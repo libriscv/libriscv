@@ -1,6 +1,7 @@
 #pragma once
 #include "types.hpp"
 #include "instruction.hpp"
+#include "riscvbase.hpp"
 #include "rv32i.hpp"
 #include <array>
 #include <vector>
@@ -27,14 +28,16 @@ namespace riscv
 		void simulate();
 		void reset();
 
-		const auto& registers() const noexcept { return m_data.m_regs; }
-		auto& registers() noexcept { return m_data.m_regs; }
-
 		address_t pc() const noexcept { return m_data.pc; }
 
 		void trigger_interrupt(interrupt_t intr);
 
-		auto& machine() const { return this->m_machine; }
+		inline auto& reg(uint16_t reg) {
+			return m_data.m_regs.at(reg);
+		}
+
+		auto& machine() { return this->m_machine; }
+		const auto& machine() const { return this->m_machine; }
 
 		CPU(Machine<W>&);
 	private:
@@ -48,13 +51,9 @@ namespace riscv
 
 		void execute();
 		inline decoded_t decode(address_t);
+
 		void handle_interrupts();
 		void execute_interrupt(interrupt_t intr);
-
-		uint8_t  peek8(address_t);
-		uint16_t peek16(address_t);
-		uint32_t peek32(address_t);
-		uint64_t peek64(address_t);
 
 		Machine<W>& m_machine;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");

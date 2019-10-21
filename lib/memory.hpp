@@ -24,7 +24,13 @@ namespace riscv
 		template <int SIZE>
 		inline auto read(address_t address) {
 			auto& page = get_page(address);
-			return page.template read<SIZE>(address & (Page::size()-1));
+			return page.template aligned_value<SIZE>(address & (Page::size()-1));
+		}
+
+		template <int SIZE, typename T>
+		inline void write(address_t address, T value) {
+			auto& page = get_page(address);
+			page.template aligned_value<SIZE>(address & (Page::size()-1)) = value;
 		}
 
 		inline auto memcpy(address_t dst, const uint8_t* src, size_t);
@@ -110,7 +116,9 @@ namespace riscv
 	{
 		while (len > 0)
 		{
-			const size_t size = std::min(Page::size(), len);
+			const size_t offset = dst & (Page::size()-1);
+			const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
+			const size_t size = std::min(remaining, len);
 			auto& page = this->get_page(dst);
 			std::memcpy(page.data(), src, size);
 

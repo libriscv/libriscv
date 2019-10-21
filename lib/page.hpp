@@ -21,7 +21,7 @@ struct alignas(4096) Page {
 	}
 
 	template <int SIZE>
-	inline auto read(uint32_t offset)
+	inline auto& aligned_value(uint32_t offset)
 	{
 		if constexpr (SIZE == 8) {
 			return memory.buffer8.at(offset);
