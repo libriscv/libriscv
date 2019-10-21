@@ -1,8 +1,12 @@
 #pragma once
 #include "types.hpp"
+#include "page.hpp"
 #include "util/delegate.hpp"
+#include <cassert>
+#include <cstring>
 #include <stdexcept>
 #include <unordered_map>
+#include <vector>
 
 namespace riscv
 {
@@ -15,50 +19,119 @@ namespace riscv
 		using isa_t     = isa_type<W>;
 		using mmio_cb_t = delegate<void(Memory&, address_t)>;
 
-		Memory(Machine<W>&);
+		Memory(Machine<W>&, std::vector<uint8_t>);
 
 		template <int SIZE>
 		inline auto read(address_t address) {
-			assert(address & 0x3);
 			auto& page = get_page(address);
-			switch (SIZE) {
-				case 8:
-					return page.buffer8.at((address >> 0) & 4095);
-				case 16:
-					return page.buffer16.at((address >> 1) & 2047);
-				case 32:
-					return page.buffer32.at((address >> 2) & 1023);
-				case 64:
-					return page.buffer64.at((address >> 3) & 511);
+			return page.template read<SIZE>(address & (Page::size()-1));
+		}
+
+		inline auto memcpy(address_t dst, const uint8_t* src, size_t);
+
+		address_t start_address() const noexcept { return this->m_start_address; }
+
+		size_t active_pages() const noexcept {
+			return m_pages.size();
+		}
+
+		inline bool is_writable(const address_t address) {
+			// find existing memory pages
+			auto it = m_page_attributes.find(page_number(address));
+			if (it != m_page_attributes.end()) {
+				return it->second.write;
 			}
-			throw std::runtime_error("Invalid read");
+			// return default
+			return PageAttributes().write;
 		}
 
 	private:
-		union alignas(4096) page {
-			std::array<uint8_t,  4096> buffer8;
-			std::array<uint16_t, 2048> buffer16;
-			std::array<uint32_t, 1024> buffer32;
-			std::array<uint64_t, 512>  buffer64;
-		};
-		inline page& get_page(const address_t address) {
-			const uint32_t page = address >> 12u;
-			// creates pages on-demand
-			return m_pages[page];
+		inline Page& get_page(const address_t address);
+		inline auto& create_attr(const address_t address);
+		inline void  set_page_attr(address_t, size_t len, PageAttributes);
+		static inline uintptr_t page_number(const address_t address) {
+			return address >> Page::SHIFT;
 		}
 
 		Machine<W>& m_machine;
+
+		address_t m_start_address = 0;
+		size_t    m_pages_total   = 128; // max physical memory usage
 		// map of page-indexed trap functions
 		// NOTE: uses page-numbers, not byte-addressing
 		std::unordered_map<address_t, mmio_cb_t> m_callbacks;
 
-		std::unordered_map<address_t, page> m_pages;
+		std::unordered_map<address_t, Page> m_pages;
+		std::unordered_map<address_t, PageAttributes> m_page_attributes;
 	};
 
 	template <int W>
-	inline Memory<W>::Memory(Machine<W>& machine)
-		: m_machine(machine)
+	inline Page& Memory<W>::get_page(const address_t address)
 	{
+		const auto page = page_number(address);
+		// find existing memory pages
+		auto it = m_pages.find(page);
+		if (it != m_pages.end()) {
+			return it->second;
+		}
+		// creates pages on-demand
+		if (m_pages.size() < m_pages_total) {
+			auto it = m_pages.emplace(
+				std::piecewise_construct,
+				std::forward_as_tuple(page),
+				std::forward_as_tuple());
+			return it.first->second;
+		}
+		throw std::runtime_error("Out of memory");
+	}
 
+	template <int W>
+	inline auto& Memory<W>::create_attr(const address_t address)
+	{
+		const auto page = page_number(address);
+		// find existing memory pages
+		auto it = m_page_attributes.find(page);
+		if (it != m_page_attributes.end()) {
+			return it->second;
+		}
+		// creates pages on-demand
+		if (m_page_attributes.size() < m_pages_total) {
+			auto it = m_page_attributes.emplace(
+				std::piecewise_construct,
+				std::forward_as_tuple(page),
+				std::forward_as_tuple());
+			return it.first->second;
+		}
+		throw std::runtime_error("Out of memory");
+	}
+
+	template <int W>
+	auto Memory<W>::memcpy(address_t dst, const uint8_t* src, size_t len)
+	{
+		while (len > 0)
+		{
+			const size_t size = std::min(Page::size(), len);
+			auto& page = this->get_page(dst);
+			std::memcpy(page.data(), src, size);
+
+			dst += size;
+			src += size;
+			len -= size;
+		}
+		return dst;
+	}
+
+	template <int W>
+	void Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
+	{
+		while (len > 0)
+		{
+			const size_t size = std::min(Page::size(), len);
+			auto& attr = this->create_attr(dst);
+			attr = options;
+
+			dst += size;
+			len -= size;
+		}
 	}
 }

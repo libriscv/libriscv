@@ -3,6 +3,8 @@
 #
 
 set (SOURCES
+		cpu.cpp
+		memory.cpp
 		rv32i.cpp
 	)
 

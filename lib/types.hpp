@@ -12,4 +12,13 @@ namespace riscv
 
 	template <int N>
 	using isa_type = typename std::conditional<(N == 4), RV32I, RV64I>::type;
+
+	using interrupt_t = uint8_t;
+
+	enum exceptions
+	{
+		ILLEGAL_OPCODE,
+		MISALIGNED_INSTRUCTION,
+		UNIMPLEMENTED_INSTRUCTION
+	};
 }

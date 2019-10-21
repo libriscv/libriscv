@@ -1,10 +1,10 @@
 #include "machine.hpp"
 
 template <int W>
-inline Machine<W>::Machine(const std::vector<uint8_t> binary)
-	: cpu(*this), memory(*this)
+inline Machine<W>::Machine(std::vector<uint8_t> binary)
+	: cpu(*this), memory(*this, std::move(binary))
 {
-
+	cpu.reset();
 }
 
 template <int W>
