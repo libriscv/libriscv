@@ -89,9 +89,10 @@ namespace riscv
 			printf("\n");
 			for (int i = 0; i < 32; i++) {
 				printf("[%s\t%08X] ", RISCV::regname(i), this->reg(i));
-				if (i % 4 == 3) printf("\n");
+				if (i % 6 == 5) printf("\n");
 			}
-			printf("\n");
+			printf("[%s\t%08X] ", "PC", this->pc());
+			printf("\n\n");
 		}
 
 		// increment PC

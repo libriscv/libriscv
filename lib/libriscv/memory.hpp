@@ -33,10 +33,12 @@ namespace riscv
 			page.template aligned_value<SIZE>(address & (Page::size()-1)) = value;
 		}
 
+		inline auto* memset(address_t dst, uint8_t value, size_t len);
 		inline auto  memcpy(address_t dst, const uint8_t* src, size_t);
 		inline auto* memcpy_out(uint8_t* dst, address_t src, size_t);
 
 		address_t start_address() const noexcept { return this->m_start_address; }
+		address_t stack_address() const noexcept { return this->m_stack_address; }
 
 		size_t active_pages() const noexcept {
 			return m_pages.size();
@@ -63,6 +65,7 @@ namespace riscv
 		Machine<W>& m_machine;
 
 		address_t m_start_address = 0;
+		address_t m_stack_address = 0;
 		size_t    m_pages_total   = 128; // max physical memory usage
 		// map of page-indexed trap functions
 		// NOTE: uses page-numbers, not byte-addressing
@@ -110,6 +113,23 @@ namespace riscv
 			return it.first->second;
 		}
 		throw std::runtime_error("Out of memory");
+	}
+
+	template <int W>
+	auto* Memory<W>::memset(address_t dst, uint8_t value, size_t len)
+	{
+		while (len > 0)
+		{
+			const size_t offset = dst & (Page::size()-1); // offset within page
+			const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
+			const size_t size = std::min(remaining, len);
+			auto& page = this->get_page(dst);
+			__builtin_memset(page.data() + offset, value, size);
+
+			dst += size;
+			len -= size;
+		}
+		return dst;
 	}
 
 	template <int W>

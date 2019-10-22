@@ -44,10 +44,10 @@ namespace riscv
 				cpu.reg(reg) = cpu.machine().memory.template read<32>(addr);
 			} else if (type == 4) {
 				// TODO: implement LBU
-				printf("LBU\n");
+				printf("!! Implement me: LBU\n");
 			} else if (type == 5) {
 				// TODO: implement LHU
-				printf("LHU\n");
+				printf("!! Implement me: LHU\n");
 			} else {
 				cpu.trigger_interrupt(ILLEGAL_OPERATION);
 			}
@@ -59,9 +59,10 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
 		static std::array<const char*, 8> f3 = {"LOADB", "LOADH", "LOADW", "???", "LBU", "LHU", "???", "???"};
-		return snprintf(buffer, len, "%s %s, [%s%+d]",
+		return snprintf(buffer, len, "%s %s, [%s%+d = %#X]",
 						f3[instr.Itype.funct3], RISCV::regname(instr.Itype.rd),
-						RISCV::regname(instr.Itype.rs1), instr.Itype.signed_imm());
+						RISCV::regname(instr.Itype.rs1), instr.Itype.signed_imm(),
+						cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm());
 	});
 
 	INSTRUCTION(STORE,
@@ -148,7 +149,12 @@ namespace riscv
 		// handler
 		if (instr.Itype.funct3 == 0) {
 			// ADDI: Add sign-extended 12-bit immediate
-			cpu.reg(instr.Itype.rd) = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+			if (instr.Itype.rd != 0) {
+				cpu.reg(instr.Itype.rd) = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+			}
+			else {
+				cpu.trigger_interrupt(ILLEGAL_OPERATION);
+			}
 		}
 		else {
 			cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
@@ -156,12 +162,21 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		static std::array<const char*, 3> func3 = {"ADDI", "SLTI", "SLTU"};
-		return snprintf(buffer, len, "%s %s, %s, %d",
-						func3[instr.Itype.funct3],
-						RISCV::regname(instr.Itype.rd),
-						RISCV::regname(instr.Itype.rs1),
-						instr.Itype.signed_imm());
+		if (instr.Itype.rs1 != 0) {
+			static std::array<const char*, 3> func3 = {"ADDI", "SLTI", "SLTU"};
+			return snprintf(buffer, len, "%s %s, %s, %d",
+							func3[instr.Itype.funct3],
+							RISCV::regname(instr.Itype.rd),
+							RISCV::regname(instr.Itype.rs1),
+							instr.Itype.signed_imm());
+		}
+		else {
+			static std::array<const char*, 3> func3 = {"LINT", "SLTI?", "SLTU?"};
+			return snprintf(buffer, len, "%s %s, %d",
+							func3[instr.Itype.funct3],
+							RISCV::regname(instr.Itype.rd),
+							instr.Itype.signed_imm());
+		}
 	});
 
 	INSTRUCTION(OP,

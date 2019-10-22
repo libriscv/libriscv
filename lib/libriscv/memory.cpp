@@ -23,6 +23,7 @@ namespace riscv
 		// enumerate & load loadable segments
 		const auto* phdr = (Elf32_Phdr*) (binary.data() + elf->e_phoff);
 		const uint32_t program_headers = elf->e_phnum;
+		const auto program_begin = phdr->p_vaddr;
 
 		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
@@ -71,6 +72,7 @@ namespace riscv
 		*/
 
 		this->m_start_address = elf->e_entry;
+		this->m_stack_address = program_begin;
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 	}
 

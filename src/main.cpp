@@ -27,6 +27,17 @@ uint32_t syscall_exit(riscv::Machine<W>& machine)
 	machine.stop();
 	return 0;
 }
+template <int W>
+uint32_t syscall_check(riscv::Machine<W>& machine)
+{
+	const auto value = machine.cpu.reg(riscv::RISCV::REG_ARG0);
+	printf("SYSCALL check called, value = %d (%s)\n", value, (value >= 0 ? "OK" : "ERROR"));
+	if (value < 0) {
+		printf(">>> Got negative return value: %d\n", value);
+		machine.stop();
+	}
+	return value;
+}
 
 int main(int argc, const char** argv)
 {
@@ -38,8 +49,11 @@ int main(int argc, const char** argv)
 	riscv::Machine<riscv::RISCV32> machine { binary };
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
-	//machine.verbose_instructions = true;
-	//machine.verbose_registers = true;
+	machine.install_syscall_handler(666, syscall_check<riscv::RISCV32>);
+	/*
+	machine.verbose_instructions = true;
+	machine.verbose_registers = true;
+	machine.verbose_jumps = true; */
 
 	while (!machine.stopped())
 	{
