@@ -13,17 +13,17 @@ uint32_t syscall_write(riscv::Machine<4>& machine)
 	const int    fd  = machine.cpu.reg(riscv::RISCV::REG_ARG0);
 	const auto   address = machine.cpu.reg(riscv::RISCV::REG_ARG1);
 	const size_t len = machine.cpu.reg(riscv::RISCV::REG_ARG2);
-	printf("SYSCALL write addr = %#X  len = %zu\n", address, len);
+	printf("SYSCALL write called, addr = %#X  len = %zu\n", address, len);
 	// really do this? :)
 	uint8_t buffer[len];
 	machine.memory.memcpy_out(buffer, address, len);
-	printf("Buffer: %.*s\n", (int) len, buffer);
+	//printf("Buffer: %.*s\n", (int) len, buffer);
 	return write(fd, buffer, len);
 }
 template <int W>
-long syscall_exit(riscv::Machine<W>& machine)
+uint32_t syscall_exit(riscv::Machine<W>& machine)
 {
-	printf("exit() called, exit value = %d\n", machine.cpu.reg(riscv::RISCV::REG_ARG0));
+	printf("SYSCALL exit called, exit value = %d\n", machine.cpu.reg(riscv::RISCV::REG_ARG0));
 	machine.stop();
 	return 0;
 }
