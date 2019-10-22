@@ -51,6 +51,6 @@ int main(int argc, const char** argv)
 }
 ```
 
-You can find details on the Linux system call ABI online as well as in the `src/syscall.h`
-header in the binaries folder. You can use this header to implement your own syscalls.
+You can find details on the Linux system call ABI online as well as in the `syscall.h`
+header in the src folder. You can use this header to make syscalls from your RISC-V programs.
 It is the Linux RISC-V syscall ABI.
