@@ -12,7 +12,7 @@ From binaries folder:
 ```
 $ ./build.sh --build hello_world.cpp
 ```
-Which will produce `hello_world.cpp.elf`. 
+Which will produce `hello_world.cpp.elf`.
 
 Building a test program (starting from root folder):
 ```sh
@@ -27,7 +27,7 @@ cmake .. && make -j4
 
 Load a binary and let the machine simulate from `_start` (ELF entry-point):
 ```C++
-#include <machine.hpp>
+#include <libriscv/machine.hpp>
 
 template <int W>
 long syscall_exit(riscv::Machine<W>& machine)
@@ -51,4 +51,6 @@ int main(int argc, const char** argv)
 }
 ```
 
-You can find details on the Linux system call ABI online as well as in the example program.
+You can find details on the Linux system call ABI online as well as in the `src/syscall.h`
+header in the binaries folder. You can use this header to implement your own syscalls.
+It is the Linux RISC-V syscall ABI.
