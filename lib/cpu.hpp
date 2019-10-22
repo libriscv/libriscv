@@ -29,6 +29,7 @@ namespace riscv
 		void reset();
 
 		address_t pc() const noexcept { return m_data.pc; }
+		void jump(address_t);
 
 		void trigger_interrupt(interrupt_t intr);
 

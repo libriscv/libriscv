@@ -44,8 +44,10 @@ namespace riscv
 				cpu.reg(reg) = cpu.machine().memory.template read<32>(addr);
 			} else if (type == 4) {
 				// TODO: implement LBU
+				printf("LBU\n");
 			} else if (type == 5) {
 				// TODO: implement LHU
+				printf("LHU\n");
 			} else {
 				cpu.trigger_interrupt(ILLEGAL_OPERATION);
 			}
@@ -109,21 +111,34 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		// return back to where we came from
 		// NOTE: returning from _start should exit the machine
-		printf("RET called: Returning\n");
-
+		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		cpu.jump(address);
+		if (cpu.machine().verbose_jumps) {
+		printf("RET: Returning to %#X <-- %s = %#x%+d\n", cpu.pc(),
+				RISCV::regname(instr.Itype.rs1), cpu.reg(instr.Itype.rs1), instr.Itype.signed_imm());
+		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		return snprintf(buffer, len, "RET");
+		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		return snprintf(buffer, len, "RET %s%+d (%#X)",
+						RISCV::regname(instr.Itype.rs1), instr.Itype.signed_imm(), address);
 	});
 
 	INSTRUCTION(JAL,
 	[] (auto& cpu, rv32i_instruction instr) {
-		// handler
+		// Link (rd = PC + 4)
+		cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
+		// And Jump (relative)
+		cpu.jump(cpu.pc() + instr.Jtype.jump_offset());
+		if (cpu.machine().verbose_jumps) {
+			printf("CALL: %#X <-- %s = %#X\n", cpu.pc(),
+					RISCV::regname(instr.Jtype.rd), cpu.reg(instr.Jtype.rd));
+		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		return snprintf(buffer, len, "JAL %s, PC%+d (%#x)",
+		return snprintf(buffer, len, "JAL %s, PC%+d (%#X)",
 						RISCV::regname(instr.Jtype.rd), instr.Jtype.jump_offset(),
 						cpu.pc() + instr.Jtype.jump_offset());
 	});
@@ -160,11 +175,33 @@ namespace riscv
 
 	INSTRUCTION(SYSTEM,
 	[] (auto& cpu, rv32i_instruction instr) {
-		// handler
+		// system functions
+		if (instr.Itype.funct3 == 0) {
+			const int sysn = cpu.reg(RISCV::REG_ECALL);
+			switch (instr.Itype.imm)
+			{
+			case 0: // ECALL
+				cpu.machine().system_call(sysn);
+				if (cpu.machine().verbose_jumps) {
+					printf("SYSCALL %d returned %d\n", sysn, cpu.reg(RISCV::REG_RETVAL));
+				}
+				return;
+			case 1: // EBREAK
+				// do ebreak
+				return;
+			}
+		}
+		// if we got here, its an illegal operation!
+		cpu.trigger_interrupt(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		// printer
-		return snprintf(buffer, len, "SYSTEM");
+		// system functions
+		static std::array<const char*, 2> etype = {"ECALL", "EBREAK"};
+		if (instr.Itype.imm < 2 && instr.Itype.funct3 == 0) {
+			return snprintf(buffer, len, "%s", etype.at(instr.Itype.imm));
+		} else {
+			return snprintf(buffer, len, "SYSTEM ???");
+		}
 	});
 
 	INSTRUCTION(LUI,

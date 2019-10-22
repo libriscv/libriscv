@@ -18,6 +18,12 @@ namespace riscv
 	}
 
 	template<int W>
+	void CPU<W>::jump(const address_t dst)
+	{
+		this->m_data.pc = dst;
+	}
+
+	template<int W>
 	void CPU<W>::trigger_interrupt(interrupt_t intr)
 	{
 		m_data.interrupt_queue.push_back(intr);

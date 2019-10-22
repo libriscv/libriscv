@@ -36,7 +36,7 @@ syscall(long n, long arg0, long arg1, long arg2, long arg3, long arg4, long arg5
 
 void _start()
 {
-	const char hello_world[] = "HELLO WORLD!\n";
+	static const char hello_world[] = "Hello RISC-V World!\n";
 
 	syscall(SYSCALL_WRITE, STDOUT, (long) hello_world, sizeof(hello_world));
 

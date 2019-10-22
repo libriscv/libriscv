@@ -33,7 +33,8 @@ namespace riscv
 			page.template aligned_value<SIZE>(address & (Page::size()-1)) = value;
 		}
 
-		inline auto memcpy(address_t dst, const uint8_t* src, size_t);
+		inline auto  memcpy(address_t dst, const uint8_t* src, size_t);
+		inline auto* memcpy_out(uint8_t* dst, address_t src, size_t);
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 
@@ -116,11 +117,29 @@ namespace riscv
 	{
 		while (len > 0)
 		{
-			const size_t offset = dst & (Page::size()-1);
+			const size_t offset = dst & (Page::size()-1); // offset within page
 			const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
 			const size_t size = std::min(remaining, len);
 			auto& page = this->get_page(dst);
-			std::memcpy(page.data(), src, size);
+			std::memcpy(page.data() + offset, src, size);
+
+			dst += size;
+			src += size;
+			len -= size;
+		}
+		return dst;
+	}
+
+	template <int W>
+	auto* Memory<W>::memcpy_out(uint8_t* dst, address_t src, size_t len)
+	{
+		while (len > 0)
+		{
+			const size_t offset = src & (Page::size()-1);
+			const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
+			const size_t size = std::min(remaining, len);
+			auto& page = this->get_page(src);
+			std::memcpy(dst, page.data() + offset, size);
 
 			dst += size;
 			src += size;

@@ -66,20 +66,33 @@ namespace riscv
 		auto [instr, format] = decode(this->pc());
 
 		// instruction logging
-		char buffer[512];
-		int  buflen = instr.printer(buffer, sizeof(buffer), *this, format);
-		if (format.length() == 4) {
-			printf("[%08X] %08X %.*s\n", this->pc(), format.whole, buflen, buffer);
-		}
-		else if (format.length() == 2) {
-			printf("[%08X] %04hX %.*s\n", this->pc(), (uint16_t) format.whole, buflen, buffer);
-		}
-		else {
-			throw std::runtime_error("Unimplemented instruction format length");
+		if (machine().verbose_instructions)
+		{
+			char buffer[512];
+			int  buflen = instr.printer(buffer, sizeof(buffer), *this, format);
+			if (format.length() == 4) {
+				printf("[%08X] %08X %.*s\n", this->pc(), format.whole, buflen, buffer);
+			}
+			else if (format.length() == 2) {
+				printf("[%08X] %04hX %.*s\n", this->pc(), (uint16_t) format.whole, buflen, buffer);
+			}
+			else {
+				throw std::runtime_error("Unimplemented instruction format length");
+			}
 		}
 
 		// execute instruction
 		instr.handler(*this, format);
+
+		if (machine().verbose_registers)
+		{
+			printf("\n");
+			for (int i = 0; i < 32; i++) {
+				printf("[%s\t%08X] ", RISCV::regname(i), this->reg(i));
+				if (i % 4 == 3) printf("\n");
+			}
+			printf("\n");
+		}
 
 		// increment PC
 		m_data.pc += format.length();

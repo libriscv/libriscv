@@ -47,7 +47,7 @@ namespace riscv
 			}
 			int32_t signed_imm() const noexcept {
 				const uint32_t ext = 0xFFFFF000;
-				return imm1 | (imm2 >> 5) | (sign() ? ext : 0);
+				return imm1 | (imm2 << 5) | (sign() ? ext : 0);
 			}
 		} Stype;
 		// upper immediate format
@@ -86,7 +86,7 @@ namespace riscv
 				return imm4;
 			}
 			int32_t jump_offset() const noexcept {
-				const int32_t  jo  = (imm3 | (imm2 << 11) | (imm1 << 12)) << 1;
+				const int32_t  jo  = (imm3 << 1) | (imm2 << 11) | (imm1 << 12);
 				const uint32_t ext = 0xFFF00000;
 				return jo | (sign() ? ext : 0);
 			}
