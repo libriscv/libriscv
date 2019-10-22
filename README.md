@@ -5,6 +5,7 @@
 ```
 $ xpm install --global @xpack-dev-tools/riscv-none-embed-gcc@latest
 ```
+See more here: https://gnu-mcu-eclipse.github.io/install/
 
 ## Building and running test program
 
