@@ -1,4 +1,3 @@
-#include <machine.hpp>
 #include <cassert>
 #include <cstdio>
 #include <string>
@@ -6,8 +5,9 @@
 #include <vector>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-#include <machine.hpp>
+#include <libriscv/machine.hpp>
 
+template <int W>
 uint32_t syscall_write(riscv::Machine<4>& machine)
 {
 	const int    fd  = machine.cpu.reg(riscv::RISCV::REG_ARG0);
@@ -20,7 +20,8 @@ uint32_t syscall_write(riscv::Machine<4>& machine)
 	printf("Buffer: %.*s\n", (int) len, buffer);
 	return write(fd, buffer, len);
 }
-uint32_t syscall_exit(riscv::Machine<4>& machine)
+template <int W>
+long syscall_exit(riscv::Machine<W>& machine)
 {
 	printf("exit() called, exit value = %d\n", machine.cpu.reg(riscv::RISCV::REG_ARG0));
 	machine.stop();
@@ -35,8 +36,8 @@ int main(int argc, const char** argv)
 	const auto binary = load_file(filename);
 
 	riscv::Machine<riscv::RISCV32> machine { binary };
-	machine.install_syscall_handler(64, syscall_write);
-	machine.install_syscall_handler(93, syscall_exit);
+	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
+	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 	//machine.verbose_instructions = true;
 	//machine.verbose_registers = true;
 

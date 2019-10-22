@@ -3,9 +3,9 @@
 #
 
 set (SOURCES
-		cpu.cpp
-		memory.cpp
-		rv32i.cpp
+		libriscv/cpu.cpp
+		libriscv/memory.cpp
+		libriscv/rv32i.cpp
 	)
 
 
