@@ -51,6 +51,8 @@ namespace riscv
 				return DECODED_INSTR(SYSTEM, instruction);
 			case 0b0110111:
 				return DECODED_INSTR(LUI, instruction);
+			case 0b0010111:
+				return DECODED_INSTR(AUIPC, instruction);
 			case 0b0011011:
 				return DECODED_INSTR(OP_IMM32, instruction);
 			case 0b0111011:

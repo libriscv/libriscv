@@ -4,6 +4,7 @@
 #define STDOUT 1
 #define STDERR 2
 
+//static inline
 char* int32_to_str(char* b, int val)
 {
 	// negation
@@ -39,8 +40,7 @@ void _start()
 	const char hello_world[] = "Hello RISC-V World!\n";
 	int bytes = write(STDOUT, hello_world, sizeof(hello_world)-1);
 	syscall(666, bytes, 0);
-/*
-	int bytes = 0;
+
 	char buffer[512];
 	buffer[0] = 'w';
 	buffer[1] = 'r';
@@ -51,8 +51,9 @@ void _start()
 	buffer[6] = ' ';
 	char* bend = int32_to_str(&buffer[7], bytes);
 	bend[0] = '\n';
-	write(STDOUT, buffer, bend - buffer);
-*/
+	write(STDOUT, buffer, bend - buffer + 1);
+
+	asm("nop");
 
 	_exit(666);
 }

@@ -1,14 +1,14 @@
 ###
 
 x0     ZERO
-x1     Return address
-x2     Stack pointer
-x3     Global pointer
-x4     Thread pointer
-x5     Link register
+x1 RA  Return address
+x2 SP  Stack pointer
+x3 GP  Global pointer
+x4 TP  Thread pointer
+x5 LR  Link register
 x6-7   Temporaries
-x8     Saved frame pointer
-x9     Saved register
+x8 S0  Saved frame pointer
+x9 S1  Saved register
 x10-11 Function args & return values
 x12-17 Function arguments
 x18-27 Saved registers

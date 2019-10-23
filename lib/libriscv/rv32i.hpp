@@ -7,6 +7,7 @@ namespace riscv
 	union rv32i_instruction
 	{
 		using word_t = uint32_t;
+		using sword_t = int32_t;
 
 		// register format
 		struct {
@@ -16,6 +17,17 @@ namespace riscv
 			uint32_t rs1    : 5;
 			uint32_t rs2    : 5;
 			uint32_t funct7 : 7;
+
+			bool is_f7() const noexcept {
+				return funct7 == 0b0100000;
+			}
+			bool is_32M() const noexcept {
+				return funct7 == 0b0000001;
+			}
+			word_t jumptable_friendly_op() const noexcept {
+				// use bit 4 for RV32M extension
+				return funct3 | ((funct7 & 1) << 4);
+			}
 		} Rtype;
 		// immediate format
 		struct {
@@ -63,15 +75,28 @@ namespace riscv
 				const uint32_t ext = 0xFFF00000;
 				return imm | (sign() ? ext : 0);
 			}
+			int32_t signed_upper() const noexcept {
+				return imm << 12u;
+			}
 		} Utype;
 		// branch type
 		struct {
 			uint32_t opcode : 7;
-			uint32_t rd     : 5;
+			uint32_t imm1   : 1;
+			uint32_t imm2   : 4;
 			uint32_t funct3 : 3;
 			uint32_t rs1    : 5;
 			uint32_t rs2    : 5;
-			uint32_t funct7 : 7;
+			uint32_t imm3   : 6;
+			uint32_t imm4   : 1;
+
+			bool sign() const noexcept {
+				return imm4;
+			}
+			int32_t signed_imm() const noexcept {
+				const uint32_t ext = 0xFFFFF000;
+				return (imm2 << 1) | (imm3 << 5) | (imm1 << 11) | (sign() ? ext : 0);
+			}
 		} Btype;
 		// jump instructions
 		struct {
@@ -105,8 +130,12 @@ namespace riscv
 			return ((Rtype.opcode & 0x3) == 0x3) ? 4 : 2;
 		}
 
-		bool sign() const noexcept {
-			return whole & (1u << 31);
+		static constexpr sword_t to_signed(word_t word) noexcept {
+			return (sword_t) word;
+		}
+		template <typename T>
+		static constexpr word_t to_word(T x) noexcept {
+			return (word_t) x;
 		}
 	};
 	static_assert(sizeof(rv32i_instruction) == 4, "Instruction is 4 bytes");
