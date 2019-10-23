@@ -1,4 +1,5 @@
-#include "../src/syscall.h"
+#include <include/syscall.h>
+#include <include/libc.hpp>
 
 #define STDIN  0
 #define STDOUT 1
@@ -34,15 +35,12 @@ int main(int, char**)
 	int bytes = write(STDOUT, hello_world, sizeof(hello_world)-1);
 	syscall(666, bytes, 0);
 
+	const char write_str[] = "write: ";
+	const int write_str_len = sizeof(write_str)-1;
 	char buffer[512];
-	buffer[0] = 'w';
-	buffer[1] = 'r';
-	buffer[2] = 'i';
-	buffer[3] = 't';
-	buffer[4] = 'e';
-	buffer[5] = ':';
-	buffer[6] = ' ';
-	char* bend = int32_to_str(&buffer[7], bytes);
+	memcpy(buffer, write_str, write_str_len);
+
+	char* bend = int32_to_str(&buffer[write_str_len], bytes);
 	bend[0] = '\n';
 	write(STDOUT, buffer, bend - buffer + 1);
 

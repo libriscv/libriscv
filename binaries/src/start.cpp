@@ -1,4 +1,4 @@
-#include "../src/syscall.h"
+#include <include/syscall.h>
 extern int main(int, char**);
 int __testable_global __attribute__((section(".bss"))) = 0;
 
