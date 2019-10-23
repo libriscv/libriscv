@@ -7,8 +7,9 @@ export CXX=$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.2.1-3.1.1/.c
 
 OPTS="-O1"
 WARNS="-Wall -Wextra"
-ABI="-march=rv32g -mabi=ilp32"
+ABI="-march=rv32im -mabi=ilp32"
 CFLAGS="$CXX -std=c++17 -static -nostdlib"
+#CFLAGS="$CC -static"
 # Goal: rv32ig --> rv32igc (rv32imafdc)
 
 for i in "$@"
@@ -16,7 +17,7 @@ do
 case $i in
     --build)
     shift # past argument with no value
-	BLINE="$CFLAGS $ABI $WARNS $OPTS $1 -o $1.elf"
+	BLINE="$CFLAGS $ABI $WARNS $OPTS $1 start.cpp -o $1.elf"
 	echo "$BLINE"
 	$BLINE
 	exit 0

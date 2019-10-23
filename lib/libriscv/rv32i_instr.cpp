@@ -182,19 +182,24 @@ namespace riscv
 	INSTRUCTION(JAL,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// Link (rd = PC + 4)
-		cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
+		if (instr.Jtype.rd != 0) {
+			cpu.reg(instr.Jtype.rd) = cpu.pc() + 4; // next instruction!
+		}
 		// And Jump (relative)
-		cpu.jump(cpu.pc() + instr.Jtype.jump_offset());
+		cpu.jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
 		if (cpu.machine().verbose_jumps) {
 			printf("CALL: %#X <-- %s = %#X\n", cpu.pc(),
 					RISCV::regname(instr.Jtype.rd), cpu.reg(instr.Jtype.rd));
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		// printer
+		if (instr.Jtype.rd != 0) {
 		return snprintf(buffer, len, "JAL %s, PC%+d (%#X)",
 						RISCV::regname(instr.Jtype.rd), instr.Jtype.jump_offset(),
 						cpu.pc() + instr.Jtype.jump_offset());
+		}
+		return snprintf(buffer, len, "JMP PC%+d (%#X)",
+						instr.Jtype.jump_offset(), cpu.pc() + instr.Jtype.jump_offset());
 	});
 
 	INSTRUCTION(OP_IMM,

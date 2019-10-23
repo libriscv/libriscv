@@ -4,7 +4,7 @@
 #define STDOUT 1
 #define STDERR 2
 
-//static inline
+static inline
 char* int32_to_str(char* b, int val)
 {
 	// negation
@@ -28,14 +28,7 @@ inline long write(int fd, const void* buffer, long len)
 	return syscall(SYSCALL_WRITE, fd, (long) buffer, len);
 }
 
-extern "C"  __attribute__((noreturn))
-void _exit(int exitval) {
-	syscall(SYSCALL_EXIT, exitval, 0);
-	__builtin_unreachable();
-}
-
-extern "C"
-void _start()
+int main(int, char**)
 {
 	const char hello_world[] = "Hello RISC-V World!\n";
 	int bytes = write(STDOUT, hello_world, sizeof(hello_world)-1);
@@ -54,6 +47,5 @@ void _start()
 	write(STDOUT, buffer, bend - buffer + 1);
 
 	asm("nop");
-
-	_exit(666);
+	return 666;
 }

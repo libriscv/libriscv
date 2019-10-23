@@ -1,4 +1,5 @@
 #include "memory.hpp"
+#include "machine.hpp"
 #include "util/elf.h"
 
 namespace riscv
@@ -30,16 +31,20 @@ namespace riscv
 		{
 			const auto*  src = binary.data() + hdr->p_offset;
 			const size_t len = hdr->p_filesz;
+			if (machine.verbose_machine) {
 			printf("* Loading program %d of size %zu from %p to virtual %p\n",
 					seg, len, src, (void*) (uintptr_t) hdr->p_vaddr);
+			}
 			// load into virtual memory
 			this->memcpy(hdr->p_vaddr, src, len);
 			// set permissions
 			const bool readable   = hdr->p_flags & PF_R;
 			const bool writable   = hdr->p_flags & PF_W;
 			const bool executable = hdr->p_flags & PF_X;
+			if (machine.verbose_machine) {
 			printf("* Program segment readable: %d writable: %d  executable: %d\n",
 					readable, writable, executable);
+			}
 			this->set_page_attr(hdr->p_vaddr, len, {
 				 .read = readable, .write = writable, .exec = executable
 			});
@@ -73,7 +78,9 @@ namespace riscv
 
 		this->m_start_address = elf->e_entry;
 		this->m_stack_address = program_begin;
+		if (machine.verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
+		}
 	}
 
 }

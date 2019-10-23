@@ -23,6 +23,10 @@ cmake .. && make -j4
 ./remu ../binaries/hello_world.cpp.elf
 ```
 
+## Instruction set support
+
+The emulator currently supports RV32IM, however the foundation is laid for RV64IM.
+Eventually RV32C extension will also be supported (compressed).
 
 ## Usage
 
