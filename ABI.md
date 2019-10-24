@@ -27,3 +27,6 @@ PC    Program counter
 
 All instructions 4-byte aligned! (Except for 16-bit extension)
 The misalignment exception happens on the branch jump that would cause the misalignment.
+
+GP must be initialized to some symbol (`__global_pointer`) in the middle of the data sections.
+The stack pointer can start at the beginning of the ELF virtual.
