@@ -4,6 +4,7 @@
 
 set (SOURCES
 		libriscv/cpu.cpp
+		libriscv/debug.cpp
 		libriscv/memory.cpp
 		libriscv/rv32i.cpp
 	)

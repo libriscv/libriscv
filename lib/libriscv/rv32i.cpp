@@ -70,36 +70,45 @@ namespace riscv
 		// instruction logging
 		if (machine().verbose_instructions)
 		{
-			char buffer[512];
-			int  buflen = instr.printer(buffer, sizeof(buffer), *this, format);
-			if (format.length() == 4) {
-				printf("[%08X] %08X %.*s\n", this->pc(), format.whole, buflen, buffer);
-			}
-			else if (format.length() == 2) {
-				printf("[%08X] %04hX %.*s\n", this->pc(), (uint16_t) format.whole, buflen, buffer);
-			}
-			else {
-				throw std::runtime_error("Unimplemented instruction format length");
-			}
+			const auto string = isa_t::to_string(*this, format, instr);
+			printf("%s\n", string.c_str());
 		}
 
 		// execute instruction
 		instr.handler(*this, format);
+		assert(this->reg(0) == 0);
 
 		if (machine().verbose_registers)
 		{
-			printf("\n");
-			for (int i = 0; i < 32; i++) {
-				printf("[%s\t%08X] ", RISCV::regname(i), this->reg(i));
-				if (i % 5 == 4) printf("\n");
-			}
-			printf("[%s\t%08X] ", "PC", this->pc());
-			printf("\n\n");
+			auto regs = this->registers().to_string();
+			printf("\n%s\n\n", regs.c_str());
 		}
 
 		// increment PC
-		m_data.pc += format.length();
+		registers().pc += format.length();
 
 		this->handle_interrupts();
+	}
+
+	std::string RV32I::to_string(CPU<4>& cpu, format_t format, instruction_t instr)
+	{
+		char buffer[256];
+		char ibuffer[128];
+		int  ibuflen = instr.printer(ibuffer, sizeof(ibuffer), cpu, format);
+		int  len = 0;
+		if (format.length() == 4) {
+			len = snprintf(buffer, sizeof(buffer),
+					"[%08X] %08X %.*s",
+					cpu.pc(), format.whole, ibuflen, ibuffer);
+		}
+		else if (format.length() == 2) {
+			len = snprintf(buffer, sizeof(buffer),
+					"[%08X] %04hX %.*s",
+					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
+		}
+		else {
+			throw std::runtime_error("Unimplemented instruction format length");
+		}
+		return std::string(buffer, len);
 	}
 }

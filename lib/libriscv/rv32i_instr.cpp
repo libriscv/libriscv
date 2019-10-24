@@ -139,13 +139,17 @@ namespace riscv
 		}
 		if (comparison) {
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			if (cpu.machine().verbose_jumps) {
+				printf(">>> BRANCH jump to %#X\n", cpu.pc() + 4);
+			}
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// BRANCH compares two registers, BQE = equal taken, BNE = notequal taken
 		static std::array<const char*, 8> f3 = {"BEQ", "BNE", "???", "???", "BLT", "BGE", "BLTU", "BGEU"};
-		static std::array<const char*, 8> f3z = {"BEQZ", "BNEZ", "???", "???", "BLTZ", "BGEZ", "BLTUZ", "BGEUZ"};
-		if (instr.Btype.rs2 != 0) {
+		static std::array<const char*, 8> f1z = {"BEQ", "BNE", "???", "???", "BGTZ", "BLEZ", "BLTU", "BGEU"};
+		static std::array<const char*, 8> f2z = {"BEQZ", "BNEZ", "???", "???", "BLTZ", "BGEZ", "BLTU", "BGEU"};
+		if (instr.Btype.rs1 != 0 && instr.Btype.rs2) {
 			return snprintf(buffer, len, "%s %s, %s => PC%+d (%#X)",
 							f3[instr.Btype.funct3],
 							RISCV::regname(instr.Btype.rs1),
@@ -153,9 +157,11 @@ namespace riscv
 							instr.Btype.signed_imm(),
 							cpu.pc() + instr.Btype.signed_imm());
 		} else {
+			auto& array = (instr.Btype.rs1) ? f2z : f1z;
+			auto  reg   = (instr.Btype.rs1) ? instr.Btype.rs1 : instr.Btype.rs2;
 			return snprintf(buffer, len, "%s %s => PC%+d (%#X)",
-							f3z[instr.Btype.funct3],
-							RISCV::regname(instr.Btype.rs1),
+							array[instr.Btype.funct3],
+							RISCV::regname(reg),
 							instr.Btype.signed_imm(),
 							cpu.pc() + instr.Btype.signed_imm());
 		}
@@ -163,32 +169,35 @@ namespace riscv
 
 	INSTRUCTION(JALR,
 	[] (auto& cpu, rv32i_instruction instr) {
-		// return back to where we came from
-		// NOTE: returning from _start should exit the machine
+		// jump to register + immediate
 		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		if (instr.Itype.rd != 0) {
+			cpu.reg(instr.Itype.rd) = cpu.pc() + 4;
+		}
 		cpu.jump(address - 4);
 		if (cpu.machine().verbose_jumps) {
-		printf("RET: Returning to %#X <-- %s = %#x%+d\n", address,
+		printf(">>> JMP %#X <-- %s = %#X%+d\n", address,
 				RISCV::regname(instr.Itype.rs1), cpu.reg(instr.Itype.rs1), instr.Itype.signed_imm());
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// RISC-V's RET instruction: return to register + immediate
+		const char* variant = (instr.Itype.rs1 == RISCV::REG_RA) ? "RET" : "JMP";
 		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		return snprintf(buffer, len, "RET %s%+d (%#X)",
+		return snprintf(buffer, len, "%s %s%+d (%#X)", variant,
 						RISCV::regname(instr.Itype.rs1), instr.Itype.signed_imm(), address);
 	});
 
 	INSTRUCTION(JAL,
 	[] (auto& cpu, rv32i_instruction instr) {
-		// Link (rd = PC + 4)
+		// Link *next* instruction (rd = PC + 4)
 		if (instr.Jtype.rd != 0) {
-			cpu.reg(instr.Jtype.rd) = cpu.pc() + 4; // next instruction!
+			cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
 		}
 		// And Jump (relative)
 		cpu.jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
 		if (cpu.machine().verbose_jumps) {
-			printf("CALL: %#X <-- %s = %#X\n", cpu.pc(),
+			printf(">>> CALL %#X <-- %s = %#X\n", cpu.pc(),
 					RISCV::regname(instr.Jtype.rd), cpu.reg(instr.Jtype.rd));
 		}
 	},
@@ -215,7 +224,7 @@ namespace riscv
 				dst = src + instr.Itype.signed_imm();
 				break;
 			case 0x1: // SLLI:
-				dst = src << instr.Itype.signed_imm();
+				dst = src << instr.Itype.shift_imm();
 				break;
 			case 0x2: // SLTI:
 				dst = instr.to_signed(src) << instr.Itype.signed_imm();
@@ -226,8 +235,11 @@ namespace riscv
 			case 0x4: // XORI:
 				dst = src ^ instr.Itype.signed_imm();
 				break;
-			case 0x5: // SRLI: TODO: WRITEME
-				dst = src ^ instr.Itype.signed_imm();
+			case 0x5: // SRLI / SRAI:
+				if (!instr.Itype.is_srai())
+					dst = src >> instr.Itype.shift_imm();
+				else // SRAI: preserve the sign bit
+					dst = ((src & 0x7FFFFFFF) >> instr.Itype.shift_imm()) | (src & 0x80000000);
 				break;
 			case 0x6: // ORI:
 				dst = src | instr.Itype.signed_imm();
@@ -236,7 +248,6 @@ namespace riscv
 				dst = src & instr.Itype.signed_imm();
 				break;
 			}
-
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -301,7 +312,7 @@ namespace riscv
 					dst = src1 ^ src2;
 					break;
 				case 0x5: // SRL / SLA TODO: WRITEME
-					dst = src1 ^ src2;
+					cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
 					break;
 				case 0x6: // OR
 					dst = src1 | src2;

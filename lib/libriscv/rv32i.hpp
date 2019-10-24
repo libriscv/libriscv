@@ -1,6 +1,8 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <string>
+#include "types.hpp"
 
 namespace riscv
 {
@@ -43,6 +45,12 @@ namespace riscv
 			int32_t signed_imm() const noexcept {
 				const uint32_t ext = 0xFFFFF000;
 				return imm | (sign() ? ext : 0);
+			}
+			uint32_t shift_imm() const noexcept {
+				return imm & 0x1F;
+			}
+			bool is_srai() const noexcept {
+				return imm & 0x20;
 			}
 		} Itype;
 		// store format
@@ -141,9 +149,11 @@ namespace riscv
 	static_assert(sizeof(rv32i_instruction) == 4, "Instruction is 4 bytes");
 
 	struct RV32I {
-		using address_t   = uint32_t; // ??
-		using format_t    = rv32i_instruction;
-		using register_t  = uint32_t;
-		static constexpr int INSTRUCTIONS = 40;
+		using address_t     = uint32_t; // ??
+		using format_t      = rv32i_instruction;
+		using instruction_t = Instruction<4>;
+		using register_t    = uint32_t;
+
+		static std::string to_string(CPU<4>& cpu, format_t format, instruction_t instr);
 	};
 }

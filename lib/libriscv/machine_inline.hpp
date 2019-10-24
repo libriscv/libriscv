@@ -23,6 +23,13 @@ inline void Machine<W>::simulate()
 }
 
 template <int W>
+inline void Machine<W>::reset()
+{
+	cpu.reset();
+	memory.reset();
+}
+
+template <int W>
 inline void Machine<W>::install_syscall_handler(int sysn, syscall_t handler)
 {
 	m_syscall_handlers[sysn] = handler;

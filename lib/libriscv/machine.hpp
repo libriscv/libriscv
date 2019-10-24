@@ -1,4 +1,5 @@
 #pragma once
+#include "common.hpp"
 #include "cpu.hpp"
 #include "memory.hpp"
 #include "util/delegate.hpp"
@@ -20,6 +21,7 @@ namespace riscv
 		void stop() noexcept;
 		bool stopped() const noexcept;
 		void simulate();
+		void reset();
 		void install_syscall_handler(int, syscall_t);
 
 		CPU<W>    cpu;

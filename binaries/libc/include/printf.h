@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#include <tinyprintf.h>
+//#include <tinyprintf.h>
 #include <stdio.h>
 
 #ifdef __cplusplus

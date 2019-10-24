@@ -7,7 +7,7 @@ namespace riscv
 	void CPU<W>::reset()
 	{
 		m_data = {};
-		m_data.pc = machine().memory.start_address();
+		m_data.m_regs.pc = machine().memory.start_address();
 		this->reg(RISCV::REG_SP) = machine().memory.stack_address();
 		this->reg(RISCV::REG_GP) = machine().memory.stack_address();
 	}
@@ -15,13 +15,14 @@ namespace riscv
 	template<int W>
 	void CPU<W>::simulate()
 	{
+		this->break_checks();
 		this->execute();
 	}
 
 	template<int W>
 	void CPU<W>::jump(const address_t dst)
 	{
-		this->m_data.pc = dst;
+		this->registers().pc = dst;
 	}
 
 	template<int W>

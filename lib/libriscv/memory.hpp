@@ -17,23 +17,17 @@ namespace riscv
 	{
 		using address_t = address_type<W>;
 		using isa_t     = isa_type<W>;
-		using mmio_cb_t = delegate<void(Memory&, address_t)>;
+		using mmio_cb_t = delegate<bool(Memory&, address_t, int, address_t)>;
 
 		Memory(Machine<W>&, std::vector<uint8_t>);
 
 		template <int SIZE>
-		inline auto read(address_t address) {
-			auto& page = get_page(address);
-			return page.template aligned_value<SIZE>(address & (Page::size()-1));
-		}
+		inline auto read(address_t address);
 
 		template <int SIZE, typename T>
-		inline void write(address_t address, T value) {
-			auto& page = get_page(address);
-			page.template aligned_value<SIZE>(address & (Page::size()-1)) = value;
-		}
+		inline void write(address_t address, T value);
 
-		inline auto* memset(address_t dst, uint8_t value, size_t len);
+		inline auto  memset(address_t dst, uint8_t value, size_t len);
 		inline auto  memcpy(address_t dst, const uint8_t* src, size_t);
 		inline auto* memcpy_out(uint8_t* dst, address_t src, size_t);
 
@@ -54,6 +48,14 @@ namespace riscv
 			return PageAttributes().write;
 		}
 
+		auto& machine() { return this->m_machine; }
+		const auto& machine() const { return this->m_machine; }
+
+		void reset();
+		void trap(address_t address, mmio_cb_t callback) {
+			this->m_callbacks[address] = callback;
+		}
+
 	private:
 		inline Page& get_page(const address_t address);
 		inline auto& create_attr(const address_t address);
@@ -61,124 +63,28 @@ namespace riscv
 		static inline uintptr_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
 		}
+		void binary_loader();
 
 		Machine<W>& m_machine;
 
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
 		size_t    m_pages_total   = 128; // max physical memory usage
-		// map of page-indexed trap functions
-		// NOTE: uses page-numbers, not byte-addressing
-		std::unordered_map<address_t, mmio_cb_t> m_callbacks;
 
 		std::unordered_map<address_t, Page> m_pages;
 		std::unordered_map<address_t, PageAttributes> m_page_attributes;
+
+		std::vector<uint8_t> m_binary;
+
+		// map of page-indexed trap functions
+		// NOTE: uses page-numbers, not byte-addressing
+		std::unordered_map<address_t, mmio_cb_t> m_callbacks;
+		bool check_trap(address_t address, int size, address_t value) {
+			auto it = m_callbacks.find(address);
+			if (it == m_callbacks.end()) return true;
+			// do the thing
+			return it->second(*this, address, size, value);
+		}
 	};
-
-	template <int W>
-	inline Page& Memory<W>::get_page(const address_t address)
-	{
-		const auto page = page_number(address);
-		// find existing memory pages
-		auto it = m_pages.find(page);
-		if (it != m_pages.end()) {
-			return it->second;
-		}
-		// creates pages on-demand
-		if (m_pages.size() < m_pages_total) {
-			auto it = m_pages.emplace(
-				std::piecewise_construct,
-				std::forward_as_tuple(page),
-				std::forward_as_tuple());
-			return it.first->second;
-		}
-		throw std::runtime_error("Out of memory");
-	}
-
-	template <int W>
-	inline auto& Memory<W>::create_attr(const address_t address)
-	{
-		const auto page = page_number(address);
-		// find existing memory pages
-		auto it = m_page_attributes.find(page);
-		if (it != m_page_attributes.end()) {
-			return it->second;
-		}
-		// creates pages on-demand
-		if (m_page_attributes.size() < m_pages_total) {
-			auto it = m_page_attributes.emplace(
-				std::piecewise_construct,
-				std::forward_as_tuple(page),
-				std::forward_as_tuple());
-			return it.first->second;
-		}
-		throw std::runtime_error("Out of memory");
-	}
-
-	template <int W>
-	auto* Memory<W>::memset(address_t dst, uint8_t value, size_t len)
-	{
-		while (len > 0)
-		{
-			const size_t offset = dst & (Page::size()-1); // offset within page
-			const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
-			const size_t size = std::min(remaining, len);
-			auto& page = this->get_page(dst);
-			__builtin_memset(page.data() + offset, value, size);
-
-			dst += size;
-			len -= size;
-		}
-		return dst;
-	}
-
-	template <int W>
-	auto Memory<W>::memcpy(address_t dst, const uint8_t* src, size_t len)
-	{
-		while (len > 0)
-		{
-			const size_t offset = dst & (Page::size()-1); // offset within page
-			const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
-			const size_t size = std::min(remaining, len);
-			auto& page = this->get_page(dst);
-			std::memcpy(page.data() + offset, src, size);
-
-			dst += size;
-			src += size;
-			len -= size;
-		}
-		return dst;
-	}
-
-	template <int W>
-	auto* Memory<W>::memcpy_out(uint8_t* dst, address_t src, size_t len)
-	{
-		while (len > 0)
-		{
-			const size_t offset = src & (Page::size()-1);
-			const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
-			const size_t size = std::min(remaining, len);
-			auto& page = this->get_page(src);
-			std::memcpy(dst, page.data() + offset, size);
-
-			dst += size;
-			src += size;
-			len -= size;
-		}
-		return dst;
-	}
-
-	template <int W>
-	void Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
-	{
-		while (len > 0)
-		{
-			const size_t size = std::min(Page::size(), len);
-			auto& attr = this->create_attr(dst);
-			attr = options;
-
-			dst += size;
-			len -= size;
-		}
-	}
+#include "memory_inline.hpp"
 }
