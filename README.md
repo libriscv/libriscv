@@ -11,16 +11,16 @@ See more here: https://gnu-mcu-eclipse.github.io/install/
 
 From binaries folder:
 ```
-$ ./build.sh --build hello_world.cpp
+$ ./build.sh
 ```
-Which will produce `hello_world.cpp.elf`.
+Which will produce `hello_world` in the build folder.
 
-Building a test program (starting from root folder):
+Building the emulator (starting from project root) and booting `hello_world`:
 ```sh
 mkdir -p build
 cd build
 cmake .. && make -j4
-./remu ../binaries/hello_world.cpp.elf
+./remu ../binaries/build/hello_world
 ```
 
 Building and running your own ELF files that can run in freestanding RV32IM is
