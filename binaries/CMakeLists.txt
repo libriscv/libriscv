@@ -10,7 +10,7 @@ set(RISCV_ABI "-march=rv32im -mabi=ilp32")
 set(WARNINGS  "-Wall -Wextra")
 set(COMMON    "-O1 -g -nostdlib -nostdinc")
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
-set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON}")
+set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON} -fno-exceptions -fno-rtti")
 
 if (DEBUGGING)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")

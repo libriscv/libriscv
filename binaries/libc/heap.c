@@ -13,7 +13,7 @@ void __init_heap(void* free_begin, void* heapmax)
 	if (heap_start & 0xF) heap_start += 0x10 - (heap_start & 0xF);
 	heap_end   = heap_start;
 	assert(((heap_start & 0xF) == 0) && "Heap should be aligned");
-	heap_max = heapmax;
+	heap_max = (uintptr_t) heapmax;
 	assert(heap_max > heap_start && "We really need some small heap");
 }
 

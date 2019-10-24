@@ -1,24 +1,8 @@
 #include <include/libc.hpp>
-#include <stdio.h>
-#include <assert.h>
-
-static inline
-char* int32_to_str(char* b, int val)
-{
-	// negation
-	if (val < 0) { *b++ = '-'; val = -val; }
-	// move to end of repr.
-	int tmp = val;
-	do { ++b; tmp /= 10;  } while (tmp);
-	char* end = b;
-	*end = '\0';
-	// move back and insert as we go
-	do {
-		*--b = '0' + (val % 10);
-		val /= 10;
-	} while (val);
-	return end;
-}
+#include <cassert>
+#include <cstdio>
+#include <memory>
+#include <string>
 
 int testval = 0;
 
@@ -33,10 +17,14 @@ void test_constructor() {
 int main(int, char**)
 {
 	assert(testval == 22);
-
-	int len = printf("Hello RISC-V World!\n");
+	static const char* hello = "Hello RISC-V World!\n";
+	// heap test
+	auto b = std::unique_ptr<std::string> (new std::string(""));
+	assert(b != nullptr);
+	// copy into string
+	*b = hello;
+	// va_list & stdarg test
+	int len = printf("%s", b->c_str());
 	assert(len > 0);
-
-	asm("nop");
 	return 666;
 }

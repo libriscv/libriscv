@@ -1,6 +1,6 @@
 #include <include/syscall.hpp>
 #include <include/printf.h>
-#include <stdarg.h>
+#include <cstdarg>
 
 extern "C"
 __attribute__((noreturn))
@@ -9,7 +9,6 @@ void panic(const char* reason)
 	printf("\n\n!!! PANIC !!!\n%s\n", reason);
 
 	// the end
-	printf("\nKernel halting...\n");
 	syscall(SYSCALL_EXIT, -1);
 	__builtin_unreachable();
 }

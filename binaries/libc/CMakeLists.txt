@@ -8,6 +8,7 @@ set(LIBC_SOURCES
 	# .cpp files
 	start.cpp
 	assert.cpp
+	libcxx.cpp
 	write.cpp
   )
 

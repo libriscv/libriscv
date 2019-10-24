@@ -3,6 +3,7 @@
 //
 #include <unistd.h>
 #include <errno.h>
+extern void* sbrk(intptr_t);
 
 static inline size_t word_align(size_t size) {
     return size + ((sizeof(size_t) - 1) & ~(sizeof(size_t) - 1));
