@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <memory>
 
 struct PageAttributes
 {
@@ -9,16 +10,9 @@ struct PageAttributes
 	bool exec  = false;
 };
 
-struct alignas(4096) Page {
+struct alignas(4096) PageData {
 	static constexpr unsigned SIZE  = 4096;
 	static constexpr unsigned SHIFT = 12;
-
-	uint8_t* data() noexcept {
-		return memory.buffer8.data();
-	}
-	static constexpr size_t size() noexcept {
-		return SIZE;
-	}
 
 	template <int SIZE>
 	inline auto& aligned_value(uint32_t offset)
@@ -41,4 +35,23 @@ struct alignas(4096) Page {
 		std::array<uint32_t, SIZE / 4> buffer32;
 		std::array<uint64_t, SIZE / 8> buffer64;
 	} memory;
+};
+
+struct Page
+{
+	static constexpr unsigned SIZE  = PageData::SIZE;
+	static constexpr unsigned SHIFT = PageData::SHIFT;
+
+	auto& page() { return *m_page; }
+
+	uint8_t* data() noexcept {
+		return page().memory.buffer8.data();
+	}
+
+	static constexpr size_t size() noexcept {
+		return SIZE;
+	}
+
+	std::unique_ptr<PageData> m_page { new PageData };
+	PageAttributes attr;
 };

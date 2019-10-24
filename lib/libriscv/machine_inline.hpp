@@ -23,6 +23,12 @@ inline void Machine<W>::simulate()
 }
 
 template <int W>
+inline void Machine<W>::break_now()
+{
+	cpu.break_now();
+}
+
+template <int W>
 inline void Machine<W>::reset()
 {
 	cpu.reset();
@@ -41,9 +47,15 @@ inline void Machine<W>::system_call(int syscall_number)
 	auto it = m_syscall_handlers.find(syscall_number);
 	if (it != m_syscall_handlers.end()) {
 		address_t ret = it->second(*this);
-		cpu.reg(RISCV::REG_RETVAL) = ret;
+		// EBREAK should not modify registers
+		if (syscall_number != 0) {
+			cpu.reg(RISCV::REG_RETVAL) = ret;
+		}
 		return;
 	}
-	//cpu.trigger_interrupt(UNIMPLEMENTED_SYSCALL);
-	cpu.reg(RISCV::REG_RETVAL) = -1;
+	fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
+	// EBREAK should not modify registers
+	if (syscall_number != 0) {
+		cpu.reg(RISCV::REG_RETVAL) = -1;
+	}
 }

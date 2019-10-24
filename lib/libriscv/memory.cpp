@@ -24,7 +24,6 @@ namespace riscv
 	void Memory<W>::reset()
 	{
 		this->m_pages.clear();
-		this->m_page_attributes.clear();
 		this->binary_loader();
 	}
 
@@ -96,6 +95,27 @@ namespace riscv
 		if (machine().verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}
+	}
+
+	template <int W>
+	void Memory<W>::protection_fault()
+	{
+		this->machine().cpu.trigger_interrupt(PROTECTION_FAULT);
+	}
+
+	template <int W>
+	Page& Memory<W>::default_page_fault(Memory<W>& mem, size_t page)
+	{
+		// create page on-demand
+		if (mem.active_pages() < mem.pages_total())
+		{
+			auto it = mem.pages().emplace(
+				std::piecewise_construct,
+				std::forward_as_tuple(page),
+				std::forward_as_tuple());
+			return it.first->second;
+		}
+		throw std::runtime_error("Out of memory");
 	}
 
 	template class Memory<4>;

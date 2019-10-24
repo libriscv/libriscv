@@ -10,6 +10,7 @@ namespace riscv
 {
 	static constexpr int RISCV32 = 4;
 	static constexpr int RISCV64 = 8;
+	static constexpr int SYSCALL_DEBUG = 0;
 
 	template <int W>
 	struct Machine
@@ -18,11 +19,12 @@ namespace riscv
 		using syscall_t = delegate<address_t (Machine<W>&)>;
 		Machine(std::vector<uint8_t> binary, bool verbose = false);
 
+		void simulate();
 		void stop() noexcept;
 		bool stopped() const noexcept;
-		void simulate();
-		void reset();
 		void install_syscall_handler(int, syscall_t);
+		void reset();
+		void break_now();
 
 		CPU<W>    cpu;
 		Memory<W> memory;

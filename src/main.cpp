@@ -34,6 +34,13 @@ uint32_t syscall_exit(riscv::Machine<W>& machine)
 	return 0;
 }
 template <int W>
+uint32_t syscall_ebreak(riscv::Machine<W>& machine)
+{
+	printf("\n>>> EBREAK at %#X", machine.cpu.pc());
+	machine.break_now();
+	return 0;
+}
+template <int W>
 uint32_t syscall_check(riscv::Machine<W>& machine)
 {
 	const auto value = machine.cpu.reg(riscv::RISCV::REG_ARG0);
@@ -55,6 +62,7 @@ int main(int argc, const char** argv)
 	const auto binary = load_file(filename);
 
 	riscv::Machine<riscv::RISCV32> machine { binary, verbose_machine };
+	machine.install_syscall_handler(0, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 

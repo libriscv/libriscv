@@ -389,7 +389,7 @@ namespace riscv
 				}
 				return;
 			case 1: // EBREAK
-				// do ebreak
+				cpu.machine().system_call(0);
 				return;
 			}
 		}

@@ -26,5 +26,6 @@ int main(int, char**)
 	// va_list & stdarg test
 	int len = printf(b->c_str(), "RISC-V");
 	assert(len > 0);
+
 	return 666;
 }

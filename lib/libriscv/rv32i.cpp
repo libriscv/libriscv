@@ -84,10 +84,11 @@ namespace riscv
 			printf("\n%s\n\n", regs.c_str());
 		}
 
+		// allow exceptions to happen on this instruction
+		this->handle_interrupts();
+
 		// increment PC
 		registers().pc += format.length();
-
-		this->handle_interrupts();
 	}
 
 	std::string RV32I::to_string(CPU<4>& cpu, format_t format, instruction_t instr)

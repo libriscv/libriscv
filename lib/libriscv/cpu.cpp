@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include "common.hpp"
 #include "riscvbase.hpp"
 
 namespace riscv
@@ -23,6 +24,10 @@ namespace riscv
 	void CPU<W>::jump(const address_t dst)
 	{
 		this->registers().pc = dst;
+		// it's possible to jump to a misaligned instruction
+		if (this->registers().pc & 0x1) {
+			this->trigger_interrupt(MISALIGNED_INSTRUCTION);
+		}
 	}
 
 	template<int W>
@@ -34,7 +39,7 @@ namespace riscv
 	template<int W>
 	void CPU<W>::handle_interrupts()
 	{
-		if (m_data.interrupt_master_enable && !m_data.interrupt_queue.empty())
+		if (UNLIKELY(m_data.interrupt_master_enable && !m_data.interrupt_queue.empty()))
 		{
 			for (auto intr : m_data.interrupt_queue) {
 				this->execute_interrupt(intr);
@@ -49,10 +54,15 @@ namespace riscv
 		// TODO: replace with callback system
 		switch (intr)
 		{
+		case DEBUG_INTERRUPT:
+			machine().system_call(0);
+			break;
 		case ILLEGAL_OPCODE:
 			throw std::runtime_error("Illegal opcode executed");
 		case ILLEGAL_OPERATION:
 			throw std::runtime_error("Illegal operation during instruction decoding");
+		case PROTECTION_FAULT:
+			throw std::runtime_error("Protection fault");
 		case MISALIGNED_INSTRUCTION:
 			// NOTE: only check for this when jumping or branching
 			throw std::runtime_error("Misaligned instruction executed");
