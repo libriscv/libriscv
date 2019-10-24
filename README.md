@@ -23,6 +23,10 @@ cmake .. && make -j4
 ./remu ../binaries/hello_world.cpp.elf
 ```
 
+Building and running your own ELF files that can run in freestanding RV32IM is
+quite challenging, so consult the hello world example! It's a bit like booting
+on bare metal using multiboot, except you have easier access to system functions.
+
 ## Instruction set support
 
 The emulator currently supports RV32IM, however the foundation is laid for RV64IM.
@@ -37,6 +41,7 @@ Load a binary and let the machine simulate from `_start` (ELF entry-point):
 template <int W>
 long syscall_exit(riscv::Machine<W>& machine)
 {
+	printf(">>> Program exit(%d)\n", machine.cpu.reg(riscv::RISCV::REG_ARG0));
 	machine.stop();
 	return 0;
 }
@@ -59,3 +64,6 @@ int main(int argc, const char** argv)
 You can find details on the Linux system call ABI online as well as in the `syscall.h`
 header in the src folder. You can use this header to make syscalls from your RISC-V programs.
 It is the Linux RISC-V syscall ABI.
+
+Be careful about modifying registers during system calls, as it may cause problems
+in the simulated program.
