@@ -58,14 +58,23 @@ int main(int argc, const char** argv)
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 	machine.install_syscall_handler(666, syscall_check<riscv::RISCV32>);
-	/*
 	machine.verbose_instructions = true;
+	/*
 	machine.verbose_registers = true;
 	machine.verbose_jumps = true;
 	*/
 	while (!machine.stopped())
 	{
 		machine.simulate();
+
+		if (machine.cpu.pc() == 0x10E1C || machine.cpu.pc() == 0x10DDC) {
+			//machine.verbose_instructions = true;
+			machine.verbose_registers = true;
+			machine.simulate();
+			//machine.stop();
+			//machine.verbose_instructions = false;
+			//machine.verbose_registers = false;
+		}
 	}
 }
 

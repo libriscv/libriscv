@@ -8,7 +8,7 @@ option(NATIVE      "Enable native performance" OFF)
 
 set(RISCV_ABI "-march=rv32im -mabi=ilp32")
 set(WARNINGS  "-Wall -Wextra")
-set(COMMON    "-O1 -g -nostdlib")
+set(COMMON    "-O1 -g -nostdlib -nostdinc")
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
 set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON}")
 
@@ -34,16 +34,17 @@ endif()
 
 set(SOURCES
 	src/hello_world.cpp
-	src/start.cpp
-	src/libc.c
 )
 
 set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
 
+add_subdirectory(ext)
+add_subdirectory(libc)
+
 add_executable(hello_world ${SOURCES})
-target_include_directories(hello_world PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(hello_world "-static")
+target_include_directories(hello_world PRIVATE "libc")
+target_link_libraries(hello_world "-static" libc)
 # place ELF into the top binary folder
 set_target_properties(hello_world
 	PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

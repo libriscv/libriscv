@@ -203,16 +203,40 @@ namespace riscv
 	});
 
 	INSTRUCTION(OP_IMM,
-	[] (auto& cpu, rv32i_instruction instr) {
-		// handler
-		if (instr.Itype.funct3 == 0) {
-			// ADDI: Add sign-extended 12-bit immediate
-			if (instr.Itype.rd != 0) {
-				cpu.reg(instr.Itype.rd) = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		if (instr.Itype.rd != 0)
+		{
+			auto& dst = cpu.reg(instr.Itype.rd);
+			const auto& src = cpu.reg(instr.Itype.rs1);
+			switch (instr.Itype.funct3) {
+			case 0x0:
+				// ADDI: Add sign-extended 12-bit immediate
+				dst = src + instr.Itype.signed_imm();
+				break;
+			case 0x1: // SLLI:
+				dst = src << instr.Itype.signed_imm();
+				break;
+			case 0x2: // SLTI:
+				dst = instr.to_signed(src) << instr.Itype.signed_imm();
+				break;
+			case 0x3: // SLTU:
+				dst = (src < instr.Itype.signed_imm()) ? 1 : 0;
+				break;
+			case 0x4: // XORI:
+				dst = src ^ instr.Itype.signed_imm();
+				break;
+			case 0x5: // SRLI: TODO: WRITEME
+				dst = src ^ instr.Itype.signed_imm();
+				break;
+			case 0x6: // ORI:
+				dst = src | instr.Itype.signed_imm();
+				break;
+			case 0x7: // ANDI:
+				dst = src & instr.Itype.signed_imm();
+				break;
 			}
-		}
-		else {
-			cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -232,11 +256,17 @@ namespace riscv
 		}
 		else if (instr.Itype.rs1 != 0) {
 			static std::array<const char*, 8> func3 = {"ADDI", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
-			return snprintf(buffer, len, "%s %s, %s%+d",
-							func3[instr.Itype.funct3],
-							RISCV::regname(instr.Itype.rd),
-							RISCV::regname(instr.Itype.rs1),
-							instr.Itype.signed_imm());
+			if (!(instr.Itype.funct3 == 4 && instr.Itype.signed_imm() == -1)) {
+				return snprintf(buffer, len, "%s %s, %s%+d",
+								func3[instr.Itype.funct3],
+								RISCV::regname(instr.Itype.rd),
+								RISCV::regname(instr.Itype.rs1),
+								instr.Itype.signed_imm());
+			} else {
+				return snprintf(buffer, len, "NOT %s, %s",
+								RISCV::regname(instr.Itype.rd),
+								RISCV::regname(instr.Itype.rs1));
+			}
 		}
 		static std::array<const char*, 8> func3 = {"LINT", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
 		return snprintf(buffer, len, "%s %s, %d",
@@ -270,7 +300,7 @@ namespace riscv
 				case 0x4: // XOR
 					dst = src1 ^ src2;
 					break;
-				case 0x5: // SRL / SLA
+				case 0x5: // SRL / SLA TODO: WRITEME
 					dst = src1 ^ src2;
 					break;
 				case 0x6: // OR
