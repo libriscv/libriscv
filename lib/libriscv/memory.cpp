@@ -104,7 +104,7 @@ namespace riscv
 	}
 
 	template <int W>
-	Page& Memory<W>::default_page_fault(Memory<W>& mem, size_t page)
+	Page& Memory<W>::default_page_fault(Memory<W>& mem, const size_t page)
 	{
 		// create page on-demand
 		if (mem.active_pages() < mem.pages_total())
