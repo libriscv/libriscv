@@ -2,7 +2,7 @@
 
 #define INSTRUCTION(x, ...) \
 		static CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
-#define DECODED_INSTR(x) { instr32i_##x }
+#define DECODED_INSTR(x) instr32i_##x
 
 namespace riscv
 {
@@ -26,7 +26,15 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		return snprintf(buffer, len, "UNIMPLEMENTED: %#x (%#x)", instr.opcode(), instr.whole);
+		if (instr.length() == 4) {
+			return snprintf(buffer, len, "UNIMPLEMENTED: 4-byte %#x (%#x)",
+							instr.opcode(), instr.whole);
+		} else {
+			return snprintf(buffer, len, "UNIMPLEMENTED: 2-byte %#hx F%#hx (%#hx)",
+							instr.compressed().opcode(),
+							instr.compressed().funct3(),
+							instr.half[0]);
+		}
 	});
 
 	INSTRUCTION(LOAD,

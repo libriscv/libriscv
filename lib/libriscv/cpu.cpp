@@ -20,6 +20,21 @@ namespace riscv
 		this->execute();
 	}
 
+	template <int W>
+	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
+	{
+		// decode whole instruction at address
+		format_t instruction;
+		instruction.whole = this->machine().memory.template read<uint16_t>(address);
+
+		if (instruction.length() == 4) {
+			// re-read 32-bit instruction *sigh*
+			instruction.whole = this->machine().memory.template read<uint32_t>(address);
+		}
+
+		return instruction;
+	}
+
 	template<int W>
 	void CPU<W>::execute()
 	{
@@ -48,21 +63,6 @@ namespace riscv
 
 		// increment PC
 		registers().pc += instruction.length();
-	}
-
-	template <int W>
-	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
-	{
-		// decode whole instruction at address
-		format_t instruction;
-		instruction.whole = this->machine().memory.template read<address_t>(address);
-
-		if (instruction.length() == 4) {
-			// re-read 32-bit instruction *sigh*
-			instruction.whole = this->machine().memory.template read<address_t>(address);
-		}
-
-		return instruction;
 	}
 
 	template<int W>

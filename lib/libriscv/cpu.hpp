@@ -4,6 +4,7 @@
 #include "rv32i.hpp"
 #include "util/delegate.hpp"
 #include <map>
+#include <tuple>
 #include <vector>
 
 namespace riscv

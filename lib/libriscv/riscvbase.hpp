@@ -58,5 +58,9 @@ namespace riscv
 			}
 			return "Invalid register";
 		}
+		static const char* ciname(const uint16_t reg) noexcept
+		{
+			return regname(reg + 0x8);
+		}
 	};
 }

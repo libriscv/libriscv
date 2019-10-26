@@ -3,9 +3,12 @@
 #include <cstdint>
 #include <string>
 #include "types.hpp"
+#include "rv32c.hpp"
 
 namespace riscv
 {
+	union rv32c_instruction;
+
 	union rv32i_instruction
 	{
 		using word_t = uint32_t;
@@ -125,6 +128,7 @@ namespace riscv
 			}
 		} Jtype;
 
+		uint16_t half[2];
 		uint32_t whole;
 
 		rv32i_instruction() : whole(0) {}
@@ -136,6 +140,10 @@ namespace riscv
 
 		uint16_t length() const noexcept {
 			return ((Rtype.opcode & 0x3) == 0x3) ? 4 : 2;
+		}
+
+		inline auto compressed() const noexcept {
+			return rv32c_instruction { half[0] };
 		}
 
 		static constexpr sword_t to_signed(word_t word) noexcept {
@@ -151,6 +159,7 @@ namespace riscv
 	struct RV32I {
 		using address_t     = uint32_t; // ??
 		using format_t      = rv32i_instruction;
+		using compressed_t  = rv32c_instruction;
 		using instruction_t = Instruction<4>;
 		using register_t    = uint32_t;
 
