@@ -22,11 +22,11 @@ namespace riscv
 
 		Memory(Machine<W>&, std::vector<uint8_t>);
 
-		template <int SIZE>
-		auto read(address_t address);
+		template <typename T>
+		T read(address_t address);
 
-		template <int SIZE, typename T>
-		void write(address_t address, T value);
+		template <typename T>
+		bool write(address_t address, T value);
 
 		auto  memset(address_t dst, uint8_t value, size_t len);
 		auto  memcpy(address_t dst, const uint8_t* src, size_t);
@@ -51,7 +51,8 @@ namespace riscv
 		size_t pages_total() const noexcept { return this->m_pages_total; }
 		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
 		auto& pages() noexcept { return m_pages; }
-		Page& get_page(const address_t address);
+		const Page& get_page(const address_t address) const noexcept;
+		Page& create_page(const address_t address);
 
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		static Page& default_page_fault(Memory&, const size_t page);

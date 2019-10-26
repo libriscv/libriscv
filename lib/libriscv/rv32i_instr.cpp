@@ -2,7 +2,7 @@
 
 #define INSTRUCTION(x, ...) \
 		static CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
-#define DECODED_INSTR(x, instr) { instr32i_##x, instr }
+#define DECODED_INSTR(x) { instr32i_##x }
 
 namespace riscv
 {
@@ -37,21 +37,21 @@ namespace riscv
 			const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 			const uint32_t type = instr.Itype.funct3;
 			if (type == 0) { // LB
-				cpu.reg(reg) = cpu.machine().memory.template read<8>(addr);
+				cpu.reg(reg) = cpu.machine().memory.template read<uint8_t>(addr);
 				// sign-extend 8-bit
 				if (cpu.reg(reg) & 0x80) cpu.reg(reg) |= 0xFFFFFF00;
 			} else if (type == 1) { // LH
-				cpu.reg(reg) = cpu.machine().memory.template read<16>(addr);
+				cpu.reg(reg) = cpu.machine().memory.template read<uint16_t>(addr);
 				// sign-extend 16-bit
 				if (cpu.reg(reg) & 0x8000) cpu.reg(reg) |= 0xFFFF0000;
 			} else if (type == 2) { // LW
-				cpu.reg(reg) = cpu.machine().memory.template read<32>(addr);
+				cpu.reg(reg) = cpu.machine().memory.template read<uint32_t>(addr);
 			} else if (type == 4) { // LBU
 				// load zero-extended 8-bit value
-				cpu.reg(reg) = cpu.machine().memory.template read<8>(addr);
+				cpu.reg(reg) = cpu.machine().memory.template read<uint8_t>(addr);
 			} else if (type == 5) { // LHU
 				// load zero-extended 16-bit value
-				cpu.reg(reg) = cpu.machine().memory.template read<16>(addr);
+				cpu.reg(reg) = cpu.machine().memory.template read<uint16_t>(addr);
 			} else {
 				cpu.trigger_interrupt(ILLEGAL_OPERATION);
 			}
@@ -76,14 +76,14 @@ namespace riscv
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 		const uint32_t type = instr.Stype.funct3;
 		if (type == 0) {
-			cpu.machine().memory.template write<8, uint8_t>(addr, value);
-			//assert(cpu.machine().memory.template read<8> (addr) == (uint8_t) value);
+			cpu.machine().memory.template write<uint8_t>(addr, value);
+			//assert(cpu.machine().memory.template read<uint8_t> (addr) == (uint8_t) value);
 		} else if (type == 1) {
-			cpu.machine().memory.template write<16, uint16_t>(addr, value);
-			//assert(cpu.machine().memory.template read<16> (addr) == (uint16_t) value);
+			cpu.machine().memory.template write<uint16_t>(addr, value);
+			//assert(cpu.machine().memory.template read<uint16_t> (addr) == (uint16_t) value);
 		} else if (type == 2) {
-			cpu.machine().memory.template write<32, uint32_t>(addr, value);
-			//assert(cpu.machine().memory.template read<32> (addr) == (uint32_t) value);
+			cpu.machine().memory.template write<uint32_t>(addr, value);
+			//assert(cpu.machine().memory.template read<uint32_t> (addr) == (uint32_t) value);
 		}
 		else {
 			cpu.trigger_interrupt(ILLEGAL_OPERATION);

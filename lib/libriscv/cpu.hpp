@@ -1,6 +1,5 @@
 #pragma once
 #include "types.hpp"
-#include "instruction.hpp"
 #include "registers.hpp"
 #include "rv32i.hpp"
 #include "util/delegate.hpp"
@@ -50,15 +49,15 @@ namespace riscv
 
 		CPU(Machine<W>&);
 	private:
-		using decoded_t = std::tuple<instruction_t&, format_t>;
 		struct {
 			Registers<W> m_regs;
 			std::vector<interrupt_t> interrupt_queue;
 			bool interrupt_master_enable = true;
 		} m_data;
 
-		void execute();
-		decoded_t decode(address_t);
+		inline void execute();
+		format_t read_instruction(address_t);
+		const instruction_t& decode(format_t) const;
 
 		void handle_interrupts();
 		void execute_interrupt(interrupt_t intr);

@@ -140,7 +140,7 @@ static bool execute_commands(CPU<W>& cpu)
         for (int i = 0; i < bytes; i++)
         {
             if (col == 0) printf("0x%04lx: ", hex + i);
-            printf("0x%02x ", cpu.machine().memory.template read<8>(hex + i));
+            printf("0x%02x ", cpu.machine().memory.template read<uint8_t>(hex + i));
             if (++col == 4)
             {
                 printf("\n");
@@ -161,7 +161,7 @@ static bool execute_commands(CPU<W>& cpu)
         unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
         int value = std::stoi(params[2]) & 0xff;
         printf("0x%04lx -> 0x%02x\n", hex, value);
-        cpu.machine().memory.template write<8>(hex, value);
+        cpu.machine().memory.template write<uint8_t>(hex, value);
         return true;
     }
     else if (cmd == "debug")
@@ -186,8 +186,9 @@ static bool execute_commands(CPU<W>& cpu)
 template<int W>
 void CPU<W>::print_and_pause(CPU<W>& cpu)
 {
-	auto [instr, format] = cpu.decode(cpu.pc());
-	const auto string = CPU<W>::isa_t::to_string(cpu, format, instr);
+	const auto instruction = cpu.read_instruction(cpu.pc());
+	const auto& handler = cpu.decode(instruction);
+	const auto string = CPU<W>::isa_t::to_string(cpu, instruction, handler);
     printf("\n>>> Breakpoint \t%s\n\n", string.c_str());
     // CPU registers
     printf("%s", cpu.registers().to_string().c_str());

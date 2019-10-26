@@ -21,6 +21,51 @@ namespace riscv
 	}
 
 	template<int W>
+	void CPU<W>::execute()
+	{
+		const auto instruction = this->read_instruction(this->pc());
+		const auto& handler = this->decode(instruction);
+
+		// instruction logging
+		if (machine().verbose_instructions)
+		{
+			const auto string = isa_t::to_string(*this, instruction, handler);
+			printf("%s\n", string.c_str());
+		}
+
+		// execute instruction
+		handler.handler(*this, instruction);
+		assert(this->reg(0) == 0);
+
+		if (machine().verbose_registers)
+		{
+			auto regs = this->registers().to_string();
+			printf("\n%s\n\n", regs.c_str());
+		}
+
+		// allow exceptions to happen on this instruction
+		this->handle_interrupts();
+
+		// increment PC
+		registers().pc += instruction.length();
+	}
+
+	template <int W>
+	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
+	{
+		// decode whole instruction at address
+		format_t instruction;
+		instruction.whole = this->machine().memory.template read<address_t>(address);
+
+		if (instruction.length() == 4) {
+			// re-read 32-bit instruction *sigh*
+			instruction.whole = this->machine().memory.template read<address_t>(address);
+		}
+
+		return instruction;
+	}
+
+	template<int W>
 	void CPU<W>::jump(const address_t dst)
 	{
 		this->registers().pc = dst;

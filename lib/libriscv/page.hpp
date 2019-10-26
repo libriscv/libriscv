@@ -2,6 +2,10 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <tuple>
+template <class...> constexpr std::false_type always_false {};
+
+namespace riscv {
 
 struct PageAttributes
 {
@@ -10,31 +14,14 @@ struct PageAttributes
 	bool exec  = false;
 };
 
-struct alignas(4096) PageData {
+union alignas(4096) PageData {
 	static constexpr unsigned SIZE  = 4096;
 	static constexpr unsigned SHIFT = 12;
 
-	template <int SIZE>
-	inline auto& aligned_value(uint32_t offset)
-	{
-		if constexpr (SIZE == 8) {
-			return memory.buffer8.at(offset);
-		} else if constexpr (SIZE == 16) {
-			return memory.buffer16.at((offset >> 1) & 2047);
-		} else if constexpr (SIZE == 32) {
-			return memory.buffer32.at((offset >> 2) & 1023);
-		} else if constexpr (SIZE == 64) {
-			return memory.buffer64.at((offset >> 3) & 511);
-		}
-		throw std::runtime_error("Invalid read");
-	}
-
-	union {
-		std::array<uint8_t,  SIZE / 1> buffer8;
-		std::array<uint16_t, SIZE / 2> buffer16;
-		std::array<uint32_t, SIZE / 4> buffer32;
-		std::array<uint64_t, SIZE / 8> buffer64;
-	} memory;
+	std::array<uint8_t,  SIZE / 1> buffer8;
+	std::array<uint16_t, SIZE / 2> buffer16;
+	std::array<uint32_t, SIZE / 4> buffer32;
+	std::array<uint64_t, SIZE / 8> buffer64;
 };
 
 struct Page
@@ -42,16 +29,68 @@ struct Page
 	static constexpr unsigned SIZE  = PageData::SIZE;
 	static constexpr unsigned SHIFT = PageData::SHIFT;
 
-	auto& page() { return *m_page; }
+	template <typename T>
+	inline std::tuple<T, bool> aligned_read(uint32_t offset) const
+	{
+		if (this->attr.read) {
+			if constexpr (std::is_same<T, uint8_t>::value) {
+				return { m_page->buffer8.at(offset), true };
+			} else if constexpr (std::is_same<T, uint16_t>::value) {
+				return { m_page->buffer16.at((offset >> 1) & 2047), (offset & 0x1) == 0 };
+			} else if constexpr (std::is_same<T, uint32_t>::value) {
+				return { m_page->buffer32.at((offset >> 2) & 1023), (offset & 0x3) == 0 };
+			} else if constexpr (std::is_same<T, uint64_t>::value) {
+				return { m_page->buffer64.at((offset >> 3) & 511), (offset & 0x7) == 0 };
+			}
+			else {
+				static_assert(always_false<T>, "Can't use this type when reading memory");
+			}
+		}
+		return { T {}, false };
+	}
 
-	uint8_t* data() noexcept {
-		return page().memory.buffer8.data();
+	template <typename T>
+	inline bool aligned_write(uint32_t offset, T value)
+	{
+		if (this->attr.write) {
+			if constexpr (std::is_same<T, uint8_t>::value) {
+				m_page->buffer8.at(offset) = value;
+				return true;
+			} else if constexpr (std::is_same<T, uint16_t>::value) {
+				m_page->buffer16.at((offset >> 1) & 2047) = value;
+				return (offset & 0x1) == 0;
+			} else if constexpr (std::is_same<T, uint32_t>::value) {
+				m_page->buffer32.at((offset >> 2) & 1023) = value;
+				return (offset & 0x3) == 0;
+			} else if constexpr (std::is_same<T, uint64_t>::value) {
+				m_page->buffer64.at((offset >> 3) & 511) = value;
+				return (offset & 0x7) == 0;
+			}
+			else {
+				static_assert(always_false<T>, "Can't use this type when writing memory");
+			}
+		}
+		return false;
+	}
+
+	auto& page() noexcept { return *m_page; }
+	const auto& page() const noexcept { return *m_page; }
+
+	auto* data() noexcept {
+		return page().buffer8.data();
+	}
+	const auto* data() const noexcept {
+		return page().buffer8.data();
 	}
 
 	static constexpr size_t size() noexcept {
 		return SIZE;
 	}
 
+	static const Page& zero_page() noexcept;
+
 	std::unique_ptr<PageData> m_page { new PageData };
 	PageAttributes attr;
 };
+
+}

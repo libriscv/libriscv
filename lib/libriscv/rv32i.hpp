@@ -154,6 +154,6 @@ namespace riscv
 		using instruction_t = Instruction<4>;
 		using register_t    = uint32_t;
 
-		static std::string to_string(CPU<4>& cpu, format_t format, instruction_t instr);
+		static std::string to_string(CPU<4>& cpu, format_t format, const instruction_t& instr);
 	};
 }

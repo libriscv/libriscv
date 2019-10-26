@@ -118,5 +118,10 @@ namespace riscv
 		throw std::runtime_error("Out of memory");
 	}
 
+	const Page& Page::zero_page() noexcept {
+		static Page zero_page;
+		return zero_page;
+	}
+
 	template class Memory<4>;
 }
