@@ -20,8 +20,6 @@ namespace riscv
 		using mmio_cb_t = delegate<bool(Memory&, address_t, int, address_t)>;
 		using page_fault_cb_t = delegate<Page&(Memory&, size_t)>;
 
-		Memory(Machine<W>&, std::vector<uint8_t>);
-
 		template <typename T>
 		T read(address_t address);
 
@@ -32,8 +30,14 @@ namespace riscv
 		void memcpy(address_t dst, const uint8_t* src, size_t);
 		void memcpy_out(uint8_t* dst, address_t src, size_t);
 
+		auto copy_to_guest(address_t dst, const uint8_t* buf, size_t len)
+		{
+			this->memcpy(dst, buf, len);
+			return dst + len;
+		}
+
 		address_t start_address() const noexcept { return this->m_start_address; }
-		address_t stack_address() const noexcept { return this->m_stack_address; }
+		address_t stack_initial() const noexcept { return this->m_stack_address; }
 
 		bool is_writable(const address_t address) const noexcept;
 
@@ -56,6 +60,8 @@ namespace riscv
 
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		static Page& default_page_fault(Memory&, const size_t page);
+
+		Memory(Machine<W>&, std::vector<uint8_t>);
 	private:
 		inline auto& create_attr(const address_t address);
 		inline void  set_page_attr(address_t, size_t len, PageAttributes);

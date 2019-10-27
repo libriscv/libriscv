@@ -1,9 +1,6 @@
 #pragma once
 #include <libriscv/machine.hpp>
 
-static constexpr bool verbose_syscalls = false;
-static constexpr bool verbose_machine  = true;
-
 template <int W>
 uint32_t syscall_write(riscv::Machine<4>& machine)
 {

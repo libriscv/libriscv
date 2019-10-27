@@ -6,11 +6,11 @@ option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 option(NATIVE      "Enable native performance" OFF)
 
-set(RISCV_ABI "-march=rv32imac -mabi=ilp32")
+set(RISCV_ABI "-march=rv32imc -mabi=ilp32")
 set(WARNINGS  "-Wall -Wextra")
-set(COMMON    "-O1")
+set(COMMON    "-O2 -fstack-protector")
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
-set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON} -fno-exceptions -fno-rtti")
+set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON}")
 
 if (DEBUGGING)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g")
@@ -40,7 +40,7 @@ set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
 
 add_executable(hello_world ${SOURCES})
-target_link_libraries(hello_world "-static" -Wl,--start-group -Wl,-lc -Wl,-lsim -Wl,--end-group)
+target_link_libraries(hello_world "-static" -lstdc++ -lsupc++ -Wl,--start-group -Wl,-lc -Wl,-lsim -Wl,--end-group)
 # place ELF into the top binary folder
 set_target_properties(hello_world
 	PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

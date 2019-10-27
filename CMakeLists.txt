@@ -5,6 +5,7 @@ add_subdirectory(lib)
 
 set(SOURCES
 	src/main.cpp
+	src/linux.cpp
 )
 
 add_executable(remu ${SOURCES})
