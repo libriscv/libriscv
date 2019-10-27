@@ -2,10 +2,9 @@
 #include <cstdio>
 #include <string>
 #include <unistd.h>
-#include <vector>
+#include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-#include <libriscv/machine.hpp>
 static constexpr bool verbose_syscalls = false;
 static constexpr bool verbose_machine = false;
 

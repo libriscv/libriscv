@@ -1,3 +1,3 @@
 [submodule "binaries/ext/tinyprintf"]
-	path = binaries/ext/tinyprintf
+	path = binaries/barebones/ext/tinyprintf
 	url = https://github.com/fwsGonzo/tinyprintf.git
