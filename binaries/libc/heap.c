@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <include/printf.h>
 
 static uintptr_t heap_start;
 static uintptr_t heap_end;

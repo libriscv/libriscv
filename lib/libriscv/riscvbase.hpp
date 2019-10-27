@@ -29,8 +29,8 @@ namespace riscv
 				case 3: return "GP";
 				case 4: return "TP";
 				case 5: return "LR";
-				case 6: return "TMP0";
-				case 7: return "TMP1";
+				case 6: return "TMP1";
+				case 7: return "TMP2";
 				case 8: return "SR0";
 				case 9: return "SR1";
 				case 10: return "A0";
@@ -51,10 +51,10 @@ namespace riscv
 				case 25: return "SR9";
 				case 26: return "SR10";
 				case 27: return "SR11";
-				case 28: return "TMP2";
-				case 29: return "TMP3";
-				case 30: return "TMP4";
-				case 31: return "TMP5";
+				case 28: return "TMP3";
+				case 29: return "TMP4";
+				case 30: return "TMP5";
+				case 31: return "TMP6";
 			}
 			return "Invalid register";
 		}

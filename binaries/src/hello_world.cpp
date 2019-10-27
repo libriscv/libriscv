@@ -16,16 +16,15 @@ void test_constructor() {
 
 int main(int, char**)
 {
+	static const char* hello = "Hello %s World v%d.%d!\n";
 	assert(testval == 22);
-	static const char* hello = "Hello %s World!\n";
 	// heap test
 	auto b = std::unique_ptr<std::string> (new std::string(""));
 	assert(b != nullptr);
 	// copy into string
 	*b = hello;
 	// va_list & stdarg test
-	int len = printf(b->c_str(), "RISC-V");
+	int len = printf(b->c_str(), "RISC-V", 1, 0);
 	assert(len > 0);
-
 	return 666;
 }

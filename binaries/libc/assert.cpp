@@ -6,7 +6,7 @@ extern "C"
 __attribute__((noreturn))
 void panic(const char* reason)
 {
-	printf("\n\n!!! PANIC !!!\n%s\n", reason);
+	tfp_printf("\n\n!!! PANIC !!!\n%s\n", reason);
 
 	// the end
 	syscall(SYSCALL_EXIT, -1);
@@ -22,10 +22,10 @@ void abort()
 extern "C"
 void abort_message(const char* fmt, ...)
 {
-	char buffer[512];
+	char buffer[2048];
 	va_list arg;
 	va_start (arg, fmt);
-	int bytes = vsnprintf(buffer, sizeof(buffer), fmt, arg);
+	int bytes = tfp_vsnprintf(buffer, sizeof(buffer), fmt, arg);
 	(void) bytes;
 	va_end (arg);
 	panic(buffer);
@@ -38,7 +38,7 @@ void __assert_func(
 	const char *func,
 	const char *failedexpr)
 {
-	printf(
+	tfp_printf(
 		"assertion \"%s\" failed: file \"%s\", line %d%s%s\n",
 		failedexpr, file, line,
 		func ? ", function: " : "", func ? func : "");

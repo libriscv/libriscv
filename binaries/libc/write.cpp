@@ -1,12 +1,19 @@
 #include <include/printf.h>
-#include <assert.h>
-#include <string.h>
+#include <cassert>
+#include <cstring>
+#include <cstdio>
 #include <include/syscall.hpp>
 
 extern "C"
 long write(int fd, const void* data, size_t len)
 {
 	return syscall(SYSCALL_WRITE, fd, (long) data, len, 0, 0, 0);
+}
+
+extern "C"
+long sendint(uint32_t value)
+{
+	return syscall(SYSCALL_SINT, value, 0, 0, 0, 0, 0);
 }
 
 extern "C"

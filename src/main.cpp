@@ -34,24 +34,18 @@ uint32_t syscall_exit(riscv::Machine<W>& machine)
 	return 0;
 }
 template <int W>
+uint32_t syscall_sendint(riscv::Machine<W>& machine)
+{
+	const uint32_t arg0 = machine.cpu.reg(riscv::RISCV::REG_ARG0);
+	printf(">>> Received integer %d (0x%X)\n", arg0, arg0);
+	return 0;
+}
+template <int W>
 uint32_t syscall_ebreak(riscv::Machine<W>& machine)
 {
 	printf("\n>>> EBREAK at %#X", machine.cpu.pc());
 	machine.break_now();
 	return 0;
-}
-template <int W>
-uint32_t syscall_check(riscv::Machine<W>& machine)
-{
-	const auto value = machine.cpu.reg(riscv::RISCV::REG_ARG0);
-	if constexpr (verbose_syscalls) {
-		printf("SYSCALL check called, value = %d (%s)\n", value, (value >= 0 ? "OK" : "ERROR"));
-	}
-	if (value < 0) {
-		printf(">>> Got negative check value: %d\n", value);
-		machine.stop();
-	}
-	return value;
 }
 
 int main(int argc, const char** argv)
@@ -65,12 +59,13 @@ int main(int argc, const char** argv)
 	machine.install_syscall_handler(0, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
+	machine.install_syscall_handler(666, syscall_sendint<riscv::RISCV32>);
 
 	/*
-	machine.cpu.breakpoint(0x10190);
 	machine.verbose_instructions = true;
 	machine.verbose_jumps = true;
 	machine.verbose_registers = true;
+	machine.cpu.breakpoint(0x10142);
 	*/
 	while (!machine.stopped())
 	{

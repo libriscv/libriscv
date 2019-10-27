@@ -32,53 +32,78 @@ namespace riscv
 				const uint32_t ext = 0xFFFFFFE0;
 				return imm1 | (sign() ? ext : 0);
 			}
+			uint32_t shift_imm() const noexcept {
+				return imm1 | (imm2 << 4);
+			}
 		} CI;
 		struct {
 			uint16_t opcode : 2;
+			uint16_t imm67  : 2;
 			uint16_t imm234 : 3;
-			uint16_t imm5   : 1;
-			uint16_t imm6   : 1;
 			uint16_t rd     : 5;
-			uint16_t imm7   : 1;
+			uint16_t imm5   : 1;
+			uint16_t funct3 : 3;
+
+			uint32_t offset() const noexcept {
+				uint32_t val = imm234 | (imm5 << 3) | (imm67 << 4);
+				return (val << 2); // scaled by 4
+			}
+		} CI2;
+		struct {
+			uint16_t opcode : 2;
+			uint16_t imm5   : 1;
+			uint16_t imm78  : 2;
+			uint16_t imm6   : 1;
+			uint16_t imm4   : 1;
+			uint16_t rd     : 5;
+			uint16_t imm9   : 1;
 			uint16_t funct3 : 3;
 
 			bool sign() const noexcept {
-				return imm5;
+				return imm9;
 			}
 			int32_t signed_imm() const noexcept {
-				const uint32_t ext = 0xFFFFFFE0;
-				int32_t val = imm6 | (imm7 << 1) | (imm234 << 2);
-				return (val << 2) | (sign() ? ext : 0);
+				const uint32_t ext = 0xFFFFFE00;
+				int32_t val = imm4 | (imm5 << 1) | (imm6 << 2) | (imm78 << 3);
+				return (val << 4) | (sign() ? ext : 0); // scaled by 16
 			}
-		} CI2;
+		} CI16;
 		// stack-relative store
 		struct {
 			uint16_t opcode : 2;
 			uint16_t rs2    : 5;
-			uint16_t imm    : 6;
+			uint16_t imm67  : 2;
+			uint16_t imm25  : 4;
 			uint16_t funct3 : 3;
 
 			int32_t offset4() const noexcept {
-				//return ((imm & 0xF) << 4) | ((imm & 0x30) >> 4);
-				return imm;
+				int32_t val = imm25 | (imm67 << 4);
+				return (val << 2);
 			}
 		} CSS;
 		// wide immediate format
 		struct {
 			uint16_t opcode : 2;
 			uint16_t srd    : 3;
-			uint16_t imm    : 8;
+			uint16_t imm3   : 1;
+			uint16_t imm2   : 1;
+			uint16_t imm6789: 4;
+			uint16_t imm45  : 2;
 			uint16_t funct3 : 3;
+
+			uint32_t offset() const noexcept {
+				uint32_t val = imm2 | (imm3 << 1) | (imm45 << 2) | (imm6789 << 4);
+				return (val << 2); // scaled by 4 (ADDI4SPN)
+			}
 		} CIW;
 		// load format
 		struct {
 			uint16_t opcode : 2;
 			uint16_t srd    : 3;
-			uint16_t imm2   : 1;
-			uint16_t imm3   : 1;
-			uint16_t srs1   : 3;
-			uint16_t imm45  : 2;
 			uint16_t imm6   : 1;
+			uint16_t imm2   : 1;
+			uint16_t srs1   : 3;
+			uint16_t imm345 : 3;
 			uint16_t funct3 : 3;
 
 			bool sign() const noexcept {
@@ -86,7 +111,7 @@ namespace riscv
 			}
 			int32_t signed_imm() const noexcept {
 				const uint32_t ext = 0xFFFFFFE0;
-				int32_t val = imm6 | (imm2 << 1) | (imm3 << 2) | (imm45 << 3);
+				const int32_t val = imm2 | (imm345 << 1);
 				return (val << 2) | (sign() ? ext : 0);
 			}
 		} CL;

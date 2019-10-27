@@ -2,17 +2,17 @@
 #include <stdarg.h>
 #include <include/printf.h>
 #include <include/libc.hpp>
+#include <stdio.h>
 
 int printf(const char* fmt, ...)
 {
 	char buffer[4096];
 	va_list va;
 	va_start(va, fmt);
-	int ret = tfp_vsnprintf(buffer, sizeof(buffer), fmt, va);
+	int len = tfp_vsnprintf(buffer, sizeof(buffer), fmt, va);
 	va_end(va);
 
-	write(0, buffer, ret);
-	return ret;
+	return write(0, buffer, len);
 }
 
 #undef snprintf

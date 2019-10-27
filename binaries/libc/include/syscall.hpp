@@ -2,6 +2,7 @@
 
 #define SYSCALL_WRITE  64
 #define SYSCALL_EXIT   93
+#define SYSCALL_SINT   666
 
 inline long
 syscall(long n, long arg0)
