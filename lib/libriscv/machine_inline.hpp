@@ -53,9 +53,18 @@ inline void Machine<W>::system_call(int syscall_number)
 		}
 		return;
 	}
-	fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
+	if (UNLIKELY(verbose_machine)) {
+		fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
+	}
 	// EBREAK should not modify registers
 	if (syscall_number != 0) {
 		cpu.reg(RISCV::REG_RETVAL) = -1;
 	}
+}
+
+template <int W>
+template <typename T>
+inline T Machine<W>::sysarg(int idx) const
+{
+	return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
 }

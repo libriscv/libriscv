@@ -78,7 +78,7 @@ void Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 }
 
 template <int W>
-auto Memory<W>::memset(address_t dst, uint8_t value, size_t len)
+void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 {
 	while (len > 0)
 	{
@@ -91,11 +91,10 @@ auto Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 		dst += size;
 		len -= size;
 	}
-	return dst;
 }
 
 template <int W>
-auto Memory<W>::memcpy(address_t dst, const uint8_t* src, size_t len)
+void Memory<W>::memcpy(address_t dst, const uint8_t* src, size_t len)
 {
 	while (len > 0)
 	{
@@ -109,11 +108,10 @@ auto Memory<W>::memcpy(address_t dst, const uint8_t* src, size_t len)
 		src += size;
 		len -= size;
 	}
-	return dst;
 }
 
 template <int W>
-auto* Memory<W>::memcpy_out(uint8_t* dst, address_t src, size_t len)
+void Memory<W>::memcpy_out(uint8_t* dst, address_t src, size_t len)
 {
 	while (len > 0)
 	{
@@ -127,5 +125,4 @@ auto* Memory<W>::memcpy_out(uint8_t* dst, address_t src, size_t len)
 		src += size;
 		len -= size;
 	}
-	return dst;
 }

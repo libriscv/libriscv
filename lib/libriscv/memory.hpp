@@ -28,9 +28,9 @@ namespace riscv
 		template <typename T>
 		bool write(address_t address, T value);
 
-		auto  memset(address_t dst, uint8_t value, size_t len);
-		auto  memcpy(address_t dst, const uint8_t* src, size_t);
-		auto* memcpy_out(uint8_t* dst, address_t src, size_t);
+		void memset(address_t dst, uint8_t value, size_t len);
+		void memcpy(address_t dst, const uint8_t* src, size_t);
+		void memcpy_out(uint8_t* dst, address_t src, size_t);
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_address() const noexcept { return this->m_stack_address; }

@@ -34,6 +34,9 @@ namespace riscv
 		bool verbose_registers = false;
 		bool verbose_machine = false;
 		void system_call(int);
+		// retrieve argument for system call
+		template <typename T>
+		inline T sysarg(int arg) const;
 
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	private:
