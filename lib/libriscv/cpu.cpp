@@ -28,8 +28,9 @@ namespace riscv
 		instruction.whole = this->machine().memory.template read<uint16_t>(address);
 
 		if (instruction.length() == 4) {
-			// re-read 32-bit instruction *sigh*
-			instruction.whole = this->machine().memory.template read<uint32_t>(address);
+			// complete the instruction (NOTE: might cross into another page)
+			instruction.half[1] =
+				this->machine().memory.template read<uint16_t>(address + 2);
 		}
 
 		return instruction;

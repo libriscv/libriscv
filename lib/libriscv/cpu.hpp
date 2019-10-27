@@ -31,9 +31,8 @@ namespace riscv
 		auto& registers() { return this->m_data.m_regs; }
 		const auto& registers() const { return this->m_data.m_regs; }
 
-		inline auto& reg(uint16_t idx) {
-			return registers().get(idx);
-		}
+		inline auto& reg(uint32_t idx) { return registers().get(idx); }
+		inline auto& cireg(uint16_t idx) { return registers().get(idx + 0x8); }
 
 		auto& machine() { return this->m_machine; }
 		const auto& machine() const { return this->m_machine; }

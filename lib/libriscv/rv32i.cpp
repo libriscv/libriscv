@@ -13,8 +13,10 @@ namespace riscv
 			return DECODED_INSTR(ILLEGAL);
 		}
 		else if (instruction.length() == 2)
-		{	// RV32 C
-			switch (instruction.compressed().opcode())
+		{
+			// RV32 C
+			const auto ci = instruction.compressed();
+			switch (ci.opcode())
 			{
 				// Quadrant 0
 				case CI_CODE(0b000, 0b00):
@@ -32,7 +34,7 @@ namespace riscv
 				case CI_CODE(0b000, 0b01):
 					return DECODED_COMPR(C1_NOP_ADDI);
 				case CI_CODE(0b001, 0b01):
-					return DECODED_COMPR(C1_JAL_ADDIW);
+					return DECODED_COMPR(C1_JAL);
 				case CI_CODE(0b010, 0b01):
 					return DECODED_COMPR(C1_LI);
 				case CI_CODE(0b011, 0b01):
@@ -52,6 +54,9 @@ namespace riscv
 				case CI_CODE(0b011, 0b10):
 					return DECODED_COMPR(C2_SP_LOAD);
 				case CI_CODE(0b100, 0b10):
+					if (UNLIKELY(ci.whole == 0b1001000000000010)) {
+						return DECODED_COMPR(C2_EBREAK);
+					}
 					return DECODED_COMPR(C2_VARIOUS);
 				case CI_CODE(0b101, 0b10):
 				case CI_CODE(0b110, 0b10):
