@@ -20,6 +20,25 @@ uint32_t syscall_write(riscv::Machine<4>& machine)
 }
 
 template <int W>
+uint32_t syscall_brk(riscv::Machine<4>& machine)
+{
+	static const uint32_t heap_start = 0xA0000000;
+	static const uint32_t heap_max   = 0xF0000000;
+	static uint32_t heap_end = heap_start;
+	const int32_t incr = machine.sysarg<int32_t>(0);
+	if constexpr (verbose_syscalls) {
+		printf("SYSCALL brk called, heap_end = 0x%X incr = 0x%X\n", heap_end, incr);
+	}
+	if (heap_end + incr > heap_max) {
+		return 0;
+	}
+	auto heap_old_end = heap_end;
+	heap_end += incr;
+	printf("New heap end: 0x%X\n", heap_end);
+	return heap_end;
+}
+
+template <int W>
 uint32_t syscall_stat(riscv::Machine<4>& machine)
 {
 	const auto  dirfd   = machine.sysarg<int>(0);

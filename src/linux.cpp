@@ -33,7 +33,7 @@ void prepare_linux(riscv::Machine<4>& machine,
 {
 	// start installing at near-end of address space, leaving room on both sides
 	// stack below and installation above
-	uint32_t dst = 0xc0000000; //machine.memory.stack_initial();
+	uint32_t dst = 0xFFA00000; //machine.memory.stack_initial();
 
 	// inception :)
 	std::array<uint8_t, 16> canary;

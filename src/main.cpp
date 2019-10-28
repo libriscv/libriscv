@@ -3,7 +3,7 @@
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr bool verbose_syscalls = false;
+static constexpr bool verbose_syscalls = true;
 static constexpr bool verbose_machine  = true;
 static constexpr bool linux_guest = true;
 #include "linux.hpp"
@@ -33,6 +33,7 @@ int main(int argc, const char** argv)
 		// some extra syscalls
 		machine.install_syscall_handler(57, syscall_close<riscv::RISCV32>);
 		machine.install_syscall_handler(80, syscall_stat<riscv::RISCV32>);
+		machine.install_syscall_handler(214, syscall_brk<riscv::RISCV32>);
 	}
 
 	/*

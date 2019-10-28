@@ -75,7 +75,7 @@ namespace riscv
 
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
-		size_t    m_pages_total   = 128; // max physical memory usage
+		size_t    m_pages_total   = 256; // max physical memory usage
 
 		std::unordered_map<address_t, Page> m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
