@@ -1,14 +1,12 @@
-#include <cassert>
-#include <cstdio>
 #include <string>
 #include <unistd.h>
 #include <libriscv/machine.hpp>
-#include "linux.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr bool verbose_syscalls = false;
 static constexpr bool verbose_machine  = true;
 static constexpr bool linux_guest = true;
+#include "linux.hpp"
 #include "syscalls.hpp"
 
 int main(int argc, const char** argv)
@@ -23,16 +21,24 @@ int main(int argc, const char** argv)
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 
-	if constexpr (linux_guest) {
-		std::vector<std::string> args = {"hello_world", "test!"};
+	if constexpr (linux_guest)
+	{
+		std::vector<std::string> args = {
+			"hello_world", "test!"
+		};
+		std::vector<std::string> env = {
+			"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
+		};
+		prepare_linux<riscv::RISCV32>(machine, args, env);
+		// some extra syscalls
 		machine.install_syscall_handler(57, syscall_close<riscv::RISCV32>);
 		machine.install_syscall_handler(80, syscall_stat<riscv::RISCV32>);
-		prepare_linux<riscv::RISCV32>(machine, args);
 	}
 
 	/*
 	machine.verbose_instructions = true;
 	machine.verbose_jumps = true;
+	machine.break_now();
 	machine.verbose_registers = true;
 	machine.cpu.breakpoint(0x10142);
 	*/

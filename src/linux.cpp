@@ -27,50 +27,49 @@ void push_down(Machine<4>& m, uint32_t& dst, const uint8_t* data, size_t size)
 }
 
 template <>
-void prepare_linux(riscv::Machine<4>& machine, const std::vector<std::string>& args)
+void prepare_linux(riscv::Machine<4>& machine,
+					const std::vector<std::string>& args,
+					const std::vector<std::string>& env)
 {
-	// Build AUX-vector for C-runtime
-	using auxv_t = AuxVec<uint32_t>;
-
 	// start installing at near-end of address space, leaving room on both sides
 	// stack below and installation above
-	uint32_t dst = machine.memory.stack_initial();
+	uint32_t dst = 0xc0000000; //machine.memory.stack_initial();
 
 	// inception :)
-	const uint32_t canary_addr = dst;
 	std::array<uint8_t, 16> canary;
 	getrandom(canary.data(), canary.size(), GRND_RANDOM);
 	push_down(machine, dst, canary.data(), canary.size());
+	const uint32_t canary_addr = dst;
 
-	const uint32_t platform_addr = dst;
-	const std::string platform = "RISC-V RV32imc";
+	const std::string platform = "RISC-V RV32I";
 	push_down(machine, dst, (const uint8_t*) platform.data(), platform.size());
+	const uint32_t platform_addr = dst;
 
-	// Parameters to main
+	// Arguments to main()
 	std::vector<uint32_t> argv;
 	argv.push_back(args.size()); // argc
 	for (const auto& string : args) {
 		push_arg(machine, argv, dst, string);
 	}
-	argv.push_back(0x0); // last parameter
+	argv.push_back(0x0);
 
-	// Env vars
-	push_arg(machine, argv, dst, "LC_CTYPE=C");
-	push_arg(machine, argv, dst, "LC_ALL=C");
-	push_arg(machine, argv, dst, "USER=root");
-	argv.push_back(0x0); // last parameter
+	// Environment vars
+	for (const auto& string : env) {
+		push_arg(machine, argv, dst, string);
+	}
+	argv.push_back(0x0);
 
-	// auxiliary vector
+	// Auxiliary vector
 	if (machine.verbose_machine) {
 		printf("* Initializing aux-vector\n");
 	}
 
-	push_aux(machine, argv, {AT_PAGESZ, 4096});
+	push_aux(machine, argv, {AT_PAGESZ, Page::size()});
 	push_aux(machine, argv, {AT_CLKTCK, 100});
 
 	// ELF related
 	push_aux(machine, argv, {AT_PHENT, 0});
-	push_aux(machine, argv, {AT_PHDR, 0});
+	push_aux(machine, argv, {AT_PHDR,  0});
 	push_aux(machine, argv, {AT_PHNUM, 0});
 
 	// Misc
@@ -94,9 +93,11 @@ void prepare_linux(riscv::Machine<4>& machine, const std::vector<std::string>& a
 	// install the arg vector
 	const size_t argsize = argv.size() * sizeof(argv[0]);
 	dst -= argsize;
+	dst &= ~0xF; // mandated 16-byte stack alignment
 	machine.memory.copy_to_guest(dst, (const uint8_t*) argv.data(), argv.size());
 	// re-initialize machine stack-pointer
 	machine.cpu.reg(RISCV::REG_SP) = dst;
+
 	if (machine.verbose_machine) {
 		printf("* SP = 0x%X  Argument list: %zu bytes\n", dst, argsize);
 	}

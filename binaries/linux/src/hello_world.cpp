@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 static inline std::vector<uint8_t> load_file(const std::string&);
+static void test_rtti();
 
 int testval = 0;
 
@@ -14,23 +15,45 @@ void test_constructor() {
 	testval = 22;
 }
 
-int main(int argc, char** argv)
+#include <exception>
+class IdioticException : public std::exception
 {
-	printf("Argc: %d  Argv 0: %s\n", argc, argv[0]);
-	static const char* hello = "Hello %s World v%d.%d!\n";
-	assert(testval == 22);
+    const char* oh_god;
+public:
+	IdioticException(const char* reason) : oh_god(reason) {}
+    const char* what() const noexcept override
+    {
+        return oh_god;
+    }
+};
+
+int main (int argc, char *argv[], char *envp[])
+{
 	// heap test
 	auto b = std::unique_ptr<std::string> (new std::string(""));
 	assert(b != nullptr);
 	// copy into string
+	static const char* hello = "Hello %s World v%d.%d!\n";
 	*b = hello;
+	assert(*b == hello);
 	// va_list & stdarg test
 	int len = printf(b->c_str(), "RISC-V", 1, 0);
 	assert(len > 0);
+	printf("* printf(), stdarg and va_lists seem to be working!\n");
+	// global constructors
+	assert(testval == 22);
+	printf("* Global ctors seem to be working!\n");
+	// auxvec, arguments to main():
+	assert(argc == 2 && std::string("hello_world") == argv[0]);
+	printf("* Auxvec and main() arguments seem to be working!\n");
+	// C++ tests
+	test_rtti();
+	printf("* C++ RTTI seems to be working!\n");
 	// test fopen, fseek, fread, fclose
 	try {
-		auto vec = load_file("test.txt");
-		assert(vec.empty()); // sadly not implemented these syscalls :(
+		throw IdioticException("Oh god!");
+		//auto vec = load_file("test.txt");
+		//assert(vec.empty()); // sadly not implemented these syscalls :(
 	}
 	catch (std::exception& e) {
 		printf("Error: %s\n", e.what());
@@ -57,4 +80,33 @@ std::vector<uint8_t> load_file(const std::string& filename)
     }
     fclose(f);
     return result;
+}
+
+struct A {
+	static int A_called;
+	static int B_called;
+	virtual void f() { A_called++; }
+};
+struct B : public A {
+	void f() override { B_called++; }
+};
+int A::A_called = 0, A::B_called = 0;
+
+void test_rtti()
+{
+	A a;
+	B b;
+	a.f();        // A::f()
+	b.f();        // B::f()
+
+	A *pA = &a;
+	A *pB = &b;
+	pA->f();      // A::f()
+	pB->f();      // B::f()
+
+	pA = &b;
+	// pB = &a;      // not allowed
+	pB = dynamic_cast<B*>(&a); // allowed but it returns NULL
+	assert(pB == nullptr);
+	assert(A::A_called == 2 && A::B_called == 2);
 }
