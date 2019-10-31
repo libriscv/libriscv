@@ -87,7 +87,7 @@ struct Page
 		return SIZE;
 	}
 
-	static const Page& zero_page() noexcept;
+	static const Page& cow_page() noexcept;
 
 	std::unique_ptr<PageData> m_page { new PageData };
 	PageAttributes attr;

@@ -1,6 +1,6 @@
 #pragma once
 #include <libriscv/machine.hpp>
-static constexpr bool verbose_syscalls = true;
+static constexpr bool verbose_syscalls = false;
 
 template <int W>
 uint32_t syscall_write(riscv::Machine<4>& machine)
@@ -8,7 +8,7 @@ uint32_t syscall_write(riscv::Machine<4>& machine)
 	const int  fd      = machine.sysarg<int>(0);
 	const auto address = machine.sysarg<uint32_t>(1);
 	const auto len     = machine.sysarg<size_t>(2);
-	if constexpr (verbose_syscalls) {
+	if constexpr (false) {
 		printf("SYSCALL write called, addr = %#X  len = %zu\n", address, len);
 	}
 	// we only accept standard pipes, for now :)
@@ -46,7 +46,11 @@ template <int W>
 uint32_t syscall_ebreak(riscv::Machine<W>& machine)
 {
 	printf("\n>>> EBREAK at %#X", machine.cpu.pc());
+#ifdef RISCV_DEBUG
 	machine.break_now();
+#else
+	throw std::runtime_error("Unhandled EBREAK instruction");
+#endif
 	return 0;
 }
 

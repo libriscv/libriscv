@@ -50,9 +50,11 @@ namespace riscv
 		static constexpr int TRAP_READ  = 0x0;
 		static constexpr int TRAP_WRITE = 0x1000;
 		static constexpr int TRAP_EXEC  = 0x2000;
+#ifdef RISCV_DEBUG
 		// NOTE: breaking traps will pause on the *next* instruction
 		// NOTE: use print_and_pause() instead!
 		void trap(address_t address, mmio_cb_t callback);
+#endif
 
 		// page handling
 		size_t active_pages() const noexcept { return m_pages.size(); }
@@ -73,6 +75,7 @@ namespace riscv
 			return address >> Page::SHIFT;
 		}
 		void binary_loader();
+		void initial_paging();
 		void protection_fault();
 
 		Machine<W>& m_machine;
@@ -89,15 +92,7 @@ namespace riscv
 		// map of page-indexed trap functions
 		// NOTE: uses page-numbers, not byte-addressing
 		std::unordered_map<address_t, mmio_cb_t> m_callbacks;
-		bool m_traps_enabled = false; // a small optimization
-
-		bool check_trap(address_t address, int size, address_t value) {
-			if (this->m_traps_enabled == false) return true;
-			auto it = m_callbacks.find(address);
-			if (it == m_callbacks.end()) return true;
-			// do the thing
-			return it->second(*this, address, size, value);
-		}
+		inline constexpr bool check_trap(address_t, int size, address_t value);
 	};
 #include "memory_inline.hpp"
 }

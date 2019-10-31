@@ -71,7 +71,10 @@ static bool execute_commands(CPU<W>& cpu)
         return false;
     }
     // stepping
-    if (cmd == "") { return false; }
+    if (cmd == "")
+	{
+		return false;
+	}
     else if (cmd == "s" || cmd == "step")
     {
         cpu.machine().verbose_instructions = true; // ???
@@ -124,32 +127,20 @@ static bool execute_commands(CPU<W>& cpu)
         return false;
     }
     // read 0xAddr size
-    else if (cmd == "ld" || cmd == "read")
+    else if (cmd == "lw" || cmd == "read")
     {
         if (params.size() < 2)
         {
-            printf(">>> Not enough parameters: read [addr] (length=1)\n");
+            printf(">>> Not enough parameters: read [addr]\n");
             return true;
         }
-        unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
-        int bytes = 1;
-        if (params.size() > 2) bytes = std::stoi(params[2]);
-        int col = 0;
-        for (int i = 0; i < bytes; i++)
-        {
-            if (col == 0) printf("0x%04lx: ", hex + i);
-            printf("0x%02x ", cpu.machine().memory.template read<uint8_t>(hex + i));
-            if (++col == 4)
-            {
-                printf("\n");
-                col = 0;
-            }
-        }
-        if (col) printf("\n");
+        unsigned long addr = std::strtoul(params[1].c_str(), 0, 16);
+		auto value = cpu.machine().memory.template read<uint32_t>(addr);
+        printf("0x%lX: 0x%X\n", addr, value);
         return true;
     }
     // write 0xAddr value
-    else if (cmd == "write")
+    else if (cmd == "sw" || cmd == "write")
     {
         if (params.size() < 3)
         {
@@ -159,7 +150,7 @@ static bool execute_commands(CPU<W>& cpu)
         unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
         int value = std::stoi(params[2]) & 0xff;
         printf("0x%04lx -> 0x%02x\n", hex, value);
-        cpu.machine().memory.template write<uint8_t>(hex, value);
+        cpu.machine().memory.template write<uint32_t>(hex, value);
         return true;
     }
     // print 0xAddr size
@@ -240,13 +231,13 @@ void CPU<W>::break_on_steps(int steps)
 template<int W>
 void CPU<W>::break_checks()
 {
-    if (this->break_time())
+    if (UNLIKELY(this->break_time()))
     {
         this->m_break = false;
         // pause for each instruction
         machine().print_and_pause();
     }
-    if (!m_breakpoints.empty())
+    if (UNLIKELY(!m_breakpoints.empty()))
     {
         // look for breakpoints
         auto it = m_breakpoints.find(registers().pc);

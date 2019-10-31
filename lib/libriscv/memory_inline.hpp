@@ -45,7 +45,7 @@ inline const Page& Memory<W>::get_page(const address_t address) const noexcept
 	if (it != m_pages.end()) {
 		return it->second;
 	}
-	return Page::zero_page();
+	return Page::cow_page();
 }
 
 template <int W>
@@ -129,15 +129,33 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
 	}
 }
 
+#ifdef RISCV_DEBUG
+
 template <int W>
 void Memory<W>::trap(address_t address, mmio_cb_t callback)
 {
 	if (callback) {
 		this->m_callbacks[address] = callback;
-		this->m_traps_enabled = true;
 	}
 	else {
 		this->m_callbacks.erase(address);
-		this->m_traps_enabled = !this->m_callbacks.empty();
 	}
 }
+template <int W> constexpr bool
+Memory<W>::check_trap(address_t address, int size, address_t value)
+{
+	if (this->m_callbacks.empty()) return true;
+	auto it = m_callbacks.find(address);
+	if (it == m_callbacks.end()) return true;
+	// do the thing
+	return it->second(*this, address, size, value);
+}
+
+#else
+
+template <int W> constexpr bool
+Memory<W>::check_trap(address_t, int, address_t) {
+	return true;
+}
+
+#endif

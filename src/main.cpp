@@ -52,35 +52,34 @@ int main(int argc, const char** argv)
 	machine.verbose_registers = true;
 	*/
 
-	// 0x1a546 <ptmalloc_init.part.0>:
-	// 0x1c6c6 <tcache_init.part.0>:
-	// [0001C6D8] 100427AF LR.W A5 <- [SR0]
-	// LR.W on 0x66444
-	// [0001C6DC] E781 C.BNEZ A5, PC+8 (0x1C6E4)
-	// [0001C6DE] 1CE426AF SC.W A3 <- [SR0], A4
-	// SC.W on 0x66444
-	// 0x1bc0c <_int_malloc>:
-	//    1be06:       22e8f863                bgeu    a7,a4,1c036 <_int_malloc+0x42a>
-	// 1c036 is malloc_printerr -> abort
-
-	// 0x10510: return value from _dl_discover_osversion moved into a5
-	// 0x10528: the comparison between a4 and a5 determines if version too old
-	//machine.cpu.breakpoint(0x1BDFE); // lw a4, [a5+4]
-	// A5 is 0, meaning av is NULL??
-	//machine.cpu.breakpoint(0x1BE06);
-	//machine.cpu.breakpoint(0x1655a);
-	// NOTE: second time a6 should be 0x10aa2, but instead its 0x2AEF0
-
 	// REQUIRES: 0x3fff100 in main()
 	// $6 = (_Unwind_Personality_Fn *) 0x3fff078
 	// $7 = (_Unwind_Personality_Fn *) 0x3fff078
 
-	machine.memory.trap(0x3fff078,
-		[] (auto& mem, uint32_t, int, uint32_t) -> bool {
+	// GOAL: find out how the wrong address gets set for fs.personality in unwind.inc
+	// HOW : follow the address backwards?
+	//       however, the stack address for the source is not even the same
+	//       so, we have to figure out why the source address for fs.personality
+	//       is different -> why the stack is different by 32 bytes
+	//       1. it should be an instruction failure, missing 32 bytes somehow
+	//       2. it could be anywhere, but its related to stack and the
+	//          unwinder is possible lazy-loaded, so could be after main()
+
+
+	machine.memory.trap(0x3FFFEFC8,
+		[] (auto& mem, uint32_t addr, int, uint32_t value) -> bool {
+			printf("Caught BAD address 0x%X  (value=0x%X)\n", addr, value);
 			mem.machine().print_and_pause();
 			return true;
 		});
-	//machine.cpu.breakpoint(0x17578);
+	machine.memory.trap(0x3ffea68,
+		[] (auto& mem, uint32_t addr, int, uint32_t value) -> bool {
+			printf("Caught GOOD address 0x%X  (value=0x%X)\n", addr, value);
+			mem.machine().print_and_pause();
+			return true;
+		});
+	machine.cpu.breakpoint(0x1653c);
+
 	try {
 		while (!machine.stopped()) {
 			machine.simulate();

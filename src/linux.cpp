@@ -1,6 +1,6 @@
 #include "linux.hpp"
 #include "auxvec.hpp"
-#include <sys/random.h>
+#include <random>
 #include <array>
 using namespace riscv;
 
@@ -33,11 +33,14 @@ void prepare_linux(riscv::Machine<4>& machine,
 {
 	// start installing at near-end of address space, leaving room on both sides
 	// stack below and installation above
-	uint32_t dst = 0xFFA00000; //machine.memory.stack_initial();
+	uint32_t dst = machine.cpu.reg(RISCV::REG_SP) - 0xe80; // FIXME!
 
 	// inception :)
+	auto gen = std::default_random_engine(time(0));
+	std::uniform_int_distribution<int> rand(0,256);
+
 	std::array<uint8_t, 16> canary;
-	getrandom(canary.data(), canary.size(), GRND_RANDOM);
+	std::generate(canary.begin(), canary.end(), [&] { return rand(gen); });
 	push_down(machine, dst, canary.data(), canary.size());
 	const uint32_t canary_addr = dst;
 
@@ -60,10 +63,6 @@ void prepare_linux(riscv::Machine<4>& machine,
 	argv.push_back(0x0);
 
 	// Auxiliary vector
-	if (machine.verbose_machine) {
-		printf("* Initializing aux-vector\n");
-	}
-
 	push_aux(machine, argv, {AT_PAGESZ, Page::size()});
 	push_aux(machine, argv, {AT_CLKTCK, 100});
 

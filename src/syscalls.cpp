@@ -38,7 +38,7 @@ uint32_t syscall_writev<4>(riscv::Machine<4>& machine)
 	const int  fd     = machine.sysarg<int>(0);
 	const auto iov_g  = machine.sysarg<uint32_t>(1);
 	const auto count  = machine.sysarg<int>(2);
-	if constexpr (verbose_syscalls) {
+	if constexpr (false) {
 		printf("SYSCALL writev called, iov = %#X  cnt = %d\n", iov_g, count);
 	}
 	// we only accept standard pipes, for now :)
@@ -100,7 +100,9 @@ uint32_t syscall_brk<4>(riscv::Machine<4>& machine)
     sbrk_end = std::max(sbrk_end, sbrk_start);
     sbrk_end = std::min(sbrk_end, sbrk_max);
 
-	printf("New sbrk() end: 0x%X\n", sbrk_end);
+	if constexpr (verbose_syscalls) {
+		printf("* New sbrk() end: 0x%X\n", sbrk_end);
+	}
 	return sbrk_end;
 }
 

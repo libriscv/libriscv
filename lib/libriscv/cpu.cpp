@@ -9,13 +9,23 @@ namespace riscv
 	{
 		m_data = {};
 		m_data.m_regs.pc = machine().memory.start_address();
-		this->reg(RISCV::REG_SP) = 0x40000000; //machine().memory.stack_initial();
+		// initial stack location
+		this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
+		// NOTE: if the stack is very low, some stack pointer value could
+		// become 0x0 which could alter the behavior of the program,
+		// even though the address might be legitimate. To solve this, we move
+		// the stack at that time to a safer location.
+		if (this->reg(RISCV::REG_SP) < 0x100000) {
+			this->reg(RISCV::REG_SP) = 0x40000000;
+		}
 	}
 
 	template<int W>
 	void CPU<W>::simulate()
 	{
+#ifdef RISCV_DEBUG
 		this->break_checks();
+#endif
 		this->execute();
 	}
 

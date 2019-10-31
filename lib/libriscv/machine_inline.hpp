@@ -23,12 +23,6 @@ inline void Machine<W>::simulate()
 }
 
 template <int W>
-inline void Machine<W>::break_now()
-{
-	cpu.break_now();
-}
-
-template <int W>
 inline void Machine<W>::reset()
 {
 	cpu.reset();
@@ -68,3 +62,13 @@ inline T Machine<W>::sysarg(int idx) const
 {
 	return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
 }
+
+#ifdef RISCV_DEBUG
+
+template <int W>
+inline void Machine<W>::break_now()
+{
+	cpu.break_now();
+}
+
+#endif

@@ -33,7 +33,7 @@ namespace riscv
 				return imm1 | (sign() ? ext : 0);
 			}
 			uint32_t shift_imm() const noexcept {
-				return imm1 | (imm2 << 4);
+				return imm1;
 			}
 		} CI;
 		struct {
@@ -145,7 +145,7 @@ namespace riscv
 			uint16_t imm2   : 1;
 			uint16_t funct3 : 3;
 
-			int32_t shift_imm() const noexcept {
+			uint32_t shift_imm() const noexcept {
 				return imm1;
 			}
 			int32_t signed_imm() const noexcept {

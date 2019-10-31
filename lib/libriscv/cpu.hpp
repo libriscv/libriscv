@@ -42,6 +42,7 @@ namespace riscv
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
 
+#ifdef RISCV_DEBUG
 		// debugging
 	    void breakpoint(address_t address, breakpoint_t = default_pausepoint);
 	    auto& breakpoints() { return this->m_breakpoints; }
@@ -50,7 +51,7 @@ namespace riscv
 	    void break_checks();
 	    bool is_breaking() const noexcept { return this->m_break; }
 		static void default_pausepoint(CPU&);
-
+#endif
 		CPU(Machine<W>&);
 	private:
 		struct {

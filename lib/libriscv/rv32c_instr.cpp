@@ -212,7 +212,7 @@ namespace riscv
 		static std::array<const char*, 8> f3 = {"SUB", "XOR", "OR", "AND", "SUBW", "ADDW", "RESV", "RESV"};
 
 		return snprintf(buffer, len, "C.%s %s, %s", f3[op],
-						RISCV::regname(ci.CA.srd), RISCV::regname(ci.CA.srs2));
+						RISCV::ciname(ci.CA.srd), RISCV::ciname(ci.CA.srs2));
 	});
 
 	COMPRESSED_INSTR(C1_JUMP,
@@ -336,9 +336,10 @@ namespace riscv
 			"XXX", "FSDSP", "SWSP", "FSWSP"
 		};
 		auto ci = instr.compressed();
-		return snprintf(buffer, len, "C.%s [SP%+d], %s",
-						f3[ci.CSS.funct3 - 4],
-						ci.CSS.offset4(), RISCV::regname(ci.CSS.rs2));
+		auto address = cpu.reg(RISCV::REG_SP) + ci.CSS.offset4();
+		return snprintf(buffer, len, "C.%s [SP%+d], %s (0x%X)",
+						f3[ci.CSS.funct3 - 4], ci.CSS.offset4(),
+						RISCV::regname(ci.CSS.rs2), address);
 	});
 	// JR, MV, JALR, ADD
 	COMPRESSED_INSTR(C2_VARIOUS,
@@ -395,6 +396,7 @@ namespace riscv
 
 	COMPRESSED_INSTR(C2_EBREAK,
 	[] (auto& cpu, rv32i_instruction) {
+		// its simpler and more flexible to just call a user-provided function
 		cpu.machine().system_call(0);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int

@@ -17,14 +17,25 @@ namespace riscv
 	Memory<W>::Memory(Machine<W>& machine, std::vector<uint8_t> binary)
 		: m_machine{machine}, m_binary{std::move(binary)}
 	{
-		this->binary_loader();
+		this->reset();
 	}
 
 	template <int W>
 	void Memory<W>::reset()
 	{
-		this->m_pages.clear();
+		// initialize paging (which clears all pages) before loading binary
+		this->initial_paging();
+		// load ELF binary into virtual memory
 		this->binary_loader();
+	}
+
+	template <int W>
+	void Memory<W>::initial_paging()
+	{
+		this->m_pages.clear();
+		// make the zero-page unreadable (to trigger faults on null-pointer accesses)
+		auto& zp = this->create_page(0);
+		zp.attr.read = false;
 	}
 
 	// ELF32 version
@@ -119,9 +130,9 @@ namespace riscv
 		throw std::runtime_error("Out of memory");
 	}
 
-	const Page& Page::zero_page() noexcept {
-		static Page zero_page;
-		return zero_page;
+	const Page& Page::cow_page() noexcept {
+		static Page zeroed_page;
+		return zeroed_page; // read-only, zeroed page
 	}
 
 	template class Memory<4>;
