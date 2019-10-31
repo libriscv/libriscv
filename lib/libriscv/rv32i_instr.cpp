@@ -473,4 +473,13 @@ namespace riscv
 		// printer
 		return snprintf(buffer, len, "OP_32");
 	});
+
+	INSTRUCTION(FENCE,
+	[] (auto& cpu, rv32i_instruction instr) {
+		// literally do nothing
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		// printer
+		return snprintf(buffer, len, "FENCE");
+	});
 }

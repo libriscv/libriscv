@@ -9,8 +9,7 @@ namespace riscv
 	{
 		m_data = {};
 		m_data.m_regs.pc = machine().memory.start_address();
-		this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
-		this->reg(RISCV::REG_GP) = machine().memory.stack_initial();
+		this->reg(RISCV::REG_SP) = 0x40000000; //machine().memory.stack_initial();
 	}
 
 	template<int W>

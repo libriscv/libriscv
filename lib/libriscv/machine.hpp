@@ -25,6 +25,8 @@ namespace riscv
 		void install_syscall_handler(int, syscall_t);
 		void reset();
 		void break_now();
+		// immediately block execution, print registers and current instruction
+		void print_and_pause();
 
 		CPU<W>    cpu;
 		Memory<W> memory;

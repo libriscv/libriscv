@@ -40,7 +40,7 @@ set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
 
 add_executable(hello_world ${SOURCES})
-target_link_libraries(hello_world -static -static-libgcc -Wl,--start-group -Wl,-lstdc++ -Wl,-lsupc++ -Wl,-lc -Wl,-lgloss -Wl,--end-group)
+target_link_libraries(hello_world -static -static-libgcc)
 # place ELF into the top binary folder
 set_target_properties(hello_world
 	PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

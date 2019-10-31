@@ -2,6 +2,7 @@
 #include "types.hpp"
 #include "registers.hpp"
 #include "rv32i.hpp"
+#include "rv32a.hpp"
 #include "util/delegate.hpp"
 #include <map>
 #include <tuple>
@@ -35,8 +36,11 @@ namespace riscv
 		inline const auto& reg(uint32_t idx) const { return registers().get(idx); }
 		inline auto& cireg(uint16_t idx) { return registers().get(idx + 0x8); }
 
-		auto& machine() { return this->m_machine; }
-		const auto& machine() const { return this->m_machine; }
+		auto& machine() noexcept { return this->m_machine; }
+		const auto& machine() const noexcept { return this->m_machine; }
+
+		auto& atomics() noexcept { return this->m_atomics; }
+		const auto& atomics() const noexcept { return this->m_atomics; }
 
 		// debugging
 	    void breakpoint(address_t address, breakpoint_t = default_pausepoint);
@@ -45,7 +49,6 @@ namespace riscv
 	    void break_now() { this->m_break = true; }
 	    void break_checks();
 	    bool is_breaking() const noexcept { return this->m_break; }
-	    static void print_and_pause(CPU&);
 		static void default_pausepoint(CPU&);
 
 		CPU(Machine<W>&);
@@ -55,6 +58,7 @@ namespace riscv
 			std::vector<interrupt_t> interrupt_queue;
 			bool interrupt_master_enable = true;
 		} m_data;
+		AtomicMemory<W> m_atomics;
 
 		inline void execute();
 		format_t read_instruction(address_t);
@@ -73,6 +77,7 @@ namespace riscv
 		bool break_time() const;
 
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
+		friend struct Machine<W>;
 	};
 
 #include "cpu_inline.hpp"

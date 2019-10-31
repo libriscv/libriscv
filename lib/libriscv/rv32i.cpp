@@ -1,6 +1,7 @@
 #include "rv32i.hpp"
 #include "machine.hpp"
 #include "rv32i_instr.cpp"
+#include "rv32a_instr.cpp"
 #include "rv32c_instr.cpp"
 
 namespace riscv
@@ -64,10 +65,11 @@ namespace riscv
 					return DECODED_COMPR(C2_SP_STORE);
 			}
 		}
-		else // RV32 IMF
+		else // RV32 IMAF
 		{
 			switch (instruction.opcode())
 			{
+				// RV32IM
 				case 0b0000011:
 					return DECODED_INSTR(LOAD);
 				case 0b0100011:
@@ -94,6 +96,19 @@ namespace riscv
 					return DECODED_INSTR(OP_IMM32);
 				case 0b0111011:
 					return DECODED_INSTR(OP32);
+				case 0b0001111:
+					return DECODED_INSTR(FENCE);
+				// RV32A - Atomic instructions
+				case 0b0101111:
+					switch (instruction.Atype.funct5)
+					{
+						case 0b00010:
+							return DECODED_ATOMIC(LOAD_RESV);
+						case 0b00011:
+							return DECODED_ATOMIC(STORE_COND);
+						case 0b00001:
+							return DECODED_ATOMIC(AMOSWAP_W);
+					}
 			}
 		}
 		// illegal operation exception
@@ -113,7 +128,7 @@ namespace riscv
 		}
 		else if (format.length() == 2) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[%08X] %04hX %.*s",
+					"[%08X]     %04hX %.*s",
 					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
 		}
 		else {

@@ -6,6 +6,7 @@ add_subdirectory(lib)
 set(SOURCES
 	src/main.cpp
 	src/linux.cpp
+	src/syscalls.cpp
 )
 
 add_executable(remu ${SOURCES})

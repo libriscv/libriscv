@@ -19,11 +19,11 @@ void push_aux(Machine<4>& m, std::vector<uint32_t>& vec, AuxVec<uint32_t> aux)
 	vec.push_back(aux.a_val);
 }
 static inline
-void push_down(Machine<4>& m, uint32_t& dst, const uint8_t* data, size_t size)
+void push_down(Machine<4>& m, uint32_t& dst, const void* data, size_t size)
 {
 	dst -= size;
 	dst &= ~0x3; // maintain alignment
-	m.memory.copy_to_guest(dst, (const uint8_t*) data, size);
+	m.memory.copy_to_guest(dst, data, size);
 }
 
 template <>
@@ -42,7 +42,7 @@ void prepare_linux(riscv::Machine<4>& machine,
 	const uint32_t canary_addr = dst;
 
 	const std::string platform = "RISC-V RV32I";
-	push_down(machine, dst, (const uint8_t*) platform.data(), platform.size());
+	push_down(machine, dst, platform.data(), platform.size());
 	const uint32_t platform_addr = dst;
 
 	// Arguments to main()
@@ -94,7 +94,7 @@ void prepare_linux(riscv::Machine<4>& machine,
 	const size_t argsize = argv.size() * sizeof(argv[0]);
 	dst -= argsize;
 	dst &= ~0xF; // mandated 16-byte stack alignment
-	machine.memory.copy_to_guest(dst, (const uint8_t*) argv.data(), argv.size());
+	machine.memory.copy_to_guest(dst, argv.data(), argv.size());
 	// re-initialize machine stack-pointer
 	machine.cpu.reg(RISCV::REG_SP) = dst;
 

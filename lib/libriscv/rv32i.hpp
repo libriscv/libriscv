@@ -127,6 +127,17 @@ namespace riscv
 				return jo | (sign() ? ext : 0);
 			}
 		} Jtype;
+		// atomic format
+		struct {
+			uint32_t opcode : 7;
+			uint32_t rd     : 5;
+			uint32_t funct3 : 3;
+			uint32_t rs1    : 5;
+			uint32_t rs2    : 5;
+			uint32_t rl     : 1;
+			uint32_t aq     : 1;
+			uint32_t funct5 : 5;
+		} Atype;
 
 		uint16_t half[2];
 		uint32_t whole;

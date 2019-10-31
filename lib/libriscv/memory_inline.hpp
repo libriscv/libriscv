@@ -4,9 +4,9 @@ template <int W>
 template <typename T>
 T Memory<W>::read(address_t address)
 {
-	const auto& page = get_page(address);
-	if (check_trap(address, sizeof(T), T {}))
+	if (check_trap(address, sizeof(T) | TRAP_READ, 0))
 	{
+		const auto& page = get_page(address);
 		const auto [return_value, ok] =
 			page.template aligned_read<T>(address & (Page::size()-1));
 		if (ok) { // aligned and readable
@@ -23,7 +23,7 @@ template <int W>
 template <typename T>
 bool Memory<W>::write(address_t address, T value)
 {
-	if (check_trap(address, sizeof(T) | 0x1000, value)) {
+	if (check_trap(address, sizeof(T) | TRAP_WRITE, value)) {
 		auto& page = create_page(address);
 		bool ok = page.template aligned_write<T>(address & (Page::size()-1), value);
 		if (ok) { // aligned & writable
@@ -94,8 +94,9 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 }
 
 template <int W>
-void Memory<W>::memcpy(address_t dst, const uint8_t* src, size_t len)
+void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 {
+	auto* src = (uint8_t*) vsrc;
 	while (len > 0)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
@@ -111,8 +112,9 @@ void Memory<W>::memcpy(address_t dst, const uint8_t* src, size_t len)
 }
 
 template <int W>
-void Memory<W>::memcpy_out(uint8_t* dst, address_t src, size_t len)
+void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
 {
+	auto* dst = (uint8_t*) vdst;
 	while (len > 0)
 	{
 		const size_t offset = src & (Page::size()-1);
@@ -124,5 +126,18 @@ void Memory<W>::memcpy_out(uint8_t* dst, address_t src, size_t len)
 		dst += size;
 		src += size;
 		len -= size;
+	}
+}
+
+template <int W>
+void Memory<W>::trap(address_t address, mmio_cb_t callback)
+{
+	if (callback) {
+		this->m_callbacks[address] = callback;
+		this->m_traps_enabled = true;
+	}
+	else {
+		this->m_callbacks.erase(address);
+		this->m_traps_enabled = !this->m_callbacks.empty();
 	}
 }

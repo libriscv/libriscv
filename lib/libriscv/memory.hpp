@@ -27,10 +27,10 @@ namespace riscv
 		bool write(address_t address, T value);
 
 		void memset(address_t dst, uint8_t value, size_t len);
-		void memcpy(address_t dst, const uint8_t* src, size_t);
-		void memcpy_out(uint8_t* dst, address_t src, size_t);
+		void memcpy(address_t dst, const void* src, size_t);
+		void memcpy_out(void* dst, address_t src, size_t);
 
-		auto copy_to_guest(address_t dst, const uint8_t* buf, size_t len)
+		auto copy_to_guest(address_t dst, const void* buf, size_t len)
 		{
 			this->memcpy(dst, buf, len);
 			return dst + len;
@@ -45,14 +45,18 @@ namespace riscv
 		const auto& machine() const { return this->m_machine; }
 
 		void reset();
-		void trap(address_t address, mmio_cb_t callback) {
-			this->m_callbacks[address] = callback;
-		}
-		void set_traps_enabled(bool en) noexcept { this->m_traps_enabled = en; }
+
+		// memory traps
+		static constexpr int TRAP_READ  = 0x0;
+		static constexpr int TRAP_WRITE = 0x1000;
+		static constexpr int TRAP_EXEC  = 0x2000;
+		// NOTE: breaking traps will pause on the *next* instruction
+		// NOTE: use print_and_pause() instead!
+		void trap(address_t address, mmio_cb_t callback);
 
 		// page handling
 		size_t active_pages() const noexcept { return m_pages.size(); }
-		size_t pages_total() const noexcept { return this->m_pages_total; }
+		size_t total_pages() const noexcept { return this->m_pages_total; }
 		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(const address_t address) const noexcept;

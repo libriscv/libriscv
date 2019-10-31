@@ -40,10 +40,8 @@ static void print_help()
       reset                 Reset the machine
       read [addr] (len=1)   Read from [addr] (len) bytes and print
       write [addr] [value]  Write [value] to memory location [addr]
-      readv0 [addr]         Print byte from VRAM0:[addr]
-      readv1 [addr]         Print byte from VRAM1:[addr]
+      print [addr] [length] Print [addr] as a string of [length] bytes
       debug                 Trigger the debug interrupt handler
-      vblank                Render current screen and call vblank
       frame                 Show frame number and extra frame info
 )V0G0N";
     printf("%s\n", help_text);
@@ -164,6 +162,22 @@ static bool execute_commands(CPU<W>& cpu)
         cpu.machine().memory.template write<uint8_t>(hex, value);
         return true;
     }
+    // print 0xAddr size
+    else if (cmd == "print")
+    {
+        if (params.size() < 3)
+        {
+            printf(">>> Not enough parameters: print addr length\n");
+            return true;
+        }
+        uint32_t src = std::strtoul(params[1].c_str(), 0, 16);
+        int bytes = std::stoi(params[2]);
+        char* buffer = new char[bytes];
+        cpu.machine().memory.memcpy_out(buffer, src, bytes);
+        printf("0x%X: %.*s\n", src, bytes, buffer);
+        delete[] buffer;
+        return true;
+    }
     else if (cmd == "debug")
     {
         cpu.trigger_interrupt(DEBUG_INTERRUPT);
@@ -184,7 +198,7 @@ static bool execute_commands(CPU<W>& cpu)
 }
 
 template<int W>
-void CPU<W>::print_and_pause(CPU<W>& cpu)
+void Machine<W>::print_and_pause()
 {
 	const auto instruction = cpu.read_instruction(cpu.pc());
 	const auto& handler = cpu.decode(instruction);
@@ -192,6 +206,9 @@ void CPU<W>::print_and_pause(CPU<W>& cpu)
     printf("\n>>> Breakpoint \t%s\n\n", string.c_str());
     // CPU registers
     printf("%s", cpu.registers().to_string().c_str());
+    // Memory subsystem
+    printf("[MEM PAGES %08zu / %08zu]\n", memory.active_pages(), memory.total_pages());
+
     while (execute_commands(cpu))
         ;
 } // print_and_pause(...)
@@ -227,7 +244,7 @@ void CPU<W>::break_checks()
     {
         this->m_break = false;
         // pause for each instruction
-        this->print_and_pause(*this);
+        machine().print_and_pause();
     }
     if (!m_breakpoints.empty())
     {

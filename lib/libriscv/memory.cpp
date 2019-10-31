@@ -43,6 +43,7 @@ namespace riscv
 		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
 		{
+			if (hdr->p_type != PT_LOAD) continue;
 			const auto*  src = m_binary.data() + hdr->p_offset;
 			const size_t len = hdr->p_filesz;
 			if (machine().verbose_machine) {
@@ -107,7 +108,7 @@ namespace riscv
 	Page& Memory<W>::default_page_fault(Memory<W>& mem, const size_t page)
 	{
 		// create page on-demand
-		if (mem.active_pages() < mem.pages_total())
+		if (mem.active_pages() < mem.total_pages())
 		{
 			auto it = mem.pages().emplace(
 				std::piecewise_construct,

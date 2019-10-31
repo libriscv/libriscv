@@ -199,10 +199,14 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
-		if ((ci.CA.funct6 & 0x3) < 3) {
-			static std::array<const char*, 3> f3 = {"SRLI", "SRAI", "ANDI"};
+		if ((ci.CA.funct6 & 0x3) < 2) {
+			static std::array<const char*, 2> f3 = {"SRLI", "SRAI"};
 			return snprintf(buffer, len, "C.%s %s, %+d",
 				f3[ci.CA.funct6 & 0x3], RISCV::ciname(ci.CAB.srd), ci.CAB.shift_imm());
+		}
+		else if ((ci.CA.funct6 & 0x3) == 2) {
+			return snprintf(buffer, len, "C.ANDI %s, %+d",
+							RISCV::ciname(ci.CAB.srd), ci.CAB.signed_imm());
 		}
 		const int op = ci.CA.funct2 | (ci.CA.funct6 & 0x4);
 		static std::array<const char*, 8> f3 = {"SUB", "XOR", "OR", "AND", "SUBW", "ADDW", "RESV", "RESV"};
