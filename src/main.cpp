@@ -19,6 +19,8 @@ int main(int argc, const char** argv)
 	machine.install_syscall_handler(riscv::EBREAK_SYSCALL, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
+	// enough pages for startup + 1mb buffer :)
+	machine.memory.set_pages_total(300);
 
 	if constexpr (linux_guest)
 	{

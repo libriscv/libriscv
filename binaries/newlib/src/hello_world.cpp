@@ -2,6 +2,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <stdexcept>
+#include "type_name.hpp"
 
 int main (int argc, char *argv[])
 {
@@ -10,8 +11,11 @@ int main (int argc, char *argv[])
 	}
 
 	auto* ptr = new char[1024*1024];
+	printf("type of ptr: %s\n", TYPE_NAME(ptr).to_string().c_str());
+	// 7-10ms to clear 1mb
+	std::memset(ptr, 0, 1024*1024);
 
-	for (int i = 0; i < 1000; i++)
+	for (int i = 0; i < 1; i++)
 	{
 		try {
 			throw std::runtime_error("Oh god!");
