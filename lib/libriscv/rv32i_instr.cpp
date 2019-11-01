@@ -416,7 +416,7 @@ namespace riscv
 				cpu.machine().system_call(sysn);
 				return;
 			case 1: // EBREAK
-				cpu.machine().system_call(0);
+				cpu.machine().system_call(riscv::EBREAK_SYSCALL);
 				return;
 			}
 		}

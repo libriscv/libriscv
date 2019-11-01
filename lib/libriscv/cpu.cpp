@@ -104,7 +104,7 @@ namespace riscv
 		switch (intr)
 		{
 		case DEBUG_INTERRUPT:
-			machine().system_call(0);
+			machine().system_call(riscv::EBREAK_SYSCALL);
 			break;
 		case ILLEGAL_OPCODE:
 			throw MachineException("Illegal opcode executed");

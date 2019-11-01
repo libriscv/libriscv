@@ -4,7 +4,7 @@ template <int W>
 template <typename T>
 T Memory<W>::read(address_t address)
 {
-	if constexpr (riscv_debug_enabled) {
+	if constexpr (memory_debug_enabled) {
 		if (!check_trap(address, sizeof(T) | TRAP_READ, 0)) return T{};
 	}
 	const auto& page = get_page(address);
@@ -19,7 +19,7 @@ template <int W>
 template <typename T>
 bool Memory<W>::write(address_t address, T value)
 {
-	if constexpr (riscv_debug_enabled) {
+	if constexpr (memory_debug_enabled) {
 		if (!check_trap(address, sizeof(T) | TRAP_WRITE, value)) return T{};
 	}
 	auto& page = create_page(address);

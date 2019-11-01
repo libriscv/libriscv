@@ -44,13 +44,4 @@ namespace riscv
 		const handler_t handler; // callback for executing one instruction
 		const printer_t printer; // callback for logging one instruction
 	};
-
-	static_assert(DEBUG_INTERRUPT == 0, "Debug interrupt must be zero");
-
-#ifdef RISCV_DEBUG
-	static constexpr bool riscv_debug_enabled = true;
-#else
-	static constexpr bool riscv_debug_enabled = false;
-#endif
-	static constexpr bool verbose_machine = false;
 }

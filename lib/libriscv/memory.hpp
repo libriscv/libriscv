@@ -1,4 +1,5 @@
 #pragma once
+#include "common.hpp"
 #include "types.hpp"
 #include "page.hpp"
 #include "util/delegate.hpp"

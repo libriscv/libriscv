@@ -1,6 +1,6 @@
 #pragma once
 #include <libriscv/machine.hpp>
-static constexpr bool verbose_syscalls = true;
+static constexpr bool verbose_syscalls = false;
 
 template <int W> inline
 uint32_t syscall_write(riscv::Machine<4>& machine)
@@ -45,9 +45,9 @@ uint32_t syscall_exit(riscv::Machine<W>& machine)
 template <int W>
 uint32_t syscall_ebreak(riscv::Machine<W>& machine)
 {
-	printf("\n>>> EBREAK at %#X", machine.cpu.pc());
+	printf("\n>>> EBREAK at %#X\n", machine.cpu.pc());
 #ifdef RISCV_DEBUG
-	machine.break_now();
+	machine.print_and_pause();
 #else
 	throw std::runtime_error("Unhandled EBREAK instruction");
 #endif

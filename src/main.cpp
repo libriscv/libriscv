@@ -15,7 +15,7 @@ int main(int argc, const char** argv)
 	const auto binary = load_file(filename);
 
 	riscv::Machine<riscv::RISCV32> machine { binary };
-	machine.install_syscall_handler(0, syscall_ebreak<riscv::RISCV32>);
+	machine.install_syscall_handler(riscv::EBREAK_SYSCALL, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 
