@@ -64,7 +64,12 @@ namespace riscv
 
 		inline void execute();
 		format_t read_instruction(address_t);
-		const instruction_t& decode(format_t) const;
+#ifndef RISCV_DEBUG
+		using handler_t = typename Instruction<W>::handler_t;
+		const handler_t& decode(format_t) const noexcept;
+#else
+		const instruction_t& decode(format_t) const noexcept;
+#endif
 
 		void handle_interrupts();
 		void execute_interrupt(interrupt_t intr);

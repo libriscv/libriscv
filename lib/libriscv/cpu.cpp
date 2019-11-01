@@ -1,6 +1,7 @@
 #include "machine.hpp"
 #include "common.hpp"
 #include "riscvbase.hpp"
+#include "rv32i.cpp"
 
 namespace riscv
 {
@@ -51,8 +52,9 @@ namespace riscv
 		const auto instruction = this->read_instruction(this->pc());
 		const auto& handler = this->decode(instruction);
 
+#ifdef RISCV_DEBUG
 		// instruction logging
-		if (machine().verbose_instructions)
+		if (UNLIKELY(machine().verbose_instructions))
 		{
 			const auto string = isa_t::to_string(*this, instruction, handler);
 			printf("%s\n", string.c_str());
@@ -60,38 +62,27 @@ namespace riscv
 
 		// execute instruction
 		handler.handler(*this, instruction);
-#ifdef RISCV_DEBUG
-		assert(this->reg(0) == 0);
+#else
+		// execute instruction
+		handler(*this, instruction);
 #endif
+		// increment instruction counter
 		registers().counter++;
 
-		if (machine().verbose_registers)
+#ifdef RISCV_DEBUG
+		assert(this->reg(0) == 0);
+		if (UNLIKELY(machine().verbose_registers))
 		{
 			auto regs = this->registers().to_string();
 			printf("\n%s\n\n", regs.c_str());
 		}
+#endif
 
 		// allow exceptions to happen on this instruction
 		this->handle_interrupts();
 
 		// increment PC
 		registers().pc += instruction.length();
-	}
-
-	template<int W>
-	void CPU<W>::jump(const address_t dst)
-	{
-		this->registers().pc = dst;
-		// it's possible to jump to a misaligned instruction
-		if (this->registers().pc & 0x1) {
-			this->trigger_interrupt(MISALIGNED_INSTRUCTION);
-		}
-	}
-
-	template<int W>
-	void CPU<W>::trigger_interrupt(interrupt_t intr)
-	{
-		m_data.interrupt_queue.push_back(intr);
 	}
 
 	template<int W>

@@ -91,9 +91,11 @@ namespace riscv
 
 		std::vector<uint8_t> m_binary;
 
+#ifdef RISCV_DEBUG
 		// map of page-indexed trap functions
 		// NOTE: uses page-numbers, not byte-addressing
 		std::unordered_map<address_t, mmio_cb_t> m_callbacks;
+#endif
 		inline constexpr bool check_trap(address_t, int size, address_t value);
 	};
 #include "memory_inline.hpp"

@@ -2,10 +2,10 @@
 #include <unistd.h>
 #include <sys/uio.h>
 static constexpr uint32_t G_SHMEM_BASE = 0x70000000;
-static const uint32_t sbrk_start = 0x80000000;
-static const uint32_t sbrk_max   = 0x81000000;
+static const uint32_t sbrk_start = 0x40000000;
+static const uint32_t sbrk_max   = sbrk_start + 0x100000;
 static const uint32_t heap_start = sbrk_max;
-static const uint32_t heap_max   = 0xE0000000;
+static const uint32_t heap_max   = 0xF0000000;
 
 struct iovec32 {
     uint32_t iov_base;
@@ -91,7 +91,7 @@ template <>
 uint32_t syscall_brk<4>(riscv::Machine<4>& machine)
 {
 	static uint32_t sbrk_end = sbrk_start;
-	const int32_t new_end = machine.sysarg<uint32_t>(0);
+	const uint32_t new_end = machine.sysarg<uint32_t>(0);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL brk called, current = 0x%X new = 0x%X\n", sbrk_end, new_end);
 	}

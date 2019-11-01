@@ -30,19 +30,7 @@ int main(int argc, const char** argv)
 		};
 		prepare_linux<riscv::RISCV32>(machine, args, env);
 		// some extra syscalls
-		machine.install_syscall_handler(56, syscall_openat<riscv::RISCV32>);
-		machine.install_syscall_handler(57, syscall_close<riscv::RISCV32>);
-		machine.install_syscall_handler(66, syscall_writev<riscv::RISCV32>);
-		machine.install_syscall_handler(78, syscall_readlinkat<riscv::RISCV32>);
-		machine.install_syscall_handler(80, syscall_stat<riscv::RISCV32>);
-		machine.install_syscall_handler(135, syscall_spm<riscv::RISCV32>);
-		machine.install_syscall_handler(160, syscall_uname<riscv::RISCV32>);
-		machine.install_syscall_handler(174, syscall_getuid<riscv::RISCV32>);
-		machine.install_syscall_handler(175, syscall_geteuid<riscv::RISCV32>);
-		machine.install_syscall_handler(176, syscall_getgid<riscv::RISCV32>);
-		machine.install_syscall_handler(177, syscall_getegid<riscv::RISCV32>);
-		machine.install_syscall_handler(214, syscall_brk<riscv::RISCV32>);
-		machine.install_syscall_handler(222, syscall_mmap<riscv::RISCV32>);
+		add_linux_syscalls(machine);
 	}
 
 	/*
