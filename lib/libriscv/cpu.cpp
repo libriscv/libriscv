@@ -107,18 +107,18 @@ namespace riscv
 			machine().system_call(0);
 			break;
 		case ILLEGAL_OPCODE:
-			throw std::runtime_error("Illegal opcode executed");
+			throw MachineException("Illegal opcode executed");
 		case ILLEGAL_OPERATION:
-			throw std::runtime_error("Illegal operation during instruction decoding");
+			throw MachineException("Illegal operation during instruction decoding");
 		case PROTECTION_FAULT:
-			throw std::runtime_error("Protection fault");
+			throw MachineException("Protection fault");
 		case MISALIGNED_INSTRUCTION:
 			// NOTE: only check for this when jumping or branching
-			throw std::runtime_error("Misaligned instruction executed");
+			throw MachineException("Misaligned instruction executed");
 		case UNIMPLEMENTED_INSTRUCTION:
-			throw std::runtime_error("Unimplemented instruction executed");
+			throw MachineException("Unimplemented instruction executed");
 		default:
-			throw std::runtime_error("Interrupt not implemented: " + std::to_string(intr));
+			throw MachineException("Interrupt not implemented: " + std::to_string(intr));
 		}
 	}
 

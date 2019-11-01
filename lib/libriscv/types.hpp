@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
 #include <type_traits>
 
 namespace riscv
@@ -26,6 +27,10 @@ namespace riscv
 		MISALIGNED_INSTRUCTION,
 		UNIMPLEMENTED_INSTRUCTION,
 		UNIMPLEMENTED_SYSCALL,
+	};
+
+	struct MachineException : public std::runtime_error {
+		using std::runtime_error::runtime_error;
 	};
 
 	template <int W>
