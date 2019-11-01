@@ -4,7 +4,7 @@
 #include "rv32a_instr.cpp"
 #include "rv32c_instr.cpp"
 #ifndef RISCV_DEBUG
-#define DECODER(x) return(x.handler)
+#define DECODER(x) x.handler(*this, instruction); return;
 #else
 #define DECODER(x) return(x)
 #endif
@@ -13,7 +13,7 @@ namespace riscv
 {
 	template<>
 #ifndef RISCV_DEBUG
-	const Instruction<4>::handler_t& CPU<4>::decode(const format_t instruction) const noexcept
+	void CPU<4>::execute(const format_t instruction) noexcept
 #else
 	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction) const noexcept
 #endif

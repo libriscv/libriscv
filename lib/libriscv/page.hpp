@@ -30,47 +30,42 @@ struct Page
 	static constexpr unsigned SHIFT = PageData::SHIFT;
 
 	template <typename T>
-	inline std::tuple<T, bool> aligned_read(uint32_t offset) const
+	inline T aligned_read(uint32_t offset) const
 	{
 		if (this->attr.read) {
 			if constexpr (std::is_same<T, uint8_t>::value) {
-				return { m_page->buffer8.at(offset), true };
+				return m_page->buffer8[offset];
 			} else if constexpr (std::is_same<T, uint16_t>::value) {
-				return { m_page->buffer16.at((offset >> 1) & 2047), (offset & 0x1) == 0 };
+				return m_page->buffer16[offset >> 1];
 			} else if constexpr (std::is_same<T, uint32_t>::value) {
-				return { m_page->buffer32.at((offset >> 2) & 1023), (offset & 0x3) == 0 };
+				return m_page->buffer32[offset >> 2];
 			} else if constexpr (std::is_same<T, uint64_t>::value) {
-				return { m_page->buffer64.at((offset >> 3) & 511), (offset & 0x7) == 0 };
+				return m_page->buffer64[offset >> 3];
 			}
 			else {
 				static_assert(always_false<T>, "Can't use this type when reading memory");
 			}
 		}
-		return { T {}, false };
+		return T {};
 	}
 
 	template <typename T>
-	inline bool aligned_write(uint32_t offset, T value)
+	inline void aligned_write(uint32_t offset, T value)
 	{
 		if (this->attr.write) {
 			if constexpr (std::is_same<T, uint8_t>::value) {
-				m_page->buffer8.at(offset) = value;
-				return true;
+				m_page->buffer8[offset] = value;
 			} else if constexpr (std::is_same<T, uint16_t>::value) {
-				m_page->buffer16.at((offset >> 1) & 2047) = value;
-				return (offset & 0x1) == 0;
+				m_page->buffer16[offset >> 1] = value;
 			} else if constexpr (std::is_same<T, uint32_t>::value) {
-				m_page->buffer32.at((offset >> 2) & 1023) = value;
-				return (offset & 0x3) == 0;
+				m_page->buffer32[offset >> 2] = value;
 			} else if constexpr (std::is_same<T, uint64_t>::value) {
-				m_page->buffer64.at((offset >> 3) & 511) = value;
-				return (offset & 0x7) == 0;
+				m_page->buffer64[offset >> 3] = value;
 			}
 			else {
 				static_assert(always_false<T>, "Can't use this type when writing memory");
 			}
 		}
-		return false;
 	}
 
 	auto& page() noexcept { return *m_page; }

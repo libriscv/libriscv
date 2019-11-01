@@ -4,18 +4,14 @@ template <int W>
 template <typename T>
 T Memory<W>::read(address_t address)
 {
-	if (check_trap(address, sizeof(T) | TRAP_READ, 0))
-	{
-		const auto& page = get_page(address);
-		const auto [return_value, ok] =
-			page.template aligned_read<T>(address & (Page::size()-1));
-		if (ok) { // aligned and readable
-			return return_value;
-		}
-		else {
-			this->protection_fault();
-		}
+	if constexpr (riscv_debug_enabled) {
+		if (!check_trap(address, sizeof(T) | TRAP_READ, 0)) return T{};
 	}
+	const auto& page = get_page(address);
+	if (page.attr.read) {
+		return page.template aligned_read<T>(address & (Page::size()-1));
+	}
+	this->protection_fault();
 	return T {};
 }
 
@@ -23,16 +19,15 @@ template <int W>
 template <typename T>
 bool Memory<W>::write(address_t address, T value)
 {
-	if (check_trap(address, sizeof(T) | TRAP_WRITE, value)) {
-		auto& page = create_page(address);
-		bool ok = page.template aligned_write<T>(address & (Page::size()-1), value);
-		if (ok) { // aligned & writable
-			return ok;
-		}
-		else {
-			this->protection_fault();
-		}
+	if constexpr (riscv_debug_enabled) {
+		if (!check_trap(address, sizeof(T) | TRAP_WRITE, value)) return T{};
 	}
+	auto& page = create_page(address);
+	if (page.attr.write) {
+		page.template aligned_write<T>(address & (Page::size()-1), value);
+		return true;
+	}
+	this->protection_fault();
 	return false;
 }
 

@@ -1,17 +1,25 @@
 #include <cstdio>
+#include <cstring>
+#include <unistd.h>
 #include <stdexcept>
 
 int main (int argc, char *argv[])
 {
-	printf("arg0: %s\n", argv[0]);
-	printf("arg1: %s\n", argv[1]);
+	for (int i = 0; i < argc; i++) {
+		printf("arg%d: %s\n", i, argv[0]);
+	}
 
-	try {
-		throw std::runtime_error("Oh god!");
+	for (int i = 0; i < 1000; i++)
+	{
+		try {
+			throw std::runtime_error("Oh god!");
+		}
+		catch (std::exception& e) {
+			//printf("Error: %s\n", e.what());
+			write(5, e.what(), strlen(e.what()));
+		}
+		const char hello_void[] = "Hello void\n";
+		write(5, hello_void, sizeof(hello_void));
 	}
-	catch (std::exception& e) {
-		printf("Error: %s\n", e.what());
-	}
-	printf("Hello world\n");
 	return 666;
 }

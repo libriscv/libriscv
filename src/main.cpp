@@ -3,7 +3,7 @@
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr bool verbose_machine  = true;
+static constexpr bool verbose_machine = true;
 static constexpr bool linux_guest = true;
 #include "linux.hpp"
 #include "syscalls.hpp"
@@ -49,6 +49,7 @@ int main(int argc, const char** argv)
 		printf(">>> Exception: %s\n", e.what());
 		//machine.print_and_pause();
 	}
+	return 0;
 }
 
 #include <unistd.h>

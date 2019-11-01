@@ -41,4 +41,10 @@ namespace riscv
 	};
 
 	static_assert(DEBUG_INTERRUPT == 0, "Debug interrupt must be zero");
+
+#ifdef RISCV_DEBUG
+	static constexpr bool riscv_debug_enabled = true;
+#else
+	static constexpr bool riscv_debug_enabled = false;
+#endif
 }

@@ -33,7 +33,7 @@ namespace riscv
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
 	{
-		// decode whole instruction at address
+		// read short instruction at address
 		format_t instruction;
 		instruction.whole = this->machine().memory.template read<uint16_t>(address);
 
@@ -50,9 +50,9 @@ namespace riscv
 	void CPU<W>::execute()
 	{
 		const auto instruction = this->read_instruction(this->pc());
-		const auto& handler = this->decode(instruction);
 
 #ifdef RISCV_DEBUG
+		const auto& handler = this->decode(instruction);
 		// instruction logging
 		if (UNLIKELY(machine().verbose_instructions))
 		{
@@ -64,7 +64,7 @@ namespace riscv
 		handler.handler(*this, instruction);
 #else
 		// execute instruction
-		handler(*this, instruction);
+		this->execute(instruction);
 #endif
 		// increment instruction counter
 		registers().counter++;
