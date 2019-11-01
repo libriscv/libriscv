@@ -1,31 +1,49 @@
 # RISC-V userspace emulator library
 
-## Installing a RISC-V GCC compiler
+## Installing a RISC-V GCC embedded compiler
 
 ```
 $ xpm install --global @xpack-dev-tools/riscv-none-embed-gcc@latest
 ```
 See more here: https://gnu-mcu-eclipse.github.io/install/
 
+## Installing a RISC-V GCC linux compiler
+
+To get C++ exceptions and other things, you will need a (limited) Linux userspace environment. You will need to build this cross-compiler yourself:
+
+```
+git clone https://github.com/riscv/riscv-gnu-toolchain.git
+cd riscv-gnu-toolchain
+./configure --prefix=$HOME/riscv --with-arch=rv32gc --with-abi=ilp32
+make -j4
+```
+This will build a newlib cross-compiler with C++ exception support.
+
+Note how the ABI is ilp32 and not ilp32d, which requires full floating-point support. Support will be added later on, and is instead emulated by the compiler.
+
+Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc is harder to support, and produces larger binaries, but will be more performant.
+
 ## Building and running test program
 
-From binaries folder:
+From one of the binary subfolders:
 ```
 $ ./build.sh
 ```
-Which will produce `hello_world` in the build folder.
+Which will produce a `hello_world` binary in the sub-projects build folder.
 
-Building the emulator (starting from project root) and booting `hello_world`:
+Building the emulator (starting from project root) and booting the newlib `hello_world`:
 ```sh
 mkdir -p build
 cd build
 cmake .. && make -j4
-./remu ../binaries/build/hello_world
+./remu ../binaries/newlib/build/hello_world
 ```
 
 Building and running your own ELF files that can run in freestanding RV32IM is
 quite challenging, so consult the hello world example! It's a bit like booting
 on bare metal using multiboot, except you have easier access to system functions.
+
+The newlib ELF files have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development.
 
 ## Instruction set support
 
