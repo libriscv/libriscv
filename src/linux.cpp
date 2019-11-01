@@ -33,7 +33,7 @@ void prepare_linux(riscv::Machine<4>& machine,
 {
 	// start installing at near-end of address space, leaving room on both sides
 	// stack below and installation above
-	uint32_t dst = machine.cpu.reg(RISCV::REG_SP) - 0xe80; // FIXME!
+	uint32_t dst = machine.cpu.reg(RISCV::REG_SP);
 
 	// inception :)
 	auto gen = std::default_random_engine(time(0));
@@ -99,5 +99,6 @@ void prepare_linux(riscv::Machine<4>& machine,
 
 	if (machine.verbose_machine) {
 		printf("* SP = 0x%X  Argument list: %zu bytes\n", dst, argsize);
+		printf("* Program end: 0x%X\n", machine.memory.elf_end_vaddr());
 	}
 }

@@ -53,7 +53,7 @@ namespace riscv
 				return imm & 0x1F;
 			}
 			bool is_srai() const noexcept {
-				return imm & 0x20;
+				return imm & 0x400;
 			}
 		} Itype;
 		// store format

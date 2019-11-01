@@ -45,40 +45,13 @@ int main(int argc, const char** argv)
 		machine.install_syscall_handler(222, syscall_mmap<riscv::RISCV32>);
 	}
 
-	machine.verbose_instructions = true;
 	/*
+	machine.verbose_instructions = true;
 	machine.verbose_jumps = true;
-	machine.break_now();
 	machine.verbose_registers = true;
+	machine.break_now();
+	machine.cpu.breakpoint(0x17c64);
 	*/
-
-	// REQUIRES: 0x3fff100 in main()
-	// $6 = (_Unwind_Personality_Fn *) 0x3fff078
-	// $7 = (_Unwind_Personality_Fn *) 0x3fff078
-
-	// GOAL: find out how the wrong address gets set for fs.personality in unwind.inc
-	// HOW : follow the address backwards?
-	//       however, the stack address for the source is not even the same
-	//       so, we have to figure out why the source address for fs.personality
-	//       is different -> why the stack is different by 32 bytes
-	//       1. it should be an instruction failure, missing 32 bytes somehow
-	//       2. it could be anywhere, but its related to stack and the
-	//          unwinder is possible lazy-loaded, so could be after main()
-
-
-	machine.memory.trap(0x3FFFEFC8,
-		[] (auto& mem, uint32_t addr, int, uint32_t value) -> bool {
-			printf("Caught BAD address 0x%X  (value=0x%X)\n", addr, value);
-			mem.machine().print_and_pause();
-			return true;
-		});
-	machine.memory.trap(0x3ffea68,
-		[] (auto& mem, uint32_t addr, int, uint32_t value) -> bool {
-			printf("Caught GOOD address 0x%X  (value=0x%X)\n", addr, value);
-			mem.machine().print_and_pause();
-			return true;
-		});
-	machine.cpu.breakpoint(0x1653c);
 
 	try {
 		while (!machine.stopped()) {
@@ -86,7 +59,7 @@ int main(int argc, const char** argv)
 		}
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
-		machine.print_and_pause();
+		//machine.print_and_pause();
 	}
 }
 

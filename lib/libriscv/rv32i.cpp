@@ -106,6 +106,8 @@ namespace riscv
 							return DECODED_ATOMIC(LOAD_RESV);
 						case 0b00011:
 							return DECODED_ATOMIC(STORE_COND);
+						case 0b00000:
+							return DECODED_ATOMIC(AMOADD_W);
 						case 0b00001:
 							return DECODED_ATOMIC(AMOSWAP_W);
 					}

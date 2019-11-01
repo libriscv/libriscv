@@ -60,6 +60,7 @@ namespace riscv
 			bool interrupt_master_enable = true;
 		} m_data;
 		AtomicMemory<W> m_atomics;
+		size_t m_counter = 0;
 
 		inline void execute();
 		format_t read_instruction(address_t);
@@ -70,13 +71,14 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
-		// debugging
+#ifdef RISCV_DEBUG
+		// instruction step & breakpoints
 	    bool m_break = false;
-	    mutable int16_t m_break_steps = 0;
-	    mutable int16_t m_break_steps_cnt = 0;
+	    mutable int32_t m_break_steps = 0;
+	    mutable int32_t m_break_steps_cnt = 0;
 	    std::map<address_t, breakpoint_t> m_breakpoints;
 		bool break_time() const;
-
+#endif
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 		friend struct Machine<W>;
 	};

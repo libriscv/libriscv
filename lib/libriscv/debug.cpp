@@ -198,7 +198,7 @@ void Machine<W>::print_and_pause()
     // CPU registers
     printf("%s", cpu.registers().to_string().c_str());
     // Memory subsystem
-    printf("[MEM PAGES %08zu / %08zu]\n", memory.active_pages(), memory.total_pages());
+    printf("[MEM PAGES %8zu / %8zu]\n", memory.active_pages(), memory.total_pages());
 
     while (execute_commands(cpu))
         ;

@@ -38,6 +38,7 @@ namespace riscv
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
+		address_t elf_end_vaddr() const noexcept { return this->m_elf_end_vaddr; }
 
 		bool is_writable(const address_t address) const noexcept;
 
@@ -82,6 +83,7 @@ namespace riscv
 
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
+		address_t m_elf_end_vaddr = 0;
 		size_t    m_pages_total   = 256; // max physical memory usage
 
 		std::unordered_map<address_t, Page> m_pages;

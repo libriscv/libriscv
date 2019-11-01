@@ -246,8 +246,12 @@ namespace riscv
 			case 0x5: // SRLI / SRAI:
 				if (LIKELY(!instr.Itype.is_srai()))
 					dst = src >> instr.Itype.shift_imm();
-				else // SRAI: preserve the sign bit
-					dst = ((src & 0x7FFFFFFF) >> instr.Itype.shift_imm()) | (src & 0x80000000);
+				else { // SRAI: preserve the sign bit
+					uint32_t sigbit = src & 0x80000000;
+					for (unsigned i = 0; i < instr.Itype.shift_imm(); i++) {
+						dst = ((src & 0x7FFFFFFF) >> 1) | sigbit;
+					}
+				}
 				break;
 			case 0x6: // ORI:
 				dst = src | instr.Itype.signed_imm();
@@ -279,7 +283,8 @@ namespace riscv
 							instr.Itype.shift_imm(),
 							cpu.reg(instr.Itype.rs1) << instr.Itype.shift_imm());
 		} else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 5) {
-			return snprintf(buffer, len, "SRLI %s, %s >> %u (0x%X)",
+			return snprintf(buffer, len, "%s %s, %s >> %u (0x%X)",
+							(instr.Itype.is_srai() ? "SRAI" : "SRLI"),
 							RISCV::regname(instr.Itype.rd),
 							RISCV::regname(instr.Itype.rs1),
 							instr.Itype.shift_imm(),
@@ -409,9 +414,6 @@ namespace riscv
 			{
 			case 0: // ECALL
 				cpu.machine().system_call(sysn);
-				if (UNLIKELY(cpu.machine().verbose_jumps)) {
-					printf("SYS ECALL %d returned %d\n", sysn, cpu.reg(RISCV::REG_RETVAL));
-				}
 				return;
 			case 1: // EBREAK
 				cpu.machine().system_call(0);

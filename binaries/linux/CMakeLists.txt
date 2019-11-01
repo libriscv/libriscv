@@ -5,6 +5,7 @@ option(MINIMAL     "Minimal build" OFF)
 option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 option(NATIVE      "Enable native performance" OFF)
+option(LTO         "Enable interprocedural optimizations" OFF)
 
 set(RISCV_ABI "-march=rv32imc -mabi=ilp32")
 set(WARNINGS  "-Wall -Wextra")

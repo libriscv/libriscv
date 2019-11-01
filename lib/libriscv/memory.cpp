@@ -50,6 +50,7 @@ namespace riscv
 		const auto* phdr = (Elf32_Phdr*) (m_binary.data() + elf->e_phoff);
 		const uint32_t program_headers = elf->e_phnum;
 		const auto program_begin = phdr->p_vaddr;
+		uint32_t program_end = program_begin;
 
 		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
@@ -75,6 +76,8 @@ namespace riscv
 				 .read = readable, .write = writable, .exec = executable
 			});
 			seg++;
+			// find program end
+			program_end = std::max(program_end, (uint32_t) (hdr->p_vaddr + len));
 		}
 
 		// install .text and other ELF sections
@@ -104,6 +107,7 @@ namespace riscv
 
 		this->m_start_address = elf->e_entry;
 		this->m_stack_address = program_begin;
+		this->m_elf_end_vaddr = program_end;
 		if (machine().verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}

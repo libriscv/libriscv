@@ -6,6 +6,26 @@
 
 namespace riscv
 {
+	ATOMIC_INSTR(AMOADD_W,
+	[] (auto& cpu, rv32i_instruction instr) {
+		// 1. load value from rs1
+		const auto addr = cpu.reg(instr.Atype.rs1);
+		auto value = cpu.machine().memory.template read<uint32_t> (addr);
+		// 2. place value into rd
+		cpu.reg(instr.Atype.rd) = value;
+		// 3. apply <add> to value and rs2
+		value += cpu.reg(instr.Atype.rs2);
+		// 4. write value back to [rs1]
+		cpu.machine().memory.template write<uint32_t> (addr, value);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		// printer
+		return snprintf(buffer, len, "AMOADD.W %s %s, %s",
+                        RISCV::regname(instr.Atype.rs1),
+                        RISCV::regname(instr.Atype.rs2),
+                        RISCV::regname(instr.Atype.rd));
+	});
+
     ATOMIC_INSTR(AMOSWAP_W,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// 1. load value from rs1

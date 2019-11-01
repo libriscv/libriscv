@@ -60,7 +60,10 @@ namespace riscv
 
 		// execute instruction
 		handler.handler(*this, instruction);
+#ifdef RISCV_DEBUG
 		assert(this->reg(0) == 0);
+#endif
+		registers().counter++;
 
 		if (machine().verbose_registers)
 		{
