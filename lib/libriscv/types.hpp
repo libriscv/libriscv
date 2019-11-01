@@ -47,4 +47,5 @@ namespace riscv
 #else
 	static constexpr bool riscv_debug_enabled = false;
 #endif
+	static constexpr bool verbose_machine = false;
 }

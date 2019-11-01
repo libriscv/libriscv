@@ -17,7 +17,7 @@ namespace riscv
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
 		using syscall_t = delegate<address_t (Machine<W>&)>;
-		Machine(std::vector<uint8_t> binary, bool verbose = false);
+		Machine(std::vector<uint8_t> binary);
 
 		void simulate();
 		void stop() noexcept;
@@ -28,10 +28,6 @@ namespace riscv
 		CPU<W>    cpu;
 		Memory<W> memory;
 
-		bool verbose_instructions = false;
-		bool verbose_jumps     = false;
-		bool verbose_registers = false;
-		bool verbose_machine   = false;
 		// retrieve arguments during a system call
 		template <typename T>
 		inline T sysarg(int arg) const;
@@ -40,6 +36,13 @@ namespace riscv
 		void break_now();
 		// immediately block execution, print registers and current instruction
 		void print_and_pause();
+		bool verbose_instructions = false;
+		bool verbose_jumps     = false;
+		bool verbose_registers = false;
+#else
+		static constexpr bool verbose_instructions = false;
+		static constexpr bool verbose_jumps     = false;
+		static constexpr bool verbose_registers = false;
 #endif
 
 		void system_call(int);

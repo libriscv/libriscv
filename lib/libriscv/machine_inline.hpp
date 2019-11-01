@@ -1,8 +1,8 @@
 #include "machine.hpp"
 
 template <int W>
-inline Machine<W>::Machine(std::vector<uint8_t> binary, bool verbose)
-	: verbose_machine{verbose}, cpu(*this), memory(*this, std::move(binary))
+inline Machine<W>::Machine(std::vector<uint8_t> binary)
+	: cpu(*this), memory(*this, std::move(binary))
 {
 	cpu.reset();
 }

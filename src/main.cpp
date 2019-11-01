@@ -3,7 +3,6 @@
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr bool verbose_machine = true;
 static constexpr bool linux_guest = true;
 #include "linux.hpp"
 #include "syscalls.hpp"
@@ -15,7 +14,7 @@ int main(int argc, const char** argv)
 
 	const auto binary = load_file(filename);
 
-	riscv::Machine<riscv::RISCV32> machine { binary, verbose_machine };
+	riscv::Machine<riscv::RISCV32> machine { binary };
 	machine.install_syscall_handler(0, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
