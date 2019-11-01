@@ -3,7 +3,8 @@
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr bool linux_guest = true;
+static constexpr bool linux_guest = false;
+static constexpr bool newlib_mini_guest = true;
 #include "linux.hpp"
 #include "syscalls.hpp"
 
@@ -30,6 +31,11 @@ int main(int argc, const char** argv)
 		prepare_linux<riscv::RISCV32>(machine, args, env);
 		// some extra syscalls
 		add_linux_syscalls(machine);
+	}
+	else if constexpr (newlib_mini_guest)
+	{
+		// the minimum number of syscalls needed for malloc and C++ exceptions
+		add_newlib_syscalls(machine);
 	}
 
 	/*

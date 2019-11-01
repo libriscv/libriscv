@@ -113,3 +113,10 @@ inline void add_linux_syscalls(riscv::Machine<W>& machine)
 	machine.install_syscall_handler(214, syscall_brk<riscv::RISCV32>);
 	machine.install_syscall_handler(222, syscall_mmap<riscv::RISCV32>);
 }
+
+template <int W>
+inline void add_newlib_syscalls(riscv::Machine<W>& machine)
+{
+	machine.install_syscall_handler(214, syscall_brk<riscv::RISCV32>);
+	machine.install_syscall_handler(222, syscall_mmap<riscv::RISCV32>);
+}
