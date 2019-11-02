@@ -68,13 +68,22 @@ namespace riscv
 	template <int W>
 	void Memory<W>::binary_loader()
 	{
+		if (m_binary.size() < 64) {
+			throw std::runtime_error("ELF binary too short");
+		}
 		// basic 32-bit ELF loader
 		const auto* elf = (Ehdr*) m_binary.data();
-		assert(validate_header<Ehdr> (elf));
+		if (UNLIKELY(!validate_header<Ehdr> (elf))) {
+			throw std::runtime_error("Invalid ELF header");
+		}
 
 		// enumerate & load loadable segments
 		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
 		const auto program_headers = elf->e_phnum;
+		if (m_binary.size() < elf->e_phoff + program_headers * sizeof(Phdr)) {
+			throw std::runtime_error("No room for ELF program-headers");
+		}
+
 		const auto program_begin = phdr->p_vaddr;
 		auto program_end = program_begin;
 
