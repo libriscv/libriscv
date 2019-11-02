@@ -33,6 +33,24 @@ uint32_t syscall_readlinkat<4>(riscv::Machine<4>& machine)
 }
 
 template <>
+uint32_t syscall_write<4>(riscv::Machine<4>& machine)
+{
+	const int  fd      = machine.sysarg<int>(0);
+	const auto address = machine.sysarg<uint32_t>(1);
+	const auto len     = machine.sysarg<size_t>(2);
+	if constexpr (false) {
+		printf("SYSCALL write called, addr = %#X  len = %zu\n", address, len);
+	}
+	// we only accept standard pipes, for now :)
+	if (fd >= 0 && fd < 3) {
+		uint8_t buffer[len];
+		machine.memory.memcpy_out(buffer, address, len);
+		return write(fd, buffer, len);
+	}
+	return -1;
+}
+
+template <>
 uint32_t syscall_writev<4>(riscv::Machine<4>& machine)
 {
 	const int  fd     = machine.sysarg<int>(0);

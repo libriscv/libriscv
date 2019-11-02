@@ -3,22 +3,7 @@
 static constexpr bool verbose_syscalls = false;
 
 template <int W> inline
-uint32_t syscall_write(riscv::Machine<4>& machine)
-{
-	const int  fd      = machine.sysarg<int>(0);
-	const auto address = machine.sysarg<uint32_t>(1);
-	const auto len     = machine.sysarg<size_t>(2);
-	if constexpr (false) {
-		printf("SYSCALL write called, addr = %#X  len = %zu\n", address, len);
-	}
-	// we only accept standard pipes, for now :)
-	if (fd >= 0 && fd < 3) {
-		uint8_t buffer[len];
-		machine.memory.memcpy_out(buffer, address, len);
-		return write(fd, buffer, len);
-	}
-	return -1;
-}
+uint32_t syscall_write(riscv::Machine<W>& machine);
 
 template <int W>
 uint32_t syscall_close(riscv::Machine<W>& machine)
