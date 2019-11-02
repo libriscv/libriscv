@@ -47,8 +47,8 @@ The newlib ELF files have much more C and C++ support, but still misses things l
 
 ## Instruction set support
 
-The emulator currently supports RV32IM, however the foundation is laid for RV64IM.
-Eventually RV32C extension will also be supported (compressed).
+The emulator currently supports RV32IMAC, however the foundation is laid for RV64IM.
+Eventually F-extension will also be supported (floating point).
 
 ## Usage
 
@@ -85,3 +85,7 @@ It is the Linux RISC-V syscall ABI.
 
 Be careful about modifying registers during system calls, as it may cause problems
 in the simulated program.
+
+## Why a RISC-V library
+
+It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely?
