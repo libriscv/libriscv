@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.9)
 project(riscv C CXX)
 
-option(LTO         "Enable interprocedural optimizations" OFF)
-option(NATIVE      "Enable native instructions" OFF)
+option(LTO         "Enable interprocedural optimizations" ON)
+option(NATIVE      "Enable native instructions" ON)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
 
