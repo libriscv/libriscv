@@ -52,7 +52,6 @@ namespace riscv
 		if (instr.Atype.funct3 == 0x2 && instr.Atype.rs2 == 0)
 		{
 			const auto addr = cpu.reg(instr.Atype.rs1);
-			printf("LR.W on 0x%X\n", addr);
 			cpu.atomics().load_reserve(addr);
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
 			cpu.reg(instr.Atype.rd) = value;
@@ -73,7 +72,6 @@ namespace riscv
 		if (instr.Atype.funct3 == 0x2 && instr.Atype.rs2 != 0)
 		{
 			const auto addr = cpu.reg(instr.Atype.rs1);
-			printf("SC.W on 0x%X\n", addr);
 			const bool resv = cpu.atomics().store_conditional(addr);
 			if (resv) {
 				auto value = cpu.machine().memory.template read<uint32_t> (addr);
