@@ -35,6 +35,10 @@ namespace riscv
 	{
 		const auto*  src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
+		if (m_binary.size() < hdr->p_offset + len) {
+			throw std::runtime_error("Not enough room for ELF program segment");
+		}
+
 		if (riscv::verbose_machine) {
 		printf("* Loading program of size %zu from %p to virtual %p\n",
 				len, src, (void*) (uintptr_t) hdr->p_vaddr);
@@ -64,14 +68,13 @@ namespace riscv
 		m_elf_end_vaddr = std::max(m_elf_end_vaddr, (uint32_t) (hdr->p_vaddr + len));
 	}
 
-	// ELF32 version
+	// ELF32 and ELF64 loader
 	template <int W>
 	void Memory<W>::binary_loader()
 	{
-		if (m_binary.size() < 64) {
+		if (UNLIKELY(m_binary.size() < 64)) {
 			throw std::runtime_error("ELF binary too short");
 		}
-		// basic 32-bit ELF loader
 		const auto* elf = (Ehdr*) m_binary.data();
 		if (UNLIKELY(!validate_header<Ehdr> (elf))) {
 			throw std::runtime_error("Invalid ELF header");
@@ -80,7 +83,10 @@ namespace riscv
 		// enumerate & load loadable segments
 		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
 		const auto program_headers = elf->e_phnum;
-		if (m_binary.size() < elf->e_phoff + program_headers * sizeof(Phdr)) {
+		if (UNLIKELY(program_headers <= 0)) {
+			throw std::runtime_error("ELF with no program-headers");
+		}
+		if (UNLIKELY(m_binary.size() < elf->e_phoff + program_headers * sizeof(Phdr))) {
 			throw std::runtime_error("No room for ELF program-headers");
 		}
 

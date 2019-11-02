@@ -312,7 +312,9 @@ namespace riscv
 		auto ci = instr.compressed();
 		if (ci.CSS.funct3 == 5) {
 			// FSDSP
+#ifdef RISCV_DEBUG
 			printf("TODO: implement FSDSP (FIXME)\n");
+#endif
 		}
 		else if (ci.CSS.funct3 == 6) {
 			// SWSP
@@ -324,7 +326,9 @@ namespace riscv
 			// FSWSP
 			auto val = cpu.reg(RISCV::REG_SP) + ci.CSS.offset4();
 			//cpu.machine().memory.write<uint64_t>
+#ifdef RISCV_DEBUG
 			printf("TODO: implement FSWSP (FIXME)\n");
+#endif
 		}
 		else {
 			cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
