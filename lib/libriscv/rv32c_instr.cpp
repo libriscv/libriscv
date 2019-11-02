@@ -49,8 +49,10 @@ namespace riscv
 				cpu.trigger_exception(ILLEGAL_OPERATION);
 				return;
 			case 5:
+#ifdef RISCV_DEBUG
 				// TODO: implement me
 				printf("FSD instruction ignored (FIXME)\n");
+#endif
 				return;
 			case 6: {
 				const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
@@ -58,8 +60,10 @@ namespace riscv
 				cpu.machine().memory.template write<uint32_t> (address, value);
 				} return;
 			case 7:
+#ifdef RISCV_DEBUG
 				// TODO: implement me
 				printf("FSW instruction ignored (FIXME)\n");
+#endif
 				return;
 		}
 	},

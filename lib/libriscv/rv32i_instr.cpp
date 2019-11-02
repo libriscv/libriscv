@@ -364,17 +364,26 @@ namespace riscv
 					dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;
 					break;
 				case 0x14: // DIV
-					dst = instr.to_signed(src1) / instr.to_signed(src2);
-					break;
+					if (LIKELY(instr.to_signed(src2) != 0)) {
+						dst = instr.to_signed(src1) / instr.to_signed(src2);
+					}
+					else dst = -1; // division by zero is not an exception
+					break;         // in RISC-V, so just set all bits
 				case 0x15: // DIVU
 					if (LIKELY(src2 != 0)) dst = src1 / src2;
 					else dst = -1;
 					break;
 				case 0x16: // REM
-					dst = instr.to_signed(src1) % instr.to_signed(src2);
+					if (LIKELY(src2 != 0)) {
+						dst = instr.to_signed(src1) % instr.to_signed(src2);
+					}
+					else dst = -1;
 					break;
 				case 0x17: // REMU
-					dst = src1 % src2;
+					if (LIKELY(src2 != 0)) {
+						dst = src1 % src2;
+					}
+					else dst = -1;
 					break;
 			}
 		} else {
