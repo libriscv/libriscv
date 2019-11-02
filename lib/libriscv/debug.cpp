@@ -171,7 +171,7 @@ static bool execute_commands(CPU<W>& cpu)
     }
     else if (cmd == "debug")
     {
-        cpu.trigger_interrupt(DEBUG_INTERRUPT);
+        cpu.trigger_exception(DEBUG_INTERRUPT);
         return true;
     }
     else if (cmd == "help" || cmd == "?")

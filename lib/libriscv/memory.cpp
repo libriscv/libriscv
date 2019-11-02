@@ -18,7 +18,7 @@ namespace riscv
 		// initialize paging (which clears all pages) before loading binary
 		this->initial_paging();
 		// load ELF binary into virtual memory
-		this->binary_loader();
+		if (!m_binary.empty()) this->binary_loader();
 	}
 
 	template <int W>
@@ -92,6 +92,8 @@ namespace riscv
 
 		const auto program_begin = phdr->p_vaddr;
 		auto program_end = program_begin;
+		this->m_start_address = elf->e_entry;
+		this->m_stack_address = program_begin;
 
 		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
@@ -102,6 +104,13 @@ namespace riscv
 					binary_load_ph(hdr);
 					seg++;
 					break;
+				case PT_GNU_STACK:
+					//printf("GNU_STACK: 0x%X\n", hdr->p_vaddr);
+					this->m_stack_address = hdr->p_vaddr; // ??
+					break;
+				case PT_GNU_RELRO:
+					throw std::runtime_error(
+						"Dynamically linked ELF binaries are not supported");
 			}
 		}
 
@@ -130,8 +139,6 @@ namespace riscv
 		}
 		*/
 
-		this->m_start_address = elf->e_entry;
-		this->m_stack_address = program_begin;
 		if (riscv::verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}
@@ -140,7 +147,7 @@ namespace riscv
 	template <int W>
 	void Memory<W>::protection_fault()
 	{
-		this->machine().cpu.trigger_interrupt(PROTECTION_FAULT);
+		machine().cpu.trigger_exception(PROTECTION_FAULT);
 	}
 
 	template <int W>

@@ -58,7 +58,7 @@ namespace riscv
 			cpu.reg(instr.Atype.rd) = value;
 			return;
 		}
-        cpu.trigger_interrupt(ILLEGAL_OPERATION);
+        cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -82,7 +82,7 @@ namespace riscv
 			cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
 			return;
 		}
-		cpu.trigger_interrupt(ILLEGAL_OPERATION);
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer

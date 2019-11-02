@@ -28,7 +28,7 @@ namespace riscv
 			cpu.cireg(ci.CL.srd) = cpu.machine().memory.template read<uint32_t> (address);
 			return;
 		}
-		cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -46,7 +46,7 @@ namespace riscv
 		auto ci = instr.compressed();
 		switch (ci.CS.funct3) {
 			case 4:
-				cpu.trigger_interrupt(ILLEGAL_OPERATION);
+				cpu.trigger_exception(ILLEGAL_OPERATION);
 				return;
 			case 5:
 				// TODO: implement me
@@ -140,7 +140,7 @@ namespace riscv
 			return;
 		}
 		// the registers are not allowed
-		cpu.trigger_interrupt(ILLEGAL_OPERATION);
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -198,7 +198,7 @@ namespace riscv
 						break;
 				}
 		}
-		cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -290,7 +290,7 @@ namespace riscv
 			// HINT
 		}
 		else {
-			cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -335,7 +335,7 @@ namespace riscv
 #endif
 		}
 		else {
-			cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -380,7 +380,7 @@ namespace riscv
 			cpu.reg(ci.CR.rd) += cpu.reg(ci.CR.rs2);
 		}
 		else {
-			cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int

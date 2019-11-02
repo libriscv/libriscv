@@ -28,7 +28,7 @@ namespace riscv
 		address_t pc() const noexcept { return registers().pc; }
 		void jump(address_t);
 
-		void trigger_interrupt(interrupt_t intr);
+		void trigger_exception(interrupt_t intr);
 
 		auto& registers() { return this->m_data.m_regs; }
 		const auto& registers() const { return this->m_data.m_regs; }
@@ -57,11 +57,8 @@ namespace riscv
 	private:
 		struct {
 			Registers<W> m_regs;
-			std::vector<interrupt_t> interrupt_queue;
-			bool interrupt_master_enable = true;
 		} m_data;
 		AtomicMemory<W> m_atomics;
-		size_t m_counter = 0;
 
 		inline void execute();
 		inline format_t read_instruction(address_t);
@@ -70,9 +67,6 @@ namespace riscv
 #else
 		const instruction_t& decode(format_t) const noexcept;
 #endif
-
-		inline void handle_interrupts();
-		inline void execute_interrupt(interrupt_t intr);
 
 		Machine<W>& m_machine;
 

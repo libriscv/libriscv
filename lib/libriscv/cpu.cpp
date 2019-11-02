@@ -78,27 +78,12 @@ namespace riscv
 		}
 #endif
 
-		// allow exceptions to happen on this instruction
-		this->handle_interrupts();
-
 		// increment PC
 		registers().pc += instruction.length();
 	}
 
 	template<int W>
-	void CPU<W>::handle_interrupts()
-	{
-		if (UNLIKELY(m_data.interrupt_master_enable && !m_data.interrupt_queue.empty()))
-		{
-			for (auto intr : m_data.interrupt_queue) {
-				this->execute_interrupt(intr);
-			}
-			m_data.interrupt_queue.clear();
-		}
-	}
-
-	template<int W>
-	void CPU<W>::execute_interrupt(interrupt_t intr)
+	void CPU<W>::trigger_exception(interrupt_t intr)
 	{
 		// TODO: replace with callback system
 		switch (intr)

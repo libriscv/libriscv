@@ -9,7 +9,7 @@ namespace riscv
 	INSTRUCTION(ILLEGAL,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// illegal opcode exception
-		cpu.trigger_interrupt(ILLEGAL_OPCODE);
+		cpu.trigger_exception(ILLEGAL_OPCODE);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -22,7 +22,7 @@ namespace riscv
 	INSTRUCTION(UNIMPLEMENTED,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
-		cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -61,11 +61,11 @@ namespace riscv
 				// load zero-extended 16-bit value
 				cpu.reg(reg) = cpu.machine().memory.template read<uint16_t>(addr);
 			} else {
-				cpu.trigger_interrupt(ILLEGAL_OPERATION);
+				cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
 		}
 		else {
-			cpu.trigger_interrupt(ILLEGAL_OPERATION);
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
@@ -94,7 +94,7 @@ namespace riscv
 			//assert(cpu.machine().memory.template read<uint32_t> (addr) == (uint32_t) value);
 		}
 		else {
-			cpu.trigger_interrupt(ILLEGAL_OPERATION);
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
@@ -130,7 +130,7 @@ namespace riscv
 				break;
 			case 0x2: // ???
 			case 0x3: // ???
-				cpu.trigger_interrupt(ILLEGAL_OPERATION);
+				cpu.trigger_exception(ILLEGAL_OPERATION);
 				break;
 			case 0x4: // BLT
 				comparison = instr.to_signed(reg1) < instr.to_signed(reg2);
@@ -378,7 +378,7 @@ namespace riscv
 					break;
 			}
 		} else {
-			cpu.trigger_interrupt(ILLEGAL_OPERATION);
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -422,7 +422,7 @@ namespace riscv
 			}
 		}
 		// if we got here, its an illegal operation!
-		cpu.trigger_interrupt(ILLEGAL_OPERATION);
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// system functions
@@ -460,7 +460,7 @@ namespace riscv
 	INSTRUCTION(OP_IMM32,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
-		cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -470,7 +470,7 @@ namespace riscv
 	INSTRUCTION(OP32,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
-		cpu.trigger_interrupt(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
