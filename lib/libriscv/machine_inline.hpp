@@ -66,6 +66,13 @@ inline T Machine<W>::sysarg(int idx) const
 	return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
 }
 
+template <int W>
+address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t len)
+{
+	memory.memcpy(dst, buf, len);
+	return dst + len;
+}
+
 #ifdef RISCV_DEBUG
 
 template <int W>

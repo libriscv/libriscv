@@ -166,6 +166,6 @@ uint32_t syscall_uname<4>(riscv::Machine<4>& machine)
     strcpy(uts.machine, "rv32imac");
     strcpy(uts.domain,  "(none)");
 
-    machine.memory.copy_to_guest(buffer, &uts, sizeof(uts32));
+    machine.copy_to_guest(buffer, &uts, sizeof(uts32));
 	return 0;
 }

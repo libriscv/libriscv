@@ -6,8 +6,8 @@ option(RISCV_DEBUG "Enable debugging features in the RISC-V machine" OFF)
 
 set (SOURCES
 		libriscv/cpu.cpp
+		libriscv/machine.cpp
 		libriscv/memory.cpp
-		#libriscv/rv32i.cpp
 	)
 if (RISCV_DEBUG)
 	list(APPEND SOURCES

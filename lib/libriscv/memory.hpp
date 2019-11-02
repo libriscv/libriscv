@@ -32,12 +32,6 @@ namespace riscv
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy_out(void* dst, address_t src, size_t);
 
-		auto copy_to_guest(address_t dst, const void* buf, size_t len)
-		{
-			this->memcpy(dst, buf, len);
-			return dst + len;
-		}
-
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
 		address_t elf_end_vaddr() const noexcept { return this->m_elf_end_vaddr; }

@@ -28,6 +28,14 @@ namespace riscv
 		CPU<W>    cpu;
 		Memory<W> memory;
 
+		// copy data into the guests memory
+		address_t copy_to_guest(address_t dst, const void* buf, size_t length);
+		// push something onto the stack, and move the stack pointer
+		address_t stack_push(const void* data, size_t length);
+
+		// push all strings on stack and then create a mini-argv on SP
+		void setup_argv(const std::vector<std::string>& args);
+
 		// retrieve arguments during a system call
 		template <typename T>
 		inline T sysarg(int arg) const;
