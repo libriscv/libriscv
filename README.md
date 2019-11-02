@@ -72,6 +72,12 @@ int main(int argc, const char** argv)
 	// install a system call handler
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 
+	// add program arguments on the stack
+	std::vector<std::string> args = {
+		"hello_world", "test!"
+	};
+	machine.setup_argv(args);
+
 	while (!machine.stopped())
 	{
 		machine.simulate();

@@ -3,8 +3,8 @@
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr bool linux_guest = true;
-static constexpr bool newlib_mini_guest = false;
+static constexpr bool linux_guest = false;
+static constexpr bool newlib_mini_guest = true;
 #include "linux.hpp"
 #include "syscalls.hpp"
 
@@ -15,6 +15,10 @@ int main(int argc, const char** argv)
 
 	const auto binary = load_file(filename);
 
+	std::vector<std::string> args = {
+		"hello_world", "test!"
+	};
+
 	riscv::Machine<riscv::RISCV32> machine { binary };
 	machine.install_syscall_handler(riscv::EBREAK_SYSCALL, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
@@ -24,9 +28,6 @@ int main(int argc, const char** argv)
 
 	if constexpr (linux_guest)
 	{
-		std::vector<std::string> args = {
-			"hello_world", "test!"
-		};
 		std::vector<std::string> env = {
 			"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
 		};
@@ -38,6 +39,7 @@ int main(int argc, const char** argv)
 	{
 		// the minimum number of syscalls needed for malloc and C++ exceptions
 		add_newlib_syscalls(machine);
+		machine.setup_argv(args);
 	}
 
 	/*
