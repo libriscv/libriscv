@@ -21,7 +21,7 @@ int main (int argc, char *argv[])
 			throw std::runtime_error("Oh god!");
 		}
 		catch (std::exception& e) {
-			//printf("Error: %s\n", e.what());
+			printf("Error: %s\n", e.what());
 			write(5, e.what(), strlen(e.what()));
 		}
 	}

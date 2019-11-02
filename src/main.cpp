@@ -3,8 +3,8 @@
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr bool linux_guest = false;
-static constexpr bool newlib_mini_guest = true;
+static constexpr bool linux_guest = true;
+static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
 #include "syscalls.hpp"
 

@@ -4,11 +4,10 @@ project(hello_world C CXX)
 option(MINIMAL     "Minimal build" OFF)
 option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
-option(NATIVE      "Enable native performance" OFF)
 
 set(RISCV_ABI "-march=rv32imc -mabi=ilp32")
 set(WARNINGS  "-Wall -Wextra")
-set(COMMON    "-O0 -fstack-protector -fexceptions -frtti")
+set(COMMON    "-O2 -fstack-protector")
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
 set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON}")
 
@@ -20,17 +19,13 @@ elseif (MINIMAL)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
 endif()
 
-if (NATIVE)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
-endif()
-
 if (GCSECTIONS)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-gc-sections")
 endif()
 
+find_package(Threads REQUIRED)
 
 set(SOURCES
 	src/hello_world.cpp
@@ -40,6 +35,7 @@ set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
 
 add_executable(hello_world ${SOURCES})
+target_link_libraries(hello_world Threads::Threads)
 target_link_libraries(hello_world -static -static-libgcc)
 # place ELF into the top binary folder
 set_target_properties(hello_world

@@ -44,16 +44,20 @@ int main (int argc, char *argv[], char *envp[])
 	assert(testval == 22);
 	printf("* Global ctors seem to be working!\n");
 	// auxvec, arguments to main():
-	assert(argc == 2 && std::string("hello_world") == argv[0]);
-	printf("* Auxvec and main() arguments seem to be working!\n");
+	//assert(argc == 2 && std::string("hello_world") == argv[0]);
+	for (int i = 0; i < argc; i++) {
+		printf("arg%d: %s\n", i, argv[i]);
+	}
+	if (argc > 0) {
+		printf("* Auxvec and main() arguments seem to be working!\n");
+	}
 	// C++ tests
 	test_rtti();
 	printf("* C++ RTTI seems to be working!\n");
-	// test fopen, fseek, fread, fclose
+	// unfortunately, exceptions are not initialized (probably no unwinder also)
+	// so this throw will just call abort()
 	try {
 		throw IdioticException("Oh god!");
-		//auto vec = load_file("test.txt");
-		//assert(vec.empty()); // sadly not implemented these syscalls :(
 	}
 	catch (std::exception& e) {
 		printf("Error: %s\n", e.what());
