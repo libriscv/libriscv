@@ -7,7 +7,7 @@
 int main (int argc, char *argv[])
 {
 	for (int i = 0; i < argc; i++) {
-		printf("arg%d: %s\n", i, argv[0]);
+		printf("arg%d: %s\n", i, argv[i]);
 	}
 
 	auto* ptr = new char[1024*1024];
