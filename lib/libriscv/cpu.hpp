@@ -1,4 +1,5 @@
 #pragma once
+#include "common.hpp"
 #include "types.hpp"
 #include "registers.hpp"
 #include "rv32i.hpp"

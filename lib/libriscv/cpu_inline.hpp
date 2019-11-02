@@ -1,5 +1,3 @@
-#pragma once
-#include "common.hpp"
 
 template <int W>
 CPU<W>::CPU(Machine<W>& machine)

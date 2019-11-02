@@ -249,13 +249,5 @@ void CPU<W>::break_checks()
     }
 }
 
-void assert_failed(const int expr, const char* strexpr,
-					const char* filename, const int line)
-{
-	fprintf(stderr, "Assertion failed in %s:%d: %s\n",
-					filename, line, strexpr);
-	abort();
-}
-
 	template class CPU<4>;
 } // namespace riscv

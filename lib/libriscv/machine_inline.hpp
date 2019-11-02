@@ -1,8 +1,7 @@
-#include "machine.hpp"
 
 template <int W>
-inline Machine<W>::Machine(std::vector<uint8_t> binary)
-	: cpu(*this), memory(*this, std::move(binary))
+inline Machine<W>::Machine(std::vector<uint8_t> binary, bool protect)
+	: cpu(*this), memory(*this, std::move(binary), protect)
 {
 	cpu.reset();
 }

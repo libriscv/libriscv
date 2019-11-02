@@ -17,7 +17,7 @@ namespace riscv
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
 		using syscall_t = delegate<address_t (Machine<W>&)>;
-		Machine(std::vector<uint8_t> binary);
+		Machine(std::vector<uint8_t> binary, bool protect_memory = true);
 
 		void simulate();
 		void stop() noexcept;

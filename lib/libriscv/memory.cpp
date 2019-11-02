@@ -1,22 +1,14 @@
 #include "memory.hpp"
 #include "machine.hpp"
-#include "util/elf.h"
+#include "elf.hpp"
 
 namespace riscv
 {
-	template <typename Class>
-	inline bool validate_header(const Class* hdr)
-	{
-		return	hdr->e_ident[0] == 0x7F &&
-				hdr->e_ident[1] == 'E'  &&
-				hdr->e_ident[2] == 'L'  &&
-				hdr->e_ident[3] == 'F';
-	}
-
 	template <int W>
-	Memory<W>::Memory(Machine<W>& machine, std::vector<uint8_t> binary)
+	Memory<W>::Memory(Machine<W>& machine, std::vector<uint8_t> binary, bool protect)
 		: m_machine{machine}, m_binary{std::move(binary)}
 	{
+		this->m_protect_segments = protect;
 		this->reset();
 	}
 
@@ -38,46 +30,64 @@ namespace riscv
 		zp.attr.read = false;
 	}
 
+	template <int W>
+	void Memory<W>::binary_load_ph(const Phdr* hdr)
+	{
+		const auto*  src = m_binary.data() + hdr->p_offset;
+		const size_t len = hdr->p_filesz;
+		if (riscv::verbose_machine) {
+		printf("* Loading program of size %zu from %p to virtual %p\n",
+				len, src, (void*) (uintptr_t) hdr->p_vaddr);
+		}
+		// load into virtual memory
+		this->memcpy(hdr->p_vaddr, src, len);
+		// set permissions
+		const bool readable   = hdr->p_flags & PF_R;
+		const bool writable   = hdr->p_flags & PF_W;
+		const bool executable = hdr->p_flags & PF_X;
+		if (riscv::verbose_machine) {
+		printf("* Program segment readable: %d writable: %d  executable: %d\n",
+				readable, writable, executable);
+		}
+		if (this->m_protect_segments) {
+			this->set_page_attr(hdr->p_vaddr, len, {
+				 .read = readable, .write = writable, .exec = executable
+			});
+		}
+		else {
+			// this might help execute simplistic barebones programs
+			this->set_page_attr(hdr->p_vaddr, len, {
+				 .read = true, .write = true, .exec = true
+			});
+		}
+		// find program end
+		m_elf_end_vaddr = std::max(m_elf_end_vaddr, (uint32_t) (hdr->p_vaddr + len));
+	}
+
 	// ELF32 version
-	template <>
-	void Memory<4>::binary_loader()
+	template <int W>
+	void Memory<W>::binary_loader()
 	{
 		// basic 32-bit ELF loader
-		const auto* elf = (Elf32_Ehdr*) m_binary.data();
-		assert(validate_header<Elf32_Ehdr> (elf));
+		const auto* elf = (Ehdr*) m_binary.data();
+		assert(validate_header<Ehdr> (elf));
 
 		// enumerate & load loadable segments
-		const auto* phdr = (Elf32_Phdr*) (m_binary.data() + elf->e_phoff);
-		const uint32_t program_headers = elf->e_phnum;
+		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
+		const auto program_headers = elf->e_phnum;
 		const auto program_begin = phdr->p_vaddr;
-		uint32_t program_end = program_begin;
+		auto program_end = program_begin;
 
 		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
 		{
-			if (hdr->p_type != PT_LOAD) continue;
-			const auto*  src = m_binary.data() + hdr->p_offset;
-			const size_t len = hdr->p_filesz;
-			if (riscv::verbose_machine) {
-			printf("* Loading program %d of size %zu from %p to virtual %p\n",
-					seg, len, src, (void*) (uintptr_t) hdr->p_vaddr);
+			switch (hdr->p_type)
+			{
+				case PT_LOAD:
+					binary_load_ph(hdr);
+					seg++;
+					break;
 			}
-			// load into virtual memory
-			this->memcpy(hdr->p_vaddr, src, len);
-			// set permissions
-			const bool readable   = hdr->p_flags & PF_R;
-			const bool writable   = hdr->p_flags & PF_W;
-			const bool executable = hdr->p_flags & PF_X;
-			if (riscv::verbose_machine) {
-			printf("* Program segment readable: %d writable: %d  executable: %d\n",
-					readable, writable, executable);
-			}
-			this->set_page_attr(hdr->p_vaddr, len, {
-				 .read = readable, .write = writable, .exec = executable
-			});
-			seg++;
-			// find program end
-			program_end = std::max(program_end, (uint32_t) (hdr->p_vaddr + len));
 		}
 
 		// install .text and other ELF sections
@@ -107,7 +117,6 @@ namespace riscv
 
 		this->m_start_address = elf->e_entry;
 		this->m_stack_address = program_begin;
-		this->m_elf_end_vaddr = program_end;
 		if (riscv::verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}

@@ -1,5 +1,6 @@
 #pragma once
 #include "common.hpp"
+#include "elf.hpp"
 #include "types.hpp"
 #include "page.hpp"
 #include "util/delegate.hpp"
@@ -69,14 +70,18 @@ namespace riscv
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		static Page& default_page_fault(Memory&, const size_t page);
 
-		Memory(Machine<W>&, std::vector<uint8_t>);
+		Memory(Machine<W>&, std::vector<uint8_t>, bool protect_memory);
 	private:
 		inline auto& create_attr(const address_t address);
 		inline void  set_page_attr(address_t, size_t len, PageAttributes);
 		static inline uintptr_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
 		}
+		using Ehdr = typename Elf<W>::Ehdr;
+		using Phdr = typename Elf<W>::Phdr;
+		using Shdr = typename Elf<W>::Shdr;
 		void binary_loader();
+		void binary_load_ph(const Phdr*);
 		void initial_paging();
 		void protection_fault();
 
@@ -91,6 +96,7 @@ namespace riscv
 		page_fault_cb_t m_page_fault_handler = nullptr;
 
 		std::vector<uint8_t> m_binary;
+		bool m_protect_segments;
 
 #ifdef RISCV_DEBUG
 		// map of page-indexed trap functions
