@@ -14,7 +14,7 @@ set_target_properties(fuzzer PROPERTIES CXX_STANDARD 17)
 #set_property(TARGET fuzzer PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 target_compile_options(riscv PUBLIC "-fsanitize=address,undefined")
 target_link_libraries(fuzzer "-fsanitize=address,undefined")
-target_compile_options(riscv PUBLIC "-march=native" -g -O2)
+target_compile_options(riscv PUBLIC -march=native -g -O2)
 
 target_compile_options(riscv PUBLIC "-fsanitize=fuzzer-no-link")
 target_link_libraries(fuzzer "-fsanitize=fuzzer" "-fuse-ld=lld")
