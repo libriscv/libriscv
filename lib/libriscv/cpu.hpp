@@ -63,9 +63,9 @@ namespace riscv
 		inline void execute();
 		inline format_t read_instruction(address_t);
 #ifndef RISCV_DEBUG
-		void execute(format_t) noexcept;
+		void execute(format_t);
 #else
-		const instruction_t& decode(format_t) const noexcept;
+		const instruction_t& decode(format_t) const;
 #endif
 
 		Machine<W>& m_machine;

@@ -162,7 +162,7 @@ namespace riscv
 				std::forward_as_tuple());
 			return it.first->second;
 		}
-		throw std::runtime_error("Out of memory");
+		throw MachineException("Out of memory");
 	}
 
 	const Page& Page::cow_page() noexcept {

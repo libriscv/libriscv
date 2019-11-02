@@ -13,9 +13,9 @@ namespace riscv
 {
 	template<>
 #ifndef RISCV_DEBUG
-	void CPU<4>::execute(const format_t instruction) noexcept
+	void CPU<4>::execute(const format_t instruction)
 #else
-	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction) const noexcept
+	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction) const
 #endif
 	{
 		// if all bits are zero, it's an illegal instruction (by design)
@@ -143,7 +143,7 @@ namespace riscv
 					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
 		}
 		else {
-			throw std::runtime_error("Unimplemented instruction format length");
+			throw MachineException("Unimplemented instruction format length");
 		}
 		return std::string(buffer, len);
 	}
