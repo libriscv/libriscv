@@ -248,8 +248,9 @@ namespace riscv
 					dst = src >> instr.Itype.shift_imm();
 				else { // SRAI: preserve the sign bit
 					uint32_t sigbit = src & 0x80000000;
+					dst = src;
 					for (unsigned i = 0; i < instr.Itype.shift_imm(); i++) {
-						dst = ((src & 0x7FFFFFFF) >> 1) | sigbit;
+						dst = ((dst & 0x7FFFFFFF) >> 1) | sigbit;
 					}
 				}
 				break;
