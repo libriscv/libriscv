@@ -11,7 +11,7 @@
 static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
 // avoid endless loops and code that takes too long
-static const uint32_t MAX_INSTRUCTIONS = 40000;
+static const size_t MAX_INSTRUCTIONS = 256000;
 
 static int create_folder(const std::string& folder);
 static int python_sanitize_compile(const std::string& project, const std::string& outfile);
