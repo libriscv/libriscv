@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 project(riscv C CXX)
 
+option(RISCV_DEBUG "" ON)
 add_subdirectory(../lib lib)
 
 set(SOURCES
