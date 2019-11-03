@@ -49,10 +49,8 @@ namespace riscv
 				cpu.trigger_exception(ILLEGAL_OPERATION);
 				return;
 			case 5:
-#ifdef RISCV_DEBUG
 				// TODO: implement me
-				printf("FSD instruction ignored (FIXME)\n");
-#endif
+				//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 				return;
 			case 6: {
 				const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
@@ -60,10 +58,8 @@ namespace riscv
 				cpu.machine().memory.template write<uint32_t> (address, value);
 				} return;
 			case 7:
-#ifdef RISCV_DEBUG
 				// TODO: implement me
-				printf("FSW instruction ignored (FIXME)\n");
-#endif
+				//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 				return;
 		}
 	},
@@ -121,7 +117,11 @@ namespace riscv
 	COMPRESSED_INSTR(C1_LI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
-		cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
+		if (ci.CI.rd != 0) {
+			cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -320,9 +320,7 @@ namespace riscv
 		auto ci = instr.compressed();
 		if (ci.CSS.funct3 == 5) {
 			// FSDSP
-#ifdef RISCV_DEBUG
-			printf("TODO: implement FSDSP (FIXME)\n");
-#endif
+			//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 		else if (ci.CSS.funct3 == 6) {
 			// SWSP
@@ -334,9 +332,7 @@ namespace riscv
 			// FSWSP
 			auto val = cpu.reg(RISCV::REG_SP) + ci.CSS.offset4();
 			//cpu.machine().memory.write<uint64_t>
-#ifdef RISCV_DEBUG
-			printf("TODO: implement FSWSP (FIXME)\n");
-#endif
+			//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 		else {
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);

@@ -7,16 +7,22 @@
 namespace riscv
 {
 	ATOMIC_INSTR(AMOADD_W,
-	[] (auto& cpu, rv32i_instruction instr) {
-		// 1. load value from rs1
-		const auto addr = cpu.reg(instr.Atype.rs1);
-		auto value = cpu.machine().memory.template read<uint32_t> (addr);
-		// 2. place value into rd
-		cpu.reg(instr.Atype.rd) = value;
-		// 3. apply <add> to value and rs2
-		value += cpu.reg(instr.Atype.rs2);
-		// 4. write value back to [rs1]
-		cpu.machine().memory.template write<uint32_t> (addr, value);
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		if (instr.Atype.rd != 0)
+		{
+			// 1. load value from rs1
+			const auto addr = cpu.reg(instr.Atype.rs1);
+			auto value = cpu.machine().memory.template read<uint32_t> (addr);
+			// 2. place value into rd
+			cpu.reg(instr.Atype.rd) = value;
+			// 3. apply <add> to value and rs2
+			value += cpu.reg(instr.Atype.rs2);
+			// 4. write value back to [rs1]
+			cpu.machine().memory.template write<uint32_t> (addr, value);
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -27,16 +33,21 @@ namespace riscv
 	});
 
     ATOMIC_INSTR(AMOSWAP_W,
-	[] (auto& cpu, rv32i_instruction instr) {
-		// 1. load value from rs1
-		const auto addr = cpu.reg(instr.Atype.rs1);
-		auto value = cpu.machine().memory.template read<uint32_t> (addr);
-		// 2. place value into rd
-		cpu.reg(instr.Atype.rd) = value;
-		// 3. apply <swap> to value and rs2
-		std::swap(value, cpu.reg(instr.Atype.rs2));
-		// 4. write value back to [rs1]
-		cpu.machine().memory.template write<uint32_t> (addr, value);
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		if (instr.Atype.rd != 0)
+		{
+			// 1. load value from rs1
+			const auto addr = cpu.reg(instr.Atype.rs1);
+			auto value = cpu.machine().memory.template read<uint32_t> (addr);
+			// 2. place value into rd
+			cpu.reg(instr.Atype.rd) = value;
+			// 3. apply <swap> to value and rs2
+			std::swap(value, cpu.reg(instr.Atype.rs2));
+			// 4. write value back to [rs1]
+			cpu.machine().memory.template write<uint32_t> (addr, value);
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer

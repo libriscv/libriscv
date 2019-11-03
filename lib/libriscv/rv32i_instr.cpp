@@ -433,6 +433,8 @@ namespace riscv
 			}
 			break;
 		case 0x2: // CSRRS
+			// destination cannot be x0
+			if (instr.Itype.rd == 0) break;
 			switch (instr.Itype.imm)
 			{
 			case 0xC00: // CSR RDCYCLE (lower)
@@ -481,7 +483,11 @@ namespace riscv
 	INSTRUCTION(LUI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
-		cpu.reg(instr.Utype.rd) = instr.Utype.signed_upper();
+		if (instr.Utype.rd != 0) {
+			cpu.reg(instr.Utype.rd) = instr.Utype.signed_upper();
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -492,7 +498,11 @@ namespace riscv
 	INSTRUCTION(AUIPC,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
-		cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.signed_upper();
+		if (instr.Utype.rd != 0) {
+			cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.signed_upper();
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer

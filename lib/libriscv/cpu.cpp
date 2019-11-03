@@ -70,11 +70,15 @@ namespace riscv
 		registers().counter++;
 
 #ifdef RISCV_DEBUG
-		assert(this->reg(0) == 0);
 		if (UNLIKELY(machine().verbose_registers))
 		{
 			auto regs = this->registers().to_string();
 			printf("\n%s\n\n", regs.c_str());
+		}
+		if (UNLIKELY(this->reg(0) != 0)) {
+			const auto string = isa_t::to_string(*this, instruction, handler);
+			printf("%s\n", string.c_str());
+			assert(this->reg(0) == 0);
 		}
 #endif
 
