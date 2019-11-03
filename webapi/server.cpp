@@ -8,7 +8,7 @@
 #include <libriscv/machine.hpp>
 #include "syscalls.cpp"
 
-static const char* ADDRESS = "0.0.0.0";
+static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
 // avoid endless loops and code that takes too long
 static const uint32_t MAX_INSTRUCTIONS = 40000;
@@ -84,7 +84,8 @@ int main(void)
 		}
 
         res.set_content(state.output, "text/plain");
-		res.status = state.exit_code;
+		res.set_header("X-Exit-Code", std::to_string(state.exit_code));
+		res.status = 200;
     });
 
 	printf("Listening on %s:%u\n", ADDRESS, PORT);
