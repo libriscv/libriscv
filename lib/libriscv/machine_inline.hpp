@@ -50,12 +50,18 @@ inline void Machine<W>::system_call(int syscall_number)
 		}
 		return;
 	}
-	if (UNLIKELY(verbose_machine)) {
-		fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
+	if (throw_on_unhandled_syscall == false)
+	{
+		if (UNLIKELY(verbose_machine)) {
+			fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
+		}
+		// EBREAK should not modify registers
+		if (syscall_number != 0) {
+			cpu.reg(RISCV::REG_RETVAL) = -ENOSYS;
+		}
 	}
-	// EBREAK should not modify registers
-	if (syscall_number != 0) {
-		cpu.reg(RISCV::REG_RETVAL) = -1;
+	else {
+		throw MachineException("Unhandled system call: " + std::to_string(syscall_number));
 	}
 }
 

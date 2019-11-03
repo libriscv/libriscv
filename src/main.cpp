@@ -48,6 +48,7 @@ int main(int argc, const char** argv)
 	machine.verbose_registers = true;
 	machine.break_now();
 	machine.cpu.breakpoint(0x17c64);
+	machine.throw_on_unhandled_syscall = true;
 	*/
 
 	try {

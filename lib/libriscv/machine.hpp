@@ -52,7 +52,7 @@ namespace riscv
 		static constexpr bool verbose_jumps     = false;
 		static constexpr bool verbose_registers = false;
 #endif
-
+		bool throw_on_unhandled_syscall = false;
 		void system_call(int);
 	private:
 		bool m_stopped = false;
