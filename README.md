@@ -95,3 +95,5 @@ in the simulated program.
 ## Why a RISC-V library
 
 It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely?
+
+See the `webapi` folder for an example webserver that compiles and runs limited C/C++ code in a relatively safe manner. Ping me or create a PR if you notice something is exploitable.

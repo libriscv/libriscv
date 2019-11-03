@@ -1,0 +1,13 @@
+#include <cstdio>
+
+int main()
+{
+	try {
+		printf("Hello world! %d\n", 123);
+		throw "123";
+	}
+	catch (...) {
+		
+	}
+	return 666;
+}

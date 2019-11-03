@@ -1,3 +1,6 @@
 [submodule "binaries/ext/tinyprintf"]
 	path = binaries/barebones/ext/tinyprintf
 	url = https://github.com/fwsGonzo/tinyprintf.git
+[submodule "webapi/cpp-httplib"]
+	path = webapi/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git
