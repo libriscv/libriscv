@@ -48,13 +48,8 @@ int main(void)
 		// sanitize + compile code
 		const int cc = python_sanitize_compile(project_folder, binaryfile);
 		if (cc != 0) {
-			printf("Return code: %d\n", cc);
-			if (cc != 666) {
-				auto vec = load_file(project_folder + "/status.txt");
-				res.set_content((const char*) vec.data(), vec.size(), "text/plain");
-			} else {
-				res.set_content("Forbidden characters in statement", "text/plain");
-			}
+			auto vec = load_file(project_folder + "/status.txt");
+			res.set_content((const char*) vec.data(), vec.size(), "text/plain");
 			res.status = 500;
 			return;
 		}

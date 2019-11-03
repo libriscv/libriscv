@@ -26,8 +26,9 @@ fo.close()
 
 # compile the code
 cmd = ["riscv32-unknown-elf-g++", "-march=rv32imc", "-mabi=ilp32",
-		"-std=c++17", "-O2", "-fstack-protector", codefile, "-o", binaryfile]
-#print(cmd)
+		"-std=c++17", "-O2", "-fstack-protector", codefile, "-o", binaryfile,
+		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections", "-Wl,-s"]
+print(cmd)
 
 result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 stdout, stderr = result.communicate()
