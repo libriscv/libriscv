@@ -10,14 +10,14 @@ binaryfile  = sys.argv[2]
 sanitized = ""
 with open(codefile) as fp:
 	for line in fp:
-		if "#include" in line:
+		if "include" in line:
 			if ("/" in line) or (".." in line):
 				fo = open(statusfile, "w")
 				fo.write("Invalid characters in statement")
 				fo.close()
 				sys.exit(666)
 		sanitized += str(line)
-#print(sanitized)
+print(sanitized)
 
 # overwrite with sanitized text
 fo = open(codefile, "w")

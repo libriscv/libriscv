@@ -65,12 +65,17 @@ int main(void)
 		State<4> state;
 		riscv::Machine<4> machine { binary };
 		machine.install_syscall_handler(64, {&state, &State<4>::syscall_write});
+		machine.install_syscall_handler(80, {&state, &State<4>::syscall_dummy});
 		machine.install_syscall_handler(93, {&state, &State<4>::syscall_exit});
 		machine.install_syscall_handler(214, {&state, &State<4>::syscall_brk});
 		try {
 			while (!machine.stopped()) {
 				machine.simulate();
-				if (machine.cpu.registers().counter > MAX_INSTRUCTIONS) break;
+				if (UNLIKELY(machine.cpu.registers().counter > MAX_INSTRUCTIONS)) {
+					res.set_content("Error: Maximum instructions reached", "text/plain");
+					res.status = 500;
+					return;
+				}
 			}
 		} catch (std::exception& e) {
 			res.set_content("Exception: " + std::string(e.what()), "text/plain");

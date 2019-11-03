@@ -11,6 +11,8 @@ struct State
 	uint32_t syscall_exit(riscv::Machine<W>& machine);
 	uint32_t syscall_write(riscv::Machine<W>& machine);
 	uint32_t syscall_brk(riscv::Machine<W>& machine);
+
+	uint32_t syscall_dummy(riscv::Machine<W>& machine);
 };
 
 template <int W>
@@ -45,4 +47,11 @@ uint32_t State<W>::syscall_brk(riscv::Machine<W>& machine)
     sbrk_end = std::max(sbrk_end, sbrk_start);
     sbrk_end = std::min(sbrk_end, sbrk_max);
 	return sbrk_end;
+}
+
+template <int W>
+uint32_t State<W>::syscall_dummy(riscv::Machine<W>& machine)
+{
+	printf("Unhandled system call: %d\n", machine.template sysarg<int>(7));
+	return -1;
 }
