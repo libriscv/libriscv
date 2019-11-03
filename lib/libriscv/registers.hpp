@@ -22,7 +22,7 @@ namespace riscv
 			char buffer[600];
 			int  len = 0;
 			len += snprintf(buffer+len, sizeof(buffer)-len,
-							"[%s\t%8zu] ", "INSTR", this->counter);
+							"[%s\t%8zu] ", "INSTR", (size_t) this->counter);
 			for (int i = 1; i < 32; i++) {
 				len += snprintf(buffer+len, sizeof(buffer) - len,
 						"[%s\t%08X] ", RISCV::regname(i), this->get(i));
@@ -33,7 +33,7 @@ namespace riscv
 			return std::string(buffer, len);
 		}
 
-		size_t    counter = 0;
+		uint64_t  counter = 0;
 		address_t pc = 0;
 		std::array<typename isa_t::register_t, 32> reg;
 	};

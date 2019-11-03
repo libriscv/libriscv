@@ -1,4 +1,5 @@
 #include "rv32i.hpp"
+#include "instr_helpers.hpp"
 
 #define INSTRUCTION(x, ...) \
 		static CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
@@ -418,17 +419,38 @@ namespace riscv
 	INSTRUCTION(SYSTEM,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// system functions
-		if (instr.Itype.funct3 == 0) {
-			const int sysn = cpu.reg(RISCV::REG_ECALL);
+		switch (instr.Itype.funct3)
+		{
+		case 0x0: // SYSTEM functions
 			switch (instr.Itype.imm)
 			{
 			case 0: // ECALL
-				cpu.machine().system_call(sysn);
+				cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
 				return;
 			case 1: // EBREAK
 				cpu.machine().system_call(riscv::EBREAK_SYSCALL);
 				return;
 			}
+			break;
+		case 0x2: // CSRRS
+			switch (instr.Itype.imm)
+			{
+			case 0xC00: // CSR RDCYCLE (lower)
+			case 0xC02: // RDINSTRET (lower)
+				cpu.reg(instr.Itype.rd) = cpu.registers().counter;
+				return;
+			case 0xC80: // CSR RDCYCLE (upper)
+			case 0xC82: // RDINSTRET (upper)
+				cpu.reg(instr.Itype.rd) = cpu.registers().counter >> 32u;
+				return;
+			case 0xC01: // CSR RDTIME (lower)
+				cpu.reg(instr.Itype.rd) = u64_monotonic_time();
+				return;
+			case 0xC81: // CSR RDTIME (upper)
+				cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
+				return;
+			}
+			break;
 		}
 		// if we got here, its an illegal operation!
 		cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -438,6 +460,19 @@ namespace riscv
 		static std::array<const char*, 2> etype = {"ECALL", "EBREAK"};
 		if (instr.Itype.imm < 2 && instr.Itype.funct3 == 0) {
 			return snprintf(buffer, len, "SYS %s", etype.at(instr.Itype.imm));
+		} else if (instr.Itype.funct3 == 0x2) {
+			// CSRRS
+			switch (instr.Itype.imm) {
+				case 0xC00:
+					return snprintf(buffer, len, "RDCYCLE.L %s", RISCV::regname(instr.Itype.rd));
+				case 0xC01:
+					return snprintf(buffer, len, "RDINSTRET.L %s", RISCV::regname(instr.Itype.rd));
+				case 0xC80:
+					return snprintf(buffer, len, "RDCYCLE.U %s", RISCV::regname(instr.Itype.rd));
+				case 0xC81:
+					return snprintf(buffer, len, "RDINSTRET.U %s", RISCV::regname(instr.Itype.rd));
+			}
+			return snprintf(buffer, len, "CSRRS (unknown), %s", RISCV::regname(instr.Itype.rd));
 		} else {
 			return snprintf(buffer, len, "SYS ???");
 		}
