@@ -6,15 +6,21 @@
 
 inline uint32_t rdcycle()
 {
-	uint32_t cycle;
-	asm volatile ("rdcycle %0" : "=r"(cycle));
-	return cycle;
+	union {
+		uint64_t whole;
+		uint32_t word[2];
+	};
+	asm ("rdcycleh %0\n rdcycle %1\n" : "=r"(word[1]), "=r"(word[0]));
+	return whole;
 }
-inline uint32_t rdtime()
+inline uint64_t rdtime()
 {
-	uint32_t t;
-	asm volatile ("rdtime %0" : "=r"(t));
-	return t;
+	union {
+		uint64_t whole;
+		uint32_t word[2];
+	};
+	asm ("rdtimeh %0\n rdtime %1\n" : "=r"(word[1]), "=r"(word[0]));
+	return whole;
 }
 
 int main (int argc, char *argv[])
@@ -28,29 +34,25 @@ int main (int argc, char *argv[])
 	// 7-10ms to clear 1mb
 	std::memset(ptr, 0, 1024*1024);
 
-	uint32_t t0 = rdtime();
-	for (int i = 0; i < 1; i++)
+	uint64_t t0 = rdtime();
+	uint64_t c0 = rdcycle();
+	for (int i = 0; i < 2; i++)
 	{
-		uint32_t c0 = rdcycle();
 		try {
 			throw std::runtime_error("Oh god!");
 		}
 		catch (std::exception& e) {
-			printf("Error: %s\n", e.what());
-			write(5, e.what(), strlen(e.what()));
+			//printf("Error: %s\n", e.what());
+			//write(5, e.what(), strlen(e.what()));
 		}
-		uint32_t c1 = rdcycle();
-		printf("It took %lu cycles to throw, catch and printf exception\n", c1 - c0);
 	}
-	uint32_t t1 = rdtime();
-	uint32_t millis = (t1 - t0) / 1000000ul;
-	printf("It took %lu nanos (%lu millis) for the whole thing\n", t1 - t0, millis);
+	uint64_t c1 = rdcycle();
+	uint64_t t1 = rdtime();
+	printf("It took %llu cycles to throw, catch and printf exception\n", c1 - c0);
+	uint32_t millis = (t1 - t0) / 1000000ull;
+	printf("It took %lu millis for the whole thing\n", millis);
 
 	const char hello_void[] = "Hello Virtual World!\n";
 	write(0, hello_void, sizeof(hello_void)-1);
-
-
-
-
 	return 666;
 }
