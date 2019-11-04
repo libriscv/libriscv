@@ -1,11 +1,17 @@
 #!/usr/bin/python3
 import sys
 import subprocess
+import os
+
+# container image name & shared folder
+dc_image = "gcc9-rv32imac"
+dc_shared = "/usr/outside"
 
 project  = sys.argv[1]
-codefile = project + "/code.cpp"
-statusfile = project + "/status.txt"
-binaryfile  = sys.argv[2]
+os.chdir(project)
+statusfile = "status.txt"
+codefile    = sys.argv[2]
+binaryfile  = sys.argv[3]
 
 sanitized = ""
 with open(codefile) as fp:
@@ -24,8 +30,12 @@ fo = open(codefile, "w")
 fo.write(sanitized)
 fo.close()
 
+local_dir = os.getcwd()
+
 # compile the code
-cmd = ["riscv32-unknown-elf-g++", "-march=rv32imc", "-mabi=ilp32", "-static",
+cmd = ["docker", "run", "--volume", local_dir + ":" + dc_shared,
+		"--user", "1000:1000", dc_image,
+		"riscv32-unknown-elf-g++", "-march=rv32imc", "-mabi=ilp32", "-static",
 		"-std=c++17", "-O2", "-fstack-protector", codefile, "-o", binaryfile,
 		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections", "-Wl,-s"]
 print(cmd)

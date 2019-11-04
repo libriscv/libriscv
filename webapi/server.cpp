@@ -8,13 +8,13 @@
 #include <libriscv/machine.hpp>
 #include "syscalls.cpp"
 
-static const char* ADDRESS = "localhost";
+static const char* ADDRESS = "0.0.0.0";
 static const uint16_t PORT = 1234;
 // avoid endless loops and code that takes too long
 static const size_t MAX_INSTRUCTIONS = 256000;
 
 static int create_folder(const std::string& folder);
-static int python_sanitize_compile(const std::string& project, const std::string& outfile);
+static int python_sanitize_compile(const std::string& project, const std::string& infile, const std::string& outfile);
 static int write_file(const std::string& file, const std::string& text);
 static std::vector<uint8_t> load_file(const std::string& filename);
 
@@ -26,8 +26,8 @@ int main(void)
     svr.Post("/exec", [](const Request& req, Response& res) {
 		static int request_ID = 0;
 		const std::string project_folder = "program" + std::to_string(request_ID++);
-		const std::string codefile   = project_folder + "/code.cpp";
-		const std::string binaryfile = project_folder + "/binary";
+		const std::string codefile   = "code.cpp";
+		const std::string binaryfile = "binary";
 
 		// create project folder
 		if (create_folder(project_folder) < 0) {
@@ -39,14 +39,14 @@ int main(void)
 		}
 
 		// write code into project folder
-		if (write_file(codefile, req.body) != 0) {
+		if (write_file(project_folder + "/" + codefile, req.body) != 0) {
 			res.set_content("Failed to write codefile", "text/plain");
 			res.status = 500;
 			return;
 		}
 
 		// sanitize + compile code
-		const int cc = python_sanitize_compile(project_folder, binaryfile);
+		const int cc = python_sanitize_compile(project_folder, codefile, binaryfile);
 		if (cc != 0) {
 			auto vec = load_file(project_folder + "/status.txt");
 			res.set_content((const char*) vec.data(), vec.size(), "text/plain");
@@ -55,8 +55,7 @@ int main(void)
 		}
 
 		// load binary and execute code
-		//printf("Loading binary: %s\n", binaryfile.c_str());
-		auto binary = load_file(binaryfile);
+		auto binary = load_file(project_folder + "/" + binaryfile);
 		if (binary.empty()) {
 			res.set_content("Failed to open binary", "text/plain");
 			res.status = 500;
@@ -97,9 +96,9 @@ int create_folder(const std::string& folder)
 	return mkdir(folder.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }
 
-int python_sanitize_compile(const std::string& project, const std::string& outfile)
+int python_sanitize_compile(const std::string& project, const std::string& infile, const std::string& outfile)
 {
-	const std::string cmd = "/usr/bin/python3 ../sanitize.py " + project + " " + outfile;
+	const std::string cmd = "/usr/bin/python3 ../sanitize.py " + project + " " + infile + " " + outfile;
 	return system(cmd.c_str());
 }
 
