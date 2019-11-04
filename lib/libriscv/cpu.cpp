@@ -33,16 +33,23 @@ namespace riscv
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
 	{
-		// read short instruction at address
 		format_t instruction;
-		instruction.whole = this->machine().memory.template read<uint16_t>(address);
-
-		if (instruction.length() == 4) {
-			// complete the instruction (NOTE: might cross into another page)
-			instruction.half[1] =
-				this->machine().memory.template read<uint16_t>(address + 2);
+		if ((address & 0x3) == 0)
+		{
+			// read (potentially) whole instruction
+			instruction.whole = this->machine().memory.template read<uint32_t>(address);
 		}
+		else
+		{
+			// read short instruction at address
+			instruction.whole = this->machine().memory.template read<uint16_t>(address);
 
+			if (instruction.length() == 4) {
+				// complete the instruction (NOTE: might cross into another page)
+				instruction.half[1] =
+					this->machine().memory.template read<uint16_t>(address + 2);
+			}
+		}
 		return instruction;
 	}
 

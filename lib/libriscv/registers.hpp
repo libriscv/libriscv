@@ -14,8 +14,11 @@ namespace riscv
 		using isa_t     = isa_type<W>;              // 32- or 64-bit architecture
 		using format_t  = typename isa_t::format_t; // one machine instruction
 
-		auto& get(uint16_t idx) { return reg.at(idx); }
-		const auto& get(uint16_t idx) const { return reg.at(idx); }
+		auto& get(uint32_t idx) { return m_reg[idx]; }
+		const auto& get(uint32_t idx) const { return m_reg[idx]; }
+
+		auto& at(uint32_t idx) { return m_reg.at(idx); }
+		const auto& at(uint32_t idx) const { return m_reg.at(idx); }
 
 		std::string to_string() const
 		{
@@ -35,6 +38,7 @@ namespace riscv
 
 		uint64_t  counter = 0;
 		address_t pc = 0;
-		std::array<typename isa_t::register_t, 32> reg;
+	private:
+		std::array<typename isa_t::register_t, 32> m_reg;
 	};
 }
