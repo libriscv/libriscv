@@ -34,21 +34,35 @@ namespace riscv
 	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
 	{
 		format_t instruction;
-		if ((address & 0x3) == 0)
-		{
-			// read (potentially) whole instruction
-			instruction.whole = this->machine().memory.template read<uint32_t>(address);
-		}
-		else
-		{
-			// read short instruction at address
-			instruction.whole = this->machine().memory.template read<uint16_t>(address);
-
-			if (instruction.length() == 4) {
-				// complete the instruction (NOTE: might cross into another page)
-				instruction.half[1] =
-					this->machine().memory.template read<uint16_t>(address + 2);
+#ifndef RISCV_DEBUG
+		const uint32_t this_page = address >> Page::SHIFT;
+		if (UNLIKELY(this_page != m_current_page)) {
+			m_current_page = this_page;
+			m_page_pointer = &machine().memory.get_page(address);
+			// TODO: verify execute
+			if (UNLIKELY(!m_page_pointer->attr.exec)) {
+				this->trigger_exception(PROTECTION_FAULT);
 			}
+		}
+		const auto offset = address & (Page::size()-1);
+
+		if (LIKELY(offset < Page::size() - W))
+		{
+			// we can read the whole thing
+			instruction.whole = *(address_t*) (m_page_pointer->data() + offset);
+			return instruction;
+		}
+		// read short instruction at address
+		instruction.whole = *(uint16_t*) (m_page_pointer->data() + offset);
+#else
+		// in debug mode we need a full memory read to allow trapping
+		instruction.whole = this->machine().memory.template read<uint16_t>(address);
+#endif
+
+		if (instruction.length() == 4) {
+			// complete the instruction (NOTE: might cross into another page)
+			instruction.half[1] =
+				this->machine().memory.template read<uint16_t>(address + 2);
 		}
 		return instruction;
 	}

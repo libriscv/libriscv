@@ -1,5 +1,6 @@
 #pragma once
 #include "common.hpp"
+#include "page.hpp"
 #include "types.hpp"
 #include "registers.hpp"
 #include "rv32i.hpp"
@@ -69,6 +70,8 @@ namespace riscv
 #endif
 
 		Machine<W>& m_machine;
+		int64_t     m_current_page = -1;
+		const Page* m_page_pointer = nullptr;
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
