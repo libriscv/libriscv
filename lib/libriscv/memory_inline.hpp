@@ -40,6 +40,7 @@ inline const Page& Memory<W>::get_page(const address_t address) const noexcept
 	if (it != m_pages.end()) {
 		return it->second;
 	}
+	// uninitialized memory is all zeroes on this system
 	return Page::cow_page();
 }
 

@@ -14,7 +14,7 @@ struct PageAttributes
 	bool exec  = false;
 };
 
-union alignas(4096) PageData {
+union PageData {
 	static constexpr unsigned SIZE  = 4096;
 	static constexpr unsigned SHIFT = 12;
 
@@ -29,18 +29,21 @@ struct Page
 	static constexpr unsigned SIZE  = PageData::SIZE;
 	static constexpr unsigned SHIFT = PageData::SHIFT;
 
+	auto& page() noexcept { return m_page; }
+	const auto& page() const noexcept { return m_page; }
+
 	template <typename T>
 	inline T aligned_read(uint32_t offset) const
 	{
 		if (this->attr.read) {
 			if constexpr (std::is_same<T, uint8_t>::value) {
-				return m_page->buffer8[offset];
+				return page().buffer8[offset];
 			} else if constexpr (std::is_same<T, uint16_t>::value) {
-				return m_page->buffer16[offset >> 1];
+				return page().buffer16[offset >> 1];
 			} else if constexpr (std::is_same<T, uint32_t>::value) {
-				return m_page->buffer32[offset >> 2];
+				return page().buffer32[offset >> 2];
 			} else if constexpr (std::is_same<T, uint64_t>::value) {
-				return m_page->buffer64[offset >> 3];
+				return page().buffer64[offset >> 3];
 			}
 			else {
 				static_assert(always_false<T>, "Can't use this type when reading memory");
@@ -54,22 +57,19 @@ struct Page
 	{
 		if (this->attr.write) {
 			if constexpr (std::is_same<T, uint8_t>::value) {
-				m_page->buffer8[offset] = value;
+				page().buffer8[offset] = value;
 			} else if constexpr (std::is_same<T, uint16_t>::value) {
-				m_page->buffer16[offset >> 1] = value;
+				page().buffer16[offset >> 1] = value;
 			} else if constexpr (std::is_same<T, uint32_t>::value) {
-				m_page->buffer32[offset >> 2] = value;
+				page().buffer32[offset >> 2] = value;
 			} else if constexpr (std::is_same<T, uint64_t>::value) {
-				m_page->buffer64[offset >> 3] = value;
+				page().buffer64[offset >> 3] = value;
 			}
 			else {
 				static_assert(always_false<T>, "Can't use this type when writing memory");
 			}
 		}
 	}
-
-	auto& page() noexcept { return *m_page; }
-	const auto& page() const noexcept { return *m_page; }
 
 	auto* data() noexcept {
 		return page().buffer8.data();
@@ -84,8 +84,10 @@ struct Page
 
 	static const Page& cow_page() noexcept;
 
-	std::unique_ptr<PageData> m_page { new PageData };
+	// this combination has been benchmarked to be faster than
+	// page-aligning the PageData struct, and avoids an indirection
 	PageAttributes attr;
+	PageData m_page;
 };
 
 }
