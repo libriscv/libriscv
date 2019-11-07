@@ -109,6 +109,7 @@ int main(void)
 		res.set_header("X-Compile-Time", std::to_string(c1 - c0) + " micros");
 		res.set_header("X-Execution-Time", std::to_string(t1 - t0) + " micros");
 		res.set_header("X-Instruction-Count", instructions);
+		res.set_header("X-Binary-Size", std::to_string(binary.size()));
 		res.set_content(state.output, "text/plain");
     });
 
