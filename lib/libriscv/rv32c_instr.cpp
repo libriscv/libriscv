@@ -50,7 +50,7 @@ namespace riscv
 				return;
 			case 5:
 				// TODO: implement me
-				//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 				return;
 			case 6: {
 				const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
@@ -59,9 +59,10 @@ namespace riscv
 				} return;
 			case 7:
 				// TODO: implement me
-				//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 				return;
 		}
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -320,7 +321,7 @@ namespace riscv
 		auto ci = instr.compressed();
 		if (ci.CSS.funct3 == 5) {
 			// FSDSP
-			//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 		else if (ci.CSS.funct3 == 6) {
 			// SWSP
@@ -332,7 +333,7 @@ namespace riscv
 			// FSWSP
 			auto val = cpu.reg(RISCV::REG_SP) + ci.CSS.offset4();
 			//cpu.machine().memory.write<uint64_t>
-			//cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 		else {
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
