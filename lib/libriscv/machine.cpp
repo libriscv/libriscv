@@ -18,8 +18,7 @@ namespace riscv
 		std::vector<uint32_t> argv;
 		argv.push_back(args.size()); // argc
 		for (const auto& string : args) {
-			auto sp = stack_push(string.data(), string.size());
-			printf("String %s at 0x%X\n", string.c_str(), sp);
+			const auto sp = stack_push(string.data(), string.size());
 			argv.push_back(sp);
 		}
 		argv.push_back(0x0);
