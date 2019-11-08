@@ -3,8 +3,8 @@
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr bool linux_guest = false;
-static constexpr bool newlib_mini_guest = true;
+static constexpr bool linux_guest = true;
+static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
 #include "syscalls.hpp"
 
@@ -43,11 +43,11 @@ int main(int argc, const char** argv)
 	}
 
 	/*
-	machine.verbose_instructions = true;
 	machine.verbose_jumps = true;
+	machine.verbose_instructions = true;
+	machine.cpu.breakpoint(0x184C8);
 	machine.verbose_registers = true;
 	machine.break_now();
-	machine.cpu.breakpoint(0x17c64);
 	machine.throw_on_unhandled_syscall = true;
 	*/
 
@@ -57,8 +57,9 @@ int main(int argc, const char** argv)
 		}
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
-		//machine.print_and_pause();
+		machine.print_and_pause();
 	}
+	printf("Instructions: %zu\n", (size_t) machine.cpu.registers().counter);
 	return 0;
 }
 

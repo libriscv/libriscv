@@ -1,5 +1,6 @@
 #include "syscalls.hpp"
 #include <unistd.h>
+#include <sys/stat.h>
 #include <sys/uio.h>
 static constexpr uint32_t G_SHMEM_BASE = 0x70000000;
 static const uint32_t sbrk_start = 0x40000000;
@@ -19,7 +20,7 @@ uint32_t syscall_openat<4>(riscv::Machine<4>& machine)
     if constexpr (verbose_syscalls) {
 		printf("SYSCALL openat called, fd = %d  \n", fd);
 	}
-    return -1;
+    return -EBADF;
 }
 
 template <>
@@ -29,7 +30,7 @@ uint32_t syscall_readlinkat<4>(riscv::Machine<4>& machine)
     if constexpr (verbose_syscalls) {
 		printf("SYSCALL readlinkat called, fd = %d  \n", fd);
 	}
-    return -1;
+    return -EBADF;
 }
 
 template <>
@@ -47,7 +48,7 @@ uint32_t syscall_write<4>(riscv::Machine<4>& machine)
 		machine.memory.memcpy_out(buffer, address, len);
 		return write(fd, buffer, len);
 	}
-	return -1;
+	return -EBADF;
 }
 
 template <>
@@ -59,12 +60,10 @@ uint32_t syscall_writev<4>(riscv::Machine<4>& machine)
 	if constexpr (false) {
 		printf("SYSCALL writev called, iov = %#X  cnt = %d\n", iov_g, count);
 	}
+	if (count < 0 || count > 256) return -EINVAL;
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
-        char buffer[1024];
-
         const size_t size = sizeof(iovec32) * count;
-        if (size > sizeof(buffer)) return -1;
 
         std::vector<iovec32> vec(count);
         machine.memory.memcpy_out(vec.data(), iov_g, size);
@@ -72,14 +71,15 @@ uint32_t syscall_writev<4>(riscv::Machine<4>& machine)
         int res = 0;
         for (const auto& iov : vec)
         {
+			char buffer[1024];
             auto src_g = (uint32_t) iov.iov_base;
-            auto len_g = iov.iov_len;
+            auto len_g = std::min(sizeof(buffer), (size_t) iov.iov_len);
             machine.memory.memcpy_out(buffer, src_g, len_g);
             res += write(fd, buffer, len_g);
         }
         return res;
 	}
-	return -1;
+	return -EBADF;
 }
 
 template <>
@@ -102,7 +102,7 @@ uint32_t syscall_mmap<4>(riscv::Machine<4>& machine)
         nextfree += length;
         return addr;
     }
-	return -1;
+	return UINT32_MAX; // = MAP_FAILED;
 }
 
 template <>
@@ -127,13 +127,26 @@ uint32_t syscall_brk<4>(riscv::Machine<4>& machine)
 template <>
 uint32_t syscall_stat<4>(riscv::Machine<4>& machine)
 {
-	const auto  dirfd   = machine.sysarg<int>(0);
+	const auto  fd      = machine.sysarg<int>(0);
 	const auto  buffer  = machine.sysarg<uint32_t>(1);
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL stat called, dirfd = %d  buffer = 0x%X\n",
-				dirfd, buffer);
+		printf("SYSCALL stat called, fd = %d  buffer = 0x%X\n",
+				fd, buffer);
 	}
-	return -ENOSYS;
+	if (false) {
+		struct stat result;
+		std::memset(&result, 0, sizeof(result));
+		result.st_dev     = 6;
+		result.st_ino     = fd;
+		result.st_mode    = 0x21b6;
+		result.st_nlink   = 1;
+		result.st_rdev    = 265;
+		result.st_blksize = 512;
+		result.st_blocks  = 0;
+		machine.copy_to_guest(buffer, &result, sizeof(result));
+		return 0;
+	}
+	return -EBADF;
 }
 
 template <>
