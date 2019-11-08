@@ -57,7 +57,9 @@ int main(int argc, const char** argv)
 		}
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
+#ifdef RISCV_DEBUG
 		machine.print_and_pause();
+#endif
 	}
 	printf("Instructions: %zu\n", (size_t) machine.cpu.registers().counter);
 	return 0;
