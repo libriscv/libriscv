@@ -49,6 +49,11 @@ int main(int argc, const char** argv)
 	machine.verbose_registers = true;
 	machine.break_now();
 	machine.throw_on_unhandled_syscall = true;
+	machine.memory.trap(0x8FFFF000,
+		[] (riscv::Page& page, uint32_t off, int mode, int64_t val) -> int64_t
+		{
+			return page.passthrough(off, mode, val);
+		});
 	*/
 
 	try {

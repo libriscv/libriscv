@@ -19,7 +19,7 @@ namespace riscv
 	{
 		using address_t = address_type<W>;
 		using isa_t     = isa_type<W>;
-		using mmio_cb_t = delegate<bool(Memory&, address_t, int, address_t)>;
+		using mmio_cb_t = Page::mmio_cb_t;
 		using page_fault_cb_t = delegate<Page&(Memory&, size_t)>;
 
 		template <typename T>
@@ -44,14 +44,8 @@ namespace riscv
 		void reset();
 
 		// memory traps
-		static constexpr int TRAP_READ  = 0x0;
-		static constexpr int TRAP_WRITE = 0x1000;
-		static constexpr int TRAP_EXEC  = 0x2000;
-#ifdef RISCV_DEBUG
-		// NOTE: breaking traps will pause on the *next* instruction
-		// NOTE: use print_and_pause() instead!
-		void trap(address_t address, mmio_cb_t callback);
-#endif
+		// NOTE: use print_and_pause() to immediately break!
+		void trap(address_t page_addr, mmio_cb_t callback);
 
 		// page handling
 		size_t active_pages() const noexcept { return m_pages.size(); }
@@ -97,13 +91,6 @@ namespace riscv
 
 		const std::vector<uint8_t>& m_binary;
 		bool m_protect_segments;
-
-#ifdef RISCV_DEBUG
-		// map of page-indexed trap functions
-		// NOTE: uses page-numbers, not byte-addressing
-		std::unordered_map<address_t, mmio_cb_t> m_callbacks;
-#endif
-		inline constexpr bool check_trap(address_t, int size, address_t value);
 	};
 #include "memory_inline.hpp"
 }

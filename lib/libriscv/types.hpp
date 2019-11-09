@@ -45,4 +45,10 @@ namespace riscv
 		const handler_t handler; // callback for executing one instruction
 		const printer_t printer; // callback for logging one instruction
 	};
+
+	enum trapmode {
+		TRAP_READ  = 0x0,
+		TRAP_WRITE = 0x1000,
+		TRAP_EXEC  = 0x2000,
+	};
 }

@@ -4,17 +4,18 @@ template <int W>
 template <typename T>
 T Memory<W>::read(address_t address)
 {
-	if constexpr (memory_debug_enabled) {
-		if (!check_trap(address, sizeof(T) | TRAP_READ, 0)) return T{};
-	}
-
 	const auto pageno = page_number(address);
 	if (m_current_rd_page != pageno) {
 		m_current_rd_page = pageno;
 		m_current_rd_ptr = &get_pageno(pageno);
 	}
-
 	const auto& page = *m_current_rd_ptr;
+
+	if constexpr (memory_debug_enabled) {
+		if (UNLIKELY(page.has_trap())) {
+			return page.trap(address & (Page::size()-1), sizeof(T) | TRAP_READ, 0);
+		}
+	}
 	if (LIKELY(page.attr.read)) {
 		return page.template aligned_read<T>(address & (Page::size()-1));
 	}
@@ -26,17 +27,19 @@ template <int W>
 template <typename T>
 void Memory<W>::write(address_t address, T value)
 {
-	if constexpr (memory_debug_enabled) {
-		if (!check_trap(address, sizeof(T) | TRAP_WRITE, value)) return;
-	}
-
 	const auto pageno = page_number(address);
 	if (m_current_wr_page != pageno) {
 		m_current_wr_page = pageno;
 		m_current_wr_ptr = &create_page(pageno);
 	}
-
 	auto& page = *m_current_wr_ptr;
+
+	if constexpr (memory_debug_enabled) {
+		if (UNLIKELY(page.has_trap())) {
+			page.trap(address & (Page::size()-1), sizeof(T) | TRAP_WRITE, value);
+			return;
+		}
+	}
 	if (LIKELY(page.attr.write)) {
 		page.template aligned_write<T>(address & (Page::size()-1), value);
 		return;
@@ -142,33 +145,9 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
 	}
 }
 
-#ifdef RISCV_DEBUG
-
 template <int W>
-void Memory<W>::trap(address_t address, mmio_cb_t callback)
+void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 {
-	if (callback) {
-		this->m_callbacks[address] = callback;
-	}
-	else {
-		this->m_callbacks.erase(address);
-	}
+	auto& page = create_page(page_number(page_addr));
+	page.set_trap(callback);
 }
-template <int W> constexpr bool
-Memory<W>::check_trap(address_t address, int size, address_t value)
-{
-	if (this->m_callbacks.empty()) return true;
-	auto it = m_callbacks.find(address);
-	if (it == m_callbacks.end()) return true;
-	// do the thing
-	return it->second(*this, address, size, value);
-}
-
-#else
-
-template <int W> constexpr bool
-Memory<W>::check_trap(address_t, int, address_t) {
-	return true;
-}
-
-#endif
