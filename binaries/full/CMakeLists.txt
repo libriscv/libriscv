@@ -25,8 +25,6 @@ if (GCSECTIONS)
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-gc-sections")
 endif()
 
-find_package(Threads REQUIRED)
-
 set(SOURCES
 	src/hello_world.cpp
 )
@@ -35,7 +33,7 @@ set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
 
 add_executable(hello_world ${SOURCES})
-target_link_libraries(hello_world Threads::Threads)
+target_link_libraries(hello_world pthread)
 target_link_libraries(hello_world -static -static-libgcc)
 # place ELF into the top binary folder
 set_target_properties(hello_world

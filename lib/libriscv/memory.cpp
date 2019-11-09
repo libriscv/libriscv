@@ -109,8 +109,9 @@ namespace riscv
 					this->m_stack_address = hdr->p_vaddr; // ??
 					break;
 				case PT_GNU_RELRO:
-					throw std::runtime_error(
-						"Dynamically linked ELF binaries are not supported");
+					//throw std::runtime_error(
+					//	"Dynamically linked ELF binaries are not supported");
+					break;
 			}
 		}
 

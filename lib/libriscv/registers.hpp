@@ -17,8 +17,13 @@ namespace riscv
 		auto& get(uint32_t idx) { return m_reg[idx]; }
 		const auto& get(uint32_t idx) const { return m_reg[idx]; }
 
+		auto& getfl(uint32_t idx) { return m_regfl[idx]; }
+		const auto& getfl(uint32_t idx) const { return m_regfl[idx]; }
+
 		auto& at(uint32_t idx) { return m_reg.at(idx); }
 		const auto& at(uint32_t idx) const { return m_reg.at(idx); }
+
+		auto& fcsr() noexcept { return m_fcsr; }
 
 		std::string to_string() const
 		{
@@ -40,5 +45,15 @@ namespace riscv
 		address_t pc = 0;
 	private:
 		std::array<typename isa_t::register_t, 32> m_reg;
+		std::array<float, 32> m_regfl;
+		// FP control register
+		union {
+			struct {
+				uint32_t fflags : 5;
+				uint32_t frm    : 3;
+				uint32_t resv24 : 24;
+			};
+			uint32_t whole = 0;
+		} m_fcsr;
 	};
 }

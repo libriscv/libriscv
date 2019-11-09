@@ -86,13 +86,10 @@ namespace riscv
 		const uint32_t type = instr.Stype.funct3;
 		if (type == 0) {
 			cpu.machine().memory.template write<uint8_t>(addr, value);
-			//assert(cpu.machine().memory.template read<uint8_t> (addr) == (uint8_t) value);
 		} else if (type == 1) {
 			cpu.machine().memory.template write<uint16_t>(addr, value);
-			//assert(cpu.machine().memory.template read<uint16_t> (addr) == (uint16_t) value);
 		} else if (type == 2) {
 			cpu.machine().memory.template write<uint32_t>(addr, value);
-			//assert(cpu.machine().memory.template read<uint32_t> (addr) == (uint32_t) value);
 		}
 		else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -437,6 +434,15 @@ namespace riscv
 			if (instr.Itype.rd == 0) break;
 			switch (instr.Itype.imm)
 			{
+			case 0x001: // fflags (accrued exceptions)
+				cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				return;
+			case 0x002: // frm (rounding-mode)
+				cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				return;
+			case 0x003: // fcsr (control and status register)
+				cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				return;
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
 				cpu.reg(instr.Itype.rd) = cpu.registers().counter;
@@ -465,6 +471,12 @@ namespace riscv
 		} else if (instr.Itype.funct3 == 0x2) {
 			// CSRRS
 			switch (instr.Itype.imm) {
+				case 0x001:
+					return snprintf(buffer, len, "RDCSR FFLAGS %s", RISCV::regname(instr.Itype.rd));
+				case 0x002:
+					return snprintf(buffer, len, "RDCSR FRM %s", RISCV::regname(instr.Itype.rd));
+				case 0x003:
+					return snprintf(buffer, len, "RDCSR FCSR %s", RISCV::regname(instr.Itype.rd));
 				case 0xC00:
 					return snprintf(buffer, len, "RDCYCLE.L %s", RISCV::regname(instr.Itype.rd));
 				case 0xC01:
