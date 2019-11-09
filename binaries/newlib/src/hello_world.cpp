@@ -3,6 +3,9 @@
 #include <unistd.h>
 #include <stdexcept>
 #include "type_name.hpp"
+//#include <iostream>
+
+using namespace std;
 
 inline uint32_t rdcycle()
 {
@@ -36,7 +39,7 @@ int main (int argc, char *argv[])
 
 	uint64_t t0 = rdtime();
 	uint64_t c0 = rdcycle();
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 500; i++)
 	{
 		try {
 			throw std::runtime_error("Oh god!");
