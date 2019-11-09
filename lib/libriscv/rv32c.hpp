@@ -106,13 +106,9 @@ namespace riscv
 			uint16_t imm345 : 3;
 			uint16_t funct3 : 3;
 
-			bool sign() const noexcept {
-				return imm6;
-			}
-			int32_t signed_imm() const noexcept {
-				const uint32_t ext = 0xFFFFFFE0;
-				const int32_t val = imm2 | (imm345 << 1);
-				return (val << 2) | (sign() ? ext : 0);
+			uint32_t offset() const noexcept {
+				const uint32_t val = imm2 | (imm345 << 1) | (imm6 << 4);
+				return val << 2;
 			}
 		} CL;
 		// store format

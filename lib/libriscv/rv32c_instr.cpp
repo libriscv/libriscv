@@ -28,7 +28,7 @@ namespace riscv
 	COMPRESSED_INSTR(C0_REG_LOAD,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
-		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.signed_imm();
+		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
 		if (ci.CL.funct3 == 0x2) {
 			cpu.cireg(ci.CL.srd) = cpu.machine().memory.template read<uint32_t> (address);
 			return;
@@ -41,10 +41,10 @@ namespace riscv
 			"???", "FLD", "LW", "FLW"
 		};
 		auto ci = instr.compressed();
-		return snprintf(buffer, len, "C.%s %s, [%s%+d = 0x%X]",
+		return snprintf(buffer, len, "C.%s %s, [%s+%u = 0x%X]",
 						f3[ci.CL.funct3], RISCV::ciname(ci.CL.srd),
-						RISCV::ciname(ci.CL.srs1), ci.CL.signed_imm(),
-						cpu.cireg(ci.CL.srs1) + ci.CL.signed_imm());
+						RISCV::ciname(ci.CL.srs1), ci.CL.offset(),
+						cpu.cireg(ci.CL.srs1) + ci.CL.offset());
 	});
 	COMPRESSED_INSTR(C0_REG_STORE,
 	[] (auto& cpu, rv32i_instruction instr) {
