@@ -60,7 +60,7 @@ namespace riscv
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(const address_t address) const noexcept;
 		const Page& get_pageno(const address_t npage) const noexcept;
-		Page& create_page(const address_t address);
+		Page& create_page(const address_t npage);
 
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		static Page& default_page_fault(Memory&, const size_t page);
@@ -72,6 +72,7 @@ namespace riscv
 		static inline uintptr_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
 		}
+
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
 		using Shdr = typename Elf<W>::Shdr;
@@ -87,6 +88,10 @@ namespace riscv
 		address_t m_elf_end_vaddr = 0;
 		size_t    m_pages_total   = 256; // max physical memory usage
 
+		const Page* m_current_rd_ptr  = nullptr;
+		address_t   m_current_rd_page = -1;
+		Page*     m_current_wr_ptr  = nullptr;
+		address_t m_current_wr_page = -1;
 		std::unordered_map<address_t, Page> m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 

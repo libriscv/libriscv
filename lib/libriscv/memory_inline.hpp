@@ -7,7 +7,14 @@ T Memory<W>::read(address_t address)
 	if constexpr (memory_debug_enabled) {
 		if (!check_trap(address, sizeof(T) | TRAP_READ, 0)) return T{};
 	}
-	const auto& page = get_page(address);
+
+	const auto pageno = page_number(address);
+	if (m_current_rd_page != pageno) {
+		m_current_rd_page = pageno;
+		m_current_rd_ptr = &get_pageno(pageno);
+	}
+
+	const auto& page = *m_current_rd_ptr;
 	if (LIKELY(page.attr.read)) {
 		return page.template aligned_read<T>(address & (Page::size()-1));
 	}
@@ -22,7 +29,14 @@ void Memory<W>::write(address_t address, T value)
 	if constexpr (memory_debug_enabled) {
 		if (!check_trap(address, sizeof(T) | TRAP_WRITE, value)) return;
 	}
-	auto& page = create_page(address);
+
+	const auto pageno = page_number(address);
+	if (m_current_wr_page != pageno) {
+		m_current_wr_page = pageno;
+		m_current_wr_ptr = &create_page(pageno);
+	}
+
+	auto& page = *m_current_wr_ptr;
 	if (LIKELY(page.attr.write)) {
 		page.template aligned_write<T>(address & (Page::size()-1), value);
 		return;
@@ -49,14 +63,13 @@ inline const Page& Memory<W>::get_pageno(const address_t page) const noexcept
 }
 
 template <int W>
-inline Page& Memory<W>::create_page(const address_t address)
+inline Page& Memory<W>::create_page(const address_t page)
 {
-	const auto page = page_number(address);
-	// find existing memory pages
 	auto it = m_pages.find(page);
 	if (it != m_pages.end()) {
 		return it->second;
 	}
+	// create page on-demand, or throw exception when out of memory
 	if (this->m_page_fault_handler == nullptr) {
 		return default_page_fault(*this, page);
 	}
@@ -69,7 +82,7 @@ void Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 	while (len > 0)
 	{
 		const size_t size = std::min(Page::size(), len);
-		auto& page = this->create_page(dst);
+		auto& page = this->create_page(dst >> Page::SHIFT);
 		page.attr = options;
 
 		dst += size;
@@ -85,7 +98,7 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
 		const size_t size = std::min(remaining, len);
-		auto& page = this->create_page(dst);
+		auto& page = this->create_page(dst >> Page::SHIFT);
 		__builtin_memset(page.data() + offset, value, size);
 
 		dst += size;
@@ -102,7 +115,7 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
 		const size_t size = std::min(remaining, len);
-		auto& page = this->create_page(dst);
+		auto& page = this->create_page(dst >> Page::SHIFT);
 		std::memcpy(page.data() + offset, src, size);
 
 		dst += size;

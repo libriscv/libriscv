@@ -35,39 +35,34 @@ struct Page
 	template <typename T>
 	inline T aligned_read(uint32_t offset) const
 	{
-		if (this->attr.read) {
-			if constexpr (std::is_same<T, uint8_t>::value) {
-				return page().buffer8[offset];
-			} else if constexpr (std::is_same<T, uint16_t>::value) {
-				return page().buffer16[offset >> 1];
-			} else if constexpr (std::is_same<T, uint32_t>::value) {
-				return page().buffer32[offset >> 2];
-			} else if constexpr (std::is_same<T, uint64_t>::value) {
-				return page().buffer64[offset >> 3];
-			}
-			else {
-				static_assert(always_false<T>, "Can't use this type when reading memory");
-			}
+		if constexpr (std::is_same<T, uint8_t>::value) {
+			return page().buffer8[offset];
+		} else if constexpr (std::is_same<T, uint16_t>::value) {
+			return page().buffer16[offset >> 1];
+		} else if constexpr (std::is_same<T, uint32_t>::value) {
+			return page().buffer32[offset >> 2];
+		} else if constexpr (std::is_same<T, uint64_t>::value) {
+			return page().buffer64[offset >> 3];
 		}
-		return T {};
+		else {
+			static_assert(always_false<T>, "Can't use this type when reading memory");
+		}
 	}
 
 	template <typename T>
 	inline void aligned_write(uint32_t offset, T value)
 	{
-		if (this->attr.write) {
-			if constexpr (std::is_same<T, uint8_t>::value) {
-				page().buffer8[offset] = value;
-			} else if constexpr (std::is_same<T, uint16_t>::value) {
-				page().buffer16[offset >> 1] = value;
-			} else if constexpr (std::is_same<T, uint32_t>::value) {
-				page().buffer32[offset >> 2] = value;
-			} else if constexpr (std::is_same<T, uint64_t>::value) {
-				page().buffer64[offset >> 3] = value;
-			}
-			else {
-				static_assert(always_false<T>, "Can't use this type when writing memory");
-			}
+		if constexpr (std::is_same<T, uint8_t>::value) {
+			page().buffer8[offset] = value;
+		} else if constexpr (std::is_same<T, uint16_t>::value) {
+			page().buffer16[offset >> 1] = value;
+		} else if constexpr (std::is_same<T, uint32_t>::value) {
+			page().buffer32[offset >> 2] = value;
+		} else if constexpr (std::is_same<T, uint64_t>::value) {
+			page().buffer64[offset >> 3] = value;
+		}
+		else {
+			static_assert(always_false<T>, "Can't use this type when writing memory");
 		}
 	}
 

@@ -38,7 +38,6 @@ namespace riscv
 	{
 		format_t instruction;
 #ifndef RISCV_DEBUG
-
 		const address_t this_page = address >> Page::SHIFT;
 		if (UNLIKELY(this_page != m_current_page)) {
 			this->change_page(this_page);
@@ -64,11 +63,18 @@ namespace riscv
 		}
 #else
 		// in debug mode we need a full memory read to allow trapping
-		instruction.whole = this->machine().memory.template read<uint16_t>(address);
-		if (UNLIKELY(instruction.is_long())) {
-			// complete the instruction (NOTE: might cross into another page)
-			instruction.half[1] =
-				this->machine().memory.template read<uint16_t>(address + 2);
+		if ((address & (W-1)) == 0) {
+			instruction.whole = this->machine().memory.template read<address_t>(address);
+		}
+		else
+		{
+			// instruction is not on word-border, so do up to two smaller reads
+			instruction.whole = this->machine().memory.template read<uint16_t>(address);
+			if (UNLIKELY(instruction.is_long())) {
+				// complete the instruction (NOTE: might cross into another page)
+				instruction.half[1] =
+					this->machine().memory.template read<uint16_t>(address + 2);
+			}
 		}
 #endif
 		return instruction;
