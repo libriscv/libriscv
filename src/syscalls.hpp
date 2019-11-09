@@ -1,6 +1,6 @@
 #pragma once
 #include <libriscv/machine.hpp>
-static constexpr bool verbose_syscalls = true;
+static constexpr bool verbose_syscalls = false;
 
 template <int W> inline
 uint32_t syscall_write(riscv::Machine<W>& machine);
@@ -10,7 +10,7 @@ uint32_t syscall_close(riscv::Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL closse called, fd = %d\n", fd);
+		printf("SYSCALL close called, fd = %d\n", fd);
 	}
 	if (fd <= 2) {
 		return 0;
