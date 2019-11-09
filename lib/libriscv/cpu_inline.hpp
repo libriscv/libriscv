@@ -1,12 +1,12 @@
 
 template <int W>
-CPU<W>::CPU(Machine<W>& machine)
+inline CPU<W>::CPU(Machine<W>& machine)
 	: m_machine { machine }
 {
 }
 
 template<int W>
-void CPU<W>::jump(const address_t dst)
+inline void CPU<W>::jump(const address_t dst)
 {
 	this->registers().pc = dst;
 	// it's possible to jump to a misaligned address

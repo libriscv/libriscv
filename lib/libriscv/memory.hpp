@@ -26,7 +26,7 @@ namespace riscv
 		T read(address_t address);
 
 		template <typename T>
-		bool write(address_t address, T value);
+		void write(address_t address, T value);
 
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
@@ -59,12 +59,13 @@ namespace riscv
 		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(const address_t address) const noexcept;
+		const Page& get_pageno(const address_t npage) const noexcept;
 		Page& create_page(const address_t address);
 
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		static Page& default_page_fault(Memory&, const size_t page);
 
-		Memory(Machine<W>&, std::vector<uint8_t>, bool protect_memory);
+		Memory(Machine<W>&, const std::vector<uint8_t>&, bool protect_memory);
 	private:
 		inline auto& create_attr(const address_t address);
 		inline void  set_page_attr(address_t, size_t len, PageAttributes);
@@ -89,7 +90,7 @@ namespace riscv
 		std::unordered_map<address_t, Page> m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 
-		std::vector<uint8_t> m_binary;
+		const std::vector<uint8_t>& m_binary;
 		bool m_protect_segments;
 
 #ifdef RISCV_DEBUG

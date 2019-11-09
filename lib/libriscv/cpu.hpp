@@ -34,9 +34,9 @@ namespace riscv
 		auto& registers() { return this->m_data.m_regs; }
 		const auto& registers() const { return this->m_data.m_regs; }
 
-		inline auto& reg(uint32_t idx) { return registers().get(idx); }
-		inline const auto& reg(uint32_t idx) const { return registers().get(idx); }
-		inline auto& cireg(uint16_t idx) { return registers().get(idx + 0x8); }
+		auto& reg(uint32_t idx) { return registers().get(idx); }
+		const auto& reg(uint32_t idx) const { return registers().get(idx); }
+		auto& cireg(uint16_t idx) { return registers().get(idx + 0x8); }
 
 		auto& machine() noexcept { return this->m_machine; }
 		const auto& machine() const noexcept { return this->m_machine; }
@@ -72,6 +72,7 @@ namespace riscv
 		Machine<W>& m_machine;
 		int64_t     m_current_page = -1;
 		const Page* m_page_pointer = nullptr;
+		inline void change_page(address_t address);
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
@@ -80,9 +81,9 @@ namespace riscv
 	    mutable int32_t m_break_steps_cnt = 0;
 	    std::map<address_t, breakpoint_t> m_breakpoints;
 		bool break_time() const;
+		friend struct Machine<W>;
 #endif
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
-		friend struct Machine<W>;
 	};
 
 #include "cpu_inline.hpp"

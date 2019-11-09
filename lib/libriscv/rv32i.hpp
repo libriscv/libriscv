@@ -152,6 +152,9 @@ namespace riscv
 		uint16_t length() const noexcept {
 			return ((Rtype.opcode & 0x3) == 0x3) ? 4 : 2;
 		}
+		bool is_long() const noexcept {
+			return (whole & 0x3) == 0x3;
+		}
 
 		inline auto compressed() const noexcept {
 			return rv32c_instruction { half[0] };

@@ -10,8 +10,13 @@ namespace riscv
 	// LW, LD, LQ, FLW, FLD, SW, SD, SQ, FSW, FSD
 	COMPRESSED_INSTR(C0_ADDI4SPN,
 	[] (auto& cpu, rv32i_instruction instr) {
-		auto ci = instr.compressed();
-		cpu.cireg(ci.CIW.srd) = cpu.reg(RISCV::REG_SP) + ci.CIW.offset();
+		// if all bits are zero, it's an illegal instruction (by design)
+		if (instr.whole != 0x0) {
+			auto ci = instr.compressed();
+			cpu.cireg(ci.CIW.srd) = cpu.reg(RISCV::REG_SP) + ci.CIW.offset();
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPCODE);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{

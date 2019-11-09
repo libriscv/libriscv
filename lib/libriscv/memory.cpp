@@ -5,8 +5,8 @@
 namespace riscv
 {
 	template <int W>
-	Memory<W>::Memory(Machine<W>& machine, std::vector<uint8_t> binary, bool protect)
-		: m_machine{machine}, m_binary{std::move(binary)}
+	Memory<W>::Memory(Machine<W>& mach, const std::vector<uint8_t>& bin, bool protect)
+		: m_machine{mach}, m_binary{bin}
 	{
 		this->m_protect_segments = protect;
 		this->reset();

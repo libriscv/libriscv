@@ -8,7 +8,7 @@ T Memory<W>::read(address_t address)
 		if (!check_trap(address, sizeof(T) | TRAP_READ, 0)) return T{};
 	}
 	const auto& page = get_page(address);
-	if (page.attr.read) {
+	if (LIKELY(page.attr.read)) {
 		return page.template aligned_read<T>(address & (Page::size()-1));
 	}
 	this->protection_fault();
@@ -17,25 +17,29 @@ T Memory<W>::read(address_t address)
 
 template <int W>
 template <typename T>
-bool Memory<W>::write(address_t address, T value)
+void Memory<W>::write(address_t address, T value)
 {
 	if constexpr (memory_debug_enabled) {
-		if (!check_trap(address, sizeof(T) | TRAP_WRITE, value)) return T{};
+		if (!check_trap(address, sizeof(T) | TRAP_WRITE, value)) return;
 	}
 	auto& page = create_page(address);
-	if (page.attr.write) {
+	if (LIKELY(page.attr.write)) {
 		page.template aligned_write<T>(address & (Page::size()-1), value);
-		return true;
+		return;
 	}
 	this->protection_fault();
-	return false;
 }
 
 template <int W>
 inline const Page& Memory<W>::get_page(const address_t address) const noexcept
 {
 	const auto page = page_number(address);
-	// find existing memory pages
+	return get_pageno(page);
+}
+
+template <int W>
+inline const Page& Memory<W>::get_pageno(const address_t page) const noexcept
+{
 	auto it = m_pages.find(page);
 	if (it != m_pages.end()) {
 		return it->second;

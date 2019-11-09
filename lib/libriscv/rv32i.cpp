@@ -18,11 +18,7 @@ namespace riscv
 	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction) const
 #endif
 	{
-		// if all bits are zero, it's an illegal instruction (by design)
-		if (UNLIKELY(instruction.whole == 0x0)) {
-			DECODER(DECODED_INSTR(ILLEGAL));
-		}
-		else if (instruction.length() == 2)
+		if (!instruction.is_long())
 		{
 			// RV32 C
 			const auto ci = instruction.compressed();
@@ -76,6 +72,7 @@ namespace riscv
 		}
 		else // RV32 IMAF
 		{
+			// Quadrant 3
 			switch (instruction.opcode())
 			{
 				// RV32IM
@@ -121,6 +118,9 @@ namespace riscv
 							DECODER(DECODED_ATOMIC(AMOSWAP_W));
 					}
 			}
+		}
+		if (instruction.whole == 0x0) {
+			DECODER(DECODED_INSTR(ILLEGAL));
 		}
 		// illegal operation exception
 		DECODER(DECODED_INSTR(UNIMPLEMENTED));

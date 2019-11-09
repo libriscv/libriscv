@@ -9,7 +9,6 @@ namespace riscv
 	void CPU<W>::reset()
 	{
 		m_data = {};
-		m_data.m_regs.pc = machine().memory.start_address();
 		// initial stack location
 		this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
 		// NOTE: if the stack is very low, some stack pointer value could
@@ -19,15 +18,19 @@ namespace riscv
 		if (this->reg(RISCV::REG_SP) < 0x100000) {
 			this->reg(RISCV::REG_SP) = 0x40000000;
 		}
+		// jumping causes some extra calculations
+		this->jump(machine().memory.start_address());
 	}
 
-	template<int W>
-	void CPU<W>::simulate()
+	template <int W>
+	inline void CPU<W>::change_page(address_t this_page)
 	{
-#ifdef RISCV_DEBUG
-		this->break_checks();
-#endif
-		this->execute();
+		m_current_page = this_page;
+		m_page_pointer = &machine().memory.get_pageno(this_page);
+		// verify execute permission
+		if (UNLIKELY(!m_page_pointer->attr.exec)) {
+			this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
+		}
 	}
 
 	template <int W>
@@ -35,35 +38,39 @@ namespace riscv
 	{
 		format_t instruction;
 #ifndef RISCV_DEBUG
-		const uint32_t this_page = address >> Page::SHIFT;
+
+		const address_t this_page = address >> Page::SHIFT;
 		if (UNLIKELY(this_page != m_current_page)) {
-			m_current_page = this_page;
-			m_page_pointer = &machine().memory.get_page(address);
-			// TODO: verify execute
-			if (UNLIKELY(!m_page_pointer->attr.exec)) {
-				this->trigger_exception(PROTECTION_FAULT);
-			}
+			this->change_page(this_page);
 		}
 		const auto offset = address & (Page::size()-1);
 
-		if (LIKELY(offset < Page::size() - W))
+		if (LIKELY(offset <= Page::size() - W))
 		{
 			// we can read the whole thing
 			instruction.whole = *(address_t*) (m_page_pointer->data() + offset);
 			return instruction;
 		}
+
 		// read short instruction at address
 		instruction.whole = *(uint16_t*) (m_page_pointer->data() + offset);
+
+		// read upper half, completing a 32-bit instruction
+		if (UNLIKELY(instruction.is_long())) {
+			// this instruction crosses a page-border
+			this->change_page(m_current_page + 1);
+			const auto offset = (address + 2) & (Page::size()-1);
+			instruction.half[1] = *(uint16_t*) (m_page_pointer->data() + offset);
+		}
 #else
 		// in debug mode we need a full memory read to allow trapping
 		instruction.whole = this->machine().memory.template read<uint16_t>(address);
-#endif
-
-		if (instruction.length() == 4) {
+		if (UNLIKELY(instruction.is_long())) {
 			// complete the instruction (NOTE: might cross into another page)
 			instruction.half[1] =
 				this->machine().memory.template read<uint16_t>(address + 2);
 		}
+#endif
 		return instruction;
 	}
 
@@ -108,6 +115,15 @@ namespace riscv
 	}
 
 	template<int W>
+	void CPU<W>::simulate()
+	{
+	#ifdef RISCV_DEBUG
+		this->break_checks();
+	#endif
+		this->execute();
+	}
+
+	template<int W>
 	void CPU<W>::trigger_exception(interrupt_t intr)
 	{
 		// TODO: replace with callback system
@@ -122,6 +138,8 @@ namespace riscv
 			throw MachineException("Illegal operation during instruction decoding");
 		case PROTECTION_FAULT:
 			throw MachineException("Protection fault");
+		case EXECUTION_SPACE_PROTECTION_FAULT:
+			throw MachineException("Execution space protection fault");
 		case MISALIGNED_INSTRUCTION:
 			// NOTE: only check for this when jumping or branching
 			throw MachineException("Misaligned instruction executed");
