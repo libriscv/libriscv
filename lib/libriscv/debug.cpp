@@ -191,10 +191,14 @@ static bool execute_commands(CPU<W>& cpu)
 template<int W>
 void Machine<W>::print_and_pause()
 {
-	const auto instruction = cpu.read_instruction(cpu.pc());
-	const auto& handler = cpu.decode(instruction);
-	const auto string = CPU<W>::isa_t::to_string(cpu, instruction, handler);
-    printf("\n>>> Breakpoint \t%s\n\n", string.c_str());
+	try {
+		const auto instruction = cpu.read_instruction(cpu.pc());
+		const auto& handler = cpu.decode(instruction);
+		const auto string = CPU<W>::isa_t::to_string(cpu, instruction, handler);
+		printf("\n>>> Breakpoint \t%s\n\n", string.c_str());
+	} catch (const std::exception& e) {
+		printf("\n>>> Breakpoint \tError reading instruction: %s\n\n", e.what());
+	}
     // CPU registers
     printf("%s", cpu.registers().to_string().c_str());
     // Memory subsystem
