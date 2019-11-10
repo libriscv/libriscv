@@ -2,6 +2,15 @@
 
 namespace riscv
 {
+	union float_helper {
+		float   fval;
+		int32_t ival;
+	};
+	union double_helper {
+		double  fval;
+		int32_t ival[2];
+	};
+
 	union rv32f_instruction
 	{
 		struct {

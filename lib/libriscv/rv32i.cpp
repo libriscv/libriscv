@@ -105,6 +105,11 @@ namespace riscv
 					DECODER(DECODED_INSTR(OP32));
 				case 0b0001111:
 					DECODER(DECODED_INSTR(FENCE));
+				// RV32F & RV32D - Floating-point instructions
+				case 0b0000111:
+					DECODER(DECODED_FLOAT(FLW_FLD));
+				case 0b0100111:
+					DECODER(DECODED_FLOAT(FSW_FSD));
 				// RV32A - Atomic instructions
 				case 0b0101111:
 					switch (instruction.Atype.funct5)

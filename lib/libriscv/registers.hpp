@@ -7,6 +7,11 @@
 
 namespace riscv
 {
+	union fp64reg {
+		float  f32[2];
+		double f64;
+	};
+
 	template <int W>
 	struct Registers
 	{
@@ -45,7 +50,7 @@ namespace riscv
 		address_t pc = 0;
 	private:
 		std::array<typename isa_t::register_t, 32> m_reg;
-		std::array<float, 32> m_regfl;
+		std::array<fp64reg, 32> m_regfl;
 		// FP control register
 		union {
 			struct {
