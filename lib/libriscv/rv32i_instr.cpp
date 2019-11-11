@@ -335,11 +335,16 @@ namespace riscv
 				case 0x4: // XOR
 					dst = src1 ^ src2;
 					break;
-				case 0x5: // SRL / SLA
-					if (!instr.Rtype.is_f7()) {
-						dst = src1 >> src2; // SRL
-					} else { // SLA: TODO: TEST THIS!
-						dst = ((src1 & 0x7FFFFFFF) << src2) | (src1 & 0x80000000);
+				case 0x5: // SRL / SRA
+					if (!instr.Rtype.is_f7()) { // SRL
+						dst = src1 >> src2;
+					} else { // SRA
+						const uint32_t sigbit = src1 & 0x80000000;
+						const uint32_t shifts = src2; // dst might be src2
+						dst = src1;
+						for (unsigned i = 0; i < shifts; i++) {
+							dst = ((dst & 0x7FFFFFFF) >> 1) | sigbit;
+						}
 					}
 					break;
 				case 0x6: // OR
@@ -396,20 +401,20 @@ namespace riscv
 				"ADD", "SLL", "SLT", "SLTU", "XOR", "SRL", "OR", "AND",
 				"SUB", "SLL", "SLT", "SLTU", "XOR", "SRA", "OR", "AND"};
 			const int EX = instr.Rtype.is_f7() ? 8 : 0;
-			return snprintf(buffer, len, "OP %s <= %s %s %s",
-							RISCV::regname(instr.Rtype.rd),
+			return snprintf(buffer, len, "%s %s %s, %s",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3 + EX],
-							RISCV::regname(instr.Rtype.rs2));
+							RISCV::regname(instr.Rtype.rs2),
+							RISCV::regname(instr.Rtype.rd));
 		}
 		else {
 			static std::array<const char*, 8> func3 = {
 				"MUL", "MULH", "MULHSU", "MULHU", "DIV", "DIVU", "REM", "REMU"};
-			return snprintf(buffer, len, "OP %s <= %s %s %s",
-							RISCV::regname(instr.Rtype.rd),
+			return snprintf(buffer, len, "%s %s %s, %s",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3],
-							RISCV::regname(instr.Rtype.rs2));
+							RISCV::regname(instr.Rtype.rs2),
+							RISCV::regname(instr.Rtype.rd));
 		}
 	});
 
