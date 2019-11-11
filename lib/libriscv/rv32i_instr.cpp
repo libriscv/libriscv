@@ -233,10 +233,10 @@ namespace riscv
 				dst = src << instr.Itype.shift_imm();
 				break;
 			case 0x2: // SLTI:
-				dst = instr.to_signed(src) << instr.Itype.signed_imm();
+				dst = (instr.to_signed(src) < instr.Itype.signed_imm()) ? 1 : 0;
 				break;
 			case 0x3: // SLTU:
-				dst = (src < instr.Itype.signed_imm()) ? 1 : 0;
+				dst = (src < (unsigned) instr.Itype.signed_imm()) ? 1 : 0;
 				break;
 			case 0x4: // XORI:
 				dst = src ^ instr.Itype.signed_imm();
