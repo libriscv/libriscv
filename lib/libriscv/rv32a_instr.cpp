@@ -75,7 +75,8 @@ namespace riscv
 			const auto addr = cpu.reg(instr.Atype.rs1);
 			cpu.atomics().load_reserve(addr);
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
-			cpu.reg(instr.Atype.rd) = value;
+			if (instr.Atype.rd != 0)
+				cpu.reg(instr.Atype.rd) = value;
 			return;
 		}
         cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -98,7 +99,8 @@ namespace riscv
 				auto value = cpu.machine().memory.template read<uint32_t> (addr);
 				cpu.reg(instr.Atype.rs2) = value;
 			}
-			cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
+			if (instr.Atype.rd != 0)
+				cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
 			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
