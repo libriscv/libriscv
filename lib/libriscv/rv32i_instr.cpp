@@ -429,33 +429,38 @@ namespace riscv
 				return;
 			}
 			break;
+		case 0x1: // CSRRW
 		case 0x2: // CSRRS
-			// destination cannot be x0
-			if (instr.Itype.rd == 0) break;
+			// if destination is x0, then we do not write to rd
+			bool rd = instr.Itype.rd != 0;
+			bool wr = instr.Itype.rs1 != 0;
 			switch (instr.Itype.imm)
 			{
 			case 0x001: // fflags (accrued exceptions)
-				cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				if (wr) cpu.registers().fcsr().fflags = cpu.reg(instr.Itype.rs1);
 				return;
 			case 0x002: // frm (rounding-mode)
-				cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				if (wr) cpu.registers().fcsr().frm = cpu.reg(instr.Itype.rs1);
 				return;
 			case 0x003: // fcsr (control and status register)
-				cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				if (wr) cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1);
 				return;
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
-				cpu.reg(instr.Itype.rd) = cpu.registers().counter;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().counter;
 				return;
 			case 0xC80: // CSR RDCYCLE (upper)
 			case 0xC82: // RDINSTRET (upper)
-				cpu.reg(instr.Itype.rd) = cpu.registers().counter >> 32u;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().counter >> 32u;
 				return;
 			case 0xC01: // CSR RDTIME (lower)
-				cpu.reg(instr.Itype.rd) = u64_monotonic_time();
+				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time();
 				return;
 			case 0xC81: // CSR RDTIME (upper)
-				cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
+				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
 				return;
 			}
 			break;

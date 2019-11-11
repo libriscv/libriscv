@@ -145,11 +145,11 @@ namespace riscv
 		rv32i_instruction() : whole(0) {}
 		rv32i_instruction(uint32_t another) : whole(another) {}
 
-		uint16_t opcode() const noexcept {
+		uint32_t opcode() const noexcept {
 			return Rtype.opcode;
 		}
 
-		uint16_t length() const noexcept {
+		uint32_t length() const noexcept {
 			return ((Rtype.opcode & 0x3) == 0x3) ? 4 : 2;
 		}
 		bool is_long() const noexcept {
@@ -158,6 +158,9 @@ namespace riscv
 
 		inline auto compressed() const noexcept {
 			return rv32c_instruction { half[0] };
+		}
+		inline auto fpfunc() const noexcept {
+			return whole >> (32 - 5);
 		}
 
 		static constexpr sword_t to_signed(word_t word) noexcept {

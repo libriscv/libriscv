@@ -110,6 +110,14 @@ namespace riscv
 					DECODER(DECODED_FLOAT(FLW_FLD));
 				case 0b0100111:
 					DECODER(DECODED_FLOAT(FSW_FSD));
+				case 0b1010011:
+					switch (instruction.fpfunc())
+					{
+						case 0b10100:
+							DECODER(DECODED_FLOAT(FEQ));
+						case 0b00100:
+							DECODER(DECODED_FLOAT(FSGNJ_NX));
+					}
 				// RV32A - Atomic instructions
 				case 0b0101111:
 					switch (instruction.Atype.funct5)

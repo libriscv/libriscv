@@ -2,15 +2,6 @@
 
 namespace riscv
 {
-	union float_helper {
-		float   fval;
-		int32_t ival;
-	};
-	union double_helper {
-		double  fval;
-		int32_t ival[2];
-	};
-
 	union rv32f_instruction
 	{
 		struct {
@@ -35,7 +26,16 @@ namespace riscv
 			uint32_t rd     : 5;
 			uint32_t funct3 : 3;
 			uint32_t rs1    : 5;
-			uint32_t imm    : 12;
+			uint32_t imm    : 11;
+			uint32_t imms   : 1;
+
+			bool sign() const noexcept {
+				return imms;
+			}
+			int32_t signed_imm() const noexcept {
+				const uint32_t ext = 0xFFFFF800;
+				return (imm) | (sign() ? ext : 0);
+			}
 		} Itype;
 		struct {
 			uint32_t opcode : 7;
@@ -43,7 +43,17 @@ namespace riscv
 			uint32_t funct3 : 3;
 			uint32_t rs1    : 5;
 			uint32_t rs2    : 5;
-			uint32_t imm511 : 7;
+			uint32_t imm510 : 6;
+			uint32_t imm11  : 1;
+
+			bool sign() const noexcept {
+				return imm11;
+			}
+			int32_t signed_imm() const noexcept {
+				const uint32_t ext = 0xFFFFF800;
+				const int32_t val = imm04 | (imm510 << 5);
+				return val | (sign() ? ext : 0);
+			}
 		} Stype;
 
 		uint16_t half[2];

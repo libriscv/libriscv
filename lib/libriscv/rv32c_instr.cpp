@@ -33,6 +33,16 @@ namespace riscv
 			cpu.cireg(ci.CL.srd) = cpu.machine().memory.template read<uint32_t> (address);
 			return;
 		}
+		else if (ci.CL.funct3 == 0x1) { // FLD
+			cpu.ciflp(ci.CL.srd).load_u64(
+					cpu.machine().memory.template read<uint64_t> (address));
+			return;
+		}
+		else if (ci.CL.funct3 == 0x3) { // FLW
+			cpu.ciflp(ci.CL.srd).load_u32(
+					cpu.machine().memory.template read<uint32_t> (address));
+			return;
+		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int

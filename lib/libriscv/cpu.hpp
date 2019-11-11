@@ -37,6 +37,7 @@ namespace riscv
 		auto& reg(uint32_t idx) { return registers().get(idx); }
 		const auto& reg(uint32_t idx) const { return registers().get(idx); }
 		auto& cireg(uint16_t idx) { return registers().get(idx + 0x8); }
+		auto& ciflp(uint16_t idx) { return registers().getfl(idx + 0x8); }
 
 		auto& machine() noexcept { return this->m_machine; }
 		const auto& machine() const noexcept { return this->m_machine; }

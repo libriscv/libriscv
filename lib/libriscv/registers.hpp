@@ -8,8 +8,27 @@
 namespace riscv
 {
 	union fp64reg {
-		float  f32[2];
-		double f64;
+		int32_t i32[2];
+		float   f32[2];
+		int64_t i64;
+		double  f64;
+		struct {
+			uint32_t bits  : 31;
+			uint32_t sign  : 1;
+			uint32_t upper;
+		} lsign;
+		struct {
+			uint64_t bits  : 63;
+			uint64_t sign  : 1;
+		} usign;
+
+		void load_u32(uint32_t val) {
+			this->i32[0] = val;
+			this->i32[1] = -1;
+		}
+		void load_u64(uint64_t val) {
+			this->i64 = val;
+		}
 	};
 
 	template <int W>
