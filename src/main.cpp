@@ -68,7 +68,7 @@ int main(int argc, const char** argv)
 
 	// call testing
 	printf("\n");
-	int ret = machine.vmcall("test", 555);
+	int ret = machine.vmcall("test", {555});
 	printf("test returned %d\n", ret);
 
 	return 0;

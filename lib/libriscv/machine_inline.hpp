@@ -93,9 +93,11 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 
 template <int W>
 inline long Machine<W>::vmcall(const std::string& function_name,
-								address_t a0, address_t a1, address_t a2)
+								std::initializer_list<address_t> args)
 {
-	this->setup_call(function_name, "_exit", a0, a1, a2);
+	address_t call_addr = memory.resolve_address(function_name);
+	address_t retn_addr = memory.resolve_address("_exit");
+	this->setup_call(call_addr, retn_addr, std::move(args));
 	long retval = -1;
 	this->install_syscall_handler(93,
 		[&retval] (auto& machine) -> long {
@@ -110,16 +112,16 @@ inline long Machine<W>::vmcall(const std::string& function_name,
 
 template <int W>
 inline void Machine<W>::setup_call(
-		const std::string& call_sym,
-		const std::string& return_sym,
-		address_t arg0, address_t arg1, address_t arg2)
+		address_t call_addr, address_t retn_addr,
+		std::initializer_list<address_t> args)
 {
-	address_t call_addr = memory.resolve_address(call_sym);
-	address_t retn_addr = memory.resolve_address(return_sym);
+	assert(args.size() <= 8);
 	cpu.reg(RISCV::REG_RA) = retn_addr;
-	cpu.reg(RISCV::REG_ARG0) = arg0;
-	cpu.reg(RISCV::REG_ARG1) = arg1;
-	cpu.reg(RISCV::REG_ARG2) = arg2;
+	size_t arg = 0;
+	for (auto value : args) {
+		cpu.reg(RISCV::REG_ARG0 + arg) = value;
+		arg++;
+	}
 	cpu.jump(call_addr);
 }
 

@@ -47,11 +47,11 @@ namespace riscv
 		// to stop execution right after returning. _exit must call the exit
 		// (93) system call and not call destructors, which is the norm.
 		long vmcall(const std::string& function_name,
-					address_t a0 = 0, address_t a1 = 0, address_t a2 = 0);
+					std::initializer_list<address_t> args);
 
 		// sets up a function call only, executes no instructions
-		void setup_call(const std::string& callsym, const std::string& retsym,
-						address_t a0, address_t a1, address_t a2);
+		void setup_call(address_t call_addr, address_t retn_addr,
+						std::initializer_list<address_t> args);
 
 #ifdef RISCV_DEBUG
 		void break_now();
