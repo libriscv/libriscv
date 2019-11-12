@@ -68,8 +68,10 @@ int main(int argc, const char** argv)
 
 	// call testing
 	printf("\n");
+	machine.cpu.registers().counter = 0;
 	int ret = machine.vmcall("test", {555});
 	printf("test returned %d\n", ret);
+	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
 
 	return 0;
 }
