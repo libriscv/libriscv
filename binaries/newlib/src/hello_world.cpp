@@ -1,11 +1,11 @@
 #include <cstdio>
 #include <cstring>
-#include <unistd.h>
-#include <stdexcept>
-#include "type_name.hpp"
-//#include <iostream>
-
-using namespace std;
+#include <regex>
+#include <iostream>
+//#include <unistd.h>
+//#include <stdexcept>
+//#include "type_name.hpp"
+extern "C" void _exit(int);
 
 inline uint32_t rdcycle()
 {
@@ -26,36 +26,63 @@ inline uint64_t rdtime()
 	return whole;
 }
 
-int main (int argc, char *argv[])
+int main()
 {
-	for (int i = 0; i < argc; i++) {
-		printf("arg%d: %s\n", i, argv[i]);
+	std::string s = "Some people, when confronted with a problem, think "
+        "\"I know, I'll use regular expressions.\" "
+        "Now they have two problems.";
+
+	std::regex self_regex("REGULAR EXPRESSIONS",
+            std::regex_constants::ECMAScript | std::regex_constants::icase);
+    if (std::regex_search(s, self_regex)) {
+		std::cout << "Text contains the phrase 'regular expressions'\n";
+    }
+
+	std::regex word_regex("(\\w+)");
+    auto words_begin =
+        std::sregex_iterator(s.begin(), s.end(), word_regex);
+    auto words_end = std::sregex_iterator();
+
+	std::cout << "Found "
+              << std::distance(words_begin, words_end)
+              << " words\n";
+
+	const int N = 6;
+	std::cout << "Words longer than " << N << " characters:\n";
+	for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+		std::smatch match = *i;
+		std::string match_str = match.str();
+		if (match_str.size() > N) {
+			std::cout << "  " << match_str << '\n';
+		}
 	}
 
-	auto* ptr = new char[1024*1024];
-	printf("type of ptr: %s\n", TYPE_NAME(ptr).to_string().c_str());
-	// 7-10ms to clear 1mb
-	std::memset(ptr, 0, 1024*1024);
+	std::regex long_word_regex("(\\w{7,})");
+	std::string new_s = std::regex_replace(s, long_word_regex, "[$&]");
+	printf("%s\n", new_s.c_str());
+	printf("Testing double: %f\n", 10.0);
+	/*
+	printf("Testing double: %f\n", 100.0);
+	printf("Testing double: %f\n", 1000.0);
+	printf("Testing double: %f\n", 10000.0);
+	*/
 
-	uint64_t t0 = rdtime();
-	uint64_t c0 = rdcycle();
-	for (int i = 0; i < 500; i++)
-	{
-		try {
-			throw std::runtime_error("Oh god!");
-		}
-		catch (std::exception& e) {
-			//printf("Error: %s\n", e.what());
-			//write(5, e.what(), strlen(e.what()));
-		}
+	// if we don't return from main we can continue calling functions in the VM
+	// exit(int) will call destructors, which breaks the C runtime environment
+	// instead, call _exit which is just a shortcut for the EXIT system call.
+	_exit(666);
+}
+
+static std::vector<int> array;
+
+extern "C"
+int test(int arg1)
+{
+	printf("Test called with argument %d\n", arg1);
+	array.push_back(arg1);
+	for (const int val : array) {
+		printf("Array: %d\n", val);
 	}
-	uint64_t c1 = rdcycle();
-	uint64_t t1 = rdtime();
-	printf("It took %llu cycles to throw, catch and printf exception\n", c1 - c0);
-	uint32_t millis = (t1 - t0) / 1000000ull;
-	printf("It took %lu millis for the whole thing\n", millis);
-
-	const char hello_void[] = "Hello Virtual World!\n";
-	write(0, hello_void, sizeof(hello_void)-1);
-	return 666;
+	printf("Returning 777\n");
+	return 777;
 }

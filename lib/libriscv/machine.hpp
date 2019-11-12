@@ -19,7 +19,7 @@ namespace riscv
 		using syscall_t = delegate<address_t (Machine<W>&)>;
 		Machine(const std::vector<uint8_t>& binary, bool protect_memory = true);
 
-		void simulate();
+		void simulate(uint64_t max_instructions = 0);
 		void stop() noexcept;
 		bool stopped() const noexcept;
 		void install_syscall_handler(int, syscall_t);
@@ -39,6 +39,19 @@ namespace riscv
 		// retrieve arguments during a system call
 		template <typename T>
 		inline T sysarg(int arg) const;
+
+		// calls into the virtual machine, returning the value returned from
+		// @function_name, which must be visible in the ELF symbol tables.
+		// the function must use the C ABI calling convention.
+		// NOTE: overwrites the exit (93) system call and relies on _exit
+		// to stop execution right after returning. _exit must call the exit
+		// (93) system call and not call destructors, which is the norm.
+		long vmcall(const std::string& function_name,
+					address_t a0 = 0, address_t a1 = 0, address_t a2 = 0);
+
+		// sets up a function call only, executes no instructions
+		void setup_call(const std::string& callsym, const std::string& retsym,
+						address_t a0, address_t a1, address_t a2);
 
 #ifdef RISCV_DEBUG
 		void break_now();

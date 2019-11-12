@@ -146,6 +146,54 @@ namespace riscv
 	}
 
 	template <int W>
+	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const char* name) const
+	{
+		const auto* shdr = elf_offset<Shdr> (elf_header()->e_shoff);
+		const auto& shstrtab = shdr[elf_header()->e_shnum-1];
+		const char* strings = elf_offset<char>(shstrtab.sh_offset);
+
+		for (auto i = 0; i < elf_header()->e_shnum; i++)
+		{
+			const char* shname = &strings[shdr[i].sh_name];
+			if (strcmp(shname, name) == 0) {
+				return &shdr[i];
+			}
+		}
+		return nullptr;
+	}
+
+	template <int W>
+	const typename Elf<W>::Sym* Memory<W>::resolve_symbol(const char* name)
+	{
+		const auto* sym_hdr = section_by_name(".symtab");
+		assert(sym_hdr != nullptr);
+		const auto* str_hdr = section_by_name(".strtab");
+		assert(str_hdr != nullptr);
+
+		const auto* symtab = elf_sym_index(sym_hdr, 0);
+		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);
+		const char* strtab = elf_offset<char>(str_hdr->sh_offset);
+
+		for (size_t i = 0; i < symtab_ents; i++)
+		{
+			const char* symname = &strtab[symtab[i].st_name];
+			//printf("Testing %s vs %s\n", symname, name);
+			if (strcmp(symname, name) == 0) {
+				return &symtab[i];
+			}
+		}
+		return nullptr;
+	}
+
+	template <int W>
+	address_type<W> Memory<W>::resolve_address(const std::string& name)
+	{
+		auto* sym = resolve_symbol(name.c_str());
+		if (sym) return sym->st_value;
+		return 0x0;
+	}
+
+	template <int W>
 	void Memory<W>::protection_fault()
 	{
 		machine().cpu.trigger_exception(PROTECTION_FAULT);

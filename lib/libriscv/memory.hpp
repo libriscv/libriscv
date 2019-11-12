@@ -43,6 +43,10 @@ namespace riscv
 
 		void reset();
 
+		// call interface
+		address_t resolve_address(const std::string& sym);
+
+
 		// memory traps
 		// NOTE: use print_and_pause() to immediately break!
 		void trap(address_t page_addr, mmio_cb_t callback);
@@ -66,14 +70,27 @@ namespace riscv
 		static inline uintptr_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
 		}
-
+		void initial_paging();
+		void protection_fault();
+		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
 		using Shdr = typename Elf<W>::Shdr;
 		void binary_loader();
 		void binary_load_ph(const Phdr*);
-		void initial_paging();
-		void protection_fault();
+		template <typename T> T* elf_offset(intptr_t ofs) const {
+			return (T*) &m_binary.at(ofs);
+		}
+		inline const auto* elf_header() const noexcept {
+			return elf_offset<const Ehdr> (0);
+		}
+		const Shdr* section_by_name(const char* name) const;
+		const typename Elf<W>::Sym* resolve_symbol(const char* name);
+		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {
+			assert(symidx < shdr->sh_size / sizeof(typename Elf<W>::Sym));
+			auto* symtab = elf_offset<typename Elf<W>::Sym>(shdr->sh_offset);
+			return &symtab[symidx];
+		}
 
 		Machine<W>& m_machine;
 

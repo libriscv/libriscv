@@ -43,11 +43,11 @@ int main(int argc, const char** argv)
 	}
 
 	/*
-	machine.verbose_jumps = true;
 	machine.verbose_instructions = true;
-	machine.cpu.breakpoint(0x184C8);
-	machine.verbose_registers = true;
 	machine.break_now();
+	machine.cpu.breakpoint(0x1438A);
+	machine.verbose_jumps = true;
+	machine.verbose_registers = true;
 	machine.throw_on_unhandled_syscall = true;
 	machine.memory.trap(0x8FFFF000,
 		[] (riscv::Page& page, uint32_t off, int mode, int64_t val) -> int64_t
@@ -57,16 +57,20 @@ int main(int argc, const char** argv)
 	*/
 
 	try {
-		while (!machine.stopped()) {
-			machine.simulate();
-		}
+		machine.simulate();
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
 #ifdef RISCV_DEBUG
 		machine.print_and_pause();
 #endif
 	}
-	printf("Instructions: %zu\n", (size_t) machine.cpu.registers().counter);
+	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+
+	// call testing
+	printf("\n");
+	int ret = machine.vmcall("test", 555);
+	printf("test returned %d\n", ret);
+
 	return 0;
 }
 

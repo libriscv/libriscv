@@ -12,6 +12,7 @@ namespace riscv
 		using Ehdr = Elf32_Ehdr;
 		using Phdr = Elf32_Phdr;
 		using Shdr = Elf32_Shdr;
+		using Sym  = Elf32_Sym;
 	};
 
 	template <>
@@ -20,6 +21,7 @@ namespace riscv
 		using Ehdr = Elf64_Ehdr;
 		using Phdr = Elf64_Phdr;
 		using Shdr = Elf64_Shdr;
+		using Sym  = Elf64_Sym;
 	};
 
 	using Elf32 = Elf<4>;
