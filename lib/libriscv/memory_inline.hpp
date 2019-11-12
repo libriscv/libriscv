@@ -146,6 +146,12 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
 }
 
 template <int W>
+inline void Memory<W>::protection_fault()
+{
+	machine().cpu.trigger_exception(PROTECTION_FAULT);
+}
+
+template <int W>
 void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 {
 	auto& page = create_page(page_number(page_addr));

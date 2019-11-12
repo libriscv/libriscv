@@ -115,31 +115,6 @@ namespace riscv
 			}
 		}
 
-		// install .text and other ELF sections
-		/*
-		const auto* shdr = (Elf32_Shdr*) (m_binary.data() + elf->e_shoff);
-		seg = 0;
-		for (const auto* hdr = shdr; hdr < shdr + elf->e_shnum; hdr++)
-		{
-			if (hdr->sh_flags & SHF_ALLOC) {
-				const bool writable   = hdr->sh_flags & SHF_WRITE;
-				const bool executable = hdr->sh_flags & SHF_EXECINSTR;
-
-				const auto*  src = m_binary.data() + hdr->sh_offset;
-				const size_t len = hdr->sh_size;
-				const address_t dst = hdr->sh_addr;
-
-				printf("Loading section %d of size %zu from %p to virtual %p\n",
-						seg, len, src, (void*) (uintptr_t) dst);
-				printf("Section writable: %d  executable: %d\n", writable, executable);
-				// load into virtual memory
-				this->memcpy(dst, src, len);
-				this->set_page_attr(dst, len, { .write = writable, .exec = executable });
-			}
-			seg++;
-		}
-		*/
-
 		if (riscv::verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}
@@ -191,12 +166,6 @@ namespace riscv
 		auto* sym = resolve_symbol(name.c_str());
 		if (sym) return sym->st_value;
 		return 0x0;
-	}
-
-	template <int W>
-	void Memory<W>::protection_fault()
-	{
-		machine().cpu.trigger_exception(PROTECTION_FAULT);
 	}
 
 	template <int W>
