@@ -8,15 +8,12 @@
 			background: black;
 		}
 	    #editor {
-			position: absolute;
-	        top: 0;
-	        right: 0;
-	        bottom: 70%;
-	        left: 0;
+			height: 400px;
 	    }
 		#content {
 			color: white;
 			background-color: black;
+			height: 50%;
 		}
 		#resultbox {
 			display: block;
@@ -26,7 +23,7 @@
 	</style>
 </head>
 <body>
-	<div id="editor" rows="8" cols="80" style="display:block;">
+	<div id="editor">
 	</div>
 	<div id="content">
 		<button type="button" id="compile_button">Compile & Run</button>
@@ -63,9 +60,6 @@ int main()
 
 		jQuery(document).ready(function()
 		{
-			// move everything to the correct row
-			var contentPlacement = $('#editor').position().top + $('#editor').height();
-		    $('#content').css('margin-top', contentPlacement + 5);
             // Get button by id
             var button = jQuery('#compile_button');
 			//var codebox = jQuery('#editor');
