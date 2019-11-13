@@ -133,3 +133,16 @@ inline address_type<W> Machine<W>::address_of(const std::string& name)
 {
 	return memory.resolve_address(name);
 }
+
+template <int W>
+void Machine<W>::realign_stack(uint8_t align)
+{
+	address_t align_mask = 15;
+	switch (align) {
+		case 4:  align_mask = 0x3; break;
+		case 8:  align_mask = 0x7; break;
+		case 16: align_mask = 0xF; break;
+		default: throw std::runtime_error("Invalid alignment");
+	}
+	cpu.reg(RISCV::REG_SP) &= ~align_mask;
+}

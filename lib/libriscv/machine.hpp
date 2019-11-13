@@ -63,6 +63,9 @@ namespace riscv
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const std::string& name);
 
+		// Realign the stack pointer, to make sure that vmcalls succeed
+		void realign_stack(uint8_t align = 16);
+
 #ifdef RISCV_DEBUG
 		// Immediately block execution, print registers and current instruction.
 		void print_and_pause();
