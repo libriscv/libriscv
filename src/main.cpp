@@ -69,9 +69,15 @@ int main(int argc, const char** argv)
 	// call testing
 	printf("\n");
 	machine.cpu.registers().counter = 0;
-	int ret = machine.vmcall("test", {555});
+	int ret = machine.vmcall("test", {555}, 3000);
 	printf("test returned %d\n", ret);
 	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+	// resume execution:
+	machine.simulate();
+	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+	// extract real return value:
+	ret = machine.sysarg<long>(0);
+	printf("test *actually* returned %d\n", ret);
 
 	return 0;
 }
