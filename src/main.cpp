@@ -66,9 +66,14 @@ int main(int argc, const char** argv)
 	}
 	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
 
-	// call testing
+	// VM function call testing
+	// NOTE: this part is only relevant for the newlib binary
 	printf("\n");
+	// make sure stack is aligned for a function call
+	machine.realign_stack();
+	// reset instruction counter to simplify calculation
 	machine.cpu.registers().counter = 0;
+	// make a function call into the guest VM
 	int ret = machine.vmcall("test", {555}, 3000);
 	printf("test returned %d\n", ret);
 	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
