@@ -127,3 +127,9 @@ inline void Machine<W>::setup_call(
 	}
 	cpu.jump(call_addr);
 }
+
+template <int W>
+inline address_type<W> Machine<W>::address_of(const std::string& name)
+{
+	return memory.resolve_address(name);
+}

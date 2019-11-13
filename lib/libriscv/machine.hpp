@@ -60,6 +60,9 @@ namespace riscv
 		void setup_call(address_t call_addr, address_t retn_addr,
 						std::initializer_list<address_t> args);
 
+		// returns the address of a symbol in the ELF symtab, or zero
+		address_t address_of(const std::string& name);
+
 #ifdef RISCV_DEBUG
 		// Immediately block execution, print registers and current instruction.
 		void print_and_pause();
