@@ -68,7 +68,7 @@ inline void Machine<W>::system_call(int syscall_number)
 			fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
 		}
 		// EBREAK should not modify registers
-		if (syscall_number != 0) {
+		if (syscall_number != EBREAK_SYSCALL) {
 			cpu.reg(RISCV::REG_RETVAL) = -ENOSYS;
 		}
 	}

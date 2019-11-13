@@ -11,11 +11,12 @@ namespace riscv
 {
 	static constexpr int EBREAK_SYSCALL = 0;
 
-	#ifdef RISCV_DEBUG
-		static constexpr bool verbose_machine = true;
-		static constexpr bool memory_debug_enabled = true;
-	#else
-		static constexpr bool verbose_machine = false;
-		static constexpr bool memory_debug_enabled = false;
-	#endif
+	// print information during machine creation
+	extern bool verbose_machine;
+
+#ifdef RISCV_DEBUG
+	static constexpr bool memory_debug_enabled = true;
+#else
+	static constexpr bool memory_debug_enabled = false;
+#endif
 }

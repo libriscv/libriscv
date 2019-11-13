@@ -2,6 +2,9 @@
 
 namespace riscv
 {
+	__attribute__((weak))
+	bool verbose_machine = true;
+
 	template <int W>
 	address_type<W> Machine<W>::stack_push(const void* data, size_t length)
 	{
