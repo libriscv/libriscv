@@ -123,8 +123,7 @@ static bool execute_commands(CPU<W>& cpu)
     else if (cmd == "reset")
     {
         cpu.machine().reset();
-        cpu.break_now();
-        return false;
+        return true;
     }
     // read 0xAddr size
     else if (cmd == "lw" || cmd == "read")
@@ -211,7 +210,6 @@ void Machine<W>::print_and_pause()
 template<int W>
 bool CPU<W>::break_time() const
 {
-    if (UNLIKELY(this->m_break)) return true;
     if (UNLIKELY(m_break_steps_cnt != 0))
     {
         m_break_steps--;
@@ -237,7 +235,6 @@ void CPU<W>::break_checks()
 {
     if (UNLIKELY(this->break_time()))
     {
-        this->m_break = false;
         // pause for each instruction
         machine().print_and_pause();
     }

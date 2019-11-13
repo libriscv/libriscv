@@ -50,9 +50,7 @@ namespace riscv
 	    void breakpoint(address_t address, breakpoint_t = default_pausepoint);
 	    auto& breakpoints() { return this->m_breakpoints; }
 	    void break_on_steps(int steps);
-	    void break_now() { this->m_break = true; }
 	    void break_checks();
-	    bool is_breaking() const noexcept { return this->m_break; }
 		static void default_pausepoint(CPU&);
 #endif
 		CPU(Machine<W>&);
@@ -77,7 +75,6 @@ namespace riscv
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
-	    bool m_break = false;
 	    mutable int32_t m_break_steps = 0;
 	    mutable int32_t m_break_steps_cnt = 0;
 	    std::map<address_t, breakpoint_t> m_breakpoints;

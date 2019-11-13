@@ -19,7 +19,11 @@ namespace riscv
 		using syscall_t = delegate<address_t (Machine<W>&)>;
 		Machine(const std::vector<uint8_t>& binary, bool protect_memory = true);
 
+		// Simulate a RISC-V machine until @max_instructions have been
+		// executed, or the machine has been stopped.
+		// NOTE: if @max_instructions is 0, then run until stop
 		void simulate(uint64_t max_instructions = 0);
+
 		void stop() noexcept;
 		bool stopped() const noexcept;
 		void install_syscall_handler(int, syscall_t);
@@ -28,34 +32,36 @@ namespace riscv
 		CPU<W>    cpu;
 		Memory<W> memory;
 
-		// copy data into the guests memory
+		// Copy data into the guests memory
 		address_t copy_to_guest(address_t dst, const void* buf, size_t length);
-		// push something onto the stack, and move the stack pointer
+		// Push something onto the stack, and move the stack pointer
 		address_t stack_push(const void* data, size_t length);
 
-		// push all strings on stack and then create a mini-argv on SP
+		// Push all strings on stack and then create a mini-argv on SP
 		void setup_argv(const std::vector<std::string>& args);
 
-		// retrieve arguments during a system call
+		// Retrieve arguments during a system call
 		template <typename T>
 		inline T sysarg(int arg) const;
 
-		// calls into the virtual machine, returning the value returned from
+		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.
 		// the function must use the C ABI calling convention.
+		// If max instructions are reached, the call returns -1, and reading
+		// the instruction counter will show that the count was reached.
 		// NOTE: overwrites the exit (93) system call and relies on _exit
 		// to stop execution right after returning. _exit must call the exit
 		// (93) system call and not call destructors, which is the norm.
 		long vmcall(const std::string& function_name,
-					std::initializer_list<address_t> args);
+					std::initializer_list<address_t> args,
+					uint64_t max_instructions = 0);
 
-		// sets up a function call only, executes no instructions
+		// Sets up a function call only, executes no instructions.
 		void setup_call(address_t call_addr, address_t retn_addr,
 						std::initializer_list<address_t> args);
 
 #ifdef RISCV_DEBUG
-		void break_now();
-		// immediately block execution, print registers and current instruction
+		// Immediately block execution, print registers and current instruction.
 		void print_and_pause();
 		bool verbose_instructions = false;
 		bool verbose_jumps     = false;

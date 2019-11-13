@@ -93,7 +93,8 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 
 template <int W>
 inline long Machine<W>::vmcall(const std::string& function_name,
-								std::initializer_list<address_t> args)
+								std::initializer_list<address_t> args,
+								uint64_t max_instructions)
 {
 	address_t call_addr = memory.resolve_address(function_name);
 	address_t retn_addr = memory.resolve_address("_exit");
@@ -103,9 +104,11 @@ inline long Machine<W>::vmcall(const std::string& function_name,
 		[&retval] (auto& machine) -> long {
 			retval = machine.template sysarg<long> (0);
 			machine.stop();
-			return 0; // have to return, even when simulation stops
+			// Since the return value of this system call will overwrite its own
+			// argument, we will just return the argument itself.
+			return retval;
 		});
-	this->simulate();
+	this->simulate(max_instructions);
 	return retval;
 }
 
@@ -124,13 +127,3 @@ inline void Machine<W>::setup_call(
 	}
 	cpu.jump(call_addr);
 }
-
-#ifdef RISCV_DEBUG
-
-template <int W>
-inline void Machine<W>::break_now()
-{
-	cpu.break_now();
-}
-
-#endif
