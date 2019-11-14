@@ -7,9 +7,8 @@
 #include <array>
 #include <libriscv/machine.hpp>
 #include "syscalls.cpp"
-#include "webpage.h"
 
-static const char* ADDRESS = "0.0.0.0";
+static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
 // avoid endless loops and code that takes too long
 static const size_t MAX_INSTRUCTIONS = 256000;
@@ -31,11 +30,6 @@ int main(void)
 {
     using namespace httplib;
     Server svr;
-
-	svr.Get("/", [](const Request& req, Response& res) {
-		res.set_content((const char*) webpage_html, webpage_html_len, "text/html");
-		res.status = 200;
-	});
 
     svr.Post("/exec", [](const Request& req, Response& res) {
 		static int request_ID = 0;
@@ -91,12 +85,9 @@ int main(void)
 		machine.install_syscall_handler(214, {&state, &State<4>::syscall_brk});
 
 		try {
-			while (!machine.stopped()) {
-				machine.simulate();
-				if (UNLIKELY(machine.cpu.registers().counter >= MAX_INSTRUCTIONS)) {
-					res.set_header("X-Exception", "Maximum instructions reached");
-					break;
-				}
+			machine.simulate(MAX_INSTRUCTIONS);
+			if (machine.cpu.registers().counter == MAX_INSTRUCTIONS) {
+				res.set_header("X-Exception", "Maximum instructions reached");
 			}
 		} catch (std::exception& e) {
 			res.set_header("X-Exception", e.what());
