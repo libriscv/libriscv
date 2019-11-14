@@ -7,7 +7,6 @@
 #include <array>
 #include <libriscv/machine.hpp>
 #include "syscalls.cpp"
-#include "webpage.h"
 
 static const char* ADDRESS = "0.0.0.0";
 static const uint16_t PORT = 1234;
@@ -31,11 +30,6 @@ int main(void)
 {
     using namespace httplib;
     Server svr;
-
-	svr.Get("/", [](const Request& req, Response& res) {
-		res.set_content((const char*) webpage_html, webpage_html_len, "text/html");
-		res.status = 200;
-	});
 
     svr.Post("/exec", [](const Request& req, Response& res) {
 		static int request_ID = 0;
