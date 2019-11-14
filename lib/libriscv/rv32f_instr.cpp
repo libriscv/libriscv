@@ -61,6 +61,260 @@ namespace riscv
 						RISCV::flpname(fi.Stype.rs2));
 	});
 
+	FLOAT_INSTR(FMADD,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = rs1.f32[0] * rs2.f32[0] + rs3.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FMADD.S", "FMADD.D", "???", "FMADD.Q"
+		};
+		return snprintf(buffer, len, "%s %s * %s + %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rs3),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FMSUB,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = rs1.f32[0] * rs2.f32[0] - rs3.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = rs1.f64 * rs2.f64 - rs3.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FMSUB.S", "FMSUB.D", "???", "FMSUB.Q"
+		};
+		return snprintf(buffer, len, "%s %s * %s - %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rs3),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FNMADD,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = -(rs1.f64 * rs2.f64) - rs3.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FMADD.S", "FMADD.D", "???", "FMADD.Q"
+		};
+		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FNMSUB,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = -(rs1.f64 * rs2.f64) + rs3.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FNMSUB.S", "FNMSUB.D", "???", "FNMSUB.Q"
+		};
+		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FADD,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = rs1.f32[0] + rs2.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = rs1.f64 + rs2.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FADD.S", "FADD.D", "???", "FADD.Q"
+		};
+		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FSUB,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = rs1.f32[0] - rs2.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = rs1.f64 - rs2.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FSUB.S", "FSUB.D", "???", "FSUB.Q"
+		};
+		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FMUL,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = rs1.f32[0] * rs2.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = rs1.f64 * rs2.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FMUL.S", "FMUL.D", "???", "FMUL.Q"
+		};
+		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FDIV,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			if (fi.R4type.funct2 == 0x0) { // float32
+				dst.f32[0] = rs1.f32[0] / rs2.f32[0];
+				dst.i32[1] = -1;
+				return;
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				dst.f64 = rs1.f64 / rs2.f64;
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FDIV.S", "FDIV.D", "???", "FDIV.Q"
+		};
+		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
 	FLOAT_INSTR(FEQ,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
@@ -91,6 +345,71 @@ namespace riscv
 						RISCV::flpname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rs2),
 						RISCV::regname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FCVT_W_SD,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& dst = cpu.reg(fi.R4type.rd);
+			switch (fi.R4type.funct2) {
+				case 0x0: // from float32
+					if (fi.R4type.rs2 == 0x0)
+						dst = (int32_t) rs1.f32[0];
+					else
+						dst = (uint32_t) rs1.f32[0];
+					return;
+				case 0x1: // from float64
+					if (fi.R4type.rs2 == 0x0)
+						dst = (int32_t) rs1.f64;
+					else
+						dst = (uint32_t) rs1.f64;
+					return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FCVT.W.S", "FCVT.W.D", "???", "FCVT.W.Q"
+		};
+		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::regname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FCVT_SD_W,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& rs1 = cpu.reg(fi.R4type.rs1);
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+			switch (fi.R4type.funct2) {
+				case 0x0: // to float32
+					dst.f32[0] = rs1;
+					dst.f32[1] = -1;
+					return;
+				case 0x1: // to float64
+					dst.f64 = rs1;
+					return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FCVT.S.W", "FCVT.D.W", "???", "FCVT.Q.W"
+		};
+		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
+						RISCV::regname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rd));
 	});
 
 	FLOAT_INSTR(FSGNJ_NX,

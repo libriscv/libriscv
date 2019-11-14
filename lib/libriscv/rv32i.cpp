@@ -71,7 +71,7 @@ namespace riscv
 					DECODER(DECODED_COMPR(C2_SP_STORE));
 			}
 		}
-		else // RV32 IMAF
+		else // RV32 IMAFD
 		{
 			// Quadrant 3
 			switch (instruction.opcode())
@@ -81,8 +81,6 @@ namespace riscv
 					DECODER(DECODED_INSTR(LOAD));
 				case 0b0100011:
 					DECODER(DECODED_INSTR(STORE));
-				case 0b1000011:
-					DECODER(DECODED_INSTR(MADD));
 				case 0b1100011:
 					DECODER(DECODED_INSTR(BRANCH));
 				case 0b1100111:
@@ -110,14 +108,35 @@ namespace riscv
 					DECODER(DECODED_FLOAT(FLW_FLD));
 				case 0b0100111:
 					DECODER(DECODED_FLOAT(FSW_FSD));
+				case 0b1000011:
+					DECODER(DECODED_FLOAT(FMADD));
+				case 0b1000111:
+					DECODER(DECODED_FLOAT(FMSUB));
+				case 0b1001011:
+					DECODER(DECODED_FLOAT(FNMSUB));
+				case 0b1001111:
+					DECODER(DECODED_FLOAT(FNMADD));
 				case 0b1010011:
 					switch (instruction.fpfunc())
 					{
-						case 0b10100:
-							DECODER(DECODED_FLOAT(FEQ));
+						case 0b00000:
+							DECODER(DECODED_FLOAT(FADD));
+						case 0b00001:
+							DECODER(DECODED_FLOAT(FSUB));
+						case 0b00010:
+							DECODER(DECODED_FLOAT(FMUL));
+						case 0b00011:
+							DECODER(DECODED_FLOAT(FDIV));
 						case 0b00100:
 							DECODER(DECODED_FLOAT(FSGNJ_NX));
+						case 0b10100:
+							DECODER(DECODED_FLOAT(FEQ));
+						case 0b11000:
+							DECODER(DECODED_FLOAT(FCVT_W_SD));
+						case 0b11010:
+							DECODER(DECODED_FLOAT(FCVT_SD_W));
 					}
+					break;
 				// RV32A - Atomic instructions
 				case 0b0101111:
 					switch (instruction.Atype.funct5)

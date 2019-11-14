@@ -47,7 +47,7 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
-		static std::array<const char*, 4> f3 = {
+		static const std::array<const char*, 4> f3 = {
 			"???", "FLD", "LW", "FLW"
 		};
 		auto ci = instr.compressed();
@@ -81,7 +81,7 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
-		static std::array<const char*, 4> f3 = {
+		static const std::array<const char*, 4> f3 = {
 			"Reserved instruction", "FSD", "SW", "FSW"
 		};
 		auto ci = instr.compressed();
@@ -224,7 +224,7 @@ namespace riscv
 	{
 		auto ci = instr.compressed();
 		if ((ci.CA.funct6 & 0x3) < 2) {
-			static std::array<const char*, 2> f3 = {"SRLI", "SRAI"};
+			static const std::array<const char*, 2> f3 = {"SRLI", "SRAI"};
 			return snprintf(buffer, len, "C.%s %s, %+d",
 				f3[ci.CA.funct6 & 0x3], RISCV::ciname(ci.CAB.srd), ci.CAB.shift_imm());
 		}
@@ -233,7 +233,9 @@ namespace riscv
 							RISCV::ciname(ci.CAB.srd), ci.CAB.signed_imm());
 		}
 		const int op = ci.CA.funct2 | (ci.CA.funct6 & 0x4);
-		static std::array<const char*, 8> f3 = {"SUB", "XOR", "OR", "AND", "SUBW", "ADDW", "RESV", "RESV"};
+		static const std::array<const char*, 8> f3 = {
+			"SUB", "XOR", "OR", "AND", "SUBW", "ADDW", "RESV", "RESV"
+		};
 
 		return snprintf(buffer, len, "C.%s %s, %s", f3[op],
 						RISCV::ciname(ci.CA.srd), RISCV::ciname(ci.CA.srs2));
@@ -301,6 +303,12 @@ namespace riscv
 			// SLLI
 			cpu.reg(ci.CI.rd) <<= ci.CI.shift_imm();
 		}
+		else if (ci.CI2.funct3 == 0x1 && ci.CI2.rd != 0) {
+			// FLDSP
+			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset8();
+			auto& dst = cpu.registers().getfl(ci.CI2.rd);
+			dst.load_u64(cpu.machine().memory.template read <uint64_t> (address));
+		}
 		else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
 			// LWSP
 			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
@@ -315,40 +323,43 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
-		static std::array<const char*, 4> f3 = {
-			"SLLI", "FLDSP", "LWSP", "FLWSP"
-		};
 		auto ci = instr.compressed();
 		if (ci.CI2.funct3 == 0x0 && ci.CI2.rd != 0) {
 			return snprintf(buffer, len, "C.SLLI %s, %u",
 							RISCV::regname(ci.CI.rd), ci.CI.shift_imm());
 		}
 		else if (ci.CI2.rd != 0) {
+			static const std::array<const char*, 4> f3 = {
+				"???", "FLDSP", "LWSP", "FLWSP"
+			};
+			const char* regname = (ci.CI2.funct3 & 1)
+			 	? RISCV::flpname(ci.CI2.rd) : RISCV::regname(ci.CI2.rd);
 			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
 			return snprintf(buffer, len, "C.%s %s, [SP+%u] (0x%X)", f3[ci.CI2.funct3],
-							RISCV::regname(ci.CI2.rd), ci.CI2.offset(), address);
+							regname, ci.CI2.offset(), address);
 		}
-		return snprintf(buffer, len, "C.HINT %s?, %s", f3[ci.CI2.funct3],
-						RISCV::regname(ci.CI2.rd));
+		return snprintf(buffer, len, "C.HINT %s", RISCV::regname(ci.CI2.rd));
 	});
 	COMPRESSED_INSTR(C2_SP_STORE,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
 		if (ci.CSS.funct3 == 5) {
 			// FSDSP
-			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(8);
+			uint64_t value = cpu.registers().getfl(ci.CSS.rs2).i64;
+			cpu.machine().memory.template write<uint64_t> (addr, value);
 		}
 		else if (ci.CSS.funct3 == 6) {
 			// SWSP
-			uint32_t addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset4();
+			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
 			uint32_t value = cpu.reg(ci.CSS.rs2);
 			cpu.machine().memory.template write<uint32_t> (addr, value);
 		}
 		else if (ci.CSS.funct3 == 7) {
 			// FSWSP
-			auto val = cpu.reg(RISCV::REG_SP) + ci.CSS.offset4();
-			//cpu.machine().memory.write<uint64_t>
-			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
+			uint32_t value = cpu.registers().getfl(ci.CSS.rs2).i32[0];
+			cpu.machine().memory.template write<uint32_t> (addr, value);
 		}
 		else {
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -356,13 +367,13 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
-		static std::array<const char*, 4> f3 = {
+		static const std::array<const char*, 4> f3 = {
 			"XXX", "FSDSP", "SWSP", "FSWSP"
 		};
 		auto ci = instr.compressed();
-		auto address = cpu.reg(RISCV::REG_SP) + ci.CSS.offset4();
+		auto address = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
 		return snprintf(buffer, len, "C.%s [SP%+d], %s (0x%X)",
-						f3[ci.CSS.funct3 - 4], ci.CSS.offset4(),
+						f3[ci.CSS.funct3 - 4], ci.CSS.offset(4),
 						RISCV::regname(ci.CSS.rs2), address);
 	});
 	// JR, MV, JALR, ADD

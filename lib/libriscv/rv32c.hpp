@@ -48,6 +48,10 @@ namespace riscv
 				uint32_t val = imm234 | (imm5 << 3) | (imm67 << 4);
 				return (val << 2); // scaled by 4
 			}
+			uint32_t offset8() const noexcept {
+				uint32_t val = imm234 | (imm5 << 3) | (imm67 << 4);
+				return (val << 3); // scaled by 8
+			}
 		} CI2;
 		struct {
 			uint16_t opcode : 2;
@@ -76,9 +80,9 @@ namespace riscv
 			uint16_t imm25  : 4;
 			uint16_t funct3 : 3;
 
-			int32_t offset4() const noexcept {
+			int32_t offset(int factor) const noexcept {
 				int32_t val = imm25 | (imm67 << 4);
-				return (val << 2);
+				return val * factor;
 			}
 		} CSS;
 		// wide immediate format

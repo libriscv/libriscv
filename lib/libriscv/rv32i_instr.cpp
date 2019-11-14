@@ -105,15 +105,6 @@ namespace riscv
 						cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm());
 	});
 
-	INSTRUCTION(MADD,
-	[] (auto& cpu, rv32i_instruction instr) {
-		// handler
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		// printer
-		return snprintf(buffer, len, "MADD");
-	});
-
 	INSTRUCTION(BRANCH,
 	[] (auto& cpu, rv32i_instruction instr) {
 		bool comparison;

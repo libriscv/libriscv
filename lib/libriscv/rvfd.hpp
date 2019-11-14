@@ -64,8 +64,8 @@ namespace riscv
 		uint32_t opcode() const noexcept {
 			return Rtype.opcode;
 		}
-
 	};
+	static_assert(sizeof(rv32f_instruction) == 4, "Must be 4 bytes");
 
 	enum fflags {
 		FFLAG_NX = 0x1,
