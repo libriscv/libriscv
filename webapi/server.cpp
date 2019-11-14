@@ -8,7 +8,7 @@
 #include <libriscv/machine.hpp>
 #include "syscalls.cpp"
 
-static const char* ADDRESS = "0.0.0.0";
+static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
 // avoid endless loops and code that takes too long
 static const size_t MAX_INSTRUCTIONS = 256000;
@@ -85,12 +85,9 @@ int main(void)
 		machine.install_syscall_handler(214, {&state, &State<4>::syscall_brk});
 
 		try {
-			while (!machine.stopped()) {
-				machine.simulate();
-				if (UNLIKELY(machine.cpu.registers().counter >= MAX_INSTRUCTIONS)) {
-					res.set_header("X-Exception", "Maximum instructions reached");
-					break;
-				}
+			machine.simulate(MAX_INSTRUCTIONS);
+			if (machine.cpu.registers().counter == MAX_INSTRUCTIONS) {
+				res.set_header("X-Exception", "Maximum instructions reached");
 			}
 		} catch (std::exception& e) {
 			res.set_header("X-Exception", e.what());
