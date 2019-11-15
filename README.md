@@ -1,5 +1,9 @@
 # RISC-V userspace emulator library
 
+## Demonstration
+
+You can find a live demonstration of the library here: https://droplet.fwsnet.net
+
 ## Installing a RISC-V GCC embedded compiler
 
 ```
@@ -233,4 +237,4 @@ It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ co
 
 See the `webapi` folder for an example web-server that compiles and runs limited C/C++ code in a relatively safe manner. Ping me or create a PR if you notice something is exploitable.
 
-Note that the web API demo uses a docker container to build RISC-V binaries, for security reasons. You can build the container with `docker build -t gcc9-rv32imac .` from the gcc folder. There is a test-script to see that it works called `dbuild.sh` which takes an input code file and output binary as parameters.
+Note that the web API demo uses a docker container to build RISC-V binaries, for security reasons. You can build the container with `docker build -t gcc9-rv32imac .` from the docker folder. There is a test-script to see that it works called `dbuild.sh` which takes an input code file and output binary as parameters.
