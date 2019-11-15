@@ -141,9 +141,9 @@ namespace riscv
 	const typename Elf<W>::Sym* Memory<W>::resolve_symbol(const char* name)
 	{
 		const auto* sym_hdr = section_by_name(".symtab");
-		assert(sym_hdr != nullptr);
+		if (sym_hdr == nullptr) return nullptr;
 		const auto* str_hdr = section_by_name(".strtab");
-		assert(str_hdr != nullptr);
+		if (str_hdr == nullptr) return nullptr;
 
 		const auto* symtab = elf_sym_index(sym_hdr, 0);
 		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);
