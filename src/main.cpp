@@ -19,6 +19,7 @@ int main(int argc, const char** argv)
 		"hello_world", "test!"
 	};
 
+	riscv::verbose_machine = false;
 	riscv::Machine<riscv::RISCV32> machine { binary };
 	machine.install_syscall_handler(riscv::EBREAK_SYSCALL, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
@@ -44,8 +45,8 @@ int main(int argc, const char** argv)
 
 	/*
 	machine.verbose_instructions = true;
+	machine.cpu.breakpoint(0x39072);
 	machine.break_now();
-	machine.cpu.breakpoint(0x1438A);
 	machine.verbose_jumps = true;
 	machine.verbose_registers = true;
 	machine.throw_on_unhandled_syscall = true;
@@ -67,23 +68,24 @@ int main(int argc, const char** argv)
 	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
 
 	// VM function call testing
-	// NOTE: this part is only relevant for the newlib binary
-	printf("\n");
-	// make sure stack is aligned for a function call
-	machine.realign_stack();
-	// reset instruction counter to simplify calculation
-	machine.cpu.registers().counter = 0;
-	// make a function call into the guest VM
-	int ret = machine.vmcall("test", {555}, 3000);
-	printf("test returned %d\n", ret);
-	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
-	// resume execution:
-	machine.simulate();
-	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
-	// extract real return value:
-	ret = machine.sysarg<long>(0);
-	printf("test *actually* returned %d\n", ret);
-
+	if (machine.address_of("test") != 0)
+	{
+		printf("\n");
+		// make sure stack is aligned for a function call
+		machine.realign_stack();
+		// reset instruction counter to simplify calculation
+		machine.cpu.registers().counter = 0;
+		// make a function call into the guest VM
+		int ret = machine.vmcall("test", {555}, 3000);
+		printf("test returned %d\n", ret);
+		printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+		// resume execution:
+		machine.simulate();
+		printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+		// extract real return value:
+		ret = machine.sysarg<long>(0);
+		printf("test *actually* returned %d\n", ret);
+	}
 	return 0;
 }
 
