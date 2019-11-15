@@ -5,7 +5,7 @@ option(MINIMAL     "Minimal build" OFF)
 option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 
-set(RISCV_ABI "-march=rv32imc -mabi=ilp32")
+set(RISCV_ABI "-march=rv32gc -mabi=ilp32")
 set(WARNINGS  "-Wall -Wextra")
 set(COMMON    "-O2 -fstack-protector")
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
