@@ -27,7 +27,7 @@ Note how the ABI is ilp32 and not ilp32d, which requires full floating-point sup
 
 Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc is harder to support, and produces larger binaries, but will be more performant. It also supports threads, which is awesome to play around with.
 
-## Building and running test program
+## Building and running a test program
 
 From one of the binary subfolders:
 ```
@@ -63,7 +63,7 @@ Load a binary and let the machine simulate from `_start` (ELF entry-point):
 template <int W>
 long syscall_exit(riscv::Machine<W>& machine)
 {
-	printf(">>> Program exit(%d)\n", machine.cpu.reg(riscv::RISCV::REG_ARG0));
+	printf(">>> Program exited, exit code = %d\n", machine.template sysarg<int> (0));
 	machine.stop();
 	return 0;
 }
@@ -177,10 +177,9 @@ You will need to handle the EXIT system call on the outside of the machine as we
 template <int W>
 long syscall_exit(riscv::Machine<W>& machine)
 {
-	const int status = machine.template sysarg<int> (0);
-	printf(">>> Program exited, exit code = %d\n", status);
+	printf(">>> Program exited, exit code = %d\n", machine.template sysarg<int> (0));
 	machine.stop();
-	return status;
+	return 0;
 }
 ```
 And installed as a 32-bit system call handler like this:
