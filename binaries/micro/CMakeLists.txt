@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1.0)
 project(hello_world C CXX)
 
-option(MINIMAL     "Minimal build" OFF)
+option(MINIMAL     "Minimal build" ON)
 option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 

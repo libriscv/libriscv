@@ -43,11 +43,13 @@ cmake .. && make -j4
 ./remu ../binaries/newlib/build/hello_world
 ```
 
-Building and running your own ELF files that can run in freestanding RV32GC is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal using multiboot, except you have easier access to system functions. The fun part is of course the extremely small binaries and total control over the environment.
+Building and running your own ELF files that can run in freestanding RV32GC is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal, except you can more easily implement system functions. The fun part is of course the extremely small binaries and total control over the environment.
 
 The `newlib` example project have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries.
 
-Finally, the `full` example project uses the Linux-configured cross compiler and will expect you to implement quite a few system calls just to get into `int main()`. In addition, you will have to setup argv, env and the aux-vector. There is a helper method to do this in the src folder. If you want to implement threads to really get to all the fun stuff (like the coming C++20 coroutines), then this is where you can do that, as newlib simply won't enable threads.
+The `full` example project uses the Linux-configured cross compiler and will expect you to implement quite a few system calls just to get into `int main()`. In addition, you will have to setup argv, env and the aux-vector. There is a helper method to do this in the src folder. If you want to implement threads to really get to all the fun stuff (like the coming C++20 coroutines), then this is where you can do that, as newlib simply won't enable threads.
+
+And finally, the `micro` project implements the absolutely minimal freestanding RV32GC C/C++ environment. You don't have any heap, so no new/delete. And you can't printf values because you don't have a C standard library, so you can only write constant strings using the write system call. Still, the stripped binary is only 712 bytes, and will execute only 77 instructions running the whole program!
 
 ## Instruction set support
 
