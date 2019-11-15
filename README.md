@@ -19,9 +19,9 @@ make -j4
 ```
 This will build a newlib cross-compiler with C++ exception support.
 
-Note how the ABI is ilp32 and not ilp32d, which requires full floating-point support. Support will be added later on, and is instead emulated by the compiler.
+Note how the ABI is ilp32 and not ilp32d, which requires full floating-point support. Support is only halfway complete, and it is recommended to instead rely on the compiler to simulate this support for now.
 
-Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc is harder to support, and produces larger binaries, but will be more performant.
+Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc is harder to support, and produces larger binaries, but will be more performant. It also supports threads, which is awesome to play around with.
 
 ## Building and running test program
 
@@ -93,16 +93,13 @@ in the simulated program.
 
 If you want a completely freestanding environment in your embedded program you will need to do a few things in order to call into a C function properly and use both stack and static storage.
 
-Make sure your stack is aligned to the mandatory alignment of your architecture, which in the case for RISC-V is 16-bytes. The first instruction we are going to execute is `auipc` though, so maybe we only need 4- or 8-byte alignment, but we will not play with fire. Let's align the stack pointer from outside the machine:
+You will want to avoid using a low address as the initial stack value, as it could mean that some stack pointer value will be evaluated as 0x0 (null) with some bad luck, which could mysteriously fail one of your own checks or asserts. Additionally, the machine automatically makes the zero-page unreadable on start to help you catch accesses to the zero-page, which are typically bugs. It's fine to start the stack at 0x0 though, as the address will wrap around and start pushing bytes at the top of the address space, at least in 32-bit.
 
 ```C++
-auto& sp = machine.cpu.reg(RISCV::REG_SP);
-sp &= ~0xF; // mandated 16-byte stack alignment
+machine.cpu.reg(RISCV::REG_SP) = 0x0;
 ```
 
-Also, perhaps you want to avoid using a low address as the initial stack value, as it could mean that some stack pointer value will be 0x0 at some point, which could mysteriously fail one of your own checks or asserts. Additionally, the machine automatically makes the zero-page unreadable on start to help you catch accesses to the zero-page, which are usually bugs. It's fine to start the stack at 0x0 though, as the address will wrap around and start pushing bytes at the top of the address space, at least in 32-bit.
-
-From now on, all the example code is going to be implemented inside the guest binary, in the startup function which is always named `_start` and is a C function. In C++ you would have to write it like this:
+From now on, all the example code is going to be implemented inside the guest binary, in the ELF entry function which is always named `_start` and is a C function. In C++ you could write it like this:
 
 ```C++
 extern "C"
@@ -112,7 +109,7 @@ void _start()
 }
 ```
 
-Second, you must set the GP pointer to the absolute address of `__global_pointer`. The only way to do that is to disable relaxation:
+The first thing you must do is setting the GP register to the absolute address of `__global_pointer`. The only way to do that is to disable relaxation:
 
 ```C++
 asm volatile
@@ -126,9 +123,7 @@ asm volatile
 asm volatile("" ::: "memory");
 ```
 
-If the GP register is not initialized properly, you will not be able to use static memory, and you will get all sorts of weird problems.
-
-Third, clear .bss which is the area of memory used by zero-initialized variables:
+Now that we have access to static storage, we can clear .bss which is the area of memory used by zero-initialized variables:
 ```C++
 extern char __bss_start;
 extern char __BSS_END__;
@@ -139,7 +134,7 @@ for (char* bss = &__bss_start; bss < &__BSS_END__; bss++) {
 
 After this you might want to initialize your heap, if you have one. If not, consider getting a tiny heap implementation from an open source project. Perhaps also initialize some early standard out (stdout) facility so that you can get feedback from subsystems that print errors during initialization.
 
-Next up is calling global constructors, which while not common in C is very common in C++, and doesn't contribute much to the binary size anyway:
+Next up is calling global constructors, which while not common in C is very common in C++, and doesn't contribute much to the binary size:
 
 ```C++
 extern void(*__init_array_start [])();
@@ -149,7 +144,7 @@ for (int i = 0; i < count; i++) {
 	__init_array_start[i]();
 }
 ```
-Now you are done initializing the absolute minimal C runtime environment. Calling main is as simple as:
+Now you are done initializing the absolute minimal C/C++ freestanding environment. Calling main is as simple as:
 
 ```C++
 extern int main(int, char**);
@@ -172,7 +167,7 @@ extern "C" {
 }
 ```
 
-You will need to handle the EXIT system call on the outside of the machine as well, to stop the machine. If you don't handle the EXIT system call and stop the machine, it will continue executing instructions past the function, which does not return. It will cause problems. A one-argument system call can be implemented like this:
+You will need to handle the EXIT system call on the outside of the machine as well, to stop the machine. If you don't handle the EXIT system call and stop the machine, it will continue executing instructions past the function, which does not return. A one-argument system call can be implemented like this:
 
 ```C++
 template <int W>
@@ -189,9 +184,9 @@ And installed as a 32-bit system call handler like this:
 machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 ```
 
-Since all system calls have to return, we might as well return the status code back, and the only reason we are doing this is because it lets us abuse `_exit` to make function calls into the environment. Otherwise, the return value has no meaning here because we already stopped running the machine. The machine instruction processing loop will stop running immediately after this system call has been invoked.
+The machine instruction processing loop will stop running immediately after this system call has been invoked.
 
-And finally, to make a system call with one (1) argument from the guest environment you could do something like this (in C++):
+Finally, to make a system call with one (1) argument from the guest environment you could do something like this (in C++):
 ```C++
 inline long syscall(long n, long arg0)
 {
@@ -203,7 +198,7 @@ inline long syscall(long n, long arg0)
 	return a0;
 }
 ```
-All integer and pointer arguments are in the a0 to a6 registers, which adds up to 7 arguments in total. The return value of the system call is written back into a0.
+All integer and pointer arguments are in the a0 to a6 registers, which adds up to 7 arguments in total. The return value of the system call is written back into a0. If you want to create a custom system call that fills some values into a struct, you should allocate room for that struct inside the guest, and just pass the pointer to that struct as one of the arguments to the system call.
 
 If you have done all this you should now have the absolute minimum C and C++ freestanding environment up and running. Have fun!
 
@@ -229,7 +224,7 @@ Arguments are passed as a C++ initializer list of register-sized integers.
 
 Instruction counters and registers are not reset on calling functions, so make sure to take that into consideration when measuring.
 
-It is not recommended to copy data into guest memory and then pass pointers to this data to VM calls, as it's a very complex task to determine which memory is unused by the guest before and during the call. Instead, the guest can allocate room for the struct on its own, and then simply perform a system call, passing a pointer to the struct as an argument.
+It is not recommended to copy data into guest memory and then pass pointers to this data as arguments, as it's a very complex task to determine which memory is unused by the guest before and even during the call. Instead, the guest can allocate room for the struct on its own, and then simply perform a system call where it passes a pointer to the struct as an argument.
 
 
 ## Why a RISC-V library
