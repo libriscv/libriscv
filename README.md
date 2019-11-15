@@ -39,16 +39,16 @@ cmake .. && make -j4
 ./remu ../binaries/newlib/build/hello_world
 ```
 
-Building and running your own ELF files that can run in freestanding RV32IM is
-quite challenging, so consult the hello world example! It's a bit like booting
-on bare metal using multiboot, except you have easier access to system functions.
+Building and running your own ELF files that can run in freestanding RV32GC is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal using multiboot, except you have easier access to system functions. The fun part is of course the extremely small binaries and total control over the environment.
 
-The newlib ELF files have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development.
+The `newlib` example project have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries.
+
+Finally, the `full` example project uses the Linux-configured cross compiler and will expect you to implement quite a few system calls just to get into `int main()`. In addition, you will have to setup argv, env and the aux-vector. There is a helper method to do this in the src folder. If you want to implement threads to really get to all the fun stuff (like the coming C++20 coroutines), then this is where you can do that, as newlib simply won't enable threads.
 
 ## Instruction set support
 
 The emulator currently supports RV32IMAC, however the foundation is laid for RV64IM.
-Eventually F-extension will also be supported (floating point).
+The F and D-extensions are halfway supported (32- and 64-bit floating point instructions).
 
 ## Usage
 
@@ -84,12 +84,129 @@ int main(int argc, const char** argv)
 }
 ```
 
-You can find details on the Linux system call ABI online as well as in the `syscall.h`
-header in the src folder. You can use this header to make syscalls from your RISC-V programs.
-It is the Linux RISC-V syscall ABI.
+You can find details on the Linux system call ABI online as well as in the `syscalls.hpp` header in the src folder. You can use this header to make syscalls from your RISC-V programs. It is the Linux RISC-V syscall ABI.
 
 Be careful about modifying registers during system calls, as it may cause problems
 in the simulated program.
+
+## Creating your own environment
+
+If you want a completely freestanding environment in your embedded program you will need to do a few things in order to call into a C function properly and use both stack and static storage.
+
+Make sure your stack is aligned to the mandatory alignment of your architecture, which in the case for RISC-V is 16-bytes. The first instruction we are going to execute is `auipc` though, so maybe we only need 4- or 8-byte alignment, but we will not play with fire. Let's align the stack pointer from outside the machine:
+
+```C++
+auto& sp = machine.cpu.reg(RISCV::REG_SP);
+sp &= ~0xF; // mandated 16-byte stack alignment
+```
+
+Also, perhaps you want to avoid using a low address as the initial stack value, as it could mean that some stack pointer value will be 0x0 at some point, which could mysteriously fail one of your own checks or asserts. Additionally, the machine automatically makes the zero-page unreadable on start to help you catch accesses to the zero-page, which are usually bugs. It's fine to start the stack at 0x0 though, as the address will wrap around and start pushing bytes at the top of the address space, at least in 32-bit.
+
+From now on, all the example code is going to be implemented inside the guest binary, in the startup function which is always named `_start` and is a C function. In C++ you would have to write it like this:
+
+```C++
+extern "C"
+void _start()
+{
+	// startup code here
+}
+```
+
+Second, you must set the GP pointer to the absolute address of `__global_pointer`. The only way to do that is to disable relaxation:
+
+```C++
+asm volatile
+("   .option push 				\t\n\
+	 .option norelax 			\t\n\
+	 1:auipc gp, %pcrel_hi(__global_pointer$) \t\n\
+	 addi  gp, gp, %pcrel_lo(1b) \t\n\
+	.option pop					\t\n\
+");
+// make sure all accesses to static memory happen after:
+asm volatile("" ::: "memory");
+```
+
+If the GP register is not initialized properly, you will not be able to use static memory, and you will get all sorts of weird problems.
+
+Third, clear .bss which is the area of memory used by zero-initialized variables:
+```C++
+extern char __bss_start;
+extern char __BSS_END__;
+for (char* bss = &__bss_start; bss < &__BSS_END__; bss++) {
+	*bss = 0;
+}
+```
+
+After this you might want to initialize your heap, if you have one. If not, consider getting a tiny heap implementation from an open source project. Perhaps also initialize some early standard out (stdout) facility so that you can get feedback from subsystems that print errors during initialization.
+
+Next up is calling global constructors, which while not common in C is very common in C++, and doesn't contribute much to the binary size anyway:
+
+```C++
+extern void(*__init_array_start [])();
+extern void(*__init_array_end [])();
+int count = __init_array_end - __init_array_start;
+for (int i = 0; i < count; i++) {
+	__init_array_start[i]();
+}
+```
+Now you are done initializing the absolute minimal C runtime environment. Calling main is as simple as:
+
+```C++
+extern int main(int, char**);
+
+// geronimo!
+_exit(main(0, nullptr));
+```
+
+Here we mandate that you must implement `int main()` or get an undefined reference, and also the almost-mandatory `_exit` system call wrapper. You can implement `_exit` like this:
+
+```C++
+#define SYSCALL_EXIT   93
+
+extern "C" {
+	__attribute__((noreturn))
+	void _exit(int status) {
+		syscall(SYSCALL_EXIT, status);
+		__builtin_unreachable();
+	}
+}
+```
+
+You will need to handle the EXIT system call on the outside of the machine as well, to stop the machine. If you don't handle the EXIT system call and stop the machine, it will continue executing instructions past the function, which does not return. It will cause problems. A one-argument system call can be implemented like this:
+
+```C++
+template <int W>
+long syscall_exit(riscv::Machine<W>& machine)
+{
+	const int status = machine.template sysarg<int> (0);
+	printf(">>> Program exited, exit code = %d\n", status);
+	machine.stop();
+	return status;
+}
+```
+And installed as a 32-bit system call handler like this:
+```C++
+machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
+```
+
+Since all system calls have to return, we might as well return the status code back, and the only reason we are doing this is because it lets us abuse `_exit` to make function calls into the environment. Otherwise, the return value has no meaning here because we already stopped running the machine. The machine instruction processing loop will stop running immediately after this system call has been invoked.
+
+And finally, to make a system call with one (1) argument from the guest environment you could do something like this (in C++):
+```C++
+inline long syscall(long n, long arg0)
+{
+	register long a0 asm("a0") = arg0;
+	register long syscall_id asm("a7") = n;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+
+	return a0;
+}
+```
+All integer and pointer arguments are in the a0 to a6 registers, which adds up to 7 arguments in total. The return value of the system call is written back into a0.
+
+If you have done all this you should now have the absolute minimum C and C++ freestanding environment up and running. Have fun!
+
 
 ## Calling into the VM environment
 

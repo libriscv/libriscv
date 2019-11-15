@@ -1,14 +1,12 @@
 #include <include/syscall.hpp>
 #include <tinyprintf.h>
 #include <stdint.h>
-
-extern int main(int, char**);
 int __testable_global __attribute__((section(".bss"))) = 0;
 
 extern "C" {
 	__attribute__((noreturn))
 	void _exit(int exitval) {
-		syscall(SYSCALL_EXIT, exitval, 0);
+		syscall(SYSCALL_EXIT, exitval);
 		__builtin_unreachable();
 	}
 	void __init_heap(uintptr_t free_begin, uintptr_t heapmax);
@@ -70,5 +68,6 @@ void _start()
 	init_stdlib();
 
 	// call main() :)
+	extern int main(int, char**);
 	_exit(main(0, nullptr));
 }

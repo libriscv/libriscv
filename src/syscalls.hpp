@@ -22,9 +22,10 @@ uint32_t syscall_close(riscv::Machine<W>& machine)
 template <int W>
 uint32_t syscall_exit(riscv::Machine<W>& machine)
 {
-	printf(">>> Program exited, exit code = %d\n", machine.template sysarg<int> (0));
+	const int status = machine.template sysarg<int> (0);
+	printf(">>> Program exited, exit code = %d\n", status);
 	machine.stop();
-	return 0;
+	return status;
 }
 
 template <int W>
