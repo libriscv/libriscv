@@ -45,6 +45,10 @@ inline void Machine<W>::install_syscall_handler(int sysn, syscall_t handler)
 {
 	m_syscall_handlers[sysn] = handler;
 }
+template <int W> inline
+typename Machine<W>::syscall_t Machine<W>::get_syscall_handler(int sysn) {
+	return m_syscall_handlers.at(sysn);
+}
 
 template <int W>
 inline void Machine<W>::system_call(int syscall_number)

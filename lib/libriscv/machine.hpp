@@ -27,6 +27,7 @@ namespace riscv
 		void stop() noexcept;
 		bool stopped() const noexcept;
 		void install_syscall_handler(int, syscall_t);
+		syscall_t get_syscall_handler(int);
 		void reset();
 
 		CPU<W>    cpu;
