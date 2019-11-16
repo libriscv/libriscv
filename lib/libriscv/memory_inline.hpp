@@ -79,8 +79,8 @@ inline Page& Memory<W>::create_page(const address_t page)
 	return m_page_fault_handler(*this, page);
 }
 
-template <int W>
-void Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
+template <int W> inline void
+Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 {
 	while (len > 0)
 	{

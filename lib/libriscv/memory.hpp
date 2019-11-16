@@ -59,6 +59,7 @@ namespace riscv
 		const Page& get_page(const address_t address) const noexcept;
 		const Page& get_pageno(const address_t npage) const noexcept;
 		Page& create_page(const address_t npage);
+		void  set_page_attr(address_t, size_t len, PageAttributes);
 
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		static Page& default_page_fault(Memory&, const size_t page);
@@ -66,7 +67,6 @@ namespace riscv
 		Memory(Machine<W>&, const std::vector<uint8_t>&, bool protect_memory);
 	private:
 		inline auto& create_attr(const address_t address);
-		inline void  set_page_attr(address_t, size_t len, PageAttributes);
 		static inline uintptr_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
 		}
