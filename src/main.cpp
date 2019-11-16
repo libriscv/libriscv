@@ -25,6 +25,9 @@ int main(int argc, const char** argv)
 	// enough pages for startup + 1mb buffer :)
 	machine.memory.set_pages_total(600 * 100);
 
+	// somewhere to store the guest outputs and exit status
+	State<riscv::RISCV32> state;
+
 	if constexpr (full_linux_guest)
 	{
 		std::vector<std::string> env = {
@@ -32,18 +35,18 @@ int main(int argc, const char** argv)
 		};
 		prepare_linux<riscv::RISCV32>(machine, args, env);
 		// some extra syscalls
-		setup_linux_syscalls(machine);
+		setup_linux_syscalls(state, machine);
 		// multi-threading
 		setup_multithreading(machine);
 	}
 	else if constexpr (newlib_mini_guest)
 	{
 		// the minimum number of syscalls needed for malloc and C++ exceptions
-		setup_newlib_syscalls(machine);
+		setup_newlib_syscalls(state, machine);
 		machine.setup_argv(args);
 	}
 	else {
-		setup_minimal_syscalls(machine);
+		setup_minimal_syscalls(state, machine);
 	}
 
 	/*
@@ -67,6 +70,7 @@ int main(int argc, const char** argv)
 		machine.print_and_pause();
 #endif
 	}
+	printf(">>> Program exited, exit code = %d\n", state.exit_code);
 	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
 
 	// VM function call testing
@@ -88,6 +92,8 @@ int main(int argc, const char** argv)
 		ret = machine.sysarg<long>(0);
 		printf("test *actually* returned %d\n", ret);
 	}
+
+	printf("\n*** Guest output ***\n%s\n", state.output.c_str());
 	printf("Pages in use: %zu (%zu kB memory), highest: %zu (%zu kB memory)\n",
 			machine.memory.active_pages(), machine.memory.active_pages() * 4,
 			machine.memory.highest_active_pages(), machine.memory.highest_active_pages() * 4);

@@ -10,10 +10,21 @@ static constexpr bool verbose_syscalls = false;
 #endif
 
 template <int W>
-void setup_minimal_syscalls(riscv::Machine<W>&);
+struct State
+{
+	int exit_code = 0;
+	std::string output;
+
+	long syscall_exit(riscv::Machine<W>&);
+	long syscall_write(riscv::Machine<W>&);
+	long syscall_writev(riscv::Machine<W>&);
+};
 
 template <int W>
-void setup_newlib_syscalls(riscv::Machine<W>&);
+void setup_minimal_syscalls(State<W>&, riscv::Machine<W>&);
 
 template <int W>
-void setup_linux_syscalls(riscv::Machine<W>&);
+void setup_newlib_syscalls(State<W>&, riscv::Machine<W>&);
+
+template <int W>
+void setup_linux_syscalls(State<W>&, riscv::Machine<W>&);
