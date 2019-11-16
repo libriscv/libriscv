@@ -7,6 +7,7 @@ static constexpr bool linux_guest = true;
 static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
 #include "syscalls.hpp"
+#include "threads.hpp"
 
 int main(int argc, const char** argv)
 {
@@ -19,13 +20,13 @@ int main(int argc, const char** argv)
 		"hello_world", "test!"
 	};
 
-	riscv::verbose_machine = false;
+	riscv::verbose_machine = true;
 	riscv::Machine<riscv::RISCV32> machine { binary };
 	machine.install_syscall_handler(riscv::EBREAK_SYSCALL, syscall_ebreak<riscv::RISCV32>);
 	machine.install_syscall_handler(64, syscall_write<riscv::RISCV32>);
 	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
 	// enough pages for startup + 1mb buffer :)
-	machine.memory.set_pages_total(300);
+	machine.memory.set_pages_total(600 * 100);
 
 	if constexpr (linux_guest)
 	{
@@ -35,6 +36,8 @@ int main(int argc, const char** argv)
 		prepare_linux<riscv::RISCV32>(machine, args, env);
 		// some extra syscalls
 		add_linux_syscalls(machine);
+		// multi-threading
+		setup_multithreading(machine);
 	}
 	else if constexpr (newlib_mini_guest)
 	{

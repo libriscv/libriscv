@@ -12,6 +12,7 @@ set(SOURCES
 	src/main.cpp
 	src/linux.cpp
 	src/syscalls.cpp
+	src/threads.cpp
 )
 
 add_executable(remu ${SOURCES})

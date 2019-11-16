@@ -27,6 +27,7 @@ endif()
 
 set(SOURCES
 	src/hello_world.cpp
+	src/test_threads.cpp
 )
 
 set(BUILD_SHARED_LIBS OFF)

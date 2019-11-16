@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 static inline std::vector<uint8_t> load_file(const std::string&);
 static void test_rtti();
@@ -27,8 +28,20 @@ public:
     }
 };
 
+void* thread_main(void*)
+{
+	printf("Hello Multithreaded World!\n");
+	// leave thread temporarily
+	sched_yield();
+	printf("Hello Again From Multithreaded World!\n");
+	// exit
+	return NULL;
+}
+
 int main (int argc, char *argv[], char *envp[])
 {
+	//printf("Hello World using puts()\n");
+	//printf("Hello World using printf(%d)\n", 123);
 	// heap test
 	auto b = std::unique_ptr<std::string> (new std::string(""));
 	assert(b != nullptr);
@@ -67,6 +80,9 @@ int main (int argc, char *argv[], char *envp[])
 	catch (std::exception& e) {
 		printf("Error: %s\n", e.what());
 	}
+	// test pthreads support
+	extern void test_threads();
+	test_threads();
 	return 666;
 }
 
