@@ -4,6 +4,8 @@
 
 You can find a live demonstration of the library here: https://droplet.fwsnet.net
 
+Here is a multi-threaded test program: https://gist.github.com/fwsGonzo/e1a9cdc18f9da2ffc309fb9324a26c32
+
 ## Installing a RISC-V GCC embedded compiler
 
 ```
@@ -90,7 +92,7 @@ int main(int argc, const char** argv)
 }
 ```
 
-You can find details on the Linux system call ABI online as well as in the `syscalls.hpp` header in the src folder. You can use this header to make syscalls from your RISC-V programs. It is the Linux RISC-V syscall ABI.
+You can find details on the Linux system call ABI online as well as in the `syscalls.hpp` header in the src folder. You can use this header to make syscalls from your RISC-V programs. It is emulating the Linux RISC-V syscall ABI.
 
 Be careful about modifying registers during system calls, as it may cause problems
 in the simulated program.
