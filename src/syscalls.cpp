@@ -15,29 +15,64 @@ struct iovec32 {
     int32_t  iov_len;
 };
 
-template <>
-uint32_t syscall_openat<4>(Machine<4>& machine)
+template <int W>
+long syscall_close(riscv::Machine<W>& machine)
 {
-	const int fd = machine.sysarg<int>(0);
+	const int fd = machine.template sysarg<int>(0);
+	if constexpr (verbose_syscalls) {
+		printf("SYSCALL close called, fd = %d\n", fd);
+	}
+	if (fd <= 2) {
+		return 0;
+	}
+	printf(">>> Close %d\n", fd);
+	return -1;
+}
+
+template <int W>
+long syscall_exit(riscv::Machine<W>& machine)
+{
+	const int status = machine.template sysarg<int> (0);
+	printf(">>> Program exited, exit code = %d\n", status);
+	machine.stop();
+	return status;
+}
+
+template <int W>
+long syscall_ebreak(riscv::Machine<W>& machine)
+{
+	printf("\n>>> EBREAK at %#X\n", machine.cpu.pc());
+#ifdef RISCV_DEBUG
+	machine.print_and_pause();
+#else
+	throw std::runtime_error("Unhandled EBREAK instruction");
+#endif
+	return 0;
+}
+
+template <int W>
+long syscall_openat(Machine<W>& machine)
+{
+	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL openat called, fd = %d  \n", fd);
     return -EBADF;
 }
 
-template <>
-uint32_t syscall_readlinkat<4>(Machine<4>& machine)
+template <int W>
+long syscall_readlinkat(Machine<W>& machine)
 {
-	const int fd = machine.sysarg<int>(0);
+	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL readlinkat called, fd = %d  \n", fd);
     return -EBADF;
 }
 
-template <>
-uint32_t syscall_write<4>(Machine<4>& machine)
+template <int W>
+long syscall_write(Machine<W>& machine)
 {
-	const int  fd      = machine.sysarg<int>(0);
-	const auto address = machine.sysarg<uint32_t>(1);
-	const auto len     = machine.sysarg<size_t>(2);
-	SYSPRINT("SYSCALL write called, addr = %#X  len = %zu\n", address, len);
+	const int  fd      = machine.template sysarg<int>(0);
+	const auto address = machine.template sysarg<address_type<W>>(1);
+	const auto len     = machine.template sysarg<size_t>(2);
+	SYSPRINT("SYSCALL write: addr = 0x%X, len = %zu\n", address, len);
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
 		uint8_t buffer[len];
@@ -47,12 +82,12 @@ uint32_t syscall_write<4>(Machine<4>& machine)
 	return -EBADF;
 }
 
-template <>
-uint32_t syscall_writev<4>(Machine<4>& machine)
+template <int W>
+long syscall_writev(Machine<W>& machine)
 {
-	const int  fd     = machine.sysarg<int>(0);
-	const auto iov_g  = machine.sysarg<uint32_t>(1);
-	const auto count  = machine.sysarg<int>(2);
+	const int  fd     = machine.template sysarg<int>(0);
+	const auto iov_g  = machine.template sysarg<uint32_t>(1);
+	const auto count  = machine.template sysarg<int>(2);
 	if constexpr (false) {
 		printf("SYSCALL writev called, iov = %#X  cnt = %d\n", iov_g, count);
 	}
@@ -78,11 +113,11 @@ uint32_t syscall_writev<4>(Machine<4>& machine)
 	return -EBADF;
 }
 
-template <>
-uint32_t syscall_brk<4>(Machine<4>& machine)
+template <int W>
+long syscall_brk(Machine<W>& machine)
 {
 	static uint32_t sbrk_end = sbrk_start;
-	const uint32_t new_end = machine.sysarg<uint32_t>(0);
+	const uint32_t new_end = machine.template sysarg<uint32_t>(0);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL brk called, current = 0x%X new = 0x%X\n", sbrk_end, new_end);
 	}
@@ -97,11 +132,11 @@ uint32_t syscall_brk<4>(Machine<4>& machine)
 	return sbrk_end;
 }
 
-template <>
-uint32_t syscall_stat<4>(Machine<4>& machine)
+template <int W>
+long syscall_stat(Machine<W>& machine)
 {
-	const auto  fd      = machine.sysarg<int>(0);
-	const auto  buffer  = machine.sysarg<uint32_t>(1);
+	const auto  fd      = machine.template sysarg<int>(0);
+	const auto  buffer  = machine.template sysarg<uint32_t>(1);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL stat called, fd = %d  buffer = 0x%X\n",
 				fd, buffer);
@@ -122,17 +157,10 @@ uint32_t syscall_stat<4>(Machine<4>& machine)
 	return -EBADF;
 }
 
-template <>
-uint32_t syscall_spm<4>(Machine<4>&)
+template <int W>
+long syscall_uname(Machine<W>& machine)
 {
-    // rt_sigprocmask stubbed
-	return 0;
-}
-
-template <>
-uint32_t syscall_uname<4>(Machine<4>& machine)
-{
-	const auto buffer = machine.sysarg<uint32_t>(0);
+	const auto buffer = machine.template sysarg<uint32_t>(0);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL uname called, buffer = 0x%X\n", buffer);
 	}
@@ -157,27 +185,25 @@ uint32_t syscall_uname<4>(Machine<4>& machine)
 }
 
 template <int W>
-void setup_linux_syscalls(Machine<W>& machine)
+static uint32_t syscall_geteuid(Machine<W>&) {
+	return 0;
+}
+template <int W>
+static uint32_t syscall_getuid(Machine<W>&) {
+	return 0;
+}
+template <int W>
+static uint32_t syscall_getegid(Machine<W>&) {
+	return 0;
+}
+template <int W>
+static uint32_t syscall_getgid(Machine<W>&) {
+	return 0;
+}
+
+template <int W>
+inline void add_mman_syscalls(Machine<W>& machine)
 {
-	// fcntl
-	machine.install_syscall_handler(29,
-	[] (Machine<W>& machine) {
-		return 0;
-	});
-
-	machine.install_syscall_handler(56, syscall_openat<RISCV32>);
-	machine.install_syscall_handler(57, syscall_close<RISCV32>);
-	machine.install_syscall_handler(66, syscall_writev<RISCV32>);
-	machine.install_syscall_handler(78, syscall_readlinkat<RISCV32>);
-	machine.install_syscall_handler(80, syscall_stat<RISCV32>);
-	machine.install_syscall_handler(135, syscall_spm<RISCV32>);
-	machine.install_syscall_handler(160, syscall_uname<RISCV32>);
-	machine.install_syscall_handler(174, syscall_getuid<RISCV32>);
-	machine.install_syscall_handler(175, syscall_geteuid<RISCV32>);
-	machine.install_syscall_handler(176, syscall_getgid<RISCV32>);
-	machine.install_syscall_handler(177, syscall_getegid<RISCV32>);
-	machine.install_syscall_handler(214, syscall_brk<RISCV32>);
-
 	// munmap
 	machine.install_syscall_handler(215,
 	[] (Machine<W>& machine) {
@@ -250,6 +276,54 @@ void setup_linux_syscalls(Machine<W>& machine)
 				return -EINVAL;
 		}
 	});
+}
+
+template <int W>
+inline void setup_minimal_syscalls(Machine<W>& machine)
+{
+	machine.install_syscall_handler(EBREAK_SYSCALL, syscall_ebreak<W>);
+	machine.install_syscall_handler(64, syscall_write<W>);
+	machine.install_syscall_handler(93, syscall_exit<W>);
+}
+
+template <int W>
+inline void setup_newlib_syscalls(Machine<W>& machine)
+{
+	setup_minimal_syscalls(machine);
+	machine.install_syscall_handler(214, syscall_brk<W>);
+	add_mman_syscalls(machine);
+}
+
+template <int W>
+void setup_linux_syscalls(Machine<W>& machine)
+{
+	setup_minimal_syscalls(machine);
+
+	// fcntl
+	machine.install_syscall_handler(29,
+	[] (Machine<W>&) {
+		return 0;
+	});
+	// rt_sigprocmask
+	machine.install_syscall_handler(135,
+	[] (Machine<W>&) {
+		return 0;
+	});
+
+	machine.install_syscall_handler(56, syscall_openat<W>);
+	machine.install_syscall_handler(57, syscall_close<W>);
+	machine.install_syscall_handler(66, syscall_writev<W>);
+	machine.install_syscall_handler(78, syscall_readlinkat<W>);
+	machine.install_syscall_handler(80, syscall_stat<W>);
+
+	machine.install_syscall_handler(160, syscall_uname<W>);
+	machine.install_syscall_handler(174, syscall_getuid<W>);
+	machine.install_syscall_handler(175, syscall_geteuid<W>);
+	machine.install_syscall_handler(176, syscall_getgid<W>);
+	machine.install_syscall_handler(177, syscall_getegid<W>);
+	machine.install_syscall_handler(214, syscall_brk<W>);
+
+	add_mman_syscalls(machine);
 
 	// statx
 	machine.install_syscall_handler(291,
@@ -276,5 +350,10 @@ void setup_linux_syscalls(Machine<W>& machine)
 	});
 }
 
+/* le sigh */
+template
+void setup_minimal_syscalls<4>(Machine<4>&);
+template
+void setup_newlib_syscalls<4>(Machine<4>&);
 template
 void setup_linux_syscalls<4>(Machine<4>&);
