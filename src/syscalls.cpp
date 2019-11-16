@@ -16,6 +16,11 @@ struct iovec32 {
 };
 
 template <int W>
+long syscall_stub_zero(Machine<W>&) {
+	return 0;
+}
+
+template <int W>
 long syscall_close(riscv::Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
@@ -185,23 +190,6 @@ long syscall_uname(Machine<W>& machine)
 }
 
 template <int W>
-static uint32_t syscall_geteuid(Machine<W>&) {
-	return 0;
-}
-template <int W>
-static uint32_t syscall_getuid(Machine<W>&) {
-	return 0;
-}
-template <int W>
-static uint32_t syscall_getegid(Machine<W>&) {
-	return 0;
-}
-template <int W>
-static uint32_t syscall_getgid(Machine<W>&) {
-	return 0;
-}
-
-template <int W>
 inline void add_mman_syscalls(Machine<W>& machine)
 {
 	// munmap
@@ -300,15 +288,21 @@ void setup_linux_syscalls(Machine<W>& machine)
 	setup_minimal_syscalls(machine);
 
 	// fcntl
-	machine.install_syscall_handler(29,
-	[] (Machine<W>&) {
-		return 0;
-	});
+	machine.install_syscall_handler(25, syscall_stub_zero<W>);
+	// ioctl
+	machine.install_syscall_handler(29, syscall_stub_zero<W>);
 	// rt_sigprocmask
-	machine.install_syscall_handler(135,
-	[] (Machine<W>&) {
-		return 0;
-	});
+	machine.install_syscall_handler(135, syscall_stub_zero<W>);
+	// getpid
+	machine.install_syscall_handler(172, syscall_stub_zero<W>);
+	// getuid
+	machine.install_syscall_handler(174, syscall_stub_zero<W>);
+	// geteuid
+	machine.install_syscall_handler(175, syscall_stub_zero<W>);
+	// getgid
+	machine.install_syscall_handler(176, syscall_stub_zero<W>);
+	// getegid
+	machine.install_syscall_handler(177, syscall_stub_zero<W>);
 
 	machine.install_syscall_handler(56, syscall_openat<W>);
 	machine.install_syscall_handler(57, syscall_close<W>);
@@ -317,10 +311,6 @@ void setup_linux_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(80, syscall_stat<W>);
 
 	machine.install_syscall_handler(160, syscall_uname<W>);
-	machine.install_syscall_handler(174, syscall_getuid<W>);
-	machine.install_syscall_handler(175, syscall_geteuid<W>);
-	machine.install_syscall_handler(176, syscall_getgid<W>);
-	machine.install_syscall_handler(177, syscall_getegid<W>);
 	machine.install_syscall_handler(214, syscall_brk<W>);
 
 	add_mman_syscalls(machine);

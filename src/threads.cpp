@@ -185,7 +185,7 @@ template <int W>
 void setup_multithreading(Machine<W>& machine)
 {
 	auto* mt = new multithreading<W>(machine);
-	// exit
+	// exit & exit_group
 	machine.install_syscall_handler(93,
 	[mt] (Machine<W>& machine) {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
@@ -203,24 +203,7 @@ void setup_multithreading(Machine<W>& machine)
 		return status;
 	});
 	// exit_group
-	machine.install_syscall_handler(94,
-	[mt] (Machine<W>& machine) {
-		const uint32_t status = machine.template sysarg<uint32_t> (0);
-		THPRINT(">>> Exit group on tid=%ld, exit code = %u\n",
-				mt->get_thread()->tid, status);
-		if (mt->get_thread()->tid != 0) {
-			// exit thread instead
-			mt->get_thread()->exit();
-			return machine.cpu.reg(RISCV::REG_ARG0);
-		}
-		machine.stop();
-		return status;
-	});
-	// fcntl
-	machine.install_syscall_handler(25,
-	[mt] (Machine<W>& machine) {
-		return 0;
-	});
+	machine.install_syscall_handler(94, machine.get_syscall_handler(93));
 	// set_tid_address
 	machine.install_syscall_handler(96,
 	[mt] (Machine<W>& machine) {
@@ -229,7 +212,7 @@ void setup_multithreading(Machine<W>& machine)
 	});
 	// set_robust_list
 	machine.install_syscall_handler(99,
-	[mt] (Machine<W>& machine) {
+	[] (Machine<W>& machine) {
 		return 0;
 	});
 	// sched_yield
@@ -260,11 +243,6 @@ void setup_multithreading(Machine<W>& machine)
 	[mt] (Machine<W>& machine) {
 		THPRINT(">>> gettid() = %ld\n", mt->get_thread()->tid);
 		return mt->get_thread()->tid;
-	});
-	// getpid
-	machine.install_syscall_handler(172,
-	[mt] (Machine<W>& machine) {
-		return 0;
 	});
 	// futex
 	machine.install_syscall_handler(98,
