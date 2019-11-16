@@ -35,7 +35,7 @@ int main(int argc, const char** argv)
 		};
 		prepare_linux<riscv::RISCV32>(machine, args, env);
 		// some extra syscalls
-		add_linux_syscalls(machine);
+		setup_linux_syscalls(machine);
 		// multi-threading
 		setup_multithreading(machine);
 	}
@@ -89,6 +89,9 @@ int main(int argc, const char** argv)
 		ret = machine.sysarg<long>(0);
 		printf("test *actually* returned %d\n", ret);
 	}
+	printf("Pages in use: %zu (%zu kB memory), highest: %zu (%zu kB memory)\n",
+			machine.memory.active_pages(), machine.memory.active_pages() * 4,
+			machine.memory.highest_active_pages(), machine.memory.highest_active_pages() * 4);
 	return 0;
 }
 

@@ -1,7 +1,6 @@
 #include "threads.hpp"
 #include <cassert>
 #include <cstdio>
-#include <sys/mman.h>
 using namespace riscv;
 
 template <int W>
@@ -306,86 +305,6 @@ void setup_multithreading(Machine<W>& machine)
 		thread->activate(func, args);
 		mt->m_current = thread;
 		// return 0 for the child
-		return 0;
-	});
-	// munmap
-	machine.install_syscall_handler(215,
-	[mt] (Machine<W>& machine) {
-		const uint32_t addr = machine.template sysarg<uint32_t> (0);
-		const uint32_t len  = machine.template sysarg<uint32_t> (1);
-		THPRINT(">>> munmap(0x%X, len=%u)\n", addr, len);
-		// TODO: deallocate pages completely
-		machine.memory.set_page_attr(addr, len, {
-			.read  = false,
-			.write = false,
-			.exec  = false
-		});
-		return 0;
-	});
-	// mprotect
-	machine.install_syscall_handler(226,
-	[mt] (Machine<W>& machine) {
-		const uint32_t addr = machine.template sysarg<uint32_t> (0);
-		const uint32_t len  = machine.template sysarg<uint32_t> (1);
-		const int      prot = machine.template sysarg<int> (2);
-		THPRINT(">>> mprotect(0x%X, len=%u, prot=%x)\n", addr, len, prot);
-		machine.memory.set_page_attr(addr, len, {
-			.read  = bool(prot & 1),
-			.write = bool(prot & 2),
-			.exec  = bool(prot & 4)
-		});
-		return 0;
-	});
-	// madvise
-	machine.install_syscall_handler(233,
-	[mt] (Machine<W>& machine) {
-		const uint32_t addr = machine.template sysarg<uint32_t> (0);
-		const uint32_t len  = machine.template sysarg<uint32_t> (1);
-		const int      advice = machine.template sysarg<int> (2);
-		THPRINT(">>> madvise(0x%X, len=%u, prot=%x)\n", addr, len, advice);
-		switch (advice) {
-			case MADV_NORMAL:
-			case MADV_RANDOM:
-			case MADV_SEQUENTIAL:
-			case MADV_WILLNEED:
-				return 0;
-			case MADV_DONTNEED:
-				printf("TODO: DONTNEED on memory range\n");
-				return 0;
-			case MADV_REMOVE:
-			case MADV_FREE:
-				printf("TODO: REMOVE on memory range\n");
-				return 0;
-			default:
-				return -EINVAL;
-		}
-	});
-	// statx
-	machine.install_syscall_handler(291,
-	[mt] (Machine<W>& machine) {
-		struct statx {
-			uint32_t stx_mask;
-			uint32_t stx_blksize = 512;
-			uint64_t stx_attributes;
-			uint32_t stx_nlink = 1;
-			uint32_t stx_uid = 0;
-			uint32_t stx_gid = 0;
-			uint32_t stx_mode = 0020000; // S_IFCHR
-		};
-		const int      fd   = machine.template sysarg<int> (0);
-		const uint32_t path = machine.template sysarg<uint32_t> (1);
-		const int     flags = machine.template sysarg<int> (2);
-		const uint32_t buffer = machine.template sysarg<uint32_t> (4);
-		THPRINT(">>> xstat(fd=%d, path=0x%X, flags=%x, buf=0x%X)\n",
-				fd, path, flags, buffer);
-		statx s;
-		s.stx_mask = flags;
-		machine.copy_to_guest(buffer, &s, sizeof(statx));
-		return 0;
-	});
-	// fcntl
-	machine.install_syscall_handler(29,
-	[mt] (Machine<W>& machine) {
 		return 0;
 	});
 }

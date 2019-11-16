@@ -1,7 +1,9 @@
 #include "syscalls.hpp"
 #include <unistd.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
+using namespace riscv;
 static constexpr uint32_t G_SHMEM_BASE = 0x70000000;
 static const uint32_t sbrk_start = 0x40000000;
 static const uint32_t sbrk_max   = sbrk_start + 0x1000000;
@@ -14,34 +16,28 @@ struct iovec32 {
 };
 
 template <>
-uint32_t syscall_openat<4>(riscv::Machine<4>& machine)
+uint32_t syscall_openat<4>(Machine<4>& machine)
 {
 	const int fd = machine.sysarg<int>(0);
-    if constexpr (verbose_syscalls) {
-		printf("SYSCALL openat called, fd = %d  \n", fd);
-	}
+	SYSPRINT("SYSCALL openat called, fd = %d  \n", fd);
     return -EBADF;
 }
 
 template <>
-uint32_t syscall_readlinkat<4>(riscv::Machine<4>& machine)
+uint32_t syscall_readlinkat<4>(Machine<4>& machine)
 {
 	const int fd = machine.sysarg<int>(0);
-    if constexpr (verbose_syscalls) {
-		printf("SYSCALL readlinkat called, fd = %d  \n", fd);
-	}
+	SYSPRINT("SYSCALL readlinkat called, fd = %d  \n", fd);
     return -EBADF;
 }
 
 template <>
-uint32_t syscall_write<4>(riscv::Machine<4>& machine)
+uint32_t syscall_write<4>(Machine<4>& machine)
 {
 	const int  fd      = machine.sysarg<int>(0);
 	const auto address = machine.sysarg<uint32_t>(1);
 	const auto len     = machine.sysarg<size_t>(2);
-	if constexpr (false) {
-		printf("SYSCALL write called, addr = %#X  len = %zu\n", address, len);
-	}
+	SYSPRINT("SYSCALL write called, addr = %#X  len = %zu\n", address, len);
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
 		uint8_t buffer[len];
@@ -52,7 +48,7 @@ uint32_t syscall_write<4>(riscv::Machine<4>& machine)
 }
 
 template <>
-uint32_t syscall_writev<4>(riscv::Machine<4>& machine)
+uint32_t syscall_writev<4>(Machine<4>& machine)
 {
 	const int  fd     = machine.sysarg<int>(0);
 	const auto iov_g  = machine.sysarg<uint32_t>(1);
@@ -83,30 +79,7 @@ uint32_t syscall_writev<4>(riscv::Machine<4>& machine)
 }
 
 template <>
-uint32_t syscall_mmap<4>(riscv::Machine<4>& machine)
-{
-	const int  addr_g = machine.sysarg<uint32_t>(0);
-	const auto length = machine.sysarg<uint32_t>(1);
-	const auto prot   = machine.sysarg<int>(2);
-    const auto flags  = machine.sysarg<int>(3);
-	if constexpr (verbose_syscalls) {
-		printf("SYSCALL mmap called, addr %#X  len %u prot %#x flags %#X\n",
-                addr_g, length, prot, flags);
-	}
-    if (addr_g == 0 && (length % riscv::Page::size()) == 0)
-    {
-        static uint32_t nextfree = heap_start;
-        const uint32_t addr = nextfree;
-        //auto& page = machine.memory.create_page(addr);
-        //page.attr.read = prot & PROT_READ;
-        nextfree += length;
-        return addr;
-    }
-	return UINT32_MAX; // = MAP_FAILED;
-}
-
-template <>
-uint32_t syscall_brk<4>(riscv::Machine<4>& machine)
+uint32_t syscall_brk<4>(Machine<4>& machine)
 {
 	static uint32_t sbrk_end = sbrk_start;
 	const uint32_t new_end = machine.sysarg<uint32_t>(0);
@@ -125,7 +98,7 @@ uint32_t syscall_brk<4>(riscv::Machine<4>& machine)
 }
 
 template <>
-uint32_t syscall_stat<4>(riscv::Machine<4>& machine)
+uint32_t syscall_stat<4>(Machine<4>& machine)
 {
 	const auto  fd      = machine.sysarg<int>(0);
 	const auto  buffer  = machine.sysarg<uint32_t>(1);
@@ -150,14 +123,14 @@ uint32_t syscall_stat<4>(riscv::Machine<4>& machine)
 }
 
 template <>
-uint32_t syscall_spm<4>(riscv::Machine<4>&)
+uint32_t syscall_spm<4>(Machine<4>&)
 {
     // rt_sigprocmask stubbed
 	return 0;
 }
 
 template <>
-uint32_t syscall_uname<4>(riscv::Machine<4>& machine)
+uint32_t syscall_uname<4>(Machine<4>& machine)
 {
 	const auto buffer = machine.sysarg<uint32_t>(0);
 	if constexpr (verbose_syscalls) {
@@ -182,3 +155,126 @@ uint32_t syscall_uname<4>(riscv::Machine<4>& machine)
     machine.copy_to_guest(buffer, &uts, sizeof(uts32));
 	return 0;
 }
+
+template <int W>
+void setup_linux_syscalls(Machine<W>& machine)
+{
+	// fcntl
+	machine.install_syscall_handler(29,
+	[] (Machine<W>& machine) {
+		return 0;
+	});
+
+	machine.install_syscall_handler(56, syscall_openat<RISCV32>);
+	machine.install_syscall_handler(57, syscall_close<RISCV32>);
+	machine.install_syscall_handler(66, syscall_writev<RISCV32>);
+	machine.install_syscall_handler(78, syscall_readlinkat<RISCV32>);
+	machine.install_syscall_handler(80, syscall_stat<RISCV32>);
+	machine.install_syscall_handler(135, syscall_spm<RISCV32>);
+	machine.install_syscall_handler(160, syscall_uname<RISCV32>);
+	machine.install_syscall_handler(174, syscall_getuid<RISCV32>);
+	machine.install_syscall_handler(175, syscall_geteuid<RISCV32>);
+	machine.install_syscall_handler(176, syscall_getgid<RISCV32>);
+	machine.install_syscall_handler(177, syscall_getegid<RISCV32>);
+	machine.install_syscall_handler(214, syscall_brk<RISCV32>);
+
+	// munmap
+	machine.install_syscall_handler(215,
+	[] (Machine<W>& machine) {
+		const uint32_t addr = machine.template sysarg<uint32_t> (0);
+		const uint32_t len  = machine.template sysarg<uint32_t> (1);
+		SYSPRINT(">>> munmap(0x%X, len=%u)\n", addr, len);
+		// TODO: deallocate pages completely
+		machine.memory.set_page_attr(addr, len, {
+			.read  = false,
+			.write = false,
+			.exec  = false
+		});
+		return 0;
+	});
+	// mmap
+	machine.install_syscall_handler(222,
+	[] (Machine<W>& machine) {
+		const int  addr_g = machine.template sysarg<uint32_t>(0);
+		const auto length = machine.template sysarg<uint32_t>(1);
+		const auto prot   = machine.template sysarg<int>(2);
+	    const auto flags  = machine.template sysarg<int>(3);
+		SYSPRINT("SYSCALL mmap called, addr %#X  len %u prot %#x flags %#X\n",
+	            addr_g, length, prot, flags);
+	    if (addr_g == 0 && (length % Page::size()) == 0)
+	    {
+	        static uint32_t nextfree = heap_start;
+	        const uint32_t addr = nextfree;
+	        //auto& page = machine.memory.create_page(addr);
+	        //page.attr.read = prot & PROT_READ;
+	        nextfree += length;
+	        return addr;
+	    }
+		return UINT32_MAX; // = MAP_FAILED;
+	});
+	// mprotect
+	machine.install_syscall_handler(226,
+	[] (Machine<W>& machine) {
+		const uint32_t addr = machine.template sysarg<uint32_t> (0);
+		const uint32_t len  = machine.template sysarg<uint32_t> (1);
+		const int      prot = machine.template sysarg<int> (2);
+		SYSPRINT(">>> mprotect(0x%X, len=%u, prot=%x)\n", addr, len, prot);
+		machine.memory.set_page_attr(addr, len, {
+			.read  = bool(prot & 1),
+			.write = bool(prot & 2),
+			.exec  = bool(prot & 4)
+		});
+		return 0;
+	});
+	// madvise
+	machine.install_syscall_handler(233,
+	[] (Machine<W>& machine) {
+		const uint32_t addr = machine.template sysarg<uint32_t> (0);
+		const uint32_t len  = machine.template sysarg<uint32_t> (1);
+		const int      advice = machine.template sysarg<int> (2);
+		SYSPRINT(">>> madvise(0x%X, len=%u, prot=%x)\n", addr, len, advice);
+		switch (advice) {
+			case MADV_NORMAL:
+			case MADV_RANDOM:
+			case MADV_SEQUENTIAL:
+			case MADV_WILLNEED:
+				return 0;
+			case MADV_DONTNEED:
+				machine.memory.free_pages(addr, len);
+				return 0;
+			case MADV_REMOVE:
+			case MADV_FREE:
+				machine.memory.free_pages(addr, len);
+				return 0;
+			default:
+				return -EINVAL;
+		}
+	});
+
+	// statx
+	machine.install_syscall_handler(291,
+	[] (Machine<W>& machine) {
+		struct statx {
+			uint32_t stx_mask;
+			uint32_t stx_blksize = 512;
+			uint64_t stx_attributes;
+			uint32_t stx_nlink = 1;
+			uint32_t stx_uid = 0;
+			uint32_t stx_gid = 0;
+			uint32_t stx_mode = S_IFCHR;
+		};
+		const int      fd   = machine.template sysarg<int> (0);
+		const uint32_t path = machine.template sysarg<uint32_t> (1);
+		const int     flags = machine.template sysarg<int> (2);
+		const uint32_t buffer = machine.template sysarg<uint32_t> (4);
+		SYSPRINT(">>> xstat(fd=%d, path=0x%X, flags=%x, buf=0x%X)\n",
+				fd, path, flags, buffer);
+		statx s;
+		s.stx_mask = flags;
+		machine.copy_to_guest(buffer, &s, sizeof(statx));
+		return 0;
+	});
+}
+
+template
+void setup_linux_syscalls<4>(Machine<4>&);
