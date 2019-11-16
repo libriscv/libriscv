@@ -24,7 +24,6 @@ struct thread
 	address_t my_stack;
 	// for returning to this thread
 	riscv::Registers<W> stored_regs;
-	bool      yielded = false;
 	// address zeroed when exiting
 	address_t clear_tid = 0;
 	// children, detached when exited
@@ -48,10 +47,9 @@ struct multithreading
 					address_t stack, address_t tls);
 	thread_t* get_thread();
 	thread_t* get_thread(int64_t tid); /* or nullptr */
-    address_t get_thread_area();
-	void      set_thread_area(address_t);
 	void      suspend_and_yield();
 	void      erase_suspension(thread_t*);
+	void      erase_thread(int64_t tid);
 
 	multithreading(riscv::Machine<W>&);
 	riscv::Machine<W>& machine;

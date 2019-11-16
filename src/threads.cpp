@@ -10,6 +10,7 @@ thread<W>::thread(multithreading<W>& mt, int ttid, address_t stack)
 template <int W>
 void thread<W>::activate(address_t func, address_t args)
 {
+	threading.m_current = this;
 	auto& cpu = threading.machine.cpu;
 	cpu.reg(RISCV::REG_SP) = this->my_stack;
 	cpu.reg(RISCV::REG_TP) = this->my_tls;
@@ -31,7 +32,6 @@ void thread<W>::yield()
   auto* next = threading.suspended.front();
   threading.suspended.pop_front();
   // resume next thread
-  this->yielded = true;
   next->resume();
 }
 
@@ -60,10 +60,7 @@ void thread<W>::exit()
 		threading.machine.memory.template write<address_t> (this->clear_tid, 0);
 	}
 	// delete this thread
-	auto it = threading.threads.find(this->tid);
-	assert(it != threading.threads.end());
-	assert(it->second == this);
-	threading.threads.erase(it);
+	threading.erase_thread(this->tid);
 	// free thread resources
 	delete this;
 	// resume parent thread
@@ -81,13 +78,13 @@ void thread<W>::resume()
 			this->tid, (void*) this->my_tls,
 			(void*) this->stored_nexti, (void*) this->stored_stack);
 
+	threading.m_current = this;
 	auto& m = threading.machine;
 	// preserve some registers
 	auto counter = m.cpu.registers().counter;
 	// restore registers
 	m.cpu.registers() = this->stored_regs;
 	m.cpu.registers().counter = counter;
-	threading.m_current = this;
 }
 
 template <int W>
@@ -130,18 +127,6 @@ multithreading<W>::multithreading(Machine<W>& mach)
 }
 
 template <int W>
-address_type<W> multithreading<W>::get_thread_area()
-{
-	return machine.cpu.reg(RISCV::REG_TP);
-}
-
-template <int W>
-void multithreading<W>::set_thread_area(address_t tpaddr)
-{
-	machine.cpu.reg(RISCV::REG_TP) = tpaddr;
-}
-
-template <int W>
 thread<W>* multithreading<W>::get_thread()
 {
 	return this->m_current;
@@ -167,6 +152,13 @@ void multithreading<W>::suspend_and_yield()
     thread->yield();
 }
 
+template <int W>
+void multithreading<W>::erase_thread(int64_t tid)
+{
+	auto it = threads.find(tid);
+	assert(it != threads.end());
+	threads.erase(it);
+}
 template <int W>
 void multithreading<W>::erase_suspension(thread_t* t)
 {
@@ -222,7 +214,7 @@ void setup_multithreading(Machine<W>& machine)
 		// begone!
 		mt->suspend_and_yield();
 		// preserve A0
-		return machine.template sysarg<uint32_t> (0);
+		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 	// tgkill
 	machine.install_syscall_handler(131,
@@ -233,6 +225,7 @@ void setup_multithreading(Machine<W>& machine)
 		if (thread != nullptr) {
 			// exit thread instead
 			thread->exit();
+			// preserve A0
 			return machine.cpu.reg(RISCV::REG_ARG0);
 		}
 		machine.stop();
@@ -280,9 +273,8 @@ void setup_multithreading(Machine<W>& machine)
 		parent->suspend();
 		// store return value for parent: child TID
 		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;
+		// activate and return 0 for the child
 		thread->activate(func, args);
-		mt->m_current = thread;
-		// return 0 for the child
 		return 0;
 	});
 }
