@@ -16,7 +16,7 @@ namespace riscv
 	struct Machine
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
-		using syscall_t = delegate<address_t (Machine<W>&)>;
+		using syscall_t = delegate<long (Machine<W>&)>;
 		Machine(const std::vector<uint8_t>& binary, bool protect_memory = true);
 
 		// Simulate a RISC-V machine until @max_instructions have been
