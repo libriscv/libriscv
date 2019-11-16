@@ -85,6 +85,7 @@ namespace riscv
 			return elf_offset<const Ehdr> (0);
 		}
 		const Shdr* section_by_name(const char* name) const;
+		void relocate_section(const char* section_name, const char* symtab);
 		const typename Elf<W>::Sym* resolve_symbol(const char* name);
 		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {
 			assert(symidx < shdr->sh_size / sizeof(typename Elf<W>::Sym));

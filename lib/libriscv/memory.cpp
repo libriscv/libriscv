@@ -115,6 +115,8 @@ namespace riscv
 			}
 		}
 
+		this->relocate_section(".rela.dyn", ".symtab");
+
 		if (riscv::verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}
@@ -166,6 +168,45 @@ namespace riscv
 		auto* sym = resolve_symbol(name.c_str());
 		if (sym) return sym->st_value;
 		return 0x0;
+	}
+
+	template <typename Sym>
+	static void elf_print_sym(const Sym* sym)
+	{
+		printf("-> Sym is at 0x%X with size %u, type %u name %u\n",
+				sym->st_value, sym->st_size,
+				ELF32_ST_TYPE(sym->st_info), sym->st_name);
+	}
+
+	template <int W>
+	void Memory<W>::relocate_section(const char* section_name, const char* sym_section)
+	{
+		const auto* rela = section_by_name(section_name);
+		if (rela == nullptr) return;
+		const auto* dyn_hdr = section_by_name(sym_section);
+		if (dyn_hdr == nullptr) return;
+		const size_t rela_ents = rela->sh_size / sizeof(Elf32_Rela);
+
+		auto* rela_addr = elf_offset<Elf32_Rela>(rela->sh_offset);
+		for (size_t i = 0; i < rela_ents; i++)
+		{
+			const uint32_t symidx = ELF32_R_SYM(rela_addr[i].r_info);
+			auto* sym = elf_sym_index(dyn_hdr, symidx);
+
+			const uint8_t type = ELF32_ST_TYPE(sym->st_info);
+			if (type == STT_FUNC || type == STT_OBJECT)
+			{
+				auto* entry = elf_offset<address_t> (rela_addr[i].r_offset);
+				auto* final = elf_offset<address_t> (sym->st_value);
+				if constexpr (true)
+				{
+					printf("Relocating rela %zu with sym idx %u where 0x%X -> 0x%X\n",
+							i, symidx, rela_addr[i].r_offset, sym->st_value);
+					elf_print_sym<typename Elf<W>::Sym>(sym);
+				}
+				*(address_t*) entry = (address_t) (uintptr_t) final;
+			}
+		}
 	}
 
 	template <int W>
