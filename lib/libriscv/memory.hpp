@@ -53,6 +53,7 @@ namespace riscv
 
 		// page handling
 		size_t active_pages() const noexcept { return m_pages.size(); }
+		size_t highest_active_pages() const noexcept { return m_pages_highest; }
 		size_t total_pages() const noexcept { return this->m_pages_total; }
 		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
 		auto& pages() noexcept { return m_pages; }
@@ -60,6 +61,9 @@ namespace riscv
 		const Page& get_pageno(const address_t npage) const noexcept;
 		Page& create_page(const address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
+		// page creation & destruction
+		Page& allocate_page(const size_t page);
+		void  free_pages(address_t, size_t len);
 
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		static Page& default_page_fault(Memory&, const size_t page);
@@ -99,6 +103,7 @@ namespace riscv
 		address_t m_stack_address = 0;
 		address_t m_elf_end_vaddr = 0;
 		size_t    m_pages_total   = 256; // max physical memory usage
+		size_t    m_pages_highest = 0;
 
 		const Page* m_current_rd_ptr  = nullptr;
 		address_t   m_current_rd_page = -1;

@@ -210,22 +210,39 @@ namespace riscv
 	}
 
 	template <int W>
+	Page& Memory<W>::allocate_page(const size_t page)
+	{
+		auto it = pages().emplace(
+			std::piecewise_construct,
+			std::forward_as_tuple(page),
+			std::forward_as_tuple());
+		m_pages_highest = std::max(m_pages_highest, pages().size());
+		return it.first->second;
+	}
+
+	template <int W>
 	Page& Memory<W>::default_page_fault(Memory<W>& mem, const size_t page)
 	{
 		// create page on-demand
 		if (mem.active_pages() < mem.total_pages())
 		{
-			auto it = mem.pages().emplace(
-				std::piecewise_construct,
-				std::forward_as_tuple(page),
-				std::forward_as_tuple());
-			return it.first->second;
+			return mem.allocate_page(page);
 		}
 		throw MachineException("Out of memory");
 	}
 
+	inline static Page create_cow() {
+		Page page;
+		page.attr = {
+			.read   = true,
+			.write  = false,
+			.exec   = false,
+			.is_cow = true
+		};
+		return page;
+	}
 	const Page& Page::cow_page() noexcept {
-		static Page zeroed_page;
+		static Page zeroed_page = create_cow();
 		return zeroed_page; // read-only, zeroed page
 	}
 

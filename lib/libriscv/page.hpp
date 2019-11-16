@@ -14,6 +14,7 @@ struct PageAttributes
 	bool read  = true;
 	bool write = true;
 	bool exec  = false;
+	bool is_cow = false;
 };
 
 union PageData {

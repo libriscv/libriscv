@@ -93,6 +93,22 @@ Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 	}
 }
 
+template <int W> inline void
+Memory<W>::free_pages(address_t dst, size_t len)
+{
+	while (len > 0)
+	{
+		const size_t size = std::min(Page::size(), len);
+		const address_t pageno = dst >> Page::SHIFT;
+		auto& page = this->get_pageno(pageno);
+		if (page.attr.is_cow == false) {
+			m_pages.erase(pageno);
+		}
+		dst += size;
+		len -= size;
+	}
+}
+
 template <int W>
 void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 {
