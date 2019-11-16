@@ -1,17 +1,22 @@
 #include <httplib.h>
 #include <cstdio>
 #include <sys/time.h>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <array>
 #include <libriscv/machine.hpp>
-#include "syscalls.cpp"
+#include <syscalls.hpp>
+#include <threads.hpp>
+#include <linux.hpp>
 
 static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
 // avoid endless loops and code that takes too long
 static const size_t MAX_INSTRUCTIONS = 256000;
+
+static const std::vector<std::string> env = {
+	"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
+};
 
 static int create_folder(const std::string& folder);
 static int python_sanitize_compile(const std::string& project, const std::string& infile, const std::string& outfile);
@@ -73,16 +78,13 @@ int main(void)
 			return;
 		}
 
-		// start out with this:
-
+		State<4> state;
 		// go-time: create machine, execute code
 		const uint64_t t0 = micros_now();
-		State<4> state;
-		riscv::Machine<4> machine { binary };
-		machine.install_syscall_handler(64, {&state, &State<4>::syscall_write});
-		machine.install_syscall_handler(80, {&state, &State<4>::syscall_dummy});
-		machine.install_syscall_handler(93, {&state, &State<4>::syscall_exit});
-		machine.install_syscall_handler(214, {&state, &State<4>::syscall_brk});
+		riscv::Machine<riscv::RISCV32> machine { binary };
+		prepare_linux<riscv::RISCV32>(machine, {}, env);
+		setup_linux_syscalls(state, machine);
+		setup_multithreading(machine);
 
 		try {
 			machine.simulate(MAX_INSTRUCTIONS);
