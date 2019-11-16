@@ -11,8 +11,9 @@
 
 static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
-// avoid endless loops and code that takes too long
-static const size_t MAX_INSTRUCTIONS = 256000;
+// avoid endless loops, code that takes too long and excessive memory usage
+static const size_t MAX_INSTRUCTIONS = 999000;
+static const size_t MAX_MEMORY       = 1024 * 1024 * 64;
 
 static const std::vector<std::string> env = {
 	"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
@@ -82,6 +83,9 @@ int main(void)
 		// go-time: create machine, execute code
 		const uint64_t t0 = micros_now();
 		riscv::Machine<riscv::RISCV32> machine { binary };
+		machine.memory.set_pages_total(MAX_MEMORY / riscv::Page::size());
+
+
 		prepare_linux<riscv::RISCV32>(machine, {}, env);
 		setup_linux_syscalls(state, machine);
 		setup_multithreading(machine);
