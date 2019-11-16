@@ -149,6 +149,8 @@ namespace riscv
 							DECODER(DECODED_ATOMIC(AMOADD_W));
 						case 0b00001:
 							DECODER(DECODED_ATOMIC(AMOSWAP_W));
+						case 0b01000:
+							DECODER(DECODED_ATOMIC(AMOOR_W));
 					}
 			}
 		}
