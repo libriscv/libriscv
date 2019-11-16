@@ -248,9 +248,12 @@ void setup_multithreading(Machine<W>& machine)
 		if ((futex_op & 0xF) == FUTEX_WAIT)
 	    {
 			THPRINT("FUTEX: Waiting for unlock... uaddr=0x%X val=%d\n", addr, val);
+			int times = 100;
 			while (machine.memory.template read<uint32_t> (addr) == val) {
 				mt->suspend_and_yield();
+				if (times-- == 0) return -ETIMEDOUT;
 			}
+			return -EAGAIN;
 	    }
 	    return 0;
 	});
