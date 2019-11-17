@@ -1,5 +1,9 @@
 # System Calls
 
+System calls are services the programming running inside the emulator requests from the host to function properly and be able to do useful things other than just calculations. For example, the only way to be able to print text in *your* terminal from inside the virtual machine is to request the system to do that, and then hope that it does! The host system is under no obligation to do anything, especially if it doesn't seem like a good idea to do!
+
+If you use `printf("Hello world!\n");` in your program, it will likely cause a call to the `write` system call wrapper. This wrapper then does the actual system call itself, which boils down to setting up the arguments and then executing `ECALL`. At that point the emulator itself will stop executing the virtual machine (the guest) and instead handle this system call. When it's done handling the system call it will continue running the virtual machine. The return value of the system call usually indicates whether or not it succeeded or not.
+
 ## System call numbers
 
 The numbers are taken from `linux-headers/include/asm-generic/unistd.h` in the riscv-gnu-toolchain, which are ultimately Linux system call numbers. You can also make up your own system calls, and even how to do a system call (the ABI).
