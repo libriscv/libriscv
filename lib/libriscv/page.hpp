@@ -15,6 +15,11 @@ struct PageAttributes
 	bool write = true;
 	bool exec  = false;
 	bool is_cow = false;
+
+	bool is_default() const noexcept {
+		PageAttributes def {};
+		return this->read == def.read && this->write == def.write && this->exec == def.exec;
+	}
 };
 
 union PageData {

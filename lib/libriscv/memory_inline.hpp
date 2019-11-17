@@ -82,11 +82,23 @@ inline Page& Memory<W>::create_page(const address_t page)
 template <int W> inline void
 Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 {
+	const bool is_default = options.is_default();
 	while (len > 0)
 	{
 		const size_t size = std::min(Page::size(), len);
-		auto& page = this->create_page(dst >> Page::SHIFT);
-		page.attr = options;
+		const size_t pageno = dst >> Page::SHIFT;
+		// unfortunately, have to create pages for non-default attrs
+		if (!is_default) {
+			this->create_page(pageno).attr = options;
+		} else {
+			// set attr on non-COW pages only!
+			auto& page = this->get_pageno(pageno);
+			if (page.attr.is_cow == false) {
+				// this page has been written to, or had attrs set,
+				// otherwise it would still be CoW.
+				this->create_page(pageno).attr = options;
+			}
+		}
 
 		dst += size;
 		len -= size;
