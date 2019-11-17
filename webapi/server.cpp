@@ -20,7 +20,7 @@ static const std::vector<std::string> env = {
 };
 
 static int create_folder(const std::string& folder);
-static int python_sanitize_compile(const std::string& project, const std::string& infile, const std::string& outfile);
+static int python_sanitize_compile(const std::string& project, const std::string& met);
 static int write_file(const std::string& file, const std::string& text);
 static std::vector<uint8_t> load_file(const std::string& filename);
 static uint64_t micros_now();
@@ -31,17 +31,23 @@ inline void common_response_fields(httplib::Response& res, int status)
 	res.set_header("Access-Control-Allow-Origin", "*");
 	res.set_header("Access-Control-Expose-Headers", "*");
 }
+static std::string get_project(const int id) {
+	return "/tmp/program" + std::to_string(id);
+}
 
 int main(void)
 {
     using namespace httplib;
     Server svr;
 
-    svr.Post("/exec", [](const Request& req, Response& res) {
-		static int request_ID = 0;
-		const std::string project_folder = "program" + std::to_string(request_ID++);
-		const std::string codefile   = "code.cpp";
-		const std::string binaryfile = "binary";
+    svr.Post("/compile", [](const Request& req, Response& res)
+	{
+		static size_t request_ID = 0;
+		const size_t program_id = request_ID++;
+		const std::string project_folder = get_project(program_id);
+		const std::string method     = "linux";
+		res.set_header("X-Program-Id", std::to_string(program_id));
+		res.set_header("X-Method", method);
 
 		// create project folder
 		if (create_folder(project_folder) < 0) {
@@ -53,7 +59,7 @@ int main(void)
 		}
 
 		// write code into project folder
-		if (write_file(project_folder + "/" + codefile, req.body) != 0) {
+		if (write_file(project_folder + "/code.cpp", req.body) != 0) {
 			common_response_fields(res, 200);
 			res.set_header("X-Error", "Failed to write codefile");
 			return;
@@ -61,7 +67,7 @@ int main(void)
 
 		// sanitize + compile code
 		const uint64_t c0 = micros_now();
-		const int cc = python_sanitize_compile(project_folder, codefile, binaryfile);
+		const int cc = python_sanitize_compile(project_folder, method);
 		if (cc != 0) {
 			common_response_fields(res, 200);
 			auto vec = load_file(project_folder + "/status.txt");
@@ -70,9 +76,10 @@ int main(void)
 			return;
 		}
 		const uint64_t c1 = micros_now();
+		res.set_header("X-Compile-Time", std::to_string(c1 - c0) + " micros");
 
 		// load binary and execute code
-		auto binary = load_file(project_folder + "/" + binaryfile);
+		auto binary = load_file(project_folder + "/binary");
 		if (binary.empty()) {
 			common_response_fields(res, 200);
 			res.set_header("X-Error", "Failed to open binary");
@@ -103,7 +110,6 @@ int main(void)
 
 		common_response_fields(res, 200);
 		res.set_header("X-Exit-Code", std::to_string(state.exit_code));
-		res.set_header("X-Compile-Time", std::to_string(c1 - c0) + " micros");
 		res.set_header("X-Execution-Time", std::to_string(t1 - t0) + " micros");
 		res.set_header("X-Instruction-Count", instructions);
 		res.set_header("X-Binary-Size", std::to_string(binary.size()));
@@ -125,9 +131,9 @@ int create_folder(const std::string& folder)
 	return mkdir(folder.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }
 
-int python_sanitize_compile(const std::string& project, const std::string& infile, const std::string& outfile)
+int python_sanitize_compile(const std::string& project, const std::string& method)
 {
-	const std::string cmd = "/usr/bin/python3 ../sanitize.py " + project + " " + infile + " " + outfile;
+	auto cmd = "/usr/bin/python3 ../sanitize.py " + project + " " + method;
 	return system(cmd.c_str());
 }
 

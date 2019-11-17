@@ -3,15 +3,12 @@ import sys
 import subprocess
 import os
 
-# container image name & shared folder
-dc_image = "linux-rv32gc"
-dc_shared = "/usr/outside"
-
-project  = sys.argv[1]
+project    = sys.argv[1]
+method     = sys.argv[2]
 os.chdir(project)
 statusfile = "status.txt"
-codefile    = sys.argv[2]
-binaryfile  = sys.argv[3]
+codefile   = "code.cpp"
+binaryfile = "binary"
 
 sanitized = ""
 with open(codefile) as fp:
@@ -31,12 +28,23 @@ fo.write(sanitized)
 fo.close()
 
 local_dir = os.getcwd()
+# docker shared folder
+dc_shared = "/usr/outside"
+
+dc_extra = []
+if method == "linux":
+	dc_image = "linux-rv32gc"
+	dc_gnucpp = "riscv32-unknown-linux-gnu-g++"
+	dc_extra = ["-pthread"]
+else:
+	dc_image = "newlib-rv32gc"
+	dc_gnucpp = "riscv32-unknown-elf-g++"
 
 # compile the code
 cmd = ["docker", "run", "--volume", local_dir + ":" + dc_shared,
 		"--user", "1000:1000", dc_image,
-		"riscv32-unknown-linux-gnu-g++", "-march=rv32gc", "-mabi=ilp32", "-static",
-		"-pthread", "-std=c++17", "-O2", "-fstack-protector", codefile, "-o", binaryfile,
+		dc_gnucpp, "-march=rv32gc", "-mabi=ilp32", "-static"] + dc_extra + [
+		"-std=c++17", "-O2", "-fstack-protector", codefile, "-o", binaryfile,
 		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections", "-Wl,-s"]
 print(cmd)
 
