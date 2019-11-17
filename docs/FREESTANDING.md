@@ -1,5 +1,4 @@
 # Creating your own environment
-==============
 
 If you want a completely freestanding environment in your embedded program you will need to do a few things in order to call into a C function properly and use both stack and static storage.
 

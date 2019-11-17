@@ -1,5 +1,4 @@
 # System Calls
-====================================
 
 ## System call numbers
 
