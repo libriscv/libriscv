@@ -174,12 +174,12 @@ void multithreading<W>::erase_suspension(thread_t* t)
 }
 
 template <int W>
-void setup_multithreading(Machine<W>& machine)
+void setup_multithreading(State<W>& state, Machine<W>& machine)
 {
 	auto* mt = new multithreading<W>(machine);
 	// exit & exit_group
 	machine.install_syscall_handler(93,
-	[mt] (Machine<W>& machine) {
+	[mt, &state] (Machine<W>& machine) {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
 		const int64_t tid = mt->get_thread()->tid;
 		THPRINT(">>> Exit on tid=%ld, exit code = %u\n",
@@ -191,6 +191,7 @@ void setup_multithreading(Machine<W>& machine)
 			assert(mt->get_thread()->tid != tid);
 			return machine.cpu.reg(RISCV::REG_ARG0);
 		}
+		state.exit_code = status;
 		machine.stop();
 		return status;
 	});
@@ -283,4 +284,4 @@ void setup_multithreading(Machine<W>& machine)
 }
 
 template
-void setup_multithreading<4>(Machine<4>& machine);
+void setup_multithreading<4>(State<4>&, Machine<4>& machine);

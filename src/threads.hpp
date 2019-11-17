@@ -3,6 +3,7 @@
 #include <map>
 #include <vector>
 #include <libriscv/machine.hpp>
+#include "syscalls.hpp"
 template <int W> struct multithreading;
 
 //#define THREADS_DEBUG 1
@@ -61,4 +62,4 @@ struct multithreading
 };
 
 template <int W>
-void setup_multithreading(riscv::Machine<W>&);
+void setup_multithreading(State<W>&, riscv::Machine<W>&);

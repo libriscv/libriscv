@@ -4,7 +4,7 @@ import subprocess
 import os
 
 # container image name & shared folder
-dc_image = "gcc9-rv32imac"
+dc_image = "linux-rv32gc"
 dc_shared = "/usr/outside"
 
 project  = sys.argv[1]
@@ -35,8 +35,8 @@ local_dir = os.getcwd()
 # compile the code
 cmd = ["docker", "run", "--volume", local_dir + ":" + dc_shared,
 		"--user", "1000:1000", dc_image,
-		"riscv32-unknown-elf-g++", "-march=rv32imc", "-mabi=ilp32", "-static",
-		"-std=c++17", "-O2", "-fstack-protector", codefile, "-o", binaryfile,
+		"riscv32-unknown-linux-gnu-g++", "-march=rv32gc", "-mabi=ilp32", "-static",
+		"-pthread", "-std=c++17", "-O2", "-fstack-protector", codefile, "-o", binaryfile,
 		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections", "-Wl,-s"]
 print(cmd)
 

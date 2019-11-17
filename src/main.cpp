@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
+static void test_vmcall(riscv::Machine<riscv::RISCV32>& machine);
 
 static constexpr bool full_linux_guest = true;
 static constexpr bool newlib_mini_guest = false;
@@ -37,7 +38,7 @@ int main(int argc, const char** argv)
 		// some extra syscalls
 		setup_linux_syscalls(state, machine);
 		// multi-threading
-		setup_multithreading(machine);
+		setup_multithreading(state, machine);
 	}
 	else if constexpr (newlib_mini_guest)
 	{
@@ -72,8 +73,21 @@ int main(int argc, const char** argv)
 	}
 	printf(">>> Program exited, exit code = %d\n", state.exit_code);
 	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+#ifndef RISCV_DEBUG
+	printf("\n*** Guest output ***\n%s\n", state.output.c_str());
+#endif
+	printf("Pages in use: %zu (%zu kB memory), highest: %zu (%zu kB memory)\n",
+			machine.memory.active_pages(), machine.memory.active_pages() * 4,
+			machine.memory.highest_active_pages(), machine.memory.highest_active_pages() * 4);
 
 	// VM function call testing
+	test_vmcall(machine);
+	return 0;
+}
+
+void test_vmcall(riscv::Machine<riscv::RISCV32>& machine)
+{
+	// look for a symbol called "test" in the binary
 	if (machine.address_of("test") != 0)
 	{
 		printf("\n");
@@ -81,25 +95,17 @@ int main(int argc, const char** argv)
 		machine.realign_stack();
 		// reset instruction counter to simplify calculation
 		machine.cpu.registers().counter = 0;
-		// make a function call into the guest VM
+		// make a function call into the guest VM, stopping at 3000 instructions
 		int ret = machine.vmcall("test", {555}, 3000);
 		printf("test returned %d\n", ret);
 		printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
-		// resume execution:
+		// resume execution, to complete the function call:
 		machine.simulate();
 		printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
 		// extract real return value:
-		ret = machine.sysarg<long>(0);
+		ret = machine.sysarg<int>(0);
 		printf("test *actually* returned %d\n", ret);
 	}
-
-#ifndef RISCV_DEBUG
-	printf("\n*** Guest output ***\n%s\n", state.output.c_str());
-#endif
-	printf("Pages in use: %zu (%zu kB memory), highest: %zu (%zu kB memory)\n",
-			machine.memory.active_pages(), machine.memory.active_pages() * 4,
-			machine.memory.highest_active_pages(), machine.memory.highest_active_pages() * 4);
-	return 0;
 }
 
 #include <unistd.h>

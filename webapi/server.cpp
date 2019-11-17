@@ -88,7 +88,7 @@ int main(void)
 
 		prepare_linux<riscv::RISCV32>(machine, {}, env);
 		setup_linux_syscalls(state, machine);
-		setup_multithreading(machine);
+		setup_multithreading(state, machine);
 
 		try {
 			machine.simulate(MAX_INSTRUCTIONS);
