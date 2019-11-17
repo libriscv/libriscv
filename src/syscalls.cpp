@@ -33,10 +33,13 @@ long State<W>::syscall_write(Machine<W>& machine)
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
 		char buffer[1024];
-		const size_t g_len = std::min(sizeof(buffer), len);
-		machine.memory.memcpy_out(buffer, address, g_len);
-		output += std::string(buffer, g_len);
-		return len;
+		const size_t len_g = std::min(sizeof(buffer), len);
+		machine.memory.memcpy_out(buffer, address, len_g);
+		output += std::string(buffer, len_g);
+#ifdef RISCV_DEBUG
+		write(fd, buffer, len_g);
+#endif
+		return len_g;
 	}
 	return -EBADF;
 }
@@ -65,8 +68,11 @@ long State<W>::syscall_writev(Machine<W>& machine)
             auto src_g = (uint32_t) iov.iov_base;
             auto len_g = std::min(sizeof(buffer), (size_t) iov.iov_len);
             machine.memory.memcpy_out(buffer, src_g, len_g);
-			output +=
-            res += write(fd, buffer, len_g);
+			output += std::string(buffer, len_g);
+#ifdef RISCV_DEBUG
+			write(fd, buffer, len_g);
+#endif
+			res += len_g;
         }
         return res;
 	}
