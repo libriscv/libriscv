@@ -8,6 +8,7 @@
 #include <syscalls.hpp>
 #include <threads.hpp>
 #include <linux.hpp>
+using namespace std; // string literals
 
 static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
@@ -45,8 +46,12 @@ int main(void)
 		static size_t request_ID = 0;
 		const size_t program_id = request_ID++;
 		const std::string project_folder = get_project(program_id);
-		const std::string method     = "linux";
 		res.set_header("X-Program-Id", std::to_string(program_id));
+
+		// find compiler method
+		std::string method = "linux";
+		auto mit = req.params.find("method");
+		if (mit != req.params.end()) method = mit->second;
 		res.set_header("X-Method", method);
 
 		// create project folder
