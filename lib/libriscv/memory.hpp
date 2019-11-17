@@ -52,9 +52,9 @@ namespace riscv
 		void trap(address_t page_addr, mmio_cb_t callback);
 
 		// page handling
-		size_t active_pages() const noexcept { return m_pages.size(); }
-		size_t highest_active_pages() const noexcept { return m_pages_highest; }
-		size_t total_pages() const noexcept { return this->m_pages_total; }
+		size_t pages_active() const noexcept { return m_pages.size(); }
+		size_t pages_highest_active() const noexcept { return m_pages_highest; }
+		size_t pages_total() const noexcept { return this->m_pages_total; }
 		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(const address_t address) const noexcept;

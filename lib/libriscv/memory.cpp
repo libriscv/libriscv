@@ -115,7 +115,7 @@ namespace riscv
 			}
 		}
 
-		this->relocate_section(".rela.dyn", ".symtab");
+		//this->relocate_section(".rela.dyn", ".symtab");
 
 		if (riscv::verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
@@ -224,7 +224,7 @@ namespace riscv
 	Page& Memory<W>::default_page_fault(Memory<W>& mem, const size_t page)
 	{
 		// create page on-demand
-		if (mem.active_pages() < mem.total_pages())
+		if (mem.pages_active() < mem.pages_total())
 		{
 			return mem.allocate_page(page);
 		}

@@ -77,8 +77,8 @@ int main(int argc, const char** argv)
 	printf("\n*** Guest output ***\n%s\n", state.output.c_str());
 #endif
 	printf("Pages in use: %zu (%zu kB memory), highest: %zu (%zu kB memory)\n",
-			machine.memory.active_pages(), machine.memory.active_pages() * 4,
-			machine.memory.highest_active_pages(), machine.memory.highest_active_pages() * 4);
+			machine.memory.pages_active(), machine.memory.pages_active() * 4,
+			machine.memory.pages_highest_active(), machine.memory.pages_highest_active() * 4);
 
 	// VM function call testing
 	test_vmcall(machine);

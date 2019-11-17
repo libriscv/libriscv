@@ -107,6 +107,12 @@ int main(void)
 		res.set_header("X-Execution-Time", std::to_string(t1 - t0) + " micros");
 		res.set_header("X-Instruction-Count", instructions);
 		res.set_header("X-Binary-Size", std::to_string(binary.size()));
+		const size_t active_mem = machine.memory.pages_active() * 4096;
+		res.set_header("X-Memory-Usage", std::to_string(active_mem));
+		const size_t highest_mem = machine.memory.pages_highest_active() * 4096;
+		res.set_header("X-Memory-Highest", std::to_string(highest_mem));
+		const size_t max_mem = machine.memory.pages_total() * 4096;
+		res.set_header("X-Memory-Max", std::to_string(highest_mem));
 		res.set_content(state.output, "text/plain");
     });
 
