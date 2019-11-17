@@ -21,7 +21,7 @@ static const std::vector<std::string> env = {
 };
 
 static int create_folder(const std::string& folder);
-static int python_sanitize_compile(const std::string& project, const std::string& met);
+static int python_sanitize_compile(const std::string& pbase, const std::string& pdir, const std::string& met);
 static int write_file(const std::string& file, const std::string& text);
 static std::vector<uint8_t> load_file(const std::string& filename);
 static uint64_t micros_now();
@@ -32,8 +32,14 @@ inline void common_response_fields(httplib::Response& res, int status)
 	res.set_header("Access-Control-Allow-Origin", "*");
 	res.set_header("Access-Control-Expose-Headers", "*");
 }
-static std::string get_project(const int id) {
-	return "/tmp/program" + std::to_string(id);
+static std::string project_base() {
+	return "/tmp/programs";
+}
+static std::string project_dir(const int id) {
+	return "program" + std::to_string(id);
+}
+static std::string project_path(const int id) {
+	return project_base() + "/program" + std::to_string(id);
 }
 
 int main(void)
@@ -45,7 +51,6 @@ int main(void)
 	{
 		static size_t request_ID = 0;
 		const size_t program_id = request_ID++;
-		const std::string project_folder = get_project(program_id);
 		res.set_header("X-Program-Id", std::to_string(program_id));
 
 		// find compiler method
@@ -54,8 +59,9 @@ int main(void)
 		if (mit != req.params.end()) method = mit->second;
 		res.set_header("X-Method", method);
 
+		const std::string progpath = project_path(program_id);
 		// create project folder
-		if (create_folder(project_folder) < 0) {
+		if (create_folder(progpath) < 0) {
 			if (errno != EEXIST) {
 				common_response_fields(res, 200);
 				res.set_header("X-Error", "Failed to create project folder");
@@ -64,7 +70,7 @@ int main(void)
 		}
 
 		// write code into project folder
-		if (write_file(project_folder + "/code.cpp", req.body) != 0) {
+		if (write_file(progpath + "/code.cpp", req.body) != 0) {
 			common_response_fields(res, 200);
 			res.set_header("X-Error", "Failed to write codefile");
 			return;
@@ -72,10 +78,10 @@ int main(void)
 
 		// sanitize + compile code
 		const uint64_t c0 = micros_now();
-		const int cc = python_sanitize_compile(project_folder, method);
+		const int cc = python_sanitize_compile(project_base(), project_dir(program_id), method);
 		if (cc != 0) {
 			common_response_fields(res, 200);
-			auto vec = load_file(project_folder + "/status.txt");
+			auto vec = load_file(progpath + "/status.txt");
 			res.set_header("X-Error", "Compilation failed");
 			res.set_content((const char*) vec.data(), vec.size(), "text/plain");
 			return;
@@ -84,7 +90,7 @@ int main(void)
 		res.set_header("X-Compile-Time", std::to_string(c1 - c0) + " micros");
 
 		// load binary and execute code
-		auto binary = load_file(project_folder + "/binary");
+		auto binary = load_file(progpath + "/binary");
 		if (binary.empty()) {
 			common_response_fields(res, 200);
 			res.set_header("X-Error", "Failed to open binary");
@@ -136,9 +142,9 @@ int create_folder(const std::string& folder)
 	return mkdir(folder.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }
 
-int python_sanitize_compile(const std::string& project, const std::string& method)
+int python_sanitize_compile(const std::string& pbase, const std::string& pdir, const std::string& method)
 {
-	auto cmd = "/usr/bin/python3 ../sanitize.py " + project + " " + method;
+	auto cmd = "/usr/bin/python3 ../sanitize.py " + pbase + " " + pdir + " " + method;
 	return system(cmd.c_str());
 }
 
