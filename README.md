@@ -120,6 +120,12 @@ Instruction counters and registers are not reset on calling functions, so make s
 
 It is not recommended to copy data into guest memory and then pass pointers to this data as arguments, as it's a very complex task to determine which memory is unused by the guest before and even during the call. Instead, the guest can allocate room for the struct on its own, and then simply perform a system call where it passes a pointer to the struct as an argument.
 
+## Tutorials
+
+[System calls](docs/SYSCALLS.md)
+
+[Freestanding environment](docs/FREESTANDING.md)
+
 
 ## Why a RISC-V library
 
