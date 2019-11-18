@@ -1,8 +1,11 @@
 #include "rvfd.hpp"
 
-#define FLOAT_INSTR(x, ...) \
-		static CPU<4>::instruction_t instr32f_##x { __VA_ARGS__ }
-#define DECODED_FLOAT(x) instr32f_##x
+#ifdef RISCV_DEBUG
+#define FLOAT_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
+#else
+#define FLOAT_INSTR(x, a, b) INSTRUCTION(x, a, nullptr)
+#endif
+#define DECODED_FLOAT(x) DECODED_INSTR(x)
 
 namespace riscv
 {

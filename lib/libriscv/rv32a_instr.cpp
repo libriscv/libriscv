@@ -1,8 +1,11 @@
 #include "rv32i.hpp"
 
-#define ATOMIC_INSTR(x, ...) \
-		static CPU<4>::instruction_t instr32a_##x { __VA_ARGS__ }
-#define DECODED_ATOMIC(x) instr32a_##x
+#ifdef RISCV_DEBUG
+#define ATOMIC_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
+#else
+#define ATOMIC_INSTR(x, a, b) INSTRUCTION(x, a, nullptr)
+#endif
+#define DECODED_ATOMIC(x) DECODED_INSTR(x)
 
 namespace riscv
 {

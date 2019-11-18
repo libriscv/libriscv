@@ -1,8 +1,11 @@
 #include "rv32i.hpp"
 #include "instr_helpers.hpp"
 
-#define INSTRUCTION(x, ...) \
-		static CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
+#ifdef RISCV_DEBUG
+#define INSTRUCTION(x, ...) static CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
+#else
+#define INSTRUCTION(x, a, b) static CPU<4>::instruction_t instr32i_##x { a, nullptr }
+#endif
 #define DECODED_INSTR(x) instr32i_##x
 
 namespace riscv
