@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.9)
-project(riscv C CXX)
+project(riscv CXX)
 
 option(LTO         "Enable interprocedural optimizations" ON)
 option(NATIVE      "Enable native instructions" ON)

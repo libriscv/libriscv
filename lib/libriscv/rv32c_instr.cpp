@@ -3,7 +3,7 @@
 #ifdef RISCV_DEBUG
 #define COMPRESSED_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
 #else
-#define COMPRESSED_INSTR(x, a, b) INSTRUCTION(x, a, nullptr)
+#define COMPRESSED_INSTR(x, a, ...) INSTRUCTION(x, a, nullptr)
 #endif
 #define DECODED_COMPR(x) DECODED_INSTR(x)
 #define CI_CODE(x, y) ((x << 13) | (y))

@@ -4,10 +4,10 @@
 #include "rv32a_instr.cpp"
 #include "rv32c_instr.cpp"
 #include "rv32f_instr.cpp"
-#ifndef RISCV_DEBUG
-#define DECODER(x) x.handler(*this, instruction); return;
-#else
+#ifdef RISCV_DEBUG
 #define DECODER(x) return(x)
+#else
+#define DECODER(x) x(*this, instruction); return;
 #endif
 
 namespace riscv

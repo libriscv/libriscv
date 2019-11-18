@@ -3,7 +3,7 @@
 #ifdef RISCV_DEBUG
 #define FLOAT_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
 #else
-#define FLOAT_INSTR(x, a, b) INSTRUCTION(x, a, nullptr)
+#define FLOAT_INSTR(x, a, ...) INSTRUCTION(x, a, nullptr)
 #endif
 #define DECODED_FLOAT(x) DECODED_INSTR(x)
 
