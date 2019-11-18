@@ -229,7 +229,7 @@ namespace riscv
 		{
 			return mem.allocate_page(page);
 		}
-		throw MachineException("Out of memory");
+		throw MachineException(OUT_OF_MEMORY, "Out of memory");
 	}
 
 	inline static Page create_cow() {

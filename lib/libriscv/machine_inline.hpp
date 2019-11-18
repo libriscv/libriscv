@@ -77,7 +77,8 @@ inline void Machine<W>::system_call(int syscall_number)
 		}
 	}
 	else {
-		throw MachineException("Unhandled system call: " + std::to_string(syscall_number));
+		throw MachineException(UNHANDLED_SYSCALL,
+								"Unhandled system call", syscall_number);
 	}
 }
 
@@ -146,7 +147,7 @@ void Machine<W>::realign_stack(uint8_t align)
 		case 4:  align_mask = 0x3; break;
 		case 8:  align_mask = 0x7; break;
 		case 16: align_mask = 0xF; break;
-		default: throw std::runtime_error("Invalid alignment");
+		default: throw MachineException(INVALID_ALIGNMENT, "Invalid alignment", align);
 	}
 	cpu.reg(RISCV::REG_SP) &= ~align_mask;
 }

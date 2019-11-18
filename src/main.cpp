@@ -64,6 +64,9 @@ int main(int argc, const char** argv)
 
 	try {
 		machine.simulate();
+	} catch (riscv::MachineException& me) {
+		printf(">>> Machine exception %d: %s (data: %d)\n",
+				me.type(), me.what(), me.data());
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
 #ifdef RISCV_DEBUG

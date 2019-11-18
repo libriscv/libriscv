@@ -29,8 +29,6 @@ namespace riscv
 		address_t pc() const noexcept { return registers().pc; }
 		void jump(address_t);
 
-		void trigger_exception(interrupt_t intr);
-
 		auto& registers() { return this->m_data.m_regs; }
 		const auto& registers() const { return this->m_data.m_regs; }
 
@@ -44,6 +42,8 @@ namespace riscv
 
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
+
+		static void trigger_exception(interrupt_t);
 
 #ifdef RISCV_DEBUG
 		// debugging

@@ -178,7 +178,8 @@ namespace riscv
 					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
 		}
 		else {
-			throw MachineException("Unimplemented instruction format length");
+			throw MachineException(UNIMPLEMENTED_INSTRUCTION_LENGTH,
+									"Unimplemented instruction format length");
 		}
 		return std::string(buffer, len);
 	}

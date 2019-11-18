@@ -130,20 +130,26 @@ namespace riscv
 		switch (intr)
 		{
 		case ILLEGAL_OPCODE:
-			throw MachineException("Illegal opcode executed");
+			throw MachineException(ILLEGAL_OPCODE,
+									"Illegal opcode executed");
 		case ILLEGAL_OPERATION:
-			throw MachineException("Illegal operation during instruction decoding");
+			throw MachineException(ILLEGAL_OPERATION,
+									"Illegal operation during instruction decoding");
 		case PROTECTION_FAULT:
-			throw MachineException("Protection fault");
+			throw MachineException(PROTECTION_FAULT,
+									"Protection fault");
 		case EXECUTION_SPACE_PROTECTION_FAULT:
-			throw MachineException("Execution space protection fault");
+			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+									"Execution space protection fault");
 		case MISALIGNED_INSTRUCTION:
 			// NOTE: only check for this when jumping or branching
-			throw MachineException("Misaligned instruction executed");
+			throw MachineException(MISALIGNED_INSTRUCTION,
+									"Misaligned instruction executed");
 		case UNIMPLEMENTED_INSTRUCTION:
-			throw MachineException("Unimplemented instruction executed");
+			throw MachineException(UNIMPLEMENTED_INSTRUCTION,
+									"Unimplemented instruction executed");
 		default:
-			throw MachineException("Interrupt not implemented: " + std::to_string(intr));
+			throw MachineException(UNKNOWN_EXCEPTION, "Unknown exception", intr);
 		}
 	}
 

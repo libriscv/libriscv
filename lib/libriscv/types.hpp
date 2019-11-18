@@ -25,12 +25,28 @@ namespace riscv
 		PROTECTION_FAULT,
 		EXECUTION_SPACE_PROTECTION_FAULT,
 		MISALIGNED_INSTRUCTION,
+		UNIMPLEMENTED_INSTRUCTION_LENGTH,
 		UNIMPLEMENTED_INSTRUCTION,
-		UNIMPLEMENTED_SYSCALL,
+		UNHANDLED_SYSCALL,
+		OUT_OF_MEMORY,
+		INVALID_ALIGNMENT,
+		UNKNOWN_EXCEPTION
 	};
 
-	struct MachineException : public std::runtime_error {
-		using std::runtime_error::runtime_error;
+	class MachineException : public std::exception {
+	public:
+	    explicit MachineException(const int type, const char* message, const int data = 0)
+			: m_type {type}, m_data { data }, m_msg { message }   {}
+
+	    virtual ~MachineException() throw() {}
+
+		const int  type() const throw() { return m_type; }
+	    const char* what() const throw() override { return m_msg; }
+		const int  data() const throw() { return m_data; }
+	protected:
+	    const int   m_type;
+		const int   m_data;
+		const char* m_msg;
 	};
 
 	template <int W>
