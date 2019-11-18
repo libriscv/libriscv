@@ -11,13 +11,15 @@ namespace riscv
 	static constexpr int RISCV32 = 4;
 	static constexpr int RISCV64 = 8;
 	static constexpr int SYSCALL_EBREAK = 0;
+	static constexpr uint64_t DEFAULT_MEMORY_MAX = 16ull << 20; // 16mb
 
 	template <int W>
 	struct Machine
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
 		using syscall_t = delegate<long (Machine<W>&)>;
-		Machine(const std::vector<uint8_t>& binary, bool protect_memory = true);
+		Machine(const std::vector<uint8_t>& binary,
+				address_t max_memory = DEFAULT_MEMORY_MAX);
 
 		// Simulate a RISC-V machine until @max_instructions have been
 		// executed, or the machine has been stopped.

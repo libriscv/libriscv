@@ -1,7 +1,7 @@
 
 template <int W>
-inline Machine<W>::Machine(const std::vector<uint8_t>& binary, bool protect)
-	: cpu(*this), memory(*this, binary, protect)
+inline Machine<W>::Machine(const std::vector<uint8_t>& binary, address_t maxmem)
+	: cpu(*this), memory(*this, binary, maxmem)
 {
 	cpu.reset();
 }

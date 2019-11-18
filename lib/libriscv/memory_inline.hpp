@@ -92,7 +92,7 @@ Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 			this->create_page(pageno).attr = options;
 		} else {
 			// set attr on non-COW pages only!
-			auto& page = this->get_pageno(pageno);
+			const auto& page = this->get_pageno(pageno);
 			if (page.attr.is_cow == false) {
 				// this page has been written to, or had attrs set,
 				// otherwise it would still be CoW.
@@ -103,6 +103,13 @@ Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 		dst += size;
 		len -= size;
 	}
+}
+template <int W> inline
+const PageAttributes& Memory<W>::get_page_attr(address_t src) const noexcept
+{
+	const size_t pageno = src >> Page::SHIFT;
+	const auto& page = this->get_pageno(pageno);
+	return page.attr;
 }
 
 template <int W> inline void

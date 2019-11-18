@@ -4,6 +4,7 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 static void test_vmcall(riscv::Machine<riscv::RISCV32>& machine);
 
+static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
 static constexpr bool full_linux_guest = true;
 static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
@@ -22,9 +23,7 @@ int main(int argc, const char** argv)
 	};
 
 	riscv::verbose_machine = false;
-	riscv::Machine<riscv::RISCV32> machine { binary };
-	// enough pages for startup + 1mb buffer :)
-	machine.memory.set_pages_total(600 * 100);
+	riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
 
 	// somewhere to store the guest outputs and exit status
 	State<riscv::RISCV32> state;

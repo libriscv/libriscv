@@ -5,10 +5,11 @@
 namespace riscv
 {
 	template <int W>
-	Memory<W>::Memory(Machine<W>& mach, const std::vector<uint8_t>& bin, bool protect)
-		: m_machine{mach}, m_binary{bin}
+	Memory<W>::Memory(Machine<W>& mach, const std::vector<uint8_t>& bin, address_t max_mem)
+		: m_machine{mach}, m_binary{bin}, m_protect_segments {true}
 	{
-		this->m_protect_segments = protect;
+		assert(max_mem % Page::size() == 0);
+		this->m_pages_total = max_mem / Page::size();
 		this->reset();
 	}
 
@@ -27,7 +28,7 @@ namespace riscv
 		this->m_pages.clear();
 		// make the zero-page unreadable (to trigger faults on null-pointer accesses)
 		auto& zp = this->create_page(0);
-		zp.attr.read = false;
+		zp.attr = { .read = false, .write = false, .exec = false };
 	}
 
 	template <int W>
