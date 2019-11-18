@@ -35,3 +35,7 @@ if (GPROF)
 	target_compile_options(riscv PUBLIC -pg -g)
 	target_link_libraries(remu "-pg")
 endif()
+
+# GC-sections
+target_compile_options(riscv PUBLIC "-ffunction-sections" "-fdata-sections")
+target_link_libraries(remu "-Wl,-gc-sections")
