@@ -20,7 +20,6 @@ namespace riscv
 
 	enum exceptions
 	{
-		DEBUG_INTERRUPT = 0,
 		ILLEGAL_OPCODE,
 		ILLEGAL_OPERATION,
 		PROTECTION_FAULT,

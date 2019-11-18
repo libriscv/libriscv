@@ -60,7 +60,6 @@ namespace riscv
 		} m_data;
 		AtomicMemory<W> m_atomics;
 
-		inline void execute();
 		inline format_t read_instruction(address_t);
 #ifndef RISCV_DEBUG
 		void execute(format_t);

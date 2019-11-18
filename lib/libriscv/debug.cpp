@@ -170,7 +170,7 @@ static bool execute_commands(CPU<W>& cpu)
     }
     else if (cmd == "debug")
     {
-        cpu.trigger_exception(DEBUG_INTERRUPT);
+        cpu.machine().system_call(EBREAK_SYSCALL);
         return true;
     }
     else if (cmd == "help" || cmd == "?")

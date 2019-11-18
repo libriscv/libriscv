@@ -81,8 +81,11 @@ namespace riscv
 	}
 
 	template<int W>
-	void CPU<W>::execute()
+	void CPU<W>::simulate()
 	{
+#ifdef RISCV_DEBUG
+		this->break_checks();
+#endif
 		const auto instruction = this->read_instruction(this->pc());
 
 #ifdef RISCV_DEBUG
@@ -121,23 +124,11 @@ namespace riscv
 	}
 
 	template<int W>
-	void CPU<W>::simulate()
-	{
-	#ifdef RISCV_DEBUG
-		this->break_checks();
-	#endif
-		this->execute();
-	}
-
-	template<int W>
 	void CPU<W>::trigger_exception(interrupt_t intr)
 	{
 		// TODO: replace with callback system
 		switch (intr)
 		{
-		case DEBUG_INTERRUPT:
-			machine().system_call(riscv::EBREAK_SYSCALL);
-			break;
 		case ILLEGAL_OPCODE:
 			throw MachineException("Illegal opcode executed");
 		case ILLEGAL_OPERATION:
