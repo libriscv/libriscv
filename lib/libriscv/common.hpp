@@ -9,7 +9,7 @@
 
 namespace riscv
 {
-	static constexpr int EBREAK_SYSCALL = 0;
+	static constexpr int SYSCALL_EBREAK = 0;
 
 	// print information during machine creation
 	extern bool verbose_machine;

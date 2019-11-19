@@ -277,7 +277,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 template <int W>
 inline void setup_minimal_syscalls(State<W>& state, Machine<W>& machine)
 {
-	machine.install_syscall_handler(EBREAK_SYSCALL, syscall_ebreak<W>);
+	machine.install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
 	machine.install_syscall_handler(64, {&state, &State<W>::syscall_write});
 	machine.install_syscall_handler(93, {&state, &State<W>::syscall_exit});
 }

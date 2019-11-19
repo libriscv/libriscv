@@ -10,7 +10,6 @@ namespace riscv
 {
 	static constexpr int RISCV32 = 4;
 	static constexpr int RISCV64 = 8;
-	static constexpr int SYSCALL_EBREAK = 0;
 	static constexpr uint64_t DEFAULT_MEMORY_MAX = 16ull << 20; // 16mb
 
 	template <int W>

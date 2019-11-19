@@ -57,7 +57,7 @@ inline void Machine<W>::system_call(int syscall_number)
 	if (it != m_syscall_handlers.end()) {
 		address_t ret = it->second(*this);
 		// EBREAK should not modify registers
-		if (syscall_number != EBREAK_SYSCALL) {
+		if (syscall_number != SYSCALL_EBREAK) {
 			cpu.reg(RISCV::REG_RETVAL) = ret;
 			if (UNLIKELY(this->verbose_jumps)) {
 				printf("SYSCALL %d returned %ld (0x%lX)\n", syscall_number,
@@ -72,7 +72,7 @@ inline void Machine<W>::system_call(int syscall_number)
 			fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
 		}
 		// EBREAK should not modify registers
-		if (syscall_number != EBREAK_SYSCALL) {
+		if (syscall_number != SYSCALL_EBREAK) {
 			cpu.reg(RISCV::REG_RETVAL) = -ENOSYS;
 		}
 	}
