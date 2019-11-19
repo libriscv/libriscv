@@ -107,6 +107,33 @@ Similarly, when making a function call into the VM you can also add this limit a
 
 You can find details on the Linux system call ABI online as well as in the `syscalls.hpp`, and `syscalls.cpp` files in the src folder. You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
 
+## Setting up your own machine environment
+
+You can create a 64kb machine without a binary, and no ELF loader will be invoked. One page will always be consumed to function as a zero-page, however it can be freed to get the memory back.
+```C++
+	const uint32_t max_memory = 65536;
+	riscv::Machine<riscv::RISCV32> machine { {}, max_memory };
+
+	// free the zero-page
+	machine.memory.free_pages(0x0, riscv::Page::size());
+```
+
+Now you can copy your machine code directly into memory:
+```C++
+	std::vector<uint8_t> my_program_data;
+	const uint32_t dst = 0x1000;
+	machine.copy_to_guest(dst, my_program_data.data(), my_program_data.size());
+```
+
+Finally, let's jump to the program entry, and start execution:
+```C++
+	// example PC start address
+	const uint32_t entry_point = 0x1068;
+	machine.cpu.jump(entry_point);
+
+	// geronimo!
+	machine.simulate();
+```
 
 ## Tutorials
 
