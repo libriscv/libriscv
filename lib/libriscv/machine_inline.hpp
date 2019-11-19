@@ -151,3 +151,9 @@ void Machine<W>::realign_stack(uint8_t align)
 	}
 	cpu.reg(RISCV::REG_SP) &= ~align_mask;
 }
+
+template <int W>
+inline address_type<W> Machine<W>::free_memory() const noexcept
+{
+	return (memory.pages_total() - memory.pages_active()) * Page::size();
+}

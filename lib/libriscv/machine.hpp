@@ -71,6 +71,9 @@ namespace riscv
 		// Realign the stack pointer, to make sure that vmcalls succeed
 		void realign_stack(uint8_t align = 16);
 
+		// Bytes (in whole pages) of unused memory
+		address_t free_memory() const noexcept;
+
 #ifdef RISCV_DEBUG
 		// Immediately block execution, print registers and current instruction.
 		void print_and_pause();
