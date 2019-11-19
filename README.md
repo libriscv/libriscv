@@ -72,7 +72,7 @@ long syscall_exit(riscv::Machine<W>& machine)
 	return 0;
 }
 
-int main(int argc, const char** argv)
+int main(int /*argc*/, const char** /*argv*/)
 {
 	const auto binary = <load your RISC-V ELF binary here>;
 
@@ -92,33 +92,21 @@ int main(int argc, const char** argv)
 }
 ```
 
-You can find details on the Linux system call ABI online as well as in the `syscalls.hpp` header in the src folder. You can use this header to make syscalls from your RISC-V programs. It is emulating the Linux RISC-V syscall ABI.
-
-Be careful about modifying registers during system calls, as it may cause problems
-in the simulated program.
-
-## Calling into the VM environment
-
-It's possible to make function calls into the environment, but there are a handful of things that need to be taken care of in order to do that. First off, you should not return from `int main()`, as that will call global destructors which will make the C run-time environment unreliable. Instead, one should call `_exit(status)` from `int main()`, which immediately exits the machine, but does not call global destructors and free resources.
-
-It is not unsafe to call `_exit()` or any other equivalent function directly, as all it does is invoke the EXIT system call, which immediately stops execution of the program. In a normal operating system this also makes the execution environment (usually a process) disappear, and releases all the resources back. In this case we just want to preserve the machine state (which is in a good known state) while also stopping execution, so that we can call into the programs functions directly.
-
-Once the machine is no longer running, but still left in a state in which we can call into it, we have to make sure that our callable function in the VM is present in the symbol table of the ELF, so that we can find the address of this function. In addition, `_exit` must also be present in the ELF symbol tables, as it will be used as a way to exit the VM call and also optionally return a status code. This is done via hooking up the exit system call behind the scenes and extracting the exit status code after execution stops.
-
-A third, and final, stumbling block is sometimes having functions, even those marked with `__attribute__((used))`, not appearing in the ELF symbol table, which is a linker issue. This can happen when using `-gc-sections` and friends. You can test if your symbol is visible to the emulator by using `machine.memory.resolve_address("myFunction")` which returns a memory address. If the address is 0, then the name was not found in the symbol table, which makes `vmcall(...)` impossible to perform.
-
-Start by running the machine normally and complete `int main()` to make sure global constructors are called and the C run-time environment is fully initialized. So, if you are calling `_exit(0)` from main instead of returning, and not stripping ELF symbols from your binary you are ready to make function calls into the virtual machine.
-
-Example which calls the function `test` with the arguments `555` and `666`:
+You can limit the amount of (virtual) memory the machine can use like so:
 ```C++
-	int ret = machine.vmcall("test", {555, 666});
-	printf("test returned %d\n", ret);
+	const uint32_t max_memory = 1024 * 1024 * 64;
+	riscv::Machine<riscv::RISCV32> machine { binary, max_memory };
 ```
-Arguments are passed as a C++ initializer list of register-sized integers.
 
-Instruction counters and registers are not reset on calling functions, so make sure to take that into consideration when measuring.
+You can limit the amount of instructions to simulate at a time like so:
+```C++
+	const uint64_t max_instructions = 1000;
+	machine.simulate(max_instructions);
+```
+Similarly, when making a function call into the VM you can also add this limit as the last parameter to the `vmcall()` function.
 
-It is not recommended to copy data into guest memory and then pass pointers to this data as arguments, as it's a very complex task to determine which memory is unused by the guest before and even during the call. Instead, the guest can allocate room for the struct on its own, and then simply perform a system call where it passes a pointer to the struct as an argument.
+You can find details on the Linux system call ABI online as well as in the `syscalls.hpp`, and `syscalls.cpp` files in the src folder. You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
+
 
 ## Tutorials
 

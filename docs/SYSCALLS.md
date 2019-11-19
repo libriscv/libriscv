@@ -38,6 +38,9 @@ Our exit system call handler extracts the exit status code from the first argume
 
 Stopping the machine in practice just means exiting the `Machine::simulate()` loop.
 
+Be careful about modifying registers during system calls, as it may cause problems
+in the simulated program. The program may only be expecting you to modify register A0.
+
 ## Handling an advanced system call
 
 If we want stdout from the VM printed in our terminal, we should handle `write`:
