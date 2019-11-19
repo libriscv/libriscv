@@ -27,9 +27,12 @@ namespace riscv
 
 		void stop() noexcept;
 		bool stopped() const noexcept;
+		void reset();
+
+		// Install a system call handler for a the given syscall number.
+		// Pass nullptr to uninstall a system call handler.
 		void install_syscall_handler(int, syscall_t);
 		syscall_t get_syscall_handler(int);
-		void reset();
 
 		CPU<W>    cpu;
 		Memory<W> memory;
