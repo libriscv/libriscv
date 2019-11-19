@@ -114,6 +114,8 @@ You can find details on the Linux system call ABI online as well as in the `sysc
 
 [Freestanding environment](docs/FREESTANDING.md)
 
+[Function calls into the VM](docs/VMCALL.md)
+
 
 ## Why a RISC-V library
 
