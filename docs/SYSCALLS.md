@@ -125,6 +125,6 @@ To pass larger data around, the guest should allocate buffers of the appropriate
 
 ## Special note on EBREAK
 
-The EBREAK instruction is handled as a system call in this emulator, specifically it uses the system call number `riscv::EBREAK_SYSCALL`, which at the time of writing is zero (0), however it can be changed in the common header.
+The EBREAK instruction is handled as a system call in this emulator, specifically it uses the system call number `riscv::SYSCALL_EBREAK`, which at the time of writing is zero (0), however it can be changed in the common header.
 
 EBREAK is very convenient for debugging purposes, as adding it somewhere in the code is very simple: `asm("ebreak");`.

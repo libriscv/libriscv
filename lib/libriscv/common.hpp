@@ -7,9 +7,13 @@
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #endif
 
+#ifndef SYSCALL_EBREAK_NR
+#define SYSCALL_EBREAK_NR    0
+#endif
+
 namespace riscv
 {
-	static constexpr int SYSCALL_EBREAK = 0;
+	static constexpr int SYSCALL_EBREAK = SYSCALL_EBREAK_NR;
 
 	// print information during machine creation
 	extern bool verbose_machine;
