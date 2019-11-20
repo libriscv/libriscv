@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <tuple>
@@ -36,6 +37,7 @@ struct Page
 {
 	static constexpr unsigned SIZE  = PageData::SIZE;
 	static constexpr unsigned SHIFT = PageData::SHIFT;
+	static constexpr bool alignment_check = false;
 	using mmio_cb_t = delegate<int64_t (Page&, uint32_t, int, int64_t)>;
 
 	auto& page() noexcept { return m_page; }
@@ -44,6 +46,9 @@ struct Page
 	template <typename T>
 	inline T aligned_read(uint32_t offset) const
 	{
+		if constexpr (alignment_check) {
+			assert(offset % sizeof(T) == 0);
+		}
 		if constexpr (std::is_same<T, uint8_t>::value) {
 			return page().buffer8[offset];
 		} else if constexpr (std::is_same<T, uint16_t>::value) {
@@ -61,6 +66,9 @@ struct Page
 	template <typename T>
 	inline void aligned_write(uint32_t offset, T value)
 	{
+		if constexpr (alignment_check) {
+			assert(offset % sizeof(T) == 0);
+		}
 		if constexpr (std::is_same<T, uint8_t>::value) {
 			page().buffer8[offset] = value;
 		} else if constexpr (std::is_same<T, uint16_t>::value) {
