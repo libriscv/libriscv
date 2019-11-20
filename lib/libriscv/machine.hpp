@@ -80,6 +80,7 @@ namespace riscv
 		bool verbose_instructions = false;
 		bool verbose_jumps     = false;
 		bool verbose_registers = false;
+		bool verbose_fp_registers = false;
 #else
 		static constexpr bool verbose_instructions = false;
 		static constexpr bool verbose_jumps     = false;
