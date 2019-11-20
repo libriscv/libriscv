@@ -122,13 +122,26 @@ namespace riscv
 			uint16_t imm6   : 1;
 			uint16_t imm2   : 1;
 			uint16_t srs1   : 3;
-			uint16_t imm3   : 3;
+			uint16_t imm345 : 3;
 			uint16_t funct3 : 3;
 
-			int32_t offset4() const noexcept {
-				return (imm2 << 2) | (imm3 << 3) | (imm6 << 6);
+			uint32_t offset4() const noexcept {
+				return (imm2 << 2) | (imm345 << 3) | (imm6 << 6);
 			}
 		} CS;
+		// D store format
+		struct {
+			uint16_t opcode : 2;
+			uint16_t srs2   : 3;
+			uint16_t imm67  : 2;
+			uint16_t srs1   : 3;
+			uint16_t imm345 : 3;
+			uint16_t funct3 : 3;
+
+			uint32_t offset8() const noexcept {
+				return (imm345 << 3) | (imm67 << 6);
+			}
+		} CSD;
 		// arithmetic format
 		struct {
 			uint16_t opcode : 2;

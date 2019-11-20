@@ -326,6 +326,33 @@ namespace riscv
 						RISCV::regname(fi.R4type.rd));
 	});
 
+	FLOAT_INSTR(FCVT_SD_DS,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		switch (fi.R4type.funct2) {
+			case 0x0: // FCVT.S.D (64 -> 32)
+				dst.f32[0] = rs1.f64;
+				dst.i32[1] = -1;
+				return;
+			case 0x1: // FCVT.D.S (32 -> 64)
+				dst.f64 = rs1.f32[0];
+				return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FCVT.S.D", "FCVT.D.S", "???", "???"
+		};
+		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
 	FLOAT_INSTR(FCVT_W_SD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
@@ -431,6 +458,15 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		rv32f_instruction fi { instr };
+		if (fi.R4type.rs1 == fi.R4type.rs2) {
+			static const std::array<const char*, 4> insn {
+				"FMV.S", "FMV.D", "???", "FMV.Q"
+			};
+			return snprintf(buffer, len, "%s %s, %s",
+							insn[fi.R4type.funct2],
+							RISCV::flpname(fi.R4type.rs1),
+							RISCV::flpname(fi.R4type.rd));
+		}
 		static const std::array<const char*, 4> insn {
 			"FSGNJ.S", "FSGNJ.D", "???", "FSGNJ.Q"
 		};
@@ -438,6 +474,6 @@ namespace riscv
 						insn[fi.R4type.funct2],
 						RISCV::flpname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rs2),
-						RISCV::regname(fi.R4type.rd));
+						RISCV::flpname(fi.R4type.rd));
 	});
 }

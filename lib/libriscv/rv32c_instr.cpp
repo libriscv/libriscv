@@ -67,19 +67,21 @@ namespace riscv
 			case 4:
 				cpu.trigger_exception(ILLEGAL_OPERATION);
 				return;
-			case 5:
-				// TODO: implement me
-				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
-				return;
-			case 6: {
+			case 5: { // C.FSD
+				const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
+				const auto value   = cpu.ciflp(ci.CSD.srs2).i64;
+				cpu.machine().memory.template write<uint64_t> (address, value);
+				} return;
+			case 6: { // C.SW
 				const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
 				const auto value   = cpu.cireg(ci.CS.srs2);
 				cpu.machine().memory.template write<uint32_t> (address, value);
 				} return;
-			case 7:
-				// TODO: implement me
-				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
-				return;
+			case 7: { // C.FSW
+				const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
+				const auto value   = cpu.ciflp(ci.CS.srs2).i32[0];
+				cpu.machine().memory.template write<uint32_t> (address, value);
+				} return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
