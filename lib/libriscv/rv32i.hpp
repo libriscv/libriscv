@@ -43,7 +43,7 @@ namespace riscv
 			uint32_t imm    : 12;
 
 			bool sign() const noexcept {
-				return imm & 2048;
+				return imm & 0x800;
 			}
 			int32_t signed_imm() const noexcept {
 				const uint32_t ext = 0xFFFFF000;
@@ -86,7 +86,7 @@ namespace riscv
 				const uint32_t ext = 0xFFF00000;
 				return imm | (sign() ? ext : 0);
 			}
-			int32_t signed_upper() const noexcept {
+			uint32_t upper_imm() const noexcept {
 				return imm << 12u;
 			}
 		} Utype;

@@ -44,26 +44,26 @@ namespace riscv
 	INSTRUCTION(LOAD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		const uint32_t reg = instr.Itype.rd;
-		if (reg != 0) {
+		if (instr.Itype.rd != 0) {
+			auto& reg = cpu.reg(instr.Itype.rd);
 			const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 			const uint32_t type = instr.Itype.funct3;
 			if (type == 0) { // LB
-				cpu.reg(reg) = cpu.machine().memory.template read<uint8_t>(addr);
+				reg = cpu.machine().memory.template read<uint8_t>(addr);
 				// sign-extend 8-bit
-				if (cpu.reg(reg) & 0x80) cpu.reg(reg) |= 0xFFFFFF00;
+				if (reg & 0x80) reg |= 0xFFFFFF00;
 			} else if (type == 1) { // LH
-				cpu.reg(reg) = cpu.machine().memory.template read<uint16_t>(addr);
+				reg = cpu.machine().memory.template read<uint16_t>(addr);
 				// sign-extend 16-bit
-				if (cpu.reg(reg) & 0x8000) cpu.reg(reg) |= 0xFFFF0000;
+				if (reg & 0x8000) reg |= 0xFFFF0000;
 			} else if (type == 2) { // LW
-				cpu.reg(reg) = cpu.machine().memory.template read<uint32_t>(addr);
+				reg = cpu.machine().memory.template read<uint32_t>(addr);
 			} else if (type == 4) { // LBU
 				// load zero-extended 8-bit value
-				cpu.reg(reg) = cpu.machine().memory.template read<uint8_t>(addr);
+				reg = cpu.machine().memory.template read<uint8_t>(addr);
 			} else if (type == 5) { // LHU
 				// load zero-extended 16-bit value
-				cpu.reg(reg) = cpu.machine().memory.template read<uint16_t>(addr);
+				reg = cpu.machine().memory.template read<uint16_t>(addr);
 			} else {
 				cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
@@ -239,10 +239,10 @@ namespace riscv
 				if (LIKELY(!instr.Itype.is_srai()))
 					dst = src >> instr.Itype.shift_imm();
 				else { // SRAI: preserve the sign bit
-					uint32_t sigbit = src & 0x80000000;
+					const uint32_t sigbit = src & 0x80000000;
 					dst = src;
 					for (unsigned i = 0; i < instr.Itype.shift_imm(); i++) {
-						dst = ((dst & 0x7FFFFFFF) >> 1) | sigbit;
+						dst = (dst >> 1) | sigbit;
 					}
 				}
 				break;
@@ -318,7 +318,7 @@ namespace riscv
 					dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
 					break;
 				case 0x1: // SLL
-					dst = src1 << src2;
+					dst = src1 << src2; // TODO: & 0x1F
 					break;
 				case 0x2: // SLT
 					dst = (instr.to_signed(src1) < instr.to_signed(src2)) ? 1 : 0;
@@ -334,10 +334,10 @@ namespace riscv
 						dst = src1 >> src2;
 					} else { // SRA
 						const uint32_t sigbit = src1 & 0x80000000;
-						const uint32_t shifts = src2; // dst might be src2
+						const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
 						dst = src1;
 						for (unsigned i = 0; i < shifts; i++) {
-							dst = ((dst & 0x7FFFFFFF) >> 1) | sigbit;
+							dst = (dst >> 1) | sigbit;
 						}
 					}
 					break;
@@ -497,7 +497,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
 		if (instr.Utype.rd != 0) {
-			cpu.reg(instr.Utype.rd) = instr.Utype.signed_upper();
+			cpu.reg(instr.Utype.rd) = instr.Utype.upper_imm();
 			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -505,23 +505,23 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
 		return snprintf(buffer, len, "LUI %s, 0x%X",
-						RISCV::regname(instr.Utype.rd), instr.Utype.signed_upper());
+						RISCV::regname(instr.Utype.rd), instr.Utype.upper_imm());
 	});
 
 	INSTRUCTION(AUIPC,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
 		if (instr.Utype.rd != 0) {
-			cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.signed_upper();
+			cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.upper_imm();
 			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		return snprintf(buffer, len, "AUIPC %s, PC%+d (0x%X)",
-						RISCV::regname(instr.Utype.rd), instr.Utype.signed_upper(),
-						cpu.pc() + instr.Utype.signed_upper());
+		return snprintf(buffer, len, "AUIPC %s, PC+0x%X (0x%X)",
+						RISCV::regname(instr.Utype.rd), instr.Utype.upper_imm(),
+						cpu.pc() + instr.Utype.upper_imm());
 	});
 
 	INSTRUCTION(OP_IMM32,
