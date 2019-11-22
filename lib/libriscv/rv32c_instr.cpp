@@ -194,7 +194,7 @@ namespace riscv
 			case 1: { // C.SRAI (preserve sign)
 					uint32_t sigbit = dst & 0x80000000;
 					for (unsigned i = 0; i < ci.CAB.shift_imm(); i++) {
-						dst = ((dst & 0x7FFFFFFF) >> 1) | sigbit;
+						dst = (dst >> 1) | sigbit;
 					}
 					return;
 				}
