@@ -11,6 +11,12 @@
 #define SYSCALL_EBREAK_NR    0
 #endif
 
+#ifndef MEMORY_TRAPS_ENABLED
+# ifdef RISCV_DEBUG
+#  define MEMORY_TRAPS_ENABLED
+# endif
+#endif
+
 namespace riscv
 {
 	static constexpr int SYSCALL_EBREAK = SYSCALL_EBREAK_NR;
@@ -18,9 +24,12 @@ namespace riscv
 	// print information during machine creation
 	extern bool verbose_machine;
 
-#ifdef RISCV_DEBUG
+#ifdef MEMORY_TRAPS_ENABLED
 	static constexpr bool memory_debug_enabled = true;
 #else
 	static constexpr bool memory_debug_enabled = false;
 #endif
+
+	// assert on misaligned reads/writes
+	static constexpr bool memory_alignment_check = false;
 }
