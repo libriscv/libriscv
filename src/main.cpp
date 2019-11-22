@@ -50,16 +50,47 @@ int main(int argc, const char** argv)
 	}
 
 	/*
-	machine.verbose_instructions = true;
-	machine.cpu.breakpoint(0x39072);
-	machine.verbose_jumps = true;
-	machine.verbose_registers = true;
-	machine.throw_on_unhandled_syscall = true;
-	machine.memory.trap(0x8FFFF000,
-		[] (riscv::Page& page, uint32_t off, int mode, int64_t val) -> int64_t
+	machine.cpu.breakpoint(machine.address_of("main"));
+	machine.cpu.breakpoint(0x5B4F4);
+	machine.cpu.breakpoint(0x5B540, //0x5B518,
+		[] (auto& cpu)
 		{
+			printf("Exchanging SR1 = %u with SR1 = 15\n", cpu.reg(9));
+			cpu.reg(9) = 15;
+			cpu.machine().print_and_pause();
+		});
+
+	machine.memory.trap(0x3FFFD000,
+		[&machine] (riscv::Page& page, uint32_t off, int mode, int64_t val) -> int64_t
+		{
+			if (off == 0xC3C) {
+				if (mode & riscv::TRAP_WRITE) {
+					printf("> write: 0x%X -> 0x%X (%u)\n", off, (int) val, (int) val);
+				} else {
+					printf("> read: 0x%X -> %d\n", off, page.aligned_read<uint32_t> (off));
+				}
+				machine.print_and_pause();
+			}
 			return page.passthrough(off, mode, val);
 		});
+
+
+	machine.memory.trap(0x3FFFE000,
+		[&machine] (riscv::Page& page, uint32_t off, int mode, int64_t val) -> int64_t
+		{
+			if (mode & riscv::TRAP_WRITE) {
+				printf("> 0x3fffe write: 0x%X -> 0x%X (%c)\n", off, (int) val, (char) val);
+			}
+			//machine.print_and_pause();
+			//machine.verbose_registers = true;
+			machine.verbose_instructions = true;
+			return page.passthrough(off, mode, val);
+		});
+	machine.verbose_instructions = true;
+	machine.verbose_jumps = true;
+	machine.verbose_registers = true;
+	machine.verbose_fp_registers = true;
+	machine.throw_on_unhandled_syscall = true;
 	*/
 
 	try {
@@ -67,6 +98,9 @@ int main(int argc, const char** argv)
 	} catch (riscv::MachineException& me) {
 		printf(">>> Machine exception %d: %s (data: %d)\n",
 				me.type(), me.what(), me.data());
+#ifdef RISCV_DEBUG
+		machine.print_and_pause();
+#endif
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
 #ifdef RISCV_DEBUG

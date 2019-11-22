@@ -37,7 +37,7 @@ long State<W>::syscall_write(Machine<W>& machine)
 		machine.memory.memcpy_out(buffer, address, len_g);
 		output += std::string(buffer, len_g);
 #ifdef RISCV_DEBUG
-		write(fd, buffer, len_g);
+		write(fd, buffer, len);
 #endif
 		return len_g;
 	}
