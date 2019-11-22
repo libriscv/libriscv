@@ -181,5 +181,12 @@ namespace riscv
 		using register_t    = uint32_t;
 
 		static std::string to_string(CPU<4>& cpu, format_t format, const instruction_t& instr);
+
+		static inline uint32_t SRA(bool is_signed, uint32_t shifts, uint32_t value)
+		{
+			const uint32_t sign_bits = -is_signed ^ 0x0;
+			const uint32_t sign_shifted = sign_bits << (32 - shifts);
+			return (value >> shifts) | sign_shifted;
+		}
 	};
 }

@@ -239,11 +239,9 @@ namespace riscv
 				if (LIKELY(!instr.Itype.is_srai()))
 					dst = src >> instr.Itype.shift_imm();
 				else { // SRAI: preserve the sign bit
-					const uint32_t sigbit = src & 0x80000000;
-					dst = src;
-					for (unsigned i = 0; i < instr.Itype.shift_imm(); i++) {
-						dst = (dst >> 1) | sigbit;
-					}
+					const uint32_t shifts = instr.Itype.shift_imm();
+					const bool is_signed = (src & 0x80000000) != 0;
+					dst = RV32I::SRA(is_signed, shifts, src);
 				}
 				break;
 			case 0x6: // ORI:
@@ -333,12 +331,9 @@ namespace riscv
 					if (!instr.Rtype.is_f7()) { // SRL
 						dst = src1 >> src2;
 					} else { // SRA
-						const uint32_t sigbit = src1 & 0x80000000;
+						const bool is_signed = (src1 & 0x80000000) != 0;
 						const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
-						dst = src1;
-						for (unsigned i = 0; i < shifts; i++) {
-							dst = (dst >> 1) | sigbit;
-						}
+						dst = RV32I::SRA(is_signed, shifts, src1);
 					}
 					break;
 				case 0x6: // OR

@@ -192,10 +192,9 @@ namespace riscv
 				dst = dst >> ci.CAB.shift_imm();
 				return;
 			case 1: { // C.SRAI (preserve sign)
-					uint32_t sigbit = dst & 0x80000000;
-					for (unsigned i = 0; i < ci.CAB.shift_imm(); i++) {
-						dst = (dst >> 1) | sigbit;
-					}
+					const uint32_t shifts = ci.CAB.shift_imm();
+					const bool is_signed = (dst & 0x80000000) != 0;
+					dst = RV32I::SRA(is_signed, shifts, dst);
 					return;
 				}
 			case 2: // C.ANDI
