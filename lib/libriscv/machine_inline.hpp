@@ -98,35 +98,29 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 
 template <int W>
 inline long Machine<W>::vmcall(const std::string& function_name,
-								std::initializer_list<address_t> args,
+								std::vector<address_t> args, bool exec,
 								uint64_t max_instructions)
 {
 	address_t call_addr = memory.resolve_address(function_name);
 	address_t retn_addr = memory.resolve_address("_exit");
 	this->setup_call(call_addr, retn_addr, std::move(args));
-	long retval = -1;
-	this->install_syscall_handler(93,
-		[&retval] (auto& machine) -> long {
-			retval = machine.template sysarg<long> (0);
-			machine.stop();
-			// Since the return value of this system call will overwrite its own
-			// argument, we will just return the argument itself.
-			return retval;
-		});
-	this->simulate(max_instructions);
-	return retval;
+	if (exec) {
+		this->simulate(max_instructions);
+		return this->sysarg<address_t> (RISCV::REG_RETVAL);
+	}
+	return 0;
 }
 
 
 template <int W>
 inline void Machine<W>::setup_call(
 		address_t call_addr, address_t retn_addr,
-		std::initializer_list<address_t> args)
+		std::vector<address_t> args)
 {
 	assert(args.size() <= 8);
 	cpu.reg(RISCV::REG_RA) = retn_addr;
 	size_t arg = 0;
-	for (auto value : args) {
+	for (const auto& value : args) {
 		cpu.reg(RISCV::REG_ARG0 + arg) = value;
 		arg++;
 	}

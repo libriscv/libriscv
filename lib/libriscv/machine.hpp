@@ -58,12 +58,12 @@ namespace riscv
 		// to stop execution right after returning. _exit must call the exit
 		// (93) system call and not call destructors, which is the norm.
 		long vmcall(const std::string& function_name,
-					std::initializer_list<address_t> args,
+					std::vector<address_t> args, bool exec = true,
 					uint64_t max_instructions = 0);
 
 		// Sets up a function call only, executes no instructions.
 		void setup_call(address_t call_addr, address_t retn_addr,
-						std::initializer_list<address_t> args);
+						std::vector<address_t> args);
 
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const std::string& name);

@@ -21,7 +21,7 @@ Example which calls the function `test` with the arguments `555` and `666`:
 ```
 
 
-Arguments are passed as a C++ initializer list of register-sized integers.
+Arguments are passed as a C++ vector of register-sized integers.
 
 Instruction counters and registers are not reset on calling functions, so make sure to take that into consideration when measuring.
 

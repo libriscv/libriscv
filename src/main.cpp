@@ -118,6 +118,7 @@ int main(int argc, const char** argv)
 
 	// VM function call testing
 	test_vmcall(machine, state);
+	test_vmcall(machine, state);
 	return 0;
 }
 
@@ -134,14 +135,13 @@ void test_vmcall(riscv::Machine<riscv::RISCV32>& machine, State<riscv::RISCV32>&
 #ifndef RISCV_DEBUG
 		state.output.clear();
 #endif
-		// make a function call into the guest VM, stopping at 3000 instructions
-		machine.vmcall("test", {555}, 1);
-		while (!machine.stopped()) {
-			printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+		// make a function call into the guest VM, but don't start execution
+		machine.vmcall("test", {555}, false);
+		do {
 			// resume execution, to complete the function call:
-			machine.simulate(100);
-		}
-		printf("Final instruction count: %zu\n", (size_t) machine.cpu.registers().counter);
+			machine.simulate(1000);
+			printf("Instruction count: %zu\n", (size_t) machine.cpu.registers().counter);
+		} while (!machine.stopped());
 		// extract real return value:
 		int ret = machine.sysarg<int>(0);
 		printf("test *actually* returned %d\n", ret);
