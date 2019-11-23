@@ -308,7 +308,7 @@ namespace riscv
 			// SLLI
 			cpu.reg(ci.CI.rd) <<= ci.CI.shift_imm();
 		}
-		else if (ci.CI2.funct3 == 0x1 && ci.CI2.rd != 0) {
+		else if (ci.CI2.funct3 == 0x1) {
 			// FLDSP
 			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset8();
 			auto& dst = cpu.registers().getfl(ci.CI2.rd);
@@ -318,6 +318,12 @@ namespace riscv
 			// LWSP
 			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
 			cpu.reg(ci.CI2.rd) = cpu.machine().memory.template read <uint32_t> (address);
+		}
+		else if (ci.CI2.funct3 == 0x3) {
+			// FLWSP
+			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
+			auto& dst = cpu.registers().getfl(ci.CI2.rd);
+			dst.load_u32(cpu.machine().memory.template read <uint32_t> (address));
 		}
 		else if (ci.CI.rd == 0) {
 			// HINT
