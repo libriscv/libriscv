@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/uio.h>
 using namespace riscv;
 static constexpr uint32_t G_SHMEM_BASE = 0x70000000;
@@ -108,6 +109,17 @@ long syscall_ebreak(riscv::Machine<W>& machine)
 	throw std::runtime_error("Unhandled EBREAK instruction");
 #endif
 	return 0;
+}
+
+template <int W>
+long syscall_gettimeofday(Machine<W>& machine)
+{
+	const auto buffer = machine.template sysarg<address_type<W>>(0);
+	SYSPRINT("SYSCALL gettimeofday called, buffer = 0x%X\n", buffer);
+	struct timeval tv;
+	gettimeofday(&tv, nullptr);
+	machine.copy_to_guest(buffer, &tv, sizeof(tv));
+    return -EBADF;
 }
 
 template <int W>
@@ -301,6 +313,8 @@ void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
 	machine.install_syscall_handler(29, syscall_stub_zero<W>);
 	// rt_sigprocmask
 	machine.install_syscall_handler(135, syscall_stub_zero<W>);
+	// rt_sigprocmask
+	machine.install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid
 	machine.install_syscall_handler(172, syscall_stub_zero<W>);
 	// getuid
