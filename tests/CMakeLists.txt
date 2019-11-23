@@ -6,6 +6,8 @@ add_subdirectory(../lib lib)
 set(SOURCES
 	custom.cpp
 	main.cpp
+	test_rv32i.cpp
+	test_rv32c.cpp
 )
 
 add_executable(tests ${SOURCES})
