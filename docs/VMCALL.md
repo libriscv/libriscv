@@ -32,7 +32,7 @@ It is not recommended to copy data into guest memory and then pass pointers to t
 
 Without using threads the machine program will simply run until it's completed, an exception occurs, or the machine is stopped from the outside during a trap or system call. It would be nice to have the ability to run the host-side program in-between without preemption. We can do this by making vmcall not execute machine instructions, and instead do it ourselves manually:
 
-```
+```C++
 // Make a function call into the guest VM, but don't start execution
 machine.vmcall("test", {555}, false);
 // Run the program for X amount of instructions, then print something, then
@@ -46,3 +46,17 @@ do {
 ```
 
 Note that for the sake of this example we have not wrapped the call to `simulate()` in a try..catch, but if a CPU exception happens, it will throw a `riscv::MachineException`.
+
+## Minimal exit function
+
+If you want to hand-write an exit function for your binary, it technically only requires 2 instructions. Here is a pseudo-assembly implementation:
+
+```
+_exit:
+	li a7, 93 # EXIT system call number
+	ecall     # A0 should already have the exit value
+```
+
+vmcall works by faking being called from `_exit`, and so when your function returns, it returns directly to `_exit`, with A0 already being the exit value.
+
+If you have some ideas on how to make vmcalls easier to do without requiring an exit function, please contact me or create an issue.
