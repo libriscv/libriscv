@@ -26,3 +26,23 @@ Arguments are passed as a C++ vector of register-sized integers.
 Instruction counters and registers are not reset on calling functions, so make sure to take that into consideration when measuring.
 
 It is not recommended to copy data into guest memory and then pass pointers to this data as arguments, as it's a very complex task to determine which memory is unused by the guest before and even during the call. Instead, the guest can allocate room for the struct on its own, and then simply perform a system call where it passes a pointer to the struct as an argument.
+
+
+## Doing work in-between machine execution
+
+Without using threads the machine program will simply run until it's completed, an exception occurs, or the machine is stopped from the outside during a trap or system call. It would be nice to have the ability to run the host-side program in-between without preemption. We can do this by making vmcall not execute machine instructions, and instead do it ourselves manually:
+
+```
+// Make a function call into the guest VM, but don't start execution
+machine.vmcall("test", {555}, false);
+// Run the program for X amount of instructions, then print something, then
+// resume execution again. Do this until stopped.
+do {
+	// Execute 1000 instructions at a time
+	machine.simulate(1000);
+	// Do some work
+	printf("Instruction count: %zu\n", (size_t) machine.cpu.registers().counter);
+} while (!machine.stopped());
+```
+
+Note that for the sake of this example we have not wrapped the call to `simulate()` in a try..catch, but if a CPU exception happens, it will throw a `riscv::MachineException`.

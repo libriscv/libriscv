@@ -6,11 +6,12 @@ option(NATIVE      "Enable native instructions" ON)
 
 add_subdirectory(../lib lib)
 
+set(EMUDIR "../emulator/src")
 set(SOURCES
 	server.cpp
-	../src/linux.cpp
-	../src/syscalls.cpp
-	../src/threads.cpp
+	${EMUDIR}/linux.cpp
+	${EMUDIR}/syscalls.cpp
+	${EMUDIR}/threads.cpp
 )
 
 add_executable(webapi ${SOURCES})
@@ -18,7 +19,7 @@ set_target_properties(webapi PROPERTIES CXX_STANDARD 17)
 target_link_libraries(webapi riscv pthread)
 target_include_directories(webapi PRIVATE "cpp-httplib")
 target_include_directories(webapi PRIVATE ${CMAKE_BINARY_DIR})
-target_include_directories(webapi PRIVATE ${CMAKE_SOURCE_DIR}/../src)
+target_include_directories(webapi PRIVATE ${CMAKE_SOURCE_DIR}/../emulator/src)
 
 if (LTO)
 	set_target_properties(riscv PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
