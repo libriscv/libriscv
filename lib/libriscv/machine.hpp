@@ -52,11 +52,11 @@ namespace riscv
 		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.
 		// the function must use the C ABI calling convention.
-		// If max instructions are reached, the call returns -1, and reading
-		// the instruction counter will show that the count was reached.
-		// NOTE: overwrites the exit (93) system call and relies on _exit
-		// to stop execution right after returning. _exit must call the exit
-		// (93) system call and not call destructors, which is the norm.
+		// NOTE: relies on _exit function to stop execution right after returning.
+		// _exit must call the exit (93) system call and not call destructors,
+		// which is the norm.
+		// The value of machine.stopped() should be false if the machine
+		// reached max instructions without completing the function call.
 		long vmcall(const std::string& function_name,
 					std::vector<address_t> args, bool exec = true,
 					uint64_t max_instructions = 0);
