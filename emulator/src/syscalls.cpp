@@ -119,7 +119,7 @@ long syscall_gettimeofday(Machine<W>& machine)
 	struct timeval tv;
 	gettimeofday(&tv, nullptr);
 	machine.copy_to_guest(buffer, &tv, sizeof(tv));
-    return -EBADF;
+    return 0;
 }
 
 template <int W>
