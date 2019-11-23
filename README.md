@@ -37,12 +37,12 @@ $ ./build.sh
 ```
 Which will produce a `hello_world` binary in the sub-projects build folder.
 
-Building the emulator (starting from project root) and booting the newlib `hello_world`:
+Building the emulator and booting the newlib `hello_world`:
 ```sh
-mkdir -p build
-cd build
+cd emulator
+mkdir -p build && cd build
 cmake .. && make -j4
-./remu ../binaries/newlib/build/hello_world
+./remu ../../binaries/newlib/build/hello_world
 ```
 
 Building and running your own ELF files that can run in freestanding RV32GC is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal, except you can more easily implement system functions. The fun part is of course the extremely small binaries and total control over the environment.

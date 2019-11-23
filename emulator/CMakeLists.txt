@@ -6,7 +6,7 @@ option(NATIVE      "Enable native instructions" ON)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
 
-add_subdirectory(lib)
+add_subdirectory(../lib lib)
 
 set(SOURCES
 	src/main.cpp
