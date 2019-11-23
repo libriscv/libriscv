@@ -2,13 +2,13 @@
 #include <unistd.h>
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
-static void test_vmcall(riscv::Machine<riscv::RISCV32>& machine);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
 static constexpr bool full_linux_guest = true;
 static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
 #include "syscalls.hpp"
+static void test_vmcall(riscv::Machine<riscv::RISCV32>&, State<riscv::RISCV32>&);
 #include "threads.hpp"
 
 int main(int argc, const char** argv)
@@ -117,11 +117,11 @@ int main(int argc, const char** argv)
 			machine.memory.pages_highest_active(), machine.memory.pages_highest_active() * 4);
 
 	// VM function call testing
-	test_vmcall(machine);
+	test_vmcall(machine, state);
 	return 0;
 }
 
-void test_vmcall(riscv::Machine<riscv::RISCV32>& machine)
+void test_vmcall(riscv::Machine<riscv::RISCV32>& machine, State<riscv::RISCV32>& state)
 {
 	// look for a symbol called "test" in the binary
 	if (machine.address_of("test") != 0)
@@ -131,16 +131,23 @@ void test_vmcall(riscv::Machine<riscv::RISCV32>& machine)
 		machine.realign_stack();
 		// reset instruction counter to simplify calculation
 		machine.cpu.registers().counter = 0;
+#ifndef RISCV_DEBUG
+		state.output.clear();
+#endif
 		// make a function call into the guest VM, stopping at 3000 instructions
-		int ret = machine.vmcall("test", {555}, 3000);
-		printf("test returned %d\n", ret);
-		printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
-		// resume execution, to complete the function call:
-		machine.simulate();
-		printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+		machine.vmcall("test", {555}, 1);
+		while (!machine.stopped()) {
+			printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+			// resume execution, to complete the function call:
+			machine.simulate(100);
+		}
+		printf("Final instruction count: %zu\n", (size_t) machine.cpu.registers().counter);
 		// extract real return value:
-		ret = machine.sysarg<int>(0);
+		int ret = machine.sysarg<int>(0);
 		printf("test *actually* returned %d\n", ret);
+#ifndef RISCV_DEBUG
+		printf("\n*** Guest output ***\n%s\n", state.output.c_str());
+#endif
 	}
 }
 

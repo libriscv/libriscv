@@ -60,12 +60,11 @@ int main()
 	std::regex long_word_regex("(\\w{7,})");
 	std::string new_s = std::regex_replace(s, long_word_regex, "[$&]");
 	printf("%s\n", new_s.c_str());
+
 	printf("Testing double: %f\n", 10.0);
-	/*
 	printf("Testing double: %f\n", 100.0);
 	printf("Testing double: %f\n", 1000.0);
 	printf("Testing double: %f\n", 10000.0);
-	*/
 
 	// if we don't return from main we can continue calling functions in the VM
 	// exit(int) will call destructors, which breaks the C runtime environment
