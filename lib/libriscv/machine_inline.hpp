@@ -7,7 +7,7 @@ inline Machine<W>::Machine(const std::vector<uint8_t>& binary, address_t maxmem)
 }
 
 template <int W>
-inline void Machine<W>::stop() noexcept {
+inline void Machine<W>::stop(bool v) noexcept {
 	m_stopped = true;
 }
 template <int W>
@@ -21,13 +21,13 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 	this->m_stopped = false;
 	if (max_instr != 0) {
 		max_instr += cpu.registers().counter;
-		while (!this->stopped()) {
+		while (LIKELY(!this->stopped())) {
 			cpu.simulate();
 			if (UNLIKELY(cpu.registers().counter >= max_instr)) break;
 		}
 	}
 	else {
-		while (!this->stopped()) {
+		while (LIKELY(!this->stopped())) {
 			cpu.simulate();
 		}
 	}

@@ -19,59 +19,7 @@ namespace riscv
 	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction) const
 #endif
 	{
-		if (!instruction.is_long())
-		{
-			// RV32 C
-			const auto ci = instruction.compressed();
-			switch (ci.opcode())
-			{
-				// Quadrant 0
-				case CI_CODE(0b000, 0b00):
-					DECODER(DECODED_COMPR(C0_ADDI4SPN));
-				case CI_CODE(0b001, 0b00):
-				case CI_CODE(0b010, 0b00):
-				case CI_CODE(0b011, 0b00):
-					DECODER(DECODED_COMPR(C0_REG_LOAD));
-				// RESERVED: 0b100, 0b00
-				case CI_CODE(0b101, 0b00):
-				case CI_CODE(0b110, 0b00):
-				case CI_CODE(0b111, 0b00):
-					DECODER(DECODED_COMPR(C0_REG_STORE));
-				// Quadrant 1
-				case CI_CODE(0b000, 0b01):
-					DECODER(DECODED_COMPR(C1_NOP_ADDI));
-				case CI_CODE(0b001, 0b01):
-					DECODER(DECODED_COMPR(C1_JAL));
-				case CI_CODE(0b010, 0b01):
-					DECODER(DECODED_COMPR(C1_LI));
-				case CI_CODE(0b011, 0b01):
-					DECODER(DECODED_COMPR(C1_ADDI16SP_LUI));
-				case CI_CODE(0b100, 0b01):
-					DECODER(DECODED_COMPR(C1_ALU_OPS));
-				case CI_CODE(0b101, 0b01):
-					DECODER(DECODED_COMPR(C1_JUMP));
-				case CI_CODE(0b110, 0b01):
-					DECODER(DECODED_COMPR(C1_BEQZ));
-				case CI_CODE(0b111, 0b01):
-					DECODER(DECODED_COMPR(C1_BNEZ));
-				// Quadrant 2
-				case CI_CODE(0b000, 0b10):
-				case CI_CODE(0b001, 0b10):
-				case CI_CODE(0b010, 0b10):
-				case CI_CODE(0b011, 0b10):
-					DECODER(DECODED_COMPR(C2_SP_LOAD));
-				case CI_CODE(0b100, 0b10):
-					if (UNLIKELY(ci.whole == 0b1001000000000010)) {
-						DECODER(DECODED_COMPR(C2_EBREAK));
-					}
-					DECODER(DECODED_COMPR(C2_VARIOUS));
-				case CI_CODE(0b101, 0b10):
-				case CI_CODE(0b110, 0b10):
-				case CI_CODE(0b111, 0b10):
-					DECODER(DECODED_COMPR(C2_SP_STORE));
-			}
-		}
-		else // RV32 IMAFD
+		if (instruction.is_long()) // RV32 IMAFD
 		{
 			// Quadrant 3
 			switch (instruction.opcode())
@@ -154,6 +102,58 @@ namespace riscv
 						case 0b01000:
 							DECODER(DECODED_ATOMIC(AMOOR_W));
 					}
+			}
+		}
+		else
+		{
+			// RV32 C
+			const auto ci = instruction.compressed();
+			switch (ci.opcode())
+			{
+				// Quadrant 0
+				case CI_CODE(0b000, 0b00):
+					DECODER(DECODED_COMPR(C0_ADDI4SPN));
+				case CI_CODE(0b001, 0b00):
+				case CI_CODE(0b010, 0b00):
+				case CI_CODE(0b011, 0b00):
+					DECODER(DECODED_COMPR(C0_REG_LOAD));
+				// RESERVED: 0b100, 0b00
+				case CI_CODE(0b101, 0b00):
+				case CI_CODE(0b110, 0b00):
+				case CI_CODE(0b111, 0b00):
+					DECODER(DECODED_COMPR(C0_REG_STORE));
+				// Quadrant 1
+				case CI_CODE(0b000, 0b01):
+					DECODER(DECODED_COMPR(C1_NOP_ADDI));
+				case CI_CODE(0b001, 0b01):
+					DECODER(DECODED_COMPR(C1_JAL));
+				case CI_CODE(0b010, 0b01):
+					DECODER(DECODED_COMPR(C1_LI));
+				case CI_CODE(0b011, 0b01):
+					DECODER(DECODED_COMPR(C1_ADDI16SP_LUI));
+				case CI_CODE(0b100, 0b01):
+					DECODER(DECODED_COMPR(C1_ALU_OPS));
+				case CI_CODE(0b101, 0b01):
+					DECODER(DECODED_COMPR(C1_JUMP));
+				case CI_CODE(0b110, 0b01):
+					DECODER(DECODED_COMPR(C1_BEQZ));
+				case CI_CODE(0b111, 0b01):
+					DECODER(DECODED_COMPR(C1_BNEZ));
+				// Quadrant 2
+				case CI_CODE(0b000, 0b10):
+				case CI_CODE(0b001, 0b10):
+				case CI_CODE(0b010, 0b10):
+				case CI_CODE(0b011, 0b10):
+					DECODER(DECODED_COMPR(C2_SP_LOAD));
+				case CI_CODE(0b100, 0b10):
+					if (UNLIKELY(ci.whole == 0b1001000000000010)) {
+						DECODER(DECODED_COMPR(C2_EBREAK));
+					}
+					DECODER(DECODED_COMPR(C2_VARIOUS));
+				case CI_CODE(0b101, 0b10):
+				case CI_CODE(0b110, 0b10):
+				case CI_CODE(0b111, 0b10):
+					DECODER(DECODED_COMPR(C2_SP_STORE));
 			}
 		}
 		if (instruction.whole == 0x0) {

@@ -25,7 +25,7 @@ namespace riscv
 		// NOTE: if @max_instructions is 0, then run until stop
 		void simulate(uint64_t max_instructions = 0);
 
-		void stop() noexcept;
+		void stop(bool v = true) noexcept;
 		bool stopped() const noexcept;
 		void reset();
 
