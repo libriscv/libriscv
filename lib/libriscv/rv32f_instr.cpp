@@ -294,7 +294,7 @@ namespace riscv
 						RISCV::flpname(fi.R4type.rd));
 	});
 
-	FLOAT_INSTR(FEQ,
+	FLOAT_INSTR(FEQ_FLT_FLE,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		rv32f_instruction fi { instr };
@@ -303,11 +303,25 @@ namespace riscv
 			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 			auto& dst = cpu.reg(fi.R4type.rd);
-			switch (fi.R4type.funct2) {
-				case 0x0: // float32
+
+			switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
+			{
+				case 0x0: // FLE.S
+					dst = (rs1.f32[0] <= rs2.f32[0]) ? 1 : 0;
+					return;
+				case 0x1: // FLT.S
+					dst = (rs1.f32[0] < rs2.f32[0]) ? 1 : 0;
+					return;
+				case 0x2: // FEQ.S
 					dst = (rs1.f32[0] == rs2.f32[0]) ? 1 : 0;
 					return;
-				case 0x1: // float64
+				case 0x10: // FLE.D
+					dst = (rs1.f64 <= rs2.f64) ? 1 : 0;
+					return;
+				case 0x11: // FLT.D
+					dst = (rs1.f64 < rs2.f64) ? 1 : 0;
+					return;
+				case 0x12: // FEQ.D
 					dst = (rs1.f64 == rs2.f64) ? 1 : 0;
 					return;
 			}
