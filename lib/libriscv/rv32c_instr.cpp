@@ -11,7 +11,6 @@
 
 namespace riscv
 {
-	// LW, LD, LQ, FLW, FLD, SW, SD, SQ, FSW, FSD
 	COMPRESSED_INSTR(C0_ADDI4SPN,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// if all bits are zero, it's an illegal instruction (by design)
@@ -29,6 +28,7 @@ namespace riscv
 						RISCV::ciname(ci.CIW.srd), ci.CIW.offset(),
 						cpu.reg(RISCV::REG_SP) + ci.CIW.offset());
 	});
+	// LW, LD, LQ, FLW, FLD, SW, SD, SQ, FSW, FSD
 	COMPRESSED_INSTR(C0_REG_LOAD,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
@@ -91,9 +91,15 @@ namespace riscv
 			"Reserved instruction", "FSD", "SW", "FSW"
 		};
 		auto ci = instr.compressed();
-		return snprintf(buffer, len, "C.%s [%s%+d], %s", f3[ci.CS.funct3 - 4],
-						RISCV::ciname(ci.CS.srs1), ci.CS.offset4(),
-						RISCV::ciname(ci.CS.srs2));
+		if (ci.CS.funct3 == 0x6) {
+		return snprintf(buffer, len, "C.%s %s, [%s%+d]", f3[ci.CS.funct3 - 4],
+						RISCV::ciname(ci.CS.srs2),
+						RISCV::ciname(ci.CS.srs1), ci.CS.offset4());
+		}
+		const int offset = (ci.CS.funct3 == 0x7) ? ci.CS.offset4() : ci.CSD.offset8();
+		return snprintf(buffer, len, "C.%s %s, [%s%+d]", f3[ci.CS.funct3 - 4],
+						RISCV::ciflp(ci.CS.srs2),
+						RISCV::ciname(ci.CS.srs1), offset);
 	});
 
 	COMPRESSED_INSTR(C1_NOP_ADDI,

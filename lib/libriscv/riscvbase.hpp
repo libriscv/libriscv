@@ -66,40 +66,44 @@ namespace riscv
 		static const char* flpname(const uint32_t reg) noexcept
 		{
 			switch (reg) {
-				case 0: return "F0";
-				case 1: return "F1";
-				case 2: return "F2";
-				case 3: return "F3";
-				case 4: return "F4";
-				case 5: return "F5";
-				case 6: return "F6";
-				case 7: return "F7";
-				case 8: return "F8";
-				case 9: return "F9";
-				case 10: return "F10";
-				case 11: return "F11";
-				case 12: return "F12";
-				case 13: return "F13";
-				case 14: return "F14";
-				case 15: return "F15";
-				case 16: return "F16";
-				case 17: return "F17";
-				case 18: return "F18";
-				case 19: return "F19";
-				case 20: return "F20";
-				case 21: return "F21";
-				case 22: return "F22";
-				case 23: return "F23";
-				case 24: return "F24";
-				case 25: return "F25";
-				case 26: return "F26";
-				case 27: return "F27";
-				case 28: return "F28";
-				case 29: return "F29";
-				case 30: return "F30";
-				case 31: return "F31";
+				case 0: return "FT0";
+				case 1: return "FT1";
+				case 2: return "FT2";
+				case 3: return "FT3";
+				case 4: return "FT4";
+				case 5: return "FT5";
+				case 6: return "FT6";
+				case 7: return "FT7";
+				case 8: return "FS0";
+				case 9: return "FS1";
+				case 10: return "FA0";
+				case 11: return "FA1";
+				case 12: return "FA2";
+				case 13: return "FA3";
+				case 14: return "FA4";
+				case 15: return "FA5";
+				case 16: return "FA6";
+				case 17: return "FA7";
+				case 18: return "FS2";
+				case 19: return "FS3";
+				case 20: return "FS4";
+				case 21: return "FS5";
+				case 22: return "FS6";
+				case 23: return "FS7";
+				case 24: return "FS8";
+				case 25: return "FS9";
+				case 26: return "FS10";
+				case 27: return "FS11";
+				case 28: return "FT8";
+				case 29: return "FT9";
+				case 30: return "FT10";
+				case 31: return "FT11";
 			}
 			return "Invalid register";
+		}
+		static const char* ciflp(const uint16_t reg) noexcept
+		{
+			return flpname(reg + 0x8);
 		}
 	};
 }
