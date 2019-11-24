@@ -294,6 +294,52 @@ namespace riscv
 						RISCV::flpname(fi.R4type.rd));
 	});
 
+	FLOAT_INSTR(FMIN_FMAX,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		if (fi.R4type.rd != 0)
+		{
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+
+			switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
+			{
+				case 0x0: // FMIN.S
+					dst.f32[0] = std::min(rs1.f32[0], rs2.f32[0]);
+					dst.nanbox();
+					return;
+				case 0x1: // FMAX.S
+					dst.f32[0] = std::max(rs1.f32[0], rs2.f32[0]);
+					dst.nanbox();
+					return;
+				case 0x10: // FMIN.D
+					dst.f64 = std::min(rs1.f64, rs2.f64);
+					return;
+				case 0x11: // FMAX.D
+					dst.f64 = std::max(rs1.f64, rs2.f64);
+					return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> fmina {
+			"FMIN.S", "FMIN.D", "???", "FMIN.Q"
+		};
+		static const std::array<const char*, 4> fmaxa {
+			"FMAX.S", "FMAX.D", "???", "FMAX.Q"
+		};
+		const auto& array = (fi.R4type.funct2 == 0) ? fmina : fmaxa;
+		return snprintf(buffer, len, "%s %s %s, %s",
+						array[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2),
+						RISCV::regname(fi.R4type.rd));
+	});
+
 	FLOAT_INSTR(FEQ_FLT_FLE,
 	[] (auto& cpu, rv32i_instruction instr)
 	{

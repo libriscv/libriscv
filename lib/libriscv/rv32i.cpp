@@ -77,6 +77,8 @@ namespace riscv
 							DECODER(DECODED_FLOAT(FDIV));
 						case 0b00100:
 							DECODER(DECODED_FLOAT(FSGNJ_NX));
+						case 0b00101:
+							DECODER(DECODED_FLOAT(FMIN_FMAX));
 						case 0b10100:
 							DECODER(DECODED_FLOAT(FEQ_FLT_FLE));
 						case 0b01000:
