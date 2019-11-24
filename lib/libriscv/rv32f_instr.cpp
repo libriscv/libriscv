@@ -74,7 +74,7 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] * rs2.f32[0] + rs3.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
@@ -104,7 +104,7 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] * rs2.f32[0] - rs3.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 - rs3.f64;
@@ -134,7 +134,7 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) - rs3.f64;
@@ -163,7 +163,7 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) + rs3.f64;
@@ -191,7 +191,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] + rs2.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 + rs2.f64;
@@ -219,7 +219,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] - rs2.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 - rs2.f64;
@@ -247,7 +247,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] * rs2.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64;
@@ -275,7 +275,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] / rs2.f32[0];
-			dst.i32[1] = -1;
+			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 / rs2.f64;
@@ -349,7 +349,7 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 			case 0x0: // FCVT.S.D (64 -> 32)
 				dst.f32[0] = rs1.f64;
-				dst.i32[1] = -1;
+				dst.nanbox();
 				return;
 			case 0x1: // FCVT.D.S (32 -> 64)
 				dst.f64 = rs1.f32[0];
@@ -411,7 +411,7 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 			case 0x0: // to float32
 				dst.f32[0] = rs1;
-				dst.f32[1] = -1;
+				dst.nanbox();
 				return;
 			case 0x1: // to float64
 				dst.f64 = rs1;

@@ -22,6 +22,7 @@ namespace riscv
 			uint64_t sign  : 1;
 		} usign;
 
+		inline void nanbox() { this->i32[1] = 0xFFFFFFFF; }
 		void load_u32(uint32_t val) {
 			this->i32[0] = val;
 			this->i32[1] = -1;
@@ -67,15 +68,15 @@ namespace riscv
 
 		std::string flp_to_string() const
 		{
-			char buffer[600];
+			char buffer[800];
 			int  len = 0;
 			for (int i = 0; i < 32; i++) {
 				auto& src = this->getfl(i);
 				const char T = (src.i32[1] == -1) ? 'S' : 'D';
 				double val = (src.i32[1] == -1) ? src.f32[0] : src.f64;
 				len += snprintf(buffer+len, sizeof(buffer) - len,
-						"[%s\t%c%+.2f] ", RISCV::flpname(i), T, val);
-				if (i % 5 == 4) {
+						"[%s\t%c%+.2f (0x%lX)] ", RISCV::flpname(i), T, val, src.i64);
+				if (i % 4 == 3) {
 					len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
 				}
 			}
@@ -97,4 +98,6 @@ namespace riscv
 			uint32_t whole = 0;
 		} m_fcsr;
 	};
+
+	static_assert(sizeof(fp64reg) == 8, "FP-register is 64-bit");
 }
