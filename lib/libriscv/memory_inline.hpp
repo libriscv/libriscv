@@ -31,6 +31,10 @@ void Memory<W>::write(address_t address, T value)
 	if (m_current_wr_page != pageno) {
 		m_current_wr_page = pageno;
 		m_current_wr_ptr = &create_page(pageno);
+		// it's possible for writes to invalidate the cached read page
+		if (m_current_rd_page == m_current_wr_page) {
+			m_current_rd_ptr = m_current_wr_ptr;
+		}
 	}
 	auto& page = *m_current_wr_ptr;
 
