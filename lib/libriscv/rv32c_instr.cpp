@@ -33,7 +33,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
 		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
-		if (ci.CL.funct3 == 0x2) {
+		if (ci.CL.funct3 == 0x2) { // LW
 			cpu.cireg(ci.CL.srd) = cpu.machine().memory.template read<uint32_t> (address);
 			return;
 		}
@@ -146,10 +146,11 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
 		if (ci.CI.rd != 0) {
+			// LI rd, imm[5:0]
 			cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
 			return;
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		// HINTs
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -161,14 +162,14 @@ namespace riscv
 	COMPRESSED_INSTR(C1_ADDI16SP_LUI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
-		if (ci.CI.rd != 0 && ci.CI.rd != 2) {
-			// LUI rd, imm[17:12]
-			cpu.reg(ci.CI.rd) = ci.CI.signed_imm() << 12;
-			return;
-		}
-		else if (ci.CI.rd == 2) {
+		if (ci.CI.rd == 2) {
 			// ADDI16SP rd, imm[17:12]
 			cpu.reg(RISCV::REG_SP) += ci.CI16.signed_imm();
+			return;
+		}
+		else if (ci.CI.rd != 0) {
+			// LUI rd, imm[17:12]
+			cpu.reg(ci.CI.rd) = ci.CI.signed_imm() << 12;
 			return;
 		}
 		// the registers are not allowed

@@ -152,18 +152,18 @@ namespace riscv
 		} CA;
 		struct {
 			uint16_t opcode : 2;
-			uint16_t imm1   : 5;
+			uint16_t imm04  : 5;
 			uint16_t srd    : 3;
 			uint16_t funct2 : 2;
-			uint16_t imm2   : 1;
+			uint16_t imm5   : 1;
 			uint16_t funct3 : 3;
 
 			uint32_t shift_imm() const noexcept {
-				return imm1;
+				return imm04;
 			}
 			int32_t signed_imm() const noexcept {
 				const uint32_t ext = 0xFFFFFFE0;
-				return imm1 | (imm2 ? ext : 0);
+				return imm04 | (imm5 ? ext : 0);
 			}
 		} CAB;
 		// branch format

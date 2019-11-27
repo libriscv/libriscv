@@ -316,7 +316,7 @@ namespace riscv
 					dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
 					break;
 				case 0x1: // SLL
-					dst = src1 << src2; // TODO: & 0x1F
+					dst = src1 << (src2 & 0x1F);
 					break;
 				case 0x2: // SLT
 					dst = (instr.to_signed(src1) < instr.to_signed(src2)) ? 1 : 0;
@@ -329,7 +329,7 @@ namespace riscv
 					break;
 				case 0x5: // SRL / SRA
 					if (!instr.Rtype.is_f7()) { // SRL
-						dst = src1 >> src2;
+						dst = src1 >> (src2 & 0x1F);
 					} else { // SRA
 						const bool is_signed = (src1 & 0x80000000) != 0;
 						const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
