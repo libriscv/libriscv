@@ -40,9 +40,9 @@ namespace riscv
 
 	    virtual ~MachineException() throw() {}
 
-		const int  type() const throw() { return m_type; }
+		int  type() const throw() { return m_type; }
 	    const char* what() const throw() override { return m_msg; }
-		const int  data() const throw() { return m_data; }
+		int  data() const throw() { return m_data; }
 	protected:
 	    const int   m_type;
 		const int   m_data;

@@ -25,7 +25,7 @@ namespace riscv
 		inline void nanbox() { this->i32[1] = 0xFFFFFFFF; }
 		void load_u32(uint32_t val) {
 			this->i32[0] = val;
-			this->i32[1] = -1;
+			this->nanbox();
 		}
 		void load_u64(uint64_t val) {
 			this->i64 = val;

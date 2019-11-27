@@ -8,7 +8,7 @@ inline Machine<W>::Machine(const std::vector<uint8_t>& binary, address_t maxmem)
 
 template <int W>
 inline void Machine<W>::stop(bool v) noexcept {
-	m_stopped = true;
+	m_stopped = v;
 }
 template <int W>
 inline bool Machine<W>::stopped() const noexcept {
