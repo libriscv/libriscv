@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.9)
 project(riscv CXX)
 
 add_subdirectory(../lib lib)
+target_compile_options(riscv PUBLIC "-g" "-Wall" "-Wextra" "-Wno-unused")
 
 set(SOURCES
 	custom.cpp
