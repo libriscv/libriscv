@@ -158,9 +158,6 @@ namespace riscv
 					DECODER(DECODED_COMPR(C2_SP_STORE));
 			}
 		}
-		if (instruction.whole == 0x0) {
-			DECODER(DECODED_INSTR(ILLEGAL));
-		}
 		// illegal operation exception
 		DECODER(DECODED_INSTR(UNIMPLEMENTED));
 	}

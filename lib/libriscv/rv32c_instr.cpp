@@ -24,6 +24,9 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
+		if (UNLIKELY(ci.whole == 0)) {
+			return snprintf(buffer, len, "INVALID: All zeroes");
+		}
 		return snprintf(buffer, len, "C.ADDI4SPN %s, SP+%u (0x%X)",
 						RISCV::ciname(ci.CIW.srd), ci.CIW.offset(),
 						cpu.reg(RISCV::REG_SP) + ci.CIW.offset());
@@ -189,8 +192,8 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_ALU_OPS,
-	[] (auto& cpu, rv32i_instruction instr) {
-		// TODO: implement me
+	[] (auto& cpu, rv32i_instruction instr)
+	{
 		auto ci = instr.compressed();
 		auto& dst = cpu.cireg(ci.CA.srd);
 		switch (ci.CA.funct6 & 0x3)
@@ -230,7 +233,7 @@ namespace riscv
 						break;
 				}
 		}
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(ILLEGAL_OPCODE);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
