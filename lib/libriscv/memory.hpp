@@ -70,6 +70,7 @@ namespace riscv
 			return address >> Page::SHIFT;
 		}
 		void initial_paging();
+		void invalidate_page(address_t pageno, Page&);
 		void protection_fault();
 		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;

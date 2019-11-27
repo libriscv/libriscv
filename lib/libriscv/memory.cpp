@@ -218,6 +218,9 @@ namespace riscv
 			std::forward_as_tuple(page),
 			std::forward_as_tuple());
 		m_pages_highest = std::max(m_pages_highest, pages().size());
+		// if this page was read-cached, invalidate it
+		this->invalidate_page(page, it.first->second);
+		// return new page
 		return it.first->second;
 	}
 

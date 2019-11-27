@@ -31,10 +31,6 @@ void Memory<W>::write(address_t address, T value)
 	if (m_current_wr_page != pageno) {
 		m_current_wr_page = pageno;
 		m_current_wr_ptr = &create_page(pageno);
-		// it's possible for writes to invalidate the cached read page
-		if (m_current_rd_page == m_current_wr_page) {
-			m_current_rd_ptr = m_current_wr_ptr;
-		}
 	}
 	auto& page = *m_current_wr_ptr;
 
@@ -70,17 +66,17 @@ inline const Page& Memory<W>::get_pageno(const address_t page) const noexcept
 }
 
 template <int W>
-inline Page& Memory<W>::create_page(const address_t page)
+inline Page& Memory<W>::create_page(const address_t pageno)
 {
-	auto it = m_pages.find(page);
+	auto it = m_pages.find(pageno);
 	if (it != m_pages.end()) {
 		return it->second;
 	}
 	// create page on-demand, or throw exception when out of memory
 	if (this->m_page_fault_handler == nullptr) {
-		return default_page_fault(*this, page);
+		return default_page_fault(*this, pageno);
 	}
-	return m_page_fault_handler(*this, page);
+	return m_page_fault_handler(*this, pageno);
 }
 
 template <int W> inline void
@@ -114,6 +110,16 @@ const PageAttributes& Memory<W>::get_page_attr(address_t src) const noexcept
 	const size_t pageno = src >> Page::SHIFT;
 	const auto& page = this->get_pageno(pageno);
 	return page.attr;
+}
+
+
+template <int W> inline void
+Memory<W>::invalidate_page(address_t pageno, Page& page)
+{
+	// it's only possible to a have CoW read-only page
+	if (m_current_rd_page == pageno) {
+		m_current_rd_ptr = &page;
+	}
 }
 
 template <int W> inline void
