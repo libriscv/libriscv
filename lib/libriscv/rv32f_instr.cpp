@@ -326,15 +326,12 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> fmina {
-			"FMIN.S", "FMIN.D", "???", "FMIN.Q"
+		static const std::array<const char*, 8> insn {
+			"FMIN", "FMAX", "???", "???", "???", "???", "???", "???"
 		};
-		static const std::array<const char*, 4> fmaxa {
-			"FMAX.S", "FMAX.D", "???", "FMAX.Q"
-		};
-		const auto& array = (fi.R4type.funct2 == 0) ? fmina : fmaxa;
-		return snprintf(buffer, len, "%s %s %s, %s",
-						array[fi.R4type.funct2],
+		return snprintf(buffer, len, "%s.%c %s %s, %s",
+						insn[fi.R4type.funct3],
+						RISCV::flpsize(fi.R4type.funct2),
 						RISCV::flpname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rs2),
 						RISCV::regname(fi.R4type.rd));
@@ -377,10 +374,11 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> insn {
-			"FEQ.S", "FEQ.D", "???", "FEQ.Q"
+			"FLE", "FLT", "FEQ", "F???"
 		};
-		return snprintf(buffer, len, "%s %s %s, %s",
-						insn[fi.R4type.funct2],
+		return snprintf(buffer, len, "%s.%c %s %s, %s",
+						insn[fi.R4type.funct3],
+						RISCV::flpsize(fi.R4type.funct2),
 						RISCV::flpname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rs2),
 						RISCV::regname(fi.R4type.rd));
@@ -518,20 +516,19 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		rv32f_instruction fi { instr };
+
 		if (fi.R4type.rs1 == fi.R4type.rs2) {
-			static const std::array<const char*, 4> insn {
-				"FMV.S", "FMV.D", "???", "FMV.Q"
-			};
-			return snprintf(buffer, len, "%s %s, %s",
-							insn[fi.R4type.funct2],
+			static const char* insn[4] = {"FMV", "FNEG", "FABS", "???"};
+			return snprintf(buffer, len, "%s.%c %s, %s",
+							insn[fi.R4type.funct3],
+							RISCV::flpsize(fi.R4type.funct2),
 							RISCV::flpname(fi.R4type.rs1),
 							RISCV::flpname(fi.R4type.rd));
 		}
-		static const std::array<const char*, 4> insn {
-			"FSGNJ.S", "FSGNJ.D", "???", "FSGNJ.Q"
-		};
-		return snprintf(buffer, len, "%s %s %s, %s",
-						insn[fi.R4type.funct2],
+		static const char* insn[4] = {"FSGNJ", "FSGNJN", "FSGNJX", "???"};
+		return snprintf(buffer, len, "%s.%c %s %s, %s",
+						insn[fi.R4type.funct3],
+						RISCV::flpsize(fi.R4type.funct2),
 						RISCV::flpname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rs2),
 						RISCV::flpname(fi.R4type.rd));

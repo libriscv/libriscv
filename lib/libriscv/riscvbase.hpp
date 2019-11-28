@@ -101,6 +101,12 @@ namespace riscv
 			}
 			return "Invalid register";
 		}
+		static inline char flpsize(const uint8_t size)
+		{
+			static const char sizechar[4] = {'S', 'D', 'H', 'Q'};
+			if (size < 4) return sizechar[size];
+			return '?';
+		}
 		static const char* ciflp(const uint16_t reg) noexcept
 		{
 			return flpname(reg + 0x8);
