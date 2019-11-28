@@ -38,9 +38,10 @@ long State<W>::syscall_write(Machine<W>& machine)
 		machine.memory.memcpy_out(buffer, address, len_g);
 		output += std::string(buffer, len_g);
 #ifdef RISCV_DEBUG
-		write(fd, buffer, len);
-#endif
+		return write(fd, buffer, len);
+#else
 		return len_g;
+#endif
 	}
 	return -EBADF;
 }
@@ -71,9 +72,10 @@ long State<W>::syscall_writev(Machine<W>& machine)
             machine.memory.memcpy_out(buffer, src_g, len_g);
 			output += std::string(buffer, len_g);
 #ifdef RISCV_DEBUG
-			write(fd, buffer, len_g);
-#endif
+			res += write(fd, buffer, len_g);
+#else
 			res += len_g;
+#endif
         }
         return res;
 	}
@@ -118,7 +120,8 @@ long syscall_gettimeofday(Machine<W>& machine)
 	SYSPRINT("SYSCALL gettimeofday called, buffer = 0x%X\n", buffer);
 	struct timeval tv;
 	gettimeofday(&tv, nullptr);
-	machine.copy_to_guest(buffer, &tv, sizeof(tv));
+	int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
+	machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
     return 0;
 }
 
