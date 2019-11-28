@@ -402,17 +402,13 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
 		const bool topbit = ci.whole & (1 << 12);
-		if (!topbit && ci.CR.rs2 == 0 && ci.CR.rd != 0)
+		if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
 		{	// JR rd
 			cpu.jump(cpu.reg(ci.CR.rd) - 2);
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
 				printf(">>> RET 0x%X <-- %s = 0x%X\n", cpu.pc(),
 						RISCV::regname(ci.CR.rd), cpu.reg(ci.CR.rd));
 			}
-		}
-		else if (!topbit && ci.CR.rs2 != 0 && ci.CR.rd != 0)
-		{	// MV rd, rs2
-			cpu.reg(ci.CR.rd) = cpu.reg(ci.CR.rs2);
 		}
 		else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
 		{	// JALR ra, rd+0
@@ -423,9 +419,18 @@ namespace riscv
 						RISCV::regname(ci.CR.rd), cpu.reg(ci.CR.rd));
 			}
 		}
+		else if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 != 0)
+		{	// MV rd, rs2
+			cpu.reg(ci.CR.rd) = cpu.reg(ci.CR.rs2);
+		}
 		else if (ci.CR.rd != 0) // ADD rd, rd + rs2
 		{
 			cpu.reg(ci.CR.rd) += cpu.reg(ci.CR.rs2);
+		}
+		else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0) // EBREAK
+		{
+			// its simpler and more flexible to just call a user-provided function
+			cpu.machine().system_call(riscv::SYSCALL_EBREAK);
 		}
 		else {
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -447,17 +452,8 @@ namespace riscv
 		else if (ci.CR.rd != 0)
 			return snprintf(buffer, len, "C.ADD %s, %s + %s", RISCV::regname(ci.CR.rd),
 							RISCV::regname(ci.CR.rd), RISCV::regname(ci.CR.rs2));
+		else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0)
+			return snprintf(buffer, len, "C.EBREAK");
 		return snprintf(buffer, len, "C.HINT");
-	});
-
-	COMPRESSED_INSTR(C2_EBREAK,
-	[] (auto& cpu, rv32i_instruction) {
-		// its simpler and more flexible to just call a user-provided function
-		cpu.machine().system_call(riscv::SYSCALL_EBREAK);
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
-	{
-		auto ci = instr.compressed();
-		return snprintf(buffer, len, "C.EBREAK");
 	});
 }

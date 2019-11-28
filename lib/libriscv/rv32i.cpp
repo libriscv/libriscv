@@ -148,9 +148,6 @@ namespace riscv
 				case CI_CODE(0b011, 0b10):
 					DECODER(DECODED_COMPR(C2_SP_LOAD));
 				case CI_CODE(0b100, 0b10):
-					if (UNLIKELY(ci.whole == 0b1001000000000010)) {
-						DECODER(DECODED_COMPR(C2_EBREAK));
-					}
 					DECODER(DECODED_COMPR(C2_VARIOUS));
 				case CI_CODE(0b101, 0b10):
 				case CI_CODE(0b110, 0b10):
