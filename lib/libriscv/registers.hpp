@@ -75,8 +75,8 @@ namespace riscv
 				const char T = (src.i32[1] == -1) ? 'S' : 'D';
 				double val = (src.i32[1] == -1) ? src.f32[0] : src.f64;
 				len += snprintf(buffer+len, sizeof(buffer) - len,
-						"[%s\t%c%+.2f (0x%lX)] ", RISCV::flpname(i), T, val, src.i64);
-				if (i % 4 == 3) {
+						"[%s\t%c%+.2f] ", RISCV::flpname(i), T, val);
+				if (i % 5 == 4) {
 					len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
 				}
 			}

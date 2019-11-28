@@ -111,6 +111,9 @@ namespace riscv
 		{
 			auto regs = this->registers().to_string();
 			printf("\n%s\n\n", regs.c_str());
+			if (UNLIKELY(machine().verbose_fp_registers)) {
+				printf("%s\n", registers().flp_to_string().c_str());
+			}
 		}
 		if (UNLIKELY(this->reg(0) != 0)) {
 			const auto string = isa_t::to_string(*this, instruction, handler);
