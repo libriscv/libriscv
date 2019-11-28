@@ -48,11 +48,20 @@ namespace riscv
 				uint32_t val = imm234 | (imm5 << 3) | (imm67 << 4);
 				return (val << 2); // scaled by 4
 			}
-			uint32_t offset8() const noexcept {
-				uint32_t val = imm234 | (imm5 << 3) | (imm67 << 4);
+		} CI2;
+		struct {
+			uint16_t opcode : 2;
+			uint16_t imm678 : 3;
+			uint16_t imm34  : 2;
+			uint16_t rd     : 5;
+			uint16_t imm5   : 1;
+			uint16_t funct3 : 3;
+
+			uint32_t offset() const noexcept {
+				uint32_t val = imm34 | (imm5 << 2) | (imm678 << 3);
 				return (val << 3); // scaled by 8
 			}
-		} CI2;
+		} CIFLD;
 		struct {
 			uint16_t opcode : 2;
 			uint16_t imm5   : 1;
@@ -85,6 +94,19 @@ namespace riscv
 				return val * factor;
 			}
 		} CSS;
+		// stack-relative store
+		struct {
+			uint16_t opcode : 2;
+			uint16_t rs2    : 5;
+			uint16_t imm678 : 3;
+			uint16_t imm345 : 3;
+			uint16_t funct3 : 3;
+
+			int32_t offset() const noexcept {
+				int32_t val = imm345 | (imm678 << 3);
+				return val * 8; // 64-bit instruction
+			}
+		} CSFSD;
 		// wide immediate format
 		struct {
 			uint16_t opcode : 2;

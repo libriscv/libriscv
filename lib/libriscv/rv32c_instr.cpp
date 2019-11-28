@@ -320,8 +320,8 @@ namespace riscv
 		}
 		else if (ci.CI2.funct3 == 0x1) {
 			// FLDSP
-			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset8();
-			auto& dst = cpu.registers().getfl(ci.CI2.rd);
+			auto address = cpu.reg(RISCV::REG_SP) + ci.CIFLD.offset();
+			auto& dst = cpu.registers().getfl(ci.CIFLD.rd);
 			dst.load_u64(cpu.machine().memory.template read <uint64_t> (address));
 		}
 		else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
@@ -355,7 +355,9 @@ namespace riscv
 			};
 			const char* regname = (ci.CI2.funct3 & 1)
 			 	? RISCV::flpname(ci.CI2.rd) : RISCV::regname(ci.CI2.rd);
-			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
+			auto address = (ci.CI2.funct3 != 0x1) ?
+						  cpu.reg(RISCV::REG_SP) + ci.CI2.offset()
+						: cpu.reg(RISCV::REG_SP) + ci.CIFLD.offset();
 			return snprintf(buffer, len, "C.%s %s, [SP+%u] (0x%X)", f3[ci.CI2.funct3],
 							regname, ci.CI2.offset(), address);
 		}
@@ -366,8 +368,8 @@ namespace riscv
 		auto ci = instr.compressed();
 		if (ci.CSS.funct3 == 5) {
 			// FSDSP
-			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(8);
-			uint64_t value = cpu.registers().getfl(ci.CSS.rs2).i64;
+			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSFSD.offset();
+			uint64_t value = cpu.registers().getfl(ci.CSFSD.rs2).i64;
 			cpu.machine().memory.template write<uint64_t> (addr, value);
 		}
 		else if (ci.CSS.funct3 == 6) {
