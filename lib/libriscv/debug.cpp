@@ -109,6 +109,15 @@ static bool execute_commands(CPU<W>& cpu)
         printf("Verbose instructions are now %s\n", v ? "ON" : "OFF");
         return true;
     }
+	// verbose registers
+    else if (cmd == "vr")
+    {
+        bool& v = cpu.machine().verbose_registers;
+        v = !v;
+		cpu.machine().verbose_fp_registers = v;
+        printf("Verbose registers are now %s\n", v ? "ON" : "OFF");
+        return true;
+    }
     else if (cmd == "r" || cmd == "run")
     {
         cpu.machine().verbose_instructions = false;
@@ -203,9 +212,9 @@ void Machine<W>::print_and_pause()
     // Memory subsystem
     printf("[MEM PAGES %8zu / %8zu]\n", memory.pages_active(), memory.pages_total());
 	// Floating-point registers
-	if (this->verbose_fp_registers) {
+	//if (this->verbose_fp_registers) {
 		printf("%s", cpu.registers().flp_to_string().c_str());
-	}
+	//}
 
     while (execute_commands(cpu))
         ;
