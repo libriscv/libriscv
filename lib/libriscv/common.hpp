@@ -29,11 +29,16 @@ namespace riscv
 	extern bool verbose_machine;
 
 #ifdef MEMORY_TRAPS_ENABLED
-	static constexpr bool memory_debug_enabled = true;
+	static constexpr bool memory_traps_enabled = true;
 #else
-	static constexpr bool memory_debug_enabled = false;
+	static constexpr bool memory_traps_enabled = false;
 #endif
 
+#ifdef RISCV_DEBUG
+	static constexpr bool debugging_enabled = true;
+#else
+	static constexpr bool debugging_enabled = false;
+#endif
 	// assert on misaligned reads/writes
 	static constexpr bool memory_alignment_check = false;
 }

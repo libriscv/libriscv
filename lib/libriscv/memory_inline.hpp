@@ -11,7 +11,7 @@ T Memory<W>::read(address_t address)
 	}
 	const auto& page = *m_current_rd_ptr;
 
-	if constexpr (memory_debug_enabled) {
+	if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
 			return page.trap(address & (Page::size()-1), sizeof(T) | TRAP_READ, 0);
 		}
@@ -34,7 +34,7 @@ void Memory<W>::write(address_t address, T value)
 	}
 	auto& page = *m_current_wr_ptr;
 
-	if constexpr (memory_debug_enabled) {
+	if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
 			page.trap(address & (Page::size()-1), sizeof(T) | TRAP_WRITE, value);
 			return;
