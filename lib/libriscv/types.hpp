@@ -1,7 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#include <stdexcept>
+#include <exception>
 #include <type_traits>
 
 namespace riscv
