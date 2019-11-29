@@ -6,11 +6,11 @@ option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 set(PUBLIC_API "" CACHE STRING "Symbols to keep during GC")
 
-set(RISCV_ABI "-march=rv32gc -mabi=ilp32")
+set(RISCV_ABI "-march=rv32gc -mabi=ilp32d")
 set(WARNINGS  "-Wall -Wextra")
 set(COMMON    "-O2 -fstack-protector")
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
-set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++2a ${COMMON} -fno-exceptions -fno-rtti")
+set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++2a ${COMMON}")
 
 if (DEBUGGING)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g")
