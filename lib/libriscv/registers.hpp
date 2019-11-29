@@ -35,9 +35,8 @@ namespace riscv
 	template <int W>
 	struct Registers
 	{
-		using address_t = address_type<W>;          // one unsigned memory address
-		using isa_t     = isa_type<W>;              // 32- or 64-bit architecture
-		using format_t  = typename isa_t::format_t; // one machine instruction
+		using address_t  = address_type<W>;       // one unsigned memory address
+		using register_t = typename isa_type<W>::register_t; // integer register
 
 		auto& get(uint32_t idx) { return m_reg[idx]; }
 		const auto& get(uint32_t idx) const { return m_reg[idx]; }
@@ -86,7 +85,7 @@ namespace riscv
 		uint64_t  counter = 0;
 		address_t pc = 0;
 	private:
-		std::array<typename isa_t::register_t, 32> m_reg;
+		std::array<register_t, 32> m_reg;
 		std::array<fp64reg, 32> m_regfl;
 		// FP control register
 		union {

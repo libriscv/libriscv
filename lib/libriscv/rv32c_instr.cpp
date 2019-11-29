@@ -1,13 +1,5 @@
 #include "rv32c.hpp"
-
-#ifdef RISCV_DEBUG
-#define COMPRESSED_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
-#else
-#define COMPRESSED_INSTR(x, a, ...) INSTRUCTION(x, a, nullptr)
-#endif
-#define DECODED_COMPR(x) DECODED_INSTR(x)
-#define CI_CODE(x, y) ((x << 13) | (y))
-#define CIC2_CODE(x, y) ((x << 12) | (y))
+#include "instr_helpers.hpp"
 
 namespace riscv
 {

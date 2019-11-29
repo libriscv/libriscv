@@ -1,11 +1,5 @@
 #include "rv32i.hpp"
-
-#ifdef RISCV_DEBUG
-#define ATOMIC_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
-#else
-#define ATOMIC_INSTR(x, a, b) INSTRUCTION(x, a, nullptr)
-#endif
-#define DECODED_ATOMIC(x) DECODED_INSTR(x)
+#include "instr_helpers.hpp"
 
 namespace riscv
 {

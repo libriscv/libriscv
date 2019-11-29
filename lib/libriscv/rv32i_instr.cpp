@@ -1,13 +1,6 @@
 #include "rv32i.hpp"
 #include "instr_helpers.hpp"
 
-#ifdef RISCV_DEBUG
-#define INSTRUCTION(x, ...) static CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
-#else
-#define INSTRUCTION(x, a, ...) static const Instruction<4>::handler_t instr32i_##x {a}
-#endif
-#define DECODED_INSTR(x) instr32i_##x
-
 namespace riscv
 {
 	INSTRUCTION(ILLEGAL,

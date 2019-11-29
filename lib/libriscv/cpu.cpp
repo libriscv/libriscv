@@ -8,7 +8,7 @@ namespace riscv
 	template <int W>
 	void CPU<W>::reset()
 	{
-		m_data = {};
+		m_regs = {};
 		// initial stack location
 		this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
 		// NOTE: if the stack is very low, some stack pointer value could

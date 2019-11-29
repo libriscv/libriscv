@@ -29,8 +29,8 @@ namespace riscv
 		address_t pc() const noexcept { return registers().pc; }
 		void jump(address_t);
 
-		auto& registers() { return this->m_data.m_regs; }
-		const auto& registers() const { return this->m_data.m_regs; }
+		auto& registers() { return this->m_regs; }
+		const auto& registers() const { return this->m_regs; }
 
 		auto& reg(uint32_t idx) { return registers().get(idx); }
 		const auto& reg(uint32_t idx) const { return registers().get(idx); }
@@ -55,9 +55,7 @@ namespace riscv
 #endif
 		CPU(Machine<W>&);
 	private:
-		struct {
-			Registers<W> m_regs;
-		} m_data;
+		Registers<W> m_regs;
 		AtomicMemory<W> m_atomics;
 
 		inline format_t read_instruction(address_t);
