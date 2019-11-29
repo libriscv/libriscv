@@ -41,29 +41,31 @@ namespace riscv
 			auto& reg = cpu.reg(instr.Itype.rd);
 			const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 			const uint32_t type = instr.Itype.funct3;
-			if (type == 0) { // LB
+			switch (type) {
+			case 0: // LB
 				reg = cpu.machine().memory.template read<uint8_t>(addr);
 				// sign-extend 8-bit
 				if (reg & 0x80) reg |= 0xFFFFFF00;
-			} else if (type == 1) { // LH
+				return;
+			case 1: // LH
 				reg = cpu.machine().memory.template read<uint16_t>(addr);
 				// sign-extend 16-bit
 				if (reg & 0x8000) reg |= 0xFFFF0000;
-			} else if (type == 2) { // LW
+				return;
+			case 2: // LW
 				reg = cpu.machine().memory.template read<uint32_t>(addr);
-			} else if (type == 4) { // LBU
+				return;
+			case 4: // LBU
 				// load zero-extended 8-bit value
 				reg = cpu.machine().memory.template read<uint8_t>(addr);
-			} else if (type == 5) { // LHU
+				return;
+			case 5: // LHU
 				// load zero-extended 16-bit value
 				reg = cpu.machine().memory.template read<uint16_t>(addr);
-			} else {
-				cpu.trigger_exception(ILLEGAL_OPERATION);
+				return;
 			}
 		}
-		else {
-			cpu.trigger_exception(ILLEGAL_OPERATION);
-		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -79,17 +81,18 @@ namespace riscv
 	{
 		const auto value = cpu.reg(instr.Stype.rs2);
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-		const uint32_t type = instr.Stype.funct3;
+		const auto type  = instr.Stype.funct3;
 		if (type == 0) {
 			cpu.machine().memory.template write<uint8_t>(addr, value);
+			return;
 		} else if (type == 1) {
 			cpu.machine().memory.template write<uint16_t>(addr, value);
+			return;
 		} else if (type == 2) {
 			cpu.machine().memory.template write<uint32_t>(addr, value);
+			return;
 		}
-		else {
-			cpu.trigger_exception(ILLEGAL_OPERATION);
-		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
