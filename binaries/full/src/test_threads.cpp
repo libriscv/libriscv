@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <stdexcept>
+#include <thread> // C++ threads
 
 struct testdata
 {
@@ -97,20 +98,22 @@ void test_threads()
   printf("*** Yielding until all children are dead!\n");
   while (rdata.depth > 0) sched_yield();
 
-/*
     auto* cpp_thread = new std::thread(
         [] (int a, long long b, std::string c) -> void {
             printf("Hello from a C++ thread\n");
             assert(a == 1);
             assert(b == 2LL);
             assert(c == std::string("test"));
+			std::this_thread::yield();
             printf("C++ thread arguments are OK, returning...\n");
         },
         1, 2L, std::string("test")
     );
+	printf("Returned. Yielding back...\n");
+	std::this_thread::yield();
     printf("Returned. Deleting the C++ thread\n");
     cpp_thread->join();
     delete cpp_thread;
-*/
+
   printf("SUCCESS\n");
 }
