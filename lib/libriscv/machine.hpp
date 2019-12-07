@@ -3,6 +3,7 @@
 #include "cpu.hpp"
 #include "memory.hpp"
 #include "util/delegate.hpp"
+#include <errno.h> // ENOSYS
 #include <map>
 #include <vector>
 

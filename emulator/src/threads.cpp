@@ -1,6 +1,7 @@
 #include "threads.hpp"
 #include <cassert>
 #include <cstdio>
+#include <sched.h>
 using namespace riscv;
 
 template <int W>
