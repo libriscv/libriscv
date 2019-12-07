@@ -1,0 +1,8 @@
+{
+	"net" : [
+		{"device" : "virtio"}
+    ],
+	"smp" : 4,
+	"mem" : 256,
+	"cpu" : {"model": "host"}
+}
