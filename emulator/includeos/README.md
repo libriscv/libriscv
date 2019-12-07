@@ -9,7 +9,7 @@ Building and running the service:
 ```
 cd build
 source activate.sh
-make -j && boot riscvemu
+make -j && boot --create-bridge riscvemu
 ```
 
 Sending a binary to run in the VM guest:
