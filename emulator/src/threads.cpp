@@ -41,24 +41,13 @@ void thread<W>::exit()
 {
 	const bool exiting_myself = (threading.get_thread() == this);
 	assert(this->parent != nullptr);
-	// detach children
-	for (auto* child : this->children) {
-		child->parent = &threading.main_thread;
-	}
-	// remove myself from parent
-	auto& pcvec = this->parent->children;
-	for (auto it = pcvec.begin(); it != pcvec.end(); ++it) {
-		if (*it == this) {
-			pcvec.erase(it); break;
-		}
-	}
 	// temporary copy of parent thread pointer
 	auto* next = this->parent;
 	auto& thr  = threading;
 	// CLONE_CHILD_CLEARTID: set userspace TID value to zero
 	if (this->clear_tid) {
 		THPRINT("Clearing child value at %p\n", this->clear_tid);
-		threading.machine.memory.template write<address_t> (this->clear_tid, 0);
+		threading.machine.memory.template write<uint32_t> (this->clear_tid, 0);
 	}
 	// delete this thread
 	threading.erase_thread(this->tid);
@@ -75,9 +64,8 @@ void thread<W>::exit()
 template <int W>
 void thread<W>::resume()
 {
-	THPRINT("Returning to tid=%ld tls=%p nexti=%p stack=%p\n",
-			this->tid, (void*) this->my_tls,
-			(void*) this->stored_nexti, (void*) this->stored_stack);
+	THPRINT("Returning to tid=%ld tls=%p stack=%p\n",
+			this->tid, (void*) this->my_tls, (void*) this->my_stack);
 
 	threading.m_current = this;
 	auto& m = threading.machine;
@@ -90,33 +78,30 @@ void thread<W>::resume()
 
 template <int W>
 thread<W>* multithreading<W>::create(
-			thread_t* parent, int flags, address_t ctid,
+			thread_t* parent, int flags, address_t ctid, address_t ptid,
 			address_t stack, address_t tls)
 {
 	const int tid = __sync_fetch_and_add(&thread_counter, 1);
-	try {
-		auto* thread = new thread_t(*this, tid, stack);
-		thread->my_tls = tls;
-		thread->parent = parent;
-		thread->parent->children.push_back(thread);
+	auto* thread = new thread_t(*this, tid, stack);
+	thread->my_tls = tls;
+	thread->parent = parent;
 
-		// flag for write child TID
-		if (flags & CLONE_CHILD_SETTID) {
-			machine.memory.template write<address_t> (ctid, thread->tid);
-		}
-		if (flags & CLONE_CHILD_CLEARTID) {
-			thread->clear_tid = ctid;
-		}
+	// flag for write child TID
+	if (flags & CLONE_CHILD_SETTID) {
+		machine.memory.template write<uint32_t> (ctid, thread->tid);
+	}
+	if (flags & CLONE_PARENT_SETTID) {
+		machine.memory.template write<uint32_t> (ptid, thread->tid);
+	}
+	if (flags & CLONE_CHILD_CLEARTID) {
+		thread->clear_tid = ctid;
+	}
 
-		threads.emplace(
-			std::piecewise_construct,
-			std::forward_as_tuple(tid),
-			std::forward_as_tuple(thread));
-		return thread;
-	}
-	catch (...) {
-		return nullptr;
-	}
+	threads.emplace(
+		std::piecewise_construct,
+		std::forward_as_tuple(tid),
+		std::forward_as_tuple(thread));
+	return thread;
 }
 
 template <int W>
@@ -134,7 +119,7 @@ thread<W>* multithreading<W>::get_thread()
 }
 
 template <int W>
-thread<W>* multithreading<W>::get_thread(int64_t tid)
+thread<W>* multithreading<W>::get_thread(int tid)
 {
 	auto it = threads.find(tid);
 	if (it == threads.end()) return nullptr;
@@ -154,7 +139,7 @@ void multithreading<W>::suspend_and_yield()
 }
 
 template <int W>
-void multithreading<W>::erase_thread(int64_t tid)
+void multithreading<W>::erase_thread(int tid)
 {
 	auto it = threads.find(tid);
 	assert(it != threads.end());
@@ -163,13 +148,11 @@ void multithreading<W>::erase_thread(int64_t tid)
 template <int W>
 void multithreading<W>::erase_suspension(thread_t* t)
 {
-  for (auto it = suspended.begin(); it != suspended.end();)
+  for (auto it = suspended.begin(); it != suspended.end(); ++it)
   {
       if (*it == t) {
           it = suspended.erase(it);
-      }
-      else {
-          ++it;
+		  return;
       }
   }
 }
@@ -182,9 +165,9 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	machine.install_syscall_handler(93,
 	[mt, &state] (Machine<W>& machine) {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
-		const int64_t tid = mt->get_thread()->tid;
-		THPRINT(">>> Exit on tid=%ld, exit code = %u\n",
-				tid, status);
+		const int tid = mt->get_thread()->tid;
+		THPRINT(">>> Exit on tid=%ld, exit code = %d\n",
+				tid, (int) status);
 		if (tid != 0) {
 			// exit thread instead
 			mt->get_thread()->exit();
@@ -201,7 +184,10 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	// set_tid_address
 	machine.install_syscall_handler(96,
 	[mt] (Machine<W>& machine) {
-		// TODO: set clear ctid
+		const int clear_tid = machine.template sysarg<address_type<W>> (0);
+		THPRINT(">>> set_tid_address(0x%X)\n", clear_tid);
+
+		mt->get_thread()->clear_tid = clear_tid;
 		return mt->get_thread()->tid;
 	});
 	// set_robust_list
@@ -243,6 +229,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	machine.install_syscall_handler(98,
 	[mt] (Machine<W>& machine) {
 		#define FUTEX_WAIT 0
+		#define FUTEX_WAKE 1
 		const uint32_t addr = machine.template sysarg<uint32_t> (0);
 		const int  futex_op = machine.template sysarg<int> (1);
 		const int       val = machine.template sysarg<int> (2);
@@ -250,14 +237,15 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		if ((futex_op & 0xF) == FUTEX_WAIT)
 	    {
 			THPRINT("FUTEX: Waiting for unlock... uaddr=0x%X val=%d\n", addr, val);
-			int times = 100;
 			while (machine.memory.template read<uint32_t> (addr) == val) {
 				mt->suspend_and_yield();
-				if (times-- == 0) return -ETIMEDOUT;
 			}
-			return -EAGAIN;
-	    }
-	    return 0;
+			return 0;
+		} else if ((futex_op & 0xF) == FUTEX_WAKE) {
+			mt->suspend_and_yield(); // ???
+			return 0;
+		}
+		return -ENOSYS;
 	});
 	// clone
 	machine.install_syscall_handler(220,
@@ -272,9 +260,9 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		const uint32_t   tls = machine.template sysarg<uint32_t> (5);
 		const uint32_t  ctid = machine.template sysarg<uint32_t> (6);
 		auto* parent = mt->get_thread();
-		THPRINT(">>> clone(func=0x%X, stack=0x%X, flags=%x, parent=%p)\n",
-				func, stack, flags, parent);
-		auto* thread = mt->create(parent, flags, ctid, stack, tls);
+		THPRINT(">>> clone(func=0x%X, stack=0x%X, flags=%x, parent=%p, ctid=%p)\n",
+				func, stack, flags, parent, ctid);
+		auto* thread = mt->create(parent, flags, ctid, ptid, stack, tls);
 		parent->suspend();
 		// store return value for parent: child TID
 		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;

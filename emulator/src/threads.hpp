@@ -20,15 +20,13 @@ struct thread
 
 	multithreading<W>& threading;
 	thread*   parent = nullptr;
-	int64_t   tid;
+	int       tid;
 	address_t my_tls;
 	address_t my_stack;
 	// for returning to this thread
 	riscv::Registers<W> stored_regs;
 	// address zeroed when exiting
 	address_t clear_tid = 0;
-	// children, detached when exited
-	std::vector<thread*> children;
 
 	thread(multithreading<W>&, int tid, address_t stack);
 	void yield();
@@ -44,13 +42,13 @@ struct multithreading
 	using address_t = riscv::address_type<W>;
 	using thread_t  = thread<W>;
 
-	thread_t* create(thread_t* parent, int flags, address_t ctid,
+	thread_t* create(thread_t* parent, int flags, address_t ctid, address_t ptid,
 					address_t stack, address_t tls);
 	thread_t* get_thread();
-	thread_t* get_thread(int64_t tid); /* or nullptr */
+	thread_t* get_thread(int tid); /* or nullptr */
 	void      suspend_and_yield();
 	void      erase_suspension(thread_t*);
-	void      erase_thread(int64_t tid);
+	void      erase_thread(int tid);
 
 	multithreading(riscv::Machine<W>&);
 	riscv::Machine<W>& machine;

@@ -242,8 +242,11 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	    {
 	        static uint32_t nextfree = heap_start;
 	        const uint32_t addr = nextfree;
-	        //auto& page = machine.memory.create_page(addr);
-	        //page.attr.read = prot & PROT_READ;
+			// anon pages need to be zeroed
+			if (flags & MAP_ANONYMOUS) {
+				// ... but they are already CoW
+				//machine.memory.memset(addr, 0, length);
+			}
 	        nextfree += length;
 	        return addr;
 	    }
