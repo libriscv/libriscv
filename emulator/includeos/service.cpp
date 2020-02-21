@@ -16,7 +16,6 @@ static const std::vector<std::string> args = {
 };
 
 #include <thread>
-#include <kernel/threads.hpp>
 #include "server.hpp"
 // RISC-V system call stuff
 #include <linux.hpp>
@@ -27,8 +26,8 @@ static uint64_t micros_now();
 static void multiprocess_task(buffer_t binary)
 {
 	SMP::global_lock();
-	printf("CPU %d TID %ld executing %zu bytes binary\n",
-			SMP::cpu_id(), kernel::get_tid(), binary.size());
+	printf("CPU %d executing %zu bytes binary\n",
+			SMP::cpu_id(), binary.size());
 	SMP::global_unlock();
 
 	State<4> state;
@@ -64,7 +63,7 @@ static void multiprocess_task(buffer_t binary)
 void Service::start()
 {
   // threads will now be migrated to free CPUs
-  kernel::setup_automatic_thread_multiprocessing();
+  SMP::migrate_threads();
 
   auto& inet = net::Interfaces::get(0);
   file_server(inet, PORT,

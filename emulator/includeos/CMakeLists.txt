@@ -18,7 +18,7 @@ set(SOURCES
 
 os_add_executable(riscvemu "RISC-V emulator in IncludeOS" ${SOURCES})
 os_add_stdout(riscvemu default_stdout)
-os_add_drivers(riscvemu virtionet) # timestamps
+os_add_drivers(riscvemu e1000)
 os_add_plugins(riscvemu autoconf) # for config.json
 os_include_directories(riscvemu PRIVATE "../src")
 
