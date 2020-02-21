@@ -18,8 +18,6 @@ extern "C" {
     thread_local int test = 2019;
     printf("test @ %p, test = %d\n", &test, test);
     assert(test == 2019);
-    // this will cause a TKILL on this thread
-    throw std::runtime_error("Test");
   }
   static void* thread_function2(void* data)
   {
@@ -66,37 +64,41 @@ extern "C" {
 
 void test_threads()
 {
-  int x = 666;
-  pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-  pthread_t t;
-  int res;
+	int x = 666;
+	pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+	pthread_t t;
+	int res;
 
-  printf("*** Testing pthread_create and sched_yield...\n");
-  res = pthread_create(&t, NULL, thread_function1, &x);
-  if (res < 0) {
-    printf("Failed to create thread!\n");
-    return;
-  }
+	printf("*** Testing pthread_create and sched_yield...\n");
+	res = pthread_create(&t, NULL, thread_function1, &x);
+	if (res < 0) {
+		printf("Failed to create thread!\n");
+		return;
+	}
+	pthread_join(t, NULL);
 
-  pthread_mutex_lock(&mtx);
-  res = pthread_create(&t, NULL, thread_function2, &mtx);
-  if (res < 0) {
-    printf("Failed to create thread!\n");
-    return;
-  }
-  pthread_mutex_unlock(&mtx);
+	pthread_mutex_lock(&mtx);
+	res = pthread_create(&t, NULL, thread_function2, &mtx);
+	if (res < 0) {
+		printf("Failed to create thread!\n");
+		return;
+	}
+	pthread_mutex_unlock(&mtx);
 
-  printf("Yielding from main thread, expecting to return to thread2\n");
-  // return back to finish thread2
-  sched_yield();
-  printf("After yielding from main thread, looking good!\n");
+	printf("Yielding from main thread, expecting to return to thread2\n");
+	// return back to finish thread2
+	sched_yield();
+	printf("After yielding from main thread, looking good!\n");
 
-  printf("*** Now testing recursive threads...\n");
-  static testdata rdata;
-  recursive_function(&rdata);
-  // now we have to yield until all the detached children also exit
-  printf("*** Yielding until all children are dead!\n");
-  while (rdata.depth > 0) sched_yield();
+	printf("*** Now testing recursive threads...\n");
+	static testdata rdata;
+	recursive_function(&rdata);
+	// now we have to yield until all the detached children also exit
+	printf("*** Yielding until all children are dead!\n");
+	while (rdata.depth > 0) sched_yield();
+
+	// remove the last thread?
+	pthread_join(t, NULL);
 
     auto* cpp_thread = new std::thread(
         [] (int a, long long b, std::string c) -> void {
@@ -111,9 +113,10 @@ void test_threads()
     );
 	printf("Returned. Yielding back...\n");
 	std::this_thread::yield();
-    printf("Returned. Deleting the C++ thread\n");
+    printf("Returned. Joining the C++ thread\n");
     cpp_thread->join();
+	printf("Deleting the C++ thread\n");
     delete cpp_thread;
 
-  printf("SUCCESS\n");
+	printf("SUCCESS\n");
 }
