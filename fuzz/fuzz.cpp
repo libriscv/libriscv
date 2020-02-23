@@ -2,17 +2,13 @@
 #include <cstdint>
 #include <libriscv/machine.hpp>
 
-static std::vector<uint8_t> binary {};
-// we don't want to see unhandled syscall messages
-namespace riscv {
-	bool verbose_machine = false;
-}
-
-
 extern "C"
 void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
 {
-	riscv::Machine<riscv::RISCV32> machine { binary };
+	static riscv::Machine<riscv::RISCV32> machine { };
+	// we don't want to see unhandled syscall messages
+	riscv::verbose_machine = false;
+
 	// copy fuzzer data to 0x1000 and skip the zero-page
 	machine.copy_to_guest(0x1000, data, len);
 	machine.cpu.registers().pc = 0x1000;

@@ -1,3 +1,4 @@
 build/
 clangbuild/
 **/build/
+fuzz/crash-*
