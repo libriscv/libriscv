@@ -4,7 +4,7 @@
 namespace riscv
 {
 	INSTRUCTION(ILLEGAL,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction /* instr */) {
 		// illegal opcode exception
 		cpu.trigger_exception(ILLEGAL_OPCODE);
 	},
@@ -17,7 +17,7 @@ namespace riscv
 	});
 
 	INSTRUCTION(UNIMPLEMENTED,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction /* instr */) {
 		// handler
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
@@ -106,7 +106,7 @@ namespace riscv
 
 	INSTRUCTION(BRANCH,
 	[] (auto& cpu, rv32i_instruction instr) {
-		bool comparison;
+		bool comparison = false;
 		const auto& reg1 = cpu.reg(instr.Btype.rs1);
 		const auto& reg2 = cpu.reg(instr.Btype.rs2);
 		switch (instr.Btype.funct3) {
@@ -354,7 +354,10 @@ namespace riscv
 				case 0x14: // DIV
 					// division by zero is not an exception
 					if (LIKELY(instr.to_signed(src2) != 0)) {
-						dst = instr.to_signed(src1) / instr.to_signed(src2);
+						// rv32i_instr.cpp:301:2: runtime error:
+						// division of -2147483648 by -1 cannot be represented in type 'int'
+						if (LIKELY(src1 != 2147483648 && src2 != 4294967295))
+							dst = instr.to_signed(src1) / instr.to_signed(src2);
 					}
 					break;
 				case 0x15: // DIVU
@@ -362,7 +365,8 @@ namespace riscv
 					break;
 				case 0x16: // REM
 					if (LIKELY(src2 != 0)) {
-						dst = instr.to_signed(src1) % instr.to_signed(src2);
+						if (LIKELY(src1 != 2147483648 && src2 != 4294967295))
+							dst = instr.to_signed(src1) % instr.to_signed(src2);
 					}
 					break;
 				case 0x17: // REMU
