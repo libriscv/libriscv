@@ -156,6 +156,6 @@ namespace riscv
 		}
 	}
 
-	template class CPU<4>;
+	template struct CPU<4>;
 	//template class CPU<8>;
 }

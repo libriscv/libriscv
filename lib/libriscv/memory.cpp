@@ -250,5 +250,5 @@ namespace riscv
 		return zeroed_page; // read-only, zeroed page
 	}
 
-	template class Memory<4>;
+	template struct Memory<4>;
 }

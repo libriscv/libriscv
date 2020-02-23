@@ -36,5 +36,5 @@ namespace riscv
 		this->copy_to_guest(sp, argv.data(), argsize);
 	}
 
-	template class Machine<4>;
+	template struct Machine<4>;
 }

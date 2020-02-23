@@ -263,5 +263,5 @@ void CPU<W>::break_checks()
     }
 }
 
-	template class CPU<4>;
+	template struct CPU<4>;
 } // namespace riscv
