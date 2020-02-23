@@ -1,7 +1,6 @@
 #pragma once
 #include <deque>
 #include <map>
-#include <vector>
 #include <libriscv/machine.hpp>
 #include "syscalls.hpp"
 template <int W> struct multithreading;
@@ -28,11 +27,11 @@ struct thread
 	// address zeroed when exiting
 	address_t clear_tid = 0;
 
-	thread(multithreading<W>&, int tid, address_t stack);
-	void yield();
+	thread(multithreading<W>&, int tid, thread* parent, 
+			address_t tls, address_t stack);
 	void exit();
 	void suspend();
-	void activate(address_t func, address_t args);
+	void activate();
 	void resume();
 };
 
@@ -46,17 +45,17 @@ struct multithreading
 					address_t stack, address_t tls);
 	thread_t* get_thread();
 	thread_t* get_thread(int tid); /* or nullptr */
-	void      suspend_and_yield();
-	void      erase_suspension(thread_t*);
+	bool      suspend_and_yield();
 	void      erase_thread(int tid);
+	void      wakeup_next();
 
 	multithreading(riscv::Machine<W>&);
 	riscv::Machine<W>& machine;
 	std::deque<thread_t*> suspended;
-    std::map<int64_t, thread_t*> threads;
+	std::map<int, thread_t*> threads;
 	int64_t    thread_counter = 1;
 	thread_t*  m_current = nullptr;
-    thread_t   main_thread;
+	thread_t   main_thread;
 };
 
 template <int W>
