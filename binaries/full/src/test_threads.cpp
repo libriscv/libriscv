@@ -4,11 +4,13 @@
 #include <sys/types.h>
 #include <stdexcept>
 #include <thread> // C++ threads
+#include <vector>
 
 struct testdata
 {
 	int depth     = 0;
 	const int max_depth = 20;
+	std::vector<pthread_t> threads;
 };
 
 extern "C" {
@@ -24,11 +26,6 @@ extern "C" {
 	{
 		printf("Inside thread function2, x = %d\n", *(int*) data);
 		thread_local int test = 2020;
-
-		printf("Locking already locked mutex now\n");
-		auto* mtx = (pthread_mutex_t*) data;
-		const int res = pthread_mutex_lock(mtx);
-		printf("Locking returned %d\n", res);
 		assert(test == 2020);
 
 		printf("Yielding from thread2, expecting to be returned to main thread\n");
@@ -52,6 +49,7 @@ extern "C" {
 				printf("Failed to create thread!\n");
 				return NULL;
 			}
+			data->threads.push_back(t);
 		}
 		printf("%ld: Thread yielding %d / %d\n",
 				pthread_self(), data->depth, data->max_depth);
@@ -67,30 +65,30 @@ extern "C" {
 void test_threads()
 {
 	int x = 666;
-	pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-	pthread_t t;
+	pthread_t t1;
+	pthread_t t2;
 	int res;
 
 	printf("*** Testing pthread_create and sched_yield...\n");
-	res = pthread_create(&t, NULL, thread_function1, &x);
+	res = pthread_create(&t1, NULL, thread_function1, &x);
 	if (res < 0) {
 		printf("Failed to create thread!\n");
 		return;
 	}
-	pthread_join(t, NULL);
+	pthread_join(t1, NULL);
 
-	pthread_mutex_lock(&mtx);
-	res = pthread_create(&t, NULL, thread_function2, &mtx);
+	res = pthread_create(&t2, NULL, thread_function2, &x);
 	if (res < 0) {
 		printf("Failed to create thread!\n");
 		return;
 	}
-	pthread_mutex_unlock(&mtx);
 
 	printf("Yielding from main thread, expecting to return to thread2\n");
 	// return back to finish thread2
 	sched_yield();
 	printf("After yielding from main thread, looking good!\n");
+	// remove the thread
+	pthread_join(t2, NULL);
 
 	printf("*** Now testing recursive threads...\n");
 	static testdata rdata;
@@ -99,8 +97,8 @@ void test_threads()
 	printf("*** Yielding until all children are dead!\n");
 	while (rdata.depth > 0) sched_yield();
 
-	// remove the last thread?
-	pthread_join(t, NULL);
+	printf("*** Joining until all children are freed!\n");
+	for (auto pt : rdata.threads) pthread_join(pt, NULL);
 
 	auto* cpp_thread = new std::thread(
 		[] (int a, long long b, std::string c) -> void {
@@ -108,14 +106,14 @@ void test_threads()
 			assert(a == 1);
 			assert(b == 2LL);
 			assert(c == std::string("test"));
+			printf("C++ thread arguments are OK, yielding...\n");
 			std::this_thread::yield();
-			printf("C++ thread arguments are OK, returning...\n");
+			printf("C++ thread exiting...\n");
 		},
-		1, 2L, std::string("test")
-	);
-	printf("Returned. Yielding back...\n");
+		1, 2L, std::string("test"));
+	printf("Returned to main. Yielding back...\n");
 	std::this_thread::yield();
-	printf("Returned. Joining the C++ thread\n");
+	printf("Returned to main. Joining the C++ thread\n");
 	cpp_thread->join();
 	printf("Deleting the C++ thread\n");
 	delete cpp_thread;
