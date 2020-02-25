@@ -8,6 +8,6 @@ export CXX=$RISCV_TC/bin/riscv32-unknown-linux-gnu-g++
 
 mkdir -p build
 pushd build
-cmake .. -D CMAKE_TOOLCHAIN_FILE=toolchain.cmake
+cmake ..
 make -j4
 popd
