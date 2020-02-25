@@ -92,7 +92,6 @@ namespace riscv
 		}
 
 		const auto program_begin = phdr->p_vaddr;
-		auto program_end = program_begin;
 		this->m_start_address = elf->e_entry;
 		this->m_stack_address = program_begin;
 

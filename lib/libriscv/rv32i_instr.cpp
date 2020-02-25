@@ -3,25 +3,12 @@
 
 namespace riscv
 {
-	INSTRUCTION(ILLEGAL,
-	[] (auto& cpu, rv32i_instruction /* instr */) {
-		// illegal opcode exception
-		cpu.trigger_exception(ILLEGAL_OPCODE);
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		// printer
-		if (instr.opcode() == 0)
-			return snprintf(buffer, len, "ILLEGAL OPCODE (Zero, outside executable area?)");
-		else
-			return snprintf(buffer, len, "ILLEGAL (Unknown)");
-	});
-
 	INSTRUCTION(UNIMPLEMENTED,
 	[] (auto& cpu, rv32i_instruction /* instr */) {
 		// handler
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		// printer
 		if (instr.length() == 4) {
 			return snprintf(buffer, len, "UNIMPLEMENTED: 4-byte 0x%X (0x%X)",
@@ -379,7 +366,7 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		if (!instr.Rtype.is_32M())
 		{
@@ -459,7 +446,7 @@ namespace riscv
 		// if we got here, its an illegal operation!
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		// system functions
 		static std::array<const char*, 2> etype = {"ECALL", "EBREAK"};
 		if (instr.Itype.imm < 2 && instr.Itype.funct3 == 0) {
@@ -497,7 +484,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		// printer
 		return snprintf(buffer, len, "LUI %s, 0x%X",
 						RISCV::regname(instr.Utype.rd), instr.Utype.upper_imm());
@@ -520,30 +507,30 @@ namespace riscv
 	});
 
 	INSTRUCTION(OP_IMM32,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction /* instr */) {
 		// handler
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction) -> int {
 		// printer
 		return snprintf(buffer, len, "OP_IMM32");
 	});
 
 	INSTRUCTION(OP32,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction /* instr */) {
 		// handler
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction) -> int {
 		// printer
 		return snprintf(buffer, len, "OP_32");
 	});
 
 	INSTRUCTION(FENCE,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& /* cpu */, rv32i_instruction /* instr */) {
 		// literally do nothing
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction) -> int {
 		// printer
 		return snprintf(buffer, len, "FENCE");
 	});

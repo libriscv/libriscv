@@ -80,7 +80,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		static const std::array<const char*, 4> f3 = {
 			"Reserved instruction", "FSD", "SW", "FSW"
@@ -106,7 +106,7 @@ namespace riscv
 			cpu.reg(ci.CI.rd) += ci.CI.signed_imm();
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
 		if (ci.CI.rd != 0) {
@@ -147,7 +147,7 @@ namespace riscv
 		}
 		// HINTs
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
 		return snprintf(buffer, len, "C.LI %s, %+d",
@@ -170,7 +170,7 @@ namespace riscv
 		// the registers are not allowed
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
 		if (ci.CI.rd != 0 && ci.CI.rd != 2) {
@@ -227,7 +227,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPCODE);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
 		if ((ci.CA.funct6 & 0x3) < 2) {
@@ -430,7 +430,7 @@ namespace riscv
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
 		const bool topbit = ci.whole & (1 << 12);

@@ -23,7 +23,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "AMOADD.W %s %s, %s",
                         RISCV::regname(instr.Atype.rs1),
                         RISCV::regname(instr.Atype.rs2),
@@ -55,7 +55,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "AMOSWAP.W %s %s, %s",
                         RISCV::regname(instr.Atype.rs1),
                         RISCV::regname(instr.Atype.rs2),
@@ -82,7 +82,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "AMOOR.W %s %s, %s",
                         RISCV::regname(instr.Atype.rs1),
                         RISCV::regname(instr.Atype.rs2),
@@ -103,7 +103,7 @@ namespace riscv
 		}
         cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "LR.W %s <- [%s]",
                         RISCV::regname(instr.Atype.rd),
                         RISCV::regname(instr.Atype.rs1));
@@ -126,7 +126,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "SC.W %s <- [%s], %s",
                         RISCV::regname(instr.Atype.rd),
                         RISCV::regname(instr.Atype.rs1),
