@@ -18,6 +18,7 @@ set(SOURCES
 add_executable(remu ${SOURCES})
 target_link_libraries(remu riscv)
 set_target_properties(remu PROPERTIES CXX_STANDARD 17)
+target_compile_options(riscv PUBLIC "-Wall" "-Wextra")
 
 if (LTO)
 	set_target_properties(riscv PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
