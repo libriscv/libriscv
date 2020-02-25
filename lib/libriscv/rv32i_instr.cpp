@@ -356,7 +356,7 @@ namespace riscv
 					if (LIKELY(instr.to_signed(src2) != 0)) {
 						// rv32i_instr.cpp:301:2: runtime error:
 						// division of -2147483648 by -1 cannot be represented in type 'int'
-						if (LIKELY(src1 != 2147483648 && src2 != 4294967295))
+						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 							dst = instr.to_signed(src1) / instr.to_signed(src2);
 					}
 					break;
@@ -365,7 +365,7 @@ namespace riscv
 					break;
 				case 0x16: // REM
 					if (LIKELY(src2 != 0)) {
-						if (LIKELY(src1 != 2147483648 && src2 != 4294967295))
+						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 							dst = instr.to_signed(src1) % instr.to_signed(src2);
 					}
 					break;
