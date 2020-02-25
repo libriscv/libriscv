@@ -162,14 +162,6 @@ namespace riscv
 		return nullptr;
 	}
 
-	template <int W>
-	address_type<W> Memory<W>::resolve_address(const std::string& name)
-	{
-		auto* sym = resolve_symbol(name.c_str());
-		if (sym) return sym->st_value;
-		return 0x0;
-	}
-
 	template <typename Sym>
 	static void elf_print_sym(const Sym* sym)
 	{

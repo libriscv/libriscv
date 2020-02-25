@@ -102,7 +102,7 @@ inline long Machine<W>::vmcall(const std::string& function_name,
 								uint64_t max_instructions)
 {
 	address_t call_addr = memory.resolve_address(function_name);
-	address_t retn_addr = memory.resolve_address("_exit");
+	address_t retn_addr = memory.exit_address();
 	this->setup_call(call_addr, retn_addr, std::move(args));
 	if (exec) {
 		this->simulate(max_instructions);
@@ -111,7 +111,6 @@ inline long Machine<W>::vmcall(const std::string& function_name,
 	return 0;
 }
 
-
 template <int W>
 inline void Machine<W>::setup_call(
 		address_t call_addr, address_t retn_addr,
@@ -119,10 +118,8 @@ inline void Machine<W>::setup_call(
 {
 	assert(args.size() <= 8);
 	cpu.reg(RISCV::REG_RA) = retn_addr;
-	size_t arg = 0;
-	for (const auto& value : args) {
-		cpu.reg(RISCV::REG_ARG0 + arg) = value;
-		arg++;
+	for (size_t arg = 0; arg < args.size(); arg++) {
+		cpu.reg(RISCV::REG_ARG0 + arg) = args[arg];
 	}
 	cpu.jump(call_addr);
 }

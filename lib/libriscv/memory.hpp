@@ -41,6 +41,7 @@ namespace riscv
 
 		// call interface
 		address_t resolve_address(const std::string& sym);
+		address_t exit_address();
 
 		// page handling
 		size_t pages_active() const noexcept { return m_pages.size(); }
@@ -110,6 +111,10 @@ namespace riscv
 
 		const std::vector<uint8_t>& m_binary;
 		bool m_protect_segments;
+
+		// lookup tree for ELF symbol names
+		std::unordered_map<std::string, address_t> sym_lookup;
+		address_t m_exit_address = 0;
 	};
 #include "memory_inline.hpp"
 }
