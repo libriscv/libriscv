@@ -206,14 +206,12 @@ void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 template <int W>
 address_type<W> Memory<W>::resolve_address(const std::string& name)
 {
-	auto it = sym_lookup.find(name);
+	const auto& it = sym_lookup.find(name.c_str());
 	if (it != sym_lookup.end()) return it->second;
 
 	auto* sym = resolve_symbol(name.c_str());
 	address_t addr = (sym) ? sym->st_value : 0x0;
-	sym_lookup.emplace(std::piecewise_construct,
-			std::forward_as_tuple(name),
-			std::forward_as_tuple(addr));
+	sym_lookup.emplace(name.c_str(), addr);
 	return addr;
 }
 

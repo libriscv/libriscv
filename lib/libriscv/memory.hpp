@@ -6,8 +6,8 @@
 #include "util/delegate.hpp"
 #include <cassert>
 #include <cstring>
-#include <stdexcept>
-#include <unordered_map>
+#include <EASTL/map.h>
+#include <EASTL/unordered_map.h>
 #include <vector>
 
 namespace riscv
@@ -106,14 +106,14 @@ namespace riscv
 		address_t   m_current_rd_page = -1;
 		Page*     m_current_wr_ptr  = nullptr;
 		address_t m_current_wr_page = -1;
-		std::unordered_map<address_t, Page> m_pages;
+		eastl::unordered_map<address_t, Page> m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 
 		const std::vector<uint8_t>& m_binary;
 		bool m_protect_segments;
 
 		// lookup tree for ELF symbol names
-		std::unordered_map<std::string, address_t> sym_lookup;
+		eastl::map<const char*, address_t> sym_lookup;
 		address_t m_exit_address = 0;
 	};
 #include "memory_inline.hpp"

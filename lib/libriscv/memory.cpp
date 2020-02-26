@@ -204,10 +204,7 @@ namespace riscv
 	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
-		auto it = pages().emplace(
-			std::piecewise_construct,
-			std::forward_as_tuple(page),
-			std::forward_as_tuple());
+		const auto& it = pages().emplace(page, Page{});
 		m_pages_highest = std::max(m_pages_highest, pages().size());
 		// if this page was read-cached, invalidate it
 		this->invalidate_page(page, it.first->second);
@@ -242,4 +239,13 @@ namespace riscv
 	}
 
 	template struct Memory<4>;
+}
+
+void* operator new[](size_t size, const char*, int, unsigned, const char*, int)
+{
+	return ::operator new[] (size);
+}
+void* operator new[](size_t size, size_t, size_t, const char*, int, unsigned, const char*, int)
+{
+	return ::operator new[](size);
 }

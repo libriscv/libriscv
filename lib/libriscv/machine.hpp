@@ -4,7 +4,7 @@
 #include "memory.hpp"
 #include "util/delegate.hpp"
 #include <errno.h> // ENOSYS
-#include <map>
+#include <EASTL/map.h>
 #include <vector>
 
 namespace riscv
@@ -91,7 +91,7 @@ namespace riscv
 		void system_call(int);
 	private:
 		bool m_stopped = false;
-		std::map<int, syscall_t> m_syscall_handlers;
+		eastl::map<int, syscall_t> m_syscall_handlers;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 

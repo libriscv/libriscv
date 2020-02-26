@@ -15,10 +15,12 @@ if (RISCV_DEBUG)
 	)
 endif()
 
+add_subdirectory(EASTL)
 
 add_library(riscv ${SOURCES})
 set_target_properties(riscv PROPERTIES CXX_STANDARD 17)
 target_include_directories(riscv PUBLIC .)
+target_link_libraries(riscv EASTL)
 if (RISCV_DEBUG)
 	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
 endif()
