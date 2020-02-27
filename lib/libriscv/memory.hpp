@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstring>
 #include <EASTL/map.h>
+#include <EASTL/string.h>
 #include <EASTL/unordered_map.h>
 #include <vector>
 
@@ -41,7 +42,8 @@ namespace riscv
 
 		// call interface
 		address_t resolve_address(const std::string& sym);
-		address_t exit_address();
+		void      set_exit_address(address_t new_exit);
+		address_t exit_address() const noexcept;
 
 		// page handling
 		size_t pages_active() const noexcept { return m_pages.size(); }
@@ -113,7 +115,7 @@ namespace riscv
 		bool m_protect_segments;
 
 		// lookup tree for ELF symbol names
-		eastl::map<const char*, address_t> sym_lookup;
+		eastl::map<eastl::string, address_t> sym_lookup;
 		address_t m_exit_address = 0;
 	};
 #include "memory_inline.hpp"

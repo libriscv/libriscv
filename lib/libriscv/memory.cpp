@@ -67,6 +67,8 @@ namespace riscv
 		}
 		// find program end
 		m_elf_end_vaddr = std::max(m_elf_end_vaddr, (uint32_t) (hdr->p_vaddr + len));
+		// set the default exit function address for vm calls
+		this->m_exit_address = resolve_address("_exit");
 	}
 
 	// ELF32 and ELF64 loader

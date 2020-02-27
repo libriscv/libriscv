@@ -216,11 +216,13 @@ address_type<W> Memory<W>::resolve_address(const std::string& name)
 }
 
 template <int W>
-address_type<W> Memory<W>::exit_address()
+address_type<W> Memory<W>::exit_address() const noexcept
 {
-	if (this->m_exit_address != 0) {
-		return this->m_exit_address;
-	}
-	this->m_exit_address = resolve_address("_exit");
 	return this->m_exit_address;
+}
+
+template <int W>
+void Memory<W>::set_exit_address(address_t addr)
+{
+	this->m_exit_address = addr;
 }
