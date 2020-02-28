@@ -19,8 +19,10 @@ namespace riscv
 	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction) const
 #endif
 	{
+#ifdef RISCV_EXT_COMPRESSED
 		if (instruction.is_long()) // RV32 IMAFD
 		{
+#endif
 			// Quadrant 3
 			switch (instruction.opcode())
 			{
@@ -89,6 +91,7 @@ namespace riscv
 							DECODER(DECODED_FLOAT(FCVT_SD_W));
 					}
 					break;
+#ifdef RISCV_EXT_ATOMICS
 				// RV32A - Atomic instructions
 				case 0b0101111:
 					switch (instruction.Atype.funct5)
@@ -104,7 +107,9 @@ namespace riscv
 						case 0b01000:
 							DECODER(DECODED_ATOMIC(AMOOR_W));
 					}
+#endif
 			}
+#ifdef RISCV_EXT_COMPRESSED
 		}
 		else
 		{
@@ -155,6 +160,7 @@ namespace riscv
 					DECODER(DECODED_COMPR(C2_SP_STORE));
 			}
 		}
+#endif
 		// illegal operation exception
 		DECODER(DECODED_INSTR(UNIMPLEMENTED));
 	}

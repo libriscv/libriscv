@@ -3,6 +3,8 @@
 #
 
 option(RISCV_DEBUG "Enable debugging features in the RISC-V machine" OFF)
+option(RISCV_EXT_A "Enable atomic instructions" ON)
+option(RISCV_EXT_C "Enable compressed instructions" ON)
 
 set (SOURCES
 		libriscv/cpu.cpp
@@ -23,4 +25,10 @@ target_include_directories(riscv PUBLIC .)
 target_link_libraries(riscv EASTL)
 if (RISCV_DEBUG)
 	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
+endif()
+if (RISCV_EXT_A)
+	target_compile_definitions(riscv PUBLIC RISCV_EXT_ATOMICS=1)
+endif()
+if (RISCV_EXT_C)
+	target_compile_definitions(riscv PUBLIC RISCV_EXT_COMPRESSED=1)
 endif()
