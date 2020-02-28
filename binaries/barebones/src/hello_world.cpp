@@ -10,7 +10,7 @@ extern "C"
 __attribute__((constructor))
 void test_constructor() {
 	static const char hello[] = "Hello, Global Constructor!\n";
-	write(STDOUT, hello, sizeof(hello)-1);
+	write(STDOUT_FILENO, hello, sizeof(hello)-1);
 	testval = 22;
 }
 

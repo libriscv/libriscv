@@ -21,11 +21,12 @@ char*  strcat(char* dest, const char* src);
 int   write(int, const void*, size_t);
 
 void* malloc(size_t);
+void* calloc(size_t, size_t);
 void  free(void*);
 
-#define STDIN  0
-#define STDOUT 1
-#define STDERR 2
+#define STDIN_FILENO  0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
 
 #ifdef __cplusplus
 }

@@ -3,13 +3,17 @@
 #include <stdint.h>
 int __testable_global __attribute__((section(".bss"))) = 0;
 
+// this is used for vmcalls
+asm(".global fastexit\n"
+	"fastexit:\n"
+	"ebreak\n");
+
 extern "C" {
 	__attribute__((noreturn))
 	void _exit(int exitval) {
 		syscall(SYSCALL_EXIT, exitval);
 		__builtin_unreachable();
 	}
-	void __init_heap(uintptr_t free_begin, uintptr_t heapmax);
 	void __print_putchr(void* file, char c);
 }
 
@@ -18,9 +22,6 @@ init_stdlib()
 {
 	// 1. enable printf facilities
 	init_printf(NULL, __print_putchr);
-
-	// 2. initialize heap (malloc, etc.)
-	__init_heap(0xC0000000, 0xF0000000);
 
 #ifdef EH_ENABLED
 	/// 3. initialize exceptions before we run constructors
@@ -32,7 +33,7 @@ init_stdlib()
 	// 4. call global C/C++ constructors
 	extern void(*__init_array_start [])();
 	extern void(*__init_array_end [])();
-	int count = __init_array_end - __init_array_start;
+	const int count = __init_array_end - __init_array_start;
 	for (int i = 0; i < count; i++) {
 		__init_array_start[i]();
 	}

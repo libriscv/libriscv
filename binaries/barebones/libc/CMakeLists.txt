@@ -2,11 +2,10 @@
 set(LIBC_SOURCES
 	# .c files
 	libc.c
-	heap.c
-	malloc.c
 	print.c
 	# .cpp files
 	start.cpp
+	heap.cpp
 	assert.cpp
 	libcxx.cpp
 	write.cpp
