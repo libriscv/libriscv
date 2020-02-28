@@ -13,12 +13,12 @@ set(SOURCES
 	src/linux.cpp
 	src/syscalls.cpp
 	src/threads.cpp
+	src/native_libc.cpp
 )
 
 add_executable(remu ${SOURCES})
 target_link_libraries(remu riscv)
 set_target_properties(remu PROPERTIES CXX_STANDARD 17)
-target_compile_options(riscv PUBLIC "-Wall" "-Wextra")
 
 if (LTO)
 	set_target_properties(riscv PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
@@ -31,7 +31,7 @@ endif()
 if (NATIVE)
 	target_compile_options(riscv PUBLIC "-march=native")
 endif()
-target_compile_options(riscv PUBLIC -O2)
+target_compile_options(riscv PUBLIC -O3 -Wall -Wextra)
 if (GPROF)
 	target_compile_options(riscv PUBLIC -pg -g)
 	target_link_libraries(remu "-pg")

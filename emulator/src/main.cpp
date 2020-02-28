@@ -4,7 +4,7 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
-static constexpr bool full_linux_guest = true;
+static constexpr bool full_linux_guest = false;
 static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
 #include "syscalls.hpp"
@@ -13,7 +13,7 @@ static void test_vmcall(riscv::Machine<riscv::RISCV32>&, State<riscv::RISCV32>&)
 
 int main(int argc, const char** argv)
 {
-	assert(argc > 1 && "Provide binary filename!");
+	assert(argc > 1 && "Provide RISC-V binary argument!");
 	const std::string filename = argv[1];
 
 	const auto binary = load_file(filename);
@@ -47,6 +47,7 @@ int main(int argc, const char** argv)
 	}
 	else {
 		setup_minimal_syscalls(state, machine);
+		setup_native_heap_syscalls(state, machine);
 	}
 
 	/*
