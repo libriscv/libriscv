@@ -53,6 +53,7 @@ namespace riscv
 					DECODER(DECODED_INSTR(OP32));
 				case 0b0001111:
 					DECODER(DECODED_INSTR(FENCE));
+#ifdef RISCV_EXT_FLOATS
 				// RV32F & RV32D - Floating-point instructions
 				case 0b0000111:
 					DECODER(DECODED_FLOAT(FLW_FLD));
@@ -91,6 +92,7 @@ namespace riscv
 							DECODER(DECODED_FLOAT(FCVT_SD_W));
 					}
 					break;
+#endif
 #ifdef RISCV_EXT_ATOMICS
 				// RV32A - Atomic instructions
 				case 0b0101111:
@@ -111,7 +113,7 @@ namespace riscv
 			}
 #ifdef RISCV_EXT_COMPRESSED
 		}
-		else
+		else if constexpr (compressed_enabled)
 		{
 			// RV32 C
 			const auto ci = instruction.compressed();

@@ -41,4 +41,20 @@ namespace riscv
 #endif
 	// assert on misaligned reads/writes
 	static constexpr bool memory_alignment_check = false;
+
+#ifdef RISCV_EXT_ATOMICS
+	static constexpr bool atomics_enabled = true;
+#else
+	static constexpr bool atomics_enabled = false;
+#endif
+#ifdef RISCV_EXT_COMPRESSED
+	static constexpr bool compressed_enabled = true;
+#else
+	static constexpr bool compressed_enabled = false;
+#endif
+#ifdef RISCV_EXT_FLOATS
+	static constexpr bool floating_point_enabled = true;
+#else
+	static constexpr bool floating_point_enabled = false;
+#endif
 }
