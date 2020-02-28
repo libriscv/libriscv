@@ -136,7 +136,7 @@ inline int Arena::free(PointerType ptr)
 		return -1;
 
     Chunk* ch = base_chunk().find(ptr);
-    if (ch->data != ptr)
+    if (ch == nullptr || ch->data != ptr)
 		return -1;
 
     ch->free = true;
