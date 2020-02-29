@@ -34,7 +34,7 @@ Without using threads the machine program will simply run until it's completed, 
 
 ```C++
 // Make a function call into the guest VM, but don't start execution
-machine.vmcall("test", {555}, false);
+machine.vmcall("test", {555}, {}, false);
 // Run the program for X amount of instructions, then print something, then
 // resume execution again. Do this until stopped.
 do {
@@ -60,3 +60,20 @@ _exit:
 vmcall works by faking being called from `_exit`, and so when your function returns, it returns directly to `_exit`, with A0 already being the exit value.
 
 If you have some ideas on how to make vmcalls easier to do without requiring an exit function, please contact me or create an issue.
+
+An even smaller variant is making the handler for the `ebreak` instruction stop the machine. The `ebreak` instruction has a fixed system-call number which is defined by `SYSCALL_EBREAK_NR`. An example implementation:
+```
+fast_exit:
+	ebreak     # A0 should already have the exit value
+```
+Or in inline assembly:
+```
+asm(".global fast_exit\n"
+	"fast_exit:\n"
+	"ebreak\n");
+```
+
+To change the exit-address used by vmcall to this very slightly faster implementation, simply use:
+```
+machine.memory.set_exit_address(machine.address_of("fast_exit"));
+```
