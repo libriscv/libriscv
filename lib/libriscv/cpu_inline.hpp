@@ -5,7 +5,7 @@ inline CPU<W>::CPU(Machine<W>& machine)
 {
 }
 
-template<int W>
+template<int W> constexpr
 inline void CPU<W>::jump(const address_t dst)
 {
 	this->registers().pc = dst;

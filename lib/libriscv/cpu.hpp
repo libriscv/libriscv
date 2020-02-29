@@ -27,7 +27,7 @@ namespace riscv
 		void reset();
 
 		address_t pc() const noexcept { return registers().pc; }
-		void jump(address_t);
+		constexpr void jump(address_t);
 
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }

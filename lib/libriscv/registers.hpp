@@ -23,6 +23,10 @@ namespace riscv
 		} usign;
 
 		inline void nanbox() { this->i32[1] = 0xFFFFFFFF; }
+		void set_float(float f) {
+			this->f32[0] = f;
+			this->nanbox();
+		}
 		void load_u32(uint32_t val) {
 			this->i32[0] = val;
 			this->nanbox();

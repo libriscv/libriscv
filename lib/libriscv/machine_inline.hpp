@@ -96,30 +96,35 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 	return dst + len;
 }
 
-template <int W>
+template <int W> constexpr
 inline long Machine<W>::vmcall(const std::string& function_name,
-								std::vector<address_t> args, bool exec,
-								uint64_t max_instructions)
+								std::vector<address_t> iargs,
+								std::vector<float>     fargs,
+								bool exec, uint64_t max_instructions)
 {
 	address_t call_addr = memory.resolve_address(function_name);
 	address_t retn_addr = memory.exit_address();
-	this->setup_call(call_addr, retn_addr, std::move(args));
+	this->setup_call(call_addr, retn_addr, std::move(iargs), std::move(fargs));
 	if (exec) {
 		this->simulate(max_instructions);
-		return this->sysarg<address_t> (RISCV::REG_RETVAL);
+		return this->sysarg<address_t> (0);
 	}
 	return 0;
 }
 
-template <int W>
+template <int W> constexpr
 inline void Machine<W>::setup_call(
 		address_t call_addr, address_t retn_addr,
-		std::vector<address_t> args)
+		std::vector<address_t> iargs,
+		std::vector<float>     fargs)
 {
-	assert(args.size() <= 8);
+	assert(iargs.size() <= 8 && fargs.size() <= 8);
 	cpu.reg(RISCV::REG_RA) = retn_addr;
-	for (size_t arg = 0; arg < args.size(); arg++) {
-		cpu.reg(RISCV::REG_ARG0 + arg) = args[arg];
+	for (size_t arg = 0; arg < iargs.size(); arg++) {
+		cpu.reg(RISCV::REG_ARG0 + arg) = iargs[arg];
+	}
+	for (size_t arg = 0; arg < fargs.size(); arg++) {
+		cpu.registers().getfl(RISCV::REG_FA0 + arg).set_float(fargs[arg]);
 	}
 	cpu.jump(call_addr);
 }

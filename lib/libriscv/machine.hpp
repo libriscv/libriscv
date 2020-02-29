@@ -58,13 +58,18 @@ namespace riscv
 		// which is the norm.
 		// The value of machine.stopped() should be false if the machine
 		// reached max instructions without completing the function call.
-		long vmcall(const std::string& function_name,
-					std::vector<address_t> args, bool exec = true,
-					uint64_t max_instructions = 0);
+		constexpr long
+		vmcall(const std::string& function_name,
+				std::vector<address_t> iargs = {},
+				std::vector<float>     fargs = {},
+				bool exec = true,
+				uint64_t max_instructions = 0);
 
 		// Sets up a function call only, executes no instructions.
-		void setup_call(address_t call_addr, address_t retn_addr,
-						std::vector<address_t> args);
+		constexpr void
+		setup_call(address_t call_addr, address_t retn_addr,
+					std::vector<address_t> iargs = {},
+					std::vector<float>     fargs = {});
 
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const std::string& name);

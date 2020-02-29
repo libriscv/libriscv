@@ -19,6 +19,8 @@ namespace riscv
 		static const uint32_t REG_ARG6   = 16;
 		static const uint32_t REG_ARG7   = 17;
 		static const uint32_t REG_ECALL  = 17;
+		/* floating-point helpers */
+		static const uint32_t REG_FA0    = 10;
 
 		static const char* regname(const uint32_t reg) noexcept
 		{
