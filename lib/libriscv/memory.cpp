@@ -9,6 +9,7 @@ namespace riscv
 		: m_machine{mach}, m_binary{bin}, m_protect_segments {true}
 	{
 		assert(max_mem % Page::size() == 0);
+		assert(max_mem >= Page::size());
 		this->m_pages_total = max_mem / Page::size();
 		this->reset();
 	}

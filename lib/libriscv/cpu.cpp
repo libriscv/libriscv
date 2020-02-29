@@ -27,16 +27,24 @@ namespace riscv
 	{
 		format_t instruction;
 #ifndef RISCV_DEBUG
-		if (this->m_page_offset == Page::size()) {
-			this->m_page_offset = 0;
-			this->change_page(this->m_current_page + 1);
+		const address_t this_page = address & ~(Page::size()-1);
+		if (this_page != this->m_current_page) {
+			this->change_page(this_page);
 		}
-		const auto offset = this->m_page_offset; // it's already the offset
+		const address_t offset = address & (Page::size()-1);
 
-		if (LIKELY(offset <= Page::size() - W))
+#ifndef RISCV_EXT_COMPRESSED
+		// special case for non-compressed mode:
+		// we can always read whole instructions
+		instruction.whole = *(uint32_t*) (m_page_pointer->data() + offset);
+		return instruction;
+#else
+		// here we support compressed instructions
+		// read only full-sized instructions until the end of the buffer
+		if (LIKELY(offset <= Page::size() - 4))
 		{
 			// we can read the whole thing
-			instruction.whole = *(address_t*) (m_page_pointer->data() + offset);
+			instruction.whole = *(uint32_t*) (m_page_pointer->data() + offset);
 			return instruction;
 		}
 
@@ -46,10 +54,10 @@ namespace riscv
 		// read upper half, completing a 32-bit instruction
 		if (instruction.is_long()) {
 			// this instruction crosses a page-border
-			this->m_page_offset = -2;
-			this->change_page(m_current_page + 1);
+			this->change_page(this->m_current_page + Page::size());
 			instruction.half[1] = *(uint16_t*) m_page_pointer->data();
 		}
+#endif
 #else
 		// in debug mode we need a full memory read to allow trapping
 		if ((address & (W-1)) == 0) {
@@ -74,10 +82,8 @@ namespace riscv
 	{
 #ifdef RISCV_DEBUG
 		this->break_checks();
-		const auto instruction = this->read_instruction(this->pc());
-#else
-		const auto instruction = this->read_instruction(this->m_page_offset);
 #endif
+		const auto instruction = this->read_instruction(this->pc());
 
 #ifdef RISCV_DEBUG
 		const auto& handler = this->decode(instruction);
@@ -115,10 +121,6 @@ namespace riscv
 
 		// increment PC
 		registers().pc += instruction.length();
-
-#ifndef RISCV_DEBUG
-		this->m_page_offset += instruction.length();
-#endif
 	}
 
 	template<int W>

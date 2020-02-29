@@ -2,8 +2,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
-#include <memory>
-#include <tuple>
+#include <type_traits>
 #include "common.hpp"
 #include "types.hpp"
 #include "util/delegate.hpp"
