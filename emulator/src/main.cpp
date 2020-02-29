@@ -5,7 +5,7 @@ static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
 static constexpr bool full_linux_guest = false;
-static constexpr bool newlib_mini_guest = false;
+static constexpr bool newlib_mini_guest = true;
 #include "linux.hpp"
 #include "syscalls.hpp"
 static void test_vmcall(riscv::Machine<riscv::RISCV32>&, State<riscv::RISCV32>&);
@@ -137,7 +137,7 @@ void test_vmcall(riscv::Machine<riscv::RISCV32>& machine, State<riscv::RISCV32>&
 		state.output.clear();
 #endif
 		// make a function call into the guest VM, but don't start execution
-		machine.vmcall("test", {555}, false);
+		machine.vmcall("test", {555}, {}, false);
 		do {
 			// resume execution, to complete the function call:
 			machine.simulate(1000);
