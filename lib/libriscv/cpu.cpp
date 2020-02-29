@@ -55,11 +55,10 @@ namespace riscv
 		instruction.whole = *(uint16_t*) (m_page_pointer->data() + offset);
 
 		// read upper half, completing a 32-bit instruction
-		if (UNLIKELY(instruction.is_long())) {
+		if (instruction.is_long()) {
 			// this instruction crosses a page-border
 			this->change_page(m_current_page + 1);
-			const auto offset = (address + 2) & (Page::size()-1);
-			instruction.half[1] = *(uint16_t*) (m_page_pointer->data() + offset);
+			instruction.half[1] = *(uint16_t*) m_page_pointer->data();
 		}
 #else
 		// in debug mode we need a full memory read to allow trapping
