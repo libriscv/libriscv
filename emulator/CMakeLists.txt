@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 project(riscv CXX)
 
-option(LTO         "Enable interprocedural optimizations" ON)
+option(LTO         "Enable interprocedural optimizations" OFF)
 option(NATIVE      "Enable native instructions" ON)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
@@ -18,7 +18,7 @@ set(SOURCES
 
 add_executable(remu ${SOURCES})
 target_link_libraries(remu riscv)
-set_target_properties(remu PROPERTIES CXX_STANDARD 17)
+target_compile_options(remu PUBLIC "-std=c++17")
 
 if (LTO)
 	set_target_properties(riscv PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
