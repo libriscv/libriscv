@@ -32,6 +32,10 @@ namespace riscv
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy_out(void* dst, address_t src, size_t);
+		// gives a sequential view of the data at address, with the possibility
+		// of optimizing away a copy if the data crosses no page-boundaries
+		void memview(address_t addr, size_t len,
+					delegate<void(const uint8_t*, size_t)> callback);
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }

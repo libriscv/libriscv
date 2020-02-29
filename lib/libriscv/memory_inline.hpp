@@ -191,6 +191,24 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
 }
 
 template <int W>
+void Memory<W>::memview(address_t addr, size_t len,
+			delegate<void(const uint8_t*, size_t)> callback)
+{
+	const size_t offset = addr & (Page::size()-1);
+	// fast-path
+	if (LIKELY(offset + len <= Page::size()))
+	{
+		const auto& page = this->get_page(addr);
+		callback(page.data() + offset, len);
+		return;
+	}
+	// slow path
+	uint8_t buffer[len];
+	memcpy_out(buffer, addr, len);
+	callback(buffer, len);
+}
+
+template <int W>
 inline void Memory<W>::protection_fault()
 {
 	machine().cpu.trigger_exception(PROTECTION_FAULT);
