@@ -43,7 +43,7 @@ inline void Machine<W>::reset()
 template <int W>
 inline void Machine<W>::install_syscall_handler(int sysn, syscall_t handler)
 {
-	m_syscall_handlers[sysn] = handler;
+	m_syscall_handlers.at(sysn) = handler;
 }
 template <int W> inline
 typename Machine<W>::syscall_t Machine<W>::get_syscall_handler(int sysn) {
@@ -53,18 +53,22 @@ typename Machine<W>::syscall_t Machine<W>::get_syscall_handler(int sysn) {
 template <int W>
 inline void Machine<W>::system_call(int syscall_number)
 {
-	auto it = m_syscall_handlers.find(syscall_number);
-	if (it != m_syscall_handlers.end()) {
-		address_t ret = it->second(*this);
-		// EBREAK should not modify registers
-		if (syscall_number != SYSCALL_EBREAK) {
-			cpu.reg(RISCV::REG_RETVAL) = ret;
-			if (UNLIKELY(this->verbose_jumps)) {
-				printf("SYSCALL %d returned %ld (0x%lX)\n", syscall_number,
-						(long) ret, (long) ret);
+	if (syscall_number < m_syscall_handlers.size())
+	{
+		auto& handler = m_syscall_handlers[syscall_number];
+		if (handler != nullptr)
+		{
+			address_t ret = handler(*this);
+			// EBREAK handler should not modify registers
+			if (syscall_number != SYSCALL_EBREAK) {
+				cpu.reg(RISCV::REG_RETVAL) = ret;
+				if (UNLIKELY(this->verbose_jumps)) {
+					printf("SYSCALL %d returned %ld (0x%lX)\n",
+							syscall_number, (long) ret, (long) ret);
+				}
 			}
+			return;
 		}
-		return;
 	}
 	if (throw_on_unhandled_syscall == false)
 	{
@@ -98,8 +102,8 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 
 template <int W> constexpr
 inline long Machine<W>::vmcall(const std::string& function_name,
-								std::vector<address_t> iargs,
-								std::vector<float>     fargs,
+								std::initializer_list<address_t> iargs,
+								std::initializer_list<float>     fargs,
 								bool exec, uint64_t max_instructions)
 {
 	address_t call_addr = memory.resolve_address(function_name);
@@ -115,16 +119,18 @@ inline long Machine<W>::vmcall(const std::string& function_name,
 template <int W> constexpr
 inline void Machine<W>::setup_call(
 		address_t call_addr, address_t retn_addr,
-		std::vector<address_t> iargs,
-		std::vector<float>     fargs)
+		std::initializer_list<address_t> iargs,
+		std::initializer_list<float>     fargs)
 {
 	assert(iargs.size() <= 8 && fargs.size() <= 8);
 	cpu.reg(RISCV::REG_RA) = retn_addr;
-	for (size_t arg = 0; arg < iargs.size(); arg++) {
-		cpu.reg(RISCV::REG_ARG0 + arg) = iargs[arg];
+	int arg = RISCV::REG_ARG0;
+	for (auto iarg : iargs) {
+		cpu.reg(arg++) = iarg;
 	}
-	for (size_t arg = 0; arg < fargs.size(); arg++) {
-		cpu.registers().getfl(RISCV::REG_FA0 + arg).set_float(fargs[arg]);
+	arg = RISCV::REG_FA0;
+	for (auto farg : fargs) {
+		cpu.registers().getfl(arg++).set_float(farg);
 	}
 	cpu.jump(call_addr);
 }

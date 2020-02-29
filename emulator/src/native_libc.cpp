@@ -3,10 +3,10 @@
 using namespace riscv;
 static sas_alloc::Arena arena {0x40000000, 0xF0000000};
 
-static const uint32_t SYSCALL_MALLOC  = 6660;
-static const uint32_t SYSCALL_CALLOC  = 6661;
-static const uint32_t SYSCALL_REALLOC = 6662;
-static const uint32_t SYSCALL_FREE    = 6663;
+static const uint32_t SYSCALL_MALLOC  = 1;
+static const uint32_t SYSCALL_CALLOC  = 2;
+static const uint32_t SYSCALL_REALLOC = 3;
+static const uint32_t SYSCALL_FREE    = 4;
 
 template <int W>
 static long syscall_malloc(Machine<W>& machine)

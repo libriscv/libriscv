@@ -3,8 +3,8 @@
 #include "cpu.hpp"
 #include "memory.hpp"
 #include "util/delegate.hpp"
+#include <array>
 #include <errno.h> // ENOSYS
-#include <EASTL/map.h>
 #include <vector>
 
 namespace riscv
@@ -60,16 +60,16 @@ namespace riscv
 		// reached max instructions without completing the function call.
 		constexpr long
 		vmcall(const std::string& function_name,
-				std::vector<address_t> iargs = {},
-				std::vector<float>     fargs = {},
+				std::initializer_list<address_t> iargs = {},
+				std::initializer_list<float>     fargs = {},
 				bool exec = true,
 				uint64_t max_instructions = 0);
 
 		// Sets up a function call only, executes no instructions.
 		constexpr void
 		setup_call(address_t call_addr, address_t retn_addr,
-					std::vector<address_t> iargs = {},
-					std::vector<float>     fargs = {});
+					std::initializer_list<address_t> iargs = {},
+					std::initializer_list<float>     fargs = {});
 
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const std::string& name);
@@ -96,7 +96,7 @@ namespace riscv
 		void system_call(int);
 	private:
 		bool m_stopped = false;
-		eastl::map<int, syscall_t> m_syscall_handlers;
+		std::array<syscall_t, 256> m_syscall_handlers;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 

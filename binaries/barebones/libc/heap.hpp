@@ -5,10 +5,10 @@
 #include <cstddef>
 #include "syscall.hpp"
 
-#define SYSCALL_MALLOC  6660
-#define SYSCALL_CALLOC  6661
-#define SYSCALL_REALLOC 6662
-#define SYSCALL_FREE    6663
+#define SYSCALL_MALLOC   1
+#define SYSCALL_CALLOC   2
+#define SYSCALL_REALLOC  3
+#define SYSCALL_FREE     4
 
 inline void* sys_malloc(size_t len)
 {
