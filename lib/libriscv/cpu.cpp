@@ -23,26 +23,15 @@ namespace riscv
 	}
 
 	template <int W>
-	inline void CPU<W>::change_page(address_t this_page)
-	{
-		m_current_page = this_page;
-		m_page_pointer = &machine().memory.get_pageno(this_page);
-		// verify execute permission
-		if (UNLIKELY(!m_page_pointer->attr.exec)) {
-			this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
-		}
-	}
-
-	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
 	{
 		format_t instruction;
 #ifndef RISCV_DEBUG
-		const address_t this_page = address >> Page::SHIFT;
-		if (UNLIKELY(this_page != m_current_page)) {
-			this->change_page(this_page);
+		if (this->m_page_offset == Page::size()) {
+			this->m_page_offset = 0;
+			this->change_page(this->m_current_page + 1);
 		}
-		const auto offset = address & (Page::size()-1);
+		const auto offset = this->m_page_offset; // it's already the offset
 
 		if (LIKELY(offset <= Page::size() - W))
 		{
@@ -57,6 +46,7 @@ namespace riscv
 		// read upper half, completing a 32-bit instruction
 		if (instruction.is_long()) {
 			// this instruction crosses a page-border
+			this->m_page_offset = -2;
 			this->change_page(m_current_page + 1);
 			instruction.half[1] = *(uint16_t*) m_page_pointer->data();
 		}
@@ -84,8 +74,10 @@ namespace riscv
 	{
 #ifdef RISCV_DEBUG
 		this->break_checks();
-#endif
 		const auto instruction = this->read_instruction(this->pc());
+#else
+		const auto instruction = this->read_instruction(this->m_page_offset);
+#endif
 
 #ifdef RISCV_DEBUG
 		const auto& handler = this->decode(instruction);
@@ -123,6 +115,10 @@ namespace riscv
 
 		// increment PC
 		registers().pc += instruction.length();
+
+#ifndef RISCV_DEBUG
+		this->m_page_offset += instruction.length();
+#endif
 	}
 
 	template<int W>

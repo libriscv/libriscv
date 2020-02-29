@@ -67,6 +67,7 @@ namespace riscv
 
 		Machine<W>& m_machine;
 		int64_t     m_current_page = -1;
+		int         m_page_offset = 0;
 		const Page* m_page_pointer = nullptr;
 		inline void change_page(address_t address);
 
