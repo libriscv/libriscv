@@ -6,8 +6,8 @@
 #include "util/delegate.hpp"
 #include <cassert>
 #include <cstring>
-#include <EASTL/map.h>
 #include <EASTL/string.h>
+#include <EASTL/string_map.h>
 #include <EASTL/unordered_map.h>
 #include <vector>
 
@@ -45,7 +45,7 @@ namespace riscv
 		const auto& machine() const { return this->m_machine; }
 
 		// call interface
-		address_t resolve_address(const std::string& sym);
+		address_t resolve_address(const char* sym);
 		void      set_exit_address(address_t new_exit);
 		address_t exit_address() const noexcept;
 
@@ -120,7 +120,7 @@ namespace riscv
 		bool m_protect_segments;
 
 		// lookup tree for ELF symbol names
-		eastl::map<eastl::string, address_t> sym_lookup;
+		eastl::string_map<address_t> sym_lookup;
 		address_t m_exit_address = 0;
 	};
 #include "memory_inline.hpp"

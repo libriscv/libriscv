@@ -106,7 +106,7 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 }
 
 template <int W> constexpr
-inline long Machine<W>::vmcall(const std::string& function_name,
+inline long Machine<W>::vmcall(const char* function_name,
 								std::initializer_list<address_t> iargs,
 								std::initializer_list<float>     fargs,
 								bool exec, uint64_t max_instructions)
@@ -141,7 +141,7 @@ inline void Machine<W>::setup_call(
 }
 
 template <int W>
-inline address_type<W> Machine<W>::address_of(const std::string& name)
+inline address_type<W> Machine<W>::address_of(const char* name)
 {
 	return memory.resolve_address(name);
 }

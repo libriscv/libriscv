@@ -60,7 +60,7 @@ namespace riscv
 		// The value of machine.stopped() should be false if the machine
 		// reached max instructions without completing the function call.
 		constexpr long
-		vmcall(const std::string& function_name,
+		vmcall(const char* function_name,
 				std::initializer_list<address_t> iargs = {},
 				std::initializer_list<float>     fargs = {},
 				bool exec = true,
@@ -73,7 +73,7 @@ namespace riscv
 					std::initializer_list<float>     fargs = {});
 
 		// returns the address of a symbol in the ELF symtab, or zero
-		address_t address_of(const std::string& name);
+		address_t address_of(const char* name);
 
 		// Realign the stack pointer, to make sure that vmcalls succeed
 		void realign_stack(uint8_t align = 16);

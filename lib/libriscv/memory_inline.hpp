@@ -222,14 +222,14 @@ void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 }
 
 template <int W>
-address_type<W> Memory<W>::resolve_address(const std::string& name)
+address_type<W> Memory<W>::resolve_address(const char* name)
 {
-	const auto& it = sym_lookup.find(name.c_str());
+	const auto& it = sym_lookup.find(name);
 	if (it != sym_lookup.end()) return it->second;
 
-	auto* sym = resolve_symbol(name.c_str());
+	auto* sym = resolve_symbol(name);
 	address_t addr = (sym) ? sym->st_value : 0x0;
-	sym_lookup.emplace(name.c_str(), addr);
+	sym_lookup.emplace(strdup(name), addr);
 	return addr;
 }
 
