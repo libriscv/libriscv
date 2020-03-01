@@ -7,7 +7,7 @@ using namespace riscv;
 template <int W>
 thread<W>::thread(multithreading<W>& mt, int ttid, thread* p,
 				address_t tls, address_t stack)
-	: threading(mt), tid(ttid), parent(p), my_tls(tls), my_stack(stack)   {}
+	: threading(mt), parent(p), tid(ttid), my_tls(tls), my_stack(stack)   {}
 
 template <int W>
 void thread<W>::activate()
@@ -35,7 +35,7 @@ void thread<W>::exit()
 	auto& thr  = this->threading;
 	// CLONE_CHILD_CLEARTID: set userspace TID value to zero
 	if (this->clear_tid) {
-		THPRINT("Clearing thread value for tid=%d at 0x%X\n", 
+		THPRINT("Clearing thread value for tid=%d at 0x%X\n",
 				this->tid, this->clear_tid);
 		threading.machine.memory.template write<uint32_t> (this->clear_tid, 0);
 	}
@@ -156,6 +156,8 @@ template <int W>
 void setup_multithreading(State<W>& state, Machine<W>& machine)
 {
 	auto* mt = new multithreading<W>(machine);
+	machine.add_destructor_callback([mt] { delete mt; });
+
 	// exit & exit_group
 	machine.install_syscall_handler(93,
 	[mt, &state] (Machine<W>& machine) {
@@ -187,7 +189,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	});
 	// set_robust_list
 	machine.install_syscall_handler(99,
-	[] (Machine<W>& machine) {
+	[] (Machine<W>&) {
 		return 0;
 	});
 	// sched_yield
@@ -216,7 +218,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	});
 	// gettid
 	machine.install_syscall_handler(178,
-	[mt] (Machine<W>& machine) {
+	[mt] (Machine<W>&) {
 		THPRINT(">>> gettid() = %ld\n", mt->get_thread()->tid);
 		return mt->get_thread()->tid;
 	});
@@ -255,8 +257,10 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		             void *parent_tidptr, void *tls, void *child_tidptr) */
 		const int      flags = machine.template sysarg<int> (0);
 		const uint32_t stack = machine.template sysarg<uint32_t> (1);
+#ifdef THREADS_DEBUG
 		const uint32_t  func = machine.template sysarg<uint32_t> (2);
 		const uint32_t  args = machine.template sysarg<uint32_t> (3);
+#endif
 		const uint32_t  ptid = machine.template sysarg<uint32_t> (4);
 		const uint32_t   tls = machine.template sysarg<uint32_t> (5);
 		const uint32_t  ctid = machine.template sysarg<uint32_t> (6);
