@@ -5,6 +5,7 @@ option(LTO         "Enable interprocedural optimizations" OFF)
 option(NATIVE      "Enable native instructions" ON)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
+option(LINKER_GC   "Enable linker section garbage collection" OFF)
 
 add_subdirectory(../lib lib)
 
@@ -33,10 +34,12 @@ if (NATIVE)
 endif()
 target_compile_options(riscv PUBLIC -O3 -Wall -Wextra)
 if (GPROF)
-	target_compile_options(riscv PUBLIC -pg -g)
+	target_compile_options(riscv PUBLIC -pg -g -fno-inline)
 	target_link_libraries(remu "-pg")
 endif()
 
 # GC-sections
-target_compile_options(riscv PUBLIC "-ffunction-sections" "-fdata-sections")
-target_link_libraries(remu "-Wl,-gc-sections")
+if (LINKER_GC)
+	target_compile_options(riscv PUBLIC "-ffunction-sections" "-fdata-sections")
+	target_link_libraries(remu "-Wl,-gc-sections")
+endif()
