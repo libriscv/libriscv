@@ -20,6 +20,7 @@ namespace riscv
 		using syscall_t = delegate<long (Machine<W>&)>;
 		Machine(const std::vector<uint8_t>& binary = {},
 				address_t max_memory = DEFAULT_MEMORY_MAX);
+		~Machine();
 
 		// Simulate a RISC-V machine until @max_instructions have been
 		// executed, or the machine has been stopped.
@@ -30,11 +31,6 @@ namespace riscv
 		bool stopped() const noexcept;
 		void reset();
 
-		// Install a system call handler for a the given syscall number.
-		// Pass nullptr to uninstall a system call handler.
-		void install_syscall_handler(int, syscall_t);
-		syscall_t get_syscall_handler(int);
-
 		CPU<W>    cpu;
 		Memory<W> memory;
 
@@ -42,6 +38,11 @@ namespace riscv
 		address_t copy_to_guest(address_t dst, const void* buf, size_t length);
 		// Push something onto the stack, and move the stack pointer
 		address_t stack_push(const void* data, size_t length);
+
+		// Install a system call handler for a the given syscall number.
+		// Pass nullptr to uninstall a system call handler.
+		void install_syscall_handler(int, syscall_t);
+		syscall_t get_syscall_handler(int);
 
 		// Push all strings on stack and then create a mini-argv on SP
 		void setup_argv(const std::vector<std::string>& args);
@@ -80,6 +81,9 @@ namespace riscv
 		// Bytes (in whole pages) of unused memory
 		address_t free_memory() const noexcept;
 
+		// Call a function when the machine gets destroyed
+		void add_destructor_callback(delegate<void()> callback);
+
 #ifdef RISCV_DEBUG
 		// Immediately block execution, print registers and current instruction.
 		void print_and_pause();
@@ -97,6 +101,7 @@ namespace riscv
 	private:
 		bool m_stopped = false;
 		std::array<syscall_t, 512> m_syscall_handlers;
+		std::vector<delegate<void()>> m_destructor_callbacks;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 
