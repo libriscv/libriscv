@@ -232,8 +232,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	// mmap
 	machine.install_syscall_handler(222,
 	[] (Machine<W>& machine) {
-		const int  addr_g = machine.template sysarg<uint32_t>(0);
-		const auto length = machine.template sysarg<uint32_t>(1);
+		const int  addr_g = machine.template sysarg<address_type<W>>(0);
+		const auto length = machine.template sysarg<address_type<W>>(1);
 		const auto prot   = machine.template sysarg<int>(2);
 	    const auto flags  = machine.template sysarg<int>(3);
 		SYSPRINT("SYSCALL mmap called, addr %#X  len %u prot %#x flags %#X\n",
@@ -251,6 +251,20 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	        return addr;
 	    }
 		return UINT32_MAX; // = MAP_FAILED;
+	});
+	// mremap
+	machine.install_syscall_handler(163,
+	[] (Machine<W>& machine) -> long {
+		const auto old_addr = machine.template sysarg<address_type<W>>(0);
+		const auto old_size = machine.template sysarg<address_type<W>>(1);
+		const auto new_size = machine.template sysarg<address_type<W>>(2);
+	    const auto flags    = machine.template sysarg<int>(3);
+		SYSPRINT("SYSCALL mremap called, addr %#X  len %u newsize %u flags %#X\n",
+	            old_addr, old_size, new_size, flags);
+		if (flags & MREMAP_FIXED) {
+			return (long) MAP_FAILED;
+		}
+		return (long) MAP_FAILED;
 	});
 	// mprotect
 	machine.install_syscall_handler(226,

@@ -69,6 +69,7 @@ namespace riscv
 		// NOTE: use print_and_pause() to immediately break!
 		void trap(address_t page_addr, mmio_cb_t callback);
 
+		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 		Memory(Machine<W>&, const std::vector<uint8_t>&, address_t max_mem);
 	private:

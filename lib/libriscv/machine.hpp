@@ -96,7 +96,7 @@ namespace riscv
 		void system_call(int);
 	private:
 		bool m_stopped = false;
-		std::array<syscall_t, 256> m_syscall_handlers;
+		std::array<syscall_t, 512> m_syscall_handlers;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 

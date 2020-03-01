@@ -4,7 +4,7 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
-static constexpr bool full_linux_guest = false;
+static constexpr bool full_linux_guest = true;
 static constexpr bool newlib_mini_guest = true;
 #include "linux.hpp"
 #include "syscalls.hpp"

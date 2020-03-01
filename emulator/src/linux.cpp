@@ -4,6 +4,16 @@
 #include <array>
 using namespace riscv;
 
+template <int W, typename T>
+const T* elf_offset(riscv::Machine<W>& machine, intptr_t ofs) {
+	return (const T*) &machine.memory.binary().at(ofs);
+}
+template <int W>
+inline const auto* elf_header(riscv::Machine<W>& machine) {
+	return elf_offset<W, typename riscv::Elf<W>::Ehdr> (machine, 0);
+}
+
+
 static inline
 void push_arg(Machine<4>& m, std::vector<uint32_t>& vec, uint32_t& dst, const std::string& str)
 {
@@ -48,6 +58,17 @@ void prepare_linux(riscv::Machine<4>& machine,
 	push_down(machine, dst, platform.data(), platform.size());
 	const uint32_t platform_addr = dst;
 
+	// Program headers
+	const auto* binary_ehdr = elf_header<4> (machine);
+	const auto* binary_phdr = elf_offset<4, riscv::Elf<4>::Phdr> (machine, binary_ehdr->e_phoff);
+	const unsigned phdr_count = binary_ehdr->e_phnum;
+	for (unsigned i = 0; i < phdr_count; i++)
+	{
+		const auto* phd = &binary_phdr[i];
+		push_down(machine, dst, phd, sizeof(riscv::Elf<4>::Phdr));
+	}
+	const uint32_t phdr_location = dst;
+
 	// Arguments to main()
 	std::vector<uint32_t> argv;
 	argv.push_back(args.size()); // argc
@@ -67,9 +88,9 @@ void prepare_linux(riscv::Machine<4>& machine,
 	push_aux(machine, argv, {AT_CLKTCK, 100});
 
 	// ELF related
-	push_aux(machine, argv, {AT_PHENT, 0});
-	push_aux(machine, argv, {AT_PHDR,  0});
-	push_aux(machine, argv, {AT_PHNUM, 0});
+	push_aux(machine, argv, {AT_PHENT, 4});
+	push_aux(machine, argv, {AT_PHDR,  phdr_location});
+	push_aux(machine, argv, {AT_PHNUM, phdr_count});
 
 	// Misc
 	push_aux(machine, argv, {AT_BASE, 0});
