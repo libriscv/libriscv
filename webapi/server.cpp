@@ -13,8 +13,8 @@ using namespace std; // string literals
 static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
 // avoid endless loops, code that takes too long and excessive memory usage
-static const size_t MAX_INSTRUCTIONS = 999000;
-static const size_t MAX_MEMORY       = 1024 * 1024 * 64;
+static const size_t MAX_INSTRUCTIONS = 2'000'000;
+static const size_t MAX_MEMORY       = 32 * 1024 * 1024;
 
 static const std::vector<std::string> env = {
 	"LC_CTYPE=C", "LC_ALL=C", "USER=groot"

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.9)
-project(webapi C CXX)
+project(webapi CXX)
 
 option(LTO         "Enable interprocedural optimizations" ON)
 option(NATIVE      "Enable native instructions" ON)
@@ -31,4 +31,4 @@ endif()
 if (NATIVE)
 	target_compile_options(riscv PUBLIC "-march=native")
 endif()
-target_compile_options(riscv PUBLIC -O2)
+target_compile_options(riscv PUBLIC -Ofast)

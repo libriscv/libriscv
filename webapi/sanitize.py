@@ -14,17 +14,13 @@ python_status   = "status.txt"
 dc_codefile = project_dir + "/" + python_codefile
 dc_binary   = project_dir + "/binary"
 
+# sanitize the code here
 sanitized = ""
 with open(python_codefile) as fp:
 	for line in fp:
-		if "include" in line:
-			if ("/" in line) or (".." in line):
-				fo = open(python_status, "w")
-				fo.write("Invalid characters in statement")
-				fo.close()
-				sys.exit(666)
+		# no sanitation atm
 		sanitized += str(line)
-print(sanitized)
+#print(sanitized)
 
 # overwrite with sanitized text
 fo = open(python_codefile, "w")
@@ -46,9 +42,10 @@ else:
 
 # compile the code
 cmd = ["docker", "exec", dc_instance,
-		dc_gnucpp, "-march=rv32gc", "-mabi=ilp32", "-static"] + dc_extra + [
+		dc_gnucpp, "-march=rv32g", "-mabi=ilp32", "-static"] + dc_extra + [
 		"-std=c++17", "-O2", "-fstack-protector", dc_codefile, "-o", dc_binary,
-		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections", "-Wl,-s"]
+		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections", "-Wl,-s",
+		"-Wl,--undefined=pthread_join"] # this fixes a glibc bug
 print(cmd)
 
 result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
