@@ -2,6 +2,8 @@
 #include <include/printf.h>
 #include <cstdarg>
 
+uint64_t __stack_chk_guard = 0x123456780C0A00FF;
+
 extern "C"
 __attribute__((noreturn))
 void panic(const char* reason)
@@ -43,4 +45,10 @@ void __assert_func(
 		failedexpr, file, line,
 		func ? ", function: " : "", func ? func : "");
 	abort();
+}
+
+extern "C"
+void __stack_chk_fail()
+{
+	panic("Stack protector failed check");
 }
