@@ -42,6 +42,21 @@ static std::string project_path(const int id) {
 	return project_base() + "/program" + std::to_string(id);
 }
 
+template <int W>
+static int run_once(riscv::Machine<W>& machine, bool& break_used)
+{
+	if (machine.cpu.registers().counter >= MAX_INSTRUCTIONS)
+		return -1;
+	// prevent infinite break loop
+	machine.simulate(MAX_INSTRUCTIONS - machine.cpu.registers().counter);
+	if (machine.cpu.registers().counter == MAX_INSTRUCTIONS) {
+		return -1;
+	} else if (break_used) {
+		return 1;
+	}
+	return 0;
+}
+
 int main(void)
 {
     using namespace httplib;
@@ -99,24 +114,45 @@ int main(void)
 
 		State<4> state;
 		// go-time: create machine, execute code
-		const uint64_t t0 = micros_now();
-		riscv::Machine<riscv::RISCV32> machine { binary };
-		machine.memory.set_pages_total(MAX_MEMORY / riscv::Page::size());
-
+		riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
 
 		prepare_linux<riscv::RISCV32>(machine, {}, env);
 		setup_linux_syscalls(state, machine);
 		setup_multithreading(state, machine);
 
+		// run the machine until potential break
+		bool break_used = false;
+		machine.install_syscall_handler(0,
+		[&break_used] (auto& machine) -> long {
+			break_used = true;
+			machine.stop();
+			return 0;
+		});
+
+		asm("" : : : "memory");
+		uint64_t t0 = micros_now();
+		asm("" : : : "memory");
 		try {
-			machine.simulate(MAX_INSTRUCTIONS);
-			if (machine.cpu.registers().counter == MAX_INSTRUCTIONS) {
+			int ret = run_once(machine, break_used);
+			if (ret == -1) {
 				res.set_header("X-Exception", "Maximum instructions reached");
+			}
+			else if (ret == 1) {
+				// break detected
+				break_used = false;
+				// restart timer
+				asm("" : : : "memory");
+				t0 = micros_now();
+				asm("" : : : "memory");
+				run_once(machine, break_used);
 			}
 		} catch (std::exception& e) {
 			res.set_header("X-Exception", e.what());
 		}
+
+		asm("" : : : "memory");
 		const uint64_t t1 = micros_now();
+		asm("" : : : "memory");
 		const auto instructions = std::to_string(machine.cpu.registers().counter);
 
 		common_response_fields(res, 200);
