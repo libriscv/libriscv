@@ -58,7 +58,7 @@ typename Machine<W>::syscall_t Machine<W>::get_syscall_handler(int sysn) {
 template <int W>
 inline void Machine<W>::system_call(int syscall_number)
 {
-	if (syscall_number < m_syscall_handlers.size())
+	if ((size_t) syscall_number < m_syscall_handlers.size())
 	{
 		auto& handler = m_syscall_handlers[syscall_number];
 		if (handler != nullptr)
@@ -147,7 +147,7 @@ inline address_type<W> Machine<W>::address_of(const char* name)
 }
 
 template <int W>
-void Machine<W>::realign_stack(uint8_t align)
+void Machine<W>::realign_stack(unsigned align)
 {
 	address_t align_mask = 15;
 	switch (align) {

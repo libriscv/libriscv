@@ -53,6 +53,12 @@ namespace riscv
 	    void break_checks();
 		static void default_pausepoint(CPU&);
 #endif
+
+		// serializes all the machine state + a tiny header to @vec
+		void serialize_to(std::vector<uint8_t>& vec);
+		// returns the machine to a previously stored state
+		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
+
 		CPU(Machine<W>&);
 	private:
 		Registers<W> m_regs;

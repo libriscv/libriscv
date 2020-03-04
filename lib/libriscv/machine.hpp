@@ -75,9 +75,6 @@ namespace riscv
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name);
 
-		// Realign the stack pointer, to make sure that vmcalls succeed
-		void realign_stack(uint8_t align = 16);
-
 		// Bytes (in whole pages) of unused memory
 		address_t free_memory() const noexcept;
 
@@ -98,6 +95,18 @@ namespace riscv
 #endif
 		bool throw_on_unhandled_syscall = false;
 		void system_call(int);
+
+		// Realign the stack pointer, to make sure that vmcalls succeed
+		void realign_stack(unsigned align = 16);
+
+		// Serializes all the machine state + a tiny header to @vec
+		void serialize_to(std::vector<uint8_t>& vec);
+		// Returns the machine to a previously stored state
+		// NOTE: All previous memory traps are lost, syscall handlers,
+		// destructor callbacks are kept. Page fault handler and
+		// symbol lookup cache is also kept. Returns 0 on success.
+		int deserialize_from(const std::vector<uint8_t>&);
+
 	private:
 		bool m_stopped = false;
 		std::array<syscall_t, 512> m_syscall_handlers;

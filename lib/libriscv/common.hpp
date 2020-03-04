@@ -57,4 +57,7 @@ namespace riscv
 #else
 	static constexpr bool floating_point_enabled = false;
 #endif
+
+	template <int W>
+	struct SerializedMachine;
 }

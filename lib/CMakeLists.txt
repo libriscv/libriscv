@@ -11,6 +11,7 @@ set (SOURCES
 		libriscv/cpu.cpp
 		libriscv/machine.cpp
 		libriscv/memory.cpp
+		libriscv/serialize.cpp
 	)
 if (RISCV_DEBUG)
 	list(APPEND SOURCES

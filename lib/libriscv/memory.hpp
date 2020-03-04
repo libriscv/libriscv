@@ -71,6 +71,11 @@ namespace riscv
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
+		// serializes all the machine state + a tiny header to @vec
+		void serialize_to(std::vector<uint8_t>& vec);
+		// returns the machine to a previously stored state
+		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
+
 		Memory(Machine<W>&, const std::vector<uint8_t>&, address_t max_mem);
 	private:
 		inline auto& create_attr(const address_t address);
