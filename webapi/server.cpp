@@ -13,8 +13,8 @@ using namespace std; // string literals
 static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
 // avoid endless loops, code that takes too long and excessive memory usage
-static const size_t MAX_INSTRUCTIONS = 2'000'000;
-static const size_t MAX_MEMORY       = 32 * 1024 * 1024;
+static const uint64_t MAX_INSTRUCTIONS = 2'000'000;
+static const uint32_t MAX_MEMORY       = 32 * 1024 * 1024;
 
 static const std::vector<std::string> env = {
 	"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
@@ -43,13 +43,11 @@ static std::string project_path(const int id) {
 }
 
 template <int W>
-static int run_once(riscv::Machine<W>& machine, bool& break_used)
+static int run_once(riscv::Machine<W>& machine, 
+		const uint64_t icount, bool& break_used)
 {
-	if (machine.cpu.registers().counter >= MAX_INSTRUCTIONS)
-		return -1;
-	// prevent infinite break loop
-	machine.simulate(MAX_INSTRUCTIONS - machine.cpu.registers().counter);
-	if (machine.cpu.registers().counter == MAX_INSTRUCTIONS) {
+	machine.simulate(icount);
+	if (machine.cpu.registers().counter == icount) {
 		return -1;
 	} else if (break_used) {
 		return 1;
@@ -133,18 +131,19 @@ int main(void)
 		uint64_t t0 = micros_now();
 		asm("" : : : "memory");
 		try {
-			int ret = run_once(machine, break_used);
+			int ret = run_once(machine, MAX_INSTRUCTIONS, break_used);
 			if (ret == -1) {
 				res.set_header("X-Exception", "Maximum instructions reached");
 			}
 			else if (ret == 1) {
 				// break detected
 				break_used = false;
+				machine.cpu.registers().counter = 0;
 				// restart timer
 				asm("" : : : "memory");
 				t0 = micros_now();
 				asm("" : : : "memory");
-				run_once(machine, break_used);
+				run_once(machine, MAX_INSTRUCTIONS, break_used);
 			}
 		} catch (std::exception& e) {
 			res.set_header("X-Exception", e.what());
