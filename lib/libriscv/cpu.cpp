@@ -1,7 +1,6 @@
 #include "machine.hpp"
 #include "common.hpp"
 #include "riscvbase.hpp"
-#include "rv32i.cpp"
 
 namespace riscv
 {
@@ -154,5 +153,5 @@ namespace riscv
 	}
 
 	template struct CPU<4>;
-	//template class CPU<8>;
+	//template struct CPU<8>;
 }
