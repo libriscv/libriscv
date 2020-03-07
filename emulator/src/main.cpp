@@ -132,16 +132,18 @@ void test_vmcall(riscv::Machine<riscv::RISCV32>& machine, State<riscv::RISCV32>&
 		// make sure stack is aligned for a function call
 		machine.realign_stack();
 		// reset instruction counter to simplify calculation
-		machine.cpu.registers().counter = 0;
+		machine.cpu.reset_instruction_counter();
 #ifndef RISCV_DEBUG
 		state.output.clear();
 #endif
-		// make a function call into the guest VM, but don't start execution
-		machine.vmcall("test", {555}, {}, false);
+		// make a function call into the guest VM,
+		// but only execute 1 instruction, then stop
+		machine.vmcall<1>("test", 555);
 		do {
 			// resume execution, to complete the function call:
 			machine.simulate(1000);
-			printf("Instruction count: %zu\n", (size_t) machine.cpu.registers().counter);
+			printf("Instruction count: %zu\n",
+					(size_t) machine.cpu.instruction_counter());
 		} while (!machine.stopped());
 		// extract real return value:
 		int ret = machine.sysarg<int>(0);

@@ -28,3 +28,9 @@ int main(int, char**)
 	assert(len > 0);
 	return 666;
 }
+
+// this function can be called using Machine::vmcall()
+extern "C" void public_function()
+{
+	printf("Test!!\n");
+}
