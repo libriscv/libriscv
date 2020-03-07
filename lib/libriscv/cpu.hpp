@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "registers.hpp"
 #include "rv32i.hpp"
+#include "rv64i.hpp"
 #include "rv32a.hpp"
 #include "util/delegate.hpp"
 #include <map>
