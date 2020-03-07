@@ -29,6 +29,9 @@ namespace riscv
 		address_t pc() const noexcept { return registers().pc; }
 		constexpr void jump(address_t);
 
+		uint64_t instruction_counter() const noexcept { return m_regs.counter; }
+		void     reset_instruction_counter() noexcept { m_regs.counter = 0; }
+
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }
 

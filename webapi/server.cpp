@@ -47,7 +47,7 @@ static int run_once(riscv::Machine<W>& machine,
 		const uint64_t icount, bool& break_used)
 {
 	machine.simulate(icount);
-	if (machine.cpu.registers().counter == icount) {
+	if (machine.cpu.instruction_counter() == icount) {
 		return -1;
 	} else if (break_used) {
 		return 1;
@@ -114,7 +114,8 @@ int main(void)
 		// go-time: create machine, execute code
 		riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
 
-		prepare_linux<riscv::RISCV32>(machine, {}, env);
+		prepare_linux<riscv::RISCV32>(machine, 
+			{"program", std::to_string(program_id)}, env);
 		setup_linux_syscalls(state, machine);
 		setup_multithreading(state, machine);
 
@@ -130,6 +131,7 @@ int main(void)
 		asm("" : : : "memory");
 		uint64_t t0 = micros_now();
 		asm("" : : : "memory");
+
 		try {
 			int ret = run_once(machine, MAX_INSTRUCTIONS, break_used);
 			if (ret == -1) {
@@ -138,9 +140,8 @@ int main(void)
 			else if (ret == 1) {
 				// break detected
 				break_used = false;
-				machine.cpu.registers().counter = 0;
+				machine.cpu.reset_instruction_counter();
 				// restart timer
-				asm("" : : : "memory");
 				t0 = micros_now();
 				asm("" : : : "memory");
 				run_once(machine, MAX_INSTRUCTIONS, break_used);
@@ -152,7 +153,7 @@ int main(void)
 		asm("" : : : "memory");
 		const uint64_t t1 = micros_now();
 		asm("" : : : "memory");
-		const auto instructions = std::to_string(machine.cpu.registers().counter);
+		const auto instructions = std::to_string(machine.cpu.instruction_counter());
 
 		common_response_fields(res, 200);
 		res.set_header("X-Exit-Code", std::to_string(state.exit_code));
