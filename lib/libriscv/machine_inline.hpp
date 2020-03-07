@@ -105,45 +105,19 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 	return dst + len;
 }
 
-template <int W> constexpr
-inline long Machine<W>::vmcall(const char* function_name,
-								std::initializer_list<address_t> iargs,
-								std::initializer_list<float>     fargs,
-								bool exec, uint64_t max_instructions)
-{
-	address_t call_addr = memory.resolve_address(function_name);
-	address_t retn_addr = memory.exit_address();
-	this->setup_call(call_addr, retn_addr, std::move(iargs), std::move(fargs));
-	if (exec) {
-		this->simulate(max_instructions);
-		return this->sysarg<address_t> (0);
-	}
-	return 0;
-}
-
-template <int W> constexpr
-inline void Machine<W>::setup_call(
-		address_t call_addr, address_t retn_addr,
-		std::initializer_list<address_t> iargs,
-		std::initializer_list<float>     fargs)
-{
-	assert(iargs.size() <= 8 && fargs.size() <= 8);
-	cpu.reg(RISCV::REG_RA) = retn_addr;
-	int arg = RISCV::REG_ARG0;
-	for (auto iarg : iargs) {
-		cpu.reg(arg++) = iarg;
-	}
-	arg = RISCV::REG_FA0;
-	for (auto farg : fargs) {
-		cpu.registers().getfl(arg++).set_float(farg);
-	}
-	cpu.jump(call_addr);
-}
-
 template <int W>
 inline address_type<W> Machine<W>::address_of(const char* name)
 {
 	return memory.resolve_address(name);
+}
+
+template <int W>
+address_type<W> Machine<W>::stack_push(const void* data, size_t length)
+{
+	auto& sp = cpu.reg(RISCV::REG_SP);
+	sp = (sp - length) & ~(W-1); // maintain word alignment
+	this->copy_to_guest(sp, data, length);
+	return sp;
 }
 
 template <int W>
@@ -170,3 +144,5 @@ inline void Machine<W>::add_destructor_callback(delegate<void()> cb)
 {
 	m_destructor_callbacks.push_back(std::move(cb));
 }
+
+#include "machine_vmcall.hpp"

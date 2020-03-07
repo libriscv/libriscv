@@ -6,15 +6,6 @@ namespace riscv
 	bool verbose_machine = true;
 
 	template <int W>
-	address_type<W> Machine<W>::stack_push(const void* data, size_t length)
-	{
-		auto& sp = cpu.reg(RISCV::REG_SP);
-		sp = (sp - length) & ~(W-1); // maintain word alignment
-		this->copy_to_guest(sp, data, length);
-		return sp;
-	}
-
-	template <int W>
 	void Machine<W>::setup_argv(const std::vector<std::string>& args)
 	{
 		// Arguments to main()

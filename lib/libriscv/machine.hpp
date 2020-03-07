@@ -54,23 +54,23 @@ namespace riscv
 		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.
 		// the function must use the C ABI calling convention.
-		// NOTE: relies on _exit function to stop execution right after returning.
-		// _exit must call the exit (93) system call and not call destructors,
-		// which is the norm.
 		// The value of machine.stopped() should be false if the machine
 		// reached max instructions without completing the function call.
-		constexpr long
-		vmcall(const char* function_name,
-				std::initializer_list<address_t> iargs = {},
-				std::initializer_list<float>     fargs = {},
-				bool exec = true,
-				uint64_t max_instructions = 0);
+		// Supports integers, floating-point values and strings.
+		// Passing 0 to max instructions will disable the limit, and potentially
+		// run forever.
+		// NOTE: relies on an exit function to stop execution after returning.
+		// _exit must call the exit (93) system call and not call destructors,
+		// which is the norm.
+		template<uint64_t MAXI = 0, typename... Args> long
+		vmcall(const char* cfunction, Args&&... args);
 
 		// Sets up a function call only, executes no instructions.
-		constexpr void
+		// Supports integers, floating-point values and strings.
+		// Strings will be put on stack, which is not restored automatically.
+		template<typename... Args> constexpr void
 		setup_call(address_t call_addr, address_t retn_addr,
-					std::initializer_list<address_t> iargs = {},
-					std::initializer_list<float>     fargs = {});
+					Args&&... args);
 
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name);
