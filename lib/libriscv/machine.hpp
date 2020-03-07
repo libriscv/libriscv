@@ -62,15 +62,17 @@ namespace riscv
 		// NOTE: relies on an exit function to stop execution after returning.
 		// _exit must call the exit (93) system call and not call destructors,
 		// which is the norm.
-		template<uint64_t MAXI = 0, typename... Args> long
-		vmcall(const char* cfunction, Args&&... args);
+		template<uint64_t MAXI = 0, typename... Args> constexpr
+		address_t vmcall(const char* cfunction, Args&&... args);
+
+		template<uint64_t MAXI = 0, typename... Args> constexpr
+		address_t vmcall(address_t call_addr, Args&&... args);
 
 		// Sets up a function call only, executes no instructions.
 		// Supports integers, floating-point values and strings.
 		// Strings will be put on stack, which is not restored automatically.
-		template<typename... Args> constexpr void
-		setup_call(address_t call_addr, address_t retn_addr,
-					Args&&... args);
+		template<typename... Args> constexpr
+		void setup_call(address_t call_addr, Args&&... args);
 
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name);

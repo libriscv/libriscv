@@ -1,4 +1,5 @@
 #pragma once
+#include <type_traits>
 
 #ifndef LIKELY
 #define LIKELY(x) __builtin_expect((x), 1)
@@ -60,4 +61,6 @@ namespace riscv
 
 	template <int W>
 	struct SerializedMachine;
+
+	template <class...> constexpr std::false_type always_false {};
 }

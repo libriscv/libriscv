@@ -6,7 +6,6 @@
 #include "common.hpp"
 #include "types.hpp"
 #include "util/delegate.hpp"
-template <class...> constexpr std::false_type always_false {};
 
 namespace riscv {
 
