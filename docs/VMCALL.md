@@ -8,7 +8,7 @@ It is not unsafe to call `_exit()` or any other equivalent function directly, as
 
 Once the machine is no longer running, but still left in a state in which we can call into it, we have to make sure that our callable function in the VM is present in the symbol table of the ELF, so that we can find the address of this function. In addition, `_exit` must also be present in the ELF symbol tables, as it will be used as a way to exit the VM call and also optionally return a status code. This is done via hooking up the exit system call behind the scenes and extracting the exit status code after execution stops.
 
-A third, and final, stumbling block is sometimes having functions, even those marked with `__attribute__((used))`, not appearing in the ELF symbol table, which is a linker issue. This can happen when using `-gc-sections` and friends. You can test if your symbol is visible to the emulator by using `machine.memory.resolve_address("myFunction")` which returns a memory address. If the address is 0, then the name was not found in the symbol table, which makes `vmcall(...)` impossible to perform.
+A third, and final, stumbling block is sometimes having functions, even those marked with `__attribute__((used))`, not appearing in the ELF symbol table, which is a linker issue. This can happen when using `-gc-sections` and friends. You can test if your symbol is visible to the emulator by using `machine.memory.resolve_address("myFunction")` which returns a memory address. If the address is 0, then the name was not found in the symbol table, which makes `vmcall(...)` impossible to perform. Calling will most likely cause a CPU exception on address 0, which by default no execute privilege.
 
 Start by running the machine normally and complete `int main()` to make sure global constructors are called and the C run-time environment is fully initialized. So, if you are calling `_exit(0)` from main instead of returning, and not stripping ELF symbols from your binary you are ready to make function calls into the virtual machine.
 
@@ -16,14 +16,24 @@ Start by running the machine normally and complete `int main()` to make sure glo
 
 Example which calls the function `test` with the arguments `555` and `666`:
 ```C++
-	int ret = machine.vmcall("test", {555, 666});
+	int ret = machine.vmcall("test", 555, 666);
 	printf("test returned %d\n", ret);
 ```
 
+Arguments are passed as a C++ vector of register-sized integers, however you can also pass floating-point values which are loaded into the separate FP registers.
 
-Arguments are passed as a C++ vector of register-sized integers.
+Additionally, you can also pass strings and plain-old-data (POD) by value, and they will be available by reference inside the callee function in the guest:
 
-Instruction counters and registers are not reset on calling functions, so make sure to take that into consideration when measuring.
+```C++
+	struct PodTest {
+		int32_t a = 4;
+		int64_t b = 6;
+	} test;
+	int ret = machine.vmcall("test", "This is a string", test);
+	printf("test returned %d\n", ret);
+```
+
+You can specify a maximum of 8 integer and 8 floating-point arguments, for a total of 16. Instruction counters and registers are not reset on calling functions, so make sure to take that into consideration when measuring.
 
 It is not recommended to copy data into guest memory and then pass pointers to this data as arguments, as it's a very complex task to determine which memory is unused by the guest before and even during the call. Instead, the guest can allocate room for the struct on its own, and then simply perform a system call where it passes a pointer to the struct as an argument.
 
