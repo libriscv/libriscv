@@ -14,8 +14,14 @@ void test_constructor() {
 	testval = 22;
 }
 
-int main(int, char**)
+int main(int argc, char** argv)
 {
+	printf("Arguments: %d\n", argc);
+	for (int i = 0; i < argc; i++) {
+		printf("Arg %d: %s\n", i, argv[i]);
+	}
+	printf("Note: If you see only garbage here, activate the native-heap "
+			"system calls in the emulator.\n");
 	static const char* hello = "Hello %s World v%d.%d!\n";
 	assert(testval == 22);
 	// heap test
