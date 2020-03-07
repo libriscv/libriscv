@@ -209,6 +209,45 @@ void Memory<W>::memview(address_t addr, size_t len,
 }
 
 template <int W>
+std::string Memory<W>::memstring(address_t addr, const size_t max_len)
+{
+	std::string result;
+	size_t pageno = page_number(addr);
+	// fast-path
+	{
+		address_t offset = addr & (Page::size()-1);
+		const Page& page = this->get_pageno(pageno);
+		const char* start = (const char*) &page.data()[offset];
+		const char* pgend = (const char*) &page.data()[std::min(Page::size(), offset + max_len)];
+		//
+		const char* reader = start + strnlen(start, pgend - start);
+		// early exit
+		if (reader < pgend) {
+			return std::string(start, reader);
+		}
+		// we are crossing a page
+		result.append(start, reader);
+	}
+	// slow-path: cross page-boundary
+	while (result.size() < max_len)
+	{
+		const size_t max_bytes = std::min(Page::size(), max_len - result.size());
+		pageno ++;
+		const Page& page = this->get_pageno(pageno);
+		const char* start = (const char*) page.data();
+		const char* endptr = (const char*) &page.data()[max_bytes];
+		//
+		const char* reader = start + strnlen(start, max_bytes);
+		result.append(start, reader);
+
+		if (reader < endptr) {
+			if (*reader == 0) return result;
+		}
+	}
+	return result;
+}
+
+template <int W>
 inline void Memory<W>::protection_fault()
 {
 	machine().cpu.trigger_exception(PROTECTION_FAULT);

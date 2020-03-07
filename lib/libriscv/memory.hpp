@@ -36,6 +36,8 @@ namespace riscv
 		// of optimizing away a copy if the data crosses no page-boundaries
 		void memview(address_t addr, size_t len,
 					delegate<void(const uint8_t*, size_t)> callback);
+		// read a zero-terminated string directly from guests memory
+		std::string memstring(address_t addr, size_t max_len = 1024);
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
