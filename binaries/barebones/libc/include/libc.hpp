@@ -20,9 +20,9 @@ char*  strcat(char* dest, const char* src);
 
 int   write(int, const void*, size_t);
 
-void* malloc(size_t);
-void* calloc(size_t, size_t);
-void  free(void*);
+void* malloc(size_t) _NOTHROW;
+void* calloc(size_t, size_t) _NOTHROW;
+void  free(void*) _NOTHROW;
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1

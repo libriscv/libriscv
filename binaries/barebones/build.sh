@@ -4,6 +4,8 @@ set -e
 export PATH=$PATH:$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.3.0-1.1.1/.content/bin
 export CC=$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.3.0-1.1.1/.content/bin/riscv-none-embed-gcc
 export CXX=$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.3.0-1.1.1/.content/bin/riscv-none-embed-g++
+#export CC=clang-11
+#export CXX=clang++-11
 
 mkdir -p build
 pushd build

@@ -33,7 +33,10 @@ void operator delete [](void* ptr, std::size_t)
 
 // exception stubs for various C++ containers
 namespace std {
-  void __throw_length_error(char const*) {
-	  abort_message("C++ length error exception");
-  }
+	void __throw_length_error(char const*) {
+		abort_message("C++ length error exception");
+	}
+	void __throw_logic_error(char const*) {
+		abort_message("C++ length error exception");
+	}
 }

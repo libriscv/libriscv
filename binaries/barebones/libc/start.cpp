@@ -44,7 +44,12 @@ void libc_start(int argc, char** argv)
 	// 1. zero-initialize .bss section
 	extern char __bss_start;
 	extern char __BSS_END__;
+	extern char _end;
+#ifdef __clang__
+	for (char* bss = &__bss_start; bss < &_end; bss++) {
+#else
 	for (char* bss = &__bss_start; bss < &__BSS_END__; bss++) {
+#endif
 		*bss = 0;
 	}
 
