@@ -16,3 +16,8 @@ Which branches into this:
 It activates a non-standard system call implementation made for these tiny binaries. Perhaps one day it will be usable for sandboxed C++ program execution.
 
 Have a look at `libc/heap.hpp` for the syscall numbers and calling.
+
+
+## Minimal build
+
+A minimal build with MINIMAL and LTO enabled yields a 4792b binary that uses 28kB memory.

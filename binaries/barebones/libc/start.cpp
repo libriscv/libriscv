@@ -38,7 +38,7 @@ init_stdlib()
 	}
 }
 
-extern "C" __attribute__((visibility("hidden")))
+extern "C" __attribute__((visibility("hidden"), used))
 void libc_start(int argc, char** argv)
 {
 	// 1. zero-initialize .bss section

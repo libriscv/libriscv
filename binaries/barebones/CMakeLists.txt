@@ -3,6 +3,7 @@ project(hello_world C CXX)
 
 option(MINIMAL     "Minimal build" OFF)
 option(DEBUGGING   "Debugging build" OFF)
+option(LTO         "Link-time optimizations" ON)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 set(VERSION_FILE   "symbols.map" CACHE STRING "Retained symbols file")
 
@@ -22,8 +23,13 @@ if (DEBUGGING)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
 elseif (MINIMAL)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os -fno-stack-protector")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os -fno-stack-protector")
+endif()
+
+if (LTO)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
 endif()
 
 if (GCSECTIONS)
