@@ -1,6 +1,4 @@
 #include "syscall.hpp"
-int __testable_global __attribute__((section(".bss"))) = 0;
-
 extern "C"
 {
 	__attribute__((noreturn))
@@ -13,21 +11,9 @@ extern "C"
 	}
 }
 
-extern "C"
-void _start()
+extern "C" __attribute__((visibility("hidden"), used))
+void libc_start(int argc, char** argv)
 {
-	// initialize the global pointer to __global_pointer
-	// NOTE: have to disable relaxing first
-	asm volatile
-	("   .option push 				\t\n\
-		 .option norelax 			\t\n\
-		 1:auipc gp, %pcrel_hi(__global_pointer$) \t\n\
-  		 addi  gp, gp, %pcrel_lo(1b) \t\n\
-		.option pop					\t\n\
-	");
-	asm volatile("" ::: "memory");
-	// testable global
-	__testable_global = 1;
 	// zero-initialize .bss section
 	extern char __bss_start;
 	extern char __BSS_END__;
@@ -35,10 +21,6 @@ void _start()
 		*bss = 0;
 	}
 	asm volatile("" ::: "memory");
-	// exit out if the .bss section did not get initialized
-	if (__testable_global != 0) {
-		_exit(-1);
-	}
 
 	// call global constructors
 	extern void(*__init_array_start [])();
@@ -50,5 +32,22 @@ void _start()
 
 	// call main() :)
 	extern int main(int, char**);
-	_exit(main(0, nullptr));
+	_exit(main(argc, argv));
 }
+
+// 1. wrangle with argc and argc
+// 2. initialize the global pointer to __global_pointer
+// NOTE: have to disable relaxing first
+asm
+("   .global _start             \t\n\
+_start:                         \t\n\
+     lw   a0, 0(sp) 			\t\n\
+	 addi a1, sp, 4		 		\t\n\
+	 andi sp, sp, -16 /* not needed */\t\n\
+     .option push 				\t\n\
+	 .option norelax 			\t\n\
+	 1:auipc gp, %pcrel_hi(__global_pointer$) \t\n\
+	 addi  gp, gp, %pcrel_lo(1b) \t\n\
+	.option pop					\t\n\
+	call libc_start				\t\n\
+");
