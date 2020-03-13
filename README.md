@@ -151,3 +151,10 @@ It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ co
 See the `webapi` folder for an example web-server that compiles and runs limited C/C++ code in a relatively safe manner. Ping me or create a PR if you notice something is exploitable.
 
 Note that the web API demo uses a docker container to build RISC-V binaries, for security reasons. You can build the container with `docker build -t newlib-rv32gc . -f newlib.Dockerfile` from the docker folder. Alternatively, you could build a more full-fledged Linux environment using `docker build -t linux-rv32gc . -f linux.Dockerfile`. There is a test-script to see that it works called `dbuild.sh` which takes an input code file and output binary as parameters.
+
+
+## What to use for performance
+
+Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything. Disable atomics and compression extensions in the emulator for a slight boost. Use GCC to build the binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`.
+
+Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using system calls. See `emulator/src/native_heap.hpp`, as well as the native_libc files.
