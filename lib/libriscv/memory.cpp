@@ -129,7 +129,7 @@ namespace riscv
 	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const char* name) const
 	{
 		const auto* shdr = elf_offset<Shdr> (elf_header()->e_shoff);
-		const auto& shstrtab = shdr[elf_header()->e_shnum-1];
+		const auto& shstrtab = shdr[elf_header()->e_shstrndx];
 		const char* strings = elf_offset<char>(shstrtab.sh_offset);
 
 		for (auto i = 0; i < elf_header()->e_shnum; i++)
@@ -157,7 +157,6 @@ namespace riscv
 		for (size_t i = 0; i < symtab_ents; i++)
 		{
 			const char* symname = &strtab[symtab[i].st_name];
-			//printf("Testing %s vs %s\n", symname, name);
 			if (strcmp(symname, name) == 0) {
 				return &symtab[i];
 			}
