@@ -51,12 +51,14 @@ The `newlib` example project have much more C and C++ support, but still misses 
 
 The `full` example project uses the Linux-configured cross compiler and will expect you to implement quite a few system calls just to get into `int main()`. In addition, you will have to setup argv, env and the aux-vector. There is a helper method to do this in the src folder. If you want to implement threads to really get to all the fun stuff (like the coming C++20 coroutines), then this is where you can do that, as newlib simply won't enable threads.
 
-And finally, the `micro` project implements the absolutely minimal freestanding RV32GC C/C++ environment. You don't have any heap, so no new/delete. And you can't printf values because you don't have a C standard library, so you can only write constant strings using the write system call. Still, the stripped binary is only 712 bytes, and will execute only 77 instructions running the whole program!
+And finally, the `micro` project implements the absolutely minimal freestanding RV32GC C/C++ environment. You won't have a heap implementation, so no new/delete. And you can't printf values because you don't have a C standard library, so you can only write strings and buffers using the write system call. Still, the stripped binary is only 784 bytes, and will execute only ~120 instructions running the whole program! The `micro` project actually initializes zero-initialized memory, calls global constructors and passes program arguments to main.
 
 ## Instruction set support
 
 The emulator currently supports RV32IMAC, however the foundation is laid for RV64IM.
-The F and D-extensions are halfway supported (32- and 64-bit floating point instructions).
+The F and D-extensions are mostly supported (32- and 64-bit floating point instructions).
+
+There is no support for the E- and Q-extensions.
 
 ## Usage
 
