@@ -1,5 +1,6 @@
 #include "machine.hpp"
 #include "common.hpp"
+#include "decoder_cache.hpp"
 #include "riscvbase.hpp"
 
 namespace riscv
@@ -29,34 +30,43 @@ namespace riscv
 		const address_t this_page = address & ~(Page::size()-1);
 		if (this_page != this->m_current_page) {
 			this->change_page(this_page);
+#ifdef RISCV_INSTR_CACHE
+			if (UNLIKELY(m_page_pointer->decoder_cache() == nullptr)) {
+				m_page_pointer->template create_decoder_cache<DecoderCache>();
+			}
+#endif
 		}
 		const address_t offset = address & (Page::size()-1);
 
-#ifndef RISCV_EXT_COMPRESSED
-		// special case for non-compressed mode:
-		// we can always read whole instructions
-		instruction.whole = *(uint32_t*) (m_page_pointer->data() + offset);
-		return instruction;
-#else
-		// here we support compressed instructions
-		// read only full-sized instructions until the end of the buffer
-		if (LIKELY(offset <= Page::size() - 4))
+		if constexpr (!compressed_enabled) {
+			// special case for non-compressed mode:
+			// we can always read whole instructions
+			instruction.whole =
+				*(uint32_t*) (m_page_pointer->data() + offset);
+		}
+		else
 		{
-			// we can read the whole thing
-			instruction.whole = *(uint32_t*) (m_page_pointer->data() + offset);
-			return instruction;
-		}
+			// here we support compressed instructions
+			// read only full-sized instructions until the end of the buffer
+			if (LIKELY(offset <= Page::size() - 4))
+			{
+				// we can read the whole thing
+				instruction.whole =
+					*(uint32_t*) (m_page_pointer->data() + offset);
+				return instruction;
+			}
 
-		// read short instruction at address
-		instruction.whole = *(uint16_t*) (m_page_pointer->data() + offset);
+			// read short instruction at address
+			instruction.whole =
+				*(uint16_t*) (m_page_pointer->data() + offset);
 
-		// read upper half, completing a 32-bit instruction
-		if (instruction.is_long()) {
-			// this instruction crosses a page-border
-			this->change_page(this->m_current_page + Page::size());
-			instruction.half[1] = *(uint16_t*) m_page_pointer->data();
+			// read upper half, completing a 32-bit instruction
+			if (instruction.is_long()) {
+				// this instruction crosses a page-border
+				this->change_page(this->m_current_page + Page::size());
+				instruction.half[1] = *(uint16_t*) m_page_pointer->data();
+			}
 		}
-#endif
 #else
 		// in debug mode we need a full memory read to allow trapping
 		if ((address & (W-1)) == 0) {
@@ -96,8 +106,22 @@ namespace riscv
 		// execute instruction
 		handler.handler(*this, instruction);
 #else
+#ifdef RISCV_INSTR_CACHE
+		// retrieve cached instruction
+		const address_t offset  = this->pc() & (Page::size()-1);
+
+		auto* dcache = m_page_pointer->decoder_cache();
+		auto& ihandler = dcache->cache32[offset / DecoderCache::DIVISOR];
+		// decode and store into cache, if necessary
+		if (UNLIKELY(!ihandler)) {
+			ihandler = this->decode(instruction).handler;
+		}
 		// execute instruction
+		ihandler(*this, instruction);
+#else
+		// decode & execute instruction directly
 		this->execute(instruction);
+#endif
 #endif
 		// increment instruction counter
 		registers().counter++;
@@ -119,7 +143,10 @@ namespace riscv
 #endif
 
 		// increment PC
-		registers().pc += instruction.length();
+		if constexpr (compressed_enabled)
+			registers().pc += instruction.length();
+		else
+			registers().pc += 4;
 	}
 
 	template<int W>

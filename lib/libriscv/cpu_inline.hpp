@@ -9,7 +9,7 @@ template <int W>
 inline void CPU<W>::change_page(address_t this_page)
 {
 	m_current_page = this_page;
-	m_page_pointer = &machine().memory.get_page(this_page);
+	m_page_pointer = &machine().memory.create_page(this_page >> Page::SHIFT);
 	// verify execute permission
 	if (UNLIKELY(!m_page_pointer->attr.exec)) {
 		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);

@@ -9,6 +9,8 @@
 
 namespace riscv {
 
+union DecoderCache;
+
 struct PageAttributes
 {
 	bool read  = true;
@@ -94,6 +96,19 @@ struct Page
 
 	static const Page& cow_page() noexcept;
 
+#ifdef RISCV_INSTR_CACHE
+	auto* decoder_cache() noexcept {
+		return m_decoder_cache;
+	}
+	const auto* decoder_cache() const noexcept {
+		return m_decoder_cache;
+	}
+	template <typename T>
+	inline void create_decoder_cache() {
+		m_decoder_cache = new T;
+	}
+#endif
+
 	bool has_trap() const noexcept { return m_trap != nullptr; }
 	void set_trap(mmio_cb_t newtrap) noexcept { this->m_trap = newtrap; }
 	int64_t trap(uint32_t offset, int mode, int64_t value) const;
@@ -105,6 +120,9 @@ struct Page
 	// page-aligning the PageData struct, and avoids an indirection
 	PageAttributes attr;
 	PageData m_page;
+#ifdef RISCV_INSTR_CACHE
+	DecoderCache* m_decoder_cache = nullptr;
+#endif
 	mmio_cb_t m_trap = nullptr;
 };
 

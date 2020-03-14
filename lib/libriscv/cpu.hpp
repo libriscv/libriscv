@@ -1,7 +1,6 @@
 #pragma once
 #include "common.hpp"
 #include "page.hpp"
-#include "types.hpp"
 #include "registers.hpp"
 #include "rv32i.hpp"
 #include "rv64i.hpp"
@@ -57,6 +56,7 @@ namespace riscv
 	    void break_checks();
 		static void default_pausepoint(CPU&);
 #endif
+		const instruction_t& decode(format_t) const;
 
 		// serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
@@ -69,15 +69,11 @@ namespace riscv
 		AtomicMemory<W> m_atomics;
 
 		inline format_t read_instruction(address_t);
-#ifndef RISCV_DEBUG
 		void execute(format_t);
-#else
-		const instruction_t& decode(format_t) const;
-#endif
 
 		Machine<W>& m_machine;
 		int64_t     m_current_page = -1;
-		const Page* m_page_pointer = nullptr;
+		Page* m_page_pointer = nullptr;
 		inline void change_page(address_t address);
 
 #ifdef RISCV_DEBUG

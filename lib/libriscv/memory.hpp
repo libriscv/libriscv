@@ -87,6 +87,9 @@ namespace riscv
 		void initial_paging();
 		void invalidate_page(address_t pageno, Page&);
 		void protection_fault();
+#ifdef RISCV_INSTR_CACHE
+		void generate_decoder_cache(address_t, size_t);
+#endif
 		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
