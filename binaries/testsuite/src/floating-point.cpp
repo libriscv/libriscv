@@ -47,8 +47,17 @@ float test_fnmsub(float a, float b, float c) {
 	return -(a * b) - c;
 }
 
-float test_fsqrt(float val) {
+float  test_fsqrt(float val) {
 	return std::sqrt(val);
+}
+double test_dsqrt(double val) {
+	return std::sqrt(val);
+}
+float  test_fpow(float val, float exp) {
+	return std::pow(val, exp);
+}
+double test_dpow(double val, double exp) {
+	return std::pow(val, exp);
 }
 
 float test_sinf(float val) {

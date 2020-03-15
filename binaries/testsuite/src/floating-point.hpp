@@ -17,7 +17,10 @@ extern float test_fmsub(float a, float b, float c);
 extern float test_fnmadd(float a, float b, float c);
 extern float test_fnmsub(float a, float b, float c);
 
-extern float test_fsqrt(float val);
+extern float  test_fsqrt(float val);
+extern double test_dsqrt(double val);
+extern float  test_fpow(float val, float);
+extern double test_dpow(double val, double);
 
 extern float test_sinf(float val);
 extern float test_cosf(float val);

@@ -59,6 +59,13 @@ int main()
 	assert(test_fsqrt(2.0f) > 1.41f);
 	assert(test_fsqrt(2.0f) < 1.42f);
 	assert(test_fsqrt(1.0f) == 1.0f);
+	assert(test_dsqrt(1.0) == 1.0);
+	assert(test_dsqrt(4.0) == 2.0);
+
+	assert(test_fpow(2.0f, 2.0f) == 4.0f);
+	assert(test_fpow(3.0f, 3.0f) == 27.0f);
+	assert(test_dpow(2.0, 2.0) == 4.0);
+	assert(test_dpow(3.0, 3.0) == 27.0);
 
 	assert(test_sinf(0.0f) == 0.0f);
 	assert(test_cosf(0.0f) == 1.0f);
