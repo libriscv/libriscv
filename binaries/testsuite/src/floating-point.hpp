@@ -9,6 +9,9 @@ extern float test_fmin(float a, float b);
 extern double test_ftod(float val);
 extern float test_dtof(double val);
 
+extern float  test_fneg(float val);
+extern double test_dneg(double val);
+
 extern float test_fmadd(float a, float b, float c);
 extern float test_fmsub(float a, float b, float c);
 extern float test_fnmadd(float a, float b, float c);

@@ -23,8 +23,15 @@ float test_fmin(float a, float b) {
 double test_ftod(float val) {
 	return (double) val;
 }
-float test_dtof(double val) {
+float  test_dtof(double val) {
 	return (float) val;
+}
+
+float  test_fneg(float val) {
+	return -val;
+}
+double test_dneg(double val) {
+	return -val;
 }
 
 float test_fmadd(float a, float b, float c) {

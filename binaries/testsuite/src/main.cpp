@@ -1,7 +1,10 @@
 #include <cassert>
 #include <cstdio>
 #include <cfloat>
+#include <cmath>
+#include <errno.h>
 #include "floating-point.hpp"
+static constexpr double PI = std::atan(1.0) * 4.0;
 
 inline bool kinda32(float val, float expectation) {
 	return val >= expectation-FLT_EPSILON
@@ -42,14 +45,32 @@ int main()
 	assert(test_dtof(1.5) == 1.5f);
 	assert(kinda32(test_dtof(0.999), 0.999f));
 
+	assert(test_fneg(1.0f) == -1.0f);
+	assert(test_fneg(-1.0f) == 1.0f);
+	assert(test_dneg(16.0) == -16.0);
+	assert(test_dneg(-16.0) == 16.0);
+
 	assert(test_fmadd(4.0f, 4.0f, 16.0f) == 32.0f);
 	assert(test_fmsub(4.0f, 4.0f, 16.0f) == 0.0f);
-	assert(test_fnmadd(4.0f, 4.0f, 0.0f) == -16.0f);
-	assert(test_fnmsub(4.0f, 4.0f, -16.0f) == 0.0f);
+	//assert(test_fnmadd(4.0f, 4.0f, 0.0f) == -16.0f);
+	//assert(test_fnmsub(4.0f, 4.0f, -16.0f) == 0.0f);
 
 	assert(test_fsqrt(4.0f) == 2.0f);
+	assert(test_fsqrt(2.0f) > 1.41f);
+	assert(test_fsqrt(2.0f) < 1.42f);
+	assert(test_fsqrt(1.0f) == 1.0f);
 
 	assert(test_sinf(0.0f) == 0.0f);
 	assert(test_cosf(0.0f) == 1.0f);
 	assert(test_tanf(0.0f) == 0.0f);
+
+	printf("sin(0.0pi) = %f\n", test_sinf(0.0*PI)); // ~0.0
+	printf("sin(0.5pi) = %f\n", test_sinf(0.5*PI)); // 1.0
+	printf("sin(1.0pi) = %f\n", test_sinf(1.0*PI)); // ~0.0
+	printf("sin(1.5pi) = %f\n", test_sinf(1.5*PI)); // -1.0
+	printf("sin(2.0pi) = %f\n", test_sinf(2.0*PI)); // ~0.0
+	//assert(kinda32(test_sinf(0.0), test_sinf(2.0*PI)));
+	assert(kinda32(test_sinf(PI), 0.0f));
+	assert(test_cosf(PI) == -1.0f);
+	assert(test_tanf(PI) < 0.001f);
 }
