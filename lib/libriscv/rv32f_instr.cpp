@@ -156,7 +156,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0];
+			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) + rs3.f32[0];
 			dst.nanbox();
 			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
@@ -170,9 +170,11 @@ namespace riscv
 		static const std::array<const char*, 4> f2 {
 			"FNMSUB.S", "FNMSUB.D", "???", "FNMSUB.Q"
 		};
-		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
+		return snprintf(buffer, len, "%s -(%s * %s) + %s, %s",
+						f2[fi.R4type.funct2],
 						RISCV::flpname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rs3),
 						RISCV::flpname(fi.R4type.rd));
 	});
 
