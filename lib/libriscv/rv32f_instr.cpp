@@ -558,14 +558,17 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		rv32f_instruction fi { instr };
-		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
-		auto& dst = cpu.reg(fi.R4type.rd);
-		switch (fi.R4type.funct2) {
-			case 0x0: // FMV.X.W
-				dst = rs1.i32[0];
-				return;
-			case 0x1: // FMV.X.D
-				cpu.trigger_exception(ILLEGAL_OPERATION);
+		if (fi.R4type.rd != 0)
+		{
+			auto& dst = cpu.reg(fi.R4type.rd);
+			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+			switch (fi.R4type.funct2) {
+				case 0x0: // FMV.X.W
+					dst = rs1.i32[0];
+					return;
+				case 0x1: // FMV.X.D
+					cpu.trigger_exception(ILLEGAL_OPERATION);
+			}
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
