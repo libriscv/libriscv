@@ -1,5 +1,4 @@
 #include <string>
-#include <unistd.h>
 #include <libriscv/machine.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
@@ -8,7 +7,6 @@ static constexpr bool full_linux_guest = true;
 static constexpr bool newlib_mini_guest = true;
 #include "linux.hpp"
 #include "syscalls.hpp"
-static void test_vmcall(riscv::Machine<riscv::RISCV32>&, State<riscv::RISCV32>&);
 #include "threads.hpp"
 
 int main(int argc, const char** argv)
@@ -52,7 +50,7 @@ int main(int argc, const char** argv)
 
 	/*
 	machine.cpu.breakpoint(machine.address_of("main"));
-	machine.cpu.breakpoint(0x5B4F4);
+	machine.cpu.breakpoint(0x10730);
 	machine.cpu.breakpoint(0x5B540, //0x5B518,
 		[] (auto& cpu)
 		{
@@ -116,42 +114,7 @@ int main(int argc, const char** argv)
 	printf("Pages in use: %zu (%zu kB memory), highest: %zu (%zu kB memory)\n",
 			machine.memory.pages_active(), machine.memory.pages_active() * 4,
 			machine.memory.pages_highest_active(), machine.memory.pages_highest_active() * 4);
-
-	// VM function call testing
-	test_vmcall(machine, state);
-	test_vmcall(machine, state);
 	return 0;
-}
-
-void test_vmcall(riscv::Machine<riscv::RISCV32>& machine, State<riscv::RISCV32>& state)
-{
-	// look for a symbol called "test" in the binary
-	if (machine.address_of("test") != 0)
-	{
-		printf("\n");
-		// make sure stack is aligned for a function call
-		machine.realign_stack();
-		// reset instruction counter to simplify calculation
-		machine.cpu.reset_instruction_counter();
-#ifndef RISCV_DEBUG
-		state.output.clear();
-#endif
-		// make a function call into the guest VM,
-		// but only execute 1 instruction, then stop
-		machine.vmcall<1>("test", 555);
-		do {
-			// resume execution, to complete the function call:
-			machine.simulate(1000);
-			printf("Instruction count: %zu\n",
-					(size_t) machine.cpu.instruction_counter());
-		} while (!machine.stopped());
-		// extract real return value:
-		int ret = machine.sysarg<int>(0);
-		printf("test *actually* returned %d\n", ret);
-#ifndef RISCV_DEBUG
-		printf("\n*** Guest output ***\n%s\n", state.output.c_str());
-#endif
-	}
 }
 
 #include <unistd.h>
