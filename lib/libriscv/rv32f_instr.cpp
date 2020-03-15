@@ -506,30 +506,30 @@ namespace riscv
 			case 0x0: // FSGNJ
 				switch (fi.R4type.funct2) {
 					case 0x0: // float32
-						dst.load_u32(rs2.lsign.sign | rs1.lsign.bits);
+						dst.load_u32((rs2.lsign.sign << 31) | rs1.lsign.bits);
 						return;
 					case 0x1: // float64
-						dst.i64 = rs2.usign.sign | rs1.usign.bits;
+						dst.i64 = ((uint64_t) rs2.usign.sign << 63) | rs1.usign.bits;
 						return;
 				}
 				break;
 			case 0x1: // FSGNJ_N
 				switch (fi.R4type.funct2) {
 					case 0x0: // float32
-						dst.load_u32(~rs2.lsign.sign | rs1.lsign.bits);
+						dst.load_u32((~rs2.lsign.sign << 31) | rs1.lsign.bits);
 						return;
 					case 0x1: // float64
-						dst.i64 = ~rs2.usign.sign | rs1.usign.bits;
+						dst.i64 = (~(uint64_t) rs2.usign.sign << 63) | rs1.usign.bits;
 						return;
 				}
 				break;
 			case 0x2: // FSGNJ_X
 				switch (fi.R4type.funct2) {
 					case 0x0: // float32
-						dst.load_u32((rs1.lsign.sign ^ rs2.lsign.sign) | rs1.lsign.bits);
+						dst.load_u32(((rs1.lsign.sign ^ rs2.lsign.sign) << 31) | rs1.lsign.bits);
 						return;
 					case 0x1: // float64
-						dst.i64 = (rs1.usign.sign ^ rs2.usign.sign) | rs1.usign.bits;
+						dst.i64 = ((uint64_t)(rs1.usign.sign ^ rs2.usign.sign) << 63) | rs1.usign.bits;
 						return;
 				}
 				break;
