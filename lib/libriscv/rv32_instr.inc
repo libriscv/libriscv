@@ -63,6 +63,8 @@
 							DECODER(DECODED_FLOAT(FSGNJ_NX));
 						case 0b00101:
 							DECODER(DECODED_FLOAT(FMIN_FMAX));
+						case 0b01011:
+							DECODER(DECODED_FLOAT(FSQRT));
 						case 0b10100:
 							DECODER(DECODED_FLOAT(FEQ_FLT_FLE));
 						case 0b01000:
@@ -71,6 +73,10 @@
 							DECODER(DECODED_FLOAT(FCVT_W_SD));
 						case 0b11010:
 							DECODER(DECODED_FLOAT(FCVT_SD_W));
+						case 0b11100:
+							DECODER(DECODED_FLOAT(FMV_X_W));
+						case 0b11110:
+							DECODER(DECODED_FLOAT(FMV_W_X));
 					}
 					break;
 #endif

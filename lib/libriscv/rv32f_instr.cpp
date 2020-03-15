@@ -288,6 +288,32 @@ namespace riscv
 						RISCV::flpname(fi.R4type.rd));
 	});
 
+	FLOAT_INSTR(FSQRT,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		switch (fi.R4type.funct2) {
+			case 0x0: // FSQRT.S
+				dst.set_float(sqrtf(rs1.f32[0]));
+				return;
+			case 0x1: // FSQRT.D
+				dst.f64 = sqrt(rs1.f64);
+				return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FSQRT.S", "FSQRT.D", "???", "FSQRT.Q"
+		};
+		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
 	FLOAT_INSTR(FMIN_FMAX,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
@@ -525,6 +551,56 @@ namespace riscv
 						RISCV::flpsize(fi.R4type.funct2),
 						RISCV::flpname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rs2),
+						RISCV::flpname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FMV_X_W, // 1110
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& dst = cpu.reg(fi.R4type.rd);
+		switch (fi.R4type.funct2) {
+			case 0x0: // FMV.X.W
+				dst = rs1.i32[0];
+				return;
+			case 0x1: // FMV.X.D
+				cpu.trigger_exception(ILLEGAL_OPERATION);
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FMV.X.W", "FMV.X.D", "???", "FMV.X.Q"
+		};
+		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::regname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FMV_W_X, // 1111
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		rv32f_instruction fi { instr };
+		auto& rs1 = cpu.reg(fi.R4type.rs1);
+		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		switch (fi.R4type.funct2) {
+			case 0x0: // FMV.W.X
+				dst.set_float(rs1);
+				return;
+			case 0x1: // FMV.D.X
+				cpu.trigger_exception(ILLEGAL_OPERATION);
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+		rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FMV.W.X", "FMV.D.X", "???", "FMV.Q.X"
+		};
+		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
+						RISCV::regname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rd));
 	});
 }
