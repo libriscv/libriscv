@@ -55,10 +55,10 @@ And finally, the `micro` project implements the absolutely minimal freestanding 
 
 ## Instruction set support
 
-The emulator currently supports RV32IMAC, however the foundation is laid for RV64IM.
-The F and D-extensions are mostly supported (32- and 64-bit floating point instructions).
+The emulator currently supports RV32GC (IMAFDC), and the foundation is laid for RV64IM.
+The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions), and there is a test-suite for these instructions, however they haven't been extensively tested as there are generally few FP-instructions in normal programs.
 
-There is no support for the E- and Q-extensions.
+Note: The compression extension suffers slight performance penalties due to all the bit-fiddling involved. There is no support for the E- and Q-extensions.
 
 ## Usage
 
@@ -157,6 +157,8 @@ Note that the web API demo uses a docker container to build RISC-V binaries, for
 
 ## What to use for performance
 
-Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything. Disable atomics and compression extensions in the emulator for a slight boost. Use GCC to build the binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`.
+Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything. Disable atomics and compression extensions in the emulator for a slight boost, if you can recompile the RISC-V binaries with the same configuration.
 
-Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using system calls. See `emulator/src/native_heap.hpp`, as well as the native_libc files.
+Use GCC to build the RISC-V binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`. Try enabling the instruction decoder cache and see if it's faster for your needs. Experiment with -Os and GC-sections, as the lower instruction count can translate into better performance for the emulator.
+
+Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using specialized system calls. See `emulator/src/native_heap.hpp`, as well as the native_libc files. This will manage the location of heap chunks outside of the emulator, however the heap memory itself is still inside the virtual memory of the guest binary.
