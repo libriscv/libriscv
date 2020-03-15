@@ -590,7 +590,8 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 			case 0x0: // FMV.W.X
-				dst.set_float(rs1);
+				dst.i32[0] = rs1;
+				dst.nanbox();
 				return;
 			case 0x1: // FMV.D.X
 				cpu.trigger_exception(ILLEGAL_OPERATION);
