@@ -20,12 +20,10 @@ To get C++ exceptions and other things, you will need a (limited) Linux userspac
 ```
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
 cd riscv-gnu-toolchain
-./configure --prefix=$HOME/riscv --with-arch=rv32gc --with-abi=ilp32
+./configure --prefix=$HOME/riscv --with-arch=rv32gc --with-abi=ilp32d
 make -j4
 ```
-This will build a newlib cross-compiler with C++ exception support.
-
-Note how the ABI is ilp32 and not ilp32d, which requires full floating-point support. Support is only halfway complete, and it is recommended to instead rely on the compiler to simulate this support for now.
+This will build a newlib cross-compiler with C++ exception support. The ABI is ilp32d, which is for 32-bit and 64-bit floating-point instruction set support. It is much faster than software implementations of binary IEEE floating-point arithmetic.
 
 Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc is harder to support, and produces larger binaries, but will be more performant. It also supports threads, which is awesome to play around with.
 
@@ -49,7 +47,7 @@ Building and running your own ELF files that can run in freestanding RV32GC is q
 
 The `newlib` example project have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries.
 
-The `full` example project uses the Linux-configured cross compiler and will expect you to implement quite a few system calls just to get into `int main()`. In addition, you will have to setup argv, env and the aux-vector. There is a helper method to do this in the src folder. If you want to implement threads to really get to all the fun stuff (like the coming C++20 coroutines), then this is where you can do that, as newlib simply won't enable threads.
+The `full` example project uses the Linux-configured cross compiler and will expect you to implement quite a few system calls just to get into `int main()`. In addition, you will have to setup argv, env and the aux-vector. There is a helper method to do this in the src folder. There is also basic pthreads support.
 
 And finally, the `micro` project implements the absolutely minimal freestanding RV32GC C/C++ environment. You won't have a heap implementation, so no new/delete. And you can't printf values because you don't have a C standard library, so you can only write strings and buffers using the write system call. Still, the stripped binary is only 784 bytes, and will execute only ~120 instructions running the whole program! The `micro` project actually initializes zero-initialized memory, calls global constructors and passes program arguments to main.
 

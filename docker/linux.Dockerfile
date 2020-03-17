@@ -28,7 +28,7 @@ RUN apt install -y \
 
 ENV RISCV_INSTALL /usr/riscv
 ENV RISCV_ARCH    rv32gc
-ENV RISCV_ABI     ilp32
+ENV RISCV_ABI     ilp32d
 
 ENV CXX g++-8
 ENV CC  gcc-8
