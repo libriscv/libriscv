@@ -154,7 +154,8 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		// jump to register + immediate
 		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		if (instr.Itype.rd != 0) {
+		// Link *next* instruction (rd = PC + 4)
+		if (LIKELY(instr.Itype.rd != 0)) {
 			cpu.reg(instr.Itype.rd) = cpu.pc() + 4;
 		}
 		cpu.jump(address - 4);
@@ -174,7 +175,7 @@ namespace riscv
 	INSTRUCTION(JAL,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// Link *next* instruction (rd = PC + 4)
-		if (instr.Jtype.rd != 0) {
+		if (LIKELY(instr.Jtype.rd != 0)) {
 			cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
 		}
 		// And Jump (relative)
@@ -234,6 +235,8 @@ namespace riscv
 				dst = src & instr.Itype.signed_imm();
 				break;
 			}
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
