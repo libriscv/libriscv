@@ -21,8 +21,14 @@ inline void CPU<W>::jump(const address_t dst)
 {
 	this->registers().pc = dst;
 	// it's possible to jump to a misaligned address
-	if (UNLIKELY(this->registers().pc & 0x1)) {
-		this->trigger_exception(MISALIGNED_INSTRUCTION);
+	if constexpr (!compressed_enabled) {
+		if (UNLIKELY(this->registers().pc & 0x3)) {
+			this->trigger_exception(MISALIGNED_INSTRUCTION);
+		}
+	} else {
+		if (UNLIKELY(this->registers().pc & 0x1)) {
+			this->trigger_exception(MISALIGNED_INSTRUCTION);
+		}
 	}
 }
 

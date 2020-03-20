@@ -42,7 +42,7 @@ namespace riscv
 			// special case for non-compressed mode:
 			// we can always read whole instructions
 			instruction.whole =
-				*(uint32_t*) (m_page_pointer->data() + offset);
+				m_page_pointer->aligned_read<uint32_t> (offset);
 		}
 		else
 		{
@@ -52,19 +52,19 @@ namespace riscv
 			{
 				// we can read the whole thing
 				instruction.whole =
-					*(uint32_t*) (m_page_pointer->data() + offset);
+					m_page_pointer->aligned_read<uint32_t> (offset);
 				return instruction;
 			}
 
 			// read short instruction at address
 			instruction.whole =
-				*(uint16_t*) (m_page_pointer->data() + offset);
+				m_page_pointer->aligned_read<uint16_t> (offset);
 
 			// read upper half, completing a 32-bit instruction
 			if (instruction.is_long()) {
 				// this instruction crosses a page-border
 				this->change_page(this->m_current_page + Page::size());
-				instruction.half[1] = *(uint16_t*) m_page_pointer->data();
+				instruction.half[1] = m_page_pointer->aligned_read<uint16_t>(0);
 			}
 		}
 #else
