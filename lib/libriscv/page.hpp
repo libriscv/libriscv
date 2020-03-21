@@ -24,14 +24,14 @@ struct PageAttributes
 	}
 };
 
-struct alignas(8) PageData {
+struct alignas(4096) PageData {
 	static constexpr unsigned SIZE  = 4096;
 	static constexpr unsigned SHIFT = 12;
 
 	std::array<uint8_t,  SIZE / 1> buffer8;
 };
 
-struct alignas(4096) Page
+struct Page
 {
 	static constexpr unsigned SIZE  = PageData::SIZE;
 	static constexpr unsigned SHIFT = PageData::SHIFT;
