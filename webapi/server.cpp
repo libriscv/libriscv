@@ -88,7 +88,8 @@ int main(void)
 			return;
 		}
 		const uint64_t c1 = micros_now();
-		res.set_header("X-Compile-Time", std::to_string(c1 - c0) + " micros");
+		res.set_header("X-Compile-Time", std::to_string(c1 - c0));
+		res.set_header("X-Time-Unit", "10e-6");
 
 		// load binary and execute code
 		auto binary = load_file(progpath + "/binary");
@@ -178,10 +179,10 @@ int main(void)
 				const uint64_t lowest = samples[0];
 				const uint64_t median = samples[samples.size() / 2];
 				const uint64_t highest = samples[samples.size()-1];
-				res.set_header("X-Runtime-First", std::to_string(first) + " micros");
-				res.set_header("X-Runtime-Lowest", std::to_string(lowest) + " micros");
-				res.set_header("X-Runtime-Median", std::to_string(median) + " micros");
-				res.set_header("X-Runtime-Highest", std::to_string(highest) + " micros");
+				res.set_header("X-Runtime-First", std::to_string(first));
+				res.set_header("X-Runtime-Lowest", std::to_string(lowest));
+				res.set_header("X-Runtime-Median", std::to_string(median));
+				res.set_header("X-Runtime-Highest", std::to_string(highest));
 			}
 			const auto instructions = std::to_string(machine.cpu.instruction_counter());
 			res.set_header("X-Instruction-Count", instructions);
