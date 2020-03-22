@@ -5,6 +5,7 @@ option(LTO         "Enable interprocedural optimizations" ON)
 option(NATIVE      "Enable native instructions" ON)
 
 add_subdirectory(../lib lib)
+target_compile_options(riscv PUBLIC -std=c++17)
 
 set(EMUDIR "../emulator/src")
 set(SOURCES
@@ -15,8 +16,7 @@ set(SOURCES
 )
 
 add_executable(webapi ${SOURCES})
-set_target_properties(webapi PROPERTIES CXX_STANDARD 17)
-target_link_libraries(webapi riscv pthread)
+target_link_libraries(webapi riscv pthread m)
 target_include_directories(webapi PRIVATE "cpp-httplib")
 target_include_directories(webapi PRIVATE ${CMAKE_BINARY_DIR})
 target_include_directories(webapi PRIVATE ${CMAKE_SOURCE_DIR}/../emulator/src)

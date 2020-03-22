@@ -43,7 +43,7 @@ static std::string project_path(const int id) {
 }
 
 template <int W>
-static int run_once(riscv::Machine<W>& machine, 
+static int run_once(riscv::Machine<W>& machine,
 		const uint64_t icount, bool& break_used)
 {
 	machine.simulate(icount);
@@ -114,7 +114,7 @@ int main(void)
 		// go-time: create machine, execute code
 		riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
 
-		prepare_linux<riscv::RISCV32>(machine, 
+		prepare_linux<riscv::RISCV32>(machine,
 			{"program", std::to_string(program_id)}, env);
 		setup_linux_syscalls(state, machine);
 		setup_multithreading(state, machine);
@@ -128,45 +128,73 @@ int main(void)
 			return 0;
 		});
 
-		asm("" : : : "memory");
-		uint64_t t0 = micros_now();
-		asm("" : : : "memory");
-
-		try {
-			int ret = run_once(machine, MAX_INSTRUCTIONS, break_used);
-			if (ret == -1) {
-				res.set_header("X-Exception", "Maximum instructions reached");
-			}
-			else if (ret == 1) {
-				// break detected
-				break_used = false;
-				machine.cpu.reset_instruction_counter();
-				// restart timer
-				t0 = micros_now();
-				asm("" : : : "memory");
-				run_once(machine, MAX_INSTRUCTIONS, break_used);
-			}
-		} catch (std::exception& e) {
-			res.set_header("X-Exception", e.what());
+		// execute until we are inside main()
+		auto main_address = machine.address_of("main");
+		if (main_address == 0x0) {
+			res.set_header("X-Exception", "The address of main() was not found");
 		}
+		else
+		{
+			// execute insruction by instruction until
+			// we have entered main(), then break
+			try {
+				while (LIKELY(!machine.stopped())) {
+					machine.cpu.simulate();
+					if (UNLIKELY(machine.cpu.instruction_counter() >= MAX_INSTRUCTIONS))
+						break;
+					if (machine.cpu.registers().pc == main_address)
+						break;
+				}
+			} catch (std::exception& e) {
+				res.set_header("X-Exception", e.what());
+			}
+		}
+		if (machine.cpu.registers().pc == main_address)
+		{
+			asm("" : : : "memory");
+			uint64_t t0 = micros_now();
+			asm("" : : : "memory");
 
-		asm("" : : : "memory");
-		const uint64_t t1 = micros_now();
-		asm("" : : : "memory");
-		const auto instructions = std::to_string(machine.cpu.instruction_counter());
+			try {
+				int ret = run_once(machine, MAX_INSTRUCTIONS, break_used);
+				if (ret == -1) {
+					res.set_header("X-Exception", "Maximum instructions reached");
+				}
+				else if (ret == 1) {
+					// break detected
+					break_used = false;
+					machine.cpu.reset_instruction_counter();
+					// restart timer
+					t0 = micros_now();
+					asm("" : : : "memory");
+					run_once(machine, MAX_INSTRUCTIONS, break_used);
+				}
+			} catch (std::exception& e) {
+				res.set_header("X-Exception", e.what());
+			}
 
-		common_response_fields(res, 200);
-		res.set_header("X-Exit-Code", std::to_string(state.exit_code));
-		res.set_header("X-Execution-Time", std::to_string(t1 - t0) + " micros");
-		res.set_header("X-Instruction-Count", instructions);
-		res.set_header("X-Binary-Size", std::to_string(binary.size()));
-		const size_t active_mem = machine.memory.pages_active() * 4096;
-		res.set_header("X-Memory-Usage", std::to_string(active_mem));
-		const size_t highest_mem = machine.memory.pages_highest_active() * 4096;
-		res.set_header("X-Memory-Highest", std::to_string(highest_mem));
-		const size_t max_mem = machine.memory.pages_total() * 4096;
-		res.set_header("X-Memory-Max", std::to_string(highest_mem));
-		res.set_content(state.output, "text/plain");
+			asm("" : : : "memory");
+			const uint64_t t1 = micros_now();
+			asm("" : : : "memory");
+			const auto instructions = std::to_string(machine.cpu.instruction_counter());
+
+			common_response_fields(res, 200);
+			res.set_header("X-Exit-Code", std::to_string(state.exit_code));
+			res.set_header("X-Execution-Time", std::to_string(t1 - t0) + " micros");
+			res.set_header("X-Instruction-Count", instructions);
+			res.set_header("X-Binary-Size", std::to_string(binary.size()));
+			const size_t active_mem = machine.memory.pages_active() * 4096;
+			res.set_header("X-Memory-Usage", std::to_string(active_mem));
+			const size_t highest_mem = machine.memory.pages_highest_active() * 4096;
+			res.set_header("X-Memory-Highest", std::to_string(highest_mem));
+			const size_t max_mem = machine.memory.pages_total() * 4096;
+			res.set_header("X-Memory-Max", std::to_string(highest_mem));
+			res.set_content(state.output, "text/plain");
+		}
+		else {
+			res.set_header("X-Exception", "Could not enter main()");
+			res.set_header("X-Instruction-Count", std::to_string(MAX_INSTRUCTIONS));
+		}
     });
 
 	printf("Listening on %s:%u\n", ADDRESS, PORT);
