@@ -78,8 +78,15 @@ int main(void)
 		}
 
 		// sanitize + compile code
+		asm("" : : : "memory");
 		const uint64_t c0 = micros_now();
+		asm("" : : : "memory");
 		const int cc = python_sanitize_compile(project_base(), project_dir(program_id), method);
+		asm("" : : : "memory");
+		const uint64_t c1 = micros_now();
+		asm("" : : : "memory");
+		res.set_header("X-Compile-Time", std::to_string(c1 - c0));
+		res.set_header("X-Time-Unit", "10e-6");
 		if (cc != 0) {
 			common_response_fields(res, 200);
 			auto vec = load_file(progpath + "/status.txt");
@@ -87,9 +94,6 @@ int main(void)
 			res.set_content((const char*) vec.data(), vec.size(), "text/plain");
 			return;
 		}
-		const uint64_t c1 = micros_now();
-		res.set_header("X-Compile-Time", std::to_string(c1 - c0));
-		res.set_header("X-Time-Unit", "10e-6");
 
 		// load binary and execute code
 		auto binary = load_file(progpath + "/binary");
