@@ -9,6 +9,7 @@
 #include <EASTL/string.h>
 #include <EASTL/string_map.h>
 #include <EASTL/unordered_map.h>
+#include <string>
 #include <vector>
 
 namespace riscv
