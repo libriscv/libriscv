@@ -26,6 +26,7 @@ static int python_sanitize_compile(const std::string& pbase, const std::string& 
 static int write_file(const std::string& file, const std::string& text);
 static std::vector<uint8_t> load_file(const std::string& filename);
 static uint64_t micros_now();
+static uint64_t monotonic_micros_now();
 
 inline void common_response_fields(httplib::Response& res, int status)
 {
@@ -79,11 +80,11 @@ int main(void)
 
 		// sanitize + compile code
 		asm("" : : : "memory");
-		const uint64_t c0 = micros_now();
+		const uint64_t c0 = monotonic_micros_now();
 		asm("" : : : "memory");
 		const int cc = python_sanitize_compile(project_base(), project_dir(program_id), method);
 		asm("" : : : "memory");
-		const uint64_t c1 = micros_now();
+		const uint64_t c1 = monotonic_micros_now();
 		asm("" : : : "memory");
 		res.set_header("X-Compile-Time", std::to_string(c1 - c0));
 		res.set_header("X-Time-Unit", "10e-6");
@@ -254,5 +255,12 @@ uint64_t micros_now()
 {
 	struct timespec ts;
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+	return ts.tv_sec * 1000000ul + ts.tv_nsec / 1000ul;
+}
+
+uint64_t monotonic_micros_now()
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return ts.tv_sec * 1000000ul + ts.tv_nsec / 1000ul;
 }
