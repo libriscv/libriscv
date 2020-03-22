@@ -246,7 +246,7 @@ std::vector<uint8_t> load_file(const std::string& filename)
 
 uint64_t micros_now()
 {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000000ul + tv.tv_usec;
+	struct timespec ts;
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+	return ts.tv_sec * 1000000ul + ts.tv_nsec / 1000ul;
 }
