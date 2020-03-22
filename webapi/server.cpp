@@ -15,6 +15,7 @@ static const uint16_t PORT = 1234;
 // avoid endless loops, code that takes too long and excessive memory usage
 static const uint64_t MAX_INSTRUCTIONS = 2'000'000;
 static const uint32_t MAX_MEMORY       = 32 * 1024 * 1024;
+static const uint32_t BENCH_SAMPLES    = 100;
 
 static const std::vector<std::string> env = {
 	"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
@@ -40,19 +41,6 @@ static std::string project_dir(const int id) {
 }
 static std::string project_path(const int id) {
 	return project_base() + "/program" + std::to_string(id);
-}
-
-template <int W>
-static int run_once(riscv::Machine<W>& machine,
-		const uint64_t icount, bool& break_used)
-{
-	machine.simulate(icount);
-	if (machine.cpu.instruction_counter() == icount) {
-		return -1;
-	} else if (break_used) {
-		return 1;
-	}
-	return 0;
 }
 
 int main(void)
@@ -151,36 +139,51 @@ int main(void)
 		}
 		if (machine.cpu.registers().pc == main_address)
 		{
-			asm("" : : : "memory");
-			uint64_t t0 = micros_now();
-			asm("" : : : "memory");
+			// take a snapshot of the machine
+			std::vector<uint8_t> program_state;
+			machine.serialize_to(program_state);
+			std::deque<uint64_t> samples;
+			// begin benchmarking
+			for (int i = 0; i < 1 + BENCH_SAMPLES; i++)
+			{
+				machine.deserialize_from(program_state);
+				state.output.clear();
+				uint64_t t0 = micros_now();
+				asm("" : : : "memory");
 
-			try {
-				int ret = run_once(machine, MAX_INSTRUCTIONS, break_used);
-				if (ret == -1) {
-					res.set_header("X-Exception", "Maximum instructions reached");
+				try {
+					machine.simulate(MAX_INSTRUCTIONS);
+					if (machine.cpu.instruction_counter() == MAX_INSTRUCTIONS) {
+						res.set_header("X-Exception", "Maximum instructions reached");
+						break;
+					}
+				} catch (std::exception& e) {
+					res.set_header("X-Exception", e.what());
+					break;
 				}
-				else if (ret == 1) {
-					// break detected
-					break_used = false;
-					machine.cpu.reset_instruction_counter();
-					// restart timer
-					t0 = micros_now();
-					asm("" : : : "memory");
-					run_once(machine, MAX_INSTRUCTIONS, break_used);
-				}
-			} catch (std::exception& e) {
-				res.set_header("X-Exception", e.what());
+
+				asm("" : : : "memory");
+				const uint64_t t1 = micros_now();
+				asm("" : : : "memory");
+				samples.push_back(t1 - t0);
 			}
-
-			asm("" : : : "memory");
-			const uint64_t t1 = micros_now();
-			asm("" : : : "memory");
-			const auto instructions = std::to_string(machine.cpu.instruction_counter());
 
 			common_response_fields(res, 200);
 			res.set_header("X-Exit-Code", std::to_string(state.exit_code));
-			res.set_header("X-Execution-Time", std::to_string(t1 - t0) + " micros");
+			if (!samples.empty()) {
+				const uint64_t first = samples[0];
+				// we don't want to measure low/high/median on the first sample
+				samples.pop_front();
+				std::sort(samples.begin(), samples.end());
+				const uint64_t lowest = samples[0];
+				const uint64_t median = samples[samples.size() / 2];
+				const uint64_t highest = samples[samples.size()-1];
+				res.set_header("X-Runtime-First", std::to_string(first) + " micros");
+				res.set_header("X-Runtime-Lowest", std::to_string(lowest) + " micros");
+				res.set_header("X-Runtime-Median", std::to_string(median) + " micros");
+				res.set_header("X-Runtime-Highest", std::to_string(highest) + " micros");
+			}
+			const auto instructions = std::to_string(machine.cpu.instruction_counter());
 			res.set_header("X-Instruction-Count", instructions);
 			res.set_header("X-Binary-Size", std::to_string(binary.size()));
 			const size_t active_mem = machine.memory.pages_active() * 4096;

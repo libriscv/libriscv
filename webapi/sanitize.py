@@ -13,6 +13,10 @@ python_status   = "status.txt"
 # docker volume paths
 dc_codefile = project_dir + "/" + python_codefile
 dc_binary   = project_dir + "/binary"
+dc_symmap   = project_dir + "/symbols.map"
+fo = open("symbols.map", "w")
+fo.write("main")
+fo.close()
 
 # sanitize the code here
 sanitized = ""
@@ -41,10 +45,11 @@ else:
 	dc_gnucpp = "riscv32-unknown-elf-g++"
 
 # compile the code
-cmd = ["docker", "exec", dc_instance,
-		dc_gnucpp, "-march=rv32g", "-mabi=ilp32", "-static"] + dc_extra + [
+cmd = ["sudo", "docker", "exec", dc_instance,
+		dc_gnucpp, "-march=rv32g", "-mabi=ilp32d", "-static"] + dc_extra + [
 		"-std=c++17", "-O2", "-fstack-protector", dc_codefile, "-o", dc_binary,
-		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections", "-Wl,-s",
+		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections",
+		"-Wl,--retain-symbols-file=" + dc_symmap,
 		"-Wl,--undefined=pthread_join"] # this fixes a glibc bug
 print(cmd)
 
