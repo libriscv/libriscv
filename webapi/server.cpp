@@ -140,11 +140,13 @@ int main(void)
 		}
 		if (machine.cpu.registers().pc == main_address)
 		{
+			// reset PC here for benchmarking
+			machine.cpu.reset_instruction_counter();
 			// take a snapshot of the machine
 			std::vector<uint8_t> program_state;
 			machine.serialize_to(program_state);
 			std::deque<uint64_t> samples;
-			// begin benchmarking
+			// begin benchmarking 1 + N samples
 			for (int i = 0; i < 1 + BENCH_SAMPLES; i++)
 			{
 				machine.deserialize_from(program_state);
