@@ -124,6 +124,8 @@ int main(void)
 		}
 		else
 		{
+			uint64_t st0 = micros_now();
+			asm("" : : : "memory");
 			// execute insruction by instruction until
 			// we have entered main(), then break
 			try {
@@ -137,6 +139,12 @@ int main(void)
 			} catch (std::exception& e) {
 				res.set_header("X-Exception", e.what());
 			}
+			asm("" : : : "memory");
+			uint64_t st1 = micros_now();
+			asm("" : : : "memory");
+			res.set_header("X-Startup-Time", std::to_string(st1 - st0));
+			const auto instructions = machine.cpu.instruction_counter();
+			res.set_header("X-Startup-Instructions", std::to_string(instructions));
 		}
 		if (machine.cpu.registers().pc == main_address)
 		{
