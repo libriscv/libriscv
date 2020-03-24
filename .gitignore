@@ -2,3 +2,4 @@ build/
 clangbuild/
 **/build/
 fuzz/crash-*
+webapi/tests/binary

@@ -10,6 +10,8 @@ target_compile_options(riscv PUBLIC -std=c++17)
 set(EMUDIR "../emulator/src")
 set(SOURCES
 	server.cpp
+	compile.cpp
+	execute.cpp
 	${EMUDIR}/linux.cpp
 	${EMUDIR}/syscalls.cpp
 	${EMUDIR}/threads.cpp
