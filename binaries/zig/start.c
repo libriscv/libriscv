@@ -1,4 +1,21 @@
-__attribute__((noreturn)) void _exit(int exitval);
+#define SYSCALL_WRITE  64
+#define SYSCALL_EXIT   93
+
+static inline long
+syscall(long n, long arg0)
+{
+	register long a0 asm("a0") = arg0;
+	register long syscall_id asm("a7") = n;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+
+	return a0;
+}
+
+__attribute__((noreturn)) void _exit(int exitval) {
+	syscall(SYSCALL_EXIT, exitval);
+	__builtin_unreachable();
+}
 
 __attribute__((visibility("hidden"), used))
 void libc_start(int argc, char** argv)
