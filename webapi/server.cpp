@@ -5,6 +5,7 @@
 
 static const char* ADDRESS = "localhost";
 static const uint16_t PORT = 1234;
+static const uint16_t CACHE_PORT = 80;
 
 int main(void)
 {
@@ -13,6 +14,43 @@ int main(void)
 
     svr.Post("/compile", compile);
 	svr.Post("/execute", execute);
+	svr.Post("/",
+		[] (const Request& req, Response& res) {
+			// take the POST body and send it to a cache
+			httplib::Client cli("localhost", CACHE_PORT);
+			// find compiler method
+			std::string method = "linux";
+			auto mit = req.params.find("method");
+			if (mit != req.params.end()) method = mit->second;
+
+			const httplib::Headers headers = {
+				{ "X-Method", method }
+			};
+			// get the source code in the body compiled
+			auto cres = cli.Post("/compile", headers,
+				req.body, "text/plain");
+			if (cres != nullptr)
+			{
+				if (cres->status == 200) {
+					// execute the resulting binary
+					auto eres = cli.Post("/execute", headers,
+						cres->body, "application/x-riscv");
+					if (eres != nullptr)
+					{
+						// return output from execution back to client
+						res.status = eres->status;
+						res.body = eres->body;
+					} else {
+						res.status = 500;
+					}
+					return;
+				}
+				res.status = cres->status;
+				res.body   = cres->body;
+			} else {
+				res.status = 500;
+			}
+		});
 
 	printf("Listening on %s:%u\n", ADDRESS, PORT);
     svr.listen(ADDRESS, PORT);
