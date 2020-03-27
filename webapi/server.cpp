@@ -14,7 +14,7 @@ int main(void)
 
     svr.Post("/compile", compile);
 	svr.Post("/execute", execute);
-	svr.Post("/",
+	svr.Post("/exec",
 		[] (const Request& req, Response& res) {
 			// take the POST body and send it to a cache
 			httplib::Client cli("localhost", CACHE_PORT);
