@@ -77,7 +77,7 @@ void compile(const Request& req, Response& res)
 		binary->size(), // Content length
 		[binary] (uint64_t offset, uint64_t length, DataSink &sink) {
 			const auto* d = (const char*) binary->data();
-			sink.write(&d[offset], std::min(length, 16384lu));
+			sink.write(&d[offset], length);
 		},
 		[binary] {
 			delete binary;

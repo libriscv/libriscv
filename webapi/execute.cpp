@@ -34,6 +34,7 @@ void execute(const Request& req, Response& res, const ContentReader& creader)
 
 	State<4> state;
 	// go-time: create machine, execute code
+	riscv::verbose_machine = false;
 	riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
 
 	prepare_linux<riscv::RISCV32>(machine, {"program"}, env);
