@@ -19,7 +19,8 @@ static const std::vector<std::string> env = {
 extern uint64_t micros_now();
 extern uint64_t monotonic_micros_now();
 
-void execute(const Request& req, Response& res, const ContentReader& creader)
+static void
+protected_execute(const Request& req, Response& res, const ContentReader& creader)
 {
 	std::vector<uint8_t> binary;
 	creader([&] (const char* data, size_t data_length) {
@@ -148,5 +149,15 @@ void execute(const Request& req, Response& res, const ContentReader& creader)
 	else {
 		res.set_header("X-Exception", "Could not enter main()");
 		res.set_header("X-Instruction-Count", std::to_string(MAX_INSTRUCTIONS));
+	}
+}
+
+void execute(const Request& req, Response& res, const ContentReader& creader)
+{
+	try {
+		protected_execute(req, res, creader);
+	} catch (std::exception& e) {
+		res.status = 200;
+		res.set_header("X-Error", e.what());
 	}
 }

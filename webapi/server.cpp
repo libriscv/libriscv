@@ -31,6 +31,13 @@ int main(void)
 				req.body, "text/plain");
 			if (cres != nullptr)
 			{
+				auto it = res.headers.find("X-Error");
+				if (it != res.headers.end()) {
+					res.status = cres->status;
+					res.set_content(cres->body, "text/plain");
+					return;
+				}
+
 				res.headers.merge(cres->headers);
 				// remove these unnecessary headers
 				res.headers.erase("Content-Length");
