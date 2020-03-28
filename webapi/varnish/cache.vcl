@@ -24,8 +24,7 @@ sub vcl_recv
 {
 	if (std.port(local.ip) == 80) {
 		if (client.ip ~ authorized) {
-			set req.http.x-method = req.method;
-			set req.backend_hint = default;
+			set req.http.x-hmethod = req.method;
 			std.cache_req_body(15MB);
 			return (hash);
 		}
@@ -42,7 +41,7 @@ sub vcl_recv
 		# accept VMOD
 		set req.http.accept = format.filter(req.http.accept);
 		# bodyaccess VMOD
-		set req.http.x-method = req.method;
+		set req.http.x-hmethod = req.method;
 		set req.http.x-cache = "nope";
 		return (pass);
 	}
@@ -64,7 +63,7 @@ sub vcl_backend_fetch
 		set bereq.backend = fs.backend();
 		set bereq.url = "/index.html";
 	} else {
-		set bereq.method = bereq.http.x-method;
+		set bereq.method = bereq.http.x-hmethod;
 	}
 }
 

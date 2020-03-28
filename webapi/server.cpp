@@ -18,10 +18,12 @@ int main(void)
 		[] (const Request& req, Response& res) {
 			// take the POST body and send it to a cache
 			httplib::Client cli(ADDRESS, CACHE_PORT);
-			// find compiler method
+			// find compilation method
 			std::string method = "linux";
-			auto mit = req.params.find("method");
-			if (mit != req.params.end()) method = mit->second;
+			if (req.has_param("method")) {
+				method = req.get_param_value("method");
+			}
+			res.set_header("X-Method", method);
 
 			const httplib::Headers headers = {
 				{ "X-Method", method }

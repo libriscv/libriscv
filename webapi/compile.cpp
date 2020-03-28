@@ -23,8 +23,13 @@ void compile(const Request& req, Response& res)
 
 	// find compiler method
 	std::string method = "linux";
-	auto mit = req.params.find("method");
-	if (mit != req.params.end()) method = mit->second;
+	if (req.has_param("method")) {
+		method = req.get_param_value("method");
+	}
+	// ... which can be overriden by X-Method header field
+	if (req.has_header("X-Method")) {
+		method = req.get_header_value("X-Method");
+	}
 	res.set_header("X-Method", method);
 
 	const std::string progpath = project_path(program_id);
