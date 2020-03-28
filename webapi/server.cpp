@@ -43,6 +43,9 @@ int main(void)
 						cres->body, "application/x-riscv");
 					if (eres != nullptr)
 					{
+						// we will get this in the next merge:
+						res.headers.erase("X-Binary-Size");
+						// merge with the program execution header fields
 						res.headers.merge(eres->headers);
 						res.headers.erase("Content-Length");
 						res.headers.erase("Content-Type");
@@ -56,7 +59,7 @@ int main(void)
 					}
 					return;
 				}
-				res.status = cres->status;
+				res.status = 200;
 				res.set_content(cres->body, "text/plain");
 			} else {
 				res.status = 500;

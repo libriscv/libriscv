@@ -60,6 +60,7 @@ void compile(const Request& req, Response& res)
 		res.status = 200;
 		res.set_header("X-Error", "Compilation failed");
 		res.set_content((const char*) vec.data(), vec.size(), "text/plain");
+		res.set_header("Cache-Control", "s-max-age=86400");
 		return;
 	}
 
@@ -73,7 +74,7 @@ void compile(const Request& req, Response& res)
 		return;
 	}
 	// indicate caching and send it
-	res.set_header("Cache-Control", "max-age=86400");
+	res.set_header("Cache-Control", "s-max-age=86400");
 	res.set_content_provider(
 		binary->size(), // Content length
 		[binary] (uint64_t offset, uint64_t length, DataSink &sink) {
