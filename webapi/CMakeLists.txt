@@ -22,6 +22,10 @@ target_link_libraries(webapi riscv pthread m)
 target_include_directories(webapi PRIVATE "cpp-httplib")
 target_include_directories(webapi PRIVATE ${CMAKE_BINARY_DIR})
 target_include_directories(webapi PRIVATE ${CMAKE_SOURCE_DIR}/../emulator/src)
+target_compile_definitions(webapi PRIVATE
+			"CPPHTTPLIB_KEEPALIVE_TIMEOUT_SECOND=30"
+			"CPPHTTPLIB_READ_TIMEOUT_SECOND=30"
+			"CPPHTTPLIB_THREAD_POOL_COUNT=16")
 
 if (LTO)
 	set_target_properties(riscv PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)

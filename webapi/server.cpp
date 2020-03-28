@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <string>
 
-static const char* ADDRESS = "localhost";
+static const char* ADDRESS = "127.0.0.1";
 static const uint16_t PORT = 1234;
 static const uint16_t CACHE_PORT = 80;
 
@@ -17,7 +17,7 @@ int main(void)
 	svr.Post("/exec",
 		[] (const Request& req, Response& res) {
 			// take the POST body and send it to a cache
-			httplib::Client cli("localhost", CACHE_PORT);
+			httplib::Client cli(ADDRESS, CACHE_PORT);
 			// find compiler method
 			std::string method = "linux";
 			auto mit = req.params.find("method");
@@ -39,14 +39,14 @@ int main(void)
 					{
 						// return output from execution back to client
 						res.status = eres->status;
-						res.body = eres->body;
+						res.set_content(eres->body, "text/plain");
 					} else {
 						res.status = 500;
 					}
 					return;
 				}
 				res.status = cres->status;
-				res.body   = cres->body;
+				res.set_content(cres->body, "text/plain");
 			} else {
 				res.status = 500;
 			}
