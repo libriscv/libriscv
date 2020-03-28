@@ -31,15 +31,15 @@ int main(void)
 				req.body, "text/plain");
 			if (cres != nullptr)
 			{
-				res.headers.merge(cres->headers);
 				// look for failed compilation
-				auto it = cres->headers.find("X-Error");
-				if (it != cres->headers.end()) {
+				if (cres->has_header("X-Error")) {
 					res.status = cres->status;
+					res.set_header("X-Error", cres->get_header_value("X-Error"));
 					res.set_content(cres->body, "text/plain");
 					return;
 				}
 
+				res.headers.merge(cres->headers);
 				// remove these unnecessary headers
 				res.headers.erase("Content-Length");
 				res.headers.erase("Content-Type");
