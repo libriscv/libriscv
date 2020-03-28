@@ -83,6 +83,8 @@ void execute(const Request& req, Response& res, const ContentReader& creader)
 		res.set_header("X-Startup-Time", std::to_string(st1 - st0));
 		const auto instructions = machine.cpu.instruction_counter();
 		res.set_header("X-Startup-Instructions", std::to_string(instructions));
+		// cache for 10 seconds (it's only the output of a program)
+		res.set_header("Cache-Control", "max-age=10");
 	}
 	if (machine.cpu.registers().pc == main_address)
 	{
