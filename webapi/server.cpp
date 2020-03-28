@@ -31,12 +31,14 @@ int main(void)
 				req.body, "text/plain");
 			if (cres != nullptr)
 			{
+				res.headers.merge(cres->headers);
 				if (cres->status == 200) {
 					// execute the resulting binary
 					auto eres = cli.Post("/execute", headers,
 						cres->body, "application/x-riscv");
 					if (eres != nullptr)
 					{
+						res.headers.merge(eres->headers);
 						// return output from execution back to client
 						res.status = eres->status;
 						res.set_content(eres->body, "text/plain");
