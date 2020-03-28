@@ -32,6 +32,11 @@ int main(void)
 			if (cres != nullptr)
 			{
 				res.headers.merge(cres->headers);
+				// remove these unnecessary headers
+				res.headers.erase("Content-Length");
+				res.headers.erase("Content-Type");
+				res.headers.erase("Accept-Ranges: bytes");
+
 				if (cres->status == 200) {
 					// execute the resulting binary
 					auto eres = cli.Post("/execute", headers,
@@ -39,6 +44,10 @@ int main(void)
 					if (eres != nullptr)
 					{
 						res.headers.merge(eres->headers);
+						res.headers.erase("Content-Length");
+						res.headers.erase("Content-Type");
+						res.headers.erase("Accept-Ranges: bytes");
+
 						// return output from execution back to client
 						res.status = eres->status;
 						res.set_content(eres->body, "text/plain");
