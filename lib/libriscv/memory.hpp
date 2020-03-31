@@ -128,7 +128,7 @@ namespace riscv
 		page_fault_cb_t m_page_fault_handler = nullptr;
 
 		const std::vector<uint8_t>& m_binary;
-		bool m_protect_segments;
+		const bool m_protect_segments;
 
 		// lookup tree for ELF symbol names
 		eastl::string_map<address_t> sym_lookup;

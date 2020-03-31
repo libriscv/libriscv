@@ -264,18 +264,17 @@ namespace riscv
 		throw MachineException(OUT_OF_MEMORY, "Out of memory");
 	}
 
-	inline static Page create_cow() {
-		Page page;
-		page.attr = {
+	static Page zeroed_page;
+	__attribute__((constructor))
+	static void create_cow() {
+		zeroed_page.attr = {
 			.read   = true,
 			.write  = false,
 			.exec   = false,
 			.is_cow = true
 		};
-		return page;
 	}
 	const Page& Page::cow_page() noexcept {
-		static Page zeroed_page = create_cow();
 		return zeroed_page; // read-only, zeroed page
 	}
 

@@ -28,7 +28,7 @@ struct alignas(4096) PageData {
 	static constexpr unsigned SIZE  = 4096;
 	static constexpr unsigned SHIFT = 12;
 
-	std::array<uint8_t,  SIZE / 1> buffer8;
+	std::array<uint8_t,  SIZE / 1> buffer8 = {0};
 };
 
 struct Page
