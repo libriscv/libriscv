@@ -28,11 +28,11 @@ namespace riscv
 		format_t instruction;
 #ifndef RISCV_DEBUG
 		const address_t this_page = address & ~(Page::size()-1);
-		if (this_page != this->m_current_page) {
+		if (this_page != this->m_current_page.address) {
 			this->change_page(this_page);
 #ifdef RISCV_INSTR_CACHE
-			if (UNLIKELY(m_page_pointer->decoder_cache() == nullptr)) {
-				m_page_pointer->template create_decoder_cache<DecoderCache>();
+			if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
+				m_current_page.page->template create_decoder_cache<DecoderCache>();
 			}
 #endif
 		}
@@ -42,7 +42,7 @@ namespace riscv
 			// special case for non-compressed mode:
 			// we can always read whole instructions
 			instruction.whole =
-				m_page_pointer->aligned_read<uint32_t> (offset);
+				m_current_page.page->template aligned_read<uint32_t> (offset);
 		}
 		else
 		{
@@ -52,30 +52,33 @@ namespace riscv
 			{
 				// we can read the whole thing
 				instruction.whole =
-					m_page_pointer->aligned_read<uint32_t> (offset);
+					m_current_page.page->template aligned_read<uint32_t> (offset);
 				return instruction;
 			}
 
 			// read short instruction at address
 			instruction.whole =
-				m_page_pointer->aligned_read<uint16_t> (offset);
+				m_current_page.page->template aligned_read<uint16_t> (offset);
 
 			// read upper half, completing a 32-bit instruction
 			if (instruction.is_long()) {
 				// this instruction crosses a page-border
-				this->change_page(this->m_current_page + Page::size());
-				instruction.half[1] = m_page_pointer->aligned_read<uint16_t>(0);
+				this->change_page(m_current_page.address + Page::size());
+				instruction.half[1] =
+					m_current_page.page->template aligned_read<uint16_t>(0);
 			}
 		}
 #else
 		// in debug mode we need a full memory read to allow trapping
 		if ((address & (W-1)) == 0) {
-			instruction.whole = this->machine().memory.template read<address_t>(address);
+			instruction.whole =
+				this->machine().memory.template read<address_t>(address);
 		}
 		else
 		{
 			// instruction is not on word-border, so do up to two smaller reads
-			instruction.whole = this->machine().memory.template read<uint16_t>(address);
+			instruction.whole =
+				this->machine().memory.template read<uint16_t>(address);
 			if (UNLIKELY(instruction.is_long())) {
 				// complete the instruction (NOTE: might cross into another page)
 				instruction.half[1] =
@@ -110,7 +113,7 @@ namespace riscv
 		// retrieve cached instruction
 		const address_t offset  = this->pc() & (Page::size()-1);
 
-		auto* dcache = m_page_pointer->decoder_cache();
+		auto* dcache = m_current_page.page->decoder_cache();
 		auto& ihandler = dcache->cache32[offset / DecoderCache::DIVISOR];
 		// decode and store into cache, if necessary
 		if (UNLIKELY(!ihandler)) {

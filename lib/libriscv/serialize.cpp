@@ -53,7 +53,7 @@ namespace riscv
 		const size_t page_bytes =
 			this->m_pages.size() * (sizeof(SerializedPage) + Page::size());
 		vec.reserve(vec.size() + page_bytes);
-	
+
 		for (const auto it : this->m_pages)
 		{
 			const auto& page = it.second;
@@ -98,8 +98,7 @@ namespace riscv
 		this->m_regs = *(const Registers<W>*) &vec[state.cpu_offset];
 		this->m_atomics = {};
 		// reset the instruction page pointer
-		this->m_current_page = -1;
-		this->m_page_pointer = nullptr;
+		this->m_current_page = {};
 	}
 	template <int W>
 	void Memory<W>::deserialize_from(const std::vector<uint8_t>& vec,
