@@ -144,8 +144,7 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 	while (len > 0)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
-		const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
-		const size_t size = std::min(remaining, len);
+		const size_t size = std::min(Page::size() - offset, len);
 		auto& page = this->create_page(dst >> Page::SHIFT);
 		__builtin_memset(page.data() + offset, value, size);
 
@@ -158,13 +157,12 @@ template <int W>
 void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 {
 	auto* src = (uint8_t*) vsrc;
-	while (len > 0)
+	while (len != 0)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
-		const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
-		const size_t size = std::min(remaining, len);
+		const size_t size = std::min(Page::size() - offset, len);
 		auto& page = this->create_page(dst >> Page::SHIFT);
-		std::memcpy(page.data() + offset, src, size);
+		std::copy(src, src + size, page.data() + offset);
 
 		dst += size;
 		src += size;
@@ -176,13 +174,12 @@ template <int W>
 void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
 {
 	auto* dst = (uint8_t*) vdst;
-	while (len > 0)
+	while (len != 0)
 	{
 		const size_t offset = src & (Page::size()-1);
-		const size_t remaining = (offset == 0) ? Page::size() : (Page::size() - offset);
-		const size_t size = std::min(remaining, len);
+		const size_t size = std::min(Page::size() - offset, len);
 		const auto& page = this->get_page(src);
-		std::memcpy(dst, page.data() + offset, size);
+		std::copy(page.data() + offset, page.data() + offset + size, dst);
 
 		dst += size;
 		src += size;
