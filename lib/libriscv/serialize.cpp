@@ -99,6 +99,11 @@ namespace riscv
 		this->m_atomics = {};
 		// reset the instruction page pointer
 		this->m_current_page = {};
+#ifdef RISCV_PAGE_CACHE
+		// reset the page cache
+		this->m_page_cache = {};
+		this->m_cache_iterator = 0;
+#endif
 	}
 	template <int W>
 	void Memory<W>::deserialize_from(const std::vector<uint8_t>& vec,

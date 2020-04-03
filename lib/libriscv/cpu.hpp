@@ -66,15 +66,14 @@ namespace riscv
 		CPU(Machine<W>&);
 	private:
 		Registers<W> m_regs;
-		AtomicMemory<W> m_atomics;
 
 		inline format_t read_instruction(address_t);
 		void execute(format_t);
 
 		Machine<W>& m_machine;
 		struct CachedPage {
-			Page*   page = nullptr;
-			int64_t address = 0;
+			Page*     page = nullptr;
+			address_t address = 0;
 		};
 		CachedPage m_current_page;
 #ifdef RISCV_PAGE_CACHE
@@ -91,6 +90,7 @@ namespace riscv
 		bool break_time() const;
 		friend struct Machine<W>;
 #endif
+		AtomicMemory<W> m_atomics;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 
