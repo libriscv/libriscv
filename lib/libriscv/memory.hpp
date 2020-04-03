@@ -37,6 +37,9 @@ namespace riscv
 		// of optimizing away a copy if the data crosses no page-boundaries
 		void memview(address_t addr, size_t len,
 					delegate<void(const uint8_t*, size_t)> callback);
+		// gives const-ref access to pod-type T in guest memory
+		template <typename T>
+		void memview(address_t addr, delegate<void(const T&)> callback);
 		// read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t max_len = 1024);
 

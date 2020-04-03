@@ -204,6 +204,24 @@ void Memory<W>::memview(address_t addr, size_t len,
 	memcpy_out(buffer, addr, len);
 	callback(buffer, len);
 }
+template <int W>
+template <typename T>
+void Memory<W>::memview(address_t addr, delegate<void(const T&)> callback)
+{
+	static_assert(std::is_trivial_v<T>, "Type T must be Plain-Old-Data");
+	const size_t offset = addr & (Page::size()-1);
+	// fast-path
+	if (LIKELY(offset + sizeof(T) <= Page::size()))
+	{
+		const auto& page = this->get_page(addr);
+		callback(*(const T*) &page.data()[offset]);
+		return;
+	}
+	// slow path
+	T object;
+	memcpy_out(&object, addr, sizeof(object));
+	callback(object);
+}
 
 template <int W>
 std::string Memory<W>::memstring(address_t addr, const size_t max_len)
