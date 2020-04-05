@@ -11,7 +11,10 @@ static constexpr bool newlib_mini_guest = false;
 
 int main(int argc, const char** argv)
 {
-	assert(argc > 1 && "Provide RISC-V binary argument!");
+	if (argc < 2) {
+		fprintf(stderr, "Provide RISC-V binary as argument!\n");
+		exit(1);
+	}
 	const std::string filename = argv[1];
 
 	const auto binary = load_file(filename);
@@ -44,10 +47,10 @@ int main(int argc, const char** argv)
 		machine.setup_argv(args);
 	}
 	else {
-		prepare_linux<riscv::RISCV32>(machine, args, {});
+		machine.setup_argv(args);
 		setup_minimal_syscalls(state, machine);
 		setup_native_heap_syscalls(state, machine);
-		setup_multithreading(state, machine);
+		setup_native_threads(state, machine);
 	}
 
 	/*

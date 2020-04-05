@@ -9,17 +9,19 @@ struct Thread;
 template <typename T, typename... Args>
 Thread* create(const T& func, Args&&... args);
 Thread* self();
+int     gettid();
 long    join(Thread*);
-void    yield();
+long    yield();
+long    yield_to(int tid);
+long    yield_to(Thread*);
 void    exit(long statuscode);
 
 struct Thread
 {
 	Thread(std::function<void()> start)
-	 	: startfunc{start}
-	{
-		static int counter = 0;
-		tid = ++counter;
+	 	: startfunc{std::move(start)} {}
+	bool has_exited() const noexcept {
+		return this->tid == 0;
 	}
 
 	__attribute__((noreturn))
@@ -34,6 +36,10 @@ inline Thread* self() {
 	Thread* tp;
 	asm("mv %0, tp" : "=r"(tp));
 	return (Thread*) tp;
+}
+
+inline int gettid() {
+	return self()->tid;
 }
 
 inline char* realign_stack(char* stack) {
@@ -51,7 +57,9 @@ template <typename T, typename... Args>
 inline Thread* create(const T& func, Args&&... args)
 {
 	static const size_t STACK_SIZE = 1*1024*1024;
-	char* stack_bot = new char[sizeof(Thread) + STACK_SIZE];
+	static_assert(STACK_SIZE > sizeof(Thread) + 16384);
+	char* stack_bot = (char*) malloc(STACK_SIZE);
+	if (stack_bot == nullptr) return nullptr;
 	char* stack_top = realign_stack(stack_bot + STACK_SIZE);
 
 	// store the thread at the beginning of the stack
@@ -71,19 +79,27 @@ inline Thread* create(const T& func, Args&&... args)
 inline long join(Thread* thread)
 {
 	// yield until the tid value is zeroed
-	while (thread->tid != 0) {
+	while (!thread->has_exited()) {
 		yield();
 		// thread->tid might have changed since yielding
 		asm ("" : : : "memory");
 	}
 	const long rv = thread->return_value;
-	delete thread;
+	free(thread);
 	return rv;
 }
 
-inline void yield()
+inline long yield()
 {
-	syscall(124, 0);
+	return syscall(124, 0);
+}
+inline long yield_to(int tid)
+{
+	return syscall(501, tid);
+}
+inline long yield_to(Thread* thread)
+{
+	return yield_to(thread->tid);
 }
 
 __attribute__((noreturn))

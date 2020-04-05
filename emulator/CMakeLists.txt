@@ -15,6 +15,7 @@ set(SOURCES
 	src/syscalls.cpp
 	src/threads.cpp
 	src/native_libc.cpp
+	src/native_threads.cpp
 )
 
 add_executable(remu ${SOURCES})

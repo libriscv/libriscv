@@ -46,6 +46,7 @@ struct multithreading
 	thread_t* get_thread();
 	thread_t* get_thread(int tid); /* or nullptr */
 	bool      suspend_and_yield();
+	void      yield_to(int tid);
 	void      erase_thread(int tid);
 	void      wakeup_next();
 
@@ -53,10 +54,12 @@ struct multithreading
 	riscv::Machine<W>& machine;
 	std::deque<thread_t*> suspended;
 	std::map<int, thread_t*> threads;
-	int        thread_counter = 1;
+	int        thread_counter = 0;
 	thread_t*  m_current = nullptr;
 	thread_t   main_thread;
 };
 
 template <int W>
 void setup_multithreading(State<W>&, riscv::Machine<W>&);
+template <int W>
+void setup_native_threads(State<W>&, riscv::Machine<W>&);

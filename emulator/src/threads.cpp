@@ -134,6 +134,31 @@ bool multithreading<W>::suspend_and_yield()
 }
 
 template <int W>
+void multithreading<W>::yield_to(int tid)
+{
+	auto* thread = get_thread();
+	auto* next   = get_thread(tid);
+	if (next == nullptr) {
+		machine.cpu.reg(RISCV::REG_ARG0) = -1;
+		return;
+	}
+	// return value for yield_to
+	machine.cpu.reg(RISCV::REG_ARG0) = 0;
+	if (thread == next) return;
+	// suspend current thread
+	thread->suspend();
+	// remove the next thread from suspension
+	for (auto it = suspended.begin(); it != suspended.end(); ++it) {
+		if (*it == next) {
+			suspended.erase(it);
+			break;
+		}
+	}
+	// resume next thread
+	next->resume();
+}
+
+template <int W>
 void multithreading<W>::wakeup_next()
 {
   // resume a waiting thread
@@ -275,25 +300,6 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		// activate and return 0 for the child
 		thread->activate();
 		return 0;
-	});
-	// 500: microclone
-	machine.install_syscall_handler(500,
-	[mt] (Machine<W>& machine) {
-		const uint32_t stack = machine.template sysarg<uint32_t> (0);
-		const uint32_t  func = machine.template sysarg<uint32_t> (1);
-		const uint32_t   tls = machine.template sysarg<uint32_t> (2);
-		const uint32_t  ctid = machine.template sysarg<uint32_t> (3);
-		auto* parent = mt->get_thread();
-		auto* thread = mt->create(parent, CLONE_CHILD_CLEARTID, ctid, 0x0, stack, tls);
-		parent->suspend();
-		// store return value for parent: child TID
-		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;
-		// activate and setup a function call
-		thread->activate();
-		// the cast is a work-around for a compiler bug
-		machine.setup_call(func, (const uint32_t) tls);
-		// preserve A0 for the new child thread
-		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 }
 
