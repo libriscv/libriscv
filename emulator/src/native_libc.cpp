@@ -5,7 +5,7 @@ static sas_alloc::Arena arena {0x40000000, 0xF0000000};
 
 static const uint32_t SYSCALL_MALLOC  = 1;
 static const uint32_t SYSCALL_CALLOC  = 2;
-static const uint32_t SYSCALL_REALLOC = 3;
+//static const uint32_t SYSCALL_REALLOC = 3;
 static const uint32_t SYSCALL_FREE    = 4;
 
 template <int W>
@@ -41,7 +41,7 @@ static long syscall_free(Machine<W>& machine)
 
 
 template <int W>
-void setup_native_heap_syscalls(State<W>& state, Machine<W>& machine)
+void setup_native_heap_syscalls(State<W>&, Machine<W>& machine)
 {
 	machine.install_syscall_handler(SYSCALL_MALLOC, syscall_malloc<W>);
 	machine.install_syscall_handler(SYSCALL_CALLOC, syscall_calloc<W>);

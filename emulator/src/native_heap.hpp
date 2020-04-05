@@ -44,7 +44,7 @@ private:
 	PointerType increment(size_t size);
 	void        decrement(size_t size);
 	inline size_t word_align(size_t size) {
-	    return size + ((sizeof(size_t) - 1) & ~(sizeof(size_t) - 1));
+	    return (size + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
 	}
 
 	PointerType arena_base;
