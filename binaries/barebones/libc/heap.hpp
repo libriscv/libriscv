@@ -3,7 +3,7 @@
  *
 **/
 #include <cstddef>
-#include "syscall.hpp"
+#include "include/syscall.hpp"
 
 #define SYSCALL_MALLOC   1
 #define SYSCALL_CALLOC   2
@@ -12,17 +12,17 @@
 
 inline void* sys_malloc(size_t len)
 {
-	return (void*) syscall1(SYSCALL_MALLOC, len);
+	return (void*) syscall(SYSCALL_MALLOC, len);
 }
 inline void* sys_calloc(size_t count, size_t size)
 {
-	return (void*) syscall2(SYSCALL_CALLOC, count, size);
+	return (void*) syscall(SYSCALL_CALLOC, count, size);
 }
 inline void* sys_realloc(void* ptr, size_t len)
 {
-	return (void*) syscall2(SYSCALL_REALLOC, (long) ptr, len);
+	return (void*) syscall(SYSCALL_REALLOC, (long) ptr, len);
 }
 inline void sys_free(void* ptr)
 {
-	syscall1(SYSCALL_FREE, (long) ptr);
+	syscall(SYSCALL_FREE, (long) ptr);
 }

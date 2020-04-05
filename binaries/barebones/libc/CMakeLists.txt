@@ -8,6 +8,7 @@ set(LIBC_SOURCES
 	heap.cpp
 	assert.cpp
 	libcxx.cpp
+	microthread.cpp
 	write.cpp
   )
 

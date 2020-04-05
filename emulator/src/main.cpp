@@ -3,8 +3,8 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
-static constexpr bool full_linux_guest = true;
-static constexpr bool newlib_mini_guest = true;
+static constexpr bool full_linux_guest = false;
+static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
 #include "syscalls.hpp"
 #include "threads.hpp"
@@ -44,8 +44,10 @@ int main(int argc, const char** argv)
 		machine.setup_argv(args);
 	}
 	else {
+		prepare_linux<riscv::RISCV32>(machine, args, {});
 		setup_minimal_syscalls(state, machine);
 		setup_native_heap_syscalls(state, machine);
+		setup_multithreading(state, machine);
 	}
 
 	/*

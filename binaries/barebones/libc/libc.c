@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+void* _impure_ptr;
 
 __attribute__((used))
 void* memset(char* dest, int ch, size_t size)
@@ -9,6 +10,7 @@ void* memset(char* dest, int ch, size_t size)
 		dest[i] = ch;
 	return dest;
 }
+__attribute__((used))
 void* memcpy(char* dest, const char* src, size_t size)
 {
 	for (size_t i = 0; i < size; i++)

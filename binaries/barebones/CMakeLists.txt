@@ -11,7 +11,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	set(RISCV_ABI "-target riscv32 -march=rv32imfd")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
 else()
-	set(RISCV_ABI "-march=rv32imfd -mabi=ilp32")
+	set(RISCV_ABI "-march=rv32imfd -mabi=ilp32d")
 endif()
 
 set(WARNINGS  "-Wall -Wextra")

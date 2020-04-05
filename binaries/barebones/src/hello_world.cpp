@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 
+#include <microthread.hpp>
+
 int testval = 0;
 
 extern "C"
@@ -32,6 +34,21 @@ int main(int argc, char** argv)
 	// va_list & stdarg test
 	int len = printf(b->c_str(), "RISC-V", 1, 0);
 	assert(len > 0);
+
+	auto* thread = microthread::create(
+		[] (int a, int b, int c) -> long {
+			printf("Hello from microthread!\n"
+					"a = %d, b = %d, c = %d\n",
+					a, b, c);
+			long rv = microthread::join(microthread::create([] () -> long {
+				printf("Recursive thread!\n");
+				microthread::exit(222);
+			}));
+			return rv;
+		}, 111, 222, 333);
+	long retval = microthread::join(thread);
+	printf("microthread returned %ld\n", retval);
+
 	return 666;
 }
 

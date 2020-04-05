@@ -27,7 +27,7 @@ struct thread
 	// address zeroed when exiting
 	address_t clear_tid = 0;
 
-	thread(multithreading<W>&, int tid, thread* parent, 
+	thread(multithreading<W>&, int tid, thread* parent,
 			address_t tls, address_t stack);
 	void exit();
 	void suspend();
@@ -53,7 +53,7 @@ struct multithreading
 	riscv::Machine<W>& machine;
 	std::deque<thread_t*> suspended;
 	std::map<int, thread_t*> threads;
-	int64_t    thread_counter = 1;
+	int        thread_counter = 1;
 	thread_t*  m_current = nullptr;
 	thread_t   main_thread;
 };

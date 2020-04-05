@@ -71,7 +71,7 @@ thread<W>* multithreading<W>::create(
 			thread_t* parent, int flags, address_t ctid, address_t ptid,
 			address_t stack, address_t tls)
 {
-	const int tid = __sync_fetch_and_add(&thread_counter, 1);
+	const int tid = ++thread_counter;
 	auto* thread = new thread_t(*this, tid, parent, tls, stack);
 
 	// flag for write child TID
@@ -275,6 +275,25 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		// activate and return 0 for the child
 		thread->activate();
 		return 0;
+	});
+	// 500: microclone
+	machine.install_syscall_handler(500,
+	[mt] (Machine<W>& machine) {
+		const uint32_t stack = machine.template sysarg<uint32_t> (0);
+		const uint32_t  func = machine.template sysarg<uint32_t> (1);
+		const uint32_t   tls = machine.template sysarg<uint32_t> (2);
+		const uint32_t  ctid = machine.template sysarg<uint32_t> (3);
+		auto* parent = mt->get_thread();
+		auto* thread = mt->create(parent, CLONE_CHILD_CLEARTID, ctid, 0x0, stack, tls);
+		parent->suspend();
+		// store return value for parent: child TID
+		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;
+		// activate and setup a function call
+		thread->activate();
+		// the cast is a work-around for a compiler bug
+		machine.setup_call(func, (const uint32_t) tls);
+		// preserve A0 for the new child thread
+		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 }
 
