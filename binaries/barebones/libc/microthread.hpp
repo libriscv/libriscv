@@ -22,14 +22,16 @@ struct Thread
 
 	Thread(std::function<void()> start)
 	 	: startfunc{std::move(start)} {}
-	~Thread() {}
+
+	long resume()   { return yield_to(this); }
+	long suspend()  { return yield(); }
 
 	bool has_exited() const noexcept {
 		return this->tid == 0;
 	}
 
-	__attribute__((noreturn))
-	void exit(long rv);
+	__attribute__((noreturn)) void exit(long rv);
+	~Thread() {}
 
 	int   tid;
 	union {
