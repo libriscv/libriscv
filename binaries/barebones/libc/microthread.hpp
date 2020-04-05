@@ -21,15 +21,29 @@ namespace microthread
 {
 struct Thread;
 
+/* Create a new thread using the given function @func,
+   and pass all further arguments to the function as is.
+   Returns the new thread. The new thread starts immediately. */
 template <typename T, typename... Args>
 Thread* create(const T& func, Args&&... args);
-Thread* self();
-int     gettid();
+
+/* Waits for a thread to finish and then returns the exit
+   status-code of the thread. The thread is then deleted. */
 long    join(Thread*);
+
+/* Exit the current thread with the given exit status. Never returns. */
+void    exit(long status);
+
+/* Return back to another suspended thread. Returns 0 on success. */
 long    yield();
-long    yield_to(int tid);
+long    yield_to(int tid); /* Return to a specific suspended thread. */
 long    yield_to(Thread*);
-void    exit(long statuscode);
+
+Thread* self();            /* Returns the current thread */
+int     gettid();          /* Returns the current thread id */
+
+
+/** implementation details **/
 
 struct Thread
 {
@@ -53,8 +67,6 @@ struct Thread
 	};
 };
 static_assert(Thread::STACK_SIZE > sizeof(Thread) + 16384);
-
-/** implementation details **/
 
 inline bool Thread::has_exited() const {
 	return this->tid == 0;
