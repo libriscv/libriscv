@@ -11,10 +11,12 @@
  *					"a = %d, b = %d, c = %d\n",
  *					a, b, c);
  *      }, 111, 222, 333);
- *  long retval = microthread::join(thread);
- *  printf("microthread return value: %ld\n", retval);
  *
- *  Note: micro threads require the native threads system calls
+ *  long retval = microthread::join(thread);
+ *  printf("microthread exit status: %ld\n", retval);
+ *
+ *  Note: microthreads require the native threads system calls.
+ *  microthreads do not support thread-local storage.
 ***/
 
 namespace microthread
@@ -27,8 +29,8 @@ struct Thread;
 template <typename T, typename... Args>
 Thread* create(const T& func, Args&&... args);
 
-/* Waits for a thread to finish and then returns the exit
-   status-code of the thread. The thread is then deleted. */
+/* Waits for a thread to finish and then returns the exit status
+   of the thread. The thread is then deleted, freeing memory. */
 long    join(Thread*);
 
 /* Exit the current thread with the given exit status. Never returns. */
@@ -54,10 +56,10 @@ struct Thread
 
 	long resume()   { return yield_to(this); }
 	long suspend()  { return yield(); }
+	void exit(long status);
 
 	bool has_exited() const;
 
-	__attribute__((noreturn)) void exit(long rv);
 	~Thread() {}
 
 	int   tid;
