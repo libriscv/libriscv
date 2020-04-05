@@ -2,6 +2,21 @@
 #include "include/syscall.hpp"
 #include <functional>
 
+/***
+ * Example usage:
+ *
+ * 	auto* thread = microthread::create(
+ *		[] (int a, int b, int c) -> long {
+ *			printf("Hello from a microthread!\n"
+ *					"a = %d, b = %d, c = %d\n",
+ *					a, b, c);
+ *      }, 111, 222, 333);
+ *  long retval = microthread::join(thread);
+ *  printf("microthread return value: %ld\n", retval);
+ *
+ *  Note: micro threads require the native threads system calls
+***/
+
 namespace microthread
 {
 struct Thread;
@@ -26,9 +41,7 @@ struct Thread
 	long resume()   { return yield_to(this); }
 	long suspend()  { return yield(); }
 
-	bool has_exited() const noexcept {
-		return this->tid == 0;
-	}
+	bool has_exited() const;
 
 	__attribute__((noreturn)) void exit(long rv);
 	~Thread() {}
@@ -40,6 +53,12 @@ struct Thread
 	};
 };
 static_assert(Thread::STACK_SIZE > sizeof(Thread) + 16384);
+
+/** implementation details **/
+
+inline bool Thread::has_exited() const {
+	return this->tid == 0;
+}
 
 inline Thread* self() {
 	Thread* tp;
