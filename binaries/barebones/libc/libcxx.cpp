@@ -40,3 +40,10 @@ namespace std {
 		abort_message("C++ length error exception");
 	}
 }
+
+extern "C"
+int __cxa_atexit(void (*func) (void*), void* /*arg*/, void* /*dso_handle*/)
+{
+	(void) func;
+	return 0;
+}
