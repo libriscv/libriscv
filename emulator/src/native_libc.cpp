@@ -1,7 +1,8 @@
 #include "syscalls.hpp"
 #include "native_heap.hpp"
 using namespace riscv;
-static sas_alloc::Arena arena {0x40000000, 0xF0000000};
+static const uint64_t ARENA_BASE = 0x40000000;
+static sas_alloc::Arena arena;
 
 static const uint32_t SYSCALL_MALLOC  = 1;
 static const uint32_t SYSCALL_CALLOC  = 2;
@@ -41,12 +42,13 @@ static long syscall_free(Machine<W>& machine)
 
 
 template <int W>
-void setup_native_heap_syscalls(State<W>&, Machine<W>& machine)
+void setup_native_heap_syscalls(State<W>&, Machine<W>& machine, size_t max_memory)
 {
 	machine.install_syscall_handler(SYSCALL_MALLOC, syscall_malloc<W>);
 	machine.install_syscall_handler(SYSCALL_CALLOC, syscall_calloc<W>);
 	machine.install_syscall_handler(SYSCALL_FREE,   syscall_free<W>);
+	arena = sas_alloc::Arena(ARENA_BASE, ARENA_BASE + max_memory);
 }
 
 /* le sigh */
-template void setup_native_heap_syscalls<4>(State<4>&, Machine<4>&);
+template void setup_native_heap_syscalls<4>(State<4>&, Machine<4>&, size_t);

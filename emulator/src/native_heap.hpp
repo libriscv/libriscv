@@ -27,6 +27,7 @@ struct Chunk
 struct Arena
 {
 	using PointerType = Chunk::PointerType;
+	Arena() : arena_base(0), arena_current(0), arena_end(0) {}
 	Arena(PointerType base, PointerType end);
 	~Arena();
 

@@ -68,6 +68,8 @@ int main(int argc, char** argv)
 	int len = printf(b->c_str(), "RISC-V", 1, 0);
 	assert(len > 0);
 
+	printf("Main thread tid=%d\n", microthread::gettid());
+
 	auto* thread = microthread::create(
 		[] (int a, int b, int c) -> long {
 			printf("Hello from microthread tid=%d!\n"
@@ -96,6 +98,7 @@ int main(int argc, char** argv)
 	long retval = microthread::join(thread);
 	printf("microthread returned %ld\n", retval);
 	microthread::yield_to(0);
+	printf("Main thread tid=%d\n", microthread::gettid());
 
 	return 666;
 }

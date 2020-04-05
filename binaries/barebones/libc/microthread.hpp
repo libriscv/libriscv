@@ -18,8 +18,12 @@ void    exit(long statuscode);
 
 struct Thread
 {
+	static const size_t STACK_SIZE = 256*1024;
+
 	Thread(std::function<void()> start)
 	 	: startfunc{std::move(start)} {}
+	~Thread() {}
+
 	bool has_exited() const noexcept {
 		return this->tid == 0;
 	}
@@ -28,9 +32,12 @@ struct Thread
 	void exit(long rv);
 
 	int   tid;
-	long  return_value;
-	std::function<void()> startfunc;
+	union {
+		long  return_value;
+		std::function<void()> startfunc;
+	};
 };
+static_assert(Thread::STACK_SIZE > sizeof(Thread) + 16384);
 
 inline Thread* self() {
 	Thread* tp;
@@ -40,10 +47,6 @@ inline Thread* self() {
 
 inline int gettid() {
 	return self()->tid;
-}
-
-inline char* realign_stack(char* stack) {
-	return (char*) ((long) stack & ~0xF);
 }
 
 inline long clone_helper(long sp, long args, long ctid)
@@ -56,11 +59,9 @@ inline long clone_helper(long sp, long args, long ctid)
 template <typename T, typename... Args>
 inline Thread* create(const T& func, Args&&... args)
 {
-	static const size_t STACK_SIZE = 1*1024*1024;
-	static_assert(STACK_SIZE > sizeof(Thread) + 16384);
-	char* stack_bot = (char*) malloc(STACK_SIZE);
+	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (stack_bot == nullptr) return nullptr;
-	char* stack_top = realign_stack(stack_bot + STACK_SIZE);
+	char* stack_top = stack_bot + Thread::STACK_SIZE;
 
 	// store the thread at the beginning of the stack
 	auto* thread = new (stack_bot) Thread(
@@ -112,6 +113,7 @@ inline void exit(long exitcode)
 	abort();
 }
 
+__attribute__((noreturn))
 inline void Thread::exit(long exitcode)
 {
 	this->tid = 0;

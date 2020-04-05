@@ -49,7 +49,7 @@ int main(int argc, const char** argv)
 	else {
 		machine.setup_argv(args);
 		setup_minimal_syscalls(state, machine);
-		setup_native_heap_syscalls(state, machine);
+		setup_native_heap_syscalls(state, machine, 6*1024*1024);
 		setup_native_threads(state, machine);
 	}
 

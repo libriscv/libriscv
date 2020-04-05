@@ -42,7 +42,7 @@ void setup_native_threads(State<W>& state, Machine<W>& machine)
 	// 500: microclone
 	machine.install_syscall_handler(500,
 	[mt] (Machine<W>& machine) {
-		const uint32_t stack = machine.template sysarg<uint32_t> (0);
+		const uint32_t stack = (machine.template sysarg<uint32_t> (0) & ~0xF);
 		const uint32_t  func = machine.template sysarg<uint32_t> (1);
 		const uint32_t   tls = machine.template sysarg<uint32_t> (2);
 		const uint32_t  ctid = machine.template sysarg<uint32_t> (3);
