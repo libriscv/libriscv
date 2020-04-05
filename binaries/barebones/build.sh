@@ -1,9 +1,10 @@
 #!/bin/bash
 set -e
+XPACK_PATH="$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.3.0-1.1.1/.content"
 
-export PATH=$PATH:$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.3.0-1.1.1/.content/bin
-export CC=$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.3.0-1.1.1/.content/bin/riscv-none-embed-gcc
-export CXX=$HOME/opt/xPacks/@xpack-dev-tools/riscv-none-embed-gcc/8.3.0-1.1.1/.content/bin/riscv-none-embed-g++
+export PATH=$PATH:$XPACK_PATH/bin
+export CC=$XPACK_PATH/bin/riscv-none-embed-gcc
+export CXX=$XPACK_PATH/bin/riscv-none-embed-g++
 #export CC=clang-11
 #export CXX=clang++-11
 

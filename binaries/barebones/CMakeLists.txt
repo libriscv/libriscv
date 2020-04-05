@@ -15,7 +15,7 @@ else()
 endif()
 
 set(WARNINGS  "-Wall -Wextra")
-set(COMMON    "-O2 -fstack-protector -nostdlib -nostdinc -fno-builtin")
+set(COMMON    "-O2 -fstack-protector -nostdlib -fno-builtin")
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
 set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON} -fno-exceptions -fno-rtti")
 
