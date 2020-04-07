@@ -1,5 +1,6 @@
 #pragma once
 #include <type_traits>
+#include <string>
 
 #ifndef LIKELY
 #define LIKELY(x) __builtin_expect((x), 1)
@@ -63,4 +64,14 @@ namespace riscv
 	struct SerializedMachine;
 
 	template <class...> constexpr std::false_type always_false {};
+
+	template<typename T>
+	struct is_string
+		: public std::disjunction<
+			std::is_same<char *, typename std::decay<T>::type>,
+			std::is_same<const char *, typename std::decay<T>::type>
+	> {};
+
+	template<class T>
+	struct is_stdstring : public std::is_same<T, std::basic_string<char>> {};
 }

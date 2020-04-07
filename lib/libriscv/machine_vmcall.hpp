@@ -1,13 +1,5 @@
 #pragma once
 
-template<typename T>
-struct is_string
-	: public std::disjunction<
-		std::is_same<char *, typename std::decay<T>::type>,
-		std::is_same<const char *, typename std::decay<T>::type>,
-		std::is_same<std::string, typename std::decay<T>::type>
-> {};
-
 template <int W>
 template <typename... Args> constexpr
 inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
@@ -18,6 +10,8 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 	([&] {
 		if constexpr (std::is_integral_v<Args>)
 			cpu.reg(iarg++) = args;
+		else if constexpr (is_stdstring<Args>::value)
+			cpu.reg(iarg++) = stack_push(args.data(), args.size()+1);
 		else if constexpr (is_string<Args>::value)
 			cpu.reg(iarg++) = stack_push(args, strlen(args)+1);
 		else if constexpr (std::is_floating_point_v<Args>)

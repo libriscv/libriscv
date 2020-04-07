@@ -95,7 +95,47 @@ template <int W>
 template <typename T>
 inline T Machine<W>::sysarg(int idx) const
 {
-	return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
+	if constexpr (std::is_integral_v<T>)
+		return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
+	else if constexpr (std::is_floating_point_v<T>)
+		return static_cast<T> (cpu.registers().getfl(RISCV::REG_FA0 + idx));
+	else if constexpr (is_stdstring<T>::value)
+		return memory.memstring(cpu.reg(RISCV::REG_ARG0 + idx));
+	else if constexpr (std::is_pod_v<std::remove_reference<T>>) {
+		T value;
+		memory.memcpy_out(&value, cpu.reg(RISCV::REG_ARG0 + idx), sizeof(T));
+		return value;
+	} else
+		static_assert(always_false<T>, "Unknown type");
+}
+
+template <int W>
+template<typename... Args, std::size_t... Indices>
+inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
+{
+	std::tuple<std::decay_t<Args>...> retval;
+	size_t i = 0;
+	size_t f = 0;
+	([&] {
+		if constexpr (std::is_integral_v<Args>) {
+			std::get<Indices>(retval) = sysarg<Args>(i++);
+		}
+		else if constexpr (std::is_floating_point_v<Args>)
+			std::get<Indices>(retval) = sysarg<Args>(f++);
+		else if constexpr (is_stdstring<Args>::value)
+			std::get<Indices>(retval) = sysarg<Args>(i++);
+		else if constexpr (std::is_pod_v<std::remove_reference<Args>>)
+			std::get<Indices>(retval) = sysarg<Args>(i++);
+		else
+			static_assert(always_false<Args>, "Unknown type");
+	}(), ...);
+	return retval;
+}
+
+template <int W>
+template<typename... Args>
+inline auto Machine<W>::sysargs() const {
+    return resolve_args<Args...>(std::index_sequence_for<Args...>{});
 }
 
 template <int W>

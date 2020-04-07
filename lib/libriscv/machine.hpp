@@ -51,6 +51,10 @@ namespace riscv
 		template <typename T>
 		inline T sysarg(int arg) const;
 
+		// Retrieve all arguments by given types during a system call
+		template <typename... Args>
+		inline auto sysargs() const;
+
 		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.
 		// the function must use the C ABI calling convention.
@@ -110,6 +114,8 @@ namespace riscv
 		int deserialize_from(const std::vector<uint8_t>&);
 
 	private:
+		template<typename... Args, std::size_t... indices>
+		auto resolve_args(std::index_sequence<indices...>) const;
 		bool m_stopped = false;
 		std::array<syscall_t, 512> m_syscall_handlers;
 		std::vector<delegate<void()>> m_destructor_callbacks;
