@@ -1,6 +1,7 @@
 #pragma once
 #include "include/syscall.hpp"
 #include <functional>
+//#define MOVE_INTO_THREADMAIN
 
 /***
  * Example usage:
@@ -100,8 +101,15 @@ inline Thread* create(const T& func, Args&&... args)
 
 	// store the thread at the beginning of the stack
 	auto* thread = new (stack_bot) Thread(
+#ifdef MOVE_INTO_THREADMAIN
+		[func, tup = std::tuple{std::move(args)...}] () {
+			self()->exit( std::apply(func, std::move(tup)) );
+#else
+		// this variant is faster and uses less memory if
+		// you don't create threads using movable objects
 		[func, args...] () {
 			self()->exit( func(args...) );
+#endif
 		});
 
 	const long tls  = (long) thread;
