@@ -18,6 +18,11 @@ namespace riscv
 		if (this->reg(RISCV::REG_SP) < 0x100000) {
 			this->reg(RISCV::REG_SP) = 0x40000000;
 		}
+#ifdef RISCV_PAGE_CACHE
+		// invalidate the page cache
+		for (auto& cache : this->m_page_cache)
+			cache.address = (address_t) -1;
+#endif
 		// jumping causes some extra calculations
 		this->jump(machine().memory.start_address());
 	}
