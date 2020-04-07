@@ -42,6 +42,7 @@ namespace riscv
 		// Install a system call handler for a the given syscall number.
 		// Pass nullptr to uninstall a system call handler.
 		void install_syscall_handler(int, syscall_t);
+		void install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>>);
 		syscall_t get_syscall_handler(int);
 
 		// Push all strings on stack and then create a mini-argv on SP

@@ -51,6 +51,12 @@ inline void Machine<W>::install_syscall_handler(int sysn, syscall_t handler)
 	m_syscall_handlers.at(sysn) = handler;
 }
 template <int W> inline
+void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>> syscalls)
+{
+	for (auto& scall : syscalls)
+		this->install_syscall_handler(scall.first, std::move(scall.second));
+}
+template <int W> inline
 typename Machine<W>::syscall_t Machine<W>::get_syscall_handler(int sysn) {
 	return m_syscall_handlers.at(sysn);
 }
