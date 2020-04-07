@@ -171,7 +171,7 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 }
 
 template <int W>
-void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
+void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 {
 	auto* dst = (uint8_t*) vdst;
 	while (len != 0)
@@ -189,7 +189,7 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len)
 
 template <int W>
 void Memory<W>::memview(address_t addr, size_t len,
-			delegate<void(const uint8_t*, size_t)> callback)
+			delegate<void(const uint8_t*, size_t)> callback) const
 {
 	const size_t offset = addr & (Page::size()-1);
 	// fast-path
@@ -206,7 +206,7 @@ void Memory<W>::memview(address_t addr, size_t len,
 }
 template <int W>
 template <typename T>
-void Memory<W>::memview(address_t addr, delegate<void(const T&)> callback)
+void Memory<W>::memview(address_t addr, delegate<void(const T&)> callback) const
 {
 	static_assert(std::is_trivial_v<T>, "Type T must be Plain-Old-Data");
 	const size_t offset = addr & (Page::size()-1);
@@ -224,7 +224,7 @@ void Memory<W>::memview(address_t addr, delegate<void(const T&)> callback)
 }
 
 template <int W>
-std::string Memory<W>::memstring(address_t addr, const size_t max_len)
+std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 {
 	std::string result;
 	size_t pageno = page_number(addr);

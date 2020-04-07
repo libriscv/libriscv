@@ -32,16 +32,16 @@ namespace riscv
 
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
-		void memcpy_out(void* dst, address_t src, size_t);
+		void memcpy_out(void* dst, address_t src, size_t) const;
 		// gives a sequential view of the data at address, with the possibility
 		// of optimizing away a copy if the data crosses no page-boundaries
 		void memview(address_t addr, size_t len,
-					delegate<void(const uint8_t*, size_t)> callback);
+					delegate<void(const uint8_t*, size_t)> callback) const;
 		// gives const-ref access to pod-type T in guest memory
 		template <typename T>
-		void memview(address_t addr, delegate<void(const T&)> callback);
+		void memview(address_t addr, delegate<void(const T&)> callback) const;
 		// read a zero-terminated string directly from guests memory
-		std::string memstring(address_t addr, size_t max_len = 1024);
+		std::string memstring(address_t addr, size_t max_len = 1024) const;
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
