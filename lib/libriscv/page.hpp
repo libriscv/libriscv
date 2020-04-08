@@ -24,11 +24,11 @@ struct PageAttributes
 	}
 };
 
-struct alignas(4096) PageData {
+struct alignas(8) PageData {
 	static constexpr unsigned SIZE  = 4096;
 	static constexpr unsigned SHIFT = 12;
 
-	std::array<uint8_t,  SIZE / 1> buffer8 = {0};
+	std::array<uint8_t, SIZE> buffer8 = {0};
 };
 
 struct Page
@@ -37,6 +37,10 @@ struct Page
 	static constexpr unsigned SHIFT = PageData::SHIFT;
 	using mmio_cb_t = delegate<int64_t (Page&, uint32_t, int, int64_t)>;
 
+	Page() = default;
+	Page(const PageAttributes& a, const PageData& d)
+		: attr(a), m_page(d) {}
+	~Page();
 	auto& page() noexcept { return m_page; }
 	const auto& page() const noexcept { return m_page; }
 

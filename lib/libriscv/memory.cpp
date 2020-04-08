@@ -245,7 +245,7 @@ namespace riscv
 	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
-		const auto& it = pages().emplace(page, Page{});
+		const auto& it = pages().insert(page);
 		m_pages_highest = std::max(m_pages_highest, pages().size());
 		// if this page was read-cached, invalidate it
 		this->invalidate_page(page, it.first->second);
@@ -278,6 +278,10 @@ namespace riscv
 		return zeroed_page; // read-only, zeroed page
 	}
 
+	Page::~Page() {
+		delete m_decoder_cache;
+	}
+
 	template struct Memory<4>;
 }
 
@@ -287,5 +291,5 @@ void* operator new[](size_t size, const char*, int, unsigned, const char*, int)
 }
 void* operator new[](size_t size, size_t, size_t, const char*, int, unsigned, const char*, int)
 {
-	return ::operator new[](size);
+	return ::operator new[] (size);
 }
