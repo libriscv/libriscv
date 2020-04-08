@@ -1,7 +1,6 @@
 #pragma once
 #include "include/syscall.hpp"
 #include <functional>
-//#define MOVE_INTO_THREADMAIN
 
 /***
  * Example usage:
@@ -11,6 +10,7 @@
  *			printf("Hello from a microthread!\n"
  *					"a = %d, b = %d, c = %d\n",
  *					a, b, c);
+ *          return a + b + c;
  *      }, 111, 222, 333);
  *
  *  long retval = microthread::join(thread);
@@ -18,6 +18,8 @@
  *
  *  Note: microthreads require the native threads system calls.
  *  microthreads do not support thread-local storage.
+ *  The thread function may also return void, in which case the
+ *  return value becomes zero (0).
 ***/
 
 namespace microthread
@@ -100,16 +102,16 @@ inline Thread* create(const T& func, Args&&... args)
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 
 	// store the thread at the beginning of the stack
-	auto* thread = new (stack_bot) Thread(
-#ifdef MOVE_INTO_THREADMAIN
-		[func, tup = std::tuple{std::move(args)...}] () {
-			self()->exit( std::apply(func, std::move(tup)) );
-#else
-		// this variant is faster and uses less memory if
-		// you don't create threads using movable objects
-		[func, args...] () {
-			self()->exit( func(args...) );
-#endif
+	Thread* thread = new (stack_bot) Thread(
+		[func, tup = std::tuple{std::move(args)...}] ()
+		{
+			if constexpr (std::is_same_v<void, decltype(func(args...))>)
+			{
+				std::apply(func, std::move(tup));
+				self()->exit(0);
+			} else {
+				self()->exit( std::apply(func, std::move(tup)) );
+			}
 		});
 
 	const long tls  = (long) thread;
@@ -135,11 +137,11 @@ inline long join(Thread* thread)
 
 inline long yield()
 {
-	return syscall(124, 0);
+	return syscall(502, 0);
 }
 inline long yield_to(int tid)
 {
-	return syscall(501, tid);
+	return syscall(503, tid);
 }
 inline long yield_to(Thread* thread)
 {
@@ -161,7 +163,7 @@ inline void Thread::exit(long exitcode)
 {
 	this->tid = 0;
 	this->return_value = exitcode;
-	syscall(93, exitcode);
+	syscall(501, exitcode);
 	__builtin_unreachable();
 }
 
