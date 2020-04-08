@@ -54,7 +54,7 @@ namespace riscv
 			this->m_pages.size() * (sizeof(SerializedPage) + Page::size());
 		vec.reserve(vec.size() + page_bytes);
 
-		for (const auto it : this->m_pages)
+		for (const auto& it : this->m_pages)
 		{
 			const auto& page = it.second;
 			assert(page.attr.is_cow == false);
@@ -126,7 +126,7 @@ namespace riscv
 			const auto& page = *(SerializedPage*) &vec[off];
 			off += sizeof(SerializedPage);
 			const auto& data = *(PageData*) &vec[off];
-			m_pages.emplace(page.addr, Page{page.attr, data, nullptr});
+			m_pages.try_emplace(page.addr, page.attr, data);
 			off += Page::size();
 		}
 	}

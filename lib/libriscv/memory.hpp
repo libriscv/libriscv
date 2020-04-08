@@ -6,6 +6,7 @@
 #include "util/delegate.hpp"
 #include <cassert>
 #include <cstring>
+#include <EASTL/allocator_malloc.h>
 #include <EASTL/string.h>
 #include <EASTL/string_map.h>
 #include <EASTL/unordered_map.h>
@@ -134,7 +135,7 @@ namespace riscv
 		const bool m_protect_segments;
 
 		// lookup tree for ELF symbol names
-		eastl::string_map<address_t> sym_lookup;
+		eastl::string_map<address_t, eastl::str_less<const char*>, eastl::allocator_malloc> sym_lookup;
 		address_t m_exit_address = 0;
 	};
 #include "memory_inline.hpp"
