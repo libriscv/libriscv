@@ -6,8 +6,8 @@ static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
 static constexpr bool full_linux_guest = false;
 static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
-#include "syscalls.hpp"
-#include "threads.hpp"
+#include <include/syscall_helpers.hpp>
+#include <include/threads.hpp>
 
 int main(int argc, const char** argv)
 {
@@ -49,8 +49,8 @@ int main(int argc, const char** argv)
 	else {
 		machine.setup_argv(args);
 		setup_minimal_syscalls(state, machine);
-		setup_native_heap_syscalls(state, machine, 6*1024*1024);
-		setup_native_threads(state, machine);
+		setup_native_heap_syscalls(machine, 6*1024*1024);
+		setup_native_threads(state.exit_code, machine);
 	}
 
 	/*

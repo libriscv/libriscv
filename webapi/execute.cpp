@@ -1,8 +1,8 @@
 #include "server.hpp"
 
 #include <libriscv/machine.hpp>
-#include <syscalls.hpp>
-#include <threads.hpp>
+#include <include/syscall_helpers.hpp>
+#include <include/threads.hpp>
 #include <linux.hpp>
 using namespace httplib;
 

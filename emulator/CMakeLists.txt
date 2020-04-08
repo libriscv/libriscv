@@ -8,18 +8,16 @@ option(GPROF       "Enable profiling with gprof" OFF)
 option(LINKER_GC   "Enable linker section garbage collection" OFF)
 
 add_subdirectory(../lib lib)
+add_subdirectory(syscalls)
 
 set(SOURCES
 	src/main.cpp
 	src/linux.cpp
-	src/syscalls.cpp
-	src/threads.cpp
-	src/native_libc.cpp
-	src/native_threads.cpp
 )
 
 add_executable(remu ${SOURCES})
 target_link_libraries(remu riscv)
+target_link_libraries(remu syscalls)
 target_compile_options(remu PUBLIC "-std=c++17")
 
 if (LTO)

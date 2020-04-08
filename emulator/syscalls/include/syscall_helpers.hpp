@@ -30,4 +30,4 @@ template <int W>
 void setup_linux_syscalls(State<W>&, riscv::Machine<W>&);
 
 template <int W>
-void setup_native_heap_syscalls(State<W>&, riscv::Machine<W>&, size_t);
+void setup_native_heap_syscalls(riscv::Machine<W>&, size_t);

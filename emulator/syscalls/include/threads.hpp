@@ -2,7 +2,7 @@
 #include <deque>
 #include <map>
 #include <libriscv/machine.hpp>
-#include "syscalls.hpp"
+#include "syscall_helpers.hpp"
 template <int W> struct multithreading;
 
 //#define THREADS_DEBUG 1
@@ -61,5 +61,6 @@ struct multithreading
 
 template <int W>
 void setup_multithreading(State<W>&, riscv::Machine<W>&);
+
 template <int W>
-void setup_native_threads(State<W>&, riscv::Machine<W>&);
+void setup_native_threads(int&, riscv::Machine<W>&);
