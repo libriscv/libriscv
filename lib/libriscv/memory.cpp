@@ -278,9 +278,11 @@ namespace riscv
 		return zeroed_page; // read-only, zeroed page
 	}
 
+#ifdef RISCV_INSTR_CACHE
 	Page::~Page() {
 		delete m_decoder_cache;
 	}
+#endif
 
 	template struct Memory<4>;
 }

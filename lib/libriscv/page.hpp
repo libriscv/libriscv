@@ -40,7 +40,7 @@ struct Page
 	Page() = default;
 	Page(const PageAttributes& a, const PageData& d)
 		: attr(a), m_page(d) {}
-	~Page();
+
 	auto& page() noexcept { return m_page; }
 	const auto& page() const noexcept { return m_page; }
 
@@ -86,6 +86,7 @@ struct Page
 	inline void create_decoder_cache() {
 		m_decoder_cache = new T;
 	}
+	~Page();
 #endif
 
 	bool has_trap() const noexcept { return m_trap != nullptr; }
