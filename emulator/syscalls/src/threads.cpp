@@ -1,7 +1,9 @@
 #include <include/threads.hpp>
 #include <cassert>
 #include <cstdio>
-#include <sched.h>
+#define CLONE_PARENT_SETTID   0x00100000 /* set the TID in the parent */
+#define CLONE_CHILD_CLEARTID  0x00200000 /* clear the TID in the child */
+#define CLONE_CHILD_SETTID    0x01000000 /* set the TID in the child */
 using namespace riscv;
 
 template <int W>

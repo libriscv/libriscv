@@ -1,7 +1,6 @@
 #include <include/threads.hpp>
 #include <cassert>
 #include <cstdio>
-#include <sched.h>
 using namespace riscv;
 static const int NTSYSBASE = 500;
 #include "threads.cpp"
