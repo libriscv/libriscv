@@ -5,13 +5,13 @@
 /***
  * Example usage:
  *
- * 	auto* thread = microthread::create(
+ *	auto* thread = microthread::create(
  *		[] (int a, int b, int c) -> long {
  *			printf("Hello from a microthread!\n"
  *					"a = %d, b = %d, c = %d\n",
  *					a, b, c);
- *          return a + b + c;
- *      }, 111, 222, 333);
+ *			return a + b + c;
+ *		}, 111, 222, 333);
  *
  *  long retval = microthread::join(thread);
  *  printf("microthread exit status: %ld\n", retval);
