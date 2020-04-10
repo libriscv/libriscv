@@ -1,4 +1,4 @@
-#include "rv32i.hpp"
+#include "rv32i_instr.hpp"
 #include "machine.hpp"
 #include "rv32i_instr.cpp"
 #include "rv32a_instr.cpp"

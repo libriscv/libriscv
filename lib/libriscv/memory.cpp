@@ -204,44 +204,6 @@ namespace riscv
 		}
 	}
 
-#ifdef RISCV_INSTR_CACHE
-	template <int W>
-	void Memory<W>::generate_decoder_cache(address_t addr, size_t len)
-	{
-		while (len > 0)
-		{
-			const size_t size = std::min(Page::size(), len);
-			const size_t pageno = addr >> Page::SHIFT;
-			// find page itself
-			auto it = m_pages.find(pageno);
-			if (it != m_pages.end()) {
-				auto& page = it->second;
-				if (page.attr.exec) {
-					assert(page.decoder_cache() == nullptr);
-					page.template create_decoder_cache<DecoderCache>();
-
-					// generate instruction handler pointers for machine code
-					for (address_t dst = addr; dst < addr + size;)
-					{
-						const address_t offset = dst & (Page::size()-1);
-						rv32i_instruction instruction;
-						instruction.whole = *(uint32_t*) (page.data() + offset);
-
-						auto instr = machine().cpu.decode(instruction);
-						page.decoder_cache()->cache32[offset / DecoderCache::DIVISOR]
-							= instr.handler;
-
-						dst += instruction.length();
-					}
-				}
-			}
-
-			addr += size;
-			len  -= size;
-		}
-	}
-#endif
-
 	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
@@ -277,12 +239,6 @@ namespace riscv
 	const Page& Page::cow_page() noexcept {
 		return zeroed_page; // read-only, zeroed page
 	}
-
-#ifdef RISCV_INSTR_CACHE
-	Page::~Page() {
-		delete m_decoder_cache;
-	}
-#endif
 
 	template struct Memory<4>;
 }

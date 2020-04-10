@@ -1,15 +1,11 @@
 #pragma once
-#include <array>
 #include <cassert>
-#include <cstdint>
 #include <type_traits>
 #include "common.hpp"
-#include "types.hpp"
+#include "decoder_cache.hpp"
 #include "util/delegate.hpp"
 
 namespace riscv {
-
-union DecoderCache;
 
 struct PageAttributes
 {
@@ -77,16 +73,14 @@ struct Page
 
 #ifdef RISCV_INSTR_CACHE
 	auto* decoder_cache() noexcept {
-		return m_decoder_cache;
+		return m_decoder_cache.get();
 	}
 	const auto* decoder_cache() const noexcept {
-		return m_decoder_cache;
+		return m_decoder_cache.get();
 	}
-	template <typename T>
-	inline void create_decoder_cache() {
-		m_decoder_cache = new T;
+	void create_decoder_cache() {
+		m_decoder_cache.reset(new DecoderCache<Page::SIZE>);
 	}
-	~Page();
 #endif
 
 	bool has_trap() const noexcept { return m_trap != nullptr; }
@@ -101,7 +95,7 @@ struct Page
 	PageAttributes attr;
 	PageData m_page;
 #ifdef RISCV_INSTR_CACHE
-	DecoderCache* m_decoder_cache = nullptr;
+	std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
 #endif
 	mmio_cb_t m_trap = nullptr;
 };

@@ -1,12 +1,13 @@
 #pragma once
-#include <array>
 #include <cstdint>
 #include <string>
 #include "types.hpp"
-#include "rv32c.hpp"
 
 namespace riscv
 {
+	union rv32c_instruction;
+	union rv32i_instruction;
+
 	struct RV64I {
 		using address_t     = uint64_t;
 		using format_t      = rv32i_instruction;

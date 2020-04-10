@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "decoder_cache.hpp"
 #include "riscvbase.hpp"
+#include "rv32i_instr.hpp"
+#include "rv64i_instr.hpp"
 
 namespace riscv
 {
@@ -37,7 +39,7 @@ namespace riscv
 			this->change_page(this_page);
 #ifdef RISCV_INSTR_CACHE
 			if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
-				m_current_page.page->template create_decoder_cache<DecoderCache>();
+				m_current_page.page->create_decoder_cache();
 			}
 #endif
 		}
@@ -119,7 +121,7 @@ namespace riscv
 		const address_t offset  = this->pc() & (Page::size()-1);
 
 		auto* dcache = m_current_page.page->decoder_cache();
-		auto& ihandler = dcache->cache32[offset / DecoderCache::DIVISOR];
+		auto& ihandler = dcache->cache32[offset / DecoderCache<Page::SIZE>::DIVISOR];
 		// decode and store into cache, if necessary
 		if (UNLIKELY(!ihandler)) {
 			ihandler = this->decode(instruction).handler;

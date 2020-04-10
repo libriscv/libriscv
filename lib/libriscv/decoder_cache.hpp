@@ -1,11 +1,12 @@
 #pragma once
 #include <array>
 #include "types.hpp"
-#include "page.hpp"
-#include "util/delegate.hpp"
+#include "rv32i.hpp"
+#include "rv64i.hpp"
 
 namespace riscv {
 
+template <size_t PageSize>
 union DecoderCache
 {
 	using handler32 = Instruction<4>::handler_t;
@@ -19,8 +20,8 @@ union DecoderCache
 	static constexpr size_t DIVISOR = 4;
 #endif
 
-	std::array<handler32, PageData::SIZE / DIVISOR> cache32 = {nullptr};
-	std::array<handler64, PageData::SIZE / DIVISOR> cache64;
+	std::array<handler32, PageSize / DIVISOR> cache32 = {nullptr};
+	std::array<handler64, PageSize / DIVISOR> cache64;
 };
 
 }
