@@ -1,6 +1,7 @@
 #include <include/syscall_helpers.hpp>
 #include <include/native_heap.hpp>
 using namespace riscv;
+//#define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 static const uint64_t ARENA_BASE = 0x40000000;
 
 static const uint32_t SYSCALL_MALLOC  = 1;
@@ -26,8 +27,8 @@ void setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 	machine.install_syscall_handler(SYSCALL_CALLOC,
 	[arena] (auto& machine) -> long
 	{
-		const size_t count = machine.template sysarg<address_type<W>>(0);
-		const size_t size  = machine.template sysarg<address_type<W>>(1);
+		const auto [count, size] = 
+			machine.template sysargs<address_type<W>, address_type<W>> ();
 		const size_t len = count * size;
 		auto data = arena->malloc(len);
 		SYSPRINT("SYSCALL calloc(%zu, %zu) = 0x%X\n", count, size, data);
@@ -43,7 +44,7 @@ void setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 		const auto ptr = machine.template sysarg<address_type<W>>(0);
 		int ret = arena->free(ptr);
 		SYSPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
-		return ret; /* avoid returning something here? */
+		return ret;
 	});
 }
 

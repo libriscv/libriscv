@@ -31,3 +31,8 @@ void  free(void*) _NOTHROW;
 #ifdef __cplusplus
 }
 #endif
+
+inline void put_string(const char* string)
+{
+	(void) write(0, string, __builtin_strlen(string));
+}

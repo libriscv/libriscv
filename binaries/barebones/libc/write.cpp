@@ -19,7 +19,7 @@ long sendint(uint32_t value)
 extern "C"
 int puts(const char* string)
 {
-	const long len = strlen(string);
+	const long len = __builtin_strlen(string);
 	return write(0, string, len);
 }
 

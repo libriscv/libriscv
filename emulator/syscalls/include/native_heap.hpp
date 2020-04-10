@@ -1,16 +1,24 @@
 //
 // C++ Header-Only Separate Address-Space Allocator
-// by fwsGonzo, based on original allocator written in C by Snaipe
+// by fwsGonzo, originally based on allocator written in C by Snaipe
 //
 #pragma once
 #include <unistd.h>
 #include <errno.h>
+#include <deque>
+#include <vector>
 
 namespace sas_alloc
 {
+struct Arena;
+
 struct Chunk
 {
 	using PointerType = uint32_t;
+
+	Chunk() = default;
+	Chunk(Chunk* n, Chunk* p, size_t s, bool f, PointerType d)
+		: next(n), prev(p), size(s), free(f), data(d) {}
 
     Chunk* next = nullptr;
 	Chunk* prev = nullptr;
@@ -20,46 +28,44 @@ struct Chunk
 
 	Chunk* find(PointerType ptr);
 	Chunk* find_free(size_t size);
-	void   merge_next();
-	void   split_next(size_t size);
+	void   merge_next(Arena&);
+	void   split_next(Arena&, size_t size);
 };
 
 struct Arena
 {
 	using PointerType = Chunk::PointerType;
-	Arena() : arena_base(0), arena_current(0), arena_end(0) {}
 	Arena(PointerType base, PointerType end);
-	~Arena();
 
 	PointerType malloc(size_t size);
 	signed int  free(PointerType);
 
 	inline Chunk& base_chunk() {
-		static Chunk bc;
-	    return bc;
+	    return m_base_chunk;
 	}
-
-	size_t      total_chunks = 0;
+	template <typename... Args>
+	Chunk* new_chunk(Args&&... args);
+	void   free_chunk(Chunk*);
+	Chunk* find_chunk(PointerType ptr);
 
 private:
-	PointerType increment(size_t size);
-	void        decrement(size_t size);
 	inline size_t word_align(size_t size) {
 	    return (size + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
 	}
 
-	PointerType arena_base;
-	PointerType arena_current;
-	PointerType arena_end;
-	Chunk*      last_chunk = nullptr;
+	std::deque<Chunk>   m_chunks;
+	std::vector<Chunk*> m_free_chunks;
+	Chunk  m_base_chunk;
+	Chunk* last_chunk = &m_base_chunk;
 };
 
 // find exact free chunk that matches ptr
 inline Chunk* Chunk::find(PointerType ptr)
 {
     Chunk* ch = this;
-    while (ch != nullptr && !ch->free) {
-		if (ch->data == ptr) return ch;
+    while (ch != nullptr) {
+		if (!ch->free && ch->data == ptr)
+			return ch;
 		ch = ch->next;
 	}
     return nullptr;
@@ -68,33 +74,34 @@ inline Chunk* Chunk::find(PointerType ptr)
 inline Chunk* Chunk::find_free(size_t size)
 {
     Chunk* ch = this;
-	while (ch != nullptr && ch->free) {
-		if (ch->size >= size) return ch;
+	while (ch != nullptr) {
+		if (ch->free && ch->size >= size)
+			return ch;
 		ch = ch->next;
 	}
     return nullptr;
 }
 // merge this and next into this chunk
-inline void Chunk::merge_next()
+inline void Chunk::merge_next(Arena& arena)
 {
-	auto* freech = this->next;
+	Chunk* freech = this->next;
     this->size += freech->size;
     this->next = freech->next;
     if (this->next) {
         this->next->prev = this;
     }
-	delete freech;
+	arena.free_chunk(freech);
 }
 
-inline void Chunk::split_next(size_t size)
+inline void Chunk::split_next(Arena& arena, size_t size)
 {
-	Chunk* newch = new Chunk({
-		.next = this->next,
-		.prev = this,
-		.size = this->size - size,
-		.free = true,
-		.data = this->data + (PointerType) size
-	});
+	Chunk* newch = arena.new_chunk(
+		this->next,
+		this,
+		this->size - size,
+		true,
+		this->data + (PointerType) size
+	);
     if (this->next) {
         this->next->prev = newch;
     }
@@ -102,97 +109,72 @@ inline void Chunk::split_next(size_t size)
     this->size = size;
 }
 
+template <typename... Args>
+inline Chunk* Arena::new_chunk(Args&&... args)
+{
+	if (UNLIKELY(m_free_chunks.empty())) {
+		m_chunks.emplace_back(std::forward<Args>(args)...);
+		return &m_chunks.back();
+	}
+	else {
+		auto* chunk = m_free_chunks.back();
+		m_free_chunks.pop_back();
+		return new (chunk) Chunk {std::forward<Args>(args)...};
+	}
+}
+inline void Arena::free_chunk(Chunk* chunk)
+{
+	m_free_chunks.push_back(chunk);
+}
+inline Chunk* Arena::find_chunk(PointerType ptr)
+{
+	for (auto& chunk : m_chunks) {
+		if (!chunk.free && chunk.data == ptr)
+			return &chunk;
+	}
+	return nullptr;
+}
+
 inline Arena::PointerType Arena::malloc(size_t size)
 {
-    if (!size) return 0;
     size_t length = word_align(size);
     Chunk* ch = base_chunk().find_free(size);
-    if (ch == nullptr)
-	{
-		Chunk::PointerType data = this->increment(length);
-		if (data == 0) return 0;
 
-        Chunk* newch = new Chunk({
-			.next = nullptr,
-			.prev = this->last_chunk,
-			.size = length,
-			.free = false,
-			.data = data
-		});
-        this->last_chunk->next = newch;
-		this->last_chunk = newch;
-		this->total_chunks++;
-		return newch->data;
-    } else if (length < ch->size) {
-        ch->split_next(length);
-		this->total_chunks++;
+    if (ch != nullptr) {
+        ch->split_next(*this, length);
+		ch->free = false;
+		return ch->data;
     }
-    ch->free = false;
-    return ch->data;
+	return 0;
 }
 
 inline int Arena::free(PointerType ptr)
 {
-    if (ptr == 0 || ptr < arena_base || ptr >= arena_end)
-		return -1;
-
     Chunk* ch = base_chunk().find(ptr);
-    if (ch == nullptr || ch->data != ptr)
+    if (UNLIKELY(ch == nullptr))
 		return -1;
 
     ch->free = true;
 	// merge chunks ahead and behind us
     if (ch->next && ch->next->free) {
-		if (ch->next == last_chunk) last_chunk = ch;
-        ch->merge_next();
-		this->total_chunks --;
+		if (ch->next == last_chunk)
+			last_chunk = ch;
+        ch->merge_next(*this);
     }
-    if (ch->prev->free) {
+    if (ch->prev && ch->prev->free) {
 		ch = ch->prev;
-		if (ch->next == last_chunk) last_chunk = ch;
-        ch->merge_next();
-		this->total_chunks --;
-    }
-	// if we are the last chunk, give back memory
-    if (!ch->next) {
-        ch->prev->next = nullptr;
-		this->decrement(ch->size);
-		delete ch;
-		this->total_chunks --;
+		if (ch->next == last_chunk)
+			last_chunk = ch;
+        ch->merge_next(*this);
     }
 	return 0;
 }
 
-inline Arena::PointerType Arena::increment(size_t size)
+inline Arena::Arena(PointerType arena_base, PointerType arena_end)
 {
-	if (arena_end - arena_current >= size) {
-		PointerType ptr = arena_current;
-		arena_current += size;
-		return ptr;
-	}
-	return 0;
-}
-inline void Arena::decrement(size_t size)
-{
-	arena_current -= size;
-	assert(arena_current >= arena_base);
-}
-
-inline Arena::Arena(PointerType base, PointerType end)
-	: arena_base(base), arena_current(base), arena_end(end)
-{
-	this->last_chunk = &base_chunk();
-}
-inline Arena::~Arena()
-{
-	Chunk* ch = base_chunk().next;
-	while (ch != nullptr) {
-		auto* next = ch->next;
-		delete ch;
-		ch = next;
-		this->total_chunks --;
-	}
-	assert(total_chunks == 0);
+	m_base_chunk.size = arena_end - arena_base;
+	m_base_chunk.data = arena_base;
+	m_base_chunk.free = true;
 }
 
 } // namespace foreign_heap
