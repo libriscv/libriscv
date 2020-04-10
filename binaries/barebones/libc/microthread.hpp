@@ -100,17 +100,20 @@ inline Thread* create(const T& func, Args&&... args)
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (stack_bot == nullptr) return nullptr;
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
+	// store arguments on stack
+	char* args_addr = stack_bot + sizeof(Thread);
+	auto* tuple = new (args_addr) std::tuple<Args&&...>{std::move(args)...};
 
 	// store the thread at the beginning of the stack
 	Thread* thread = new (stack_bot) Thread(
-		[func, tup = std::tuple{std::move(args)...}] ()
+		[func, tuple] ()
 		{
 			if constexpr (std::is_same_v<void, decltype(func(args...))>)
 			{
-				std::apply(func, std::move(tup));
+				std::apply(func, std::move(*tuple));
 				self()->exit(0);
 			} else {
-				self()->exit( std::apply(func, std::move(tup)) );
+				self()->exit( std::apply(func, std::move(*tuple)) );
 			}
 		});
 
