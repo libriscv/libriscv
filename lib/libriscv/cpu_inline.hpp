@@ -23,6 +23,13 @@ inline void CPU<W>::change_page(address_t this_page)
 	m_page_cache[m_cache_iterator] = m_current_page;
 	m_cache_iterator = (m_cache_iterator + 1) % m_page_cache.size();
 #endif
+	// execute traps have priority over execute permission
+if constexpr (execute_traps_enabled) {
+	if (UNLIKELY(m_current_page.page->has_trap())) {
+		m_current_page.page->trap(this_page, TRAP_EXEC, 0x0);
+		return;
+	}
+}
 	// verify execute permission
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
 		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);

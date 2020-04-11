@@ -17,9 +17,9 @@
 #define SYSCALL_EBREAK_NR    0
 #endif
 
-#ifndef MEMORY_TRAPS_ENABLED
+#ifndef RISCV_MEMORY_TRAPS_ENABLED
 # ifdef RISCV_DEBUG
-#  define MEMORY_TRAPS_ENABLED
+#  define RISCV_MEMORY_TRAPS_ENABLED
 # endif
 #endif
 
@@ -30,10 +30,16 @@ namespace riscv
 	// print information during machine creation
 	extern bool verbose_machine;
 
-#ifdef MEMORY_TRAPS_ENABLED
+#ifdef RISCV_MEMORY_TRAPS_ENABLED
 	static constexpr bool memory_traps_enabled = true;
 #else
 	static constexpr bool memory_traps_enabled = false;
+#endif
+
+#ifdef RISCV_EXEC_TRAPS_ENABLED
+	static constexpr bool execute_traps_enabled = true;
+#else
+	static constexpr bool execute_traps_enabled = false;
 #endif
 
 #ifdef RISCV_DEBUG
