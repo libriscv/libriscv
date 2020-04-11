@@ -103,8 +103,10 @@ inline T Machine<W>::sysarg(int idx) const
 {
 	if constexpr (std::is_integral_v<T>)
 		return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
-	else if constexpr (std::is_floating_point_v<T>)
-		return static_cast<T> (cpu.registers().getfl(RISCV::REG_FA0 + idx));
+	else if constexpr (std::is_same_v<T, float>)
+		return cpu.registers().getfl(RISCV::REG_FA0 + idx).f32[0];
+	else if constexpr (std::is_same_v<T, double>)
+		return cpu.registers().getfl(RISCV::REG_FA0 + idx).f64;
 	else if constexpr (is_stdstring<T>::value)
 		return memory.memstring(cpu.reg(RISCV::REG_ARG0 + idx));
 	else if constexpr (std::is_pod_v<std::remove_reference<T>>) {
