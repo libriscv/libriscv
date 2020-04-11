@@ -30,20 +30,15 @@ namespace riscv
 	}
 
 	template <int W>
-	typename CPU<W>::format_t CPU<W>::read_instruction(address_t address)
+	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
 		format_t instruction;
 #ifndef RISCV_DEBUG
-		const address_t this_page = address & ~(Page::size()-1);
+		const address_t this_page = this->pc() & ~(Page::size()-1);
 		if (this_page != this->m_current_page.address) {
 			this->change_page(this_page);
-#ifdef RISCV_INSTR_CACHE
-			if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
-				m_current_page.page->create_decoder_cache();
-			}
-#endif
 		}
-		const address_t offset = address & (Page::size()-1);
+		const address_t offset = this->pc() & (Page::size()-1);
 
 		if constexpr (!compressed_enabled) {
 			// special case for non-compressed mode:
@@ -77,19 +72,19 @@ namespace riscv
 		}
 #else
 		// in debug mode we need a full memory read to allow trapping
-		if ((address & (W-1)) == 0) {
+		if ((this->pc() & (W-1)) == 0) {
 			instruction.whole =
-				this->machine().memory.template read<address_t>(address);
+				this->machine().memory.template read<address_t>(this->pc());
 		}
 		else
 		{
 			// instruction is not on word-border, so do up to two smaller reads
 			instruction.whole =
-				this->machine().memory.template read<uint16_t>(address);
+				this->machine().memory.template read<uint16_t>(this->pc());
 			if (UNLIKELY(instruction.is_long())) {
 				// complete the instruction (NOTE: might cross into another page)
 				instruction.half[1] =
-					this->machine().memory.template read<uint16_t>(address + 2);
+					this->machine().memory.template read<uint16_t>(this->pc() + 2);
 			}
 		}
 #endif
@@ -102,7 +97,7 @@ namespace riscv
 #ifdef RISCV_DEBUG
 		this->break_checks();
 #endif
-		const auto instruction = this->read_instruction(this->pc());
+		const auto instruction = this->read_next_instruction();
 
 #ifdef RISCV_DEBUG
 		const auto& handler = this->decode(instruction);

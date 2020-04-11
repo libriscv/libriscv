@@ -12,27 +12,43 @@ inline void CPU<W>::change_page(address_t this_page)
 	for (const auto& cache : m_page_cache) {
 		if (cache.address == this_page) {
 			m_current_page = cache;
+			if constexpr (execute_traps_enabled) {
+				this->check_page(m_current_page);
+			}
 			return;
 		}
 	}
 #endif
 	m_current_page.address = this_page;
 	m_current_page.page = &machine().memory.create_page(this_page >> Page::SHIFT);
+#ifdef RISCV_INSTR_CACHE
+	if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
+		m_current_page.page->create_decoder_cache();
+	}
+#endif
 #ifdef RISCV_PAGE_CACHE
 	// cache it
 	m_page_cache[m_cache_iterator] = m_current_page;
 	m_cache_iterator = (m_cache_iterator + 1) % m_page_cache.size();
 #endif
-	// execute traps have priority over execute permission
 if constexpr (execute_traps_enabled) {
-	if (UNLIKELY(m_current_page.page->has_trap())) {
-		m_current_page.page->trap(this_page, TRAP_EXEC, 0x0);
-		return;
-	}
+	this->check_page(m_current_page);
 }
 	// verify execute permission
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
 		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
+	}
+}
+
+template <int W>
+inline void CPU<W>::check_page(CachedPage& cp)
+{
+	if (UNLIKELY(cp.page->has_trap())) {
+		cp.page->trap(cp.address, TRAP_EXEC, 0x0);
+		const address_t new_page = this->pc() & ~(Page::size()-1);
+		if (cp.address != new_page) {
+			this->change_page(new_page);
+		}
 	}
 }
 

@@ -202,7 +202,7 @@ template<int W>
 void Machine<W>::print_and_pause()
 {
 	try {
-		const auto instruction = cpu.read_instruction(cpu.pc());
+		const auto instruction = cpu.read_next_instruction();
 		const auto& handler = cpu.decode(instruction);
 		const auto string = CPU<W>::isa_t::to_string(cpu, instruction, handler);
 		printf("\n>>> Breakpoint \t%s\n\n", string.c_str());

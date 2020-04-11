@@ -67,7 +67,7 @@ namespace riscv
 	private:
 		Registers<W> m_regs;
 
-		inline format_t read_instruction(address_t);
+		inline format_t read_next_instruction();
 		void execute(format_t);
 
 		Machine<W>& m_machine;
@@ -81,6 +81,7 @@ namespace riscv
 		size_t m_cache_iterator = 0;
 #endif
 		inline void change_page(address_t address);
+		inline void check_page(CachedPage&);
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
