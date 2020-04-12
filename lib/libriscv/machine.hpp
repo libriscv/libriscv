@@ -38,6 +38,9 @@ namespace riscv
 		address_t copy_to_guest(address_t dst, const void* buf, size_t length);
 		// Push something onto the stack, and move the stack pointer
 		address_t stack_push(const void* data, size_t length);
+		address_t stack_push(const std::string& string);
+		template <typename T>
+		address_t stack_push(const T& pod_type);
 
 		// Install a system call handler for a the given syscall number.
 		// Pass nullptr to uninstall a system call handler.

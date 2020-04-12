@@ -167,6 +167,17 @@ address_type<W> Machine<W>::stack_push(const void* data, size_t length)
 	this->copy_to_guest(sp, data, length);
 	return sp;
 }
+template <int W>
+address_type<W> Machine<W>::stack_push(const std::string& string)
+{
+	return stack_push(string.data(), string.size()+1); /* zero */
+}
+template <int W>
+template <typename T>
+address_type<W> Machine<W>::stack_push(const T& type)
+{
+	return stack_push(&type, sizeof(T));
+}
 
 template <int W>
 void Machine<W>::realign_stack(unsigned align)
