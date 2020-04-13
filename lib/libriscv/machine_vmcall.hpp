@@ -8,8 +8,11 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 	int iarg = RISCV::REG_ARG0;
 	int farg = RISCV::REG_FA0;
 	([&] {
-		if constexpr (std::is_integral_v<Args>)
+		if constexpr (std::is_integral_v<Args>) {
 			cpu.reg(iarg++) = args;
+			if constexpr (sizeof(Args) > W) // upper 32-bits for 64-bit integers
+				cpu.reg(iarg++) = args >> 32;
+		}
 		else if constexpr (is_stdstring<Args>::value)
 			cpu.reg(iarg++) = stack_push(args.data(), args.size()+1);
 		else if constexpr (is_string<Args>::value)

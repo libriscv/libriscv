@@ -101,8 +101,14 @@ template <int W>
 template <typename T>
 inline T Machine<W>::sysarg(int idx) const
 {
-	if constexpr (std::is_integral_v<T>)
+	if constexpr (std::is_integral_v<T>) {
+		// 64-bit integers on 32-bit uses 2 registers
+		if constexpr (sizeof(T) > W) {
+			return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx))
+				| static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx + 1)) << 32;
+		}
 		return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
+	}
 	else if constexpr (std::is_same_v<T, float>)
 		return cpu.registers().getfl(RISCV::REG_FA0 + idx).f32[0];
 	else if constexpr (std::is_same_v<T, double>)
@@ -127,6 +133,7 @@ inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
 	([&] {
 		if constexpr (std::is_integral_v<Args>) {
 			std::get<Indices>(retval) = sysarg<Args>(i++);
+			if constexpr (sizeof(Args) > W) i++; // uses 2 registers
 		}
 		else if constexpr (std::is_floating_point_v<Args>)
 			std::get<Indices>(retval) = sysarg<Args>(f++);
