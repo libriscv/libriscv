@@ -106,8 +106,8 @@ namespace riscv
 		bool throw_on_unhandled_syscall = false;
 		void system_call(int);
 
-		// Realign the stack pointer, to make sure that vmcalls succeed
-		void realign_stack(unsigned align = 16);
+		// Realign the stack pointer, to make sure that function calls succeed
+		void realign_stack();
 
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);

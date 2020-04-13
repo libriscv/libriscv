@@ -34,6 +34,8 @@ inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 	const address_t sp = cpu.reg(RISCV::REG_SP);
 	// setup calling convention
 	this->setup_call(call_addr, std::forward<Args>(args)...);
+	// realign the stack for the 16-byte ABI alignment
+	this->realign_stack();
 	// execute function
 	this->simulate(MAXI);
 	// restore stack pointer
