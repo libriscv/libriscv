@@ -180,16 +180,10 @@ address_type<W> Machine<W>::stack_push(const T& type)
 }
 
 template <int W>
-void Machine<W>::realign_stack(unsigned align)
+void Machine<W>::realign_stack()
 {
-	address_t align_mask = 15;
-	switch (align) {
-		case 4:  align_mask = 0x3; break;
-		case 8:  align_mask = 0x7; break;
-		case 16: align_mask = 0xF; break;
-		default: throw MachineException(INVALID_ALIGNMENT, "Invalid alignment", align);
-	}
-	cpu.reg(RISCV::REG_SP) &= ~align_mask;
+	// the RISC-V calling convention mandates a 16-byte alignment
+	cpu.reg(RISCV::REG_SP) &= ~(address_t) 0xF;
 }
 
 template <int W>
