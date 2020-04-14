@@ -2,7 +2,9 @@
 #include <cassert>
 #include <cstdio>
 using namespace riscv;
-static const int NTSYSBASE = 500;
+#ifndef CUSTOM_NATIVE_SYSCALL_NUMBERS
+static const int THREADS_SYSCALL_BASE = 500;
+#endif
 #include "threads.cpp"
 
 template <int W>
@@ -12,7 +14,7 @@ void setup_native_threads(int& status, Machine<W>& machine)
 	machine.add_destructor_callback([mt] { delete mt; });
 
 	// 500: microclone
-	machine.install_syscall_handler(NTSYSBASE+0,
+	machine.install_syscall_handler(THREADS_SYSCALL_BASE+0,
 	[mt] (Machine<W>& machine) {
 		const uint32_t stack = (machine.template sysarg<uint32_t> (0) & ~0xF);
 		const uint32_t  func = machine.template sysarg<uint32_t> (1);
@@ -32,7 +34,7 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 	// exit
-	machine.install_syscall_handler(NTSYSBASE+1,
+	machine.install_syscall_handler(THREADS_SYSCALL_BASE+1,
 	[mt, &status] (Machine<W>& machine) {
 		status = machine.template sysarg<int> (0);
 		const int tid = mt->get_thread()->tid;
@@ -49,7 +51,7 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		return (address_type<W>) status;
 	});
 	// sched_yield
-	machine.install_syscall_handler(NTSYSBASE+2,
+	machine.install_syscall_handler(THREADS_SYSCALL_BASE+2,
 	[mt] (Machine<W>& machine) {
 		THPRINT(">>> sched_yield()\n");
 		// begone!
@@ -58,7 +60,7 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 	// yield_to
-	machine.install_syscall_handler(NTSYSBASE+3,
+	machine.install_syscall_handler(THREADS_SYSCALL_BASE+3,
 	[mt] (Machine<W>& machine) {
 		mt->yield_to(machine.template sysarg<uint32_t> (0));
 		// preserve A0 for the new thread
