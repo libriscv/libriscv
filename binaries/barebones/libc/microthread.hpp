@@ -102,7 +102,7 @@ inline Thread* create(const T& func, Args&&... args)
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store arguments on stack
 	char* args_addr = stack_bot + sizeof(Thread);
-	auto* tuple = new (args_addr) std::tuple<Args&&...>{std::move(args)...};
+	auto* tuple = new (args_addr) std::tuple<Args&&...>{std::forward<Args>(args)...};
 
 	// store the thread at the beginning of the stack
 	Thread* thread = new (stack_bot) Thread(
