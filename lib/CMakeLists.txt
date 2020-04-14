@@ -3,6 +3,7 @@
 #
 
 option(RISCV_DEBUG  "Enable debugging features in the RISC-V machine" OFF)
+option(RISCV_SYSCALL_THROW  "Throw when system call is not implemented" OFF)
 option(RISCV_ICACHE "Enable instruction decoder cache" OFF)
 option(RISCV_PCACHE "Enable small page cache (recommended)" ON)
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
@@ -30,6 +31,9 @@ target_include_directories(riscv PUBLIC .)
 target_link_libraries(riscv EASTL)
 if (RISCV_DEBUG)
 	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
+endif()
+if (RISCV_SYSCALL_THROW)
+	target_compile_definitions(riscv PUBLIC RISCV_THROW_UNIMPLEMENTED=1)
 endif()
 if (RISCV_EXT_A)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_ATOMICS=1)

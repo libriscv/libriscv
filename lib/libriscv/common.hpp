@@ -42,6 +42,12 @@ namespace riscv
 	static constexpr bool execute_traps_enabled = false;
 #endif
 
+#ifdef RISCV_THROW_UNIMPLEMENTED
+	static constexpr bool throw_on_unhandled_syscall = true;
+#else
+	static constexpr bool throw_on_unhandled_syscall = false;
+#endif
+
 #ifdef RISCV_DEBUG
 	static constexpr bool debugging_enabled = true;
 #else

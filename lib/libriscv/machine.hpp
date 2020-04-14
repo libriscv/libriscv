@@ -103,7 +103,6 @@ namespace riscv
 		static constexpr bool verbose_jumps     = false;
 		static constexpr bool verbose_registers = false;
 #endif
-		bool throw_on_unhandled_syscall = false;
 		void system_call(int);
 
 		// Realign the stack pointer, to make sure that function calls succeed
@@ -120,9 +119,9 @@ namespace riscv
 	private:
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
-		bool m_stopped = false;
 		std::array<syscall_t, 512> m_syscall_handlers;
 		std::vector<delegate<void()>> m_destructor_callbacks;
+		bool m_stopped = false;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 

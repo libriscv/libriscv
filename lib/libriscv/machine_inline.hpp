@@ -64,14 +64,14 @@ typename Machine<W>::syscall_t Machine<W>::get_syscall_handler(int sysn) {
 template <int W>
 inline void Machine<W>::system_call(int syscall_number)
 {
-	if ((size_t) syscall_number < m_syscall_handlers.size())
+	if (LIKELY((size_t) syscall_number < m_syscall_handlers.size()))
 	{
 		auto& handler = m_syscall_handlers[syscall_number];
-		if (handler != nullptr)
+		if (LIKELY(handler != nullptr))
 		{
 			address_t ret = handler(*this);
 			// EBREAK handler should not modify registers
-			if (syscall_number != SYSCALL_EBREAK) {
+			if (LIKELY(syscall_number != SYSCALL_EBREAK)) {
 				cpu.reg(RISCV::REG_RETVAL) = ret;
 				if (UNLIKELY(this->verbose_jumps)) {
 					printf("SYSCALL %d returned %ld (0x%lX)\n",
@@ -81,7 +81,7 @@ inline void Machine<W>::system_call(int syscall_number)
 			return;
 		}
 	}
-	if (throw_on_unhandled_syscall == false)
+	if constexpr (!throw_on_unhandled_syscall)
 	{
 		if (UNLIKELY(verbose_machine)) {
 			fprintf(stderr, ">>> Warning: Unhandled syscall %d\n", syscall_number);
