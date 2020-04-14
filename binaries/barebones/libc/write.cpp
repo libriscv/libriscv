@@ -11,12 +11,6 @@ long write(int fd, const void* data, size_t len)
 }
 
 extern "C"
-long sendint(uint32_t value)
-{
-	return syscall(SYSCALL_SINT, value, 0, 0, 0, 0, 0);
-}
-
-extern "C"
 int puts(const char* string)
 {
 	const long len = __builtin_strlen(string);

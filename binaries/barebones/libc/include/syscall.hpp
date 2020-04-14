@@ -1,8 +1,12 @@
 #pragma once
 
+#define SYSCALL_MALLOC   1
+#define SYSCALL_CALLOC   2
+#define SYSCALL_REALLOC  3
+#define SYSCALL_FREE     4
+
 #define SYSCALL_WRITE  64
 #define SYSCALL_EXIT   93
-#define SYSCALL_SINT   666
 
 inline long
 syscall(long n, long arg0)

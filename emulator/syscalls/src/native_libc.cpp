@@ -7,7 +7,7 @@ static const uint64_t ARENA_BASE = 0x40000000;
 #ifndef CUSTOM_NATIVE_SYSCALL_NUMBERS
 static const uint32_t SYSCALL_MALLOC  = 1;
 static const uint32_t SYSCALL_CALLOC  = 2;
-static const uint32_t SYSCALL_FREE    = 3;
+static const uint32_t SYSCALL_FREE    = 4;
 #endif
 
 template <int W>
