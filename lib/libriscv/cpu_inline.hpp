@@ -44,7 +44,7 @@ template <int W>
 inline void CPU<W>::check_page(CachedPage& cp)
 {
 	if (UNLIKELY(cp.page->has_trap())) {
-		cp.page->trap(cp.address, TRAP_EXEC, 0x0);
+		cp.page->trap(this->pc() - cp.address, TRAP_EXEC, cp.address);
 		const address_t new_page = this->pc() & ~(Page::size()-1);
 		if (cp.address != new_page) {
 			this->change_page(new_page);
