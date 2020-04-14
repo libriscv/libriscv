@@ -4,6 +4,9 @@
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
 #include "rv64i_instr.hpp"
+#ifdef __GNUG__
+#include "rv32i.cpp"
+#endif
 
 namespace riscv
 {
