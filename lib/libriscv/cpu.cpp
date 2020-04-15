@@ -26,7 +26,7 @@ namespace riscv
 #ifdef RISCV_PAGE_CACHE
 		// invalidate the page cache
 		for (auto& cache : this->m_page_cache)
-			cache.address = (address_t) -1;
+			cache.pageno = -1;
 #endif
 		// jumping causes some extra calculations
 		this->jump(machine().memory.start_address());
@@ -37,8 +37,8 @@ namespace riscv
 	{
 		format_t instruction;
 #ifndef RISCV_DEBUG
-		const address_t this_page = this->pc() & ~(Page::size()-1);
-		if (this_page != this->m_current_page.address) {
+		const int this_page = this->pc() >> Page::SHIFT;
+		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
 		}
 		const address_t offset = this->pc() & (Page::size()-1);
@@ -68,7 +68,7 @@ namespace riscv
 			// read upper half, completing a 32-bit instruction
 			if (instruction.is_long()) {
 				// this instruction crosses a page-border
-				this->change_page(m_current_page.address + Page::size());
+				this->change_page(this_page + 1);
 				instruction.half[1] =
 					m_current_page.page->template aligned_read<uint16_t>(0);
 			}

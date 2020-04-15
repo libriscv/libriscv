@@ -6,11 +6,11 @@ inline CPU<W>::CPU(Machine<W>& machine)
 }
 
 template <int W>
-inline void CPU<W>::change_page(address_t this_page)
+inline void CPU<W>::change_page(int pageno)
 {
 #ifdef RISCV_PAGE_CACHE
 	for (const auto& cache : m_page_cache) {
-		if (cache.address == this_page) {
+		if (cache.pageno == pageno) {
 			m_current_page = cache;
 			if constexpr (execute_traps_enabled) {
 				this->check_page(m_current_page);
@@ -19,13 +19,8 @@ inline void CPU<W>::change_page(address_t this_page)
 		}
 	}
 #endif
-	m_current_page.address = this_page;
-	m_current_page.page = &machine().memory.create_page(this_page >> Page::SHIFT);
-#ifdef RISCV_INSTR_CACHE
-	if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
-		m_current_page.page->create_decoder_cache();
-	}
-#endif
+	m_current_page.pageno = pageno;
+	m_current_page.page = &machine().memory.get_exec_pageno(pageno);
 #ifdef RISCV_PAGE_CACHE
 	// cache it
 	m_page_cache[m_cache_iterator] = m_current_page;
@@ -38,16 +33,21 @@ if constexpr (execute_traps_enabled) {
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
 		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
 	}
+#ifdef RISCV_INSTR_CACHE
+	if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
+		m_current_page.page->create_decoder_cache();
+	}
+#endif
 }
 
 template <int W>
 inline void CPU<W>::check_page(CachedPage& cp)
 {
 	if (UNLIKELY(cp.page->has_trap())) {
-		cp.page->trap(this->pc() - cp.address, TRAP_EXEC, cp.address);
-		const address_t new_page = this->pc() & ~(Page::size()-1);
-		if (cp.address != new_page) {
-			this->change_page(new_page);
+		cp.page->trap(this->pc() - (cp.pageno << Page::SHIFT), TRAP_EXEC, cp.pageno);
+		const int new_pageno = this->pc() >> Page::SHIFT;
+		if (cp.pageno != new_pageno) {
+			this->change_page(new_pageno);
 		}
 	}
 }

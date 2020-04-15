@@ -55,6 +55,17 @@ inline const Page& Memory<W>::get_page(const address_t address) const noexcept
 }
 
 template <int W>
+inline Page& Memory<W>::get_exec_pageno(const address_t page)
+{
+	auto it = m_pages.find(page);
+	if (it != m_pages.end()) {
+		return it->second;
+	}
+	machine().cpu.trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
+	__builtin_unreachable();
+}
+
+template <int W>
 inline const Page& Memory<W>::get_pageno(const address_t page) const noexcept
 {
 	auto it = m_pages.find(page);

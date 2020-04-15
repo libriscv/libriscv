@@ -72,15 +72,15 @@ namespace riscv
 
 		Machine<W>& m_machine;
 		struct CachedPage {
-			Page*     page = nullptr;
-			address_t address = 0;
+			Page* page = nullptr;
+			int   pageno = 0;
 		};
 		CachedPage m_current_page;
 #ifdef RISCV_PAGE_CACHE
 		std::array<CachedPage, RISCV_PAGE_CACHE> m_page_cache = {};
-		size_t m_cache_iterator = 0;
+		int m_cache_iterator = 0;
 #endif
-		inline void change_page(address_t address);
+		inline void change_page(int pageno);
 		inline void check_page(CachedPage&);
 
 #ifdef RISCV_DEBUG

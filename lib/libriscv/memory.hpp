@@ -63,6 +63,7 @@ namespace riscv
 		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(address_t) const noexcept;
+		Page& get_exec_pageno(address_t npage); // throws
 		const Page& get_pageno(address_t npage) const noexcept;
 		Page& create_page(address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
