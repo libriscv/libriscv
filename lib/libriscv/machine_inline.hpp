@@ -73,10 +73,6 @@ inline void Machine<W>::system_call(int syscall_number)
 			// EBREAK handler should not modify registers
 			if (LIKELY(syscall_number != SYSCALL_EBREAK)) {
 				cpu.reg(RISCV::REG_RETVAL) = ret;
-				if (UNLIKELY(this->verbose_jumps)) {
-					printf("SYSCALL %d returned %ld (0x%lX)\n",
-							syscall_number, (long) ret, (long) ret);
-				}
 			}
 			return;
 		}
