@@ -1,5 +1,5 @@
 #include "microthread.hpp"
-#include <cstdio>
+#include <stdio.h>
 
 namespace microthread
 {

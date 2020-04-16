@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.1.0)
 project(hello_world C CXX)
 
-option(MINIMAL     "Minimal build" OFF)
+option(MINIMAL     "Minimal build" ON)
 option(DEBUGGING   "Debugging build" OFF)
 option(LTO         "Link-time optimizations" ON)
-option(GCSECTIONS  "Garbage collect empty sections" ON)
+option(GCSECTIONS  "Garbage collect empty sections" OFF)
 set(VERSION_FILE   "symbols.map" CACHE STRING "Retained symbols file")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -57,7 +57,7 @@ add_subdirectory(ext)
 add_subdirectory(libc)
 
 add_executable(hello_world ${SOURCES})
-target_link_libraries(hello_world -static libc gcc)
+target_link_libraries(hello_world -static -Wl,--whole-archive libc -Wl,--no-whole-archive gcc)
 # place ELF into the top binary folder
 set_target_properties(hello_world
 	PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

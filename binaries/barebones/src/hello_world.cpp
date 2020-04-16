@@ -66,8 +66,6 @@ int main(int argc, char** argv)
 	// va_list & stdarg test
 	int len = printf(b->c_str(), "RISC-V", 1, 0);
 	assert(len > 0);
-	// this fixes a bug where memcpy is removed
-	memcpy(b.get(), b.get(), 0);
 
 	printf("Main thread tid=%d\n", microthread::gettid());
 
