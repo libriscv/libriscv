@@ -39,6 +39,8 @@ long    join(Thread*);
 /* Exit the current thread with the given exit status. Never returns. */
 void    exit(long status);
 
+/* Yield as long as condition is true */
+void    yield(const std::function<bool()>&);
 /* Return back to another suspended thread. Returns 0 on success. */
 long    yield();
 long    yield_to(int tid); /* Return to a specific suspended thread. */
@@ -138,9 +140,16 @@ inline long join(Thread* thread)
 	return rv;
 }
 
+inline void yield(const std::function<bool()>& condition)
+{
+	do {
+		yield();
+		asm("" ::: "memory");
+	} while (condition());
+}
 inline long yield()
 {
-	return syscall(502, 0);
+	return syscall(502);
 }
 inline long yield_to(int tid)
 {
@@ -154,11 +163,8 @@ inline long yield_to(Thread* thread)
 __attribute__((noreturn))
 inline void exit(long exitcode)
 {
-	if (self() != nullptr) {
-		self()->exit(exitcode);
-		__builtin_unreachable();
-	}
-	abort();
+	self()->exit(exitcode);
+	__builtin_unreachable();
 }
 
 __attribute__((noreturn))

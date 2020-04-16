@@ -1,6 +1,5 @@
 #include <include/libc.hpp>
 #include <cassert>
-#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -12,7 +11,7 @@ extern "C"
 __attribute__((constructor))
 void test_constructor() {
 	static const char hello[] = "Hello, Global Constructor!\n";
-	write(STDOUT_FILENO, hello, sizeof(hello)-1);
+	sys_write(hello, sizeof(hello)-1);
 	testval = 22;
 }
 
@@ -67,6 +66,8 @@ int main(int argc, char** argv)
 	// va_list & stdarg test
 	int len = printf(b->c_str(), "RISC-V", 1, 0);
 	assert(len > 0);
+	// this fixes a bug where memcpy is removed
+	memcpy(b.get(), b.get(), 0);
 
 	printf("Main thread tid=%d\n", microthread::gettid());
 

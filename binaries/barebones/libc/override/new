@@ -1,0 +1,13 @@
+#pragma once
+#include_next<new>
+
+inline void*
+operator new[](size_t size, const char*, int, unsigned, const char*, int)
+{
+	return ::operator new[] (size);
+}
+inline void*
+operator new[](size_t size, size_t, size_t, const char*, int, unsigned, const char*, int)
+{
+	return ::operator new[] (size);
+}

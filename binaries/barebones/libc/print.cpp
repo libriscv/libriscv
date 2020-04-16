@@ -1,9 +1,11 @@
-#include <assert.h>
-#include <stdarg.h>
-#include <include/printf.h>
-#include <include/libc.hpp>
+#include <cassert>
+#include <cstdarg>
 #include <stdio.h>
+#include <include/libc.hpp>
+#include <include/printf.hpp>
 
+#undef printf
+__attribute__((format (printf, 1, 2)))
 int printf(const char* fmt, ...)
 {
 	char buffer[4096];
@@ -12,7 +14,7 @@ int printf(const char* fmt, ...)
 	int len = tfp_vsnprintf(buffer, sizeof(buffer), fmt, va);
 	va_end(va);
 
-	return write(0, buffer, len);
+	return sys_write(buffer, len);
 }
 
 #undef snprintf
@@ -26,7 +28,6 @@ int snprintf(char *s, size_t maxlen, const char *format, ...)
 	return bytes;
 }
 
-#undef printf
 #undef fprintf
 #undef vfprintf
 int vfprintf(FILE* fp, const char *format, va_list ap)
@@ -34,7 +35,7 @@ int vfprintf(FILE* fp, const char *format, va_list ap)
 	(void) fp;
 	char buffer[4096];
 	int len = tfp_vsnprintf(buffer, sizeof(buffer), format, ap);
-	write(0, buffer, len);
+	sys_write(buffer, len);
 	return len;
 }
 

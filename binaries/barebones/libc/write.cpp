@@ -1,4 +1,3 @@
-#include <include/printf.h>
 #include <cassert>
 #include <cstring>
 #include <cstdio>
@@ -7,7 +6,7 @@
 extern "C"
 long write(int fd, const void* data, size_t len)
 {
-	return syscall(SYSCALL_WRITE, fd, (long) data, len, 0, 0, 0);
+	return syscall(SYSCALL_WRITE, fd, (long) data, len);
 }
 
 extern "C"
@@ -30,7 +29,7 @@ int fflush(FILE*)
 }
 
 extern "C"
-void __print_putchr(const void*, char c)
+void __print_putchr(void*, char c)
 {
 	buffer[cnt++] = c;
 	if (c == '\n' || cnt == sizeof(buffer)) {

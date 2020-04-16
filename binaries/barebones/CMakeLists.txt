@@ -28,8 +28,8 @@ elseif (MINIMAL)
 endif()
 
 if (LTO)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto -ffat-lto-objects")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -ffat-lto-objects")
 endif()
 
 if (GCSECTIONS)
@@ -57,7 +57,7 @@ add_subdirectory(ext)
 add_subdirectory(libc)
 
 add_executable(hello_world ${SOURCES})
-target_link_libraries(hello_world -static libc)
+target_link_libraries(hello_world -static libc gcc)
 # place ELF into the top binary folder
 set_target_properties(hello_world
 	PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

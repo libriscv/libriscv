@@ -1,6 +1,5 @@
-#include <stddef.h>
-#include <stdint.h>
-#include <include/printf.h>
+#include <cstddef>
+#include <cstdint>
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,20 +8,20 @@ extern "C" {
 __attribute__((noreturn))
 void panic(const char* reason);
 
-void* memset(void* dest, int ch, size_t size);
-void* memcpy(void* dest, const void* src, size_t size);
-void* memmove(void* dest, const void* src, size_t size);
-int   memcmp(const void* ptr1, const void* ptr2, size_t n);
-char*  strcpy(char* dst, const char* src);
-size_t strlen(const char* str);
-int    strcmp(const char* str1, const char* str2);
-char*  strcat(char* dest, const char* src);
+extern void* memset(void* dest, int ch, size_t size);
+extern void* memcpy(void* dest, const void* src, size_t size);
+extern void* memmove(void* dest, const void* src, size_t size);
+extern int   memcmp(const void* ptr1, const void* ptr2, size_t n);
+extern char*  strcpy(char* dst, const char* src);
+extern size_t strlen(const char* str);
+extern int    strcmp(const char* str1, const char* str2);
+extern char*  strcat(char* dest, const char* src);
 
-int   write(int, const void*, size_t);
+extern int   write(int, const void*, size_t);
 
-void* malloc(size_t) _NOTHROW;
-void* calloc(size_t, size_t) _NOTHROW;
-void  free(void*) _NOTHROW;
+extern void* malloc(size_t);
+extern void* calloc(size_t, size_t);
+extern void  free(void*);
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
@@ -32,7 +31,13 @@ void  free(void*) _NOTHROW;
 }
 #endif
 
+#include "syscall.hpp"
+
+inline int sys_write(const void* data, size_t len) {
+	return syscall(SYSCALL_WRITE, 0, (long) data, len);
+}
+
 inline void put_string(const char* string)
 {
-	(void) write(0, string, __builtin_strlen(string));
+	(void) sys_write(string, __builtin_strlen(string));
 }
