@@ -116,7 +116,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		THPRINT(">>> clone(func=0x%X, stack=0x%X, flags=%x, args=0x%X,"
 				" parent=%p, ctid=0x%X ptid=0x%X, tls=0x%X)\n",
 				func, stack, flags, args, parent, ctid, ptid, tls);
-		auto* thread = mt->create(parent, flags, ctid, ptid, stack, tls);
+		auto* thread = mt->create(flags, ctid, ptid, stack, tls);
 		parent->suspend();
 		// store return value for parent: child TID
 		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;

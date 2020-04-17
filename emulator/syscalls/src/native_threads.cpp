@@ -20,9 +20,10 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		const uint32_t  func = machine.template sysarg<uint32_t> (1);
 		const uint32_t   tls = machine.template sysarg<uint32_t> (2);
 		const uint32_t  ctid = machine.template sysarg<uint32_t> (3);
+		const uint32_t cleartid = (ctid & 0x80000000) ? CLONE_CHILD_CLEARTID : 0x0;
 		auto* parent = mt->get_thread();
-		auto* thread = mt->create(parent,
-			CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID, ctid, 0x0, stack, tls);
+		auto* thread = mt->create(
+			CLONE_CHILD_SETTID | cleartid, ctid & 0x7FFFFFFF, 0x0, stack, tls);
 		parent->suspend();
 		// store return value for parent: child TID
 		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;
@@ -53,7 +54,6 @@ void setup_native_threads(int& status, Machine<W>& machine)
 	// sched_yield
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+2,
 	[mt] (Machine<W>& machine) {
-		THPRINT(">>> sched_yield()\n");
 		// begone!
 		mt->suspend_and_yield();
 		// preserve A0 for the new thread
@@ -63,6 +63,21 @@ void setup_native_threads(int& status, Machine<W>& machine)
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+3,
 	[mt] (Machine<W>& machine) {
 		mt->yield_to(machine.template sysarg<uint32_t> (0));
+		// preserve A0 for the new thread
+		return machine.cpu.reg(RISCV::REG_ARG0);
+	});
+	// block (w/reason)
+	machine.install_syscall_handler(THREADS_SYSCALL_BASE+4,
+	[mt] (Machine<W>& machine) {
+		// begone!
+		mt->block(machine.template sysarg<int> (0));
+		// preserve A0 for the new thread
+		return machine.cpu.reg(RISCV::REG_ARG0);
+	});
+	// unblock (w/reason)
+	machine.install_syscall_handler(THREADS_SYSCALL_BASE+5,
+	[mt] (Machine<W>& machine) {
+		mt->wakeup_blocked(machine.template sysarg<int> (0));
 		// preserve A0 for the new thread
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});

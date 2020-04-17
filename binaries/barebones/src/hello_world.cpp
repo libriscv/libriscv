@@ -19,7 +19,7 @@ struct testdata
 {
 	int depth     = 0;
 	const int max_depth = 20;
-	std::vector<microthread::Thread*> threads;
+	std::vector<microthread::Thread_ptr> threads;
 };
 static testdata tdata;
 
@@ -31,12 +31,12 @@ static long recursive_function(testdata* data)
 
 	if (data->depth < data->max_depth)
 	{
-		auto* thread = microthread::create(recursive_function, data);
+		auto thread = microthread::create(recursive_function, data);
 		if (thread == nullptr) {
 			printf("Failed to create thread!\n");
 			return -1;
 		}
-		data->threads.push_back(thread);
+		data->threads.push_back(std::move(thread));
 	}
 	printf("%d: Thread yielding %d / %d\n",
 			microthread::gettid(), data->depth, data->max_depth);
@@ -69,12 +69,12 @@ int main(int argc, char** argv)
 
 	printf("Main thread tid=%d\n", microthread::gettid());
 
-	auto* thread = microthread::create(
+	auto thread = microthread::create(
 		[] (int a, int b, int c) -> long {
 			printf("Hello from microthread tid=%d!\n"
 					"a = %d, b = %d, c = %d\n",
 					microthread::gettid(), a, b, c);
-			auto* t2 = microthread::create([] () -> long {
+			auto t2 = microthread::create([] () -> long {
 				printf("Second thread tid=%d, yielding directly to tid=1!\n",
 						microthread::gettid());
 				int ret = microthread::yield_to(1);
@@ -88,7 +88,7 @@ int main(int argc, char** argv)
 
 			printf("yield=%d, Starting recursive nightmare!\n", ret);
 			recursive_function(&tdata);
-			for (auto* thread : tdata.threads) {
+			for (auto& thread : tdata.threads) {
 				microthread::join(thread);
 			}
 			return rv;

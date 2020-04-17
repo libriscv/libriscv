@@ -1,11 +1,12 @@
 #pragma once
 #include "include/syscall.hpp"
 #include <functional>
+#include <memory>
 
 /***
  * Example usage:
  *
- *	auto* thread = microthread::create(
+ *	auto thread = microthread::create(
  *		[] (int a, int b, int c) -> long {
  *			printf("Hello from a microthread!\n"
  *					"a = %d, b = %d, c = %d\n",
@@ -30,7 +31,12 @@ struct Thread;
    and pass all further arguments to the function as is.
    Returns the new thread. The new thread starts immediately. */
 template <typename T, typename... Args>
-Thread* create(const T& func, Args&&... args);
+auto create(const T& func, Args&&... args);
+
+/* Create a new self-governing thread that deletes itself on exit.
+   Returns 0 if the thread was successfully created, -1 otherwise. */
+template <typename T, typename... Args>
+int  sovereign(const T& func, Args&&... args);
 
 /* Waits for a thread to finish and then returns the exit status
    of the thread. The thread is then deleted, freeing memory. */
@@ -39,12 +45,18 @@ long    join(Thread*);
 /* Exit the current thread with the given exit status. Never returns. */
 void    exit(long status);
 
-/* Yield as long as condition is true */
-void    yield(const std::function<bool()>&);
+/* Yield until condition is true */
+void    yield_until(const std::function<bool()>& condition);
 /* Return back to another suspended thread. Returns 0 on success. */
 long    yield();
 long    yield_to(int tid); /* Return to a specific suspended thread. */
 long    yield_to(Thread*);
+
+/* Block a thread with a specific reason. */
+long    block(int reason);
+void    block(int reason, const std::function<bool()>& condition);
+/* Wake thread with @reason that was blocked, returns -1 if nothing happened. */
+long    wakeup_one_blocked(int reason);
 
 Thread* self();            /* Returns the current thread */
 int     gettid();          /* Returns the current thread id */
@@ -73,7 +85,13 @@ struct Thread
 		std::function<void()> startfunc;
 	};
 };
+struct ThreadDeleter {
+	void operator() (Thread* thread) {
+		join(thread);
+	}
+};
 static_assert(Thread::STACK_SIZE > sizeof(Thread) + 16384);
+using Thread_ptr = std::unique_ptr<Thread, ThreadDeleter>;
 
 inline bool Thread::has_exited() const {
 	return this->tid == 0;
@@ -97,10 +115,10 @@ inline long clone_helper(long sp, long args, long ctid)
 }
 
 template <typename T, typename... Args>
-inline Thread* create(const T& func, Args&&... args)
+inline auto create(const T& func, Args&&... args)
 {
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
-	if (stack_bot == nullptr) return nullptr;
+	if (stack_bot == nullptr) return Thread_ptr{};
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store arguments on stack
 	char* args_addr = stack_bot + sizeof(Thread);
@@ -122,9 +140,32 @@ inline Thread* create(const T& func, Args&&... args)
 	const long tls  = (long) thread;
 	const long ctid = (long) &thread->tid;
 
-	(void) clone_helper((long) stack_top, tls, ctid);
+	(void) clone_helper((long) stack_top, tls, ctid | 0x80000000);
 	// parent path (reordering doesn't matter)
-	return thread;
+	return Thread_ptr(thread);
+}
+template <typename T, typename... Args>
+inline int sovereign(const T& func, Args&&... args)
+{
+	static_assert(std::is_same_v<void, decltype(func(args...))>,
+				"Free threads have no return value!");
+	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
+	if (stack_bot == nullptr) return -1;
+	char* stack_top = stack_bot + Thread::STACK_SIZE;
+	// store arguments on stack
+	char* args_addr = stack_bot + sizeof(Thread);
+	auto* tuple = new (args_addr) std::tuple<Args&&...>{std::forward<Args>(args)...};
+	// store the thread at the beginning of the stack
+	Thread* thread = new (stack_bot) Thread(
+		[func, tuple] {
+			std::apply(func, std::move(*tuple));
+			free(self()); // after this point stack unusable
+			syscall(501, 0);
+			__builtin_unreachable();
+		});
+	const long tls  = (long) thread;
+	const long ctid = (long) &thread->tid;
+	return clone_helper((long) stack_top, tls, ctid);
 }
 
 inline long join(Thread* thread)
@@ -139,13 +180,17 @@ inline long join(Thread* thread)
 	free(thread);
 	return rv;
 }
+inline long join(Thread_ptr& tp)
+{
+	return join(tp.release());
+}
 
-inline void yield(const std::function<bool()>& condition)
+inline void yield_until(const std::function<bool()>& condition)
 {
 	do {
 		yield();
 		asm("" ::: "memory");
-	} while (condition());
+	} while (!condition());
 }
 inline long yield()
 {
@@ -158,6 +203,22 @@ inline long yield_to(int tid)
 inline long yield_to(Thread* thread)
 {
 	return yield_to(thread->tid);
+}
+
+inline long block(int reason)
+{
+	return syscall(504, reason);
+}
+inline void block(int reason, const std::function<bool()>& condition)
+{
+	do {
+		block(reason);
+		asm("" ::: "memory");
+	} while (!condition());
+}
+inline long wakeup_one_blocked(int reason)
+{
+	return syscall(505, reason);
 }
 
 __attribute__((noreturn))
