@@ -5,7 +5,7 @@
 // this is used for vmcalls
 asm(".global fastexit\n"
 	"fastexit:\n"
-	"ebreak\n");
+	"\tfence\n");
 
 extern "C" {
 	__attribute__((noreturn))

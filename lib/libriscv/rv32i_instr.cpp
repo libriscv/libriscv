@@ -530,8 +530,13 @@ namespace riscv
 	});
 
 	INSTRUCTION(FENCE,
-	[] (auto& /* cpu */, rv32i_instruction /* instr */) {
-		// literally do nothing
+	[] (auto& cpu [[maybe_unused]], rv32i_instruction /* instr */) {
+		// literally do nothing, unless...
+#ifdef RISCV_FENCE_MEANS_STOP
+		// we can probably check some more bits to make fence dual usage
+		cpu.machine().stop();
+#endif
+		(void) cpu;
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction) -> int {
 		// printer
