@@ -406,7 +406,11 @@ namespace riscv
 				cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
 				return;
 			case 1: // EBREAK
+#ifdef RISCV_EBREAK_MEANS_STOP
+				cpu.machine().stop();
+#else
 				cpu.machine().system_call(riscv::SYSCALL_EBREAK);
+#endif
 				return;
 			}
 			break;
@@ -530,13 +534,8 @@ namespace riscv
 	});
 
 	INSTRUCTION(FENCE,
-	[] (auto& cpu [[maybe_unused]], rv32i_instruction /* instr */) {
+	[] (auto&, rv32i_instruction /* instr */) {
 		// literally do nothing, unless...
-#ifdef RISCV_FENCE_MEANS_STOP
-		// we can probably check some more bits to make fence dual usage
-		cpu.machine().stop();
-#endif
-		(void) cpu;
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction) -> int {
 		// printer

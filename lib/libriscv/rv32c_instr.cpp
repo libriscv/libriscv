@@ -423,8 +423,12 @@ namespace riscv
 		}
 		else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0) // EBREAK
 		{
+#ifdef RISCV_EBREAK_MEANS_STOP
+			cpu.machine().stop();
+#else
 			// its simpler and more flexible to just call a user-provided function
 			cpu.machine().system_call(riscv::SYSCALL_EBREAK);
+#endif
 		}
 		else {
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
