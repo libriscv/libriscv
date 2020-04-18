@@ -31,12 +31,12 @@ struct Thread;
    and pass all further arguments to the function as is.
    Returns the new thread. The new thread starts immediately. */
 template <typename T, typename... Args>
-auto create(const T& func, Args&&... args);
+auto    create(const T& func, Args&&... args);
 
-/* Create a new self-governing thread that deletes itself on exit.
-   Returns 0 if the thread was successfully created, -1 otherwise. */
+/* Create a new self-governing thread that deletes itself on completion.
+   Calling exit() in a sovereign thread is undefined behavior. */
 template <typename T, typename... Args>
-int  sovereign(const T& func, Args&&... args);
+Thread* oneshot(const T& func, Args&&... args);
 
 /* Waits for a thread to finish and then returns the exit status
    of the thread. The thread is then deleted, freeing memory. */
@@ -122,7 +122,7 @@ inline auto create(const T& func, Args&&... args)
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store arguments on stack
 	char* args_addr = stack_bot + sizeof(Thread);
-	auto* tuple = new (args_addr) std::tuple<Args&&...>{std::forward<Args>(args)...};
+	auto* tuple = new (args_addr) std::tuple<Args...>{std::move(args)...};
 
 	// store the thread at the beginning of the stack
 	Thread* thread = new (stack_bot) Thread(
@@ -145,16 +145,16 @@ inline auto create(const T& func, Args&&... args)
 	return Thread_ptr(thread);
 }
 template <typename T, typename... Args>
-inline int sovereign(const T& func, Args&&... args)
+inline Thread* oneshot(const T& func, Args&&... args)
 {
 	static_assert(std::is_same_v<void, decltype(func(args...))>,
 				"Free threads have no return value!");
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
-	if (stack_bot == nullptr) return -1;
+	if (stack_bot == nullptr) return nullptr;
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store arguments on stack
 	char* args_addr = stack_bot + sizeof(Thread);
-	auto* tuple = new (args_addr) std::tuple<Args&&...>{std::forward<Args>(args)...};
+	auto* tuple = new (args_addr) std::tuple<Args...>{std::move(args)...};
 	// store the thread at the beginning of the stack
 	Thread* thread = new (stack_bot) Thread(
 		[func, tuple] {
@@ -165,7 +165,8 @@ inline int sovereign(const T& func, Args&&... args)
 		});
 	const long tls  = (long) thread;
 	const long ctid = (long) &thread->tid;
-	return clone_helper((long) stack_top, tls, ctid);
+	clone_helper((long) stack_top, tls, ctid);
+	return thread;
 }
 
 inline long join(Thread* thread)
