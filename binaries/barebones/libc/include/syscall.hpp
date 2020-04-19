@@ -5,6 +5,11 @@
 #define SYSCALL_REALLOC  3
 #define SYSCALL_FREE     4
 
+#define SYSCALL_MEMCPY   5
+#define SYSCALL_MEMSET   6
+#define SYSCALL_MEMMOVE  7
+
+
 #define SYSCALL_WRITE  64
 #define SYSCALL_EXIT   93
 
