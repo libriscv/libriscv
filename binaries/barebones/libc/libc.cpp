@@ -1,28 +1,40 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-extern struct _reent* _impure_ptr;
+extern "C" struct _reent* _impure_ptr;
+#ifdef NATIVE_MEM_SYSCALLS
+#include <include/syscall.hpp>
+#endif
 
 extern "C"
 void* memset(void* vdest, int ch, size_t size)
 {
+#ifndef NATIVE_MEM_SYSCALLS
 	char* dest = (char*) vdest;
 	for (size_t i = 0; i < size; i++)
 		dest[i] = ch;
 	return dest;
+#else
+	return (void*) syscall(SYSCALL_MEMSET, (long) vdest, ch, size);
+#endif
 }
-extern "C" __attribute__((used))
+extern "C"
 void* memcpy(void* vdest, const void* vsrc, size_t size)
 {
+#ifndef NATIVE_MEM_SYSCALLS
 	const char* src = (const char*) vsrc;
 	char* dest = (char*) vdest;
 	for (size_t i = 0; i < size; i++)
 		dest[i] = src[i];
 	return dest;
+#else
+	return (void*) syscall(SYSCALL_MEMCPY, (long) vdest, (long) vsrc, size);
+#endif
 }
 extern "C"
 void* memmove(void* vdest, const void* vsrc, size_t size)
 {
+#ifndef NATIVE_MEM_SYSCALLS
 	const char* src = (const char*) vsrc;
 	char* dest = (char*) vdest;
 	if (dest <= src)
@@ -36,6 +48,9 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 			dest[i] = src[i];
 	}
 	return dest;
+#else
+	return (void*) syscall(SYSCALL_MEMMOVE, (long) vdest, (long) vsrc, size);
+#endif
 }
 extern "C"
 int memcmp(const void* ptr1, const void* ptr2, size_t n)

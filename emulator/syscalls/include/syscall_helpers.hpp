@@ -31,3 +31,6 @@ void setup_linux_syscalls(State<W>&, riscv::Machine<W>&);
 
 template <int W>
 void setup_native_heap_syscalls(riscv::Machine<W>&, size_t);
+
+template <int W>
+void setup_native_memory_syscalls(riscv::Machine<W>&, bool trusted);

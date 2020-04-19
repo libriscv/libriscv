@@ -5,9 +5,13 @@ using namespace riscv;
 static const uint64_t ARENA_BASE = 0x40000000;
 
 #ifndef CUSTOM_NATIVE_SYSCALL_NUMBERS
-static const uint32_t SYSCALL_MALLOC  = 1;
-static const uint32_t SYSCALL_CALLOC  = 2;
-static const uint32_t SYSCALL_FREE    = 4;
+static const int SYSCALL_MALLOC  = 1;
+static const int SYSCALL_CALLOC  = 2;
+static const int SYSCALL_FREE    = 4;
+
+static const int SYSCALL_MEMCPY  = 5;
+static const int SYSCALL_MEMSET  = 6;
+static const int SYSCALL_MEMMOVE = 7;
 #endif
 
 template <int W>
@@ -47,6 +51,58 @@ void setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 		return ret;
 	});
 }
+template <int W>
+void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
+{
+	machine.install_syscall_handler(SYSCALL_MEMCPY,
+	[] (auto& m) -> long
+	{
+		const auto [dst, src, len] = 
+			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+		SYSPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
+		for (size_t i = 0; i < len; i++) {
+			m.memory.template write<uint8_t> (dst + i, 
+				m.memory.template read<uint8_t> (src + i));
+		}
+		m.cpu.registers().counter += 2 * len;
+		return dst;
+	});
+	machine.install_syscall_handler(SYSCALL_MEMSET,
+	[] (auto& m) -> long
+	{
+		const auto [dst, value, len] = 
+			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+		SYSPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
+		for (size_t i = 0; i < len; i++) {
+			m.memory.template write<uint8_t> (dst + i, value);
+		}
+		m.cpu.registers().counter += len;
+		return dst;
+	});
+	machine.install_syscall_handler(SYSCALL_MEMMOVE,
+	[] (auto& m) -> long
+	{
+		auto [dst, src, len] = 
+			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+		SYSPRINT("SYSCALL memmove(%#X, %#X, %u)\n", dst, src, len);
+		if (src < dst)
+		{
+			unsigned i = 0;
+			while (i++ != len) {
+				m.memory.template write<uint8_t> (dst + i, 
+					m.memory.template read<uint8_t> (src + i));
+			}
+		} else {
+			while (len-- != 0) {
+				m.memory.template write<uint8_t> (dst + len, 
+					m.memory.template read<uint8_t> (src + len));
+			}
+		}
+		m.cpu.registers().counter += 2 * len;
+		return dst;
+	});
+}
 
 /* le sigh */
 template void setup_native_heap_syscalls<4>(Machine<4>&, size_t);
+template void setup_native_memory_syscalls<4>(Machine<4>&, bool);
