@@ -1,5 +1,4 @@
 #include <cstddef>
-#include <new>
 #include "heap.hpp"
 extern "C"
 __attribute__((noreturn)) void abort_message(const char* fmt, ...);
