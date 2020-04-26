@@ -207,16 +207,16 @@ inline long yield_to(Thread* thread)
 	return yield_to(thread->tid);
 }
 
-inline long block(int reason)
+inline long block(int reason = 0)
 {
 	return syscall(504, reason);
 }
 inline void block(int reason, const std::function<bool()>& condition)
 {
-	do {
-		block(reason);
+	while (!condition()) {
+		if (block(reason) < 0) break;
 		asm("" ::: "memory");
-	} while (!condition());
+	}
 }
 inline long wakeup_one_blocked(int reason)
 {

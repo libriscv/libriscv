@@ -29,7 +29,7 @@ struct thread
 	thread(multithreading<W>&, int tid,
 			address_t tls, address_t stack);
 	void exit();
-	void suspend();
+	void suspend(address_t return_value);
 	void block(int reason);
 	void activate();
 	void resume();

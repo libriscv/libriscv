@@ -21,9 +21,11 @@ void thread<W>::activate()
 }
 
 template <int W>
-void thread<W>::suspend()
+void thread<W>::suspend(address_t return_value)
 {
 	this->stored_regs = threading.machine.cpu.registers();
+	// set the *future* return value for this thread
+	this->stored_regs.get(RISCV::REG_ARG0) = return_value;
 	// add to suspended (NB: can throw)
 	threading.suspended.push_back(this);
 }
@@ -132,13 +134,11 @@ bool multithreading<W>::suspend_and_yield()
 	// don't go through the ardous yielding process when alone
 	if (suspended.empty()) {
 		// set the return value for sched_yield
-		thread->stored_regs.get(RISCV::REG_ARG0) = 0;
+		machine.cpu.reg(RISCV::REG_ARG0) = 0;
 		return false;
 	}
-	// suspend current thread
-	thread->suspend();
-	// set the return value for sched_yield
-	thread->stored_regs.get(RISCV::REG_ARG0) = 0;
+	// suspend current thread, and return 0 when resumed
+	thread->suspend(0);
 	// resume some other thread
 	this->wakeup_next();
 	return true;
@@ -167,11 +167,13 @@ void multithreading<W>::yield_to(int tid)
 		machine.cpu.reg(RISCV::REG_ARG0) = -1;
 		return;
 	}
-	// return value for yield_to
-	machine.cpu.reg(RISCV::REG_ARG0) = 0;
-	if (thread == next) return;
+	if (thread == next) {
+		// immediately returning back to caller
+		machine.cpu.reg(RISCV::REG_ARG0) = 0;
+		return;
+	}
 	// suspend current thread
-	thread->suspend();
+	thread->suspend(0);
 	// remove the next thread from suspension
 	for (auto it = suspended.begin(); it != suspended.end(); ++it) {
 		if (*it == next) {
@@ -202,7 +204,7 @@ void multithreading<W>::unblock(int tid)
 		if ((*it)->tid == tid)
 		{
 			// suspend current thread
-			get_thread()->suspend();
+			get_thread()->suspend(0);
 			// resume this thread
 			(*it)->resume();
 			blocked.erase(it);
@@ -223,7 +225,7 @@ void multithreading<W>::wakeup_blocked(int reason)
 		if ((*it)->stored_regs.get(RISCV::REG_ARG0) == (uint32_t) reason)
 		{
 			// suspend current thread
-			get_thread()->suspend();
+			get_thread()->suspend(0);
 			// resume this thread
 			(*it)->resume();
 			blocked.erase(it);
