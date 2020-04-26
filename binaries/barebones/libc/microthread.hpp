@@ -55,6 +55,7 @@ long    yield_to(Thread*);
 /* Block a thread with a specific reason. */
 long    block(int reason);
 void    block(int reason, const std::function<bool()>& condition);
+long    unblock(int tid);
 /* Wake thread with @reason that was blocked, returns -1 if nothing happened. */
 long    wakeup_one_blocked(int reason);
 
@@ -220,6 +221,10 @@ inline void block(int reason, const std::function<bool()>& condition)
 inline long wakeup_one_blocked(int reason)
 {
 	return syscall(505, reason);
+}
+inline long unblock(int tid)
+{
+	return syscall(506, tid);
 }
 
 __attribute__((noreturn))

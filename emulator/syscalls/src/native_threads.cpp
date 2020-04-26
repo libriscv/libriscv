@@ -81,6 +81,13 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		// preserve A0 for the new thread
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
+	// unblock thread
+	machine.install_syscall_handler(THREADS_SYSCALL_BASE+6,
+	[mt] (Machine<W>& machine) {
+		mt->unblock(machine.template sysarg<int> (0));
+		// preserve A0 for the new thread
+		return machine.cpu.reg(RISCV::REG_ARG0);
+	});
 }
 
 template

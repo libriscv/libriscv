@@ -195,6 +195,25 @@ void multithreading<W>::wakeup_next()
 }
 
 template <int W>
+void multithreading<W>::unblock(int tid)
+{
+	for (auto it = blocked.begin(); it != blocked.end(); )
+	{
+		if ((*it)->tid == tid)
+		{
+			// suspend current thread
+			get_thread()->suspend();
+			// resume this thread
+			(*it)->resume();
+			blocked.erase(it);
+			return;
+		}
+		else ++it;
+	}
+	// given thread id was not blocked
+	machine.cpu.reg(RISCV::REG_ARG0) = -1;
+}
+template <int W>
 void multithreading<W>::wakeup_blocked(int reason)
 {
 	for (auto it = blocked.begin(); it != blocked.end(); )

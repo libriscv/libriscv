@@ -50,6 +50,7 @@ struct multithreading
 	void      erase_thread(int tid);
 	void      wakeup_next();
 	bool      block(int reason);
+	void      unblock(int tid);
 	void      wakeup_blocked(int reason);
 
 	multithreading(riscv::Machine<W>&);
