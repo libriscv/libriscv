@@ -119,7 +119,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		auto* thread = mt->create(flags, ctid, ptid, stack, tls);
 		parent->suspend();
 		// store return value for parent: child TID
-		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;
+		parent->stored_regs->get(RISCV::REG_ARG0) = thread->tid;
 		// activate and return 0 for the child
 		thread->activate();
 		return 0;

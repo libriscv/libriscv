@@ -16,13 +16,14 @@ template <int W>
 struct thread
 {
 	using address_t = riscv::address_type<W>;
+	using registers_t = riscv::Registers<W>;
 
 	multithreading<W>& threading;
 	int       tid;
 	address_t my_tls;
 	address_t my_stack;
 	// for returning to this thread
-	riscv::Registers<W> stored_regs;
+	std::unique_ptr<registers_t> stored_regs = nullptr;
 	// address zeroed when exiting
 	address_t clear_tid = 0;
 

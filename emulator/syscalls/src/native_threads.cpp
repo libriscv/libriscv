@@ -26,7 +26,7 @@ void setup_native_threads(int& status, Machine<W>& machine)
 			CLONE_CHILD_SETTID | cleartid, ctid & 0x7FFFFFFF, 0x0, stack, tls);
 		parent->suspend();
 		// store return value for parent: child TID
-		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;
+		parent->stored_regs->get(RISCV::REG_ARG0) = thread->tid;
 		// activate and setup a function call
 		thread->activate();
 		// the cast is a work-around for a compiler bug

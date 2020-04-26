@@ -23,7 +23,8 @@ void thread<W>::activate()
 template <int W>
 void thread<W>::suspend()
 {
-	this->stored_regs = threading.machine.cpu.registers();
+	this->stored_regs.reset(new registers_t {
+		threading.machine.cpu.registers()});
 	// add to suspended (NB: can throw)
 	threading.suspended.push_back(this);
 }
@@ -31,9 +32,10 @@ void thread<W>::suspend()
 template <int W>
 void thread<W>::block(int reason)
 {
-	this->stored_regs = threading.machine.cpu.registers();
+	this->stored_regs.reset(new registers_t {
+		threading.machine.cpu.registers()});
 	// set the block reason as the next return value
-	this->stored_regs.get(RISCV::REG_ARG0) = reason;
+	this->stored_regs->get(RISCV::REG_ARG0) = reason;
 	// add to blocked (NB: can throw)
 	threading.blocked.push_back(this);
 }
@@ -73,8 +75,9 @@ void thread<W>::resume()
 	// preserve some registers
 	auto counter = m.cpu.registers().counter;
 	// restore registers
-	m.cpu.registers() = this->stored_regs;
+	m.cpu.registers() = *this->stored_regs;
 	m.cpu.registers().counter = counter;
+	this->stored_regs = nullptr;
 }
 
 template <int W>
@@ -132,13 +135,13 @@ bool multithreading<W>::suspend_and_yield()
 	// don't go through the ardous yielding process when alone
 	if (suspended.empty()) {
 		// set the return value for sched_yield
-		thread->stored_regs.get(RISCV::REG_ARG0) = 0;
+		thread->stored_regs->get(RISCV::REG_ARG0) = 0;
 		return false;
 	}
 	// suspend current thread
 	thread->suspend();
 	// set the return value for sched_yield
-	thread->stored_regs.get(RISCV::REG_ARG0) = 0;
+	thread->stored_regs->get(RISCV::REG_ARG0) = 0;
 	// resume some other thread
 	this->wakeup_next();
 	return true;
@@ -220,7 +223,7 @@ void multithreading<W>::wakeup_blocked(int reason)
 	{
 		// check the return value for this blocked thread
 		// compare against block reason
-		if ((*it)->stored_regs.get(RISCV::REG_ARG0) == (uint32_t) reason)
+		if ((*it)->stored_regs->get(RISCV::REG_ARG0) == (uint32_t) reason)
 		{
 			// suspend current thread
 			get_thread()->suspend();
