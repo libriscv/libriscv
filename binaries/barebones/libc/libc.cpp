@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 extern "C" struct _reent* _impure_ptr;
+int __errno = 0;
 #ifdef NATIVE_MEM_SYSCALLS
 #include <include/syscall.hpp>
 #endif
