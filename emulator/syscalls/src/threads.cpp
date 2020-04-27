@@ -112,6 +112,13 @@ multithreading<W>::multithreading(Machine<W>& mach)
 	main_thread.my_stack = machine.cpu.reg(RISCV::REG_SP);
 	m_current = &main_thread;
 }
+template <int W>
+multithreading<W>::~multithreading()
+{
+	for (auto it : threads) {
+		delete it.second;
+	}
+}
 
 template <int W>
 thread<W>* multithreading<W>::get_thread()

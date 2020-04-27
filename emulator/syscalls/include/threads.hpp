@@ -54,6 +54,7 @@ struct multithreading
 	void      wakeup_blocked(int reason);
 
 	multithreading(riscv::Machine<W>&);
+	~multithreading();
 	riscv::Machine<W>& machine;
 	std::vector<thread_t*> blocked;
 	std::deque<thread_t*> suspended;
