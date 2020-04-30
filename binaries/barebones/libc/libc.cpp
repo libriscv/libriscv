@@ -2,10 +2,15 @@
 #include <cstddef>
 #include <cstdint>
 extern "C" struct _reent* _impure_ptr;
-int __errno = 0;
 #ifdef NATIVE_MEM_SYSCALLS
 #include <include/syscall.hpp>
 #endif
+void* __dso_handle;
+
+extern "C" int* __errno() {
+	static int errno_value = 0;
+	return &errno_value;
+}
 
 extern "C"
 void* memset(void* vdest, int ch, size_t size)

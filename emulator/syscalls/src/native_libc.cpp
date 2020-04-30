@@ -12,6 +12,8 @@ static const int SYSCALL_FREE    = 4;
 static const int SYSCALL_MEMCPY  = 5;
 static const int SYSCALL_MEMSET  = 6;
 static const int SYSCALL_MEMMOVE = 7;
+
+static const int SYSCALL_BACKTRACE = 8;
 #endif
 
 template <int W>
@@ -100,6 +102,15 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		}
 		m.cpu.registers().counter += 2 * len;
 		return dst;
+	});
+	machine.install_syscall_handler(SYSCALL_BACKTRACE,
+	[] (auto& m) -> long
+	{
+		m.memory.print_backtrace(
+			[] (const char* buffer, size_t len) {
+				printf("%.*s\n", (int)len, buffer);
+			});
+		return 0;
 	});
 }
 

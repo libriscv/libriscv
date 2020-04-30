@@ -55,6 +55,14 @@ namespace riscv
 		address_t resolve_address(const char* sym);
 		void      set_exit_address(address_t new_exit);
 		address_t exit_address() const noexcept;
+		// basic backtraces
+		struct Callsite {
+			std::string name = "(null)";
+			address_t   address = 0x0;
+			uint32_t    offset  = 0x0;
+		};
+		Callsite lookup(address_t);
+		void print_backtrace(void(*print_function)(const char*, size_t));
 
 		// page handling
 		size_t pages_active() const noexcept { return m_pages.size(); }

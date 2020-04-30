@@ -3,6 +3,9 @@
 #include "decoder_cache.hpp"
 #include "elf.hpp"
 
+extern "C" char *
+__cxa_demangle(const char *name, char *buf, size_t *n, int *status);
+
 namespace riscv
 {
 	template <int W>
@@ -165,6 +168,7 @@ namespace riscv
 		return nullptr;
 	}
 
+	
 	template <typename Sym>
 	static void elf_print_sym(const Sym* sym)
 	{
@@ -240,13 +244,83 @@ namespace riscv
 		return zeroed_page; // read-only, zeroed page
 	}
 
+	template <int W>
+	typename Memory<W>::Callsite Memory<W>::lookup(address_t address)
+	{
+		const auto* sym_hdr = section_by_name(".symtab");
+		if (sym_hdr == nullptr) return {};
+		const auto* str_hdr = section_by_name(".strtab");
+		if (str_hdr == nullptr) return {};
+		// backtrace can sometimes find null addresses
+		if (address == 0x0) return {};
+
+		const auto* symtab = elf_sym_index(sym_hdr, 0);
+		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);
+		const char* strtab = elf_offset<char>(str_hdr->sh_offset);
+
+		const auto result =
+			[] (const char* strtab, address_t addr, const auto* sym)
+		{
+			const char* symname = &strtab[sym->st_name];
+			char* dma = __cxa_demangle(symname, nullptr, nullptr, nullptr);
+			return Callsite {
+				.name = (dma) ? dma : symname,
+				.address = sym->st_value,
+				.offset = addr - sym->st_value
+			};
+		};
+
+		const typename Elf<W>::Sym* best = nullptr;
+		for (size_t i = 0; i < symtab_ents; i++)
+		{
+			if (ELF32_ST_TYPE(symtab[i].st_info) != STT_FUNC) continue;
+			/*printf("Testing %#X vs  %#X to %#X = %s\n",
+					address, symtab[i].st_value, 
+					symtab[i].st_value + symtab[i].st_size, symname);*/
+
+			if (address >= symtab[i].st_value &&
+				address < symtab[i].st_value + symtab[i].st_size)
+			{
+				// exact match
+				return result(strtab, address, &symtab[i]);
+			}
+			else if (address > symtab[i].st_value)
+			{
+				// best guess (symbol + 0xOff)
+				best = &symtab[i];
+			}
+		}
+		if (best)
+			return result(strtab, address, best);
+		return {};
+	}
+	template <int W>
+	void Memory<W>::print_backtrace(void(*print_function)(const char*, size_t))
+	{
+		auto print_trace = 
+			[this, print_function] (const int N, const address_type<W> addr) {
+				// get information about the callsite
+				const auto site = this->lookup(addr);
+				// write information directly to stdout
+				char buffer[8192];
+				const int len = snprintf(buffer, sizeof(buffer),
+						"[%d] 0x%08x + 0x%.3x: %s",
+						N, site.address, site.offset, site.name.c_str());
+				print_function(buffer, len);
+			};
+		print_trace(0, this->machine().cpu.pc());
+		print_trace(1, this->machine().cpu.reg(RISCV::REG_RA));
+	}
+
 	template struct Memory<4>;
 }
 
+__attribute__((weak))
 void* operator new[](size_t size, const char*, int, unsigned, const char*, int)
 {
 	return ::operator new[] (size);
 }
+__attribute__((weak))
 void* operator new[](size_t size, size_t, size_t, const char*, int, unsigned, const char*, int)
 {
 	return ::operator new[] (size);
