@@ -1,4 +1,5 @@
 #pragma once
+#include "include/common.hpp"
 #include "include/syscall.hpp"
 #include <functional>
 #include <memory>
@@ -146,12 +147,12 @@ inline auto create(const T& func, Args&&... args)
 	return Thread_ptr(thread);
 }
 template <typename T, typename... Args>
-inline Thread* oneshot(const T& func, Args&&... args)
+inline int oneshot(const T& func, Args&&... args)
 {
 	static_assert(std::is_same_v<void, decltype(func(args...))>,
 				"Free threads have no return value!");
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
-	if (stack_bot == nullptr) return nullptr;
+	if (UNLIKELY(stack_bot == nullptr)) return -ENOMEM;
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store arguments on stack
 	char* args_addr = stack_bot + sizeof(Thread);
@@ -167,7 +168,7 @@ inline Thread* oneshot(const T& func, Args&&... args)
 	const long tls  = (long) thread;
 	const long ctid = (long) &thread->tid;
 	clone_helper((long) stack_top, tls, ctid);
-	return thread;
+	return 0;
 }
 
 inline long join(Thread* thread)

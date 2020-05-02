@@ -89,8 +89,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		SYSPRINT("SYSCALL memmove(%#X, %#X, %u)\n", dst, src, len);
 		if (src < dst)
 		{
-			unsigned i = 0;
-			while (i++ != len) {
+			for (unsigned i = 0; i != len; i++) {
 				m.memory.template write<uint8_t> (dst + i, 
 					m.memory.template read<uint8_t> (src + i));
 			}
