@@ -117,14 +117,7 @@ namespace riscv
 		assert(vec.size() >= state.mem_offset + page_bytes);
 		// completely reset the paging system as
 		// all pages will be completely replaced
-		for (auto it : m_pages) {
-			if (!it.second->attr.shared) delete it.second;
-		}
-		this->m_pages.clear();
-		this->m_current_rd_page = -1;
-		this->m_current_rd_ptr  = nullptr;
-		this->m_current_wr_page = -1;
-		this->m_current_wr_ptr  = nullptr;
+		this->clear_all_pages();
 
 		size_t off = state.mem_offset;
 		for (size_t p = 0; p < state.n_pages; p++) {

@@ -87,7 +87,7 @@ namespace riscv
 		void trap(address_t page_addr, mmio_cb_t callback);
 		// shared pages (regular pages will have priority!)
 		size_t nonshared_pages_active() const noexcept;
-		void   install_shared_page(address_t, Page&);
+		void   install_shared_page(address_t pageno, Page&);
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
@@ -103,6 +103,7 @@ namespace riscv
 		static inline uintptr_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
 		}
+		void clear_all_pages();
 		void initial_paging();
 		void invalidate_page(address_t pageno, Page&);
 		void protection_fault();

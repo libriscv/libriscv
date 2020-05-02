@@ -20,10 +20,7 @@ namespace riscv
 	template <int W>
 	Memory<W>::~Memory()
 	{
-		// delete any pages that aren't shared
-		for (auto it : m_pages) {
-			if (!it.second->attr.shared) delete it.second;
-		}
+		this->clear_all_pages();
 	}
 
 	template <int W>
@@ -36,9 +33,23 @@ namespace riscv
 	}
 
 	template <int W>
+	void Memory<W>::clear_all_pages()
+	{
+		// delete any pages that aren't shared
+		for (auto it : m_pages) {
+			if (!it.second->attr.shared) delete it.second;
+		}
+		this->m_pages.clear();
+		this->m_current_rd_page = -1;
+		this->m_current_rd_ptr  = nullptr;
+		this->m_current_wr_page = -1;
+		this->m_current_wr_ptr  = nullptr;
+	}
+
+	template <int W>
 	void Memory<W>::initial_paging()
 	{
-		this->m_pages.clear();
+		this->clear_all_pages();
 		// make the zero-page unreadable (to trigger faults on null-pointer accesses)
 		auto& zp = this->create_page(0);
 		zp.attr = { .read = false, .write = false, .exec = false };
@@ -238,18 +249,28 @@ namespace riscv
 		throw MachineException(OUT_OF_MEMORY, "Out of memory");
 	}
 
-	static Page zeroed_page;
-	__attribute__((constructor))
-	static void create_cow() {
-		zeroed_page.attr = {
+	static Page zeroed_page {
+		PageAttributes {
 			.read   = true,
 			.write  = false,
 			.exec   = false,
 			.is_cow = true
-		};
-	}
+		}, {}
+	};
 	const Page& Page::cow_page() noexcept {
 		return zeroed_page; // read-only, zeroed page
+	}
+
+	template <int W>
+	void Memory<W>::install_shared_page(address_t pageno, Page& shared_page)
+	{
+		if (UNLIKELY(get_pageno(pageno).attr.is_cow == false))
+			throw MachineException(ILLEGAL_OPERATION,
+				"There was a page at the specified location already", pageno);
+		if (UNLIKELY(shared_page.attr.shared == false))
+			throw MachineException(ILLEGAL_OPERATION,
+				"The provided page did not have the shared attribute", pageno);
+		m_pages.insert({pageno, &shared_page});
 	}
 
 	template <int W>

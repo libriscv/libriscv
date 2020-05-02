@@ -28,6 +28,7 @@ namespace riscv
 		for (auto& cache : this->m_page_cache)
 			cache.pageno = -1;
 #endif
+		m_current_page = {};
 		// jumping causes some extra calculations
 		this->jump(machine().memory.start_address());
 	}

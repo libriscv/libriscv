@@ -158,12 +158,6 @@ size_t Memory<W>::nonshared_pages_active() const noexcept
 					return value + (!it.second->attr.shared ? 1 : 0);
 				});
 }
-template <int W>
-void Memory<W>::install_shared_page(address_t address, Page& shared_page)
-{
-	m_pages.insert({address, &shared_page});
-}
-
 
 template <int W>
 void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
