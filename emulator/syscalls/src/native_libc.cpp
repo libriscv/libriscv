@@ -59,14 +59,27 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 	machine.install_syscall_handler(SYSCALL_MEMCPY,
 	[] (auto& m) -> long
 	{
-		const auto [dst, src, len] = 
+		auto [dst, src, len] =
 			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		SYSPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-		for (size_t i = 0; i < len; i++) {
-			m.memory.template write<uint8_t> (dst + i, 
-				m.memory.template read<uint8_t> (src + i));
-		}
 		m.cpu.registers().counter += 2 * len;
+		if ((dst & 3) == (src & 3)) {
+			while ((src & 3) && len > 0) {
+				m.memory.template write<uint8_t> (dst++,
+					m.memory.template read<uint8_t> (src++));
+				len --;
+			}
+			while (len >= 4) {
+				m.memory.template write<uint64_t> (dst,
+					m.memory.template read<uint64_t> (src));
+				dst += 4; src += 4; len -= 4;
+			}
+		}
+		while (len > 0) {
+			m.memory.template write<uint8_t> (dst++,
+				m.memory.template read<uint8_t> (src++));
+			len --;
+		}
 		return dst;
 	});
 	machine.install_syscall_handler(SYSCALL_MEMSET,
