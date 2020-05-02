@@ -28,7 +28,7 @@ namespace riscv
 	{
 		const SerializedMachine<W> header {
 			.magic    = MAGiC_V4LUE,
-			.n_pages  = (unsigned) memory.pages_active(),
+			.n_pages  = (unsigned) memory.nonshared_pages_active(),
 			.reg_size = sizeof(Registers<W>),
 			.page_size = Page::size(),
 			.attr_size = sizeof(PageAttributes),
@@ -50,14 +50,16 @@ namespace riscv
 	template <int W>
 	void Memory<W>::serialize_to(std::vector<uint8_t>& vec)
 	{
-		const size_t page_bytes =
+		const size_t est_page_bytes =
 			this->m_pages.size() * (sizeof(SerializedPage) + Page::size());
-		vec.reserve(vec.size() + page_bytes);
+		vec.reserve(vec.size() + est_page_bytes);
 
 		for (const auto& it : this->m_pages)
 		{
-			const auto& page = it.second;
+			const auto& page = *it.second;
 			assert(page.attr.is_cow == false);
+			// we want to ignore shared pages
+			if (page.attr.shared) continue;
 			const SerializedPage spage {
 				.addr = it.first,
 				.attr = page.attr
@@ -115,6 +117,9 @@ namespace riscv
 		assert(vec.size() >= state.mem_offset + page_bytes);
 		// completely reset the paging system as
 		// all pages will be completely replaced
+		for (auto it : m_pages) {
+			if (!it.second->attr.shared) delete it.second;
+		}
 		this->m_pages.clear();
 		this->m_current_rd_page = -1;
 		this->m_current_rd_ptr  = nullptr;
@@ -126,7 +131,7 @@ namespace riscv
 			const auto& page = *(SerializedPage*) &vec[off];
 			off += sizeof(SerializedPage);
 			const auto& data = *(PageData*) &vec[off];
-			m_pages.try_emplace(page.addr, page.attr, data);
+			m_pages.insert({page.addr, new Page{page.attr, data}});
 			off += Page::size();
 		}
 	}

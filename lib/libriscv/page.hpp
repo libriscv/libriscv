@@ -9,10 +9,16 @@ namespace riscv {
 
 struct PageAttributes
 {
-	bool read  = true;
-	bool write = true;
-	bool exec  = false;
-	bool is_cow = false;
+	union {
+		struct {
+			int  read   :  1;
+			int  write  :  1;
+			int  exec   :  1;
+			int  is_cow :  1;
+			int  shared :  1;
+		};
+		int whole = 0x3;
+	};
 
 	bool is_default() const noexcept {
 		PageAttributes def {};

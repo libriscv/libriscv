@@ -10,6 +10,7 @@
 #include <EASTL/string.h>
 #include <EASTL/string_map.h>
 #include <EASTL/unordered_map.h>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,9 @@ namespace riscv
 		static Page& default_page_fault(Memory&, const size_t page);
 		// NOTE: use print_and_pause() to immediately break!
 		void trap(address_t page_addr, mmio_cb_t callback);
+		// shared pages (regular pages will have priority!)
+		size_t nonshared_pages_active() const noexcept;
+		void   install_shared_page(address_t, Page&);
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
@@ -93,6 +97,7 @@ namespace riscv
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
 		Memory(Machine<W>&, const std::vector<uint8_t>&, address_t max_mem);
+		~Memory();
 	private:
 		inline auto& create_attr(const address_t address);
 		static inline uintptr_t page_number(const address_t address) {
@@ -134,7 +139,7 @@ namespace riscv
 		address_t   m_current_rd_page = -1;
 		Page*     m_current_wr_ptr  = nullptr;
 		address_t m_current_wr_page = -1;
-		eastl::unordered_map<address_t, Page> m_pages;
+		eastl::unordered_map<address_t, Page*>  m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 
 		const std::vector<uint8_t>& m_binary;

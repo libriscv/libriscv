@@ -17,6 +17,14 @@ namespace riscv
 		this->m_pages_total = max_mem / Page::size();
 		this->reset();
 	}
+	template <int W>
+	Memory<W>::~Memory()
+	{
+		// delete any pages that aren't shared
+		for (auto it : m_pages) {
+			if (!it.second->attr.shared) delete it.second;
+		}
+	}
 
 	template <int W>
 	void Memory<W>::reset()
@@ -211,12 +219,12 @@ namespace riscv
 	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
-		const auto& it = pages().insert(page);
+		const auto& it = pages().insert({page, new Page});
 		m_pages_highest = std::max(m_pages_highest, pages().size());
 		// if this page was read-cached, invalidate it
-		this->invalidate_page(page, it.first->second);
+		this->invalidate_page(page, *it.first->second);
 		// return new page
-		return it.first->second;
+		return *it.first->second;
 	}
 
 	template <int W>
