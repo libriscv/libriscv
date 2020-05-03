@@ -70,8 +70,8 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 				len --;
 			}
 			while (len >= 4) {
-				m.memory.template write<uint64_t> (dst,
-					m.memory.template read<uint64_t> (src));
+				m.memory.template write<uint32_t> (dst,
+					m.memory.template read<uint32_t> (src));
 				dst += 4; src += 4; len -= 4;
 			}
 		}
