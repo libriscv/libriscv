@@ -1,5 +1,4 @@
 #include "microthread.hpp"
-#include <stdio.h>
 
 namespace microthread
 {
@@ -7,6 +6,13 @@ namespace microthread
 	{
 		thread->startfunc();
 	}
+	void oneshot_exit()
+	{
+		free(self()); // after this point stack unusable
+		syscall(501, 0);
+		__builtin_unreachable();
+	}
+
 	static Thread main_thread {nullptr};
 	__attribute__((constructor))
 	void init_threads()

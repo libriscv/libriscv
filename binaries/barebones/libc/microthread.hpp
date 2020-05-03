@@ -37,7 +37,13 @@ auto    create(const T& func, Args&&... args);
 /* Create a new self-governing thread that deletes itself on completion.
    Calling exit() in a sovereign thread is undefined behavior. */
 template <typename T, typename... Args>
-Thread* oneshot(const T& func, Args&&... args);
+int     oneshot(const T& func, Args&&... args);
+
+/* Create a new self-governing thread that directly starts on the
+   threads start function, with a special return address that
+   self-deletes and exits the thread safely. Data can be retrieved
+   using microthread::getdata(). Returns 0 on success. */
+int     direct(void(*) (), void* data = nullptr);
 
 /* Waits for a thread to finish and then returns the exit status
    of the thread. The thread is then deleted, freeing memory. */
@@ -72,6 +78,8 @@ struct Thread
 
 	Thread(std::function<void()> start)
 	 	: startfunc{std::move(start)} {}
+	Thread(void(*func)(), void* data)
+		: tinyfunc{func}, tinydata{data} {}
 
 	long resume()   { return yield_to(this); }
 	long suspend()  { return yield(); }
@@ -85,6 +93,10 @@ struct Thread
 	union {
 		long  return_value;
 		std::function<void()> startfunc;
+		struct {
+			void (*tinyfunc) ();
+			void* tinydata;
+		};
 	};
 };
 struct ThreadDeleter {
@@ -109,11 +121,15 @@ inline int gettid() {
 	return self()->tid;
 }
 
-inline long clone_helper(long sp, long args, long ctid)
+inline void* getdata() {
+	return self()->tinydata;
+}
+
+inline long clone_helper(long sp, long args, long ctid, long ra)
 {
 	extern void trampoline(Thread*);
-	/* stack, func, tls, ctid */
-	return syscall(500, sp, (long) &trampoline, args, ctid);
+	/* stack, func, tls, ctid, return addr */
+	return syscall(500, sp, (long) &trampoline, args, ctid, ra);
 }
 
 template <typename T, typename... Args>
@@ -142,7 +158,7 @@ inline auto create(const T& func, Args&&... args)
 	const long tls  = (long) thread;
 	const long ctid = (long) &thread->tid;
 
-	(void) clone_helper((long) stack_top, tls, ctid | 0x80000000);
+	(void) clone_helper((long) stack_top, tls, ctid | 0x80000000, 0);
 	// parent path (reordering doesn't matter)
 	return Thread_ptr(thread);
 }
@@ -161,13 +177,24 @@ inline int oneshot(const T& func, Args&&... args)
 	Thread* thread = new (stack_bot) Thread(
 		[func, tuple] {
 			std::apply(func, std::move(*tuple));
-			free(self()); // after this point stack unusable
-			syscall(501, 0);
-			__builtin_unreachable();
 		});
 	const long tls  = (long) thread;
 	const long ctid = (long) &thread->tid;
-	clone_helper((long) stack_top, tls, ctid);
+	extern void oneshot_exit();
+	clone_helper((long) stack_top, tls, ctid, (long) &oneshot_exit);
+	return 0;
+}
+inline int direct(void(*func)(), void* data)
+{
+	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
+	if (UNLIKELY(stack_bot == nullptr)) return -ENOMEM;
+	char* stack_top = stack_bot + Thread::STACK_SIZE;
+	// store the thread at the beginning of the stack
+	Thread* thread = new (stack_bot) Thread(func, data);
+	const long tls  = (long) thread;
+	extern void oneshot_exit();
+	/* stack, func, tls, ctid */
+	syscall(500, (long) stack_top, (long) func, tls, tls, (long) &oneshot_exit);
 	return 0;
 }
 
