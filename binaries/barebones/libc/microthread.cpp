@@ -12,6 +12,11 @@ namespace microthread
 		syscall(501, 0);
 		__builtin_unreachable();
 	}
+	void direct_starter(Thread* thread)
+	{
+		thread->tinyfunc();
+		oneshot_exit();
+	}
 
 	static Thread main_thread {nullptr};
 	__attribute__((constructor))

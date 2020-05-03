@@ -20,7 +20,6 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		const uint32_t  func = machine.template sysarg<uint32_t> (1);
 		const uint32_t   tls = machine.template sysarg<uint32_t> (2);
 		const uint32_t  ctid = machine.template sysarg<uint32_t> (3);
-		const uint32_t  retv = machine.template sysarg<uint32_t> (4);
 		const uint32_t cleartid = (ctid & 0x80000000) ? CLONE_CHILD_CLEARTID : 0x0;
 		auto* parent = mt->get_thread();
 		auto* thread = mt->create(
@@ -31,7 +30,6 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		thread->activate();
 		// the cast is a work-around for a compiler bug
 		machine.setup_call(func, (const uint32_t) tls);
-		if (retv) machine.cpu.reg(RISCV::REG_RA) = retv;
 		// preserve A0 for the new child thread
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
