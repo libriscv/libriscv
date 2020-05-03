@@ -19,11 +19,10 @@ void setup_native_threads(int& status, Machine<W>& machine)
 		const uint32_t stack = (machine.template sysarg<uint32_t> (0) & ~0xF);
 		const uint32_t  func = machine.template sysarg<uint32_t> (1);
 		const uint32_t   tls = machine.template sysarg<uint32_t> (2);
-		const uint32_t  ctid = machine.template sysarg<uint32_t> (3);
-		const uint32_t cleartid = (ctid & 0x80000000) ? CLONE_CHILD_CLEARTID : 0x0;
+		const uint32_t flags = machine.template sysarg<uint32_t> (3);
 		auto* parent = mt->get_thread();
 		auto* thread = mt->create(
-			CLONE_CHILD_SETTID | cleartid, ctid & 0x7FFFFFFF, 0x0, stack, tls);
+			CLONE_CHILD_SETTID | flags, tls, 0x0, stack, tls);
 		// suspend and store return value for parent: child TID
 		parent->suspend(thread->tid);
 		// activate and setup a function call

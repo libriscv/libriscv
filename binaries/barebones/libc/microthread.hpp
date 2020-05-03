@@ -126,11 +126,11 @@ inline void* getdata() {
 	return self()->tinydata;
 }
 
-inline long clone_helper(long sp, long args, long ctid)
+inline long clone_helper(long sp, long tls, long ctid)
 {
 	extern void trampoline(Thread*);
-	/* stack, func, tls, ctid, return addr */
-	return syscall(500, sp, (long) &trampoline, args, ctid);
+	/* stack, func, tls, flags */
+	return syscall(500, sp, (long) &trampoline, tls, ctid);
 }
 
 template <typename T, typename... Args>
@@ -157,9 +157,9 @@ inline auto create(const T& func, Args&&... args)
 		});
 
 	const long tls  = (long) thread;
-	const long ctid = (long) &thread->tid;
+	const long ctid = 0x80000000;
 
-	(void) clone_helper((long) stack_top, tls, ctid | 0x80000000);
+	(void) clone_helper((long) stack_top, tls, ctid);
 	// parent path (reordering doesn't matter)
 	return Thread_ptr(thread);
 }
@@ -182,9 +182,7 @@ inline int oneshot(const T& func, Args&&... args)
 			oneshot_exit();
 		});
 	const long tls  = (long) thread;
-	const long ctid = (long) &thread->tid;
-	clone_helper((long) stack_top, tls, ctid);
-	return thread->tid;
+	return clone_helper((long) stack_top, tls, 0);
 }
 inline int direct(void(*func)(), void* data)
 {
@@ -195,9 +193,8 @@ inline int direct(void(*func)(), void* data)
 	Thread* thread = new (stack_bot) Thread(func, data);
 	const long tls  = (long) thread;
 	extern void direct_starter(Thread*);
-	/* stack, func, tls, ctid */
-	syscall(500, (long) stack_top, (long) &direct_starter, tls, tls);
-	return thread->tid;
+	/* stack, func, tls, flags */
+	return syscall(500, (long) stack_top, (long) &direct_starter, tls, 0);
 }
 
 inline long join(Thread* thread)

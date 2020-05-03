@@ -117,9 +117,8 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 				" parent=%p, ctid=0x%X ptid=0x%X, tls=0x%X)\n",
 				func, stack, flags, args, parent, ctid, ptid, tls);
 		auto* thread = mt->create(flags, ctid, ptid, stack, tls);
-		parent->suspend();
 		// store return value for parent: child TID
-		parent->stored_regs.get(RISCV::REG_ARG0) = thread->tid;
+		parent->suspend(thread->tid);
 		// activate and return 0 for the child
 		thread->activate();
 		return 0;
