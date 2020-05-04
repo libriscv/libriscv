@@ -64,10 +64,21 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		SYSPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
 		m.cpu.registers().counter += 2 * len;
 		if ((dst & 3) == (src & 3)) {
-			while ((src & 3) && len > 0) {
+			while ((src & 3) != 0 && len > 0) {
 				m.memory.template write<uint8_t> (dst++,
 					m.memory.template read<uint8_t> (src++));
 				len --;
+			}
+			while (len >= 16) {
+				m.memory.template write<uint32_t> (dst + 0,
+					m.memory.template read<uint32_t> (src + 0));
+				m.memory.template write<uint32_t> (dst + 4,
+					m.memory.template read<uint32_t> (src + 4));
+				m.memory.template write<uint32_t> (dst + 8,
+					m.memory.template read<uint32_t> (src + 8));
+				m.memory.template write<uint32_t> (dst + 12,
+					m.memory.template read<uint32_t> (src + 12));
+				dst += 16; src += 16; len -= 16;
 			}
 			while (len >= 4) {
 				m.memory.template write<uint32_t> (dst,
