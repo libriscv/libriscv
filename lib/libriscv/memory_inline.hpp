@@ -8,6 +8,9 @@ T Memory<W>::read(address_t address)
 	if (m_current_rd_page != pageno) {
 		m_current_rd_page = pageno;
 		m_current_rd_ptr = &get_pageno(pageno);
+		if (UNLIKELY(!m_current_rd_ptr->attr.read)) {
+			this->protection_fault();
+		}
 	}
 	const auto& page = *m_current_rd_ptr;
 
@@ -16,11 +19,7 @@ T Memory<W>::read(address_t address)
 			return page.trap(address & (Page::size()-1), sizeof(T) | TRAP_READ, 0);
 		}
 	}
-	if (LIKELY(page.attr.read)) {
-		return page.template aligned_read<T>(address & (Page::size()-1));
-	}
-	this->protection_fault();
-	return T {};
+	return page.template aligned_read<T>(address & (Page::size()-1));
 }
 
 template <int W>
@@ -31,6 +30,9 @@ void Memory<W>::write(address_t address, T value)
 	if (m_current_wr_page != pageno) {
 		m_current_wr_page = pageno;
 		m_current_wr_ptr = &create_page(pageno);
+		if (UNLIKELY(!m_current_wr_ptr->attr.write)) {
+			this->protection_fault();
+		}
 	}
 	auto& page = *m_current_wr_ptr;
 
@@ -40,11 +42,7 @@ void Memory<W>::write(address_t address, T value)
 			return;
 		}
 	}
-	if (LIKELY(page.attr.write)) {
-		page.template aligned_write<T>(address & (Page::size()-1), value);
-		return;
-	}
-	this->protection_fault();
+	page.template aligned_write<T>(address & (Page::size()-1), value);
 }
 
 template <int W>
