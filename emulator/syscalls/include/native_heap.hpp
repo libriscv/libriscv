@@ -3,8 +3,7 @@
 // by fwsGonzo, originally based on allocator written in C by Snaipe
 //
 #pragma once
-#include <unistd.h>
-#include <errno.h>
+#include <cstddef>
 #include <deque>
 #include <vector>
 
@@ -113,8 +112,7 @@ template <typename... Args>
 inline Chunk* Arena::new_chunk(Args&&... args)
 {
 	if (UNLIKELY(m_free_chunks.empty())) {
-		m_chunks.emplace_back(std::forward<Args>(args)...);
-		return &m_chunks.back();
+		return &m_chunks.emplace_back(std::forward<Args>(args)...);
 	}
 	else {
 		auto* chunk = m_free_chunks.back();
@@ -137,7 +135,7 @@ inline Chunk* Arena::find_chunk(PointerType ptr)
 
 inline Arena::PointerType Arena::malloc(size_t size)
 {
-    size_t length = word_align(size);
+    const size_t length = word_align(size);
     Chunk* ch = base_chunk().find_free(size);
 
     if (ch != nullptr) {
