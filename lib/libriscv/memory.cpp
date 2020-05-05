@@ -22,7 +22,7 @@ namespace riscv
 		this->m_pages_total = options.memory_max / Page::size();
 		this->reset();
 		// set the default exit function address for vm calls
-		//this->m_exit_address = resolve_address("_exit");
+		this->m_exit_address = resolve_address("_exit");
 	}
 	template <int W>
 	Memory<W>::~Memory()
