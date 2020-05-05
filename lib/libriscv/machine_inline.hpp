@@ -50,8 +50,8 @@ inline void Machine<W>::reset()
 	memory.reset();
 }
 
-template <int W>
-inline void Machine<W>::install_syscall_handler(int sysn, syscall_t handler)
+template <int W> inline
+void Machine<W>::install_syscall_handler(int sysn, syscall_t handler)
 {
 	m_syscall_handlers.at(sysn) = handler;
 }
@@ -62,7 +62,7 @@ void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<int, s
 		this->install_syscall_handler(scall.first, std::move(scall.second));
 }
 template <int W> inline
-typename Machine<W>::syscall_t Machine<W>::get_syscall_handler(int sysn) {
+auto& Machine<W>::get_syscall_handler(int sysn) {
 	return m_syscall_handlers.at(sysn);
 }
 
@@ -201,7 +201,7 @@ inline address_type<W> Machine<W>::free_memory() const noexcept
 }
 
 template <int W>
-inline void Machine<W>::add_destructor_callback(delegate<void()> cb)
+inline void Machine<W>::add_destructor_callback(Function<void()> cb)
 {
 	m_destructor_callbacks.push_back(std::move(cb));
 }

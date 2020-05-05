@@ -3,12 +3,12 @@
 #include "elf.hpp"
 #include "types.hpp"
 #include "page.hpp"
-#include "util/delegate.hpp"
 #include <cassert>
 #include <cstring>
 #include <EASTL/allocator_malloc.h>
 #include <EASTL/string_map.h>
 #include <EASTL/unordered_map.h>
+#include "util/function.hpp"
 #include <numeric>
 #include <string>
 #include <vector>
@@ -23,7 +23,7 @@ namespace riscv
 		using address_t = address_type<W>;
 		using isa_t     = isa_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
-		using page_fault_cb_t = delegate<Page&(Memory&, size_t)>;
+		using page_fault_cb_t = Function<Page&(Memory&, size_t)>;
 
 		template <typename T>
 		T read(address_t src);
@@ -37,10 +37,10 @@ namespace riscv
 		// gives a sequential view of the data at address, with the possibility
 		// of optimizing away a copy if the data crosses no page-boundaries
 		void memview(address_t addr, size_t len,
-					delegate<void(const uint8_t*, size_t)> callback) const;
+					Function<void(const uint8_t*, size_t)> callback) const;
 		// gives const-ref access to pod-type T in guest memory
 		template <typename T>
-		void memview(address_t addr, delegate<void(const T&)> callback) const;
+		void memview(address_t addr, Function<void(const T&)> callback) const;
 		// read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t max_len = 1024) const;
 
@@ -85,7 +85,7 @@ namespace riscv
 		void trap(address_t page_addr, mmio_cb_t callback);
 		// shared pages (regular pages will have priority!)
 		size_t nonshared_pages_active() const noexcept;
-		void   install_shared_page(address_t pageno, Page&);
+		void   install_shared_page(address_t pageno, const Page&);
 		// convert every memory page to shared, return vector with address, Page* pair
 		std::vector<std::pair<address_t, Page*>> convert_to_shared_memory();
 

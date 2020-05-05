@@ -141,7 +141,7 @@ Memory<W>::free_pages(address_t dst, size_t len)
 		auto& page = this->get_pageno(pageno);
 		if (page.attr.is_cow == false) {
 			m_pages.erase(pageno);
-			delete &page;
+			if (!page.attr.shared) delete &page;
 		}
 		dst += size;
 		len -= size;
@@ -208,7 +208,7 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 
 template <int W>
 void Memory<W>::memview(address_t addr, size_t len,
-			delegate<void(const uint8_t*, size_t)> callback) const
+	Function<void(const uint8_t*, size_t)> callback) const
 {
 	const size_t offset = addr & (Page::size()-1);
 	// fast-path
@@ -225,7 +225,8 @@ void Memory<W>::memview(address_t addr, size_t len,
 }
 template <int W>
 template <typename T>
-void Memory<W>::memview(address_t addr, delegate<void(const T&)> callback) const
+void Memory<W>::memview(address_t addr,
+	Function<void(const T&)> callback) const
 {
 	static_assert(std::is_trivial_v<T>, "Type T must be Plain-Old-Data");
 	const size_t offset = addr & (Page::size()-1);

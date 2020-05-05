@@ -1,5 +1,6 @@
 #pragma once
 #include <libriscv/machine.hpp>
+#include <libriscv/rv32i_instr.hpp>
 #include <cstdio>
 
 namespace riscv
@@ -16,7 +17,7 @@ namespace riscv
 	template <int W>
 	static bool
 	validate(Machine<W>& machine, const testable_insn<W>& insn,
-			delegate<bool(CPU<W>&, const testable_insn<W>&)> callback)
+			std::function<bool(CPU<W>&, const testable_insn<W>&)> callback)
 	{
 		static const address_type<W> MEMBASE = 0x1000;
 		// create page, make it executable

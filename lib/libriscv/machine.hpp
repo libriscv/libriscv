@@ -2,7 +2,7 @@
 #include "common.hpp"
 #include "cpu.hpp"
 #include "memory.hpp"
-#include "util/delegate.hpp"
+#include "util/function.hpp"
 #include <array>
 
 namespace riscv
@@ -13,8 +13,8 @@ namespace riscv
 	template <int W>
 	struct Machine
 	{
-		using address_t = address_type<W>;          // one unsigned memory address
-		using syscall_t = delegate<long (Machine<W>&)>;
+		using syscall_t = Function<long(Machine&)>;
+		using address_t = address_type<W>; // one unsigned memory address
 
 		// see common.hpp for MachineOptions
 		Machine(const std::vector<uint8_t>& binary = {},
@@ -47,7 +47,7 @@ namespace riscv
 		// Pass nullptr to uninstall a system call handler.
 		void install_syscall_handler(int, syscall_t);
 		void install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>>);
-		syscall_t get_syscall_handler(int);
+		auto& get_syscall_handler(int);
 
 		// Push all strings on stack and then create a mini-argv on SP
 		void setup_argv(const std::vector<std::string>& args);
@@ -90,7 +90,7 @@ namespace riscv
 		address_t free_memory() const noexcept;
 
 		// Call a function when the machine gets destroyed
-		void add_destructor_callback(delegate<void()> callback);
+		void add_destructor_callback(Function<void()> callback);
 
 #ifdef RISCV_DEBUG
 		// Immediately block execution, print registers and current instruction.
@@ -106,6 +106,9 @@ namespace riscv
 #endif
 		void system_call(int);
 
+		template <typename T> void set_userdata(T* data) { m_userdata = data; }
+		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
+
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
@@ -120,9 +123,10 @@ namespace riscv
 	private:
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
-		std::array<syscall_t, 512> m_syscall_handlers;
-		std::vector<delegate<void()>> m_destructor_callbacks;
 		bool m_stopped = false;
+		std::array<syscall_t, 512> m_syscall_handlers;
+		std::vector<Function<void()>> m_destructor_callbacks;
+		void* m_userdata = nullptr;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 

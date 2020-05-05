@@ -22,7 +22,7 @@ namespace riscv
 		this->m_pages_total = options.memory_max / Page::size();
 		this->reset();
 		// set the default exit function address for vm calls
-		this->m_exit_address = resolve_address("_exit");
+		//this->m_exit_address = resolve_address("_exit");
 	}
 	template <int W>
 	Memory<W>::~Memory()
@@ -33,6 +33,7 @@ namespace riscv
 	template <int W>
 	void Memory<W>::reset()
 	{
+		this->clear_all_pages();
 		// initialize paging (which clears all pages) before loading binary
 		this->initial_paging();
 		// load ELF binary into virtual memory
@@ -57,13 +58,9 @@ namespace riscv
 	template <int W>
 	void Memory<W>::initial_paging()
 	{
-		this->clear_all_pages();
-
 		if (m_pages.find(0) == m_pages.end()) {
-			// create a default zero-page, unreadable.
-			// this will trigger faults on null-pointer accesses.
-			auto& zp = this->create_page(0);
-			zp.attr = { .read = false, .write = false, .exec = false };
+			// add a guard page to catch zero-page accesses
+			install_shared_page(0, Page::guard_page());
 		}
 	}
 
@@ -179,10 +176,11 @@ namespace riscv
 	template <int W>
 	const typename Elf<W>::Sym* Memory<W>::resolve_symbol(const char* name) const
 	{
+		if (UNLIKELY(m_binary.empty())) return nullptr;
 		const auto* sym_hdr = section_by_name(".symtab");
-		if (sym_hdr == nullptr) return nullptr;
+		if (UNLIKELY(sym_hdr == nullptr)) return nullptr;
 		const auto* str_hdr = section_by_name(".strtab");
-		if (str_hdr == nullptr) return nullptr;
+		if (UNLIKELY(str_hdr == nullptr)) return nullptr;
 
 		const auto* symtab = elf_sym_index(sym_hdr, 0);
 		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);
@@ -241,7 +239,7 @@ namespace riscv
 	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
-		const auto& it = pages().insert({page, new Page});
+		const auto& it = pages().emplace(page, new Page);
 		m_pages_highest = std::max(m_pages_highest, pages().size());
 		// if this page was read-cached, invalidate it
 		this->invalidate_page(page, *it.first->second);
@@ -268,12 +266,24 @@ namespace riscv
 			.is_cow = true
 		}, {}
 	};
+	static Page guarded_page {
+		PageAttributes {
+			.read   = false,
+			.write  = false,
+			.exec   = false,
+			.is_cow = false,
+			.shared = true
+		}, {}
+	};
 	const Page& Page::cow_page() noexcept {
 		return zeroed_page; // read-only, zeroed page
 	}
+	const Page& Page::guard_page() noexcept {
+		return guarded_page; // inaccessible page
+	}
 
 	template <int W>
-	void Memory<W>::install_shared_page(address_t pageno, Page& shared_page)
+	void Memory<W>::install_shared_page(address_t pageno, const Page& shared_page)
 	{
 		if (UNLIKELY(get_pageno(pageno).attr.is_cow == false))
 			throw MachineException(ILLEGAL_OPERATION,
@@ -281,7 +291,9 @@ namespace riscv
 		if (UNLIKELY(shared_page.attr.shared == false))
 			throw MachineException(ILLEGAL_OPERATION,
 				"The provided page did not have the shared attribute", pageno);
-		m_pages.insert({pageno, &shared_page});
+		// NOTE: If you insert a const Page, DON'T modify it! The machine
+		// won't, unless system-calls do or manual intervention happens!
+		m_pages.insert({pageno, const_cast<Page*> (&shared_page)});
 	}
 
 	template <int W>

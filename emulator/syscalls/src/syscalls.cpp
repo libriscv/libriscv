@@ -17,26 +17,28 @@ struct iovec32 {
 };
 
 template <int W>
-long State<W>::syscall_exit(Machine<W>& machine)
+long syscall_exit(Machine<W>& machine)
 {
-	this->exit_code = machine.template sysarg<int> (0);
+	auto* state = machine.template get_userdata<State<W>> ();
+	state->exit_code = machine.template sysarg<int> (0);
 	machine.stop();
-	return this->exit_code;
+	return state->exit_code;
 }
 
 template <int W>
-long State<W>::syscall_write(Machine<W>& machine)
+long syscall_write(Machine<W>& machine)
 {
 	const int  fd      = machine.template sysarg<int>(0);
 	const auto address = machine.template sysarg<address_type<W>>(1);
 	const size_t len   = machine.template sysarg<address_type<W>>(2);
 	SYSPRINT("SYSCALL write: addr = 0x%X, len = %zu\n", address, len);
+	auto* state = machine.template get_userdata<State<W>> ();
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
 		char buffer[1024];
 		const size_t len_g = std::min(sizeof(buffer), len);
 		machine.memory.memcpy_out(buffer, address, len_g);
-		output += std::string(buffer, len_g);
+		state->output += std::string(buffer, len_g);
 #ifdef RISCV_DEBUG
 		return write(fd, buffer, len);
 #else
@@ -47,7 +49,7 @@ long State<W>::syscall_write(Machine<W>& machine)
 }
 
 template <int W>
-long State<W>::syscall_writev(Machine<W>& machine)
+long syscall_writev(Machine<W>& machine)
 {
 	const int  fd     = machine.template sysarg<int>(0);
 	const auto iov_g  = machine.template sysarg<uint32_t>(1);
@@ -60,6 +62,7 @@ long State<W>::syscall_writev(Machine<W>& machine)
 	if (fd >= 0 && fd < 3) {
         const size_t size = sizeof(iovec32) * count;
 
+		auto* state = machine.template get_userdata<State<W>> ();
         std::vector<iovec32> vec(count);
         machine.memory.memcpy_out(vec.data(), iov_g, size);
 
@@ -70,7 +73,7 @@ long State<W>::syscall_writev(Machine<W>& machine)
             auto src_g = (uint32_t) iov.iov_base;
             auto len_g = std::min(sizeof(buffer), (size_t) iov.iov_len);
             machine.memory.memcpy_out(buffer, src_g, len_g);
-			output += std::string(buffer, len_g);
+			state->output += std::string(buffer, len_g);
 #ifdef RISCV_DEBUG
 			res += write(fd, buffer, len_g);
 #else
@@ -130,6 +133,7 @@ long syscall_openat(Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL openat called, fd = %d  \n", fd);
+	(void) fd;
     return -EBADF;
 }
 
@@ -138,6 +142,7 @@ long syscall_readlinkat(Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL readlinkat called, fd = %d  \n", fd);
+	(void) fd;
     return -EBADF;
 }
 
@@ -309,9 +314,10 @@ inline void add_mman_syscalls(Machine<W>& machine)
 template <int W>
 inline void setup_minimal_syscalls(State<W>& state, Machine<W>& machine)
 {
+	machine.set_userdata(&state);
 	machine.install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
-	machine.install_syscall_handler(64, {&state, &State<W>::syscall_write});
-	machine.install_syscall_handler(93, {&state, &State<W>::syscall_exit});
+	machine.install_syscall_handler(64, syscall_write<W>);
+	machine.install_syscall_handler(93, syscall_exit<W>);
 }
 
 template <int W>
@@ -348,7 +354,7 @@ void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
 
 	machine.install_syscall_handler(56, syscall_openat<W>);
 	machine.install_syscall_handler(57, syscall_close<W>);
-	machine.install_syscall_handler(66, {&state, &State<W>::syscall_writev});
+	machine.install_syscall_handler(66, syscall_writev<W>);
 	machine.install_syscall_handler(78, syscall_readlinkat<W>);
 	machine.install_syscall_handler(80, syscall_stat<W>);
 
@@ -375,6 +381,7 @@ void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
 		const uint32_t buffer = machine.template sysarg<uint32_t> (4);
 		SYSPRINT(">>> xstat(fd=%d, path=0x%X, flags=%x, buf=0x%X)\n",
 				fd, path, flags, buffer);
+		(void) fd;
 		statx s;
 		s.stx_mask = flags;
 		machine.copy_to_guest(buffer, &s, sizeof(statx));

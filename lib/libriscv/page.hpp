@@ -1,24 +1,21 @@
 #pragma once
 #include <cassert>
+#include <functional>
+#include <memory>
 #include <type_traits>
 #include "common.hpp"
 #include "decoder_cache.hpp"
-#include "util/delegate.hpp"
+#include "util/function.hpp"
 
 namespace riscv {
 
 struct PageAttributes
 {
-	union {
-		struct {
-			int  read   :  1;
-			int  write  :  1;
-			int  exec   :  1;
-			int  is_cow :  1;
-			int  shared :  1;
-		};
-		int whole = 0x3;
-	};
+	bool read = true;
+	bool write = true;
+	bool exec = false;
+	bool is_cow = false;
+	bool shared = false;
 
 	bool is_default() const noexcept {
 		PageAttributes def {};
@@ -37,11 +34,11 @@ struct Page
 {
 	static constexpr unsigned SIZE  = PageData::SIZE;
 	static constexpr unsigned SHIFT = PageData::SHIFT;
-	using mmio_cb_t = delegate<int64_t (Page&, uint32_t, int, int64_t)>;
+	using mmio_cb_t = Function<int64_t (Page&, uint32_t, int, int64_t)>;
 
 	Page() = default;
 	Page(const PageAttributes& a, const PageData& d)
-		: attr(a), m_page(d) {}
+		: m_page(d), attr(a) {}
 
 	auto& page() noexcept { return m_page; }
 	const auto& page() const noexcept { return m_page; }
@@ -76,6 +73,7 @@ struct Page
 	}
 
 	static const Page& cow_page() noexcept;
+	static const Page& guard_page() noexcept;
 
 #ifdef RISCV_INSTR_CACHE
 	auto* decoder_cache() noexcept {
@@ -98,8 +96,8 @@ struct Page
 
 	// this combination has been benchmarked to be faster than
 	// page-aligning the PageData struct, and avoids an indirection
-	PageAttributes attr;
 	PageData m_page;
+	PageAttributes attr;
 #ifdef RISCV_INSTR_CACHE
 	std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
 #endif
