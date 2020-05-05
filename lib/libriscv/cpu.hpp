@@ -15,7 +15,7 @@ namespace riscv
 	template<int W> struct Machine;
 
 	template<int W>
-	struct CPU
+	struct alignas(64) CPU
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
 		using isa_t     = isa_type<W>;              // 32- or 64-bit architecture

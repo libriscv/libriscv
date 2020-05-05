@@ -130,14 +130,6 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
-		address_t m_start_address = 0;
-		address_t m_stack_address = 0;
-		address_t m_exit_address  = 0;
-		const bool m_load_program;
-		const bool m_protect_segments;
-		size_t    m_pages_total   = 0; // max memory usage
-		size_t    m_pages_highest = 0; // max pages used
-
 		const Page* m_current_rd_ptr  = nullptr;
 		address_t   m_current_rd_page = -1;
 		Page*     m_current_wr_ptr  = nullptr;
@@ -151,6 +143,14 @@ namespace riscv
 		mutable eastl::string_map<address_t,
 				eastl::str_less<const char*>,
 				eastl::allocator_malloc> sym_lookup;
+
+		address_t m_start_address = 0;
+		address_t m_stack_address = 0;
+		address_t m_exit_address  = 0;
+		const bool m_load_program;
+		const bool m_protect_segments;
+		size_t    m_pages_total   = 0; // max memory usage
+		size_t    m_pages_highest = 0; // max pages used
 	};
 #include "memory_inline.hpp"
 }

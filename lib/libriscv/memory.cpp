@@ -13,9 +13,9 @@ namespace riscv
 					const std::vector<uint8_t>& bin,
 					MachineOptions options)
 		: m_machine{mach},
+		  m_binary{bin},
 		  m_load_program     {options.load_program},
-		  m_protect_segments {options.protect_segments},
-		  m_binary{bin}
+		  m_protect_segments {options.protect_segments}
 	{
 		assert(options.memory_max % Page::size() == 0);
 		assert(options.memory_max >= Page::size());
