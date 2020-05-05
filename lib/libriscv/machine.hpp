@@ -4,22 +4,23 @@
 #include "memory.hpp"
 #include "util/delegate.hpp"
 #include <array>
-#include <errno.h> // ENOSYS
-#include <vector>
 
 namespace riscv
 {
 	static constexpr int RISCV32 = 4;
 	static constexpr int RISCV64 = 8;
-	static constexpr uint64_t DEFAULT_MEMORY_MAX = 16ull << 20; // 16mb
 
 	template <int W>
 	struct Machine
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
 		using syscall_t = delegate<long (Machine<W>&)>;
+
+		// see common.hpp for MachineOptions
 		Machine(const std::vector<uint8_t>& binary = {},
-				address_t max_memory = DEFAULT_MEMORY_MAX);
+				MachineOptions = {});
+		Machine(const std::vector<uint8_t>& binary = {},
+				uint64_t memory_max = 16ull << 20 /* 16mb */);
 		~Machine();
 
 		// Simulate a RISC-V machine until @max_instructions have been
@@ -83,7 +84,7 @@ namespace riscv
 		void setup_call(address_t call_addr, Args&&... args);
 
 		// returns the address of a symbol in the ELF symtab, or zero
-		address_t address_of(const char* name);
+		address_t address_of(const char* name) const;
 
 		// Bytes (in whole pages) of unused memory
 		address_t free_memory() const noexcept;

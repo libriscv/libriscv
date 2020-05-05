@@ -7,7 +7,6 @@
 #include <cassert>
 #include <cstring>
 #include <EASTL/allocator_malloc.h>
-#include <EASTL/string.h>
 #include <EASTL/string_map.h>
 #include <EASTL/unordered_map.h>
 #include <numeric>
@@ -47,13 +46,12 @@ namespace riscv
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
-		address_t elf_end_vaddr() const noexcept { return this->m_elf_end_vaddr; }
 
 		auto& machine() { return this->m_machine; }
 		const auto& machine() const { return this->m_machine; }
 
 		// call interface
-		address_t resolve_address(const char* sym);
+		address_t resolve_address(const char* sym) const;
 		void      set_exit_address(address_t new_exit);
 		address_t exit_address() const noexcept;
 		// basic backtraces
@@ -62,7 +60,7 @@ namespace riscv
 			address_t   address = 0x0;
 			uint32_t    offset  = 0x0;
 		};
-		Callsite lookup(address_t);
+		Callsite lookup(address_t) const;
 		void print_backtrace(void(*print_function)(const char*, size_t));
 
 		// page handling
@@ -88,6 +86,8 @@ namespace riscv
 		// shared pages (regular pages will have priority!)
 		size_t nonshared_pages_active() const noexcept;
 		void   install_shared_page(address_t pageno, Page&);
+		// convert every memory page to shared, return vector with address, Page* pair
+		std::vector<std::pair<address_t, Page*>> convert_to_shared_memory();
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
@@ -96,7 +96,7 @@ namespace riscv
 		// returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
-		Memory(Machine<W>&, const std::vector<uint8_t>&, address_t max_mem);
+		Memory(Machine<W>&, const std::vector<uint8_t>&, MachineOptions);
 		~Memory();
 	private:
 		inline auto& create_attr(const address_t address);
@@ -121,7 +121,7 @@ namespace riscv
 		}
 		const Shdr* section_by_name(const char* name) const;
 		void relocate_section(const char* section_name, const char* symtab);
-		const typename Elf<W>::Sym* resolve_symbol(const char* name);
+		const typename Elf<W>::Sym* resolve_symbol(const char* name) const;
 		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {
 			assert(symidx < shdr->sh_size / sizeof(typename Elf<W>::Sym));
 			auto* symtab = elf_offset<typename Elf<W>::Sym>(shdr->sh_offset);
@@ -132,7 +132,9 @@ namespace riscv
 
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
-		address_t m_elf_end_vaddr = 0;
+		address_t m_exit_address  = 0;
+		const bool m_load_program;
+		const bool m_protect_segments;
 		size_t    m_pages_total   = 0; // max memory usage
 		size_t    m_pages_highest = 0; // max pages used
 
@@ -144,11 +146,11 @@ namespace riscv
 		page_fault_cb_t m_page_fault_handler = nullptr;
 
 		const std::vector<uint8_t>& m_binary;
-		const bool m_protect_segments;
 
 		// lookup tree for ELF symbol names
-		eastl::string_map<address_t, eastl::str_less<const char*>, eastl::allocator_malloc> sym_lookup;
-		address_t m_exit_address = 0;
+		mutable eastl::string_map<address_t,
+				eastl::str_less<const char*>,
+				eastl::allocator_malloc> sym_lookup;
 	};
 #include "memory_inline.hpp"
 }

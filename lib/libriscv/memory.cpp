@@ -9,13 +9,20 @@ __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 namespace riscv
 {
 	template <int W>
-	Memory<W>::Memory(Machine<W>& mach, const std::vector<uint8_t>& bin, address_t max_mem)
-		: m_machine{mach}, m_binary{bin}, m_protect_segments {true}
+	Memory<W>::Memory(Machine<W>& mach,
+					const std::vector<uint8_t>& bin,
+					MachineOptions options)
+		: m_machine{mach},
+		  m_load_program     {options.load_program},
+		  m_protect_segments {options.protect_segments},
+		  m_binary{bin}
 	{
-		assert(max_mem % Page::size() == 0);
-		assert(max_mem >= Page::size());
-		this->m_pages_total = max_mem / Page::size();
+		assert(options.memory_max % Page::size() == 0);
+		assert(options.memory_max >= Page::size());
+		this->m_pages_total = options.memory_max / Page::size();
 		this->reset();
+		// set the default exit function address for vm calls
+		this->m_exit_address = resolve_address("_exit");
 	}
 	template <int W>
 	Memory<W>::~Memory()
@@ -29,7 +36,8 @@ namespace riscv
 		// initialize paging (which clears all pages) before loading binary
 		this->initial_paging();
 		// load ELF binary into virtual memory
-		if (!m_binary.empty()) this->binary_loader();
+		if (!m_binary.empty())
+			this->binary_loader();
 	}
 
 	template <int W>
@@ -50,9 +58,13 @@ namespace riscv
 	void Memory<W>::initial_paging()
 	{
 		this->clear_all_pages();
-		// make the zero-page unreadable (to trigger faults on null-pointer accesses)
-		auto& zp = this->create_page(0);
-		zp.attr = { .read = false, .write = false, .exec = false };
+
+		if (m_pages.find(0) == m_pages.end()) {
+			// create a default zero-page, unreadable.
+			// this will trigger faults on null-pointer accesses.
+			auto& zp = this->create_page(0);
+			zp.attr = { .read = false, .write = false, .exec = false };
+		}
 	}
 
 	template <int W>
@@ -89,10 +101,6 @@ namespace riscv
 				 .read = true, .write = true, .exec = true
 			});
 		}
-		// find program end
-		m_elf_end_vaddr = std::max(m_elf_end_vaddr, (uint32_t) (hdr->p_vaddr + len));
-		// set the default exit function address for vm calls
-		this->m_exit_address = resolve_address("_exit");
 	}
 
 	// ELF32 and ELF64 loader
@@ -127,7 +135,10 @@ namespace riscv
 			switch (hdr->p_type)
 			{
 				case PT_LOAD:
-					binary_load_ph(hdr);
+					// loadable program segments
+					if (this->m_load_program) {
+						binary_load_ph(hdr);
+					}
 					seg++;
 					break;
 				case PT_GNU_STACK:
@@ -166,7 +177,7 @@ namespace riscv
 	}
 
 	template <int W>
-	const typename Elf<W>::Sym* Memory<W>::resolve_symbol(const char* name)
+	const typename Elf<W>::Sym* Memory<W>::resolve_symbol(const char* name) const
 	{
 		const auto* sym_hdr = section_by_name(".symtab");
 		if (sym_hdr == nullptr) return nullptr;
@@ -274,7 +285,26 @@ namespace riscv
 	}
 
 	template <int W>
-	typename Memory<W>::Callsite Memory<W>::lookup(address_t address)
+	std::vector<std::pair<address_type<W>, Page*>>
+		Memory<W>::convert_to_shared_memory()
+	{
+		// shared pages that has to be manually managed by the receiver
+		std::vector<std::pair<address_t, Page*>> result;
+		// NOTE: maybe result.reserve(m_pages.size()) here?
+		for (auto it : m_pages) {
+			auto* page = it.second;
+			assert(page->attr.is_cow == false);
+			// convert all non-shared pages to shared and collect them
+			if (!page->attr.shared) {
+				page->attr.shared = true;
+				result.emplace_back(it.first, page);
+			}
+		}
+		return result;
+	}
+
+	template <int W>
+	typename Memory<W>::Callsite Memory<W>::lookup(address_t address) const
 	{
 		const auto* sym_hdr = section_by_name(".symtab");
 		if (sym_hdr == nullptr) return {};

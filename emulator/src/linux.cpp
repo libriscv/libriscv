@@ -120,6 +120,6 @@ void prepare_linux(riscv::Machine<4>& machine,
 
 	if (riscv::verbose_machine) {
 		printf("* SP = 0x%X  Argument list: %zu bytes\n", dst, argsize);
-		printf("* Program end: 0x%X\n", machine.memory.elf_end_vaddr());
+		// printf("* Program end: 0x%X\n", xxx); <-- can be calc from phdrs
 	}
 }

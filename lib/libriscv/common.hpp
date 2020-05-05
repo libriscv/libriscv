@@ -1,6 +1,7 @@
 #pragma once
 #include <type_traits>
 #include <string>
+#include <vector>
 
 #ifndef LIKELY
 #define LIKELY(x) __builtin_expect((x), 1)
@@ -71,6 +72,19 @@ namespace riscv
 #else
 	static constexpr bool floating_point_enabled = false;
 #endif
+
+	struct Page;
+
+	struct MachineOptions
+	{
+		uint64_t memory_max = 16ull << 20; // 16mb
+		bool load_program = true;
+		bool protect_segments = true;
+		// The pages provided will be inserted into the machine.
+		// They must be shared because there is no good way to handle
+		// machine resets (you will lose all non-shared pages).
+		std::vector<Page*> pages;
+	};
 
 	template <int W>
 	struct SerializedMachine;

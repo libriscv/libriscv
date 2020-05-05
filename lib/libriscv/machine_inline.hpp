@@ -1,10 +1,15 @@
 
 template <int W>
-inline Machine<W>::Machine(const std::vector<uint8_t>& binary, address_t maxmem)
-	: cpu(*this), memory(*this, binary, maxmem)
+inline Machine<W>::Machine(const std::vector<uint8_t>& binary, 
+							MachineOptions options)
+	: cpu(*this), memory(*this, binary, options)
 {
 	cpu.reset();
 }
+template <int W>
+inline Machine<W>::Machine(const std::vector<uint8_t>& binary, 
+							uint64_t mmax)
+	: Machine(binary, { .memory_max = mmax }) {}
 template <int W>
 inline Machine<W>::~Machine()
 {
@@ -84,7 +89,7 @@ inline void Machine<W>::system_call(int syscall_number)
 		}
 		// EBREAK should not modify registers
 		if (syscall_number != SYSCALL_EBREAK) {
-			cpu.reg(RISCV::REG_RETVAL) = -ENOSYS;
+			cpu.reg(RISCV::REG_RETVAL) = -38; // -ENOSYS
 		}
 	}
 	else {
@@ -157,7 +162,7 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 }
 
 template <int W>
-inline address_type<W> Machine<W>::address_of(const char* name)
+inline address_type<W> Machine<W>::address_of(const char* name) const
 {
 	return memory.resolve_address(name);
 }

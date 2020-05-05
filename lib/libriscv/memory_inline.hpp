@@ -297,7 +297,7 @@ void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 }
 
 template <int W>
-address_type<W> Memory<W>::resolve_address(const char* name)
+address_type<W> Memory<W>::resolve_address(const char* name) const
 {
 	const auto& it = sym_lookup.find(name);
 	if (it != sym_lookup.end()) return it->second;
