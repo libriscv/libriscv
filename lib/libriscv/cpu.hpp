@@ -43,9 +43,10 @@ namespace riscv
 		auto& machine() noexcept { return this->m_machine; }
 		const auto& machine() const noexcept { return this->m_machine; }
 
+#ifdef RISCV_EXT_ATOMICS
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
-
+#endif
 		static void trigger_exception(interrupt_t) COLD_PATH();
 
 #ifdef RISCV_DEBUG
@@ -91,7 +92,9 @@ namespace riscv
 		bool break_time() const;
 		friend struct Machine<W>;
 #endif
+#ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
+#endif
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 

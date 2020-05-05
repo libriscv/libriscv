@@ -34,8 +34,8 @@ void setup_native_threads(int& status, Machine<W>& machine)
 	});
 	// exit
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+1,
-	[mt, &status] (Machine<W>& machine) {
-		status = machine.template sysarg<int> (0);
+	[mt] (Machine<W>& machine) {
+		const int status = machine.template sysarg<int> (0);
 		const int tid = mt->get_thread()->tid;
 		THPRINT(">>> Exit on tid=%ld, exit status = %d\n",
 				tid, (int) status);

@@ -98,7 +98,9 @@ namespace riscv
 		assert(vec.size() >= state.cpu_offset + sizeof(Registers<W>));
 		// restore CPU registers and counters
 		this->m_regs = *(const Registers<W>*) &vec[state.cpu_offset];
+#ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};
+#endif
 		// reset the instruction page pointer
 		this->m_current_page = {};
 #ifdef RISCV_PAGE_CACHE

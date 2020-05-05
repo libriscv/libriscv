@@ -32,6 +32,7 @@
 
 namespace riscv {
 
+#define USE_EMBEDDED_FUNCTION
 #ifdef USE_EMBEDDED_FUNCTION
 
 /**

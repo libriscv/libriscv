@@ -1,7 +1,9 @@
 #include "rv32i_instr.hpp"
 #include "machine.hpp"
 #include "rv32i_instr.cpp"
+#ifdef RISCV_EXT_ATOMICS
 #include "rv32a_instr.cpp"
+#endif
 #include "rv32c_instr.cpp"
 #include "rv32f_instr.cpp"
 
