@@ -6,6 +6,10 @@ You can find a live demonstration of the library here: https://droplet.fwsnet.ne
 
 Here is a multi-threaded test program: https://gist.github.com/fwsGonzo/e1a9cdc18f9da2ffc309fb9324a26c32
 
+## Benchmarks against LuaJIT
+
+https://gist.github.com/fwsGonzo/f874ba58f2bab1bf502cad47a9b2fbed
+
 ## Installing a RISC-V GCC embedded compiler
 
 ```
@@ -157,6 +161,6 @@ Note that the web API demo uses a docker container to build RISC-V binaries, for
 
 Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything. Disable atomics and compression extensions in the emulator for a slight boost, if you can recompile the RISC-V binaries with the same configuration.
 
-Use GCC to build the RISC-V binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`. Try enabling the instruction decoder cache and see if it's faster for your needs. Experiment with -Os and GC-sections, as the lower instruction count can translate into better performance for the emulator.
+Use GCC to build the RISC-V binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`. Try enabling the instruction decoder cache and see if it's faster for your needs. Always enable the page cache. Experiment with LTO and GC-sections, as the lower instruction count will translate into better performance for the emulator.
 
-Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using specialized system calls. See `emulator/src/native_heap.hpp`, as well as the native_libc files. This will manage the location of heap chunks outside of the emulator, however the heap memory itself is still inside the virtual memory of the guest binary.
+Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using specialized system calls. See `emulator/syscalls/src/native_heap.hpp`, as well as the native_libc files. This will manage the location of heap chunks outside of the emulator, however the heap memory itself is still inside the virtual memory of the guest binary. There is also an accelerated tiny threads implementation, see: `microthread.hpp` and `emulator/syscalls/src/native_threads.cpp`.
