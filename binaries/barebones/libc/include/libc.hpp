@@ -19,9 +19,9 @@ extern char*  strcat(char* dest, const char* src);
 
 extern int   write(int, const void*, size_t);
 
-extern void* malloc(size_t);
-extern void* calloc(size_t, size_t);
-extern void  free(void*);
+extern void* malloc(size_t) _NOTHROW;
+extern void* calloc(size_t, size_t) _NOTHROW;
+extern void  free(void*) _NOTHROW;
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1

@@ -1,7 +1,11 @@
 #pragma once
 
+#ifndef NATIVE_SYSCALLS_BASE
 #define NATIVE_SYSCALLS_BASE    1  /* They start at 1 */
+#endif
+#ifndef THREAD_SYSCALLS_BASE
 #define THREAD_SYSCALLS_BASE  500  /* They start at 500 */
+#endif
 
 #define SYSCALL_MALLOC    (NATIVE_SYSCALLS_BASE+0)
 #define SYSCALL_CALLOC    (NATIVE_SYSCALLS_BASE+1)
