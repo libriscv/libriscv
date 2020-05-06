@@ -5,7 +5,8 @@
 extern "C"
 void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
 {
-	static riscv::Machine<riscv::RISCV32> machine { };
+	static std::vector<uint8_t> bin {};
+	static riscv::Machine<riscv::RISCV32> machine { bin };
 	// we don't want to see unhandled syscall messages
 	riscv::verbose_machine = false;
 

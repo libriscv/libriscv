@@ -17,9 +17,9 @@ namespace riscv
 		using address_t = address_type<W>; // one unsigned memory address
 
 		// see common.hpp for MachineOptions
-		Machine(const std::vector<uint8_t>& binary = {},
-				MachineOptions = {});
-		Machine(const std::vector<uint8_t>& binary = {},
+		Machine(const std::vector<uint8_t>& binary,
+				MachineOptions);
+		Machine(const std::vector<uint8_t>& binary,
 				uint64_t memory_max = 16ull << 20 /* 16mb */);
 		~Machine();
 
