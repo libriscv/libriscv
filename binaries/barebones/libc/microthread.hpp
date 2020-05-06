@@ -130,7 +130,7 @@ inline long clone_helper(long sp, long tls, long ctid)
 {
 	extern void trampoline(Thread*);
 	/* stack, func, tls, flags */
-	return syscall(500, sp, (long) &trampoline, tls, ctid);
+	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, ctid);
 }
 
 template <typename T, typename... Args>
@@ -194,7 +194,7 @@ inline int direct(void(*func)(), void* data)
 	const long tls  = (long) thread;
 	extern void direct_starter(Thread*);
 	/* stack, func, tls, flags */
-	return syscall(500, (long) stack_top, (long) &direct_starter, tls, 0);
+	return syscall(THREAD_SYSCALLS_BASE+0, (long) stack_top, (long) &direct_starter, tls, 0);
 }
 
 inline long join(Thread* thread)
@@ -223,11 +223,11 @@ inline void yield_until(const std::function<bool()>& condition)
 }
 inline long yield()
 {
-	return syscall(502);
+	return syscall(THREAD_SYSCALLS_BASE+2);
 }
 inline long yield_to(int tid)
 {
-	return syscall(503, tid);
+	return syscall(THREAD_SYSCALLS_BASE+3, tid);
 }
 inline long yield_to(Thread* thread)
 {
@@ -236,7 +236,7 @@ inline long yield_to(Thread* thread)
 
 inline long block(int reason = 0)
 {
-	return syscall(504, reason);
+	return syscall(THREAD_SYSCALLS_BASE+4, reason);
 }
 inline void block(int reason, const std::function<bool()>& condition)
 {
@@ -247,11 +247,11 @@ inline void block(int reason, const std::function<bool()>& condition)
 }
 inline long wakeup_one_blocked(int reason)
 {
-	return syscall(505, reason);
+	return syscall(THREAD_SYSCALLS_BASE+5, reason);
 }
 inline long unblock(int tid)
 {
-	return syscall(506, tid);
+	return syscall(THREAD_SYSCALLS_BASE+6, tid);
 }
 
 __attribute__((noreturn))
@@ -266,7 +266,7 @@ inline void Thread::exit(long exitcode)
 {
 	this->tid = 0;
 	this->return_value = exitcode;
-	syscall(501, exitcode);
+	syscall(THREAD_SYSCALLS_BASE+1, exitcode);
 	__builtin_unreachable();
 }
 

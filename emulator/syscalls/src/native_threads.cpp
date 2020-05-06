@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cstdio>
 using namespace riscv;
-#ifndef CUSTOM_NATIVE_SYSCALL_NUMBERS
+#ifndef THREADS_SYSCALL_BASE
 static const int THREADS_SYSCALL_BASE = 500;
 #endif
 #include "threads.cpp"

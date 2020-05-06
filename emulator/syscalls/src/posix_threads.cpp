@@ -5,10 +5,11 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 {
 	auto* mt = new multithreading<W>(machine);
 	machine.add_destructor_callback([mt] { delete mt; });
+	machine.set_userdata(&state);
 
 	// exit & exit_group
 	machine.install_syscall_handler(93,
-	[mt, &state] (Machine<W>& machine) {
+	[mt] (Machine<W>& machine) {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
 		const int tid = mt->get_thread()->tid;
 		THPRINT(">>> Exit on tid=%ld, exit code = %d\n",
@@ -20,7 +21,9 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 			assert(mt->get_thread()->tid != tid);
 			return machine.cpu.reg(RISCV::REG_ARG0);
 		}
-		state.exit_code = status;
+		// using the userdata pointer in machine we can get
+		// access to the extra state struct without capturing
+		machine.template get_userdata<State<W>> ()->exit_code = status;
 		machine.stop();
 		return status;
 	});

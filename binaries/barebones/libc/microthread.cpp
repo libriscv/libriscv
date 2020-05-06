@@ -9,7 +9,7 @@ namespace microthread
 	void oneshot_exit()
 	{
 		free(self()); // after this point stack unusable
-		syscall(501, 0);
+		syscall(THREAD_SYSCALLS_BASE+1, 0);
 		__builtin_unreachable();
 	}
 	void direct_starter(Thread* thread)
