@@ -29,7 +29,8 @@ Let's start with an example of handing exit:
 template <int W>
 long syscall_exit(Machine<W>& machine)
 {
-	int exit_code = machine.template sysarg<int> (0);
+	auto [exit_code] = machine.template sysargs <int> ();
+	// Do something with exit_code
 	machine.stop();
 	return exit_code;
 }
@@ -51,9 +52,8 @@ If we want stdout from the VM printed in our terminal, we should handle `write`:
 template <int W>
 long syscall_write(Machine<W>& machine)
 {
-	const int  fd      = machine.template sysarg<int>(0);
-	const auto address = machine.template sysarg<address_type<W>>(1);
-	const size_t len   = machine.template sysarg<address_type<W>>(2);
+	const auto [fd, address, len] =
+		machine.template sysargs <int, address_type<W>, address_type<W>> ();
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
 		char buffer[1024];
@@ -67,7 +67,7 @@ long syscall_write(Machine<W>& machine)
 ```
 Here we extract 3 arguments, `int fd, void* buffer, size_t len`, looks familiar? We have to make sure fd is one of the known standard pipes, otherwise the VM could start writing to real files open in the host process!
 
-The return value of a call into a kernel is usually a success or error indication, and the way to set an error is to negate a POSIX error code. Success is often 0, however in this case success is the length of the written buffer.
+The return value of a call into a kernel is usually a success or error indication, and the way to set an error is to negate a POSIX error code. Success is often 0, however in this case the return value is the bytes written.
 
 ## Installing system calls
 
@@ -75,7 +75,7 @@ To be able to handle system calls, they need to be installed into the machine:
 
 ```
 const int SYS_WRITE = 64;
-machine.install_syscall_handler(SYS_WRITE, syscall_write);
+machine.install_syscall_handler(SYS_WRITE, syscall_write<W>);
 ```
 Now when the VM guest calls `printf()` and the C library uses the `write` syscall, our `syscall_write` function will be called.
 
@@ -102,8 +102,8 @@ To handle this system call, we will need to copy into the guest:
 template <int W>
 long syscall_getcwd(Machine<W>& machine)
 {
-	const auto address = machine.template sysarg<address_type<W>>(0);
-	const size_t len   = machine.template sysarg<address_type<W>>(1);
+	const auto [address, len] =
+		machine.template sysargs <address_type<W>, address_type<W>> ();
 	// make something up! :)
 	const char path[] = "/home/vmguest";
 	// we only accept lengths of at least sizeof(path)

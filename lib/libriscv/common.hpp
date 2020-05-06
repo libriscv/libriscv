@@ -14,8 +14,12 @@
 #define COLD_PATH() __attribute__((cold))
 #endif
 
-#ifndef SYSCALL_EBREAK_NR
-#define SYSCALL_EBREAK_NR    0
+#ifndef RISCV_SYSCALL_EBREAK_NR
+#define RISCV_SYSCALL_EBREAK_NR    0
+#endif
+
+#ifndef RISCV_SYSCALLS_MAX
+#define RISCV_SYSCALLS_MAX   512
 #endif
 
 #ifndef RISCV_MEMORY_TRAPS_ENABLED
@@ -26,7 +30,7 @@
 
 namespace riscv
 {
-	static constexpr int SYSCALL_EBREAK = SYSCALL_EBREAK_NR;
+	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
 
 	// print information during machine creation
 	extern bool verbose_machine;

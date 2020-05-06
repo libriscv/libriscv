@@ -8,7 +8,7 @@ It is not unsafe to call `_exit()` or any other equivalent function directly, as
 
 Once the machine is no longer running, but still left in a state in which we can call into it, we have to make sure that our callable function in the VM is present in the symbol table of the ELF, so that we can find the address of this function. In addition, `_exit` must also be present in the ELF symbol tables, as it will be used as a way to exit the VM call and also optionally return a status code. This is done via hooking up the exit system call behind the scenes and extracting the exit status code after execution stops.
 
-A third, and final, stumbling block is sometimes having functions, even those marked with `__attribute__((used))`, not appearing in the ELF symbol table, which is a linker issue. This can happen when using `-gc-sections` and friends. You can test if your symbol is visible to the emulator by using `machine.address_of("myFunction")` which returns a memory address. If the address is 0, then the name was not found in the symbol table, which makes `vmcall(...)` impossible to perform. Calling will most likely cause a CPU exception on address 0, which by default no execute privilege.
+A third, and final, stumbling block is sometimes having functions, even those marked with `__attribute__((used))`, not appearing in the ELF symbol table, which is a linker issue. This can happen when using `-gc-sections` and friends. You can test if your symbol is visible to the emulator by using `machine.address_of("myFunction")` which returns a memory address. If the address is 0, then the name was not found in the symbol table, which makes `vmcall(...)` impossible to perform. Calling will most likely cause a CPU exception on address 0, which by default has no execute privileges.
 
 Start by running the machine normally and complete `int main()` to make sure global constructors are called and the C run-time environment is fully initialized. So, if you are calling `_exit(0)` from main instead of returning, and not stripping ELF symbols from your binary you are ready to make function calls into the virtual machine.
 
@@ -20,9 +20,7 @@ Example which calls the function `test` with the arguments `555` and `666`:
 	printf("test returned %d\n", ret);
 ```
 
-Arguments are passed as a C++ vector of register-sized integers, however you can also pass floating-point values which are loaded into the separate FP registers.
-
-Additionally, you can also pass strings and plain-old-data (POD) by value, and they will be available by reference inside the callee function in the guest:
+Arguments are passed as normal. The function will move integral values and pointers into the integer registers, and floating-point values into the FP registers. Structs and strings will be pushed on stack and then an integer register will hold the pointer, following the RISC-V calling convention.
 
 ```C++
 	struct PodTest {
@@ -43,8 +41,8 @@ It is not recommended to copy data into guest memory and then pass pointers to t
 Without using threads the machine program will simply run until it's completed, an exception occurs, or the machine is stopped from the outside during a trap or system call. It would be nice to have the ability to run the host-side program in-between without preemption. We can do this by making vmcall not execute machine instructions, and instead do it ourselves manually:
 
 ```C++
-// Make a function call into the guest VM, but don't start execution
-machine.vmcall("test", {555}, {}, false);
+// Function call setup for the guest VM, but don't start execution
+machine.setup_call("test", 555, 666);
 // Run the program for X amount of instructions, then print something, then
 // resume execution again. Do this until stopped.
 do {
@@ -55,7 +53,7 @@ do {
 } while (!machine.stopped());
 ```
 
-Note that for the sake of this example we have not wrapped the call to `simulate()` in a try..catch, but if a CPU exception happens, it will throw a `riscv::MachineException`.
+Note that for the sake of this example we have not wrapped the call to `simulate()` in a try..catch, but if a CPU exception happens, it will throw a `riscv::MachineException`, and possibly exceptions from your own system call handlers.
 
 ## Minimal exit function
 
@@ -71,7 +69,7 @@ vmcall works by faking being called from `_exit`, and so when your function retu
 
 If you have some ideas on how to make vmcalls easier to do without requiring an exit function, please contact me or create an issue.
 
-An even smaller variant is making the handler for the `ebreak` instruction stop the machine. The `ebreak` instruction has a fixed system-call number which is defined by `SYSCALL_EBREAK_NR`. An example implementation:
+An even smaller variant is making the handler for the `ebreak` instruction stop the machine. The `ebreak` instruction has a fixed system-call number which is defined by `RISCV_SYSCALL_EBREAK_NR`. An example implementation:
 ```
 fast_exit:
 	ebreak     # A0 should already have the exit value
@@ -96,4 +94,4 @@ Build your executable with `-O2 -march=rv32g -mabi=ilp32d` or `-O2 -march=rv32im
 
 Use `Memory::memview()` or `Memory::memstring()` to handle arguments passed from guest to host. They have fast-paths for strings and structs that don't cross page-boundaries. Use `std::deque` instead of `std::vector` inside the guest where possible. The fastest way to append data to a list is using a `std::array` with a pointer: `*ptr++ = value;`.
 
-You can provide arguments to main with `Machine::setup_argv()`. They are all strings, just like normal.
+You can provide arguments to main with `Machine::setup_argv()`. They are all regular C++ strings, and will be passed into the VM in a way that is understood by normal C runtimes.

@@ -124,7 +124,7 @@ namespace riscv
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
 		bool m_stopped = false;
-		std::array<syscall_t, 512> m_syscall_handlers;
+		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers;
 		std::vector<Function<void()>> m_destructor_callbacks;
 		void* m_userdata = nullptr;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
