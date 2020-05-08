@@ -25,6 +25,7 @@ namespace riscv
 
 		void simulate();
 		void reset();
+		void reset_stack_pointer() noexcept;
 
 		address_t pc() const noexcept { return registers().pc; }
 		constexpr void jump(address_t);

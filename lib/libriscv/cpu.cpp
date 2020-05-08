@@ -13,22 +13,14 @@ namespace riscv
 	template <int W>
 	void CPU<W>::reset()
 	{
-		m_regs = {};
-		// initial stack location
-		this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
-		// NOTE: if the stack is very low, some stack pointer value could
-		// become 0x0 which could alter the behavior of the program,
-		// even though the address might be legitimate. To solve this, we move
-		// the stack at that time to a safer location.
-		if (this->reg(RISCV::REG_SP) < 0x100000) {
-			this->reg(RISCV::REG_SP) = 0x40000000;
-		}
+		this->m_regs = {};
+		this->reset_stack_pointer();
 #ifdef RISCV_PAGE_CACHE
 		// invalidate the page cache
 		for (auto& cache : this->m_page_cache)
 			cache.pageno = -1;
 #endif
-		m_current_page = {};
+		this->m_current_page = {};
 		// jumping causes some extra calculations
 		this->jump(machine().memory.start_address());
 	}

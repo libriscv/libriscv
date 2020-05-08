@@ -31,15 +31,12 @@ template <int W>
 template <uint64_t MAXI, typename... Args> constexpr
 inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 {
-	const address_t sp = cpu.reg(RISCV::REG_SP);
+	// reset the stack pointer to an initial location (deliberately)
+	this->cpu.reset_stack_pointer();
 	// setup calling convention
 	this->setup_call(call_addr, std::forward<Args>(args)...);
-	// realign the stack for the 16-byte ABI alignment
-	this->realign_stack();
 	// execute function
 	this->simulate(MAXI);
-	// restore stack pointer
-	this->cpu.reg(RISCV::REG_SP) = sp;
 	// address-sized integer return value
 	return cpu.reg(RISCV::REG_ARG0);
 }
@@ -50,4 +47,31 @@ inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
 	return vmcall<MAXI>(call_addr, std::forward<Args>(args)...);
+}
+
+template <int W>
+template <uint64_t MAXI, typename... Args> inline
+address_type<W> Machine<W>::vmintr(address_t call_addr, Args&&... args)
+{
+	const auto regs = cpu.registers();
+	const bool is_stopped = this->m_stopped;
+	// setup calling convention
+	this->setup_call(call_addr, std::forward<Args>(args)...);
+	// we need to make some stack room
+	this->cpu.reg(RISCV::REG_SP) -= 1024u;
+	this->realign_stack();
+	// execute function
+	try {
+		this->simulate(MAXI);
+	}
+	catch (...) {
+		this->m_stopped = is_stopped;
+		cpu.registers() = regs;
+		throw;
+	}
+	// restore registers and return value
+	const address_t return_value = cpu.reg(RISCV::REG_ARG0);
+	this->m_stopped = is_stopped;
+	cpu.registers() = regs;
+	return return_value;
 }

@@ -4,6 +4,19 @@ inline CPU<W>::CPU(Machine<W>& machine)
 	: m_machine { machine }
 {
 }
+template <int W>
+inline void CPU<W>::reset_stack_pointer() noexcept
+{
+	// initial stack location
+	this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
+	// NOTE: if the stack is very low, some stack pointer value could
+	// become 0x0 which could alter the behavior of the program,
+	// even though the address might be legitimate. To solve this, we move
+	// the stack at that time to a safer location.
+	if (this->reg(RISCV::REG_SP) < 0x100000) {
+		this->reg(RISCV::REG_SP) = 0x40000000;
+	}
+}
 
 template <int W>
 inline void CPU<W>::change_page(int pageno)

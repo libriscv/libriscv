@@ -43,6 +43,8 @@ Without using threads the machine program will simply run until it's completed, 
 ```C++
 // Function call setup for the guest VM, but don't start execution
 machine.setup_call("test", 555, 666);
+// Reset the stack pointer from any previous call to its initial value
+machine.cpu.reset_stack_pointer();
 // Run the program for X amount of instructions, then print something, then
 // resume execution again. Do this until stopped.
 do {
@@ -95,3 +97,7 @@ Build your executable with `-O2 -march=rv32g -mabi=ilp32d` or `-O2 -march=rv32im
 Use `Memory::memview()` or `Memory::memstring()` to handle arguments passed from guest to host. They have fast-paths for strings and structs that don't cross page-boundaries. Use `std::deque` instead of `std::vector` inside the guest where possible. The fastest way to append data to a list is using a `std::array` with a pointer: `*ptr++ = value;`.
 
 You can provide arguments to main with `Machine::setup_argv()`. They are all regular C++ strings, and will be passed into the VM in a way that is understood by normal C runtimes.
+
+## Interrupting a running machine
+
+It is possible to interrupt a running machine to perform another task. This can be done using the `Machine::vmintr()` function. A machine can also interrupt itself without any issues.

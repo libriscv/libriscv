@@ -77,6 +77,10 @@ namespace riscv
 		template<uint64_t MAXI = 0, typename... Args> constexpr
 		address_t vmcall(address_t call_addr, Args&&... args);
 
+		// Saves and restores registers before calling
+		template<uint64_t MAXI = 0, typename... Args>
+		address_t vmintr(address_t call_addr, Args&&... args);
+
 		// Sets up a function call only, executes no instructions.
 		// Supports integers, floating-point values and strings.
 		// Strings will be put on stack, which is not restored automatically.

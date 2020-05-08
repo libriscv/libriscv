@@ -255,7 +255,7 @@ namespace riscv
 		{
 			return mem.allocate_page(page);
 		}
-		throw MachineException(OUT_OF_MEMORY, "Out of memory");
+		throw MachineException(OUT_OF_MEMORY, "Out of memory", mem.pages_total());
 	}
 
 	static Page zeroed_page {
@@ -291,6 +291,7 @@ namespace riscv
 		if (UNLIKELY(shared_page.attr.shared == false))
 			throw MachineException(ILLEGAL_OPERATION,
 				"The provided page did not have the shared attribute", pageno);
+
 		// NOTE: If you insert a const Page, DON'T modify it! The machine
 		// won't, unless system-calls do or manual intervention happens!
 		m_pages.insert({pageno, const_cast<Page*> (&shared_page)});

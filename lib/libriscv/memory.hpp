@@ -46,14 +46,15 @@ namespace riscv
 
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
+		void set_stack_initial(address_t addr) { this->m_stack_address = addr; }
 
 		auto& machine() { return this->m_machine; }
 		const auto& machine() const { return this->m_machine; }
 
 		// call interface
 		address_t resolve_address(const char* sym) const;
-		void      set_exit_address(address_t new_exit);
 		address_t exit_address() const noexcept;
+		void      set_exit_address(address_t new_exit);
 		// basic backtraces
 		struct Callsite {
 			std::string name = "(null)";

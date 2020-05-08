@@ -57,7 +57,7 @@ And finally, the `micro` project implements the absolutely minimal freestanding 
 
 ## Instruction set support
 
-The emulator currently supports RV32GC (IMAFDC), and the foundation is laid for RV64IM.
+The emulator currently supports RV32GC (IMAFDC), and the foundation is laid for RV64I(MAFD).
 The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions), and there is a test-suite for these instructions, however they haven't been extensively tested as there are generally few FP-instructions in normal programs.
 
 Note: The compression extension suffers slight performance penalties due to all the bit-fiddling involved. There is no support for the E- and Q-extensions.
@@ -107,19 +107,17 @@ You can limit the amount of instructions to simulate at a time like so:
 	const uint64_t max_instructions = 1000;
 	machine.simulate(max_instructions);
 ```
-Similarly, when making a function call into the VM you can also add this limit as the last parameter to the `vmcall()` function.
+Similarly, when making a function call into the VM you can also add this limit as a template parameter to the `vmcall()` function.
 
 You can find details on the Linux system call ABI online as well as in the `syscalls.hpp`, and `syscalls.cpp` files in the src folder. You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
 
 ## Setting up your own machine environment
 
-You can create a 64kb machine without a binary, and no ELF loader will be invoked. One page will always be consumed to function as a zero-page, however it can be freed to get the memory back.
+You can create a 64kb machine without a binary, and no ELF loader will be invoked.
 ```C++
 	const uint32_t max_memory = 65536;
-	riscv::Machine<riscv::RISCV32> machine { {}, max_memory };
-
-	// free the zero-page
-	machine.memory.free_pages(0x0, riscv::Page::size());
+	std::vector<uint8_t> nothing; // taken as reference
+	riscv::Machine<riscv::RISCV32> machine { nothing, max_memory };
 ```
 
 Now you can copy your machine code directly into memory:
@@ -136,10 +134,10 @@ Finally, let's jump to the program entry, and start execution:
 	machine.cpu.jump(entry_point);
 
 	// geronimo!
-	machine.simulate();
+	machine.simulate(5'000);
 ```
 
-## Tutorials
+## Documentation
 
 [System calls](docs/SYSCALLS.md)
 
@@ -156,11 +154,12 @@ See the `webapi` folder for an example web-server that compiles and runs limited
 
 Note that the web API demo uses a docker container to build RISC-V binaries, for security reasons. You can build the container with `docker build -t newlib-rv32gc . -f newlib.Dockerfile` from the docker folder. Alternatively, you could build a more full-fledged Linux environment using `docker build -t linux-rv32gc . -f linux.Dockerfile`. There is a test-script to see that it works called `dbuild.sh` which takes an input code file and output binary as parameters.
 
+It can also be used as a script backend for a game engine, as it's quite a bit faster than LuaJIT, although it requires you to compile the scripts ahead of time as binaries using any computer language which can output RISC-V.
 
 ## What to use for performance
 
 Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything. Disable atomics and compression extensions in the emulator for a slight boost, if you can recompile the RISC-V binaries with the same configuration.
 
-Use GCC to build the RISC-V binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`. Try enabling the instruction decoder cache and see if it's faster for your needs. Always enable the page cache. Experiment with LTO and GC-sections, as the lower instruction count will translate into better performance for the emulator.
+Use GCC to build the RISC-V binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`. Try enabling the instruction decoder cache and see if it's faster for your needs. Always enable the page cache. Experiment with LTO and GC-sections, as the lower instruction count will translate into better performance for the emulator. Fair warning: It's a bit harder to use Clang for freestanding RISC-V.
 
 Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using specialized system calls. See `emulator/syscalls/src/native_heap.hpp`, as well as the native_libc files. This will manage the location of heap chunks outside of the emulator, however the heap memory itself is still inside the virtual memory of the guest binary. There is also an accelerated tiny threads implementation, see: `microthread.hpp` and `emulator/syscalls/src/native_threads.cpp`.
