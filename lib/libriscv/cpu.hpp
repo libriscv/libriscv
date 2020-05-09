@@ -7,7 +7,6 @@
 #include "rv32a.hpp"
 #include "util/function.hpp"
 #include <map>
-#include <tuple>
 #include <vector>
 
 namespace riscv

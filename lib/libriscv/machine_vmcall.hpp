@@ -51,7 +51,7 @@ inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 
 template <int W>
 template <uint64_t MAXI, typename... Args> inline
-address_type<W> Machine<W>::vmintr(address_t call_addr, Args&&... args)
+address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 {
 	const auto regs = cpu.registers();
 	const bool is_stopped = this->m_stopped;
@@ -69,9 +69,11 @@ address_type<W> Machine<W>::vmintr(address_t call_addr, Args&&... args)
 		cpu.registers() = regs;
 		throw;
 	}
-	// restore registers and return value
+	// restore registers and return value, preserve counter
 	const address_t return_value = cpu.reg(RISCV::REG_ARG0);
+	const uint64_t  counter = cpu.instruction_counter();
 	this->m_stopped = is_stopped;
 	cpu.registers() = regs;
+	cpu.registers().counter = counter;
 	return return_value;
 }

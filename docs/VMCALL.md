@@ -100,4 +100,4 @@ You can provide arguments to main with `Machine::setup_argv()`. They are all reg
 
 ## Interrupting a running machine
 
-It is possible to interrupt a running machine to perform another task. This can be done using the `Machine::vmintr()` function. A machine can also interrupt itself without any issues.
+It is possible to interrupt a running machine to perform another task. This can be done using the `Machine::preempt()` function. A machine can also interrupt itself without any issues.

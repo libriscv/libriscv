@@ -79,7 +79,7 @@ namespace riscv
 
 		// Saves and restores registers before calling
 		template<uint64_t MAXI = 0, typename... Args>
-		address_t vmintr(address_t call_addr, Args&&... args);
+		address_t preempt(address_t call_addr, Args&&... args);
 
 		// Sets up a function call only, executes no instructions.
 		// Supports integers, floating-point values and strings.
