@@ -1,11 +1,9 @@
-#include <array>
-#include "include/ringbuffer.hpp"
+#include "function.hpp"
+#include "ringbuffer.hpp"
 
 struct Events {
-	struct Work {
-		void (*event) (const void*);
-		const void* data;
-	};
+	using Work = Function<void()>;
+
 	FixedRingBuffer<8, Work> ring;
 	bool in_use = false;
 
@@ -17,7 +15,7 @@ inline void Events::handle()
 {
 	this->in_use = true;
 	while (const auto* wrk = ring.read()) {
-		wrk->event(wrk->data);
+		(*wrk)();
 	}
 	this->in_use = false;
 }
