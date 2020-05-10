@@ -23,7 +23,7 @@ inline long syscall(long n)
 	register long a0 asm("a0");
 	register long syscall_id asm("a7") = n;
 
-	asm volatile ("scall" : "=r"(a0) : "r"(syscall_id));
+	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id));
 
 	return a0;
 }
