@@ -77,3 +77,11 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	cpu.registers().counter = counter;
 	return return_value;
 }
+
+template <int W>
+template <uint64_t MAXI, typename... Args> inline
+address_type<W> Machine<W>::preempt(const char* funcname, Args&&... args)
+{
+	address_t call_addr = memory.resolve_address(funcname);
+	return preempt<MAXI>(call_addr, std::forward<Args>(args)...);
+}
