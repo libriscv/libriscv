@@ -55,10 +55,10 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 {
 	const auto regs = cpu.registers();
 	const bool is_stopped = this->m_stopped;
-	// setup calling convention
-	this->setup_call(call_addr, std::forward<Args>(args)...);
 	// we need to make some stack room
 	this->cpu.reg(RISCV::REG_SP) -= 1024u;
+	// setup calling convention
+	this->setup_call(call_addr, std::forward<Args>(args)...);
 	this->realign_stack();
 	// execute function
 	try {
