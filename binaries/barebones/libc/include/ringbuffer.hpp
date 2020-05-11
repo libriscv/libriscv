@@ -33,6 +33,9 @@ public:
 		}
 		return false;
 	}
+	void clear() {
+		this->m_reader = this->m_writer = 0;
+	}
 
 	size_t size() const {
 		return this->m_writer - this->m_reader;
