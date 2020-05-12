@@ -33,7 +33,7 @@ struct Page
 {
 	static constexpr unsigned SIZE  = PageData::SIZE;
 	static constexpr unsigned SHIFT = PageData::SHIFT;
-	using mmio_cb_t = std::function<int64_t (Page&, uint32_t, int, int64_t)>;
+	using mmio_cb_t = Function<int64_t (Page&, uint32_t, int, int64_t)>;
 
 	Page() = default;
 	Page(const PageAttributes& a, const PageData& d)
