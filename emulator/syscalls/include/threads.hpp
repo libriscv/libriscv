@@ -68,4 +68,4 @@ template <int W>
 void setup_multithreading(State<W>&, riscv::Machine<W>&);
 
 template <int W>
-void setup_native_threads(int&, riscv::Machine<W>&);
+void setup_native_threads(riscv::Machine<W>&);

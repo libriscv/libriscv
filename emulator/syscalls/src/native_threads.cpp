@@ -8,7 +8,7 @@ static const int THREADS_SYSCALL_BASE = 500;
 #include "threads.cpp"
 
 template <int W>
-void setup_native_threads(int& status, Machine<W>& machine)
+void setup_native_threads(Machine<W>& machine)
 {
 	auto* mt = new multithreading<W>(machine);
 	machine.add_destructor_callback([mt] { delete mt; });
@@ -89,4 +89,4 @@ void setup_native_threads(int& status, Machine<W>& machine)
 }
 
 template
-void setup_native_threads<4>(int&, Machine<4>& machine);
+void setup_native_threads<4>(Machine<4>& machine);
