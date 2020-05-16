@@ -98,10 +98,7 @@ thread<W>* multithreading<W>::create(
 		thread->clear_tid = ctid;
 	}
 
-	threads.emplace(
-		std::piecewise_construct,
-		std::forward_as_tuple(tid),
-		std::forward_as_tuple(thread));
+	threads.emplace(tid, thread);
 	return thread;
 }
 
@@ -198,7 +195,7 @@ void multithreading<W>::wakeup_next()
 	// resume a waiting thread
 	assert(!suspended.empty());
 	auto* next = suspended.front();
-	suspended.pop_front();
+	suspended.erase(suspended.begin());
 	// resume next thread
 	next->resume();
 }

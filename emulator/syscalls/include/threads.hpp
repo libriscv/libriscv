@@ -1,6 +1,5 @@
 #pragma once
-#include <deque>
-#include <map>
+#include <EASTL/fixed_map.h>
 #include <libriscv/machine.hpp>
 #include "syscall_helpers.hpp"
 template <int W> struct multithreading;
@@ -57,8 +56,8 @@ struct multithreading
 	~multithreading();
 	riscv::Machine<W>& machine;
 	std::vector<thread_t*> blocked;
-	std::deque<thread_t*> suspended;
-	std::map<int, thread_t*> threads;
+	std::vector<thread_t*> suspended;
+	eastl::fixed_map<int, thread_t*, 32> threads;
 	int        thread_counter = 0;
 	thread_t*  m_current = nullptr;
 	thread_t   main_thread;
