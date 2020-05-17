@@ -2,6 +2,7 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "elf.hpp"
+#include <stdexcept>
 
 extern "C" char *
 __cxa_demangle(const char *name, char *buf, size_t *n, int *status);

@@ -1,6 +1,7 @@
 #pragma once
 #include <cassert>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include "common.hpp"
 #include "decoder_cache.hpp"
