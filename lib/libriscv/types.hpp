@@ -31,6 +31,7 @@ namespace riscv
 		OUT_OF_MEMORY,
 		INVALID_ALIGNMENT,
 		DEADLOCK_REACHED,
+		MAX_INSTRUCTIONS_REACHED,
 		UNKNOWN_EXCEPTION
 	};
 
@@ -48,6 +49,10 @@ namespace riscv
 	    const int   m_type;
 		const int   m_data;
 		const char* m_msg;
+	};
+
+	class MachineTimeoutException : public MachineException {
+		using MachineException::MachineException;
 	};
 
 	template <int W>

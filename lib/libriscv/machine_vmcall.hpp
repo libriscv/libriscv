@@ -28,7 +28,7 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 }
 
 template <int W>
-template <uint64_t MAXI, typename... Args> constexpr
+template <uint64_t MAXI, bool Throw, typename... Args> constexpr
 inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 {
 	// reset the stack pointer to an initial location (deliberately)
@@ -36,13 +36,13 @@ inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 	// setup calling convention
 	this->setup_call(call_addr, std::forward<Args>(args)...);
 	// execute function
-	this->simulate(MAXI);
+	this->simulate<Throw>(MAXI);
 	// address-sized integer return value
 	return cpu.reg(RISCV::REG_ARG0);
 }
 
 template <int W>
-template <uint64_t MAXI, typename... Args> constexpr
+template <uint64_t MAXI, bool Throw, typename... Args> constexpr
 inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
@@ -50,10 +50,13 @@ inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 }
 
 template <int W>
-template <uint64_t MAXI, typename... Args> inline
+template <uint64_t MAXI, bool Throw, bool StoreRegs, typename... Args> inline
 address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 {
-	const auto regs = cpu.registers();
+	Registers<W> regs;
+	if constexpr (StoreRegs) {
+		regs = cpu.registers();
+	}
 	const bool is_stopped = this->m_stopped;
 	// we need to make some stack room
 	this->cpu.reg(RISCV::REG_SP) -= 1024u;
@@ -62,26 +65,31 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	this->realign_stack();
 	// execute function
 	try {
-		this->simulate(MAXI);
-	}
-	catch (...) {
+		this->simulate<Throw>(MAXI);
+	} catch (...) {
 		this->m_stopped = is_stopped;
-		cpu.registers() = regs;
+		if constexpr (StoreRegs) {
+			const auto counter = cpu.instruction_counter();
+			cpu.registers() = regs;
+			cpu.registers().counter = counter;
+		}
 		throw;
 	}
-	// restore registers and return value, preserve counter
-	const address_t return_value = cpu.reg(RISCV::REG_ARG0);
-	const uint64_t  counter = cpu.instruction_counter();
+	// restore registers and return value
 	this->m_stopped = is_stopped;
-	cpu.registers() = regs;
-	cpu.registers().counter = counter;
-	return return_value;
+	const auto retval = cpu.reg(RISCV::REG_ARG0);
+	if constexpr (StoreRegs) {
+		const auto counter = cpu.instruction_counter();
+		cpu.registers() = regs;
+		cpu.registers().counter = counter;
+	}
+	return retval;
 }
 
 template <int W>
-template <uint64_t MAXI, typename... Args> inline
+template <uint64_t MAXI, bool Throw, bool StoreRegs, typename... Args> inline
 address_type<W> Machine<W>::preempt(const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
-	return preempt<MAXI>(call_addr, std::forward<Args>(args)...);
+	return preempt<MAXI, Throw, StoreRegs>(call_addr, std::forward<Args>(args)...);
 }

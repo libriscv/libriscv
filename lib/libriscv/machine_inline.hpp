@@ -26,6 +26,7 @@ inline bool Machine<W>::stopped() const noexcept {
 }
 
 template <int W>
+template <bool Throw>
 inline void Machine<W>::simulate(uint64_t max_instr)
 {
 	this->m_stopped = false;
@@ -33,7 +34,12 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 		max_instr += cpu.registers().counter;
 		while (LIKELY(!this->stopped())) {
 			cpu.simulate();
-			if (UNLIKELY(cpu.registers().counter >= max_instr)) break;
+			if (UNLIKELY(cpu.registers().counter >= max_instr)) {
+				if constexpr (Throw) {
+					throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
+						"Maximum instruction counter reached", max_instr);
+				} else break;
+			}
 		}
 	}
 	else {
