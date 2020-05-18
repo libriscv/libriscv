@@ -21,26 +21,6 @@ void thread<W>::activate()
 }
 
 template <int W>
-void thread<W>::suspend(address_t return_value)
-{
-	this->stored_regs = threading.machine.cpu.registers();
-	// set the *future* return value for this thread
-	this->stored_regs.get(RISCV::REG_ARG0) = return_value;
-	// add to suspended (NB: can throw)
-	threading.suspended.push_back(this);
-}
-
-template <int W>
-void thread<W>::block(int reason)
-{
-	this->stored_regs = threading.machine.cpu.registers();
-	// set the block reason as the next return value
-	this->stored_regs.get(RISCV::REG_ARG0) = reason;
-	// add to blocked (NB: can throw)
-	threading.blocked.push_back(this);
-}
-
-template <int W>
 void thread<W>::exit()
 {
 	const bool exiting_myself = (threading.get_thread() == this);
@@ -62,21 +42,6 @@ void thread<W>::exit()
 		// resume next thread in suspended list
 		thr.wakeup_next();
 	}
-}
-
-template <int W>
-void thread<W>::resume()
-{
-	THPRINT("Returning to tid=%ld tls=%p stack=%p\n",
-			this->tid, (void*) this->my_tls, (void*) this->my_stack);
-
-	threading.m_current = this;
-	auto& m = threading.machine;
-	// preserve some registers
-	auto counter = m.cpu.registers().counter;
-	// restore registers
-	m.cpu.registers() = this->stored_regs;
-	m.cpu.registers().counter = counter;
 }
 
 template <int W>
@@ -118,20 +83,6 @@ multithreading<W>::~multithreading()
 }
 
 template <int W>
-thread<W>* multithreading<W>::get_thread()
-{
-	return this->m_current;
-}
-
-template <int W>
-thread<W>* multithreading<W>::get_thread(int tid)
-{
-	auto it = threads.find(tid);
-	if (it == threads.end()) return nullptr;
-	return it->second;
-}
-
-template <int W>
 bool multithreading<W>::suspend_and_yield()
 {
 	auto* thread = get_thread();
@@ -153,31 +104,35 @@ bool multithreading<W>::block(int reason)
 {
 	auto* thread = get_thread();
 	if (UNLIKELY(suspended.empty())) {
+		// TODO: Stop the machine here?
 		throw std::runtime_error("A blocked thread has nothing to yield to!");
 	}
-	// suspend current thread
-	thread->block(reason);
+	// block thread, write reason to future return value
+	thread->block(reason, reason);
 	// resume some other thread
 	this->wakeup_next();
 	return true;
 }
 
 template <int W>
-void multithreading<W>::yield_to(int tid)
+bool multithreading<W>::yield_to(int tid, bool store_retval)
 {
 	auto* thread = get_thread();
 	auto* next   = get_thread(tid);
 	if (next == nullptr) {
-		machine.cpu.reg(RISCV::REG_ARG0) = -1;
-		return;
+		if (store_retval) machine.cpu.reg(RISCV::REG_ARG0) = -1;
+		return false;
 	}
 	if (thread == next) {
 		// immediately returning back to caller
-		machine.cpu.reg(RISCV::REG_ARG0) = 0;
-		return;
+		if (store_retval) machine.cpu.reg(RISCV::REG_ARG0) = 0;
+		return false;
 	}
 	// suspend current thread
-	thread->suspend(0);
+	if (store_retval)
+		thread->suspend(0);
+	else
+		thread->suspend();
 	// remove the next thread from suspension
 	for (auto it = suspended.begin(); it != suspended.end(); ++it) {
 		if (*it == next) {
@@ -187,17 +142,7 @@ void multithreading<W>::yield_to(int tid)
 	}
 	// resume next thread
 	next->resume();
-}
-
-template <int W>
-void multithreading<W>::wakeup_next()
-{
-	// resume a waiting thread
-	assert(!suspended.empty());
-	auto* next = suspended.front();
-	suspended.erase(suspended.begin());
-	// resume next thread
-	next->resume();
+	return true;
 }
 
 template <int W>
@@ -224,9 +169,8 @@ void multithreading<W>::wakeup_blocked(int reason)
 {
 	for (auto it = blocked.begin(); it != blocked.end(); )
 	{
-		// check the return value for this blocked thread
 		// compare against block reason
-		if ((*it)->stored_regs.get(RISCV::REG_ARG0) == (uint32_t) reason)
+		if ((*it)->block_reason == reason)
 		{
 			// suspend current thread
 			get_thread()->suspend(0);

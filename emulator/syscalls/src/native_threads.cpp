@@ -8,7 +8,7 @@ static const int THREADS_SYSCALL_BASE = 500;
 #include "threads.cpp"
 
 template <int W>
-void setup_native_threads(Machine<W>& machine)
+multithreading<W>* setup_native_threads(Machine<W>& machine)
 {
 	auto* mt = new multithreading<W>(machine);
 	machine.add_destructor_callback([mt] { delete mt; });
@@ -86,7 +86,9 @@ void setup_native_threads(Machine<W>& machine)
 		// preserve A0 for the new thread
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
+
+	return mt;
 }
 
 template
-void setup_native_threads<4>(Machine<4>& machine);
+multithreading<4>* setup_native_threads<4>(Machine<4>& machine);
