@@ -61,7 +61,7 @@ struct multithreading
 	riscv::Machine<W>& machine;
 	std::vector<thread_t*> blocked;
 	std::vector<thread_t*> suspended;
-	eastl::fixed_map<int, thread_t*, 32> threads;
+	eastl::fixed_map<int, thread_t, 32> threads;
 	int        thread_counter = 0;
 	thread_t*  m_current = nullptr;
 	thread_t   main_thread;
@@ -134,7 +134,7 @@ inline thread<W>* multithreading<W>::get_thread(int tid)
 {
 	auto it = threads.find(tid);
 	if (it == threads.end()) return nullptr;
-	return it->second;
+	return &it->second;
 }
 
 template <int W>

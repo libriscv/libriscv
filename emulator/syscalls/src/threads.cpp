@@ -35,8 +35,6 @@ void thread<W>::exit()
 	}
 	// delete this thread
 	threading.erase_thread(this->tid);
-	// free thread resources
-	delete this;
 
 	if (exiting_myself)
 	{
@@ -51,7 +49,8 @@ thread<W>* multithreading<W>::create(
 			address_t stack, address_t tls)
 {
 	const int tid = ++thread_counter;
-	auto* thread = new thread_t(*this, tid, tls, stack);
+	auto it = threads.emplace(tid, thread_t{*this, tid, tls, stack});
+	thread_t* thread = &it.first->second;
 
 	// flag for write child TID
 	if (flags & CLONE_CHILD_SETTID) {
@@ -64,7 +63,6 @@ thread<W>* multithreading<W>::create(
 		thread->clear_tid = ctid;
 	}
 
-	threads.emplace(tid, thread);
 	return thread;
 }
 
@@ -78,9 +76,6 @@ multithreading<W>::multithreading(Machine<W>& mach)
 template <int W>
 multithreading<W>::~multithreading()
 {
-	for (auto it : threads) {
-		delete it.second;
-	}
 }
 
 template <int W>
