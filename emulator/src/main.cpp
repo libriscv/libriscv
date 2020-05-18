@@ -51,7 +51,7 @@ int main(int argc, const char** argv)
 		setup_minimal_syscalls(state, machine);
 		setup_native_heap_syscalls(machine, 6*1024*1024);
 		setup_native_memory_syscalls(machine, false);
-		setup_native_threads(state.exit_code, machine);
+		setup_native_threads(machine);
 	}
 
 	/*
