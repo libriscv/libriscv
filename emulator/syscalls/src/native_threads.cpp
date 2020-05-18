@@ -75,7 +75,8 @@ multithreading<W>* setup_native_threads(Machine<W>& machine)
 	// unblock (w/reason)
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+5,
 	[mt] (Machine<W>& machine) {
-		mt->wakeup_blocked(machine.template sysarg<int> (0));
+		if (!mt->wakeup_blocked(machine.template sysarg<int> (0)))
+			return -1u;
 		// preserve A0 for the new thread
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
