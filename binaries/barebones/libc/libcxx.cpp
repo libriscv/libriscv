@@ -40,6 +40,9 @@ namespace std {
 	void __throw_logic_error(char const*) {
 		abort_message("C++ length error exception");
 	}
+	void __throw_out_of_range_fmt(char const*, ...) {
+		abort_message("C++ out-of-range exception");
+	}
 	void __throw_bad_function_call() {
 		abort_message("Bad std::function call!");
 	}
