@@ -21,3 +21,13 @@ inline void sys_free(void* ptr)
 {
 	syscall(SYSCALL_FREE, (long) ptr);
 }
+
+struct MemInfo {
+	size_t bytes_free;
+	size_t bytes_used;
+	size_t chunks_used;
+};
+inline int sys_meminfo(void* ptr, size_t len)
+{
+	return psyscall(SYSCALL_MEMINFO, ptr, len);
+}

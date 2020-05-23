@@ -39,6 +39,10 @@ struct Arena
 	PointerType malloc(size_t size);
 	signed int  free(PointerType);
 
+	size_t bytes_free() const;
+	size_t bytes_used() const;
+	size_t chunks_used() const noexcept { return m_chunks.size(); }
+
 	inline Chunk& base_chunk() {
 	    return m_base_chunk;
 	}
@@ -51,6 +55,7 @@ private:
 	inline size_t word_align(size_t size) {
 	    return (size + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
 	}
+	void foreach(std::function<void(const Chunk&)>) const;
 
 	std::deque<Chunk>   m_chunks;
 	std::vector<Chunk*> m_free_chunks;
@@ -173,6 +178,32 @@ inline Arena::Arena(PointerType arena_base, PointerType arena_end)
 	m_base_chunk.size = arena_end - arena_base;
 	m_base_chunk.data = arena_base;
 	m_base_chunk.free = true;
+}
+
+inline void Arena::foreach(std::function<void(const Chunk&)> callback) const
+{
+	const Chunk* ch = &this->m_base_chunk;
+    while (ch != nullptr) {
+		callback(*ch);
+		ch = ch->next;
+	}
+}
+
+inline size_t Arena::bytes_free() const
+{
+	size_t size = 0;
+	foreach([&size] (const Chunk& chunk) {
+		if (chunk.free) size += chunk.size;
+	});
+	return size;
+}
+inline size_t Arena::bytes_used() const
+{
+	size_t size = 0;
+	foreach([&size] (const Chunk& chunk) {
+		if (!chunk.free) size += chunk.size;
+	});
+	return size;
 }
 
 } // namespace foreign_heap

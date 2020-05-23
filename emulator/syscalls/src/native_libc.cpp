@@ -38,6 +38,27 @@ void setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 		}
 		return data;
 	});
+	// Meminfo n+2
+	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+2,
+	[arena] (auto& machine) -> long
+	{
+		const auto dst = machine.template sysarg<address_type<W>>(0);
+		struct Result {
+			const uint32_t bf;
+			const uint32_t bu;
+			const uint32_t cu;
+		} result = {
+			.bf = (uint32_t) arena->bytes_free(),
+			.bu = (uint32_t) arena->bytes_used(),
+			.cu = (uint32_t) arena->chunks_used()
+		};
+		int ret = (dst != 0) ? 0 : -1;
+		SYSPRINT("SYSCALL meminfo(0x%X) = %d\n", ptr, ret);
+		if (ret == 0) {
+			machine.copy_to_guest(dst, &result, sizeof(result));
+		}
+		return ret;
+	});
 	// Free n+3
 	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+3,
 	[arena] (auto& machine) -> long

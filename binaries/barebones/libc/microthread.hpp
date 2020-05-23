@@ -61,8 +61,8 @@ long    yield_to(int tid); /* Return to a specific suspended thread. */
 long    yield_to(Thread*);
 
 /* Block a thread with a specific reason. */
-long    block(int reason);
-void    block(int reason, const std::function<bool()>& condition);
+long    block(int reason = 0);
+void    block(const std::function<bool()>& condition, int reason = 0);
 long    unblock(int tid);
 /* Wake thread with @reason that was blocked, returns -1 if nothing happened. */
 long    wakeup_one_blocked(int reason);
@@ -234,11 +234,11 @@ inline long yield_to(Thread* thread)
 	return yield_to(thread->tid);
 }
 
-inline long block(int reason = 0)
+inline long block(int reason)
 {
 	return syscall(THREAD_SYSCALLS_BASE+4, reason);
 }
-inline void block(int reason, const std::function<bool()>& condition)
+inline void block(const std::function<bool()>& condition, int reason)
 {
 	while (!condition()) {
 		if (block(reason) < 0) break;
