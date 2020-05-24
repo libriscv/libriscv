@@ -435,11 +435,11 @@ namespace riscv
 				return;
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().counter;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.instruction_counter();
 				return;
 			case 0xC80: // CSR RDCYCLE (upper)
 			case 0xC82: // RDINSTRET (upper)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().counter >> 32u;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.instruction_counter() >> 32u;
 				return;
 			case 0xC01: // CSR RDTIME (lower)
 				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time();

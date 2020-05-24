@@ -69,9 +69,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	} catch (...) {
 		this->m_stopped = is_stopped;
 		if constexpr (StoreRegs) {
-			const auto counter = cpu.instruction_counter();
 			cpu.registers() = regs;
-			cpu.registers().counter = counter;
 		}
 		throw;
 	}
@@ -79,9 +77,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	this->m_stopped = is_stopped;
 	const auto retval = cpu.reg(RISCV::REG_ARG0);
 	if constexpr (StoreRegs) {
-		const auto counter = cpu.instruction_counter();
 		cpu.registers() = regs;
-		cpu.registers().counter = counter;
 	}
 	return retval;
 }

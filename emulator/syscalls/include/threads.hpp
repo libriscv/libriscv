@@ -91,11 +91,8 @@ inline void thread<W>::resume()
 
 	threading.m_current = this;
 	auto& m = threading.machine;
-	// preserve some registers
-	auto counter = m.cpu.registers().counter;
 	// restore registers
 	m.cpu.registers() = this->stored_regs;
-	m.cpu.registers().counter = counter;
 }
 
 template <int W>

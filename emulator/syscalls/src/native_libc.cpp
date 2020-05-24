@@ -60,7 +60,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 			auto [dst, src, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 			SYSPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-			m.cpu.registers().counter += 2 * len;
+			m.cpu.increment_counter(2 * len);
 			if ((dst & 3) == (src & 3)) {
 				while ((src & 3) != 0 && len > 0) {
 					m.memory.template write<uint8_t> (dst++,
@@ -101,7 +101,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 			for (size_t i = 0; i < len; i++) {
 				m.memory.template write<uint8_t> (dst + i, value);
 			}
-			m.cpu.registers().counter += len;
+			m.cpu.increment_counter(len);
 			return dst;
 		});
 	} else {
@@ -113,7 +113,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 			auto [dst, src, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 			SYSPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-			m.cpu.registers().counter += 2 * len;
+			m.cpu.increment_counter(2 * len);
 			m.memory.memview(src, len,
 				[&m] (const uint8_t* data, size_t len) {
 					auto dst = m.template sysarg <address_type<W>> (0);
@@ -129,7 +129,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 			SYSPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
 			m.memory.memset(dst, value, len);
-			m.cpu.registers().counter += len;
+			m.cpu.increment_counter(len);
 			return dst;
 		});
 	} // trusted
@@ -153,7 +153,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 					m.memory.template read<uint8_t> (src + len));
 			}
 		}
-		m.cpu.registers().counter += 2 * len;
+		m.cpu.increment_counter(2 * len);
 		return dst;
 	});
 	// Print backtrace n+7

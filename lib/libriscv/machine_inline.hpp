@@ -31,10 +31,10 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 {
 	this->m_stopped = false;
 	if (max_instr != 0) {
-		max_instr += cpu.registers().counter;
+		max_instr += cpu.instruction_counter();
 		while (LIKELY(!this->stopped())) {
 			cpu.simulate();
-			if (UNLIKELY(cpu.registers().counter >= max_instr)) {
+			if (UNLIKELY(cpu.instruction_counter() >= max_instr)) {
 				if constexpr (Throw) {
 					throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
 						"Maximum instruction counter reached", max_instr);

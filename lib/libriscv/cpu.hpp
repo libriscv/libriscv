@@ -29,8 +29,9 @@ namespace riscv
 		address_t pc() const noexcept { return registers().pc; }
 		constexpr void jump(address_t);
 
-		uint64_t instruction_counter() const noexcept { return m_regs.counter; }
-		void     reset_instruction_counter() noexcept { m_regs.counter = 0; }
+		uint64_t instruction_counter() const noexcept { return m_counter; }
+		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
+		void     reset_instruction_counter() noexcept { m_counter = 0; }
 
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }
@@ -67,14 +68,15 @@ namespace riscv
 		CPU(Machine<W>&);
 	private:
 		Registers<W> m_regs;
+		uint64_t     m_counter = 0;
 
 		inline format_t read_next_instruction();
 		void execute(format_t);
 
 		Machine<W>& m_machine;
 		struct CachedPage {
-			Page* page = nullptr;
-			int   pageno = 0;
+			Page*   page = nullptr;
+			int64_t pageno = 0;
 		};
 		CachedPage m_current_page;
 #ifdef RISCV_PAGE_CACHE

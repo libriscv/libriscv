@@ -3,7 +3,6 @@
 #include "riscvbase.hpp"
 #include <array>
 #include <string>
-#include <cstdio> // snprintf
 
 namespace riscv
 {
@@ -53,40 +52,9 @@ namespace riscv
 
 		auto& fcsr() noexcept { return m_fcsr; }
 
-		std::string to_string() const
-		{
-			char buffer[600];
-			int  len = 0;
-			len += snprintf(buffer+len, sizeof(buffer)-len,
-							"[%s\t%8zu] ", "INSTR", (size_t) this->counter);
-			for (int i = 1; i < 32; i++) {
-				len += snprintf(buffer+len, sizeof(buffer) - len,
-						"[%s\t%08X] ", RISCV::regname(i), this->get(i));
-				if (i % 5 == 4) {
-					len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
-				}
-			}
-			return std::string(buffer, len);
-		}
+		std::string to_string() const;
+		std::string flp_to_string() const;
 
-		std::string flp_to_string() const
-		{
-			char buffer[800];
-			int  len = 0;
-			for (int i = 0; i < 32; i++) {
-				auto& src = this->getfl(i);
-				const char T = (src.i32[1] == -1) ? 'S' : 'D';
-				double val = (src.i32[1] == -1) ? src.f32[0] : src.f64;
-				len += snprintf(buffer+len, sizeof(buffer) - len,
-						"[%s\t%c%+.2f] ", RISCV::flpname(i), T, val);
-				if (i % 5 == 4) {
-					len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
-				}
-			}
-			return std::string(buffer, len);
-		}
-
-		uint64_t  counter = 0;
 		address_t pc = 0;
 	private:
 		std::array<register_t, 32> m_reg;
