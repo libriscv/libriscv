@@ -25,7 +25,7 @@ namespace riscv
 		this->jump(machine().memory.start_address());
 	}
 
-	template <int W>
+	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
 		format_t instruction;
@@ -87,7 +87,7 @@ namespace riscv
 		return instruction;
 	}
 
-	template<int W>
+	template<int W> __attribute__((hot))
 	void CPU<W>::simulate()
 	{
 #ifdef RISCV_DEBUG
@@ -150,7 +150,7 @@ namespace riscv
 			registers().pc += 4;
 	}
 
-	template<int W>
+	template<int W> __attribute__((cold))
 	void CPU<W>::trigger_exception(interrupt_t intr)
 	{
 		// TODO: replace with callback system
@@ -180,7 +180,7 @@ namespace riscv
 		}
 	}
 
-	template <int W>
+	template <int W> __attribute__((cold))
 	std::string Registers<W>::to_string() const
 	{
 		char buffer[600];
@@ -195,7 +195,7 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-	template <int W>
+	template <int W> __attribute__((cold))
 	std::string Registers<W>::flp_to_string() const
 	{
 		char buffer[800];

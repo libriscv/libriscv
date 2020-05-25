@@ -32,6 +32,9 @@ namespace riscv
 		uint64_t instruction_counter() const noexcept { return m_counter; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
+#ifdef RISCV_PAGE_CACHE
+		int64_t  page_cache_evictions() const noexcept { return std::max((int64_t) 0, m_cache_iterator - (int64_t) m_page_cache.size()); }
+#endif
 
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }
@@ -81,7 +84,7 @@ namespace riscv
 		CachedPage m_current_page;
 #ifdef RISCV_PAGE_CACHE
 		std::array<CachedPage, RISCV_PAGE_CACHE> m_page_cache = {};
-		int m_cache_iterator = 0;
+		int64_t m_cache_iterator = 0;
 #endif
 		inline void change_page(int pageno);
 		inline void check_page(CachedPage&);

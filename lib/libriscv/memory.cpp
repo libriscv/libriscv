@@ -152,6 +152,14 @@ namespace riscv
 
 		//this->relocate_section(".rela.dyn", ".symtab");
 
+		// NOTE: if the stack is very low, some stack pointer value could
+		// become 0x0 which could alter the behavior of the program,
+		// even though the address might be legitimate. To solve this, we move
+		// the stack at that time to a safer location.
+		if (this->m_stack_address < 0x100000) {
+			this->m_stack_address = 0x40000000;
+		}
+
 		if (riscv::verbose_machine) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}

@@ -9,26 +9,17 @@ inline void CPU<W>::reset_stack_pointer() noexcept
 {
 	// initial stack location
 	this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
-	// NOTE: if the stack is very low, some stack pointer value could
-	// become 0x0 which could alter the behavior of the program,
-	// even though the address might be legitimate. To solve this, we move
-	// the stack at that time to a safer location.
-	if (this->reg(RISCV::REG_SP) < 0x100000) {
-		this->reg(RISCV::REG_SP) = 0x40000000;
-	}
 }
 
-template <int W>
+template <int W> __attribute__((hot))
 inline void CPU<W>::change_page(int pageno)
 {
 #ifdef RISCV_PAGE_CACHE
 	for (const auto& cache : m_page_cache) {
 		if (cache.pageno == pageno) {
 			m_current_page = cache;
-			if constexpr (execute_traps_enabled) {
-				this->check_page(m_current_page);
-			}
-			return;
+			// NOTE: this lowers instruction cache pressure
+			goto riscv_validate_current_page;
 		}
 	}
 #endif
@@ -36,9 +27,10 @@ inline void CPU<W>::change_page(int pageno)
 	m_current_page.page = &machine().memory.get_exec_pageno(pageno);
 #ifdef RISCV_PAGE_CACHE
 	// cache it
-	m_page_cache[m_cache_iterator] = m_current_page;
-	m_cache_iterator = (m_cache_iterator + 1) % m_page_cache.size();
+	m_page_cache[m_cache_iterator % m_page_cache.size()] = m_current_page;
+	m_cache_iterator ++;
 #endif
+	riscv_validate_current_page:
 if constexpr (execute_traps_enabled) {
 	this->check_page(m_current_page);
 }
@@ -53,7 +45,7 @@ if constexpr (execute_traps_enabled) {
 #endif
 }
 
-template <int W>
+template <int W> __attribute__((hot))
 inline void CPU<W>::check_page(CachedPage& cp)
 {
 	if (UNLIKELY(cp.page->has_trap())) {
@@ -65,7 +57,7 @@ inline void CPU<W>::check_page(CachedPage& cp)
 	}
 }
 
-template<int W> constexpr
+template<int W> constexpr __attribute__((hot))
 inline void CPU<W>::jump(const address_t dst)
 {
 	this->registers().pc = dst;
