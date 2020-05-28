@@ -1,6 +1,7 @@
 #include <include/syscall_helpers.hpp>
 #include <include/native_heap.hpp>
 using namespace riscv;
+using namespace sas_alloc;
 //#define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 static const uint64_t ARENA_BASE = 0x40000000;
 
@@ -9,7 +10,7 @@ static const uint64_t ARENA_BASE = 0x40000000;
 #endif
 
 template <int W>
-void setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
+Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 {
 	auto* arena = new sas_alloc::Arena(ARENA_BASE, ARENA_BASE + max_memory);
 	machine.add_destructor_callback([arena] { delete arena; });
@@ -68,6 +69,8 @@ void setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 		SYSPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
 		return ret;
 	});
+
+	return arena;
 }
 template <int W>
 void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
@@ -190,5 +193,5 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 }
 
 /* le sigh */
-template void setup_native_heap_syscalls<4>(Machine<4>&, size_t);
+template Arena* setup_native_heap_syscalls<4>(Machine<4>&, size_t);
 template void setup_native_memory_syscalls<4>(Machine<4>&, bool);

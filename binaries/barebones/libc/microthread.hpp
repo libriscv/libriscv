@@ -126,11 +126,11 @@ inline void* getdata() {
 	return self()->tinydata;
 }
 
-inline long clone_helper(long sp, long tls, long ctid)
+inline long clone_helper(long sp, long tls)
 {
 	extern void trampoline(Thread*);
-	/* stack, func, tls, flags */
-	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, ctid);
+	/* stack, func, tls */
+	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls);
 }
 
 template <typename T, typename... Args>
@@ -156,10 +156,7 @@ inline auto create(const T& func, Args&&... args)
 			}
 		});
 
-	const long tls  = (long) thread;
-	const long ctid = 0x80000000;
-
-	(void) clone_helper((long) stack_top, tls, ctid);
+	(void) clone_helper((long) stack_top, (long) thread);
 	// parent path (reordering doesn't matter)
 	return Thread_ptr(thread);
 }
@@ -182,19 +179,32 @@ inline int oneshot(const T& func, Args&&... args)
 			oneshot_exit();
 		});
 	const long tls  = (long) thread;
-	return clone_helper((long) stack_top, tls, 0);
+	return clone_helper((long) stack_top, tls);
 }
+template <typename Ret = long, typename... Args>
+inline Ret threadcall(int n, Args&&... args)
+{
+	using tcall_t = Ret (*) (...);
+	// Special thread system call number is offset / 4
+	return ((tcall_t) (0xFFFFE000 + n*4)) (std::forward<Args>(args)...);
+}
+
 inline int direct(void(*func)(), void* data)
 {
+	extern void direct_starter(Thread*);
+	extern void oneshot_exit();
+#ifdef USE_THREADCALLS
+	return threadcall<int>(64, func, data, (long) &oneshot_exit);
+#else
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (UNLIKELY(stack_bot == nullptr)) return -ENOMEM;
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store the thread at the beginning of the stack
 	Thread* thread = new (stack_bot) Thread(func, data);
 	const long tls  = (long) thread;
-	extern void direct_starter(Thread*);
 	/* stack, func, tls, flags */
 	return syscall(THREAD_SYSCALLS_BASE+0, (long) stack_top, (long) &direct_starter, tls, 0);
+#endif
 }
 
 inline long join(Thread* thread)

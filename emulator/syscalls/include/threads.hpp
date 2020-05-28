@@ -70,8 +70,12 @@ struct multithreading
 template <int W>
 extern void setup_multithreading(State<W>&, riscv::Machine<W>&);
 
+namespace sas_alloc {
+	struct Arena;
+}
 template <int W>
-extern multithreading<W>* setup_native_threads(riscv::Machine<W>&);
+extern multithreading<W>* setup_native_threads(
+	riscv::Machine<W>&, sas_alloc::Arena* = nullptr);
 
 /** Implementation **/
 
