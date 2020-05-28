@@ -28,13 +28,12 @@ namespace riscv
 	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-		format_t instruction;
-#ifndef RISCV_DEBUG
 		const int this_page = this->pc() >> Page::SHIFT;
 		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
 		}
 		const address_t offset = this->pc() & (Page::size()-1);
+		format_t instruction;
 
 		if constexpr (!compressed_enabled) {
 			// special case for non-compressed mode:
@@ -61,29 +60,11 @@ namespace riscv
 			// read upper half, completing a 32-bit instruction
 			if (instruction.is_long()) {
 				// this instruction crosses a page-border
-				this->change_page(this_page + 1);
+				this->change_page(m_current_page.pageno + 1);
 				instruction.half[1] =
 					m_current_page.page->template aligned_read<uint16_t>(0);
 			}
 		}
-#else
-		// in debug mode we need a full memory read to allow trapping
-		if ((this->pc() & (W-1)) == 0) {
-			instruction.whole =
-				this->machine().memory.template read<address_t>(this->pc());
-		}
-		else
-		{
-			// instruction is not on word-border, so do up to two smaller reads
-			instruction.whole =
-				this->machine().memory.template read<uint16_t>(this->pc());
-			if (UNLIKELY(instruction.is_long())) {
-				// complete the instruction (NOTE: might cross into another page)
-				instruction.half[1] =
-					this->machine().memory.template read<uint16_t>(this->pc() + 2);
-			}
-		}
-#endif
 		return instruction;
 	}
 

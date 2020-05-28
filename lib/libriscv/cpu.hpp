@@ -73,7 +73,7 @@ namespace riscv
 		Registers<W> m_regs;
 		uint64_t     m_counter = 0;
 
-		inline format_t read_next_instruction();
+		format_t read_next_instruction();
 		void execute(format_t);
 
 		Machine<W>& m_machine;
@@ -87,7 +87,7 @@ namespace riscv
 		int64_t m_cache_iterator = 0;
 #endif
 		inline void change_page(int pageno);
-		inline void check_page(CachedPage&);
+		inline void check_page();
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints

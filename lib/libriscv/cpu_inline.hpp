@@ -32,7 +32,7 @@ inline void CPU<W>::change_page(int pageno)
 #endif
 	riscv_validate_current_page:
 if constexpr (execute_traps_enabled) {
-	this->check_page(m_current_page);
+	this->check_page();
 }
 	// verify execute permission
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
@@ -46,12 +46,14 @@ if constexpr (execute_traps_enabled) {
 }
 
 template <int W> __attribute__((hot))
-inline void CPU<W>::check_page(CachedPage& cp)
+inline void CPU<W>::check_page()
 {
+	const auto& cp = m_current_page;
 	if (UNLIKELY(cp.page->has_trap())) {
+		const int old_pageno = cp.pageno;
 		cp.page->trap(this->pc() - (cp.pageno << Page::SHIFT), TRAP_EXEC, cp.pageno);
 		const int new_pageno = this->pc() >> Page::SHIFT;
-		if (cp.pageno != new_pageno) {
+		if (old_pageno != new_pageno) {
 			this->change_page(new_pageno);
 		}
 	}
