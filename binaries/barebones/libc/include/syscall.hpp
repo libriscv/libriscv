@@ -10,6 +10,7 @@
 #define SYSCALL_MALLOC    (NATIVE_SYSCALLS_BASE+0)
 #define SYSCALL_CALLOC    (NATIVE_SYSCALLS_BASE+1)
 #define SYSCALL_REALLOC   (NATIVE_SYSCALLS_BASE+2)
+#define SYSCALL_MEMINFO   (NATIVE_SYSCALLS_BASE+2)
 #define SYSCALL_FREE      (NATIVE_SYSCALLS_BASE+3)
 #define SYSCALL_MEMCPY    (NATIVE_SYSCALLS_BASE+4)
 #define SYSCALL_MEMSET    (NATIVE_SYSCALLS_BASE+5)
@@ -126,4 +127,36 @@ syscall(long n, long arg0, long arg1, long arg2,
 			"r"(a4), "r"(a5), "r"(a6), "r"(syscall_id));
 
 	return a0;
+}
+
+/** Pointer-parameter syscalls **/
+
+inline long psyscall(long n, const void* arg0)
+{
+	asm ("" ::: "memory");
+	return syscall(n, (long) arg0);
+}
+
+inline long psyscall(long n, const void* arg0, const void* arg1)
+{
+	asm ("" ::: "memory");
+	return syscall(n, (long) arg0, (long) arg1);
+}
+
+inline long psyscall(long n, const void* arg0, long arg1)
+{
+	asm ("" ::: "memory");
+	return syscall(n, (long) arg0, arg1);
+}
+
+inline long psyscall(long n, const void* arg0, long arg1, long arg2)
+{
+	asm ("" ::: "memory");
+	return syscall(n, (long) arg0, arg1, arg2);
+}
+
+inline long psyscall(long n, const void* arg0, const void* arg1, const void* arg2)
+{
+	asm ("" ::: "memory");
+	return syscall(n, (long) arg0, (long) arg1, (long) arg2);
 }

@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstdint>
+#define _NOTHROW __attribute__ ((__nothrow__))
 
 #ifdef __cplusplus
 extern "C" {
