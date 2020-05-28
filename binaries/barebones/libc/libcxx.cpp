@@ -34,6 +34,9 @@ void operator delete [](void* ptr, std::size_t)
 
 // exception stubs for various C++ containers
 namespace std {
+	void __throw_bad_alloc() {
+		abort_message("exception: bad_alloc thrown\n");
+	}
 	void __throw_length_error(char const*) {
 		abort_message("C++ length error exception");
 	}

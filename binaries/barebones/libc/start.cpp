@@ -41,7 +41,8 @@ init_stdlib()
 extern "C" __attribute__((visibility("hidden"), used))
 void libc_start(int argc, char** argv)
 {
-	// 1. zero-initialize .bss section
+	// .bss should already be zeroed
+#ifdef DO_ZERO_BSS
 	extern char __bss_start;
 	extern char __BSS_END__;
 #ifdef __clang__
@@ -52,6 +53,7 @@ void libc_start(int argc, char** argv)
 #endif
 		*bss = 0;
 	}
+#endif
 
 	init_stdlib();
 
@@ -59,6 +61,9 @@ void libc_start(int argc, char** argv)
 	extern int main(int, char**);
 	_exit(main(argc, argv));
 }
+
+__attribute__((weak))
+int main(int, char**) { return 0; }
 
 // 1. wrangle with argc and argc
 // 2. initialize the global pointer to __global_pointer
