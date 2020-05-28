@@ -113,7 +113,7 @@ int main(int argc, const char** argv)
 #endif
 	}
 	printf(">>> Program exited, exit code = %d\n", state.exit_code);
-	printf("Instructions executed: %zu\n", (size_t) machine.cpu.registers().counter);
+	printf("Instructions executed: %zu\n", (size_t) machine.cpu.instruction_counter());
 #ifndef RISCV_DEBUG
 	printf("\n*** Guest output ***\n%s\n", state.output.c_str());
 #endif
