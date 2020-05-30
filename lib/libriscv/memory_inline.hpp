@@ -308,6 +308,13 @@ address_type<W> Memory<W>::resolve_address(const char* name) const
 }
 
 template <int W>
+address_type<W> Memory<W>::resolve_section(const char* name) const
+{
+	auto* shdr = this->section_by_name(name);
+	return shdr->sh_addr;
+}
+
+template <int W>
 address_type<W> Memory<W>::exit_address() const noexcept
 {
 	return this->m_exit_address;

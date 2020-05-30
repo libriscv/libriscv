@@ -53,6 +53,7 @@ namespace riscv
 
 		// call interface
 		address_t resolve_address(const char* sym) const;
+		address_t resolve_section(const char* name) const;
 		address_t exit_address() const noexcept;
 		void      set_exit_address(address_t new_exit);
 		// basic backtraces
