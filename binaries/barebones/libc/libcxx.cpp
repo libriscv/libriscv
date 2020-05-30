@@ -2,8 +2,6 @@
 #include "heap.hpp"
 extern "C"
 __attribute__((noreturn)) void abort_message(const char* fmt, ...);
-extern "C" void __cxa_guard_acquire(void*) {}
-extern "C" void __cxa_guard_release(void*) {}
 
 void* operator new(size_t size)
 {

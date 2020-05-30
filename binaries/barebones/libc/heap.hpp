@@ -2,6 +2,7 @@
  * Accelerated heap using syscalls
  *
 **/
+#pragma once
 #include <cstddef>
 #include "include/syscall.hpp"
 
