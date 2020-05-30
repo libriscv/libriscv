@@ -81,10 +81,14 @@ inline void Machine<W>::system_call(int syscall_number)
 		if (LIKELY(handler != nullptr))
 		{
 			address_t ret = handler(*this);
+#ifndef RISCV_EBREAK_MEANS_STOP
 			// EBREAK handler should not modify registers
 			if (LIKELY(syscall_number != SYSCALL_EBREAK)) {
 				cpu.reg(RISCV::REG_RETVAL) = ret;
 			}
+#else
+			cpu.reg(RISCV::REG_RETVAL) = ret;
+#endif
 			return;
 		}
 	}
