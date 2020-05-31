@@ -16,6 +16,10 @@ namespace riscv
 		uint16_t mem_offset;
 
 		Registers<W> registers[0];
+
+		uint64_t start_address = 0;
+		uint64_t stack_address = 0;
+		uint64_t exit_address  = 0;
 	};
 	struct SerializedPage
 	{
@@ -35,6 +39,10 @@ namespace riscv
 			.reserved = 0,
 			.cpu_offset = sizeof(SerializedMachine<W>),
 			.mem_offset = sizeof(SerializedMachine<W>) + sizeof(Registers<W>),
+
+			.start_address = memory.start_address(),
+			.stack_address = memory.stack_initial(),
+			.exit_address  = memory.exit_address(),
 		};
 		const auto* hptr = (const uint8_t*) &header;
 		vec.insert(vec.end(), hptr, hptr + sizeof(header));
@@ -113,6 +121,10 @@ namespace riscv
 	void Memory<W>::deserialize_from(const std::vector<uint8_t>& vec,
 					const SerializedMachine<W>& state)
 	{
+		this->m_start_address = state.start_address;
+		this->m_stack_address = state.stack_address;
+		this->m_exit_address  = state.exit_address;
+
 		[[maybe_unused]]
 		const size_t page_bytes =
 			state.n_pages * (sizeof(SerializedPage) + Page::size());
@@ -134,6 +146,7 @@ namespace riscv
 
 			off += Page::size();
 		}
+		this->m_pages_highest = m_pages.size();
 	}
 
 	template struct Machine<4>;
