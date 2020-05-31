@@ -23,7 +23,7 @@ void push_arg(Machine<4>& m, std::vector<uint32_t>& vec, uint32_t& dst, const st
 	m.copy_to_guest(dst, (const uint8_t*) str.data(), str.size());
 }
 static inline
-void push_aux(Machine<4>& m, std::vector<uint32_t>& vec, AuxVec<uint32_t> aux)
+void push_aux(Machine<4>&, std::vector<uint32_t>& vec, AuxVec<uint32_t> aux)
 {
 	vec.push_back(aux.a_type);
 	vec.push_back(aux.a_val);
@@ -117,9 +117,4 @@ void prepare_linux(riscv::Machine<4>& machine,
 	machine.copy_to_guest(dst, argv.data(), argsize);
 	// re-initialize machine stack-pointer
 	machine.cpu.reg(RISCV::REG_SP) = dst;
-
-	if (riscv::verbose_machine) {
-		printf("* SP = 0x%X  Argument list: %zu bytes\n", dst, argsize);
-		// printf("* Program end: 0x%X\n", xxx); <-- can be calc from phdrs
-	}
 }

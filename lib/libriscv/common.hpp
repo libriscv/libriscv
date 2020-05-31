@@ -35,9 +35,6 @@ namespace riscv
 {
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
 
-	// print information during machine creation
-	extern bool verbose_machine;
-
 #ifdef RISCV_MEMORY_TRAPS_ENABLED
 	static constexpr bool memory_traps_enabled = true;
 #else
@@ -87,6 +84,7 @@ namespace riscv
 		uint64_t memory_max = 16ull << 20; // 16mb
 		bool load_program = true;
 		bool protect_segments = true;
+		bool verbose_loader = false;
 		// The pages provided will be inserted into the machine.
 		// They must be shared because there is no good way to handle
 		// machine resets (you will lose all non-shared pages).

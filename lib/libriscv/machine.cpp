@@ -2,9 +2,6 @@
 
 namespace riscv
 {
-	__attribute__((weak))
-	bool verbose_machine = true;
-
 	template <int W>
 	void Machine<W>::setup_argv(const std::vector<std::string>& args)
 	{

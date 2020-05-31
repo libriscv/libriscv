@@ -16,7 +16,8 @@ namespace riscv
 		: m_machine{mach},
 		  m_binary{bin},
 		  m_load_program     {options.load_program},
-		  m_protect_segments {options.protect_segments}
+		  m_protect_segments {options.protect_segments},
+		  m_verbose_loader   {options.verbose_loader}
 	{
 		assert(options.memory_max % Page::size() == 0);
 		assert(options.memory_max >= Page::size());
@@ -74,7 +75,7 @@ namespace riscv
 			throw std::runtime_error("Not enough room for ELF program segment");
 		}
 
-		if (riscv::verbose_machine) {
+		if (this->m_verbose_loader) {
 		printf("* Loading program of size %zu from %p to virtual %p\n",
 				len, src, (void*) (uintptr_t) hdr->p_vaddr);
 		}
@@ -84,7 +85,7 @@ namespace riscv
 		const bool readable   = hdr->p_flags & PF_R;
 		const bool writable   = hdr->p_flags & PF_W;
 		const bool executable = hdr->p_flags & PF_X;
-		if (riscv::verbose_machine) {
+		if (this->m_verbose_loader) {
 		printf("* Program segment readable: %d writable: %d  executable: %d\n",
 				readable, writable, executable);
 		}
@@ -160,7 +161,7 @@ namespace riscv
 			this->m_stack_address = 0x40000000;
 		}
 
-		if (riscv::verbose_machine) {
+		if (this->m_verbose_loader) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}
 	}

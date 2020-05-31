@@ -152,6 +152,7 @@ namespace riscv
 		address_t m_exit_address  = 0;
 		const bool m_load_program;
 		const bool m_protect_segments;
+		const bool m_verbose_loader;
 		size_t    m_pages_total   = 0; // max memory usage
 		size_t    m_pages_highest = 0; // max pages used
 	};

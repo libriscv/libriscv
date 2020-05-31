@@ -23,7 +23,6 @@ int main(int argc, const char** argv)
 		"hello_world", "test!"
 	};
 
-	riscv::verbose_machine = false;
 	riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
 
 	// somewhere to store the guest outputs and exit status

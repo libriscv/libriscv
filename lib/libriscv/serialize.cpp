@@ -126,7 +126,12 @@ namespace riscv
 			const auto& page = *(SerializedPage*) &vec[off];
 			off += sizeof(SerializedPage);
 			const auto& data = *(PageData*) &vec[off];
-			m_pages.insert({page.addr, new Page{page.attr, data}});
+			// when we serialized non-owning pages, we lost the connection
+			// so now we own the page data
+			PageAttributes new_attr = page.attr;
+			new_attr.non_owning = false;
+			m_pages.insert({page.addr, new Page{new_attr, data}});
+
 			off += Page::size();
 		}
 	}

@@ -49,6 +49,7 @@ namespace riscv
 		void install_syscall_handler(int, syscall_t);
 		void install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>>);
 		auto& get_syscall_handler(int);
+		void on_unhandled_syscall(Function<void(int)> callback) { m_on_unhandled_syscall = callback; }
 
 		// Push all strings on stack and then create a mini-argv on SP
 		void setup_argv(const std::vector<std::string>& args);
@@ -134,6 +135,7 @@ namespace riscv
 		bool m_stopped = false;
 		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers;
 		std::vector<Function<void()>> m_destructor_callbacks;
+		Function<void(int)> m_on_unhandled_syscall = nullptr;
 		void* m_userdata = nullptr;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
