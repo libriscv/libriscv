@@ -307,22 +307,19 @@ namespace riscv
 	}
 
 	template <int W>
-	std::vector<std::pair<address_type<W>, Page*>>
-		Memory<W>::convert_to_shared_memory()
+	void Memory<W>::insert_non_owned_memory(
+		address_t dst, void* src, size_t size, PageAttributes attr)
 	{
-		// shared pages that has to be manually managed by the receiver
-		std::vector<std::pair<address_t, Page*>> result;
-		// NOTE: maybe result.reserve(m_pages.size()) here?
-		for (auto it : m_pages) {
-			auto* page = it.second;
-			assert(page->attr.is_cow == false);
-			// convert all non-shared pages to shared and collect them
-			if (!page->attr.shared) {
-				page->attr.shared = true;
-				result.emplace_back(it.first, page);
-			}
+		assert(dst % Page::size() == 0);
+		assert(size % Page::size() == 0);
+		attr.non_owning = true;
+
+		for (size_t i = 0; i < size; i += Page::size())
+		{
+			const auto pageno = (dst + i) >> Page::SHIFT;
+			PageData* pdata = reinterpret_cast<PageData*> ((char*) src + i);
+			m_pages.insert({pageno, new Page{attr, pdata}});
 		}
-		return result;
 	}
 
 	template <int W>

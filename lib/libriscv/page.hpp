@@ -16,6 +16,7 @@ struct PageAttributes
 	bool exec = false;
 	bool is_cow = false;
 	bool shared = false;
+	bool non_owning = false;
 
 	bool is_default() const noexcept {
 		PageAttributes def {};
@@ -36,12 +37,18 @@ struct Page
 	static constexpr unsigned SHIFT = PageData::SHIFT;
 	using mmio_cb_t = std::function<int64_t (Page&, uint32_t, int, int64_t)>;
 
-	Page() = default;
+	// create a new blank page
+	Page() { m_page.reset(new PageData {}); };
+	// copy another page (or data)
 	Page(const PageAttributes& a, const PageData& d)
-		: m_page(d), attr(a) {}
+		: attr(a), m_page(new PageData{d}) {}
+	// create a page that doesn't own this memory
+	Page(const PageAttributes& a, PageData* data);
+	// don't try to free non-owned page memory
+	~Page() { if (attr.non_owning) m_page.release(); }
 
-	auto& page() noexcept { return m_page; }
-	const auto& page() const noexcept { return m_page; }
+	auto& page() noexcept { return *m_page; }
+	const auto& page() const noexcept { return *m_page; }
 
 	template <typename T>
 	inline T aligned_read(uint32_t offset) const
@@ -96,13 +103,20 @@ struct Page
 
 	// this combination has been benchmarked to be faster than
 	// page-aligning the PageData struct, and avoids an indirection
-	PageData m_page;
 	PageAttributes attr;
+	std::unique_ptr<PageData> m_page;
 #ifdef RISCV_INSTR_CACHE
 	std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
 #endif
 	mmio_cb_t m_trap = nullptr;
 };
+
+inline Page::Page(const PageAttributes& a, PageData* data)
+	: attr(a)
+{
+	attr.non_owning = true;
+	m_page.reset(data);
+}
 
 inline int64_t Page::trap(uint32_t offset, int mode, int64_t value) const
 {

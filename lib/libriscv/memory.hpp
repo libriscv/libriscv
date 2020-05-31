@@ -88,8 +88,9 @@ namespace riscv
 		// shared pages (regular pages will have priority!)
 		size_t nonshared_pages_active() const noexcept;
 		void   install_shared_page(address_t pageno, const Page&);
-		// convert every memory page to shared, return vector with address, Page* pair
-		std::vector<std::pair<address_t, Page*>> convert_to_shared_memory();
+		// create pages pointing to non-owned memory with given attributes
+		void insert_non_owned_memory(
+			address_t dst, void* src, size_t size, PageAttributes = {});
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
