@@ -282,7 +282,7 @@ namespace riscv
 			.exec   = false,
 			.is_cow = false,
 			.shared = true
-		}, {}
+		}, nullptr
 	};
 	const Page& Page::cow_page() noexcept {
 		return zeroed_page; // read-only, zeroed page
