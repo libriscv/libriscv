@@ -1,10 +1,18 @@
 
 template <int W>
 inline Machine<W>::Machine(const std::vector<uint8_t>& binary, 
-							MachineOptions options)
+							MachineOptions<W> options)
 	: cpu(*this), memory(*this, binary, options)
 {
-	cpu.reset();
+	if (options.owning_machine == nullptr)
+		cpu.reset();
+	else {
+		const auto& src = *options.owning_machine;
+		cpu.registers() = src.cpu.registers();
+		cpu.increment_counter(src.cpu.instruction_counter());
+		// TODO: copy atomics here
+		cpu.jump(cpu.pc());
+	}
 }
 template <int W>
 inline Machine<W>::Machine(const std::vector<uint8_t>& binary, 

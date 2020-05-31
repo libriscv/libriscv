@@ -18,7 +18,7 @@ namespace riscv
 
 		// see common.hpp for MachineOptions
 		Machine(const std::vector<uint8_t>& binary,
-				MachineOptions);
+				MachineOptions<W>);
 		Machine(const std::vector<uint8_t>& binary,
 				uint64_t memory_max = 16ull << 20 /* 16mb */);
 		~Machine();

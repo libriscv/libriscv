@@ -77,18 +77,19 @@ namespace riscv
 	static constexpr bool floating_point_enabled = false;
 #endif
 
-	struct Page;
+	template <int W>
+	struct Machine;
 
+	template <int W>
 	struct MachineOptions
 	{
 		uint64_t memory_max = 16ull << 20; // 16mb
 		bool load_program = true;
 		bool protect_segments = true;
 		bool verbose_loader = false;
-		// The pages provided will be inserted into the machine.
-		// They must be shared because there is no good way to handle
-		// machine resets (you will lose all non-shared pages).
-		std::vector<Page*> pages;
+
+		// machine who owns all the execute- and read-only memory
+		const Machine<W>* owning_machine = nullptr;
 	};
 
 	template <int W>

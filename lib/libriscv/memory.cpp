@@ -12,7 +12,7 @@ namespace riscv
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach,
 					const std::vector<uint8_t>& bin,
-					MachineOptions options)
+					MachineOptions<W> options)
 		: m_machine{mach},
 		  m_binary{bin},
 		  m_load_program     {options.load_program},
@@ -22,7 +22,14 @@ namespace riscv
 		assert(options.memory_max % Page::size() == 0);
 		assert(options.memory_max >= Page::size());
 		this->m_pages_total = options.memory_max / Page::size();
-		this->reset();
+		// when an owning machine is passed, its state will be used instead
+		if (options.owning_machine == nullptr) {
+			this->reset();
+		}
+		else {
+			assert(&bin == &options.owning_machine->memory.binary());
+			this->machine_loader(*options.owning_machine);
+		}
 		// set the default exit function address for vm calls
 		this->m_exit_address = resolve_address("_exit");
 	}
@@ -163,6 +170,26 @@ namespace riscv
 
 		if (this->m_verbose_loader) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
+		}
+	}
+
+	template <int W>
+	void Memory<W>::machine_loader(const Machine<W>& master)
+	{
+		this->initial_paging();
+		for (auto it : master.memory.pages())
+		{
+			const auto* page = it.second;
+			if ((page->attr.read || page->attr.exec) && !page->attr.write && !page->attr.is_cow) {
+				// make a non-owning page
+				auto attr = page->attr;
+				attr.non_owning = true;
+				m_pages.insert({it.first, new Page{attr, (PageData*) page->data()}});
+			} else if (page->attr.write) {
+				// full copy
+				auto* new_page = new Page {page->attr, page->page()};
+				m_pages.insert({it.first, new_page});
+			}
 		}
 	}
 

@@ -70,6 +70,7 @@ namespace riscv
 		size_t pages_highest_active() const noexcept { return m_pages_highest; }
 		size_t pages_total() const noexcept { return this->m_pages_total; }
 		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
+		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(address_t) const noexcept;
 		Page& get_exec_pageno(address_t npage); // throws
@@ -99,7 +100,7 @@ namespace riscv
 		// returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
-		Memory(Machine<W>&, const std::vector<uint8_t>&, MachineOptions);
+		Memory(Machine<W>&, const std::vector<uint8_t>&, MachineOptions<W>);
 		~Memory();
 	private:
 		inline auto& create_attr(const address_t address);
@@ -130,6 +131,9 @@ namespace riscv
 			auto* symtab = elf_offset<typename Elf<W>::Sym>(shdr->sh_offset);
 			return &symtab[symidx];
 		}
+		// machine cloning
+		void machine_loader(const Machine<W>&);
+
 
 		Machine<W>& m_machine;
 
