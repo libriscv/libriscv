@@ -99,6 +99,7 @@ multithreading<W>* setup_native_threads(
 			sas_alloc::Arena* arena;
 		};
 		auto* data = new Data { machine, mt, arena };
+		machine.add_destructor_callback([data] { delete data; });
 
 		auto& page = machine.memory.create_page(0xFFFFE);
 		page.attr.write = false;
