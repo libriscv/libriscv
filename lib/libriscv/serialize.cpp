@@ -64,10 +64,10 @@ namespace riscv
 
 		for (const auto& it : this->m_pages)
 		{
-			const auto& page = *it.second;
+			const auto& page = it.second;
 			assert(page.attr.is_cow == false);
-			// we want to ignore shared pages
-			if (page.attr.shared) continue;
+			// we want to ignore shared/non-owned pages
+			if (page.attr.non_owning) continue;
 			const SerializedPage spage {
 				.addr = it.first,
 				.attr = page.attr
@@ -142,7 +142,7 @@ namespace riscv
 			// so now we own the page data
 			PageAttributes new_attr = page.attr;
 			new_attr.non_owning = false;
-			m_pages.insert({page.addr, new Page{new_attr, data}});
+			m_pages.try_emplace(page.addr, new_attr, data);
 
 			off += Page::size();
 		}

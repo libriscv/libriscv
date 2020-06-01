@@ -53,10 +53,6 @@ namespace riscv
 	template <int W>
 	void Memory<W>::clear_all_pages()
 	{
-		// delete any pages that aren't shared
-		for (auto it : m_pages) {
-			if (!it.second->attr.shared) delete it.second;
-		}
 		this->m_pages.clear();
 		this->m_current_rd_page = -1;
 		this->m_current_rd_ptr  = nullptr;
@@ -177,18 +173,17 @@ namespace riscv
 	void Memory<W>::machine_loader(const Machine<W>& master)
 	{
 		this->initial_paging();
-		for (auto it : master.memory.pages())
+		for (auto& it : master.memory.pages())
 		{
-			const auto* page = it.second;
-			if ((page->attr.read || page->attr.exec) && !page->attr.write && !page->attr.is_cow) {
+			const auto& page = it.second;
+			if ((page.attr.read || page.attr.exec) && !page.attr.write && !page.attr.is_cow) {
 				// make a non-owning page
-				auto attr = page->attr;
+				auto attr = page.attr;
 				attr.non_owning = true;
-				m_pages.insert({it.first, new Page{attr, (PageData*) page->data()}});
-			} else if (page->attr.write) {
+				m_pages.try_emplace(it.first, attr, (PageData*) page.data());
+			} else if (page.attr.write) {
 				// full copy
-				auto* new_page = new Page {page->attr, page->page()};
-				m_pages.insert({it.first, new_page});
+				m_pages.try_emplace(it.first, page.attr, page.page());
 			}
 		}
 	}
@@ -276,12 +271,12 @@ namespace riscv
 	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
-		const auto& it = pages().emplace(page, new Page);
+		const auto& it = pages().try_emplace(page);
 		m_pages_highest = std::max(m_pages_highest, pages().size());
 		// if this page was read-cached, invalidate it
-		this->invalidate_page(page, *it.first->second);
+		this->invalidate_page(page, it.first->second);
 		// return new page
-		return *it.first->second;
+		return it.first->second;
 	}
 
 	template <int W>
@@ -309,7 +304,7 @@ namespace riscv
 			.write  = false,
 			.exec   = false,
 			.is_cow = false,
-			.shared = true
+			.non_owning = true
 		}, nullptr
 	};
 	const Page& Page::cow_page() noexcept {
@@ -325,13 +320,12 @@ namespace riscv
 		if (UNLIKELY(get_pageno(pageno).attr.is_cow == false))
 			throw MachineException(ILLEGAL_OPERATION,
 				"There was a page at the specified location already", pageno);
-		if (UNLIKELY(shared_page.attr.shared == false))
-			throw MachineException(ILLEGAL_OPERATION,
-				"The provided page did not have the shared attribute", pageno);
 
+		auto attr = shared_page.attr;
+		attr.non_owning = true;
 		// NOTE: If you insert a const Page, DON'T modify it! The machine
 		// won't, unless system-calls do or manual intervention happens!
-		m_pages.insert({pageno, const_cast<Page*> (&shared_page)});
+		m_pages.try_emplace(pageno, attr, const_cast<PageData*> (&shared_page.page()));
 	}
 
 	template <int W>
@@ -346,7 +340,7 @@ namespace riscv
 		{
 			const auto pageno = (dst + i) >> Page::SHIFT;
 			PageData* pdata = reinterpret_cast<PageData*> ((char*) src + i);
-			m_pages.insert({pageno, new Page{attr, pdata}});
+			m_pages.try_emplace(pageno, attr, pdata);
 		}
 	}
 

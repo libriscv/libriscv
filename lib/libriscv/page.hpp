@@ -15,7 +15,6 @@ struct PageAttributes
 	bool write = true;
 	bool exec = false;
 	bool is_cow = false;
-	bool shared = false;
 	bool non_owning = false;
 
 	bool is_default() const noexcept {

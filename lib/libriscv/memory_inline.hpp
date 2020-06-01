@@ -57,7 +57,7 @@ inline Page& Memory<W>::get_exec_pageno(const address_t page)
 {
 	auto it = m_pages.find(page);
 	if (LIKELY(it != m_pages.end())) {
-		return *it->second;
+		return it->second;
 	}
 	machine().cpu.trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
 	__builtin_unreachable();
@@ -68,7 +68,7 @@ inline const Page& Memory<W>::get_pageno(const address_t page) const noexcept
 {
 	auto it = m_pages.find(page);
 	if (it != m_pages.end()) {
-		return *it->second;
+		return it->second;
 	}
 	// uninitialized memory is all zeroes on this system
 	return Page::cow_page();
@@ -79,7 +79,7 @@ inline Page& Memory<W>::create_page(const address_t pageno)
 {
 	auto it = m_pages.find(pageno);
 	if (it != m_pages.end()) {
-		return *it->second;
+		return it->second;
 	}
 	// create page on-demand, or throw exception when out of memory
 	if (this->m_page_fault_handler == nullptr) {
@@ -141,7 +141,6 @@ Memory<W>::free_pages(address_t dst, size_t len)
 		auto& page = this->get_pageno(pageno);
 		if (page.attr.is_cow == false) {
 			m_pages.erase(pageno);
-			if (!page.attr.shared) delete &page;
 		}
 		dst += size;
 		len -= size;
@@ -153,7 +152,7 @@ size_t Memory<W>::nonshared_pages_active() const noexcept
 {
 	return std::accumulate(m_pages.begin(), m_pages.end(),
 				0, [] (int value, const auto& it) {
-					return value + (!it.second->attr.shared ? 1 : 0);
+					return value + (!it.second.attr.non_owning ? 1 : 0);
 				});
 }
 

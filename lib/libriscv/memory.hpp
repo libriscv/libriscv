@@ -89,7 +89,7 @@ namespace riscv
 		// shared pages (regular pages will have priority!)
 		size_t nonshared_pages_active() const noexcept;
 		void   install_shared_page(address_t pageno, const Page&);
-		// create pages pointing to non-owned memory with given attributes
+		// create pages for non-owned (shared) memory with given attributes
 		void insert_non_owned_memory(
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
@@ -141,7 +141,7 @@ namespace riscv
 		address_t   m_current_rd_page = -1;
 		Page*     m_current_wr_ptr  = nullptr;
 		address_t m_current_wr_page = -1;
-		eastl::unordered_map<address_t, Page*>  m_pages;
+		eastl::unordered_map<address_t, Page>  m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 
 		const std::vector<uint8_t>& m_binary;
