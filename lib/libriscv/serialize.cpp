@@ -15,7 +15,8 @@ namespace riscv
 		uint16_t cpu_offset;
 		uint16_t mem_offset;
 
-		Registers<W> registers[0];
+		Registers<W> registers;
+		uint64_t     counter;
 
 		uint64_t start_address = 0;
 		uint64_t stack_address = 0;
@@ -38,7 +39,10 @@ namespace riscv
 			.attr_size = sizeof(PageAttributes),
 			.reserved = 0,
 			.cpu_offset = sizeof(SerializedMachine<W>),
-			.mem_offset = sizeof(SerializedMachine<W>) + sizeof(Registers<W>),
+			.mem_offset = sizeof(SerializedMachine<W>),
+
+			.registers = cpu.registers(),
+			.counter   = cpu.instruction_counter(),
 
 			.start_address = memory.start_address(),
 			.stack_address = memory.stack_initial(),
@@ -50,10 +54,8 @@ namespace riscv
 		this->memory.serialize_to(vec);
 	}
 	template <int W>
-	void CPU<W>::serialize_to(std::vector<uint8_t>& vec)
+	void CPU<W>::serialize_to(std::vector<uint8_t>& /* vec */)
 	{
-		auto* rptr = (const uint8_t*) &this->m_regs;
-		vec.insert(vec.end(), rptr, rptr + sizeof(Registers<W>));
 	}
 	template <int W>
 	void Memory<W>::serialize_to(std::vector<uint8_t>& vec)
@@ -65,7 +67,7 @@ namespace riscv
 		for (const auto& it : this->m_pages)
 		{
 			const auto& page = it.second;
-			assert(page.attr.is_cow == false);
+			assert(!page.attr.is_cow && "Should never have CoW pages stored");
 			// we want to ignore shared/non-owned pages
 			if (page.attr.non_owning) continue;
 			const SerializedPage spage {
@@ -100,12 +102,12 @@ namespace riscv
 		return 0;
 	}
 	template <int W>
-	void CPU<W>::deserialize_from(const std::vector<uint8_t>& vec,
+	void CPU<W>::deserialize_from(const std::vector<uint8_t>& /* vec */,
 					const SerializedMachine<W>& state)
 	{
-		assert(vec.size() >= state.cpu_offset + sizeof(Registers<W>));
 		// restore CPU registers and counters
-		this->m_regs = *(const Registers<W>*) &vec[state.cpu_offset];
+		this->m_regs = state.registers;
+		this->m_counter = state.counter;
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};
 #endif

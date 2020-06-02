@@ -85,7 +85,7 @@ inline void Machine<W>::system_call(int syscall_number)
 {
 	if (LIKELY((size_t) syscall_number < m_syscall_handlers.size()))
 	{
-		auto& handler = m_syscall_handlers[syscall_number];
+		const auto& handler = m_syscall_handlers[syscall_number];
 		if (LIKELY(handler != nullptr))
 		{
 			address_t ret = handler(*this);
