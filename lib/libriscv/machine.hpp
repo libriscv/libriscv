@@ -113,7 +113,7 @@ namespace riscv
 		static constexpr bool verbose_jumps     = false;
 		static constexpr bool verbose_registers = false;
 #endif
-		void system_call(int);
+		void system_call(size_t);
 
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }
 		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
