@@ -70,6 +70,19 @@ int memcmp(const void* ptr1, const void* ptr2, size_t n)
 	}
 	return n == 0 ? 0 : (*iter1 - *iter2);
 }
+extern "C"
+void* memchr(const void *s, unsigned char c, size_t n)
+{
+    if (n != 0) {
+        const auto* p = (const unsigned char*) s;
+
+        do {
+            if (*p++ == c)
+                return ((void *)(p - 1));
+        } while (--n != 0);
+    }
+    return nullptr;
+}
 
 extern "C"
 char* strcpy(char* dst, const char* src)
