@@ -290,15 +290,15 @@ namespace riscv
 		throw MachineException(OUT_OF_MEMORY, "Out of memory", mem.pages_total());
 	}
 
-	static Page zeroed_page {
+	static const Page zeroed_page {
 		PageAttributes {
 			.read   = true,
 			.write  = false,
 			.exec   = false,
 			.is_cow = true
-		}, {}
+		}
 	};
-	static Page guarded_page {
+	static const Page guarded_page {
 		PageAttributes {
 			.read   = false,
 			.write  = false,
@@ -320,6 +320,10 @@ namespace riscv
 		if (UNLIKELY(get_pageno(pageno).attr.is_cow == false))
 			throw MachineException(ILLEGAL_OPERATION,
 				"There was a page at the specified location already", pageno);
+		if (shared_page.data() == nullptr && (
+			shared_page.attr.write || shared_page.attr.read || shared_page.attr.exec))
+			throw MachineException(ILLEGAL_OPERATION,
+				"There was a RWX page with no allocated data", pageno);
 
 		auto attr = shared_page.attr;
 		attr.non_owning = true;

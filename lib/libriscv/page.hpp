@@ -39,7 +39,7 @@ struct Page
 	// create a new blank page
 	Page() { m_page.reset(new PageData {}); };
 	// copy another page (or data)
-	Page(const PageAttributes& a, const PageData& d)
+	Page(const PageAttributes& a, const PageData& d = {})
 		: attr(a), m_page(new PageData{d}) {}
 	// create a page that doesn't own this memory
 	Page(const PageAttributes& a, PageData* data);
