@@ -310,7 +310,8 @@ template <int W>
 address_type<W> Memory<W>::resolve_section(const char* name) const
 {
 	auto* shdr = this->section_by_name(name);
-	return shdr->sh_addr;
+	if (shdr) return shdr->sh_addr;
+	return 0x0;
 }
 
 template <int W>
