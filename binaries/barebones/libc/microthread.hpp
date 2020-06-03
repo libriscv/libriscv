@@ -181,20 +181,16 @@ inline int oneshot(const T& func, Args&&... args)
 	const long tls  = (long) thread;
 	return clone_helper((long) stack_top, tls);
 }
+
 template <typename Ret = long, typename... Args>
-inline Ret threadcall(int n, Args&&... args)
-{
-	using tcall_t = Ret (*) (...);
-	// Special thread system call number is offset / 4
-	return ((tcall_t) (0xFFFFE000 + n*4)) (std::forward<Args>(args)...);
-}
+inline Ret threadcall(int n, Args&&... args);
 
 inline int direct(void(*func)(), void* data)
 {
 	extern void direct_starter(Thread*);
 	extern void oneshot_exit();
 #ifdef USE_THREADCALLS
-	return threadcall<int>(64, func, data, (long) &oneshot_exit);
+	return threadcall(64, func, data, (long) &oneshot_exit);
 #else
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (UNLIKELY(stack_bot == nullptr)) return -ENOMEM;
@@ -278,6 +274,17 @@ inline void Thread::exit(long exitcode)
 	this->return_value = exitcode;
 	syscall(THREAD_SYSCALLS_BASE+1, exitcode);
 	__builtin_unreachable();
+}
+
+
+/** For when USE_THREADCALLS is enabled **/
+
+template <typename Ret = long, typename... Args>
+inline Ret threadcall(int n, Args&&... args)
+{
+	using tcall_t = Ret (*) (...);
+	// Special thread system call number is offset / 4
+	return ((tcall_t) (0xFFFFE000 + n*4)) (std::forward<Args>(args)...);
 }
 
 }

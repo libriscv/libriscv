@@ -39,7 +39,7 @@ multithreading<W>* setup_native_threads(
 	[mt] (Machine<W>& machine) {
 		const int status = machine.template sysarg<int> (0);
 		const int tid = mt->get_thread()->tid;
-		THPRINT(">>> Exit on tid=%ld, exit status = %d\n",
+		THPRINT(">>> Exit on tid=%d, exit status = %d\n",
 				tid, (int) status);
 		if (tid != 0) {
 			// exit thread instead
@@ -112,13 +112,14 @@ multithreading<W>* setup_native_threads(
 			auto* mt    = data->mt;
 			auto* arena = data->arena;
 			// invoke a system call
-			//printf("System call: %#x %d\n", sysn, sysn / 4);
+			//printf("Threadcall: %#x %d\n", sysn, sysn / 4);
 			switch (sysn / 4) {
 				case 64: {
 					// ultra-fast clone
 					const uint32_t   tls = arena->malloc(STACK_SIZE);
 					if (UNLIKELY(tls == 0)) {
-						printf("Error: Thread stack allocation failed: %#x\n", tls);
+						fprintf(stderr,
+							"Error: Thread stack allocation failed: %#x\n", tls);
 						machine.cpu.reg(RISCV::REG_ARG0) = -1;
 						break;
 					}

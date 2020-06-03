@@ -38,6 +38,11 @@ void* memcpy(void* vdest, const void* vsrc, size_t size)
 #endif
 }
 extern "C"
+wchar_t* wmemcpy(wchar_t* wto, const wchar_t* wfrom, size_t size)
+{
+	return (wchar_t *) memcpy (wto, wfrom, size * sizeof (wchar_t));
+}
+extern "C"
 void* memmove(void* vdest, const void* vsrc, size_t size)
 {
 #ifndef NATIVE_MEM_SYSCALLS
@@ -150,4 +155,10 @@ char* __strcat_chk(char* dest, const char* src, size_t destlen)
   size_t len = strlen(dest) + strlen(src) + 1;
   assert (len <= destlen);
   return strcat(dest, src);
+}
+
+extern "C"
+int abs(int value)
+{
+	return (value >= 0) ? value : -value;
 }
