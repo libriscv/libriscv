@@ -242,7 +242,7 @@ inline bool multithreading<W>::block(int reason)
 	auto* thread = get_thread();
 	if (UNLIKELY(suspended.empty())) {
 		// TODO: Stop the machine here?
-		throw std::runtime_error("A blocked thread has nothing to yield to!");
+		return false; // continue immediately?
 	}
 	// block thread, write reason to future return value
 	thread->block(reason, reason);
