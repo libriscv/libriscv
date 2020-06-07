@@ -4,6 +4,9 @@
 #include "syscall_helpers.hpp"
 #include <cstdio>
 template <int W> struct multithreading;
+static const uint32_t PARENT_SETTID  = 0x00100000; /* set the TID in the parent */
+static const uint32_t CHILD_CLEARTID = 0x00200000; /* clear the TID in the child */
+static const uint32_t CHILD_SETTID   = 0x01000000; /* set the TID in the child */
 
 //#define THREADS_DEBUG 1
 #ifdef THREADS_DEBUG
@@ -201,9 +204,6 @@ inline thread<W>* multithreading<W>::create(
 	const int tid = ++this->thread_counter;
 	auto it = threads.emplace(tid, thread_t{*this, tid, tls, stack});
 	thread_t* thread = &it.first->second;
-	static const uint32_t PARENT_SETTID  = 0x00100000; /* set the TID in the parent */
-	static const uint32_t CHILD_CLEARTID = 0x00200000; /* clear the TID in the child */
-	static const uint32_t CHILD_SETTID   = 0x01000000; /* set the TID in the child */
 
 	// flag for write child TID
 	if (flags & CHILD_SETTID) {

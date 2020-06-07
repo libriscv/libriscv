@@ -23,7 +23,7 @@ multithreading<W>* setup_native_threads(
 		const uint32_t  func = machine.template sysarg<uint32_t> (1);
 		const uint32_t   tls = machine.template sysarg<uint32_t> (2);
 		auto* thread = mt->create(
-			CLONE_CHILD_SETTID, tls, 0x0, stack, tls);
+			CHILD_SETTID, tls, 0x0, stack, tls);
 		// suspend and store return value for parent: child TID
 		auto* parent = mt->get_thread();
 		parent->suspend(thread->tid);
@@ -132,7 +132,7 @@ multithreading<W>* setup_native_threads(
 					machine.memory.template write<uint32_t> (tls + 4, func);
 					machine.memory.template write<uint32_t> (tls + 8, data);
 					auto* thread = mt->create(
-						CLONE_CHILD_SETTID, tls, 0x0, stack, tls);
+						CHILD_SETTID, tls, 0x0, stack, tls);
 					// set PC back to clone point - 4
 					machine.cpu.registers().pc =
 						machine.cpu.reg(riscv::RISCV::REG_RA) - 4;
