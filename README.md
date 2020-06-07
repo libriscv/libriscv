@@ -24,7 +24,7 @@ To get C++ exceptions and other things, you will need a (limited) Linux userspac
 ```
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
 cd riscv-gnu-toolchain
-./configure --prefix=$HOME/riscv --with-arch=rv32gc --with-abi=ilp32d
+./configure --prefix=$HOME/riscv --with-arch=rv32g --with-abi=ilp32d
 make -j4
 ```
 This will build a newlib cross-compiler with C++ exception support. The ABI is ilp32d, which is for 32-bit and 64-bit floating-point instruction set support. It is much faster than software implementations of binary IEEE floating-point arithmetic.
@@ -160,6 +160,6 @@ It can also be used as a script backend for a game engine, as it's quite a bit f
 
 Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything. Disable atomics and compression extensions in the emulator for a slight boost, if you can recompile the RISC-V binaries with the same configuration.
 
-Use GCC to build the RISC-V binaries with, -O2 with atomics and compression disabled: `-march=rv32imfd`. Try enabling the instruction decoder cache and see if it's faster for your needs. Always enable the page cache. Experiment with LTO and GC-sections, as the lower instruction count will translate into better performance for the emulator. Fair warning: It's a bit harder to use Clang for freestanding RISC-V.
+Use GCC to build the RISC-V binaries with, -O2 with compressed instructions disabled: `-march=rv32imafd` which is the same as `-match=rv32g`. Try enabling the instruction decoder cache and see if it's faster for your needs. Always enable the page cache. Experiment with LTO and GC-sections, as the lower instruction count will translate into better performance for the emulator. Fair warning: It's a bit harder to use Clang for freestanding RISC-V.
 
 Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using specialized system calls. See `emulator/syscalls/src/native_heap.hpp`, as well as the native_libc files. This will manage the location of heap chunks outside of the emulator, however the heap memory itself is still inside the virtual memory of the guest binary. There is also an accelerated tiny threads implementation, see: `microthread.hpp` and `emulator/syscalls/src/native_threads.cpp`.
