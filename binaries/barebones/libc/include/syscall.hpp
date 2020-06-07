@@ -160,3 +160,46 @@ inline long psyscall(long n, const void* arg0, const void* arg1, const void* arg
 	asm ("" ::: "memory");
 	return syscall(n, (long) arg0, (long) arg1, (long) arg2);
 }
+
+/** Floating-point System calls */
+
+inline float
+fsyscallf(long n, float farg0)
+{
+	register float fa0 asm("fa0") = farg0;
+	register long syscall_id asm("a7") = n;
+	float retval;
+
+	asm volatile ("scall"
+	 	: "+f"(fa0) : "r"(syscall_id) : "a0");
+	retval = fa0;
+
+	return retval;
+}
+
+inline float
+fsyscallf(long n, float farg0, float farg1)
+{
+	register float fa0 asm("fa0") = farg0;
+	register float fa1 asm("fa1") = farg1;
+	register long syscall_id asm("a7") = n;
+
+	asm volatile ("scall"
+	 	: "+f"(fa0) : "f"(fa1), "r"(syscall_id) : "a0");
+
+	return fa0;
+}
+
+inline float
+fsyscallf(long n, float farg0, float farg1, float farg2)
+{
+	register float fa0 asm("fa0") = farg0;
+	register float fa1 asm("fa1") = farg1;
+	register float fa2 asm("fa2") = farg2;
+	register long syscall_id asm("a7") = n;
+
+	asm volatile ("scall"
+	 	: "+f"(fa0) : "f"(fa1), "f"(fa2), "r"(syscall_id) : "a0");
+
+	return fa0;
+}
