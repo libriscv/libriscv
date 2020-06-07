@@ -4,7 +4,7 @@
 **/
 #pragma once
 #include <cstddef>
-#include "include/syscall.hpp"
+#include <include/syscall.hpp>
 
 inline void* sys_malloc(size_t len)
 {

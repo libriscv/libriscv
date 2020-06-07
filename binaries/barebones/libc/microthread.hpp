@@ -1,6 +1,6 @@
 #pragma once
-#include "include/common.hpp"
-#include "include/syscall.hpp"
+#include <include/common.hpp>
+#include <include/syscall.hpp>
 #include <functional>
 #include <memory>
 
@@ -35,7 +35,7 @@ template <typename T, typename... Args>
 auto    create(const T& func, Args&&... args);
 
 /* Create a new self-governing thread that deletes itself on completion.
-   Calling exit() in a sovereign thread is undefined behavior. 
+   Calling exit() in a sovereign thread is undefined behavior.
    Returns thread id on success. */
 template <typename T, typename... Args>
 int     oneshot(const T& func, Args&&... args);
