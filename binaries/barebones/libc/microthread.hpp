@@ -42,9 +42,17 @@ int     oneshot(const T& func, Args&&... args);
 
 /* Create a new self-governing thread that directly starts on the
    threads start function, with a special return address that
-   self-deletes and exits the thread safely. Data can be retrieved
-   using microthread::getdata(). Returns thread id on success. */
-int     direct(void(*) (), void* data = nullptr);
+   self-deletes and exits the thread safely. Arguments can be passed,
+   but they must be used by value, unless you know what you are doing.
+   Returns thread id on success. The first argument is the Thread&. */
+#ifdef USE_THREADCALLS
+template <typename T, typename... Args>
+int     direct(const T& func, Args&&... args);
+
+#else
+int     direct(void (*func) (), void* data = nullptr);
+
+#endif
 
 /* Waits for a thread to finish and then returns the exit status
    of the thread. The thread is then deleted, freeing memory. */
@@ -183,15 +191,19 @@ inline int oneshot(const T& func, Args&&... args)
 }
 
 template <typename Ret = long, typename... Args>
-inline Ret threadcall(int n, Args&&... args);
+inline Ret threadcall(Args&&... args);
 
-inline int direct(void(*func)(), void* data)
+#ifdef USE_THREADCALLS
+template <typename T, typename... Args>
+inline int direct(const T& func, Args&&... args)
+{
+	auto fptr = static_cast<void(*)(Thread&, Args...)> (func);
+	return threadcall(fptr, std::forward<Args> (args)...);
+}
+#else
+inline int direct(void (*func) (), void* data)
 {
 	extern void direct_starter(Thread*);
-	extern void oneshot_exit();
-#ifdef USE_THREADCALLS
-	return threadcall(64, func, data, (long) &oneshot_exit);
-#else
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (UNLIKELY(stack_bot == nullptr)) return -ENOMEM;
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
@@ -200,8 +212,8 @@ inline int direct(void(*func)(), void* data)
 	const long tls  = (long) thread;
 	/* stack, func, tls, flags */
 	return syscall(THREAD_SYSCALLS_BASE+0, (long) stack_top, (long) &direct_starter, tls, 0);
-#endif
 }
+#endif
 
 inline long join(Thread* thread)
 {
@@ -280,11 +292,11 @@ inline void Thread::exit(long exitcode)
 /** For when USE_THREADCALLS is enabled **/
 
 template <typename Ret = long, typename... Args>
-inline Ret threadcall(int n, Args&&... args)
+inline Ret threadcall(Args&&... args)
 {
 	using tcall_t = Ret (*) (...);
 	// Special thread system call number is offset / 4
-	return ((tcall_t) (0xFFFFE000 + n*4)) (std::forward<Args>(args)...);
+	return ((tcall_t) (0xFFFFE000)) (std::forward<Args>(args)...);
 }
 
 }

@@ -103,57 +103,59 @@ multithreading<W>* setup_native_threads(
 		auto* data = new Data { machine, mt, arena };
 		machine.add_destructor_callback([data] { delete data; });
 
-		auto& page = machine.memory.create_page(0xFFFFE);
-		page.attr.write = false;
-		page.attr.read = false;
-		page.attr.exec = true;
+		// custom jump trap for clone threadcall
+		auto& clone_page = machine.memory.install_shared_page(0xFFFFE,
+			Page{{ .read = false, .write = false, .exec = false }, nullptr});
 		// create an execution trap on the page
-		page.set_trap(
-		[data] (riscv::Page&, uint32_t sysn, int, int64_t) -> int64_t {
+		clone_page.set_trap(
+		[data] (riscv::Page&, uint32_t, int, int64_t) -> int64_t {
 			auto& machine = data->machine;
 			auto* mt    = data->mt;
 			auto* arena = data->arena;
-			// invoke a system call
-			//printf("Threadcall: %#x %d\n", sysn, sysn / 4);
-			switch (sysn / 4) {
-				case 64: {
-					// ultra-fast clone
-					const uint32_t   tls = arena->malloc(STACK_SIZE);
-					if (UNLIKELY(tls == 0)) {
-						fprintf(stderr,
-							"Error: Thread stack allocation failed: %#x\n", tls);
-						machine.cpu.reg(RISCV::REG_ARG0) = -1;
-						break;
-					}
-					const uint32_t stack = ((tls + STACK_SIZE) & ~0xF);
-					const uint32_t  func = machine.template sysarg<uint32_t> (0);
-					const uint32_t  data = machine.template sysarg<uint32_t> (1);
-					const uint32_t exitf = machine.template sysarg<uint32_t> (2);
-					machine.memory.template write<uint32_t> (tls + 4, func);
-					machine.memory.template write<uint32_t> (tls + 8, data);
-					auto* thread = mt->create(
-						CHILD_SETTID, tls, 0x0, stack, tls);
-					// set PC back to clone point - 4
-					machine.cpu.registers().pc =
-						machine.cpu.reg(riscv::RISCV::REG_RA) - 4;
-					// suspend and store return value for parent: child TID
-					auto* parent = mt->get_thread();
-					parent->suspend(thread->tid);
-					// activate and setup a function call
-					thread->activate();
-					// the cast is a work-around for a compiler bug
-					machine.cpu.reg(riscv::RISCV::REG_ARG0) = (uint32_t) tls;
-					machine.cpu.reg(riscv::RISCV::REG_RA) = exitf;
-					machine.cpu.jump(func);
-					return 0;
-				}
-				default:
-					printf("Error: Unknown threadcall: %d\n", sysn / 4);
-					machine.cpu.reg(RISCV::REG_ARG0) = -1;
+			// invoke clone threadcall
+			const uint32_t   tls = arena->malloc(STACK_SIZE);
+			if (UNLIKELY(tls == 0)) {
+				fprintf(stderr,
+					"Error: Thread stack allocation failed: %#x\n", tls);
+				machine.cpu.reg(RISCV::REG_ARG0) = -1;
+				// return back to caller
+				machine.cpu.jump(machine.cpu.reg(riscv::RISCV::REG_RA));
+				return 0;
 			}
-			// return to caller
-			const auto retaddr = machine.cpu.reg(riscv::RISCV::REG_RA);
-			machine.cpu.jump(retaddr);
+			const uint32_t stack = ((tls + STACK_SIZE) & ~0xF);
+			const uint32_t  func = machine.template sysarg<uint32_t> (0);
+			auto* thread = mt->create(
+				CHILD_SETTID, tls, 0x0, stack, tls);
+			// set PC back to clone point - 4
+			machine.cpu.registers().pc =
+				machine.cpu.reg(riscv::RISCV::REG_RA) - 4;
+			// suspend and store return value for parent: child TID
+			auto* parent = mt->get_thread();
+			parent->suspend(thread->tid);
+			// activate and setup a function call
+			thread->activate();
+			// exit into the exit function which frees the thread
+			machine.cpu.reg(riscv::RISCV::REG_RA) = 0xFFFFD000;
+			// geronimo!
+			machine.cpu.jump(func);
+			// first argument is Thread* or Thread&
+			machine.cpu.reg(riscv::RISCV::REG_ARG0) = tls;
+			return 0;
+		});
+		// custom jump trap for exit threadcall
+		auto& exit_page = machine.memory.install_shared_page(0xFFFFD,
+			Page{{ .read = false, .write = false, .exec = false }, nullptr});
+		// create an execution trap on the page
+		exit_page.set_trap(
+		[data] (riscv::Page&, uint32_t, int, int64_t) -> int64_t {
+			auto& machine = data->machine;
+			auto* mt    = data->mt;
+			auto* arena = data->arena;
+
+			auto self = machine.cpu.reg(riscv::RISCV::REG_TP);
+			arena->free(self);
+			// exit thread instead
+			mt->get_thread()->exit();
 			return 0;
 		});
 	} // arena provided
