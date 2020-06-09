@@ -1,6 +1,9 @@
 #include <include/syscall.hpp>
 #include <tinyprintf.h>
+#include <stdlib.h>
 #include <cstdint>
+static struct _reent reent;
+struct _reent* _impure_ptr = &reent;
 
 // this is used for vmcalls
 asm(".global fastexit\n"
@@ -19,15 +22,10 @@ extern "C" {
 static void
 init_stdlib()
 {
+	_REENT_INIT_PTR_ZEROED(_impure_ptr);
+
 	// 2. enable printf facilities
 	init_printf(NULL, __print_putchr);
-
-#ifdef EH_ENABLED
-	/// 3. initialize exceptions before we run constructors
-    extern char __eh_frame_start[];
-    extern void __register_frame(void*);
-  	__register_frame(&__eh_frame_start);
-#endif
 
 	// 4. call global C/C++ constructors
 	extern void(*__init_array_start [])();
@@ -41,20 +39,6 @@ init_stdlib()
 extern "C" __attribute__((visibility("hidden"), used))
 void libc_start(int argc, char** argv)
 {
-	// .bss should already be zeroed
-#ifdef DO_ZERO_BSS
-	extern char __bss_start;
-	extern char __BSS_END__;
-#ifdef __clang__
-	extern char _end;
-	for (char* bss = &__bss_start; bss < &_end; bss++) {
-#else
-	for (char* bss = &__bss_start; bss < &__BSS_END__; bss++) {
-#endif
-		*bss = 0;
-	}
-#endif
-
 	init_stdlib();
 
 	// call main() :)
