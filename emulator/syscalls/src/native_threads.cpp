@@ -153,9 +153,12 @@ multithreading<W>* setup_native_threads(
 			auto* arena = data->arena;
 
 			auto self = machine.cpu.reg(riscv::RISCV::REG_TP);
+			// TODO: check this return value
 			arena->free(self);
 			// exit thread instead
 			mt->get_thread()->exit();
+			// we need to jump ahead because pre-instruction
+			machine.cpu.registers().pc += 4;
 			return 0;
 		});
 	} // arena provided
