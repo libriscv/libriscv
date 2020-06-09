@@ -88,7 +88,7 @@ namespace riscv
 		void trap(address_t page_addr, mmio_cb_t callback);
 		// shared pages (regular pages will have priority!)
 		size_t nonshared_pages_active() const noexcept;
-		void   install_shared_page(address_t pageno, const Page&);
+		Page&  install_shared_page(address_t pageno, const Page&);
 		// create pages for non-owned (shared) memory with given attributes
 		void insert_non_owned_memory(
 			address_t dst, void* src, size_t size, PageAttributes = {});

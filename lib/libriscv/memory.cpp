@@ -315,7 +315,7 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::install_shared_page(address_t pageno, const Page& shared_page)
+	Page& Memory<W>::install_shared_page(address_t pageno, const Page& shared_page)
 	{
 		if (UNLIKELY(get_pageno(pageno).attr.is_cow == false))
 			throw MachineException(ILLEGAL_OPERATION,
@@ -330,6 +330,7 @@ namespace riscv
 		// NOTE: If you insert a const Page, DON'T modify it! The machine
 		// won't, unless system-calls do or manual intervention happens!
 		m_pages.try_emplace(pageno, attr, const_cast<PageData*> (&shared_page.page()));
+		return m_pages[pageno];
 	}
 
 	template <int W>
