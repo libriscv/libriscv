@@ -66,14 +66,7 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 extern "C"
 int memcmp(const void* ptr1, const void* ptr2, size_t n)
 {
-	const uint8_t* iter1 = (const uint8_t*) ptr1;
-	const uint8_t* iter2 = (const uint8_t*) ptr2;
-	while (n > 0 && *iter1 == *iter2) {
-		iter1++;
-		iter2++;
-		n--;
-	}
-	return n == 0 ? 0 : (*iter1 - *iter2);
+	return syscall(SYSCALL_MEMCMP, (long) ptr1, (long) ptr2, n);
 }
 extern "C"
 void* memchr(const void *s, unsigned char c, size_t n)

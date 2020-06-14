@@ -180,8 +180,31 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		m.cpu.increment_counter(2 * len);
 		return dst;
 	});
-	// Print backtrace n+7
+	// Memcmp n+7
 	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+7,
+	[] (auto& m) -> long
+	{
+		auto [p1, p2, len] = 
+			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+		SYSPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
+		m.cpu.increment_counter(2 * len);
+		/** Untrusted version: **
+		uint8_t v1 = 0;
+		uint8_t v2 = 0;
+		while (len > 0) {
+			v1 = m.memory.template read<uint8_t> (p1);
+			v2 = m.memory.template read<uint8_t> (p2);
+			if (v1 != v2) break;
+			p1++;
+			p2++;
+			len--;
+		}
+		return len == 0 ? 0 : (v1 - v2);
+		**/
+		return m.memory.memcmp(p1, p2, len);
+	});
+	// Print backtrace n+8
+	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+8,
 	[] (auto& m) -> long
 	{
 		m.memory.print_backtrace(
