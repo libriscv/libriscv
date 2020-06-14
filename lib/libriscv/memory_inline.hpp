@@ -282,6 +282,66 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 }
 
 template <int W>
+int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
+{
+	// NOTE: fast implementation if no pointer crosses page boundary
+	const auto pageno1 = this->page_number(p1);
+	const auto pageno2 = this->page_number(p2);
+	if (pageno1 == ((p1 + len-1) >> Page::SHIFT) &&
+		pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
+		auto& page1 = this->get_pageno(pageno1);
+		auto& page2 = this->get_pageno(pageno2);
+		const uint8_t* s1 = page1.data() + p1 % Page::SIZE;
+		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
+		return __builtin_memcmp(s1, s2, len);
+	}
+	else // slow path (optimizable)
+	{
+		uint8_t v1 = 0;
+		uint8_t v2 = 0;
+		while (len > 0) {
+			const auto pageno1 = this->page_number(p1);
+			const auto pageno2 = this->page_number(p2);
+			auto& page1 = this->get_pageno(pageno1);
+			auto& page2 = this->get_pageno(pageno2);
+			v1 = page1.data()[p1 % Page::SIZE];
+			v2 = page2.data()[p2 % Page::SIZE];
+			if (v1 != v2) break;
+			p1++;
+			p2++;
+			len--;
+		}
+		return len == 0 ? 0 : (v1 - v2);
+	}
+}
+template <int W>
+int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
+{
+	const char* s1 = (const char*) ptr1;
+	// NOTE: fast implementation if no pointer crosses page boundary
+	const auto pageno2 = this->page_number(p2);
+	if (pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
+		auto& page2 = this->get_pageno(pageno2);
+		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
+		return __builtin_memcmp(s1, s2, len);
+	}
+	else // slow path (optimizable)
+	{
+		uint8_t v2 = 0;
+		while (len > 0) {
+			const auto pageno2 = this->page_number(p2);
+			auto& page2 = this->get_pageno(pageno2);
+			v2 = page2.data()[p2 % Page::SIZE];
+			if (*s1 != v2) break;
+			s1++;
+			p2++;
+			len--;
+		}
+		return len == 0 ? 0 : (*s1 - v2);
+	}
+}
+
+template <int W>
 inline void Memory<W>::protection_fault()
 {
 	machine().cpu.trigger_exception(PROTECTION_FAULT);
