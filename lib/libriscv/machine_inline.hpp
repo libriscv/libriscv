@@ -17,7 +17,7 @@ inline Machine<W>::Machine(const std::vector<uint8_t>& binary,
 template <int W>
 inline Machine<W>::Machine(const std::vector<uint8_t>& binary, 
 							uint64_t mmax)
-	: Machine(binary, { .memory_max = mmax }) {}
+	: Machine(binary, MachineOptions<W> { .memory_max = mmax }) {}
 template <int W>
 inline Machine<W>::~Machine()
 {
