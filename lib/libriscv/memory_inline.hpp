@@ -79,7 +79,11 @@ inline Page& Memory<W>::create_page(const address_t pageno)
 {
 	auto it = m_pages.find(pageno);
 	if (it != m_pages.end()) {
-		return it->second;
+		Page& page = it->second;
+		if (UNLIKELY(page.attr.is_cow)) {
+			page.make_writable();
+		}
+		return page;
 	}
 	// create page on-demand, or throw exception when out of memory
 	if (this->m_page_fault_handler == nullptr) {

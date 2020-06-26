@@ -93,6 +93,21 @@ struct Page
 	}
 #endif
 
+	/* Transform a CoW-page to an owned writable page */
+	void make_writable()
+	{
+		if (m_page != nullptr)
+		{
+			auto* new_data = new PageData {*m_page};
+			if (attr.non_owning) m_page.release();
+			m_page.reset(new_data);
+		} else {
+			m_page.reset(new PageData {});
+		}
+		attr.is_cow = false;
+		attr.non_owning = false;
+	}
+
 	bool has_trap() const noexcept { return m_trap != nullptr; }
 	void set_trap(mmio_cb_t newtrap) noexcept { this->m_trap = newtrap; }
 	int64_t trap(uint32_t offset, int mode, int64_t value) const;
@@ -101,7 +116,7 @@ struct Page
 	int64_t passthrough(uint32_t off, int mode, int64_t val);
 
 	// this combination has been benchmarked to be faster than
-	// page-aligning the PageData struct, and avoids an indirection
+	// page-aligning the PageData struct and putting it first
 	PageAttributes attr;
 	std::unique_ptr<PageData> m_page;
 #ifdef RISCV_INSTR_CACHE
