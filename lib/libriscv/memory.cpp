@@ -176,15 +176,11 @@ namespace riscv
 		for (auto& it : master.memory.pages())
 		{
 			const auto& page = it.second;
-			if ((page.attr.read || page.attr.exec) && !page.attr.write && !page.attr.is_cow) {
-				// make a non-owning page
-				auto attr = page.attr;
-				attr.non_owning = true;
-				m_pages.try_emplace(it.first, attr, (PageData*) page.data());
-			} else if (page.attr.write) {
-				// full copy
-				m_pages.try_emplace(it.first, page.attr, page.page());
-			}
+			// just make every page CoW and non-owning
+			auto attr = page.attr;
+			attr.is_cow = true;
+			attr.non_owning = true;
+			m_pages.try_emplace(it.first, attr, (PageData*) page.data());
 		}
 	}
 
