@@ -11,7 +11,7 @@ pub fn strlen(ptr: [*]u8) usize {
 
 inline fn write(dest: []const u8) isize
 {
-    return sys_write(&dest[0], dest.len);
+    return sys_write(dest.ptr, dest.len);
 }
 
 export fn ZigMainCaller(c_argc: i32, c_argv: [*][*:0]u8) callconv(.C) i32 {
