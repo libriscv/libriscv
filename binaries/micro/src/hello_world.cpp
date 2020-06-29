@@ -1,21 +1,35 @@
 #include "syscall.hpp"
 
-extern "C"
+struct String {
+	const char* data;
+	unsigned len = 0;
+
+	template<int N>
+	constexpr String(const char (&str)[N]) : data(str), len(N-1) {}
+
+	constexpr String(const char* str, unsigned l) : data(str), len(l) {}
+
+	constexpr String(char* str) : data(str), len(0) {
+		while(str[len] != 0) len++;
+	}
+};
+
+template <typename... Args>
+inline void print(Args&&... args) {
+	([&] {
+		const String str {args};
+		write(0, str.data, str.len);
+	}(), ...);
+}
+
+
 __attribute__((constructor))
-void test_constructor() {
-	// static storage const string
-	static const char hello[] = "Hello, Global Constructor!\n";
-	write(0, hello, sizeof(hello)-1);
+static void test_constructor() {
+	print("Hello, Global Constructor!\n");
 }
 
 int main(int, char** argv)
 {
-	// calculate length of argv[0]
-	int alen = 0; while(argv[0][alen] != 0) alen++;
-	// NOTE: can't use automatic storage here, because we would need memcpy()
-	static const char hello[] = "Hello World from ";
-	write(0, hello, sizeof(hello)-1);
-	write(0, argv[0], alen);
-	write(0, "!\n", 2);
+	print("Hello World from ", argv[0], "!\n");
 	return 666;
 }
