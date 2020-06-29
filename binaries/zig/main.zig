@@ -1,4 +1,4 @@
-extern fn sys_write(dest: *const u8, len: usize) callconv(.C) isize;
+extern fn sys_write(dest: *const c_void, len: usize) callconv(.C) isize;
 pub var args: [][*]u8 = undefined;
 
 pub fn strlen(ptr: [*]u8) usize {
@@ -22,7 +22,7 @@ export fn ZigMainCaller(c_argc: i32, c_argv: [*][*:0]u8) callconv(.C) i32 {
 export fn main() i32 {
     _ = write("Hello World!\n");
     _ = write("Arg0: ");
-    _ = sys_write(&args[0][0], strlen(args[0]));
+    _ = sys_write(args[0], strlen(args[0]));
     _ = write("\n");
     return 0;
 }
