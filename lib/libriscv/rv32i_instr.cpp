@@ -235,6 +235,8 @@ namespace riscv
 				dst = src & instr.Itype.signed_imm();
 				break;
 			}
+		} else if (instr.Itype.rs1 == 0) {
+			// NOP
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
