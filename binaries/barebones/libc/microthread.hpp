@@ -137,6 +137,7 @@ inline void* getdata() {
 inline long clone_helper(long sp, long tls)
 {
 	extern void trampoline(Thread*);
+	asm("" ::: "memory"); /* avoid dead-store optimization */
 	/* stack, func, tls */
 	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls);
 }
@@ -153,7 +154,7 @@ inline auto create(const T& func, Args&&... args)
 
 	// store the thread at the beginning of the stack
 	Thread* thread = new (stack_bot) Thread(
-		[func, tuple] ()
+		[func, tuple] () -> void
 		{
 			if constexpr (std::is_same_v<void, decltype(func(args...))>)
 			{
@@ -174,7 +175,7 @@ inline int oneshot(const T& func, Args&&... args)
 	static_assert(std::is_same_v<void, decltype(func(args...))>,
 				"Free threads have no return value!");
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
-	if (UNLIKELY(stack_bot == nullptr)) return -ENOMEM;
+	if (UNLIKELY(stack_bot == nullptr)) return -12; /* ENOMEM */
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store arguments on stack
 	char* args_addr = stack_bot + sizeof(Thread);
@@ -211,6 +212,7 @@ inline int direct(void (*func) (), void* data)
 	Thread* thread = new (stack_bot) Thread(func, data);
 	const long tls  = (long) thread;
 	/* stack, func, tls, flags */
+	asm("" ::: "memory");
 	return syscall(THREAD_SYSCALLS_BASE+0, (long) stack_top, (long) &direct_starter, tls, 0);
 }
 #endif

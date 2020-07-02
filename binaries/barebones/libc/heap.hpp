@@ -16,11 +16,11 @@ inline void* sys_calloc(size_t count, size_t size)
 }
 inline void* sys_realloc(void* ptr, size_t len)
 {
-	return (void*) syscall(SYSCALL_REALLOC, (long) ptr, len);
+	return (void*) psyscall(SYSCALL_REALLOC, ptr, len);
 }
 inline void sys_free(void* ptr)
 {
-	syscall(SYSCALL_FREE, (long) ptr);
+	psyscall(SYSCALL_FREE, ptr);
 }
 
 struct MemInfo {
