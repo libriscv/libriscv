@@ -54,7 +54,7 @@ Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 			.cu = (uint32_t) arena->chunks_used()
 		};
 		int ret = (dst != 0) ? 0 : -1;
-		SYSPRINT("SYSCALL meminfo(0x%X) = %d\n", ptr, ret);
+		SYSPRINT("SYSCALL meminfo(0x%X) = %d\n", dst, ret);
 		if (ret == 0) {
 			machine.copy_to_guest(dst, &result, sizeof(result));
 		}

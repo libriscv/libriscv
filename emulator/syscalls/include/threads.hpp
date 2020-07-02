@@ -22,8 +22,6 @@ struct thread
 
 	multithreading<W>& threading;
 	const int tid;
-	address_t my_tls;
-	address_t my_stack;
 	// for returning to this thread
 	riscv::Registers<W> stored_regs;
 	// address zeroed when exiting
@@ -86,20 +84,22 @@ template <int W>
 inline multithreading<W>::multithreading(riscv::Machine<W>& mach)
 	: machine(mach), main_thread(*this, 0, 0x0, 0x0)
 {
-	main_thread.my_stack = machine.cpu.reg(riscv::RISCV::REG_SP);
+	main_thread.stored_regs.get(riscv::RISCV::REG_SP)
+		= machine.cpu.reg(riscv::RISCV::REG_SP);
 	m_current = &main_thread;
 }
 
 template <int W>
 inline void thread<W>::resume()
 {
-	THPRINT("Returning to tid=%ld tls=%p stack=%p\n",
-			this->tid, (void*) this->my_tls, (void*) this->my_stack);
-
 	threading.m_current = this;
 	auto& m = threading.machine;
 	// restore registers
 	m.cpu.registers() = this->stored_regs;
+	THPRINT("Returning to tid=%ld tls=0x%X stack=0x%X\n",
+			this->tid,
+			this->stored_regs.get(riscv::RISCV::REG_TP),
+			this->stored_regs.get(riscv::RISCV::REG_SP));
 }
 
 template <int W>
@@ -163,15 +163,19 @@ inline void multithreading<W>::wakeup_next()
 template <int W>
 inline thread<W>::thread(
 	multithreading<W>& mt, int ttid, address_t tls, address_t stack)
-	: threading(mt), tid(ttid), my_tls(tls), my_stack(stack)   {}
+	: threading(mt), tid(ttid)
+{
+	this->stored_regs.get(riscv::RISCV::REG_TP) = tls;
+	this->stored_regs.get(riscv::RISCV::REG_SP) = stack;
+}
 
 template <int W>
 inline void thread<W>::activate()
 {
 	threading.m_current = this;
 	auto& cpu = threading.machine.cpu;
-	cpu.reg(riscv::RISCV::REG_SP) = this->my_stack;
-	cpu.reg(riscv::RISCV::REG_TP) = this->my_tls;
+	cpu.reg(riscv::RISCV::REG_TP) = this->stored_regs.get(riscv::RISCV::REG_TP);
+	cpu.reg(riscv::RISCV::REG_SP) = this->stored_regs.get(riscv::RISCV::REG_SP);
 }
 
 template <int W>
@@ -184,7 +188,8 @@ inline void thread<W>::exit()
 	if (this->clear_tid) {
 		THPRINT("Clearing thread value for tid=%d at 0x%X\n",
 				this->tid, this->clear_tid);
-		threading.machine.memory.template write<uint32_t> (this->clear_tid, 0);
+		threading.machine.memory.
+			template write<riscv::address_type<W>> (this->clear_tid, 0);
 	}
 	// delete this thread
 	threading.erase_thread(this->tid);
