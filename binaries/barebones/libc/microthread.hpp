@@ -206,13 +206,13 @@ inline int direct(void (*func) (), void* data)
 {
 	extern void direct_starter(Thread*);
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
-	if (UNLIKELY(stack_bot == nullptr)) return -ENOMEM;
+	if (UNLIKELY(stack_bot == nullptr)) return -12; /* ENOMEM */
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
 	// store the thread at the beginning of the stack
 	Thread* thread = new (stack_bot) Thread(func, data);
+	asm("" ::: "memory");
 	const long tls  = (long) thread;
 	/* stack, func, tls, flags */
-	asm("" ::: "memory");
 	return syscall(THREAD_SYSCALLS_BASE+0, (long) stack_top, (long) &direct_starter, tls, 0);
 }
 #endif
