@@ -11,23 +11,42 @@ syscall(long n, long arg0)
 
 	return a0;
 }
+static inline long
+syscall2(long n, long arg0, long arg1)
+{
+	register long a0 asm("a0") = arg0;
+	register long a1 asm("a1") = arg1;
+	register long syscall_id asm("a7") = n;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(a1), "r"(syscall_id));
+
+	return a0;
+}
+static inline long
+syscall3(long n, long arg0, long arg1, long arg2)
+{
+	register long a0 asm("a0") = arg0;
+	register long a1 asm("a1") = arg1;
+	register long a2 asm("a2") = arg2;
+	register long syscall_id asm("a7") = n;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(a1), "r"(a2), "r"(syscall_id));
+
+	return a0;
+}
 
 __attribute__((noreturn)) void _exit(int exitval) {
 	syscall(SYSCALL_EXIT, exitval);
 	__builtin_unreachable();
 }
 
-__attribute__((visibility("hidden"), used))
-void libc_start(int argc, char** argv)
-{
-	// zero-initialize .bss section
-	extern char __bss_start;
-	extern char _end;
-	for (char* bss = &__bss_start; bss < &_end; bss++) {
-		*bss = 0;
-	}
-	asm volatile("" ::: "memory");
+void sys_write(const void* data, unsigned long len) {
+	syscall3(SYSCALL_WRITE, 1, (long) data, len);
+}
 
+__attribute__((visibility("hidden"), used))
+static void libc_start(int argc, char** argv)
+{
 	// call global constructors
 	extern void(*__init_array_start [])();
 	extern void(*__init_array_end [])();
@@ -37,8 +56,8 @@ void libc_start(int argc, char** argv)
 	}
 
 	// call main() :)
-	extern int main(int, char**);
-	_exit(main(argc, argv));
+	extern int ZigMainCaller(int, char**);
+	_exit(ZigMainCaller(argc, argv));
 }
 
 // 1. wrangle with argc and argc

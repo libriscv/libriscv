@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
-zig build-exe -target riscv32-freestanding test.zig --c-source start.c
+set -e
+zig build-exe -target riscv32-freestanding main.zig --c-source start.c

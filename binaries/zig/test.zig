@@ -1,2 +1,0 @@
-export fn main() void {
-}
