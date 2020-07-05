@@ -52,6 +52,9 @@ int main(int argc, const char** argv)
 		setup_native_memory_syscalls(machine, false);
 		setup_native_threads(machine);
 	}
+	machine.on_unhandled_syscall([] (int number) {
+		printf("Unhandled system call: %d\n", number);
+	});
 
 	/*
 	machine.cpu.breakpoint(machine.address_of("main"));
