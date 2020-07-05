@@ -22,17 +22,19 @@ multithreading<W>* setup_native_threads(
 		const auto stack = (machine.template sysarg<address_type<W>> (0) & ~0xF);
 		const auto  func = machine.template sysarg<address_type<W>> (1);
 		const auto   tls = machine.template sysarg<address_type<W>> (2);
+		const auto flags = machine.template sysarg<uint32_t> (3);
 		THPRINT(">>> clone(func=0x%X, stack=0x%X, tls=0x%X)\n",
 				func, stack, tls);
 		auto* thread = mt->create(
-			CHILD_SETTID | CHILD_CLEARTID, tls, 0x0, stack, tls);
+			CHILD_SETTID | flags, tls, 0x0, stack, tls);
 		// suspend and store return value for parent: child TID
 		auto* parent = mt->get_thread();
 		parent->suspend(thread->tid);
 		// activate and setup a function call
 		thread->activate();
 		// the cast is a work-around for a compiler bug
-		machine.setup_call(func, (const address_type<W>) tls);
+		// NOTE: have to start at DST-4 here!!!
+		machine.setup_call(func-4, (const address_type<W>) tls);
 		// preserve A0 for the new child thread
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
