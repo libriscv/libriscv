@@ -81,6 +81,7 @@ namespace riscv
 		Page& create_page(address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
 		const PageAttributes& get_page_attr(address_t) const noexcept;
+		std::string get_page_info(address_t addr) const;
 		// page creation & destruction
 		Page& allocate_page(const size_t page);
 		void  free_pages(address_t, size_t len);
@@ -107,13 +108,13 @@ namespace riscv
 		~Memory();
 	private:
 		inline auto& create_attr(const address_t address);
-		static inline uintptr_t page_number(const address_t address) {
+		static inline address_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
 		}
 		void clear_all_pages();
 		void initial_paging();
 		void invalidate_page(address_t pageno, Page&);
-		void protection_fault();
+		static void protection_fault();
 		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;

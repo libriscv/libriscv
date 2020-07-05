@@ -265,6 +265,15 @@ namespace riscv
 	}
 
 	template <int W>
+	std::string Memory<W>::get_page_info(address_t addr) const
+	{
+		char buffer[1024];
+		int len = snprintf(buffer, sizeof(buffer),
+			"[0x%08X] %s", addr, get_page(addr).to_string().c_str());
+		return std::string(buffer, len);
+	}
+
+	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
 		const auto& it = pages().try_emplace(page);

@@ -99,7 +99,7 @@ Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 	while (len > 0)
 	{
 		const size_t size = std::min(Page::size(), len);
-		const size_t pageno = dst >> Page::SHIFT;
+		const address_t pageno = page_number(dst);
 		// unfortunately, have to create pages for non-default attrs
 		if (!is_default) {
 			this->create_page(pageno).attr = options;
@@ -120,7 +120,7 @@ Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
 template <int W> inline
 const PageAttributes& Memory<W>::get_page_attr(address_t src) const noexcept
 {
-	const size_t pageno = src >> Page::SHIFT;
+	const address_t pageno = page_number(src);
 	const auto& page = this->get_pageno(pageno);
 	return page.attr;
 }
@@ -218,7 +218,11 @@ void Memory<W>::memview(address_t addr, size_t len,
 	if (LIKELY(offset + len <= Page::size()))
 	{
 		const auto& page = this->get_page(addr);
-		callback(page.data() + offset, len);
+		if (page.has_data()) {
+			callback(page.data() + offset, len);
+		} else {
+			protection_fault();
+		}
 		return;
 	}
 	// slow path
@@ -237,7 +241,11 @@ void Memory<W>::memview(address_t addr,
 	if (LIKELY(offset + sizeof(T) <= Page::size()))
 	{
 		const auto& page = this->get_page(addr);
-		callback(*(const T*) &page.data()[offset]);
+		if (page.has_data()) {
+			callback(*(const T*) &page.data()[offset]);
+		} else {
+			protection_fault();
+		}
 		return;
 	}
 	// slow path
@@ -255,6 +263,9 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 	{
 		address_t offset = addr & (Page::size()-1);
 		const Page& page = this->get_pageno(pageno);
+		if (UNLIKELY(!page.has_data()))
+			protection_fault();
+
 		const char* start = (const char*) &page.data()[offset];
 		const char* pgend = (const char*) &page.data()[std::min(Page::size(), offset + max_len)];
 		//
@@ -272,6 +283,9 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 		const size_t max_bytes = std::min(Page::size(), max_len - result.size());
 		pageno ++;
 		const Page& page = this->get_pageno(pageno);
+		if (UNLIKELY(!page.has_data()))
+			protection_fault();
+
 		const char* start = (const char*) page.data();
 		const char* endptr = (const char*) &page.data()[max_bytes];
 		//
@@ -295,6 +309,9 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 		pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
 		auto& page1 = this->get_pageno(pageno1);
 		auto& page2 = this->get_pageno(pageno2);
+		if (UNLIKELY(!page1.has_data() || !page2.has_data()))
+			protection_fault();
+
 		const uint8_t* s1 = page1.data() + p1 % Page::SIZE;
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
 		return __builtin_memcmp(s1, s2, len);
@@ -308,6 +325,9 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 			const auto pageno2 = this->page_number(p2);
 			auto& page1 = this->get_pageno(pageno1);
 			auto& page2 = this->get_pageno(pageno2);
+			if (UNLIKELY(!page1.has_data() || !page2.has_data()))
+				protection_fault();
+
 			v1 = page1.data()[p1 % Page::SIZE];
 			v2 = page2.data()[p2 % Page::SIZE];
 			if (v1 != v2) break;
@@ -326,6 +346,8 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	const auto pageno2 = this->page_number(p2);
 	if (pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
 		auto& page2 = this->get_pageno(pageno2);
+		if (UNLIKELY(!page2.has_data())) protection_fault();
+
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
 		return __builtin_memcmp(s1, s2, len);
 	}
@@ -335,6 +357,8 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 		while (len > 0) {
 			const auto pageno2 = this->page_number(p2);
 			auto& page2 = this->get_pageno(pageno2);
+			if (UNLIKELY(!page2.has_data())) protection_fault();
+
 			v2 = page2.data()[p2 % Page::SIZE];
 			if (*s1 != v2) break;
 			s1++;
@@ -348,7 +372,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 template <int W>
 inline void Memory<W>::protection_fault()
 {
-	machine().cpu.trigger_exception(PROTECTION_FAULT);
+	CPU<W>::trigger_exception(PROTECTION_FAULT);
 }
 
 template <int W>
