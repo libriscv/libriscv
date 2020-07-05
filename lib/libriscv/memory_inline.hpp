@@ -6,11 +6,12 @@ T Memory<W>::read(address_t address)
 {
 	const auto pageno = page_number(address);
 	if (m_current_rd_page != pageno) {
-		m_current_rd_page = pageno;
-		m_current_rd_ptr = &get_pageno(pageno);
-		if (UNLIKELY(!m_current_rd_ptr->attr.read)) {
+		const auto* potential = &get_pageno(pageno);
+		if (UNLIKELY(!potential->attr.read)) {
 			this->protection_fault();
 		}
+		m_current_rd_page = pageno;
+		m_current_rd_ptr = potential;
 	}
 	const auto& page = *m_current_rd_ptr;
 
@@ -28,11 +29,12 @@ void Memory<W>::write(address_t address, T value)
 {
 	const auto pageno = page_number(address);
 	if (m_current_wr_page != pageno) {
-		m_current_wr_page = pageno;
-		m_current_wr_ptr = &create_page(pageno);
-		if (UNLIKELY(!m_current_wr_ptr->attr.write)) {
+		auto* potential = &create_page(pageno);
+		if (UNLIKELY(!potential->attr.write)) {
 			this->protection_fault();
 		}
+		m_current_wr_page = pageno;
+		m_current_wr_ptr = potential;
 	}
 	auto& page = *m_current_wr_ptr;
 
