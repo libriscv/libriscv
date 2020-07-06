@@ -165,15 +165,16 @@ int abs(int value)
 
 #else
 
-extern "C"
+extern "C" __attribute__((noreturn))
 void _exit(int code)
 {
-	register long a0 asm("a0");
-	asm volatile ("ebreak" : "=r"(a0));
+	register long a0 asm("a0") = code;
+
+	asm("ebreak" : : "r"(a0));
 	__builtin_unreachable();
 }
 
-extern "C"
+extern "C" __attribute__((noreturn))
 void exit(int code)
 {
 	_exit(code);
