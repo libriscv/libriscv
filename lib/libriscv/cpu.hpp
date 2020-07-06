@@ -51,7 +51,7 @@ namespace riscv
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
 #endif
-		static void trigger_exception(interrupt_t) COLD_PATH();
+		static void trigger_exception(interrupt_t, address_t = 0) COLD_PATH();
 
 #ifdef RISCV_DEBUG
 		// debugging

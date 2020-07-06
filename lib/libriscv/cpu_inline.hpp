@@ -36,7 +36,8 @@ if constexpr (execute_traps_enabled) {
 }
 	// verify execute permission
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
-		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
+		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT,
+			pageno * Page::size());
 	}
 #ifdef RISCV_INSTR_CACHE
 	if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
@@ -66,11 +67,11 @@ inline void CPU<W>::jump(const address_t dst)
 	// it's possible to jump to a misaligned address
 	if constexpr (!compressed_enabled) {
 		if (UNLIKELY(this->registers().pc & 0x3)) {
-			this->trigger_exception(MISALIGNED_INSTRUCTION);
+			this->trigger_exception(MISALIGNED_INSTRUCTION, registers().pc);
 		}
 	} else {
 		if (UNLIKELY(this->registers().pc & 0x1)) {
-			this->trigger_exception(MISALIGNED_INSTRUCTION);
+			this->trigger_exception(MISALIGNED_INSTRUCTION, registers().pc);
 		}
 	}
 }

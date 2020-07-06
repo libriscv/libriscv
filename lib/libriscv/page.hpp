@@ -140,9 +140,9 @@ inline Page::Page(const PageAttributes& a, PageData* data)
 
 inline std::string Page::to_string() const
 {
-	return "Readable: " + std::string(attr.read ? "true" : "false") +
-		"  Writable: " + std::string(attr.write ? "true" : "false") +
-		"  Executable: " + std::string(attr.exec ? "true" : "false");
+	return "Readable: " + std::string(attr.read ? "[x]" : "[ ]") +
+		"  Writable: " + std::string(attr.write ? "[x]" : "[ ]") +
+		"  Executable: " + std::string(attr.exec ? "[x]" : "[ ]");
 }
 
 

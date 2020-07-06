@@ -8,7 +8,7 @@ T Memory<W>::read(address_t address)
 	if (m_current_rd_page != pageno) {
 		const auto* potential = &get_pageno(pageno);
 		if (UNLIKELY(!potential->attr.read)) {
-			this->protection_fault();
+			this->protection_fault(address);
 		}
 		m_current_rd_page = pageno;
 		m_current_rd_ptr = potential;
@@ -31,7 +31,7 @@ void Memory<W>::write(address_t address, T value)
 	if (m_current_wr_page != pageno) {
 		auto* potential = &create_page(pageno);
 		if (UNLIKELY(!potential->attr.write)) {
-			this->protection_fault();
+			this->protection_fault(address);
 		}
 		m_current_wr_page = pageno;
 		m_current_wr_ptr = potential;
@@ -223,7 +223,7 @@ void Memory<W>::memview(address_t addr, size_t len,
 		if (page.has_data()) {
 			callback(page.data() + offset, len);
 		} else {
-			protection_fault();
+			protection_fault(addr);
 		}
 		return;
 	}
@@ -246,7 +246,7 @@ void Memory<W>::memview(address_t addr,
 		if (page.has_data()) {
 			callback(*(const T*) &page.data()[offset]);
 		} else {
-			protection_fault();
+			protection_fault(addr);
 		}
 		return;
 	}
@@ -266,7 +266,7 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 		address_t offset = addr & (Page::size()-1);
 		const Page& page = this->get_pageno(pageno);
 		if (UNLIKELY(!page.has_data()))
-			protection_fault();
+			protection_fault(addr);
 
 		const char* start = (const char*) &page.data()[offset];
 		const char* pgend = (const char*) &page.data()[std::min(Page::size(), offset + max_len)];
@@ -286,7 +286,7 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 		pageno ++;
 		const Page& page = this->get_pageno(pageno);
 		if (UNLIKELY(!page.has_data()))
-			protection_fault();
+			protection_fault(addr);
 
 		const char* start = (const char*) page.data();
 		const char* endptr = (const char*) &page.data()[max_bytes];
@@ -312,7 +312,7 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 		auto& page1 = this->get_pageno(pageno1);
 		auto& page2 = this->get_pageno(pageno2);
 		if (UNLIKELY(!page1.has_data() || !page2.has_data()))
-			protection_fault();
+			protection_fault(p1);
 
 		const uint8_t* s1 = page1.data() + p1 % Page::SIZE;
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
@@ -328,7 +328,7 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 			auto& page1 = this->get_pageno(pageno1);
 			auto& page2 = this->get_pageno(pageno2);
 			if (UNLIKELY(!page1.has_data() || !page2.has_data()))
-				protection_fault();
+				protection_fault(p1);
 
 			v1 = page1.data()[p1 % Page::SIZE];
 			v2 = page2.data()[p2 % Page::SIZE];
@@ -348,7 +348,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	const auto pageno2 = this->page_number(p2);
 	if (pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
 		auto& page2 = this->get_pageno(pageno2);
-		if (UNLIKELY(!page2.has_data())) protection_fault();
+		if (UNLIKELY(!page2.has_data())) protection_fault(p2);
 
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
 		return __builtin_memcmp(s1, s2, len);
@@ -359,7 +359,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 		while (len > 0) {
 			const auto pageno2 = this->page_number(p2);
 			auto& page2 = this->get_pageno(pageno2);
-			if (UNLIKELY(!page2.has_data())) protection_fault();
+			if (UNLIKELY(!page2.has_data())) protection_fault(p2);
 
 			v2 = page2.data()[p2 % Page::SIZE];
 			if (*s1 != v2) break;
@@ -369,12 +369,6 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 		}
 		return len == 0 ? 0 : (*s1 - v2);
 	}
-}
-
-template <int W>
-inline void Memory<W>::protection_fault()
-{
-	CPU<W>::trigger_exception(PROTECTION_FAULT);
 }
 
 template <int W>

@@ -114,7 +114,7 @@ namespace riscv
 		void clear_all_pages();
 		void initial_paging();
 		void invalidate_page(address_t pageno, Page&);
-		static void protection_fault();
+		[[noreturn]] static void protection_fault(address_t);
 		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
