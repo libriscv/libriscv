@@ -116,7 +116,7 @@ inline void Machine<W>::system_call(size_t syscall_number)
 	}
 	else {
 		throw MachineException(UNHANDLED_SYSCALL,
-								"Unhandled system call", syscall_number);
+			"Unhandled system call", syscall_number);
 	}
 }
 

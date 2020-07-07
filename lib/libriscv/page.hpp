@@ -2,6 +2,7 @@
 #include <cassert>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include "common.hpp"
 #include "decoder_cache.hpp"
@@ -49,6 +50,8 @@ struct Page
 	auto& page() noexcept { return *m_page; }
 	const auto& page() const noexcept { return *m_page; }
 
+	std::string to_string() const;
+
 	template <typename T>
 	inline T aligned_read(uint32_t offset) const
 	{
@@ -67,6 +70,9 @@ struct Page
 		*(T*) &page().buffer8[offset] = value;
 	}
 
+	bool has_data() const noexcept {
+		return m_page != nullptr;
+	}
 	auto* data() noexcept {
 		return page().buffer8.data();
 	}
@@ -131,6 +137,14 @@ inline Page::Page(const PageAttributes& a, PageData* data)
 	attr.non_owning = true;
 	m_page.reset(data);
 }
+
+inline std::string Page::to_string() const
+{
+	return "Readable: " + std::string(attr.read ? "[x]" : "[ ]") +
+		"  Writable: " + std::string(attr.write ? "[x]" : "[ ]") +
+		"  Executable: " + std::string(attr.exec ? "[x]" : "[ ]");
+}
+
 
 inline int64_t Page::trap(uint32_t offset, int mode, int64_t value) const
 {

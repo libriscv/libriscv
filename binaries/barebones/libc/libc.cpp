@@ -1,16 +1,19 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-extern "C" struct _reent* _impure_ptr;
+#include <cstring>
 #ifdef NATIVE_MEM_SYSCALLS
 #include <include/syscall.hpp>
 #endif
+#ifndef USE_NEWLIB
+extern "C" struct _reent* _impure_ptr;
 void* __dso_handle;
 
 extern "C" int* __errno() {
 	static int errno_value = 0;
 	return &errno_value;
 }
+#endif
 
 extern "C"
 void* memset(void* vdest, int ch, size_t size)
@@ -38,11 +41,6 @@ void* memcpy(void* vdest, const void* vsrc, size_t size)
 #endif
 }
 extern "C"
-wchar_t* wmemcpy(wchar_t* wto, const wchar_t* wfrom, size_t size)
-{
-	return (wchar_t *) memcpy (wto, wfrom, size * sizeof (wchar_t));
-}
-extern "C"
 void* memmove(void* vdest, const void* vsrc, size_t size)
 {
 #ifndef NATIVE_MEM_SYSCALLS
@@ -68,8 +66,17 @@ int memcmp(const void* ptr1, const void* ptr2, size_t n)
 {
 	return syscall(SYSCALL_MEMCMP, (long) ptr1, (long) ptr2, n);
 }
+
+#ifndef USE_NEWLIB
+
 extern "C"
-void* memchr(const void *s, unsigned char c, size_t n)
+wchar_t* wmemcpy(wchar_t* wto, const wchar_t* wfrom, size_t size)
+{
+	return (wchar_t *) memcpy (wto, wfrom, size * sizeof (wchar_t));
+}
+
+extern "C"
+void* memchr(const void *s, int c, size_t n)
 {
     if (n != 0) {
         const auto* p = (const unsigned char*) s;
@@ -155,3 +162,22 @@ int abs(int value)
 {
 	return (value >= 0) ? value : -value;
 }
+
+#else
+
+extern "C" __attribute__((noreturn))
+void _exit(int code)
+{
+	register long a0 asm("a0") = code;
+
+	asm("ebreak" : : "r"(a0));
+	__builtin_unreachable();
+}
+
+extern "C" __attribute__((noreturn))
+void exit(int code)
+{
+	_exit(code);
+}
+
+#endif

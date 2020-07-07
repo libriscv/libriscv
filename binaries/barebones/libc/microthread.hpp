@@ -134,14 +134,6 @@ inline void* getdata() {
 	return self()->tinydata;
 }
 
-inline long clone_helper(long sp, long tls)
-{
-	extern void trampoline(Thread*);
-	asm("" ::: "memory"); /* avoid dead-store optimization */
-	/* stack, func, tls */
-	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls);
-}
-
 template <typename T, typename... Args>
 inline auto create(const T& func, Args&&... args)
 {
@@ -165,7 +157,12 @@ inline auto create(const T& func, Args&&... args)
 			}
 		});
 
-	(void) clone_helper((long) stack_top, (long) thread);
+	extern void trampoline(Thread*);
+	asm("" ::: "memory"); /* avoid dead-store optimization */
+	/* stack, func, tls, flags = CHILD_CLEARTID */
+	const long sp   = (long) stack_top;
+	const long tls  = (long) thread;
+	(void) syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0x200000);
 	// parent path (reordering doesn't matter)
 	return Thread_ptr(thread);
 }
@@ -187,8 +184,11 @@ inline int oneshot(const T& func, Args&&... args)
 			extern void oneshot_exit();
 			oneshot_exit();
 		});
+	asm ("" ::: "memory"); // prevent dead-store optimization
+	extern void trampoline(Thread*);
+	const long sp   = (long) stack_top;
 	const long tls  = (long) thread;
-	return clone_helper((long) stack_top, tls);
+	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0);
 }
 
 template <typename Ret = long, typename... Args>

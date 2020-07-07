@@ -30,6 +30,7 @@ void operator delete [](void* ptr, std::size_t)
 	sys_free(ptr);
 }
 
+#ifndef __EXCEPTIONS
 // exception stubs for various C++ containers
 namespace std {
 	void __throw_bad_alloc() {
@@ -48,6 +49,7 @@ namespace std {
 		abort_message("Bad std::function call!");
 	}
 }
+#endif
 
 extern "C"
 int __cxa_atexit(void (*func) (void*), void* /*arg*/, void* /*dso_handle*/)

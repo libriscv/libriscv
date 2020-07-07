@@ -37,6 +37,7 @@ struct Arena
 	Arena(PointerType base, PointerType end);
 
 	PointerType malloc(size_t size);
+	size_t      size(PointerType src);
 	signed int  free(PointerType);
 
 	size_t bytes_free() const;
@@ -149,6 +150,14 @@ inline Arena::PointerType Arena::malloc(size_t size)
 		return ch->data;
     }
 	return 0;
+}
+
+inline size_t Arena::size(PointerType ptr)
+{
+	Chunk* ch = base_chunk().find(ptr);
+    if (UNLIKELY(ch == nullptr))
+		return 0;
+	return ch->size;
 }
 
 inline int Arena::free(PointerType ptr)

@@ -132,32 +132,33 @@ namespace riscv
 	}
 
 	template<int W> __attribute__((cold))
-	void CPU<W>::trigger_exception(interrupt_t intr)
+	void CPU<W>::trigger_exception(interrupt_t intr, address_t data)
 	{
 		// TODO: replace with callback system
 		switch (intr)
 		{
 		case ILLEGAL_OPCODE:
 			throw MachineException(ILLEGAL_OPCODE,
-									"Illegal opcode executed");
+					"Illegal opcode executed", data);
 		case ILLEGAL_OPERATION:
 			throw MachineException(ILLEGAL_OPERATION,
-									"Illegal operation during instruction decoding");
+					"Illegal operation during instruction decoding", data);
 		case PROTECTION_FAULT:
 			throw MachineException(PROTECTION_FAULT,
-									"Protection fault");
+					"Protection fault", data);
 		case EXECUTION_SPACE_PROTECTION_FAULT:
 			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
-									"Execution space protection fault");
+					"Execution space protection fault", data);
 		case MISALIGNED_INSTRUCTION:
 			// NOTE: only check for this when jumping or branching
 			throw MachineException(MISALIGNED_INSTRUCTION,
-									"Misaligned instruction executed");
+					"Misaligned instruction executed", data);
 		case UNIMPLEMENTED_INSTRUCTION:
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION,
-									"Unimplemented instruction executed");
+					"Unimplemented instruction executed", data);
 		default:
-			throw MachineException(UNKNOWN_EXCEPTION, "Unknown exception", intr);
+			throw MachineException(UNKNOWN_EXCEPTION,
+					"Unknown exception", intr);
 		}
 	}
 

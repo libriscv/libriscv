@@ -265,6 +265,15 @@ namespace riscv
 	}
 
 	template <int W>
+	std::string Memory<W>::get_page_info(address_t addr) const
+	{
+		char buffer[1024];
+		int len = snprintf(buffer, sizeof(buffer),
+			"[0x%08X] %s", addr, get_page(addr).to_string().c_str());
+		return std::string(buffer, len);
+	}
+
+	template <int W>
 	Page& Memory<W>::allocate_page(const size_t page)
 	{
 		const auto& it = pages().try_emplace(page);
@@ -411,6 +420,13 @@ namespace riscv
 			};
 		print_trace(0, this->machine().cpu.pc());
 		print_trace(1, this->machine().cpu.reg(RISCV::REG_RA));
+	}
+
+	template <int W>
+	void Memory<W>::protection_fault(address_t addr)
+	{
+		CPU<W>::trigger_exception(PROTECTION_FAULT, addr);
+		__builtin_unreachable();
 	}
 
 	template struct Memory<4>;

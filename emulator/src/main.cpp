@@ -56,6 +56,10 @@ int main(int argc, const char** argv)
 		exit(1);
 	}
 
+	machine.on_unhandled_syscall([] (int number) {
+		printf("Unhandled system call: %d\n", number);
+	});
+
 	/*
 	machine.cpu.breakpoint(machine.address_of("main"));
 	machine.cpu.breakpoint(0x10730);

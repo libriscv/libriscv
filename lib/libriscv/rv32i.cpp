@@ -43,7 +43,7 @@ namespace riscv
 		}
 		else {
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION_LENGTH,
-									"Unimplemented instruction format length");
+				"Unimplemented instruction format length", format.length());
 		}
 		return std::string(buffer, len);
 	}
