@@ -44,8 +44,10 @@ Building the emulator and booting the newlib `hello_world`:
 cd emulator
 mkdir -p build && cd build
 cmake .. && make -j4
-./remu ../../binaries/newlib/build/hello_world
+./rvnewlib ../../binaries/newlib/build/hello_world
 ```
+
+The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib. `rvlinux` has all the system calls necessary to run a normal userspace linux binary.
 
 Building and running your own ELF files that can run in freestanding RV32GC is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal, except you can more easily implement system functions. The fun part is of course the extremely small binaries and total control over the environment.
 
