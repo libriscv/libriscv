@@ -26,15 +26,19 @@ inline void CPU<W>::change_page(int pageno)
 	m_current_page.pageno = pageno;
 	m_current_page.page = &machine().memory.get_exec_pageno(pageno);
 #ifdef RISCV_PAGE_CACHE
-	// cache it
+	// Cache it
 	m_page_cache[m_cache_iterator % m_page_cache.size()] = m_current_page;
 	m_cache_iterator ++;
+riscv_validate_current_page:
 #endif
-	riscv_validate_current_page:
-if constexpr (execute_traps_enabled) {
-	this->check_page();
-}
-	// verify execute permission
+	// Execute traps enables trapping on execute and enables a novel way of
+	// invoking system calls as regular functions by calling an address.
+	if constexpr (execute_traps_enabled) {
+		// If this trap immediately returns to the caller then by design the
+		// caller will avoid faulting on a page with no execute permission.
+		this->check_page();
+	}
+	// Verify execute permission
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
 		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT,
 			pageno * Page::size());

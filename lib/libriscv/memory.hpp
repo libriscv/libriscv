@@ -76,7 +76,7 @@ namespace riscv
 		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(address_t) const noexcept;
-		Page& get_exec_pageno(address_t npage); // throws
+		const Page& get_exec_pageno(address_t npage) const; // throws
 		const Page& get_pageno(address_t npage) const noexcept;
 		Page& create_page(address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);

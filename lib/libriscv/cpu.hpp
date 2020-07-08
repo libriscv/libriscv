@@ -78,7 +78,7 @@ namespace riscv
 
 		Machine<W>& m_machine;
 		struct CachedPage {
-			Page*   page = nullptr;
+			const Page* page = nullptr;
 			int64_t pageno = 0;
 		};
 		CachedPage m_current_page;

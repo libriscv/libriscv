@@ -55,7 +55,7 @@ inline const Page& Memory<W>::get_page(const address_t address) const noexcept
 }
 
 template <int W>
-inline Page& Memory<W>::get_exec_pageno(const address_t page)
+inline const Page& Memory<W>::get_exec_pageno(const address_t page) const
 {
 	auto it = m_pages.find(page);
 	if (LIKELY(it != m_pages.end())) {

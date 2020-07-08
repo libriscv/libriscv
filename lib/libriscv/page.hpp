@@ -88,13 +88,10 @@ struct Page
 	static const Page& guard_page() noexcept;
 
 #ifdef RISCV_INSTR_CACHE
-	auto* decoder_cache() noexcept {
+	auto* decoder_cache() const noexcept {
 		return m_decoder_cache.get();
 	}
-	const auto* decoder_cache() const noexcept {
-		return m_decoder_cache.get();
-	}
-	void create_decoder_cache() {
+	void create_decoder_cache() const {
 		m_decoder_cache.reset(new DecoderCache<Page::SIZE>);
 	}
 #endif
@@ -126,7 +123,7 @@ struct Page
 	PageAttributes attr;
 	std::unique_ptr<PageData> m_page;
 #ifdef RISCV_INSTR_CACHE
-	std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
+	mutable std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
 #endif
 	mmio_cb_t m_trap = nullptr;
 };
