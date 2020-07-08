@@ -5,11 +5,9 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 using namespace riscv;
-static constexpr uint32_t G_SHMEM_BASE = 0x70000000;
 static const uint32_t sbrk_start = 0x40000000;
 static const uint32_t sbrk_max   = sbrk_start + 0x1000000;
 static const uint32_t heap_start = sbrk_max;
-static const uint32_t heap_max   = 0xF0000000;
 
 struct iovec32 {
     uint32_t iov_base;
