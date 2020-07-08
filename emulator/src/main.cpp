@@ -1,10 +1,9 @@
 #include <string>
 #include <libriscv/machine.hpp>
+#include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
-static constexpr bool full_linux_guest = false;
-static constexpr bool newlib_mini_guest = false;
 #include "linux.hpp"
 #include <include/syscall_helpers.hpp>
 #include <include/threads.hpp>
@@ -45,13 +44,18 @@ int main(int argc, const char** argv)
 		setup_newlib_syscalls(state, machine);
 		machine.setup_argv(args);
 	}
-	else {
+	else if constexpr (micro_guest) {
 		machine.setup_argv(args);
 		setup_minimal_syscalls(state, machine);
 		setup_native_heap_syscalls(machine, 6*1024*1024);
 		setup_native_memory_syscalls(machine, false);
 		setup_native_threads(machine);
 	}
+	else {
+		fprintf(stderr, "Unknown emulation mode! Exiting...\n");
+		exit(1);
+	}
+
 	machine.on_unhandled_syscall([] (int number) {
 		printf("Unhandled system call: %d\n", number);
 	});
