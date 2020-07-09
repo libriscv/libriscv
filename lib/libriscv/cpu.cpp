@@ -50,6 +50,7 @@ namespace riscv
 		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
 		}
+		format_t instruction;
 
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		// This seemingly unchecked code works out because
@@ -58,10 +59,10 @@ namespace riscv
 		// by using the actual page memory, which will make this feature
 		// less experimental. We can do that by creating all the executable
 		// pages from one sequental allocation, which is owned by the first page.
-		return *(uint32_t*) &m_exec_data[this->pc()];
+		instruction.whole = *(uint32_t*) &m_exec_data[this->pc()];
+		return instruction;
 #else
 		const address_t offset = this->pc() & (Page::size()-1);
-		format_t instruction;
 
 		if constexpr (!compressed_enabled) {
 			// special case for non-compressed mode:

@@ -163,6 +163,11 @@ namespace riscv
 		const bool m_verbose_loader;
 		size_t    m_pages_total   = 0; // max memory usage
 		size_t    m_pages_highest = 0; // max pages used
+#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
+		size_t    m_exec_pagedata_size = 0;
+		address_t m_exec_pagedata_base = 0;
+#endif
 	};
 #include "memory_inline.hpp"
 }

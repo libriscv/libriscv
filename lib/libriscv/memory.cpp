@@ -82,30 +82,52 @@ namespace riscv
 		printf("* Loading program of size %zu from %p to virtual %p\n",
 				len, src, (void*) (uintptr_t) hdr->p_vaddr);
 		}
-		// load into virtual memory
-		this->memcpy(hdr->p_vaddr, src, len);
-		// set permissions
-		const bool readable   = hdr->p_flags & PF_R;
-		const bool writable   = hdr->p_flags & PF_W;
-		const bool executable = hdr->p_flags & PF_X;
+		// segment permissions
+		const PageAttributes attr {
+			 .read  = (hdr->p_flags & PF_R) != 0,
+			 .write = (hdr->p_flags & PF_W) != 0,
+			 .exec  = (hdr->p_flags & PF_X) != 0
+		};
 		if (this->m_verbose_loader) {
 		printf("* Program segment readable: %d writable: %d  executable: %d\n",
-				readable, writable, executable);
+				attr.read, attr.write, attr.exec);
 		}
 
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
-		if (executable && machine().cpu.exec_seg_data() == nullptr) {
-			machine().cpu.initialize_exec_segs(src - hdr->p_vaddr);
-		} else if (executable) {
+		if (attr.exec && machine().cpu.exec_seg_data() == nullptr)
+		{
+			constexpr address_t PMASK = Page::size()-1;
+			const address_t pbase = hdr->p_vaddr & ~PMASK;
+			const size_t prelen  = hdr->p_vaddr - pbase;
+			const size_t midlen  = len + prelen;
+			const size_t plen =
+				(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
+			const size_t postlen = plen - midlen;
+			//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
+			//	hdr->p_vaddr, len, pbase, pbase + plen, prelen, len, postlen, plen);
+			// Create the whole executable memory range
+			m_exec_pagedata.reset(new uint8_t[plen]);
+			m_exec_pagedata_size = plen;
+			m_exec_pagedata_base = pbase;
+			std::memset(&m_exec_pagedata[0],      0,   prelen);
+			std::memcpy(&m_exec_pagedata[prelen], src, len);
+			std::memset(&m_exec_pagedata[midlen], 0,   postlen);
+			// Insert everything as non-owned memory
+			this->insert_non_owned_memory(
+				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, attr);
+			// This is what the CPU instruction fetcher will use
+			machine().cpu.initialize_exec_segs(m_exec_pagedata.get() - pbase);
+			return;
+		} else if (attr.exec) {
 			throw std::runtime_error("Binary cannot have more than one executable segment!"
 				" Disable the experimental feature option to solve this.");
 		}
 #endif
+		// Load into virtual memory
+		this->memcpy(hdr->p_vaddr, src, len);
 
 		if (this->m_protect_segments) {
-			this->set_page_attr(hdr->p_vaddr, len, {
-				 .read = readable, .write = writable, .exec = executable
-			});
+			this->set_page_attr(hdr->p_vaddr, len, attr);
 		}
 		else {
 			// this might help execute simplistic barebones programs
