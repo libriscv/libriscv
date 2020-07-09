@@ -30,6 +30,7 @@ void operator delete [](void* ptr, std::size_t)
 	sys_free(ptr);
 }
 
+#ifndef USE_NEWLIB
 #ifndef __EXCEPTIONS
 // exception stubs for various C++ containers
 namespace std {
@@ -57,3 +58,4 @@ int __cxa_atexit(void (*func) (void*), void* /*arg*/, void* /*dso_handle*/)
 	(void) func;
 	return 0;
 }
+#endif
