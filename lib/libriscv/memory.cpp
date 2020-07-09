@@ -214,6 +214,12 @@ namespace riscv
 			attr.non_owning = true;
 			m_pages.try_emplace(it.first, attr, (PageData*) page.data());
 		}
+#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
+		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;
+		this->machine().cpu.initialize_exec_segs(
+			master.memory.m_exec_pagedata.get() - m_exec_pagedata_base);
+#endif
 	}
 
 	template <int W>
