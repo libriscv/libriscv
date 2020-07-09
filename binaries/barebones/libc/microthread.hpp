@@ -293,7 +293,7 @@ inline void Thread::exit(long exitcode)
 
 /** For when USE_THREADCALLS is enabled **/
 
-template <typename Ret = long, typename... Args>
+template <typename Ret, typename... Args>
 inline Ret threadcall(Args&&... args)
 {
 	using tcall_t = Ret (*) (...);
