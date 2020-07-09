@@ -25,15 +25,35 @@ namespace riscv
 		this->jump(machine().memory.start_address());
 	}
 
+	template <int W> __attribute__((cold))
+	typename CPU<W>::format_t CPU<W>::read_upper_half(address_t offset)
+	{
+		format_t instruction;
+		// read short instruction at address
+		instruction.whole =
+			m_current_page.page->template aligned_read<uint16_t> (offset);
+
+		// read upper half, completing a 32-bit instruction
+		if (UNLIKELY(instruction.is_long())) {
+			// this instruction crosses a page-border
+			this->change_page(m_current_page.pageno + 1);
+			instruction.half[1] =
+				m_current_page.page->template aligned_read<uint16_t>(0);
+		}
+		return instruction;
+	}
+
 	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
+		format_t instruction;
+#ifdef RISCV_DEBUG
 		const int this_page = this->pc() >> Page::SHIFT;
 		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
 		}
+#endif
 		const address_t offset = this->pc() & (Page::size()-1);
-		format_t instruction;
 
 		if constexpr (!compressed_enabled) {
 			// special case for non-compressed mode:
@@ -53,17 +73,7 @@ namespace riscv
 				return instruction;
 			}
 
-			// read short instruction at address
-			instruction.whole =
-				m_current_page.page->template aligned_read<uint16_t> (offset);
-
-			// read upper half, completing a 32-bit instruction
-			if (instruction.is_long()) {
-				// this instruction crosses a page-border
-				this->change_page(m_current_page.pageno + 1);
-				instruction.half[1] =
-					m_current_page.page->template aligned_read<uint16_t>(0);
-			}
+			return read_upper_half(offset);
 		}
 		return instruction;
 	}
@@ -73,6 +83,11 @@ namespace riscv
 	{
 #ifdef RISCV_DEBUG
 		this->break_checks();
+#else
+		const int this_page = this->pc() >> Page::SHIFT;
+		if (this_page != this->m_current_page.pageno) {
+			this->change_page(this_page);
+		}
 #endif
 		const auto instruction = this->read_next_instruction();
 
@@ -91,15 +106,16 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE
 		// retrieve cached instruction
 		const address_t offset  = this->pc() & (Page::size()-1);
+		const size_t idx = offset / DecoderCache<Page::SIZE>::DIVISOR;
 
 		auto* dcache = m_current_page.page->decoder_cache();
-		auto& ihandler = dcache->cache32[offset / DecoderCache<Page::SIZE>::DIVISOR];
+		auto& cache_entry = dcache->cache32[idx];
 		// decode and store into cache, if necessary
-		if (UNLIKELY(!ihandler)) {
-			ihandler = this->decode(instruction).handler;
+		if (UNLIKELY(!cache_entry)) {
+			cache_entry = this->decode(instruction).handler;
 		}
 		// execute instruction
-		ihandler(*this, instruction);
+		cache_entry(*this, instruction);
 #else
 		// decode & execute instruction directly
 		this->execute(instruction);
@@ -116,11 +132,6 @@ namespace riscv
 			if (UNLIKELY(machine().verbose_fp_registers)) {
 				printf("%s\n", registers().flp_to_string().c_str());
 			}
-		}
-		if (UNLIKELY(this->reg(0) != 0)) {
-			const auto string = isa_t::to_string(*this, instruction, handler);
-			printf("%s\n", string.c_str());
-			assert(this->reg(0) == 0);
 		}
 #endif
 

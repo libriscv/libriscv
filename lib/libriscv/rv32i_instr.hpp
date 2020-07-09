@@ -150,11 +150,11 @@ namespace riscv
 			return Rtype.opcode;
 		}
 
-		uint32_t length() const noexcept {
-			return ((Rtype.opcode & 0x3) == 0x3) ? 4 : 2;
-		}
 		bool is_long() const noexcept {
 			return (whole & 0x3) == 0x3;
+		}
+		uint32_t length() const noexcept {
+			return is_long() ? 4 : 2;
 		}
 
 		inline auto compressed() const noexcept {

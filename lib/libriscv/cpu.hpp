@@ -74,6 +74,7 @@ namespace riscv
 		uint64_t     m_counter = 0;
 
 		format_t read_next_instruction();
+		format_t read_upper_half(address_t offset);
 		void execute(format_t);
 
 		Machine<W>& m_machine;
