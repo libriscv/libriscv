@@ -46,14 +46,22 @@ namespace riscv
 	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-		format_t instruction;
-#ifdef RISCV_DEBUG
 		const int this_page = this->pc() >> Page::SHIFT;
 		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
 		}
-#endif
+
+#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		// This seemingly unchecked code works out because
+		// change_page() above will throw an exception if you access
+		// a non-executable page. But we have to improve this later
+		// by using the actual page memory, which will make this feature
+		// less experimental. We can do that by creating all the executable
+		// pages from one sequental allocation, which is owned by the first page.
+		return *(uint32_t*) &m_exec_data[this->pc()];
+#else
 		const address_t offset = this->pc() & (Page::size()-1);
+		format_t instruction;
 
 		if constexpr (!compressed_enabled) {
 			// special case for non-compressed mode:
@@ -76,6 +84,7 @@ namespace riscv
 			return read_upper_half(offset);
 		}
 		return instruction;
+#endif
 	}
 
 	template<int W> __attribute__((hot))
@@ -83,11 +92,6 @@ namespace riscv
 	{
 #ifdef RISCV_DEBUG
 		this->break_checks();
-#else
-		const int this_page = this->pc() >> Page::SHIFT;
-		if (this_page != this->m_current_page.pageno) {
-			this->change_page(this_page);
-		}
 #endif
 		const auto instruction = this->read_next_instruction();
 

@@ -9,6 +9,7 @@ option(RISCV_PCACHE "Enable small page cache (recommended)" ON)
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
+option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 
 set (SOURCES
 		libriscv/cpu.cpp
@@ -49,4 +50,7 @@ if (RISCV_ICACHE)
 endif()
 if (RISCV_PCACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_PAGE_CACHE=8)
+endif()
+if (RISCV_EXPERIMENTAL)
+	target_compile_definitions(riscv PUBLIC RISCV_EXEC_SEGMENT_IS_CONSTANT=1)
 endif()

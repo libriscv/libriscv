@@ -92,6 +92,16 @@ namespace riscv
 		printf("* Program segment readable: %d writable: %d  executable: %d\n",
 				readable, writable, executable);
 		}
+
+#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		if (executable && machine().cpu.exec_seg_data() == nullptr) {
+			machine().cpu.initialize_exec_segs(src - hdr->p_vaddr);
+		} else if (executable) {
+			throw std::runtime_error("Binary cannot have more than one executable segment!"
+				" Disable the experimental feature option to solve this.");
+		}
+#endif
+
 		if (this->m_protect_segments) {
 			this->set_page_attr(hdr->p_vaddr, len, {
 				 .read = readable, .write = writable, .exec = executable
