@@ -312,17 +312,6 @@ namespace riscv
 	}
 
 	template <int W>
-	Page& Memory<W>::allocate_page(const size_t page)
-	{
-		const auto& it = pages().try_emplace(page);
-		m_pages_highest = std::max(m_pages_highest, pages().size());
-		// if this page was read-cached, invalidate it
-		this->invalidate_page(page, it.first->second);
-		// return new page
-		return it.first->second;
-	}
-
-	template <int W>
 	Page& Memory<W>::default_page_fault(Memory<W>& mem, const size_t page)
 	{
 		// create page on-demand

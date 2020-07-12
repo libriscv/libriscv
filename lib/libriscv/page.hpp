@@ -17,6 +17,7 @@ struct PageAttributes
 	bool exec = false;
 	bool is_cow = false;
 	bool non_owning = false;
+	uint16_t user_defined = 0; /* Use this for yourself */
 
 	bool is_default() const noexcept {
 		PageAttributes def {};

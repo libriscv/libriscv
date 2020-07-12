@@ -83,11 +83,12 @@ namespace riscv
 		const PageAttributes& get_page_attr(address_t) const noexcept;
 		std::string get_page_info(address_t addr) const;
 		// page creation & destruction
-		Page& allocate_page(const size_t page);
+		template <typename... Args>
+		Page& allocate_page(size_t page, Args&& ...);
 		void  free_pages(address_t, size_t len);
 		// page faults
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
-		static Page& default_page_fault(Memory&, const size_t page);
+		static Page& default_page_fault(Memory&, size_t page);
 		// NOTE: use print_and_pause() to immediately break!
 		void trap(address_t page_addr, mmio_cb_t callback);
 		// shared pages (regular pages will have priority!)
@@ -146,7 +147,7 @@ namespace riscv
 		Page*     m_current_wr_ptr  = nullptr;
 		address_t m_current_wr_page = -1;
 		eastl::unordered_map<address_t, Page>  m_pages;
-		page_fault_cb_t m_page_fault_handler = nullptr;
+		page_fault_cb_t m_page_fault_handler = default_page_fault;
 
 		const std::vector<uint8_t>& m_binary;
 
