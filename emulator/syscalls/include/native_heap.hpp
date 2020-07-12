@@ -4,8 +4,8 @@
 //
 #pragma once
 #include <cstddef>
-#include <deque>
-#include <vector>
+#include <EASTL/deque.h>
+#include <EASTL/fixed_vector.h>
 
 namespace sas_alloc
 {
@@ -58,8 +58,8 @@ private:
 	}
 	void foreach(std::function<void(const Chunk&)>) const;
 
-	std::deque<Chunk>   m_chunks;
-	std::vector<Chunk*> m_free_chunks;
+	eastl::deque<Chunk> m_chunks;
+	eastl::fixed_vector<Chunk*, 128> m_free_chunks;
 	Chunk  m_base_chunk;
 	Chunk* last_chunk = &m_base_chunk;
 };
@@ -118,7 +118,8 @@ template <typename... Args>
 inline Chunk* Arena::new_chunk(Args&&... args)
 {
 	if (UNLIKELY(m_free_chunks.empty())) {
-		return &m_chunks.emplace_back(std::forward<Args>(args)...);
+		m_chunks.emplace_back(std::forward<Args>(args)...);
+		return &m_chunks.back();
 	}
 	else {
 		auto* chunk = m_free_chunks.back();
