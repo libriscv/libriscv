@@ -98,6 +98,10 @@ namespace riscv
 		void insert_non_owned_memory(
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
+#ifdef RISCV_INSTR_CACHE
+		void generate_decoder_cache(address_t addr, size_t len);
+#endif
+
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 		// serializes all the machine state + a tiny header to @vec

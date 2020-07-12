@@ -124,7 +124,7 @@ struct Page
 	PageAttributes attr;
 	std::unique_ptr<PageData> m_page;
 #ifdef RISCV_INSTR_CACHE
-	mutable std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
+	mutable std::shared_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
 #endif
 	mmio_cb_t m_trap = nullptr;
 };

@@ -116,7 +116,11 @@ namespace riscv
 			this->insert_non_owned_memory(
 				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, attr);
 			// This is what the CPU instruction fetcher will use
-			machine().cpu.initialize_exec_segs(m_exec_pagedata.get() - pbase);
+			auto* exec_offset = m_exec_pagedata.get() - pbase;
+			machine().cpu.initialize_exec_segs(exec_offset);
+#ifdef RISCV_INSTR_CACHE
+			this->generate_decoder_cache(hdr->p_vaddr, len);
+#endif
 			return;
 		} else if (attr.exec) {
 			throw std::runtime_error("Binary cannot have more than one executable segment!"
@@ -212,7 +216,12 @@ namespace riscv
 			auto attr = page.attr;
 			attr.is_cow = true;
 			attr.non_owning = true;
-			m_pages.try_emplace(it.first, attr, (PageData*) page.data());
+			auto p = m_pages.try_emplace(it.first, attr, (PageData*) page.data());
+#ifdef RISCV_INSTR_CACHE
+			// make a shared copy of any potential instruction cache in the source
+			Page& copy = p.first->second;
+			copy.m_decoder_cache = page.m_decoder_cache;
+#endif
 		}
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
@@ -262,7 +271,7 @@ namespace riscv
 		return nullptr;
 	}
 
-	
+
 	template <typename Sym>
 	static void elf_print_sym(const Sym* sym)
 	{

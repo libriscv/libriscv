@@ -13,6 +13,7 @@ option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 
 set (SOURCES
 		libriscv/cpu.cpp
+		libriscv/decoder_cache.cpp
 		libriscv/machine.cpp
 		libriscv/memory.cpp
 		libriscv/rv32i.cpp
