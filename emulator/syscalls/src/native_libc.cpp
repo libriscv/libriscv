@@ -254,6 +254,11 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 	});
 }
 
+void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to)
+{
+	from->transfer(*to);
+}
+
 /* le sigh */
 template Arena* setup_native_heap_syscalls<4>(Machine<4>&, size_t);
 template void setup_native_memory_syscalls<4>(Machine<4>&, bool);

@@ -44,6 +44,8 @@ struct Arena
 	size_t bytes_used() const;
 	size_t chunks_used() const noexcept { return m_chunks.size(); }
 
+	void transfer(Arena& other) const;
+
 	inline Chunk& base_chunk() {
 	    return m_base_chunk;
 	}
@@ -61,7 +63,6 @@ private:
 	eastl::deque<Chunk> m_chunks;
 	eastl::fixed_vector<Chunk*, 128> m_free_chunks;
 	Chunk  m_base_chunk;
-	Chunk* last_chunk = &m_base_chunk;
 };
 
 // find exact free chunk that matches ptr
@@ -170,14 +171,10 @@ inline int Arena::free(PointerType ptr)
     ch->free = true;
 	// merge chunks ahead and behind us
     if (ch->next && ch->next->free) {
-		if (ch->next == last_chunk)
-			last_chunk = ch;
         ch->merge_next(*this);
     }
     if (ch->prev && ch->prev->free) {
 		ch = ch->prev;
-		if (ch->next == last_chunk)
-			last_chunk = ch;
         ch->merge_next(*this);
     }
 	return 0;
@@ -214,6 +211,29 @@ inline size_t Arena::bytes_used() const
 		if (!chunk.free) size += chunk.size;
 	});
 	return size;
+}
+
+inline void Arena::transfer(Arena& other) const
+{
+	other.m_base_chunk = m_base_chunk;
+	other.m_chunks.clear();
+	other.m_free_chunks.clear();
+
+	Chunk* last = &other.m_base_chunk;
+
+	const Chunk* chunk = m_base_chunk.next;
+    while (chunk != nullptr)
+	{
+		other.m_chunks.push_back(*chunk);
+		auto& new_chunk = other.m_chunks.back();
+		new_chunk.prev = last;
+		new_chunk.next = nullptr;
+		last->next = &new_chunk;
+		/* New last before next iteration */
+		last = &new_chunk;
+
+		chunk = chunk->next;
+	}
 }
 
 } // namespace foreign_heap

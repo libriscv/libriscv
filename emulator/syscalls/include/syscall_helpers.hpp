@@ -39,4 +39,6 @@ sas_alloc::Arena* setup_native_heap_syscalls(riscv::Machine<W>&, size_t);
 template <int W>
 void setup_native_memory_syscalls(riscv::Machine<W>&, bool trusted);
 
+extern void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to);
+
 #include "threads.hpp"
