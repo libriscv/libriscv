@@ -9,6 +9,7 @@
 #include <EASTL/string_map.h>
 #include <EASTL/unordered_map.h>
 #include "util/function.hpp"
+#include "util/string.hpp"
 #include <numeric>
 #include <string>
 #include <vector>
@@ -43,6 +44,7 @@ namespace riscv
 		void memview(address_t addr, Function<void(const T&)> callback) const;
 		// read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t max_len = 1024) const;
+		riscv::String rvstring(address_t addr, size_t len) const;
 		// compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
