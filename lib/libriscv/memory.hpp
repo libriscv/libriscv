@@ -43,8 +43,8 @@ namespace riscv
 		template <typename T>
 		void memview(address_t addr, Function<void(const T&)> callback) const;
 		// read a zero-terminated string directly from guests memory
-		std::string memstring(address_t addr, size_t max_len = 1024) const;
-		riscv::String rvstring(address_t addr, size_t len) const;
+		std::string memstring(address_t addr, size_t maxlen = 1024) const;
+		riscv::String rvstring(address_t addr, size_t len, size_t maxlen = 4096) const;
 		// compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;

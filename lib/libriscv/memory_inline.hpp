@@ -179,6 +179,9 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t size = std::min(Page::size() - offset, len);
 		auto& page = this->create_page(dst >> Page::SHIFT);
+		if (UNLIKELY(!page.has_data()))
+			protection_fault(dst);
+
 		__builtin_memset(page.data() + offset, value, size);
 
 		dst += size;
@@ -195,6 +198,9 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t size = std::min(Page::size() - offset, len);
 		auto& page = this->create_page(dst >> Page::SHIFT);
+		if (UNLIKELY(!page.has_data()))
+			protection_fault(dst);
+
 		std::copy(src, src + size, page.data() + offset);
 
 		dst += size;
@@ -281,12 +287,11 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 		const char* pgend = (const char*) &page.data()[std::min(Page::size(), offset + max_len)];
 		//
 		const char* reader = start + strnlen(start, pgend - start);
-		// early exit
-		if (reader < pgend) {
-			return std::string(start, reader);
-		}
-		// we are crossing a page
 		result.append(start, reader);
+		// early exit
+		if (LIKELY(reader < pgend)) {
+			return result;
+		}
 	}
 	// slow-path: cross page-boundary
 	while (result.size() < max_len)
@@ -299,20 +304,23 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 
 		const char* start = (const char*) page.data();
 		const char* endptr = (const char*) &page.data()[max_bytes];
-		//
+
 		const char* reader = start + strnlen(start, max_bytes);
 		result.append(start, reader);
-
-		if (reader < endptr) {
-			if (*reader == 0) return result;
-		}
+		// if we didn't stop at the page border, we must be done
+		if (reader < endptr)
+			return result;
 	}
 	return result;
 }
 
 template <int W>
-riscv::String Memory<W>::rvstring(address_t addr, const size_t datalen) const
+riscv::String Memory<W>::rvstring(address_t addr,
+	const size_t datalen, const size_t maxlen) const
 {
+	if (UNLIKELY(datalen + 1 >= maxlen))
+		protection_fault(addr);
+
 	const address_t offset = addr & (Page::size()-1);
 	size_t pageno = page_number(addr);
 	const char* start = nullptr;
@@ -331,10 +339,10 @@ riscv::String Memory<W>::rvstring(address_t addr, const size_t datalen) const
 				protection_fault(addr);
 		}
 	}
-	// we are crossing a page
+	// we are crossing a page, allocate new string data on heap
 	char*  result = new char[datalen + 1];
 	size_t result_size = Page::size() - offset;
-	std::memcpy(result, start, result_size);
+	std::copy(start, start + result_size, result);
 	// slow-path: cross page-boundary
 	while (result_size < datalen)
 	{
