@@ -208,8 +208,8 @@ namespace riscv
 	template <int W>
 	void Memory<W>::machine_loader(const Machine<W>& master)
 	{
-		this->initial_paging();
-		for (auto& it : master.memory.pages())
+		this->m_pages.clear();
+		for (const auto& it : master.memory.pages())
 		{
 			const auto& page = it.second;
 			// just make every page CoW and non-owning
