@@ -360,6 +360,30 @@ riscv::String Memory<W>::rvstring(address_t addr,
 }
 
 template <int W>
+size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
+{
+	size_t len = 0;
+
+	do {
+		const address_t offset = addr & (Page::size()-1);
+		size_t pageno = page_number(addr);
+		const Page& page = this->get_pageno(pageno);
+		if (UNLIKELY(!page.has_data()))
+			protection_fault(addr);
+
+		const char* start = (const char*) &page.data()[offset];
+		const size_t max_bytes = Page::size() - offset;
+		const size_t thislen = strnlen(start, max_bytes);
+		len += thislen;
+		if (thislen != max_bytes) break;
+	} while (len < maxlen);
+
+	if (len <= maxlen)
+		return len;
+	return maxlen;
+}
+
+template <int W>
 int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 {
 	// NOTE: fast implementation if no pointer crosses page boundary
