@@ -61,11 +61,33 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 	return (void*) syscall(SYSCALL_MEMMOVE, (long) vdest, (long) vsrc, size);
 #endif
 }
+
+#ifdef NATIVE_MEM_SYSCALLS
+
 extern "C"
 int memcmp(const void* ptr1, const void* ptr2, size_t n)
 {
 	return syscall(SYSCALL_MEMCMP, (long) ptr1, (long) ptr2, n);
 }
+
+extern "C"
+size_t strlen(const char* str)
+{
+	return syscall(SYSCALL_STRLEN, (long) str);
+}
+extern "C"
+int strcmp(const char* str1, const char* str2)
+{
+	return syscall(SYSCALL_STRCMP, (long) str1, (long) str2, 4096);
+}
+extern "C"
+int strncmp(const char* s1, const char* s2, size_t n)
+{
+	return syscall(SYSCALL_STRCMP, (long) s1, (long) s2, n);
+}
+
+#endif
+
 
 #ifndef USE_NEWLIB
 
