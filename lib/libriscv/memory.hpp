@@ -6,8 +6,8 @@
 #include <cassert>
 #include <cstring>
 #include <EASTL/allocator_malloc.h>
+#include <EASTL/fixed_hash_map.h>
 #include <EASTL/string_map.h>
-#include <EASTL/unordered_map.h>
 #include "util/function.hpp"
 #include "util/string.hpp"
 #include <numeric>
@@ -153,7 +153,7 @@ namespace riscv
 		address_t   m_current_rd_page = -1;
 		Page*     m_current_wr_ptr  = nullptr;
 		address_t m_current_wr_page = -1;
-		eastl::unordered_map<address_t, Page>  m_pages;
+		eastl::fixed_hash_map<address_t, Page, 128>  m_pages;
 		page_fault_cb_t m_page_fault_handler = default_page_fault;
 
 		const std::vector<uint8_t>& m_binary;
