@@ -25,13 +25,13 @@ namespace riscv
 		// when an owning machine is passed, its state will be used instead
 		if (options.owning_machine == nullptr) {
 			this->reset();
+			// set the default exit function address for vm calls
+			this->m_exit_address = resolve_address("_exit");
 		}
 		else {
 			assert(&bin == &options.owning_machine->memory.binary());
 			this->machine_loader(*options.owning_machine);
 		}
-		// set the default exit function address for vm calls
-		this->m_exit_address = resolve_address("_exit");
 	}
 	template <int W>
 	Memory<W>::~Memory()
@@ -224,6 +224,7 @@ namespace riscv
 			copy.m_decoder_non_owned = true;
 #endif
 		}
+		this->set_exit_address(master.memory.exit_address());
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
 		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;
