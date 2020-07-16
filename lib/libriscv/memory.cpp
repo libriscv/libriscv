@@ -220,7 +220,8 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE
 			// make a shared copy of any potential instruction cache in the source
 			Page& copy = p.first->second;
-			copy.m_decoder_cache = page.m_decoder_cache;
+			copy.m_decoder_cache.reset(page.m_decoder_cache.get());
+			copy.m_decoder_non_owned = true;
 #endif
 		}
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT

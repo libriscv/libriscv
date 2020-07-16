@@ -463,12 +463,16 @@ void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 template <int W>
 address_type<W> Memory<W>::resolve_address(const char* name) const
 {
+#ifndef RISCV_DISABLE_SYM_LOOKUP
 	const auto& it = sym_lookup.find(name);
 	if (it != sym_lookup.end()) return it->second;
+#endif
 
 	auto* sym = resolve_symbol(name);
 	address_t addr = (sym) ? sym->st_value : 0x0;
+#ifndef RISCV_DISABLE_SYM_LOOKUP
 	sym_lookup.emplace(strdup(name), addr);
+#endif
 	return addr;
 }
 

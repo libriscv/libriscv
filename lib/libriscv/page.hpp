@@ -46,7 +46,12 @@ struct Page
 	// create a page that doesn't own this memory
 	Page(const PageAttributes& a, PageData* data);
 	// don't try to free non-owned page memory
-	~Page() { if (attr.non_owning) m_page.release(); }
+	~Page() {
+		if (attr.non_owning) m_page.release();
+#ifdef RISCV_INSTR_CACHE
+		if (m_decoder_non_owned) m_decoder_cache.release();
+#endif
+	}
 
 	auto& page() noexcept { return *m_page; }
 	const auto& page() const noexcept { return *m_page; }
@@ -124,7 +129,8 @@ struct Page
 	PageAttributes attr;
 	std::unique_ptr<PageData> m_page;
 #ifdef RISCV_INSTR_CACHE
-	mutable std::shared_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
+	mutable std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
+	bool m_decoder_non_owned = false;
 #endif
 	mmio_cb_t m_trap = nullptr;
 };

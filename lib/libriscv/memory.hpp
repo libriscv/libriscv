@@ -158,11 +158,12 @@ namespace riscv
 
 		const std::vector<uint8_t>& m_binary;
 
+#ifndef RISCV_DISABLE_SYM_LOOKUP
 		// lookup tree for ELF symbol names
 		mutable eastl::string_map<address_t,
 				eastl::str_less<const char*>,
 				eastl::allocator_malloc> sym_lookup;
-
+#endif
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
 		address_t m_exit_address  = 0;
