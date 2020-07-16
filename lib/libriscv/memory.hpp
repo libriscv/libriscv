@@ -25,6 +25,7 @@ namespace riscv
 		using isa_t     = isa_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
 		using page_fault_cb_t = Function<Page&(Memory&, size_t)>;
+		using page_write_cb_t = Function<void(Memory&, Page&)>;
 
 		template <typename T>
 		T read(address_t src);
@@ -89,9 +90,12 @@ namespace riscv
 		template <typename... Args>
 		Page& allocate_page(size_t page, Args&& ...);
 		void  free_pages(address_t, size_t len);
-		// page faults
+		// page fault on unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
+		// page write on copy-on-write page
+		void set_page_write_handler(page_write_cb_t h) { this->m_page_write_handler = h; }
 		static Page& default_page_fault(Memory&, size_t page);
+		static void default_page_write(Memory&, Page& page);
 		// NOTE: use print_and_pause() to immediately break!
 		void trap(address_t page_addr, mmio_cb_t callback);
 		// shared pages (regular pages will have priority!)
@@ -155,6 +159,7 @@ namespace riscv
 		address_t m_current_wr_page = -1;
 		eastl::fixed_hash_map<address_t, Page, 128>  m_pages;
 		page_fault_cb_t m_page_fault_handler = default_page_fault;
+		page_write_cb_t m_page_write_handler = default_page_write;
 
 		const std::vector<uint8_t>& m_binary;
 

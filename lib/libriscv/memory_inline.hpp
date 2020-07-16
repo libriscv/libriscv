@@ -83,7 +83,7 @@ inline Page& Memory<W>::create_page(const address_t pageno)
 	if (it != m_pages.end()) {
 		Page& page = it->second;
 		if (UNLIKELY(page.attr.is_cow)) {
-			page.make_writable();
+			m_page_write_handler(*this, page);
 		}
 		return page;
 	}

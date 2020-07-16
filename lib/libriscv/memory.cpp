@@ -332,6 +332,11 @@ namespace riscv
 		}
 		throw MachineException(OUT_OF_MEMORY, "Out of memory", mem.pages_total());
 	}
+	template <int W>
+	void Memory<W>::default_page_write(Memory<W>& mem, Page& page)
+	{
+		page.make_writable();
+	}
 
 	static const Page zeroed_page {
 		PageAttributes {
