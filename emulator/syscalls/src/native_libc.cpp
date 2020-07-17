@@ -305,6 +305,11 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 	});
 }
 
+uint64_t arena_malloc(sas_alloc::Arena* arena, const size_t len)
+{
+	return arena->malloc(len);
+}
+
 void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to)
 {
 	from->transfer(*to);
