@@ -208,10 +208,11 @@ namespace riscv
 	template <int W>
 	void Memory<W>::machine_loader(const Machine<W>& master)
 	{
-		this->m_pages.clear();
 		for (const auto& it : master.memory.pages())
 		{
 			const auto& page = it.second;
+			// skip pages marked as don't fork
+			if (page.attr.dont_fork) continue;
 			// just make every page CoW and non-owning
 			auto attr = page.attr;
 			attr.is_cow = true;
