@@ -185,4 +185,5 @@ namespace riscv
 #endif
 	};
 #include "memory_inline.hpp"
+#include "memory_helpers.hpp"
 }
