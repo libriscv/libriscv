@@ -315,48 +315,33 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 }
 
 template <int W>
-riscv::String Memory<W>::rvstring(address_t addr,
+riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	const size_t datalen, const size_t maxlen) const
 {
 	if (UNLIKELY(datalen + 1 >= maxlen))
 		protection_fault(addr);
 
-	const address_t offset = addr & (Page::size()-1);
+	riscv::Buffer result;
 	size_t pageno = page_number(addr);
-	const char* start = nullptr;
-	{
-		const Page& page = this->get_pageno(pageno);
-		if (UNLIKELY(!page.has_data()))
-			protection_fault(addr);
+	const Page& page = this->get_pageno(pageno);
+	if (UNLIKELY(!page.has_data()))
+		protection_fault(addr);
 
-		start = (const char*) &page.data()[offset];
-		// early exit, we need 1 more byte for zero
-		if (LIKELY(offset + datalen < Page::size())) {
-			// you can only use rvstring on zero-terminated strings
-			if (start[datalen] == 0)
-				return riscv::String(start, datalen);
-			else
-				protection_fault(addr);
-		}
-	}
-	// we are crossing a page, allocate new string data on heap
-	char*  result = new char[datalen + 1];
-	size_t result_size = Page::size() - offset;
-	std::copy(start, start + result_size, result);
+	const address_t offset = addr & (Page::size()-1);
+	auto* start = (const char*) &page.data()[offset];
+	result.append_page(start, Page::size() - offset);
 	// slow-path: cross page-boundary
-	while (result_size < datalen)
+	while (result.size() < datalen)
 	{
-		const size_t max_bytes = std::min(Page::size(), datalen - result_size);
+		const size_t max_bytes = std::min(Page::size(), datalen - result.size());
 		pageno ++;
 		const Page& page = this->get_pageno(pageno);
 		if (UNLIKELY(!page.has_data()))
 			protection_fault(addr);
 
-		std::memcpy(&result[result_size], page.data(), max_bytes);
-		result_size += max_bytes;
+		result.append_page((const char*) page.data(), max_bytes);
 	}
-	result[datalen] = 0; /* Finish the string */
-	return riscv::String(result, datalen, true);
+	return result;
 }
 
 template <int W>

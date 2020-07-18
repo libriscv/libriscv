@@ -9,7 +9,7 @@
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/string_map.h>
 #include "util/function.hpp"
-#include "util/string.hpp"
+#include "util/buffer.hpp"
 #include <numeric>
 #include <string>
 #include <vector>
@@ -46,9 +46,10 @@ namespace riscv
 		// compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
+		// gather all the page data into a array of buffers
+		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 4096) const;
 		// read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t maxlen = 1024) const;
-		riscv::String rvstring(address_t addr, size_t len, size_t maxlen = 4096) const;
 		size_t strlen(address_t addr, size_t maxlen = 4096) const;
 
 		address_t start_address() const noexcept { return this->m_start_address; }
