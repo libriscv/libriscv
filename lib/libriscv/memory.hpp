@@ -69,6 +69,7 @@ namespace riscv
 			std::string name = "(null)";
 			address_t   address = 0x0;
 			uint32_t    offset  = 0x0;
+			size_t      size    = 0;
 		};
 		Callsite lookup(address_t) const;
 		void print_backtrace(void(*print_function)(const char*, size_t));

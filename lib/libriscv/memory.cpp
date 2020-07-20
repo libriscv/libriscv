@@ -420,7 +420,8 @@ namespace riscv
 			return Callsite {
 				.name = (dma) ? dma : symname,
 				.address = sym->st_value,
-				.offset = addr - sym->st_value
+				.offset = addr - sym->st_value,
+				.size   = sym->st_size
 			};
 		};
 
