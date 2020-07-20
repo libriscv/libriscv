@@ -222,7 +222,7 @@ namespace riscv
 			// make a shared copy of any potential instruction cache in the source
 			Page& copy = p.first->second;
 			copy.m_decoder_cache.reset(page.m_decoder_cache.get());
-			copy.m_decoder_non_owned = true;
+			copy.attr.decoder_non_owned = true;
 #endif
 		}
 		this->set_exit_address(master.memory.exit_address());
