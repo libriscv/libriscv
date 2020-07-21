@@ -76,9 +76,13 @@ namespace riscv
 #else
 	static constexpr bool floating_point_enabled = false;
 #endif
+}
+#include "util/function.hpp"
 
-	template <int W>
-	struct Machine;
+namespace riscv
+{
+	template <int W> struct Machine;
+	template <int W> struct Memory;
 
 	template <int W>
 	struct MachineOptions
@@ -90,6 +94,7 @@ namespace riscv
 
 		// machine who owns all the execute- and read-only memory
 		const Machine<W>* owning_machine = nullptr;
+		Function<struct Page&(Memory<W>&, size_t)> page_fault_handler = nullptr;
 	};
 
 	template <int W>

@@ -19,7 +19,11 @@ namespace riscv
 		  m_protect_segments {options.protect_segments},
 		  m_verbose_loader   {options.verbose_loader}
 	{
-		if (options.memory_max != 0)
+		if (options.page_fault_handler != nullptr)
+		{
+			this->m_page_fault_handler = std::move(options.page_fault_handler);
+		}
+		else
 		{
 			assert(options.memory_max % Page::size() == 0);
 			assert(options.memory_max >= Page::size());
