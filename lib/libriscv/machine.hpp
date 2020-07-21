@@ -96,9 +96,6 @@ namespace riscv
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name) const;
 
-		// Bytes (in whole pages) of unused memory
-		address_t free_memory() const noexcept;
-
 		// Call a function when the machine gets destroyed
 		void add_destructor_callback(Function<void()> callback);
 

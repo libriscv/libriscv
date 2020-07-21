@@ -157,7 +157,6 @@ namespace riscv
 
 			off += Page::size();
 		}
-		this->m_pages_highest = m_pages.size();
 	}
 
 	template struct Machine<4>;

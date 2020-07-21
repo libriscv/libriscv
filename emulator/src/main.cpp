@@ -123,9 +123,8 @@ int main(int argc, const char** argv)
 #ifndef RISCV_DEBUG
 	printf("\n*** Guest output ***\n%s\n", state.output.c_str());
 #endif
-	printf("Pages in use: %zu (%zu kB memory), highest: %zu (%zu kB memory)\n",
-			machine.memory.pages_active(), machine.memory.pages_active() * 4,
-			machine.memory.pages_highest_active(), machine.memory.pages_highest_active() * 4);
+	printf("Pages in use: %zu (%zu kB memory)\n",
+			machine.memory.pages_active(), machine.memory.pages_active() * 4);
 	return 0;
 }
 

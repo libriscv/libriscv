@@ -76,9 +76,6 @@ namespace riscv
 
 		// page handling
 		size_t pages_active() const noexcept { return m_pages.size(); }
-		size_t pages_highest_active() const noexcept { return m_pages_highest; }
-		size_t pages_total() const noexcept { return this->m_pages_total; }
-		void set_pages_total(size_t new_max) noexcept { this->m_pages_total = new_max; }
 		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(address_t) const noexcept;
@@ -160,7 +157,7 @@ namespace riscv
 		Page*     m_current_wr_ptr  = nullptr;
 		address_t m_current_wr_page = -1;
 		eastl::fixed_hash_map<address_t, Page, 64>  m_pages;
-		page_fault_cb_t m_page_fault_handler = default_page_fault;
+		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
 
 		const std::vector<uint8_t>& m_binary;
@@ -177,8 +174,6 @@ namespace riscv
 		const bool m_load_program;
 		const bool m_protect_segments;
 		const bool m_verbose_loader;
-		size_t    m_pages_total   = 0; // max memory usage
-		size_t    m_pages_highest = 0; // max pages used
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;

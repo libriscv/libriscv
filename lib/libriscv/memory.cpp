@@ -19,9 +19,22 @@ namespace riscv
 		  m_protect_segments {options.protect_segments},
 		  m_verbose_loader   {options.verbose_loader}
 	{
-		assert(options.memory_max % Page::size() == 0);
-		assert(options.memory_max >= Page::size());
-		this->m_pages_total = options.memory_max / Page::size();
+		if (options.memory_max != 0)
+		{
+			assert(options.memory_max % Page::size() == 0);
+			assert(options.memory_max >= Page::size());
+			const size_t pages_max = options.memory_max / Page::size();
+			this->m_page_fault_handler =
+				[pages_max] (auto& mem, const size_t page) -> Page&
+				{
+					// create page on-demand
+					if (mem.pages_active() < pages_max)
+					{
+						return mem.allocate_page(page);
+					}
+					throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
+				};
+		}
 		// when an owning machine is passed, its state will be used instead
 		if (options.owning_machine == nullptr) {
 			this->reset();
@@ -323,16 +336,6 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-	template <int W>
-	Page& Memory<W>::default_page_fault(Memory<W>& mem, const size_t page)
-	{
-		// create page on-demand
-		if (mem.pages_active() < mem.pages_total())
-		{
-			return mem.allocate_page(page);
-		}
-		throw MachineException(OUT_OF_MEMORY, "Out of memory", mem.pages_total());
-	}
 	template <int W>
 	void Memory<W>::default_page_write(Memory<W>& mem, Page& page)
 	{

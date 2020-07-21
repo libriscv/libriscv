@@ -223,12 +223,6 @@ void Machine<W>::realign_stack()
 }
 
 template <int W>
-inline address_type<W> Machine<W>::free_memory() const noexcept
-{
-	return (memory.pages_total() - memory.pages_active()) * Page::size();
-}
-
-template <int W>
 inline void Machine<W>::add_destructor_callback(Function<void()> cb)
 {
 	m_destructor_callbacks.push_back(std::move(cb));

@@ -96,7 +96,6 @@ template <typename... Args>
 inline Page& Memory<W>::allocate_page(const size_t page, Args&&... args)
 {
 	const auto& it = pages().try_emplace(page, std::forward<Args> (args)...);
-	m_pages_highest = std::max(m_pages_highest, pages().size());
 	// if this page was read-cached, invalidate it
 	this->invalidate_page(page, it.first->second);
 	// return new page
