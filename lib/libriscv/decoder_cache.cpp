@@ -32,7 +32,7 @@ namespace riscv
 						rv32i_instruction instruction;
 						instruction.whole = *(uint32_t*) (page.data() + offset);
 
-						cache->cache32[offset / cache->DIVISOR] =
+						cache->template get<W> (offset / cache->DIVISOR) =
 							machine().cpu.decode(instruction).handler;
 
 						dst += instruction.length();
@@ -47,4 +47,5 @@ namespace riscv
 #endif
 
 	template struct Memory<4>;
+	template struct Memory<8>;
 }

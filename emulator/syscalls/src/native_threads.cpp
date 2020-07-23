@@ -72,19 +72,19 @@ multithreading<W>* setup_native_threads(
 	});
 	// block (w/reason)
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+4,
-	[mt] (Machine<W>& machine) {
+	[mt] (Machine<W>& machine) -> long {
 		// begone!
 		if (mt->block(machine.template sysarg<int> (0)))
 			// preserve A0 for the new thread
 			return machine.cpu.reg(RISCV::REG_ARG0);
 		// error, we didn't block
-		return -1u;
+		return -1;
 	});
 	// unblock (w/reason)
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+5,
-	[mt] (Machine<W>& machine) {
+	[mt] (Machine<W>& machine) -> long {
 		if (!mt->wakeup_blocked(machine.template sysarg<int> (0)))
-			return -1u;
+			return -1;
 		// preserve A0 for the new thread
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
@@ -171,3 +171,5 @@ multithreading<W>* setup_native_threads(
 
 template
 multithreading<4>* setup_native_threads<4>(Machine<4>&, sas_alloc::Arena*);
+template
+multithreading<8>* setup_native_threads<8>(Machine<8>&, sas_alloc::Arena*);

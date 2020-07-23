@@ -318,3 +318,6 @@ void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to)
 /* le sigh */
 template Arena* setup_native_heap_syscalls<4>(Machine<4>&, size_t);
 template void setup_native_memory_syscalls<4>(Machine<4>&, bool);
+
+template Arena* setup_native_heap_syscalls<8>(Machine<8>&, size_t);
+template void setup_native_memory_syscalls<8>(Machine<8>&, bool);

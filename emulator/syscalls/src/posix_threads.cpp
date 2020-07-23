@@ -9,7 +9,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 
 	// exit & exit_group
 	machine.install_syscall_handler(93,
-	[mt] (Machine<W>& machine) {
+	[mt] (Machine<W>& machine) -> long {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
 		const int tid = mt->get_thread()->tid;
 		THPRINT(">>> Exit on tid=%ld, exit code = %d\n",
@@ -54,7 +54,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	});
 	// tgkill
 	machine.install_syscall_handler(131,
-	[mt] (Machine<W>& machine) {
+	[mt] (Machine<W>& machine) -> long {
 		const int tid = machine.template sysarg<int> (1);
 		THPRINT(">>> tgkill on tid=%d\n", tid);
 		auto* thread = mt->get_thread(tid);
@@ -130,3 +130,5 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 
 template
 void setup_multithreading<4>(State<4>&, Machine<4>& machine);
+template
+void setup_multithreading<8>(State<8>&, Machine<8>& machine);

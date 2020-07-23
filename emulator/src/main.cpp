@@ -8,6 +8,9 @@ static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
 #include <include/syscall_helpers.hpp>
 #include <include/threads.hpp>
 
+static constexpr bool USE_64BIT = false;
+static constexpr int  MARCH = (USE_64BIT ? riscv::RISCV64 : riscv::RISCV32);
+
 int main(int argc, const char** argv)
 {
 	if (argc < 2) {
@@ -22,17 +25,17 @@ int main(int argc, const char** argv)
 		"hello_world", "test!"
 	};
 
-	riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
+	riscv::Machine<MARCH> machine { binary, MAX_MEMORY };
 
 	// somewhere to store the guest outputs and exit status
-	State<riscv::RISCV32> state;
+	State<MARCH> state;
 
 	if constexpr (full_linux_guest)
 	{
 		std::vector<std::string> env = {
 			"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
 		};
-		prepare_linux<riscv::RISCV32>(machine, args, env);
+		prepare_linux<MARCH>(machine, args, env);
 		// some extra syscalls
 		setup_linux_syscalls(state, machine);
 		// multi-threading

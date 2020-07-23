@@ -1,8 +1,8 @@
 #include "rv32i_instr.hpp"
 #include "machine.hpp"
 
-#define INSTRUCTION(x, ...) static constexpr CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
-#define DECODED_INSTR(x) instr32i_##x
+#define INSTRUCTION(x, ...) static constexpr CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }
+#define DECODED_INSTR(x) instr64i_##x
 #include "rv32i_instr.cpp"
 #ifdef RISCV_EXT_ATOMICS
 #include "rv32a_instr.cpp"
@@ -13,7 +13,7 @@
 namespace riscv
 {
 	template<>
-	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction) const
+	const CPU<8>::instruction_t& CPU<8>::decode(const format_t instruction) const
 	{
 #define DECODER(x) return(x)
 #include "rv32_instr.inc"
@@ -21,14 +21,14 @@ namespace riscv
 	}
 
 	template<>
-	void CPU<4>::execute(const format_t instruction)
+	void CPU<8>::execute(const format_t instruction)
 	{
 #define DECODER(x) x.handler(*this, instruction); return;
 #include "rv32_instr.inc"
 #undef DECODER
 	}
 
-	std::string RV32I::to_string(CPU<4>& cpu, format_t format, const instruction_t& instr)
+	std::string RV64I::to_string(CPU<8>& cpu, format_t format, const instruction_t& instr)
 	{
 		char buffer[256];
 		char ibuffer[128];
@@ -36,12 +36,12 @@ namespace riscv
 		int  len = 0;
 		if (format.length() == 4) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[%08X] %08X %.*s",
+					"[%016lX] %016lX %.*s",
 					cpu.pc(), format.whole, ibuflen, ibuffer);
 		}
 		else if (format.length() == 2) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[%08X]     %04hX %.*s",
+					"[%016lX]     %04hX %.*s",
 					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
 		}
 		else {

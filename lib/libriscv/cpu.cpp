@@ -114,7 +114,7 @@ namespace riscv
 		const size_t idx = offset / DecoderCache<Page::SIZE>::DIVISOR;
 
 		auto* dcache = m_current_page.page->decoder_cache();
-		auto& cache_entry = dcache->cache32[idx];
+		auto& cache_entry = dcache->template get<W> (idx);
 		// decode and store into cache, if necessary
 		if (UNLIKELY(!cache_entry)) {
 			cache_entry = this->decode(instruction).handler;
@@ -212,6 +212,7 @@ namespace riscv
 	}
 
 	template struct CPU<4>;
-	//template struct CPU<8>;
 	template struct Registers<4>;
+	template struct CPU<8>;
+	template struct Registers<8>;
 }

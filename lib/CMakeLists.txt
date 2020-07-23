@@ -17,6 +17,7 @@ set (SOURCES
 		libriscv/machine.cpp
 		libriscv/memory.cpp
 		libriscv/rv32i.cpp
+		libriscv/rv64i.cpp
 		libriscv/serialize.cpp
 	)
 if (RISCV_DEBUG)

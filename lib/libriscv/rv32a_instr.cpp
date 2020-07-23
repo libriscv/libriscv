@@ -37,7 +37,7 @@ namespace riscv
 		{
 			// 1. load value from rs1
 			const auto addr = cpu.reg(instr.Atype.rs1);
-			auto value = cpu.machine().memory.template read<uint32_t> (addr);
+			RVREGTYPE(cpu) value = cpu.machine().memory.template read<uint32_t> (addr);
 			// 2. place value into rd
 			if (instr.Atype.rd != 0) {
 				cpu.reg(instr.Atype.rd) = value;

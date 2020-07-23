@@ -14,36 +14,36 @@ inline const auto* elf_header(riscv::Machine<W>& machine) {
 }
 
 
-static inline
-void push_arg(Machine<4>& m, std::vector<uint32_t>& vec, uint32_t& dst, const std::string& str)
+template <int W> static inline
+void push_arg(Machine<W>& m, std::vector<address_type<W>>& vec, address_type<W>& dst, const std::string& str)
 {
 	dst -= str.size();
-	dst &= ~0x3; // maintain alignment
+	dst &= ~(W-1); // maintain alignment
 	vec.push_back(dst);
 	m.copy_to_guest(dst, (const uint8_t*) str.data(), str.size());
 }
-static inline
-void push_aux(Machine<4>&, std::vector<uint32_t>& vec, AuxVec<uint32_t> aux)
+template <int W> static inline
+void push_aux(Machine<W>&, std::vector<address_type<W>>& vec, AuxVec<address_type<W>> aux)
 {
 	vec.push_back(aux.a_type);
 	vec.push_back(aux.a_val);
 }
-static inline
-void push_down(Machine<4>& m, uint32_t& dst, const void* data, size_t size)
+template <int W> static inline
+void push_down(Machine<W>& m, address_type<W>& dst, const void* data, size_t size)
 {
 	dst -= size;
-	dst &= ~0x3; // maintain alignment
+	dst &= ~(W-1); // maintain alignment
 	m.copy_to_guest(dst, data, size);
 }
 
-template <>
-void prepare_linux(riscv::Machine<4>& machine,
+template <int W>
+void prepare_linux(riscv::Machine<W>& machine,
 					const std::vector<std::string>& args,
 					const std::vector<std::string>& env)
 {
 	// start installing at near-end of address space, leaving room on both sides
 	// stack below and installation above
-	uint32_t dst = machine.cpu.reg(RISCV::REG_SP);
+	auto dst = machine.cpu.reg(RISCV::REG_SP);
 
 	// inception :)
 	auto gen = std::default_random_engine(time(0));
@@ -52,25 +52,25 @@ void prepare_linux(riscv::Machine<4>& machine,
 	std::array<uint8_t, 16> canary;
 	std::generate(canary.begin(), canary.end(), [&] { return rand(gen); });
 	push_down(machine, dst, canary.data(), canary.size());
-	const uint32_t canary_addr = dst;
+	const auto canary_addr = dst;
 
 	const std::string platform = "RISC-V RV32I";
 	push_down(machine, dst, platform.data(), platform.size());
-	const uint32_t platform_addr = dst;
+	const auto platform_addr = dst;
 
 	// Program headers
-	const auto* binary_ehdr = elf_header<4> (machine);
-	const auto* binary_phdr = elf_offset<4, riscv::Elf<4>::Phdr> (machine, binary_ehdr->e_phoff);
+	const auto* binary_ehdr = elf_header<W> (machine);
+	const auto* binary_phdr = elf_offset<W, typename riscv::Elf<W>::Phdr> (machine, binary_ehdr->e_phoff);
 	const unsigned phdr_count = binary_ehdr->e_phnum;
 	for (unsigned i = 0; i < phdr_count; i++)
 	{
 		const auto* phd = &binary_phdr[i];
-		push_down(machine, dst, phd, sizeof(riscv::Elf<4>::Phdr));
+		push_down(machine, dst, phd, sizeof(typename riscv::Elf<W>::Phdr));
 	}
-	const uint32_t phdr_location = dst;
+	const auto phdr_location = dst;
 
 	// Arguments to main()
-	std::vector<uint32_t> argv;
+	std::vector<address_type<W>> argv;
 	argv.push_back(args.size()); // argc
 	for (const auto& string : args) {
 		push_arg(machine, argv, dst, string);
@@ -118,3 +118,12 @@ void prepare_linux(riscv::Machine<4>& machine,
 	// re-initialize machine stack-pointer
 	machine.cpu.reg(RISCV::REG_SP) = dst;
 }
+
+template
+void prepare_linux(riscv::Machine<4>& machine,
+					const std::vector<std::string>&,
+					const std::vector<std::string>&);
+template
+void prepare_linux(riscv::Machine<8>& machine,
+					const std::vector<std::string>&,
+					const std::vector<std::string>&);

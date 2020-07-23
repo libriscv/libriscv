@@ -391,3 +391,7 @@ void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
 template void setup_minimal_syscalls<4>(State<4>&, Machine<4>&);
 template void setup_newlib_syscalls<4>(State<4>&, Machine<4>&);
 template void setup_linux_syscalls<4>(State<4>&, Machine<4>&);
+
+template void setup_minimal_syscalls<8>(State<8>&, Machine<8>&);
+template void setup_newlib_syscalls<8>(State<8>&, Machine<8>&);
+template void setup_linux_syscalls<8>(State<8>&, Machine<8>&);

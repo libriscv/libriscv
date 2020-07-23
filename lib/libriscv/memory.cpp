@@ -295,9 +295,15 @@ namespace riscv
 	template <typename Sym>
 	static void elf_print_sym(const Sym* sym)
 	{
-		printf("-> Sym is at 0x%X with size %u, type %u name %u\n",
+		if constexpr (sizeof(Sym::st_value) == 4) {
+			printf("-> Sym is at 0x%X with size %u, type %u name %u\n",
 				sym->st_value, sym->st_size,
 				ELF32_ST_TYPE(sym->st_info), sym->st_name);
+		} else {
+			printf("-> Sym is at 0x%lX with size %lu, type %u name %u\n",
+				sym->st_value, sym->st_size,
+				ELF64_ST_TYPE(sym->st_info), sym->st_name);
+		}
 	}
 
 	template <int W>
@@ -322,8 +328,8 @@ namespace riscv
 				auto* final = elf_offset<address_t> (sym->st_value);
 				if constexpr (true)
 				{
-					printf("Relocating rela %zu with sym idx %u where 0x%X -> 0x%X\n",
-							i, symidx, rela_addr[i].r_offset, sym->st_value);
+					//printf("Relocating rela %zu with sym idx %u where 0x%X -> 0x%X\n",
+					//		i, symidx, rela_addr[i].r_offset, sym->st_value);
 					elf_print_sym<typename Elf<W>::Sym>(sym);
 				}
 				*(address_t*) entry = (address_t) (uintptr_t) final;
@@ -335,8 +341,14 @@ namespace riscv
 	std::string Memory<W>::get_page_info(address_t addr) const
 	{
 		char buffer[1024];
-		int len = snprintf(buffer, sizeof(buffer),
-			"[0x%08X] %s", addr, get_page(addr).to_string().c_str());
+		int len;
+		if constexpr (W == 4) {
+			len = snprintf(buffer, sizeof(buffer),
+				"[0x%08X] %s", addr, get_page(addr).to_string().c_str());
+		} else {
+			len = snprintf(buffer, sizeof(buffer),
+				"[0x%016lX] %s", addr, get_page(addr).to_string().c_str());
+		}
 		return std::string(buffer, len);
 	}
 
@@ -427,7 +439,7 @@ namespace riscv
 			return Callsite {
 				.name = (dma) ? dma : symname,
 				.address = sym->st_value,
-				.offset = addr - sym->st_value,
+				.offset = (uint32_t) (addr - sym->st_value),
 				.size   = sym->st_size
 			};
 		};
@@ -465,9 +477,16 @@ namespace riscv
 				const auto site = this->lookup(addr);
 				// write information directly to stdout
 				char buffer[8192];
-				const int len = snprintf(buffer, sizeof(buffer),
+				int len;
+				if constexpr (W == 4) {
+					len = snprintf(buffer, sizeof(buffer),
 						"[%d] 0x%08x + 0x%.3x: %s",
 						N, site.address, site.offset, site.name.c_str());
+				} else {
+					len = snprintf(buffer, sizeof(buffer),
+						"[%d] 0x%016lx + 0x%.3x: %s",
+						N, site.address, site.offset, site.name.c_str());
+				}
 				print_function(buffer, len);
 			};
 		print_trace(0, this->machine().cpu.pc());
@@ -482,6 +501,7 @@ namespace riscv
 	}
 
 	template struct Memory<4>;
+	template struct Memory<8>;
 }
 
 __attribute__((weak))
