@@ -46,7 +46,7 @@ namespace riscv
 	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-		const int this_page = this->pc() >> Page::SHIFT;
+		const address_t this_page = this->pc() >> Page::SHIFT;
 		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
 		}

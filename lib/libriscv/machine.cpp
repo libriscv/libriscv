@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include <time.h>
 
 namespace riscv
 {
@@ -22,6 +23,13 @@ namespace riscv
 		sp &= ~0xF; // mandated 16-byte stack alignment
 
 		this->copy_to_guest(sp, argv.data(), argsize);
+	}
+
+	uint64_t u64_monotonic_time()
+	{
+		struct timespec tp;
+		clock_gettime(CLOCK_MONOTONIC, &tp);
+		return tp.tv_sec * 1000000000ull + tp.tv_nsec;
 	}
 
 	template struct Machine<4>;

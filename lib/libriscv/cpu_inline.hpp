@@ -12,7 +12,7 @@ inline void CPU<W>::reset_stack_pointer() noexcept
 }
 
 template <int W> __attribute__((hot))
-inline void CPU<W>::change_page(int pageno)
+inline void CPU<W>::change_page(address_t pageno)
 {
 #ifdef RISCV_PAGE_CACHE
 	for (const auto& cache : m_page_cache) {
@@ -55,9 +55,9 @@ inline void CPU<W>::check_page()
 {
 	const auto& cp = m_current_page;
 	if (UNLIKELY(cp.page->has_trap())) {
-		const int old_pageno = cp.pageno;
+		const address_t old_pageno = cp.pageno;
 		cp.page->trap(this->pc() - (cp.pageno << Page::SHIFT), TRAP_EXEC, cp.pageno);
-		const int new_pageno = this->pc() >> Page::SHIFT;
+		const address_t new_pageno = this->pc() >> Page::SHIFT;
 		if (old_pageno != new_pageno) {
 			this->change_page(new_pageno);
 		}

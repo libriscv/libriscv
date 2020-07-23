@@ -108,5 +108,5 @@ void test_rv32c()
 		assert(b);
 	}
 
-	printf("%lu instructions passed.\n", machine.cpu.registers().counter);
+	printf("%lu instructions passed.\n", machine.cpu.instruction_counter());
 }

@@ -34,9 +34,10 @@ unsigned char crash_983d2079843182f2cb27e6aeeb47af256c44fcdd[] = {
 unsigned int crash_983d2079843182f2cb27e6aeeb47af256c44fcdd_len = 13;
 
 template <int W>
-void execute(riscv::Machine<W> machine, const char* array_name,
+void execute(uint64_t max_mem, const char* array_name,
 			uint8_t* data, size_t len)
 {
+	riscv::Machine<W> machine { {}, max_mem };
 	printf("* Testing %s\n", array_name);
 	machine.copy_to_guest(0x1000, data, len);
 	// make the instructions readable & executable
@@ -52,15 +53,15 @@ void execute(riscv::Machine<W> machine, const char* array_name,
 	}
 }
 
-#define TEST_CRASH(m, x) execute(m, #x, x, sizeof(x))
+#define TEST_CRASH(m, x) execute<m>(65536ul, #x, x, sizeof(x))
 
 void test_crashes()
 {
-	const uint32_t memory = 65536;
-	riscv::Machine<riscv::RISCV32> m { {}, memory };
-
 	// test for crashes
-	TEST_CRASH(m, crash_f6999f60cd85cb2a4b567e2e9783c63001de98f0);
-	TEST_CRASH(m, crash_675b93f2255f0ac4ca4ae13f4e9f8122d74baea8);
-	TEST_CRASH(m, crash_983d2079843182f2cb27e6aeeb47af256c44fcdd);
+	TEST_CRASH(4, crash_f6999f60cd85cb2a4b567e2e9783c63001de98f0);
+	TEST_CRASH(8, crash_f6999f60cd85cb2a4b567e2e9783c63001de98f0);
+	TEST_CRASH(4, crash_675b93f2255f0ac4ca4ae13f4e9f8122d74baea8);
+	TEST_CRASH(8, crash_675b93f2255f0ac4ca4ae13f4e9f8122d74baea8);
+	TEST_CRASH(4, crash_983d2079843182f2cb27e6aeeb47af256c44fcdd);
+	TEST_CRASH(8, crash_983d2079843182f2cb27e6aeeb47af256c44fcdd);
 }

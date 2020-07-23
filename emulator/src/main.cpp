@@ -7,8 +7,6 @@ static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
 #include "linux.hpp"
 #include <include/syscall_helpers.hpp>
 #include <include/threads.hpp>
-
-static constexpr bool USE_64BIT = false;
 static constexpr int  MARCH = (USE_64BIT ? riscv::RISCV64 : riscv::RISCV32);
 
 int main(int argc, const char** argv)

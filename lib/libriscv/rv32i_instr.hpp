@@ -164,9 +164,6 @@ namespace riscv
 			return whole >> (32 - 5);
 		}
 
-		static constexpr sword_t to_signed(word_t word) noexcept {
-			return (sword_t) word;
-		}
 		template <typename T>
 		static constexpr word_t to_word(T x) noexcept {
 			return (word_t) x;

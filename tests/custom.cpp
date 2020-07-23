@@ -4,7 +4,7 @@
 void test_custom_machine()
 {
 	// this is a custom machine with very little virtual memory
-	const uint32_t m2_memory = 65536;
+	const uint64_t m2_memory = 65536;
 	riscv::Machine<riscv::RISCV32> m2 { {}, m2_memory };
 
 	// free the zero-page to reclaim 4k
@@ -14,7 +14,6 @@ void test_custom_machine()
 	const uint32_t entry_point = 0x1068;
 	m2.cpu.jump(entry_point);
 
-	assert(m2.cpu.registers().counter == 0);
+	assert(m2.cpu.instruction_counter() == 0);
 	assert(m2.cpu.registers().pc == entry_point);
-	assert(m2.free_memory() == 65536);
 }

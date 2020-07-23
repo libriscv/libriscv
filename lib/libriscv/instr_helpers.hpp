@@ -12,13 +12,5 @@
 #define CIC2_CODE(x, y) ((x << 12) | (y))
 
 #define RVREGTYPE(x) typename std::remove_reference_t<decltype(x)>::address_t
+#define RVTOSIGNED(x) (static_cast<typename std::make_signed<decltype(x)>::type> (x))
 #define RVIS64BIT(x) (sizeof(RVREGTYPE(x)) == 8)
-
-#include <time.h>
-
-inline uint64_t u64_monotonic_time()
-{
-	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp);
-	return tp.tv_sec * 1000000000ull + tp.tv_nsec;
-}
