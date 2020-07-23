@@ -161,7 +161,8 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 
 	const address_t offset = addr & (Page::size()-1);
 	auto* start = (const char*) &page.data()[offset];
-	result.append_page(start, Page::size() - offset);
+	const size_t max_bytes = std::min(Page::size() - offset, datalen);
+	result.append_page(start, max_bytes);
 	// slow-path: cross page-boundary
 	while (result.size() < datalen)
 	{
