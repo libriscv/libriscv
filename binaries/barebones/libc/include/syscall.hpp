@@ -162,6 +162,12 @@ inline long psyscall(long n, const void* arg0, long arg1, long arg2)
 	return syscall(n, (long) arg0, arg1, arg2);
 }
 
+inline long psyscall(long n, const void* arg0, long arg1, const void* arg2)
+{
+	asm ("" ::: "memory");
+	return syscall(n, (long) arg0, arg1, (long) arg2);
+}
+
 inline long psyscall(long n, const void* arg0, const void* arg1, const void* arg2)
 {
 	asm ("" ::: "memory");

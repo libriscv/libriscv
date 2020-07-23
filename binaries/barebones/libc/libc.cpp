@@ -118,6 +118,7 @@ char* strcpy(char* dst, const char* src)
 	*dst = 0;
 	return dst;
 }
+#ifndef NATIVE_MEM_SYSCALLS
 extern "C"
 size_t strlen(const char* str)
 {
@@ -152,6 +153,7 @@ int strncmp(const char* s1, const char* s2, size_t n)
         return ( *(unsigned char *)s1 - *(unsigned char *)s2 );
     }
 }
+#endif
 extern "C"
 char* strcat(char* dest, const char* src)
 {
