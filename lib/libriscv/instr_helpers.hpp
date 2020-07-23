@@ -12,6 +12,7 @@
 #define CIC2_CODE(x, y) ((x << 12) | (y))
 
 #define RVREGTYPE(x) typename std::remove_reference_t<decltype(x)>::address_t
+#define RVIS64BIT(x) (sizeof(RVREGTYPE(x)) == 8)
 
 #include <time.h>
 

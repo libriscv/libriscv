@@ -6,7 +6,7 @@ namespace riscv
 	void Machine<W>::setup_argv(const std::vector<std::string>& args)
 	{
 		// Arguments to main()
-		std::vector<uint32_t> argv;
+		std::vector<address_t> argv;
 		argv.push_back(args.size()); // argc
 		for (const auto& string : args) {
 			const auto sp = stack_push(string.data(), string.size());
