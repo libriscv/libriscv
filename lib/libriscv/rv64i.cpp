@@ -41,7 +41,7 @@ namespace riscv
 		}
 		else if (format.length() == 2) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[%08lX]     %04hX %.*s",
+					"[%08lX]     %04hlX %.*s",
 					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
 		}
 		else {
