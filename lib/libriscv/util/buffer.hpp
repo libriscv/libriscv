@@ -61,8 +61,8 @@ namespace riscv
 	{
 		std::string result;
 		result.reserve(this->m_len);
-		for (const auto& entry : m_data) {
-			if (entry.second == 0) break;
+		for (size_t i = 0; i < m_idx; i++) {
+			auto& entry = m_data[i];
 			result.append(entry.first, entry.first + entry.second);
 		}
 		return result;
