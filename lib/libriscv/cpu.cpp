@@ -108,23 +108,25 @@ namespace riscv
 		// execute instruction
 		handler.handler(*this, instruction);
 #else
-#ifdef RISCV_INSTR_CACHE
+# ifdef RISCV_INSTR_CACHE
 		// retrieve cached instruction
 		const address_t offset  = this->pc() & (Page::size()-1);
 		const size_t idx = offset / DecoderCache<Page::SIZE>::DIVISOR;
 
 		auto* dcache = m_current_page.page->decoder_cache();
 		auto& cache_entry = dcache->template get<W> (idx);
+#  ifndef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		// decode and store into cache, if necessary
 		if (UNLIKELY(!cache_entry)) {
 			cache_entry = this->decode(instruction).handler;
 		}
+#  endif
 		// execute instruction
 		cache_entry(*this, instruction);
-#else
+# else
 		// decode & execute instruction directly
 		this->execute(instruction);
-#endif
+# endif
 #endif
 		// increment instruction counter
 		this->m_counter++;

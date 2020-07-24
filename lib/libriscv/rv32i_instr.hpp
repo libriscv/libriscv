@@ -157,7 +157,8 @@ namespace riscv
 			return (whole & 0x3) == 0x3;
 		}
 		uint32_t length() const noexcept {
-			return is_long() ? 4 : 2;
+			//return is_long() ? 4 : 2;
+			return 2 + 2 * is_long();
 		}
 
 		inline auto compressed() const noexcept {
