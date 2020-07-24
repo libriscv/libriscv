@@ -50,7 +50,7 @@ template <int W>
 long syscall_writev(Machine<W>& machine)
 {
 	const int  fd     = machine.template sysarg<int>(0);
-	const auto iov_g  = machine.template sysarg<uint32_t>(1);
+	const auto iov_g  = machine.template sysarg<address_type<W>>(1);
 	const auto count  = machine.template sysarg<int>(2);
 	if constexpr (false) {
 		printf("SYSCALL writev called, iov = %#X  cnt = %d\n", iov_g, count);
@@ -68,7 +68,7 @@ long syscall_writev(Machine<W>& machine)
         for (const auto& iov : vec)
         {
 			char buffer[1024];
-            auto src_g = (uint32_t) iov.iov_base;
+            auto src_g = (address_type<W>) iov.iov_base;
             auto len_g = std::min(sizeof(buffer), (size_t) iov.iov_len);
             machine.memory.memcpy_out(buffer, src_g, len_g);
 			state->output += std::string(buffer, len_g);
@@ -191,7 +191,7 @@ long syscall_stat(Machine<W>& machine)
 template <int W>
 long syscall_uname(Machine<W>& machine)
 {
-	const auto buffer = machine.template sysarg<uint32_t>(0);
+	const auto buffer = machine.template sysarg<address_type<W>>(0);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL uname called, buffer = 0x%X\n", buffer);
 	}
@@ -208,7 +208,7 @@ long syscall_uname(Machine<W>& machine)
     strcpy(uts.nodename,"libriscv");
     strcpy(uts.release, "5.0.0");
     strcpy(uts.version, "");
-    strcpy(uts.machine, "rv32imac");
+    strcpy(uts.machine, "rv32imafdc");
     strcpy(uts.domain,  "(none)");
 
     machine.copy_to_guest(buffer, &uts, sizeof(uts32));
@@ -221,8 +221,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	// munmap
 	machine.install_syscall_handler(215,
 	[] (Machine<W>& machine) {
-		const uint32_t addr = machine.template sysarg<uint32_t> (0);
-		const uint32_t len  = machine.template sysarg<uint32_t> (1);
+		const auto addr = machine.template sysarg<address_type<W>> (0);
+		const auto len  = machine.template sysarg<address_type<W>> (1);
 		SYSPRINT(">>> munmap(0x%X, len=%u)\n", addr, len);
 		// TODO: deallocate pages completely
 		machine.memory.set_page_attr(addr, len, {
@@ -272,8 +272,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	// mprotect
 	machine.install_syscall_handler(226,
 	[] (Machine<W>& machine) {
-		const uint32_t addr = machine.template sysarg<uint32_t> (0);
-		const uint32_t len  = machine.template sysarg<uint32_t> (1);
+		const auto addr = machine.template sysarg<address_type<W>> (0);
+		const auto len  = machine.template sysarg<address_type<W>> (1);
 		const int      prot = machine.template sysarg<int> (2);
 		SYSPRINT(">>> mprotect(0x%X, len=%u, prot=%x)\n", addr, len, prot);
 		machine.memory.set_page_attr(addr, len, {
@@ -286,9 +286,9 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	// madvise
 	machine.install_syscall_handler(233,
 	[] (Machine<W>& machine) {
-		const uint32_t addr = machine.template sysarg<uint32_t> (0);
-		const uint32_t len  = machine.template sysarg<uint32_t> (1);
-		const int      advice = machine.template sysarg<int> (2);
+		const auto addr  = machine.template sysarg<address_type<W>> (0);
+		const auto len   = machine.template sysarg<address_type<W>> (1);
+		const int advice = machine.template sysarg<int> (2);
 		SYSPRINT(">>> madvise(0x%X, len=%u, prot=%x)\n", addr, len, advice);
 		switch (advice) {
 			case MADV_NORMAL:
