@@ -6,7 +6,7 @@ namespace riscv
 	FLOAT_INSTR(FLW_FLD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
 		auto& dst = cpu.registers().getfl(fi.Itype.rd);
 		switch (fi.Itype.funct3) {
@@ -20,7 +20,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 8> insn {
 			"???", "FLH", "FLW", "FLD", "FLQ", "???", "???", "???"
 		};
@@ -33,7 +33,7 @@ namespace riscv
 	FLOAT_INSTR(FSW_FSD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& src = cpu.registers().getfl(fi.Stype.rs2);
 		auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
 		switch (fi.Itype.funct3) {
@@ -47,7 +47,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 8> insn {
 			"???", "FSH", "FSW", "FSD", "FSQ", "???", "???", "???"
 		};
@@ -61,7 +61,7 @@ namespace riscv
 	FLOAT_INSTR(FMADD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -77,7 +77,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FMADD.S", "FMADD.D", "???", "FMADD.Q"
 		};
@@ -91,7 +91,7 @@ namespace riscv
 	FLOAT_INSTR(FMSUB,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -107,7 +107,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FMSUB.S", "FMSUB.D", "???", "FMSUB.Q"
 		};
@@ -121,7 +121,7 @@ namespace riscv
 	FLOAT_INSTR(FNMADD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -137,7 +137,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FMADD.S", "FMADD.D", "???", "FMADD.Q"
 		};
@@ -150,7 +150,7 @@ namespace riscv
 	FLOAT_INSTR(FNMSUB,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -166,7 +166,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FNMSUB.S", "FNMSUB.D", "???", "FNMSUB.Q"
 		};
@@ -181,7 +181,7 @@ namespace riscv
 	FLOAT_INSTR(FADD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -196,7 +196,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FADD.S", "FADD.D", "???", "FADD.Q"
 		};
@@ -209,7 +209,7 @@ namespace riscv
 	FLOAT_INSTR(FSUB,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -224,7 +224,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FSUB.S", "FSUB.D", "???", "FSUB.Q"
 		};
@@ -237,7 +237,7 @@ namespace riscv
 	FLOAT_INSTR(FMUL,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -252,7 +252,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FMUL.S", "FMUL.D", "???", "FMUL.Q"
 		};
@@ -265,7 +265,7 @@ namespace riscv
 	FLOAT_INSTR(FDIV,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
@@ -280,7 +280,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FDIV.S", "FDIV.D", "???", "FDIV.Q"
 		};
@@ -293,7 +293,7 @@ namespace riscv
 	FLOAT_INSTR(FSQRT,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
@@ -307,7 +307,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FSQRT.S", "FSQRT.D", "???", "FSQRT.Q"
 		};
@@ -319,7 +319,7 @@ namespace riscv
 	FLOAT_INSTR(FMIN_FMAX,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		if (fi.R4type.rd != 0)
 		{
 			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -347,7 +347,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 8> insn {
 			"FMIN", "FMAX", "???", "???", "???", "???", "???", "???"
 		};
@@ -362,7 +362,7 @@ namespace riscv
 	FLOAT_INSTR(FEQ_FLT_FLE,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		if (fi.R4type.rd != 0)
 		{
 			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -394,7 +394,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> insn {
 			"FLE", "FLT", "FEQ", "F???"
 		};
@@ -409,7 +409,7 @@ namespace riscv
 	FLOAT_INSTR(FCVT_SD_DS,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
@@ -424,7 +424,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FCVT.S.D", "FCVT.D.S", "???", "???"
 		};
@@ -436,7 +436,7 @@ namespace riscv
 	FLOAT_INSTR(FCVT_W_SD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		if (fi.R4type.rd != 0)
 		{
 			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -459,7 +459,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FCVT.W.S", "FCVT.W.D", "???", "FCVT.W.Q"
 		};
@@ -471,7 +471,7 @@ namespace riscv
 	FLOAT_INSTR(FCVT_SD_W,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
@@ -486,7 +486,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FCVT.S.W", "FCVT.D.W", "???", "FCVT.Q.W"
 		};
@@ -498,7 +498,7 @@ namespace riscv
 	FLOAT_INSTR(FSGNJ_NX,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -537,7 +537,7 @@ namespace riscv
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 
 		if (fi.R4type.rs1 == fi.R4type.rs2) {
 			static const char* insn[4] = {"FMV", "FNEG", "FABS", "???"};
@@ -559,7 +559,7 @@ namespace riscv
 	FLOAT_INSTR(FMV_X_W, // 1110
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		if (fi.R4type.rd != 0)
 		{
 			auto& dst = cpu.reg(fi.R4type.rd);
@@ -569,13 +569,17 @@ namespace riscv
 					dst = rs1.i32[0];
 					return;
 				case 0x1: // FMV.X.D
+					if constexpr (RVIS64BIT(cpu)) {
+						dst = rs1.i64;
+						return;
+					}
 					cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FMV.X.W", "FMV.X.D", "???", "FMV.X.Q"
 		};
@@ -587,7 +591,7 @@ namespace riscv
 	FLOAT_INSTR(FMV_W_X, // 1111
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
@@ -596,12 +600,16 @@ namespace riscv
 				dst.nanbox();
 				return;
 			case 0x1: // FMV.D.X
+				if constexpr (RVIS64BIT(cpu)) {
+					dst.load_u64(rs1);
+					return;
+				}
 				cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		rv32f_instruction fi { instr };
+		const rv32f_instruction fi { instr };
 		static const std::array<const char*, 4> f2 {
 			"FMV.W.X", "FMV.D.X", "???", "FMV.Q.X"
 		};
