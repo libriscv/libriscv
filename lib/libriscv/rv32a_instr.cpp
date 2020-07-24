@@ -13,7 +13,7 @@ namespace riscv
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
 			// 2. place value into rd
 			if (instr.Atype.rd != 0) {
-				cpu.reg(instr.Atype.rd) = value;
+				cpu.reg(instr.Atype.rd) = (int32_t) value;
 			}
 			// 3. apply <add> to value and rs2
 			value += cpu.reg(instr.Atype.rs2);
@@ -40,7 +40,7 @@ namespace riscv
 			RVREGTYPE(cpu) value = cpu.machine().memory.template read<uint32_t> (addr);
 			// 2. place value into rd
 			if (instr.Atype.rd != 0) {
-				cpu.reg(instr.Atype.rd) = value;
+				cpu.reg(instr.Atype.rd) = (int32_t) value;
 			}
 			// 3. apply <swap> to value and rs2
 			if (instr.Atype.rs2 != 0) {
@@ -72,7 +72,7 @@ namespace riscv
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
 			// 2. place value into rd
 			if (instr.Atype.rd != 0) {
-				cpu.reg(instr.Atype.rd) = value;
+				cpu.reg(instr.Atype.rd) = (int32_t) value;
 			}
 			// 3. apply <or> to value and rs2
 			value |= cpu.reg(instr.Atype.rs2);
@@ -98,7 +98,7 @@ namespace riscv
 			cpu.atomics().load_reserve(addr);
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
 			if (instr.Atype.rd != 0)
-				cpu.reg(instr.Atype.rd) = value;
+				cpu.reg(instr.Atype.rd) = (int32_t) value;
 			return;
 		}
         cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -118,7 +118,7 @@ namespace riscv
 			const bool resv = cpu.atomics().store_conditional(addr);
 			if (resv) {
 				auto value = cpu.machine().memory.template read<uint32_t> (addr);
-				cpu.reg(instr.Atype.rs2) = value;
+				cpu.reg(instr.Atype.rs2) = (int32_t) value;
 			}
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
