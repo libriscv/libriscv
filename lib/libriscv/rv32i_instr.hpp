@@ -53,6 +53,9 @@ namespace riscv
 			uint32_t shift_imm() const noexcept {
 				return imm & 0x1F;
 			}
+			uint32_t shift64_imm() const noexcept {
+				return imm & 0x3F;
+			}
 			bool is_srai() const noexcept {
 				return imm & 0x400;
 			}

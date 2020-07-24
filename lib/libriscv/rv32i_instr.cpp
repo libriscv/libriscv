@@ -223,7 +223,10 @@ namespace riscv
 				dst = src + instr.Itype.signed_imm();
 				break;
 			case 0x1: // SLLI:
-				dst = src << instr.Itype.shift_imm();
+				if constexpr (RVIS64BIT(cpu))
+					dst = src << instr.Itype.shift64_imm();
+				else
+					dst = src << instr.Itype.shift_imm();
 				break;
 			case 0x2: // SLTI:
 				dst = (RVTOSIGNED(src) < instr.Itype.signed_imm()) ? 1 : 0;
@@ -235,16 +238,21 @@ namespace riscv
 				dst = src ^ instr.Itype.signed_imm();
 				break;
 			case 0x5: // SRLI / SRAI:
-				if (LIKELY(!instr.Itype.is_srai()))
-					dst = src >> instr.Itype.shift_imm();
-				else { // SRAI: preserve the sign bit
-					const uint32_t shifts = instr.Itype.shift_imm();
+				if (LIKELY(!instr.Itype.is_srai())) {
+					if constexpr (RVIS64BIT(cpu))
+						dst = src >> instr.Itype.shift64_imm();
+					else
+						dst = src >> instr.Itype.shift_imm();
+				} else { // SRAI: preserve the sign bit
 					constexpr auto bit = 1ul << (sizeof(src) * 8 - 1);
 					const bool is_signed = (src & bit) != 0;
-					if constexpr (sizeof(src) == 4)
-						dst = RV32I::SRA(is_signed, shifts, src);
-					else
+					if constexpr (RVIS64BIT(cpu)) {
+						const uint32_t shifts = instr.Itype.shift64_imm();
 						dst = RV64I::SRA(is_signed, shifts, src);
+					} else {
+						const uint32_t shifts = instr.Itype.shift_imm();
+						dst = RV32I::SRA(is_signed, shifts, src);
+					}
 				}
 				break;
 			case 0x6: // ORI:
@@ -576,41 +584,23 @@ namespace riscv
 		if (instr.Itype.rd != 0)
 		{
 			auto& dst = cpu.reg(instr.Itype.rd);
-			const uint32_t src = cpu.reg(instr.Itype.rs1);
+			const int32_t src = cpu.reg(instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0:
 				// ADDIW: Add sign-extended 12-bit immediate
 				dst = (int32_t) (src + instr.Itype.signed_imm());
-				if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
 				break;
 			case 0x1: // SLLIW:
 				dst = (int32_t) (src << instr.Itype.shift_imm());
-				if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
-				break;
-			case 0x2: // SLTI:
-				dst = ((int32_t) src < instr.Itype.signed_imm()) ? 1 : 0;
-				break;
-			case 0x3: // SLTU:
-				dst = (src < (unsigned) instr.Itype.signed_imm()) ? 1 : 0;
-				break;
-			case 0x4: // XORI:
-				dst = src ^ instr.Itype.signed_imm();
 				break;
 			case 0x5: // SRLIW / SRAIW:
 				if (LIKELY(!instr.Itype.is_srai())) {
-					dst = src >> instr.Itype.shift_imm();
+					dst = (int32_t) (src >> instr.Itype.shift_imm());
 				} else { // SRAIW: preserve the sign bit
 					const uint32_t shifts = instr.Itype.shift_imm();
 					const bool is_signed = (src & 0x80000000) != 0;
-					dst = RV32I::SRA(is_signed, shifts, src);
+					dst = (int32_t) RV32I::SRA(is_signed, shifts, src);
 				}
-				if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
-				break;
-			case 0x6: // ORI:
-				dst = src | instr.Itype.signed_imm();
-				break;
-			case 0x7: // ANDI:
-				dst = src & instr.Itype.signed_imm();
 				break;
 			}
 		} else if (instr.Itype.rs1 == 0) {
@@ -661,10 +651,10 @@ namespace riscv
 			}
 		}
 		static std::array<const char*, 8> func3 = {"LINT", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
-		return snprintf(buffer, len, "%sW %s, %d",
+		return snprintf(buffer, len, "%sW %s, %ld",
 						func3[instr.Itype.funct3],
 						RISCV::regname(instr.Itype.rd),
-						instr.Itype.signed_imm());
+						(long) instr.Itype.signed_imm());
 	});
 
 	INSTRUCTION(OP32,
@@ -672,80 +662,61 @@ namespace riscv
 		if (instr.Rtype.rd != 0)
 		{
 			auto& dst = cpu.reg(instr.Rtype.rd);
-			const uint32_t src1 = cpu.reg(instr.Rtype.rs1);
-			const uint32_t src2 = cpu.reg(instr.Rtype.rs2);
+			const int32_t src1 = cpu.reg(instr.Rtype.rs1);
+			const int32_t src2 = cpu.reg(instr.Rtype.rs2);
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 				case 0x0: // ADDW / SUBW
-					dst = (int32_t) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
-					if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
-					break;
-				case 0x1: // SLL
-					dst = src1 << (src2 & 0x1F);
-					break;
-				case 0x2: // SLT
-					dst = ((int32_t) src1 < (int32_t) src2) ? 1 : 0;
-					break;
-				case 0x3: // SLTU
-					dst = (src1 < src2) ? 1 : 0;
-					break;
-				case 0x4: // XOR
-					dst = src1 ^ src2;
-					break;
+					dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
+					return;
+				case 0x1: // SLLW
+					dst = (int32_t) (src1 << (src2 & 0x1F));
+					return;
 				case 0x5: // SRLW / SRAW
 					if (!instr.Rtype.is_f7()) { // SRL
-						dst = src1 >> (src2 & 0x1F);
+						dst = (int32_t) src1 >> (src2 & 0x1F);
 					} else { // SRAW
 						const bool is_signed = (src1 & 0x80000000) != 0;
 						const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
-						dst = RV32I::SRA(is_signed, shifts, src1);
+						dst = (int32_t) (RV32I::SRA(is_signed, shifts, src1));
 					}
-					if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
-					break;
-				case 0x6: // OR
-					dst = src1 | src2;
-					break;
-				case 0x7: // AND
-					dst = src1 & src2;
-					break;
+					return;
 				// extension RV64M
 				case 0x10: // MULW
-					dst = (int32_t) src1 * (int32_t) src2;
-					if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
-					break;
+					dst = (int32_t) (src1 * src2);
+					return;
 				case 0x14: // DIVW
 					// division by zero is not an exception
 					if (LIKELY((uint32_t) src2 != 0)) {
 						// rv32i_instr.cpp:301:2: runtime error:
 						// division of -2147483648 by -1 cannot be represented in type 'int'
 						if (LIKELY(!((uint32_t) src1 == 2147483648 && (uint32_t) src2 == 4294967295))) {
-							dst = (int32_t) src1 / (int32_t) src2;
-							if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
+							dst = src1 / src2;
 						}
 					}
-					break;
+					return;
 				case 0x15: // DIVUW
-					if (LIKELY((uint32_t) src2 != 0))
+					if (LIKELY((uint32_t) src2 != 0)) {
 						dst = (uint32_t) src1 / (uint32_t) src2;
-					break;
+						if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
+					}
+					return;
 				case 0x16: // REMW
 					if (LIKELY(src2 != 0)) {
 						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295))) {
-							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-							if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
+							dst = src1 % src2;
 						}
 					}
-					break;
+					return;
 				case 0x17: // REMUW
 					if (LIKELY((uint32_t) src2 != 0)) {
 						dst = (uint32_t) src1 % (uint32_t) src2;
 						if (dst & 0x80000000) dst |= 0xFFFFFFFF00000000;
 					}
-					break;
+					return;
 			}
-		} else {
-			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		if (!instr.Rtype.is_32M())
@@ -754,7 +725,7 @@ namespace riscv
 				"ADD", "SLL", "SLT", "SLTU", "XOR", "SRL", "OR", "AND",
 				"SUB", "SLL", "SLT", "SLTU", "XOR", "SRA", "OR", "AND"};
 			const int EX = instr.Rtype.is_f7() ? 8 : 0;
-			return snprintf(buffer, len, "%sW %s %s, %s",
+			return snprintf(buffer, len, "%s %sW %s, %s",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3 + EX],
 							RISCV::regname(instr.Rtype.rs2),
@@ -763,7 +734,7 @@ namespace riscv
 		else {
 			static std::array<const char*, 8> func3 = {
 				"MUL", "MULH", "MULHSU", "MULHU", "DIV", "DIVU", "REM", "REMU"};
-			return snprintf(buffer, len, "%sW %s %s, %s",
+			return snprintf(buffer, len, "%s %sW %s, %s",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3],
 							RISCV::regname(instr.Rtype.rs2),

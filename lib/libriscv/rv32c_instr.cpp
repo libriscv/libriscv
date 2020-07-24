@@ -137,6 +137,22 @@ namespace riscv
 						ci.CJ.signed_imm(), cpu.pc() + ci.CJ.signed_imm());
 	});
 
+	COMPRESSED_INSTR(C1_ADDIW,
+	[] (auto& cpu, rv32i_instruction instr) {
+		auto ci = instr.compressed();
+		if (ci.CI.rd != 0) {
+			// ADDIW rd, imm[5:0]
+			cpu.reg(ci.CI.rd) = (int32_t) cpu.reg(ci.CI.rd) + ci.CI.signed_imm();
+			return;
+		}
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	{
+		auto ci = instr.compressed();
+		return snprintf(buffer, len, "C.ADDIW %s, +d",
+						RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
+	});
+
 	COMPRESSED_INSTR(C1_LI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
@@ -322,10 +338,17 @@ namespace riscv
 			cpu.reg(ci.CI2.rd) = cpu.machine().memory.template read <uint32_t> (address);
 		}
 		else if (ci.CI2.funct3 == 0x3) {
-			// FLWSP
-			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
-			auto& dst = cpu.registers().getfl(ci.CI2.rd);
-			dst.load_u32(cpu.machine().memory.template read <uint32_t> (address));
+			if constexpr (RVIS64BIT(cpu)) {
+				// LDSP
+				auto address = cpu.reg(RISCV::REG_SP) + ci.CIFLD.offset();
+				cpu.reg(ci.CIFLD.rd) =
+					cpu.machine().memory.template read <uint64_t> (address);
+			} else {
+				// FLWSP
+				auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
+				auto& dst = cpu.registers().getfl(ci.CI2.rd);
+				dst.load_u32(cpu.machine().memory.template read <uint32_t> (address));
+			}
 		}
 		else if (ci.CI.rd == 0) {
 			// HINT
@@ -371,10 +394,17 @@ namespace riscv
 			cpu.machine().memory.template write<uint32_t> (addr, value);
 		}
 		else if (ci.CSS.funct3 == 7) {
-			// FSWSP
-			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
-			uint32_t value = cpu.registers().getfl(ci.CSS.rs2).i32[0];
-			cpu.machine().memory.template write<uint32_t> (addr, value);
+			if constexpr (RVIS64BIT(cpu)) {
+				// SDSP
+				auto addr = cpu.reg(RISCV::REG_SP) + ci.CSFSD.offset();
+				auto value = cpu.reg(ci.CSFSD.rs2);
+				cpu.machine().memory.template write<uint64_t> (addr, value);
+			} else {
+				// FSWSP
+				auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
+				uint32_t value = cpu.registers().getfl(ci.CSS.rs2).i32[0];
+				cpu.machine().memory.template write<uint32_t> (addr, value);
+			}
 		}
 		else {
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);

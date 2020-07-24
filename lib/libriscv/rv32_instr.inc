@@ -122,7 +122,11 @@
 				case CI_CODE(0b000, 0b01):
 					DECODER(DECODED_COMPR(C1_NOP_ADDI));
 				case CI_CODE(0b001, 0b01):
-					DECODER(DECODED_COMPR(C1_JAL));
+					if constexpr (RVIS64BIT(*this)) {
+						DECODER(DECODED_COMPR(C1_ADDIW));
+					} else {
+						DECODER(DECODED_COMPR(C1_JAL));
+					}
 				case CI_CODE(0b010, 0b01):
 					DECODER(DECODED_COMPR(C1_LI));
 				case CI_CODE(0b011, 0b01):
