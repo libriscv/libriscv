@@ -83,7 +83,6 @@ namespace riscv
 		const Page& get_pageno(address_t npage) const noexcept;
 		Page& create_page(address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
-		const PageAttributes& get_page_attr(address_t) const noexcept;
 		std::string get_page_info(address_t addr) const;
 		// page creation & destruction
 		template <typename... Args>
@@ -126,6 +125,8 @@ namespace riscv
 		void initial_paging();
 		void invalidate_page(address_t pageno, Page&);
 		[[noreturn]] static void protection_fault(address_t);
+		const Page& get_readable_page(address_t);
+		Page& get_writable_page(address_t);
 		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
