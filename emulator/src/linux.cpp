@@ -54,7 +54,7 @@ void prepare_linux(riscv::Machine<W>& machine,
 	push_down(machine, dst, canary.data(), canary.size());
 	const auto canary_addr = dst;
 
-	const std::string platform = "RISC-V RV32I";
+	const std::string platform = (W == 4) ? "RISC-V RV32GC" : "RISC-V RV64GC";
 	push_down(machine, dst, platform.data(), platform.size());
 	const auto platform_addr = dst;
 

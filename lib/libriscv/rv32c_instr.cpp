@@ -27,20 +27,27 @@ namespace riscv
 	COMPRESSED_INSTR(C0_REG_LOAD,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto ci = instr.compressed();
-		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
-		if (ci.CL.funct3 == 0x2) { // LW
+		if (ci.CL.funct3 == 0x2) { // C.LW
+			auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
 			cpu.cireg(ci.CL.srd) = cpu.machine().memory.template read<uint32_t> (address);
 			return;
 		}
-		else if (ci.CL.funct3 == 0x1) { // FLD
+		else if (ci.CL.funct3 == 0x1) { // C.FLD
+			auto address = cpu.cireg(ci.CL.srs1) + ci.CSD.offset8();
 			cpu.ciflp(ci.CL.srd).load_u64(
 					cpu.machine().memory.template read<uint64_t> (address));
 			return;
 		}
-		else if (ci.CL.funct3 == 0x3) { // FLW
-			cpu.ciflp(ci.CL.srd).load_u32(
+		else if (ci.CL.funct3 == 0x3) { // C.LD / C.FLW
+			if constexpr (RVIS64BIT(cpu)) {
+				auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
+				cpu.cireg(ci.CSD.srs2) =
+						cpu.machine().memory.template read<uint64_t> (address);
+			} else {
+				auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
+				cpu.ciflp(ci.CL.srd).load_u32(
 					cpu.machine().memory.template read<uint32_t> (address));
-			return;
+			} return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
@@ -72,10 +79,15 @@ namespace riscv
 				const auto value   = cpu.cireg(ci.CS.srs2);
 				cpu.machine().memory.template write<uint32_t> (address, value);
 				} return;
-			case 7: { // C.FSW
-				const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
-				const auto value   = cpu.ciflp(ci.CS.srs2).i32[0];
-				cpu.machine().memory.template write<uint32_t> (address, value);
+			case 7: // C.SD / C.FSW
+				if constexpr (RVIS64BIT(cpu)) {
+					const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
+					const auto value   = cpu.cireg(ci.CSD.srs2);
+					cpu.machine().memory.template write<uint64_t> (address, value);
+				} else {
+					const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
+					const auto value   = cpu.ciflp(ci.CS.srs2).i32[0];
+					cpu.machine().memory.template write<uint32_t> (address, value);
 				} return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -125,16 +137,16 @@ namespace riscv
 		const auto address = cpu.pc() + ci.CJ.signed_imm();
 		cpu.jump(address - 2);
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
-			printf(">>> CALL 0x%X <-- %s = 0x%X\n", address,
-					RISCV::regname(RISCV::REG_RA), cpu.reg(RISCV::REG_RA));
+			printf(">>> CALL 0x%lX <-- %s = 0x%lX\n", (long) address,
+					RISCV::regname(RISCV::REG_RA), (long) cpu.reg(RISCV::REG_RA));
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
-		return snprintf(buffer, len, "C.JAL %s, PC%+d (0x%X)",
+		return snprintf(buffer, len, "C.JAL %s, PC%+d (0x%lX)",
 						RISCV::regname(RISCV::REG_RA),
-						ci.CJ.signed_imm(), cpu.pc() + ci.CJ.signed_imm());
+						ci.CJ.signed_imm(), (long) cpu.pc() + ci.CJ.signed_imm());
 	});
 
 	COMPRESSED_INSTR(C1_ADDIW,
@@ -142,11 +154,10 @@ namespace riscv
 		auto ci = instr.compressed();
 		if (ci.CI.rd != 0) {
 			// ADDIW rd, imm[5:0]
-			cpu.reg(ci.CI.rd) = (int32_t) cpu.reg(ci.CI.rd) + ci.CI.signed_imm();
-			return;
+			cpu.reg(ci.CI.rd) = (int32_t) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		auto ci = instr.compressed();
 		return snprintf(buffer, len, "C.ADDIW %s, +d",
@@ -159,7 +170,6 @@ namespace riscv
 		if (ci.CI.rd != 0) {
 			// LI rd, imm[5:0]
 			cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
-			return;
 		}
 		// HINTs
 	},
@@ -207,12 +217,22 @@ namespace riscv
 		switch (ci.CA.funct6 & 0x3)
 		{
 			case 0: // C.SRLI
-				dst = dst >> ci.CAB.shift_imm();
+				if constexpr (RVIS64BIT(cpu)) {
+					dst = dst >> ci.CAB.shift64_imm();
+				} else {
+					dst = dst >> ci.CAB.shift_imm();
+				}
 				return;
 			case 1: { // C.SRAI (preserve sign)
-					const uint32_t shifts = ci.CAB.shift_imm();
-					const bool is_signed = (dst & 0x80000000) != 0;
-					dst = RV32I::SRA(is_signed, shifts, dst);
+					constexpr auto bit = 1ul << (sizeof(dst) * 8 - 1);
+					const bool is_signed = (dst & bit) != 0;
+					if constexpr (RVIS64BIT(cpu)) {
+						const uint32_t shifts = ci.CAB.shift64_imm();
+						dst = RV64I::SRA(is_signed, shifts, dst);
+					} else {
+						const uint32_t shifts = ci.CAB.shift_imm();
+						dst = RV32I::SRA(is_signed, shifts, dst);
+					}
 					return;
 				}
 			case 2: // C.ANDI
@@ -235,7 +255,15 @@ namespace riscv
 						dst = dst & src;
 						return;
 					case 0x4: // C.SUBW
+					if constexpr (RVIS64BIT(cpu)) {
+						dst = (int32_t) (dst - src);
+						return;
+					}
 					case 0x5: // C.ADDW
+					if constexpr (RVIS64BIT(cpu)) {
+						dst = (int32_t) (dst + src);
+						return;
+					}
 					case 0x6: // RESERVED
 					case 0x7: // RESERVED
 						break;
@@ -324,7 +352,11 @@ namespace riscv
 		auto ci = instr.compressed();
 		if (ci.CI.funct3 == 0x0 && ci.CI.rd != 0) {
 			// SLLI
-			cpu.reg(ci.CI.rd) <<= ci.CI.shift_imm();
+			if constexpr (RVIS64BIT(cpu)) {
+				cpu.reg(ci.CI.rd) <<= ci.CI.shift64_imm();
+			} else {
+				cpu.reg(ci.CI.rd) <<= ci.CI.shift_imm();
+			}
 		}
 		else if (ci.CI2.funct3 == 0x1) {
 			// FLDSP

@@ -36,12 +36,12 @@ namespace riscv
 		int  len = 0;
 		if (format.length() == 4) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[%08lX] %08X %.*s",
+					"[%#0lX] %08X %.*s",
 					cpu.pc(), format.whole, ibuflen, ibuffer);
 		}
 		else if (format.length() == 2) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[%08lX]     %04hX %.*s",
+					"[%#0lX]     %04hX %.*s",
 					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
 		}
 		else {

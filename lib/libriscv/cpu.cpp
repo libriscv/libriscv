@@ -185,7 +185,7 @@ namespace riscv
 		int  len = 0;
 		for (int i = 1; i < 32; i++) {
 			len += snprintf(buffer+len, sizeof(buffer) - len,
-					"[%s\t%08X] ", RISCV::regname(i), this->get(i));
+					"[%s\t%08lX] ", RISCV::regname(i), (long) this->get(i));
 			if (i % 5 == 4) {
 				len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
 			}
