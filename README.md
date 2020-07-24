@@ -31,6 +31,14 @@ This will build a newlib cross-compiler with C++ exception support. The ABI is i
 
 Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc is harder to support, and produces larger binaries, but will be more performant. It also supports threads, which is awesome to play around with.
 
+```
+git clone https://github.com/riscv/riscv-gnu-toolchain.git
+cd riscv-gnu-toolchain
+./configure --prefix=$HOME/riscv --with-arch=rv64g --with-abi=lp64d
+make -j4
+```
+The incantation for 64-bit RISC-V.
+
 ## Building and running a test program
 
 From one of the binary subfolders:
@@ -59,7 +67,7 @@ And finally, the `micro` project implements the absolutely minimal freestanding 
 
 ## Instruction set support
 
-The emulator currently supports RV32GC (IMAFDC), and the foundation is laid for RV64I(MAFD).
+The emulator currently supports RV32GC (IMAFDC), and RV64G (IMAFD).
 The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions), and there is a test-suite for these instructions, however they haven't been extensively tested as there are generally few FP-instructions in normal programs.
 
 Note: There is no support for the B-, E- and Q-extensions.
@@ -162,7 +170,7 @@ It can also be used as a script backend for a game engine, as it's quite a bit f
 
 Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything.
 
-Use GCC to build the RISC-V binaries. Use -O2 or -O3 and use the regular standard extensions: `-march=rv32gc -mabi=ilp32d`. Enable the RISCV_EXPERIMENTAL option for the best performance unless you are using libriscv as a sandbox. Use `-march=rv32g` for the absolute best performance, if you have that choice. Difference is minimal so don't go out of your way to build everything yourself. Try enabling the instruction decoder cache and see if it's faster for your case. Always enable the page cache. Always enable LTO. Fair warning: It's a bit harder to use Clang for freestanding RISC-V.
+Use GCC to build the RISC-V binaries. Use -O2 or -O3 and use the regular standard extensions: `-march=rv32gc -mabi=ilp32d`. Enable the RISCV_EXPERIMENTAL option for the best performance unless you are using libriscv as a sandbox. Use `-march=rv32g` for the absolute best performance, if you have that choice. Difference is minimal so don't go out of your way to build everything yourself. Try enabling the instruction decoder cache and see if it's faster for your case. Always enable the page cache. Always enable LTO. Fair warning: It's a bit harder to use Clang for freestanding RISC-V. 32-bit is a little bit faster than 64-bit, although you should probably just measure that.
 
 Otherwise, if you are building the libc yourself, you can outsource all the heap functionality to the host using specialized system calls. See `emulator/syscalls/src/native_heap.hpp`, as well as the native_libc files. This will manage the location of heap chunks outside of the emulator, however the heap memory itself is still inside the virtual memory of the guest binary. There is also an accelerated tiny threads implementation, see: `microthread.hpp` and `emulator/syscalls/src/native_threads.cpp`. Check out the `rvscript` repository on github for an actual implementation of this.
 
