@@ -11,6 +11,7 @@ namespace riscv
 {
 	struct Buffer
 	{
+		bool    is_sequential() const noexcept { return m_idx == 1; }
 		auto    first() const { return m_data[0]; }
 		auto*   c_str() const noexcept { return first().first; }
 		size_t  size() const noexcept { return m_len; }
