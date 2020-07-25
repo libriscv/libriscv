@@ -394,7 +394,8 @@ namespace riscv
 		auto ci = instr.compressed();
 		if (ci.CI2.funct3 == 0x0 && ci.CI2.rd != 0) {
 			return snprintf(buffer, len, "C.SLLI %s, %u",
-							RISCV::regname(ci.CI.rd), ci.CI.shift_imm());
+							RISCV::regname(ci.CI.rd),
+							(RVIS64BIT(cpu)) ? ci.CI.shift64_imm() : ci.CI.shift_imm());
 		}
 		else if (ci.CI2.rd != 0) {
 			static const std::array<const char*, 4> f3 = {

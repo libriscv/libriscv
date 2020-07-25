@@ -30,13 +30,17 @@ namespace riscv
 			const uint32_t type = instr.Itype.funct3;
 			switch (type) {
 			case 0: // LB
-				reg = RVTOSIGNED((int8_t) cpu.machine().memory.template read<uint8_t>(addr));
+				reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
 				return;
 			case 1: // LH
-				reg = RVTOSIGNED((int16_t) cpu.machine().memory.template read<uint16_t>(addr));
+				reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint16_t>(addr);
 				return;
 			case 2: // LW
-				reg = RVTOSIGNED((int32_t) cpu.machine().memory.template read<uint32_t>(addr));
+				if constexpr (RVIS64BIT(cpu)) {
+					reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint32_t>(addr);
+				} else {
+					reg = cpu.machine().memory.template read<uint32_t>(addr);
+				}
 				return;
 			case 3: // LD
 				if constexpr (RVIS64BIT(cpu)) {
