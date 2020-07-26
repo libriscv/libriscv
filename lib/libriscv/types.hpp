@@ -56,15 +56,19 @@ namespace riscv
 	};
 
 	template <int W>
+	using instruction_format  = union rv32i_instruction;
+	template <int W>
+	using instruction_handler = void (*)(CPU<W>&, instruction_format<W>);
+	template <int W>
+	using instruction_printer = int  (*)(char*, size_t, CPU<W>&, instruction_format<W>);
+
+	template <int W>
 	struct Instruction {
-		using isa_t     = isa_type<W>;              // 32- or 64-bit architecture
-		using format_t  = typename isa_t::format_t; // one machine instruction
+		using isa_t     = isa_type<W>;           // 32- or 64-bit architecture
+		using format_t  = instruction_format<W>; // one machine instruction
 
-		using handler_t = void (*)(CPU<W>&, format_t);
-		using printer_t = int  (*)(char*, size_t, CPU<W>&, format_t);
-
-		const handler_t handler; // callback for executing one instruction
-		const printer_t printer; // callback for logging one instruction
+		const instruction_handler<W> handler; // callback for executing one instruction
+		const instruction_printer<W> printer; // callback for logging one instruction
 	};
 
 	enum trapmode {
