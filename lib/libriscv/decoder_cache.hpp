@@ -1,16 +1,14 @@
 #pragma once
 #include <array>
 #include "types.hpp"
-#include "rv32i.hpp"
-#include "rv64i.hpp"
 
 namespace riscv {
 
 template <size_t PageSize>
 union DecoderCache
 {
-	using handler32 = Instruction<4>::handler_t;
-	using handler64 = Instruction<8>::handler_t;
+	using handler32 = instruction_handler<4>;
+	using handler64 = instruction_handler<8>;
 
 	template <int W>
 	inline auto& get(size_t idx) noexcept {

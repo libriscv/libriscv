@@ -12,8 +12,8 @@ static const uint64_t ARENA_BASE = 0x40000000;
 template <int W> address_type<W> machine_memcpy(
 	Machine<W>& m, address_type<W> dst, address_type<W> src, address_type<W> len)
 {
-	if ((dst & 3) == (src & 3)) {
-		while ((src & 3) != 0 && len > 0) {
+	if ((dst & (W-1)) == (src & (W-1))) {
+		while ((src & (W-1)) != 0 && len > 0) {
 			m.memory.template write<uint8_t> (dst++,
 				m.memory.template read<uint8_t> (src++));
 			len --;
@@ -21,18 +21,18 @@ template <int W> address_type<W> machine_memcpy(
 		while (len >= 16) {
 			m.memory.template write<uint32_t> (dst + 0,
 				m.memory.template read<uint32_t> (src + 0));
-			m.memory.template write<uint32_t> (dst + 4,
-				m.memory.template read<uint32_t> (src + 4));
-			m.memory.template write<uint32_t> (dst + 8,
-				m.memory.template read<uint32_t> (src + 8));
-			m.memory.template write<uint32_t> (dst + 12,
-				m.memory.template read<uint32_t> (src + 12));
+			m.memory.template write<uint32_t> (dst + 1*W,
+				m.memory.template read<uint32_t> (src + 1*W));
+			m.memory.template write<uint32_t> (dst + 2*W,
+				m.memory.template read<uint32_t> (src + 2*W));
+			m.memory.template write<uint32_t> (dst + 3*W,
+				m.memory.template read<uint32_t> (src + 3*W));
 			dst += 16; src += 16; len -= 16;
 		}
-		while (len >= 4) {
+		while (len >= W) {
 			m.memory.template write<uint32_t> (dst,
 				m.memory.template read<uint32_t> (src));
-			dst += 4; src += 4; len -= 4;
+			dst += W; src += W; len -= W;
 		}
 	}
 	while (len > 0) {
@@ -44,11 +44,9 @@ template <int W> address_type<W> machine_memcpy(
 }
 
 template <int W>
-Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
+static void setup_native_heap_syscalls(Machine<W>& machine, 
+	sas_alloc::Arena* arena)
 {
-	auto* arena = new sas_alloc::Arena(ARENA_BASE, ARENA_BASE + max_memory);
-	machine.add_destructor_callback([arena] { delete arena; });
-
 	// Malloc n+0
 	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+0,
 	[arena] (auto& machine) -> long
@@ -133,9 +131,29 @@ Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
 		}
 		return ret;
 	});
+}
 
+template <int W>
+Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
+{
+	auto* arena = new sas_alloc::Arena(ARENA_BASE, ARENA_BASE + max_memory);
+	machine.add_destructor_callback([arena] { delete arena; });
+
+	setup_native_heap_syscalls<W> (machine, arena);
 	return arena;
 }
+template <int W>
+Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory,
+	Function<void* (size_t)> constructor)
+{
+	sas_alloc::Arena* arena =
+		(sas_alloc::Arena*) constructor(sizeof(sas_alloc::Arena));
+	new (arena) sas_alloc::Arena(ARENA_BASE, ARENA_BASE + max_memory);
+
+	setup_native_heap_syscalls<W> (machine, arena);
+	return arena;
+}
+
 template <int W>
 void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 {
@@ -317,7 +335,9 @@ void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to)
 
 /* le sigh */
 template Arena* setup_native_heap_syscalls<4>(Machine<4>&, size_t);
+template Arena* setup_native_heap_syscalls<4>(Machine<4>& machine, size_t, Function<void* (size_t)>);
 template void setup_native_memory_syscalls<4>(Machine<4>&, bool);
 
 template Arena* setup_native_heap_syscalls<8>(Machine<8>&, size_t);
+template Arena* setup_native_heap_syscalls<8>(Machine<8>& machine, size_t, Function<void* (size_t)>);
 template void setup_native_memory_syscalls<8>(Machine<8>&, bool);
