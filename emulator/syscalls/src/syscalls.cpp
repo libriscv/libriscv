@@ -5,13 +5,22 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 using namespace riscv;
-static const uint32_t sbrk_start = 0x40000000;
-static const uint32_t sbrk_max   = sbrk_start + 0x1000000;
-static const uint32_t heap_start = sbrk_max;
+template <int W>
+static const address_type<W> sbrk_start = 0x40000000;
+template <int W>
+static const address_type<W> sbrk_max   = sbrk_start<W> + 0x1000000;
+template <int W>
+static const address_type<W> heap_start = sbrk_max<W>;
 
-struct iovec32 {
+template <int W> struct guest_iovec;
+
+template <> struct guest_iovec<4> {
     uint32_t iov_base;
     int32_t  iov_len;
+};
+template <> struct guest_iovec<8> {
+    uint64_t iov_base;
+    int64_t  iov_len;
 };
 
 template <int W>
@@ -58,10 +67,10 @@ long syscall_writev(Machine<W>& machine)
 	if (count < 0 || count > 256) return -EINVAL;
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
-        const size_t size = sizeof(iovec32) * count;
+        const size_t size = sizeof(guest_iovec<W>) * count;
 
 		auto* state = machine.template get_userdata<State<W>> ();
-        std::vector<iovec32> vec(count);
+        std::vector<guest_iovec<W>> vec(count);
         machine.memory.memcpy_out(vec.data(), iov_g, size);
 
         int res = 0;
@@ -121,8 +130,12 @@ long syscall_gettimeofday(Machine<W>& machine)
 	SYSPRINT("SYSCALL gettimeofday called, buffer = 0x%X\n", buffer);
 	struct timeval tv;
 	gettimeofday(&tv, nullptr);
-	int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
-	machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
+	if constexpr (W == 4) {
+		int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
+		machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
+	} else {
+		machine.copy_to_guest(buffer, &tv, sizeof(tv));
+	}
     return 0;
 }
 
@@ -147,15 +160,15 @@ long syscall_readlinkat(Machine<W>& machine)
 template <int W>
 long syscall_brk(Machine<W>& machine)
 {
-	static uint32_t sbrk_end = sbrk_start;
-	const uint32_t new_end = machine.template sysarg<uint32_t>(0);
+	static address_type<W> sbrk_end = sbrk_start<W>;
+	const auto new_end = machine.template sysarg<address_type<W>>(0);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL brk called, current = 0x%X new = 0x%X\n", sbrk_end, new_end);
 	}
     if (new_end == 0) return sbrk_end;
     sbrk_end = new_end;
-    sbrk_end = std::max(sbrk_end, sbrk_start);
-    sbrk_end = std::min(sbrk_end, sbrk_max);
+    sbrk_end = std::max(sbrk_end, sbrk_start<W>);
+    sbrk_end = std::min(sbrk_end, sbrk_max<W>);
 
 	if constexpr (verbose_syscalls) {
 		printf("* New sbrk() end: 0x%X\n", sbrk_end);
@@ -167,7 +180,7 @@ template <int W>
 long syscall_stat(Machine<W>& machine)
 {
 	const auto  fd      = machine.template sysarg<int>(0);
-	const auto  buffer  = machine.template sysarg<uint32_t>(1);
+	const auto  buffer  = machine.template sysarg<address_type<W>>(1);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL stat called, fd = %d  buffer = 0x%X\n",
 				fd, buffer);
@@ -235,7 +248,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	// mmap
 	machine.install_syscall_handler(222,
 	[] (Machine<W>& machine) {
-		const int  addr_g = machine.template sysarg<address_type<W>>(0);
+		const auto addr_g = machine.template sysarg<address_type<W>>(0);
 		const auto length = machine.template sysarg<address_type<W>>(1);
 		const auto prot   = machine.template sysarg<int>(2);
 	    const auto flags  = machine.template sysarg<int>(3);
@@ -243,8 +256,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	            addr_g, length, prot, flags);
 	    if (addr_g == 0 && (length % Page::size()) == 0)
 	    {
-	        static uint32_t nextfree = heap_start;
-	        const uint32_t addr = nextfree;
+	        static address_type<W> nextfree = heap_start<W>;
+	        const address_type<W> addr = nextfree;
 			// anon pages need to be zeroed
 			if (flags & MAP_ANONYMOUS) {
 				// ... but they are already CoW
@@ -253,7 +266,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	        nextfree += length;
 	        return addr;
 	    }
-		return UINT32_MAX; // = MAP_FAILED;
+		return (address_type<W>) -1; // = MAP_FAILED;
 	});
 	// mremap
 	machine.install_syscall_handler(163,
@@ -374,9 +387,9 @@ void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
 			uint32_t stx_mode = S_IFCHR;
 		};
 		const int      fd   = machine.template sysarg<int> (0);
-		const uint32_t path = machine.template sysarg<uint32_t> (1);
+		const auto     path = machine.template sysarg<address_type<W>> (1);
 		const int     flags = machine.template sysarg<int> (2);
-		const uint32_t buffer = machine.template sysarg<uint32_t> (4);
+		const auto   buffer = machine.template sysarg<address_type<W>> (4);
 		SYSPRINT(">>> xstat(fd=%d, path=0x%X, flags=%x, buf=0x%X)\n",
 				fd, path, flags, buffer);
 		(void) fd;
