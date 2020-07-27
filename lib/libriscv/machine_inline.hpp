@@ -65,9 +65,9 @@ inline void Machine<W>::reset()
 }
 
 template <int W> inline
-void Machine<W>::install_syscall_handler(int sysn, syscall_t handler)
+void Machine<W>::install_syscall_handler(int sysn, const syscall_t& handler)
 {
-	m_syscall_handlers.at(sysn) = handler;
+	new (&m_syscall_handlers.at(sysn)) syscall_t(handler);
 }
 template <int W> inline
 void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>> syscalls)

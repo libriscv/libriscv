@@ -15,6 +15,7 @@ namespace riscv
 	struct Machine
 	{
 		using syscall_t = Function<long(Machine&)>;
+		using syscall_fptr_t = long(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address
 
 		// see common.hpp for MachineOptions
@@ -47,7 +48,7 @@ namespace riscv
 
 		// Install a system call handler for a the given syscall number.
 		// Pass nullptr to uninstall a system call handler.
-		void install_syscall_handler(int, syscall_t);
+		void install_syscall_handler(int, const syscall_t&);
 		void install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>>);
 		template <size_t N>
 		void install_syscall_handler_range(int base, const std::array<const syscall_t, N>&);
