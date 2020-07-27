@@ -114,7 +114,7 @@ long syscall_close(riscv::Machine<W>& machine)
 template <int W>
 long syscall_ebreak(riscv::Machine<W>& machine)
 {
-	printf("\n>>> EBREAK at %#X\n", machine.cpu.pc());
+	printf("\n>>> EBREAK at %#lX\n", (long) machine.cpu.pc());
 #ifdef RISCV_DEBUG
 	machine.print_and_pause();
 #else
