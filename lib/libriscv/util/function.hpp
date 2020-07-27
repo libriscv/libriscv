@@ -92,6 +92,7 @@ class Function<Ret(Args...)>
         alignas(alignof(void*)) char data[FunctionStorageSize];
     };
 
+	using RawFunctionPointerType = Ret (*) (Args...);
     using FunctionPointerType = Ret (*) (Storage, Args...);
 
 public:
@@ -148,6 +149,11 @@ public:
         new(reinterpret_cast<Callable *>(m_storage.data)) Callable(callable);
     }
 
+	template <>
+    constexpr Function<RawFunctionPointerType>(RawFunctionPointerType fptr) noexcept
+		: m_func_ptr(&trampoline<RawFunctionPointerType>), m_real_ptr{fptr}  {}
+
+
     /**
      * Determine whether the function object stores a callable.
      * 
@@ -178,7 +184,10 @@ private:
 
 private:
     FunctionPointerType m_func_ptr;
-    Storage m_storage;
+	union {
+		RawFunctionPointerType m_real_ptr;
+    	Storage m_storage;
+	};
 };
 
 /**
