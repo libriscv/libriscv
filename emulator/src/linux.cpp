@@ -88,7 +88,7 @@ void prepare_linux(riscv::Machine<W>& machine,
 	push_aux(machine, argv, {AT_CLKTCK, 100});
 
 	// ELF related
-	push_aux(machine, argv, {AT_PHENT, 4});
+	push_aux(machine, argv, {AT_PHENT, sizeof(*binary_phdr)});
 	push_aux(machine, argv, {AT_PHDR,  phdr_location});
 	push_aux(machine, argv, {AT_PHNUM, phdr_count});
 

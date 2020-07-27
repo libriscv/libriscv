@@ -24,42 +24,42 @@ namespace riscv
 	INSTRUCTION(LOAD,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		if (instr.Itype.rd != 0) {
-			auto& reg = cpu.reg(instr.Itype.rd);
-			const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-			const uint32_t type = instr.Itype.funct3;
-			switch (type) {
-			case 0: // LB
-				reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
+		/* Null-checks can load to zero */
+		RVREGTYPE(cpu) dummy;
+		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const uint32_t type = instr.Itype.funct3;
+		switch (type) {
+		case 0: // LB
+			reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
+			return;
+		case 1: // LH
+			reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint16_t>(addr);
+			return;
+		case 2: // LW
+			if constexpr (RVIS64BIT(cpu)) {
+				reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint32_t>(addr);
+			} else {
+				reg = cpu.machine().memory.template read<uint32_t>(addr);
+			}
+			return;
+		case 3: // LD
+			if constexpr (RVIS64BIT(cpu)) {
+				reg = cpu.machine().memory.template read<uint64_t>(addr);
 				return;
-			case 1: // LH
-				reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint16_t>(addr);
+			}
+		case 4: // LBU
+			// load zero-extended 8-bit value
+			reg = cpu.machine().memory.template read<uint8_t>(addr);
+			return;
+		case 5: // LHU
+			// load zero-extended 16-bit value
+			reg = cpu.machine().memory.template read<uint16_t>(addr);
+			return;
+		case 6: // LWU
+			if constexpr (RVIS64BIT(cpu)) {
+				reg = cpu.machine().memory.template read<uint32_t>(addr);
 				return;
-			case 2: // LW
-				if constexpr (RVIS64BIT(cpu)) {
-					reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint32_t>(addr);
-				} else {
-					reg = cpu.machine().memory.template read<uint32_t>(addr);
-				}
-				return;
-			case 3: // LD
-				if constexpr (RVIS64BIT(cpu)) {
-					reg = cpu.machine().memory.template read<uint64_t>(addr);
-					return;
-				}
-			case 4: // LBU
-				// load zero-extended 8-bit value
-				reg = cpu.machine().memory.template read<uint8_t>(addr);
-				return;
-			case 5: // LHU
-				// load zero-extended 16-bit value
-				reg = cpu.machine().memory.template read<uint16_t>(addr);
-				return;
-			case 6: // LWU
-				if constexpr (RVIS64BIT(cpu)) {
-					reg = cpu.machine().memory.template read<uint32_t>(addr);
-					return;
-				}
 			}
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);

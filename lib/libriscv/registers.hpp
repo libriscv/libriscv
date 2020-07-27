@@ -44,6 +44,11 @@ namespace riscv
 		auto& get(uint32_t idx) { return m_reg[idx]; }
 		const auto& get(uint32_t idx) const { return m_reg[idx]; }
 
+		auto& get_with_dummy(uint32_t idx, address_type<W>& dummy) {
+			if (idx != 0) return m_reg[idx];
+			return dummy;
+		}
+
 		auto& getfl(uint32_t idx) { return m_regfl[idx]; }
 		const auto& getfl(uint32_t idx) const { return m_regfl[idx]; }
 
