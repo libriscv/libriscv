@@ -75,6 +75,16 @@ void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<int, s
 	for (auto& scall : syscalls)
 		this->install_syscall_handler(scall.first, std::move(scall.second));
 }
+template <int W>
+template <size_t N> inline
+void Machine<W>::install_syscall_handler_range(int base, const std::array<const syscall_t, N>& syscalls)
+{
+	auto* first = &m_syscall_handlers.at(base);
+	if (m_syscall_handlers.size() >= base + syscalls.size())
+	{
+		std::copy(syscalls.begin(), syscalls.end(), first);
+	}
+}
 template <int W> inline
 auto& Machine<W>::get_syscall_handler(int sysn) {
 	return m_syscall_handlers.at(sysn);

@@ -49,6 +49,8 @@ namespace riscv
 		// Pass nullptr to uninstall a system call handler.
 		void install_syscall_handler(int, syscall_t);
 		void install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>>);
+		template <size_t N>
+		void install_syscall_handler_range(int base, const std::array<const syscall_t, N>&);
 		auto& get_syscall_handler(int);
 		void on_unhandled_syscall(Function<void(int)> callback) { m_on_unhandled_syscall = callback; }
 
