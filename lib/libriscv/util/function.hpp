@@ -98,14 +98,14 @@ public:
     /**
      * Default constructor, constructs an empty function object.
      */
-    inline Function () noexcept :
+    constexpr Function () noexcept :
         m_func_ptr(nullptr)
     {}
 
     /**
      * Constructor from nullptr, constructs an empty function object.
      */
-    inline Function (std::nullptr_t) noexcept :
+    constexpr Function (std::nullptr_t) noexcept :
         Function()
     {}
 
