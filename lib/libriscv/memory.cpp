@@ -23,7 +23,7 @@ namespace riscv
 		{
 			this->m_page_fault_handler = std::move(options.page_fault_handler);
 		}
-		else
+		else if (options.memory_max != 0)
 		{
 			assert(options.memory_max % Page::size() == 0);
 			assert(options.memory_max >= Page::size());
@@ -37,6 +37,12 @@ namespace riscv
 						return mem.allocate_page(page);
 					}
 					throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
+				};
+		} else {
+			this->m_page_fault_handler =
+				[] (auto& mem, const size_t page) -> Page&
+				{
+					return mem.allocate_page(page);
 				};
 		}
 		// when an owning machine is passed, its state will be used instead
