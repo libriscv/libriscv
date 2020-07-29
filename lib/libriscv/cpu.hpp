@@ -63,7 +63,8 @@ namespace riscv
 #endif
 		const instruction_t& decode(format_t) const;
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
-		void initialize_exec_segs(const uint8_t* data) { m_exec_data = data; }
+		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t end)
+			{ m_exec_data = data; m_exec_begin = begin; m_exec_end = end; }
 		const uint8_t* exec_seg_data() const { return m_exec_data; }
 #endif
 
@@ -96,6 +97,8 @@ namespace riscv
 
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		const uint8_t* m_exec_data = nullptr;
+		address_t m_exec_begin = 0;
+		address_t m_exec_end   = 0;
 #endif
 
 #ifdef RISCV_DEBUG

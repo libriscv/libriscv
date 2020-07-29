@@ -134,7 +134,7 @@ namespace riscv
 				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, attr);
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
-			machine().cpu.initialize_exec_segs(exec_offset);
+			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, hdr->p_vaddr + len);
 #ifdef RISCV_INSTR_CACHE
 			this->generate_decoder_cache(hdr->p_vaddr, len);
 #endif
@@ -247,7 +247,8 @@ namespace riscv
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
 		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;
 		this->machine().cpu.initialize_exec_segs(
-			master.memory.m_exec_pagedata.get() - m_exec_pagedata_base);
+			master.memory.m_exec_pagedata.get() - m_exec_pagedata_base,
+			m_exec_pagedata_base, m_exec_pagedata_base + m_exec_pagedata_size);
 #endif
 	}
 

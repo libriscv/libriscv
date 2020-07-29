@@ -58,14 +58,16 @@ namespace riscv
 		format_t instruction;
 
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
-		// This seemingly unchecked code works out because
-		// change_page() above will throw an exception if you access
-		// a non-executable page. But we have to improve this later
-		// by using the actual page memory, which will make this feature
-		// less experimental. We can do that by creating all the executable
-		// pages from one sequental allocation, which is owned by the first page.
-		instruction.whole = *(uint32_t*) &m_exec_data[this->pc()];
-		return instruction;
+		// We have to check the bounds just to be thorough, as this will
+		// instantly crash if something is wrong. In addition,
+		// page management is completely disabled when this feature is enabled
+		// in combination with a disabled instruction cache.
+		if (this->pc() >= m_exec_begin && this->pc() < m_exec_end) {
+			instruction.whole = *(uint32_t*) &m_exec_data[this->pc()];
+			return instruction;
+		}
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+		__builtin_unreachable();
 #else
 		const address_t offset = this->pc() & (Page::size()-1);
 
