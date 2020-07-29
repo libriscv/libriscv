@@ -46,10 +46,15 @@ namespace riscv
 	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
+#if !(defined(RISCV_EXEC_SEGMENT_IS_CONSTANT) && !defined(RISCV_INSTR_CACHE))
+		// We don't need to manage the current page when
+		// we have the whole execute-range and no instruction caching
+		// WARNING: this combination will break jump-traps
 		const address_t this_page = this->pc() >> Page::SHIFT;
 		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
 		}
+#endif
 		format_t instruction;
 
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
