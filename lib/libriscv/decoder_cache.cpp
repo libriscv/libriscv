@@ -12,6 +12,21 @@ namespace riscv
 	template <int W>
 	void Memory<W>::generate_decoder_cache(address_t addr, size_t len)
 	{
+		constexpr address_t PMASK = Page::size()-1;
+		const address_t pbase = addr & ~PMASK;
+		const size_t prelen  = addr - pbase;
+		const size_t midlen  = len + prelen;
+		const size_t plen =
+			(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
+
+		const size_t n_pages = plen / Page::size();
+		auto* decoder_array = new DecoderCache<Page::SIZE> [n_pages];
+		size_t dcindex = 0;
+#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		this->m_exec_decoder =
+			decoder_array[0].template get_base<W>() - pbase / DecoderCache<Page::SIZE>::DIVISOR;
+#endif
+
 		while (len > 0)
 		{
 			const size_t size = std::min(Page::size(), len);
@@ -22,8 +37,12 @@ namespace riscv
 				auto& page = it->second;
 				if (page.attr.exec) {
 					assert(page.decoder_cache() == nullptr);
-					page.create_decoder_cache();
-					auto* cache = page.decoder_cache();
+					// assign slice
+					auto* cache = &decoder_array[dcindex];
+					page.m_decoder_cache.reset(cache);
+					// only the first page owns the whole range
+					page.attr.decoder_non_owned = (dcindex != 0);
+					dcindex++;
 
 					// generate instruction handler pointers for machine code
 					for (address_t dst = addr; dst < addr + size;)

@@ -64,7 +64,7 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::default_page_write(Memory<W>& mem, Page& page)
+	void Memory<W>::default_page_write(Memory<W>&, Page& page)
 	{
 		page.make_writable();
 	}

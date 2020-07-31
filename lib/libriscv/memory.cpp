@@ -249,6 +249,9 @@ namespace riscv
 		this->machine().cpu.initialize_exec_segs(
 			master.memory.m_exec_pagedata.get() - m_exec_pagedata_base,
 			m_exec_pagedata_base, m_exec_pagedata_base + m_exec_pagedata_size);
+#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		this->m_exec_decoder = master.memory.m_exec_decoder;
+#endif
 #endif
 	}
 

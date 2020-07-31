@@ -46,7 +46,7 @@ namespace riscv
 	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-#if !(defined(RISCV_EXEC_SEGMENT_IS_CONSTANT) && !defined(RISCV_INSTR_CACHE))
+#if !defined(RISCV_EXEC_SEGMENT_IS_CONSTANT)
 		// We don't need to manage the current page when
 		// we have the whole execute-range and no instruction caching
 		// WARNING: this combination will break jump-traps
@@ -116,13 +116,17 @@ namespace riscv
 		handler.handler(*this, instruction);
 #else
 # ifdef RISCV_INSTR_CACHE
+#  ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		// retrieve instructions directly from the constant cache
+		auto& cache_entry
+			= machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
+#  else
 		// retrieve cached instruction
 		const address_t offset  = this->pc() & (Page::size()-1);
 		const size_t idx = offset / DecoderCache<Page::SIZE>::DIVISOR;
 
 		auto* dcache = m_current_page.page->decoder_cache();
 		auto& cache_entry = dcache->template get<W> (idx);
-#  ifndef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		// decode and store into cache, if necessary
 		if (UNLIKELY(!cache_entry)) {
 			cache_entry = this->decode(instruction).handler;

@@ -176,7 +176,7 @@ public:
 
 private:
     template<typename Callable>
-    static Ret trampoline (Storage storage, Args ...args)
+    static constexpr Ret trampoline (Storage storage, Args ...args)
     {
         Callable const *c = reinterpret_cast<Callable const *>(storage.data);
         return (*c)(std::forward<Args>(args)...);
@@ -185,7 +185,7 @@ private:
 private:
     FunctionPointerType m_func_ptr;
 	union {
-		RawFunctionPointerType m_real_ptr;
+		RawFunctionPointerType m_real_ptr = nullptr;
     	Storage m_storage;
 	};
 };

@@ -105,6 +105,9 @@ namespace riscv
 
 #ifdef RISCV_INSTR_CACHE
 		void generate_decoder_cache(address_t addr, size_t len);
+#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		auto* get_decoder_cache() const { return m_exec_decoder; }
+#endif
 #endif
 
 		const auto& binary() const noexcept { return m_binary; }
@@ -179,6 +182,9 @@ namespace riscv
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;
 		address_t m_exec_pagedata_base = 0;
+#ifdef RISCV_INSTR_CACHE
+		instruction_handler<W>* m_exec_decoder = nullptr;
+#endif
 #endif
 	};
 #include "memory_inline.hpp"
