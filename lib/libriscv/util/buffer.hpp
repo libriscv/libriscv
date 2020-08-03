@@ -12,10 +12,9 @@ namespace riscv
 	struct Buffer
 	{
 		bool    is_sequential() const noexcept { return m_idx == 1; }
-		auto    first() const { return m_data[0]; }
-		auto*   c_str() const noexcept { return first().first; }
-		size_t  size() const noexcept { return m_len; }
-		uint32_t used() const noexcept { return m_idx; }
+		const auto& first() const { return m_data[0]; }
+		const char* c_str() const noexcept { return first().first; }
+		size_t      size() const noexcept { return m_len; }
 
 		size_t copy_to(char* dst, size_t dstlen);
 		void   foreach(std::function<void(const char*, size_t)> cb);
