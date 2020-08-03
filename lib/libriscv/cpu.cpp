@@ -46,15 +46,6 @@ namespace riscv
 	template <int W> __attribute__((hot))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-#if !defined(RISCV_EXEC_SEGMENT_IS_CONSTANT)
-		// We don't need to manage the current page when
-		// we have the whole execute-range and no instruction caching
-		// WARNING: this combination will break jump-traps
-		const address_t this_page = this->pc() >> Page::SHIFT;
-		if (this_page != this->m_current_page.pageno) {
-			this->change_page(this_page);
-		}
-#endif
 		format_t instruction;
 
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
@@ -62,13 +53,18 @@ namespace riscv
 		// instantly crash if something is wrong. In addition,
 		// page management is completely disabled when this feature is enabled
 		// in combination with a disabled instruction cache.
-		if (this->pc() >= m_exec_begin && this->pc() < m_exec_end) {
+		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 			instruction.whole = *(uint32_t*) &m_exec_data[this->pc()];
 			return instruction;
 		}
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-		__builtin_unreachable();
-#else
+#endif
+		// We don't need to manage the current page when
+		// we have the whole execute-range (+ instruction cache)
+		// WARNING: this combination will break jump-traps (for now)
+		const address_t this_page = this->pc() >> Page::SHIFT;
+		if (this_page != this->m_current_page.pageno) {
+			this->change_page(this_page);
+		}
 		const address_t offset = this->pc() & (Page::size()-1);
 
 		if constexpr (!compressed_enabled) {
@@ -92,7 +88,6 @@ namespace riscv
 			return read_upper_half(offset);
 		}
 		return instruction;
-#endif
 	}
 
 	template<int W> __attribute__((hot))
@@ -118,9 +113,14 @@ namespace riscv
 # ifdef RISCV_INSTR_CACHE
 #  ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		// retrieve instructions directly from the constant cache
-		auto& cache_entry
-			= machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
-#  else
+		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
+			auto& cache_entry =
+				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
+			// execute instruction
+			cache_entry(*this, instruction);
+		}
+		else {
+#  endif
 		// retrieve cached instruction
 		const address_t offset  = this->pc() & (Page::size()-1);
 		const size_t idx = offset / DecoderCache<Page::SIZE>::DIVISOR;
@@ -131,9 +131,11 @@ namespace riscv
 		if (UNLIKELY(!cache_entry)) {
 			cache_entry = this->decode(instruction).handler;
 		}
-#  endif
 		// execute instruction
 		cache_entry(*this, instruction);
+#  ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		}
+#  endif
 # else
 		// decode & execute instruction directly
 		this->execute(instruction);
