@@ -51,8 +51,9 @@ namespace riscv
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		// We have to check the bounds just to be thorough, as this will
 		// instantly crash if something is wrong. In addition,
-		// page management is completely disabled when this feature is enabled
-		// in combination with a disabled instruction cache.
+		// page management is only done for jumps outside of execute segment.
+		// Secondly, any jump traps will **HAVE** to return to the execute
+		// segment before returning.
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 			instruction.whole = *(uint32_t*) &m_exec_data[this->pc()];
 			return instruction;
@@ -113,14 +114,14 @@ namespace riscv
 # ifdef RISCV_INSTR_CACHE
 #  ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		// retrieve instructions directly from the constant cache
-		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
-			auto& cache_entry =
-				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
-			// execute instruction
-			cache_entry(*this, instruction);
-		}
-		else {
-#  endif
+		// WARNING: the contract between read_next_instruction and this
+		// is that any jump traps must return to the caller, and be re-
+		// validated, otherwise this code will read garbage data!
+		auto& cache_entry =
+			machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
+		// execute instruction
+		cache_entry(*this, instruction);
+#  else
 		// retrieve cached instruction
 		const address_t offset  = this->pc() & (Page::size()-1);
 		const size_t idx = offset / DecoderCache<Page::SIZE>::DIVISOR;
@@ -133,8 +134,6 @@ namespace riscv
 		}
 		// execute instruction
 		cache_entry(*this, instruction);
-#  ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
-		}
 #  endif
 # else
 		// decode & execute instruction directly
