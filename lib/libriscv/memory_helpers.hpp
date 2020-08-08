@@ -195,6 +195,7 @@ size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 		const size_t thislen = strnlen(start, max_bytes);
 		len += thislen;
 		if (thislen != max_bytes) break;
+		addr += len;
 	} while (len < maxlen);
 
 	if (len <= maxlen)
