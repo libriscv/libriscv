@@ -173,7 +173,7 @@ namespace riscv
 		}
 		const auto* elf = (Ehdr*) m_binary.data();
 		if (UNLIKELY(!validate_header<Ehdr> (elf))) {
-			throw std::runtime_error("Invalid ELF header");
+			throw std::runtime_error("Invalid ELF header! Mixup between 32- and 64-bit?");
 		}
 
 		// enumerate & load loadable segments

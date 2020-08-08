@@ -30,9 +30,14 @@ namespace riscv
 	template <typename Class>
 	inline bool validate_header(const Class* hdr)
 	{
-		return	hdr->e_ident[0] == 0x7F &&
-				hdr->e_ident[1] == 'E'  &&
-				hdr->e_ident[2] == 'L'  &&
-				hdr->e_ident[3] == 'F';
+		if (hdr->e_ident[EI_MAG0] != 0x7F ||
+			hdr->e_ident[EI_MAG1] != 'E'  ||
+			hdr->e_ident[EI_MAG2] != 'L'  ||
+			hdr->e_ident[EI_MAG3] != 'F')
+			return false;
+		if constexpr (std::is_same_v<Class, Elf32_Ehdr>)
+			return hdr->e_ident[EI_CLASS] == ELFCLASS32;
+		else
+			return hdr->e_ident[EI_CLASS] == ELFCLASS64;
 	}
 }
