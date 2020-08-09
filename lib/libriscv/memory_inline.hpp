@@ -97,6 +97,9 @@ void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	auto& page = create_page(page_number(page_addr));
 	page.set_trap(callback);
+#else
+	(void) page_addr;
+	(void) callback;
 #endif
 }
 

@@ -110,24 +110,17 @@ inline void Machine<W>::system_call(size_t syscall_number)
 			return;
 		}
 	}
-	if constexpr (!throw_on_unhandled_syscall)
-	{
-		if (UNLIKELY(m_on_unhandled_syscall != nullptr)) {
-			this->m_on_unhandled_syscall(syscall_number);
-		}
+	if (UNLIKELY(m_on_unhandled_syscall != nullptr)) {
+		this->m_on_unhandled_syscall(syscall_number);
+	}
 #ifndef RISCV_EBREAK_MEANS_STOP
-		// EBREAK should not modify registers
-		if (syscall_number != SYSCALL_EBREAK) {
-			cpu.reg(RISCV::REG_RETVAL) = -38; // -ENOSYS
-		}
+	// EBREAK should not modify registers
+	if (syscall_number != SYSCALL_EBREAK) {
+		cpu.reg(RISCV::REG_RETVAL) = -38; // -ENOSYS
+	}
 #else
-			cpu.reg(RISCV::REG_RETVAL) = -38;
+	cpu.reg(RISCV::REG_RETVAL) = -38;
 #endif
-	}
-	else {
-		throw MachineException(UNHANDLED_SYSCALL,
-			"Unhandled system call", syscall_number);
-	}
 }
 
 template <int W>
