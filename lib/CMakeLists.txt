@@ -54,5 +54,7 @@ if (RISCV_PCACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_PAGE_CACHE=8)
 endif()
 if (RISCV_EXPERIMENTAL)
-	target_compile_definitions(riscv PUBLIC RISCV_EXEC_SEGMENT_IS_CONSTANT=1)
+	target_compile_definitions(riscv PUBLIC
+		RISCV_EXEC_SEGMENT_IS_CONSTANT=1
+		RISCV_RODATA_SEGMENT_IS_SHARED=1)
 endif()

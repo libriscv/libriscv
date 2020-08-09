@@ -41,9 +41,14 @@ inline const Page& Memory<W>::get_page(const address_t address) const noexcept
 }
 
 template <int W>
-inline const Page& Memory<W>::get_exec_pageno(const address_t page) const
+inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 {
-	auto it = m_pages.find(page);
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+	if (pageno >= m_ropage_begin && pageno < m_ropage_end) {
+		return m_ro_pages[pageno - m_ropage_begin];
+	}
+#endif
+	auto it = m_pages.find(pageno);
 	if (LIKELY(it != m_pages.end())) {
 		return it->second;
 	}
@@ -52,9 +57,14 @@ inline const Page& Memory<W>::get_exec_pageno(const address_t page) const
 }
 
 template <int W>
-inline const Page& Memory<W>::get_pageno(const address_t page) const noexcept
+inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
 {
-	auto it = m_pages.find(page);
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+	if (pageno >= m_ropage_begin && pageno < m_ropage_end) {
+		return m_ro_pages[pageno - m_ropage_begin];
+	}
+#endif
+	auto it = m_pages.find(pageno);
 	if (it != m_pages.end()) {
 		return it->second;
 	}

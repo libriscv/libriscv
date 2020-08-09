@@ -49,6 +49,13 @@ struct Page
 	// copy another page (or data)
 	Page(const PageAttributes& a, const PageData& d = {})
 		: attr(a), m_page(new PageData{d}) {}
+	Page(Page&& other)
+		: attr(other.attr), m_page(std::move(other.m_page)) {}
+	Page& operator= (Page&& other) {
+		attr = other.attr;
+		m_page = std::move(other.m_page);
+		return *this;
+	}
 	// create a page that doesn't own this memory
 	Page(const PageAttributes& a, PageData* data);
 	// don't try to free non-owned page memory

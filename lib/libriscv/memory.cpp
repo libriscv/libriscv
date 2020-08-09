@@ -17,7 +17,8 @@ namespace riscv
 		  m_binary{bin},
 		  m_load_program     {options.load_program},
 		  m_protect_segments {options.protect_segments},
-		  m_verbose_loader   {options.verbose_loader}
+		  m_verbose_loader   {options.verbose_loader},
+		  m_original_machine {options.owning_machine == nullptr}
 	{
 		if (options.page_fault_handler != nullptr)
 		{
@@ -60,6 +61,11 @@ namespace riscv
 	Memory<W>::~Memory()
 	{
 		this->clear_all_pages();
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		// only the original machine owns rodata range
+		if (!this->m_original_machine)
+			m_ro_pages.release();
+#endif
 	}
 
 	template <int W>
@@ -214,6 +220,37 @@ namespace riscv
 		}
 
 		//this->relocate_section(".rela.dyn", ".symtab");
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		std::vector<std::pair<address_t, Page>> ro_pages;
+		for (auto& it : m_pages)
+		{
+			auto& page = it.second;
+			if (page.attr.read && !page.attr.write) {
+				ro_pages.emplace_back(std::piecewise_construct,
+					std::forward_as_tuple(it.first),
+					std::forward_as_tuple(page.attr, page.page()));
+				// Make sure it's not part of the fork
+				page.attr.dont_fork = true;
+			}
+		}
+		// Sort from lowest to highest address
+		std::sort(ro_pages.begin(), ro_pages.end(),
+			[] (const auto& a, const auto& b) { return a.first < b.first; });
+		// Verify memory range is sequential
+		address_t last = 0;
+		for (const auto& page : ro_pages) {
+			if (last >= page.first)
+				throw std::runtime_error("Read-only data was not sequential");
+			last = page.first;
+		}
+		// Create share-able range
+		m_ropage_begin = ro_pages.front().first;
+		m_ropage_end   = ro_pages.back().first + 1;
+		m_ro_pages.reset(new Page[ro_pages.size()]);
+		for (size_t i = 0; i < ro_pages.size(); i++) {
+			m_ro_pages[i] = std::move(ro_pages[i].second);
+		}
+#endif
 
 		// NOTE: if the stack is very low, some stack pointer value could
 		// become 0x0 which could alter the behavior of the program,
@@ -258,6 +295,11 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE
 		this->m_exec_decoder = master.memory.m_exec_decoder;
 #endif
+#endif
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		this->m_ropage_begin = master.memory.m_ropage_begin;
+		this->m_ropage_end   = master.memory.m_ropage_end;
+		this->m_ro_pages.reset(master.memory.m_ro_pages.get());
 #endif
 	}
 

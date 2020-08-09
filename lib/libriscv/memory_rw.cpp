@@ -40,7 +40,7 @@ namespace riscv
 			Page& page = it->second;
 			if (UNLIKELY(page.attr.is_cow)) {
 				// don't enter page write handler with no-data page
-				if (UNLIKELY(!page.has_data()))
+				if (UNLIKELY(!page.has_data() || !page.attr.write))
 					protection_fault(pageno * Page::size());
 				m_page_write_handler(*this, page);
 			}

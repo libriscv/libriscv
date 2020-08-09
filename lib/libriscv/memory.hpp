@@ -178,6 +178,7 @@ namespace riscv
 		const bool m_load_program;
 		const bool m_protect_segments;
 		const bool m_verbose_loader;
+		const bool m_original_machine;
 #ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;
@@ -185,6 +186,11 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE
 		instruction_handler<W>* m_exec_decoder = nullptr;
 #endif
+#endif
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		std::unique_ptr<Page[]> m_ro_pages = nullptr;
+		address_t m_ropage_begin = 0;
+		address_t m_ropage_end = 0;
 #endif
 	};
 #include "memory_inline.hpp"
