@@ -60,8 +60,9 @@ private:
 	}
 	void foreach(std::function<void(const Chunk&)>) const;
 
-	std::deque<Chunk> m_chunks;
-	eastl::fixed_vector<Chunk*, 128> m_free_chunks;
+	static const size_t MAX_ALLOCS = 64;
+	eastl::fixed_vector<Chunk, MAX_ALLOCS, false> m_chunks;
+	eastl::fixed_vector<Chunk*, MAX_ALLOCS, false> m_free_chunks;
 	Chunk  m_base_chunk;
 };
 

@@ -96,6 +96,7 @@ multithreading<W>* setup_native_threads(
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 	// super fast threads
 	if (arena != nullptr)
 	{
@@ -166,6 +167,7 @@ multithreading<W>* setup_native_threads(
 			return 0;
 		});
 	} // arena provided
+#endif
 	return mt;
 }
 

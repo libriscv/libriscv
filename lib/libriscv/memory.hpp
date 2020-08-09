@@ -160,7 +160,7 @@ namespace riscv
 		address_t   m_current_rd_page = -1;
 		Page*     m_current_wr_ptr  = nullptr;
 		address_t m_current_wr_page = -1;
-		eastl::fixed_hash_map<address_t, Page, 64>  m_pages;
+		eastl::fixed_hash_map<address_t, Page, 128, 64>  m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
 

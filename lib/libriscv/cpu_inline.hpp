@@ -43,7 +43,7 @@ riscv_validate_current_page:
 		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT,
 			pageno * Page::size());
 	}
-#ifdef RISCV_INSTR_CACHE
+#ifdef RISCV_INSTR_CACHE_PER_PAGE
 	if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
 		m_current_page.page->create_decoder_cache();
 	}
@@ -53,6 +53,7 @@ riscv_validate_current_page:
 template <int W> __attribute__((hot))
 inline void CPU<W>::check_page()
 {
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 	const auto& cp = m_current_page;
 	if (UNLIKELY(cp.page->has_trap())) {
 		const address_t old_pageno = cp.pageno;
@@ -62,6 +63,7 @@ inline void CPU<W>::check_page()
 			this->change_page(new_pageno);
 		}
 	}
+#endif
 }
 
 template<int W> constexpr __attribute__((hot))

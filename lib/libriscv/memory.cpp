@@ -241,7 +241,7 @@ namespace riscv
 			attr.is_cow = true;
 			attr.non_owning = true;
 			auto p = m_pages.try_emplace(it.first, attr, (PageData*) page.data());
-#ifdef RISCV_INSTR_CACHE
+#ifdef RISCV_INSTR_CACHE_PER_PAGE
 			// make a shared copy of any potential instruction cache in the source
 			Page& copy = p.first->second;
 			copy.m_decoder_cache.reset(page.m_decoder_cache.get());

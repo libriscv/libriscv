@@ -6,11 +6,13 @@ T Memory<W>::read(address_t address)
 {
 	const auto& page = get_readable_page(address);
 
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
 			return page.trap(address & (Page::size()-1), sizeof(T) | TRAP_READ, 0);
 		}
 	}
+#endif
 	return page.template aligned_read<T>(address & (Page::size()-1));
 }
 
@@ -20,12 +22,14 @@ void Memory<W>::write(address_t address, T value)
 {
 	auto& page = get_writable_page(address);
 
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
 			page.trap(address & (Page::size()-1), sizeof(T) | TRAP_WRITE, value);
 			return;
 		}
 	}
+#endif
 	page.template aligned_write<T>(address & (Page::size()-1), value);
 }
 
@@ -90,8 +94,10 @@ size_t Memory<W>::nonshared_pages_active() const noexcept
 template <int W>
 void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 {
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 	auto& page = create_page(page_number(page_addr));
 	page.set_trap(callback);
+#endif
 }
 
 template <int W>

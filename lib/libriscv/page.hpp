@@ -18,7 +18,7 @@ struct PageAttributes
 	bool is_cow = false;
 	bool non_owning = false;
 	bool dont_fork = false;
-#ifdef RISCV_INSTR_CACHE
+#ifdef RISCV_INSTR_CACHE_PER_PAGE
 	bool decoder_non_owned = false;
 	uint8_t user_defined = 0; /* Use this for yourself */
 #else
@@ -54,7 +54,7 @@ struct Page
 	// don't try to free non-owned page memory
 	~Page() {
 		if (attr.non_owning) m_page.release();
-#ifdef RISCV_INSTR_CACHE
+#ifdef RISCV_INSTR_CACHE_PER_PAGE
 		if (attr.decoder_non_owned) m_decoder_cache.release();
 #endif
 	}
@@ -99,7 +99,7 @@ struct Page
 	static const Page& cow_page() noexcept;
 	static const Page& guard_page() noexcept;
 
-#ifdef RISCV_INSTR_CACHE
+#ifdef RISCV_INSTR_CACHE_PER_PAGE
 	auto* decoder_cache() const noexcept {
 		return m_decoder_cache.get();
 	}
@@ -123,6 +123,14 @@ struct Page
 		attr.non_owning = false;
 	}
 
+	// this combination has been benchmarked to be faster than
+	// page-aligning the PageData struct and putting it first
+	PageAttributes attr;
+	std::unique_ptr<PageData> m_page;
+#ifdef RISCV_INSTR_CACHE_PER_PAGE
+	mutable std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
+#endif
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 	bool has_trap() const noexcept { return m_trap != nullptr; }
 	void set_trap(mmio_cb_t newtrap) noexcept { this->m_trap = newtrap; }
 	int64_t trap(uint32_t offset, int mode, int64_t value) const;
@@ -130,14 +138,8 @@ struct Page
 
 	int64_t passthrough(uint32_t off, int mode, int64_t val);
 
-	// this combination has been benchmarked to be faster than
-	// page-aligning the PageData struct and putting it first
-	PageAttributes attr;
-	std::unique_ptr<PageData> m_page;
-#ifdef RISCV_INSTR_CACHE
-	mutable std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
-#endif
 	mmio_cb_t m_trap = nullptr;
+#endif
 };
 
 inline Page::Page(const PageAttributes& a, PageData* data)
@@ -154,7 +156,7 @@ inline std::string Page::to_string() const
 		"  Executable: " + std::string(attr.exec ? "[x]" : "[ ]");
 }
 
-
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 inline int64_t Page::trap(uint32_t offset, int mode, int64_t value) const
 {
 	return m_trap((Page&) *this, offset, mode, value);
@@ -186,5 +188,6 @@ inline int64_t Page::passthrough(uint32_t off, int mode, int64_t val)
 	}
 	throw std::runtime_error("passthrough: Unknown mode or size");
 }
+#endif
 
 }
