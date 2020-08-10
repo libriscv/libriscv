@@ -46,6 +46,11 @@ namespace riscv
 			}
 			return page;
 		}
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		if (UNLIKELY(pageno >= m_ropage_begin && pageno < m_ropage_end)) {
+			this->protection_fault(pageno * Page::size());
+		}
+#endif
 		// this callback must produce a new page, or throw
 		return m_page_fault_handler(*this, pageno);
 	}

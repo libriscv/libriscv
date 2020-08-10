@@ -283,6 +283,8 @@ namespace riscv
 			Page& copy = p.first->second;
 			copy.m_decoder_cache.reset(page.m_decoder_cache.get());
 			copy.attr.decoder_non_owned = true;
+#else
+			(void) p;
 #endif
 		}
 		this->set_exit_address(master.memory.exit_address());
