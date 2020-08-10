@@ -149,9 +149,11 @@ public:
         new(reinterpret_cast<Callable *>(m_storage.data)) Callable(callable);
     }
 
+#ifndef __GNUG__
 	template <>
     constexpr Function<RawFunctionPointerType>(RawFunctionPointerType fptr) noexcept
 		: m_func_ptr(&trampoline<RawFunctionPointerType>), m_real_ptr{fptr}  {}
+#endif
 
 
     /**

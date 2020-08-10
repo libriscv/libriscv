@@ -35,10 +35,10 @@ namespace riscv
 			if (it != m_pages.end()) {
 				auto& page = it->second;
 				if (page.attr.exec) {
-					assert(page.decoder_cache() == nullptr);
 					// assign slice
 					auto* cache = &decoder_array[dcindex];
 #ifdef RISCV_INSTR_CACHE_PER_PAGE
+					assert(page.decoder_cache() == nullptr);
 					page.m_decoder_cache.reset(cache);
 					// only the first page owns the whole range
 					page.attr.decoder_non_owned = (dcindex != 0);
@@ -66,6 +66,8 @@ namespace riscv
 	}
 #endif
 
+#ifndef __GNUG__
 	template struct Memory<4>;
 	template struct Memory<8>;
+#endif
 }
