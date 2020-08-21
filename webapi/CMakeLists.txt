@@ -8,12 +8,10 @@ add_subdirectory(../lib lib)
 add_subdirectory(../emulator/syscalls syscalls)
 target_compile_options(riscv PUBLIC -std=c++17)
 
-set(EMUDIR "../emulator/src")
 set(SOURCES
 	server.cpp
 	compile.cpp
 	execute.cpp
-	${EMUDIR}/linux.cpp
 )
 
 add_executable(webapi ${SOURCES})

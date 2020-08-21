@@ -3,7 +3,6 @@
 #include <libriscv/machine.hpp>
 #include <include/syscall_helpers.hpp>
 #include <include/threads.hpp>
-#include <linux.hpp>
 using namespace httplib;
 
 // avoid endless loops, code that takes too long and excessive memory usage
@@ -37,7 +36,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 	// go-time: create machine, execute code
 	riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
 
-	prepare_linux<riscv::RISCV32>(machine, {"program"}, env);
+	machine.setup_linux({"program"}, env);
 	setup_linux_syscalls(state, machine);
 	setup_multithreading(state, machine);
 
@@ -139,10 +138,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		res.set_header("X-Binary-Size", std::to_string(binary.size()));
 		const size_t active_mem = machine.memory.pages_active() * 4096;
 		res.set_header("X-Memory-Usage", std::to_string(active_mem));
-		const size_t highest_mem = machine.memory.pages_highest_active() * 4096;
-		res.set_header("X-Memory-Highest", std::to_string(highest_mem));
-		const size_t max_mem = machine.memory.pages_total() * 4096;
-		res.set_header("X-Memory-Max", std::to_string(highest_mem));
+		res.set_header("X-Memory-Max", std::to_string(MAX_MEMORY));
 		res.set_content(state.output, "text/plain");
 	}
 	else {
