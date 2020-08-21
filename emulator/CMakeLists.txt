@@ -12,7 +12,6 @@ add_subdirectory(syscalls)
 
 set(SOURCES
 	src/main.cpp
-	src/linux.cpp
 )
 
 if (LTO)

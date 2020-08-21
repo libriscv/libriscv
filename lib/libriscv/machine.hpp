@@ -56,7 +56,9 @@ namespace riscv
 		void on_unhandled_syscall(Function<void(int)> callback) { m_on_unhandled_syscall = callback; }
 
 		// Push all strings on stack and then create a mini-argv on SP
-		void setup_argv(const std::vector<std::string>& args);
+		void setup_argv(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
+		// Full Linux-compatible stack with program headers
+		void setup_linux(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
 
 		// Retrieve arguments during a system call
 		template <typename T>
