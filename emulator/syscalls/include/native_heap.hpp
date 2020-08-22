@@ -19,11 +19,11 @@ struct Chunk
 	Chunk(Chunk* n, Chunk* p, size_t s, bool f, PointerType d)
 		: next(n), prev(p), size(s), free(f), data(d) {}
 
-    Chunk* next = nullptr;
+	Chunk* next = nullptr;
 	Chunk* prev = nullptr;
-    size_t size = 0;
-    bool   free = false;
-    PointerType data = 0;
+	size_t size = 0;
+	bool   free = false;
+	PointerType data = 0;
 
 	Chunk* find(PointerType ptr);
 	Chunk* find_free(size_t size);
@@ -47,7 +47,7 @@ struct Arena
 	void transfer(Arena& other) const;
 
 	inline Chunk& base_chunk() {
-	    return m_base_chunk;
+		return m_base_chunk;
 	}
 	template <typename... Args>
 	Chunk* new_chunk(Args&&... args);
@@ -56,26 +56,26 @@ struct Arena
 
 private:
 	inline size_t word_align(size_t size) {
-	    return (size + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
+		return (size + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
 	}
 	void foreach(std::function<void(const Chunk&)>) const;
 
 	static const size_t MAX_ALLOCS = 64;
-	eastl::fixed_vector<Chunk, MAX_ALLOCS, false> m_chunks;
-	eastl::fixed_vector<Chunk*, MAX_ALLOCS, false> m_free_chunks;
+	std::deque<Chunk> m_chunks;
+	eastl::fixed_vector<Chunk*, MAX_ALLOCS> m_free_chunks;
 	Chunk  m_base_chunk;
 };
 
 // find exact free chunk that matches ptr
 inline Chunk* Chunk::find(PointerType ptr)
 {
-    Chunk* ch = this;
-    while (ch != nullptr) {
+	Chunk* ch = this;
+	while (ch != nullptr) {
 		if (!ch->free && ch->data == ptr)
 			return ch;
 		ch = ch->next;
 	}
-    return nullptr;
+	return nullptr;
 }
 // find free chunk that has at least given size
 inline Chunk* Chunk::find_free(size_t size)
@@ -86,17 +86,17 @@ inline Chunk* Chunk::find_free(size_t size)
 			return ch;
 		ch = ch->next;
 	}
-    return nullptr;
+	return nullptr;
 }
 // merge this and next into this chunk
 inline void Chunk::merge_next(Arena& arena)
 {
 	Chunk* freech = this->next;
-    this->size += freech->size;
-    this->next = freech->next;
-    if (this->next) {
-        this->next->prev = this;
-    }
+	this->size += freech->size;
+	this->next = freech->next;
+	if (this->next) {
+		this->next->prev = this;
+	}
 	arena.free_chunk(freech);
 }
 
@@ -109,11 +109,11 @@ inline void Chunk::split_next(Arena& arena, size_t size)
 		true,
 		this->data + (PointerType) size
 	);
-    if (this->next) {
-        this->next->prev = newch;
-    }
-    this->next = newch;
-    this->size = size;
+	if (this->next) {
+		this->next->prev = newch;
+	}
+	this->next = newch;
+	this->size = size;
 }
 
 template <typename... Args>
@@ -144,40 +144,40 @@ inline Chunk* Arena::find_chunk(PointerType ptr)
 
 inline Arena::PointerType Arena::malloc(size_t size)
 {
-    const size_t length = word_align(size);
-    Chunk* ch = base_chunk().find_free(size);
+	const size_t length = word_align(size);
+	Chunk* ch = base_chunk().find_free(size);
 
-    if (ch != nullptr) {
-        ch->split_next(*this, length);
+	if (ch != nullptr) {
+		ch->split_next(*this, length);
 		ch->free = false;
 		return ch->data;
-    }
+	}
 	return 0;
 }
 
 inline size_t Arena::size(PointerType ptr)
 {
 	Chunk* ch = base_chunk().find(ptr);
-    if (UNLIKELY(ch == nullptr))
+	if (UNLIKELY(ch == nullptr))
 		return 0;
 	return ch->size;
 }
 
 inline int Arena::free(PointerType ptr)
 {
-    Chunk* ch = base_chunk().find(ptr);
-    if (UNLIKELY(ch == nullptr))
+	Chunk* ch = base_chunk().find(ptr);
+	if (UNLIKELY(ch == nullptr))
 		return -1;
 
-    ch->free = true;
+	ch->free = true;
 	// merge chunks ahead and behind us
-    if (ch->next && ch->next->free) {
-        ch->merge_next(*this);
-    }
-    if (ch->prev && ch->prev->free) {
+	if (ch->next && ch->next->free) {
+		ch->merge_next(*this);
+	}
+	if (ch->prev && ch->prev->free) {
 		ch = ch->prev;
-        ch->merge_next(*this);
-    }
+		ch->merge_next(*this);
+	}
 	return 0;
 }
 
@@ -223,7 +223,7 @@ inline void Arena::transfer(Arena& other) const
 	Chunk* last = &other.m_base_chunk;
 
 	const Chunk* chunk = m_base_chunk.next;
-    while (chunk != nullptr)
+	while (chunk != nullptr)
 	{
 		other.m_chunks.push_back(*chunk);
 		auto& new_chunk = other.m_chunks.back();
