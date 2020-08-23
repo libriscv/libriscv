@@ -87,17 +87,19 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 				// back, in which case the copy could be completely skipped.
 				arena->free(src);
 				auto data = arena->malloc(newlen);
-				SYSPRINT("SYSCALL realloc(0x%X:%zu -> 0x%X:%zu)\n", src, srclen, data, newlen);
+				SYSPRINT("SYSCALL realloc(0x%X:%zu, %zu) = 0x%X)\n", src, srclen, newlen, data);
 				if (data != 0 && data != src)
 				{
 					machine_memcpy(machine, data, src, srclen);
 				}
 				return data;
 			} else {
-				SYSPRINT("SYSCALL realloc(0x%X -> %zu) = not found\n", src, newlen);
+				SYSPRINT("SYSCALL realloc(0x%X:??, %zu) = 0x0\n", src, newlen);
 			}
 		} else {
-			return arena->malloc(newlen);
+			auto data = arena->malloc(newlen);
+			SYSPRINT("SYSCALL realloc(0x0, %zu) = 0x%X)\n", newlen, data);
+			return data;
 		}
 		return 0;
 	});
@@ -106,9 +108,14 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 	[arena] (auto& machine) -> long
 	{
 		const auto ptr = machine.template sysarg<address_type<W>>(0);
-		int ret = arena->free(ptr);
-		SYSPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
-		return ret;
+		if (ptr != 0)
+		{
+			int ret = arena->free(ptr);
+			SYSPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
+			return ret;
+		}
+		SYSPRINT("SYSCALL free(0x0) = 0\n");
+		return 0;
 	});
 	// Meminfo n+4
 	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+4,
@@ -289,24 +296,23 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		return dst;
 	});
 
-	// Strcmp n+11
+	// Strncmp n+11
 	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+11,
 	[] (auto& m) -> long
 	{
 		auto [a1, a2, maxlen] =
 			m.template sysargs<address_type<W>, address_type<W>, uint32_t> ();
-		SYSPRINT("SYSCALL strcmp(%#X, %#X, %u)\n", a1, a2, maxlen);
-		if (maxlen == 0) return 0;
+		SYSPRINT("SYSCALL strncmp(%#lX, %#lX, %u)\n", (long)a1, (long)a2, maxlen);
 		uint32_t len = 0;
-		do {
-			const auto v1 = m.memory.template read<uint8_t> (a1 ++);
-			const auto v2 = m.memory.template read<uint8_t> (a2 ++);
-			if (v1 != v2) {
+		while (len < maxlen) {
+			const uint8_t v1 = m.memory.template read<uint8_t> (a1 ++);
+			const uint8_t v2 = m.memory.template read<uint8_t> (a2 ++);
+			if (v1 != v2 || v1 == 0) {
 				m.cpu.increment_counter(2 + 2 * len);
 				return v1 - v2;
 			}
 			len ++;
-		} while (len < maxlen);
+		}
 		m.cpu.increment_counter(2 + 2 * len);
 		return 0;
 	});

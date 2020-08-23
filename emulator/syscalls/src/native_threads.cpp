@@ -6,7 +6,9 @@ using namespace riscv;
 #ifndef THREADS_SYSCALL_BASE
 static const int THREADS_SYSCALL_BASE = 500;
 #endif
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 static const uint32_t STACK_SIZE = 256 * 1024;
+#endif
 #include "threads.cpp"
 
 template <int W>
@@ -167,6 +169,8 @@ multithreading<W>* setup_native_threads(
 			return 0;
 		});
 	} // arena provided
+#else
+	(void) arena;
 #endif
 	return mt;
 }
