@@ -5,6 +5,7 @@
 #pragma once
 #include <cstddef>
 #include <deque>
+#include <EASTL/fixed_list.h>
 #include <EASTL/fixed_vector.h>
 
 namespace sas_alloc
@@ -60,8 +61,9 @@ private:
 	}
 	void foreach(std::function<void(const Chunk&)>) const;
 
-	static const size_t MAX_ALLOCS = 64;
-	std::deque<Chunk> m_chunks;
+	static const size_t MAX_ALLOCS = 128;
+	//std::deque<Chunk> m_chunks;
+	eastl::fixed_list<Chunk, MAX_ALLOCS> m_chunks;
 	eastl::fixed_vector<Chunk*, MAX_ALLOCS> m_free_chunks;
 	Chunk  m_base_chunk;
 };
