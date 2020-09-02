@@ -7,12 +7,12 @@ namespace riscv
 	{
 		const auto pageno = page_number(address);
 		if (m_current_rd_page != pageno) {
-			const auto* potential = &get_pageno(pageno);
-			if (UNLIKELY(!potential->attr.read)) {
+			const auto& potential = get_pageno(pageno);
+			if (UNLIKELY(!potential.attr.read)) {
 				this->protection_fault(address);
 			}
 			m_current_rd_page = pageno;
-			m_current_rd_ptr = potential;
+			m_current_rd_ptr = &potential;
 		}
 		return *m_current_rd_ptr;
 	}
@@ -22,12 +22,12 @@ namespace riscv
 	{
 		const auto pageno = page_number(address);
 		if (m_current_wr_page != pageno) {
-			auto* potential = &create_page(pageno);
-			if (UNLIKELY(!potential->attr.write)) {
+			auto& potential = create_page(pageno);
+			if (UNLIKELY(!potential.attr.write)) {
 				this->protection_fault(address);
 			}
 			m_current_wr_page = pageno;
-			m_current_wr_ptr = potential;
+			m_current_wr_ptr = &potential;
 		}
 		return *m_current_wr_ptr;
 	}

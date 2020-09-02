@@ -42,11 +42,13 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 		max_instr += cpu.instruction_counter();
 		while (LIKELY(!this->stopped())) {
 			cpu.simulate();
-			if (UNLIKELY(cpu.instruction_counter() >= max_instr)) {
-				if constexpr (Throw) {
-					throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
-						"Maximum instruction counter reached", max_instr);
-				} else break;
+			if (UNLIKELY(cpu.instruction_counter() >= max_instr))
+				break;
+		}
+		if (UNLIKELY(cpu.instruction_counter() >= max_instr)) {
+			if constexpr (Throw) {
+				throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
+					"Maximum instruction counter reached", max_instr);
 			}
 		}
 	}
