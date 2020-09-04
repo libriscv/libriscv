@@ -69,6 +69,9 @@ namespace riscv
 		if (!this->m_original_machine)
 			m_ro_pages.release();
 #endif
+#if defined(RISCV_INSTR_CACHE) && !defined(RISCV_INSTR_CACHE_PER_PAGE)
+		delete[] m_decoder_cache;
+#endif
 	}
 
 	template <int W>

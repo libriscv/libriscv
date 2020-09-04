@@ -25,6 +25,9 @@ namespace riscv
 		this->m_exec_decoder =
 			decoder_array[0].template get_base<W>() - pbase / DecoderCache<Page::SIZE>::DIVISOR;
 #endif
+#ifndef RISCV_INSTR_CACHE_PER_PAGE
+		this->m_decoder_cache = &decoder_array[0];
+#endif
 		size_t dcindex = 0;
 		while (len > 0)
 		{

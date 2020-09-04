@@ -183,9 +183,12 @@ namespace riscv
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;
 		address_t m_exec_pagedata_base = 0;
-#ifdef RISCV_INSTR_CACHE
+#  ifdef RISCV_INSTR_CACHE
 		instruction_handler<W>* m_exec_decoder = nullptr;
-#endif
+#    ifndef RISCV_INSTR_CACHE_PER_PAGE
+		DecoderCache<Page::SIZE>* m_decoder_cache = nullptr;
+#    endif
+#  endif
 #endif
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		std::unique_ptr<Page[]> m_ro_pages = nullptr;

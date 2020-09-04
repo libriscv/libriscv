@@ -48,7 +48,7 @@ struct Page
 	Page() { m_page.reset(new PageData {}); };
 	// copy another page (or data)
 	Page(const PageAttributes& a, const PageData& d = {})
-		: attr(a), m_page(new PageData{d}) {}
+		: attr(a), m_page(new PageData{d}) { attr.non_owning = false; }
 	Page(Page&& other)
 		: attr(other.attr), m_page(std::move(other.m_page)) {}
 	Page& operator= (Page&& other) {
