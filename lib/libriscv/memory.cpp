@@ -29,9 +29,8 @@ namespace riscv
 		}
 		else if (options.memory_max != 0)
 		{
-			assert(options.memory_max % Page::size() == 0);
-			assert(options.memory_max >= Page::size());
-			const size_t pages_max = options.memory_max / Page::size();
+			const address_t pages_max = options.memory_max >> Page::SHIFT;
+			assert(pages_max >= 1);
 			this->m_page_fault_handler =
 				[pages_max] (auto& mem, const size_t page) -> Page&
 				{
