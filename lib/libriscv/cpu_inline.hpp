@@ -11,7 +11,7 @@ inline void CPU<W>::reset_stack_pointer() noexcept
 	this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
 }
 
-template <int W> __attribute__((hot))
+template <int W>
 inline void CPU<W>::change_page(address_t pageno)
 {
 #ifdef RISCV_PAGE_CACHE
@@ -50,7 +50,7 @@ riscv_validate_current_page:
 #endif
 }
 
-template <int W> __attribute__((hot))
+template <int W>
 inline void CPU<W>::check_page()
 {
 #ifdef RISCV_PAGE_TRAPS_ENABLED
@@ -66,7 +66,7 @@ inline void CPU<W>::check_page()
 #endif
 }
 
-template<int W> constexpr __attribute__((hot))
+template<int W> constexpr
 inline void CPU<W>::jump(const address_t dst)
 {
 	this->registers().pc = dst;

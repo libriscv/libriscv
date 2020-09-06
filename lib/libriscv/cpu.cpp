@@ -25,7 +25,7 @@ namespace riscv
 		this->jump(machine().memory.start_address());
 	}
 
-	template <int W> __attribute__((cold))
+	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_upper_half(address_t offset)
 	{
 		format_t instruction;
@@ -43,7 +43,7 @@ namespace riscv
 		return instruction;
 	}
 
-	template <int W> __attribute__((hot))
+	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
 		format_t instruction;
@@ -91,7 +91,7 @@ namespace riscv
 		return instruction;
 	}
 
-	template<int W> __attribute__((hot))
+	template<int W>
 	void CPU<W>::simulate()
 	{
 #ifdef RISCV_DEBUG
