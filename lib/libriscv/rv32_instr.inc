@@ -81,7 +81,7 @@
 					break;
 #endif
 #ifdef RISCV_EXT_ATOMICS
-				// RV32A - Atomic instructions
+				// RVxA - Atomic instructions
 				case 0b0101111:
 					switch (instruction.Atype.funct5)
 					{
@@ -90,11 +90,11 @@
 						case 0b00011:
 							DECODER(DECODED_ATOMIC(STORE_COND));
 						case 0b00000:
-							DECODER(DECODED_ATOMIC(AMOADD_W));
+							DECODER(DECODED_ATOMIC(AMOADD));
 						case 0b00001:
-							DECODER(DECODED_ATOMIC(AMOSWAP_W));
+							DECODER(DECODED_ATOMIC(AMOSWAP));
 						case 0b01000:
-							DECODER(DECODED_ATOMIC(AMOOR_W));
+							DECODER(DECODED_ATOMIC(AMOOR));
 					}
 #endif
 			}
