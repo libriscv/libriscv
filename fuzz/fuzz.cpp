@@ -2,8 +2,7 @@
 #include <cstdint>
 #include <libriscv/machine.hpp>
 
-extern "C"
-void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
+static void fuzz_instruction_set(const uint8_t* data, size_t len)
 {
 	static std::vector<uint8_t> bin {};
 	static riscv::Machine<riscv::RISCV32> machine32 { bin };
@@ -29,4 +28,22 @@ void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
 	} catch (std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
+}
+
+static void fuzz_elf_loader(const uint8_t* data, size_t len)
+{
+	std::vector<uint8_t> bin {data, data + len};
+	try {
+		riscv::Machine<riscv::RISCV32> machine32 { bin };
+		riscv::Machine<riscv::RISCV64> machine64 { bin };
+	} catch (std::exception& e) {
+		//printf(">>> Exception: %s\n", e.what());
+	}
+}
+
+extern "C"
+void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
+{
+	//fuzz_elf_loader(data, len);
+	fuzz_instruction_set(data, len);
 }

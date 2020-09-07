@@ -51,8 +51,6 @@ namespace riscv
 		// when an owning machine is passed, its state will be used instead
 		if (options.owning_machine == nullptr) {
 			this->reset();
-			// set the default exit function address for vm calls
-			this->m_exit_address = resolve_address("_exit");
 		}
 		else {
 			assert(&bin == &options.owning_machine->memory.binary());
