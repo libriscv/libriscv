@@ -237,12 +237,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto addr = machine.template sysarg<address_type<W>> (0);
 		const auto len  = machine.template sysarg<address_type<W>> (1);
 		SYSPRINT(">>> munmap(0x%X, len=%u)\n", addr, len);
-		// TODO: deallocate pages completely
-		machine.memory.set_page_attr(addr, len, {
-			.read  = false,
-			.write = false,
-			.exec  = false
-		});
+		machine.memory.free_pages(addr, len);
 		return 0;
 	});
 	// mmap

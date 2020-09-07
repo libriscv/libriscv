@@ -12,7 +12,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	[mt] (Machine<W>& machine) -> long {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
 		const int tid = mt->get_thread()->tid;
-		THPRINT(">>> Exit on tid=%ld, exit code = %d\n",
+		THPRINT(">>> Exit on tid=%d, exit code = %d\n",
 				tid, (int) status);
 		if (tid != 0) {
 			// exit thread instead
@@ -78,14 +78,14 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	[mt] (Machine<W>& machine) {
 		#define FUTEX_WAIT 0
 		#define FUTEX_WAKE 1
-		const uint32_t addr = machine.template sysarg<uint32_t> (0);
-		const int  futex_op = machine.template sysarg<int> (1);
-		const int       val = machine.template sysarg<int> (2);
-		THPRINT(">>> futex(0x%X, op=%d, val=%d)\n", addr, futex_op, val);
+		const auto addr = machine.template sysarg<address_type<W>> (0);
+		const int futex_op = machine.template sysarg<int> (1);
+		const int      val = machine.template sysarg<int> (2);
+		THPRINT(">>> futex(0x%lX, op=%d, val=%d)\n", (long) addr, futex_op, val);
 		if ((futex_op & 0xF) == FUTEX_WAIT)
 	    {
-			THPRINT("FUTEX: Waiting for unlock... uaddr=0x%X val=%d\n", addr, val);
-			while (machine.memory.template read<uint32_t> (addr) == val) {
+			THPRINT("FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
+			while (machine.memory.template read<address_type<W>> (addr) == val) {
 				if (mt->suspend_and_yield()) {
 					return (int) machine.cpu.reg(RISCV::REG_ARG0);
 				}
@@ -106,15 +106,15 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 	[mt] (Machine<W>& machine) {
 		/* int clone(int (*fn)(void *arg), void *child_stack, int flags, void *arg,
 		             void *parent_tidptr, void *tls, void *child_tidptr) */
-		const int      flags = machine.template sysarg<int> (0);
-		const uint32_t stack = machine.template sysarg<uint32_t> (1);
+		const int  flags = machine.template sysarg<int> (0);
+		const auto stack = machine.template sysarg<address_type<W>> (1);
 #ifdef THREADS_DEBUG
-		const uint32_t  func = machine.template sysarg<uint32_t> (2);
-		const uint32_t  args = machine.template sysarg<uint32_t> (3);
+		const auto  func = machine.template sysarg<address_type<W>> (2);
+		const auto  args = machine.template sysarg<address_type<W>> (3);
 #endif
-		const uint32_t  ptid = machine.template sysarg<uint32_t> (4);
-		const uint32_t   tls = machine.template sysarg<uint32_t> (5);
-		const uint32_t  ctid = machine.template sysarg<uint32_t> (6);
+		const auto  ptid = machine.template sysarg<address_type<W>> (4);
+		const auto   tls = machine.template sysarg<address_type<W>> (5);
+		const auto  ctid = machine.template sysarg<address_type<W>> (6);
 		auto* parent = mt->get_thread();
 		THPRINT(">>> clone(func=0x%X, stack=0x%X, flags=%x, args=0x%X,"
 				" parent=%p, ctid=0x%X ptid=0x%X, tls=0x%X)\n",
