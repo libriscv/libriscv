@@ -66,7 +66,7 @@ namespace riscv
 		if (!this->m_original_machine)
 			m_ro_pages.release();
 #endif
-#if defined(RISCV_INSTR_CACHE) && !defined(RISCV_INSTR_CACHE_PER_PAGE)
+#ifdef RISCV_INSTR_CACHE
 		delete[] m_decoder_cache;
 #endif
 	}
@@ -125,7 +125,6 @@ namespace riscv
 				attr.read, attr.write, attr.exec);
 		}
 
-#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		if (attr.exec && machine().cpu.exec_seg_data() == nullptr)
 		{
 			constexpr address_t PMASK = Page::size()-1;
@@ -154,11 +153,7 @@ namespace riscv
 			this->generate_decoder_cache(hdr->p_vaddr, len);
 #endif
 			return;
-		} else if (attr.exec) {
-			throw std::runtime_error("Binary cannot have more than one executable segment!"
-				" Disable the experimental feature option to solve this.");
 		}
-#endif
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
 
@@ -280,18 +275,10 @@ namespace riscv
 			auto attr = page.attr;
 			attr.is_cow = true;
 			attr.non_owning = true;
-			auto p = m_pages.try_emplace(it.first, attr, (PageData*) page.data());
-#ifdef RISCV_INSTR_CACHE_PER_PAGE
-			// make a shared copy of any potential instruction cache in the source
-			Page& copy = p.first->second;
-			copy.m_decoder_cache.reset(page.m_decoder_cache.get());
-			copy.attr.decoder_non_owned = true;
-#else
-			(void) p;
-#endif
+			m_pages.try_emplace(it.first, attr, (PageData*) page.data());
 		}
 		this->set_exit_address(master.memory.exit_address());
-#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+		// base address, size and PC-relative data pointer for instructions
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
 		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;
 		this->machine().cpu.initialize_exec_segs(
@@ -300,7 +287,7 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE
 		this->m_exec_decoder = master.memory.m_exec_decoder;
 #endif
-#endif
+
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		this->m_ropage_begin = master.memory.m_ropage_begin;
 		this->m_ropage_end   = master.memory.m_ropage_end;
@@ -441,7 +428,7 @@ namespace riscv
 		{
 			if (ELF32_ST_TYPE(symtab[i].st_info) != STT_FUNC) continue;
 			/*printf("Testing %#X vs  %#X to %#X = %s\n",
-					address, symtab[i].st_value, 
+					address, symtab[i].st_value,
 					symtab[i].st_value + symtab[i].st_size, symname);*/
 
 			if (address >= symtab[i].st_value &&
@@ -463,7 +450,7 @@ namespace riscv
 	template <int W>
 	void Memory<W>::print_backtrace(void(*print_function)(const char*, size_t))
 	{
-		auto print_trace = 
+		auto print_trace =
 			[this, print_function] (const int N, const address_type<W> addr) {
 				// get information about the callsite
 				const auto site = this->lookup(addr);

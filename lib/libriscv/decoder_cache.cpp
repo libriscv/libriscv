@@ -21,13 +21,9 @@ namespace riscv
 
 		const size_t n_pages = plen / Page::size();
 		auto* decoder_array = new DecoderCache<Page::SIZE> [n_pages];
-#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		this->m_exec_decoder =
 			decoder_array[0].template get_base<W>() - pbase / DecoderCache<Page::SIZE>::DIVISOR;
-#endif
-#ifndef RISCV_INSTR_CACHE_PER_PAGE
 		this->m_decoder_cache = &decoder_array[0];
-#endif
 		size_t dcindex = 0;
 		while (len > 0)
 		{
@@ -40,14 +36,8 @@ namespace riscv
 				if (page.attr.exec) {
 					// assign slice
 					auto* cache = &decoder_array[dcindex];
-#ifdef RISCV_INSTR_CACHE_PER_PAGE
-					assert(page.decoder_cache() == nullptr);
-					page.m_decoder_cache.reset(cache);
-					// only the first page owns the whole range
-					page.attr.decoder_non_owned = (dcindex != 0);
-#endif
 					dcindex++;
-
+#ifdef RISCV_INSTR_CACHE_PREGEN
 					// generate instruction handler pointers for machine code
 					for (address_t dst = addr; dst < addr + size;)
 					{
@@ -60,6 +50,9 @@ namespace riscv
 
 						dst += instruction.length();
 					}
+#else
+					*cache = {};
+#endif
 				}
 			}
 

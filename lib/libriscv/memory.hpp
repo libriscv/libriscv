@@ -105,9 +105,7 @@ namespace riscv
 
 #ifdef RISCV_INSTR_CACHE
 		void generate_decoder_cache(address_t addr, size_t len);
-#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		auto* get_decoder_cache() const { return m_exec_decoder; }
-#endif
 #endif
 
 		const auto& binary() const noexcept { return m_binary; }
@@ -179,17 +177,16 @@ namespace riscv
 		const bool m_protect_segments;
 		const bool m_verbose_loader;
 		const bool m_original_machine;
-#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
+
+		// ELF programs linear .text segment
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;
 		address_t m_exec_pagedata_base = 0;
-#  ifdef RISCV_INSTR_CACHE
+#ifdef RISCV_INSTR_CACHE
 		instruction_handler<W>* m_exec_decoder = nullptr;
-#    ifndef RISCV_INSTR_CACHE_PER_PAGE
 		DecoderCache<Page::SIZE>* m_decoder_cache = nullptr;
-#    endif
-#  endif
 #endif
+
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		std::unique_ptr<Page[]> m_ro_pages = nullptr;
 		address_t m_ropage_begin = 0;

@@ -48,7 +48,6 @@ namespace riscv
 	{
 		format_t instruction;
 
-#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
 		// We have to check the bounds just to be thorough, as this will
 		// instantly crash if something is wrong. In addition,
 		// page management is only done for jumps outside of execute segment.
@@ -58,7 +57,7 @@ namespace riscv
 			instruction.whole = *(uint32_t*) &m_exec_data[this->pc()];
 			return instruction;
 		}
-#endif
+
 		// We don't need to manage the current page when
 		// we have the whole execute-range (+ instruction cache)
 		// WARNING: this combination will break jump-traps (for now)
@@ -112,29 +111,26 @@ namespace riscv
 		handler.handler(*this, instruction);
 #else
 # ifdef RISCV_INSTR_CACHE
-#  ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
-		// retrieve instructions directly from the constant cache
-		// WARNING: the contract between read_next_instruction and this
-		// is that any jump traps must return to the caller, and be re-
-		// validated, otherwise this code will read garbage data!
-		auto& cache_entry =
-			machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
-		// execute instruction
-		cache_entry(*this, instruction);
-#  else
-		// retrieve cached instruction
-		const address_t offset  = this->pc() & (Page::size()-1);
-		const size_t idx = offset / DecoderCache<Page::SIZE>::DIVISOR;
-
-		auto* dcache = m_current_page.page->decoder_cache();
-		auto& cache_entry = dcache->template get<W> (idx);
-		// decode and store into cache, if necessary
-		if (UNLIKELY(!cache_entry)) {
-			cache_entry = this->decode(instruction).handler;
+		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end))
+		{
+			// retrieve instructions directly from the constant cache
+			// WARNING: the contract between read_next_instruction and this
+			// is that any jump traps must return to the caller, and be re-
+			// validated, otherwise this code will read garbage data!
+			auto& cache_entry =
+				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
+#ifndef RISCV_INSTR_CACHE_PREGEN
+			if (UNLIKELY(!cache_entry)) {
+				cache_entry = this->decode(instruction).handler;
+			}
+#endif
+			// execute instruction
+			cache_entry(*this, instruction);
 		}
-		// execute instruction
-		cache_entry(*this, instruction);
-#  endif
+		else {
+			// decode & execute instruction directly
+			this->execute(instruction);
+		}
 # else
 		// decode & execute instruction directly
 		this->execute(instruction);

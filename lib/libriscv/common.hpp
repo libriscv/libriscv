@@ -71,9 +71,6 @@ namespace riscv
 	static constexpr bool floating_point_enabled = false;
 #endif
 }
-#if defined(RISCV_INSTR_CACHE) && !defined(RISCV_EXEC_SEGMENT_IS_CONSTANT)
-#define RISCV_INSTR_CACHE_PER_PAGE
-#endif
 #if defined(RISCV_EXEC_TRAPS_ENABLED) || defined (RISCV_DEBUG)
 #define RISCV_PAGE_TRAPS_ENABLED
 #endif

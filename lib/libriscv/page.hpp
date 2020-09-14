@@ -18,12 +18,7 @@ struct PageAttributes
 	bool is_cow = false;
 	bool non_owning = false;
 	bool dont_fork = false;
-#ifdef RISCV_INSTR_CACHE_PER_PAGE
-	bool decoder_non_owned = false;
-	uint8_t user_defined = 0; /* Use this for yourself */
-#else
 	uint16_t user_defined = 0; /* Use this for yourself */
-#endif
 
 	bool is_default() const noexcept {
 		PageAttributes def {};
@@ -61,9 +56,6 @@ struct Page
 	// don't try to free non-owned page memory
 	~Page() {
 		if (attr.non_owning) m_page.release();
-#ifdef RISCV_INSTR_CACHE_PER_PAGE
-		if (attr.decoder_non_owned) m_decoder_cache.release();
-#endif
 	}
 
 	auto& page() noexcept { return *m_page; }
@@ -106,15 +98,6 @@ struct Page
 	static const Page& cow_page() noexcept;
 	static const Page& guard_page() noexcept;
 
-#ifdef RISCV_INSTR_CACHE_PER_PAGE
-	auto* decoder_cache() const noexcept {
-		return m_decoder_cache.get();
-	}
-	void create_decoder_cache() const {
-		m_decoder_cache.reset(new DecoderCache<Page::SIZE>);
-	}
-#endif
-
 	/* Transform a CoW-page to an owned writable page */
 	void make_writable()
 	{
@@ -134,9 +117,6 @@ struct Page
 	// page-aligning the PageData struct and putting it first
 	PageAttributes attr;
 	std::unique_ptr<PageData> m_page;
-#ifdef RISCV_INSTR_CACHE_PER_PAGE
-	mutable std::unique_ptr<DecoderCache<Page::SIZE>> m_decoder_cache = nullptr;
-#endif
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	bool has_trap() const noexcept { return m_trap != nullptr; }
 	void set_trap(mmio_cb_t newtrap) noexcept { this->m_trap = newtrap; }

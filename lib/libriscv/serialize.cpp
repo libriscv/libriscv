@@ -135,14 +135,15 @@ namespace riscv
 		// all pages will be completely replaced
 		this->clear_all_pages();
 
-#ifdef RISCV_EXEC_SEGMENT_IS_CONSTANT
-		// NOTE: this only works if you restore to the same machine
-		// TODO: serialize the executable memory separately?
-		this->insert_non_owned_memory(
-			m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, {
-				.read = true, .write = false, .exec = true
-			});
-#endif
+		if (m_exec_pagedata != nullptr && m_exec_pagedata_size > 0)
+		{
+			// NOTE: this only works if you restore to the same machine
+			// TODO: serialize the executable memory separately?
+			this->insert_non_owned_memory(
+				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, {
+					.read = true, .write = false, .exec = true
+				});
+		}
 
 		size_t off = state.mem_offset;
 		for (size_t p = 0; p < state.n_pages; p++) {
