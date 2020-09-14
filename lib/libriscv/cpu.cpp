@@ -111,26 +111,19 @@ namespace riscv
 		handler.handler(*this, instruction);
 #else
 # ifdef RISCV_INSTR_CACHE
-		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end))
-		{
-			// retrieve instructions directly from the constant cache
-			// WARNING: the contract between read_next_instruction and this
-			// is that any jump traps must return to the caller, and be re-
-			// validated, otherwise this code will read garbage data!
-			auto& cache_entry =
-				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
+		// retrieve instructions directly from the constant cache
+		// WARNING: the contract between read_next_instruction and this
+		// is that any jump traps must return to the caller, and be re-
+		// validated, otherwise this code will read garbage data!
+		auto& cache_entry =
+			machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
 #ifndef RISCV_INSTR_CACHE_PREGEN
-			if (UNLIKELY(!cache_entry)) {
-				cache_entry = this->decode(instruction).handler;
-			}
+		if (UNLIKELY(!cache_entry)) {
+			cache_entry = this->decode(instruction).handler;
+		}
 #endif
-			// execute instruction
-			cache_entry(*this, instruction);
-		}
-		else {
-			// decode & execute instruction directly
-			this->execute(instruction);
-		}
+		// execute instruction
+		cache_entry(*this, instruction);
 # else
 		// decode & execute instruction directly
 		this->execute(instruction);

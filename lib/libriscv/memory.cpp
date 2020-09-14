@@ -153,6 +153,11 @@ namespace riscv
 			this->generate_decoder_cache(hdr->p_vaddr, len);
 #endif
 			return;
+		} else if (attr.exec) {
+#ifdef RISCV_INSTR_CACHE
+			throw std::runtime_error(
+				"Binary can not have more than one executable segment!");
+#endif
 		}
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
