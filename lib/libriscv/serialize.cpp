@@ -161,6 +161,9 @@ namespace riscv
 	}
 
 	template struct Machine<4>;
+	template struct Machine<8>;
 	template struct CPU<4>;
+	template struct CPU<8>;
 	template struct Memory<4>;
+	template struct Memory<8>;
 }
