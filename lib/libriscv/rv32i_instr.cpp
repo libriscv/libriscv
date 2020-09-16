@@ -137,9 +137,11 @@ namespace riscv
 		}
 		if (comparison) {
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+#ifdef RISCV_DEBUG
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
 				printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 4);
 			}
+#endif
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
@@ -163,6 +165,93 @@ namespace riscv
 							(long) instr.Btype.signed_imm(),
 							(long) cpu.pc() + instr.Btype.signed_imm());
 		}
+	});
+
+#ifdef RISCV_DEBUG
+#define VERBOSE_BRANCH() \
+	if (UNLIKELY(cpu.machine().verbose_jumps)) { \
+		printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 4); \
+	}
+#else
+#define VERBOSE_BRANCH() /* */
+#endif
+
+	INSTRUCTION(BRANCH_EQ,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto reg1 = cpu.reg(instr.Btype.rs1);
+		const auto reg2 = cpu.reg(instr.Btype.rs2);
+		if (reg1 == reg2) {
+			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			VERBOSE_BRANCH()
+		}
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
+	});
+
+	INSTRUCTION(BRANCH_NE,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto reg1 = cpu.reg(instr.Btype.rs1);
+		const auto reg2 = cpu.reg(instr.Btype.rs2);
+		if (reg1 != reg2) {
+			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			VERBOSE_BRANCH()
+		}
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
+	});
+
+	INSTRUCTION(BRANCH_LT,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto reg1 = cpu.reg(instr.Btype.rs1);
+		const auto reg2 = cpu.reg(instr.Btype.rs2);
+		if (RVTOSIGNED(reg1) < RVTOSIGNED(reg2)) {
+			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			VERBOSE_BRANCH()
+		}
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
+	});
+
+	INSTRUCTION(BRANCH_GE,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto reg1 = cpu.reg(instr.Btype.rs1);
+		const auto reg2 = cpu.reg(instr.Btype.rs2);
+		if (RVTOSIGNED(reg1) >= RVTOSIGNED(reg2)) {
+			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			VERBOSE_BRANCH()
+		}
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
+	});
+
+	INSTRUCTION(BRANCH_LTU,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto& reg1 = cpu.reg(instr.Btype.rs1);
+		const auto& reg2 = cpu.reg(instr.Btype.rs2);
+		if (reg1 < reg2) {
+			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			VERBOSE_BRANCH()
+		}
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
+	});
+
+	INSTRUCTION(BRANCH_GEU,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto& reg1 = cpu.reg(instr.Btype.rs1);
+		const auto& reg2 = cpu.reg(instr.Btype.rs2);
+		if (reg1 >= reg2) {
+			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			VERBOSE_BRANCH()
+		}
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
 	});
 
 	INSTRUCTION(JALR,

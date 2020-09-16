@@ -13,7 +13,22 @@
 				case 0b0100011:
 					DECODER(DECODED_INSTR(STORE));
 				case 0b1100011:
-					DECODER(DECODED_INSTR(BRANCH));
+					switch (instruction.Btype.funct3) {
+					case 0x0:
+						DECODER(DECODED_INSTR(BRANCH_EQ));
+					case 0x1:
+						DECODER(DECODED_INSTR(BRANCH_NE));
+					case 0x4:
+						DECODER(DECODED_INSTR(BRANCH_LT));
+					case 0x5:
+						DECODER(DECODED_INSTR(BRANCH_GE));
+					case 0x6:
+						DECODER(DECODED_INSTR(BRANCH_LTU));
+					case 0x7:
+						DECODER(DECODED_INSTR(BRANCH_GEU));
+					default:
+						DECODER(DECODED_INSTR(BRANCH));
+					}
 				case 0b1100111:
 					DECODER(DECODED_INSTR(JALR));
 				case 0b1101111:
