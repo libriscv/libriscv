@@ -33,20 +33,60 @@
 					DECODER(DECODED_INSTR(JALR));
 				case 0b1101111:
 					DECODER(DECODED_INSTR(JAL));
-				case 0b0010011:
-					DECODER(DECODED_INSTR(OP_IMM));
+				case 0b0010011: // OP_IMM
+					if (instruction.Itype.rd != 0)
+					{
+						switch (instruction.Itype.funct3) {
+						case 0x0: // ADDI
+							DECODER(DECODED_INSTR(OP_IMM_ADDI));
+						default:
+							DECODER(DECODED_INSTR(OP_IMM));
+						}
+					} else if (instruction.Itype.rs1 == 0) {
+						DECODER(DECODED_INSTR(NOP));
+					}
+					break;
 				case 0b0110011:
-					DECODER(DECODED_INSTR(OP));
+					if (instruction.Rtype.rd != 0)
+					{
+						switch (instruction.Rtype.jumptable_friendly_op()) {
+						case 0x0: // ADD / SUB
+							DECODER(DECODED_INSTR(OP_ADD));
+						default:
+							DECODER(DECODED_INSTR(OP));
+						}
+					}
+					break;
 				case 0b1110011:
 					DECODER(DECODED_INSTR(SYSTEM));
 				case 0b0110111:
 					DECODER(DECODED_INSTR(LUI));
 				case 0b0010111:
 					DECODER(DECODED_INSTR(AUIPC));
-				case 0b0011011:
-					DECODER(DECODED_INSTR(OP_IMM32));
-				case 0b0111011:
-					DECODER(DECODED_INSTR(OP32));
+				case 0b0011011: // OP_IMM32
+					if (instruction.Itype.rd != 0)
+					{
+						switch (instruction.Itype.funct3) {
+						case 0x0: // ADDIW
+							DECODER(DECODED_INSTR(OP_IMM32_ADDIW));
+						default:
+							DECODER(DECODED_INSTR(OP_IMM32));
+						}
+					} else if (instruction.Itype.rs1 == 0) {
+						DECODER(DECODED_INSTR(NOP));
+					}
+					break;
+				case 0b0111011: // OP32
+					if (instruction.Rtype.rd != 0)
+					{
+						switch (instruction.Rtype.jumptable_friendly_op()) {
+						case 0x0: // ADDW / SUBW
+							DECODER(DECODED_INSTR(OP32_ADDW));
+						default:
+							DECODER(DECODED_INSTR(OP32));
+						}
+					}
+					break;
 				case 0b0001111:
 					DECODER(DECODED_INSTR(FENCE));
 #ifdef RISCV_EXT_FLOATS
