@@ -120,7 +120,7 @@ multithreading<W>* setup_native_threads(
 			auto* mt    = data->mt;
 			auto* arena = data->arena;
 			// invoke clone threadcall
-			const uint32_t   tls = arena->malloc(STACK_SIZE);
+			const auto tls = arena->malloc(STACK_SIZE);
 			if (UNLIKELY(tls == 0)) {
 				fprintf(stderr,
 					"Error: Thread stack allocation failed: %#x\n", tls);
@@ -129,8 +129,8 @@ multithreading<W>* setup_native_threads(
 				machine.cpu.jump(machine.cpu.reg(riscv::RISCV::REG_RA));
 				return 0;
 			}
-			const uint32_t stack = ((tls + STACK_SIZE) & ~0xF);
-			const uint32_t  func = machine.template sysarg<uint32_t> (0);
+			const auto stack = ((tls + STACK_SIZE) & ~0xF);
+			const auto  func = machine.template sysarg<address_type<W>> (0);
 			auto* thread = mt->create(
 				CHILD_SETTID, tls, 0x0, stack, tls);
 			// set PC back to clone point - 4
