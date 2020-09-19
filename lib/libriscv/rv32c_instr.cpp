@@ -136,10 +136,12 @@ namespace riscv
 		cpu.reg(RISCV::REG_RA) = cpu.pc() + 2; // return instruction
 		const auto address = cpu.pc() + ci.CJ.signed_imm();
 		cpu.jump(address - 2);
+#ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
 			printf(">>> CALL 0x%lX <-- %s = 0x%lX\n", (long) address,
 					RISCV::regname(RISCV::REG_RA), (long) cpu.reg(RISCV::REG_RA));
 		}
+#endif
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -316,9 +318,11 @@ namespace riscv
 		if (cpu.cireg(ci.CB.srs1) == 0) {
 			// branch taken
 			cpu.jump(cpu.pc() + ci.CB.signed_imm() - 2);
+#ifdef RISCV_DEBUG
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
 				printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 2);
 			}
+#endif
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -336,9 +340,11 @@ namespace riscv
 		if (cpu.cireg(ci.CB.srs1) != 0) {
 			// branch taken
 			cpu.jump(cpu.pc() + ci.CB.signed_imm() - 2);
+#ifdef RISCV_DEBUG
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
 				printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 2);
 			}
+#endif
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -465,20 +471,24 @@ namespace riscv
 		if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
 		{	// JR rd
 			cpu.jump(cpu.reg(ci.CR.rd) - 2);
+#ifdef RISCV_DEBUG
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
 				printf(">>> RET 0x%lX <-- %s = 0x%lX\n", (long) cpu.pc(),
 					RISCV::regname(ci.CR.rd), (long) cpu.reg(ci.CR.rd));
 			}
+#endif
 		}
 		else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
 		{	// JALR ra, rd+0
 			cpu.reg(RISCV::REG_RA) = cpu.pc() + 0x2;
 			cpu.jump(cpu.reg(ci.CR.rd) - 2);
+#ifdef RISCV_DEBUG
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
 				printf(">>> C.JAL RA, 0x%lX <-- %s = 0x%lX\n",
 					(long) cpu.reg(RISCV::REG_RA) - 2,
 					RISCV::regname(ci.CR.rd), (long) cpu.reg(ci.CR.rd));
 			}
+#endif
 		}
 		else if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 != 0)
 		{	// MV rd, rs2

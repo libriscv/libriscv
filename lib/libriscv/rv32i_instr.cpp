@@ -245,11 +245,13 @@ namespace riscv
 			cpu.reg(instr.Itype.rd) = cpu.pc() + 4;
 		}
 		cpu.jump(address - 4);
+#ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
 		printf(">>> JMP 0x%lX <-- %s = 0x%lX%+ld\n", (long) address,
 				RISCV::regname(instr.Itype.rs1),
 				(long) cpu.reg(instr.Itype.rs1), (long) instr.Itype.signed_imm());
 		}
+#endif
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// RISC-V's RET instruction: return to register + immediate
@@ -268,11 +270,13 @@ namespace riscv
 		}
 		// And Jump (relative)
 		cpu.jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
+#ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
 			printf(">>> CALL 0x%lX <-- %s = 0x%lX\n", (long) cpu.pc(),
 					RISCV::regname(instr.Jtype.rd),
 					(long) cpu.reg(instr.Jtype.rd));
 		}
+#endif
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		if (instr.Jtype.rd != 0) {
