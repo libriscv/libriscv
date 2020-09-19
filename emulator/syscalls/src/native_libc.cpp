@@ -215,11 +215,12 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		{
 			auto [addr] = m.template sysargs<address_type<W>> ();
 			SYSPRINT("SYSCALL strlen(%#X)\n", addr);
-			uint32_t len = 0;
+			address_type<W> iter = addr;
 			do {
-				const auto v1 = m.memory.template read<uint8_t> (addr ++);
+				auto v1 = m.memory.template read<uint8_t> (iter ++);
 				if (v1 == 0) break;
-			} while (len < 4096);
+			} while ((iter - addr) < 4096);
+			const auto len = iter - addr;
 			m.cpu.increment_counter(2 * len);
 			return len;
 		});
