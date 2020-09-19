@@ -75,6 +75,9 @@
 					{
 						switch (instruction.Itype.funct3) {
 						case 0x0: // ADDI
+							if (instruction.Itype.rs1 == 0) {
+								DECODER(DECODED_INSTR(OP_IMM_LI));
+							}
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
 						default:
 							DECODER(DECODED_INSTR(OP_IMM));

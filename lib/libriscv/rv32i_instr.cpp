@@ -397,6 +397,12 @@ namespace riscv
 		dst = src + instr.Itype.signed_imm();
 	}, DECODED_INSTR(OP_IMM).printer);
 
+	INSTRUCTION(OP_IMM_LI,
+	[] (auto& cpu, rv32i_instruction instr) {
+		// LI: Load sign-extended 12-bit immediate
+		cpu.reg(instr.Itype.rd) = instr.Itype.signed_imm();
+	}, DECODED_INSTR(OP_IMM).printer);
+
 	INSTRUCTION(OP,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
