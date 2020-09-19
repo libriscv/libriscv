@@ -28,47 +28,18 @@ namespace riscv
 		}
 	});
 
-	INSTRUCTION(LOAD,
+	INSTRUCTION(ILLEGAL,
+	[] (auto& cpu, rv32i_instruction /* instr */) {
+		cpu.trigger_exception(ILLEGAL_OPCODE);
+	}, DECODED_INSTR(UNIMPLEMENTED).printer);
+
+	INSTRUCTION(LOAD_I8,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		/* Null-checks can load to zero */
 		RVREGTYPE(cpu) dummy;
 		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		switch (instr.Itype.funct3) {
-		case 0: // LB
-			reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
-			return;
-		case 1: // LH
-			reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint16_t>(addr);
-			return;
-		case 2: // LW
-			if constexpr (RVIS64BIT(cpu)) {
-				reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint32_t>(addr);
-			} else {
-				reg = cpu.machine().memory.template read<uint32_t>(addr);
-			}
-			return;
-		case 3: // LD
-			if constexpr (RVIS64BIT(cpu)) {
-				reg = cpu.machine().memory.template read<uint64_t>(addr);
-				return;
-			}
-		case 4: // LBU
-			// load zero-extended 8-bit value
-			reg = cpu.machine().memory.template read<uint8_t>(addr);
-			return;
-		case 5: // LHU
-			// load zero-extended 16-bit value
-			reg = cpu.machine().memory.template read<uint16_t>(addr);
-			return;
-		case 6: // LWU
-			if constexpr (RVIS64BIT(cpu)) {
-				reg = cpu.machine().memory.template read<uint32_t>(addr);
-				return;
-			}
-		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -79,28 +50,66 @@ namespace riscv
 						(long) cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm());
 	});
 
-	INSTRUCTION(STORE,
+	INSTRUCTION(LOAD_I16,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		const auto value = cpu.reg(instr.Stype.rs2);
+		RVREGTYPE(cpu) dummy;
+		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint16_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(LOAD_I32,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		RVREGTYPE(cpu) dummy;
+		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint32_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(LOAD_U8,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		RVREGTYPE(cpu) dummy;
+		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = cpu.machine().memory.template read<uint8_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(LOAD_U16,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		RVREGTYPE(cpu) dummy;
+		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = cpu.machine().memory.template read<uint16_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(LOAD_U32,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		RVREGTYPE(cpu) dummy;
+		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = cpu.machine().memory.template read<uint32_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(LOAD_U64,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		RVREGTYPE(cpu) dummy;
+		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = cpu.machine().memory.template read<uint64_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(STORE_I8,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		const auto& value = cpu.reg(instr.Stype.rs2);
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-		const auto type  = instr.Stype.funct3;
-		if (type == 0) {
-			cpu.machine().memory.template write<uint8_t>(addr, value);
-			return;
-		} else if (type == 1) {
-			cpu.machine().memory.template write<uint16_t>(addr, value);
-			return;
-		} else if (type == 2) {
-			cpu.machine().memory.template write<uint32_t>(addr, value);
-			return;
-		} else if (type == 3) {
-			if constexpr (RVIS64BIT(cpu)) {
-				cpu.machine().memory.template write<uint64_t>(addr, value);
-				return;
-			}
-		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		cpu.machine().memory.template write<uint8_t>(addr, value);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
@@ -112,42 +121,46 @@ namespace riscv
 						(long) cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm());
 	});
 
-	INSTRUCTION(BRANCH,
+	INSTRUCTION(STORE_I16,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		const auto& value = cpu.reg(instr.Stype.rs2);
+		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		cpu.machine().memory.template write<uint16_t>(addr, value);
+	}, DECODED_INSTR(STORE_I8).printer);
+
+	INSTRUCTION(STORE_I32,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		const auto& value = cpu.reg(instr.Stype.rs2);
+		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		cpu.machine().memory.template write<uint32_t>(addr, value);
+	}, DECODED_INSTR(STORE_I8).printer);
+
+	INSTRUCTION(STORE_I64,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		const auto& value = cpu.reg(instr.Stype.rs2);
+		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		cpu.machine().memory.template write<uint64_t>(addr, value);
+	}, DECODED_INSTR(STORE_I8).printer);
+
+#ifdef RISCV_DEBUG
+#define VERBOSE_BRANCH() \
+	if (UNLIKELY(cpu.machine().verbose_jumps)) { \
+		printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 4); \
+	}
+#else
+#define VERBOSE_BRANCH() /* */
+#endif
+
+	INSTRUCTION(BRANCH_EQ,
 	[] (auto& cpu, rv32i_instruction instr) {
-		bool comparison = false;
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
-		switch (instr.Btype.funct3) {
-			case 0x0: // BEQ
-				comparison = reg1 == reg2;
-				break;
-			case 0x1: // BNE
-				comparison = reg1 != reg2;
-				break;
-			case 0x2: // ???
-			case 0x3: // ???
-				cpu.trigger_exception(ILLEGAL_OPERATION);
-				break;
-			case 0x4: // BLT
-				comparison = RVTOSIGNED(reg1) < RVTOSIGNED(reg2);
-				break;
-			case 0x5: // BGE
-				comparison = RVTOSIGNED(reg1) >= RVTOSIGNED(reg2);
-				break;
-			case 0x6: // BLTU
-				comparison = reg1 < reg2;
-				break;
-			case 0x7: // BGEU
-				comparison = reg1 >= reg2;
-				break;
-		}
-		if (comparison) {
+		if (reg1 == reg2) {
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
-#ifdef RISCV_DEBUG
-			if (UNLIKELY(cpu.machine().verbose_jumps)) {
-				printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 4);
-			}
-#endif
+			VERBOSE_BRANCH()
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
@@ -173,28 +186,6 @@ namespace riscv
 		}
 	});
 
-#ifdef RISCV_DEBUG
-#define VERBOSE_BRANCH() \
-	if (UNLIKELY(cpu.machine().verbose_jumps)) { \
-		printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 4); \
-	}
-#else
-#define VERBOSE_BRANCH() /* */
-#endif
-
-	INSTRUCTION(BRANCH_EQ,
-	[] (auto& cpu, rv32i_instruction instr) {
-		const auto reg1 = cpu.reg(instr.Btype.rs1);
-		const auto reg2 = cpu.reg(instr.Btype.rs2);
-		if (reg1 == reg2) {
-			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
-			VERBOSE_BRANCH()
-		}
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
-	});
-
 	INSTRUCTION(BRANCH_NE,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
@@ -203,10 +194,7 @@ namespace riscv
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(BRANCH_EQ).printer);
 
 	INSTRUCTION(BRANCH_LT,
 	[] (auto& cpu, rv32i_instruction instr) {
@@ -216,10 +204,7 @@ namespace riscv
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(BRANCH_EQ).printer);
 
 	INSTRUCTION(BRANCH_GE,
 	[] (auto& cpu, rv32i_instruction instr) {
@@ -229,10 +214,7 @@ namespace riscv
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(BRANCH_EQ).printer);
 
 	INSTRUCTION(BRANCH_LTU,
 	[] (auto& cpu, rv32i_instruction instr) {
@@ -242,10 +224,7 @@ namespace riscv
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(BRANCH_EQ).printer);
 
 	INSTRUCTION(BRANCH_GEU,
 	[] (auto& cpu, rv32i_instruction instr) {
@@ -255,10 +234,7 @@ namespace riscv
 			cpu.jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(BRANCH).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(BRANCH_EQ).printer);
 
 	INSTRUCTION(JALR,
 	[] (auto& cpu, rv32i_instruction instr) {
@@ -361,10 +337,6 @@ namespace riscv
 				dst = src & instr.Itype.signed_imm();
 				break;
 			}
-		} else if (instr.Itype.rs1 == 0) {
-			// NOP
-		} else {
-			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -422,10 +394,7 @@ namespace riscv
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// ADDI: Add sign-extended 12-bit immediate
 		dst = src + instr.Itype.signed_imm();
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(OP_IMM).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP,
 	[] (auto& cpu, rv32i_instruction instr)
@@ -566,10 +535,7 @@ namespace riscv
 		const auto src1 = cpu.reg(instr.Rtype.rs1);
 		const auto src2 = cpu.reg(instr.Rtype.rs2);
 		dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(OP).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(OP).printer);
 
 	INSTRUCTION(SYSTEM,
 	[] (auto& cpu, rv32i_instruction instr) {
@@ -662,15 +628,11 @@ namespace riscv
 
 	INSTRUCTION(LUI,
 	[] (auto& cpu, rv32i_instruction instr) {
-		// handler
-		if (instr.Utype.rd != 0) {
+		if (LIKELY(instr.Utype.rd != 0)) {
 			cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();
-			return;
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		// printer
 		return snprintf(buffer, len, "LUI %s, 0x%lX",
 						RISCV::regname(instr.Utype.rd),
 						(long) instr.Utype.upper_imm());
@@ -678,15 +640,11 @@ namespace riscv
 
 	INSTRUCTION(AUIPC,
 	[] (auto& cpu, rv32i_instruction instr) {
-		// handler
-		if (instr.Utype.rd != 0) {
+		if (LIKELY(instr.Utype.rd != 0)) {
 			cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.upper_imm();
-			return;
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		// printer
 		return snprintf(buffer, len, "AUIPC %s, PC+0x%lX (0x%lX)",
 						RISCV::regname(instr.Utype.rd),
 						(long) instr.Utype.upper_imm(),
@@ -717,10 +675,8 @@ namespace riscv
 				}
 				return;
 			}
-		} else if (instr.Itype.rs1 == 0) {
-			return; // NOP
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		if (instr.Itype.imm == 0)
@@ -776,11 +732,7 @@ namespace riscv
 		const int32_t src = cpu.reg(instr.Itype.rs1);
 		// ADDIW: Add sign-extended 12-bit immediate
 		dst = (int32_t) (src + instr.Itype.signed_imm());
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(OP_IMM32).printer(buffer, len, cpu, instr);
-	});
-
+	}, DECODED_INSTR(OP_IMM32).printer);
 
 	INSTRUCTION(OP32,
 	[] (auto& cpu, rv32i_instruction instr) {
@@ -838,8 +790,8 @@ namespace riscv
 					}
 					return;
 			}
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		if (!instr.Rtype.is_32M())
@@ -871,10 +823,7 @@ namespace riscv
 		const int32_t src1 = cpu.reg(instr.Rtype.rs1);
 		const int32_t src2 = cpu.reg(instr.Rtype.rs2);
 		dst = (int32_t) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
-	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return DECODED_INSTR(OP32).printer(buffer, len, cpu, instr);
-	});
+	}, DECODED_INSTR(OP32).printer);
 
 	INSTRUCTION(FENCE,
 	[] (auto&, rv32i_instruction /* instr */) {

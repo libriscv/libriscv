@@ -9,15 +9,54 @@
 			{
 				// RV32IM
 				case 0b0000011:
-					DECODER(DECODED_INSTR(LOAD));
+					switch (instruction.Stype.funct3) {
+						case 0x0:
+							DECODER(DECODED_INSTR(LOAD_I8));
+						case 0x1:
+							DECODER(DECODED_INSTR(LOAD_I16));
+						case 0x2:
+							DECODER(DECODED_INSTR(LOAD_I32));
+						case 0x3:
+							if constexpr (RVIS64BIT(*this)) {
+								DECODER(DECODED_INSTR(LOAD_U64));
+							}
+							break;
+						case 0x4:
+							DECODER(DECODED_INSTR(LOAD_U8));
+						case 0x5:
+							DECODER(DECODED_INSTR(LOAD_U16));
+						case 0x6:
+							DECODER(DECODED_INSTR(LOAD_U32));
+						default:
+							DECODER(DECODED_INSTR(ILLEGAL));
+					}
+					break;
 				case 0b0100011:
-					DECODER(DECODED_INSTR(STORE));
+					switch (instruction.Stype.funct3) {
+						case 0x0:
+							DECODER(DECODED_INSTR(STORE_I8));
+						case 0x1:
+							DECODER(DECODED_INSTR(STORE_I16));
+						case 0x2:
+							DECODER(DECODED_INSTR(STORE_I32));
+						case 0x3:
+							if constexpr (RVIS64BIT(*this)) {
+								DECODER(DECODED_INSTR(STORE_I64));
+							}
+							break;
+						default:
+							DECODER(DECODED_INSTR(ILLEGAL));
+					}
+					break;
 				case 0b1100011:
 					switch (instruction.Btype.funct3) {
 					case 0x0:
 						DECODER(DECODED_INSTR(BRANCH_EQ));
 					case 0x1:
 						DECODER(DECODED_INSTR(BRANCH_NE));
+					case 0x2:
+					case 0x3:
+						DECODER(DECODED_INSTR(ILLEGAL));
 					case 0x4:
 						DECODER(DECODED_INSTR(BRANCH_LT));
 					case 0x5:
@@ -26,8 +65,6 @@
 						DECODER(DECODED_INSTR(BRANCH_LTU));
 					case 0x7:
 						DECODER(DECODED_INSTR(BRANCH_GEU));
-					default:
-						DECODER(DECODED_INSTR(BRANCH));
 					}
 				case 0b1100111:
 					DECODER(DECODED_INSTR(JALR));
@@ -42,10 +79,9 @@
 						default:
 							DECODER(DECODED_INSTR(OP_IMM));
 						}
-					} else if (instruction.Itype.rs1 == 0) {
+					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
-					break;
 				case 0b0110011:
 					if (instruction.Rtype.rd != 0)
 					{
@@ -55,8 +91,9 @@
 						default:
 							DECODER(DECODED_INSTR(OP));
 						}
+					} else {
+						DECODER(DECODED_INSTR(NOP));
 					}
-					break;
 				case 0b1110011:
 					DECODER(DECODED_INSTR(SYSTEM));
 				case 0b0110111:
@@ -72,10 +109,9 @@
 						default:
 							DECODER(DECODED_INSTR(OP_IMM32));
 						}
-					} else if (instruction.Itype.rs1 == 0) {
+					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
-					break;
 				case 0b0111011: // OP32
 					if (instruction.Rtype.rd != 0)
 					{
@@ -85,8 +121,9 @@
 						default:
 							DECODER(DECODED_INSTR(OP32));
 						}
+					} else {
+						DECODER(DECODED_INSTR(NOP));
 					}
-					break;
 				case 0b0001111:
 					DECODER(DECODED_INSTR(FENCE));
 #ifdef RISCV_EXT_FLOATS
