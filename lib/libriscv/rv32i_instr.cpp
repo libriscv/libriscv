@@ -288,55 +288,52 @@ namespace riscv
 	INSTRUCTION(OP_IMM,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		if (instr.Itype.rd != 0)
-		{
-			auto& dst = cpu.reg(instr.Itype.rd);
-			const auto src = cpu.reg(instr.Itype.rs1);
-			switch (instr.Itype.funct3) {
-			case 0x0:
-				// ADDI: Add sign-extended 12-bit immediate
-				dst = src + instr.Itype.signed_imm();
-				break;
-			case 0x1: // SLLI:
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const auto src = cpu.reg(instr.Itype.rs1);
+		switch (instr.Itype.funct3) {
+		case 0x0:
+			// ADDI: Add sign-extended 12-bit immediate
+			dst = src + instr.Itype.signed_imm();
+			break;
+		case 0x1: // SLLI:
+			if constexpr (RVIS64BIT(cpu))
+				dst = src << instr.Itype.shift64_imm();
+			else
+				dst = src << instr.Itype.shift_imm();
+			break;
+		case 0x2: // SLTI:
+			dst = (RVTOSIGNED(src) < instr.Itype.signed_imm()) ? 1 : 0;
+			break;
+		case 0x3: // SLTU:
+			dst = (src < (unsigned) instr.Itype.signed_imm()) ? 1 : 0;
+			break;
+		case 0x4: // XORI:
+			dst = src ^ instr.Itype.signed_imm();
+			break;
+		case 0x5: // SRLI / SRAI:
+			if (LIKELY(!instr.Itype.is_srai())) {
 				if constexpr (RVIS64BIT(cpu))
-					dst = src << instr.Itype.shift64_imm();
+					dst = src >> instr.Itype.shift64_imm();
 				else
-					dst = src << instr.Itype.shift_imm();
-				break;
-			case 0x2: // SLTI:
-				dst = (RVTOSIGNED(src) < instr.Itype.signed_imm()) ? 1 : 0;
-				break;
-			case 0x3: // SLTU:
-				dst = (src < (unsigned) instr.Itype.signed_imm()) ? 1 : 0;
-				break;
-			case 0x4: // XORI:
-				dst = src ^ instr.Itype.signed_imm();
-				break;
-			case 0x5: // SRLI / SRAI:
-				if (LIKELY(!instr.Itype.is_srai())) {
-					if constexpr (RVIS64BIT(cpu))
-						dst = src >> instr.Itype.shift64_imm();
-					else
-						dst = src >> instr.Itype.shift_imm();
-				} else { // SRAI: preserve the sign bit
-					constexpr auto bit = 1ul << (sizeof(src) * 8 - 1);
-					const bool is_signed = (src & bit) != 0;
-					if constexpr (RVIS64BIT(cpu)) {
-						const uint32_t shifts = instr.Itype.shift64_imm();
-						dst = RV64I::SRA(is_signed, shifts, src);
-					} else {
-						const uint32_t shifts = instr.Itype.shift_imm();
-						dst = RV32I::SRA(is_signed, shifts, src);
-					}
+					dst = src >> instr.Itype.shift_imm();
+			} else { // SRAI: preserve the sign bit
+				constexpr auto bit = 1ul << (sizeof(src) * 8 - 1);
+				const bool is_signed = (src & bit) != 0;
+				if constexpr (RVIS64BIT(cpu)) {
+					const uint32_t shifts = instr.Itype.shift64_imm();
+					dst = RV64I::SRA(is_signed, shifts, src);
+				} else {
+					const uint32_t shifts = instr.Itype.shift_imm();
+					dst = RV32I::SRA(is_signed, shifts, src);
 				}
-				break;
-			case 0x6: // ORI:
-				dst = src | instr.Itype.signed_imm();
-				break;
-			case 0x7: // ANDI:
-				dst = src & instr.Itype.signed_imm();
-				break;
 			}
+			break;
+		case 0x6: // ORI:
+			dst = src | instr.Itype.signed_imm();
+			break;
+		case 0x7: // ANDI:
+			dst = src & instr.Itype.signed_imm();
+			break;
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -399,110 +396,106 @@ namespace riscv
 	INSTRUCTION(OP,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		if (instr.Rtype.rd != 0)
-		{
-			auto& dst = cpu.reg(instr.Rtype.rd);
-			const auto src1 = cpu.reg(instr.Rtype.rs1);
-			const auto src2 = cpu.reg(instr.Rtype.rs2);
+		auto& dst = cpu.reg(instr.Rtype.rd);
+		const auto src1 = cpu.reg(instr.Rtype.rs1);
+		const auto src2 = cpu.reg(instr.Rtype.rs2);
 
-			switch (instr.Rtype.jumptable_friendly_op()) {
-				case 0x0: // ADD / SUB
-					dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
-					return;
-				case 0x1: // SLL
+		switch (instr.Rtype.jumptable_friendly_op()) {
+			case 0x0: // ADD / SUB
+				dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
+				return;
+			case 0x1: // SLL
+				if constexpr (RVIS64BIT(cpu)) {
+					dst = src1 << (src2 & 0x3F);
+				} else {
+					dst = src1 << (src2 & 0x1F);
+				}
+				return;
+			case 0x2: // SLT
+				dst = (RVTOSIGNED(src1) < RVTOSIGNED(src2)) ? 1 : 0;
+				return;
+			case 0x3: // SLTU
+				dst = (src1 < src2) ? 1 : 0;
+				return;
+			case 0x4: // XOR
+				dst = src1 ^ src2;
+				return;
+			case 0x5: // SRL / SRA
+				if (!instr.Rtype.is_f7()) { // SRL
 					if constexpr (RVIS64BIT(cpu)) {
-						dst = src1 << (src2 & 0x3F);
+						dst = src1 >> (src2 & 0x3F); // max 63 shifts!
 					} else {
-						dst = src1 << (src2 & 0x1F);
+						dst = src1 >> (src2 & 0x1F); // max 31 shifts!
 					}
-					return;
-				case 0x2: // SLT
-					dst = (RVTOSIGNED(src1) < RVTOSIGNED(src2)) ? 1 : 0;
-					return;
-				case 0x3: // SLTU
-					dst = (src1 < src2) ? 1 : 0;
-					return;
-				case 0x4: // XOR
-					dst = src1 ^ src2;
-					return;
-				case 0x5: // SRL / SRA
-					if (!instr.Rtype.is_f7()) { // SRL
-						if constexpr (RVIS64BIT(cpu)) {
-							dst = src1 >> (src2 & 0x3F); // max 63 shifts!
-						} else {
-							dst = src1 >> (src2 & 0x1F); // max 31 shifts!
-						}
-					} else { // SRA
-						constexpr auto bit = 1ul << (sizeof(src1) * 8 - 1);
-						const bool is_signed = (src1 & bit) != 0;
-						if constexpr (RVIS64BIT(cpu)) {
-							const uint32_t shifts = src2 & 0x3F; // max 63 shifts!
-							dst = RV64I::SRA(is_signed, shifts, src1);
-						} else {
-							const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
-							dst = RV32I::SRA(is_signed, shifts, src1);
-						}
+				} else { // SRA
+					constexpr auto bit = 1ul << (sizeof(src1) * 8 - 1);
+					const bool is_signed = (src1 & bit) != 0;
+					if constexpr (RVIS64BIT(cpu)) {
+						const uint32_t shifts = src2 & 0x3F; // max 63 shifts!
+						dst = RV64I::SRA(is_signed, shifts, src1);
+					} else {
+						const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
+						dst = RV32I::SRA(is_signed, shifts, src1);
 					}
+				}
+				return;
+			case 0x6: // OR
+				dst = src1 | src2;
+				return;
+			case 0x7: // AND
+				dst = src1 & src2;
+				return;
+			// extension RV32M / RV64M
+			case 0x10: // MUL
+				dst = RVTOSIGNED(src1) * RVTOSIGNED(src2);
+				return;
+			case 0x11: // MULH
+				if constexpr (!RVIS64BIT(cpu)) {
+					dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
 					return;
-				case 0x6: // OR
-					dst = src1 | src2;
+				}
+			case 0x12: // MULHSU
+				if constexpr (!RVIS64BIT(cpu)) {
+					dst = ((int64_t) src1 * (uint64_t) src2) >> 32u;
 					return;
-				case 0x7: // AND
-					dst = src1 & src2;
+				}
+			case 0x13: // MULHU
+				if constexpr (!RVIS64BIT(cpu)) {
+					dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;
 					return;
-				// extension RV32M / RV64M
-				case 0x10: // MUL
-					dst = RVTOSIGNED(src1) * RVTOSIGNED(src2);
-					return;
-				case 0x11: // MULH
-					if constexpr (!RVIS64BIT(cpu)) {
-						dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
-						return;
+				}
+			case 0x14: // DIV
+				// division by zero is not an exception
+				if (LIKELY(RVTOSIGNED(src2) != 0)) {
+					if constexpr (RVIS64BIT(cpu)) {
+						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
+					} else {
+					// rv32i_instr.cpp:301:2: runtime error:
+					// division of -2147483648 by -1 cannot be represented in type 'int'
+					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
+						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
 					}
-				case 0x12: // MULHSU
-					if constexpr (!RVIS64BIT(cpu)) {
-						dst = ((int64_t) src1 * (uint64_t) src2) >> 32u;
-						return;
+				}
+				return;
+			case 0x15: // DIVU
+				if (LIKELY(src2 != 0)) dst = src1 / src2;
+				return;
+			case 0x16: // REM
+				if (LIKELY(src2 != 0)) {
+					if constexpr (RVIS64BIT(cpu)) {
+						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
+					} else {
+					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
+						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
 					}
-				case 0x13: // MULHU
-					if constexpr (!RVIS64BIT(cpu)) {
-						dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;
-						return;
-					}
-				case 0x14: // DIV
-					// division by zero is not an exception
-					if (LIKELY(RVTOSIGNED(src2) != 0)) {
-						if constexpr (RVIS64BIT(cpu)) {
-							dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
-						} else {
-						// rv32i_instr.cpp:301:2: runtime error:
-						// division of -2147483648 by -1 cannot be represented in type 'int'
-						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-							dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
-						}
-					}
-					return;
-				case 0x15: // DIVU
-					if (LIKELY(src2 != 0)) dst = src1 / src2;
-					return;
-				case 0x16: // REM
-					if (LIKELY(src2 != 0)) {
-						if constexpr (RVIS64BIT(cpu)) {
-							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-						} else {
-						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-						}
-					}
-					return;
-				case 0x17: // REMU
-					if (LIKELY(src2 != 0)) {
-						dst = src1 % src2;
-					}
-					return;
-			}
+				}
+				return;
+			case 0x17: // REMU
+				if (LIKELY(src2 != 0)) {
+					dst = src1 % src2;
+				}
+				return;
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -532,9 +525,17 @@ namespace riscv
 	INSTRUCTION(OP_ADD,
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto& dst = cpu.reg(instr.Rtype.rd);
-		const auto src1 = cpu.reg(instr.Rtype.rs1);
-		const auto src2 = cpu.reg(instr.Rtype.rs2);
-		dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
+		const auto& src1 = cpu.reg(instr.Rtype.rs1);
+		const auto& src2 = cpu.reg(instr.Rtype.rs2);
+		dst = src1 + src2;
+	}, DECODED_INSTR(OP).printer);
+
+	INSTRUCTION(OP_SUB,
+	[] (auto& cpu, rv32i_instruction instr) {
+		auto& dst = cpu.reg(instr.Rtype.rd);
+		const auto& src1 = cpu.reg(instr.Rtype.rs1);
+		const auto& src2 = cpu.reg(instr.Rtype.rs2);
+		dst = src1 - src2;
 	}, DECODED_INSTR(OP).printer);
 
 	INSTRUCTION(SYSTEM,
@@ -625,6 +626,20 @@ namespace riscv
 			return snprintf(buffer, len, "SYS ???");
 		}
 	});
+
+	INSTRUCTION(SYSCALL,
+	[] (auto& cpu, rv32i_instruction) {
+		cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
+	}, DECODED_INSTR(SYSTEM).printer);
+
+	INSTRUCTION(EBREAK,
+	[] (auto& cpu, rv32i_instruction) {
+#ifdef RISCV_EBREAK_MEANS_STOP
+		cpu.machine().stop();
+#else
+		cpu.machine().system_call(riscv::SYSCALL_EBREAK);
+#endif
+	}, DECODED_INSTR(SYSTEM).printer);
 
 	INSTRUCTION(LUI,
 	[] (auto& cpu, rv32i_instruction instr) {

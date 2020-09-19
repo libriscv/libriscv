@@ -79,22 +79,32 @@
 						default:
 							DECODER(DECODED_INSTR(OP_IMM));
 						}
-					} else {
-						DECODER(DECODED_INSTR(NOP));
 					}
-				case 0b0110011:
+					DECODER(DECODED_INSTR(NOP));
+				case 0b0110011: // OP
 					if (instruction.Rtype.rd != 0)
 					{
 						switch (instruction.Rtype.jumptable_friendly_op()) {
 						case 0x0: // ADD / SUB
-							DECODER(DECODED_INSTR(OP_ADD));
+							if (!instruction.Rtype.is_f7()) {
+								DECODER(DECODED_INSTR(OP_ADD));
+							} else {
+								DECODER(DECODED_INSTR(OP_SUB));
+							}
 						default:
 							DECODER(DECODED_INSTR(OP));
 						}
-					} else {
-						DECODER(DECODED_INSTR(NOP));
 					}
+					DECODER(DECODED_INSTR(NOP));
 				case 0b1110011:
+					if (instruction.Itype.funct3 == 0)
+					{
+						if (instruction.Itype.imm == 0) {
+							DECODER(DECODED_INSTR(SYSCALL));
+						} else if (instruction.Itype.imm == 1) {
+							DECODER(DECODED_INSTR(EBREAK));
+						}
+					}
 					DECODER(DECODED_INSTR(SYSTEM));
 				case 0b0110111:
 					DECODER(DECODED_INSTR(LUI));

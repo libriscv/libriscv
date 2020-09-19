@@ -573,7 +573,6 @@ namespace riscv
 						dst = rs1.i64;
 						return;
 					}
-					cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -604,7 +603,6 @@ namespace riscv
 					dst.load_u64(rs1);
 					return;
 				}
-				cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
