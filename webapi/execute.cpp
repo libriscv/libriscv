@@ -89,41 +89,31 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 	{
 		// reset PC here for benchmarking
 		machine.cpu.reset_instruction_counter();
-		// take a snapshot of the machine
-		std::vector<uint8_t> program_state;
-		machine.serialize_to(program_state);
 		std::deque<uint64_t> samples;
-		// begin benchmarking 1 + N samples
-		for (int i = 0; i < 1 + BENCH_SAMPLES; i++)
-		{
-			machine.deserialize_from(program_state);
-			state.output.clear();
-			const uint64_t t0 = micros_now();
-			asm("" : : : "memory");
+		state.output.clear();
 
-			try {
-				machine.simulate(MAX_INSTRUCTIONS);
-				if (machine.cpu.instruction_counter() == MAX_INSTRUCTIONS) {
-					res.set_header("X-Exception", "Maximum instructions reached");
-					break;
-				}
-			} catch (std::exception& e) {
-				res.set_header("X-Exception", e.what());
-				break;
+		asm("" : : : "memory");
+		const uint64_t t0 = micros_now();
+		asm("" : : : "memory");
+
+		try {
+			machine.simulate(MAX_INSTRUCTIONS);
+			if (machine.cpu.instruction_counter() == MAX_INSTRUCTIONS) {
+				res.set_header("X-Exception", "Maximum instructions reached");
 			}
-
-			asm("" : : : "memory");
-			const uint64_t t1 = micros_now();
-			asm("" : : : "memory");
-			samples.push_back(t1 - t0);
+		} catch (const std::exception& e) {
+			res.set_header("X-Exception", e.what());
 		}
+
+		asm("" : : : "memory");
+		const uint64_t t1 = micros_now();
+		asm("" : : : "memory");
+		samples.push_back(t1 - t0);
 
 		res.status = 200;
 		res.set_header("X-Exit-Code", std::to_string(state.exit_code));
 		if (!samples.empty()) {
 			const uint64_t first = samples[0];
-			// we don't want to measure low/high/median on the first sample
-			samples.pop_front();
 			std::sort(samples.begin(), samples.end());
 			const uint64_t lowest = samples[0];
 			const uint64_t median = samples[samples.size() / 2];
