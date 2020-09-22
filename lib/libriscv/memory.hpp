@@ -115,7 +115,7 @@ namespace riscv
 		// returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
-		Memory(Machine<W>&, const std::vector<uint8_t>&, MachineOptions<W>);
+		Memory(Machine<W>&, std::string_view, MachineOptions<W>);
 		~Memory();
 	private:
 		inline auto& create_attr(const address_t address);
@@ -162,7 +162,7 @@ namespace riscv
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
 
-		const std::vector<uint8_t>& m_binary;
+		const std::string_view m_binary;
 
 #ifndef RISCV_DISABLE_SYM_LOOKUP
 		// lookup tree for ELF symbol names

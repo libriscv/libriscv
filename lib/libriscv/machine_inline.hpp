@@ -1,6 +1,6 @@
 
 template <int W>
-inline Machine<W>::Machine(const std::vector<uint8_t>& binary, 
+inline Machine<W>::Machine(std::string_view binary,
 							MachineOptions<W> options)
 	: cpu(*this), memory(*this, binary, options)
 {
@@ -15,9 +15,17 @@ inline Machine<W>::Machine(const std::vector<uint8_t>& binary,
 	}
 }
 template <int W>
-inline Machine<W>::Machine(const std::vector<uint8_t>& binary, 
-							uint64_t mmax)
+inline Machine<W>::Machine(std::string_view binary, uint64_t mmax)
 	: Machine(binary, MachineOptions<W> { .memory_max = mmax }) {}
+
+template <int W>
+inline Machine<W>::Machine(const std::vector<uint8_t>& bin, MachineOptions<W> opts)
+	: Machine(std::string_view{(char*) bin.data(), bin.size()}, opts) {}
+
+template <int W>
+inline Machine<W>::Machine(const std::vector<uint8_t>& binary, uint64_t mmax)
+	: Machine(binary, MachineOptions<W> { .memory_max = mmax }) {}
+
 template <int W>
 inline Machine<W>::~Machine()
 {

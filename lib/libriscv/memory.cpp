@@ -13,8 +13,7 @@ __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 namespace riscv
 {
 	template <int W>
-	Memory<W>::Memory(Machine<W>& mach,
-					const std::vector<uint8_t>& bin,
+	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
 					MachineOptions<W> options)
 		: m_machine{mach},
 		  m_binary{bin},

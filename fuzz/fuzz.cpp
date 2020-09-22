@@ -33,7 +33,7 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 
 static void fuzz_elf_loader(const uint8_t* data, size_t len)
 {
-	const std::vector<uint8_t> bin {data, data + len};
+	const std::string_view bin {(const char*) data, len};
 	try {
 		riscv::Machine<riscv::RISCV32> m32 { bin };
 	} catch (const std::exception& e) {
