@@ -38,6 +38,13 @@ namespace riscv
 					auto* cache = &decoder_array[dcindex];
 					dcindex++;
 #ifdef RISCV_INSTR_CACHE_PREGEN
+					// fill start with illegal instructions
+					const address_t start_offset = addr & (Page::size()-1);
+					for (address_t off = 0; off < start_offset; off += 4)
+					{
+						cache->template get<W> (off / cache->DIVISOR) =
+							machine().cpu.decode(rv32i_instruction{0}).handler;
+					}
 					// generate instruction handler pointers for machine code
 					for (address_t dst = addr; dst < addr + size;)
 					{
@@ -50,7 +57,16 @@ namespace riscv
 
 						dst += instruction.length();
 					}
+					// fill end with illegal instructions
+					const address_t end_offset = (addr + size) & (Page::size()-1);
+					if (end_offset != 0)
+					for (address_t off = end_offset; off < Page::size(); off += 4)
+					{
+						cache->template get<W> (off / cache->DIVISOR) =
+							machine().cpu.decode(rv32i_instruction{0}).handler;
+					}
 #else
+					// the instructions will be decoded on-demand
 					*cache = {};
 #endif
 				}
