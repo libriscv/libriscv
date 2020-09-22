@@ -1,3 +1,4 @@
+#pragma once
 #include <cstddef>
 #include <cstdint>
 #define _NOTHROW __attribute__ ((__nothrow__))
