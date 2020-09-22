@@ -52,7 +52,6 @@ namespace riscv
 			this->reset();
 		}
 		else {
-			assert(&bin == &options.owning_machine->memory.binary());
 			this->machine_loader(*options.owning_machine);
 		}
 	}
