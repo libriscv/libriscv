@@ -9,24 +9,38 @@
 			{
 				// RV32IM
 				case 0b0000011:
-					switch (instruction.Stype.funct3) {
+					switch (instruction.Itype.funct3) {
 						case 0x0:
-							DECODER(DECODED_INSTR(LOAD_I8));
+							if (instruction.Itype.rd != 0)
+								DECODER(DECODED_INSTR(LOAD_I8));
+							DECODER(DECODED_INSTR(LOAD_I8_DUMMY));
 						case 0x1:
-							DECODER(DECODED_INSTR(LOAD_I16));
+							if (instruction.Itype.rd != 0)
+								DECODER(DECODED_INSTR(LOAD_I16));
+							DECODER(DECODED_INSTR(LOAD_I16_DUMMY));
 						case 0x2:
-							DECODER(DECODED_INSTR(LOAD_I32));
+							if (instruction.Itype.rd != 0)
+								DECODER(DECODED_INSTR(LOAD_I32));
+							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
 						case 0x3:
 							if constexpr (RVIS64BIT(*this)) {
-								DECODER(DECODED_INSTR(LOAD_U64));
+								if (instruction.Itype.rd != 0)
+									DECODER(DECODED_INSTR(LOAD_U64));
+								DECODER(DECODED_INSTR(LOAD_U64_DUMMY));
 							}
 							break;
 						case 0x4:
-							DECODER(DECODED_INSTR(LOAD_U8));
+							if (instruction.Itype.rd != 0)
+								DECODER(DECODED_INSTR(LOAD_U8));
+							DECODER(DECODED_INSTR(LOAD_I8_DUMMY));
 						case 0x5:
-							DECODER(DECODED_INSTR(LOAD_U16));
+							if (instruction.Itype.rd != 0)
+								DECODER(DECODED_INSTR(LOAD_U16));
+							DECODER(DECODED_INSTR(LOAD_I16_DUMMY));
 						case 0x6:
-							DECODER(DECODED_INSTR(LOAD_U32));
+							if (instruction.Itype.rd != 0)
+								DECODER(DECODED_INSTR(LOAD_U32));
+							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
 						default:
 							DECODER(DECODED_INSTR(ILLEGAL));
 					}
@@ -34,7 +48,9 @@
 				case 0b0100011:
 					switch (instruction.Stype.funct3) {
 						case 0x0:
-							DECODER(DECODED_INSTR(STORE_I8));
+							if (instruction.Stype.signed_imm() == 0)
+								DECODER(DECODED_INSTR(STORE_I8));
+							DECODER(DECODED_INSTR(STORE_I8_IMM));
 						case 0x1:
 							DECODER(DECODED_INSTR(STORE_I16));
 						case 0x2:
