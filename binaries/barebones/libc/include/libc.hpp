@@ -19,8 +19,6 @@ extern size_t strlen(const char* str);
 extern int    strcmp(const char* str1, const char* str2);
 extern char*  strcat(char* dest, const char* src);
 
-extern long int write(int, const void*, size_t);
-
 extern void* malloc(size_t) _NOTHROW;
 extern void* calloc(size_t, size_t) _NOTHROW;
 extern void  free(void*) _NOTHROW;
