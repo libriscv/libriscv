@@ -52,12 +52,12 @@
 								DECODER(DECODED_INSTR(STORE_I8));
 							DECODER(DECODED_INSTR(STORE_I8_IMM));
 						case 0x1:
-							DECODER(DECODED_INSTR(STORE_I16));
+							DECODER(DECODED_INSTR(STORE_I16_IMM));
 						case 0x2:
-							DECODER(DECODED_INSTR(STORE_I32));
+							DECODER(DECODED_INSTR(STORE_I32_IMM));
 						case 0x3:
 							if constexpr (RVIS64BIT(*this)) {
-								DECODER(DECODED_INSTR(STORE_I64));
+								DECODER(DECODED_INSTR(STORE_I64_IMM));
 							}
 							break;
 						default:
@@ -125,10 +125,18 @@
 						}
 					}
 					DECODER(DECODED_INSTR(SYSTEM));
-				case 0b0110111:
-					DECODER(DECODED_INSTR(LUI));
-				case 0b0010111:
-					DECODER(DECODED_INSTR(AUIPC));
+				case 0b0110111: // LUI
+					if (instruction.Utype.rd != 0) {
+						DECODER(DECODED_INSTR(LUI));
+					} else {
+						DECODER(DECODED_INSTR(NOP));
+					}
+				case 0b0010111: // AUIPC
+					if (instruction.Utype.rd != 0) {
+						DECODER(DECODED_INSTR(AUIPC));
+					} else {
+						DECODER(DECODED_INSTR(NOP));
+					}
 				case 0b0011011: // OP_IMM32
 					if (instruction.Itype.rd != 0)
 					{

@@ -89,8 +89,7 @@ namespace riscv
 	INSTRUCTION(LOAD_U8,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		RVREGTYPE(cpu) dummy;
-		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		auto& reg = cpu.reg(instr.Itype.rd);
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		reg = cpu.machine().memory.template read<uint8_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
@@ -98,8 +97,7 @@ namespace riscv
 	INSTRUCTION(LOAD_U16,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		RVREGTYPE(cpu) dummy;
-		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		auto& reg = cpu.reg(instr.Itype.rd);
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		reg = cpu.machine().memory.template read<uint16_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
@@ -107,8 +105,7 @@ namespace riscv
 	INSTRUCTION(LOAD_U32,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		RVREGTYPE(cpu) dummy;
-		auto& reg = cpu.registers().get_with_dummy(instr.Itype.rd, dummy);
+		auto& reg = cpu.reg(instr.Itype.rd);
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		reg = cpu.machine().memory.template read<uint32_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
@@ -124,7 +121,6 @@ namespace riscv
 	INSTRUCTION(LOAD_U64_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
-		RVREGTYPE(cpu) dummy;
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		cpu.machine().memory.template read<uint64_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
@@ -154,7 +150,7 @@ namespace riscv
 		cpu.machine().memory.template write<uint8_t>(addr, value);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
-	INSTRUCTION(STORE_I16,
+	INSTRUCTION(STORE_I16_IMM,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
@@ -162,7 +158,7 @@ namespace riscv
 		cpu.machine().memory.template write<uint16_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8).printer);
 
-	INSTRUCTION(STORE_I32,
+	INSTRUCTION(STORE_I32_IMM,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
@@ -170,7 +166,7 @@ namespace riscv
 		cpu.machine().memory.template write<uint32_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8).printer);
 
-	INSTRUCTION(STORE_I64,
+	INSTRUCTION(STORE_I64_IMM,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
@@ -686,9 +682,7 @@ namespace riscv
 
 	INSTRUCTION(LUI,
 	[] (auto& cpu, rv32i_instruction instr) {
-		if (LIKELY(instr.Utype.rd != 0)) {
-			cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();
-		}
+		cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "LUI %s, 0x%lX",
@@ -698,9 +692,7 @@ namespace riscv
 
 	INSTRUCTION(AUIPC,
 	[] (auto& cpu, rv32i_instruction instr) {
-		if (LIKELY(instr.Utype.rd != 0)) {
-			cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.upper_imm();
-		}
+		cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.upper_imm();
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "AUIPC %s, PC+0x%lX (0x%lX)",
