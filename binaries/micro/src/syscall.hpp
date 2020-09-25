@@ -1,7 +1,11 @@
 #pragma once
 
+#ifndef SYSCALL_WRITE
 #define SYSCALL_WRITE  64
+#endif
+#ifndef SYSCALL_EXIT
 #define SYSCALL_EXIT   93
+#endif
 
 extern "C"
 {
