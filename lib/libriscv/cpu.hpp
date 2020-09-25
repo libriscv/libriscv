@@ -73,6 +73,7 @@ namespace riscv
 
 		CPU(Machine<W>&);
 	private:
+		Machine<W>&  m_machine;
 		Registers<W> m_regs;
 		uint64_t     m_counter = 0;
 
@@ -80,7 +81,6 @@ namespace riscv
 		format_t read_upper_half(address_t offset);
 		void execute(format_t);
 
-		Machine<W>& m_machine;
 		struct CachedPage {
 			const Page* page = nullptr;
 			address_t pageno = -1;
