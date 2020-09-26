@@ -41,13 +41,8 @@ riscv_validate_current_page:
 	// Verify execute permission
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
 		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT,
-			pageno * Page::size());
+			m_current_page.pageno * Page::size());
 	}
-#ifdef RISCV_INSTR_CACHE_PER_PAGE
-	if (UNLIKELY(m_current_page.page->decoder_cache() == nullptr)) {
-		m_current_page.page->create_decoder_cache();
-	}
-#endif
 }
 
 template <int W>
