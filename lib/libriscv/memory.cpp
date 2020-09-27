@@ -141,9 +141,17 @@ namespace riscv
 			std::memset(&m_exec_pagedata[0],      0,   prelen);
 			std::memcpy(&m_exec_pagedata[prelen], src, len);
 			std::memset(&m_exec_pagedata[midlen], 0,   postlen);
-			// Insert everything as non-owned memory
-			this->insert_non_owned_memory(
+			// If execute-only, don't add execute pages
+			bool add_execute_pages = attr.read;
+#ifdef RISCV_EXEC_TRAPS_ENABLED
+			add_execute_pages = true; /* Work-around */
+#endif
+			if (add_execute_pages) {
+				// Insert everything as non-owned memory
+				// NOTE: Necessary for execute traps
+				this->insert_non_owned_memory(
 				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, attr);
+			}
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, hdr->p_vaddr + len);
@@ -223,16 +231,16 @@ namespace riscv
 		//this->relocate_section(".rela.dyn", ".symtab");
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		std::vector<std::pair<address_t, Page>> ro_pages;
-		for (auto& it : m_pages)
+		for (auto it = m_pages.begin(); it != m_pages.end(); )
 		{
-			auto& page = it.second;
+			auto& page = it->second;
 			if (page.attr.read && !page.attr.write) {
 				ro_pages.emplace_back(std::piecewise_construct,
-					std::forward_as_tuple(it.first),
-					std::forward_as_tuple(page.attr, page.page()));
-				// Make sure it's not part of the fork
-				page.attr.dont_fork = true;
-			}
+					std::forward_as_tuple(it->first),
+					std::forward_as_tuple(std::move(page)));
+				// Remove the page to simplify the structure
+				it = m_pages.erase(it);
+			} else ++it;
 		}
 		// Sort from lowest to highest address
 		std::sort(ro_pages.begin(), ro_pages.end(),
@@ -240,7 +248,7 @@ namespace riscv
 		// Verify memory range is sequential
 		address_t last = 0;
 		for (const auto& page : ro_pages) {
-			if (last >= page.first)
+			if (last != 0 && page.first != last + 1)
 				throw std::runtime_error("Read-only data was not sequential");
 			last = page.first;
 		}
