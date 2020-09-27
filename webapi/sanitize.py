@@ -45,7 +45,7 @@ else:
 	dc_gnucpp = "riscv32-unknown-elf-g++"
 
 # compile the code
-cmd = ["sudo", "docker", "exec", dc_instance,
+cmd = ["docker", "exec", dc_instance,
 		dc_gnucpp, "-march=rv32g", "-mabi=ilp32d", "-static"] + dc_extra + [
 		"-std=c++17", "-O2", "-fstack-protector", dc_codefile, "-o", dc_binary,
 		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections",
