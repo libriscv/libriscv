@@ -37,13 +37,13 @@ namespace riscv
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::handle_execute_trap()
 	{
-#ifdef RISCV_PAGE_TRAPS_ENABLED
 		// If this trap immediately returns to the caller then by design the
 		// caller will avoid faulting on a page with no execute permission.
 		const address_t pageno = pc() >> Page::SHIFT;
 		const auto& page = get_cached_page(pageno);
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 		if (LIKELY(page.has_trap())) {
-			page.trap(pc(), TRAP_EXEC, pageno);
+			page.trap(pc() & (Page::size()-1), TRAP_EXEC, pageno);
 		}
 #endif
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
