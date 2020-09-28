@@ -48,6 +48,7 @@ namespace riscv
 	{
 		format_t instruction;
 
+retry_instruction:
 		// We have to check the bounds just to be thorough, as this will
 		// instantly crash if something is wrong. In addition,
 		// page management is only done for jumps outside of execute segment.
@@ -64,6 +65,7 @@ namespace riscv
 		const address_t this_page = this->pc() >> Page::SHIFT;
 		if (this_page != this->m_current_page.pageno) {
 			this->change_page(this_page);
+			goto retry_instruction;
 		}
 		const address_t offset = this->pc() & (Page::size()-1);
 

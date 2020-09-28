@@ -142,11 +142,8 @@ namespace riscv
 			std::memcpy(&m_exec_pagedata[prelen], src, len);
 			std::memset(&m_exec_pagedata[midlen], 0,   postlen);
 			// If execute-only, don't add execute pages
-			bool add_execute_pages = attr.read;
-#ifdef RISCV_EXEC_TRAPS_ENABLED
-			add_execute_pages = true; /* Work-around */
-#endif
-			if (add_execute_pages) {
+			// When text and rodata is merged we don't know where the split is
+			if (attr.read) {
 				// Insert everything as non-owned memory
 				// NOTE: Necessary for execute traps
 				this->insert_non_owned_memory(

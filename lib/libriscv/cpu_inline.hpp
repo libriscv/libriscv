@@ -36,7 +36,7 @@ riscv_validate_current_page:
 	if constexpr (execute_traps_enabled) {
 		// If this trap immediately returns to the caller then by design the
 		// caller will avoid faulting on a page with no execute permission.
-		this->check_page();
+		if (this->check_page()) return;
 	}
 	// Verify execute permission
 	if (UNLIKELY(!m_current_page.page->attr.exec)) {
@@ -46,18 +46,17 @@ riscv_validate_current_page:
 }
 
 template <int W>
-inline void CPU<W>::check_page()
+inline bool CPU<W>::check_page()
 {
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	const auto& cp = m_current_page;
 	if (UNLIKELY(cp.page->has_trap())) {
 		const address_t old_pageno = cp.pageno;
 		cp.page->trap(this->pc() - (cp.pageno << Page::SHIFT), TRAP_EXEC, cp.pageno);
-		const address_t new_pageno = this->pc() >> Page::SHIFT;
-		if (old_pageno != new_pageno) {
-			this->change_page(new_pageno);
-		}
+		m_current_page.pageno = -1;
+		return true;
 	}
+	return false;
 #endif
 }
 

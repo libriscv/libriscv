@@ -91,7 +91,7 @@ namespace riscv
 		int64_t m_cache_iterator = 0;
 #endif
 		inline void change_page(address_t pageno);
-		inline void check_page();
+		inline bool check_page();
 
 		// ELF programs linear .text segment
 		const uint8_t* m_exec_data = nullptr;
