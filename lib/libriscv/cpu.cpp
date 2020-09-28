@@ -23,6 +23,7 @@ namespace riscv
 #endif
 	}
 
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 	template <int W>
 	const Page& CPU<W>::get_cached_page(address_t pageno)
 	{
@@ -33,15 +34,16 @@ namespace riscv
 		this->m_cached_page = {&page, pageno};
 		return page;
 	}
+#endif
 
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::handle_execute_trap()
 	{
+#ifdef RISCV_PAGE_TRAPS_ENABLED
 		// If this trap immediately returns to the caller then by design the
 		// caller will avoid faulting on a page with no execute permission.
 		const address_t pageno = pc() >> Page::SHIFT;
 		const auto& page = get_cached_page(pageno);
-#ifdef RISCV_PAGE_TRAPS_ENABLED
 		if (LIKELY(page.has_trap())) {
 			page.trap(pc() & (Page::size()-1), TRAP_EXEC, pageno);
 		}
