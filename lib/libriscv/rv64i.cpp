@@ -23,7 +23,7 @@ namespace riscv
 	template<>
 	void CPU<8>::execute(const format_t instruction)
 	{
-#define DECODER(x) x.handler(*this, instruction); return;
+#define DECODER(x) { x.handler(*this, instruction); return; }
 #include "rv32_instr.inc"
 #undef DECODER
 	}
