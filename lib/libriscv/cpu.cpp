@@ -15,81 +15,64 @@ namespace riscv
 	{
 		this->m_regs = {};
 		this->reset_stack_pointer();
-#ifdef RISCV_PAGE_CACHE
-		// invalidate the page cache
-		for (auto& cache : this->m_page_cache)
-			cache.pageno = -1;
-#endif
-		this->m_current_page = {};
 		// jumping causes some extra calculations
 		this->jump(machine().memory.start_address());
+
+#ifdef RISCV_PAGE_TRAPS_ENABLED
+		this->m_cached_page = {};
+#endif
 	}
 
 	template <int W>
-	typename CPU<W>::format_t CPU<W>::read_upper_half(address_t offset)
+	const Page& CPU<W>::get_cached_page(address_t pageno)
 	{
-		format_t instruction;
-		// read short instruction at address
-		instruction.whole =
-			m_current_page.page->template aligned_read<uint16_t> (offset);
+		if (LIKELY(m_cached_page.pageno == pageno))
+			return *m_cached_page.page;
 
-		// read upper half, completing a 32-bit instruction
-		if (UNLIKELY(instruction.is_long())) {
-			// this instruction crosses a page-border
-			this->change_page(m_current_page.pageno + 1);
-			instruction.half[1] =
-				m_current_page.page->template aligned_read<uint16_t>(0);
+		const auto& page = machine().memory.get_exec_pageno(pageno);
+		this->m_cached_page = {&page, pageno};
+		return page;
+	}
+
+	template <int W>
+	typename CPU<W>::format_t CPU<W>::handle_execute_trap()
+	{
+#ifdef RISCV_PAGE_TRAPS_ENABLED
+		// If this trap immediately returns to the caller then by design the
+		// caller will avoid faulting on a page with no execute permission.
+		const address_t pageno = pc() >> Page::SHIFT;
+		const auto& page = get_cached_page(pageno);
+		if (LIKELY(page.has_trap())) {
+			page.trap(pc(), TRAP_EXEC, pageno);
 		}
-		return instruction;
+#endif
+		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
+			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
+		}
+
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+		__builtin_unreachable();
 	}
 
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-		format_t instruction;
-
-retry_instruction:
 		// We have to check the bounds just to be thorough, as this will
 		// instantly crash if something is wrong. In addition,
 		// page management is only done for jumps outside of execute segment.
 		// Secondly, any jump traps will **HAVE** to return to the execute
 		// segment before returning.
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
-			instruction.whole = *(uint32_t*) &m_exec_data[this->pc()];
-			return instruction;
+			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
 
-		// We don't need to manage the current page when
-		// we have the whole execute-range (+ instruction cache)
-		// WARNING: this combination will break jump-traps (for now)
-		const address_t this_page = this->pc() >> Page::SHIFT;
-		if (this_page != this->m_current_page.pageno) {
-			this->change_page(this_page);
-			goto retry_instruction;
+		// ...
+		if constexpr (execute_traps_enabled) {
+			return handle_execute_trap();
 		}
-		const address_t offset = this->pc() & (Page::size()-1);
 
-		if constexpr (!compressed_enabled) {
-			// special case for non-compressed mode:
-			// we can always read whole instructions
-			instruction.whole =
-				m_current_page.page->template aligned_read<uint32_t> (offset);
-		}
-		else
-		{
-			// here we support compressed instructions
-			// read only full-sized instructions until the end of the buffer
-			if (LIKELY(offset <= Page::size() - 4))
-			{
-				// we can read the whole thing
-				instruction.whole =
-					m_current_page.page->template aligned_read<uint32_t> (offset);
-				return instruction;
-			}
-
-			return read_upper_half(offset);
-		}
-		return instruction;
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+		__builtin_unreachable();
 	}
 
 	template<int W>

@@ -11,55 +11,6 @@ inline void CPU<W>::reset_stack_pointer() noexcept
 	this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
 }
 
-template <int W>
-inline void CPU<W>::change_page(address_t pageno)
-{
-#ifdef RISCV_PAGE_CACHE
-	for (const auto& cache : m_page_cache) {
-		if (cache.pageno == pageno) {
-			m_current_page = cache;
-			// NOTE: this lowers instruction cache pressure
-			goto riscv_validate_current_page;
-		}
-	}
-#endif
-	m_current_page.pageno = pageno;
-	m_current_page.page = &machine().memory.get_exec_pageno(pageno);
-#ifdef RISCV_PAGE_CACHE
-	// Cache it
-	m_page_cache[m_cache_iterator % m_page_cache.size()] = m_current_page;
-	m_cache_iterator ++;
-riscv_validate_current_page:
-#endif
-	// Execute traps enables trapping on execute and enables a novel way of
-	// invoking system calls as regular functions by calling an address.
-	if constexpr (execute_traps_enabled) {
-		// If this trap immediately returns to the caller then by design the
-		// caller will avoid faulting on a page with no execute permission.
-		if (this->check_page()) return;
-	}
-	// Verify execute permission
-	if (UNLIKELY(!m_current_page.page->attr.exec)) {
-		this->trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT,
-			m_current_page.pageno * Page::size());
-	}
-}
-
-template <int W>
-inline bool CPU<W>::check_page()
-{
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-	const auto& cp = m_current_page;
-	if (UNLIKELY(cp.page->has_trap())) {
-		const address_t old_pageno = cp.pageno;
-		cp.page->trap(this->pc() - (cp.pageno << Page::SHIFT), TRAP_EXEC, cp.pageno);
-		m_current_page.pageno = -1;
-		return true;
-	}
-	return false;
-#endif
-}
-
 template<int W> constexpr
 inline void CPU<W>::jump(const address_t dst)
 {

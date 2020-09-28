@@ -32,9 +32,6 @@ namespace riscv
 		uint64_t instruction_counter() const noexcept { return m_counter; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
-#ifdef RISCV_PAGE_CACHE
-		int64_t  page_cache_evictions() const noexcept { return std::max((int64_t) 0, m_cache_iterator - (int64_t) m_page_cache.size()); }
-#endif
 
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }
@@ -51,6 +48,7 @@ namespace riscv
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
 #endif
+		__attribute__((noreturn))
 		static void trigger_exception(interrupt_t, address_t = 0) COLD_PATH();
 
 #ifdef RISCV_DEBUG
@@ -78,25 +76,22 @@ namespace riscv
 		Machine<W>&  m_machine;
 
 		format_t read_next_instruction();
-		format_t read_upper_half(address_t offset);
+		format_t handle_execute_trap() COLD_PATH();
 		void execute(format_t);
-
-		struct CachedPage {
-			const Page* page = nullptr;
-			address_t pageno = -1;
-		};
-		CachedPage m_current_page;
-#ifdef RISCV_PAGE_CACHE
-		std::array<CachedPage, RISCV_PAGE_CACHE> m_page_cache = {};
-		int64_t m_cache_iterator = 0;
-#endif
-		inline void change_page(address_t pageno);
-		inline bool check_page();
 
 		// ELF programs linear .text segment
 		const uint8_t* m_exec_data = nullptr;
 		address_t m_exec_begin = 0;
 		address_t m_exec_end   = 0;
+
+#ifdef RISCV_PAGE_TRAPS_ENABLED
+		struct CachedPage {
+			const Page* page = nullptr;
+			address_t pageno = -1;
+		};
+		CachedPage m_cached_page;
+		const Page& get_cached_page(address_t pageno);
+#endif
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
