@@ -73,9 +73,9 @@ namespace riscv
 
 		CPU(Machine<W>&);
 	private:
-		Machine<W>&  m_machine;
 		Registers<W> m_regs;
 		uint64_t     m_counter = 0;
+		Machine<W>&  m_machine;
 
 		format_t read_next_instruction();
 		format_t read_upper_half(address_t offset);
