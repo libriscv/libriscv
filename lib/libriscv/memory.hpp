@@ -22,7 +22,6 @@ namespace riscv
 	struct Memory
 	{
 		using address_t = address_type<W>;
-		using isa_t     = isa_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
 		using page_fault_cb_t = Function<Page&(Memory&, size_t)>;
 		using page_write_cb_t = Function<void(Memory&, Page&)>;

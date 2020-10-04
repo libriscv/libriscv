@@ -204,7 +204,7 @@ void Machine<W>::print_and_pause()
 	try {
 		const auto instruction = cpu.read_next_instruction();
 		const auto& handler = cpu.decode(instruction);
-		const auto string = CPU<W>::isa_t::to_string(cpu, instruction, handler);
+		const auto string = isa_type<W>::to_string(cpu, instruction, handler);
 		printf("\n>>> Breakpoint \t%s\n\n", string.c_str());
 	} catch (const std::exception& e) {
 		printf("\n>>> Breakpoint \tError reading instruction: %s\n\n", e.what());

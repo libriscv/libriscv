@@ -15,7 +15,6 @@ namespace riscv
 	struct CPU
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
-		using isa_t     = isa_type<W>;              // 32- or 64-bit architecture
 		using format_t  = instruction_format<W>; // one machine instruction
 		using breakpoint_t = Function<void(CPU<W>&)>; // machine instruction
 		using instruction_t = Instruction<W>;

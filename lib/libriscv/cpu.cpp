@@ -90,7 +90,7 @@ namespace riscv
 		// instruction logging
 		if (UNLIKELY(machine().verbose_instructions))
 		{
-			const auto string = isa_t::to_string(*this, instruction, handler);
+			const auto string = isa_type<W>::to_string(*this, instruction, handler);
 			printf("%s\n", string.c_str());
 		}
 

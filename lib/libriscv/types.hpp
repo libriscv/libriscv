@@ -61,6 +61,8 @@ namespace riscv
 	using instruction_handler = void (*)(CPU<W>&, instruction_format<W>);
 	template <int W>
 	using instruction_printer = int  (*)(char*, size_t, CPU<W>&, instruction_format<W>);
+	template <int W>
+	using register_type  = address_type<W>;
 
 	template <int W>
 	struct Instruction {

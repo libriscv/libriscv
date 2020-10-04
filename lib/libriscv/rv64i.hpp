@@ -9,8 +9,6 @@ namespace riscv
 	union rv32i_instruction;
 
 	struct RV64I {
-		using address_t     = uint64_t;
-		using register_t    = address_t;
 		using instruction_t = Instruction<8>;
 
 		static std::string to_string(CPU<8>& cpu, instruction_format<8> format, const instruction_t& instr);

@@ -41,8 +41,8 @@ namespace riscv
 	template <int W>
 	struct Registers
 	{
-		using address_t  = address_type<W>;       // one unsigned memory address
-		using register_t = address_t; // integer register
+		using address_t  = address_type<W>;   // one unsigned memory address
+		using register_t = register_type<W>;  // integer register
 
 		auto& get(uint32_t idx) { return m_reg[idx]; }
 		const auto& get(uint32_t idx) const { return m_reg[idx]; }
