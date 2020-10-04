@@ -1,8 +1,6 @@
 #pragma once
-#include "common.hpp"
 #include "cpu.hpp"
 #include "memory.hpp"
-#include "util/function.hpp"
 #include <EASTL/fixed_vector.h>
 #include <array>
 

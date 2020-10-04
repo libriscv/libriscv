@@ -1,5 +1,4 @@
 #pragma once
-#include "common.hpp"
 #include "elf.hpp"
 #include "types.hpp"
 #include "page.hpp"
@@ -8,10 +7,8 @@
 #include <EASTL/allocator_malloc.h>
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/string_map.h>
-#include "util/function.hpp"
-#include "util/buffer.hpp"
+#include "util/buffer.hpp" // <string>
 #include <numeric>
-#include <string>
 #include <vector>
 
 namespace riscv

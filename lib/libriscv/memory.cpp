@@ -1,7 +1,4 @@
 #include "memory.hpp"
-#include "machine.hpp"
-#include "decoder_cache.hpp"
-#include "elf.hpp"
 #include <stdexcept>
 #ifdef __GNUG__
 #include "decoder_cache.cpp"

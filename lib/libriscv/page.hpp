@@ -1,12 +1,9 @@
 #pragma once
-#include <cassert>
-#include <memory>
-#include <stdexcept>
-#include <string>
-#include <type_traits>
 #include "common.hpp"
 #include "decoder_cache.hpp"
 #include "util/function.hpp"
+#include <cassert>
+#include <memory>
 
 namespace riscv {
 
@@ -173,7 +170,7 @@ inline int64_t Page::passthrough(uint32_t off, int mode, int64_t val)
 			this->template aligned_write<uint64_t> (off, val);
 			return 0;
 	}
-	throw std::runtime_error("passthrough: Unknown mode or size");
+	throw MachineException(INVALID_ALIGNMENT, "passthrough: Unknown mode or size", mode);
 }
 #endif
 

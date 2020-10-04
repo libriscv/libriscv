@@ -1,6 +1,5 @@
 #pragma once
 #include "types.hpp"
-#include "riscvbase.hpp"
 #include <array>
 #include <string>
 

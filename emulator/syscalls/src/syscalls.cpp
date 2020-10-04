@@ -1,4 +1,5 @@
 #include <include/syscall_helpers.hpp>
+#include <stdexcept>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>

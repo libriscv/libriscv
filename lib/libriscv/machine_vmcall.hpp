@@ -1,4 +1,3 @@
-#pragma once
 
 template <int W>
 template <typename... Args> constexpr

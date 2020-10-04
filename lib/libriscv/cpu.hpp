@@ -2,6 +2,7 @@
 #include "common.hpp"
 #include "page.hpp"
 #include "registers.hpp"
+#include "riscvbase.hpp"
 #include "rva.hpp"
 #include "util/function.hpp"
 #include <map>

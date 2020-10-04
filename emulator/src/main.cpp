@@ -127,6 +127,7 @@ int main(int argc, const char** argv)
 	return 0;
 }
 
+#include <stdexcept>
 #include <unistd.h>
 std::vector<uint8_t> load_file(const std::string& filename)
 {
