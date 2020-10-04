@@ -103,7 +103,7 @@ namespace riscv
 		// is that any jump traps must return to the caller, and be re-
 		// validated, otherwise this code will read garbage data!
 		auto& cache_entry =
-			machine().memory.get_decoder_cache()[this->pc() / DecoderCache<Page::SIZE>::DIVISOR];
+			machine().memory.get_decoder_cache()[this->pc() / DecoderCache::DIVISOR];
 #ifndef RISCV_INSTR_CACHE_PREGEN
 		if (UNLIKELY(!cache_entry)) {
 			cache_entry = this->decode(instruction).handler;
@@ -140,7 +140,6 @@ namespace riscv
 	template<int W> __attribute__((cold))
 	void CPU<W>::trigger_exception(interrupt_t intr, address_t data)
 	{
-		// TODO: replace with callback system
 		switch (intr)
 		{
 		case ILLEGAL_OPCODE:

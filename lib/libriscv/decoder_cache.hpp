@@ -1,10 +1,10 @@
 #pragma once
 #include <array>
+#include "common.hpp"
 #include "types.hpp"
 
 namespace riscv {
 
-template <size_t PageSize>
 union DecoderCache
 {
 	template <int W>

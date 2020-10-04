@@ -1,6 +1,6 @@
 #pragma once
 #include "common.hpp"
-#include "decoder_cache.hpp"
+#include "types.hpp"
 #include "util/function.hpp"
 #include <cassert>
 #include <memory>
@@ -24,8 +24,9 @@ struct PageAttributes
 };
 
 struct alignas(8) PageData {
-	static constexpr unsigned SIZE  = 4096;
+	static constexpr unsigned SIZE  = PageSize;
 	static constexpr unsigned SHIFT = 12;
+	static_assert((1 << SHIFT) == PageSize, "Page shift value must match page size");
 
 	std::array<uint8_t, SIZE> buffer8 = {0};
 };
