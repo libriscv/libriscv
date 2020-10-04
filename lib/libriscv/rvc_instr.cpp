@@ -1,4 +1,4 @@
-#include "rv32c.hpp"
+#include "rvc.hpp"
 #include "instr_helpers.hpp"
 
 namespace riscv

@@ -9,13 +9,11 @@ namespace riscv
 	union rv32i_instruction;
 
 	struct RV32I {
-		using address_t     = uint32_t; // ??
-		using format_t      = rv32i_instruction;
-		using compressed_t  = rv32c_instruction;
+		using address_t     = uint32_t;
+		using register_t    = address_t;
 		using instruction_t = Instruction<4>;
-		using register_t    = uint32_t;
 
-		static std::string to_string(CPU<4>& cpu, format_t format, const instruction_t& instr);
+		static std::string to_string(CPU<4>& cpu, instruction_format<4> format, const instruction_t& instr);
 
 		static inline uint32_t SRA(bool is_signed, uint32_t shifts, uint32_t value)
 		{

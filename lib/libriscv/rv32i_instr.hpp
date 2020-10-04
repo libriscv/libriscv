@@ -4,7 +4,7 @@
 #include <string>
 #include "types.hpp"
 #include "rv32i.hpp"
-#include "rv32c.hpp"
+#include "rvc.hpp"
 
 namespace riscv
 {

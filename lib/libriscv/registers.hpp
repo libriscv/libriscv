@@ -42,7 +42,7 @@ namespace riscv
 	struct Registers
 	{
 		using address_t  = address_type<W>;       // one unsigned memory address
-		using register_t = typename isa_type<W>::register_t; // integer register
+		using register_t = address_t; // integer register
 
 		auto& get(uint32_t idx) { return m_reg[idx]; }
 		const auto& get(uint32_t idx) const { return m_reg[idx]; }

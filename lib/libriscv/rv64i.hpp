@@ -10,12 +10,10 @@ namespace riscv
 
 	struct RV64I {
 		using address_t     = uint64_t;
-		using format_t      = rv32i_instruction;
-		using compressed_t  = rv32c_instruction;
+		using register_t    = address_t;
 		using instruction_t = Instruction<8>;
-		using register_t    = uint64_t;
 
-		static std::string to_string(CPU<8>& cpu, format_t format, const instruction_t& instr);
+		static std::string to_string(CPU<8>& cpu, instruction_format<8> format, const instruction_t& instr);
 
 		static inline uint64_t SRA(bool is_signed, uint32_t shifts, uint64_t value)
 		{

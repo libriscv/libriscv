@@ -3,12 +3,12 @@
 
 #define INSTRUCTION(x, ...) static constexpr CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr64i_##x
-#include "rv32i_instr.cpp"
+#include "rvi_instr.cpp"
 #ifdef RISCV_EXT_ATOMICS
-#include "rv32a_instr.cpp"
+#include "rva_instr.cpp"
 #endif
-#include "rv32c_instr.cpp"
-#include "rv32f_instr.cpp"
+#include "rvc_instr.cpp"
+#include "rvf_instr.cpp"
 
 namespace riscv
 {
@@ -16,7 +16,7 @@ namespace riscv
 	const CPU<8>::instruction_t& CPU<8>::decode(const format_t instruction) const
 	{
 #define DECODER(x) return(x)
-#include "rv32_instr.inc"
+#include "instr_decoding.inc"
 #undef DECODER
 	}
 
@@ -24,11 +24,11 @@ namespace riscv
 	void CPU<8>::execute(const format_t instruction)
 	{
 #define DECODER(x) { x.handler(*this, instruction); return; }
-#include "rv32_instr.inc"
+#include "instr_decoding.inc"
 #undef DECODER
 	}
 
-	std::string RV64I::to_string(CPU<8>& cpu, format_t format, const instruction_t& instr)
+	std::string RV64I::to_string(CPU<8>& cpu, instruction_format<8> format, const instruction_t& instr)
 	{
 		char buffer[256];
 		char ibuffer[128];

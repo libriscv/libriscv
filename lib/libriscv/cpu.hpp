@@ -2,9 +2,7 @@
 #include "common.hpp"
 #include "page.hpp"
 #include "registers.hpp"
-#include "rv32i.hpp"
-#include "rv64i.hpp"
-#include "rv32a.hpp"
+#include "rva.hpp"
 #include "util/function.hpp"
 #include <map>
 #include <vector>
@@ -18,7 +16,7 @@ namespace riscv
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
 		using isa_t     = isa_type<W>;              // 32- or 64-bit architecture
-		using format_t  = typename isa_t::format_t; // one machine instruction
+		using format_t  = instruction_format<W>; // one machine instruction
 		using breakpoint_t = Function<void(CPU<W>&)>; // machine instruction
 		using instruction_t = Instruction<W>;
 
