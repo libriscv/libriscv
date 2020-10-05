@@ -13,7 +13,7 @@
 namespace riscv
 {
 	template<int W> struct Machine;
-	union DecoderCache;
+	template<int W> struct DecoderCache;
 
 	template<int W>
 	struct Memory
@@ -180,7 +180,7 @@ namespace riscv
 		address_t m_exec_pagedata_base = 0;
 #ifdef RISCV_INSTR_CACHE
 		instruction_handler<W>* m_exec_decoder = nullptr;
-		DecoderCache* m_decoder_cache = nullptr;
+		DecoderCache<W>* m_decoder_cache = nullptr;
 #endif
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED

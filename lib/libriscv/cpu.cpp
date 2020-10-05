@@ -103,7 +103,7 @@ namespace riscv
 		// is that any jump traps must return to the caller, and be re-
 		// validated, otherwise this code will read garbage data!
 		auto& cache_entry =
-			machine().memory.get_decoder_cache()[this->pc() / DecoderCache::DIVISOR];
+			machine().memory.get_decoder_cache()[this->pc() / DecoderCache<W>::DIVISOR];
 #ifndef RISCV_INSTR_CACHE_PREGEN
 		if (UNLIKELY(!cache_entry)) {
 			cache_entry = this->decode(instruction).handler;

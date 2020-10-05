@@ -20,9 +20,9 @@ namespace riscv
 			(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
 
 		const size_t n_pages = plen / Page::size();
-		auto* decoder_array = new DecoderCache [n_pages];
+		auto* decoder_array = new DecoderCache<W> [n_pages];
 		this->m_exec_decoder =
-			decoder_array[0].template get_base<W>() - pbase / DecoderCache::DIVISOR;
+			decoder_array[0].get_base() - pbase / decoder_array->DIVISOR;
 		this->m_decoder_cache = &decoder_array[0];
 
 #ifdef RISCV_INSTR_CACHE_PREGEN
@@ -33,7 +33,7 @@ namespace riscv
 			const size_t cacheno = page_number(dst - pbase);
 			const address_t offset = dst & (Page::size()-1);
 			auto& cache = decoder_array[cacheno];
-			auto& entry = cache.template get<W> (offset / cache.DIVISOR);
+			auto& entry = cache.get(offset / cache.DIVISOR);
 
 			if (dst >= addr && dst < addr + len)
 			{
