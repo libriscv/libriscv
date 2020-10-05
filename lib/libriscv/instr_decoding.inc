@@ -231,13 +231,17 @@
 		}
 		else if constexpr (compressed_enabled)
 		{
-			// RV32 C
+			// RISC-V Compressed Extension
 			const auto ci = instruction.compressed();
 			switch (ci.opcode())
 			{
 				// Quadrant 0
 				case CI_CODE(0b000, 0b00):
-					DECODER(DECODED_COMPR(C0_ADDI4SPN));
+					// if all bits are zero, it's an illegal instruction
+					if (ci.whole != 0x0) {
+						DECODER(DECODED_COMPR(C0_ADDI4SPN));
+					}
+					DECODER(DECODED_INSTR(ILLEGAL));
 				case CI_CODE(0b001, 0b00):
 				case CI_CODE(0b010, 0b00):
 				case CI_CODE(0b011, 0b00):
@@ -249,17 +253,32 @@
 					DECODER(DECODED_COMPR(C0_REG_STORE));
 				// Quadrant 1
 				case CI_CODE(0b000, 0b01):
-					DECODER(DECODED_COMPR(C1_NOP_ADDI));
+					if (ci.CI.rd != 0) {
+						DECODER(DECODED_COMPR(C1_ADDI));
+					}
+					DECODER(DECODED_INSTR(NOP));
 				case CI_CODE(0b001, 0b01):
 					if constexpr (RVIS64BIT(*this)) {
-						DECODER(DECODED_COMPR(C1_ADDIW));
+						if (ci.CI.rd != 0) {
+							DECODER(DECODED_COMPR(C1_ADDIW));
+						}
+						DECODER(DECODED_INSTR(NOP));
 					} else {
 						DECODER(DECODED_COMPR(C1_JAL));
 					}
 				case CI_CODE(0b010, 0b01):
-					DECODER(DECODED_COMPR(C1_LI));
+					if (ci.CI.rd != 0) {
+						DECODER(DECODED_COMPR(C1_LI));
+					}
+					DECODER(DECODED_INSTR(NOP));
 				case CI_CODE(0b011, 0b01):
-					DECODER(DECODED_COMPR(C1_ADDI16SP_LUI));
+					if (ci.CI.rd == 2) {
+						DECODER(DECODED_COMPR(C1_ADDI16SP));
+					}
+					else if (ci.CI.rd != 0) {
+						DECODER(DECODED_COMPR(C1_LUI));
+					}
+					DECODER(DECODED_INSTR(ILLEGAL));
 				case CI_CODE(0b100, 0b01):
 					DECODER(DECODED_COMPR(C1_ALU_OPS));
 				case CI_CODE(0b101, 0b01):

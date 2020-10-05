@@ -5,13 +5,8 @@ namespace riscv
 {
 	COMPRESSED_INSTR(C0_ADDI4SPN,
 	[] (auto& cpu, rv32i_instruction instr) {
-		// if all bits are zero, it's an illegal instruction (by design)
-		if (instr.whole != 0x0) {
-			const auto ci = instr.compressed();
-			cpu.cireg(ci.CIW.srd) = cpu.reg(RISCV::REG_SP) + ci.CIW.offset();
-			return;
-		}
-		cpu.trigger_exception(ILLEGAL_OPCODE);
+		const auto ci = instr.compressed();
+		cpu.cireg(ci.CIW.srd) = cpu.reg(RISCV::REG_SP) + ci.CIW.offset();
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -109,14 +104,11 @@ namespace riscv
 						RISCV::ciname(ci.CS.srs1), offset);
 	});
 
-	COMPRESSED_INSTR(C1_NOP_ADDI,
+	COMPRESSED_INSTR(C1_ADDI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
 		// ADDI (non-hint, not NOP)
-		if (ci.CI.rd != 0)
-		{
-			cpu.reg(ci.CI.rd) += ci.CI.signed_imm();
-		}
+		cpu.reg(ci.CI.rd) += ci.CI.signed_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -154,10 +146,8 @@ namespace riscv
 	COMPRESSED_INSTR(C1_ADDIW,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		if (ci.CI.rd != 0) {
-			// ADDIW rd, imm[5:0]
-			cpu.reg(ci.CI.rd) = (int32_t) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
-		}
+		// ADDIW rd, imm[5:0]
+		cpu.reg(ci.CI.rd) = (int32_t) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -169,11 +159,8 @@ namespace riscv
 	COMPRESSED_INSTR(C1_LI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		if (ci.CI.rd != 0) {
-			// LI rd, imm[5:0]
-			cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
-		}
-		// HINTs
+		// LI rd, imm[5:0]
+		cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -182,21 +169,11 @@ namespace riscv
 						RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
 	});
 
-	COMPRESSED_INSTR(C1_ADDI16SP_LUI,
+	COMPRESSED_INSTR(C1_ADDI16SP,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		if (ci.CI.rd == 2) {
-			// ADDI16SP rd, imm[17:12]
-			cpu.reg(RISCV::REG_SP) += ci.CI16.signed_imm();
-			return;
-		}
-		else if (ci.CI.rd != 0) {
-			// LUI rd, imm[17:12]
-			cpu.reg(ci.CI.rd) = ci.CI.signed_imm() << 12;
-			return;
-		}
-		// the registers are not allowed
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		// ADDI16SP rd, imm[17:12]
+		cpu.reg(RISCV::REG_SP) += ci.CI16.signed_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -212,6 +189,13 @@ namespace riscv
 		}
 		return snprintf(buffer, len, "C.LUI (Invalid values)");
 	});
+
+	COMPRESSED_INSTR(C1_LUI,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		// LUI rd, imm[17:12]
+		cpu.reg(ci.CI.rd) = ci.CI.signed_imm() << 12;
+	}, DECODED_COMPR(C1_ADDI16SP).printer);
 
 	COMPRESSED_INSTR(C1_ALU_OPS,
 	[] (auto& cpu, rv32i_instruction instr)
@@ -300,9 +284,11 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
 		cpu.jump(cpu.pc() + ci.CJ.signed_imm() - 2);
+#ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
 			printf(">>> C.JMP 0x%lX\n", (long) cpu.pc() + 2);
 		}
+#endif
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -463,6 +449,7 @@ namespace riscv
 						f3[ci.CSS.funct3 - 4], ci.CSS.offset(4),
 						RISCV::regname(ci.CSS.rs2), (long) address);
 	});
+
 	// JR, MV, JALR, ADD
 	COMPRESSED_INSTR(C2_VARIOUS,
 	[] (auto& cpu, rv32i_instruction instr) {
