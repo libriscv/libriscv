@@ -31,6 +31,10 @@
 # endif
 #endif
 
+#ifndef RISCV_RODATA_SEGMENT_IS_SHARED
+#define RISCV_RODATA_SEGMENT_IS_SHARED 1
+#endif
+
 namespace riscv
 {
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;

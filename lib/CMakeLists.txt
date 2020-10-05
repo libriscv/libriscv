@@ -3,8 +3,7 @@
 #
 
 option(RISCV_DEBUG  "Enable debugging features in the RISC-V machine" OFF)
-option(RISCV_ICACHE "Enable instruction decoder cache" OFF)
-option(RISCV_PCACHE "Enable small page cache (recommended)" ON)
+option(RISCV_ICACHE "Enable instruction decoder cache" ON)
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
@@ -47,11 +46,7 @@ endif()
 if (RISCV_ICACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE=1)
 endif()
-if (RISCV_PCACHE)
-	target_compile_definitions(riscv PUBLIC RISCV_PAGE_CACHE=8)
-endif()
 if (RISCV_EXPERIMENTAL)
 	target_compile_definitions(riscv PUBLIC
-		RISCV_INSTR_CACHE_PREGEN=1
-		RISCV_RODATA_SEGMENT_IS_SHARED=1)
+		RISCV_INSTR_CACHE_PREGEN=1)
 endif()
