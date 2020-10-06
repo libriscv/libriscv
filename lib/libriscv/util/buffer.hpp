@@ -16,7 +16,7 @@ namespace riscv
 		const char* c_str() const noexcept { return first().first; }
 		size_t      size() const noexcept { return m_len; }
 
-		size_t copy_to(char* dst, size_t dstlen);
+		size_t copy_to(char* dst, size_t dstlen) const;
 		void   foreach(std::function<void(const char*, size_t)> cb);
 		std::string to_string() const;
 		char* to_buffer(char* dest) const;
@@ -31,7 +31,7 @@ namespace riscv
 		uint32_t m_idx  = 0; /* Current array index */
 	};
 
-	inline size_t Buffer::copy_to(char* dst, size_t maxlen)
+	inline size_t Buffer::copy_to(char* dst, size_t maxlen) const
 	{
 		size_t len = 0;
 		for (const auto& entry : m_data) {
