@@ -711,18 +711,18 @@ namespace riscv
 			switch (instr.Itype.funct3) {
 			case 0x0:
 				// ADDIW: Add sign-extended 12-bit immediate
-				dst = (int32_t) (src + instr.Itype.signed_imm());
+				dst = RVSIGNEXTW(cpu) (src + instr.Itype.signed_imm());
 				return;
 			case 0x1: // SLLIW:
-				dst = (int32_t) (src << instr.Itype.shift_imm());
+				dst = RVSIGNEXTW(cpu) (src << instr.Itype.shift_imm());
 				return;
 			case 0x5: // SRLIW / SRAIW:
 				if (LIKELY(!instr.Itype.is_srai())) {
-					dst = (int32_t) (src >> instr.Itype.shift_imm());
+					dst = RVSIGNEXTW(cpu) (src >> instr.Itype.shift_imm());
 				} else { // SRAIW: preserve the sign bit
 					const uint32_t shifts = instr.Itype.shift_imm();
 					const bool is_signed = (src & 0x80000000) != 0;
-					dst = (int32_t) RV32I::SRA(is_signed, shifts, src);
+					dst = RVSIGNEXTW(cpu) RV32I::SRA(is_signed, shifts, src);
 				}
 				return;
 			}
@@ -781,8 +781,8 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const int32_t src = cpu.reg(instr.Itype.rs1);
-		// ADDIW: Add sign-extended 12-bit immediate
-		dst = (int32_t) (src + instr.Itype.signed_imm());
+		// ADDIW: Add 32-bit sign-extended 12-bit immediate
+		dst = RVSIGNEXTW(cpu) (src + instr.Itype.signed_imm());
 	}, DECODED_INSTR(OP_IMM32).printer);
 
 	INSTRUCTION(OP32,
@@ -795,10 +795,10 @@ namespace riscv
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 				case 0x0: // ADDW / SUBW
-					dst = (int32_t) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
+					dst = RVSIGNEXTW(cpu) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
 					return;
 				case 0x1: // SLLW
-					dst = (int32_t) (src1 << (src2 & 0x1F));
+					dst = RVSIGNEXTW(cpu) (src1 << (src2 & 0x1F));
 					return;
 				case 0x5: // SRLW / SRAW
 					if (!instr.Rtype.is_f7()) { // SRL
@@ -806,7 +806,7 @@ namespace riscv
 					} else { // SRAW
 						const bool is_signed = (src1 & 0x80000000) != 0;
 						const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
-						dst = (int32_t) (RV32I::SRA(is_signed, shifts, src1));
+						dst = RVSIGNEXTW(cpu) (RV32I::SRA(is_signed, shifts, src1));
 					}
 					return;
 				// extension RV64M
@@ -825,13 +825,13 @@ namespace riscv
 					return;
 				case 0x15: // DIVUW
 					if (LIKELY((uint32_t) src2 != 0)) {
-						dst = (int32_t) ((uint32_t) src1 / (uint32_t) src2);
+						dst = RVSIGNEXTW(cpu) ((uint32_t) src1 / (uint32_t) src2);
 					}
 					return;
 				case 0x16: // REMW
 					if (LIKELY(src2 != 0)) {
 						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295))) {
-							dst = (int32_t) (src1 % src2);
+							dst = RVSIGNEXTW(cpu) (src1 % src2);
 						}
 					}
 					return;
@@ -873,7 +873,7 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Rtype.rd);
 		const int32_t src1 = cpu.reg(instr.Rtype.rs1);
 		const int32_t src2 = cpu.reg(instr.Rtype.rs2);
-		dst = (int32_t) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
+		dst = RVSIGNEXTW(cpu) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
 	}, DECODED_INSTR(OP32).printer);
 
 	INSTRUCTION(FENCE,

@@ -24,7 +24,7 @@ namespace riscv
 		const auto ci = instr.compressed();
 		if (ci.CL.funct3 == 0x2) { // C.LW
 			auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
-			cpu.cireg(ci.CL.srd) = cpu.machine().memory.template read<uint32_t> (address);
+			cpu.cireg(ci.CL.srd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read<uint32_t> (address);
 			return;
 		}
 		else if (ci.CL.funct3 == 0x1) { // C.FLD
@@ -62,8 +62,7 @@ namespace riscv
 		const auto ci = instr.compressed();
 		switch (ci.CS.funct3) {
 			case 4:
-				cpu.trigger_exception(ILLEGAL_OPERATION);
-				return;
+				break;
 			case 5: { // C.FSD
 				const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
 				const auto value   = cpu.ciflp(ci.CSD.srs2).i64;
@@ -85,7 +84,7 @@ namespace riscv
 					cpu.machine().memory.template write<uint32_t> (address, value);
 				} return;
 		}
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -147,7 +146,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
 		// ADDIW rd, imm[5:0]
-		cpu.reg(ci.CI.rd) = (int32_t) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
+		cpu.reg(ci.CI.rd) = RVSIGNEXTW(cpu) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -244,12 +243,12 @@ namespace riscv
 						return;
 					case 0x4: // C.SUBW
 					if constexpr (RVIS64BIT(cpu)) {
-						dst = (int32_t) (dst - src);
+						dst = RVSIGNEXTW(cpu) (dst - src);
 						return;
 					}
 					case 0x5: // C.ADDW
 					if constexpr (RVIS64BIT(cpu)) {
-						dst = (int32_t) (dst + src);
+						dst = RVSIGNEXTW(cpu) (dst + src);
 						return;
 					}
 					case 0x6: // RESERVED
@@ -259,13 +258,14 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPCODE);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		const auto ci = instr.compressed();
 		if ((ci.CA.funct6 & 0x3) < 2) {
 			static const std::array<const char*, 2> f3 = {"SRLI", "SRAI"};
 			return snprintf(buffer, len, "C.%s %s, %+d",
-				f3[ci.CA.funct6 & 0x3], RISCV::ciname(ci.CAB.srd), ci.CAB.shift_imm());
+				f3[ci.CA.funct6 & 0x3], RISCV::ciname(ci.CAB.srd),
+					RVIS64BIT(cpu) ? ci.CAB.shift64_imm() : ci.CAB.shift_imm());
 		}
 		else if ((ci.CA.funct6 & 0x3) == 2) {
 			return snprintf(buffer, len, "C.ANDI %s, %+ld",
@@ -362,7 +362,7 @@ namespace riscv
 		else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
 			// LWSP
 			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
-			cpu.reg(ci.CI2.rd) = cpu.machine().memory.template read <uint32_t> (address);
+			cpu.reg(ci.CI2.rd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read <uint32_t> (address);
 		}
 		else if (ci.CI2.funct3 == 0x3) {
 			if constexpr (RVIS64BIT(cpu)) {

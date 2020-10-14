@@ -8,8 +8,6 @@ namespace riscv
 {
 	union rv32c_instruction
 	{
-		static constexpr int REG_OFFSET = 0x8;
-
 		// register format
 		struct {
 			uint16_t opcode : 2;
@@ -210,7 +208,7 @@ namespace riscv
 			}
 			int64_t signed_imm() const noexcept {
 				int64_t val = (off12 | (off34 << 2) | (off5 << 4) | (off67 << 5));
-				const uint64_t ext = 0xFFFFFFFFFFFFFF00; // 7+1 immediate bits + 1 sign
+				const uint64_t ext = 0xFFFFFFFFFFFFFF00; // 7 immediate bits + 1 sign
 				return (val << 1) | (sign() ? ext : 0);
 			}
 		} CB;

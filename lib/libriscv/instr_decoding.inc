@@ -252,12 +252,12 @@
 				case CI_CODE(0b111, 0b00):
 					DECODER(DECODED_COMPR(C0_REG_STORE));
 				// Quadrant 1
-				case CI_CODE(0b000, 0b01):
+				case CI_CODE(0b000, 0b01): // C.ADDI
 					if (ci.CI.rd != 0) {
 						DECODER(DECODED_COMPR(C1_ADDI));
 					}
 					DECODER(DECODED_INSTR(NOP));
-				case CI_CODE(0b001, 0b01):
+				case CI_CODE(0b001, 0b01): // C.ADDIW / C.JAL
 					if constexpr (RVIS64BIT(*this)) {
 						if (ci.CI.rd != 0) {
 							DECODER(DECODED_COMPR(C1_ADDIW));
