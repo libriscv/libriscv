@@ -75,7 +75,7 @@ And finally, the `micro` project implements the absolutely minimal freestanding 
 
 ## Instruction set support
 
-The emulator currently supports RV32GC (IMAFDC), and RV64G (IMAFD).
+The emulator currently supports RV32GC, and RV64GC (IMAFDC).
 The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions), and there is a test-suite for these instructions, however they haven't been extensively tested as there are generally few FP-instructions in normal programs.
 
 Note: There is no support for the B-, E- and Q-extensions.
@@ -86,32 +86,51 @@ Load a binary and let the machine simulate from `_start` (ELF entry-point):
 ```C++
 #include <libriscv/machine.hpp>
 
-template <int W>
-long syscall_exit(riscv::Machine<W>& machine)
-{
-	printf(">>> Program exited, exit code = %d\n", machine.template sysarg<int> (0));
-	machine.stop();
-	return 0;
-}
-
 int main(int /*argc*/, const char** /*argv*/)
 {
-	const auto binary = <load your RISC-V ELF binary here>;
+	// load binary from file
+	const std::vector<uint8_t> binary /* = ... */;
 
-	riscv::Machine<riscv::RISCV32> machine { binary };
-	// install a system call handler
-	machine.install_syscall_handler(93, syscall_exit<riscv::RISCV32>);
+	using namespace riscv;
+	// create a 64-bit machine
+	Machine<RISCV64> machine { binary };
+
+	// install the `exit` system call handler
+	machine.install_syscall_handler(93,
+	 [] (auto& machine) {
+		 const auto [code] = machine.template sysargs <int> ();
+		 printf(">>> Program exited, exit code = %d\n", code);
+		 machine.stop();
+		 return 0;
+	 });
 
 	// add program arguments on the stack
-	std::vector<std::string> args = {
-		"hello_world", "test!"
-	};
-	machine.setup_argv(args);
+	machine.setup_argv({"emulator", "test!"});
 
-	// this function will run until the exit syscall has stopped the machine
-	// or an exception happens which stops execution
-	machine.simulate();
+	// this function will run until the exit syscall has stopped the
+	// machine, an exception happens which stops execution, or the
+	// instruction counter reaches the given limit (1M):
+	try {
+		machine.simulate(1'000'000);
+	} catch (const std::exception& e) {
+		fprintf(stderr, ">>> Runtime exception: %s\n", e.what());
+	}
 }
+```
+
+You can find the example above in the `emulator/minimal` folder. It's a normal CMake project, so you can build it like so:
+
+```
+mkdir -p build && cd build
+cmake .. && make -j4
+./emulator
+```
+
+If you run the program as-is with no program loaded, you will get an `Execution space protection fault`, which means the emulator tried to execute on non-executable memory.
+
+```
+$ ./emulator
+>>> Runtime exception: Execution space protection fault
 ```
 
 You can limit the amount of (virtual) memory the machine can use like so:
