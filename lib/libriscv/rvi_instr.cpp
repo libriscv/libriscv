@@ -489,21 +489,27 @@ namespace riscv
 			case 0x10: // MUL
 				dst = RVTOSIGNED(src1) * RVTOSIGNED(src2);
 				return;
-			case 0x11: // MULH
+			case 0x11: // MULH (signed x signed)
 				if constexpr (!RVIS64BIT(cpu)) {
 					dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
-					return;
+				} else {
+					RV64I::MUL128(dst, src1, src2);
 				}
-			case 0x12: // MULHSU
+				return;
+			case 0x12: // MULHSU (signed x unsigned)
 				if constexpr (!RVIS64BIT(cpu)) {
 					dst = ((int64_t) src1 * (uint64_t) src2) >> 32u;
-					return;
+				} else {
+					RV64I::MUL128(dst, src1, src2);
 				}
-			case 0x13: // MULHU
+				return;
+			case 0x13: // MULHU (unsigned x unsigned)
 				if constexpr (!RVIS64BIT(cpu)) {
 					dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;
-					return;
+				} else {
+					RV64I::MUL128(dst, src1, src2);
 				}
+				return;
 			case 0x14: // DIV
 				// division by zero is not an exception
 				if (LIKELY(RVTOSIGNED(src2) != 0)) {
@@ -802,7 +808,7 @@ namespace riscv
 					return;
 				case 0x5: // SRLW / SRAW
 					if (!instr.Rtype.is_f7()) { // SRL
-						dst = (int32_t) (src1 >> (src2 & 0x1F));
+						dst = RVSIGNEXTW(cpu) (src1 >> (src2 & 0x1F));
 					} else { // SRAW
 						const bool is_signed = (src1 & 0x80000000) != 0;
 						const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
@@ -819,7 +825,7 @@ namespace riscv
 						// rv32i_instr.cpp:301:2: runtime error:
 						// division of -2147483648 by -1 cannot be represented in type 'int'
 						if (LIKELY(!((uint32_t) src1 == 2147483648 && (uint32_t) src2 == 4294967295))) {
-							dst = (int32_t) (src1 / src2);
+							dst = RVSIGNEXTW(cpu) (src1 / src2);
 						}
 					}
 					return;
@@ -837,7 +843,7 @@ namespace riscv
 					return;
 				case 0x17: // REMUW
 					if (LIKELY((uint32_t) src2 != 0)) {
-						dst = (int32_t) ((uint32_t) src1 % (uint32_t) src2);
+						dst = RVSIGNEXTW(cpu) ((uint32_t) src1 % (uint32_t) src2);
 					}
 					return;
 			}
