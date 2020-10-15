@@ -822,9 +822,8 @@ namespace riscv
 				case 0x14: // DIVW
 					// division by zero is not an exception
 					if (LIKELY((uint32_t) src2 != 0)) {
-						// rv32i_instr.cpp:301:2: runtime error:
 						// division of -2147483648 by -1 cannot be represented in type 'int'
-						if (LIKELY(!((uint32_t) src1 == 2147483648 && (uint32_t) src2 == 4294967295))) {
+						if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
 							dst = RVSIGNEXTW(cpu) (src1 / src2);
 						}
 					}
@@ -836,7 +835,7 @@ namespace riscv
 					return;
 				case 0x16: // REMW
 					if (LIKELY(src2 != 0)) {
-						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295))) {
+						if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
 							dst = RVSIGNEXTW(cpu) (src1 % src2);
 						}
 					}
