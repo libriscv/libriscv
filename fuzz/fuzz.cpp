@@ -1,31 +1,54 @@
-#include <cstddef>
-#include <cstdint>
 #include <libriscv/machine.hpp>
 
-static const std::vector<uint8_t> empty {};
+static const std::vector<uint8_t> empty;
+static bool init = false;
 
 static void fuzz_instruction_set(const uint8_t* data, size_t len)
 {
 	static riscv::Machine<riscv::RISCV32> machine32 { empty };
 	static riscv::Machine<riscv::RISCV64> machine64 { empty };
+	constexpr uint32_t S = 0x1000;
+	constexpr uint32_t V = 0x2000;
+	constexpr uint32_t CYCLES = 5000;
 
-	if (UNLIKELY(len == 0)) return;
+	if (UNLIKELY(len == 0 || init == false)) {
+		init = true;
+		machine32.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
+		machine32.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
+		machine64.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
+		machine64.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
+		// Setup for 32-bit execute segment
+		auto* data32 = machine32.memory.get_page(V).data();
+		machine32.cpu.initialize_exec_segs(data32 - V, V, V + 0x1000);
+		// Setup for 64-bit execute segment
+		auto* data64 = machine64.memory.get_page(V).data();
+		machine64.cpu.initialize_exec_segs(data64 - V, V, V + 0x1000);
+		return;
+	}
 
-	// Copy fuzzer data to 0x1000 and skip the zero-page.
-	// Non-zero length guarantees that the page will be created.
-	machine32.copy_to_guest(0x1000, data, len);
-	machine32.cpu.jump(0x1000);
+	// Copy fuzzer data to 0x2000 and reset the stack pointer.
+	machine32.copy_to_guest(V, data, len);
+	machine32.cpu.reg(2) = V;
+	machine32.cpu.jump(V);
+#ifdef RISCV_DEBUG
+	machine32.verbose_instructions = true;
+	machine32.verbose_registers = true;
+#endif
 	try {
 		// Let's avoid loops
-		machine32.simulate(5000);
+		for (int i = 0; i < CYCLES; i++)
+			machine32.cpu.simulate();
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
+
 	// Again for 64-bit
-	machine64.copy_to_guest(0x1000, data, len);
-	machine64.cpu.jump(0x1000);
+	machine64.copy_to_guest(V, data, len);
+	machine64.cpu.reg(2) = V;
+	machine64.cpu.jump(V);
 	try {
-		machine64.simulate(5000);
+		for (int i = 0; i < CYCLES; i++)
+			machine64.cpu.simulate();
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
@@ -49,6 +72,6 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 extern "C"
 void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
 {
-	fuzz_elf_loader(data, len);
+	//fuzz_elf_loader(data, len);
 	fuzz_instruction_set(data, len);
 }
