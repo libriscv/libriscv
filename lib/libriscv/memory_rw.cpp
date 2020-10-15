@@ -125,7 +125,7 @@ namespace riscv
 		address_t dst, void* src, size_t size, PageAttributes attr)
 	{
 		assert(dst % Page::size() == 0);
-		assert(size % Page::size() == 0);
+		assert((dst + size) % Page::size() == 0);
 		attr.non_owning = true;
 
 		for (size_t i = 0; i < size; i += Page::size())

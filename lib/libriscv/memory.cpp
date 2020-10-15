@@ -101,8 +101,16 @@ namespace riscv
 	{
 		const auto*  src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
+		if (m_binary.size() <= hdr->p_offset ||
+			hdr->p_offset + len <= hdr->p_offset)
+		{
+			throw std::runtime_error("Bogus ELF program segment offset");
+		}
 		if (m_binary.size() < hdr->p_offset + len) {
 			throw std::runtime_error("Not enough room for ELF program segment");
+		}
+		if (hdr->p_vaddr + len < hdr->p_vaddr) {
+			throw std::runtime_error("Bogus ELF segment virtual base");
 		}
 
 		if (this->m_verbose_loader) {
@@ -123,7 +131,7 @@ namespace riscv
 		if (attr.exec && machine().cpu.exec_seg_data() == nullptr)
 		{
 			constexpr address_t PMASK = Page::size()-1;
-			const address_t pbase = hdr->p_vaddr & ~PMASK;
+			const address_t pbase = hdr->p_vaddr & ~(address_t) PMASK;
 			const size_t prelen  = hdr->p_vaddr - pbase;
 			const size_t midlen  = len + prelen;
 			const size_t plen =
@@ -131,6 +139,9 @@ namespace riscv
 			const size_t postlen = plen - midlen;
 			//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
 			//	hdr->p_vaddr, len, pbase, pbase + plen, prelen, len, postlen, plen);
+			if (UNLIKELY(prelen > plen || prelen + len > plen)) {
+				throw std::runtime_error("Segment virtual base was bogus");
+			}
 			// Create the whole executable memory range
 			m_exec_pagedata.reset(new uint8_t[plen]);
 			m_exec_pagedata_size = plen;
@@ -144,7 +155,7 @@ namespace riscv
 				// Insert everything as non-owned memory
 				// NOTE: Necessary for execute traps
 				this->insert_non_owned_memory(
-				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, attr);
+				  m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, attr);
 			}
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
@@ -159,6 +170,11 @@ namespace riscv
 				"Binary can not have more than one executable segment!");
 #endif
 		}
+		// We would normally never allow this
+		if (attr.exec && attr.write) {
+			throw std::runtime_error("Insecure ELF has writable machine code");
+		}
+
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
 
@@ -186,15 +202,21 @@ namespace riscv
 		}
 
 		// enumerate & load loadable segments
-		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
 		const auto program_headers = elf->e_phnum;
 		if (UNLIKELY(program_headers <= 0)) {
 			throw std::runtime_error("ELF with no program-headers");
 		}
-		if (UNLIKELY(m_binary.size() < elf->e_phoff + program_headers * sizeof(Phdr))) {
-			throw std::runtime_error("No room for ELF program-headers");
+		if (UNLIKELY(program_headers >= 10)) {
+			throw std::runtime_error("ELF with too many program-headers");
+		}
+		if (UNLIKELY(elf->e_phoff > 0x4000)) {
+			throw std::runtime_error("ELF program-headers have bogus offset");
+		}
+		if (UNLIKELY(elf->e_phoff + program_headers * sizeof(Phdr) > m_binary.size())) {
+			throw std::runtime_error("ELF program-headers are outside the binary");
 		}
 
+		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
 		const auto program_begin = phdr->p_vaddr;
 		this->m_start_address = elf->e_entry;
 		this->m_stack_address = program_begin;
@@ -202,6 +224,17 @@ namespace riscv
 		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
 		{
+			// Detect overlapping segments
+			for (const auto* ph = phdr; ph < hdr; ph++) {
+				if (hdr->p_type == PT_LOAD && ph->p_type == PT_LOAD)
+				if (ph->p_vaddr < hdr->p_vaddr + hdr->p_filesz &&
+					ph->p_vaddr + ph->p_filesz >= hdr->p_vaddr) {
+					// Normally we would not care, but no normal ELF
+					// has overlapping segments, so treat as bogus.
+					throw std::runtime_error("Overlapping ELF segments");
+				}
+			}
+
 			switch (hdr->p_type)
 			{
 				case PT_LOAD:
@@ -236,22 +269,25 @@ namespace riscv
 				it = m_pages.erase(it);
 			} else ++it;
 		}
-		// Sort from lowest to highest address
-		std::sort(ro_pages.begin(), ro_pages.end(),
-			[] (const auto& a, const auto& b) { return a.first < b.first; });
-		// Verify memory range is sequential
-		address_t last = 0;
-		for (const auto& page : ro_pages) {
-			if (last != 0 && page.first != last + 1)
-				throw std::runtime_error("Read-only data was not sequential");
-			last = page.first;
-		}
-		// Create share-able range
-		m_ropage_begin = ro_pages.front().first;
-		m_ropage_end   = ro_pages.back().first + 1;
-		m_ro_pages.reset(new Page[ro_pages.size()]);
-		for (size_t i = 0; i < ro_pages.size(); i++) {
-			m_ro_pages[i] = std::move(ro_pages[i].second);
+		this->m_ro_pages.reset(new Page[ro_pages.size()]);
+		if (!ro_pages.empty())
+		{
+			// Sort from lowest to highest address
+			std::sort(ro_pages.begin(), ro_pages.end(),
+				[] (const auto& a, const auto& b) { return a.first < b.first; });
+			// Verify memory range is sequential
+			address_t last = 0;
+			for (const auto& page : ro_pages) {
+				if (last != 0 && page.first != last + 1)
+					throw std::runtime_error("Read-only data was not sequential");
+				last = page.first;
+			}
+			// Create share-able range
+			m_ropage_begin = ro_pages.front().first;
+			m_ropage_end   = ro_pages.back().first + 1;
+			for (size_t i = 0; i < ro_pages.size(); i++) {
+				m_ro_pages[i] = std::move(ro_pages[i].second);
+			}
 		}
 #endif
 
