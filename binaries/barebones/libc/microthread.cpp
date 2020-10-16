@@ -26,3 +26,17 @@ namespace microthread
 		asm("mv tp, %0" : : "r"(&main_thread) : "tp");
 	}
 }
+
+extern "C"
+__attribute__((noinline))
+int threadcall_executor(...)
+{
+	return syscall(THREAD_SYSCALLS_BASE+8);
+}
+
+extern "C"
+void threadcall_destructor()
+{
+	syscall(THREAD_SYSCALLS_BASE+9);
+	__builtin_unreachable();
+}

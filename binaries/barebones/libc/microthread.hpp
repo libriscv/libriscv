@@ -45,14 +45,8 @@ int     oneshot(const T& func, Args&&... args);
    self-deletes and exits the thread safely. Arguments can be passed,
    but they must be used by value, unless you know what you are doing.
    Returns thread id on success. The first argument is the Thread&. */
-#ifdef USE_THREADCALLS
 template <typename T, typename... Args>
 int     direct(const T& func, Args&&... args);
-
-#else
-int     direct(void (*func) (), void* data = nullptr);
-
-#endif
 
 /* Waits for a thread to finish and then returns the exit status
    of the thread. The thread is then deleted, freeing memory. */
@@ -191,31 +185,16 @@ inline int oneshot(const T& func, Args&&... args)
 	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0);
 }
 
-template <typename Ret = long, typename... Args>
-inline Ret threadcall(Args&&... args);
+extern "C" int threadcall_executor(...);
+extern "C" void threadcall_destructor();
 
-#ifdef USE_THREADCALLS
 template <typename T, typename... Args>
 inline int direct(const T& func, Args&&... args)
 {
-	auto fptr = static_cast<void(*)(Thread&, Args...)> (func);
-	return threadcall(fptr, std::forward<Args> (args)...);
+	auto fptr = static_cast<void(*)(Args...)> (func);
+	auto dptr = threadcall_destructor;
+	return threadcall_executor(fptr, dptr, std::forward<Args> (args)...);
 }
-#else
-inline int direct(void (*func) (), void* data)
-{
-	extern void direct_starter(Thread*);
-	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
-	if (UNLIKELY(stack_bot == nullptr)) return -12; /* ENOMEM */
-	char* stack_top = stack_bot + Thread::STACK_SIZE;
-	// store the thread at the beginning of the stack
-	Thread* thread = new (stack_bot) Thread(func, data);
-	asm("" ::: "memory");
-	const long tls  = (long) thread;
-	/* stack, func, tls, flags */
-	return syscall(THREAD_SYSCALLS_BASE+0, (long) stack_top, (long) &direct_starter, tls, 0);
-}
-#endif
 
 inline long join(Thread* thread)
 {
@@ -288,17 +267,6 @@ inline void Thread::exit(long exitcode)
 	this->return_value = exitcode;
 	syscall(THREAD_SYSCALLS_BASE+1, exitcode);
 	__builtin_unreachable();
-}
-
-
-/** For when USE_THREADCALLS is enabled **/
-
-template <typename Ret, typename... Args>
-inline Ret threadcall(Args&&... args)
-{
-	using tcall_t = Ret (*) (...);
-	// Special thread system call number is offset / 4
-	return ((tcall_t) (0xFFFFE000)) (std::forward<Args>(args)...);
 }
 
 }

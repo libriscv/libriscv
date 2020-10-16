@@ -6,9 +6,7 @@ using namespace riscv;
 #ifndef THREADS_SYSCALL_BASE
 static const int THREADS_SYSCALL_BASE = 500;
 #endif
-#ifdef RISCV_PAGE_TRAPS_ENABLED
 static const uint32_t STACK_SIZE = 256 * 1024;
-#endif
 #include "threads.cpp"
 
 template <int W>
@@ -98,25 +96,19 @@ multithreading<W>* setup_native_threads(
 		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-	// super fast threads
+	// super fast "direct" threads
 	if (arena != nullptr)
 	{
 		struct Data {
-			Machine<W>& machine;
 			multithreading<W>* mt;
 			sas_alloc::Arena* arena;
 		};
-		auto* data = new Data { machine, mt, arena };
+		auto* data = new Data { mt, arena };
 		machine.add_destructor_callback([data] { delete data; });
 
-		// custom jump trap for clone threadcall
-		auto& clone_page = machine.memory.install_shared_page(0xFFFFE,
-			Page{{ .read = false, .write = false, .exec = false }, nullptr});
-		// create an execution trap on the page
-		clone_page.set_trap(
-		[data] (riscv::Page&, uint32_t, int, int64_t) -> int64_t {
-			auto& machine = data->machine;
+		// N+8: clone threadcall
+		machine.install_syscall_handler(THREADS_SYSCALL_BASE+8,
+		[data] (Machine<W>& machine) -> long {
 			auto* mt    = data->mt;
 			auto* arena = data->arena;
 			// invoke clone threadcall
@@ -124,13 +116,11 @@ multithreading<W>* setup_native_threads(
 			if (UNLIKELY(tls == 0)) {
 				fprintf(stderr,
 					"Error: Thread stack allocation failed: %#x\n", tls);
-				machine.cpu.reg(RISCV::REG_ARG0) = -1;
-				// return back to caller
-				machine.cpu.jump(machine.cpu.reg(riscv::RISCV::REG_RA));
-				return 0;
+				return -1;
 			}
 			const auto stack = ((tls + STACK_SIZE) & ~0xF);
 			const auto  func = machine.template sysarg<address_type<W>> (0);
+			const auto  fini = machine.template sysarg<address_type<W>> (1);
 			auto* thread = mt->create(
 				CHILD_SETTID, tls, 0x0, stack, tls);
 			// set PC back to clone point - 4
@@ -142,36 +132,30 @@ multithreading<W>* setup_native_threads(
 			// activate and setup a function call
 			thread->activate();
 			// exit into the exit function which frees the thread
-			machine.cpu.reg(riscv::RISCV::REG_RA) = 0xFFFFD000;
+			machine.cpu.reg(riscv::RISCV::REG_RA) = fini;
+			// move 6 arguments back
+			std::memmove(&machine.cpu.reg(10), &machine.cpu.reg(12),
+				6 * sizeof(address_type<W>));
 			// geronimo!
-			machine.cpu.jump(func);
-			// first argument is Thread* or Thread&
-			machine.cpu.reg(riscv::RISCV::REG_ARG0) = tls;
-			return 0;
+			machine.cpu.jump(func - 4);
+			return machine.cpu.reg(riscv::RISCV::REG_RETVAL);
 		});
-		// custom jump trap for exit threadcall
-		auto& exit_page = machine.memory.install_shared_page(0xFFFFD,
-			Page{{ .read = false, .write = false, .exec = false }, nullptr});
-		// create an execution trap on the page
-		exit_page.set_trap(
-		[data] (riscv::Page&, uint32_t, int, int64_t) -> int64_t {
-			auto& machine = data->machine;
+		// N+9: exit threadcall
+		machine.install_syscall_handler(THREADS_SYSCALL_BASE+9,
+		[data] (Machine<W>& machine) {
 			auto* mt    = data->mt;
 			auto* arena = data->arena;
 
+			auto retval = machine.cpu.reg(riscv::RISCV::REG_RETVAL);
 			auto self = machine.cpu.reg(riscv::RISCV::REG_TP);
 			// TODO: check this return value
 			arena->free(self);
 			// exit thread instead
 			mt->get_thread()->exit();
-			// we need to jump ahead because pre-instruction
-			machine.cpu.registers().pc += 4;
-			return 0;
+			// return value from exited thread
+			return retval;
 		});
 	} // arena provided
-#else
-	(void) arena;
-#endif
 	return mt;
 }
 
