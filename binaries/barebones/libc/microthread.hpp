@@ -46,7 +46,7 @@ int     oneshot(const T& func, Args&&... args);
    but they must be used by value, unless you know what you are doing.
    Returns thread id on success. The first argument is the Thread&. */
 template <typename T, typename... Args>
-int     direct(const T& func, Args&&... args);
+long    direct(const T& func, Args&&... args);
 
 /* Waits for a thread to finish and then returns the exit status
    of the thread. The thread is then deleted, freeing memory. */
@@ -185,13 +185,14 @@ inline int oneshot(const T& func, Args&&... args)
 	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0);
 }
 
-extern "C" int threadcall_executor(...);
+extern "C" long threadcall_executor(...);
 extern "C" void threadcall_destructor();
 
 template <typename T, typename... Args>
-inline int direct(const T& func, Args&&... args)
+inline long direct(const T& func, Args&&... args)
 {
-	auto fptr = static_cast<void(*)(Args...)> (func);
+	using Ret = decltype(func(args...));
+	auto fptr = static_cast<Ret(*)(Args...)> (func);
 	auto dptr = threadcall_destructor;
 	return threadcall_executor(fptr, dptr, std::forward<Args> (args)...);
 }

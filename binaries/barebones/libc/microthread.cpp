@@ -29,7 +29,7 @@ namespace microthread
 
 extern "C"
 __attribute__((noinline))
-int threadcall_executor(...)
+long threadcall_executor(...)
 {
 	return syscall(THREAD_SYSCALLS_BASE+8);
 }
