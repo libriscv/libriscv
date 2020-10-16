@@ -45,7 +45,7 @@ namespace riscv
 		const address_t pageno = pc() >> Page::SHIFT;
 		const auto& page = get_cached_page(pageno);
 		if (LIKELY(page.has_trap())) {
-			page.trap(pc() & (Page::size()-1), TRAP_EXEC, pageno);
+			page.trap(pc(), TRAP_EXEC, pageno);
 		}
 #endif
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
