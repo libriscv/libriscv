@@ -133,7 +133,8 @@ namespace riscv
 			constexpr address_t PMASK = Page::size()-1;
 			const address_t pbase = hdr->p_vaddr & ~(address_t) PMASK;
 			const size_t prelen  = hdr->p_vaddr - pbase;
-			const size_t midlen  = len + prelen;
+			// The last 4 bytes of the range is zeroed out (illegal instruction)
+			const size_t midlen  = len + prelen + 0x4;
 			const size_t plen =
 				(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
 			const size_t postlen = plen - midlen;
@@ -148,7 +149,7 @@ namespace riscv
 			m_exec_pagedata_base = pbase;
 			std::memset(&m_exec_pagedata[0],      0,   prelen);
 			std::memcpy(&m_exec_pagedata[prelen], src, len);
-			std::memset(&m_exec_pagedata[midlen], 0,   postlen);
+			std::memset(&m_exec_pagedata[prelen + len], 0,   postlen);
 			// If execute-only, don't add execute pages
 			// When text and rodata is merged we don't know where the split is
 			if (attr.read) {

@@ -22,17 +22,18 @@ namespace riscv
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
+#ifndef BOUNDS_CHECK_JUMPS_ONLY
 		// We have to check the bounds just to be thorough, as this will
 		// instantly crash if something is wrong. In addition,
 		// page management is only done for jumps outside of execute segment.
 		// Secondly, any jump traps will **HAVE** to return to the execute
 		// segment before returning.
-		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
-			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
+		if (UNLIKELY(this->pc() < m_exec_begin || this->pc() >= m_exec_end)) {
+			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+			__builtin_unreachable();
 		}
-
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-		__builtin_unreachable();
+#endif
+		return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 	}
 
 	template<int W>

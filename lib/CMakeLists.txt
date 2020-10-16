@@ -48,5 +48,6 @@ if (RISCV_ICACHE)
 endif()
 if (RISCV_EXPERIMENTAL)
 	target_compile_definitions(riscv PUBLIC
-		RISCV_INSTR_CACHE_PREGEN=1)
+		RISCV_INSTR_CACHE_PREGEN=1
+		BOUNDS_CHECK_JUMPS_ONLY=1)
 endif()
