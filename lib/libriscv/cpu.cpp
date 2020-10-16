@@ -17,43 +17,6 @@ namespace riscv
 		this->reset_stack_pointer();
 		// jumping causes some extra calculations
 		this->jump(machine().memory.start_address());
-
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-		this->m_cached_page = {};
-#endif
-	}
-
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-	template <int W>
-	const Page& CPU<W>::get_cached_page(address_t pageno)
-	{
-		if (LIKELY(m_cached_page.pageno == pageno))
-			return *m_cached_page.page;
-
-		const auto& page = machine().memory.get_exec_pageno(pageno);
-		this->m_cached_page = {&page, pageno};
-		return page;
-	}
-#endif
-
-	template <int W>
-	typename CPU<W>::format_t CPU<W>::handle_execute_trap()
-	{
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-		// If this trap immediately returns to the caller then by design the
-		// caller will avoid faulting on a page with no execute permission.
-		const address_t pageno = pc() >> Page::SHIFT;
-		const auto& page = get_cached_page(pageno);
-		if (LIKELY(page.has_trap())) {
-			page.trap(pc(), TRAP_EXEC, pageno);
-		}
-#endif
-		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
-			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
-		}
-
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-		__builtin_unreachable();
 	}
 
 	template <int W>
@@ -66,11 +29,6 @@ namespace riscv
 		// segment before returning.
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
-		}
-
-		// ...
-		if constexpr (execute_traps_enabled) {
-			return handle_execute_trap();
 		}
 
 		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());

@@ -26,9 +26,6 @@
 # ifndef RISCV_MEMORY_TRAPS_ENABLED
 #   define RISCV_MEMORY_TRAPS_ENABLED
 # endif
-# ifndef RISCV_EXEC_TRAPS_ENABLED
-#   define RISCV_EXEC_TRAPS_ENABLED
-# endif
 #endif
 
 #ifndef RISCV_RODATA_SEGMENT_IS_SHARED
@@ -45,12 +42,6 @@ namespace riscv
 	static constexpr bool memory_traps_enabled = true;
 #else
 	static constexpr bool memory_traps_enabled = false;
-#endif
-
-#ifdef RISCV_EXEC_TRAPS_ENABLED
-	static constexpr bool execute_traps_enabled = true;
-#else
-	static constexpr bool execute_traps_enabled = false;
 #endif
 
 #ifdef RISCV_DEBUG
@@ -77,9 +68,6 @@ namespace riscv
 	static constexpr bool floating_point_enabled = false;
 #endif
 }
-#if defined(RISCV_EXEC_TRAPS_ENABLED) || defined (RISCV_DEBUG)
-#define RISCV_PAGE_TRAPS_ENABLED
-#endif
 
 #include "util/function.hpp"
 

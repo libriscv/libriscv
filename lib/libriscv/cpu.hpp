@@ -82,15 +82,6 @@ namespace riscv
 		address_t m_exec_begin = 0;
 		address_t m_exec_end   = 0;
 
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-		struct CachedPage {
-			const Page* page = nullptr;
-			address_t pageno = -1;
-		};
-		CachedPage m_cached_page;
-		const Page& get_cached_page(address_t pageno);
-#endif
-
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
 	    mutable int32_t m_break_steps = 0;
