@@ -133,6 +133,7 @@ namespace riscv
 		int deserialize_from(const std::vector<uint8_t>&);
 
 	private:
+		static long unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
 		bool m_stopped = false;

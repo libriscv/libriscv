@@ -6,6 +6,23 @@
 namespace riscv
 {
 	template <int W>
+	long Machine<W>::unknown_syscall_handler(Machine<W>& machine)
+	{
+		const auto syscall_number = machine.cpu.reg(RISCV::REG_ECALL);
+		if (UNLIKELY(machine.m_on_unhandled_syscall != nullptr)) {
+			machine.m_on_unhandled_syscall(syscall_number);
+		}
+#ifndef RISCV_EBREAK_MEANS_STOP
+		// EBREAK should not modify registers
+		if (syscall_number != SYSCALL_EBREAK) {
+			machine.cpu.reg(RISCV::REG_RETVAL) = -38; // -ENOSYS
+		}
+#else
+		machine.cpu.reg(RISCV::REG_RETVAL) = -38;
+#endif
+	}
+
+	template <int W>
 	void Machine<W>::setup_argv(
 		const std::vector<std::string>& args,
 		const std::vector<std::string>& env)

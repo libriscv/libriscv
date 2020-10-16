@@ -4,6 +4,10 @@ inline Machine<W>::Machine(std::string_view binary,
 							MachineOptions<W> options)
 	: cpu(*this), memory(*this, binary, options)
 {
+	// initialize every system call to the unknown handler
+	for (auto& handler : m_syscall_handlers)
+		handler = unknown_syscall_handler;
+
 	if (options.owning_machine == nullptr)
 		cpu.reset();
 	else {
@@ -103,34 +107,13 @@ auto& Machine<W>::get_syscall_handler(int sysn) {
 template <int W>
 inline void Machine<W>::system_call(size_t syscall_number)
 {
-	if (LIKELY(syscall_number < m_syscall_handlers.size()))
+	if (LIKELY(syscall_number < RISCV_SYSCALLS_MAX))
 	{
 		const auto& handler = m_syscall_handlers[syscall_number];
-		if (LIKELY(handler != nullptr))
-		{
-			address_t ret = handler(*this);
-#ifndef RISCV_EBREAK_MEANS_STOP
-			// EBREAK handler should not modify registers
-			if (LIKELY(syscall_number != SYSCALL_EBREAK)) {
-				cpu.reg(RISCV::REG_RETVAL) = ret;
-			}
-#else
-			cpu.reg(RISCV::REG_RETVAL) = ret;
-#endif
-			return;
-		}
+		cpu.reg(RISCV::REG_RETVAL) = handler(*this);
+		return;
 	}
-	if (UNLIKELY(m_on_unhandled_syscall != nullptr)) {
-		this->m_on_unhandled_syscall(syscall_number);
-	}
-#ifndef RISCV_EBREAK_MEANS_STOP
-	// EBREAK should not modify registers
-	if (syscall_number != SYSCALL_EBREAK) {
-		cpu.reg(RISCV::REG_RETVAL) = -38; // -ENOSYS
-	}
-#else
-	cpu.reg(RISCV::REG_RETVAL) = -38;
-#endif
+	cpu.reg(RISCV::REG_RETVAL) = unknown_syscall_handler(*this);
 }
 
 template <int W>
