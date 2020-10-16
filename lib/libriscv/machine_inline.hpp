@@ -47,16 +47,16 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 {
 	this->m_stopped = false;
 	if (max_instr != 0) {
-		max_instr += cpu.instruction_counter();
-		while (LIKELY(!this->stopped())) {
+		uint64_t i = 0;
+		for (; i < max_instr; i++) {
 			cpu.simulate();
-			if (UNLIKELY(cpu.instruction_counter() >= max_instr))
-				break;
+			if (UNLIKELY(this->stopped()))
+				return;
 		}
-		if (UNLIKELY(cpu.instruction_counter() >= max_instr)) {
-			if constexpr (Throw) {
+		if constexpr (Throw) {
+			if (UNLIKELY(i == max_instr)) {
 				throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
-					"Maximum instruction counter reached", max_instr);
+					"Instruction count limit reached", max_instr);
 			}
 		}
 	}
