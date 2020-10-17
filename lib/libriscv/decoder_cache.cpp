@@ -23,6 +23,8 @@ namespace riscv
 		auto* decoder_array = new DecoderCache<W> [n_pages];
 		this->m_exec_decoder =
 			decoder_array[0].get_base() - pbase / decoder_array->DIVISOR;
+		// there could be an old cache from a machine reset
+		delete[] this->m_decoder_cache;
 		this->m_decoder_cache = &decoder_array[0];
 
 #ifdef RISCV_INSTR_CACHE_PREGEN
