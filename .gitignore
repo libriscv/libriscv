@@ -1,5 +1,4 @@
-build/
-clangbuild/
 **/build/
+build_debug/
 fuzz/crash-*
 webapi/tests/binary

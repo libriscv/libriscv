@@ -102,6 +102,11 @@ int main(int argc, const char** argv)
 	machine.verbose_fp_registers = true;
 	machine.throw_on_unhandled_syscall = true;
 	*/
+#ifdef RISCV_DEBUG
+	// print all instructions by default, when debugging is enabled
+	machine.verbose_instructions = true;
+	machine.print_and_pause();
+#endif
 
 	try {
 		machine.simulate();
