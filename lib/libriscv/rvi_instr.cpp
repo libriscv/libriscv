@@ -43,7 +43,7 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		static std::array<const char*, 8> f3 = {"LOADB", "LOADH", "LOADW", "LOADD", "LBU", "LHU", "LWU", "???"};
+		static std::array<const char*, 8> f3 = {"LD.B", "LD.H", "LD.W", "LD.D", "LD.BU", "LD.HU", "LD.WU", "???"};
 		return snprintf(buffer, len, "%s %s, [%s%+ld = 0x%lX]",
 						f3[instr.Itype.funct3], RISCV::regname(instr.Itype.rd),
 						RISCV::regname(instr.Itype.rs1), (long) instr.Itype.signed_imm(),
@@ -135,7 +135,7 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		static std::array<const char*, 4> f3 = {"STOREB", "STOREH", "STOREW", "STORED"};
+		static std::array<const char*, 4> f3 = {"ST.B", "ST.H", "ST.W", "ST.D"};
 		const auto idx = std::min(instr.Stype.funct3, instr.to_word(f3.size()));
 		return snprintf(buffer, len, "%s %s, [%s%+ld] (0x%lX)",
 						f3[idx], RISCV::regname(instr.Stype.rs2),

@@ -47,7 +47,7 @@ namespace riscv
 #ifdef RISCV_DEBUG
 		const auto& handler = this->decode(instruction);
 		// instruction logging
-		if (UNLIKELY(machine().verbose_instructions))
+		if (machine().verbose_instructions)
 		{
 			const auto string = isa_type<W>::to_string(*this, instruction, handler);
 			printf("%s\n", string.c_str());
