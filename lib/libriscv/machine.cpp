@@ -15,10 +15,11 @@ namespace riscv
 #ifndef RISCV_EBREAK_MEANS_STOP
 		// EBREAK should not modify registers
 		if (syscall_number != SYSCALL_EBREAK) {
-			machine.cpu.reg(RISCV::REG_RETVAL) = -38; // -ENOSYS
+			return -38; // -ENOSYS
 		}
+		return machine.cpu.reg(RISCV::REG_RETVAL);
 #else
-		machine.cpu.reg(RISCV::REG_RETVAL) = -38;
+		return -38;
 #endif
 	}
 
