@@ -3,7 +3,7 @@
 #include "decoder_cache.hpp"
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
-#include "rv64i_instr.hpp"
+#include "rv64i.hpp"
 #ifdef __GNUG__
 #include "rv32i.cpp"
 #endif

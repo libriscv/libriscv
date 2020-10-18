@@ -4,10 +4,6 @@ inline Machine<W>::Machine(std::string_view binary,
 							MachineOptions<W> options)
 	: cpu(*this), memory(*this, binary, options)
 {
-	// initialize every system call to the unknown handler
-	for (auto& handler : m_syscall_handlers)
-		handler = unknown_syscall_handler;
-
 	if (options.owning_machine == nullptr)
 		cpu.reset();
 	else {
@@ -110,8 +106,10 @@ inline void Machine<W>::system_call(size_t syscall_number)
 	if (LIKELY(syscall_number < RISCV_SYSCALLS_MAX))
 	{
 		const auto& handler = m_syscall_handlers[syscall_number];
-		cpu.reg(RISCV::REG_RETVAL) = handler(*this);
-		return;
+		if (LIKELY(handler != nullptr)) {
+			cpu.reg(RISCV::REG_RETVAL) = handler(*this);
+			return;
+		}
 	}
 	cpu.reg(RISCV::REG_RETVAL) = unknown_syscall_handler(*this);
 }
