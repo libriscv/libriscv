@@ -177,6 +177,17 @@ inline auto Machine<W>::sysargs() const {
 }
 
 template <int W>
+inline void Machine<W>::ebreak()
+{
+#ifdef RISCV_EBREAK_MEANS_STOP
+	this->stop();
+#else
+	// its simpler and more flexible to just call a user-provided function
+	this->system_call(riscv::SYSCALL_EBREAK);
+#endif
+}
+
+template <int W>
 address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t len)
 {
 	memory.memcpy(dst, buf, len);

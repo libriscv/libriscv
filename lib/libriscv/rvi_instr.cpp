@@ -597,11 +597,7 @@ namespace riscv
 				cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
 				return;
 			case 1: // EBREAK
-#ifdef RISCV_EBREAK_MEANS_STOP
-				cpu.machine().stop();
-#else
-				cpu.machine().system_call(riscv::SYSCALL_EBREAK);
-#endif
+				cpu.machine().ebreak();
 				return;
 			}
 			break;
@@ -680,11 +676,7 @@ namespace riscv
 
 	INSTRUCTION(EBREAK,
 	[] (auto& cpu, rv32i_instruction) {
-#ifdef RISCV_EBREAK_MEANS_STOP
-		cpu.machine().stop();
-#else
-		cpu.machine().system_call(riscv::SYSCALL_EBREAK);
-#endif
+		cpu.machine().ebreak();
 	}, DECODED_INSTR(SYSTEM).printer);
 
 	INSTRUCTION(LUI,

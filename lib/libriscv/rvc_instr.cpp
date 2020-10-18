@@ -519,11 +519,6 @@ namespace riscv
 
 	COMPRESSED_INSTR(C2_EBREAK,
 	[] (auto& cpu, rv32i_instruction) {
-#ifdef RISCV_EBREAK_MEANS_STOP
-		cpu.machine().stop();
-#else
-		// its simpler and more flexible to just call a user-provided function
-		cpu.machine().system_call(riscv::SYSCALL_EBREAK);
-#endif
+		cpu.machine().ebreak();
 	}, DECODED_COMPR(C2_JR).printer);
 }
