@@ -459,52 +459,16 @@ namespace riscv
 	});
 
 	// JR, MV, JALR, ADD
-	COMPRESSED_INSTR(C2_VARIOUS,
+	COMPRESSED_INSTR(C2_JR,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		const bool topbit = ci.whole & (1 << 12);
-		if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
-		{	// JR rd
-			cpu.jump(cpu.reg(ci.CR.rd) - 2);
+		cpu.jump(cpu.reg(ci.CR.rd) - 2);
 #ifdef RISCV_DEBUG
-			if (UNLIKELY(cpu.machine().verbose_jumps)) {
-				printf(">>> RET 0x%lX <-- %s = 0x%lX\n", (long) cpu.pc(),
-					RISCV::regname(ci.CR.rd), (long) cpu.reg(ci.CR.rd));
-			}
+		if (UNLIKELY(cpu.machine().verbose_jumps)) {
+			printf(">>> RET 0x%lX <-- %s = 0x%lX\n", (long) cpu.pc(),
+				RISCV::regname(ci.CR.rd), (long) cpu.reg(ci.CR.rd));
+		}
 #endif
-		}
-		else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
-		{	// JALR ra, rd+0
-			cpu.reg(RISCV::REG_RA) = cpu.pc() + 0x2;
-			cpu.jump(cpu.reg(ci.CR.rd) - 2);
-#ifdef RISCV_DEBUG
-			if (UNLIKELY(cpu.machine().verbose_jumps)) {
-				printf(">>> C.JAL RA, 0x%lX <-- %s = 0x%lX\n",
-					(long) cpu.reg(RISCV::REG_RA) - 2,
-					RISCV::regname(ci.CR.rd), (long) cpu.reg(ci.CR.rd));
-			}
-#endif
-		}
-		else if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 != 0)
-		{	// MV rd, rs2
-			cpu.reg(ci.CR.rd) = cpu.reg(ci.CR.rs2);
-		}
-		else if (ci.CR.rd != 0) // ADD rd, rd + rs2
-		{
-			cpu.reg(ci.CR.rd) += cpu.reg(ci.CR.rs2);
-		}
-		else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0) // EBREAK
-		{
-#ifdef RISCV_EBREAK_MEANS_STOP
-			cpu.machine().stop();
-#else
-			// its simpler and more flexible to just call a user-provided function
-			cpu.machine().system_call(riscv::SYSCALL_EBREAK);
-#endif
-		}
-		else {
-			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
-		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -526,4 +490,40 @@ namespace riscv
 			return snprintf(buffer, len, "C.EBREAK");
 		return snprintf(buffer, len, "C.HINT");
 	});
+
+	COMPRESSED_INSTR(C2_JALR,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		cpu.reg(RISCV::REG_RA) = cpu.pc() + 0x2;
+		cpu.jump(cpu.reg(ci.CR.rd) - 2);
+#ifdef RISCV_DEBUG
+		if (UNLIKELY(cpu.machine().verbose_jumps)) {
+			printf(">>> C.JAL RA, 0x%lX <-- %s = 0x%lX\n",
+				(long) cpu.reg(RISCV::REG_RA) - 2,
+				RISCV::regname(ci.CR.rd), (long) cpu.reg(ci.CR.rd));
+		}
+#endif
+	}, DECODED_COMPR(C2_JR).printer);
+
+	COMPRESSED_INSTR(C2_MV,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		cpu.reg(ci.CR.rd) = cpu.reg(ci.CR.rs2);
+	}, DECODED_COMPR(C2_JR).printer);
+
+	COMPRESSED_INSTR(C2_ADD,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		cpu.reg(ci.CR.rd) += cpu.reg(ci.CR.rs2);
+	}, DECODED_COMPR(C2_JR).printer);
+
+	COMPRESSED_INSTR(C2_EBREAK,
+	[] (auto& cpu, rv32i_instruction) {
+#ifdef RISCV_EBREAK_MEANS_STOP
+		cpu.machine().stop();
+#else
+		// its simpler and more flexible to just call a user-provided function
+		cpu.machine().system_call(riscv::SYSCALL_EBREAK);
+#endif
+	}, DECODED_COMPR(C2_JR).printer);
 }

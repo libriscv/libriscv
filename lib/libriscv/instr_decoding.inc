@@ -320,8 +320,30 @@
 				case CI_CODE(0b010, 0b10):
 				case CI_CODE(0b011, 0b10):
 					DECODER(DECODED_COMPR(C2_SP_LOAD));
-				case CI_CODE(0b100, 0b10):
-					DECODER(DECODED_COMPR(C2_VARIOUS));
+				case CI_CODE(0b100, 0b10): {
+					const bool topbit = ci.whole & (1 << 12);
+					if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
+					{	// JR rd
+						DECODER(DECODED_COMPR(C2_JR));
+					}
+					else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
+					{	// JALR ra, rd+0
+						DECODER(DECODED_COMPR(C2_JALR));
+					}
+					else if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 != 0)
+					{	// MV rd, rs2
+						DECODER(DECODED_COMPR(C2_MV));
+					}
+					else if (ci.CR.rd != 0)
+					{	// ADD rd, rd + rs2
+						DECODER(DECODED_COMPR(C2_ADD));
+					}
+					else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0)
+					{	// EBREAK
+						DECODER(DECODED_COMPR(C2_EBREAK));
+					}
+					DECODER(DECODED_COMPR(UNIMPLEMENTED));
+				}
 				case CI_CODE(0b101, 0b10):
 				case CI_CODE(0b110, 0b10):
 				case CI_CODE(0b111, 0b10):
