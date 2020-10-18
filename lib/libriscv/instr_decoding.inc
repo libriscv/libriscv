@@ -263,7 +263,21 @@
 				case CI_CODE(0b101, 0b00):
 				case CI_CODE(0b110, 0b00):
 				case CI_CODE(0b111, 0b00):
-					DECODER(DECODED_COMPR(C0_REG_STORE));
+					switch (ci.CS.funct3) {
+					case 4:
+						DECODER(DECODED_INSTR(UNIMPLEMENTED));
+					case 5: // C.FSD
+						DECODER(DECODED_COMPR(C0_REG_FSD));
+					case 6: // C.SW
+						DECODER(DECODED_COMPR(C0_REG_SW));
+					case 7: // C.SD / C.FSW
+						if constexpr (RVIS64BIT(*this)) {
+							DECODER(DECODED_COMPR(C0_REG_SD));
+						} else {
+							DECODER(DECODED_COMPR(C0_REG_FSW));
+						}
+					}
+					DECODER(DECODED_INSTR(ILLEGAL));
 				// Quadrant 1
 				case CI_CODE(0b000, 0b01): // C.ADDI
 					if (ci.CI.rd != 0) {

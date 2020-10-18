@@ -63,34 +63,12 @@ namespace riscv
 	}, DECODED_COMPR(C0_REG_FLD).printer);
 
 	// SW, SD, SQ, FSW, FSD
-	COMPRESSED_INSTR(C0_REG_STORE,
+	COMPRESSED_INSTR(C0_REG_FSD,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		switch (ci.CS.funct3) {
-			case 4:
-				break;
-			case 5: { // C.FSD
-				const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
-				const auto value   = cpu.ciflp(ci.CSD.srs2).i64;
-				cpu.machine().memory.template write<uint64_t> (address, value);
-				} return;
-			case 6: { // C.SW
-				const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
-				const auto value   = cpu.cireg(ci.CS.srs2);
-				cpu.machine().memory.template write<uint32_t> (address, value);
-				} return;
-			case 7: // C.SD / C.FSW
-				if constexpr (RVIS64BIT(cpu)) {
-					const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
-					const auto value   = cpu.cireg(ci.CSD.srs2);
-					cpu.machine().memory.template write<uint64_t> (address, value);
-				} else {
-					const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
-					const auto value   = cpu.ciflp(ci.CS.srs2).i32[0];
-					cpu.machine().memory.template write<uint32_t> (address, value);
-				} return;
-		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
+		const auto value   = cpu.ciflp(ci.CSD.srs2).i64;
+		cpu.machine().memory.template write<uint64_t> (address, value);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
@@ -108,6 +86,30 @@ namespace riscv
 						RISCV::ciflp(ci.CS.srs2),
 						RISCV::ciname(ci.CS.srs1), offset);
 	});
+
+	COMPRESSED_INSTR(C0_REG_SW,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
+		const auto value   = cpu.cireg(ci.CS.srs2);
+		cpu.machine().memory.template write<uint32_t> (address, value);
+	}, DECODED_COMPR(C0_REG_FSD).printer);
+
+	COMPRESSED_INSTR(C0_REG_SD,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
+		const auto value   = cpu.cireg(ci.CSD.srs2);
+		cpu.machine().memory.template write<uint64_t> (address, value);
+	}, DECODED_COMPR(C0_REG_FSD).printer);
+
+	COMPRESSED_INSTR(C0_REG_FSW,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
+		const auto value   = cpu.ciflp(ci.CS.srs2).i32[0];
+		cpu.machine().memory.template write<uint32_t> (address, value);
+	}, DECODED_COMPR(C0_REG_FSD).printer);
 
 	COMPRESSED_INSTR(C1_ADDI,
 	[] (auto& cpu, rv32i_instruction instr) {
