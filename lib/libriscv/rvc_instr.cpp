@@ -114,7 +114,7 @@ namespace riscv
 	COMPRESSED_INSTR(C1_ADDI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		// ADDI (non-hint, not NOP)
+		// C.ADDI (non-hint, not NOP)
 		cpu.reg(ci.CI.rd) += ci.CI.signed_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
@@ -153,7 +153,7 @@ namespace riscv
 	COMPRESSED_INSTR(C1_ADDIW,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		// ADDIW rd, imm[5:0]
+		// C.ADDIW rd, imm[5:0]
 		cpu.reg(ci.CI.rd) = RVSIGNEXTW(cpu) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
@@ -166,7 +166,7 @@ namespace riscv
 	COMPRESSED_INSTR(C1_LI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		// LI rd, imm[5:0]
+		// C.LI rd, imm[5:0]
 		cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
@@ -179,7 +179,7 @@ namespace riscv
 	COMPRESSED_INSTR(C1_ADDI16SP,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		// ADDI16SP rd, imm[17:12]
+		// C.ADDI16SP rd, imm[17:12]
 		cpu.reg(RISCV::REG_SP) += ci.CI16.signed_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
@@ -457,7 +457,7 @@ namespace riscv
 		cpu.machine().memory.template write<uint32_t> (addr, value);
 	}, DECODED_COMPR(C2_FSDSP).printer);
 
-	// JR, MV, JALR, ADD
+	// C.JR, C.MV, C.JALR, C.ADD
 	COMPRESSED_INSTR(C2_JR,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
