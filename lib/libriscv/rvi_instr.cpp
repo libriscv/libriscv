@@ -325,16 +325,6 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		switch (instr.Itype.funct3) {
-		case 0x0:
-			// ADDI: Add sign-extended 12-bit immediate
-			dst = src + instr.Itype.signed_imm();
-			break;
-		case 0x1: // SLLI:
-			if constexpr (RVIS64BIT(cpu))
-				dst = src << instr.Itype.shift64_imm();
-			else
-				dst = src << instr.Itype.shift_imm();
-			break;
 		case 0x2: // SLTI:
 			dst = (RVTOSIGNED(src) < instr.Itype.signed_imm()) ? 1 : 0;
 			break;
@@ -361,12 +351,6 @@ namespace riscv
 					dst = RV32I::SRA(is_signed, shifts, src);
 				}
 			}
-			break;
-		case 0x6: // ORI:
-			dst = src | instr.Itype.signed_imm();
-			break;
-		case 0x7: // ANDI:
-			dst = src & instr.Itype.signed_imm();
 			break;
 		}
 	},
@@ -421,16 +405,40 @@ namespace riscv
 
 	INSTRUCTION(OP_IMM_ADDI,
 	[] (auto& cpu, rv32i_instruction instr) {
-		auto& dst = cpu.reg(instr.Itype.rd);
-		const auto src = cpu.reg(instr.Itype.rs1);
 		// ADDI: Add sign-extended 12-bit immediate
-		dst = src + instr.Itype.signed_imm();
+		cpu.reg(instr.Itype.rd) =
+			cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	}, DECODED_INSTR(OP_IMM).printer);
+
+	INSTRUCTION(OP_IMM_ORI,
+	[] (auto& cpu, rv32i_instruction instr) {
+		// ORI: Or sign-extended 12-bit immediate
+		cpu.reg(instr.Itype.rd) =
+			cpu.reg(instr.Itype.rs1) | instr.Itype.signed_imm();
+	}, DECODED_INSTR(OP_IMM).printer);
+
+	INSTRUCTION(OP_IMM_ANDI,
+	[] (auto& cpu, rv32i_instruction instr) {
+		// ANDI: And sign-extended 12-bit immediate
+		cpu.reg(instr.Itype.rd) =
+			cpu.reg(instr.Itype.rs1) & instr.Itype.signed_imm();
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP_IMM_LI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// LI: Load sign-extended 12-bit immediate
 		cpu.reg(instr.Itype.rd) = instr.Itype.signed_imm();
+	}, DECODED_INSTR(OP_IMM).printer);
+
+	INSTRUCTION(OP_IMM_SLLI,
+	[] (auto& cpu, rv32i_instruction instr) {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const auto src = cpu.reg(instr.Itype.rs1);
+		// SLLI: Logical left-shift 5/6-bit immediate
+		if constexpr (RVIS64BIT(cpu))
+			dst = src << instr.Itype.shift64_imm();
+		else
+			dst = src << instr.Itype.shift_imm();
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP,

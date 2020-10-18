@@ -95,6 +95,12 @@
 								DECODER(DECODED_INSTR(OP_IMM_LI));
 							}
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
+						case 0x1: // SLLI
+							DECODER(DECODED_INSTR(OP_IMM_SLLI));
+						case 0x6: // ORI
+							DECODER(DECODED_INSTR(OP_IMM_ORI));
+						case 0x7: // ANDI
+							DECODER(DECODED_INSTR(OP_IMM_ANDI));
 						default:
 							DECODER(DECODED_INSTR(OP_IMM));
 						}
