@@ -319,7 +319,32 @@
 				case CI_CODE(0b001, 0b10):
 				case CI_CODE(0b010, 0b10):
 				case CI_CODE(0b011, 0b10):
-					DECODER(DECODED_COMPR(C2_SP_LOAD));
+					if (ci.CI.funct3 == 0x0 && ci.CI.rd != 0) {
+						// C.SLLI
+						DECODER(DECODED_COMPR(C2_SLLI));
+					}
+					else if (ci.CI2.funct3 == 0x1) {
+						// C.FLDSP
+						DECODER(DECODED_COMPR(C2_FLDSP));
+					}
+					else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
+						// C.LWSP
+						DECODER(DECODED_COMPR(C2_LWSP));
+					}
+					else if (ci.CI2.funct3 == 0x3) {
+						if constexpr (RVIS64BIT(*this)) {
+							// C.LDSP
+							DECODER(DECODED_COMPR(C2_LDSP));
+						} else {
+							// C.FLWSP
+							DECODER(DECODED_COMPR(C2_FLWSP));
+						}
+					}
+					else if (ci.CI.rd == 0) {
+						// C.HINT
+						DECODER(DECODED_INSTR(NOP));
+					}
+					DECODER(DECODED_COMPR(UNIMPLEMENTED));
 				case CI_CODE(0b100, 0b10): {
 					const bool topbit = ci.whole & (1 << 12);
 					if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
@@ -347,7 +372,24 @@
 				case CI_CODE(0b101, 0b10):
 				case CI_CODE(0b110, 0b10):
 				case CI_CODE(0b111, 0b10):
-					DECODER(DECODED_COMPR(C2_SP_STORE));
+					if (ci.CSS.funct3 == 5) {
+						// FSDSP
+						DECODER(DECODED_COMPR(C2_FSDSP));
+					}
+					else if (ci.CSS.funct3 == 6) {
+						// SWSP
+						DECODER(DECODED_COMPR(C2_SWSP));
+					}
+					else if (ci.CSS.funct3 == 7) {
+						if constexpr (RVIS64BIT(*this)) {
+							// SDSP
+							DECODER(DECODED_COMPR(C2_SDSP));
+						} else {
+							// FSWSP
+							DECODER(DECODED_COMPR(C2_FSWSP));
+						}
+					}
+					DECODER(DECODED_COMPR(UNIMPLEMENTED));
 			}
 		}
 #endif

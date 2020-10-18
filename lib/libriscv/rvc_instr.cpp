@@ -349,47 +349,14 @@ namespace riscv
 						(long) cpu.pc() + ci.CB.signed_imm());
 	});
 
-	// LWSP, LDSP, LQSP, FLWSP, FLDSP, SWSP, SDSP, SQSP, FSWSP, FSDSP
-	COMPRESSED_INSTR(C2_SP_LOAD,
+	// C.SLLI, LWSP, LDSP, LQSP, FLWSP, FLDSP
+	COMPRESSED_INSTR(C2_SLLI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		if (ci.CI.funct3 == 0x0 && ci.CI.rd != 0) {
-			// SLLI
-			if constexpr (RVIS64BIT(cpu)) {
-				cpu.reg(ci.CI.rd) <<= ci.CI.shift64_imm();
-			} else {
-				cpu.reg(ci.CI.rd) <<= ci.CI.shift_imm();
-			}
-		}
-		else if (ci.CI2.funct3 == 0x1) {
-			// FLDSP
-			auto address = cpu.reg(RISCV::REG_SP) + ci.CIFLD.offset();
-			auto& dst = cpu.registers().getfl(ci.CIFLD.rd);
-			dst.load_u64(cpu.machine().memory.template read <uint64_t> (address));
-		}
-		else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
-			// LWSP
-			auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
-			cpu.reg(ci.CI2.rd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read <uint32_t> (address);
-		}
-		else if (ci.CI2.funct3 == 0x3) {
-			if constexpr (RVIS64BIT(cpu)) {
-				// LDSP
-				auto address = cpu.reg(RISCV::REG_SP) + ci.CIFLD.offset();
-				cpu.reg(ci.CIFLD.rd) =
-					cpu.machine().memory.template read <uint64_t> (address);
-			} else {
-				// FLWSP
-				auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
-				auto& dst = cpu.registers().getfl(ci.CI2.rd);
-				dst.load_u32(cpu.machine().memory.template read <uint32_t> (address));
-			}
-		}
-		else if (ci.CI.rd == 0) {
-			// HINT
-		}
-		else {
-			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		if constexpr (RVIS64BIT(cpu)) {
+			cpu.reg(ci.CI.rd) <<= ci.CI.shift64_imm();
+		} else {
+			cpu.reg(ci.CI.rd) <<= ci.CI.shift_imm();
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -414,37 +381,45 @@ namespace riscv
 		}
 		return snprintf(buffer, len, "C.HINT %s", RISCV::regname(ci.CI2.rd));
 	});
-	COMPRESSED_INSTR(C2_SP_STORE,
+
+	COMPRESSED_INSTR(C2_FLDSP,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		if (ci.CSS.funct3 == 5) {
-			// FSDSP
-			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSFSD.offset();
-			uint64_t value = cpu.registers().getfl(ci.CSFSD.rs2).i64;
-			cpu.machine().memory.template write<uint64_t> (addr, value);
-		}
-		else if (ci.CSS.funct3 == 6) {
-			// SWSP
-			auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
-			uint32_t value = cpu.reg(ci.CSS.rs2);
-			cpu.machine().memory.template write<uint32_t> (addr, value);
-		}
-		else if (ci.CSS.funct3 == 7) {
-			if constexpr (RVIS64BIT(cpu)) {
-				// SDSP
-				auto addr = cpu.reg(RISCV::REG_SP) + ci.CSFSD.offset();
-				auto value = cpu.reg(ci.CSFSD.rs2);
-				cpu.machine().memory.template write<uint64_t> (addr, value);
-			} else {
-				// FSWSP
-				auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
-				uint32_t value = cpu.registers().getfl(ci.CSS.rs2).i32[0];
-				cpu.machine().memory.template write<uint32_t> (addr, value);
-			}
-		}
-		else {
-			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
-		}
+		auto address = cpu.reg(RISCV::REG_SP) + ci.CIFLD.offset();
+		auto& dst = cpu.registers().getfl(ci.CIFLD.rd);
+		dst.load_u64(cpu.machine().memory.template read <uint64_t> (address));
+	}, DECODED_COMPR(C2_SLLI).printer);
+
+	COMPRESSED_INSTR(C2_LWSP,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
+		cpu.reg(ci.CI2.rd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read <uint32_t> (address);
+	}, DECODED_COMPR(C2_SLLI).printer);
+
+	COMPRESSED_INSTR(C2_LDSP,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto address = cpu.reg(RISCV::REG_SP) + ci.CIFLD.offset();
+		cpu.reg(ci.CIFLD.rd) =
+			cpu.machine().memory.template read <uint64_t> (address);
+	}, DECODED_COMPR(C2_SLLI).printer);
+
+	COMPRESSED_INSTR(C2_FLWSP,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto address = cpu.reg(RISCV::REG_SP) + ci.CI2.offset();
+		auto& dst = cpu.registers().getfl(ci.CI2.rd);
+		dst.load_u32(cpu.machine().memory.template read <uint32_t> (address));
+	}, DECODED_COMPR(C2_SLLI).printer);
+
+	// SWSP, SDSP, SQSP, FSWSP, FSDSP
+	COMPRESSED_INSTR(C2_FSDSP,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto addr = cpu.reg(RISCV::REG_SP) + ci.CSFSD.offset();
+		uint64_t value = cpu.registers().getfl(ci.CSFSD.rs2).i64;
+		cpu.machine().memory.template write<uint64_t> (addr, value);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -457,6 +432,30 @@ namespace riscv
 						f3[ci.CSS.funct3 - 4], ci.CSS.offset(4),
 						RISCV::regname(ci.CSS.rs2), (long) address);
 	});
+
+	COMPRESSED_INSTR(C2_SWSP,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
+		uint32_t value = cpu.reg(ci.CSS.rs2);
+		cpu.machine().memory.template write<uint32_t> (addr, value);
+	}, DECODED_COMPR(C2_FSDSP).printer);
+
+	COMPRESSED_INSTR(C2_SDSP,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto addr = cpu.reg(RISCV::REG_SP) + ci.CSFSD.offset();
+		auto value = cpu.reg(ci.CSFSD.rs2);
+		cpu.machine().memory.template write<uint64_t> (addr, value);
+	}, DECODED_COMPR(C2_FSDSP).printer);
+
+	COMPRESSED_INSTR(C2_FSWSP,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto addr = cpu.reg(RISCV::REG_SP) + ci.CSS.offset(4);
+		uint32_t value = cpu.registers().getfl(ci.CSS.rs2).i32[0];
+		cpu.machine().memory.template write<uint32_t> (addr, value);
+	}, DECODED_COMPR(C2_FSDSP).printer);
 
 	// JR, MV, JALR, ADD
 	COMPRESSED_INSTR(C2_JR,
