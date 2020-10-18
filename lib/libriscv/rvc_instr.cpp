@@ -18,33 +18,14 @@ namespace riscv
 						RISCV::ciname(ci.CIW.srd), ci.CIW.offset(),
 						(long) cpu.reg(RISCV::REG_SP) + ci.CIW.offset());
 	});
-	// LW, LD, LQ, FLW, FLD, SW, SD, SQ, FSW, FSD
-	COMPRESSED_INSTR(C0_REG_LOAD,
+
+	// LW, LD, LQ, FLW, FLD
+	COMPRESSED_INSTR(C0_REG_FLD,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();
-		if (ci.CL.funct3 == 0x2) { // C.LW
-			auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
-			cpu.cireg(ci.CL.srd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read<uint32_t> (address);
-			return;
-		}
-		else if (ci.CL.funct3 == 0x1) { // C.FLD
-			auto address = cpu.cireg(ci.CL.srs1) + ci.CSD.offset8();
-			cpu.ciflp(ci.CL.srd).load_u64(
-					cpu.machine().memory.template read<uint64_t> (address));
-			return;
-		}
-		else if (ci.CL.funct3 == 0x3) { // C.LD / C.FLW
-			if constexpr (RVIS64BIT(cpu)) {
-				auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
-				cpu.cireg(ci.CSD.srs2) =
-						cpu.machine().memory.template read<uint64_t> (address);
-			} else {
-				auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
-				cpu.ciflp(ci.CL.srd).load_u32(
-					cpu.machine().memory.template read<uint32_t> (address));
-			} return;
-		}
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		auto address = cpu.cireg(ci.CL.srs1) + ci.CSD.offset8();
+		cpu.ciflp(ci.CL.srd).load_u64(
+				cpu.machine().memory.template read<uint64_t> (address));
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
@@ -57,6 +38,31 @@ namespace riscv
 						RISCV::ciname(ci.CL.srs1), ci.CL.offset(),
 						(long) cpu.cireg(ci.CL.srs1) + ci.CL.offset());
 	});
+
+	COMPRESSED_INSTR(C0_REG_LW,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
+		cpu.cireg(ci.CL.srd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read<uint32_t> (address);
+	}, DECODED_COMPR(C0_REG_FLD).printer);
+
+	COMPRESSED_INSTR(C0_REG_LD,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
+		cpu.cireg(ci.CSD.srs2) =
+				cpu.machine().memory.template read<uint64_t> (address);
+	}, DECODED_COMPR(C0_REG_FLD).printer);
+
+	COMPRESSED_INSTR(C0_REG_FLW,
+	[] (auto& cpu, rv32i_instruction instr) {
+		const auto ci = instr.compressed();
+		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
+		cpu.ciflp(ci.CL.srd).load_u32(
+			cpu.machine().memory.template read<uint32_t> (address));
+	}, DECODED_COMPR(C0_REG_FLD).printer);
+
+	// SW, SD, SQ, FSW, FSD
 	COMPRESSED_INSTR(C0_REG_STORE,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto ci = instr.compressed();

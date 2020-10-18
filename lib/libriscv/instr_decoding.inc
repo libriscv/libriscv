@@ -245,7 +245,20 @@
 				case CI_CODE(0b001, 0b00):
 				case CI_CODE(0b010, 0b00):
 				case CI_CODE(0b011, 0b00):
-					DECODER(DECODED_COMPR(C0_REG_LOAD));
+					if (ci.CL.funct3 == 0x1) { // C.FLD
+						DECODER(DECODED_COMPR(C0_REG_FLD));
+					}
+					else if (ci.CL.funct3 == 0x2) { // C.LW
+						DECODER(DECODED_COMPR(C0_REG_LW));
+					}
+					else if (ci.CL.funct3 == 0x3) {
+						if constexpr (RVIS64BIT(*this)) { // C.LD
+							DECODER(DECODED_COMPR(C0_REG_LD));
+						} else { // C.FLW
+							DECODER(DECODED_COMPR(C0_REG_FLW));
+						}
+					}
+					DECODER(DECODED_INSTR(ILLEGAL));
 				// RESERVED: 0b100, 0b00
 				case CI_CODE(0b101, 0b00):
 				case CI_CODE(0b110, 0b00):
@@ -302,5 +315,8 @@
 			}
 		}
 #endif
-		// illegal operation exception
+		// all zeroes: illegal instruction
+		if (instruction.whole == 0x0) {
+			DECODER(DECODED_INSTR(ILLEGAL));
+		}
 		DECODER(DECODED_INSTR(UNIMPLEMENTED));
