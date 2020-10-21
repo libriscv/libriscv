@@ -19,21 +19,50 @@ namespace riscv
 		this->jump(machine().memory.start_address());
 	}
 
+	template <int W> __attribute__((noinline))
+	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath()
+	{
+		// Fallback: Read directly from page memory
+		const auto pageno = this->pc() >> Page::SHIFT;
+		const auto& page = machine().memory.get_exec_pageno(pageno);
+		const auto offset = this->pc() & (Page::size()-1);
+		if (!page.attr.exec) {
+			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+		}
+		format_t instruction;
+
+		if (LIKELY(offset <= Page::size()-4)) {
+			instruction.whole = *(uint32_t*) (page.data() + offset);
+			return instruction;
+		}
+		// It's not possible to jump to a misaligned address,
+		// so there is necessarily 16-bit left of the page now.
+		instruction.whole = *(uint16_t*) (page.data() + offset);
+
+		// If it's a 32-bit instruction at a page border, we need
+		// to get the next page, and then read the upper half
+		if (UNLIKELY(instruction.is_long()))
+		{
+			const auto& page = machine().memory.get_exec_pageno(pageno+1);
+			instruction.half[1] = *(uint16_t*) page.data();
+		}
+
+		return instruction;
+	}
+
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-#ifndef BOUNDS_CHECK_JUMPS_ONLY
 		// We have to check the bounds just to be thorough, as this will
 		// instantly crash if something is wrong. In addition,
 		// page management is only done for jumps outside of execute segment.
 		// Secondly, any jump traps will **HAVE** to return to the execute
 		// segment before returning.
-		if (UNLIKELY(this->pc() < m_exec_begin || this->pc() >= m_exec_end)) {
-			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-			__builtin_unreachable();
+		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
+			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
-#endif
-		return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
+
+		return read_next_instruction_slowpath();
 	}
 
 	template<int W>

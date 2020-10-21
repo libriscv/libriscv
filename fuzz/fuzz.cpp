@@ -17,10 +17,7 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 		machine32.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
 		machine64.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
 		machine64.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
-		// Setup for 32-bit execute segment
-		auto* data32 = machine32.memory.get_page(V).data();
-		machine32.cpu.initialize_exec_segs(data32 - V, V, V + 0x1000);
-		// Setup for 64-bit execute segment
+		// On the 64-bit machine we will fuzz using the execute segment
 		auto* data64 = machine64.memory.get_page(V).data();
 		machine64.cpu.initialize_exec_segs(data64 - V, V, V + 0x1000);
 		return;

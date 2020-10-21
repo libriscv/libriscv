@@ -74,7 +74,7 @@ namespace riscv
 		Machine<W>&  m_machine;
 
 		format_t read_next_instruction();
-		format_t handle_execute_trap() COLD_PATH();
+		format_t read_next_instruction_slowpath() COLD_PATH();
 		void execute(format_t);
 
 		// ELF programs linear .text segment
