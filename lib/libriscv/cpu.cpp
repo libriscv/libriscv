@@ -53,6 +53,13 @@ namespace riscv
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
+#ifdef RISCV_BOUNDS_CHECKED_JUMPS
+		// When jumps are bounds-checked, we can assume that PC
+		// is always inside a single executable segment that is
+		// one instruction larger than it needs to be, which allows
+		// reading instructions without checking bounds.
+		return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
+#else
 		// We have to check the bounds just to be thorough, as this will
 		// instantly crash if something is wrong. In addition,
 		// page management is only done for jumps outside of execute segment.
@@ -63,6 +70,7 @@ namespace riscv
 		}
 
 		return read_next_instruction_slowpath();
+#endif
 	}
 
 	template<int W>
