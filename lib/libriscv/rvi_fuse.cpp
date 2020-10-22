@@ -19,23 +19,19 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 			return true;
 		}
 	}
+	return false;
 	// LI + LI fused
 	if (i1.first == DECODED_INSTR(OP_IMM_LI).handler) {
 		if (i2.first == DECODED_INSTR(OP_IMM_LI).handler) {
 			// not enough room for upper bits
-			if (i1.second.Itype.rd >= 32 || i2.second.Itype.rd >= 32) {
+			if (i1.second.Itype.rd >= 16 || i2.second.Itype.rd >= 16) {
 				return false;
 			}
-			// Unfortunately, this clobbers the bits needed to
-			// measure the length of the instruction, so it will randomly
-			// see a 16-bit instruction and move on to an invalid opcode.
-			return false;
-
 			struct Lili {
-				uint16_t    imm1   : 12;
-				uint16_t    rd1    : 4;
-				uint16_t    imm2   : 12;
-				uint16_t    rd2    : 4;
+				uint32_t    imm1   : 12;
+				uint32_t    rd1    : 4;
+				uint32_t    imm2   : 12;
+				uint32_t    rd2    : 4;
 
 				static bool sign(uint32_t imm) {
 					return imm & 0x800;
