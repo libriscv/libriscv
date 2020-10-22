@@ -67,6 +67,10 @@ namespace riscv
 		// returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
+		// instruction fusing (icache only)
+		using instr_pair = std::pair<instruction_handler<W>&, format_t&>;
+		bool try_fuse(instr_pair i1, instr_pair i2) const;
+
 		CPU(Machine<W>&);
 	private:
 		Registers<W> m_regs;

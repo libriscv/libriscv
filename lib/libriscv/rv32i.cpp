@@ -50,4 +50,7 @@ namespace riscv
 		}
 		return std::string(buffer, len);
 	}
+
+#include "rvi_fuse.cpp"
+	template bool CPU<4>::try_fuse(instr_pair, instr_pair) const;
 }

@@ -28,7 +28,9 @@ namespace riscv
 		this->m_decoder_cache = &decoder_array[0];
 
 #ifdef RISCV_INSTR_CACHE_PREGEN
-		const auto* exec_offset = m_exec_pagedata.get() - pbase;
+		std::vector<typename CPU<W>::instr_pair> ipairs;
+
+		auto* exec_offset = m_exec_pagedata.get() - pbase;
 		// generate instruction handler pointers for machine code
 		for (address_t dst = pbase; dst < pbase + plen;)
 		{
@@ -39,8 +41,8 @@ namespace riscv
 
 			if (dst >= addr && dst < addr + len)
 			{
-				rv32i_instruction instruction;
-				instruction.whole = *(uint32_t*) &exec_offset[dst];
+				auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
+				ipairs.emplace_back(entry, instruction);
 
 				entry = machine().cpu.decode(instruction).handler;
 				dst += instruction.length();
@@ -48,6 +50,12 @@ namespace riscv
 				entry = machine().cpu.decode({0}).handler;
 				dst += 4;
 			}
+		}
+
+		for (size_t n = 0; n < ipairs.size()-1; n++)
+		{
+			if (machine().cpu.try_fuse(ipairs[n+0], ipairs[n+1]))
+				n += 1;
 		}
 #else
 		// zero the whole thing

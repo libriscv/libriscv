@@ -1,7 +1,7 @@
 #include "cpu.hpp"
 #include "machine.hpp"
 #include "rv32i_instr.hpp"
-#include "rv64i_instr.hpp"
+#include "rv64i.hpp"
 #include <cstdio>
 #include <cstdlib>
 
