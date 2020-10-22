@@ -116,7 +116,10 @@ namespace riscv
 		static constexpr bool verbose_jumps     = false;
 		static constexpr bool verbose_registers = false;
 #endif
+
+		// Call an installed system call handler
 		void system_call(size_t);
+		void unchecked_system_call(size_t);
 		void ebreak();
 
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }

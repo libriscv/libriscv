@@ -113,6 +113,16 @@ inline void Machine<W>::system_call(size_t syscall_number)
 	}
 	cpu.reg(RISCV::REG_RETVAL) = unknown_syscall_handler(*this);
 }
+template <int W>
+inline void Machine<W>::unchecked_system_call(size_t syscall_number)
+{
+	const auto& handler = m_syscall_handlers[syscall_number];
+	if (LIKELY(handler != nullptr)) {
+		cpu.reg(RISCV::REG_RETVAL) = handler(*this);
+	} else {
+		cpu.reg(RISCV::REG_RETVAL) = unknown_syscall_handler(*this);
+	}
+}
 
 template <int W>
 template <typename T>
