@@ -26,7 +26,11 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 			if (i1.second.Itype.rd >= 32 || i2.second.Itype.rd >= 32) {
 				return false;
 			}
+			// Unfortunately, this clobbers the bits needed to
+			// measure the length of the instruction, so it will randomly
+			// see a 16-bit instruction and move on to an invalid opcode.
 			return false;
+
 			struct Lili {
 				uint16_t    imm1   : 12;
 				uint16_t    rd1    : 4;
