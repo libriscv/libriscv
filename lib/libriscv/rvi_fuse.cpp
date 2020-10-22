@@ -16,11 +16,25 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 		const auto sysno = i1.second.Itype.signed_imm();
 		if (i1.second.Itype.rd == RISCV::REG_ECALL && sysno < RISCV_SYSCALLS_MAX)
 		{
-			i1.second.whole = sysno;
+			union FusedSyscall {
+				struct {
+					uint8_t lower;
+					uint8_t ilen;
+					uint16_t sysno;
+				};
+				uint32_t whole;
+			};
+			const FusedSyscall fop {
+				.lower = (uint8_t)  i2.second.half[0],  // Trick emulator to step
+				.ilen  = (uint8_t)  i1.second.length(), // over second instruction.
+				.sysno = (uint16_t) sysno,
+			};
+			i1.second.whole = fop.whole;
 			i1.first = [] (auto& cpu, rv32i_instruction instr) {
-				cpu.registers().pc += 4;
-				cpu.reg(RISCV::REG_ECALL) = instr.whole;
-				cpu.machine().unchecked_system_call(instr.whole);
+				auto& fop = view_as<FusedSyscall> (instr);
+				cpu.registers().pc += fop.ilen;
+				cpu.reg(RISCV::REG_ECALL) = fop.sysno;
+				cpu.machine().unchecked_system_call(fop.sysno);
 			};
 			return true;
 		}
