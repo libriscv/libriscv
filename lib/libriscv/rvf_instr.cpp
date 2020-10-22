@@ -320,29 +320,26 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const rv32f_instruction fi { instr };
-		if (fi.R4type.rd != 0)
-		{
-			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
-			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
-			auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 
-			switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
-			{
-				case 0x0: // FMIN.S
-					dst.f32[0] = std::min(rs1.f32[0], rs2.f32[0]);
-					dst.nanbox();
-					return;
-				case 0x1: // FMAX.S
-					dst.f32[0] = std::max(rs1.f32[0], rs2.f32[0]);
-					dst.nanbox();
-					return;
-				case 0x10: // FMIN.D
-					dst.f64 = std::min(rs1.f64, rs2.f64);
-					return;
-				case 0x11: // FMAX.D
-					dst.f64 = std::max(rs1.f64, rs2.f64);
-					return;
-			}
+		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
+		{
+			case 0x0: // FMIN.S
+				dst.f32[0] = std::min(rs1.f32[0], rs2.f32[0]);
+				dst.nanbox();
+				return;
+			case 0x1: // FMAX.S
+				dst.f32[0] = std::max(rs1.f32[0], rs2.f32[0]);
+				dst.nanbox();
+				return;
+			case 0x10: // FMIN.D
+				dst.f64 = std::min(rs1.f64, rs2.f64);
+				return;
+			case 0x11: // FMAX.D
+				dst.f64 = std::max(rs1.f64, rs2.f64);
+				return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
@@ -363,33 +360,30 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const rv32f_instruction fi { instr };
-		if (fi.R4type.rd != 0)
-		{
-			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
-			auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
-			auto& dst = cpu.reg(fi.R4type.rd);
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+		auto& dst = cpu.reg(fi.R4type.rd);
 
-			switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
-			{
-				case 0x0: // FLE.S
-					dst = (rs1.f32[0] <= rs2.f32[0]) ? 1 : 0;
-					return;
-				case 0x1: // FLT.S
-					dst = (rs1.f32[0] < rs2.f32[0]) ? 1 : 0;
-					return;
-				case 0x2: // FEQ.S
-					dst = (rs1.f32[0] == rs2.f32[0]) ? 1 : 0;
-					return;
-				case 0x10: // FLE.D
-					dst = (rs1.f64 <= rs2.f64) ? 1 : 0;
-					return;
-				case 0x11: // FLT.D
-					dst = (rs1.f64 < rs2.f64) ? 1 : 0;
-					return;
-				case 0x12: // FEQ.D
-					dst = (rs1.f64 == rs2.f64) ? 1 : 0;
-					return;
-			}
+		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
+		{
+			case 0x0: // FLE.S
+				dst = (rs1.f32[0] <= rs2.f32[0]) ? 1 : 0;
+				return;
+			case 0x1: // FLT.S
+				dst = (rs1.f32[0] < rs2.f32[0]) ? 1 : 0;
+				return;
+			case 0x2: // FEQ.S
+				dst = (rs1.f32[0] == rs2.f32[0]) ? 1 : 0;
+				return;
+			case 0x10: // FLE.D
+				dst = (rs1.f64 <= rs2.f64) ? 1 : 0;
+				return;
+			case 0x11: // FLT.D
+				dst = (rs1.f64 < rs2.f64) ? 1 : 0;
+				return;
+			case 0x12: // FEQ.D
+				dst = (rs1.f64 == rs2.f64) ? 1 : 0;
+				return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
@@ -437,24 +431,21 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const rv32f_instruction fi { instr };
-		if (fi.R4type.rd != 0)
-		{
-			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
-			auto& dst = cpu.reg(fi.R4type.rd);
-			switch (fi.R4type.funct2) {
-				case 0x0: // from float32
-					if (fi.R4type.rs2 == 0x0)
-						dst = (int32_t) rs1.f32[0];
-					else
-						dst = (uint32_t) rs1.f32[0];
-					return;
-				case 0x1: // from float64
-					if (fi.R4type.rs2 == 0x0)
-						dst = (int32_t) rs1.f64;
-					else
-						dst = (uint32_t) rs1.f64;
-					return;
-			}
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& dst = cpu.reg(fi.R4type.rd);
+		switch (fi.R4type.funct2) {
+			case 0x0: // from float32
+				if (fi.R4type.rs2 == 0x0)
+					dst = (int32_t) rs1.f32[0];
+				else
+					dst = (uint32_t) rs1.f32[0];
+				return;
+			case 0x1: // from float64
+				if (fi.R4type.rs2 == 0x0)
+					dst = (int32_t) rs1.f64;
+				else
+					dst = (uint32_t) rs1.f64;
+				return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
@@ -560,20 +551,17 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const rv32f_instruction fi { instr };
-		if (fi.R4type.rd != 0)
-		{
-			auto& dst = cpu.reg(fi.R4type.rd);
-			auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
-			switch (fi.R4type.funct2) {
-				case 0x0: // FMV.X.W
-					dst = rs1.i32[0];
+		auto& dst = cpu.reg(fi.R4type.rd);
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		switch (fi.R4type.funct2) {
+			case 0x0: // FMV.X.W
+				dst = rs1.i32[0];
+				return;
+			case 0x1: // FMV.X.D
+				if constexpr (RVIS64BIT(cpu)) {
+					dst = rs1.i64;
 					return;
-				case 0x1: // FMV.X.D
-					if constexpr (RVIS64BIT(cpu)) {
-						dst = rs1.i64;
-						return;
-					}
-			}
+				}
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},

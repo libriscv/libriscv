@@ -201,15 +201,21 @@
 						case 0b01011:
 							DECODER(DECODED_FLOAT(FSQRT));
 						case 0b10100:
-							DECODER(DECODED_FLOAT(FEQ_FLT_FLE));
+							if (rv32f_instruction { instruction }.R4type.rd != 0)
+								DECODER(DECODED_FLOAT(FEQ_FLT_FLE));
+							DECODER(DECODED_INSTR(NOP));
 						case 0b01000:
 							DECODER(DECODED_FLOAT(FCVT_SD_DS));
 						case 0b11000:
-							DECODER(DECODED_FLOAT(FCVT_W_SD));
+							if (rv32f_instruction { instruction }.R4type.rd != 0)
+								DECODER(DECODED_FLOAT(FCVT_W_SD));
+							DECODER(DECODED_INSTR(NOP));
 						case 0b11010:
 							DECODER(DECODED_FLOAT(FCVT_SD_W));
 						case 0b11100:
-							DECODER(DECODED_FLOAT(FMV_X_W));
+							if (rv32f_instruction { instruction }.R4type.rd != 0)
+								DECODER(DECODED_FLOAT(FMV_X_W));
+							DECODER(DECODED_INSTR(NOP));
 						case 0b11110:
 							DECODER(DECODED_FLOAT(FMV_W_X));
 					}

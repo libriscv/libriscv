@@ -57,6 +57,9 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 			return true;
 		}
 	}
+#else
+	(void) i1;
+	(void) i2;
 #endif
 	return false;
 }
