@@ -157,50 +157,48 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto addr = cpu.reg(instr.Atype.rs1);
 		// switch on atomic type
-		if (instr.Atype.funct3 == 0x2 && instr.Atype.rs2 == 0)
+		if (instr.Atype.funct3 == 0x2)
 		{
 			cpu.atomics().load_reserve(4, addr);
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = (int32_t) value;
 		}
-		else if (instr.Atype.funct3 == 0x3 && instr.Atype.rs2 == 0)
+		else if (instr.Atype.funct3 == 0x3)
 		{
 			cpu.atomics().load_reserve(8, addr);
 			auto value = cpu.machine().memory.template read<uint64_t> (addr);
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = value;
-		} else {
-        	cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
 	DECODED_ATOMIC(AMOSWAP_W).printer);
 
     ATOMIC_INSTR(STORE_COND,
 	[] (auto& cpu, rv32i_instruction instr) {
-		const auto addr = cpu.reg(instr.Atype.rs1);
+		const auto addr = cpu.reg(instr.Atype.rs2);
 		// store conditionally
-		if (instr.Atype.funct3 == 0x2 && instr.Atype.rs2 != 0)
+		if (instr.Atype.funct3 == 0x2)
 		{
 			const bool resv = cpu.atomics().store_conditional(4, addr);
 			if (resv) {
 				auto value = cpu.machine().memory.template read<uint32_t> (addr);
-				cpu.reg(instr.Atype.rs2) = (int32_t) value;
+				if (instr.Atype.rs1 != 0)
+					cpu.reg(instr.Atype.rs1) = (int32_t) value;
 			}
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
 		}
-		else if (instr.Atype.funct3 == 0x3 && instr.Atype.rs2 != 0)
+		else if (instr.Atype.funct3 == 0x3)
 		{
 			const bool resv = cpu.atomics().store_conditional(8, addr);
 			if (resv) {
 				auto value = cpu.machine().memory.template read<uint64_t> (addr);
-				cpu.reg(instr.Atype.rs2) = value;
+				if (instr.Atype.rs1 != 0)
+					cpu.reg(instr.Atype.rs1) = value;
 			}
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
-		} else {
-			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
 	DECODED_ATOMIC(AMOSWAP_W).printer);

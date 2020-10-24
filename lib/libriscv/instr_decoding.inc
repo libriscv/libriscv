@@ -230,7 +230,9 @@
 						switch (instruction.Atype.funct5)
 						{
 						case 0b00010:
-							DECODER(DECODED_ATOMIC(LOAD_RESV));
+							if (instruction.Atype.rs2 == 0)
+								DECODER(DECODED_ATOMIC(LOAD_RESV));
+							DECODER(DECODED_INSTR(ILLEGAL));
 						case 0b00011:
 							DECODER(DECODED_ATOMIC(STORE_COND));
 						case 0b00000:
@@ -250,7 +252,9 @@
 						switch (instruction.Atype.funct5)
 						{
 						case 0b00010:
-							DECODER(DECODED_ATOMIC(LOAD_RESV));
+							if (instruction.Atype.rs2 == 0)
+								DECODER(DECODED_ATOMIC(LOAD_RESV));
+							DECODER(DECODED_INSTR(ILLEGAL));
 						case 0b00011:
 							DECODER(DECODED_ATOMIC(STORE_COND));
 						case 0b00000:
