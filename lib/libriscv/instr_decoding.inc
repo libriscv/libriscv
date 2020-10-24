@@ -244,6 +244,7 @@
 						case 0b01100:
 							DECODER(DECODED_ATOMIC(AMOAND_W));
 						}
+						break;
 					case 0x3:
 					if constexpr (RVIS64BIT(*this)) {
 						switch (instruction.Atype.funct5)
@@ -263,6 +264,7 @@
 						case 0b01100:
 							DECODER(DECODED_ATOMIC(AMOAND_D));
 						}
+						break;
 					}
 					}
 #endif
