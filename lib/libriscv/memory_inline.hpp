@@ -18,6 +18,23 @@ T Memory<W>::read(address_t address)
 
 template <int W>
 template <typename T> inline
+T& Memory<W>::writable_read(address_t address)
+{
+	auto& page = get_writable_page(address);
+
+#ifdef RISCV_PAGE_TRAPS_ENABLED
+	if constexpr (memory_traps_enabled) {
+		if (UNLIKELY(page.has_trap())) {
+			page.trap(address & (Page::size()-1), sizeof(T) | TRAP_WRITE, value);
+			return;
+		}
+	}
+#endif
+	return page.template aligned_read<T>(address & (Page::size()-1));
+}
+
+template <int W>
+template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
 	auto& page = get_writable_page(address);

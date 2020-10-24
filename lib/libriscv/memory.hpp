@@ -27,6 +27,9 @@ namespace riscv
 		T read(address_t src);
 
 		template <typename T>
+		T& writable_read(address_t src);
+
+		template <typename T>
 		void write(address_t dst, T value);
 
 		void memset(address_t dst, uint8_t value, size_t len);

@@ -45,6 +45,8 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
+		template <typename Type>
+		void amo(format_t, void(*op)(CPU&, register_type<W>&, uint32_t));
 #endif
 		__attribute__((noreturn))
 		static void trigger_exception(interrupt_t, address_t = 0) COLD_PATH();

@@ -62,7 +62,7 @@ struct Page
 	std::string to_string() const;
 
 	template <typename T>
-	inline T aligned_read(uint32_t offset) const
+	inline T& aligned_read(uint32_t offset) const
 	{
 		if constexpr (memory_alignment_check) {
 			assert(offset % sizeof(T) == 0);

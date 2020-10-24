@@ -224,18 +224,46 @@
 #ifdef RISCV_EXT_ATOMICS
 				// RVxA - Atomic instructions
 				case 0b0101111:
-					switch (instruction.Atype.funct5)
+					switch (instruction.Atype.funct3)
 					{
+					case 0x2:
+						switch (instruction.Atype.funct5)
+						{
 						case 0b00010:
 							DECODER(DECODED_ATOMIC(LOAD_RESV));
 						case 0b00011:
 							DECODER(DECODED_ATOMIC(STORE_COND));
 						case 0b00000:
-							DECODER(DECODED_ATOMIC(AMOADD));
+							DECODER(DECODED_ATOMIC(AMOADD_W));
 						case 0b00001:
-							DECODER(DECODED_ATOMIC(AMOSWAP));
+							DECODER(DECODED_ATOMIC(AMOSWAP_W));
+						case 0b00100:
+							DECODER(DECODED_ATOMIC(AMOXOR_W));
 						case 0b01000:
-							DECODER(DECODED_ATOMIC(AMOOR));
+							DECODER(DECODED_ATOMIC(AMOOR_W));
+						case 0b01100:
+							DECODER(DECODED_ATOMIC(AMOAND_W));
+						}
+					case 0x3:
+					if constexpr (RVIS64BIT(*this)) {
+						switch (instruction.Atype.funct5)
+						{
+						case 0b00010:
+							DECODER(DECODED_ATOMIC(LOAD_RESV));
+						case 0b00011:
+							DECODER(DECODED_ATOMIC(STORE_COND));
+						case 0b00000:
+							DECODER(DECODED_ATOMIC(AMOADD_D));
+						case 0b00001:
+							DECODER(DECODED_ATOMIC(AMOSWAP_D));
+						case 0b00100:
+							DECODER(DECODED_ATOMIC(AMOXOR_D));
+						case 0b01000:
+							DECODER(DECODED_ATOMIC(AMOOR_D));
+						case 0b01100:
+							DECODER(DECODED_ATOMIC(AMOAND_D));
+						}
+					}
 					}
 #endif
 			}

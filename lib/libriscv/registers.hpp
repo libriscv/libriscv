@@ -43,8 +43,8 @@ namespace riscv
 		using address_t  = address_type<W>;   // one unsigned memory address
 		using register_t = register_type<W>;  // integer register
 
-		auto& get(uint32_t idx) { return m_reg[idx]; }
-		const auto& get(uint32_t idx) const { return m_reg[idx]; }
+		register_t& get(uint32_t idx) { return m_reg[idx]; }
+		const register_t& get(uint32_t idx) const { return m_reg[idx]; }
 
 		auto& getfl(uint32_t idx) { return m_regfl[idx]; }
 		const auto& getfl(uint32_t idx) const { return m_regfl[idx]; }
