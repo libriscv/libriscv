@@ -156,16 +156,17 @@ namespace riscv
     ATOMIC_INSTR(LOAD_RESV,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto addr = cpu.reg(instr.Atype.rs1);
-		cpu.atomics().load_reserve(addr);
 		// switch on atomic type
 		if (instr.Atype.funct3 == 0x2 && instr.Atype.rs2 == 0)
 		{
+			cpu.atomics().load_reserve(4, addr);
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = (int32_t) value;
 		}
 		else if (instr.Atype.funct3 == 0x3 && instr.Atype.rs2 == 0)
 		{
+			cpu.atomics().load_reserve(8, addr);
 			auto value = cpu.machine().memory.template read<uint64_t> (addr);
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = value;
@@ -178,10 +179,10 @@ namespace riscv
     ATOMIC_INSTR(STORE_COND,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto addr = cpu.reg(instr.Atype.rs1);
-		const bool resv = cpu.atomics().store_conditional(addr);
 		// store conditionally
 		if (instr.Atype.funct3 == 0x2 && instr.Atype.rs2 != 0)
 		{
+			const bool resv = cpu.atomics().store_conditional(4, addr);
 			if (resv) {
 				auto value = cpu.machine().memory.template read<uint32_t> (addr);
 				cpu.reg(instr.Atype.rs2) = (int32_t) value;
@@ -191,6 +192,7 @@ namespace riscv
 		}
 		else if (instr.Atype.funct3 == 0x3 && instr.Atype.rs2 != 0)
 		{
+			const bool resv = cpu.atomics().store_conditional(8, addr);
 			if (resv) {
 				auto value = cpu.machine().memory.template read<uint64_t> (addr);
 				cpu.reg(instr.Atype.rs2) = value;
