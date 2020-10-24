@@ -522,12 +522,15 @@ namespace riscv
 				// division by zero is not an exception
 				if (LIKELY(RVTOSIGNED(src2) != 0)) {
 					if constexpr (RVIS64BIT(cpu)) {
-						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
+						// vi_instr.cpp:444:2: runtime error:
+						// division of -9223372036854775808 by -1 cannot be represented in type 'long'
+						if (LIKELY(!(src1 == -9223372036854775808ull && src2 == -1ull)))
+							dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
 					} else {
-					// rv32i_instr.cpp:301:2: runtime error:
-					// division of -2147483648 by -1 cannot be represented in type 'int'
-					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
+						// rv32i_instr.cpp:301:2: runtime error:
+						// division of -2147483648 by -1 cannot be represented in type 'int'
+						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
+							dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
 					}
 				}
 				return;
@@ -537,7 +540,8 @@ namespace riscv
 			case 0x16: // REM
 				if (LIKELY(src2 != 0)) {
 					if constexpr (RVIS64BIT(cpu)) {
-						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
+						if (LIKELY(!(src1 == -9223372036854775808ull && src2 == -1ull)))
+							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
 					} else {
 					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
