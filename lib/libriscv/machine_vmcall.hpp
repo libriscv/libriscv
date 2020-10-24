@@ -4,8 +4,8 @@ template <typename... Args> constexpr
 inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 {
 	cpu.reg(RISCV::REG_RA) = memory.exit_address();
-	int iarg = RISCV::REG_ARG0;
-	int farg = RISCV::REG_FA0;
+	[[maybe_unused]] int iarg = RISCV::REG_ARG0;
+	[[maybe_unused]] int farg = RISCV::REG_FA0;
 	([&] {
 		if constexpr (std::is_integral_v<Args>) {
 			cpu.reg(iarg++) = args;
