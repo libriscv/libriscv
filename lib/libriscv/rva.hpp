@@ -14,7 +14,11 @@ namespace riscv
 		void load_reserve(int size, address_t addr)
 		{
 			check_alignment(size, addr);
-			m_reservations.insert(addr);
+			if (LIKELY(m_reservations.size() < MAX_RESV))
+				m_reservations.insert(addr);
+			else
+				throw MachineException(DEADLOCK_REACHED,
+					"Not enough room for memory reservations", addr);
 		}
 
 		// Volume I: RISC-V Unprivileged ISA V20190608 p.49:
