@@ -133,6 +133,7 @@ namespace riscv
 		using Shdr = typename Elf<W>::Shdr;
 		void binary_loader();
 		void binary_load_ph(const Phdr*);
+		void serialize_ropages(address_t, const char*, size_t, PageAttributes);
 		template <typename T> T* elf_offset(intptr_t ofs) const {
 			return (T*) &m_binary.at(ofs);
 		}

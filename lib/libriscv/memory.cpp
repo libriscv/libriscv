@@ -150,21 +150,15 @@ namespace riscv
 			std::memset(&m_exec_pagedata[0],      0,   prelen);
 			std::memcpy(&m_exec_pagedata[prelen], src, len);
 			std::memset(&m_exec_pagedata[prelen + len], 0,   postlen);
-			// If execute-only, don't add execute pages
-			// When text and rodata is merged we don't know where the split is
-			if (attr.read) {
-				// Insert everything as non-owned memory
-				// NOTE: Necessary for execute traps
-				this->insert_non_owned_memory(
-				  m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, attr);
-			}
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, hdr->p_vaddr + len);
 #ifdef RISCV_INSTR_CACHE
 			this->generate_decoder_cache(hdr->p_vaddr, len);
 #endif
-			return;
+			// Nothing more to do here, if execute-only
+			if (!attr.read)
+				return;
 		} else if (attr.exec) {
 #ifdef RISCV_INSTR_CACHE
 			throw std::runtime_error(
@@ -175,6 +169,13 @@ namespace riscv
 		if (attr.exec && attr.write) {
 			throw std::runtime_error("Insecure ELF has writable machine code");
 		}
+
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		if (attr.read && !attr.write && m_ro_pages == nullptr) {
+			serialize_ropages(hdr->p_vaddr, src, len, attr);
+			return;
+		}
+#endif
 
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
@@ -188,6 +189,43 @@ namespace riscv
 				 .read = true, .write = true, .exec = true
 			});
 		}
+	}
+
+	template <int W>
+	void Memory<W>::serialize_ropages(address_t addr, const char* src, size_t size, PageAttributes attr)
+	{
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		constexpr address_t PMASK = Page::size()-1;
+		const address_t pbase = addr & ~(address_t) PMASK;
+		const size_t prelen  = addr - pbase;
+		const size_t midlen  = size + prelen;
+		const size_t plen =
+			(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
+		const size_t postlen = plen - midlen;
+		// Detect bogus values
+		if (UNLIKELY(prelen > plen || prelen + size > plen)) {
+			throw std::runtime_error("Segment virtual base was bogus");
+		}
+		assert(plen % Page::size() == 0);
+		// Create the whole memory range
+		auto* pagedata = new uint8_t[plen];
+		std::memset(&pagedata[0],      0,     prelen);
+		std::memcpy(&pagedata[prelen], src,   size);
+		std::memset(&pagedata[prelen + size], 0,   postlen);
+
+		const size_t npages = plen / Page::size();
+		m_ro_pages.reset(new Page[npages]);
+		// Create share-able range
+		m_ropage_begin = addr / Page::size();
+		m_ropage_end   = m_ropage_begin + npages;
+
+		for (size_t i = 0; i < npages; i++) {
+			m_ro_pages[i].attr = attr;
+			// None of the pages own this memory
+			m_ro_pages[i].attr.non_owning = true;
+			m_ro_pages[i].m_page.reset((PageData*) &pagedata[i * Page::size()]);
+		}
+#endif
 	}
 
 	// ELF32 and ELF64 loader
@@ -257,40 +295,6 @@ namespace riscv
 		}
 
 		//this->relocate_section(".rela.dyn", ".symtab");
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		std::vector<std::pair<address_t, Page>> ro_pages;
-		for (auto it = m_pages.begin(); it != m_pages.end(); )
-		{
-			auto& page = it->second;
-			if (page.attr.read && !page.attr.write) {
-				ro_pages.emplace_back(std::piecewise_construct,
-					std::forward_as_tuple(it->first),
-					std::forward_as_tuple(std::move(page)));
-				// Remove the page to simplify the structure
-				it = m_pages.erase(it);
-			} else ++it;
-		}
-		this->m_ro_pages.reset(new Page[ro_pages.size()]);
-		if (!ro_pages.empty())
-		{
-			// Sort from lowest to highest address
-			std::sort(ro_pages.begin(), ro_pages.end(),
-				[] (const auto& a, const auto& b) { return a.first < b.first; });
-			// Verify memory range is sequential
-			address_t last = 0;
-			for (const auto& page : ro_pages) {
-				if (last != 0 && page.first != last + 1)
-					throw std::runtime_error("Read-only data was not sequential");
-				last = page.first;
-			}
-			// Create share-able range
-			m_ropage_begin = ro_pages.front().first;
-			m_ropage_end   = ro_pages.back().first + 1;
-			for (size_t i = 0; i < ro_pages.size(); i++) {
-				m_ro_pages[i] = std::move(ro_pages[i].second);
-			}
-		}
-#endif
 
 		// NOTE: if the stack is very low, some stack pointer value could
 		// become 0x0 which could alter the behavior of the program,
