@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <EASTL/fixed_vector.h>
+#include <EASTL/fixed_set.h>
 #include "types.hpp"
 
 namespace riscv
@@ -9,12 +9,12 @@ namespace riscv
 	struct AtomicMemory
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
-		static constexpr size_t MAX_RESV = 8;
+		static constexpr size_t MAX_RESV = 16;
 
 		void load_reserve(int size, address_t addr)
 		{
 			check_alignment(size, addr);
-			m_reservations.push_back(addr);
+			m_reservations.insert(addr);
 		}
 
 		// Volume I: RISC-V Unprivileged ISA V20190608 p.49:
@@ -22,13 +22,7 @@ namespace riscv
 		bool store_conditional(int size, address_t addr)
 		{
 			check_alignment(size, addr);
-			if (UNLIKELY(m_reservations.empty()))
-				return false;
-
-			bool result = (addr == m_reservations.back());
-			if (result)
-				m_reservations.pop_back();
-			return result;
+			return (m_reservations.erase(addr) != 0);
 		}
 
 	private:
@@ -40,6 +34,6 @@ namespace riscv
 			}
 		}
 
-		eastl::fixed_vector<address_t, MAX_RESV, false> m_reservations;
+		eastl::fixed_set<address_t, MAX_RESV, false> m_reservations;
 	};
 }
