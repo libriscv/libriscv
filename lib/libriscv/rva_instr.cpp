@@ -16,16 +16,18 @@ namespace riscv
 		const auto addr = this->reg(instr.Atype.rs1);
 		// 2. read value from writable memory location
 		auto& mem = machine().memory.template writable_read<Type> (addr);
+		// 4. apply <op>
 		register_type<W> value = mem;
+		op(*this, value, instr.Atype.rs2);
 		// 3. place value into rd
+		// NOTE: we have to do it in this order, because we can
+		// clobber rs2 when writing to rd, if they are the same!
 		if (instr.Atype.rd != 0) {
 			if constexpr (sizeof(Type) == 4)
-				this->reg(instr.Atype.rd) = (int32_t) value;
+				this->reg(instr.Atype.rd) = (int32_t) mem;
 			else
-				this->reg(instr.Atype.rd) = value;
+				this->reg(instr.Atype.rd) = mem;
 		}
-		// 4. apply <op>
-		op(*this, value, instr.Atype.rs2);
 		// 5. write value back to [rs1]
 		mem = value;
 	}
