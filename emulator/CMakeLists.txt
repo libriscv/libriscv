@@ -12,6 +12,9 @@ set(SOURCES
 )
 
 set(CMAKE_CXX_FLAGS "-O3")
+if (RISCV_DEBUG)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O1")
+endif()
 if (SANITIZE)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined")
 endif()
