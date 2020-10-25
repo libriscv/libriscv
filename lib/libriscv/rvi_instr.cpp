@@ -149,7 +149,7 @@ namespace riscv
 		const auto& addr  = cpu.reg(instr.Stype.rs1);
 		const auto& value = cpu.reg(instr.Stype.rs2);
 		cpu.machine().memory.template write<uint8_t>(addr, value);
-	}, DECODED_INSTR(LOAD_I8).printer);
+	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
 	INSTRUCTION(STORE_I16_IMM,
 	[] (auto& cpu, rv32i_instruction instr)
@@ -157,7 +157,7 @@ namespace riscv
 		const auto& value = cpu.reg(instr.Stype.rs2);
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 		cpu.machine().memory.template write<uint16_t>(addr, value);
-	}, DECODED_INSTR(STORE_I8).printer);
+	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
 	INSTRUCTION(STORE_I32_IMM,
 	[] (auto& cpu, rv32i_instruction instr)
@@ -165,7 +165,7 @@ namespace riscv
 		const auto& value = cpu.reg(instr.Stype.rs2);
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 		cpu.machine().memory.template write<uint32_t>(addr, value);
-	}, DECODED_INSTR(STORE_I8).printer);
+	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
 	INSTRUCTION(STORE_I64_IMM,
 	[] (auto& cpu, rv32i_instruction instr)
@@ -173,7 +173,7 @@ namespace riscv
 		const auto& value = cpu.reg(instr.Stype.rs2);
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 		cpu.machine().memory.template write<uint64_t>(addr, value);
-	}, DECODED_INSTR(STORE_I8).printer);
+	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
 #ifdef RISCV_DEBUG
 #define VERBOSE_BRANCH() \
@@ -369,18 +369,20 @@ namespace riscv
 							RISCV::regname(instr.Itype.rs1));
 		}
 		else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 1) {
+			const auto shift = (RVIS64BIT(cpu)) ? instr.Itype.shift64_imm() : instr.Itype.shift_imm();
 			return snprintf(buffer, len, "SLLI %s, %s << %u (0x%lX)",
 							RISCV::regname(instr.Itype.rd),
 							RISCV::regname(instr.Itype.rs1),
-							instr.Itype.shift_imm(),
-							(long) cpu.reg(instr.Itype.rs1) << instr.Itype.shift_imm());
+							shift,
+							(long) cpu.reg(instr.Itype.rs1) << shift);
 		} else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 5) {
+			const auto shift = (RVIS64BIT(cpu)) ? instr.Itype.shift64_imm() : instr.Itype.shift_imm();
 			return snprintf(buffer, len, "%s %s, %s >> %u (0x%lX)",
 							(instr.Itype.is_srai() ? "SRAI" : "SRLI"),
 							RISCV::regname(instr.Itype.rd),
 							RISCV::regname(instr.Itype.rs1),
-							instr.Itype.shift_imm(),
-							(long) cpu.reg(instr.Itype.rs1) >> instr.Itype.shift_imm());
+							shift,
+							(long) cpu.reg(instr.Itype.rs1) >> shift);
 		} else if (instr.Itype.rs1 != 0) {
 			static std::array<const char*, 8> func3 = {"ADDI", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
 			if (!(instr.Itype.funct3 == 4 && instr.Itype.signed_imm() == -1)) {
