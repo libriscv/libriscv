@@ -1,7 +1,6 @@
 #include "rv32i.hpp"
 #include "instr_helpers.hpp"
 static const char atomic_type[] { '?', '?', 'W', 'D' };
-static const char* atomic_name[] { "AMOADD", "AMOSWAP", "LR", "SC" };
 static const char* atomic_name2[] {
 	"AMOADD", "AMOXOR", "AMOOR", "AMOAND", "AMOMIN", "AMOMAX", "AMOMINU", "AMOMAXU"
 };
@@ -40,7 +39,7 @@ namespace riscv
 		});
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		return snprintf(buffer, len, "%s.%c %s %s, %s",
+		return snprintf(buffer, len, "%s.%c [%s] %s, %s",
 						atomic_name2[instr.Atype.funct5 >> 2],
 						atomic_type[instr.Atype.funct3 & 3],
                         RISCV::regname(instr.Atype.rs1),
@@ -124,15 +123,14 @@ namespace riscv
 		cpu.template amo<uint32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
 			if (rs2 != 0) {
-				std::swap(value, cpu.reg(rs2));
+				value = cpu.reg(rs2);
 			} else {
 				value = 0;
 			}
 		});
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		return snprintf(buffer, len, "%s.%c %s %s, %s",
-						atomic_name[instr.Atype.funct5 & 3],
+		return snprintf(buffer, len, "AMOSWAP.%c [%s] %s, %s",
 						atomic_type[instr.Atype.funct3 & 3],
                         RISCV::regname(instr.Atype.rs1),
                         RISCV::regname(instr.Atype.rs2),
@@ -145,7 +143,7 @@ namespace riscv
 		cpu.template amo<uint64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
 			if (rs2 != 0) {
-				std::swap(value, cpu.reg(rs2));
+				value = cpu.reg(rs2);
 			} else {
 				value = 0;
 			}
@@ -172,34 +170,39 @@ namespace riscv
 				cpu.reg(instr.Atype.rd) = value;
 		}
 	},
-	DECODED_ATOMIC(AMOSWAP_W).printer);
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+		return snprintf(buffer, len, "LR.%c [%s], %s",
+				atomic_type[instr.Atype.funct3 & 3],
+				RISCV::regname(instr.Atype.rs1),
+				RISCV::regname(instr.Atype.rd));
+	});
 
     ATOMIC_INSTR(STORE_COND,
 	[] (auto& cpu, rv32i_instruction instr) {
-		const auto addr = cpu.reg(instr.Atype.rs2);
-		// store conditionally
+		const auto addr = cpu.reg(instr.Atype.rs1);
+		bool resv;
 		if (instr.Atype.funct3 == 0x2)
 		{
-			const bool resv = cpu.atomics().store_conditional(4, addr);
+			resv = cpu.atomics().store_conditional(4, addr);
 			if (resv) {
-				auto value = cpu.machine().memory.template read<uint32_t> (addr);
-				if (instr.Atype.rs1 != 0)
-					cpu.reg(instr.Atype.rs1) = (int32_t) value;
+				cpu.machine().memory.template write<uint32_t> (addr, cpu.reg(instr.Atype.rs2));
 			}
-			if (instr.Atype.rd != 0)
-				cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
 		}
 		else if (instr.Atype.funct3 == 0x3)
 		{
-			const bool resv = cpu.atomics().store_conditional(8, addr);
+			resv = cpu.atomics().store_conditional(8, addr);
 			if (resv) {
-				auto value = cpu.machine().memory.template read<uint64_t> (addr);
-				if (instr.Atype.rs1 != 0)
-					cpu.reg(instr.Atype.rs1) = value;
+				cpu.machine().memory.template write<uint64_t> (addr, cpu.reg(instr.Atype.rs2));
 			}
-			if (instr.Atype.rd != 0)
-				cpu.reg(instr.Atype.rd) = (resv) ? 0 : -1;
 		}
+		if (instr.Atype.rd != 0)
+			cpu.reg(instr.Atype.rd) = (resv) ? 0 : 1;
 	},
-	DECODED_ATOMIC(AMOSWAP_W).printer);
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+		return snprintf(buffer, len, "SC.%c [%s], %s res=%s",
+				atomic_type[instr.Atype.funct3 & 3],
+				RISCV::regname(instr.Atype.rs1),
+				RISCV::regname(instr.Atype.rs2),
+				RISCV::regname(instr.Atype.rd));
+	});
 }
