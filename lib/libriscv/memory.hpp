@@ -188,9 +188,10 @@ namespace riscv
 #endif
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		std::unique_ptr<Page[]> m_ro_pages = nullptr;
 		address_t m_ropage_begin = 0;
 		address_t m_ropage_end = 0;
+		std::unique_ptr<Page[]> m_ro_pages = nullptr;
+		std::unique_ptr<uint8_t[]> m_ro_pagedata = nullptr;
 #endif
 	};
 #include "memory_inline.hpp"

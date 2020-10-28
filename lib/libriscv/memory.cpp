@@ -212,6 +212,7 @@ namespace riscv
 		std::memset(&pagedata[0],      0,     prelen);
 		std::memcpy(&pagedata[prelen], src,   size);
 		std::memset(&pagedata[prelen + size], 0,   postlen);
+		m_ro_pagedata.reset(pagedata);
 
 		const size_t npages = plen / Page::size();
 		m_ro_pages.reset(new Page[npages]);
