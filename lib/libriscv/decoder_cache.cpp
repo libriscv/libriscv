@@ -45,7 +45,10 @@ namespace riscv
 				ipairs.emplace_back(entry, instruction);
 
 				entry = machine().cpu.decode(instruction).handler;
-				dst += instruction.length();
+				if constexpr (compressed_enabled)
+					dst += instruction.length();
+				else
+					dst += 4;
 			} else {
 				entry = machine().cpu.decode({0}).handler;
 				dst += 4;
