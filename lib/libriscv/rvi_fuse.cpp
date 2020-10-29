@@ -24,9 +24,9 @@ static void fused_li_ecall(
 	i1.first = [] (auto& cpu, rv32i_instruction instr) {
 		auto& fop = view_as<FusedSyscall> (instr);
 		if constexpr (compressed_enabled)
-			cpu.registers().pc += fop.ilen;
+			cpu.increment_pc(fop.ilen);
 		else
-			cpu.registers().pc += 4;
+			cpu.increment_pc(4);
 		cpu.reg(RISCV::REG_ECALL) = fop.sysno;
 		cpu.machine().unchecked_system_call(fop.sysno);
 	};
@@ -71,7 +71,7 @@ static void fused_store(
 		const auto addr2  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm) - sizeof(T);
 		cpu.machine().memory.template write<T>(addr2, value2);
 
-		cpu.registers().pc += 4;
+		cpu.increment_pc(4);
 	};
 }
 
@@ -125,7 +125,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 				auto& fop = view_as<FusedAddi> (instr);
 				cpu.reg(fop.reg1) += FusedAddi::signed_imm(fop.addi1);
 				cpu.reg(fop.reg2) += FusedAddi::signed_imm(fop.addi2);
-				cpu.registers().pc += 4;
+				cpu.increment_pc(4);
 			};
 			return true;
 		}
@@ -163,7 +163,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 				auto& fop = view_as<FusedLili> (instr);
 				cpu.reg(fop.reg1) = FusedLili::signed_imm(fop.li1);
 				cpu.reg(fop.reg2) = FusedLili::signed_imm(fop.li2);
-				cpu.registers().pc += 4;
+				cpu.increment_pc(4);
 			};
 			return true;
 		}

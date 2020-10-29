@@ -25,6 +25,7 @@ namespace riscv
 		void reset_stack_pointer() noexcept;
 
 		address_t pc() const noexcept { return registers().pc; }
+		void increment_pc(int delta) { registers().pc += delta; }
 		constexpr void jump(address_t);
 
 		uint64_t instruction_counter() const noexcept { return m_counter; }
