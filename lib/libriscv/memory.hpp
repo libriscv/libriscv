@@ -158,8 +158,8 @@ namespace riscv
 			T*        page = nullptr;
 			address_t pageno = -1;
 		};
-		std::array<CachedPage<const Page>, 1> m_rd_cache;
-		std::array<CachedPage<Page>, 1> m_wr_cache;
+		std::array<CachedPage<const Page>, RISCV_PAGE_CACHE> m_rd_cache;
+		std::array<CachedPage<Page>, RISCV_PAGE_CACHE> m_wr_cache;
 		eastl::fixed_hash_map<address_t, Page, 128, 64>  m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;

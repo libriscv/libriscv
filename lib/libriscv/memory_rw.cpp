@@ -13,9 +13,8 @@ namespace riscv
 		if (UNLIKELY(!potential.attr.read)) {
 			this->protection_fault(address);
 		}
-		entry.pageno = pageno;
-		entry.page   = &potential;
-		return *entry.page;
+		entry = {&potential, pageno};
+		return potential;
 	}
 
 	template <int W>
@@ -29,9 +28,8 @@ namespace riscv
 		if (UNLIKELY(!potential.attr.write)) {
 			this->protection_fault(address);
 		}
-		entry.pageno = pageno;
-		entry.page   = &potential;
-		return *entry.page;
+		entry = {&potential, pageno};
+		return potential;
 	}
 
 	template <int W>

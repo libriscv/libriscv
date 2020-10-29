@@ -22,6 +22,10 @@
 #define RISCV_SYSCALLS_MAX   512
 #endif
 
+#ifndef RISCV_PAGE_CACHE
+#define RISCV_PAGE_CACHE     1
+#endif
+
 #ifdef RISCV_DEBUG
 # ifndef RISCV_MEMORY_TRAPS_ENABLED
 #   define RISCV_MEMORY_TRAPS_ENABLED
