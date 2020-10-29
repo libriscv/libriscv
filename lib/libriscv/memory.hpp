@@ -8,7 +8,6 @@
 #include <EASTL/string_map.h>
 #include "util/buffer.hpp" // <string>
 #include <numeric>
-#include <vector>
 
 namespace riscv
 {
@@ -45,8 +44,8 @@ namespace riscv
 		// compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
-		// gather all the page data into a array of buffers
-		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 4096) const;
+		// gather fragmented virtual memory into an array of buffers
+		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16384) const;
 		// read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t maxlen = 1024) const;
 		size_t strlen(address_t addr, size_t maxlen = 4096) const;
@@ -131,9 +130,6 @@ namespace riscv
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
 		using Shdr = typename Elf<W>::Shdr;
-		void binary_loader();
-		void binary_load_ph(const Phdr*);
-		void serialize_ropages(address_t, const char*, size_t, PageAttributes);
 		template <typename T> T* elf_offset(intptr_t ofs) const {
 			return (T*) &m_binary.at(ofs);
 		}
@@ -148,6 +144,10 @@ namespace riscv
 			auto* symtab = elf_offset<typename Elf<W>::Sym>(shdr->sh_offset);
 			return &symtab[symidx];
 		}
+		// ELF loader
+		void binary_loader();
+		void binary_load_ph(const Phdr*);
+		void serialize_ropages(address_t, const char*, size_t, PageAttributes);
 		// machine cloning
 		void machine_loader(const Machine<W>&);
 
