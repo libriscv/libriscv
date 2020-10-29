@@ -4,6 +4,24 @@ T& view_as(rv32i_instruction& i) {
 	return *(T*) &i;
 }
 
+union FusedStores {
+	struct {
+		uint32_t imm    : 12;
+		uint32_t src1   : 5;
+		uint32_t src2   : 5;
+		uint32_t dst    : 5;
+		uint32_t opcode : 5;
+	};
+	static bool sign(uint32_t imm) {
+		return imm & 0x800;
+	}
+	static int64_t signed_imm(uint32_t imm) {
+		const uint64_t ext = 0xFFFFFFFFFFFFF000;
+		return imm | (sign(imm) ? ext : 0);
+	}
+	uint32_t whole;
+};
+
 template <int W>
 inline void fused_li_ecall(
 	typename CPU<W>::instr_pair& i1, typename CPU<W>::instr_pair& i2, int sysno)
@@ -86,6 +104,99 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 			};
 			return true;
 		}
+	}
+	// LI x, n + LI y, m fused
+	if (i1.first == DECODED_INSTR(OP_IMM_LI).handler &&
+		i2.first == DECODED_INSTR(OP_IMM_LI).handler)
+	{
+		if (i1.second.Itype.rd < 16 && i2.second.Itype.rd < 16)
+		if constexpr (!compressed_enabled)
+		{
+			union FusedLili {
+				struct {
+					uint32_t li1   : 12;
+					uint32_t reg1  : 4;
+					uint32_t li2   : 12;
+					uint32_t reg2  : 4;
+				};
+				static bool sign(uint32_t imm) {
+					return imm & 0x800;
+				}
+				static int64_t signed_imm(uint32_t imm) {
+					const uint64_t ext = 0xFFFFFFFFFFFFF000;
+					return imm | (sign(imm) ? ext : 0);
+				}
+				uint32_t whole;
+			};
+			i1.second.whole = FusedLili {
+				.li1  = i1.second.Itype.imm,
+				.reg1 = i1.second.Itype.rd,
+				.li2  = i2.second.Itype.imm,
+				.reg2 = i2.second.Itype.rd
+			}.whole;
+			i1.first = [] (auto& cpu, rv32i_instruction instr) {
+				auto& fop = view_as<FusedLili> (instr);
+				cpu.reg(fop.reg1) = FusedLili::signed_imm(fop.li1);
+				cpu.reg(fop.reg2) = FusedLili::signed_imm(fop.li2);
+				cpu.registers().pc += 4;
+			};
+			return true;
+		}
+	}
+	// ST x, n-0*W + ST y, n-1*W fused
+	if (i1.first == DECODED_INSTR(STORE_I32_IMM).handler &&
+		i2.first == DECODED_INSTR(STORE_I32_IMM).handler && 
+		i1.second.Stype.signed_imm()-4 == i2.second.Stype.signed_imm() &&
+		i1.second.Stype.rs1 == i2.second.Stype.rs1)
+	{
+		i1.second.whole = FusedStores {
+			.imm = (uint32_t) (i1.second.Stype.imm1 | (i1.second.Stype.imm2 << 5)),
+			.src1 = i1.second.Stype.rs2,
+			.src2 = i2.second.Stype.rs2,
+			.dst  = i1.second.Stype.rs1,
+			.opcode = i1.second.Stype.opcode,
+		}.whole;
+		i1.first = [] (auto& cpu, rv32i_instruction instr) {
+			auto& fop = view_as<FusedStores> (instr);
+
+			const auto& value1 = cpu.reg(fop.src1);
+			const auto addr1  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm);
+			cpu.machine().memory.template write<uint32_t>(addr1, value1);
+
+			const auto& value2 = cpu.reg(fop.src2);
+			const auto addr2  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm) - 4;
+			cpu.machine().memory.template write<uint32_t>(addr2, value2);
+
+			cpu.registers().pc += 4;
+		};
+		return true;
+	}
+	if (i1.first == DECODED_INSTR(STORE_I64_IMM).handler &&
+		i2.first == DECODED_INSTR(STORE_I64_IMM).handler && 
+		i1.second.Stype.signed_imm()-8 == i2.second.Stype.signed_imm() &&
+		!compressed_enabled)
+	{
+		i1.second.whole = FusedStores {
+			.imm = (uint32_t) (i1.second.Stype.imm1 | (i1.second.Stype.imm2 << 5)),
+			.src1 = i1.second.Stype.rs2,
+			.src2 = i2.second.Stype.rs2,
+			.dst  = i1.second.Stype.rs1,
+			.opcode = i1.second.Stype.opcode,
+		}.whole;
+		i1.first = [] (auto& cpu, rv32i_instruction instr) {
+			auto& fop = view_as<FusedStores> (instr);
+
+			const auto& value1 = cpu.reg(fop.src1);
+			const auto addr1  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm);
+			cpu.machine().memory.template write<uint64_t>(addr1, value1);
+
+			const auto& value2 = cpu.reg(fop.src2);
+			const auto addr2  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm) - 8;
+			cpu.machine().memory.template write<uint64_t>(addr2, value2);
+
+			cpu.registers().pc += 4;
+		};
+		return true;
 	}
 # ifdef RISCV_EXT_COMPRESSED
 	// C.LI + ECALL fused
