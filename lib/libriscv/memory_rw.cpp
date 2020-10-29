@@ -6,30 +6,32 @@ namespace riscv
 	const Page& Memory<W>::get_readable_page(address_t address)
 	{
 		const auto pageno = page_number(address);
-		if (m_current_rd_page != pageno) {
-			const auto& potential = get_pageno(pageno);
-			if (UNLIKELY(!potential.attr.read)) {
-				this->protection_fault(address);
-			}
-			m_current_rd_page = pageno;
-			m_current_rd_ptr = &potential;
+		auto& entry = m_rd_cache[pageno % m_rd_cache.size()];
+		if (entry.pageno == pageno)
+			return *entry.page;
+		const auto& potential = get_pageno(pageno);
+		if (UNLIKELY(!potential.attr.read)) {
+			this->protection_fault(address);
 		}
-		return *m_current_rd_ptr;
+		entry.pageno = pageno;
+		entry.page   = &potential;
+		return *entry.page;
 	}
 
 	template <int W>
 	Page& Memory<W>::get_writable_page(address_t address)
 	{
 		const auto pageno = page_number(address);
-		if (m_current_wr_page != pageno) {
-			auto& potential = create_page(pageno);
-			if (UNLIKELY(!potential.attr.write)) {
-				this->protection_fault(address);
-			}
-			m_current_wr_page = pageno;
-			m_current_wr_ptr = &potential;
+		auto& entry = m_wr_cache[pageno % m_wr_cache.size()];
+		if (entry.pageno == pageno)
+			return *entry.page;
+		auto& potential = create_page(pageno);
+		if (UNLIKELY(!potential.attr.write)) {
+			this->protection_fault(address);
 		}
-		return *m_current_wr_ptr;
+		entry.pageno = pageno;
+		entry.page   = &potential;
+		return *entry.page;
 	}
 
 	template <int W>

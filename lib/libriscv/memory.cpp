@@ -81,10 +81,8 @@ namespace riscv
 	void Memory<W>::clear_all_pages()
 	{
 		this->m_pages.clear();
-		this->m_current_rd_page = -1;
-		this->m_current_rd_ptr  = nullptr;
-		this->m_current_wr_page = -1;
-		this->m_current_wr_ptr  = nullptr;
+		this->m_rd_cache = {};
+		this->m_wr_cache = {};
 	}
 
 	template <int W>
