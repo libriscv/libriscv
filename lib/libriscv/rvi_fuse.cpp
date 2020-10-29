@@ -4,26 +4,8 @@ T& view_as(rv32i_instruction& i) {
 	return *(T*) &i;
 }
 
-union FusedStores {
-	struct {
-		uint32_t imm    : 12;
-		uint32_t src1   : 5;
-		uint32_t src2   : 5;
-		uint32_t dst    : 5;
-		uint32_t opcode : 5;
-	};
-	static bool sign(uint32_t imm) {
-		return imm & 0x800;
-	}
-	static int64_t signed_imm(uint32_t imm) {
-		const uint64_t ext = 0xFFFFFFFFFFFFF000;
-		return imm | (sign(imm) ? ext : 0);
-	}
-	uint32_t whole;
-};
-
 template <int W>
-inline void fused_li_ecall(
+static void fused_li_ecall(
 	typename CPU<W>::instr_pair& i1, typename CPU<W>::instr_pair& i2, int sysno)
 {
 	union FusedSyscall {
@@ -47,6 +29,49 @@ inline void fused_li_ecall(
 			cpu.registers().pc += 4;
 		cpu.reg(RISCV::REG_ECALL) = fop.sysno;
 		cpu.machine().unchecked_system_call(fop.sysno);
+	};
+}
+
+template <int W, typename T>
+static void fused_store(
+	typename CPU<W>::instr_pair& i1, typename CPU<W>::instr_pair& i2)
+{
+	union FusedStores {
+		struct {
+			uint32_t imm    : 12;
+			uint32_t src1   : 5;
+			uint32_t src2   : 5;
+			uint32_t dst    : 5;
+			uint32_t opcode : 5;
+		};
+		static bool sign(uint32_t imm) {
+			return imm & 0x800;
+		}
+		static int64_t signed_imm(uint32_t imm) {
+			const uint64_t ext = 0xFFFFFFFFFFFFF000;
+			return imm | (sign(imm) ? ext : 0);
+		}
+		uint32_t whole;
+	};
+	i1.second.whole = FusedStores {
+		.imm = (uint32_t) (i1.second.Stype.imm1 | (i1.second.Stype.imm2 << 5)),
+		.src1 = i1.second.Stype.rs2,
+		.src2 = i2.second.Stype.rs2,
+		.dst  = i1.second.Stype.rs1,
+		.opcode = i1.second.Stype.opcode,
+	}.whole;
+	i1.first = [] (auto& cpu, rv32i_instruction instr) {
+		auto& fop = view_as<FusedStores> (instr);
+
+		const auto& value1 = cpu.reg(fop.src1);
+		const auto addr1  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm);
+		cpu.machine().memory.template write<T>(addr1, value1);
+
+		const auto& value2 = cpu.reg(fop.src2);
+		const auto addr2  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm) - sizeof(T);
+		cpu.machine().memory.template write<T>(addr2, value2);
+
+		cpu.registers().pc += 4;
 	};
 }
 
@@ -145,57 +170,19 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 	}
 	// ST x, n-0*W + ST y, n-1*W fused
 	if (i1.first == DECODED_INSTR(STORE_I32_IMM).handler &&
-		i2.first == DECODED_INSTR(STORE_I32_IMM).handler && 
+		i2.first == DECODED_INSTR(STORE_I32_IMM).handler &&
 		i1.second.Stype.signed_imm()-4 == i2.second.Stype.signed_imm() &&
 		i1.second.Stype.rs1 == i2.second.Stype.rs1)
 	{
-		i1.second.whole = FusedStores {
-			.imm = (uint32_t) (i1.second.Stype.imm1 | (i1.second.Stype.imm2 << 5)),
-			.src1 = i1.second.Stype.rs2,
-			.src2 = i2.second.Stype.rs2,
-			.dst  = i1.second.Stype.rs1,
-			.opcode = i1.second.Stype.opcode,
-		}.whole;
-		i1.first = [] (auto& cpu, rv32i_instruction instr) {
-			auto& fop = view_as<FusedStores> (instr);
-
-			const auto& value1 = cpu.reg(fop.src1);
-			const auto addr1  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm);
-			cpu.machine().memory.template write<uint32_t>(addr1, value1);
-
-			const auto& value2 = cpu.reg(fop.src2);
-			const auto addr2  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm) - 4;
-			cpu.machine().memory.template write<uint32_t>(addr2, value2);
-
-			cpu.registers().pc += 4;
-		};
+		fused_store<W, uint32_t> (i1, i2);
 		return true;
 	}
 	if (i1.first == DECODED_INSTR(STORE_I64_IMM).handler &&
-		i2.first == DECODED_INSTR(STORE_I64_IMM).handler && 
+		i2.first == DECODED_INSTR(STORE_I64_IMM).handler &&
 		i1.second.Stype.signed_imm()-8 == i2.second.Stype.signed_imm() &&
 		!compressed_enabled)
 	{
-		i1.second.whole = FusedStores {
-			.imm = (uint32_t) (i1.second.Stype.imm1 | (i1.second.Stype.imm2 << 5)),
-			.src1 = i1.second.Stype.rs2,
-			.src2 = i2.second.Stype.rs2,
-			.dst  = i1.second.Stype.rs1,
-			.opcode = i1.second.Stype.opcode,
-		}.whole;
-		i1.first = [] (auto& cpu, rv32i_instruction instr) {
-			auto& fop = view_as<FusedStores> (instr);
-
-			const auto& value1 = cpu.reg(fop.src1);
-			const auto addr1  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm);
-			cpu.machine().memory.template write<uint64_t>(addr1, value1);
-
-			const auto& value2 = cpu.reg(fop.src2);
-			const auto addr2  = cpu.reg(fop.dst) + fop.signed_imm(fop.imm) - 8;
-			cpu.machine().memory.template write<uint64_t>(addr2, value2);
-
-			cpu.registers().pc += 4;
-		};
+		fused_store<W, uint64_t> (i1, i2);
 		return true;
 	}
 # ifdef RISCV_EXT_COMPRESSED
