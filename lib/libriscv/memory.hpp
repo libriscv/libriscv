@@ -154,12 +154,8 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
-		template <typename T> struct CachedPage {
-			T*        page = nullptr;
-			address_t pageno = -1;
-		};
-		std::array<CachedPage<const Page>, RISCV_PAGE_CACHE> m_rd_cache;
-		std::array<CachedPage<Page>, RISCV_PAGE_CACHE> m_wr_cache;
+		std::array<CachedPage<W, const Page>, RISCV_PAGE_CACHE> m_rd_cache;
+		std::array<CachedPage<W, Page>, RISCV_PAGE_CACHE> m_wr_cache;
 		eastl::fixed_hash_map<address_t, Page, 128, 64>  m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;

@@ -14,6 +14,8 @@ namespace riscv
 		this->reset_stack_pointer();
 		// jumping causes some extra calculations
 		this->jump(machine().memory.start_address());
+		// reset the page cache
+		this->m_cache = {};
 	}
 
 	template <int W> __attribute__((noinline))
@@ -21,11 +23,16 @@ namespace riscv
 	{
 		// Fallback: Read directly from page memory
 		const auto pageno = this->pc() >> Page::SHIFT;
-		const auto& page = machine().memory.get_exec_pageno(pageno);
-		const auto offset = this->pc() & (Page::size()-1);
-		if (!page.attr.exec) {
-			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+		// Page cache
+		auto& entry = this->m_cache;
+		if (entry.pageno != pageno) {
+			entry = {pageno, &machine().memory.get_exec_pageno(pageno)};
+			if (!entry.page->attr.exec) {
+				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+			}
 		}
+		const auto& page = *entry.page;
+		const auto offset = this->pc() & (Page::size()-1);
 		format_t instruction;
 
 		if (LIKELY(offset <= Page::size()-4)) {
@@ -50,35 +57,21 @@ namespace riscv
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction()
 	{
-#ifdef RISCV_BOUNDS_CHECKED_JUMPS
-		// When jumps are bounds-checked, we can assume that PC
-		// is always inside a single executable segment that is
-		// one instruction larger than it needs to be, which allows
-		// reading instructions without checking bounds.
-		return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
-#else
-		// We have to check the bounds just to be thorough, as this will
-		// instantly crash if something is wrong. In addition,
-		// page management is only done for jumps outside of execute segment.
-		// Secondly, any jump traps will **HAVE** to return to the execute
-		// segment before returning.
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
 
 		return read_next_instruction_slowpath();
-#endif
 	}
 
 	template<int W>
 	void CPU<W>::simulate()
 	{
+		format_t instruction;
 #ifdef RISCV_DEBUG
 		this->break_checks();
-#endif
-		const auto instruction = this->read_next_instruction();
 
-#ifdef RISCV_DEBUG
+		instruction = this->read_next_instruction();
 		const auto& handler = this->decode(instruction);
 		// instruction logging
 		if (machine().verbose_instructions)
@@ -91,17 +84,25 @@ namespace riscv
 		handler.handler(*this, instruction);
 #else
 # ifdef RISCV_INSTR_CACHE
-		// retrieve instructions directly from the constant cache
-		auto& cache_entry =
-			machine().memory.get_decoder_cache()[this->pc() / DecoderCache<W>::DIVISOR];
-#ifndef RISCV_INSTR_CACHE_PREGEN
-		if (UNLIKELY(!cache_entry)) {
-			cache_entry = this->decode(instruction).handler;
+		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
+			instruction = format_t { *(uint32_t*) &m_exec_data[this->pc()] };
+			// retrieve instructions directly from the constant cache
+			auto& cache_entry =
+				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<W>::DIVISOR];
+		#ifndef RISCV_INSTR_CACHE_PREGEN
+			if (UNLIKELY(!cache_entry)) {
+				cache_entry = this->decode(instruction).handler;
+			}
+		#endif
+			// execute instruction
+			cache_entry(*this, instruction);
+		} else {
+			instruction = read_next_instruction_slowpath();
+			// decode & execute instruction directly
+			this->execute(instruction);
 		}
-#endif
-		// execute instruction
-		cache_entry(*this, instruction);
 # else
+		instruction = this->read_next_instruction();
 		// decode & execute instruction directly
 		this->execute(instruction);
 # endif

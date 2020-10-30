@@ -13,7 +13,7 @@ namespace riscv
 		if (UNLIKELY(!potential.attr.read)) {
 			this->protection_fault(address);
 		}
-		entry = {&potential, pageno};
+		entry = {pageno, &potential};
 		return potential;
 	}
 
@@ -28,7 +28,7 @@ namespace riscv
 		if (UNLIKELY(!potential.attr.write)) {
 			this->protection_fault(address);
 		}
-		entry = {&potential, pageno};
+		entry = {pageno, &potential};
 		return potential;
 	}
 

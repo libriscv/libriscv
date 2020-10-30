@@ -15,11 +15,6 @@ template<int W> constexpr
 inline void CPU<W>::jump(const address_t dst)
 {
 	this->registers().pc = dst;
-#ifdef RISCV_BOUNDS_CHECKED_JUMPS
-	if (UNLIKELY(this->pc() < m_exec_begin || this->pc() >= m_exec_end)) {
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-	}
-#endif
 	// it's possible to jump to a misaligned address
 	if constexpr (!compressed_enabled) {
 		if (UNLIKELY(this->pc() & 0x3)) {

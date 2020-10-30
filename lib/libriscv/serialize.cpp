@@ -108,9 +108,7 @@ namespace riscv
 		// restore CPU registers and counters
 		this->m_regs = state.registers;
 		this->m_counter = state.counter;
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-		this->m_cached_page = {};
-#endif
+		this->m_cache = {};
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};
 #endif

@@ -175,4 +175,10 @@ inline int64_t Page::passthrough(uint32_t off, int mode, int64_t val)
 }
 #endif
 
+// Helper class for caching pages
+template <int W, typename T> struct CachedPage {
+	address_type<W> pageno = -1;
+	T* page = nullptr;
+};
+
 }

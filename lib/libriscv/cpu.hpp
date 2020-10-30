@@ -89,6 +89,9 @@ namespace riscv
 		address_t m_exec_begin = 0;
 		address_t m_exec_end   = 0;
 
+		// Page cache for execution on virtual memory
+		CachedPage<W, const Page> m_cache;
+
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
 	    mutable int32_t m_break_steps = 0;

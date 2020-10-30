@@ -151,7 +151,7 @@ namespace riscv
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, hdr->p_vaddr + len);
-#ifdef RISCV_INSTR_CACHE
+#if defined(RISCV_INSTR_CACHE) && !defined(RISCV_DEBUG)
 			this->generate_decoder_cache(hdr->p_vaddr, len);
 #endif
 			// Nothing more to do here, if execute-only
