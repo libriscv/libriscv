@@ -70,7 +70,6 @@ inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 		return it->second;
 	}
 	machine().cpu.trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
-	__builtin_unreachable();
 }
 
 template <int W>
@@ -111,16 +110,16 @@ Page& Memory<W>::allocate_page(const size_t page, Args&&... args)
 }
 
 template <int W>
-size_t Memory<W>::nonshared_pages_active() const noexcept
+inline size_t Memory<W>::nonshared_pages_active() const noexcept
 {
 	return std::accumulate(m_pages.begin(), m_pages.end(),
-				0, [] (int value, const auto& it) {
-					return value + (!it.second.attr.non_owning ? 1 : 0);
-				});
+		0, [] (int value, const auto& it) {
+			return value + (!it.second.attr.non_owning ? 1 : 0);
+		});
 }
 
 template <int W>
-void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
+inline void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 {
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	auto& page = create_page(page_number(page_addr));
@@ -132,7 +131,7 @@ void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 }
 
 template <int W>
-address_type<W> Memory<W>::resolve_address(const char* name) const
+inline address_type<W> Memory<W>::resolve_address(const char* name) const
 {
 #ifndef RISCV_DISABLE_SYM_LOOKUP
 	const auto& it = sym_lookup.find(name);
@@ -148,7 +147,7 @@ address_type<W> Memory<W>::resolve_address(const char* name) const
 }
 
 template <int W>
-address_type<W> Memory<W>::resolve_section(const char* name) const
+inline address_type<W> Memory<W>::resolve_section(const char* name) const
 {
 	auto* shdr = this->section_by_name(name);
 	if (shdr) return shdr->sh_addr;
@@ -156,13 +155,13 @@ address_type<W> Memory<W>::resolve_section(const char* name) const
 }
 
 template <int W>
-address_type<W> Memory<W>::exit_address() const noexcept
+inline address_type<W> Memory<W>::exit_address() const noexcept
 {
 	return this->m_exit_address;
 }
 
 template <int W>
-void Memory<W>::set_exit_address(address_t addr)
+inline void Memory<W>::set_exit_address(address_t addr)
 {
 	this->m_exit_address = addr;
 }
