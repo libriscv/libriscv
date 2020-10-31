@@ -613,6 +613,11 @@ namespace riscv
 			case 1: // EBREAK
 				cpu.machine().ebreak();
 				return;
+#ifdef RISCV_SI_SYSCALLS
+			default: // Do a system call directly
+				cpu.machine().system_call(instr.Itype.imm);
+				return;
+#endif
 			}
 			break;
 		case 0x1: // CSRRW
