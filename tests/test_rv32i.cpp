@@ -16,7 +16,7 @@ static const std::vector<uint32_t> instructions =
 void test_rv32i()
 {
 	const uint32_t memory = 65536;
-	riscv::Machine<riscv::RISCV32> m { {}, memory };
+	riscv::Machine<riscv::RISCV32> m { std::string_view{}, memory };
 	// install instructions
 	const size_t bytes = sizeof(instructions[0]) * instructions.size();
 	m.copy_to_guest(0x1000, instructions.data(), bytes);

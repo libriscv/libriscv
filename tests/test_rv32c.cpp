@@ -6,7 +6,7 @@ using namespace riscv;
 void test_rv32c()
 {
 	const uint32_t memory = 65536;
-	riscv::Machine<RISCV32> machine { {}, memory };
+	riscv::Machine<RISCV32> machine { std::string_view{}, memory };
 	machine.verbose_instructions = true;
 
 	// C.SRLI imm = [0, 31] CI_CODE(0b100, 0b01):

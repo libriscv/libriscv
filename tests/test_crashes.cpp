@@ -37,7 +37,7 @@ template <int W>
 void execute(uint64_t max_mem, const char* array_name,
 			uint8_t* data, size_t len)
 {
-	riscv::Machine<W> machine { {}, max_mem };
+	riscv::Machine<W> machine { std::string_view{}, max_mem };
 	printf("* Testing %s\n", array_name);
 	machine.copy_to_guest(0x1000, data, len);
 	// make the instructions readable & executable
