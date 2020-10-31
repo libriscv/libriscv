@@ -116,7 +116,7 @@ namespace riscv
 		attr.non_owning = true;
 		// NOTE: If you insert a const Page, DON'T modify it! The machine
 		// won't, unless system-calls do or manual intervention happens!
-		m_pages.try_emplace(pageno, attr, const_cast<PageData*> (&shared_page.page()));
+		m_pages.try_emplace(pageno, attr, const_cast<PageData*> (shared_page.m_page.get()));
 		return m_pages[pageno];
 	}
 
