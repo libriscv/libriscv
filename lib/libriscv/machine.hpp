@@ -12,8 +12,8 @@ namespace riscv
 	template <int W>
 	struct Machine
 	{
-		using syscall_t = Function<long(Machine&)>;
-		using syscall_fptr_t = long(*)(Machine&);
+		using syscall_t = Function<void(Machine&)>;
+		using syscall_fptr_t = void(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address
 
 		// see common.hpp for MachineOptions
@@ -67,6 +67,11 @@ namespace riscv
 		// Retrieve all arguments by given types during a system call
 		template <typename... Args>
 		inline auto sysargs() const;
+
+		// Set the result of a system or function call
+		// Only supports primitive types like integers and floats
+		template <typename... Args>
+		inline void set_result(Args... args);
 
 		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.

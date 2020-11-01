@@ -9,7 +9,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 
 	// exit & exit_group
 	machine.install_syscall_handler(93,
-	[mt] (Machine<W>& machine) -> long {
+	[mt] (Machine<W>& machine) {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
 		const int tid = mt->get_thread()->tid;
 		THPRINT(">>> Exit on tid=%d, exit code = %d\n",
@@ -19,13 +19,13 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 			mt->get_thread()->exit();
 			// should be a new thread now
 			assert(mt->get_thread()->tid != tid);
-			return machine.cpu.reg(RISCV::REG_ARG0);
+			return;
 		}
 		// using the userdata pointer in machine we can get
 		// access to the extra state struct without capturing
 		machine.template get_userdata<State<W>> ()->exit_code = status;
 		machine.stop();
-		return status;
+		machine.set_result(status);
 	});
 	// exit_group
 	machine.install_syscall_handler(94, machine.get_syscall_handler(93));
@@ -36,42 +36,38 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		THPRINT(">>> set_tid_address(0x%X)\n", clear_tid);
 
 		mt->get_thread()->clear_tid = clear_tid;
-		return mt->get_thread()->tid;
+		machine.set_result(mt->get_thread()->tid);
 	});
 	// set_robust_list
 	machine.install_syscall_handler(99,
-	[] (Machine<W>&) {
-		return 0;
+	[] (Machine<W>& machine) {
+		machine.set_result(0);
 	});
 	// sched_yield
 	machine.install_syscall_handler(124,
-	[mt] (Machine<W>& machine) {
+	[mt] (Machine<W>&) {
 		THPRINT(">>> sched_yield()\n");
 		// begone!
 		mt->suspend_and_yield();
-		// preserve A0 for the new thread
-		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 	// tgkill
 	machine.install_syscall_handler(131,
-	[mt] (Machine<W>& machine) -> long {
+	[mt] (Machine<W>& machine) {
 		const int tid = machine.template sysarg<int> (1);
 		THPRINT(">>> tgkill on tid=%d\n", tid);
 		auto* thread = mt->get_thread(tid);
 		if (thread != nullptr) {
 			// exit thread instead
 			thread->exit();
-			// preserve A0
-			return machine.cpu.reg(RISCV::REG_ARG0);
+			return;
 		}
 		machine.stop();
-		return 0u;
 	});
 	// gettid
 	machine.install_syscall_handler(178,
-	[mt] (Machine<W>&) {
+	[mt] (Machine<W>& machine) {
 		THPRINT(">>> gettid() = %ld\n", mt->get_thread()->tid);
-		return mt->get_thread()->tid;
+		machine.set_result(mt->get_thread()->tid);
 	});
 	// futex
 	machine.install_syscall_handler(98,
@@ -87,19 +83,21 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 			THPRINT("FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
 			while (machine.memory.template read<address_type<W>> (addr) == val) {
 				if (mt->suspend_and_yield()) {
-					return (int) machine.cpu.reg(RISCV::REG_ARG0);
+					return;
 				}
 				machine.cpu.trigger_exception(DEADLOCK_REACHED);
 			}
-			return 0;
+			machine.set_result(0);
+			return;
 		} else if ((futex_op & 0xF) == FUTEX_WAKE) {
 			THPRINT("FUTEX: Waking others on %d\n", val);
 			if (mt->suspend_and_yield()) {
-				return (int) machine.cpu.reg(RISCV::REG_ARG0);
+				return;
 			}
-			return 0;
+			machine.set_result(0);
+			return;
 		}
-		return -ENOSYS;
+		machine.set_result(-EINVAL);
 	});
 	// clone
 	machine.install_syscall_handler(220,
@@ -124,7 +122,7 @@ void setup_multithreading(State<W>& state, Machine<W>& machine)
 		parent->suspend(thread->tid);
 		// activate and return 0 for the child
 		thread->activate();
-		return 0;
+		machine.set_result(0);
 	});
 }
 

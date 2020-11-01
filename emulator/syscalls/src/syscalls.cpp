@@ -25,16 +25,16 @@ template <> struct guest_iovec<8> {
 };
 
 template <int W>
-long syscall_exit(Machine<W>& machine)
+void syscall_exit(Machine<W>& machine)
 {
 	auto* state = machine.template get_userdata<State<W>> ();
 	state->exit_code = machine.template sysarg<int> (0);
 	machine.stop();
-	return state->exit_code;
+	machine.set_result(state->exit_code);
 }
 
 template <int W>
-long syscall_write(Machine<W>& machine)
+void syscall_write(Machine<W>& machine)
 {
 	const int  fd      = machine.template sysarg<int>(0);
 	const auto address = machine.template sysarg<address_type<W>>(1);
@@ -48,16 +48,17 @@ long syscall_write(Machine<W>& machine)
 		machine.memory.memcpy_out(buffer, address, len_g);
 		state->output += std::string(buffer, len_g);
 #ifdef RISCV_DEBUG
-		return write(fd, buffer, len);
+		machine.set_result(write(fd, buffer, len));
 #else
-		return len_g;
+		machine.set_result(len_g);
 #endif
+		return;
 	}
-	return -EBADF;
+	machine.set_result(-EBADF);
 }
 
 template <int W>
-long syscall_writev(Machine<W>& machine)
+void syscall_writev(Machine<W>& machine)
 {
 	const int  fd     = machine.template sysarg<int>(0);
 	const auto iov_g  = machine.template sysarg<address_type<W>>(1);
@@ -65,7 +66,10 @@ long syscall_writev(Machine<W>& machine)
 	if constexpr (false) {
 		printf("SYSCALL writev called, iov = %#X  cnt = %d\n", iov_g, count);
 	}
-	if (count < 0 || count > 256) return -EINVAL;
+	if (count < 0 || count > 256) {
+		machine.set_result(-EINVAL);
+		return;
+	}
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
         const size_t size = sizeof(guest_iovec<W>) * count;
@@ -88,32 +92,34 @@ long syscall_writev(Machine<W>& machine)
 			res += len_g;
 #endif
         }
-        return res;
+		machine.set_result(res);
+        return;
 	}
-	return -EBADF;
+	machine.set_result(-EBADF);
 }
 
 template <int W>
-long syscall_stub_zero(Machine<W>&) {
-	return 0;
+void syscall_stub_zero(Machine<W>& machine) {
+	machine.set_result(0);
 }
 
 template <int W>
-long syscall_close(riscv::Machine<W>& machine)
+void syscall_close(riscv::Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL close called, fd = %d\n", fd);
 	}
 	if (fd <= 2) {
-		return 0;
+		machine.set_result(0);
+		return;
 	}
 	printf(">>> Close %d\n", fd);
-	return -1;
+	machine.set_result(-1);
 }
 
 template <int W>
-long syscall_ebreak(riscv::Machine<W>& machine)
+void syscall_ebreak(riscv::Machine<W>& machine)
 {
 	printf("\n>>> EBREAK at %#lX\n", (long) machine.cpu.pc());
 #ifdef RISCV_DEBUG
@@ -121,11 +127,10 @@ long syscall_ebreak(riscv::Machine<W>& machine)
 #else
 	throw std::runtime_error("Unhandled EBREAK instruction");
 #endif
-	return 0;
 }
 
 template <int W>
-long syscall_gettimeofday(Machine<W>& machine)
+void syscall_gettimeofday(Machine<W>& machine)
 {
 	const auto buffer = machine.template sysarg<address_type<W>>(0);
 	SYSPRINT("SYSCALL gettimeofday called, buffer = 0x%X\n", buffer);
@@ -137,36 +142,39 @@ long syscall_gettimeofday(Machine<W>& machine)
 	} else {
 		machine.copy_to_guest(buffer, &tv, sizeof(tv));
 	}
-    return 0;
+    machine.set_result(0);
 }
 
 template <int W>
-long syscall_openat(Machine<W>& machine)
+void syscall_openat(Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL openat called, fd = %d  \n", fd);
 	(void) fd;
-    return -EBADF;
+    machine.set_result(-EBADF);
 }
 
 template <int W>
-long syscall_readlinkat(Machine<W>& machine)
+void syscall_readlinkat(Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL readlinkat called, fd = %d  \n", fd);
 	(void) fd;
-    return -EBADF;
+    machine.set_result(-EBADF);
 }
 
 template <int W>
-long syscall_brk(Machine<W>& machine)
+void syscall_brk(Machine<W>& machine)
 {
 	static address_type<W> sbrk_end = sbrk_start<W>;
 	const auto new_end = machine.template sysarg<address_type<W>>(0);
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL brk called, current = 0x%X new = 0x%X\n", sbrk_end, new_end);
 	}
-    if (new_end == 0) return sbrk_end;
+    if (new_end == 0) {
+		machine.set_result(sbrk_end);
+		return;
+	}
     sbrk_end = new_end;
     sbrk_end = std::max(sbrk_end, sbrk_start<W>);
     sbrk_end = std::min(sbrk_end, sbrk_max<W>);
@@ -174,11 +182,11 @@ long syscall_brk(Machine<W>& machine)
 	if constexpr (verbose_syscalls) {
 		printf("* New sbrk() end: 0x%X\n", sbrk_end);
 	}
-	return sbrk_end;
+	machine.set_result(sbrk_end);
 }
 
 template <int W>
-long syscall_stat(Machine<W>& machine)
+void syscall_stat(Machine<W>& machine)
 {
 	const auto  fd      = machine.template sysarg<int>(0);
 	const auto  buffer  = machine.template sysarg<address_type<W>>(1);
@@ -197,13 +205,12 @@ long syscall_stat(Machine<W>& machine)
 		result.st_blksize = 512;
 		result.st_blocks  = 0;
 		machine.copy_to_guest(buffer, &result, sizeof(result));
-		return 0;
 	}
-	return -EBADF;
+	machine.set_result(-EBADF);
 }
 
 template <int W>
-long syscall_uname(Machine<W>& machine)
+void syscall_uname(Machine<W>& machine)
 {
 	const auto buffer = machine.template sysarg<address_type<W>>(0);
 	if constexpr (verbose_syscalls) {
@@ -226,7 +233,7 @@ long syscall_uname(Machine<W>& machine)
     strcpy(uts.domain,  "(none)");
 
     machine.copy_to_guest(buffer, &uts, sizeof(uts32));
-	return 0;
+	machine.set_result(0);
 }
 
 template <int W>
@@ -239,7 +246,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto len  = machine.template sysarg<address_type<W>> (1);
 		SYSPRINT(">>> munmap(0x%X, len=%u)\n", addr, len);
 		machine.memory.free_pages(addr, len);
-		return 0;
+		machine.set_result(0);
 	});
 	// mmap
 	machine.install_syscall_handler(222,
@@ -260,13 +267,14 @@ inline void add_mman_syscalls(Machine<W>& machine)
 				//machine.memory.memset(addr, 0, length);
 			}
 	        nextfree += length;
-	        return addr;
+			machine.set_result(addr);
+	        return;
 	    }
-		return (address_type<W>) -1; // = MAP_FAILED;
+		machine.set_result(-1); // = MAP_FAILED;
 	});
 	// mremap
 	machine.install_syscall_handler(163,
-	[] (Machine<W>& machine) -> long {
+	[] (Machine<W>& machine) {
 		const auto old_addr = machine.template sysarg<address_type<W>>(0);
 		const auto old_size = machine.template sysarg<address_type<W>>(1);
 		const auto new_size = machine.template sysarg<address_type<W>>(2);
@@ -274,9 +282,9 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		SYSPRINT("SYSCALL mremap called, addr %#X  len %u newsize %u flags %#X\n",
 	            old_addr, old_size, new_size, flags);
 		if (flags & MREMAP_FIXED) {
-			return (long) MAP_FAILED;
+			// ...
 		}
-		return (long) MAP_FAILED;
+		machine.set_result(-1);
 	});
 	// mprotect
 	machine.install_syscall_handler(226,
@@ -290,7 +298,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 			.write = bool(prot & 2),
 			.exec  = bool(prot & 4)
 		});
-		return 0;
+		machine.set_result(0);
 	});
 	// madvise
 	machine.install_syscall_handler(233,
@@ -304,16 +312,20 @@ inline void add_mman_syscalls(Machine<W>& machine)
 			case MADV_RANDOM:
 			case MADV_SEQUENTIAL:
 			case MADV_WILLNEED:
-				return 0;
+				machine.set_result(0);
+				return;
 			case MADV_DONTNEED:
 				machine.memory.free_pages(addr, len);
-				return 0;
+				machine.set_result(0);
+				return;
 			case MADV_REMOVE:
 			case MADV_FREE:
 				machine.memory.free_pages(addr, len);
-				return 0;
+				machine.set_result(0);
+				return;
 			default:
-				return -EINVAL;
+				machine.set_result(-EINVAL);
+				return;
 		}
 	});
 }
@@ -392,7 +404,7 @@ void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
 		statx s;
 		s.stx_mask = flags;
 		machine.copy_to_guest(buffer, &s, sizeof(statx));
-		return 0;
+		machine.set_result(0);
 	});
 }
 

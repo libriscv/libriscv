@@ -101,7 +101,6 @@ int main(int /*argc*/, const char** /*argv*/)
 		 const auto [code] = machine.template sysargs <int> ();
 		 printf(">>> Program exited, exit code = %d\n", code);
 		 machine.stop();
-		 return 0;
 	 });
 
 	// add program arguments on the stack

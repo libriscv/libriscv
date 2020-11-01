@@ -107,20 +107,20 @@ inline void Machine<W>::system_call(size_t syscall_number)
 	{
 		const auto& handler = m_syscall_handlers[syscall_number];
 		if (LIKELY(handler != nullptr)) {
-			cpu.reg(RISCV::REG_RETVAL) = handler(*this);
+			handler(*this);
 			return;
 		}
 	}
-	cpu.reg(RISCV::REG_RETVAL) = unknown_syscall_handler(*this);
+	unknown_syscall_handler(*this);
 }
 template <int W>
 inline void Machine<W>::unchecked_system_call(size_t syscall_number)
 {
 	const auto& handler = m_syscall_handlers[syscall_number];
 	if (LIKELY(handler != nullptr)) {
-		cpu.reg(RISCV::REG_RETVAL) = handler(*this);
+		handler(*this);
 	} else {
-		cpu.reg(RISCV::REG_RETVAL) = unknown_syscall_handler(*this);
+		unknown_syscall_handler(*this);
 	}
 }
 
@@ -184,6 +184,24 @@ template <int W>
 template<typename... Args>
 inline auto Machine<W>::sysargs() const {
     return resolve_args<Args...>(std::index_sequence_for<Args...>{});
+}
+
+template <int W>
+template <typename... Args>
+inline void Machine<W>::set_result(Args... args) {
+	size_t i = 0;
+	size_t f = 0;
+	([&] {
+		if constexpr (std::is_integral_v<Args>) {
+			cpu.registers().at(RISCV::REG_ARG0 + i++) = args;
+		}
+		else if constexpr (std::is_same_v<Args, float>)
+			cpu.registers().getfl(RISCV::REG_FA0 + f++).set_float(args);
+		else if constexpr (std::is_same_v<Args, double>)
+			cpu.registers().getfl(RISCV::REG_FA0 + f++).set_double(args);
+		else
+			static_assert(always_false<Args>, "Unknown type");
+	}(), ...);
 }
 
 template <int W>

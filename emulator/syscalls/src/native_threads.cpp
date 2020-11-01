@@ -35,8 +35,6 @@ multithreading<W>* setup_native_threads(
 		// the cast is a work-around for a compiler bug
 		// NOTE: have to start at DST-4 here!!!
 		machine.setup_call(func-4, (const address_type<W>) tls);
-		// preserve A0 for the new child thread
-		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 	// exit
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+1,
@@ -50,50 +48,41 @@ multithreading<W>* setup_native_threads(
 			mt->get_thread()->exit();
 			// should be a new thread now
 			assert(mt->get_thread()->tid != tid);
-			return machine.cpu.reg(RISCV::REG_ARG0);
+			return;
 		}
 		machine.stop();
-		return (address_type<W>) status;
+		machine.set_result(status);
 	});
 	// sched_yield
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+2,
-	[mt] (Machine<W>& machine) {
+	[mt] (Machine<W>& /* machine */) {
 		// begone!
 		mt->suspend_and_yield();
-		// preserve A0 for the new thread
-		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 	// yield_to
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+3,
 	[mt] (Machine<W>& machine) {
 		mt->yield_to(machine.template sysarg<uint32_t> (0));
-		// preserve A0 for the new thread
-		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 	// block (w/reason)
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+4,
-	[mt] (Machine<W>& machine) -> long {
+	[mt] (Machine<W>& machine) {
 		// begone!
 		if (mt->block(machine.template sysarg<int> (0)))
-			// preserve A0 for the new thread
-			return machine.cpu.reg(RISCV::REG_ARG0);
+			return;
 		// error, we didn't block
-		return -1;
+		machine.set_result(-1);
 	});
 	// unblock (w/reason)
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+5,
-	[mt] (Machine<W>& machine) -> long {
+	[mt] (Machine<W>& machine) {
 		if (!mt->wakeup_blocked(machine.template sysarg<int> (0)))
-			return -1;
-		// preserve A0 for the new thread
-		return machine.cpu.reg(RISCV::REG_ARG0);
+			machine.set_result(-1);
 	});
 	// unblock thread
 	machine.install_syscall_handler(THREADS_SYSCALL_BASE+6,
 	[mt] (Machine<W>& machine) {
 		mt->unblock(machine.template sysarg<int> (0));
-		// preserve A0 for the new thread
-		return machine.cpu.reg(RISCV::REG_ARG0);
 	});
 
 	// super fast "direct" threads
@@ -108,7 +97,7 @@ multithreading<W>* setup_native_threads(
 
 		// N+8: clone threadcall
 		machine.install_syscall_handler(THREADS_SYSCALL_BASE+8,
-		[data] (Machine<W>& machine) -> long {
+		[data] (Machine<W>& machine) {
 			auto* mt    = data->mt;
 			auto* arena = data->arena;
 			// invoke clone threadcall
@@ -116,7 +105,8 @@ multithreading<W>* setup_native_threads(
 			if (UNLIKELY(tls == 0)) {
 				fprintf(stderr,
 					"Error: Thread stack allocation failed: %#x\n", tls);
-				return -1;
+				machine.set_result(-1);
+				return;
 			}
 			const auto stack = ((tls + STACK_SIZE) & ~0xF);
 			const auto  func = machine.template sysarg<address_type<W>> (0);
@@ -138,7 +128,6 @@ multithreading<W>* setup_native_threads(
 				6 * sizeof(address_type<W>));
 			// geronimo!
 			machine.cpu.jump(func - 4);
-			return machine.cpu.reg(riscv::RISCV::REG_RETVAL);
 		});
 		// N+9: exit threadcall
 		machine.install_syscall_handler(THREADS_SYSCALL_BASE+9,
@@ -153,7 +142,7 @@ multithreading<W>* setup_native_threads(
 			// exit thread instead
 			mt->get_thread()->exit();
 			// return value from exited thread
-			return retval;
+			machine.set_result(retval);
 		});
 	} // arena provided
 	return mt;

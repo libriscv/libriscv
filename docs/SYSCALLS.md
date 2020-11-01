@@ -16,7 +16,7 @@ Example:
 
 ## Standard library system calls
 
-When running a RISC-V program in the emulator, you may see messages about unhandled system calls, or exceptions thrown if you have enabled the `machine.throw_on_unhandled_syscall` option.
+When running a RISC-V program in the emulator, you can see messages about unhandled system calls if you provide a callback function to with `machine.on_unhandled_syscall(...)`.
 
 These are system calls executed by the C and C++ standard libraries, and some of them are not optional. For example, there is no graceful way to shutdown the program without implementing `exit` (93) or `exit_group` (94).
 
@@ -27,12 +27,12 @@ If you want to see the stdout output from your hello world, you will also want t
 Let's start with an example of handing exit:
 ```C++
 template <int W>
-long syscall_exit(Machine<W>& machine)
+void syscall_exit(Machine<W>& machine)
 {
 	auto [exit_code] = machine.template sysargs <int> ();
 	// Do something with exit_code
+	printf("The machine exited with code: %d\n", exit_code);
 	machine.stop();
-	return exit_code;
 }
 ```
 Our exit system call handler extracts the exit status code from the first argument to the system call, stops the machine and then returns a mandatory value. The return value in this system call is not important, as the machine has already been stopped and isn't expecting to return from the system call it just ran.
@@ -50,7 +50,7 @@ If we want stdout from the VM printed in our terminal, we should handle `write`:
 #include <unistd.h>
 
 template <int W>
-long syscall_write(Machine<W>& machine)
+void syscall_write(Machine<W>& machine)
 {
 	const auto [fd, address, len] =
 		machine.template sysargs <int, address_type<W>, address_type<W>> ();
@@ -60,9 +60,10 @@ long syscall_write(Machine<W>& machine)
 		const size_t len_g = std::min(sizeof(buffer), len);
 		machine.memory.memcpy_out(buffer, address, len_g);
 		// write buffer to our terminal!
-		return write(fd, buffer, len_g);
+		machine.set_result(write(fd, buffer, len_g));
+		return;
 	}
-	return -EBADF;
+	machine.set_result(-EBADF);
 }
 ```
 Here we extract 3 arguments, `int fd, void* buffer, size_t len`, looks familiar? We have to make sure fd is one of the known standard pipes, otherwise the VM could start writing to real files open in the host process!
@@ -100,7 +101,7 @@ To handle this system call, we will need to copy into the guest:
 #include <unistd.h>
 
 template <int W>
-long syscall_getcwd(Machine<W>& machine)
+void syscall_getcwd(Machine<W>& machine)
 {
 	const auto [address, len] =
 		machine.template sysargs <address_type<W>, address_type<W>> ();
@@ -109,9 +110,11 @@ long syscall_getcwd(Machine<W>& machine)
 	// we only accept lengths of at least sizeof(path)
 	if (len >= sizeof(path)) {
 		machine.copy_to_guest(address, path, sizeof(path));
-		return address; // ^ this way will copy the terminating zero as well!
+		machine.set_result(address);
+		return; // ^ this way will copy the terminating zero as well!
 	}
-	return 0;
+	// for unacceptable values we return null
+	machine.set_result(0);
 }
 ```
 
