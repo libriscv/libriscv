@@ -16,6 +16,8 @@ namespace riscv
 		const char* c_str() const noexcept { return first().first; }
 		size_t      size() const noexcept { return m_len; }
 
+		auto strview() const noexcept { return std::string_view{c_str(), size()}; }
+
 		size_t copy_to(char* dst, size_t dstlen) const;
 		void   foreach(std::function<void(const char*, size_t)> cb);
 		std::string to_string() const;
