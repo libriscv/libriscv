@@ -93,6 +93,8 @@ struct Page
 		return SIZE;
 	}
 
+	bool is_cow_page() const noexcept { return this == &cow_page(); }
+
 	static const Page& cow_page() noexcept;
 	static const Page& guard_page() noexcept;
 

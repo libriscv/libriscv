@@ -63,7 +63,7 @@ namespace riscv
 			const size_t size = std::min(Page::size(), len);
 			const address_t pageno = dst >> Page::SHIFT;
 			auto& page = this->get_pageno(pageno);
-			if (page.attr.is_cow == false) {
+			if (!page.is_cow_page()) {
 				m_pages.erase(pageno);
 			}
 			dst += size;
@@ -104,7 +104,8 @@ namespace riscv
 	template <int W>
 	Page& Memory<W>::install_shared_page(address_t pageno, const Page& shared_page)
 	{
-		if (UNLIKELY(get_pageno(pageno).attr.is_cow == false))
+		auto& already_there = get_pageno(pageno);
+		if (!already_there.is_cow_page() && !already_there.attr.non_owning)
 			throw MachineException(ILLEGAL_OPERATION,
 				"There was a page at the specified location already", pageno);
 		if (shared_page.data() == nullptr && (
@@ -116,7 +117,13 @@ namespace riscv
 		attr.non_owning = true;
 		// NOTE: If you insert a const Page, DON'T modify it! The machine
 		// won't, unless system-calls do or manual intervention happens!
-		m_pages.try_emplace(pageno, attr, const_cast<PageData*> (shared_page.m_page.get()));
+		auto res = m_pages.try_emplace(pageno, attr, const_cast<PageData*> (shared_page.m_page.get()));
+		// try overwriting instead, if emplace failed
+		if (res.second == false) {
+			auto& page = res.first->second;
+			new (&page) Page{attr, const_cast<PageData*> (shared_page.m_page.get())};
+			return page;
+		}
 		return m_pages[pageno];
 	}
 
