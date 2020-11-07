@@ -111,8 +111,6 @@ namespace riscv
 		this->execute(instruction);
 # endif
 #endif
-		// increment instruction counter
-		this->m_counter++;
 
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(machine().verbose_registers))

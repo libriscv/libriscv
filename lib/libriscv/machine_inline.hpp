@@ -9,7 +9,7 @@ inline Machine<W>::Machine(std::string_view binary,
 	else {
 		const auto& src = *options.owning_machine;
 		cpu.registers() = src.cpu.registers();
-		cpu.increment_counter(src.cpu.instruction_counter());
+		this->increment_counter(src.instruction_counter());
 		// TODO: copy atomics here
 		cpu.jump(cpu.pc());
 	}
@@ -47,23 +47,31 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 {
 	this->m_stopped = false;
 	if (max_instr != 0) {
-		uint64_t i = 0;
-		for (; i < max_instr; i++) {
-			cpu.simulate();
-			if (UNLIKELY(this->stopped()))
-				return;
+		const uint64_t max = m_counter + max_instr;
+		const int GRANULARITY = 128;
+		while (m_counter < max)
+		{
+			for (int i = 0; i < GRANULARITY; i++) {
+				cpu.simulate();
+				if (UNLIKELY(this->stopped()))
+					return;
+			}
+			this->m_counter += GRANULARITY;
 		}
 		if constexpr (Throw) {
-			if (UNLIKELY(i == max_instr)) {
+			if (UNLIKELY(m_counter >= max)) {
 				throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
 					"Instruction count limit reached", max_instr);
 			}
 		}
 	}
 	else {
+		uint64_t i = 0;
 		while (LIKELY(!this->stopped())) {
 			cpu.simulate();
+			i++;
 		}
+		this->m_counter += i;
 	}
 }
 

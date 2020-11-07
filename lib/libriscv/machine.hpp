@@ -35,6 +35,10 @@ namespace riscv
 		bool stopped() const noexcept;
 		void reset();
 
+		uint64_t instruction_counter() const noexcept { return m_counter; }
+		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
+		void     reset_instruction_counter() noexcept { m_counter = 0; }
+
 		CPU<W>    cpu;
 		Memory<W> memory;
 
@@ -145,7 +149,8 @@ namespace riscv
 		static long unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
-		bool m_stopped = false;
+		bool     m_stopped = false;
+		uint64_t m_counter = 0;
 		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers {};
 		eastl::fixed_vector<Function<void()>, 16> m_destructor_callbacks;
 		Function<void(int)> m_on_unhandled_syscall = nullptr;
