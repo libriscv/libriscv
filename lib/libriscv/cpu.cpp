@@ -84,7 +84,9 @@ namespace riscv
 		handler.handler(*this, instruction);
 #else
 # ifdef RISCV_INSTR_CACHE
+#  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
+#  endif
 			instruction = format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 			// retrieve instructions directly from the constant cache
 			auto& cache_entry =
@@ -96,11 +98,13 @@ namespace riscv
 		#endif
 			// execute instruction
 			cache_entry(*this, instruction);
+#  ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
 			instruction = read_next_instruction_slowpath();
 			// decode & execute instruction directly
 			this->execute(instruction);
 		}
+#  endif
 # else
 		instruction = this->read_next_instruction();
 		// decode & execute instruction directly
