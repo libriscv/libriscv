@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <stdexcept>
 #include <EASTL/hash_set.h>
 #include "types.hpp"
 

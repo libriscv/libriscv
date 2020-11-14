@@ -26,6 +26,7 @@ if (RISCV_DEBUG)
 endif()
 
 add_subdirectory(EASTL)
+target_compile_definitions(EASTL PUBLIC EASTL_EXCEPTIONS_ENABLED=1)
 
 add_library(riscv ${SOURCES})
 set_target_properties(riscv PROPERTIES CXX_STANDARD 17)

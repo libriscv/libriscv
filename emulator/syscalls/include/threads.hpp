@@ -1,8 +1,9 @@
 #pragma once
+#include <cstdio>
+#include <stdexcept>
 #include <EASTL/fixed_map.h>
 #include <libriscv/machine.hpp>
 #include "syscall_helpers.hpp"
-#include <cstdio>
 template <int W> struct multithreading;
 static const uint32_t PARENT_SETTID  = 0x00100000; /* set the TID in the parent */
 static const uint32_t CHILD_CLEARTID = 0x00200000; /* clear the TID in the child */

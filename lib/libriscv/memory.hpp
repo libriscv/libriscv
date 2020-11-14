@@ -3,6 +3,7 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
+#include <stdexcept>
 #include <EASTL/allocator_malloc.h>
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/string_map.h>
