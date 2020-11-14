@@ -231,7 +231,7 @@ namespace riscv
 	template <int W>
 	void Memory<W>::binary_loader()
 	{
-		if (UNLIKELY(m_binary.size() < 64)) {
+		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
 			throw std::runtime_error("ELF binary too short");
 		}
 		const auto* elf = (Ehdr*) m_binary.data();
