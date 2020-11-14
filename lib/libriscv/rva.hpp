@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <EASTL/fixed_set.h>
+#include <EASTL/hash_set.h>
 #include "types.hpp"
 
 namespace riscv
@@ -38,6 +38,6 @@ namespace riscv
 			}
 		}
 
-		eastl::fixed_set<address_t, MAX_RESV, false> m_reservations;
+		eastl::hash_set<address_t> m_reservations;
 	};
 }
