@@ -9,4 +9,4 @@ pushd build
 cmake ..
 make -j4
 popd
-LD_LIBRARY_PATH=$HOME/llvm/install/lib ./build/fuzzer -handle_fpe=0
+./build/fuzzer -N4 -handle_fpe=0
