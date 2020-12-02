@@ -1,20 +1,14 @@
 # RISC-V userspace emulator library
 
-## Demonstration
-
-You can find a live demonstration of the library here: https://droplet.nwcs.no
-
-Here is a multi-threaded test program: https://gist.github.com/fwsGonzo/e1a9cdc18f9da2ffc309fb9324a26c32
+_libriscv_ is a RISC-V emulator that is highly embeddable and configurable. This project is intended to be included in a CMake build system, and should not be installed anywhere. There are several CMake options that control RISC-V extensions and how the emulator behaves.
 
 ## Benchmarks against Lua
 
-LuaJIT:
+My primary motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using.
 
-https://gist.github.com/fwsGonzo/f874ba58f2bab1bf502cad47a9b2fbed
+[LuaJIT benchmarks](https://gist.github.com/fwsGonzo/f874ba58f2bab1bf502cad47a9b2fbed)
 
-And for Lua 5.4:
-
-https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb
+[Lua 5.4 benchmarks](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
 
 ## Installing a RISC-V GCC compiler
 
@@ -37,6 +31,12 @@ cd riscv-gnu-toolchain
 make -j4
 ```
 The incantation for 64-bit RISC-V.
+
+The last step is to add your compiler to PATH so that it becomes visible to build systems. So, add this at the bottom of your `.bashrc` file in the home (~) directory:
+
+```
+export PATH=$PATH:$HOME/riscv/bin
+```
 
 ## Installing a RISC-V GCC embedded compiler
 
@@ -198,8 +198,8 @@ It can also be used as a script backend for a game engine, as it's quite a bit f
 
 Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything.
 
-Use GCC to build the RISC-V binaries. Use -O2 or -O3 and use the regular standard extensions: `-march=rv32gc -mabi=ilp32d`. Enable the RISCV_EXPERIMENTAL option for the best performance unless you are using libriscv as a sandbox. Use `-march=rv32g` for the absolute best performance, if you have that choice. Difference is minimal so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable the page cache. Always enable LTO.
+Use GCC to build the RISC-V binaries. Use -O2 or -O3 and use the regular standard extensions: `-march=rv32gc -mabi=ilp32d`. Enable the RISCV_EXPERIMENTAL option for the best performance unless you are using libriscv as a sandbox. Use `-march=rv32g` for the absolute best performance, if you have that choice. Difference is minimal so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable LTO and `-march=native` if you can.
 
-Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my rvscript repository. It's a complex topic that cannot be explained in one paragraph.
+Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my [rvscript](https://github.com/fwsGonzo/rvscript) repository. It's a complex topic that cannot be explained in one paragraph.
 
-If you have arenas available you can replace the default page fault handler with your that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallell you absolutely must use the forking constructor option, which applies copy-on-write to all pages on the newly created machine. Also, enable RISCV_EXPERIMENTAL so that both the decoder cache and execute page data is shared. Don't run any untrusted executables unless you audit the RISCV_EXPERIMENTAL feature.
+If you have arenas available you can replace the default page fault handler with your that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the forking constructor option. It will apply copy-on-write to all pages on the newly created machine and share text and rodata. Also, enable RISCV_EXPERIMENTAL so that the decoder cache will be generated ahead of time.
