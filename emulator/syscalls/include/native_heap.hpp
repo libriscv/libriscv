@@ -4,9 +4,18 @@
 //
 #pragma once
 #include <cstddef>
+#include <cassert>
 #include <deque>
+#include <functional>
 #include <EASTL/fixed_list.h>
 #include <EASTL/fixed_vector.h>
+
+#ifndef LIKELY
+#define LIKELY(x) __builtin_expect((x), 1)
+#endif
+#ifndef UNLIKELY
+#define UNLIKELY(x) __builtin_expect((x), 0)
+#endif
 
 namespace sas_alloc
 {
@@ -38,7 +47,7 @@ struct Arena
 	Arena(PointerType base, PointerType end);
 
 	PointerType malloc(size_t size);
-	size_t      size(PointerType src);
+	size_t      size(PointerType src, bool allow_free = false);
 	signed int  free(PointerType);
 
 	size_t bytes_free() const;
@@ -125,11 +134,9 @@ inline Chunk* Arena::new_chunk(Args&&... args)
 		m_chunks.emplace_back(std::forward<Args>(args)...);
 		return &m_chunks.back();
 	}
-	else {
-		auto* chunk = m_free_chunks.back();
-		m_free_chunks.pop_back();
-		return new (chunk) Chunk {std::forward<Args>(args)...};
-	}
+	auto* chunk = m_free_chunks.back();
+	m_free_chunks.pop_back();
+	return new (chunk) Chunk {std::forward<Args>(args)...};
 }
 inline void Arena::free_chunk(Chunk* chunk)
 {
@@ -146,8 +153,9 @@ inline Chunk* Arena::find_chunk(PointerType ptr)
 
 inline Arena::PointerType Arena::malloc(size_t size)
 {
-	const size_t length = word_align(size);
-	Chunk* ch = base_chunk().find_free(size);
+	size_t length = word_align(size);
+	length = std::max(length, (size_t) 8);
+	Chunk* ch = base_chunk().find_free(length);
 
 	if (ch != nullptr) {
 		ch->split_next(*this, length);
@@ -157,10 +165,10 @@ inline Arena::PointerType Arena::malloc(size_t size)
 	return 0;
 }
 
-inline size_t Arena::size(PointerType ptr)
+inline size_t Arena::size(PointerType ptr, bool allow_free)
 {
 	Chunk* ch = base_chunk().find(ptr);
-	if (UNLIKELY(ch == nullptr))
+	if (UNLIKELY(ch == nullptr || (ch->free && !allow_free)))
 		return 0;
 	return ch->size;
 }
