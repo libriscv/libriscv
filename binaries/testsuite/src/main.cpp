@@ -14,6 +14,24 @@ inline bool kinda64(float val, double expectation) {
 	return val >= expectation-FLT_EPSILON
 		&& val < expectation+FLT_EPSILON;
 }
+inline bool kinda(double val, double expectation) {
+	return val >= expectation-FLT_EPSILON
+		&& val < expectation+FLT_EPSILON;
+}
+
+static struct {
+	double sum = 0.0;
+	int counter = 0;
+	int sign = 1;
+} pi;
+
+static double compute_more_pi()
+{
+    pi.sum += pi.sign / (2.0 * pi.counter + 1.0);
+	pi.counter ++;
+	pi.sign = -pi.sign;
+    return 4.0 * pi.sum;
+}
 
 int main()
 {
@@ -80,4 +98,9 @@ int main()
 	assert(kinda32(test_sinf(PI), 0.0f));
 	assert(test_cosf(PI) == -1.0f);
 	assert(test_tanf(PI) < 0.001f);
+
+	assert(kinda(compute_more_pi(), 4.0));
+	assert(kinda(compute_more_pi(), 2.66666666666));
+	assert(kinda(compute_more_pi(), 3.46666666666));
+	// ...
 }

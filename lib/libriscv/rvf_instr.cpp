@@ -467,11 +467,17 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 			case 0x0: // to float32
-				dst.f32[0] = rs1;
+				if (fi.R4type.rs2 == 0x0)
+					dst.f32[0] = (RVSIGNTYPE(cpu)) rs1;
+				else
+					dst.f32[0] = rs1;
 				dst.nanbox();
 				return;
 			case 0x1: // to float64
-				dst.f64 = rs1;
+				if (fi.R4type.rs2 == 0x0) {
+					dst.f64 = (RVSIGNTYPE(cpu)) rs1;
+				} else
+					dst.f64 = rs1;
 				return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
