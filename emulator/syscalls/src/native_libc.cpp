@@ -2,7 +2,10 @@
 #include <include/native_heap.hpp>
 using namespace riscv;
 using namespace sas_alloc;
-//#define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+//#define HPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define HPRINT(fmt, ...) /* */
+//#define MPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define MPRINT(fmt, ...) /* */
 static const uint64_t ARENA_BASE = 0x40000000;
 
 #ifndef NATIVE_SYSCALLS_BASE
@@ -53,7 +56,7 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 	{
 		const size_t len = machine.template sysarg<address_type<W>>(0);
 		auto data = arena->malloc(len);
-		SYSPRINT("SYSCALL malloc(%zu) = 0x%X\n", len, data);
+		HPRINT("SYSCALL malloc(%zu) = 0x%X\n", len, data);
 		machine.set_result(data);
 	});
 	// Calloc n+1
@@ -64,7 +67,7 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 			machine.template sysargs<address_type<W>, address_type<W>> ();
 		const size_t len = count * size;
 		auto data = arena->malloc(len);
-		SYSPRINT("SYSCALL calloc(%u, %u) = 0x%X\n", count, size, data);
+		HPRINT("SYSCALL calloc(%u, %u) = 0x%X\n", count, size, data);
 		if (data != 0) {
 			// TODO: optimize this (CoW), **can throw**
 			machine.memory.memset(data, 0, len);
@@ -79,27 +82,36 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 		const size_t newlen = machine.template sysarg<address_type<W>>(1);
 		if (src != 0)
 		{
-			const size_t srclen = arena->size(src);
+			const size_t srclen = arena->size(src, false);
 			if (srclen > 0)
 			{
+				if (srclen >= newlen) {
+					return;
+				}
 				// XXX: really have to know what we are doing here
 				// we are freeing in the hopes of getting the same chunk
 				// back, in which case the copy could be completely skipped.
 				arena->free(src);
 				auto data = arena->malloc(newlen);
-				SYSPRINT("SYSCALL realloc(0x%X:%zu, %zu) = 0x%X)\n", src, srclen, newlen, data);
-				if (data != 0 && data != src)
+				HPRINT("SYSCALL realloc(0x%X:%zu, %zu) = 0x%X\n", src, srclen, newlen, data);
+				// If the reallocation fails, return NULL
+				if (data == 0) {
+					arena->malloc(srclen);
+					machine.set_result(data);
+					return;
+				}
+				else if (data != src)
 				{
 					machine_memcpy(machine, data, src, srclen);
 				}
 				machine.set_result(data);
 				return;
 			} else {
-				SYSPRINT("SYSCALL realloc(0x%X:??, %zu) = 0x0\n", src, newlen);
+				HPRINT("SYSCALL realloc(0x%X:??, %zu) = 0x0\n", src, newlen);
 			}
 		} else {
 			auto data = arena->malloc(newlen);
-			SYSPRINT("SYSCALL realloc(0x0, %zu) = 0x%X)\n", newlen, data);
+			HPRINT("SYSCALL realloc(0x0, %zu) = 0x%lX\n", newlen, (long) data);
 			machine.set_result(data);
 			return;
 		}
@@ -113,11 +125,14 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 		if (ptr != 0)
 		{
 			int ret = arena->free(ptr);
-			SYSPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
+			HPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
 			machine.set_result(ret);
+			if (ptr != 0x0 && ret < 0) {
+				throw std::runtime_error("Possible double-free for freed pointer");
+			}
 			return;
 		}
-		SYSPRINT("SYSCALL free(0x0) = 0\n");
+		HPRINT("SYSCALL free(0x0) = 0\n");
 		machine.set_result(0);
 		return;
 	});
@@ -136,7 +151,7 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 			.cu = (uint32_t) arena->chunks_used()
 		};
 		int ret = (dst != 0) ? 0 : -1;
-		SYSPRINT("SYSCALL meminfo(0x%X) = %d\n", dst, ret);
+		HPRINT("SYSCALL meminfo(0x%X) = %d\n", dst, ret);
 		if (ret == 0) {
 			machine.copy_to_guest(dst, &result, sizeof(result));
 		}
@@ -176,9 +191,10 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		{
 			auto [dst, src, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			SYSPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
+			MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
+			machine_memcpy(m, dst, src, len);
 			m.increment_counter(2 * len);
-			m.set_result(machine_memcpy(m, dst, src, len));
+			m.set_result(dst);
 		});
 		// Memset n+6
 		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+6,
@@ -186,7 +202,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		{
 			const auto [dst, value, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			SYSPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
+			MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
 			for (size_t i = 0; i < len; i++) {
 				m.memory.template write<uint8_t> (dst + i, value);
 			}
@@ -199,7 +215,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		{
 			auto [p1, p2, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			SYSPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
+			MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
 			m.increment_counter(2 * len);
 			uint8_t v1 = 0;
 			uint8_t v2 = 0;
@@ -218,7 +234,6 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		[] (auto& m)
 		{
 			auto [addr] = m.template sysargs<address_type<W>> ();
-			SYSPRINT("SYSCALL strlen(%#X)\n", addr);
 			address_type<W> iter = addr;
 			do {
 				auto v1 = m.memory.template read<uint8_t> (iter ++);
@@ -227,6 +242,8 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 			const auto len = iter - addr;
 			m.increment_counter(2 * len);
 			m.set_result(len);
+			MPRINT("SYSCALL strlen(%#lX) = %lu\n",
+				(long) addr, (long) len);
 		});
 	} else {
 		/// trusted system calls ///
@@ -236,14 +253,14 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		{
 			auto [dst, src, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			SYSPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-			m.increment_counter(2 * len);
+			MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
 			m.memory.memview(src, len,
 				[&m] (const uint8_t* data, size_t len) {
 					auto dst = m.template sysarg <address_type<W>> (0);
 					m.memory.memcpy(dst, data, len);
 				});
-				m.set_result(dst);
+			m.increment_counter(2 * len);
+			m.set_result(dst);
 		});
 		// Memset n+6
 		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+6,
@@ -251,7 +268,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		{
 			const auto [dst, value, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			SYSPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
+			MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
 			m.memory.memset(dst, value, len);
 			m.increment_counter(len);
 			m.set_result(dst);
@@ -262,7 +279,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		{
 			auto [p1, p2, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			SYSPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
+			MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
 			m.increment_counter(2 * len);
 			m.set_result(m.memory.memcmp(p1, p2, len));
 		});
@@ -271,10 +288,11 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		[] (auto& m)
 		{
 			auto [addr] = m.template sysargs<address_type<W>> ();
-			SYSPRINT("SYSCALL strlen(%#X)\n", addr);
 			uint32_t len = m.memory.strlen(addr, 4096);
 			m.increment_counter(2 * len);
 			m.set_result(len);
+			MPRINT("SYSCALL strlen(%#lX) = %lu\n",
+				(long) addr, (long) len);
 		});
 	} // trusted
 
@@ -284,7 +302,8 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 	{
 		auto [dst, src, len] =
 			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-		SYSPRINT("SYSCALL memmove(%#X, %#X, %u)\n", dst, src, len);
+		MPRINT("SYSCALL memmove(%#lX, %#lX, %lu)\n",
+			(long) dst, (long) src, (long) len);
 		if (src < dst)
 		{
 			for (unsigned i = 0; i != len; i++) {
@@ -307,7 +326,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 	{
 		auto [a1, a2, maxlen] =
 			m.template sysargs<address_type<W>, address_type<W>, uint32_t> ();
-		SYSPRINT("SYSCALL strncmp(%#lX, %#lX, %u)\n", (long)a1, (long)a2, maxlen);
+		MPRINT("SYSCALL strncmp(%#lX, %#lX, %u)\n", (long)a1, (long)a2, maxlen);
 		uint32_t len = 0;
 		while (len < maxlen) {
 			const uint8_t v1 = m.memory.template read<uint8_t> (a1 ++);
