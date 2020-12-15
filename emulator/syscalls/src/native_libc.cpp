@@ -324,7 +324,10 @@ uint64_t arena_malloc(sas_alloc::Arena* arena, const size_t len)
 {
 	return arena->malloc(len);
 }
-
+int arena_free(sas_alloc::Arena* arena, const uint64_t addr)
+{
+	return arena->free(addr);
+}
 void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to)
 {
 	from->transfer(*to);
