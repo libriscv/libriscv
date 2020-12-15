@@ -48,21 +48,16 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 	this->m_stopped = false;
 	if (max_instr != 0) {
 		const uint64_t max = m_counter + max_instr;
-		const int GRANULARITY = 128;
 		while (m_counter < max)
 		{
-			for (int i = 0; i < GRANULARITY; i++) {
-				cpu.simulate();
-				if (UNLIKELY(this->stopped()))
-					return;
-			}
-			this->m_counter += GRANULARITY;
+			cpu.simulate();
+			this->m_counter ++;
+			if (UNLIKELY(this->stopped()))
+				return;
 		}
 		if constexpr (Throw) {
-			if (UNLIKELY(m_counter >= max)) {
-				throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
-					"Instruction count limit reached", max_instr);
-			}
+			throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
+				"Instruction count limit reached", max_instr);
 		}
 	}
 	else {
