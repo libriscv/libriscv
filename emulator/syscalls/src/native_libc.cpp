@@ -12,40 +12,6 @@ static const uint64_t ARENA_BASE = 0x40000000;
 #define NATIVE_SYSCALLS_BASE    1  /* They start at 1 */
 #endif
 
-template <int W> address_type<W> machine_memcpy(
-	Machine<W>& m, address_type<W> dst, address_type<W> src, address_type<W> len)
-{
-	if ((dst & (W-1)) == (src & (W-1))) {
-		while ((src & (W-1)) != 0 && len > 0) {
-			m.memory.template write<uint8_t> (dst++,
-				m.memory.template read<uint8_t> (src++));
-			len --;
-		}
-		while (len >= 16) {
-			m.memory.template write<uint32_t> (dst + 0,
-				m.memory.template read<uint32_t> (src + 0));
-			m.memory.template write<uint32_t> (dst + 1*W,
-				m.memory.template read<uint32_t> (src + 1*W));
-			m.memory.template write<uint32_t> (dst + 2*W,
-				m.memory.template read<uint32_t> (src + 2*W));
-			m.memory.template write<uint32_t> (dst + 3*W,
-				m.memory.template read<uint32_t> (src + 3*W));
-			dst += 16; src += 16; len -= 16;
-		}
-		while (len >= W) {
-			m.memory.template write<uint32_t> (dst,
-				m.memory.template read<uint32_t> (src));
-			dst += W; src += W; len -= W;
-		}
-	}
-	while (len > 0) {
-		m.memory.template write<uint8_t> (dst++,
-			m.memory.template read<uint8_t> (src++));
-		len --;
-	}
-	return dst;
-}
-
 template <int W>
 static void setup_native_heap_syscalls(Machine<W>& machine,
 	sas_alloc::Arena* arena)
@@ -102,7 +68,7 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 				}
 				else if (data != src)
 				{
-					machine_memcpy(machine, data, src, srclen);
+					machine.memory.memcpy(data, machine, src, srclen);
 				}
 				machine.set_result(data);
 				return;
@@ -192,7 +158,7 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 			auto [dst, src, len] =
 				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 			MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-			machine_memcpy(m, dst, src, len);
+			m.memory.memcpy(dst, m, src, len);
 			m.increment_counter(2 * len);
 			m.set_result(dst);
 		});

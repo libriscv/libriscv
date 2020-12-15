@@ -272,3 +272,37 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 		return len == 0 ? 0 : (*s1 - v2);
 	}
 }
+
+template <int W>
+void Memory<W>::memcpy(
+	address_t dst, Machine<W>& srcm, address_t src, address_t len)
+{
+	if ((dst & (W-1)) == (src & (W-1))) {
+		while ((src & (W-1)) != 0 && len > 0) {
+			this->template write<uint8_t> (dst++,
+				srcm.memory.template read<uint8_t> (src++));
+			len --;
+		}
+		while (len >= 16) {
+			this->template write<uint32_t> (dst + 0,
+				srcm.memory.template read<uint32_t> (src + 0));
+			this->template write<uint32_t> (dst + 1*W,
+				srcm.memory.template read<uint32_t> (src + 1*W));
+			this->template write<uint32_t> (dst + 2*W,
+				srcm.memory.template read<uint32_t> (src + 2*W));
+			this->template write<uint32_t> (dst + 3*W,
+				srcm.memory.template read<uint32_t> (src + 3*W));
+			dst += 16; src += 16; len -= 16;
+		}
+		while (len >= W) {
+			this->template write<uint32_t> (dst,
+				srcm.memory.template read<uint32_t> (src));
+			dst += W; src += W; len -= W;
+		}
+	}
+	while (len > 0) {
+		this->template write<uint8_t> (dst++,
+			srcm.memory.template read<uint8_t> (src++));
+		len --;
+	}
+}
