@@ -20,6 +20,7 @@ namespace riscv
 		auto strview() const noexcept { return std::string_view{c_str(), size()}; }
 
 		size_t copy_to(char* dst, size_t dstlen) const;
+		void   copy_to(std::vector<uint8_t>&) const;
 		void   foreach(std::function<void(const char*, size_t)> cb);
 		std::string to_string() const;
 		char* to_buffer(char* dest) const;
@@ -44,6 +45,13 @@ namespace riscv
 			len += entry.second;
 		}
 		return len;
+	}
+	inline void Buffer::copy_to(std::vector<uint8_t>& vec) const
+	{
+		for (const auto& entry : m_data) {
+			if (entry.second == 0) break;
+			vec.insert(vec.end(), entry.first, entry.first + entry.second);
+		}
 	}
 
 	inline void Buffer::foreach(std::function<void(const char*, size_t)> cb)
