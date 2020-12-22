@@ -8,7 +8,7 @@
 			switch (instruction.opcode())
 			{
 				// RV32IM
-				case 0b0000011:
+				case RV32I_LOAD:
 					switch (instruction.Itype.funct3) {
 						case 0x0:
 							if (instruction.Itype.rd != 0)
@@ -45,7 +45,7 @@
 							DECODER(DECODED_INSTR(ILLEGAL));
 					}
 					break;
-				case 0b0100011:
+				case RV32I_STORE:
 					switch (instruction.Stype.funct3) {
 						case 0x0:
 							if (instruction.Stype.signed_imm() == 0)
@@ -64,7 +64,7 @@
 							DECODER(DECODED_INSTR(ILLEGAL));
 					}
 					break;
-				case 0b1100011:
+				case RV32I_BRANCH:
 					switch (instruction.Btype.funct3) {
 					case 0x0:
 						DECODER(DECODED_INSTR(BRANCH_EQ));
@@ -82,11 +82,11 @@
 					case 0x7:
 						DECODER(DECODED_INSTR(BRANCH_GEU));
 					}
-				case 0b1100111:
+				case RV32I_JALR:
 					DECODER(DECODED_INSTR(JALR));
-				case 0b1101111:
+				case RV32I_JAL:
 					DECODER(DECODED_INSTR(JAL));
-				case 0b0010011: // OP_IMM
+				case RV32I_OP_IMM:
 					if (instruction.Itype.rd != 0)
 					{
 						switch (instruction.Itype.funct3) {
@@ -106,7 +106,7 @@
 						}
 					}
 					DECODER(DECODED_INSTR(NOP));
-				case 0b0110011: // OP
+				case RV32I_OP:
 					if (instruction.Rtype.rd != 0)
 					{
 						switch (instruction.Rtype.jumptable_friendly_op()) {
@@ -121,7 +121,7 @@
 						}
 					}
 					DECODER(DECODED_INSTR(NOP));
-				case 0b1110011:
+				case RV32I_SYSTEM:
 					if (instruction.Itype.funct3 == 0)
 					{
 						if (instruction.Itype.imm == 0) {
@@ -131,19 +131,19 @@
 						}
 					}
 					DECODER(DECODED_INSTR(SYSTEM));
-				case 0b0110111: // LUI
+				case RV32I_LUI:
 					if (instruction.Utype.rd != 0) {
 						DECODER(DECODED_INSTR(LUI));
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
-				case 0b0010111: // AUIPC
+				case RV32I_AUIPC:
 					if (instruction.Utype.rd != 0) {
 						DECODER(DECODED_INSTR(AUIPC));
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
-				case 0b0011011: // OP_IMM32
+				case RV64I_OP_IMM32:
 					if (instruction.Itype.rd != 0)
 					{
 						switch (instruction.Itype.funct3) {
@@ -155,7 +155,7 @@
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
-				case 0b0111011: // OP32
+				case RV64I_OP32:
 					if (instruction.Rtype.rd != 0)
 					{
 						switch (instruction.Rtype.jumptable_friendly_op()) {
@@ -167,23 +167,23 @@
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
-				case 0b0001111:
+				case RV32I_FENCE:
 					DECODER(DECODED_INSTR(FENCE));
 #ifdef RISCV_EXT_FLOATS
 				// RV32F & RV32D - Floating-point instructions
-				case 0b0000111:
+				case RV32F_LOAD:
 					DECODER(DECODED_FLOAT(FLW_FLD));
-				case 0b0100111:
+				case RV32F_STORE:
 					DECODER(DECODED_FLOAT(FSW_FSD));
-				case 0b1000011:
+				case RV32F_FMADD:
 					DECODER(DECODED_FLOAT(FMADD));
-				case 0b1000111:
+				case RV32F_FMSUB:
 					DECODER(DECODED_FLOAT(FMSUB));
-				case 0b1001011:
+				case RV32F_FNMSUB:
 					DECODER(DECODED_FLOAT(FNMSUB));
-				case 0b1001111:
+				case RV32F_FNMADD:
 					DECODER(DECODED_FLOAT(FNMADD));
-				case 0b1010011:
+				case RV32F_FPFUNC:
 					switch (instruction.fpfunc())
 					{
 						case 0b00000:
@@ -223,7 +223,7 @@
 #endif
 #ifdef RISCV_EXT_ATOMICS
 				// RVxA - Atomic instructions
-				case 0b0101111:
+				case RV32A_ATOMIC:
 					switch (instruction.Atype.funct3)
 					{
 					case 0x2:

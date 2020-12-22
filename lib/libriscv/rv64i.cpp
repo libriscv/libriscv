@@ -9,6 +9,7 @@
 #endif
 #include "rvc_instr.cpp"
 #include "rvf_instr.cpp"
+#include "instruction_list.hpp"
 
 namespace riscv
 {
