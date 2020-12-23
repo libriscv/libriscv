@@ -12,13 +12,13 @@ static std::string compiler()
 
 static std::string libriscv_path()
 {
-	const char* p = getenv("CXXINC");
+	const char* p = getenv("RISCV_INC");
 	if (p) return std::string(p);
 	return "/home/gonzo/github/libriscv/lib";
 }
 static std::string eastl_path()
 {
-	const char* p = getenv("EASTLINC");
+	const char* p = getenv("EASTL_INC");
 	if (p) return std::string(p);
 	return "/home/gonzo/github/libriscv/lib/EASTL/include";
 }
@@ -45,7 +45,8 @@ namespace riscv
 		const auto outfile = std::string(namebuffer) + ".elf";
 		// system compiler invocation
 		const std::string command =
-			compiler() + " -std=c++17 -shared -x c++ -fPIC -g -Wall "
+			compiler() + " -std=c++17 -shared -x c++ -fPIC -O1 "
+			" -fno-exceptions -fno-rtti -fuse-ld=lld "
 			 + "-I\"" + libriscv_path() + "\" -I\"" + eastl_path() + "\" -I\"" + eastl_path() + "/../test/packages/EABase/include/Common"
 			 + "\" -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr

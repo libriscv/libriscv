@@ -17,9 +17,11 @@ namespace riscv
 			check_alignment(size, addr);
 			if (LIKELY(m_reservations.size() < MAX_RESV))
 				m_reservations.insert(addr);
+#ifdef __exceptions
 			else
 				throw MachineException(DEADLOCK_REACHED,
 					"Not enough room for memory reservations", addr);
+#endif
 		}
 
 		// Volume I: RISC-V Unprivileged ISA V20190608 p.49:
@@ -34,8 +36,10 @@ namespace riscv
 		inline void check_alignment(int size, address_t addr)
 		{
 			if (UNLIKELY(addr & (size-1))) {
+#ifdef __exceptions
 				throw MachineException(INVALID_ALIGNMENT,
 					"Load-Reserved address is misaligned", addr);
+#endif
 			}
 		}
 

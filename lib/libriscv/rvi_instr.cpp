@@ -1,6 +1,7 @@
 #include "rv32i.hpp"
 #include "rv64i.hpp"
 #include "instr_helpers.hpp"
+#include "rvc.hpp"
 
 namespace riscv
 {
@@ -23,8 +24,8 @@ namespace riscv
 							instr.opcode(), instr.whole);
 		} else {
 			return snprintf(buffer, len, "UNIMPLEMENTED: 2-byte %#hx F%#hx (%#hx)",
-							instr.compressed().opcode(),
-							instr.compressed().funct3(),
+							rv32c_instruction { instr }.opcode(),
+							rv32c_instruction { instr }.funct3(),
 							instr.half[0]);
 		}
 	});

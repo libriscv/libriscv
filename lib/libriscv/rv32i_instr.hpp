@@ -4,12 +4,9 @@
 #include <string>
 #include "types.hpp"
 #include "rv32i.hpp"
-#include "rvc.hpp"
 
 namespace riscv
 {
-	union rv32c_instruction;
-
 	union rv32i_instruction
 	{
 		using word_t = uint32_t;
@@ -161,9 +158,6 @@ namespace riscv
 			return 2 + 2 * is_long();
 		}
 
-		inline auto compressed() const noexcept {
-			return rv32c_instruction { half[0] };
-		}
 		inline auto fpfunc() const noexcept {
 			return whole >> (32 - 5);
 		}

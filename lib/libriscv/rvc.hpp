@@ -1,8 +1,5 @@
 #pragma once
-#include <array>
-#include <cstdint>
-#include <string>
-#include "types.hpp"
+#include "rv32i_instr.hpp"
 
 namespace riscv
 {
@@ -241,6 +238,7 @@ namespace riscv
 
 		rv32c_instruction() : whole(0) {}
 		rv32c_instruction(uint16_t another) : whole(another) {}
+		rv32c_instruction(rv32i_instruction i) : whole(i.half[0]) {}
 
 		uint16_t opcode() const noexcept {
 			return whole & 0b1110000000000011;
