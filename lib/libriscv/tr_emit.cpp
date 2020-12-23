@@ -51,7 +51,7 @@ inline std::string from_imm(int64_t imm) {
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
 {
-	code += "extern \"C\" void " + func + "(CPU<" + std::to_string(W) + ">& cpu, rv32i_instruction) {\n";
+	code += "extern \"C\" void " + func + "(ThinCPU& cpu, rv32i_instruction) {\n";
 	for (size_t i = 0; i < len; i++) {
 		const auto& instr = ip[i].second;
 		if (IS_HANDLER(ip[i], LOAD_I8_DUMMY)) {
@@ -61,7 +61,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I8)) {
 			add_code(code,
-				from_reg(instr.Itype.rd) + " = (RVSIGNTYPE(cpu)) (int8_t) api.mem_read8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+				from_reg(instr.Itype.rd) + " = (saddress_t) (int8_t) api.mem_read8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I16_DUMMY)) {
@@ -71,7 +71,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I16)) {
 			add_code(code,
-				from_reg(instr.Itype.rd) + " = (RVSIGNTYPE(cpu)) (int16_t) api.mem_read16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+				from_reg(instr.Itype.rd) + " = (saddress_t) (int16_t) api.mem_read16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I32_DUMMY)) {
@@ -81,7 +81,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I32)) {
 			add_code(code,
-				from_reg(instr.Itype.rd) + " = (RVSIGNTYPE(cpu)) (int32_t) api.mem_read32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+				from_reg(instr.Itype.rd) + " = (saddress_t) (int32_t) api.mem_read32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_U8)) {
@@ -132,7 +132,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		else if (IS_HANDLER(ip[i], BRANCH_NE)) {
 			add_code(code,
 				"if (" + from_reg(instr.Btype.rs1) + " != " + from_reg(instr.Btype.rs2) + ") {",
-				"api.jump(cpu, " + PCREL(0 + (int64_t)instr.Btype.signed_imm()) + ");",
+				"api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ");",
 				"}api.increment_counter(cpu, " + std::to_string(i) + ");}");
 			return; // !
 		}
@@ -145,8 +145,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				add_code(code, from_reg(instr.Itype.rd) + " = " + PCREL(4) + ";\n");
 			}
 			add_code(code, "api.jump(cpu, address - 4);",
-				"api.increment_counter(cpu, " + std::to_string(len-1) + ");",
-				"}}");
+				"}api.increment_counter(cpu, " + std::to_string(i) + ");}");
 			return; // !
 		}
 		else if (IS_HANDLER(ip[i], JAL)) {
@@ -184,13 +183,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				break;
 			case 0x2: // SLTI:
 				// signed less than immediate
-				if constexpr (W == 8) {
-					add_code(code,
-						dst + " = ((int64_t) " + src + " < " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
-				} else {
-					add_code(code,
-						dst + " = ((int32_t) " + src + " < " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
-				}
+				add_code(code,
+					dst + " = ((saddress_t)" + src + " < " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU:
 				add_code(code,
@@ -237,147 +231,141 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		else if (IS_HANDLER(ip[i], OP)
 			|| IS_HANDLER(ip[i], OP_ADD)
 			|| IS_HANDLER(ip[i], OP_SUB)) {
-			begin_code(code,
-				"auto& dst = " + from_reg(instr.Rtype.rd) + ";",
-				"const auto src1 = " + from_reg(instr.Rtype.rs1) + ";",
-				"const auto src2 = " + from_reg(instr.Rtype.rs2) + ";"
-			);
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD / SUB
 				add_code(code,
 					!instr.Rtype.is_f7() ?
-					"dst = src1 + src2;" :
-					"dst = src1 - src2;"
+					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " + " + from_reg(instr.Rtype.rs2) + ";" :
+					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " - " + from_reg(instr.Rtype.rs2) + ";"
 				);
 				break;
 			case 0x1: // SLL
 				if constexpr (W == 8) {
 					add_code(code,
-						"dst = src1 << (src2 & 0x3F);");
+						from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " << (" + from_reg(instr.Rtype.rs2) + " & 0x3F);");
 				} else {
 					add_code(code,
-						"dst = src1 << (src2 & 0x1F);");
+						from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " << (" + from_reg(instr.Rtype.rs2) + " & 0x1F);");
 				}
 				break;
 			case 0x2: // SLT
 				add_code(code,
-					"dst = (RVTOSIGNED(src1) < RVTOSIGNED(src2)) ? 1 : 0;"
-				);
+					from_reg(instr.Rtype.rd) + " = ((saddress_t)" + from_reg(instr.Rtype.rs1) + " < (saddress_t)" + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU
 				add_code(code,
-					"dst = (src1 < src2) ? 1 : 0;");
+					from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " < " + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XOR
 				add_code(code,
-					"dst = src1 ^ src2;");
+					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x5: // SRL / SRA
 				if (!instr.Rtype.is_f7()) { // SRL
 					if constexpr (W == 8) {
 						add_code(code,
-							"dst = src1 >> (src2 & 0x3F);"); // max 63 shifts!
+							from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & 0x3F);"); // max 63 shifts!
 					} else {
 						add_code(code,
-							"dst = src1 >> (src2 & 0x1F);"); // max 31 shifts!
+							from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & 0x1F);"); // max 31 shifts!
 					}
 				} else { // SRA
 					add_code(code,
-						"constexpr auto bit = 1ul << (sizeof(src1) * 8 - 1);",
-						"const bool is_signed = (src1 & bit) != 0;"
+						"{constexpr auto bit = 1ul << (sizeof(" + from_reg(instr.Rtype.rs1) + ") * 8 - 1);",
+						"const bool is_signed = (" + from_reg(instr.Rtype.rs1) + " & bit) != 0;"
 					);
 					if constexpr (W == 8) {
 						add_code(code,
-							"const uint32_t shifts = src2 & 0x3F;", // max 63 shifts!
-							"dst = RV64I::SRA(is_signed, shifts, src1);"
+							"const uint32_t shifts = " + from_reg(instr.Rtype.rs2) + " & 0x3F;", // max 63 shifts!
+							from_reg(instr.Rtype.rd) + " = RV64I::SRA(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
 						);
 					} else {
 						add_code(code,
-							"const uint32_t shifts = src2 & 0x1F;", // max 31 shifts!
-							"dst = RV32I::SRA(is_signed, shifts, src1);"
+							"const uint32_t shifts = " + from_reg(instr.Rtype.rs2) + " & 0x1F;", // max 31 shifts!
+							from_reg(instr.Rtype.rd) + " = RV32I::SRA(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
 						);
 					}
+					add_code(code, "}");
 				}
 				break;
 			case 0x6: // OR
 				add_code(code,
-					"dst = src1 | src2;");
+					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " | " + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x7: // AND
 				add_code(code,
-					"dst = src1 & src2;");
+					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " & " + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			// extension RV32M / RV64M
 			case 0x10: // MUL
 				add_code(code,
-					"dst = RVTOSIGNED(src1) * RVTOSIGNED(src2);"
-				);
+					from_reg(instr.Rtype.rd) + " = (saddress_t)" + from_reg(instr.Rtype.rs1) + " * (saddress_t)" + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x11: // MULH (signed x signed)
 				add_code(code,
 					(W == 4) ?
-					"dst = ((int64_t) src1 * (int64_t) src2) >> 32u;" :
-					"RV64I::MUL128(dst, src1, src2);"
+					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(instr.Rtype.rs1) + " * (int64_t) " + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
+					"RV64I::MUL128(" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
 				add_code(code,
 					(W == 4) ?
-					"dst = ((int64_t) src1 * (uint64_t) src2) >> 32u;" :
-					"RV64I::MUL128(dst, src1, src2);"
+					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
+					"RV64I::MUL128(" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x13: // MULHU (unsigned x unsigned)
 				add_code(code,
 					(W == 4) ?
-					"dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;" :
-					"RV64I::MUL128(dst, src1, src2);"
+					from_reg(instr.Rtype.rd) + " = ((uint64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
+					"RV64I::MUL128(" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x14: // DIV
 				// division by zero is not an exception
 				if constexpr (W == 8) {
 					add_code(code,
-						"if (LIKELY(RVTOSIGNED(src2) != 0)) {",
-						"	if (LIKELY(!(src1 == -9223372036854775808ull && src2 == -1ull)))"
-						"		dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);",
+						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))"
+						"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				} else {
 					add_code(code,
-						"if (LIKELY(RVTOSIGNED(src2) != 0)) {",
-						"	if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))",
-						"		dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);",
+						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
+						"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				}
 				break;
 			case 0x15: // DIVU
 				add_code(code,
-					"if (LIKELY(src2 != 0)) dst = src1 / src2;"
+					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
+					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " / " + from_reg(instr.Rtype.rs2) + ";"
 				);
 				break;
 			case 0x16: // REM
 				if constexpr (W == 8) {
-					add_code(code, R"V0G0N(
-					if (LIKELY(src2 != 0)) {
-						if (LIKELY(!(src1 == -9223372036854775808ull && src2 == -1ull)))
-							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-					})V0G0N");
+					add_code(code,
+					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))",
+					"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " % (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
+					"}");
 				} else {
-					add_code(code, R"V0G0N(
-					if (LIKELY(src2 != 0)) {
-						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-					})V0G0N");
+					add_code(code,
+					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
+					"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " % (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
+					"}");
 				}
 				break;
 			case 0x17: // REMU
 				add_code(code,
-					"if (LIKELY(src2 != 0))",
-						"dst = src1 % src2;"
+				"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
+					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " % " + from_reg(instr.Rtype.rs2) + ";"
 				);
 				break;
 			}
-			code += "}";
 		}
 		else if (IS_HANDLER(ip[i], LUI)) {
 			add_code(code,
@@ -411,7 +399,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		}
 	}
 	code +=
-		"\tapi.increment_counter(cpu, " + std::to_string(len-1) + ");\n"
-		"\tcpu.increment_pc(" + std::to_string(4 * (len-1)) + ");\n"
+		"\napi.increment_counter(cpu, " + std::to_string(len-1) + ");\n"
+		"cpu.set_pc(" + std::to_string(basepc + 4 * (len-1)) + ");\n"
 		"}\n\n";
 }

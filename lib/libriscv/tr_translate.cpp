@@ -1,4 +1,4 @@
-static constexpr int TRANSLATION_TRESHOLD = 4;
+static constexpr int TRANSLATION_TRESHOLD = 8;
 }
 #include <EASTL/hash_set.h>
 namespace riscv {
@@ -49,15 +49,15 @@ void CPU<W>::try_translate(
 	std::vector<instr_pair*> candidates;
 	std::vector<NamedIPair<W>> dlmappings;
 	std::string code =
-		"#define RISCV_TRANSLATION_DYLIB\n"
+		"#define RISCV_TRANSLATION_DYLIB " + std::to_string(W) + "\n"
 		"#include <libriscv/tr_api.hpp>\n"
-		"#include <libriscv/instr_helpers.hpp>\n"
 		"#include <libriscv/rv32i_instr.hpp>\n"
+		"#include <libriscv/rv32i.hpp>\n"
 		"#include <libriscv/rv64i.hpp>\n"
 		"using namespace riscv;\n\n"
-		"static CallbackTable<" + std::to_string(W) + "> api;\n\n"
+		"static CallbackTable api;\n\n"
 		"extern \"C\"\n"
-		"void init(const CallbackTable<" + std::to_string(W) + ">& table) {\n"
+		"void init(const CallbackTable& table) {\n"
 		"	api = table;\n"
 		"}\n\n";
 
@@ -73,7 +73,7 @@ void CPU<W>::try_translate(
 				// we can include this but not continue after
 				if (it->second.opcode() == RV32I_JALR ||
 					it->second.opcode() == RV32I_JAL
-					//|| (it->second.opcode() == RV32I_BRANCH && it->first == DECODED_INSTR(BRANCH_NE).handler)
+					//(it->second.opcode() == RV32I_BRANCH && it->first == DECODED_INSTR(BRANCH_NE).handler)
 				) {
 					++it; break;
 				}

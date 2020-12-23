@@ -1,7 +1,6 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <type_traits>
 
 namespace riscv
@@ -35,26 +34,6 @@ namespace riscv
 		UNKNOWN_EXCEPTION
 	};
 
-	class MachineException : public std::exception {
-	public:
-	    explicit MachineException(const int type, const char* message, const int data = 0)
-			: m_type {type}, m_data { data }, m_msg { message }   {}
-
-	    virtual ~MachineException() throw() {}
-
-		int  type() const throw() { return m_type; }
-	    const char* what() const throw() override { return m_msg; }
-		int  data() const throw() { return m_data; }
-	protected:
-	    const int   m_type;
-		const int   m_data;
-		const char* m_msg;
-	};
-
-	class MachineTimeoutException : public MachineException {
-		using MachineException::MachineException;
-	};
-
 	template <int W>
 	using instruction_format  = union rv32i_instruction;
 	template <int W>
@@ -79,3 +58,30 @@ namespace riscv
 		TRAP_EXEC  = 0x2000,
 	};
 }
+
+#ifndef RISCV_TRANSLATION_DYLIB
+// Optimize compile times by skipping complex includes
+#include <exception>
+namespace riscv
+{
+	class MachineException : public std::exception {
+	public:
+	    explicit MachineException(const int type, const char* message, const int data = 0)
+			: m_type {type}, m_data { data }, m_msg { message }   {}
+
+	    virtual ~MachineException() throw() {}
+
+		int  type() const throw() { return m_type; }
+	    const char* what() const throw() override { return m_msg; }
+		int  data() const throw() { return m_data; }
+	protected:
+	    const int   m_type;
+		const int   m_data;
+		const char* m_msg;
+	};
+
+	class MachineTimeoutException : public MachineException {
+		using MachineException::MachineException;
+	};
+}
+#endif

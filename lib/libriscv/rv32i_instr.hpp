@@ -1,6 +1,6 @@
 #pragma once
 #include <array>
-#include "rv32i.hpp"
+#include <cstdint>
 
 namespace riscv
 {
@@ -155,7 +155,7 @@ namespace riscv
 			return 2 + 2 * is_long();
 		}
 
-		inline auto fpfunc() const noexcept {
+		inline uint32_t fpfunc() const noexcept {
 			return whole >> (32 - 5);
 		}
 
