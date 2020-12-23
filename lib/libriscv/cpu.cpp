@@ -25,11 +25,13 @@ namespace riscv
 		const auto pageno = this->pc() >> Page::SHIFT;
 		// Page cache
 		auto& entry = this->m_cache;
-		if (entry.pageno != pageno) {
-			entry = {pageno, &machine().memory.get_exec_pageno(pageno)};
-			if (!entry.page->attr.exec) {
+		if (entry.pageno != pageno || entry.page == nullptr) {
+			auto e = decltype(m_cache){pageno, &machine().memory.get_exec_pageno(pageno)};
+			if (!e.page->attr.exec) {
 				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 			}
+			// delay setting entry until we know it's good!
+			entry = e;
 		}
 		const auto& page = *entry.page;
 		const auto offset = this->pc() & (Page::size()-1);
