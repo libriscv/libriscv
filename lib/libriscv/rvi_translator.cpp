@@ -1,7 +1,7 @@
 static eastl::hash_set<uint32_t> good_insn
 {
-	//RV32I_LOAD,
-	//RV32I_STORE,
+	RV32I_LOAD,
+	RV32I_STORE,
 	RV32I_OP_IMM,
 	RV32I_OP,
 	RV32I_LUI,
@@ -38,102 +38,102 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 		if (IS_HANDLER(ip[i], LOAD_I8_DUMMY)) {
 			add_code(code, instr,
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"cpu.machine().memory.template read<uint8_t>(addr);"
+				"api.mem_read8(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I8)) {
 			add_code(code, instr,
 				"auto& reg = cpu.reg(instr.Itype.rd);",
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);"
+				"reg = (RVSIGNTYPE(cpu)) (int8_t) api.mem_read8(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I16_DUMMY)) {
 			add_code(code, instr,
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"cpu.machine().memory.template read<uint16_t>(addr);"
+				"api.mem_read16(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I16)) {
 			add_code(code, instr,
 				"auto& reg = cpu.reg(instr.Itype.rd);",
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint8_t>(addr);"
+				"reg = (RVSIGNTYPE(cpu)) (int16_t) api.mem_read16(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I32_DUMMY)) {
 			add_code(code, instr,
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"cpu.machine().memory.template read<uint32_t>(addr);"
+				"api.mem_read32(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_I32)) {
 			add_code(code, instr,
 				"auto& reg = cpu.reg(instr.Itype.rd);",
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint8_t>(addr);"
+				"reg = (RVSIGNTYPE(cpu)) (int32_t) api.mem_read32(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_U8)) {
 			add_code(code, instr,
 				"auto& reg = cpu.reg(instr.Itype.rd);",
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"reg = cpu.machine().memory.template read<uint8_t>(addr);}"
+				"reg = api.mem_read8(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_U16)) {
 			add_code(code, instr,
 				"auto& reg = cpu.reg(instr.Itype.rd);",
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"reg = cpu.machine().memory.template read<uint16_t>(addr);"
+				"reg = api.mem_read16(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_U32)) {
 			add_code(code, instr,
 				"auto& reg = cpu.reg(instr.Itype.rd);",
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"reg = cpu.machine().memory.template read<uint32_t>(addr);"
+				"reg = api.mem_read32(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_U64)) {
 			add_code(code, instr,
 				"auto& reg = cpu.reg(instr.Itype.rd);",
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"reg = cpu.machine().memory.template read<uint64_t>(addr);"
+				"reg = api.mem_read64(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], LOAD_U64_DUMMY)) {
 			add_code(code, instr,
 				"const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();",
-				"cpu.machine().memory.template read<uint64_t>(addr);"
+				"api.mem_read64(cpu, addr);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], STORE_I8) || IS_HANDLER(ip[i], STORE_I8_IMM)) {
 			add_code(code, instr,
 				"const auto& value = cpu.reg(instr.Stype.rs2);",
 				"const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();",
-				"cpu.machine().memory.template write<uint8_t>(addr, value);"
+				"api.mem_write8(cpu, addr, value);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], STORE_I16_IMM)) {
 			add_code(code, instr,
 				"const auto& value = cpu.reg(instr.Stype.rs2);",
 				"const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();",
-				"cpu.machine().memory.template write<uint16_t>(addr, value);"
+				"api.mem_write16(cpu, addr, value);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], STORE_I32_IMM)) {
 			add_code(code, instr,
 				"const auto& value = cpu.reg(instr.Stype.rs2);",
 				"const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();",
-				"cpu.machine().memory.template write<uint32_t>(addr, value);"
+				"api.mem_write32(cpu, addr, value);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], STORE_I64_IMM)) {
 			add_code(code, instr,
 				"const auto& value = cpu.reg(instr.Stype.rs2);",
 				"const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();",
-				"cpu.machine().memory.template write<uint64_t>(addr, value);"
+				"api.mem_write64(cpu, addr, value);"
 			);
 		}
 		else if (IS_HANDLER(ip[i], OP_IMM)
@@ -333,6 +333,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 }
 #include <dlfcn.h>
 #include <unistd.h>
+#include "tr_api.hpp"
 namespace riscv {
 
 template <int W>
@@ -354,10 +355,15 @@ void CPU<W>::try_translate(
 		"#include <libriscv/rv32i_instr.hpp>\n"
 		"#include <libriscv/rv32i.hpp>\n"
 		"#include <libriscv/rv64i.hpp>\n"
-		"#include <cstdio>\n"
-		"using namespace riscv;\n\n";
+		"#include <libriscv/tr_api.hpp>\n"
+		"using namespace riscv;\n\n"
+		"static CallbackTable<" + std::to_string(W) + "> api;\n\n"
+		"extern \"C\"\n"
+		"void init(const CallbackTable<" + std::to_string(W) + ">& table) {\n"
+		"	api = table;\n"
+		"}\n\n";
 
-	printf("Trying to translate...\n");
+	size_t icounter = 0;
 	auto it = ipairs.begin();
 	while (it != ipairs.end())
 	{
@@ -375,12 +381,14 @@ void CPU<W>::try_translate(
 				"func" + std::to_string(dlmappings.size());
 			emit(code, func, &*block, length);
 			dlmappings.push_back({*block, func});
+			icounter += length;
 		}
 		else {
 			++it;
 		}
 	}
 	// nothing to compile without mappings
+	printf("Emitted %zu accelerated instructions!\n", icounter);
 	if (dlmappings.empty())
 		return;
 
@@ -389,6 +397,41 @@ void CPU<W>::try_translate(
 	auto res = compile(code);
 	void* dylib = res.second;
 	if (dylib) {
+		// map the API callback table
+		auto* ptr = dlsym(dylib, "init");
+		if (ptr == nullptr) {
+			fprintf(stderr, "Could not find init function\n");
+			dlclose(dylib);
+			return;
+		}
+		auto func = (void (*)(const CallbackTable<W>&)) ptr;
+		func(CallbackTable<W>{
+			.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
+				return cpu.machine().memory.template read<uint8_t> (addr);
+			},
+			.mem_read16 = [] (CPU<W>& cpu, address_type<W> addr) -> uint16_t {
+				return cpu.machine().memory.template read<uint16_t> (addr);
+			},
+			.mem_read32 = [] (CPU<W>& cpu, address_type<W> addr) -> uint32_t {
+				return cpu.machine().memory.template read<uint32_t> (addr);
+			},
+			.mem_read64 = [] (CPU<W>& cpu, address_type<W> addr) -> uint64_t {
+				return cpu.machine().memory.template read<uint64_t> (addr);
+			},
+			.mem_write8 = [] (CPU<W>& cpu, address_type<W> addr, uint8_t val) {
+				cpu.machine().memory.template write<uint8_t> (addr, val);
+			},
+			.mem_write16 = [] (CPU<W>& cpu, address_type<W> addr, uint16_t val) {
+				cpu.machine().memory.template write<uint16_t> (addr, val);
+			},
+			.mem_write32 = [] (CPU<W>& cpu, address_type<W> addr, uint32_t val) {
+				cpu.machine().memory.template write<uint32_t> (addr, val);
+			},
+			.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
+				cpu.machine().memory.template write<uint64_t> (addr, val);
+			},
+		});
+
 		// map all the functions
 		for (auto& mapping : dlmappings) {
 			auto* func = dlsym(dylib, mapping.symbol.c_str());
@@ -396,6 +439,7 @@ void CPU<W>::try_translate(
 				mapping.ipair.first = (instruction_handler<W>) func;
 			}
 		}
+
 		// delete program
 		unlink(res.first.c_str());
 		// close dylib when machine is destructed
