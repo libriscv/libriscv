@@ -8,7 +8,7 @@ template <int W>
 inline void CPU<W>::reset_stack_pointer() noexcept
 {
 	// initial stack location
-	this->reg(RISCV::REG_SP) = machine().memory.stack_initial();
+	this->reg(2) = machine().memory.stack_initial();
 }
 
 template<int W> constexpr

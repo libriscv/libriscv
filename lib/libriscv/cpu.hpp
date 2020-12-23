@@ -2,10 +2,13 @@
 #include "common.hpp"
 #include "page.hpp"
 #include "registers.hpp"
-#include "riscvbase.hpp"
+#ifdef RISCV_EXT_ATOMICS
 #include "rva.hpp"
+#endif
 #include "util/function.hpp"
+#ifdef RISCV_DEBUG
 #include <map>
+#endif
 #include <vector>
 
 namespace riscv
@@ -103,5 +106,7 @@ namespace riscv
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 
+#ifndef RISCV_TRANSLATION_DYLIB
 #include "cpu_inline.hpp"
+#endif
 }

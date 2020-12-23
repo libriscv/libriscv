@@ -278,7 +278,7 @@
 		else if constexpr (compressed_enabled)
 		{
 			// RISC-V Compressed Extension
-			const auto ci = instruction.compressed();
+			const rv32c_instruction ci { instruction };
 			switch (ci.opcode())
 			{
 				// Quadrant 0

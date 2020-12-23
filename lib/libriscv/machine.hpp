@@ -1,6 +1,7 @@
 #pragma once
 #include "cpu.hpp"
 #include "memory.hpp"
+#include "riscvbase.hpp"
 #include <EASTL/fixed_vector.h>
 #include <array>
 

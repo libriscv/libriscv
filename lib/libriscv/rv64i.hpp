@@ -5,9 +5,6 @@
 
 namespace riscv
 {
-	union rv32c_instruction;
-	union rv32i_instruction;
-
 	struct RV64I {
 		using instruction_t = Instruction<8>;
 

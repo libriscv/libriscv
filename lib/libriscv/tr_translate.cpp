@@ -46,6 +46,7 @@ void CPU<W>::try_translate(
 	std::vector<instr_pair*> candidates;
 	std::vector<NamedIPair<W>> dlmappings;
 	std::string code =
+		"#define RISCV_TRANSLATION_DYLIB\n"
 		"#include <libriscv/cpu.hpp>\n"
 		"#include <libriscv/instr_helpers.hpp>\n"
 		"#include <libriscv/rv32i_instr.hpp>\n"

@@ -349,13 +349,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			code += "}";
 		}
 		else if (IS_HANDLER(ip[i], LUI)) {
-			code_block(code, instr,
-				"cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();"
+			add_code(code,
+				from_reg(instr.Utype.rd) + " = (int32_t) " + from_imm(instr.Utype.upper_imm()) + ";"
 			);
 		}
 		else if (IS_HANDLER(ip[i], AUIPC)) {
-			code_block(code, instr,
-				"cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.upper_imm();"
+			add_code(code,
+				from_reg(instr.Utype.rd) + " = cpu.pc() + " + from_imm(instr.Utype.upper_imm()) + ";"
 			);
 		}
 		else if (IS_HANDLER(ip[i], NOP)
