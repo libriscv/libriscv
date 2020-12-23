@@ -12,12 +12,13 @@ namespace riscv
 		switch (fi.Itype.funct3) {
 		case 0x2: // FLW
 			dst.load_u32(cpu.machine().memory.template read<uint32_t> (addr));
-			return;
+			break;
 		case 0x3: // FLD
 			dst.load_u64(cpu.machine().memory.template read<uint64_t> (addr));
-			return;
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -39,12 +40,13 @@ namespace riscv
 		switch (fi.Itype.funct3) {
 		case 0x2: // FSW
 			cpu.machine().memory.template write<uint32_t> (addr, src.i32[0]);
-			return;
+			break;
 		case 0x3: // FSD
 			cpu.machine().memory.template write<uint64_t> (addr, src.i64);
-			return;
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -69,12 +71,11 @@ namespace riscv
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] * rs2.f32[0] + rs3.f32[0];
 			dst.nanbox();
-			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -99,12 +100,11 @@ namespace riscv
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] * rs2.f32[0] - rs3.f32[0];
 			dst.nanbox();
-			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 - rs3.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -129,12 +129,11 @@ namespace riscv
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0];
 			dst.nanbox();
-			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) - rs3.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -158,12 +157,11 @@ namespace riscv
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) + rs3.f32[0];
 			dst.nanbox();
-			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) + rs3.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -188,12 +186,11 @@ namespace riscv
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] + rs2.f32[0];
 			dst.nanbox();
-			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 + rs2.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -216,12 +213,11 @@ namespace riscv
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] - rs2.f32[0];
 			dst.nanbox();
-			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 - rs2.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -244,12 +240,11 @@ namespace riscv
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.f32[0] = rs1.f32[0] * rs2.f32[0];
 			dst.nanbox();
-			return;
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -269,15 +264,14 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
-		if (fi.R4type.funct2 == 0x0) { // float32
+		if (fi.R4type.funct2 == 0x0) { // fp32
 			dst.f32[0] = rs1.f32[0] / rs2.f32[0];
 			dst.nanbox();
-			return;
-		} else if (fi.R4type.funct2 == 0x1) { // float64
+		} else if (fi.R4type.funct2 == 0x1) { // fp64
 			dst.f64 = rs1.f64 / rs2.f64;
-			return;
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -297,14 +291,15 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
-			case 0x0: // FSQRT.S
-				dst.set_float(sqrtf(rs1.f32[0]));
-				return;
-			case 0x1: // FSQRT.D
-				dst.f64 = sqrt(rs1.f64);
-				return;
+		case 0x0: // FSQRT.S
+			dst.set_float(sqrtf(rs1.f32[0]));
+			break;
+		case 0x1: // FSQRT.D
+			dst.f64 = sqrt(rs1.f64);
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -326,22 +321,23 @@ namespace riscv
 
 		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
 		{
-			case 0x0: // FMIN.S
-				dst.f32[0] = std::min(rs1.f32[0], rs2.f32[0]);
-				dst.nanbox();
-				return;
-			case 0x1: // FMAX.S
-				dst.f32[0] = std::max(rs1.f32[0], rs2.f32[0]);
-				dst.nanbox();
-				return;
-			case 0x10: // FMIN.D
-				dst.f64 = std::min(rs1.f64, rs2.f64);
-				return;
-			case 0x11: // FMAX.D
-				dst.f64 = std::max(rs1.f64, rs2.f64);
-				return;
+		case 0x0: // FMIN.S
+			dst.f32[0] = std::min(rs1.f32[0], rs2.f32[0]);
+			dst.nanbox();
+			break;
+		case 0x1: // FMAX.S
+			dst.f32[0] = std::max(rs1.f32[0], rs2.f32[0]);
+			dst.nanbox();
+			break;
+		case 0x10: // FMIN.D
+			dst.f64 = std::min(rs1.f64, rs2.f64);
+			break;
+		case 0x11: // FMAX.D
+			dst.f64 = std::max(rs1.f64, rs2.f64);
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -366,26 +362,27 @@ namespace riscv
 
 		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
 		{
-			case 0x0: // FLE.S
-				dst = (rs1.f32[0] <= rs2.f32[0]) ? 1 : 0;
-				return;
-			case 0x1: // FLT.S
-				dst = (rs1.f32[0] < rs2.f32[0]) ? 1 : 0;
-				return;
-			case 0x2: // FEQ.S
-				dst = (rs1.f32[0] == rs2.f32[0]) ? 1 : 0;
-				return;
-			case 0x10: // FLE.D
-				dst = (rs1.f64 <= rs2.f64) ? 1 : 0;
-				return;
-			case 0x11: // FLT.D
-				dst = (rs1.f64 < rs2.f64) ? 1 : 0;
-				return;
-			case 0x12: // FEQ.D
-				dst = (rs1.f64 == rs2.f64) ? 1 : 0;
-				return;
+		case 0x0: // FLE.S
+			dst = (rs1.f32[0] <= rs2.f32[0]) ? 1 : 0;
+			break;
+		case 0x1: // FLT.S
+			dst = (rs1.f32[0] < rs2.f32[0]) ? 1 : 0;
+			break;
+		case 0x2: // FEQ.S
+			dst = (rs1.f32[0] == rs2.f32[0]) ? 1 : 0;
+			break;
+		case 0x10: // FLE.D
+			dst = (rs1.f64 <= rs2.f64) ? 1 : 0;
+			break;
+		case 0x11: // FLT.D
+			dst = (rs1.f64 < rs2.f64) ? 1 : 0;
+			break;
+		case 0x12: // FEQ.D
+			dst = (rs1.f64 == rs2.f64) ? 1 : 0;
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -407,15 +404,16 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
-			case 0x0: // FCVT.S.D (64 -> 32)
-				dst.f32[0] = rs1.f64;
-				dst.nanbox();
-				return;
-			case 0x1: // FCVT.D.S (32 -> 64)
-				dst.f64 = rs1.f32[0];
-				return;
+		case 0x0: // FCVT.S.D (64 -> 32)
+			dst.f32[0] = rs1.f64;
+			dst.nanbox();
+			break;
+		case 0x1: // FCVT.D.S (32 -> 64)
+			dst.f64 = rs1.f32[0];
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -434,20 +432,21 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& dst = cpu.reg(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
-			case 0x0: // from float32
-				if (fi.R4type.rs2 == 0x0)
-					dst = (int32_t) rs1.f32[0];
-				else
-					dst = (uint32_t) rs1.f32[0];
-				return;
-			case 0x1: // from float64
-				if (fi.R4type.rs2 == 0x0)
-					dst = (int32_t) rs1.f64;
-				else
-					dst = (uint32_t) rs1.f64;
-				return;
+		case 0x0: // from float32
+			if (fi.R4type.rs2 == 0x0)
+				dst = (int32_t) rs1.f32[0];
+			else
+				dst = (uint32_t) rs1.f32[0];
+			break;
+		case 0x1: // from float64
+			if (fi.R4type.rs2 == 0x0)
+				dst = (int32_t) rs1.f64;
+			else
+				dst = (uint32_t) rs1.f64;
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -466,21 +465,22 @@ namespace riscv
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
-			case 0x0: // to float32
-				if (fi.R4type.rs2 == 0x0)
-					dst.f32[0] = (RVSIGNTYPE(cpu)) rs1;
-				else
-					dst.f32[0] = rs1;
-				dst.nanbox();
-				return;
-			case 0x1: // to float64
-				if (fi.R4type.rs2 == 0x0) {
-					dst.f64 = (RVSIGNTYPE(cpu)) rs1;
-				} else
-					dst.f64 = rs1;
-				return;
+		case 0x0: // to float32
+			if (fi.R4type.rs2 == 0x0)
+				dst.f32[0] = (RVSIGNTYPE(cpu)) rs1;
+			else
+				dst.f32[0] = rs1;
+			dst.nanbox();
+			break;
+		case 0x1: // to float64
+			if (fi.R4type.rs2 == 0x0) {
+				dst.f64 = (RVSIGNTYPE(cpu)) rs1;
+			} else
+				dst.f64 = rs1;
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -500,38 +500,45 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct3) {
-			case 0x0: // FSGNJ
-				switch (fi.R4type.funct2) {
-					case 0x0: // float32
-						dst.load_u32((rs2.lsign.sign << 31) | rs1.lsign.bits);
-						return;
-					case 0x1: // float64
-						dst.i64 = ((uint64_t) rs2.usign.sign << 63) | rs1.usign.bits;
-						return;
-				}
+		case 0x0: // FSGNJ
+			switch (fi.R4type.funct2) {
+			case 0x0: // float32
+				dst.load_u32((rs2.lsign.sign << 31) | rs1.lsign.bits);
 				break;
-			case 0x1: // FSGNJ_N
-				switch (fi.R4type.funct2) {
-					case 0x0: // float32
-						dst.load_u32((~rs2.lsign.sign << 31) | rs1.lsign.bits);
-						return;
-					case 0x1: // float64
-						dst.i64 = (~(uint64_t) rs2.usign.sign << 63) | rs1.usign.bits;
-						return;
-				}
+			case 0x1: // float64
+				dst.i64 = ((uint64_t) rs2.usign.sign << 63) | rs1.usign.bits;
 				break;
-			case 0x2: // FSGNJ_X
-				switch (fi.R4type.funct2) {
-					case 0x0: // float32
-						dst.load_u32(((rs1.lsign.sign ^ rs2.lsign.sign) << 31) | rs1.lsign.bits);
-						return;
-					case 0x1: // float64
-						dst.i64 = ((uint64_t)(rs1.usign.sign ^ rs2.usign.sign) << 63) | rs1.usign.bits;
-						return;
-				}
+			default:
+				cpu.trigger_exception(ILLEGAL_OPERATION);
+			}
+			break;
+		case 0x1: // FSGNJ_N
+			switch (fi.R4type.funct2) {
+			case 0x0: // float32
+				dst.load_u32((~rs2.lsign.sign << 31) | rs1.lsign.bits);
 				break;
+			case 0x1: // float64
+				dst.i64 = (~(uint64_t) rs2.usign.sign << 63) | rs1.usign.bits;
+				break;
+			default:
+				cpu.trigger_exception(ILLEGAL_OPERATION);
+			}
+			break;
+		case 0x2: // FSGNJ_X
+			switch (fi.R4type.funct2) {
+			case 0x0: // float32
+				dst.load_u32(((rs1.lsign.sign ^ rs2.lsign.sign) << 31) | rs1.lsign.bits);
+				break;
+			case 0x1: // float64
+				dst.i64 = ((uint64_t)(rs1.usign.sign ^ rs2.usign.sign) << 63) | rs1.usign.bits;
+				break;
+			default:
+				cpu.trigger_exception(ILLEGAL_OPERATION);
+			}
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -560,16 +567,19 @@ namespace riscv
 		auto& dst = cpu.reg(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		switch (fi.R4type.funct2) {
-			case 0x0: // FMV.X.W
-				dst = rs1.i32[0];
-				return;
-			case 0x1: // FMV.X.D
-				if constexpr (RVIS64BIT(cpu)) {
-					dst = rs1.i64;
-					return;
-				}
+		case 0x0: // FMV.X.W
+			dst = rs1.i32[0];
+			break;
+		case 0x1: // FMV.X.D
+			if constexpr (RVIS64BIT(cpu)) {
+				dst = rs1.i64;
+				break;
+			} else {
+				cpu.trigger_exception(ILLEGAL_OPERATION);
+			}
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -588,17 +598,20 @@ namespace riscv
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
-			case 0x0: // FMV.W.X
-				dst.i32[0] = rs1;
-				dst.nanbox();
-				return;
-			case 0x1: // FMV.D.X
-				if constexpr (RVIS64BIT(cpu)) {
-					dst.load_u64(rs1);
-					return;
-				}
+		case 0x0: // FMV.W.X
+			dst.i32[0] = rs1;
+			dst.nanbox();
+			break;
+		case 0x1: // FMV.D.X
+			if constexpr (RVIS64BIT(cpu)) {
+				dst.load_u64(rs1);
+				break;
+			} else {
+				cpu.trigger_exception(ILLEGAL_OPERATION);
+			}
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
