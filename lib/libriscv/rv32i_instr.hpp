@@ -146,8 +146,8 @@ namespace riscv
 		uint16_t half[2];
 		uint32_t whole;
 
-		rv32i_instruction() : whole(0) {}
-		rv32i_instruction(uint32_t another) : whole(another) {}
+		constexpr rv32i_instruction() : whole(0) {}
+		constexpr rv32i_instruction(uint32_t another) : whole(another) {}
 
 		uint32_t opcode() const noexcept {
 			return Rtype.opcode;

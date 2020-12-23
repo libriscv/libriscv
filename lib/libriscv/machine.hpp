@@ -111,7 +111,7 @@ namespace riscv
 		address_t address_of(const char* name) const;
 
 		// Call a function when the machine gets destroyed
-		void add_destructor_callback(Function<void()> callback);
+		void add_destructor_callback(Function<void()> callback) const;
 
 #ifdef RISCV_DEBUG
 		// Immediately block execution, print registers and current instruction.
@@ -152,7 +152,7 @@ namespace riscv
 		bool     m_stopped = false;
 		uint64_t m_counter = 0;
 		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers {};
-		eastl::fixed_vector<Function<void()>, 16> m_destructor_callbacks;
+		mutable eastl::fixed_vector<Function<void()>, 16> m_destructor_callbacks;
 		Function<void(int)> m_on_unhandled_syscall = nullptr;
 		void* m_userdata = nullptr;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");

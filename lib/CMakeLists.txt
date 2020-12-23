@@ -24,6 +24,11 @@ if (RISCV_DEBUG)
 		libriscv/debug.cpp
 	)
 endif()
+if (RISCV_EXPERIMENTAL)
+	list(APPEND SOURCES
+		libriscv/rvi_compiler.cpp
+	)
+endif()
 
 add_subdirectory(EASTL)
 target_compile_definitions(EASTL PUBLIC EASTL_EXCEPTIONS_ENABLED=1)
@@ -51,5 +56,7 @@ if (RISCV_ICACHE)
 endif()
 if (RISCV_EXPERIMENTAL)
 	target_compile_definitions(riscv PUBLIC
-		RISCV_INSTR_CACHE_PREGEN=1)
+		RISCV_INSTR_CACHE_PREGEN=1
+		RISCV_BINARY_TRANSLATION=1)
+	target_link_libraries(riscv dl)
 endif()

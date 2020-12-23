@@ -68,6 +68,7 @@ namespace riscv
 
 		// instruction fusing (icache only)
 		using instr_pair = std::pair<instruction_handler<W>&, format_t&>;
+		void try_translate(std::vector<instr_pair>&) const;
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 
 		CPU(Machine<W>&);
@@ -78,6 +79,7 @@ namespace riscv
 		format_t read_next_instruction();
 		format_t read_next_instruction_slowpath() COLD_PATH();
 		void execute(format_t);
+		void emit(std::string& code, const std::string& symb, instr_pair* blk, size_t len) const;
 
 		// ELF programs linear .text segment
 		const uint8_t* m_exec_data = nullptr;

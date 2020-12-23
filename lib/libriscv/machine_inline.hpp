@@ -259,7 +259,7 @@ void Machine<W>::realign_stack()
 }
 
 template <int W>
-inline void Machine<W>::add_destructor_callback(Function<void()> cb)
+inline void Machine<W>::add_destructor_callback(Function<void()> cb) const
 {
 	m_destructor_callbacks.push_back(std::move(cb));
 }
