@@ -1,4 +1,7 @@
-static constexpr int TRANSLATION_TRESHOLD = 6;
+static constexpr int TRANSLATION_TRESHOLD = 4;
+}
+#include <EASTL/hash_set.h>
+namespace riscv {
 
 static eastl::hash_set<uint32_t> good_insn
 {
@@ -41,17 +44,16 @@ struct NamedIPair {
 
 template <int W>
 void CPU<W>::try_translate(
-	std::vector<instr_pair>& ipairs) const
+	address_t basepc, std::vector<instr_pair>& ipairs) const
 {
 	std::vector<instr_pair*> candidates;
 	std::vector<NamedIPair<W>> dlmappings;
 	std::string code =
 		"#define RISCV_TRANSLATION_DYLIB\n"
-		"#include <libriscv/cpu.hpp>\n"
+		"#include <libriscv/tr_api.hpp>\n"
 		"#include <libriscv/instr_helpers.hpp>\n"
 		"#include <libriscv/rv32i_instr.hpp>\n"
 		"#include <libriscv/rv64i.hpp>\n"
-		"#include <libriscv/tr_api.hpp>\n"
 		"using namespace riscv;\n\n"
 		"static CallbackTable<" + std::to_string(W) + "> api;\n\n"
 		"extern \"C\"\n"
@@ -68,6 +70,14 @@ void CPU<W>::try_translate(
 		{
 			// measure block length
 			while (++it != ipairs.end()) {
+				// we can include this but not continue after
+				if (it->second.opcode() == RV32I_JALR ||
+					it->second.opcode() == RV32I_JAL
+					//|| (it->second.opcode() == RV32I_BRANCH && it->first == DECODED_INSTR(BRANCH_NE).handler)
+				) {
+					++it; break;
+				}
+				// we can accelerate these and continue
 				if (gucci<W>(*it) == 0)
 					break;
 			}
@@ -77,13 +87,15 @@ void CPU<W>::try_translate(
 				//printf("Block found. Length: %zu\n", length);
 				const std::string func =
 					"func" + std::to_string(dlmappings.size());
-				emit(code, func, &*block, length);
+				emit(code, func, basepc, &*block, length);
 				dlmappings.push_back({*block, func});
 				icounter += length;
 			}
+			basepc += 4 * length;
 		}
 		else {
 			++it;
+			basepc += 4;
 		}
 	}
 	// nothing to compile without mappings
@@ -129,6 +141,9 @@ void CPU<W>::try_translate(
 			},
 			.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
 				cpu.machine().memory.template write<uint64_t> (addr, val);
+			},
+			.jump = [] (CPU<W>& cpu, address_type<W> addr) {
+				cpu.jump(addr);
 			},
 			.increment_counter = [] (CPU<W>& cpu, uint64_t val) {
 				cpu.machine().increment_counter(val);

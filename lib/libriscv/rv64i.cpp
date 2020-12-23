@@ -54,11 +54,10 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 #include "tr_translate.cpp"
-template void CPU<8>::try_translate(std::vector<instr_pair>&) const;
-template void CPU<8>::emit(std::string&, const std::string&, instr_pair*, size_t) const;
-#else
-#include "rvi_fuse.cpp"
-template bool CPU<8>::try_fuse(instr_pair, instr_pair) const;
+template void CPU<8>::try_translate(address_t, std::vector<instr_pair>&) const;
+template void CPU<8>::emit(std::string&, const std::string&, address_t, instr_pair*, size_t) const;
 #endif
 
+#include "rvi_fuse.cpp"
+template bool CPU<8>::try_fuse(instr_pair, instr_pair) const;
 }

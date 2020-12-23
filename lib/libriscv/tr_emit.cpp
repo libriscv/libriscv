@@ -36,7 +36,9 @@ inline void add_code(std::string& code, Args&& ... addendum) {
 }
 
 inline std::string from_reg(int reg) {
-	return "cpu.reg(" + std::to_string(reg) + ")";
+	if (reg != 0)
+		return "cpu.reg(" + std::to_string(reg) + ")";
+	return "0";
 }
 inline std::string from_imm(int64_t imm) {
 	return std::to_string(imm);
@@ -44,9 +46,10 @@ inline std::string from_imm(int64_t imm) {
 
 #define IS_HANDLER(ip, instr) ((ip).first == DECODED_INSTR(instr).handler)
 #define IS_FPHANDLER(ip, instr) ((ip).first == DECODED_FLOAT(instr).handler)
+#define PCREL(x) std::to_string(basepc + i * 4 + (x))
 
 template <int W>
-void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, size_t len) const
+void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
 {
 	code += "extern \"C\" void " + func + "(CPU<" + std::to_string(W) + ">& cpu, rv32i_instruction) {\n";
 	for (size_t i = 0; i < len; i++) {
@@ -112,22 +115,50 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			);
 		}
 		else if (IS_HANDLER(ip[i], STORE_I16_IMM)) {
-			code_block(code,
-				"const auto addr = " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ";",
-				"api.mem_write16(cpu, addr, " + from_reg(instr.Stype.rs2) + ");"
+			add_code(code,
+				"api.mem_write16(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 			);
 		}
 		else if (IS_HANDLER(ip[i], STORE_I32_IMM)) {
-			code_block(code,
-				"const auto addr = " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ";",
-				"api.mem_write32(cpu, addr, " + from_reg(instr.Stype.rs2) + ");"
+			add_code(code,
+				"api.mem_write32(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 			);
 		}
 		else if (IS_HANDLER(ip[i], STORE_I64_IMM)) {
-			code_block(code,
-				"const auto addr = " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ";",
-				"api.mem_write64(cpu, addr, " + from_reg(instr.Stype.rs2) + ");"
+			add_code(code,
+				"api.mem_write64(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 			);
+		}
+		else if (IS_HANDLER(ip[i], BRANCH_NE)) {
+			add_code(code,
+				"if (" + from_reg(instr.Btype.rs1) + " != " + from_reg(instr.Btype.rs2) + ") {",
+				"api.jump(cpu, " + PCREL(0 + (int64_t)instr.Btype.signed_imm()) + ");",
+				"}api.increment_counter(cpu, " + std::to_string(i) + ");}");
+			return; // !
+		}
+		else if (IS_HANDLER(ip[i], JALR)) {
+			// jump to register + immediate
+			begin_code(code,
+				"const auto address = " + from_reg(instr.Itype.rs1)
+					+ " + " + from_imm(instr.Itype.signed_imm()) + ";");
+			if (instr.Itype.rd != 0) {
+				add_code(code, from_reg(instr.Itype.rd) + " = " + PCREL(4) + ";\n");
+			}
+			add_code(code, "api.jump(cpu, address - 4);",
+				"api.increment_counter(cpu, " + std::to_string(len-1) + ");",
+				"}}");
+			return; // !
+		}
+		else if (IS_HANDLER(ip[i], JAL)) {
+			code += "{\n";
+			if (instr.Jtype.rd != 0) {
+				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCREL(4) + ";\n");
+			}
+			add_code(code,
+				"api.jump(cpu, " + PCREL(instr.Jtype.jump_offset() - 4) + ");",
+				"api.increment_counter(cpu, " + std::to_string(len-1) + ");",
+				"}}");
+			return; // !
 		}
 		else if (IS_HANDLER(ip[i], OP_IMM)
 			|| IS_HANDLER(ip[i], OP_IMM_ADDI)
@@ -355,7 +386,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 		}
 		else if (IS_HANDLER(ip[i], AUIPC)) {
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = cpu.pc() + " + from_imm(instr.Utype.upper_imm()) + ";"
+				from_reg(instr.Utype.rd) + " = " + PCREL(instr.Utype.upper_imm()) + ";"
 			);
 		}
 		else if (IS_HANDLER(ip[i], NOP)
@@ -368,40 +399,12 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				"api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
 		}
 		else if (IS_FPHANDLER(ip[i], FLW_FLD)) {
-			code_block(code, instr,
-				R"V0G0N("
-				const rv32f_instruction fi { instr };
-				auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
-				auto& dst = cpu.registers().getfl(fi.Itype.rd);
-				switch (fi.Itype.funct3) {
-				case 0x2: // FLW
-					dst.load_u32(cpu.machine().memory.template read<uint32_t> (addr));
-					break;
-				case 0x3: // FLD
-					dst.load_u64(cpu.machine().memory.template read<uint64_t> (addr));
-					break;
-				default:
-					api.trigger_exception(cpu, ILLEGAL_OPERATION);
-				})V0G0N"
-			);
+			code +=
+				"api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
 		}
 		else if (IS_FPHANDLER(ip[i], FSW_FSD)) {
-			code_block(code, instr,
-				R"V0G0N("
-				const rv32f_instruction fi { instr };
-				auto& src = cpu.registers().getfl(fi.Stype.rs2);
-				auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
-				switch (fi.Itype.funct3) {
-				case 0x2: // FSW
-					cpu.machine().memory.template write<uint32_t> (addr, src.i32[0]);
-					break;
-				case 0x3: // FSD
-					cpu.machine().memory.template write<uint64_t> (addr, src.i64);
-					break;
-				default:
-					api.trigger_exception(cpu, ILLEGAL_OPERATION);
-				})V0G0N"
-			);
+			code +=
+				"api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
 		}
 		else {
 			throw std::runtime_error("Unhandled instruction in code emitter");

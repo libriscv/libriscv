@@ -45,7 +45,7 @@ namespace riscv
 		const auto outfile = std::string(namebuffer) + ".elf";
 		// system compiler invocation
 		const std::string command =
-			compiler() + " -std=c++17 -shared -x c++ -fPIC -pipe -O1 "
+			compiler() + " -std=c++17 -shared -x c++ -fPIC -O "
 			" -fno-exceptions -fno-rtti -fuse-ld=lld "
 			 + "-I\"" + libriscv_path() + "\" -I\"" + eastl_path() + "\" -I\"" + eastl_path() + "/../test/packages/EABase/include/Common"
 			 + "\" -o " + outfile + " "
