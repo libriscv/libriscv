@@ -13,6 +13,9 @@ inline std::string from_reg(int reg) {
 		return "cpu->regs[" + std::to_string(reg) + "]";
 	return "0";
 }
+inline std::string from_fpreg(int reg) {
+	return "cpu->fpreg[" + std::to_string(reg) + "]";
+}
 inline std::string from_imm(int64_t imm) {
 	return std::to_string(imm);
 }
@@ -379,12 +382,32 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				"api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
 		}
 		else if (IS_FPHANDLER(ip[i], FLW_FLD)) {
-			code +=
-				"api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
+			const rv32f_instruction fi { instr };
+			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
+			switch (fi.Itype.funct3) {
+			case 0x2: // FLW
+				code += "load_float(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read32(cpu, " + addr + "));";
+				break;
+			case 0x3: // FLD
+				code += "load_double(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read64(cpu, " + addr + "));";
+				break;
+			default:
+				code += "api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
+			}
 		}
 		else if (IS_FPHANDLER(ip[i], FSW_FSD)) {
-			code +=
-				"api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
+			const rv32f_instruction fi { instr };
+			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
+			switch (fi.Itype.funct3) {
+			case 0x2: // FLW
+				code += "api.mem_write32(cpu, " + addr + ", " + from_fpreg(fi.Itype.rd) + ".f32[0]);";
+				break;
+			case 0x3: // FLD
+				code += "api.mem_write64(cpu, " + addr + ", " + from_fpreg(fi.Itype.rd) + ".i64);";
+				break;
+			default:
+				code += "api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
+			}
 		}
 		else {
 			throw std::runtime_error("Unhandled instruction in code emitter");

@@ -6,6 +6,7 @@ R"123(#include <stdint.h>
 #include <stdbool.h>
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
+#define ILLEGAL_OPCODE  0
 
 #if RISCV_TRANSLATION_DYLIB == 4
 	typedef uint32_t address_t;
@@ -15,10 +16,42 @@ R"123(#include <stdint.h>
 	typedef int64_t saddress_t;
 #endif
 
+typedef union {
+	int32_t i32[2];
+	float   f32[2];
+	int64_t i64;
+	double  f64;
+	struct {
+		uint32_t bits  : 31;
+		uint32_t sign  : 1;
+		uint32_t upper;
+	} lsign;
+	struct {
+		uint64_t bits  : 63;
+		uint64_t sign  : 1;
+	} usign;
+} fp64reg;
+
+static inline void load_float(fp64reg* reg, uint32_t fv) {
+	reg->i32[0] = fv;
+	reg->i32[1] = 0xFFFFFFFF;
+}
+static inline void load_double(fp64reg* reg, uint64_t dv) {
+	reg->i64 = dv;
+}
+static inline void set_float(fp64reg* reg, float f) {
+	reg->f32[0] = f;
+	reg->i32[1] = 0xFFFFFFFF;
+}
+static inline void set_double(fp64reg* reg, double d) {
+	reg->f64 = d;
+}
+
 // Thin variant of CPU for higher compilation speed
 typedef struct {
 	address_t  pc;
 	address_t  regs[32];
+	fp64reg    fpreg[32];
 } ThinCPU;
 
 static struct CallbackTable {
