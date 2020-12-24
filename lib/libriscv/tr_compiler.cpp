@@ -16,12 +16,6 @@ static std::string libriscv_path()
 	if (p) return std::string(p);
 	return "/home/gonzo/github/libriscv/lib";
 }
-static std::string eastl_path()
-{
-	const char* p = getenv("EASTL_INC");
-	if (p) return std::string(p);
-	return "/home/gonzo/github/libriscv/lib/EASTL/include";
-}
 
 namespace riscv
 {
@@ -45,9 +39,9 @@ namespace riscv
 		const auto outfile = std::string(namebuffer) + ".elf";
 		// system compiler invocation
 		const std::string command =
-			compiler() + " -std=c++11 -shared -x c++ -fPIC -O2 "
-			" -fno-exceptions -fno-rtti -fuse-ld=lld "
-			 + "-I\"" + libriscv_path() + "\" -I\"" + eastl_path() + "\" -I\"" + eastl_path() + "/../test/packages/EABase/include/Common"
+			compiler() + " -O2 -s -std=c++11 -shared -x c++ -fPIC -fno-exceptions -fno-rtti"
+			" -fuse-ld=lld -fno-threadsafe-statics -ffreestanding -nostdlib "
+			 + "-I\"" + libriscv_path()
 			 + "\" -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
@@ -65,7 +59,7 @@ namespace riscv
 		}
 		pclose(f);
 		// delete temporary code file
-		//unlink(namebuffer);
+		unlink(namebuffer);
 
 		return {outfile, dlopen(outfile.c_str(), RTLD_LAZY)};
 	}

@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <array>
 
 #ifdef RISCV_TRANSLATION_DYLIB
 #ifndef LIKELY
@@ -34,8 +33,8 @@ namespace riscv {
 	private:
 		using register_t = address_t;
 		struct {
-			address_t pc;
-			std::array<register_t, 32> regs;
+			address_t  pc;
+			register_t regs[32];
 		} m_regs;
 	};
 	struct CallbackTable {

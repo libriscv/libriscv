@@ -138,25 +138,25 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		}
 		else if (IS_HANDLER(ip[i], JALR)) {
 			// jump to register + immediate
-			begin_code(code,
+			add_code(code,
 				"const auto address = " + from_reg(instr.Itype.rs1)
 					+ " + " + from_imm(instr.Itype.signed_imm()) + ";");
 			if (instr.Itype.rd != 0) {
 				add_code(code, from_reg(instr.Itype.rd) + " = " + PCREL(4) + ";\n");
 			}
 			add_code(code, "api.jump(cpu, address - 4);",
-				"}api.increment_counter(cpu, " + std::to_string(i) + ");}");
+				"api.increment_counter(cpu, " + std::to_string(i) + ");",
+				"}");
 			return; // !
 		}
 		else if (IS_HANDLER(ip[i], JAL)) {
-			code += "{\n";
 			if (instr.Jtype.rd != 0) {
 				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCREL(4) + ";\n");
 			}
 			add_code(code,
 				"api.jump(cpu, " + PCREL(instr.Jtype.jump_offset() - 4) + ");",
 				"api.increment_counter(cpu, " + std::to_string(len-1) + ");",
-				"}}");
+				"}");
 			return; // !
 		}
 		else if (IS_HANDLER(ip[i], OP_IMM)
