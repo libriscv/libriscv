@@ -1,6 +1,6 @@
-static constexpr int TRANSLATION_TRESHOLD = 6;
-static constexpr int INSTRUCTIONS_MAX = 24'000;
-static constexpr int TRANSLATIONS_MAX = 2000;
+static constexpr int TRANSLATION_TRESHOLD = 8;
+static constexpr int INSTRUCTIONS_MAX = 64'000;
+static constexpr int TRANSLATIONS_MAX = 4000;
 }
 #include <EASTL/hash_set.h>
 namespace riscv {
@@ -65,8 +65,7 @@ void CPU<W>::try_translate(
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
 				if (it->second.opcode() == RV32I_JALR ||
-					it->second.opcode() == RV32I_JAL
-				) {
+					it->second.opcode() == RV32I_JAL) {
 					++it; break;
 				}
 
@@ -79,7 +78,7 @@ void CPU<W>::try_translate(
 			{
 				//printf("Block found. Length: %zu\n", length);
 				const std::string func =
-					"func" + std::to_string(dlmappings.size());
+					"f" + std::to_string(dlmappings.size());
 				emit(code, func, basepc, &*block, length);
 				dlmappings.push_back({*block, func});
 				icounter += length;
@@ -102,7 +101,6 @@ void CPU<W>::try_translate(
 		return;
 
 	extern std::pair<std::string, void*> compile(const std::string& code, int arch);
-	//printf("Code:\n%s\n", code.c_str());
 	auto res = compile(code, W);
 	void* dylib = res.second;
 	if (dylib) {
@@ -138,6 +136,10 @@ void CPU<W>::try_translate(
 			},
 			.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
 				cpu.machine().memory.template write<uint64_t> (addr, val);
+			},
+			.finish_block = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
+				cpu.registers().pc = addr;
+				cpu.machine().increment_counter(val);
 			},
 			.jump = [] (CPU<W>& cpu, address_type<W> addr) {
 				cpu.jump(addr);

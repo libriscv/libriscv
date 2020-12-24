@@ -20,12 +20,6 @@ typedef struct {
 	address_t  pc;
 	address_t  regs[32];
 } ThinCPU;
-inline void cpu_set_pc(ThinCPU* cpu, address_t pc) {
-	cpu->pc = pc;
-}
-inline address_t* cpu_reg(ThinCPU* cpu, int reg) {
-	return &cpu->regs[reg];
-}
 
 static struct CallbackTable {
 	uint8_t  (*mem_read8)(ThinCPU*, address_t addr);
@@ -36,6 +30,7 @@ static struct CallbackTable {
 	void (*mem_write16)(ThinCPU*, address_t addr, uint16_t);
 	void (*mem_write32)(ThinCPU*, address_t addr, uint32_t);
 	void (*mem_write64)(ThinCPU*, address_t addr, uint64_t);
+	void (*finish_block)(ThinCPU*, address_t, uint64_t);
 	void (*jump)(ThinCPU*, address_t);
 	void (*increment_counter)(ThinCPU*, uint64_t);
 	void (*trigger_exception)(ThinCPU*, int);

@@ -9,6 +9,12 @@ static std::string compiler()
 	if (cc) return std::string(cc);
 	return "gcc";
 }
+static std::string cflags()
+{
+	const char* cflags = getenv("CFLAGS");
+	if (cflags) return std::string(cflags);
+	return "";
+}
 
 namespace riscv
 {
@@ -32,10 +38,10 @@ namespace riscv
 		const auto outfile = std::string(namebuffer) + ".elf";
 		// system compiler invocation
 		const std::string command =
-			compiler() + " -O2 -s -std=c99 -shared -x c "
+			compiler() + " -O0 -s -std=c99 -fPIC -shared -x c "
 			" -ffreestanding -nostdlib "
 			 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
-			 + " -o " + outfile + " "
+			 + " " + cflags() + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
 		// compile the translated code
@@ -52,7 +58,7 @@ namespace riscv
 		}
 		pclose(f);
 		// delete temporary code file
-		//unlink(namebuffer);
+		unlink(namebuffer);
 
 		return {outfile, dlopen(outfile.c_str(), RTLD_LAZY)};
 	}
