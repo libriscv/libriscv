@@ -3,6 +3,7 @@
 #include "decoder_cache.hpp"
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
+#include "rv32i.hpp"
 #include "rv64i.hpp"
 
 namespace riscv
