@@ -10,17 +10,10 @@ static std::string compiler()
 	return "g++";
 }
 
-static std::string libriscv_path()
-{
-	const char* p = getenv("RISCV_INC");
-	if (p) return std::string(p);
-	return "/home/gonzo/github/libriscv/lib";
-}
-
 namespace riscv
 {
 	std::pair<std::string, void*>
-	compile(const std::string& code)
+	compile(const std::string& code, int arch)
 	{
 		// create temporary filename
 		char namebuffer[64];
@@ -39,10 +32,10 @@ namespace riscv
 		const auto outfile = std::string(namebuffer) + ".elf";
 		// system compiler invocation
 		const std::string command =
-			compiler() + " -O2 -s -std=c++11 -shared -x c++ -fPIC -fno-exceptions -fno-rtti"
-			" -fuse-ld=lld -fno-threadsafe-statics -ffreestanding -nostdlib "
-			 + "-I\"" + libriscv_path()
-			 + "\" -o " + outfile + " "
+			compiler() + " -O2 -s -std=c++11 -shared -x c++ -fno-exceptions -fno-rtti"
+			" -fno-threadsafe-statics -ffreestanding -nostdlib "
+			 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
+			 + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
 		// compile the translated code

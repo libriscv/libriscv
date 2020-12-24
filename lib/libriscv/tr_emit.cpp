@@ -1,40 +1,13 @@
-template <typename ... Args>
-inline void begin_code(std::string& code, rv32i_instruction instr, Args&& ... addendum) {
-	code += "{constexpr rv32i_instruction instr {" + std::to_string(instr.whole) + "u};\n";
-	([&] {
-		code += std::string(addendum) + "\n";
-	}(), ...);
-}
-template <typename ... Args>
-inline void begin_code(std::string& code, Args&& ... addendum) {
-	code += "{";
-	([&] {
-		code += std::string(addendum) + "\n";
-	}(), ...);
-}
-template <typename ... Args>
-inline void code_block(std::string& code, rv32i_instruction instr, Args&& ... addendum) {
-	code += "{constexpr rv32i_instruction instr {" + std::to_string(instr.whole) + "u};\n";
-	([&] {
-		code += std::string(addendum) + "\n";
-	}(), ...);
-	code += "}";
-}
-template <typename ... Args>
-inline void code_block(std::string& code, Args&& ... addendum) {
-	code += "{";
-	([&] {
-		code += std::string(addendum) + "\n";
-	}(), ...);
-	code += "}";
-}
+#define IS_HANDLER(ip, instr) ((ip).first == DECODED_INSTR(instr).handler)
+#define IS_FPHANDLER(ip, instr) ((ip).first == DECODED_FLOAT(instr).handler)
+#define PCREL(x) std::to_string((address_t) (basepc + i * 4 + (x)))
+
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
 	([&] {
 		code += std::string(addendum) + "\n";
 	}(), ...);
 }
-
 inline std::string from_reg(int reg) {
 	if (reg != 0)
 		return "cpu.reg(" + std::to_string(reg) + ")";
@@ -43,10 +16,18 @@ inline std::string from_reg(int reg) {
 inline std::string from_imm(int64_t imm) {
 	return std::to_string(imm);
 }
-
-#define IS_HANDLER(ip, instr) ((ip).first == DECODED_INSTR(instr).handler)
-#define IS_FPHANDLER(ip, instr) ((ip).first == DECODED_FLOAT(instr).handler)
-#define PCREL(x) std::to_string(basepc + i * 4 + (x))
+template <int W>
+inline void add_branch(std::string& code, bool sign, const std::string& op, address_type<W> basepc, size_t i, rv32i_instruction instr)
+{
+	using address_t = address_type<W>;
+	add_code(code,
+		((sign == false) ?
+		"if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {" :
+		"if ((saddress_t)" + from_reg(instr.Btype.rs1) + op + " (saddress_t)" + from_reg(instr.Btype.rs2) + ") {"),
+		"api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ");",
+		"api.increment_counter(cpu, " + std::to_string(i) + ");return;"
+		"}");
+}
 
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
@@ -129,12 +110,23 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				"api.mem_write64(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 			);
 		}
+		else if (IS_HANDLER(ip[i], BRANCH_EQ)) {
+			add_branch<W>(code, false, " == ", basepc, i, instr);
+		}
 		else if (IS_HANDLER(ip[i], BRANCH_NE)) {
-			add_code(code,
-				"if (" + from_reg(instr.Btype.rs1) + " != " + from_reg(instr.Btype.rs2) + ") {",
-				"api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ");",
-				"}api.increment_counter(cpu, " + std::to_string(i) + ");}");
-			return; // !
+			add_branch<W>(code, false, " != ", basepc, i, instr);
+		}
+		else if (IS_HANDLER(ip[i], BRANCH_LT)) {
+			add_branch<W>(code, true, " < ", basepc, i, instr);
+		}
+		else if (IS_HANDLER(ip[i], BRANCH_GE)) {
+			add_branch<W>(code, true, " >= ", basepc, i, instr);
+		}
+		else if (IS_HANDLER(ip[i], BRANCH_LTU)) {
+			add_branch<W>(code, false, " < ", basepc, i, instr);
+		}
+		else if (IS_HANDLER(ip[i], BRANCH_GEU)) {
+			add_branch<W>(code, false, " >= ", basepc, i, instr);
 		}
 		else if (IS_HANDLER(ip[i], JALR)) {
 			// jump to register + immediate

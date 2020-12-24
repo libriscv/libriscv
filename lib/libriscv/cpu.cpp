@@ -10,6 +10,7 @@ namespace riscv
 	template <int W>
 	void CPU<W>::reset()
 	{
+		static_assert(offsetof(CPU, m_regs) == 0, "Registers must be first");
 		this->m_regs = {};
 		this->reset_stack_pointer();
 		// jumping causes some extra calculations

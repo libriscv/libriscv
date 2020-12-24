@@ -26,6 +26,7 @@ if (RISCV_DEBUG)
 endif()
 if (RISCV_EXPERIMENTAL)
 	list(APPEND SOURCES
+		libriscv/tr_api.cpp
 		libriscv/tr_compiler.cpp
 	)
 endif()
