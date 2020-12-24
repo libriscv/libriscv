@@ -1,4 +1,5 @@
 static constexpr int TRANSLATION_TRESHOLD = 8;
+static constexpr int TRANSLATIONS_MAX = 1000;
 }
 #include <EASTL/hash_set.h>
 namespace riscv {
@@ -90,6 +91,10 @@ void CPU<W>::try_translate(
 				emit(code, func, basepc, &*block, length);
 				dlmappings.push_back({*block, func});
 				icounter += length;
+				// we can't translate beyond this estimate, otherwise
+				// the compiler will never finish code generation
+				if (dlmappings.size() >= TRANSLATIONS_MAX)
+					break;
 			}
 			basepc += 4 * length;
 		}
