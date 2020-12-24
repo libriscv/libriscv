@@ -190,7 +190,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 	else if (i1.first == DECODED_INSTR(C1_LI).handler &&
 		i2.first == DECODED_INSTR(SYSCALL).handler)
 	{
-		const auto ci = i1.second.compressed();
+		const rv32c_instruction ci { i1.second };
 		const uint16_t sysno = ci.CI.signed_imm();
 		if (ci.CI.rd == RISCV::REG_ECALL && sysno < RISCV_SYSCALLS_MAX)
 		{
