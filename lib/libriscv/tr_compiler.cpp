@@ -5,9 +5,9 @@
 
 static std::string compiler()
 {
-	const char* cxx = getenv("CXX");
-	if (cxx) return std::string(cxx);
-	return "g++";
+	const char* cc = getenv("CC");
+	if (cc) return std::string(cc);
+	return "gcc";
 }
 
 namespace riscv
@@ -32,8 +32,8 @@ namespace riscv
 		const auto outfile = std::string(namebuffer) + ".elf";
 		// system compiler invocation
 		const std::string command =
-			compiler() + " -O2 -s -std=c++11 -shared -x c++ -fno-exceptions -fno-rtti"
-			" -fno-threadsafe-statics -ffreestanding -nostdlib "
+			compiler() + " -O2 -s -std=c99 -shared -x c "
+			" -ffreestanding -nostdlib "
 			 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
 			 + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
@@ -52,7 +52,7 @@ namespace riscv
 		}
 		pclose(f);
 		// delete temporary code file
-		unlink(namebuffer);
+		//unlink(namebuffer);
 
 		return {outfile, dlopen(outfile.c_str(), RTLD_LAZY)};
 	}

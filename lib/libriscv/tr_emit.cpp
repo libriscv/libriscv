@@ -10,7 +10,7 @@ inline void add_code(std::string& code, Args&& ... addendum) {
 }
 inline std::string from_reg(int reg) {
 	if (reg != 0)
-		return "cpu.reg(" + std::to_string(reg) + ")";
+		return "*cpu_reg(cpu, " + std::to_string(reg) + ")";
 	return "0";
 }
 inline std::string from_imm(int64_t imm) {
@@ -32,7 +32,7 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, addr
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
 {
-	code += "extern \"C\" void " + func + "(ThinCPU& cpu, rv32i_instruction) {\n";
+	code += "extern void " + func + "(ThinCPU* cpu) {\n";
 	for (size_t i = 0; i < len; i++) {
 		const auto& instr = ip[i].second;
 		if (IS_HANDLER(ip[i], LOAD_I8_DUMMY)) {
@@ -131,12 +131,12 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		else if (IS_HANDLER(ip[i], JALR)) {
 			// jump to register + immediate
 			add_code(code,
-				"const auto address = " + from_reg(instr.Itype.rs1)
+				"const address_t addr = " + from_reg(instr.Itype.rs1)
 					+ " + " + from_imm(instr.Itype.signed_imm()) + ";");
 			if (instr.Itype.rd != 0) {
 				add_code(code, from_reg(instr.Itype.rd) + " = " + PCREL(4) + ";\n");
 			}
-			add_code(code, "api.jump(cpu, address - 4);",
+			add_code(code, "api.jump(cpu, addr - 4);",
 				"api.increment_counter(cpu, " + std::to_string(i) + ");",
 				"}");
 			return; // !
@@ -196,16 +196,16 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 							dst + " = " + src + " >> " + std::to_string(instr.Itype.shift_imm()) + ";");
 				} else { // SRAI: preserve the sign bit
 					add_code(code,
-						"{constexpr auto bit = 1ul << (sizeof(" + src + ") * 8 - 1);",
+						"{const address_t bit = 1ul << (sizeof(" + src + ") * 8 - 1);",
 						"const bool is_signed = (" + src + " & bit) != 0;");
 					if constexpr (W == 8) {
 						add_code(code,
 							"const uint32_t shifts = " + std::to_string(instr.Itype.shift64_imm()) + ";",
-							dst + " = RV64I::SRA(is_signed, shifts, " + src + ");");
+							dst + " = SRA64(is_signed, shifts, " + src + ");");
 					} else {
 						add_code(code,
 							"const uint32_t shifts = " + std::to_string(instr.Itype.shift_imm()) + ";",
-							dst + " = RV32I::SRA(is_signed, shifts, " + src + ");");
+							dst + " = SRA32(is_signed, shifts, " + src + ");");
 					}
 					code += "}";
 				}
@@ -263,18 +263,18 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 					}
 				} else { // SRA
 					add_code(code,
-						"{constexpr auto bit = 1ul << (sizeof(" + from_reg(instr.Rtype.rs1) + ") * 8 - 1);",
+						"{const address_t bit = 1ul << (sizeof(" + from_reg(instr.Rtype.rs1) + ") * 8 - 1);",
 						"const bool is_signed = (" + from_reg(instr.Rtype.rs1) + " & bit) != 0;"
 					);
 					if constexpr (W == 8) {
 						add_code(code,
 							"const uint32_t shifts = " + from_reg(instr.Rtype.rs2) + " & 0x3F;", // max 63 shifts!
-							from_reg(instr.Rtype.rd) + " = RV64I::SRA(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
+							from_reg(instr.Rtype.rd) + " = SRA64(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
 						);
 					} else {
 						add_code(code,
 							"const uint32_t shifts = " + from_reg(instr.Rtype.rs2) + " & 0x1F;", // max 31 shifts!
-							from_reg(instr.Rtype.rd) + " = RV32I::SRA(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
+							from_reg(instr.Rtype.rd) + " = SRA32(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
 						);
 					}
 					add_code(code, "}");
@@ -297,21 +297,21 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				add_code(code,
 					(W == 4) ?
 					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(instr.Rtype.rs1) + " * (int64_t) " + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"RV64I::MUL128(" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
 				add_code(code,
 					(W == 4) ?
 					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"RV64I::MUL128(" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x13: // MULHU (unsigned x unsigned)
 				add_code(code,
 					(W == 4) ?
 					from_reg(instr.Rtype.rd) + " = ((uint64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"RV64I::MUL128(" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x14: // DIV
@@ -392,6 +392,6 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 	}
 	code +=
 		"\napi.increment_counter(cpu, " + std::to_string(len-1) + ");\n"
-		"cpu.set_pc(" + std::to_string(basepc + 4 * (len-1)) + ");\n"
+		"cpu_set_pc(cpu, " + std::to_string(basepc + 4 * (len-1)) + ");\n"
 		"}\n\n";
 }
