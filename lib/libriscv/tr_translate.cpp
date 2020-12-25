@@ -64,8 +64,7 @@ void CPU<W>::try_translate(
 			// measure block length
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
-				if (it->second.opcode() == RV32I_JALR ||
-					it->second.opcode() == RV32I_JAL) {
+				if (it->second.opcode() == RV32I_JAL) {
 					++it; break;
 				}
 
@@ -141,8 +140,9 @@ void CPU<W>::try_translate(
 				cpu.registers().pc = addr;
 				cpu.machine().increment_counter(val);
 			},
-			.jump = [] (CPU<W>& cpu, address_type<W> addr) {
+			.jump = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
 				cpu.jump(addr);
+				cpu.machine().increment_counter(val);
 			},
 			.increment_counter = [] (CPU<W>& cpu, uint64_t val) {
 				cpu.machine().increment_counter(val);

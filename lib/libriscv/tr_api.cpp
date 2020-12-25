@@ -64,7 +64,7 @@ static struct CallbackTable {
 	void (*mem_write32)(ThinCPU*, address_t addr, uint32_t);
 	void (*mem_write64)(ThinCPU*, address_t addr, uint64_t);
 	void (*finish_block)(ThinCPU*, address_t, uint64_t);
-	void (*jump)(ThinCPU*, address_t);
+	void (*jump)(ThinCPU*, address_t, uint64_t);
 	void (*increment_counter)(ThinCPU*, uint64_t);
 	void (*trigger_exception)(ThinCPU*, int);
 } api;
