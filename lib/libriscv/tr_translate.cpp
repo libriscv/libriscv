@@ -1,6 +1,7 @@
 static constexpr int TRANSLATION_TRESHOLD = 6;
 static constexpr int INSTRUCTIONS_MAX = 64'000;
 static constexpr int TRANSLATIONS_MAX = 4000;
+static constexpr int LOOP_OFFSET_MAX = 80;
 }
 #include <EASTL/hash_set.h>
 namespace riscv {
@@ -10,6 +11,7 @@ static eastl::hash_set<uint32_t> good_insn
 	RV32I_LOAD,
 	RV32I_STORE,
 	RV32I_BRANCH,
+	RV32I_JAL,
 	RV32I_OP_IMM,
 	RV32I_OP,
 	RV32I_LUI,
@@ -56,25 +58,49 @@ void CPU<W>::try_translate(
 
 	size_t icounter = 0;
 	auto it = ipairs.begin();
+	std::vector<std::pair<decltype(it), address_t>> loops;
+	eastl::hash_set<address_t> already_generated;
+	eastl::hash_set<address_t> already_looped;
+
 	while (it != ipairs.end() && icounter < INSTRUCTIONS_MAX)
 	{
-		auto block = it;
-		if (gucci<W>(*block))
+		if (!loops.empty()) {
+			it = loops.back().first;
+			basepc = loops.back().second;
+			loops.pop_back();
+		}
+		if (gucci<W>(*it))
 		{
+			auto block = it;
 			// measure block length
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
-				if (it->second.opcode() == RV32I_JAL) {
+				if (it->second.opcode() == RV32I_JALR) {
 					++it; break;
 				}
-
+if constexpr (LOOP_OFFSET_MAX > 0) {
+				// loop detection (negative branch offsets)
+				if (it->second.opcode() == RV32I_BRANCH && it->second.Btype.sign()) {
+					// detect jump location
+					const auto& instr = it->second;
+					const size_t length = it - block;
+					const auto offset = instr.Btype.signed_imm();
+					const auto dst = basepc + (4 * length) + offset;
+					if (offset > -LOOP_OFFSET_MAX && already_looped.count(dst) == 0) {
+						loops.push_back({it + offset / 4, dst});
+						already_looped.insert(dst);
+					}
+				}
+}
 				// we can accelerate these and continue
 				if (gucci<W>(*it) == 0)
 					break;
 			}
-			size_t length = it - block;
-			if (length >= TRANSLATION_TRESHOLD && icounter + length < INSTRUCTIONS_MAX)
+			const size_t length = it - block;
+			if (length >= TRANSLATION_TRESHOLD && icounter + length < INSTRUCTIONS_MAX
+				&& already_generated.count(basepc) == 0)
 			{
+				already_generated.insert(basepc);
 				//printf("Block found. Length: %zu\n", length);
 				const std::string func =
 					"f" + std::to_string(dlmappings.size());
@@ -89,8 +115,8 @@ void CPU<W>::try_translate(
 			basepc += 4 * length;
 		}
 		else {
-			++it;
 			basepc += 4;
+			++it;
 		}
 	}
 	// nothing to compile without mappings
