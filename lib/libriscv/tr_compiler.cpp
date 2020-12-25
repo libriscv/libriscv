@@ -15,6 +15,14 @@ static std::string cflags()
 	if (cflags) return std::string(cflags);
 	return "";
 }
+static bool keep_code()
+{
+	return getenv("KEEPCODE") != nullptr;
+}
+static bool verbose()
+{
+	return getenv("VERBOSE") != nullptr;
+}
 
 namespace riscv
 {
@@ -45,20 +53,27 @@ namespace riscv
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
 		// compile the translated code
-		printf("Command: %s\n", command.c_str());
+		if (verbose()) {
+			printf("Command: %s\n", command.c_str());
+		}
 		FILE* f = popen(command.c_str(), "r");
 		if (f == nullptr) {
 			unlink(namebuffer);
 			return {"", nullptr};
 		}
-		// get compiler output
-		char buffer[1024];
-		while (fgets(buffer, sizeof(buffer), f) != NULL) {
-			fprintf(stderr, "%s", buffer);
+		if (verbose()) {
+			// get compiler output
+			char buffer[1024];
+			while (fgets(buffer, sizeof(buffer), f) != NULL) {
+				fprintf(stderr, "%s", buffer);
+			}
 		}
 		pclose(f);
-		// delete temporary code file
-		unlink(namebuffer);
+
+		if (!keep_code()) {
+			// delete temporary code file
+			unlink(namebuffer);
+		}
 
 		return {outfile, dlopen(outfile.c_str(), RTLD_LAZY)};
 	}

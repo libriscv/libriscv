@@ -21,6 +21,10 @@ static eastl::hash_set<uint32_t> good_insn
 	RV64I_OP32,
 	RV32F_LOAD,
 	RV32F_STORE,
+	RV32F_FMADD,
+	RV32F_FMSUB,
+	RV32F_FNMADD,
+	RV32F_FNMSUB,
 };
 
 #include "tr_emit.cpp"
@@ -31,7 +35,16 @@ inline uint32_t opcode(const typename CPU<W>::instr_pair& ip) {
 }
 template <int W>
 inline bool gucci(const typename CPU<W>::instr_pair& ip) {
-	return good_insn.count(opcode<W>(ip)) > 0;
+	if (good_insn.count(opcode<W>(ip)) > 0) return true;
+	// we support some FP functions
+	if (ip.second.opcode() == RV32F_FPFUNC) {
+		if (ip.second.fpfunc() == RV32F__FADD || ip.second.fpfunc() == RV32F__FSUB ||
+			ip.second.fpfunc() == RV32F__FMUL || ip.second.fpfunc() == RV32F__FDIV ||
+			ip.second.fpfunc() == RV32F__FSGNJ_NX) {
+			return true;
+		}
+	}
+	return false;
 }
 
 }
@@ -93,8 +106,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				}
 }
 				// we can accelerate these and continue
-				if (gucci<W>(*it) == 0)
+				if (gucci<W>(*it) == false) {
+					// must exit native, ending block
 					break;
+				}
 			}
 			const size_t length = it - block;
 			if (length >= TRANSLATION_TRESHOLD && icounter + length < INSTRUCTIONS_MAX
@@ -119,15 +134,17 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			++it;
 		}
 	}
+	// run with VERBOSE=1 to see command and output
+	if (getenv("VERBOSE")) {
+		printf("Emitted %zu accelerated instructions and %zu functions!\n",
+			icounter, dlmappings.size());
+	}
 	// nothing to compile without mappings
-	printf("Emitted %zu accelerated instructions and %zu functions!\n",
-		icounter, dlmappings.size());
 	if (dlmappings.empty())
 		return;
 
 	extern std::pair<std::string, void*> compile(const std::string& code, int arch);
-	auto res = compile(code, W);
-	void* dylib = res.second;
+	auto [filename, dylib] = compile(code, W);
 	if (dylib) {
 		// map the API callback table
 		auto* ptr = dlsym(dylib, "init");
@@ -187,7 +204,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		}
 
 		// delete program
-		unlink(res.first.c_str());
+		unlink(filename.c_str());
 		// close dylib when machine is destructed
 		/*machine().add_destructor_callback(
 			[dylib] {

@@ -2,6 +2,7 @@
 #define IS_HANDLER(ip, instr) ((ip).first == DECODED_INSTR(instr).handler)
 #define IS_FPHANDLER(ip, instr) ((ip).first == DECODED_FLOAT(instr).handler)
 #define PCREL(x) std::to_string((address_t) (basepc + i * 4 + (x)))
+#define ILLEGAL_AND_EXIT() { code += "api.trigger_exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -399,7 +400,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				}
 				break;
 			default:
-				code += "api.trigger_exception(ILLEGAL_OPCODE);\n";
+				ILLEGAL_AND_EXIT();
 			}
 			} break;
 		case RV64I_OP32: {
@@ -455,7 +456,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				dst + " = " + SIGNEXTW + " ((uint32_t)" + src1 + " % (uint32_t)" + src2 + ");");
 				break;
 			default:
-				code += "api.trigger_exception(ILLEGAL_OPCODE);\n";
+				ILLEGAL_AND_EXIT();
 			}
 			} break;
 		case RV32F_LOAD: {
@@ -469,7 +470,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				code += "load_double(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read64(cpu, " + addr + "));";
 				break;
 			default:
-				code += "api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
+				ILLEGAL_AND_EXIT();
 			}
 			} break;
 		case RV32F_STORE: {
@@ -483,9 +484,75 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				code += "api.mem_write64(cpu, " + addr + ", " + from_fpreg(fi.Itype.rd) + ".i64);";
 				break;
 			default:
-				code += "api.trigger_exception(cpu, ILLEGAL_OPCODE);\n";
+				ILLEGAL_AND_EXIT();
 			}
 			} break;
+		case RV32F_FMADD:
+		case RV32F_FMSUB:
+		case RV32F_FNMADD:
+		case RV32F_FNMSUB: {
+			const rv32f_instruction fi { instr };
+			const auto dst = from_fpreg(fi.R4type.rd);
+			const auto rs1 = from_fpreg(fi.R4type.rs1);
+			const auto rs2 = from_fpreg(fi.R4type.rs2);
+			const auto rs3 = from_fpreg(fi.R4type.rs3);
+			const std::string sign = (instr.opcode() == RV32F_FNMADD || instr.opcode() == RV32F_FNMSUB) ? "-" : "";
+			const std::string add = (instr.opcode() == RV32F_FMSUB || instr.opcode() == RV32F_FNMSUB) ? " - " : " + ";
+			if (fi.R4type.funct2 == 0x0) { // float32
+				code += "set_float(&" + dst + ", " + sign + "(" + rs1 + ".f32[0] * " + rs2 + ".f32[0]" + add + rs3 + ".f32[0]));\n";
+			} else if (fi.R4type.funct2 == 0x1) { // float64
+				code += "set_double(&" + dst + ", " + sign + "(" + rs1 + ".f64 * " + rs2 + ".f64" + add + rs3 + ".f64));\n";
+			} else {
+				ILLEGAL_AND_EXIT();
+			}
+			} break;
+		case RV32F_FPFUNC: {
+			const rv32f_instruction fi { instr };
+			const auto dst = from_fpreg(fi.R4type.rd);
+			const auto rs1 = from_fpreg(fi.R4type.rs1);
+			const auto rs2 = from_fpreg(fi.R4type.rs2);
+			if (fi.R4type.funct2 < 0x2) { // fp32 / fp64
+			switch (instr.fpfunc()) {
+			case RV32F__FADD:
+			case RV32F__FSUB:
+			case RV32F__FMUL:
+			case RV32F__FDIV: {
+				std::string fop = " + ";
+				if (instr.fpfunc() == RV32F__FSUB) fop = " - ";
+				else if (instr.fpfunc() == RV32F__FMUL) fop = " * ";
+				else if (instr.fpfunc() == RV32F__FDIV) fop = " / ";
+				if (fi.R4type.funct2 == 0x0) { // fp32
+					code += "set_float(&" + dst + ", " + rs1 + ".f32[0]" + fop + rs2 + ".f32[0]);\n";
+				} else { // fp64
+					code += "set_double(&" + dst + ", " + rs1 + ".f64" + fop + rs2 + ".f64);\n";
+				}
+				} break;
+			case RV32F__FSGNJ_NX:
+				switch (fi.R4type.funct3) {
+				case 0x0: // FSGNJ
+					if (fi.R4type.funct2 == 0x0) { // fp32
+						code += "load_float(&" + dst + ", (" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
+					} else { // fp64
+						code += "load_double(&" + dst + ", ((uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits;\n";
+					} break;
+				case 0x1: // FSGNJ_N
+					if (fi.R4type.funct2 == 0x0) { // fp32
+						code += "load_float(&" + dst + ", (~" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
+					} else { // fp64
+						code += "load_double(&" + dst + ", (~(uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits;\n";
+					} break;
+				case 0x2: // FSGNJ_X
+					if (fi.R4type.funct2 == 0x0) { // fp32
+						code += "load_float(&" + dst + ", ((" + rs1 + ".lsign.sign ^ " + rs2 + ".lsign.sign) << 31) | " + rs1 + ".lsign.bits);\n";
+					} else { // fp64
+						code += "load_double(&" + dst + ", ((uint64_t)(" + rs1 + ".usign.sign ^ " + rs2 + ".usign.sign) << 63) | " + rs1 + ".usign.bits);\n";
+					} break;
+				default:
+					ILLEGAL_AND_EXIT();
+				} break;
+			} // fpfunc
+			} else ILLEGAL_AND_EXIT();
+			} break; // RV32F_FPFUNC
 		default:
 			throw std::runtime_error("Unhandled instruction in code emitter");
 		}
