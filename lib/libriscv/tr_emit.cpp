@@ -47,6 +47,7 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
 {
+	static const std::string SIGNEXTW = "(saddress_t) (int32_t)";
 	code += "extern void " + func + "(ThinCPU* cpu) {\n";
 	for (size_t i = 0; i < len; i++) {
 		const auto& instr = ip[i].second;
@@ -376,6 +377,87 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			break;
 		case RV32I_FENCE:
 			break;
+		case RV64I_OP_IMM32: {
+			const auto dst = from_reg(instr.Itype.rd);
+			const auto src = "(int32_t)" + from_reg(instr.Itype.rs1);
+			switch (instr.Itype.funct3) {
+			case 0x0:
+				// ADDIW: Add sign-extended 12-bit immediate
+				add_code(code, dst + " = " + SIGNEXTW + " (" + src + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				break;
+			case 0x1: // SLLIW:
+				add_code(code, dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
+				break;
+			case 0x5: // SRLIW / SRAIW:
+				if (LIKELY(!instr.Itype.is_srai())) {
+					add_code(code, dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
+				} else { // SRAIW: preserve the sign bit
+					add_code(code,
+					"{const uint32_t shifts = " + from_imm(instr.Itype.shift_imm()) + ";",
+					"const bool is_signed = (" + src + " & 0x80000000) != 0;",
+					dst + " = " + SIGNEXTW + " SRA32(is_signed, shifts, " + src + ");}");
+				}
+				break;
+			default:
+				code += "api.trigger_exception(ILLEGAL_OPCODE);\n";
+			}
+			} break;
+		case RV64I_OP32: {
+			const auto dst = from_reg(instr.Rtype.rd);
+			const auto src1 = "(int32_t)" + from_reg(instr.Rtype.rs1);
+			const auto src2 = "(int32_t)" + from_reg(instr.Rtype.rs2);
+
+			switch (instr.Rtype.jumptable_friendly_op()) {
+			case 0x0: // ADDW / SUBW
+				if (!instr.Rtype.is_f7())
+					add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " + " + src2 + ");");
+				else
+					add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " - " + src2 + ");");
+				break;
+			case 0x1: // SLLW
+				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " << (" + src2 + " & 0x1F));");
+				break;
+			case 0x5: // SRLW / SRAW
+				if (!instr.Rtype.is_f7()) { // SRL
+					add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
+				} else { // SRAW
+					add_code(code,
+						"{const bool is_signed = (" + src1 + " & 0x80000000) != 0;",
+						"const uint32_t shifts = " + src2 + " & 0x1F;",
+						dst + " = " + SIGNEXTW + " (SRA32(is_signed, shifts, " + src1 + ")); }");
+				}
+				break;
+			// M-extension
+			case 0x10: // MULW
+				add_code(code, dst + " = (int32_t) (" + src1 + " * " + src2 + ");");
+				break;
+			case 0x14: // DIVW
+				// division by zero is not an exception
+				add_code(code,
+				"if (LIKELY((uint32_t)" + src2 + " != 0))",
+				"if (LIKELY(!(" + src1 + " == -2147483648 && " + src2 + " == -1)))",
+				dst + " = " + SIGNEXTW + " (" + src1 + " / " + src2 + ");");
+				break;
+			case 0x15: // DIVUW
+				add_code(code,
+				"if (LIKELY((uint32_t)" + src2 + " != 0))",
+				dst + " = " + SIGNEXTW + " ((uint32_t)" + src1 + " / (uint32_t)" + src2 + ");");
+				break;
+			case 0x16: // REMW
+				add_code(code,
+				"if (LIKELY(" + src2 + " != 0))",
+				"if (LIKELY(!(" + src1 + " == -2147483648 && " + src2 + " == -1)))",
+				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
+				break;
+			case 0x17: // REMUW
+				add_code(code,
+				"if (LIKELY((uint32_t)" + src2 + " != 0))",
+				dst + " = " + SIGNEXTW + " ((uint32_t)" + src1 + " % (uint32_t)" + src2 + ");");
+				break;
+			default:
+				code += "api.trigger_exception(ILLEGAL_OPCODE);\n";
+			}
+			} break;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi { instr };
 			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());

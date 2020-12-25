@@ -17,8 +17,8 @@ static eastl::hash_set<uint32_t> good_insn
 	RV32I_LUI,
 	RV32I_AUIPC,
 	RV32I_FENCE,
-	//RV64I_OP_IMM32,
-	//RV64I_OP32,
+	RV64I_OP_IMM32,
+	RV64I_OP32,
 	RV32F_LOAD,
 	RV32F_STORE,
 };
