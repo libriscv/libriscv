@@ -1,7 +1,7 @@
-static constexpr int TRANSLATION_TRESHOLD = 6;
-static constexpr int INSTRUCTIONS_MAX = 64'000;
-static constexpr int TRANSLATIONS_MAX = 4000;
-static constexpr int LOOP_OFFSET_MAX = 80;
+static constexpr int  TRANSLATION_TRESHOLD = 6;
+static constexpr int  INSTRUCTIONS_MAX = 64'000;
+static constexpr int  TRANSLATIONS_MAX = 2500;
+static constexpr int  LOOP_OFFSET_MAX = 80;
 }
 #include <EASTL/hash_set.h>
 namespace riscv {
@@ -23,6 +23,7 @@ static eastl::hash_set<uint32_t> good_insn
 	RV32F_STORE,
 };
 
+#define PROLOGUE_OPTIMIZATIONS
 #include "tr_emit.cpp"
 
 template <int W>

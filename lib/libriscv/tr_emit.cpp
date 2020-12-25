@@ -44,11 +44,50 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 	}
 }
 
+#ifdef PROLOGUE_OPTIMIZATIONS
+struct OptimizedPrologue {
+	int ra = 0; int64_t ra_imm = 0;
+	int s0 = 0; int64_t s0_imm = 0;
+};
+
+inline bool handle_prologue(std::string& code, rv32i_instruction instr, OptimizedPrologue& prologue)
+{
+	if (instr.Stype.rs2 == 2) {
+		add_code(code, std::string(prologue.ra ? "" : "address_t ") + "ra = " + from_reg(instr.Stype.rs2) + ";");
+		prologue.ra = instr.Stype.rs1;
+		prologue.ra_imm = instr.Stype.signed_imm();
+		return true; // we can only expect RA to be a 100% hit
+	} else if (instr.Stype.rs2 == 8) {
+		add_code(code, std::string(prologue.s0 ? "" : "address_t ") + "s0 = " + from_reg(instr.Stype.rs2) + ";");
+		prologue.s0 = instr.Stype.rs1;
+		prologue.s0_imm = instr.Stype.signed_imm();
+	}
+	return false;
+}
+inline bool handle_epilogue(std::string& code, rv32i_instruction instr, OptimizedPrologue& prologue)
+{
+	const int reg = instr.Itype.rd;
+	if (reg == 2 && prologue.ra == instr.Itype.rs1 && prologue.ra_imm == instr.Itype.signed_imm()) {
+		add_code(code, from_reg(reg) + " = ra;");
+		return true;
+	} else if (reg == 8 && prologue.s0 == instr.Itype.rs1 && prologue.s0_imm == instr.Itype.signed_imm()) {
+		add_code(code, from_reg(reg) + " = s0;");
+		return true;
+	}
+	return false;
+}
+#endif
+
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
 {
 	static const std::string SIGNEXTW = "(saddress_t) (int32_t)";
 	code += "extern void " + func + "(ThinCPU* cpu) {\n";
+#ifdef PROLOGUE_OPTIMIZATIONS
+	// caching for most common function prologue
+	OptimizedPrologue prologue;
+#endif
+	// code generation
 	for (size_t i = 0; i < len; i++) {
 		const auto& instr = ip[i].second;
 		switch (instr.opcode()) {
@@ -79,6 +118,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_I32)) {
+#ifdef PROLOGUE_OPTIMIZATIONS
+				bool handled = false;
+				if constexpr (W == 4) {
+					handled = handle_epilogue(code, instr, prologue);
+				}
+				if (!handled)
+#endif
 				add_code(code,
 					from_reg(instr.Itype.rd) + " = (saddress_t) (int32_t) api.mem_read32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
@@ -99,6 +145,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_U64)) {
+#ifdef PROLOGUE_OPTIMIZATIONS
+				bool handled = false;
+				if constexpr (W == 8) {
+					handled = handle_epilogue(code, instr, prologue);
+				}
+				if (!handled)
+#endif
 				add_code(code,
 					from_reg(instr.Itype.rd) + " = api.mem_read64(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
@@ -123,11 +176,25 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				);
 			}
 			else if (IS_HANDLER(ip[i], STORE_I32_IMM)) {
+#ifdef PROLOGUE_OPTIMIZATIONS
+				bool handled = false;
+				if constexpr (W == 4) {
+					handled = handle_prologue(code, instr, prologue);
+				}
+				if (!handled)
+#endif
 				add_code(code,
 					"api.mem_write32(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], STORE_I64_IMM)) {
+#ifdef PROLOGUE_OPTIMIZATIONS
+				bool handled = false;
+				if constexpr (W == 8) {
+					handled = handle_prologue(code, instr, prologue);
+				}
+				if (!handled)
+#endif
 				add_code(code,
 					"api.mem_write64(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 				);
