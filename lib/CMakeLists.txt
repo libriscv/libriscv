@@ -8,6 +8,9 @@ option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
+if (RISCV_EXPERIMENTAL)
+	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
+endif()
 
 set (SOURCES
 		libriscv/cpu.cpp
@@ -33,6 +36,7 @@ endif()
 
 add_subdirectory(EASTL)
 target_compile_definitions(EASTL PUBLIC EASTL_EXCEPTIONS_ENABLED=1)
+target_compile_options(EASTL PRIVATE -Wno-unused-parameter)
 
 add_library(riscv ${SOURCES})
 set_target_properties(riscv PROPERTIES CXX_STANDARD 17)
@@ -57,7 +61,10 @@ if (RISCV_ICACHE)
 endif()
 if (RISCV_EXPERIMENTAL)
 	target_compile_definitions(riscv PUBLIC
-		RISCV_INSTR_CACHE_PREGEN=1
+		RISCV_INSTR_CACHE_PREGEN=1)
+endif()
+if (RISCV_BINARY_TRANSLATION)
+	target_compile_definitions(riscv PUBLIC
 		RISCV_BINARY_TRANSLATION=1)
 	target_link_libraries(riscv dl)
 endif()

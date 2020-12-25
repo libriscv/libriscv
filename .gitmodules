@@ -6,4 +6,4 @@
 	url = https://github.com/yhirose/cpp-httplib.git
 [submodule "lib/EASTL"]
 	path = lib/EASTL
-	url = https://github.com/electronicarts/EASTL.git
+	url = https://github.com/fwsGonzo/EASTL.git
