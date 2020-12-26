@@ -533,13 +533,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 					if (fi.R4type.funct2 == 0x0) { // fp32
 						code += "load_float(&" + dst + ", (" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
 					} else { // fp64
-						code += "load_double(&" + dst + ", ((uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits;\n";
+						code += "load_double(&" + dst + ", ((uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits);\n";
 					} break;
 				case 0x1: // FSGNJ_N
 					if (fi.R4type.funct2 == 0x0) { // fp32
 						code += "load_float(&" + dst + ", (~" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
 					} else { // fp64
-						code += "load_double(&" + dst + ", (~(uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits;\n";
+						code += "load_double(&" + dst + ", (~(uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits);\n";
 					} break;
 				case 0x2: // FSGNJ_X
 					if (fi.R4type.funct2 == 0x0) { // fp32

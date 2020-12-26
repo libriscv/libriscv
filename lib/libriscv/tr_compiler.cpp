@@ -47,7 +47,7 @@ namespace riscv
 		// system compiler invocation
 		const std::string command =
 			compiler() + " -O0 -s -std=c99 -fPIC -shared -x c "
-			" -ffreestanding -nostdlib "
+			" -ffreestanding -nostdlib -fexceptions -fno-omit-frame-pointer "
 			 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
 			 + " " + cflags() + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
