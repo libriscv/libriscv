@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <type_traits>
 
 namespace riscv
@@ -52,18 +53,6 @@ namespace riscv
 		const instruction_printer<W> printer; // callback for logging one instruction
 	};
 
-	enum trapmode {
-		TRAP_READ  = 0x0,
-		TRAP_WRITE = 0x1000,
-		TRAP_EXEC  = 0x2000,
-	};
-}
-
-#ifndef RISCV_TRANSLATION_DYLIB
-// Optimize compile times by skipping complex includes
-#include <exception>
-namespace riscv
-{
 	class MachineException : public std::exception {
 	public:
 	    explicit MachineException(const int type, const char* message, const int data = 0)
@@ -83,5 +72,10 @@ namespace riscv
 	class MachineTimeoutException : public MachineException {
 		using MachineException::MachineException;
 	};
+
+	enum trapmode {
+		TRAP_READ  = 0x0,
+		TRAP_WRITE = 0x1000,
+		TRAP_EXEC  = 0x2000,
+	};
 }
-#endif
