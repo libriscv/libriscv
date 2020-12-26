@@ -26,8 +26,8 @@ static bool verbose()
 
 namespace riscv
 {
-	std::pair<std::string, void*>
-	compile(const std::string& code, int arch)
+	void*
+	compile(const std::string& code, int arch, const char* outfile)
 	{
 		// create temporary filename
 		char namebuffer[64];
@@ -35,21 +35,20 @@ namespace riscv
 		// open a temporary file with owner privs
 		int fd = mkstemp(namebuffer);
 		if (fd < 0) {
-			return {"", nullptr};
+			return nullptr;
 		}
 		// write translated code to temp file
 		ssize_t len = write(fd, code.c_str(), code.size());
 		if (len < (ssize_t) code.size()) {
 			unlink(namebuffer);
-			return {"", nullptr};
+			return nullptr;
 		}
-		const auto outfile = std::string(namebuffer) + ".elf";
 		// system compiler invocation
 		const std::string command =
 			compiler() + " -O0 -s -std=c99 -fPIC -shared -x c "
 			" -ffreestanding -nostdlib -fexceptions -fno-omit-frame-pointer "
 			 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
-			 + " " + cflags() + " -o " + outfile + " "
+			 + " " + cflags() + " -o " + std::string(outfile) + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
 		// compile the translated code
@@ -59,7 +58,7 @@ namespace riscv
 		FILE* f = popen(command.c_str(), "r");
 		if (f == nullptr) {
 			unlink(namebuffer);
-			return {"", nullptr};
+			return nullptr;
 		}
 		if (verbose()) {
 			// get compiler output
@@ -75,6 +74,6 @@ namespace riscv
 			unlink(namebuffer);
 		}
 
-		return {outfile, dlopen(outfile.c_str(), RTLD_LAZY)};
+		return dlopen(outfile, RTLD_LAZY);
 	}
 }

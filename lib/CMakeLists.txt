@@ -66,6 +66,7 @@ if (RISCV_EXPERIMENTAL)
 endif()
 if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC
-		RISCV_BINARY_TRANSLATION=1)
+		RISCV_BINARY_TRANSLATION=1
+		RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv dl)
 endif()

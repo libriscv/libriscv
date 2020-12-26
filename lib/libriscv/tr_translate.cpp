@@ -5,6 +5,7 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "tr_api.hpp"
+#include "util/crc32.hpp"
 
 namespace riscv
 {
@@ -147,80 +148,100 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	if (machine().memory.is_binary_translated()) {
 		throw std::runtime_error("Machine already reports binary translation");
 	}
+	// create cacheable filename
+	const uint32_t checksum = crc32(code.c_str(), code.size());
+	char filename[1024];
+	int len = snprintf(filename, sizeof(filename),
+		"/tmp/rvbintr-%08X", checksum);
+	if (len <= 0) {
+		return;
+	}
+	void* dylib = nullptr;
 
-	extern std::pair<std::string, void*> compile(const std::string& code, int arch);
-	auto [filename, dylib] = compile(code, W);
-	if (dylib) {
-		// map the API callback table
-		auto* ptr = dlsym(dylib, "init");
-		if (ptr == nullptr) {
-			fprintf(stderr, "Could not find init function\n");
-			dlclose(dylib);
+#ifdef RISCV_TRANSLATION_CACHE
+	if (access(filename, R_OK) == 0) {
+		dylib = dlopen(filename, RTLD_LAZY);
+	}
+#endif
+	// compile ourselves
+	if (dylib == nullptr) {
+		extern void* compile(const std::string& code, int arch, const char*);
+		dylib = compile(code, W, filename);
+		// check compilation result
+		if (dylib == nullptr) {
 			return;
 		}
-		auto func = (void (*)(const CallbackTable<W>&)) ptr;
-		func(CallbackTable<W>{
-			.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
-				return cpu.machine().memory.template read<uint8_t> (addr);
-			},
-			.mem_read16 = [] (CPU<W>& cpu, address_type<W> addr) -> uint16_t {
-				return cpu.machine().memory.template read<uint16_t> (addr);
-			},
-			.mem_read32 = [] (CPU<W>& cpu, address_type<W> addr) -> uint32_t {
-				return cpu.machine().memory.template read<uint32_t> (addr);
-			},
-			.mem_read64 = [] (CPU<W>& cpu, address_type<W> addr) -> uint64_t {
-				return cpu.machine().memory.template read<uint64_t> (addr);
-			},
-			.mem_write8 = [] (CPU<W>& cpu, address_type<W> addr, uint8_t val) {
-				cpu.machine().memory.template write<uint8_t> (addr, val);
-			},
-			.mem_write16 = [] (CPU<W>& cpu, address_type<W> addr, uint16_t val) {
-				cpu.machine().memory.template write<uint16_t> (addr, val);
-			},
-			.mem_write32 = [] (CPU<W>& cpu, address_type<W> addr, uint32_t val) {
-				cpu.machine().memory.template write<uint32_t> (addr, val);
-			},
-			.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
-				cpu.machine().memory.template write<uint64_t> (addr, val);
-			},
-			.finish_block = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
-				cpu.registers().pc = addr;
-				cpu.machine().increment_counter(val);
-			},
-			.jump = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
-				cpu.jump(addr);
-				cpu.machine().increment_counter(val);
-			},
-			.syscall = [] (CPU<W>& cpu, uint64_t val) {
-				cpu.registers().pc += val * 4;
-				cpu.machine().increment_counter(val);
-				cpu.machine().system_call(cpu.reg(17));
-			},
-			.ebreak = [] (CPU<W>& cpu, uint64_t val) {
-				cpu.registers().pc += val * 4;
-				cpu.machine().increment_counter(val);
-				cpu.machine().ebreak();
-			},
-			.trigger_exception = [] (CPU<W>& cpu, int e) {
-				cpu.trigger_exception(e);
-			},
-		});
+	}
+	// map the API callback table
+	auto* ptr = dlsym(dylib, "init");
+	if (ptr == nullptr) {
+		fprintf(stderr, "libriscv: Could not find dylib init function\n");
+		dlclose(dylib);
+		return;
+	}
+	auto func = (void (*)(const CallbackTable<W>&)) ptr;
+	func(CallbackTable<W>{
+		.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
+			return cpu.machine().memory.template read<uint8_t> (addr);
+		},
+		.mem_read16 = [] (CPU<W>& cpu, address_type<W> addr) -> uint16_t {
+			return cpu.machine().memory.template read<uint16_t> (addr);
+		},
+		.mem_read32 = [] (CPU<W>& cpu, address_type<W> addr) -> uint32_t {
+			return cpu.machine().memory.template read<uint32_t> (addr);
+		},
+		.mem_read64 = [] (CPU<W>& cpu, address_type<W> addr) -> uint64_t {
+			return cpu.machine().memory.template read<uint64_t> (addr);
+		},
+		.mem_write8 = [] (CPU<W>& cpu, address_type<W> addr, uint8_t val) {
+			cpu.machine().memory.template write<uint8_t> (addr, val);
+		},
+		.mem_write16 = [] (CPU<W>& cpu, address_type<W> addr, uint16_t val) {
+			cpu.machine().memory.template write<uint16_t> (addr, val);
+		},
+		.mem_write32 = [] (CPU<W>& cpu, address_type<W> addr, uint32_t val) {
+			cpu.machine().memory.template write<uint32_t> (addr, val);
+		},
+		.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
+			cpu.machine().memory.template write<uint64_t> (addr, val);
+		},
+		.finish_block = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
+			cpu.registers().pc = addr;
+			cpu.machine().increment_counter(val);
+		},
+		.jump = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
+			cpu.jump(addr);
+			cpu.machine().increment_counter(val);
+		},
+		.syscall = [] (CPU<W>& cpu, uint64_t val) {
+			cpu.registers().pc += val * 4;
+			cpu.machine().increment_counter(val);
+			cpu.machine().system_call(cpu.reg(17));
+		},
+		.ebreak = [] (CPU<W>& cpu, uint64_t val) {
+			cpu.registers().pc += val * 4;
+			cpu.machine().increment_counter(val);
+			cpu.machine().ebreak();
+		},
+		.trigger_exception = [] (CPU<W>& cpu, int e) {
+			cpu.trigger_exception(e);
+		},
+	});
 
-		// map all the functions
-		for (auto& mapping : dlmappings) {
-			auto* func = dlsym(dylib, mapping.symbol.c_str());
-			if (func != nullptr) {
-				mapping.ipair.first = (instruction_handler<W>) func;
-			}
+	// map all the functions
+	for (auto& mapping : dlmappings) {
+		auto* func = dlsym(dylib, mapping.symbol.c_str());
+		if (func != nullptr) {
+			mapping.ipair.first = (instruction_handler<W>) func;
 		}
-
-		// delete program
-		unlink(filename.c_str());
-		// close dylib when machine is destructed
-		machine().memory.set_binary_translated(dylib);
 	}
 
+#ifndef RISCV_TRANSLATION_CACHE
+	// delete program
+	unlink(filename);
+#endif
+	// close dylib when machine is destructed
+	machine().memory.set_binary_translated(dylib);
 }
 
 	template void CPU<4>::try_translate(address_t, std::vector<instr_pair>&) const;
