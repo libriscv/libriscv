@@ -142,8 +142,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	}
 	// nothing to compile without mappings
 	if (dlmappings.empty()) {
-		machine().set_binary_translated(false);
 		return;
+	}
+	if (machine().memory.is_binary_translated()) {
+		throw std::runtime_error("Machine already reports binary translation");
 	}
 
 	extern std::pair<std::string, void*> compile(const std::string& code, int arch);
@@ -216,11 +218,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		// delete program
 		unlink(filename.c_str());
 		// close dylib when machine is destructed
-		machine().add_destructor_callback(
-			[dl = dylib] {
-				dlclose(dl);
-			});
-		machine().set_binary_translated(true);
+		machine().memory.set_binary_translated(dylib);
 	}
 
 }

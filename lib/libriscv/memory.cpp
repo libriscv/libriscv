@@ -1,4 +1,5 @@
 #include "memory.hpp"
+#include <dlfcn.h>
 #include <stdexcept>
 #ifdef __GNUG__
 #include "decoder_cache.cpp"
@@ -63,6 +64,10 @@ namespace riscv
 #endif
 #ifdef RISCV_INSTR_CACHE
 		delete[] m_decoder_cache;
+#endif
+#ifdef RISCV_BINARY_TRANSLATION
+		if (m_bintr_dl)
+			dlclose(m_bintr_dl);
 #endif
 	}
 
