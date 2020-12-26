@@ -556,6 +556,25 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				default:
 					ILLEGAL_AND_EXIT();
 				} break;
+			case RV32F__FCVT_SD_DS: {
+				if (fi.R4type.funct2 == 0x0) {
+					code += "set_float(&" + dst + ", " + rs1 + ".f64);\n";
+				} else if (fi.R4type.funct2 == 0x1) {
+					code += "set_double(&" + dst + ", " + rs1 + ".f32[0]);\n";
+				} else {
+					ILLEGAL_AND_EXIT();
+				}
+				} break;
+			case RV32F__FCVT_SD_W: {
+				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddress_t)" : "");
+				if (fi.R4type.funct2 == 0x0) {
+					code += "set_float(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+				} else if (fi.R4type.funct2 == 0x1) {
+					code += "set_double(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+				} else {
+					ILLEGAL_AND_EXIT();
+				}
+				} break;
 			} // fpfunc
 			} else ILLEGAL_AND_EXIT();
 			} break; // RV32F_FPFUNC

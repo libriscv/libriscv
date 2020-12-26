@@ -22,8 +22,14 @@
 #define RV32F_FPFUNC   0b1010011
 #define RV32A_ATOMIC   0b0101111
 
-#define RV32F__FADD      0b00000
-#define RV32F__FSUB      0b00001
-#define RV32F__FMUL      0b00010
-#define RV32F__FDIV      0b00011
-#define RV32F__FSGNJ_NX  0b00100
+#define RV32F__FADD       0b00000
+#define RV32F__FSUB       0b00001
+#define RV32F__FMUL       0b00010
+#define RV32F__FDIV       0b00011
+#define RV32F__FSGNJ_NX   0b00100
+#define RV32F__FMIN_MAX   0b00101
+#define RV32F__FSQRT      0b01011
+#define RV32F__FEQ_LT_LE  0b10100
+#define RV32F__FCVT_SD_DS 0b01000
+#define RV32F__FCVT_W_SD  0b11000
+#define RV32F__FCVT_SD_W  0b11010
