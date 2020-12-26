@@ -1,10 +1,17 @@
-static constexpr int TRANSLATION_TRESHOLD = 6;
-static constexpr int INSTRUCTIONS_MAX = 64'000;
-static constexpr int TRANSLATIONS_MAX = 4000;
-static constexpr int LOOP_OFFSET_MAX = 80;
-}
 #include <EASTL/hash_set.h>
-namespace riscv {
+#include <dlfcn.h>
+#include <unistd.h>
+#include "machine.hpp"
+#include "instruction_list.hpp"
+#include "rv32i_instr.hpp"
+#include "tr_api.hpp"
+
+namespace riscv
+{
+	static constexpr int TRANSLATION_TRESHOLD = 6;
+	static constexpr int INSTRUCTIONS_MAX = 64'000;
+	static constexpr int TRANSLATIONS_MAX = 4000;
+	static constexpr int LOOP_OFFSET_MAX = 80;
 
 static eastl::hash_set<uint32_t> good_insn
 {
@@ -27,8 +34,6 @@ static eastl::hash_set<uint32_t> good_insn
 	RV32F_FNMSUB,
 };
 
-#include "tr_emit.cpp"
-
 template <int W>
 inline uint32_t opcode(const typename CPU<W>::instr_pair& ip) {
 	return ip.second.opcode();
@@ -47,12 +52,6 @@ inline bool gucci(const typename CPU<W>::instr_pair& ip) {
 	}
 	return false;
 }
-
-}
-#include <dlfcn.h>
-#include <unistd.h>
-#include "tr_api.hpp"
-namespace riscv {
 
 template <int W>
 struct NamedIPair {
@@ -118,11 +117,11 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				&& already_generated.count(basepc) == 0)
 			{
 				already_generated.insert(basepc);
-				//printf("Block found. Length: %zu\n", length);
-				const std::string func =
+				//printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
+				std::string func =
 					"f" + std::to_string(dlmappings.size());
 				emit(code, func, basepc, &*block, length);
-				dlmappings.push_back({*block, func});
+				dlmappings.push_back({*block, std::move(func)});
 				icounter += length;
 				// we can't translate beyond this estimate, otherwise
 				// the compiler will never finish code generation
@@ -192,7 +191,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			.syscall = [] (CPU<W>& cpu, uint64_t val) {
 				cpu.registers().pc += val * 4;
 				cpu.machine().increment_counter(val);
-				cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
+				cpu.machine().system_call(cpu.reg(17));
 			},
 			.ebreak = [] (CPU<W>& cpu, uint64_t val) {
 				cpu.registers().pc += val * 4;
@@ -220,4 +219,9 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				dlclose(dylib);
 			});*/
 	}
+
+}
+
+	template void CPU<4>::try_translate(address_t, std::vector<instr_pair>&) const;
+	template void CPU<8>::try_translate(address_t, std::vector<instr_pair>&) const;
 }

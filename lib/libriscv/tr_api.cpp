@@ -3,7 +3,6 @@
 namespace riscv {
 extern const std::string bintr_code =
 R"123(#include <stdint.h>
-#include <stdbool.h>
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #define ILLEGAL_OPCODE  0
@@ -70,13 +69,13 @@ static struct CallbackTable {
 	void (*exception)(CPU*, int);
 } api;
 
-static inline uint32_t SRA32(bool is_signed, uint32_t shifts, uint32_t value)
+static inline uint32_t SRA32(int is_signed, uint32_t shifts, uint32_t value)
 {
 	const uint32_t sign_bits = -is_signed ^ 0x0;
 	const uint32_t sign_shifted = sign_bits << (32 - shifts);
 	return (value >> shifts) | sign_shifted;
 }
-static inline uint64_t SRA64(bool is_signed, uint32_t shifts, uint64_t value)
+static inline uint64_t SRA64(int is_signed, uint32_t shifts, uint64_t value)
 {
 	const uint64_t sign_bits = -is_signed ^ 0x0;
 	const uint64_t sign_shifted = sign_bits << (64 - shifts);

@@ -31,6 +31,7 @@ if (RISCV_EXPERIMENTAL)
 	list(APPEND SOURCES
 		libriscv/tr_api.cpp
 		libriscv/tr_compiler.cpp
+		libriscv/tr_translate.cpp
 	)
 endif()
 

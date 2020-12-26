@@ -210,7 +210,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				} else { // SRAI: preserve the sign bit
 					add_code(code,
 						"{addr_t bit = 1ul << (sizeof(" + src + ") * 8 - 1);",
-						"bool is_signed = (" + src + " & bit) != 0;");
+						"int is_signed = (" + src + " & bit) != 0;");
 					if constexpr (W == 8) {
 						add_code(code,
 							"uint32_t shifts = " + std::to_string(instr.Itype.shift64_imm()) + ";",
@@ -273,7 +273,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				} else { // SRA
 					add_code(code,
 						"{addr_t bit = 1ul << (sizeof(" + from_reg(instr.Rtype.rs1) + ") * 8 - 1);",
-						"bool is_signed = (" + from_reg(instr.Rtype.rs1) + " & bit) != 0;"
+						"int is_signed = (" + from_reg(instr.Rtype.rs1) + " & bit) != 0;"
 					);
 					if constexpr (W == 8) {
 						add_code(code,
@@ -402,7 +402,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				} else { // SRAIW: preserve the sign bit
 					add_code(code,
 					"{const uint32_t shifts = " + from_imm(instr.Itype.shift_imm()) + ";",
-					"const bool is_signed = (" + src + " & 0x80000000) != 0;",
+					"const int is_signed = (" + src + " & 0x80000000) != 0;",
 					dst + " = " + SIGNEXTW + " SRA32(is_signed, shifts, " + src + ");}");
 				}
 				break;
@@ -430,7 +430,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 					add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
 				} else { // SRAW
 					add_code(code,
-						"{const bool is_signed = (" + src1 + " & 0x80000000) != 0;",
+						"{const int is_signed = (" + src1 + " & 0x80000000) != 0;",
 						"const uint32_t shifts = " + src2 + " & 0x1F;",
 						dst + " = " + SIGNEXTW + " (SRA32(is_signed, shifts, " + src1 + ")); }");
 				}
