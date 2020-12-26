@@ -138,6 +138,11 @@ namespace riscv
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
+		// Returns true if the guest environment contains native code
+		// generated from binary translation.
+		bool is_binary_translated() const { return m_binary_translation; }
+		void set_binary_translated(bool bt) const { m_binary_translation = bt; }
+
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
 		// Returns the machine to a previously stored state
@@ -150,8 +155,9 @@ namespace riscv
 		static long unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
-		bool     m_stopped = false;
-		uint64_t m_counter = 0;
+		bool         m_stopped = false;
+		mutable bool m_binary_translation = false;
+		uint64_t     m_counter = 0;
 		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers {};
 		mutable eastl::fixed_vector<Function<void()>, 16> m_destructor_callbacks;
 		Function<void(int)> m_on_unhandled_syscall = nullptr;

@@ -141,8 +141,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			icounter, dlmappings.size());
 	}
 	// nothing to compile without mappings
-	if (dlmappings.empty())
+	if (dlmappings.empty()) {
+		machine().set_binary_translated(false);
 		return;
+	}
 
 	extern std::pair<std::string, void*> compile(const std::string& code, int arch);
 	auto [filename, dylib] = compile(code, W);
@@ -218,6 +220,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			[dl = dylib] {
 				dlclose(dl);
 			});
+		machine().set_binary_translated(true);
 	}
 
 }
