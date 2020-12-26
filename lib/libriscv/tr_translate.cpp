@@ -149,7 +149,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		throw std::runtime_error("Machine already reports binary translation");
 	}
 	// create cacheable filename
-	const uint32_t checksum = crc32(code.c_str(), code.size());
+	const uint32_t checksum = crc32c(code.c_str(), code.size());
 	char filename[1024];
 	int len = snprintf(filename, sizeof(filename),
 		"/tmp/rvbintr-%08X", checksum);

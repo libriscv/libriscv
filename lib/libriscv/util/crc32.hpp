@@ -48,4 +48,7 @@ inline constexpr auto crc32(const void* vdata, const size_t len)
     return ~crc;
 }
 
+// CRC32-C with hardware acceleration on amd64
+extern uint32_t crc32c(const void* data, size_t);
+
 } // riscv

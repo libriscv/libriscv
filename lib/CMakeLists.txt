@@ -21,6 +21,7 @@ set (SOURCES
 		libriscv/rv32i.cpp
 		libriscv/rv64i.cpp
 		libriscv/serialize.cpp
+		libriscv/util/crc32c.cpp
 	)
 if (RISCV_DEBUG)
 	list(APPEND SOURCES
