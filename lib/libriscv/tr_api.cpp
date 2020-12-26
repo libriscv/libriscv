@@ -9,11 +9,11 @@ R"123(#include <stdint.h>
 #define ILLEGAL_OPCODE  0
 
 #if RISCV_TRANSLATION_DYLIB == 4
-	typedef uint32_t address_t;
-	typedef int32_t saddress_t;
+	typedef uint32_t addr_t;
+	typedef int32_t saddr_t;
 #else
-	typedef uint64_t address_t;
-	typedef int64_t saddress_t;
+	typedef uint64_t addr_t;
+	typedef int64_t saddr_t;
 #endif
 
 typedef union {
@@ -32,41 +32,40 @@ typedef union {
 	} usign;
 } fp64reg;
 
-static inline void load_float(fp64reg* reg, uint32_t fv) {
+static inline void load_fl(fp64reg* reg, uint32_t fv) {
 	reg->i32[0] = fv;
 	reg->i32[1] = 0xFFFFFFFF;
 }
-static inline void load_double(fp64reg* reg, uint64_t dv) {
+static inline void load_dbl(fp64reg* reg, uint64_t dv) {
 	reg->i64 = dv;
 }
-static inline void set_float(fp64reg* reg, float f) {
+static inline void set_fl(fp64reg* reg, float f) {
 	reg->f32[0] = f;
 	reg->i32[1] = 0xFFFFFFFF;
 }
-static inline void set_double(fp64reg* reg, double d) {
+static inline void set_dbl(fp64reg* reg, double d) {
 	reg->f64 = d;
 }
 
 // Thin variant of CPU for higher compilation speed
 typedef struct {
-	address_t  pc;
-	address_t  regs[32];
-	fp64reg    fpreg[32];
-} ThinCPU;
+	addr_t  pc;
+	addr_t  r[32];
+	fp64reg    fr[32];
+} CPU;
 
 static struct CallbackTable {
-	uint8_t  (*mem_read8)(ThinCPU*, address_t addr);
-	uint16_t (*mem_read16)(ThinCPU*, address_t addr);
-	uint32_t (*mem_read32)(ThinCPU*, address_t addr);
-	uint64_t (*mem_read64)(ThinCPU*, address_t addr);
-	void (*mem_write8) (ThinCPU*, address_t addr, uint8_t);
-	void (*mem_write16)(ThinCPU*, address_t addr, uint16_t);
-	void (*mem_write32)(ThinCPU*, address_t addr, uint32_t);
-	void (*mem_write64)(ThinCPU*, address_t addr, uint64_t);
-	void (*finish_block)(ThinCPU*, address_t, uint64_t);
-	void (*jump)(ThinCPU*, address_t, uint64_t);
-	void (*increment_counter)(ThinCPU*, uint64_t);
-	void (*trigger_exception)(ThinCPU*, int);
+	uint8_t  (*mem_ld8)(CPU*, addr_t addr);
+	uint16_t (*mem_ld16)(CPU*, addr_t addr);
+	uint32_t (*mem_ld32)(CPU*, addr_t addr);
+	uint64_t (*mem_ld64)(CPU*, addr_t addr);
+	void (*mem_st8) (CPU*, addr_t addr, uint8_t);
+	void (*mem_st16)(CPU*, addr_t addr, uint16_t);
+	void (*mem_st32)(CPU*, addr_t addr, uint32_t);
+	void (*mem_st64)(CPU*, addr_t addr, uint64_t);
+	void (*finish)(CPU*, addr_t, uint64_t);
+	void (*jump)(CPU*, addr_t, uint64_t);
+	void (*exception)(CPU*, int);
 } api;
 
 static inline uint32_t SRA32(bool is_signed, uint32_t shifts, uint32_t value)

@@ -2,7 +2,7 @@
 #define IS_HANDLER(ip, instr) ((ip).first == DECODED_INSTR(instr).handler)
 #define IS_FPHANDLER(ip, instr) ((ip).first == DECODED_FLOAT(instr).handler)
 #define PCREL(x) std::to_string((address_t) (basepc + i * 4 + (x)))
-#define ILLEGAL_AND_EXIT() { code += "api.trigger_exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
+#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -12,11 +12,11 @@ inline void add_code(std::string& code, Args&& ... addendum) {
 }
 inline std::string from_reg(int reg) {
 	if (reg != 0)
-		return "cpu->regs[" + std::to_string(reg) + "]";
+		return "cpu->r[" + std::to_string(reg) + "]";
 	return "0";
 }
 inline std::string from_fpreg(int reg) {
-	return "cpu->fpreg[" + std::to_string(reg) + "]";
+	return "cpu->fr[" + std::to_string(reg) + "]";
 }
 inline std::string from_imm(int64_t imm) {
 	return std::to_string(imm);
@@ -28,7 +28,7 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, addr
 	add_code(code,
 		((sign == false) ?
 		"if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {" :
-		"if ((saddress_t)" + from_reg(instr.Btype.rs1) + op + " (saddress_t)" + from_reg(instr.Btype.rs2) + ") {"),
+		"if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {"),
 		"api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ", " + std::to_string(i) + ");",
 		"return;}");
 }
@@ -48,65 +48,65 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
 {
-	static const std::string SIGNEXTW = "(saddress_t) (int32_t)";
-	code += "extern void " + func + "(ThinCPU* cpu) {\n";
+	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
+	code += "extern void " + func + "(CPU* cpu) {\n";
 	for (size_t i = 0; i < len; i++) {
 		const auto& instr = ip[i].second;
 		switch (instr.opcode()) {
 		case RV32I_LOAD:
 			if (IS_HANDLER(ip[i], LOAD_I8_DUMMY)) {
 				add_code(code,
-					"api.mem_read8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					"api.mem_ld8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_I8)) {
 				add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddress_t) (int8_t) api.mem_read8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					from_reg(instr.Itype.rd) + " = (saddr_t) (int8_t) api.mem_ld8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_I16_DUMMY)) {
 				add_code(code,
-					"api.mem_read16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					"api.mem_ld16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_I16)) {
 				add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddress_t) (int16_t) api.mem_read16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					from_reg(instr.Itype.rd) + " = (saddr_t) (int16_t) api.mem_ld16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_I32_DUMMY)) {
 				add_code(code,
-					"api.mem_read32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					"api.mem_ld32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_I32)) {
 				add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddress_t) (int32_t) api.mem_read32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					from_reg(instr.Itype.rd) + " = (saddr_t) (int32_t) api.mem_ld32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_U8)) {
 				add_code(code,
-					from_reg(instr.Itype.rd) + " = api.mem_read8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					from_reg(instr.Itype.rd) + " = api.mem_ld8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_U16)) {
 				add_code(code,
-					from_reg(instr.Itype.rd) + " = api.mem_read16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					from_reg(instr.Itype.rd) + " = api.mem_ld16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_U32)) {
 				add_code(code,
-					from_reg(instr.Itype.rd) + " = api.mem_read32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					from_reg(instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_U64)) {
 				add_code(code,
-					from_reg(instr.Itype.rd) + " = api.mem_read64(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					from_reg(instr.Itype.rd) + " = api.mem_ld64(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], LOAD_U64_DUMMY)) {
 				add_code(code,
-					"api.mem_read64(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					"api.mem_ld64(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			} else {
 				throw std::runtime_error("Unhandled load opcode");
@@ -115,22 +115,22 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		case RV32I_STORE:
 			if (IS_HANDLER(ip[i], STORE_I8) || IS_HANDLER(ip[i], STORE_I8_IMM)) {
 				add_code(code,
-					"api.mem_write8(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
+					"api.mem_st8(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], STORE_I16_IMM)) {
 				add_code(code,
-					"api.mem_write16(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
+					"api.mem_st16(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], STORE_I32_IMM)) {
 				add_code(code,
-					"api.mem_write32(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
+					"api.mem_st32(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 				);
 			}
 			else if (IS_HANDLER(ip[i], STORE_I64_IMM)) {
 				add_code(code,
-					"api.mem_write64(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
+					"api.mem_st64(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");"
 				);
 			} else {
 				throw std::runtime_error("Unhandled store opcode");
@@ -192,7 +192,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			case 0x2: // SLTI:
 				// signed less than immediate
 				add_code(code,
-					dst + " = ((saddress_t)" + src + " < " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
+					dst + " = ((saddr_t)" + src + " < " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU:
 				add_code(code,
@@ -209,7 +209,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 						emit_op(code, " >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift_imm()));
 				} else { // SRAI: preserve the sign bit
 					add_code(code,
-						"{address_t bit = 1ul << (sizeof(" + src + ") * 8 - 1);",
+						"{addr_t bit = 1ul << (sizeof(" + src + ") * 8 - 1);",
 						"bool is_signed = (" + src + " & bit) != 0;");
 					if constexpr (W == 8) {
 						add_code(code,
@@ -252,7 +252,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				break;
 			case 0x2: // SLT
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = ((saddress_t)" + from_reg(instr.Rtype.rs1) + " < (saddress_t)" + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
+					from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " < (saddr_t)" + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU
 				add_code(code,
@@ -272,7 +272,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 					}
 				} else { // SRA
 					add_code(code,
-						"{address_t bit = 1ul << (sizeof(" + from_reg(instr.Rtype.rs1) + ") * 8 - 1);",
+						"{addr_t bit = 1ul << (sizeof(" + from_reg(instr.Rtype.rs1) + ") * 8 - 1);",
 						"bool is_signed = (" + from_reg(instr.Rtype.rs1) + " & bit) != 0;"
 					);
 					if constexpr (W == 8) {
@@ -298,7 +298,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			// extension RV32M / RV64M
 			case 0x10: // MUL
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = (saddress_t)" + from_reg(instr.Rtype.rs1) + " * (saddress_t)" + from_reg(instr.Rtype.rs2) + ";");
+					from_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(instr.Rtype.rs1) + " * (saddr_t)" + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x11: // MULH (signed x signed)
 				add_code(code,
@@ -464,10 +464,10 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
-				code += "load_float(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read32(cpu, " + addr + "));\n";
+				code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", api.mem_ld32(cpu, " + addr + "));\n";
 				break;
 			case 0x3: // FLD
-				code += "load_double(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read64(cpu, " + addr + "));\n";
+				code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", api.mem_ld64(cpu, " + addr + "));\n";
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -478,10 +478,10 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			const auto addr = from_reg(fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
-				code += "api.mem_write32(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".f32[0]);\n";
+				code += "api.mem_st32(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".f32[0]);\n";
 				break;
 			case 0x3: // FLD
-				code += "api.mem_write64(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i64);\n";
+				code += "api.mem_st64(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i64);\n";
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -499,9 +499,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			const std::string sign = (instr.opcode() == RV32F_FNMADD || instr.opcode() == RV32F_FNMSUB) ? "-" : "";
 			const std::string add = (instr.opcode() == RV32F_FMSUB || instr.opcode() == RV32F_FNMSUB) ? " - " : " + ";
 			if (fi.R4type.funct2 == 0x0) { // float32
-				code += "set_float(&" + dst + ", " + sign + "(" + rs1 + ".f32[0] * " + rs2 + ".f32[0]" + add + rs3 + ".f32[0]));\n";
+				code += "set_fl(&" + dst + ", " + sign + "(" + rs1 + ".f32[0] * " + rs2 + ".f32[0]" + add + rs3 + ".f32[0]));\n";
 			} else if (fi.R4type.funct2 == 0x1) { // float64
-				code += "set_double(&" + dst + ", " + sign + "(" + rs1 + ".f64 * " + rs2 + ".f64" + add + rs3 + ".f64));\n";
+				code += "set_dbl(&" + dst + ", " + sign + "(" + rs1 + ".f64 * " + rs2 + ".f64" + add + rs3 + ".f64));\n";
 			} else {
 				ILLEGAL_AND_EXIT();
 			}
@@ -522,9 +522,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				else if (instr.fpfunc() == RV32F__FMUL) fop = " * ";
 				else if (instr.fpfunc() == RV32F__FDIV) fop = " / ";
 				if (fi.R4type.funct2 == 0x0) { // fp32
-					code += "set_float(&" + dst + ", " + rs1 + ".f32[0]" + fop + rs2 + ".f32[0]);\n";
+					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0]" + fop + rs2 + ".f32[0]);\n";
 				} else { // fp64
-					code += "set_double(&" + dst + ", " + rs1 + ".f64" + fop + rs2 + ".f64);\n";
+					code += "set_dbl(&" + dst + ", " + rs1 + ".f64" + fop + rs2 + ".f64);\n";
 				}
 				} break;
 			case RV32F__FSGNJ_NX:
@@ -532,45 +532,45 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				case 0x0: // FSGNJ
 					if (fi.R4type.rs1 == fi.R4type.rs2) { // FMV rd, rs1
 						if (fi.R4type.funct2 == 0x0) // fp32
-							code += "set_float(&" + dst + ", " + rs1 + ".f32[0]);\n";
+							code += "set_fl(&" + dst + ", " + rs1 + ".f32[0]);\n";
 						else // fp64
-							code += "set_double(&" + dst + ", " + rs1 + ".f64);\n";
+							code += "set_dbl(&" + dst + ", " + rs1 + ".f64);\n";
 					} else {
 					if (fi.R4type.funct2 == 0x0) { // fp32
-						code += "load_float(&" + dst + ", (" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
+						code += "load_fl(&" + dst + ", (" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
 					} else { // fp64
-						code += "load_double(&" + dst + ", ((uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits);\n";
+						code += "load_dbl(&" + dst + ", ((uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits);\n";
 					} } break;
 				case 0x1: // FSGNJ_N
 					if (fi.R4type.funct2 == 0x0) { // fp32
-						code += "load_float(&" + dst + ", (~" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
+						code += "load_fl(&" + dst + ", (~" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
 					} else { // fp64
-						code += "load_double(&" + dst + ", (~(uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits);\n";
+						code += "load_dbl(&" + dst + ", (~(uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits);\n";
 					} break;
 				case 0x2: // FSGNJ_X
 					if (fi.R4type.funct2 == 0x0) { // fp32
-						code += "load_float(&" + dst + ", ((" + rs1 + ".lsign.sign ^ " + rs2 + ".lsign.sign) << 31) | " + rs1 + ".lsign.bits);\n";
+						code += "load_fl(&" + dst + ", ((" + rs1 + ".lsign.sign ^ " + rs2 + ".lsign.sign) << 31) | " + rs1 + ".lsign.bits);\n";
 					} else { // fp64
-						code += "load_double(&" + dst + ", ((uint64_t)(" + rs1 + ".usign.sign ^ " + rs2 + ".usign.sign) << 63) | " + rs1 + ".usign.bits);\n";
+						code += "load_dbl(&" + dst + ", ((uint64_t)(" + rs1 + ".usign.sign ^ " + rs2 + ".usign.sign) << 63) | " + rs1 + ".usign.bits);\n";
 					} break;
 				default:
 					ILLEGAL_AND_EXIT();
 				} break;
 			case RV32F__FCVT_SD_DS: {
 				if (fi.R4type.funct2 == 0x0) {
-					code += "set_float(&" + dst + ", " + rs1 + ".f64);\n";
+					code += "set_fl(&" + dst + ", " + rs1 + ".f64);\n";
 				} else if (fi.R4type.funct2 == 0x1) {
-					code += "set_double(&" + dst + ", " + rs1 + ".f32[0]);\n";
+					code += "set_dbl(&" + dst + ", " + rs1 + ".f32[0]);\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
 				} break;
 			case RV32F__FCVT_SD_W: {
-				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddress_t)" : "");
+				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddr_t)" : "");
 				if (fi.R4type.funct2 == 0x0) {
-					code += "set_float(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+					code += "set_fl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
 				} else if (fi.R4type.funct2 == 0x1) {
-					code += "set_double(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+					code += "set_dbl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
@@ -583,6 +583,6 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		}
 	}
 	code +=
-		"\napi.finish_block(cpu, " + std::to_string(basepc + 4 * (len-1)) + ", " + std::to_string(len-1) + ");\n"
+		"\napi.finish(cpu, " + std::to_string(basepc + 4 * (len-1)) + ", " + std::to_string(len-1) + ");\n"
 		"}\n\n";
 }
