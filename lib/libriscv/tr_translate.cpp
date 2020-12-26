@@ -214,10 +214,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		// delete program
 		unlink(filename.c_str());
 		// close dylib when machine is destructed
-		/*machine().add_destructor_callback(
-			[dylib] {
-				dlclose(dylib);
-			});*/
+		machine().add_destructor_callback(
+			[dl = dylib] {
+				dlclose(dl);
+			});
 	}
 
 }

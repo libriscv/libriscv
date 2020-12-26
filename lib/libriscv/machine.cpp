@@ -6,6 +6,13 @@
 namespace riscv
 {
 	template <int W>
+	Machine<W>::~Machine()
+	{
+		for (auto rit = m_destructor_callbacks.rbegin(); rit != m_destructor_callbacks.rend(); ++rit)
+			(*rit)();
+	}
+
+	template <int W>
 	long Machine<W>::unknown_syscall_handler(Machine<W>& machine)
 	{
 		const auto syscall_number = machine.cpu.reg(RISCV::REG_ECALL);

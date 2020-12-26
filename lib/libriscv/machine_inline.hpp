@@ -27,12 +27,6 @@ inline Machine<W>::Machine(const std::vector<uint8_t>& binary, uint64_t mmax)
 	: Machine(binary, MachineOptions<W> { .memory_max = mmax }) {}
 
 template <int W>
-inline Machine<W>::~Machine()
-{
-	for (auto& callback : m_destructor_callbacks) callback();
-}
-
-template <int W>
 inline void Machine<W>::stop(bool v) noexcept {
 	m_stopped = v;
 }
