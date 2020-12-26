@@ -464,10 +464,10 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
-				code += "load_float(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read32(cpu, " + addr + "));";
+				code += "load_float(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read32(cpu, " + addr + "));\n";
 				break;
 			case 0x3: // FLD
-				code += "load_double(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read64(cpu, " + addr + "));";
+				code += "load_double(&" + from_fpreg(fi.Itype.rd) + ", api.mem_read64(cpu, " + addr + "));\n";
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -475,13 +475,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			} break;
 		case RV32F_STORE: {
 			const rv32f_instruction fi { instr };
-			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
+			const auto addr = from_reg(fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
-				code += "api.mem_write32(cpu, " + addr + ", " + from_fpreg(fi.Itype.rd) + ".f32[0]);";
+				code += "api.mem_write32(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".f32[0]);\n";
 				break;
 			case 0x3: // FLD
-				code += "api.mem_write64(cpu, " + addr + ", " + from_fpreg(fi.Itype.rd) + ".i64);";
+				code += "api.mem_write64(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i64);\n";
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -530,11 +530,17 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			case RV32F__FSGNJ_NX:
 				switch (fi.R4type.funct3) {
 				case 0x0: // FSGNJ
+					if (fi.R4type.rs1 == fi.R4type.rs2) { // FMV rd, rs1
+						if (fi.R4type.funct2 == 0x0) // fp32
+							code += "set_float(&" + dst + ", " + rs1 + ".f32[0]);\n";
+						else // fp64
+							code += "set_double(&" + dst + ", " + rs1 + ".f64);\n";
+					} else {
 					if (fi.R4type.funct2 == 0x0) { // fp32
 						code += "load_float(&" + dst + ", (" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
 					} else { // fp64
 						code += "load_double(&" + dst + ", ((uint64_t)" + rs2 + ".usign.sign << 63) | " + rs1 + ".usign.bits);\n";
-					} break;
+					} } break;
 				case 0x1: // FSGNJ_N
 					if (fi.R4type.funct2 == 0x0) { // fp32
 						code += "load_float(&" + dst + ", (~" + rs2 + ".lsign.sign << 31) | " + rs1 + ".lsign.bits);\n";
