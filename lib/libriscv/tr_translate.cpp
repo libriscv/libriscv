@@ -89,7 +89,8 @@ void CPU<W>::try_translate(
 			// measure block length
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
-				if (it->second.opcode() == RV32I_JALR) {
+				if (it->second.opcode() == RV32I_JALR ||
+					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0)) {
 					++it; break;
 				}
 if constexpr (LOOP_OFFSET_MAX > 0) {
@@ -188,8 +189,15 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				cpu.jump(addr);
 				cpu.machine().increment_counter(val);
 			},
-			.increment_counter = [] (CPU<W>& cpu, uint64_t val) {
+			.syscall = [] (CPU<W>& cpu, uint64_t val) {
+				cpu.registers().pc += val * 4;
 				cpu.machine().increment_counter(val);
+				cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
+			},
+			.ebreak = [] (CPU<W>& cpu, uint64_t val) {
+				cpu.registers().pc += val * 4;
+				cpu.machine().increment_counter(val);
+				cpu.machine().ebreak();
 			},
 			.trigger_exception = [] (CPU<W>& cpu, int e) {
 				cpu.trigger_exception(e);

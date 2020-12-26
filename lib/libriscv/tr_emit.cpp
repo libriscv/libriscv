@@ -378,6 +378,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			break;
 		case RV32I_FENCE:
 			break;
+		case RV32I_SYSTEM:
+			if (instr.Itype.imm == 1) {
+				code += "api.ebreak(cpu, " + std::to_string(i) + ");\n}\n";
+			} else {
+				code += "api.syscall(cpu, " + std::to_string(i) + ");\n}\n";
+			}
+			return; // !!
 		case RV64I_OP_IMM32: {
 			const auto dst = from_reg(instr.Itype.rd);
 			const auto src = "(int32_t)" + from_reg(instr.Itype.rs1);
