@@ -33,6 +33,7 @@ static eastl::hash_set<uint32_t> good_insn
 	RV32F_FMSUB,
 	RV32F_FNMADD,
 	RV32F_FNMSUB,
+	RV32F_FPFUNC,
 };
 
 template <int W>
@@ -41,19 +42,7 @@ inline uint32_t opcode(const typename CPU<W>::instr_pair& ip) {
 }
 template <int W>
 inline bool gucci(const typename CPU<W>::instr_pair& ip) {
-	if (good_insn.count(opcode<W>(ip)) > 0) return true;
-	// we support some FP functions
-	if (ip.second.opcode() == RV32F_FPFUNC) {
-		if (ip.second.fpfunc() == RV32F__FADD || ip.second.fpfunc() == RV32F__FSUB ||
-			ip.second.fpfunc() == RV32F__FMUL || ip.second.fpfunc() == RV32F__FDIV ||
-			ip.second.fpfunc() == RV32F__FSQRT || ip.second.fpfunc() == RV32F__FCVT_SD_DS ||
-			ip.second.fpfunc() == RV32F__FCVT_W_SD || ip.second.fpfunc() == RV32F__FCVT_SD_W ||
-			ip.second.fpfunc() == RV32F__FMV_X_W || ip.second.fpfunc() == RV32F__FMV_W_X ||
-			ip.second.fpfunc() == RV32F__FSGNJ_NX) {
-			return true;
-		}
-	}
-	return false;
+	return good_insn.count(opcode<W>(ip)) > 0;
 }
 
 template <int W>
