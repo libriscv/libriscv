@@ -248,4 +248,6 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 
 	template void CPU<4>::try_translate(address_t, std::vector<instr_pair>&) const;
 	template void CPU<8>::try_translate(address_t, std::vector<instr_pair>&) const;
+	static_assert(!compressed_enabled,
+		"C-extension incompatible with binary translation");
 }
