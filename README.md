@@ -204,6 +204,10 @@ Use GCC to build the RISC-V binaries. Use -O2 or -O3 and use the regular standar
 
 Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my [rvscript](https://github.com/fwsGonzo/rvscript) repository. It's a complex topic that cannot be explained in one paragraph.
 
-The binary translation feature (accessible by enabling RISCV_EXPERIMENTAL) can greatly improve performance in some cases, at a great up-front cost. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is a work in progress.
-
 If you have arenas available you can replace the default page fault handler with your that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the forking constructor option. It will apply copy-on-write to all pages on the newly created machine and share text and rodata. Also, enable RISCV_EXPERIMENTAL so that the decoder cache will be generated ahead of time.
+
+## Binary translation
+
+Instead of JIT, the emulator supports translating binaries to native code using any local C or C++ compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myprogram`.
+
+The binary translation feature (accessible by enabling RISCV_EXPERIMENTAL) can greatly improve performance in some cases, at a great up-front cost. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is a work in progress.
