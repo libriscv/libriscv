@@ -26,6 +26,14 @@ static bool verbose()
 
 namespace riscv
 {
+	std::string compile_command(int arch)
+	{
+		return compiler() + " -O0 -s -std=c99 -fPIC -shared -x c "
+		" -ffreestanding -nostdlib -fexceptions -fno-omit-frame-pointer "
+		 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
+		 + " " + cflags();
+	}
+
 	void*
 	compile(const std::string& code, int arch, const char* outfile)
 	{
@@ -45,10 +53,8 @@ namespace riscv
 		}
 		// system compiler invocation
 		const std::string command =
-			compiler() + " -O0 -s -std=c99 -fPIC -shared -x c "
-			" -ffreestanding -nostdlib -fexceptions -fno-omit-frame-pointer "
-			 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
-			 + " " + cflags() + " -o " + std::string(outfile) + " "
+			compile_command(arch) + " "
+			 + " -o " + std::string(outfile) + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
 		// compile the translated code

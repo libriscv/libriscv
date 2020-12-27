@@ -148,6 +148,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	if (machine().memory.is_binary_translated()) {
 		throw std::runtime_error("Machine already reports binary translation");
 	}
+	const size_t code_size = code.size();
+	// add compiler arguments to make it part of checksum
+	extern std::string compile_command(int arch);
+	code.append(compile_command(W));
 	// create cacheable filename
 	const uint32_t checksum = crc32c(code.c_str(), code.size());
 	char filename[1024];
@@ -157,6 +161,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		return;
 	}
 	void* dylib = nullptr;
+	code.resize(code_size); // remove compiler arguments
 
 #ifdef RISCV_TRANSLATION_CACHE
 	if (access(filename, R_OK) == 0) {
