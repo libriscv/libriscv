@@ -366,14 +366,16 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			}
 			break;
 		case RV32I_LUI:
+			if (UNLIKELY(instr.Utype.rd == 0))
+				ILLEGAL_AND_EXIT();
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = (int32_t) " + from_imm(instr.Utype.upper_imm()) + ";"
-			);
+				from_reg(instr.Utype.rd) + " = (int32_t) " + from_imm(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_AUIPC:
+			if (UNLIKELY(instr.Utype.rd == 0))
+				ILLEGAL_AND_EXIT();
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = " + PCREL(instr.Utype.upper_imm()) + ";"
-			);
+				from_reg(instr.Utype.rd) + " = " + PCREL(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_FENCE:
 			break;
@@ -385,6 +387,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			}
 			return; // !!
 		case RV64I_OP_IMM32: {
+			if (UNLIKELY(instr.Itype.rd == 0))
+				ILLEGAL_AND_EXIT();
 			const auto dst = from_reg(instr.Itype.rd);
 			const auto src = "(int32_t)" + from_reg(instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
@@ -410,6 +414,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			}
 			} break;
 		case RV64I_OP32: {
+			if (UNLIKELY(instr.Rtype.rd == 0))
+				ILLEGAL_AND_EXIT();
 			const auto dst = from_reg(instr.Rtype.rd);
 			const auto src1 = "(int32_t)" + from_reg(instr.Rtype.rs1);
 			const auto src2 = "(int32_t)" + from_reg(instr.Rtype.rs2);
@@ -520,6 +526,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			if (fi.R4type.funct2 < 0x2) { // fp32 / fp64
 			switch (instr.fpfunc()) {
 			case RV32F__FEQ_LT_LE:
+				if (UNLIKELY(fi.R4type.rd == 0))
+					ILLEGAL_AND_EXIT();
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FLE.S
 					code += from_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
@@ -627,9 +635,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				} break;
 			case RV32F__FCVT_W_SD: {
 				const std::string sign((fi.R4type.rs2 == 0x0) ? "(int32_t)" : "(uint32_t)");
-				if (fi.R4type.funct2 == 0x0) {
+				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
 					code += from_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
-				} else if (fi.R4type.funct2 == 0x1) {
+				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
 					code += from_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f64[0];\n";
 				} else {
 					ILLEGAL_AND_EXIT();
@@ -644,9 +652,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 					ILLEGAL_AND_EXIT();
 				} break;
 			case RV32F__FMV_X_W:
-				if (fi.R4type.funct2 == 0x0) {
+				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
 					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
-				} else if (W == 8 && fi.R4type.funct2 == 0x1) { // 64-bit only
+				} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
 					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i64[0];\n";
 				} else {
 					ILLEGAL_AND_EXIT();
