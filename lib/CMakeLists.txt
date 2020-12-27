@@ -28,7 +28,7 @@ if (RISCV_DEBUG)
 		libriscv/debug.cpp
 	)
 endif()
-if (RISCV_EXPERIMENTAL)
+if (RISCV_BINARY_TRANSLATION)
 	list(APPEND SOURCES
 		libriscv/tr_api.cpp
 		libriscv/tr_compiler.cpp
