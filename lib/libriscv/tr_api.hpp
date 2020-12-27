@@ -17,5 +17,7 @@ namespace riscv {
 		void (*syscall)(CPU<W>&, uint64_t);
 		void (*ebreak)(CPU<W>&, uint64_t);
 		void (*trigger_exception)(CPU<W>&, int);
+		float  (*sqrtf32)(float);
+		double (*sqrtf64)(double);
 	};
 }

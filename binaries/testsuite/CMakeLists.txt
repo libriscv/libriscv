@@ -8,7 +8,7 @@ set(VERSION_FILE   "symbols.map" CACHE STRING "Retained symbols file")
 
 set(RISCV_ABI "-march=rv32g -mabi=ilp32d")
 set(WARNINGS  "-Wall -Wextra")
-set(COMMON    "-O2 -fstack-protector")
+set(COMMON    "-O2 -ffast-math -fstack-protector")
 set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++2a ${COMMON}")
 
 if (DEBUGGING)

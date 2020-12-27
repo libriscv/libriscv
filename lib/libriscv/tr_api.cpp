@@ -67,6 +67,8 @@ static struct CallbackTable {
 	void (*syscall)(CPU*, uint64_t);
 	void (*ebreak)(CPU*, uint64_t);
 	void (*exception)(CPU*, int);
+	float  (*sqrtf32)(float);
+	double (*sqrtf64)(double);
 } api;
 
 static inline uint32_t SRA32(int is_signed, uint32_t shifts, uint32_t value)

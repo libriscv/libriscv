@@ -48,10 +48,10 @@ float test_fnmsub(float a, float b, float c) {
 }
 
 float  test_fsqrt(float val) {
-	return std::sqrt(val);
+	return __builtin_sqrtf(val);
 }
 double test_dsqrt(double val) {
-	return std::sqrt(val);
+	return __builtin_sqrt(val);
 }
 float  test_fpow(float val, float exp) {
 	return std::pow(val, exp);
