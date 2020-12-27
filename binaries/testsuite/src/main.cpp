@@ -35,6 +35,17 @@ static double compute_more_pi()
 
 int main()
 {
+	assert((int32_t) -44.0f == -44);
+	assert((int32_t) -44.0 == -44);
+	assert((uint32_t) 44.0f == 44);
+	assert((uint32_t) 44.0 == 44);
+	const float cf = 5.0;
+	const float* pf = &cf;
+	assert(*pf == cf);
+	const double cd = 5.0;
+	const double* pd = &cd;
+	assert(*pd == cd);
+
 	assert(test_fadd(1.0f, 1.0f) == 2.0f);
 	assert(test_fadd(2.0f, 2.0f) == 4.0f);
 

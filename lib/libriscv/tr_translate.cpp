@@ -46,8 +46,9 @@ inline bool gucci(const typename CPU<W>::instr_pair& ip) {
 	if (ip.second.opcode() == RV32F_FPFUNC) {
 		if (ip.second.fpfunc() == RV32F__FADD || ip.second.fpfunc() == RV32F__FSUB ||
 			ip.second.fpfunc() == RV32F__FMUL || ip.second.fpfunc() == RV32F__FDIV ||
-			ip.second.fpfunc() == RV32F__FSQRT ||
-			ip.second.fpfunc() == RV32F__FCVT_SD_DS || ip.second.fpfunc() == RV32F__FCVT_SD_W ||
+			ip.second.fpfunc() == RV32F__FSQRT || ip.second.fpfunc() == RV32F__FCVT_SD_DS ||
+			ip.second.fpfunc() == RV32F__FCVT_W_SD || ip.second.fpfunc() == RV32F__FCVT_SD_W ||
+			ip.second.fpfunc() == RV32F__FMV_X_W || ip.second.fpfunc() == RV32F__FMV_W_X ||
 			ip.second.fpfunc() == RV32F__FSGNJ_NX) {
 			return true;
 		}

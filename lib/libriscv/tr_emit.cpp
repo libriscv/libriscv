@@ -164,8 +164,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			}
 			add_code(code, "api.jump(cpu, " + from_reg(instr.Itype.rs1)
 				+ " + " + from_imm(instr.Itype.signed_imm()) + " - 4, " + std::to_string(i) + ");",
-				"return;");
-			break;
+				"}\n");
+			return;
 		case RV32I_JAL:
 			if (instr.Jtype.rd != 0) {
 				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCREL(4) + ";\n");
@@ -585,6 +585,38 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
+				} break;
+			case RV32F__FCVT_W_SD: {
+				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddr_t)" : "");
+				if (fi.R4type.funct2 == 0x0) {
+					if (fi.R4type.rs2 == 0x0)
+						code += from_reg(fi.R4type.rd) + " = (int32_t)" + rs1 + ".f32[0];\n";
+					else
+						code += from_reg(fi.R4type.rd) + " = (uint32_t)" + rs1 + ".f32[0];\n";
+				} else if (fi.R4type.funct2 == 0x1) {
+					if (fi.R4type.rs2 == 0x0)
+						code += from_reg(fi.R4type.rd) + " = (int32_t)" + rs1 + ".f64[0];\n";
+					else
+						code += from_reg(fi.R4type.rd) + " = (uint32_t)" + rs1 + ".f64[0];\n";
+				} else {
+					ILLEGAL_AND_EXIT();
+				}
+				} break;
+			case RV32F__FMV_W_X:
+				if (fi.R4type.funct2 == 0x0) {
+					code += "load_fl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
+				} else if (W == 8 && fi.R4type.funct2 == 0x1) {
+					code += "load_dbl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
+				} else {
+					ILLEGAL_AND_EXIT();
+				} break;
+			case RV32F__FMV_X_W:
+				if (fi.R4type.funct2 == 0x0) {
+					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
+				} else if (W == 8 && fi.R4type.funct2 == 0x1) { // 64-bit only
+					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i64[0];\n";
+				} else {
+					ILLEGAL_AND_EXIT();
 				} break;
 			} // fpfunc
 			} else ILLEGAL_AND_EXIT();
