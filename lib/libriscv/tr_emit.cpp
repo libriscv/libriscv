@@ -1,8 +1,9 @@
 #define IS_OPCODE(instr, opcode) (instr.opcode() == opcode)
 #define IS_HANDLER(ip, instr) ((ip).first == DECODED_INSTR(instr).handler)
 #define PCREL(x) std::to_string((address_t) (tinfo.basepc + i * 4 + (x)))
+#define INSTRUCTION_COUNT(i) ((tinfo.has_branch ? "c + " : "") + std::to_string(i))
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
-static constexpr int BRANCH_LOOPS_MAX = 64;
+static constexpr int LOOP_INSTRUCTIONS_MAX = 1024;
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -27,14 +28,14 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, cons
 	using address_t = address_type<W>;
 	const auto offset = instr.Btype.signed_imm() / 4;
 	bool goto_enabled = tinfo.has_branch && (offset == -(long) i);
-	add_code(code,
-		((sign == false) ?
-		"if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {" :
-		"if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {"),
-		goto_enabled ?
-		"if (c--) goto " + func + "_start;" : "",
-		"api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ", " + std::to_string(i) + ");",
-		"return;}");
+	if (sign == false)
+		code += "if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {\n";
+	else
+		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
+	if (goto_enabled)
+		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
+	code += "api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ", " + INSTRUCTION_COUNT(i) + ");\n"
+		"return;}\n";
 }
 inline void emit_op(std::string& code, const std::string& op, const std::string& sop,
 	uint32_t rd, uint32_t rs1, const std::string& rs2)
@@ -56,7 +57,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 	code += "extern void " + func + "(CPU* cpu) {\n";
 	// branches can jump back, within limits
 	if (tinfo.has_branch) {
-		code += "int c = " + std::to_string(BRANCH_LOOPS_MAX) + "; " + func + "_start:\n";
+		code += "int c = 0; " + func + "_start:\n";
 	}
 	for (size_t i = 0; i < len; i++) {
 		const auto& instr = ip[i].second;
@@ -172,7 +173,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				add_code(code, from_reg(instr.Itype.rd) + " = " + PCREL(4) + ";\n");
 			}
 			add_code(code, "api.jump(cpu, " + from_reg(instr.Itype.rs1)
-				+ " + " + from_imm(instr.Itype.signed_imm()) + " - 4, " + std::to_string(i) + ");",
+				+ " + " + from_imm(instr.Itype.signed_imm()) + " - 4, " + INSTRUCTION_COUNT(i) + ");",
 				"}\n");
 			return;
 		case RV32I_JAL:
@@ -180,7 +181,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCREL(4) + ";\n");
 			}
 			add_code(code,
-				"api.jump(cpu, " + PCREL(instr.Jtype.jump_offset() - 4) + ", " + std::to_string(i) + ");",
+				"api.jump(cpu, " + PCREL(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
 				"}");
 			return; // !
 		case RV32I_OP_IMM: {
@@ -390,9 +391,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			break;
 		case RV32I_SYSTEM:
 			if (instr.Itype.imm == 1) {
-				code += "api.ebreak(cpu, " + std::to_string(i) + ");\n}\n";
+				code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
 			} else {
-				code += "api.syscall(cpu, " + std::to_string(i) + ");\n}\n";
+				code += "api.syscall(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
 			}
 			return; // !!
 		case RV64I_OP_IMM32: {
@@ -676,6 +677,6 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 		}
 	}
 	code +=
-		"\napi.finish(cpu, " + std::to_string(tinfo.basepc + 4 * (len-1)) + ", " + std::to_string(len-1) + ");\n"
+		"\napi.finish(cpu, " + std::to_string(tinfo.basepc + 4 * (len-1)) + ", " + INSTRUCTION_COUNT(len-1) + ");\n"
 		"}\n\n";
 }
