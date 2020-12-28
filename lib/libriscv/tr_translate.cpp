@@ -77,6 +77,7 @@ void CPU<W>::try_translate(
 		if (gucci<W>(*it))
 		{
 			auto block = it;
+			bool has_branch = false;
 			// measure block length
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
@@ -87,6 +88,7 @@ void CPU<W>::try_translate(
 if constexpr (LOOP_OFFSET_MAX > 0) {
 				// loop detection (negative branch offsets)
 				if (it->second.opcode() == RV32I_BRANCH && it->second.Btype.sign()) {
+					has_branch = true;
 					// detect jump location
 					const auto& instr = it->second;
 					const size_t length = it - block;
@@ -112,7 +114,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				//printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
 				std::string func =
 					"f" + std::to_string(dlmappings.size());
-				emit(code, func, basepc, &*block, length);
+				emit(code, func, &*block, length, {basepc, has_branch});
 				dlmappings.push_back({*block, std::move(func)});
 				icounter += length;
 				// we can't translate beyond this estimate, otherwise

@@ -54,7 +54,7 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 #include "tr_emit.cpp"
-template void CPU<8>::emit(std::string&, const std::string&, address_t, instr_pair*, size_t) const;
+template void CPU<8>::emit(std::string&, const std::string&, instr_pair*, size_t, const TransInfo<8>&) const;
 #else
 #include "rvi_fuse.cpp"
 template bool CPU<8>::try_fuse(instr_pair, instr_pair) const;

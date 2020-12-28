@@ -1,7 +1,8 @@
 #define IS_OPCODE(instr, opcode) (instr.opcode() == opcode)
 #define IS_HANDLER(ip, instr) ((ip).first == DECODED_INSTR(instr).handler)
-#define PCREL(x) std::to_string((address_t) (basepc + i * 4 + (x)))
+#define PCREL(x) std::to_string((address_t) (tinfo.basepc + i * 4 + (x)))
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
+static constexpr int BRANCH_LOOPS_MAX = 64;
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -21,13 +22,17 @@ inline std::string from_imm(int64_t imm) {
 	return std::to_string(imm);
 }
 template <int W>
-inline void add_branch(std::string& code, bool sign, const std::string& op, address_type<W> basepc, size_t i, rv32i_instruction instr)
+inline void add_branch(std::string& code, bool sign, const std::string& op, const TransInfo<W>& tinfo, size_t i, rv32i_instruction instr, const std::string& func)
 {
 	using address_t = address_type<W>;
+	const auto offset = instr.Btype.signed_imm() / 4;
+	bool goto_enabled = tinfo.has_branch && (offset == -(long) i);
 	add_code(code,
 		((sign == false) ?
 		"if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {" :
 		"if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {"),
+		goto_enabled ?
+		"if (c--) goto " + func + "_start;" : "",
 		"api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ", " + std::to_string(i) + ");",
 		"return;}");
 }
@@ -45,10 +50,14 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 }
 
 template <int W>
-void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, instr_pair* ip, size_t len) const
+void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, size_t len, const TransInfo<W>& tinfo) const
 {
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	code += "extern void " + func + "(CPU* cpu) {\n";
+	// branches can jump back, within limits
+	if (tinfo.has_branch) {
+		code += "int c = " + std::to_string(BRANCH_LOOPS_MAX) + "; " + func + "_start:\n";
+	}
 	for (size_t i = 0; i < len; i++) {
 		const auto& instr = ip[i].second;
 		switch (instr.opcode()) {
@@ -137,22 +146,22 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 			break;
 		case RV32I_BRANCH:
 			if (IS_HANDLER(ip[i], BRANCH_EQ)) {
-				add_branch<W>(code, false, " == ", basepc, i, instr);
+				add_branch<W>(code, false, " == ", tinfo, i, instr, func);
 			}
 			else if (IS_HANDLER(ip[i], BRANCH_NE)) {
-				add_branch<W>(code, false, " != ", basepc, i, instr);
+				add_branch<W>(code, false, " != ", tinfo, i, instr, func);
 			}
 			else if (IS_HANDLER(ip[i], BRANCH_LT)) {
-				add_branch<W>(code, true, " < ", basepc, i, instr);
+				add_branch<W>(code, true, " < ", tinfo, i, instr, func);
 			}
 			else if (IS_HANDLER(ip[i], BRANCH_GE)) {
-				add_branch<W>(code, true, " >= ", basepc, i, instr);
+				add_branch<W>(code, true, " >= ", tinfo, i, instr, func);
 			}
 			else if (IS_HANDLER(ip[i], BRANCH_LTU)) {
-				add_branch<W>(code, false, " < ", basepc, i, instr);
+				add_branch<W>(code, false, " < ", tinfo, i, instr, func);
 			}
 			else if (IS_HANDLER(ip[i], BRANCH_GEU)) {
-				add_branch<W>(code, false, " >= ", basepc, i, instr);
+				add_branch<W>(code, false, " >= ", tinfo, i, instr, func);
 			} else {
 				throw std::runtime_error("Unhandled branch opcode");
 			}
@@ -667,6 +676,6 @@ void CPU<W>::emit(std::string& code, const std::string& func, address_t basepc, 
 		}
 	}
 	code +=
-		"\napi.finish(cpu, " + std::to_string(basepc + 4 * (len-1)) + ", " + std::to_string(len-1) + ");\n"
+		"\napi.finish(cpu, " + std::to_string(tinfo.basepc + 4 * (len-1)) + ", " + std::to_string(len-1) + ");\n"
 		"}\n\n";
 }

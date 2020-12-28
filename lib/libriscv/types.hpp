@@ -78,4 +78,10 @@ namespace riscv
 		TRAP_WRITE = 0x1000,
 		TRAP_EXEC  = 0x2000,
 	};
+
+	template <int W>
+	struct TransInfo {
+		address_type<W> basepc;
+		bool has_branch;
+	};
 }
