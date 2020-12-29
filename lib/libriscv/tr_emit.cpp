@@ -390,12 +390,18 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 		case RV32I_FENCE:
 			break;
 		case RV32I_SYSTEM:
-			if (instr.Itype.imm == 1) {
-				code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
+			if (instr.Itype.funct3 == 0x0) {
+				if (instr.Itype.imm == 1) {
+					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
+					return; // !!
+				} else {
+					code += "if (api.syscall(cpu, " + INSTRUCTION_COUNT(i) + "))\n"
+						"return;\n";
+					break;
+				}
 			} else {
-				code += "api.syscall(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
+				code += "api.system(" + std::to_string(instr.whole) +");\n";
 			}
-			return; // !!
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
 				ILLEGAL_AND_EXIT();

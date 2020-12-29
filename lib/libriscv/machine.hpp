@@ -131,6 +131,8 @@ namespace riscv
 		void system_call(size_t);
 		void unchecked_system_call(size_t);
 		void ebreak();
+		// Execute CSRs
+		void system(union rv32i_instruction);
 
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }
 		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
@@ -159,6 +161,7 @@ namespace riscv
 		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers {};
 		mutable eastl::fixed_vector<Function<void()>, 16> m_destructor_callbacks;
 		Function<void(int)> m_on_unhandled_syscall = nullptr;
+		Function<void(int, int, int)> m_on_unhandled_csr = nullptr;
 		void* m_userdata = nullptr;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};

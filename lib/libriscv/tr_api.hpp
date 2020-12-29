@@ -14,8 +14,9 @@ namespace riscv {
 		void (*mem_write64)(CPU<W>&, address_type<W> addr, uint64_t);
 		void (*finish_block)(CPU<W>&, address_type<W> addr, uint64_t);
 		void (*jump)(CPU<W>&, address_type<W>, uint64_t);
-		void (*syscall)(CPU<W>&, uint64_t);
+		int  (*syscall)(CPU<W>&, uint64_t);
 		void (*ebreak)(CPU<W>&, uint64_t);
+		void (*system)(CPU<W>&, uint32_t);
 		void (*trigger_exception)(CPU<W>&, int);
 		float  (*sqrtf32)(float);
 		double (*sqrtf64)(double);

@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include "rv32i_instr.hpp"
 #include "util/auxvec.hpp"
 #include <time.h>
 #include <random>
@@ -178,6 +179,70 @@ namespace riscv
 		struct timespec tp;
 		clock_gettime(CLOCK_MONOTONIC, &tp);
 		return tp.tv_sec * 1000000000ull + tp.tv_nsec;
+	}
+
+	template <int W>
+	void Machine<W>::system(union rv32i_instruction instr)
+	{
+		switch (instr.Itype.funct3) {
+		case 0x0: // SYSTEM functions
+			switch (instr.Itype.imm)
+			{
+			case 0: // ECALL
+				cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
+				return;
+			case 1: // EBREAK
+				cpu.machine().ebreak();
+				return;
+#ifdef RISCV_SI_SYSCALLS
+			default: // Do a system call directly
+				cpu.machine().system_call(instr.Itype.imm);
+				return;
+#endif
+			}
+			break;
+		case 0x1: // CSRRW
+		case 0x2: // CSRRS
+			// if destination is x0, then we do not write to rd
+			bool rd = instr.Itype.rd != 0;
+			bool wr = instr.Itype.rs1 != 0;
+			switch (instr.Itype.imm)
+			{
+			case 0x001: // fflags (accrued exceptions)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				if (wr) cpu.registers().fcsr().fflags = cpu.reg(instr.Itype.rs1);
+				return;
+			case 0x002: // frm (rounding-mode)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				if (wr) cpu.registers().fcsr().frm = cpu.reg(instr.Itype.rs1);
+				return;
+			case 0x003: // fcsr (control and status register)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				if (wr) cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1);
+				return;
+			case 0xC00: // CSR RDCYCLE (lower)
+			case 0xC02: // RDINSTRET (lower)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.machine().instruction_counter();
+				return;
+			case 0xC80: // CSR RDCYCLE (upper)
+			case 0xC82: // RDINSTRET (upper)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.machine().instruction_counter() >> 32u;
+				return;
+			case 0xC01: // CSR RDTIME (lower)
+				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time();
+				return;
+			case 0xC81: // CSR RDTIME (upper)
+				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
+				return;
+			default:
+				if (m_on_unhandled_csr != nullptr) {
+					m_on_unhandled_csr(instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				}
+			}
+			break;
+		}
+		// if we got here, its an illegal operation!
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	}
 
 	template struct Machine<4>;

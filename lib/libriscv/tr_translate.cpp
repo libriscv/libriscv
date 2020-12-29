@@ -24,6 +24,7 @@ static eastl::hash_set<uint32_t> good_insn
 	RV32I_OP,
 	RV32I_LUI,
 	RV32I_AUIPC,
+	RV32I_SYSTEM,
 	RV32I_FENCE,
 	RV64I_OP_IMM32,
 	RV64I_OP32,
@@ -82,7 +83,8 @@ void CPU<W>::try_translate(
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
 				if (it->second.opcode() == RV32I_JALR ||
-					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0)) {
+					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0 && it->second.Itype.imm == 1))
+				{
 					++it; break;
 				}
 if constexpr (LOOP_OFFSET_MAX > 0) {
@@ -211,15 +213,26 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			cpu.jump(addr);
 			cpu.machine().increment_counter(val);
 		},
-		.syscall = [] (CPU<W>& cpu, uint64_t val) {
+		.syscall = [] (CPU<W>& cpu, uint64_t val) -> int {
+			auto old_pc = cpu.pc();
 			cpu.registers().pc += val * 4;
-			cpu.machine().increment_counter(val);
 			cpu.machine().system_call(cpu.reg(17));
+			// if the system did not modify PC, return to bintr
+			if (cpu.pc() - val * 4 == old_pc && !cpu.machine().stopped()) {
+				cpu.registers().pc = old_pc;
+				return 0;
+			}
+			// otherwise, update instruction counter and exit
+			cpu.machine().increment_counter(val);
+			return 1;
 		},
 		.ebreak = [] (CPU<W>& cpu, uint64_t val) {
 			cpu.registers().pc += val * 4;
 			cpu.machine().increment_counter(val);
 			cpu.machine().ebreak();
+		},
+		.system = [] (CPU<W>& cpu, uint32_t instr) {
+			cpu.machine().system(rv32i_instruction{instr});
 		},
 		.trigger_exception = [] (CPU<W>& cpu, int e) {
 			cpu.trigger_exception(e);
