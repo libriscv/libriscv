@@ -3,22 +3,13 @@
 
 namespace riscv
 {
-	FLOAT_INSTR(FLW_FLD,
+	FLOAT_INSTR(FLW,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const rv32f_instruction fi { instr };
 		auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
 		auto& dst = cpu.registers().getfl(fi.Itype.rd);
-		switch (fi.Itype.funct3) {
-		case 0x2: // FLW
-			dst.load_u32(cpu.machine().memory.template read<uint32_t> (addr));
-			break;
-		case 0x3: // FLD
-			dst.load_u64(cpu.machine().memory.template read<uint64_t> (addr));
-			break;
-		default:
-			cpu.trigger_exception(ILLEGAL_OPERATION);
-		}
+		dst.load_u32(cpu.machine().memory.template read<uint32_t> (addr));
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -31,22 +22,22 @@ namespace riscv
                         RISCV::regname(fi.Stype.rs1),
 						fi.Itype.signed_imm());
 	});
-	FLOAT_INSTR(FSW_FSD,
+	FLOAT_INSTR(FLD,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		const rv32f_instruction fi { instr };
+		auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
+		auto& dst = cpu.registers().getfl(fi.Itype.rd);
+		dst.load_u64(cpu.machine().memory.template read<uint64_t> (addr));
+	}, DECODED_FLOAT(FLW).printer);
+
+	FLOAT_INSTR(FSW,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const rv32f_instruction fi { instr };
 		auto& src = cpu.registers().getfl(fi.Stype.rs2);
 		auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
-		switch (fi.Itype.funct3) {
-		case 0x2: // FSW
-			cpu.machine().memory.template write<uint32_t> (addr, src.i32[0]);
-			break;
-		case 0x3: // FSD
-			cpu.machine().memory.template write<uint64_t> (addr, src.i64);
-			break;
-		default:
-			cpu.trigger_exception(ILLEGAL_OPERATION);
-		}
+		cpu.machine().memory.template write<uint32_t> (addr, src.i32[0]);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		const rv32f_instruction fi { instr };
@@ -59,6 +50,14 @@ namespace riscv
 						fi.Stype.signed_imm(),
 						RISCV::flpname(fi.Stype.rs2));
 	});
+	FLOAT_INSTR(FSD,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		const rv32f_instruction fi { instr };
+		auto& src = cpu.registers().getfl(fi.Stype.rs2);
+		auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
+		cpu.machine().memory.template write<uint64_t> (addr, src.i64);
+	}, DECODED_FLOAT(FSW).printer);
 
 	FLOAT_INSTR(FMADD,
 	[] (auto& cpu, rv32i_instruction instr)

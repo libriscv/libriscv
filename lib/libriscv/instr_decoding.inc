@@ -171,10 +171,28 @@
 					DECODER(DECODED_INSTR(FENCE));
 #ifdef RISCV_EXT_FLOATS
 				// RV32F & RV32D - Floating-point instructions
-				case RV32F_LOAD:
-					DECODER(DECODED_FLOAT(FLW_FLD));
-				case RV32F_STORE:
-					DECODER(DECODED_FLOAT(FSW_FSD));
+				case RV32F_LOAD: {
+					const rv32f_instruction fi { instruction };
+					switch (fi.Itype.funct3) {
+					case 0x2: // FLW
+						DECODER(DECODED_FLOAT(FLW));
+					case 0x3: // FLD
+						DECODER(DECODED_FLOAT(FLD));
+					default:
+						DECODER(DECODED_INSTR(ILLEGAL));
+					}
+				}
+				case RV32F_STORE: {
+					const rv32f_instruction fi { instruction };
+					switch (fi.Itype.funct3) {
+					case 0x2: // FSW
+						DECODER(DECODED_FLOAT(FSW));
+					case 0x3: // FSD
+						DECODER(DECODED_FLOAT(FSD));
+					default:
+						DECODER(DECODED_INSTR(ILLEGAL));
+					}
+				}
 				case RV32F_FMADD:
 					DECODER(DECODED_FLOAT(FMADD));
 				case RV32F_FMSUB:
