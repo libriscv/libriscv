@@ -168,6 +168,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 			return true;
 		}
 	}
+#if 0
 	// ST x, n-0*W + ST y, n-1*W fused
 	if (i1.first == DECODED_INSTR(STORE_I32_IMM).handler &&
 		i2.first == DECODED_INSTR(STORE_I32_IMM).handler &&
@@ -185,6 +186,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 		fused_store<W, uint64_t> (i1, i2);
 		return true;
 	}
+#endif
 # ifdef RISCV_EXT_COMPRESSED
 	// C.LI + ECALL fused
 	else if (i1.first == DECODED_INSTR(C1_LI).handler &&
