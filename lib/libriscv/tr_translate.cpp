@@ -9,10 +9,11 @@
 
 namespace riscv
 {
-	static constexpr int TRANSLATION_TRESHOLD = 6;
-	static constexpr int INSTRUCTIONS_MAX = 64'000;
-	static constexpr int TRANSLATIONS_MAX = 4000;
-	static constexpr int LOOP_OFFSET_MAX = 80;
+	static constexpr int  TRANSLATION_TRESHOLD = 6;
+	static constexpr int  INSTRUCTIONS_MAX = 64'000;
+	static constexpr int  TRANSLATIONS_MAX = 4000;
+	static constexpr int  LOOP_OFFSET_MAX = 80;
+	static constexpr bool SCAN_FOR_GP = true;
 
 static eastl::hash_set<uint32_t> good_insn
 {
@@ -61,6 +62,28 @@ void CPU<W>::try_translate(
 	std::vector<NamedIPair<W>> dlmappings;
 	extern std::string bintr_code;
 	std::string code = bintr_code;
+
+	address_t gp = 0;
+if constexpr (SCAN_FOR_GP) {
+	// We assume that GP is initialized with AUIPC,
+	// followed by OP_IMM (and maybe OP_IMM32)
+	for (auto it = ipairs.begin(); it != ipairs.end(); ++it)
+	if (it->second.opcode() == RV32I_AUIPC) {
+		const auto auipc = it->second;
+		if (auipc.Utype.rd == 3) { // GP
+			// calculate current PC for AUIPC
+			const address_t pc = basepc + 4 * (it - ipairs.begin());
+			const auto addi = (it+1)->second;
+			if (addi.opcode() == RV32I_OP_IMM && addi.Itype.funct3 == 0x0) {
+				//printf("Found OP_IMM: ADDI  rd=%d, rs1=%d\n", addi.Itype.rd, addi.Itype.rs1);
+				if (addi.Itype.rd == 3 && addi.Itype.rs1 == 3) { // GP
+					gp = pc + auipc.Utype.upper_imm() + addi.Itype.signed_imm();
+					break;
+				}
+			}
+		}
+	}
+} // SCAN_FOR_GP
 
 	size_t icounter = 0;
 	auto it = ipairs.begin();
@@ -116,7 +139,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				//printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
 				std::string func =
 					"f" + std::to_string(dlmappings.size());
-				emit(code, func, &*block, length, {basepc, has_branch});
+				emit(code, func, &*block, length, {basepc, gp, has_branch});
 				dlmappings.push_back({*block, std::move(func)});
 				icounter += length;
 				// we can't translate beyond this estimate, otherwise
@@ -133,8 +156,8 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	}
 	// run with VERBOSE=1 to see command and output
 	if (getenv("VERBOSE")) {
-		printf("Emitted %zu accelerated instructions and %zu functions!\n",
-			icounter, dlmappings.size());
+		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
+			icounter, dlmappings.size(), (long) gp);
 	}
 	// nothing to compile without mappings
 	if (dlmappings.empty()) {

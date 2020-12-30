@@ -16,6 +16,14 @@ inline void add_code(std::string& code, Args&& ... addendum) {
 		code += std::string(addendum) + "\n";
 	}(), ...);
 }
+template <int W>
+inline std::string from_reg(const TransInfo<W>& tinfo, int reg) {
+	if (reg == 3 && tinfo.gp != 0)
+		return std::to_string(tinfo.gp);
+	else if (reg != 0)
+		return "cpu->r[" + std::to_string(reg) + "]";
+	return "0";
+}
 inline std::string from_reg(int reg) {
 	if (reg != 0)
 		return "cpu->r[" + std::to_string(reg) + "]";
@@ -34,16 +42,17 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, cons
 	const auto offset = instr.Btype.signed_imm() / 4;
 	bool goto_enabled = tinfo.has_branch && (offset == -(long) i);
 	if (sign == false)
-		code += "if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {\n";
+		code += "if (" + from_reg(tinfo, instr.Btype.rs1) + op + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	else
-		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
+		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (goto_enabled)
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
 	code += "api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ", " + INSTRUCTION_COUNT(i) + ");\n"
 		"return;}\n";
 }
+template <int W>
 inline void emit_op(std::string& code, const std::string& op, const std::string& sop,
-	uint32_t rd, uint32_t rs1, const std::string& rs2)
+	const TransInfo<W>& tinfo, uint32_t rd, uint32_t rs1, const std::string& rs2)
 {
 	if (rd == 0) {
 		/* must be a NOP */
@@ -51,7 +60,7 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 		add_code(code, from_reg(rd) + sop + rs2 + ";");
 	} else {
 	add_code(code,
-		from_reg(rd) + " = " + from_reg(rs1) + op + rs2 + ";");
+		from_reg(rd) + " = " + from_reg(tinfo, rs1) + op + rs2 + ";");
 	}
 }
 
@@ -72,47 +81,47 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			case 0x0: // I8
 				if (instr.Itype.rd == 0) {
 					add_code(code,
-					"api.mem_ld8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					"api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
 					add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddr_t)(int8_t)api.mem_ld8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					from_reg(instr.Itype.rd) + " = (saddr_t)(int8_t)api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} break;
 			case 0x1: // I16
 				if (instr.Itype.rd == 0) {
 					add_code(code,
-					"api.mem_ld16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					"api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
 					add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddr_t)(int16_t)api.mem_ld16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					from_reg(instr.Itype.rd) + " = (saddr_t)(int16_t)api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} break;
 			case 0x2: // I32
 				if (instr.Itype.rd == 0) {
 					add_code(code,
-					"api.mem_ld32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					"api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
 					add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddr_t)(int32_t)api.mem_ld32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					from_reg(instr.Itype.rd) + " = (saddr_t)(int32_t)api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} break;
 			case 0x3: // I64
 				if (instr.Itype.rd == 0) {
 					add_code(code,
-					"api.mem_ld64(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					"api.mem_ld64(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
 					add_code(code,
-					from_reg(instr.Itype.rd) + " = api.mem_ld64(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					from_reg(instr.Itype.rd) + " = api.mem_ld64(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				}
 				break;
 			case 0x4: // U8
 				add_code(code,
-				from_reg(instr.Itype.rd) + " = api.mem_ld8(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				from_reg(instr.Itype.rd) + " = api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			case 0x5: // U16
 				add_code(code,
-				from_reg(instr.Itype.rd) + " = api.mem_ld16(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				from_reg(instr.Itype.rd) + " = api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			case 0x6: // U32
 				add_code(code,
-				from_reg(instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				from_reg(instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -121,19 +130,19 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			switch (instr.Stype.funct3) {
 			case 0x0: // I8
 				add_code(code,
-					"api.mem_st8(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");");
+					"api.mem_st8(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
 				break;
 			case 0x1: // I16
 				add_code(code,
-					"api.mem_st16(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");");
+					"api.mem_st16(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
 				break;
 			case 0x2: // I32
 				add_code(code,
-					"api.mem_st32(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");");
+					"api.mem_st32(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
 				break;
 			case 0x3: // I64
 				add_code(code,
-					"api.mem_st64(cpu, " + from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(instr.Stype.rs2) + ");");
+					"api.mem_st64(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -168,7 +177,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			if (instr.Itype.rd != 0) {
 				add_code(code, from_reg(instr.Itype.rd) + " = " + PCREL(4) + ";\n");
 			}
-			add_code(code, "api.jump(cpu, " + from_reg(instr.Itype.rs1)
+			add_code(code, "api.jump(cpu, " + from_reg(tinfo, instr.Itype.rs1)
 				+ " + " + from_imm(instr.Itype.signed_imm()) + " - 4, " + INSTRUCTION_COUNT(i) + ");",
 				"}\n");
 			return;
@@ -182,17 +191,17 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			return; // !
 		case RV32I_OP_IMM: {
 			const auto dst = from_reg(instr.Itype.rd);
-			const auto src = from_reg(instr.Itype.rs1);
+			const auto src = from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
-				emit_op(code, " + ", " += ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
+				emit_op(code, " + ", " += ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
 				if constexpr (W == 8)
-					emit_op(code, " << ", " <<= ", instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift64_imm()));
+					emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift64_imm()));
 				else
-					emit_op(code, " << ", " <<= ", instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift_imm()));
+					emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift_imm()));
 				break;
 			case 0x2: // SLTI:
 				// signed less than immediate
@@ -204,14 +213,14 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 					dst + " = (" + src + " < (unsigned) " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XORI:
-				emit_op(code, " ^ ", " ^= ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
+				emit_op(code, " ^ ", " ^= ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				break;
 			case 0x5: // SRLI / SRAI:
 				if (LIKELY(!instr.Itype.is_srai())) {
 					if constexpr (W == 8)
-						emit_op(code, " >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift64_imm()));
+						emit_op(code, " >> ", " >>= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift64_imm()));
 					else
-						emit_op(code, " >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift_imm()));
+						emit_op(code, " >> ", " >>= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift_imm()));
 				} else { // SRAI: preserve the sign bit
 					add_code(code,
 						"{addr_t bit = 1ul << (sizeof(" + src + ") * 8 - 1);",
@@ -242,131 +251,131 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD / SUB
 				if (!instr.Rtype.is_f7())
-					emit_op(code, " + ", " += ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+					emit_op(code, " + ", " += ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				else
-					emit_op(code, " - ", " -= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+					emit_op(code, " - ", " -= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			case 0x1: // SLL
 				if constexpr (W == 8) {
 					add_code(code,
-						from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " << (" + from_reg(instr.Rtype.rs2) + " & 0x3F);");
+						from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x3F);");
 				} else {
 					add_code(code,
-						from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " << (" + from_reg(instr.Rtype.rs2) + " & 0x1F);");
+						from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x1F);");
 				}
 				break;
 			case 0x2: // SLT
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " < (saddr_t)" + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
+					from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " < (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " < " + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
+					from_reg(instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " < " + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XOR
-				emit_op(code, " ^ ", " ^= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			case 0x5: // SRL / SRA
 				if (!instr.Rtype.is_f7()) { // SRL
 					if constexpr (W == 8) {
 						add_code(code,
-							from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & 0x3F);"); // max 63 shifts!
+							from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x3F);"); // max 63 shifts!
 					} else {
 						add_code(code,
-							from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & 0x1F);"); // max 31 shifts!
+							from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x1F);"); // max 31 shifts!
 					}
 				} else { // SRA
 					add_code(code,
-						"{addr_t bit = 1ul << (sizeof(" + from_reg(instr.Rtype.rs1) + ") * 8 - 1);",
-						"int is_signed = (" + from_reg(instr.Rtype.rs1) + " & bit) != 0;"
+						"{addr_t bit = 1ul << (sizeof(" + from_reg(tinfo, instr.Rtype.rs1) + ") * 8 - 1);",
+						"int is_signed = (" + from_reg(tinfo, instr.Rtype.rs1) + " & bit) != 0;"
 					);
 					if constexpr (W == 8) {
 						add_code(code,
-							"uint32_t shifts = " + from_reg(instr.Rtype.rs2) + " & 0x3F;", // max 63 shifts!
-							from_reg(instr.Rtype.rd) + " = SRA64(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
+							"uint32_t shifts = " + from_reg(tinfo, instr.Rtype.rs2) + " & 0x3F;", // max 63 shifts!
+							from_reg(instr.Rtype.rd) + " = SRA64(is_signed, shifts, " + from_reg(tinfo, instr.Rtype.rs1) + ");"
 						);
 					} else {
 						add_code(code,
-							"uint32_t shifts = " + from_reg(instr.Rtype.rs2) + " & 0x1F;", // max 31 shifts!
-							from_reg(instr.Rtype.rd) + " = SRA32(is_signed, shifts, " + from_reg(instr.Rtype.rs1) + ");"
+							"uint32_t shifts = " + from_reg(tinfo, instr.Rtype.rs2) + " & 0x1F;", // max 31 shifts!
+							from_reg(instr.Rtype.rd) + " = SRA32(is_signed, shifts, " + from_reg(tinfo, instr.Rtype.rs1) + ");"
 						);
 					}
 					add_code(code, "}");
 				}
 				break;
 			case 0x6: // OR
-				emit_op(code, " | ", " |= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				emit_op(code, " | ", " |= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			case 0x7: // AND
-				emit_op(code, " & ", " &= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				emit_op(code, " & ", " &= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			// extension RV32M / RV64M
 			case 0x10: // MUL
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(instr.Rtype.rs1) + " * (saddr_t)" + from_reg(instr.Rtype.rs2) + ";");
+					from_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";");
 				break;
 			case 0x11: // MULH (signed x signed)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(instr.Rtype.rs1) + " * (int64_t) " + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (int64_t) " + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x13: // MULHU (unsigned x unsigned)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = ((uint64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					from_reg(instr.Rtype.rd) + " = ((uint64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x14: // DIV
 				// division by zero is not an exception
 				if constexpr (W == 8) {
 					add_code(code,
-						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
-						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))"
-						"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
+						"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
+						"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(tinfo, instr.Rtype.rs2) + " == -1ull)))"
+						"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int64_t)" + from_reg(tinfo, instr.Rtype.rs1) + " / (int64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
 						"}");
 				} else {
 					add_code(code,
-						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
-						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
-						"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
+						"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
+						"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == 2147483648 && " + from_reg(tinfo, instr.Rtype.rs2) + " == 4294967295)))",
+						"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int32_t)" + from_reg(tinfo, instr.Rtype.rs1) + " / (int32_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
 						"}");
 				}
 				break;
 			case 0x15: // DIVU
 				add_code(code,
-					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
-					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " / " + from_reg(instr.Rtype.rs2) + ";"
+					"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0))",
+					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " / " + from_reg(tinfo, instr.Rtype.rs2) + ";"
 				);
 				break;
 			case 0x16: // REM
 				if constexpr (W == 8) {
 					add_code(code,
-					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
-					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))",
-					"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " % (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
+					"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
+					"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(tinfo, instr.Rtype.rs2) + " == -1ull)))",
+					"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int64_t)" + from_reg(tinfo, instr.Rtype.rs1) + " % (int64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
 					"}");
 				} else {
 					add_code(code,
-					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
-					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
-					"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " % (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
+					"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
+					"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == 2147483648 && " + from_reg(tinfo, instr.Rtype.rs2) + " == 4294967295)))",
+					"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int32_t)" + from_reg(tinfo, instr.Rtype.rs1) + " % (int32_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
 					"}");
 				}
 				break;
 			case 0x17: // REMU
 				add_code(code,
-				"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
-					from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " % " + from_reg(instr.Rtype.rs2) + ";"
+				"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0))",
+					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " % " + from_reg(tinfo, instr.Rtype.rs2) + ";"
 				);
 				break;
 			}
@@ -402,7 +411,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			if (UNLIKELY(instr.Itype.rd == 0))
 				ILLEGAL_AND_EXIT();
 			const auto dst = from_reg(instr.Itype.rd);
-			const auto src = "(int32_t)" + from_reg(instr.Itype.rs1);
+			const auto src = "(int32_t)" + from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0:
 				// ADDIW: Add sign-extended 12-bit immediate
@@ -429,8 +438,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			if (UNLIKELY(instr.Rtype.rd == 0))
 				ILLEGAL_AND_EXIT();
 			const auto dst = from_reg(instr.Rtype.rd);
-			const auto src1 = "(int32_t)" + from_reg(instr.Rtype.rs1);
-			const auto src2 = "(int32_t)" + from_reg(instr.Rtype.rs2);
+			const auto src1 = "(int32_t)" + from_reg(tinfo, instr.Rtype.rs1);
+			const auto src2 = "(int32_t)" + from_reg(tinfo, instr.Rtype.rs2);
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADDW / SUBW
@@ -485,7 +494,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			} break;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi { instr };
-			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
+			const auto addr = from_reg(tinfo, fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
 				code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", api.mem_ld32(cpu, " + addr + "));\n";
@@ -499,7 +508,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			} break;
 		case RV32F_STORE: {
 			const rv32f_instruction fi { instr };
-			const auto addr = from_reg(fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
+			const auto addr = from_reg(tinfo, fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
 				code += "api.mem_st32(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i32[0]);\n";
@@ -638,9 +647,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			case RV32F__FCVT_SD_W: {
 				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddr_t)" : "");
 				if (fi.R4type.funct2 == 0x0) {
-					code += "set_fl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+					code += "set_fl(&" + dst + ", " + sign + from_reg(tinfo, fi.R4type.rs1) + ");\n";
 				} else if (fi.R4type.funct2 == 0x1) {
-					code += "set_dbl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+					code += "set_dbl(&" + dst + ", " + sign + from_reg(tinfo, fi.R4type.rs1) + ");\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
@@ -657,9 +666,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				} break;
 			case RV32F__FMV_W_X:
 				if (fi.R4type.funct2 == 0x0) {
-					code += "load_fl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
+					code += "load_fl(&" + dst + ", " + from_reg(tinfo, fi.R4type.rs1) + ");\n";
 				} else if (W == 8 && fi.R4type.funct2 == 0x1) {
-					code += "load_dbl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
+					code += "load_dbl(&" + dst + ", " + from_reg(tinfo, fi.R4type.rs1) + ");\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				} break;
