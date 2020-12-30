@@ -56,13 +56,12 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 		machine().cpu.try_translate(pbase, ipairs);
-#else
+#endif
 		for (size_t n = 0; n < ipairs.size()-1; n++)
 		{
 			if (machine().cpu.try_fuse(ipairs[n+0], ipairs[n+1]))
 				n += 1;
 		}
-#endif
 
 #else
 		// zero the whole thing

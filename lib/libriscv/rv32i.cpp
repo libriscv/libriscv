@@ -52,10 +52,7 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-#ifdef RISCV_BINARY_TRANSLATION
-#include "tr_emit.cpp"
-template void CPU<4>::emit(std::string&, const std::string&, instr_pair*, size_t, const TransInfo<4>&) const;
-#else
+#ifdef RISCV_INSTR_CACHE_PREGEN
 #include "rvi_fuse.cpp"
 template bool CPU<4>::try_fuse(instr_pair, instr_pair) const;
 #endif
