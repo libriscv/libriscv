@@ -64,7 +64,7 @@ static struct CallbackTable {
 	void (*mem_st64)(CPU*, addr_t addr, uint64_t);
 	void (*finish)(CPU*, addr_t, uint64_t);
 	void (*jump)(CPU*, addr_t, uint64_t);
-	int  (*syscall)(CPU*, uint64_t);
+	int  (*syscall)(CPU*, addr_t, uint64_t);
 	void (*ebreak)(CPU*, uint64_t);
 	void (*system)(CPU*, uint32_t);
 	void (*exception)(CPU*, int);

@@ -404,7 +404,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
 					return; // !!
 				} else {
-					code += "if (api.syscall(cpu, " + INSTRUCTION_COUNT(i) + "))\n"
+					code += "if (api.syscall(cpu, " + from_reg(17) + ", " + INSTRUCTION_COUNT(i) + "))\n"
 						"return;\n";
 					break;
 				}

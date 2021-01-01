@@ -297,10 +297,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			cpu.jump(addr);
 			cpu.machine().increment_counter(val);
 		},
-		.syscall = [] (CPU<W>& cpu, uint64_t val) -> int {
+		.syscall = [] (CPU<W>& cpu, address_type<W> n, uint64_t val) -> int {
 			auto old_pc = cpu.pc();
 			cpu.registers().pc += val * 4;
-			cpu.machine().system_call(cpu.reg(17));
+			cpu.machine().system_call(n);
 			// if the system did not modify PC, return to bintr
 			if (cpu.pc() - val * 4 == old_pc && !cpu.machine().stopped()) {
 				cpu.registers().pc = old_pc;
