@@ -195,11 +195,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			const auto src = from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
-				if (instr.Itype.rs1 == 0)
+				if (instr.Itype.rd == 0) {
+					// NOP
+				} else if (instr.Itype.rs1 == 0) {
 					code += dst + " = " + from_imm(instr.Itype.signed_imm()) + ";\n";
-				else
+				} else {
 					emit_op(code, " + ", " += ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
-				break;
+				} break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
 				if constexpr (W == 8)
