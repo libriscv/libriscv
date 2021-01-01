@@ -3,7 +3,8 @@
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 
-#define PCREL(x) std::to_string((address_t) (tinfo.basepc + i * 4 + (x)))
+#define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
+#define PCRELS(x) std::to_string(PCRELA(x))
 #define INSTRUCTION_COUNT(i) ((tinfo.has_branch ? "c + " : "") + std::to_string(i))
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
 
@@ -47,7 +48,7 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, cons
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (goto_enabled)
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
-	code += "api.jump(cpu, " + PCREL(instr.Btype.signed_imm() - 4) + ", " + INSTRUCTION_COUNT(i) + ");\n"
+	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", " + INSTRUCTION_COUNT(i) + ");\n"
 		"return;}\n";
 }
 template <int W>
@@ -175,7 +176,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 		case RV32I_JALR:
 			// jump to register + immediate
 			if (instr.Itype.rd != 0) {
-				add_code(code, from_reg(instr.Itype.rd) + " = " + PCREL(4) + ";\n");
+				add_code(code, from_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";\n");
 			}
 			add_code(code, "api.jump(cpu, " + from_reg(tinfo, instr.Itype.rs1)
 				+ " + " + from_imm(instr.Itype.signed_imm()) + " - 4, " + INSTRUCTION_COUNT(i) + ");",
@@ -183,10 +184,10 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			return;
 		case RV32I_JAL:
 			if (instr.Jtype.rd != 0) {
-				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCREL(4) + ";\n");
+				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
 			add_code(code,
-				"api.jump(cpu, " + PCREL(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
+				"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
 				"}");
 			return; // !
 		case RV32I_OP_IMM: {
@@ -393,7 +394,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			if (UNLIKELY(instr.Utype.rd == 0))
 				ILLEGAL_AND_EXIT();
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = " + PCREL(instr.Utype.upper_imm()) + ";");
+				from_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_FENCE:
 			break;

@@ -6,6 +6,7 @@
 #include "rv32i_instr.hpp"
 #include "tr_api.hpp"
 #include "util/crc32.hpp"
+//#define BINTR_TIMING
 
 namespace riscv
 {
@@ -14,6 +15,17 @@ namespace riscv
 	static constexpr int  TRANSLATIONS_MAX = 4000;
 	static constexpr int  LOOP_OFFSET_MAX = 80;
 	static constexpr bool SCAN_FOR_GP = true;
+
+	inline timespec time_now();
+	inline long nanodiff(timespec, timespec);
+#ifdef BINTR_TIMING
+	#define TIME_POINT(x) \
+		asm("" : : : "memory"); \
+		auto x = time_now();    \
+		asm("" : : : "memory");
+#else
+	#define TIME_POINT(x)  /* */
+#endif
 
 static eastl::hash_set<uint32_t> good_insn
 {
@@ -58,12 +70,10 @@ template <int W>
 void CPU<W>::try_translate(
 	address_t basepc, std::vector<instr_pair>& ipairs) const
 {
-	std::vector<instr_pair*> candidates;
-	std::vector<NamedIPair<W>> dlmappings;
-	extern std::string bintr_code;
-	std::string code = bintr_code;
-
+	// run with VERBOSE=1 to see command and output
+	const bool verbose = (getenv("VERBOSE") != nullptr);
 	address_t gp = 0;
+	TIME_POINT(t0);
 if constexpr (SCAN_FOR_GP) {
 	// We assume that GP is initialized with AUIPC,
 	// followed by OP_IMM (and maybe OP_IMM32)
@@ -83,13 +93,26 @@ if constexpr (SCAN_FOR_GP) {
 			}
 		}
 	}
+#ifdef BINTR_TIMING
+	TIME_POINT(t1);
+	printf(">> GP scan took %ld ns\n", nanodiff(t0, t1));
+#endif
 } // SCAN_FOR_GP
 
+	// Code block and loop detection
+	TIME_POINT(t2);
 	size_t icounter = 0;
 	auto it = ipairs.begin();
 	std::vector<std::pair<decltype(it), address_t>> loops;
 	eastl::hash_set<address_t> already_generated;
 	eastl::hash_set<address_t> already_looped;
+	struct CodeBlock {
+		instr_pair& instr;
+		size_t      length;
+		address_t   addr;
+		bool        has_branch;
+	};
+	std::vector<CodeBlock> blocks;
 
 	while (it != ipairs.end() && icounter < INSTRUCTIONS_MAX)
 	{
@@ -102,6 +125,7 @@ if constexpr (SCAN_FOR_GP) {
 		{
 			auto block = it;
 			bool has_branch = false;
+			bool has_loop = false;
 			// measure block length
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
@@ -121,6 +145,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 					const auto dst = basepc + (4 * length) + offset;
 					if (offset > -LOOP_OFFSET_MAX && already_looped.count(dst) == 0) {
 						loops.push_back({it + offset / 4, dst});
+						has_loop = true;
 						already_looped.insert(dst);
 					}
 				}
@@ -137,14 +162,11 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			{
 				already_generated.insert(basepc);
 				//printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
-				std::string func =
-					"f" + std::to_string(dlmappings.size());
-				emit(code, func, &*block, length, {basepc, gp, has_branch});
-				dlmappings.push_back({*block, std::move(func)});
+				blocks.push_back({*block, length, basepc, has_branch});
 				icounter += length;
 				// we can't translate beyond this estimate, otherwise
 				// the compiler will never finish code generation
-				if (dlmappings.size() >= TRANSLATIONS_MAX)
+				if (blocks.size() >= TRANSLATIONS_MAX)
 					break;
 			}
 			basepc += 4 * length;
@@ -154,8 +176,30 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			++it;
 		}
 	}
-	// run with VERBOSE=1 to see command and output
-	if (getenv("VERBOSE")) {
+#ifdef BINTR_TIMING
+	TIME_POINT(t3);
+	printf(">> Code block detection %ld ns\n", nanodiff(t2, t3));
+#endif
+
+	// Code generation
+	std::vector<NamedIPair<W>> dlmappings;
+	extern std::string bintr_code;
+	std::string code = bintr_code;
+
+	for (const auto& block : blocks)
+	{
+		std::string func =
+			"f" + std::to_string(block.addr);
+		emit(code, func, &block.instr, block.length,
+			{block.addr, gp, block.has_branch});
+		dlmappings.push_back({block.instr, std::move(func)});
+	}
+#ifdef BINTR_TIMING
+	TIME_POINT(t4);
+	printf(">> Code generation took %ld ns\n", nanodiff(t3, t4));
+#endif
+
+	if (verbose) {
 		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
 			icounter, dlmappings.size(), (long) gp);
 	}
@@ -166,13 +210,14 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	if (machine().memory.is_binary_translated()) {
 		throw std::runtime_error("Machine already reports binary translation");
 	}
+	TIME_POINT(t5);
 	const size_t code_size = code.size();
 	// add compiler arguments to make it part of checksum
 	extern std::string compile_command(int arch);
 	code.append(compile_command(W));
 	// create cacheable filename
 	const uint32_t checksum = crc32c(code.c_str(), code.size());
-	char filename[1024];
+	char filename[256];
 	int len = snprintf(filename, sizeof(filename),
 		"/tmp/rvbintr-%08X", checksum);
 	if (len <= 0) {
@@ -180,21 +225,37 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	}
 	void* dylib = nullptr;
 	code.resize(code_size); // remove compiler arguments
+#ifdef BINTR_TIMING
+	TIME_POINT(t6);
+	printf(">> Code hashing took %ld ns\n", nanodiff(t5, t6));
+#endif
 
 #ifdef RISCV_TRANSLATION_CACHE
 	if (access(filename, R_OK) == 0) {
+		TIME_POINT(t7);
 		dylib = dlopen(filename, RTLD_LAZY);
+	#ifdef BINTR_TIMING
+		TIME_POINT(t8);
+		printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
+	#endif
 	}
 #endif
 	// compile ourselves
 	if (dylib == nullptr) {
+		TIME_POINT(t9);
 		extern void* compile(const std::string& code, int arch, const char*);
 		dylib = compile(code, W, filename);
+	#ifdef BINTR_TIMING
+		TIME_POINT(t10);
+		printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
+	#endif
 		// check compilation result
 		if (dylib == nullptr) {
 			return;
 		}
 	}
+
+	TIME_POINT(t11);
 	// map the API callback table
 	auto* ptr = dlsym(dylib, "init");
 	if (ptr == nullptr) {
@@ -282,10 +343,26 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 #endif
 	// close dylib when machine is destructed
 	machine().memory.set_binary_translated(dylib);
+#ifdef BINTR_TIMING
+	TIME_POINT(t12);
+	printf(">> Activating binary translation took %ld ns\n", nanodiff(t11, t12));
+	printf(">> Bintr totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
+#endif
 }
 
 	template void CPU<4>::try_translate(address_t, std::vector<instr_pair>&) const;
 	template void CPU<8>::try_translate(address_t, std::vector<instr_pair>&) const;
 	static_assert(!compressed_enabled,
 		"C-extension incompatible with binary translation");
+
+	timespec time_now()
+	{
+		timespec t;
+		clock_gettime(CLOCK_MONOTONIC, &t);
+		return t;
+	}
+	long nanodiff(timespec start_time, timespec end_time)
+	{
+		return (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
+	}
 }
