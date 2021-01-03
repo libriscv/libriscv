@@ -10,10 +10,9 @@ namespace riscv
 
 #ifdef RISCV_INSTR_CACHE
 	template <int W>
-	void Memory<W>::generate_decoder_cache(address_t addr, size_t len)
+	void Memory<W>::generate_decoder_cache(address_t pbase, address_t addr, size_t len)
 	{
 		constexpr address_t PMASK = Page::size()-1;
-		const address_t pbase = addr & ~PMASK;
 		const size_t prelen  = addr - pbase;
 		const size_t midlen  = len + prelen;
 		const size_t plen =
@@ -55,7 +54,7 @@ namespace riscv
 		}
 
 #ifdef RISCV_BINARY_TRANSLATION
-		machine().cpu.try_translate(pbase, ipairs);
+		machine().cpu.try_translate(addr, ipairs);
 #endif
 		for (size_t n = 0; n < ipairs.size()-1; n++)
 		{

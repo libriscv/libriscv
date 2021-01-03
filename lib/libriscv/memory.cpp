@@ -134,7 +134,7 @@ namespace riscv
 		if (attr.exec && machine().cpu.exec_seg_data() == nullptr)
 		{
 			constexpr address_t PMASK = Page::size()-1;
-			const address_t pbase = hdr->p_vaddr & ~(address_t) PMASK;
+			const address_t pbase = (hdr->p_vaddr - 0x4) & ~(address_t) PMASK;
 			const size_t prelen  = hdr->p_vaddr - pbase;
 			// The last 4 bytes of the range is zeroed out (illegal instruction)
 			const size_t midlen  = len + prelen + 0x4;
@@ -157,7 +157,7 @@ namespace riscv
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, hdr->p_vaddr + len);
 #if defined(RISCV_INSTR_CACHE) && !defined(RISCV_DEBUG)
-			this->generate_decoder_cache(hdr->p_vaddr, len);
+			this->generate_decoder_cache(pbase, hdr->p_vaddr, len);
 #endif
 			// Nothing more to do here, if execute-only
 			if (!attr.read)

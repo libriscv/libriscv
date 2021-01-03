@@ -104,7 +104,7 @@ namespace riscv
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
 #ifdef RISCV_INSTR_CACHE
-		void generate_decoder_cache(address_t addr, size_t len);
+		void generate_decoder_cache(address_t pbase, address_t va, size_t len);
 		auto* get_decoder_cache() const { return m_exec_decoder; }
 #endif
 
