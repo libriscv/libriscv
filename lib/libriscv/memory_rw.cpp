@@ -77,6 +77,12 @@ namespace riscv
 		page.make_writable();
 	}
 
+	template <int W>
+	const Page& Memory<W>::default_page_read(const Memory<W>&, size_t)
+	{
+		return Page::cow_page();
+	}
+
 	static const Page zeroed_page {
 		PageAttributes {
 			.read   = true,

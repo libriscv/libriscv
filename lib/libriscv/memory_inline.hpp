@@ -84,8 +84,9 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
 	if (it != m_pages.end()) {
 		return it->second;
 	}
-	// uninitialized memory is all zeroes on this system
-	return Page::cow_page();
+	// we can provide pages from even other machines
+	// by mapping memory completely separately
+	return m_page_readf_handler(*this, pageno);
 }
 
 template <int W> inline void
