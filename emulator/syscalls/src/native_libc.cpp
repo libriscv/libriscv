@@ -6,7 +6,6 @@ using namespace sas_alloc;
 #define HPRINT(fmt, ...) /* */
 //#define MPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #define MPRINT(fmt, ...) /* */
-static const uint64_t ARENA_BASE = 0x40000000;
 
 #ifndef NATIVE_SYSCALLS_BASE
 #define NATIVE_SYSCALLS_BASE    1  /* They start at 1 */
@@ -126,21 +125,21 @@ static void setup_native_heap_syscalls(Machine<W>& machine,
 }
 
 template <int W>
-Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory)
+Arena* setup_native_heap_syscalls(Machine<W>& machine, uint64_t base, size_t max_memory)
 {
-	auto* arena = new sas_alloc::Arena(ARENA_BASE, ARENA_BASE + max_memory);
+	auto* arena = new sas_alloc::Arena(base, base + max_memory);
 	machine.add_destructor_callback([arena] { delete arena; });
 
 	setup_native_heap_syscalls<W> (machine, arena);
 	return arena;
 }
 template <int W>
-Arena* setup_native_heap_syscalls(Machine<W>& machine, size_t max_memory,
+Arena* setup_native_heap_syscalls(Machine<W>& machine, uint64_t base, size_t max_memory,
 	Function<void* (size_t)> constructor)
 {
 	sas_alloc::Arena* arena =
 		(sas_alloc::Arena*) constructor(sizeof(sas_alloc::Arena));
-	new (arena) sas_alloc::Arena(ARENA_BASE, ARENA_BASE + max_memory);
+	new (arena) sas_alloc::Arena(base, base + max_memory);
 
 	setup_native_heap_syscalls<W> (machine, arena);
 	return arena;
@@ -334,10 +333,10 @@ void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to)
 }
 
 /* le sigh */
-template Arena* setup_native_heap_syscalls<4>(Machine<4>&, size_t);
-template Arena* setup_native_heap_syscalls<4>(Machine<4>& machine, size_t, Function<void* (size_t)>);
+template Arena* setup_native_heap_syscalls<4>(Machine<4>&, uint64_t, size_t);
+template Arena* setup_native_heap_syscalls<4>(Machine<4>& machine, uint64_t, size_t, Function<void* (size_t)>);
 template void setup_native_memory_syscalls<4>(Machine<4>&, bool);
 
-template Arena* setup_native_heap_syscalls<8>(Machine<8>&, size_t);
-template Arena* setup_native_heap_syscalls<8>(Machine<8>& machine, size_t, Function<void* (size_t)>);
+template Arena* setup_native_heap_syscalls<8>(Machine<8>&, uint64_t, size_t);
+template Arena* setup_native_heap_syscalls<8>(Machine<8>& machine, uint64_t, size_t, Function<void* (size_t)>);
 template void setup_native_memory_syscalls<8>(Machine<8>&, bool);
