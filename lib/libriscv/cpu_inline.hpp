@@ -16,7 +16,7 @@ inline void CPU<W>::jump(const address_t dst)
 {
 	this->registers().pc = dst;
 #ifdef RISCV_INBOUND_JUMPS_ONLY
-	if (UNLIKELY(this->pc() < m_exec_begin && this->pc() >= m_exec_end)) {
+	if (UNLIKELY(this->pc() < m_exec_begin || this->pc() >= m_exec_end)) {
 		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 	}
 #endif
