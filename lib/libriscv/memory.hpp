@@ -88,11 +88,13 @@ namespace riscv
 		// page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(size_t page, Args&& ...);
+		void  invalidate_page(address_t pageno, Page&);
 		void  free_pages(address_t, size_t len);
 		// page fault when writing to unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
 		// page fault when reading unused memory
 		void set_page_readf_handler(page_readf_cb_t h) { this->m_page_readf_handler = h; }
+		void reset_page_readf_handler() { this->m_page_readf_handler = default_page_read; }
 		// page write on copy-on-write page
 		void set_page_write_handler(page_write_cb_t h) { this->m_page_write_handler = h; }
 		static void default_page_write(Memory&, Page& page);
@@ -131,7 +133,6 @@ namespace riscv
 		}
 		void clear_all_pages();
 		void initial_paging();
-		void invalidate_page(address_t pageno, Page&);
 		[[noreturn]] static void protection_fault(address_t);
 		const Page& get_readable_page(address_t);
 		Page& get_writable_page(address_t);
