@@ -75,8 +75,10 @@ namespace riscv
 		Callsite lookup(address_t) const;
 		void print_backtrace(void(*print_function)(const char*, size_t));
 
-		// page handling
+		// memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
+		size_t nonshared_pages_active() const noexcept;
+		// page handling
 		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(address_t) const noexcept;
@@ -102,7 +104,6 @@ namespace riscv
 		// NOTE: use print_and_pause() to immediately break!
 		void trap(address_t page_addr, mmio_cb_t callback);
 		// shared pages (regular pages will have priority!)
-		size_t nonshared_pages_active() const noexcept;
 		Page&  install_shared_page(address_t pageno, const Page&);
 		// create pages for non-owned (shared) memory with given attributes
 		void insert_non_owned_memory(

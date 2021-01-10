@@ -55,18 +55,18 @@ namespace riscv
 
 	class MachineException : public std::exception {
 	public:
-	    explicit MachineException(const int type, const char* message, const int data = 0)
-			: m_type {type}, m_data { data }, m_msg { message }   {}
+	    explicit MachineException(const int type, const char* text, const uint64_t data = 0)
+			: m_type{type}, m_data{data}, m_msg{text} {}
 
 	    virtual ~MachineException() throw() {}
 
-		int  type() const throw() { return m_type; }
+		int         type() const throw() { return m_type; }
+		uint64_t    data() const throw() { return m_data; }
 	    const char* what() const throw() override { return m_msg; }
-		int  data() const throw() { return m_data; }
 	protected:
-	    const int   m_type;
-		const int   m_data;
-		const char* m_msg;
+	    const int      m_type;
+		const uint64_t m_data;
+		const char*    m_msg;
 	};
 
 	class MachineTimeoutException : public MachineException {
