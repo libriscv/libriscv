@@ -29,7 +29,7 @@ namespace riscv
 #undef DECODER
 	}
 
-	std::string RV64I::to_string(CPU<8>& cpu, instruction_format<8> format, const instruction_t& instr)
+	std::string RV64I::to_string(CPU<8>& cpu, instruction_format format, const instruction_t& instr)
 	{
 		char buffer[256];
 		char ibuffer[128];

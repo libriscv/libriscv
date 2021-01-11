@@ -35,19 +35,18 @@ namespace riscv
 		UNKNOWN_EXCEPTION
 	};
 
-	template <int W>
 	using instruction_format  = union rv32i_instruction;
 	template <int W>
-	using instruction_handler = void (*)(CPU<W>&, instruction_format<W>);
+	using instruction_handler = void (*)(CPU<W>&, instruction_format);
 	template <int W>
-	using instruction_printer = int  (*)(char*, size_t, CPU<W>&, instruction_format<W>);
+	using instruction_printer = int  (*)(char*, size_t, CPU<W>&, instruction_format);
 	template <int W>
 	using register_type  = address_type<W>;
 
 	template <int W>
 	struct Instruction {
 		using isa_t     = isa_type<W>;           // 32- or 64-bit architecture
-		using format_t  = instruction_format<W>; // one machine instruction
+		using format_t  = instruction_format; // one machine instruction
 
 		const instruction_handler<W> handler; // callback for executing one instruction
 		const instruction_printer<W> printer; // callback for logging one instruction

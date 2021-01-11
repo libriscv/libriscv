@@ -19,7 +19,7 @@ namespace riscv
 	struct CPU
 	{
 		using address_t = address_type<W>;          // one unsigned memory address
-		using format_t  = instruction_format<W>; // one machine instruction
+		using format_t  = instruction_format; // one machine instruction
 		using breakpoint_t = Function<void(CPU<W>&)>; // machine instruction
 		using instruction_t = Instruction<W>;
 

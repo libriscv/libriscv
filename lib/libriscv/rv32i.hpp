@@ -11,7 +11,7 @@ namespace riscv
 	struct RV32I {
 		using instruction_t = Instruction<4>;
 
-		static std::string to_string(CPU<4>& cpu, instruction_format<4> format, const instruction_t& instr);
+		static std::string to_string(CPU<4>& cpu, instruction_format format, const instruction_t& instr);
 
 		static inline uint32_t SRA(bool is_signed, uint32_t shifts, uint32_t value)
 		{
