@@ -319,7 +319,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 				machine.set_result(0);
 				return;
 			case MADV_REMOVE:
-			case MADV_FREE:
+			//case MADV_FREE:
 				machine.memory.free_pages(addr, len);
 				machine.set_result(0);
 				return;

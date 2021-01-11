@@ -46,7 +46,7 @@ int main(int argc, const char** argv)
 	else if constexpr (micro_guest) {
 		machine.setup_argv(args);
 		setup_minimal_syscalls(state, machine);
-		setup_native_heap_syscalls(machine, 6*1024*1024);
+		setup_native_heap_syscalls(machine, 0x40000000, 6*1024*1024);
 		setup_native_memory_syscalls(machine, false);
 		setup_native_threads(machine);
 	}
@@ -111,7 +111,7 @@ int main(int argc, const char** argv)
 	try {
 		machine.simulate();
 	} catch (riscv::MachineException& me) {
-		printf(">>> Machine exception %d: %s (data: %d)\n",
+		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
 				me.type(), me.what(), me.data());
 #ifdef RISCV_DEBUG
 		machine.print_and_pause();
