@@ -87,17 +87,18 @@ namespace riscv
 		Page& create_page(address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
 		std::string get_page_info(address_t addr) const;
-		// page creation & destruction
+		// Page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(size_t page, Args&& ...);
 		void  invalidate_page(address_t pageno, Page&);
 		void  free_pages(address_t, size_t len);
-		// page fault when writing to unused memory
+		// Page fault when writing to unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
-		// page fault when reading unused memory
+		// Page fault when reading unused memory.
+		// Primarily used for pagetable sharing, enabled with RISCV_SHARED_PT.
 		void set_page_readf_handler(page_readf_cb_t h) { this->m_page_readf_handler = h; }
 		void reset_page_readf_handler() { this->m_page_readf_handler = default_page_read; }
-		// page write on copy-on-write page
+		// Page write on copy-on-write page
 		void set_page_write_handler(page_write_cb_t h) { this->m_page_write_handler = h; }
 		static void default_page_write(Memory&, Page& page);
 		static const Page& default_page_read(const Memory&, size_t);
@@ -135,6 +136,7 @@ namespace riscv
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);
+		const Page& get_pageno_slowpath(address_t) const noexcept;
 		const Page& get_readable_page(address_t);
 		Page& get_writable_page(address_t);
 		// ELF stuff
@@ -168,17 +170,18 @@ namespace riscv
 		std::array<CachedPage<W, Page>, RISCV_PAGE_CACHE> m_wr_cache;
 		eastl::fixed_hash_map<address_t, Page, 128, 64>  m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
-		page_readf_cb_t m_page_readf_handler = default_page_read;
+		page_readf_cb_t m_page_readf_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
 
 		const std::string_view m_binary;
 
-#ifndef RISCV_DISABLE_SYM_LOOKUP
-		// lookup tree for ELF symbol names
-		mutable eastl::string_map<address_t,
-				eastl::str_less<const char*>,
-				eastl::allocator_malloc> sym_lookup;
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+		address_t m_ropage_begin = 0;
+		address_t m_ropage_end = 0;
+		std::unique_ptr<Page[]> m_ro_pages = nullptr;
+		std::unique_ptr<uint8_t[]> m_ro_pagedata = nullptr;
 #endif
+
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
 		address_t m_exit_address  = 0;
@@ -187,6 +190,12 @@ namespace riscv
 		const bool m_verbose_loader;
 		const bool m_original_machine;
 
+#ifndef RISCV_DISABLE_SYM_LOOKUP
+		// lookup tree for ELF symbol names
+		mutable eastl::string_map<address_t,
+				eastl::str_less<const char*>,
+				eastl::allocator_malloc> sym_lookup;
+#endif
 		// ELF programs linear .text segment
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;
@@ -194,13 +203,6 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE
 		instruction_handler<W>* m_exec_decoder = nullptr;
 		DecoderCache<W>* m_decoder_cache = nullptr;
-#endif
-
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		address_t m_ropage_begin = 0;
-		address_t m_ropage_end = 0;
-		std::unique_ptr<Page[]> m_ro_pages = nullptr;
-		std::unique_ptr<uint8_t[]> m_ro_pagedata = nullptr;
 #endif
 		mutable void* m_bintr_dl = nullptr;
 	};

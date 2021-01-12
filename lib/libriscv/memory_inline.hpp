@@ -81,12 +81,10 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
 	}
 #endif
 	auto it = m_pages.find(pageno);
-	if (it != m_pages.end()) {
+	if (LIKELY(it != m_pages.end())) {
 		return it->second;
 	}
-	// we can provide pages from even other machines
-	// by mapping memory completely separately
-	return m_page_readf_handler(*this, pageno);
+	return get_pageno_slowpath(pageno);
 }
 
 template <int W> inline void
