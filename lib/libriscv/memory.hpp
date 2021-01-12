@@ -94,10 +94,12 @@ namespace riscv
 		void  free_pages(address_t, size_t len);
 		// Page fault when writing to unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
-		// Page fault when reading unused memory.
-		// Primarily used for pagetable sharing, enabled with RISCV_SHARED_PT.
+#ifdef RISCV_SHARED_PAGETABLES
+		// Page fault when reading unused memory. Primarily used for
+		// pagetable sharing across machines, enabled with RISCV_SHARED_PT.
 		void set_page_readf_handler(page_readf_cb_t h) { this->m_page_readf_handler = h; }
 		void reset_page_readf_handler() { this->m_page_readf_handler = default_page_read; }
+#endif
 		// Page write on copy-on-write page
 		void set_page_write_handler(page_write_cb_t h) { this->m_page_write_handler = h; }
 		static void default_page_write(Memory&, Page& page);
@@ -170,8 +172,10 @@ namespace riscv
 		std::array<CachedPage<W, Page>, RISCV_PAGE_CACHE> m_wr_cache;
 		eastl::fixed_hash_map<address_t, Page, 128, 64>  m_pages;
 		page_fault_cb_t m_page_fault_handler = nullptr;
-		page_readf_cb_t m_page_readf_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
+#ifdef RISCV_SHARED_PAGETABLES
+		page_readf_cb_t m_page_readf_handler = nullptr;
+#endif
 
 		const std::string_view m_binary;
 

@@ -50,7 +50,7 @@ static inline void set_dbl(fp64reg* reg, double d) {
 typedef struct {
 	addr_t  pc;
 	addr_t  r[32];
-	fp64reg    fr[32];
+	fp64reg fr[32];
 } CPU;
 
 static struct CallbackTable {
@@ -62,7 +62,6 @@ static struct CallbackTable {
 	void (*mem_st16)(CPU*, addr_t addr, uint16_t);
 	void (*mem_st32)(CPU*, addr_t addr, uint32_t);
 	void (*mem_st64)(CPU*, addr_t addr, uint64_t);
-	void (*finish)(CPU*, addr_t, uint64_t);
 	void (*jump)(CPU*, addr_t, uint64_t);
 	int  (*syscall)(CPU*, addr_t, uint64_t);
 	void (*ebreak)(CPU*, uint64_t);

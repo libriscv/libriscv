@@ -289,10 +289,6 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
 			cpu.machine().memory.template write<uint64_t> (addr, val);
 		},
-		.finish_block = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
-			cpu.registers().pc = addr;
-			cpu.machine().increment_counter(val);
-		},
 		.jump = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
 			cpu.jump(addr);
 			cpu.machine().increment_counter(val);

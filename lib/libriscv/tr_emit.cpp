@@ -195,8 +195,11 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			const auto src = from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
-				emit_op(code, " + ", " += ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
-				break;
+				if (instr.Itype.signed_imm() == 0) {
+					add_code(code, dst + " = " + src + ";");
+				} else {
+					emit_op(code, " + ", " += ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
+				} break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
 				if constexpr (W == 8)
@@ -401,13 +404,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
 					return; // !!
 				} else {
-					code += "if (api.syscall(cpu, " + from_reg(17) + ", " + INSTRUCTION_COUNT(i) + "))\n"
-						"return;\n";
+					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(17) + ", " + INSTRUCTION_COUNT(i) + ")))\n"
+						"  return;\n";
 					break;
 				}
 			} else {
 				code += "api.system(" + std::to_string(instr.whole) +");\n";
-			}
+			} break;
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
 				ILLEGAL_AND_EXIT();
@@ -688,9 +691,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			throw std::runtime_error("Unhandled instruction in code emitter");
 		}
 	}
-	code +=
-		"\napi.finish(cpu, " + std::to_string(tinfo.basepc + 4 * (len-1)) + ", " + INSTRUCTION_COUNT(len-1) + ");\n"
-		"}\n\n";
+	throw std::runtime_error("Code block did not return properly");
 }
 
 template void CPU<4>::emit(std::string&, const std::string&, instr_pair*, size_t, const TransInfo<4>&) const;
