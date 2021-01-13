@@ -48,7 +48,7 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, cons
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (goto_enabled)
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
-	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", " + INSTRUCTION_COUNT(i) + ");\n"
+	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", c);\n"
 		"return;}\n";
 }
 template <int W>
