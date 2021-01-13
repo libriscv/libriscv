@@ -48,7 +48,8 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, cons
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (goto_enabled)
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
-	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", c);\n"
+	// The number of instructions to increment depends on if branch-instruction-counting is enabled
+	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", " + (tinfo.has_branch ? "c" : std::to_string(i)) + ");\n"
 		"return;}\n";
 }
 template <int W>
@@ -196,7 +197,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
 				if (instr.Itype.signed_imm() == 0) {
-					add_code(code, dst + " = " + src + ";");
+					if (instr.Itype.rd != 0) // NOP: x0 = 0
+						add_code(code, dst + " = " + src + ";");
 				} else {
 					emit_op(code, " + ", " += ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				} break;
