@@ -182,7 +182,7 @@ namespace riscv
     ATOMIC_INSTR(STORE_COND,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto addr = cpu.reg(instr.Atype.rs1);
-		bool resv;
+		bool resv = false;
 		if (instr.Atype.funct3 == 0x2)
 		{
 			resv = cpu.atomics().store_conditional(4, addr);

@@ -16,11 +16,12 @@ static void fused_li_ecall(
 		};
 		uint32_t whole;
 	};
-	i1.second.whole = FusedSyscall {
+	const FusedSyscall fsys = { {
 		.lower = (uint8_t)  i2.second.half[0],  // Trick emulator to step
 		.ilen  = (uint8_t)  i1.second.length(), // over second instruction.
 		.sysno = (uint16_t) sysno,
-	}.whole;
+	} };
+	i1.second.whole = fsys.whole;
 	i1.first = [] (auto& cpu, rv32i_instruction instr) {
 		auto& fop = view_as<FusedSyscall> (instr);
 		if constexpr (compressed_enabled)
@@ -153,12 +154,13 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 				}
 				uint32_t whole;
 			};
-			i1.second.whole = FusedLili {
+			const FusedLili lili = { {
 				.li1  = i1.second.Itype.imm,
 				.reg1 = i1.second.Itype.rd,
 				.li2  = i2.second.Itype.imm,
 				.reg2 = i2.second.Itype.rd
-			}.whole;
+			} };
+			i1.second.whole = lili.whole;
 			i1.first = [] (auto& cpu, rv32i_instruction instr) {
 				auto& fop = view_as<FusedLili> (instr);
 				cpu.reg(fop.reg1) = FusedLili::signed_imm(fop.li1);
