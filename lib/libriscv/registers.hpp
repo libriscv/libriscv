@@ -38,7 +38,7 @@ namespace riscv
 	};
 
 	template <int W>
-	struct Registers
+	struct alignas(16) Registers
 	{
 		using address_t  = address_type<W>;   // one unsigned memory address
 		using register_t = register_type<W>;  // integer register
