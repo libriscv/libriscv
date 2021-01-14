@@ -9,7 +9,7 @@
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
 
 namespace riscv {
-static constexpr int LOOP_INSTRUCTIONS_MAX = 1024;
+static constexpr int LOOP_INSTRUCTIONS_MAX = 4096;
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -46,11 +46,16 @@ inline void add_branch(std::string& code, bool sign, const std::string& op, cons
 		code += "if (" + from_reg(tinfo, instr.Btype.rs1) + op + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	else
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
-	if (goto_enabled)
+	if (goto_enabled) {
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
+		// We can simplify this jump because we know it's safe
+		code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n"
+			"return;}\n";
+	} else {
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
 	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", " + (tinfo.has_branch ? "c" : std::to_string(i)) + ");\n"
 		"return;}\n";
+	}
 }
 template <int W>
 inline void emit_op(std::string& code, const std::string& op, const std::string& sop,
