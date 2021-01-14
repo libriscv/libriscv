@@ -146,125 +146,31 @@ Arena* setup_native_heap_syscalls(Machine<W>& machine, uint64_t base, size_t max
 }
 
 template <int W>
-void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
+void setup_native_memory_syscalls(Machine<W>& machine, bool /*trusted*/)
 {
-	if (trusted == false)
-	{
+	machine.install_syscall_handlers({
+		{NATIVE_SYSCALLS_BASE+5, [] (auto& m) {
 		// Memcpy n+5
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+5,
-		[] (auto& m)
-		{
-			auto [dst, src, len] =
-				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-			m.memory.memcpy(dst, m, src, len);
-			m.increment_counter(2 * len);
-			m.set_result(dst);
-		});
+		auto [dst, src, len] =
+			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+		MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
+		m.memory.memview(src, len,
+			[&m] (const uint8_t* data, size_t len) {
+				auto dst = m.template sysarg <address_type<W>> (0);
+				m.memory.memcpy(dst, data, len);
+			});
+		m.increment_counter(2 * len);
+		m.set_result(dst);
+	}}, {NATIVE_SYSCALLS_BASE+6, [] (auto& m) {
 		// Memset n+6
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+6,
-		[] (auto& m)
-		{
-			const auto [dst, value, len] =
-				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
-			for (size_t i = 0; i < len; i++) {
-				m.memory.template write<uint8_t> (dst + i, value);
-			}
-			m.increment_counter(len);
-			m.set_result(dst);
-		});
-		// Memcmp n+8
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+8,
-		[] (auto& m)
-		{
-			auto [p1, p2, len] =
-				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
-			m.increment_counter(2 * len);
-			uint8_t v1 = 0;
-			uint8_t v2 = 0;
-			while (len > 0) {
-				v1 = m.memory.template read<uint8_t> (p1);
-				v2 = m.memory.template read<uint8_t> (p2);
-				if (v1 != v2) break;
-				p1++;
-				p2++;
-				len--;
-			}
-			m.set_result(len == 0 ? 0 : (v1 - v2));
-		});
-		// Strlen n+10
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+10,
-		[] (auto& m)
-		{
-			auto [addr] = m.template sysargs<address_type<W>> ();
-			address_type<W> iter = addr;
-			do {
-				auto v1 = m.memory.template read<uint8_t> (iter ++);
-				if (v1 == 0) break;
-			} while ((iter - addr) < 4096);
-			const auto len = iter - addr;
-			m.increment_counter(2 * len);
-			m.set_result(len);
-			MPRINT("SYSCALL strlen(%#lX) = %lu\n",
-				(long) addr, (long) len);
-		});
-	} else {
-		/// trusted system calls ///
-		// Memcpy n+5
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+5,
-		[] (auto& m)
-		{
-			auto [dst, src, len] =
-				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-			m.memory.memview(src, len,
-				[&m] (const uint8_t* data, size_t len) {
-					auto dst = m.template sysarg <address_type<W>> (0);
-					m.memory.memcpy(dst, data, len);
-				});
-			m.increment_counter(2 * len);
-			m.set_result(dst);
-		});
-		// Memset n+6
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+6,
-		[] (auto& m)
-		{
-			const auto [dst, value, len] =
-				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
-			m.memory.memset(dst, value, len);
-			m.increment_counter(len);
-			m.set_result(dst);
-		});
-		// Memcmp n+8
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+8,
-		[] (auto& m)
-		{
-			auto [p1, p2, len] =
-				m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-			MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
-			m.increment_counter(2 * len);
-			m.set_result(m.memory.memcmp(p1, p2, len));
-		});
-		// Strlen n+10
-		machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+10,
-		[] (auto& m)
-		{
-			auto [addr] = m.template sysargs<address_type<W>> ();
-			uint32_t len = m.memory.strlen(addr, 4096);
-			m.increment_counter(2 * len);
-			m.set_result(len);
-			MPRINT("SYSCALL strlen(%#lX) = %lu\n",
-				(long) addr, (long) len);
-		});
-	} // trusted
-
-	// Memmove n+7
-	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+7,
-	[] (auto& m)
-	{
+		const auto [dst, value, len] =
+			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+		MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
+		m.memory.memset(dst, value, len);
+		m.increment_counter(len);
+		m.set_result(dst);
+	}}, {NATIVE_SYSCALLS_BASE+7, [] (auto& m) {
+		// Memmove n+7
 		auto [dst, src, len] =
 			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memmove(%#lX, %#lX, %lu)\n",
@@ -283,12 +189,23 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		}
 		m.increment_counter(2 * len);
 		m.set_result(dst);
-	});
-
-	// Strncmp n+11
-	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+11,
-	[] (auto& m)
-	{
+	}}, {NATIVE_SYSCALLS_BASE+8, [] (auto& m) {
+		// Memcmp n+8
+		auto [p1, p2, len] =
+			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+		MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
+		m.increment_counter(2 * len);
+		m.set_result(m.memory.memcmp(p1, p2, len));
+	}}, {NATIVE_SYSCALLS_BASE+10, [] (auto& m) {
+		// Strlen n+10
+		auto [addr] = m.template sysargs<address_type<W>> ();
+		uint32_t len = m.memory.strlen(addr, 4096);
+		m.increment_counter(2 * len);
+		m.set_result(len);
+		MPRINT("SYSCALL strlen(%#lX) = %lu\n",
+			(long) addr, (long) len);
+	}}, {NATIVE_SYSCALLS_BASE+11, [] (auto& m) {
+		// Strncmp n+11
 		auto [a1, a2, maxlen] =
 			m.template sysargs<address_type<W>, address_type<W>, uint32_t> ();
 		MPRINT("SYSCALL strncmp(%#lX, %#lX, %u)\n", (long)a1, (long)a2, maxlen);
@@ -305,18 +222,14 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool trusted)
 		}
 		m.increment_counter(2 + 2 * len);
 		m.set_result(0);
-	});
-
-	// Print backtrace n+19
-	machine.install_syscall_handler(NATIVE_SYSCALLS_BASE+19,
-	[] (auto& m)
-	{
+	}}, {NATIVE_SYSCALLS_BASE+19, [] (auto& m) {
+		// Print backtrace n+19
 		m.memory.print_backtrace(
 			[] (const char* buffer, size_t len) {
 				printf("%.*s\n", (int)len, buffer);
 			});
 		m.set_result(0);
-	});
+	}}});
 }
 
 uint64_t arena_malloc(sas_alloc::Arena* arena, const size_t len)
