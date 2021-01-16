@@ -20,7 +20,7 @@ namespace riscv
 			uint64_t sign  : 1;
 		} usign;
 
-		inline void nanbox() { this->i32[1] = 0xFFFFFFFF; }
+		inline void nanbox() { this->i32[1] = 0; }
 		void set_float(float f) {
 			this->f32[0] = f;
 			this->nanbox();

@@ -68,8 +68,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = rs1.f32[0] * rs2.f32[0] + rs3.f32[0];
-			dst.nanbox();
+			dst.set_float(rs1.f32[0] * rs2.f32[0] + rs3.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
 		} else {
@@ -97,8 +96,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = rs1.f32[0] * rs2.f32[0] - rs3.f32[0];
-			dst.nanbox();
+			dst.set_float(rs1.f32[0] * rs2.f32[0] - rs3.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 - rs3.f64;
 		} else {
@@ -126,8 +124,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0];
-			dst.nanbox();
+			dst.set_float(-(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) - rs3.f64;
 		} else {
@@ -154,8 +151,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = -(rs1.f32[0] * rs2.f32[0]) + rs3.f32[0];
-			dst.nanbox();
+			dst.set_float(-(rs1.f32[0] * rs2.f32[0]) + rs3.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) + rs3.f64;
 		} else {
@@ -183,8 +179,7 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = rs1.f32[0] + rs2.f32[0];
-			dst.nanbox();
+			dst.set_float(rs1.f32[0] + rs2.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 + rs2.f64;
 		} else {
@@ -210,8 +205,7 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = rs1.f32[0] - rs2.f32[0];
-			dst.nanbox();
+			dst.set_float(rs1.f32[0] - rs2.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 - rs2.f64;
 		} else {
@@ -237,8 +231,7 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.f32[0] = rs1.f32[0] * rs2.f32[0];
-			dst.nanbox();
+			dst.set_float(rs1.f32[0] * rs2.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64;
 		} else {
@@ -264,8 +257,7 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // fp32
-			dst.f32[0] = rs1.f32[0] / rs2.f32[0];
-			dst.nanbox();
+			dst.set_float(rs1.f32[0] / rs2.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // fp64
 			dst.f64 = rs1.f64 / rs2.f64;
 		} else {
@@ -321,12 +313,10 @@ namespace riscv
 		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
 		{
 		case 0x0: // FMIN.S
-			dst.f32[0] = std::min(rs1.f32[0], rs2.f32[0]);
-			dst.nanbox();
+			dst.set_float(std::min(rs1.f32[0], rs2.f32[0]));
 			break;
 		case 0x1: // FMAX.S
-			dst.f32[0] = std::max(rs1.f32[0], rs2.f32[0]);
-			dst.nanbox();
+			dst.set_float(std::max(rs1.f32[0], rs2.f32[0]));
 			break;
 		case 0x10: // FMIN.D
 			dst.f64 = std::min(rs1.f64, rs2.f64);
@@ -404,8 +394,7 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FCVT.S.D (64 -> 32)
-			dst.f32[0] = rs1.f64;
-			dst.nanbox();
+			dst.set_float(rs1.f64);
 			break;
 		case 0x1: // FCVT.D.S (32 -> 64)
 			dst.f64 = rs1.f32[0];
@@ -466,10 +455,9 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 		case 0x0: // to float32
 			if (fi.R4type.rs2 == 0x0)
-				dst.f32[0] = (RVSIGNTYPE(cpu)) rs1;
+				dst.set_float((RVSIGNTYPE(cpu)) rs1);
 			else
-				dst.f32[0] = rs1;
-			dst.nanbox();
+				dst.set_float(rs1);
 			break;
 		case 0x1: // to float64
 			if (fi.R4type.rs2 == 0x0) {
@@ -598,8 +586,7 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FMV.W.X
-			dst.i32[0] = rs1;
-			dst.nanbox();
+			dst.load_u32(rs1);
 			break;
 		case 0x1: // FMV.D.X
 			if constexpr (RVIS64BIT(cpu)) {

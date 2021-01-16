@@ -33,18 +33,14 @@ typedef union {
 
 static inline void load_fl(fp64reg* reg, uint32_t fv) {
 	reg->i32[0] = fv;
-	reg->i32[1] = 0xFFFFFFFF;
-}
-static inline void load_dbl(fp64reg* reg, uint64_t dv) {
-	reg->i64 = dv;
+	reg->i32[1] = 0;
 }
 static inline void set_fl(fp64reg* reg, float f) {
 	reg->f32[0] = f;
-	reg->i32[1] = 0xFFFFFFFF;
+	reg->i32[1] = 0;
 }
-static inline void set_dbl(fp64reg* reg, double d) {
-	reg->f64 = d;
-}
+#define load_dbl(reg, dv) (reg)->i64 = (dv)
+#define set_dbl(reg, dv)  (reg)->f64 = (dv)
 
 // Thin variant of CPU for higher compilation speed
 __attribute__((aligned(16)))
@@ -55,14 +51,14 @@ typedef struct {
 } CPU;
 
 static struct CallbackTable {
-	uint8_t  (*mem_ld8)(CPU*, addr_t addr);
-	uint16_t (*mem_ld16)(CPU*, addr_t addr);
-	uint32_t (*mem_ld32)(CPU*, addr_t addr);
-	uint64_t (*mem_ld64)(CPU*, addr_t addr);
-	void (*mem_st8) (CPU*, addr_t addr, uint8_t);
-	void (*mem_st16)(CPU*, addr_t addr, uint16_t);
-	void (*mem_st32)(CPU*, addr_t addr, uint32_t);
-	void (*mem_st64)(CPU*, addr_t addr, uint64_t);
+	uint8_t  (*mem_ld8)(CPU*, addr_t);
+	uint16_t (*mem_ld16)(CPU*, addr_t);
+	uint32_t (*mem_ld32)(CPU*, addr_t);
+	uint64_t (*mem_ld64)(CPU*, addr_t);
+	void (*mem_st8) (CPU*, addr_t, uint8_t);
+	void (*mem_st16)(CPU*, addr_t, uint16_t);
+	void (*mem_st32)(CPU*, addr_t, uint32_t);
+	void (*mem_st64)(CPU*, addr_t, uint64_t);
 	void (*jump)(CPU*, addr_t, uint64_t);
 	int  (*syscall)(CPU*, addr_t, uint64_t);
 	void (*ebreak)(CPU*, uint64_t);
