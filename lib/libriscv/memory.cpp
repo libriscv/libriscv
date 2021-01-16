@@ -47,7 +47,11 @@ namespace riscv
 		}
 		// when an owning machine is passed, its state will be used instead
 		if (options.owning_machine == nullptr) {
-			this->reset();
+			// initialize paging (which clears all pages) before loading binary
+			this->initial_paging();
+			// load ELF binary into virtual memory
+			if (!m_binary.empty())
+				this->binary_loader(options);
 		}
 		else {
 			this->machine_loader(*options.owning_machine);
@@ -74,12 +78,8 @@ namespace riscv
 	template <int W>
 	void Memory<W>::reset()
 	{
-		this->clear_all_pages();
-		// initialize paging (which clears all pages) before loading binary
-		this->initial_paging();
-		// load ELF binary into virtual memory
-		if (!m_binary.empty())
-			this->binary_loader();
+		// Hard to support because of things like
+		// serialization, machine options and machine forks
 	}
 
 	template <int W>
@@ -100,7 +100,7 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::binary_load_ph(const Phdr* hdr)
+	void Memory<W>::binary_load_ph(const MachineOptions<W>& options, const Phdr* hdr)
 	{
 		const auto*  src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
@@ -157,7 +157,7 @@ namespace riscv
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, hdr->p_vaddr + len);
 #if defined(RISCV_INSTR_CACHE) && !defined(RISCV_DEBUG)
-			this->generate_decoder_cache(pbase, hdr->p_vaddr, len);
+			this->generate_decoder_cache(options, pbase, hdr->p_vaddr, len);
 #endif
 			// Nothing more to do here, if execute-only
 			if (!attr.read)
@@ -234,7 +234,7 @@ namespace riscv
 
 	// ELF32 and ELF64 loader
 	template <int W>
-	void Memory<W>::binary_loader()
+	void Memory<W>::binary_loader(const MachineOptions<W>& options)
 	{
 		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
 			throw std::runtime_error("ELF binary too short");
@@ -283,7 +283,7 @@ namespace riscv
 				case PT_LOAD:
 					// loadable program segments
 					if (this->m_load_program) {
-						binary_load_ph(hdr);
+						binary_load_ph(options, hdr);
 					}
 					seg++;
 					break;

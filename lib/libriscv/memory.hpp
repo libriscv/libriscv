@@ -113,7 +113,7 @@ namespace riscv
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
 #ifdef RISCV_INSTR_CACHE
-		void generate_decoder_cache(address_t pbase, address_t va, size_t len);
+		void generate_decoder_cache(const MachineOptions<W>&, address_t pbase, address_t va, size_t len);
 		auto* get_decoder_cache() const { return m_exec_decoder; }
 #endif
 
@@ -160,8 +160,8 @@ namespace riscv
 			return &symtab[symidx];
 		}
 		// ELF loader
-		void binary_loader();
-		void binary_load_ph(const Phdr*);
+		void binary_loader(const MachineOptions<W>& options);
+		void binary_load_ph(const MachineOptions<W>&, const Phdr*);
 		void serialize_ropages(address_t, const char*, size_t, PageAttributes);
 		// machine cloning
 		void machine_loader(const Machine<W>&);

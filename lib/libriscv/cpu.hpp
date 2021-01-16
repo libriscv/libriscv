@@ -71,7 +71,7 @@ namespace riscv
 
 		// instruction fusing (icache only)
 		using instr_pair = std::pair<instruction_handler<W>&, format_t&>;
-		void try_translate(address_t pc, std::vector<instr_pair>&) const;
+		void try_translate(const MachineOptions<W>&, address_t pc, std::vector<instr_pair>&) const;
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 
 		CPU(Machine<W>&);

@@ -96,6 +96,12 @@ namespace riscv
 		// machine who owns all the execute- and read-only memory
 		const Machine<W>* owning_machine = nullptr;
 		Function<struct Page&(Memory<W>&, size_t)> page_fault_handler = nullptr;
+
+#ifdef RISCV_BINARY_TRANSLATION
+		int block_size_treshold = 6;
+		int translate_blocks_max = 4000;
+		int translate_instr_max = 64'000;
+#endif
 	};
 
 	template <int W>

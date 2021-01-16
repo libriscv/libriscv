@@ -10,9 +10,6 @@
 
 namespace riscv
 {
-	static constexpr int  TRANSLATION_TRESHOLD = 6;
-	static constexpr int  INSTRUCTIONS_MAX = 64'000;
-	static constexpr int  TRANSLATIONS_MAX = 4000;
 	static constexpr int  LOOP_OFFSET_MAX = 80;
 	static constexpr bool SCAN_FOR_GP = true;
 
@@ -67,7 +64,7 @@ struct NamedIPair {
 };
 
 template <int W>
-void CPU<W>::try_translate(
+void CPU<W>::try_translate(const MachineOptions<W>& options,
 	address_t basepc, std::vector<instr_pair>& ipairs) const
 {
 	// run with VERBOSE=1 to see command and output
@@ -114,7 +111,7 @@ if constexpr (SCAN_FOR_GP) {
 	};
 	std::vector<CodeBlock> blocks;
 
-	while (it != ipairs.end() && icounter < INSTRUCTIONS_MAX)
+	while (it != ipairs.end() && icounter < options.translate_instr_max)
 	{
 		if (!loops.empty()) {
 			it = loops.back().first;
@@ -157,7 +154,8 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				}
 			}
 			const size_t length = it - block;
-			if (length >= TRANSLATION_TRESHOLD && icounter + length < INSTRUCTIONS_MAX
+			if (length >= options.block_size_treshold
+				&& icounter + length < options.translate_instr_max
 				&& already_generated.count(basepc) == 0)
 			{
 				already_generated.insert(basepc);
@@ -166,7 +164,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				icounter += length;
 				// we can't translate beyond this estimate, otherwise
 				// the compiler will never finish code generation
-				if (blocks.size() >= TRANSLATIONS_MAX)
+				if (blocks.size() >= options.translate_blocks_max)
 					break;
 			}
 			basepc += 4 * length;
@@ -346,8 +344,8 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 #endif
 }
 
-	template void CPU<4>::try_translate(address_t, std::vector<instr_pair>&) const;
-	template void CPU<8>::try_translate(address_t, std::vector<instr_pair>&) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, address_t, std::vector<instr_pair>&) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, address_t, std::vector<instr_pair>&) const;
 	static_assert(!compressed_enabled,
 		"C-extension incompatible with binary translation");
 
