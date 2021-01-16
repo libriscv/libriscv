@@ -416,7 +416,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 					break;
 				}
 			} else {
-				code += "api.system(" + std::to_string(instr.whole) +");\n";
+				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 			} break;
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
@@ -687,7 +687,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
 					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
 				} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
-					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i64[0];\n";
+					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i64;\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				} break;
