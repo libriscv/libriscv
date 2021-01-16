@@ -2,7 +2,7 @@
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 
-static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 24;
+static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 200;
 #include <include/syscall_helpers.hpp>
 #include <include/threads.hpp>
 static constexpr int MARCH = (USE_64BIT ? riscv::RISCV64 : riscv::RISCV32);
