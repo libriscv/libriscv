@@ -8,6 +8,8 @@ My primary motivation when writing this emulator was to use it in a game engine,
 
 [Benchmarks with binary translation enabled](https://gist.github.com/fwsGonzo/c77befe81c5957b87b96726e98466946)
 
+[STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
+
 [LuaJIT benchmarks](https://gist.github.com/fwsGonzo/f874ba58f2bab1bf502cad47a9b2fbed)
 
 [Lua 5.4 benchmarks](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
