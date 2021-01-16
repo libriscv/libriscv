@@ -63,8 +63,9 @@ namespace riscv
 		this->clear_all_pages();
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		// only the original machine owns rodata range
-		if (!this->m_original_machine)
-			m_ro_pages.release();
+		if (!this->m_original_machine) {
+			m_ropages.pages.release();
+		}
 #endif
 #ifdef RISCV_INSTR_CACHE
 		delete[] m_decoder_cache;
@@ -174,8 +175,8 @@ namespace riscv
 		}
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		if (attr.read && !attr.write && m_ro_pages == nullptr) {
-			serialize_ropages(hdr->p_vaddr, src, len, attr);
+		if (attr.read && !attr.write && m_ropages.end == 0) {
+			serialize_pages(m_ropages, hdr->p_vaddr, src, len, attr);
 			return;
 		}
 #endif
@@ -195,7 +196,8 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::serialize_ropages(address_t addr, const char* src, size_t size, PageAttributes attr)
+	void Memory<W>::serialize_pages(MemoryArea& area,
+		address_t addr, const char* src, size_t size, PageAttributes attr)
 	{
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		constexpr address_t PMASK = Page::size()-1;
@@ -215,19 +217,19 @@ namespace riscv
 		std::memset(&pagedata[0],      0,     prelen);
 		std::memcpy(&pagedata[prelen], src,   size);
 		std::memset(&pagedata[prelen + size], 0,   postlen);
-		m_ro_pagedata.reset(pagedata);
+		area.data.reset(pagedata);
 
 		const size_t npages = plen / Page::size();
-		m_ro_pages.reset(new Page[npages]);
+		area.pages.reset(new Page[npages]);
 		// Create share-able range
-		m_ropage_begin = addr / Page::size();
-		m_ropage_end   = m_ropage_begin + npages;
+		area.begin = addr / Page::size();
+		area.end   = area.begin + npages;
 
 		for (size_t i = 0; i < npages; i++) {
-			m_ro_pages[i].attr = attr;
+			area.pages[i].attr = attr;
 			// None of the pages own this memory
-			m_ro_pages[i].attr.non_owning = true;
-			m_ro_pages[i].m_page.reset((PageData*) &pagedata[i * Page::size()]);
+			area.pages[i].attr.non_owning = true;
+			area.pages[i].m_page.reset((PageData*) &pagedata[i * Page::size()]);
 		}
 #endif
 	}
@@ -339,9 +341,9 @@ namespace riscv
 #endif
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		this->m_ropage_begin = master.memory.m_ropage_begin;
-		this->m_ropage_end   = master.memory.m_ropage_end;
-		this->m_ro_pages.reset(master.memory.m_ro_pages.get());
+		this->m_ropages.begin = master.memory.m_ropages.begin;
+		this->m_ropages.end   = master.memory.m_ropages.end;
+		this->m_ropages.pages.reset(master.memory.m_ropages.pages.get());
 #endif
 	}
 

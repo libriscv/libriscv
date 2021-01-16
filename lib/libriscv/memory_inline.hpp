@@ -61,8 +61,8 @@ template <int W>
 inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 {
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-	if (pageno >= m_ropage_begin && pageno < m_ropage_end) {
-		return m_ro_pages[pageno - m_ropage_begin];
+	if (m_ropages.contains(pageno)) {
+		return m_ropages.pages[pageno - m_ropages.begin];
 	}
 #endif
 	auto it = m_pages.find(pageno);
@@ -76,8 +76,8 @@ template <int W>
 inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
 {
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-	if (pageno >= m_ropage_begin && pageno < m_ropage_end) {
-		return m_ro_pages[pageno - m_ropage_begin];
+	if (m_ropages.contains(pageno)) {
+		return m_ropages.pages[pageno - m_ropages.begin];
 	}
 #endif
 	auto it = m_pages.find(pageno);
@@ -109,12 +109,13 @@ Page& Memory<W>::allocate_page(const size_t page, Args&&... args)
 }
 
 template <int W>
-inline size_t Memory<W>::nonshared_pages_active() const noexcept
+inline size_t Memory<W>::owned_pages_active() const noexcept
 {
-	return std::accumulate(m_pages.begin(), m_pages.end(),
-		0, [] (int value, const auto& it) {
-			return value + (!it.second.attr.non_owning ? 1 : 0);
-		});
+	size_t count = 0;
+	for (const auto& it : m_pages) {
+		if (!it.second.attr.non_owning) count++;
+	}
+	return count;
 }
 
 template <int W>

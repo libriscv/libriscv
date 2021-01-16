@@ -33,7 +33,7 @@ namespace riscv
 	{
 		const SerializedMachine<W> header {
 			.magic    = MAGiC_V4LUE,
-			.n_pages  = (unsigned) memory.nonshared_pages_active(),
+			.n_pages  = (unsigned) memory.owned_pages_active(),
 			.reg_size = sizeof(Registers<W>),
 			.page_size = Page::size(),
 			.attr_size = sizeof(PageAttributes),

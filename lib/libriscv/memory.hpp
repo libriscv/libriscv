@@ -8,7 +8,6 @@
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/string_map.h>
 #include "util/buffer.hpp" // <string>
-#include <numeric>
 
 namespace riscv
 {
@@ -77,7 +76,7 @@ namespace riscv
 
 		// memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
-		size_t nonshared_pages_active() const noexcept;
+		size_t owned_pages_active() const noexcept;
 		// page handling
 		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
@@ -131,6 +130,13 @@ namespace riscv
 		Memory(Machine<W>&, std::string_view, MachineOptions<W>);
 		~Memory();
 	private:
+		struct MemoryArea {
+			address_t begin = 0;
+			address_t end = 0;
+			std::unique_ptr<Page[]> pages = nullptr;
+			std::unique_ptr<uint8_t[]> data = nullptr;
+			bool contains(address_t pg) const noexcept { return pg >= begin && pg < end; }
+		};
 		inline auto& create_attr(const address_t address);
 		static inline address_t page_number(const address_t address) {
 			return address >> Page::SHIFT;
@@ -162,7 +168,7 @@ namespace riscv
 		// ELF loader
 		void binary_loader(const MachineOptions<W>& options);
 		void binary_load_ph(const MachineOptions<W>&, const Phdr*);
-		void serialize_ropages(address_t, const char*, size_t, PageAttributes);
+		void serialize_pages(MemoryArea&, address_t, const char*, size_t, PageAttributes);
 		// machine cloning
 		void machine_loader(const Machine<W>&);
 
@@ -180,10 +186,7 @@ namespace riscv
 		const std::string_view m_binary;
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		address_t m_ropage_begin = 0;
-		address_t m_ropage_end = 0;
-		std::unique_ptr<Page[]> m_ro_pages = nullptr;
-		std::unique_ptr<uint8_t[]> m_ro_pagedata = nullptr;
+		MemoryArea m_ropages;
 #endif
 
 		address_t m_start_address = 0;

@@ -47,7 +47,7 @@ namespace riscv
 			return page;
 		}
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		if (UNLIKELY(pageno >= m_ropage_begin && pageno < m_ropage_end)) {
+		if (UNLIKELY(m_ropages.contains(pageno))) {
 			this->protection_fault(pageno * Page::size());
 		}
 #endif
