@@ -670,7 +670,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
 					code += from_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
 				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
-					code += from_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f64[0];\n";
+					code += from_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f64;\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
