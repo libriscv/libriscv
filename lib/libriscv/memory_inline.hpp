@@ -69,7 +69,7 @@ inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 	if (LIKELY(it != m_pages.end())) {
 		return it->second;
 	}
-	machine().cpu.trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
+	CPU<W>::trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
 }
 
 template <int W>
