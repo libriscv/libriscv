@@ -67,7 +67,12 @@ template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
 	address_t basepc, std::vector<instr_pair>& ipairs) const
 {
-	// run with VERBOSE=1 to see command and output
+	// Disable translator with NO_TRANSLATE=1
+	if (getenv("NO_TRANSLATE")) {
+		machine().memory.set_binary_translated(nullptr);
+		return;
+	}
+	// Run with VERBOSE=1 to see command and output
 	const bool verbose = (getenv("VERBOSE") != nullptr);
 	address_t gp = 0;
 	TIME_POINT(t0);
