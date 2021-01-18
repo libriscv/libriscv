@@ -208,7 +208,12 @@ namespace riscv
 		size_t    m_exec_pagedata_size = 0;
 		address_t m_exec_pagedata_base = 0;
 #ifdef RISCV_INSTR_CACHE
-		instruction_handler<W>* m_exec_decoder = nullptr;
+	#ifdef RISCV_DEBUG
+		using dchandler_t = Instruction<W>;
+	#else
+		using dchandler_t = instruction_handler<W>;
+	#endif
+		dchandler_t* m_exec_decoder = nullptr;
 		DecoderCache<W>* m_decoder_cache = nullptr;
 #endif
 		mutable void* m_bintr_dl = nullptr;

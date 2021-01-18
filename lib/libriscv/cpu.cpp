@@ -74,19 +74,8 @@ namespace riscv
 		format_t instruction;
 #ifdef RISCV_DEBUG
 		this->break_checks();
+#endif
 
-		instruction = this->read_next_instruction();
-		const auto& handler = this->decode(instruction);
-		// instruction logging
-		if (machine().verbose_instructions)
-		{
-			const auto string = isa_type<W>::to_string(*this, instruction, handler);
-			printf("%s\n", string.c_str());
-		}
-
-		// execute instruction
-		handler.handler(*this, instruction);
-#else
 # ifdef RISCV_INSTR_CACHE
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
@@ -96,12 +85,23 @@ namespace riscv
 			auto& cache_entry =
 				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<W>::DIVISOR];
 		#ifndef RISCV_INSTR_CACHE_PREGEN
-			if (UNLIKELY(!cache_entry)) {
-				cache_entry = this->decode(instruction).handler;
+			if (UNLIKELY(!DecoderCache<W>::isset(cache_entry))) {
+				DecoderCache<W>::convert(this->decode(instruction), cache_entry);
 			}
 		#endif
+		#ifdef RISCV_DEBUG
+			// instruction logging
+			if (machine().verbose_instructions)
+			{
+				const auto string = isa_type<W>::to_string(*this, instruction, cache_entry);
+				printf("%s\n", string.c_str());
+			}
+			// execute instruction
+			cache_entry.handler(*this, instruction);
+		#else
 			// execute instruction
 			cache_entry(*this, instruction);
+		#endif
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
 			instruction = read_next_instruction_slowpath();
@@ -114,7 +114,6 @@ namespace riscv
 		// decode & execute instruction directly
 		this->execute(instruction);
 # endif
-#endif
 
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(machine().verbose_registers))

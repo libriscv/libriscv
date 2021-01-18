@@ -42,11 +42,15 @@ namespace riscv
 			if (dst >= addr && dst < addr + len)
 			{
 				auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
+			#ifdef RISCV_DEBUG
+				ipairs.emplace_back(entry.handler, instruction);
+			#else
 				ipairs.emplace_back(entry, instruction);
+			#endif
 
-				entry = machine().cpu.decode(instruction).handler;
+				cache.convert(machine().cpu.decode(instruction), entry);
 			} else {
-				entry = machine().cpu.decode({0}).handler;
+				cache.convert(machine().cpu.decode({0}), entry);
 			}
 			if constexpr (compressed_enabled)
 				dst += 2; /* We need to handle all entries */

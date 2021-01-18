@@ -48,8 +48,8 @@ namespace riscv
 		using isa_t     = isa_type<W>;           // 32- or 64-bit architecture
 		using format_t  = instruction_format; // one machine instruction
 
-		const instruction_handler<W> handler; // callback for executing one instruction
-		const instruction_printer<W> printer; // callback for logging one instruction
+		instruction_handler<W> handler; // callback for executing one instruction
+		instruction_printer<W> printer; // callback for logging one instruction
 	};
 
 	class MachineException : public std::exception {
