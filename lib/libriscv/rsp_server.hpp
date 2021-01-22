@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 
 /**
@@ -42,6 +43,8 @@
   point control registers, but no other floating
   point hardware.
 **/
+
+namespace riscv {
 template <int W> struct RSPClient;
 
 template <int W>
@@ -134,6 +137,11 @@ RSPClient<W>* RSP<W>::accept()
 	int sockfd = ::accept(server_fd, (struct sockaddr*) &address,
         	(socklen_t*) &addrlen);
     if (sockfd < 0) {
+		return nullptr;
+	}
+	int opt = 1;
+	if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt))) {
+		close(sockfd);
 		return nullptr;
 	}
 	return new RSPClient(m_machine, sockfd);
@@ -296,8 +304,10 @@ void RSPClient<W>::process_data()
 		report_status();
 		break;
 	default:
-		fprintf(stderr, "Unhandled packet: %c\n",
-			buffer[0]);
+		if (UNLIKELY(m_verbose)) {
+			fprintf(stderr, "Unhandled packet: %c\n",
+				buffer[0]);
+		}
 	}
 }
 template <int W>
@@ -340,8 +350,10 @@ void RSPClient<W>::handle_query()
 		send("");
 	}
 	else {
-		fprintf(stderr, "Unknown query: %s\n",
-			buffer.data());
+		if (UNLIKELY(m_verbose)) {
+			fprintf(stderr, "Unknown query: %s\n",
+				buffer.data());
+		}
 		send("");
 	}
 }
@@ -394,11 +406,7 @@ void RSPClient<W>::handle_breakpoint()
 template <int W>
 void RSPClient<W>::handle_executing()
 {
-	if (strncmp("vRun", buffer.data(), strlen("vRun")) == 0)
-	{
-		//printf("Signal: Run now\n");
-	}
-	else if (strncmp("vCont?", buffer.data(), strlen("vCont?")) == 0)
+	if (strncmp("vCont?", buffer.data(), strlen("vCont?")) == 0)
 	{
 		send("vContc;s");
 	}
@@ -419,8 +427,10 @@ void RSPClient<W>::handle_executing()
 		send("");
 	}
 	else {
-		fprintf(stderr, "Unknown executor: %s\n",
-			buffer.data());
+		if (UNLIKELY(m_verbose)) {
+			fprintf(stderr, "Unknown executor: %s\n",
+				buffer.data());
+		}
 		send("");
 	}
 }
@@ -434,7 +444,6 @@ void RSPClient<W>::handle_readmem()
 	uint64_t addr = 0;
 	uint32_t len = 0;
 	sscanf(buffer.c_str(), "m%lx,%x", &addr, &len);
-	//printf("Addr: 0x%lX  Len: %u\n", addr, len);
 	if (len >= 500) {
 		send("E01");
 		return;
@@ -461,10 +470,32 @@ void RSPClient<W>::handle_writemem()
 {
 	uint64_t addr = 0;
 	uint32_t len = 0;
-	uint32_t val = 0;
-	sscanf(buffer.c_str(), "X%lx,%x:%x", &addr, &len, &val);
-
-	m_machine.memory.template write<uint32_t> (addr, val);
+	int ret = sscanf(buffer.c_str(), "X%lx,%x:", &addr, &len);
+	if (ret <= 0) {
+		send("E01");
+		return;
+	}
+	char* bin = (char*)
+		memchr(buffer.data(), ':', buffer.size());
+	if (bin == nullptr) {
+		send("E01");
+		return;
+	}
+	bin += 1; // Move past colon
+	const char* end = buffer.c_str() + buffer.size();
+	uint32_t rlen = std::min(len, (uint32_t) (end - bin));
+	try {
+		for (auto i = 0u; i < rlen; i++) {
+			char data = bin[i];
+			if (data == '{' && i+1 < rlen) {
+				data = bin[++i] ^ 0x20;
+			}
+			m_machine.memory.template write<uint8_t> (addr+i, data);
+		}
+		reply_ok();
+	} catch (...) {
+		send("E01");
+	}
 }
 template <int W>
 void RSPClient<W>::report_status()
@@ -536,3 +567,5 @@ template <int W>
 void RSPClient<W>::kill() {
 	close(sockfd);
 }
+
+} // riscv
