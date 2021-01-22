@@ -76,6 +76,11 @@ namespace riscv
 #else
 	static constexpr bool floating_point_enabled = false;
 #endif
+#ifdef RISCV_BINARY_TRANSLATION
+	static constexpr bool binary_translation_enabled = true;
+#else
+	static constexpr bool binary_translation_enabled = false;
+#endif
 }
 
 #include "util/function.hpp"
