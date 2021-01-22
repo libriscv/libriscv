@@ -132,6 +132,7 @@ if constexpr (SCAN_FOR_GP) {
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
 				if (it->second.opcode() == RV32I_JALR ||
+					//it->second.opcode() == RV32I_JAL ||
 					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0 && it->second.Itype.imm == 1))
 				{
 					++it; break;
@@ -193,8 +194,8 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	{
 		std::string func =
 			"f" + std::to_string(block.addr);
-		emit(code, func, &block.instr, block.length,
-			{block.addr, gp, block.has_branch});
+		emit(code, func, &block.instr,
+			{block.addr, gp, block.length, block.has_branch});
 		dlmappings.push_back({block.instr, std::move(func)});
 	}
 #ifdef BINTR_TIMING

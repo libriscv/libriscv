@@ -82,6 +82,7 @@ namespace riscv
 	struct TransInfo {
 		address_type<W> basepc;
 		address_type<W> gp;
+		size_t len;
 		bool has_branch;
 	};
 }

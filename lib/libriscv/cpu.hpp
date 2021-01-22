@@ -82,7 +82,7 @@ namespace riscv
 		format_t read_next_instruction();
 		format_t read_next_instruction_slowpath() COLD_PATH();
 		void execute(format_t);
-		void emit(std::string& code, const std::string& symb, instr_pair* blk, size_t len, const TransInfo<W>&) const;
+		void emit(std::string& code, const std::string& symb, instr_pair* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
 		const uint8_t* m_exec_data = nullptr;

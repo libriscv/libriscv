@@ -2,6 +2,7 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
+#include <set>
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x))
@@ -36,21 +37,28 @@ inline std::string from_fpreg(int reg) {
 inline std::string from_imm(int64_t imm) {
 	return std::to_string(imm);
 }
+struct BranchInfo {
+	bool sign;
+	bool goto_enabled;
+	int forw_addr;
+};
+#define FUNCLABEL(i)  (func + "_" + std::to_string(i))
 template <int W>
-inline void add_branch(std::string& code, bool sign, const std::string& op, const TransInfo<W>& tinfo, size_t i, rv32i_instruction instr, const std::string& func)
+inline void add_branch(std::string& code, const BranchInfo& binfo, const std::string& op, const TransInfo<W>& tinfo, size_t i, rv32i_instruction instr, const std::string& func)
 {
 	using address_t = address_type<W>;
-	const auto offset = instr.Btype.signed_imm() / 4;
-	bool goto_enabled = tinfo.has_branch && (offset == -(long) i);
-	if (sign == false)
+	if (binfo.sign == false)
 		code += "if (" + from_reg(tinfo, instr.Btype.rs1) + op + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	else
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
-	if (goto_enabled) {
+	if (binfo.goto_enabled) {
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
 		// We can simplify this jump because we know it's safe
 		code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n"
 			"return;}\n";
+	} else if (binfo.forw_addr > 0) {
+		code += "goto " + FUNCLABEL(binfo.forw_addr) + ";\n"
+				"}\n";
 	} else {
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
 	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", " + (tinfo.has_branch ? "c" : std::to_string(i)) + ");\n"
@@ -72,16 +80,23 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 }
 
 template <int W>
-void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, size_t len, const TransInfo<W>& tinfo) const
+void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, const TransInfo<W>& tinfo) const
 {
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
+	std::set<unsigned> labels;
 	code += "extern void " + func + "(CPU* cpu) {\n";
 	// branches can jump back, within limits
 	if (tinfo.has_branch) {
 		code += "int c = 0; " + func + "_start:\n";
 	}
-	for (size_t i = 0; i < len; i++) {
+	for (size_t i = 0; i < tinfo.len; i++) {
 		const auto& instr = ip[i].second;
+		// forward branches
+		if (labels.count(i) > 0) {
+			code.append(FUNCLABEL(i) + ":\n");
+			labels.erase(i);
+		}
+		// instruction generation
 		switch (instr.opcode()) {
 		case RV32I_LOAD:
 			switch (instr.Itype.funct3) {
@@ -155,30 +170,39 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				ILLEGAL_AND_EXIT();
 			}
 			break;
-		case RV32I_BRANCH:
+		case RV32I_BRANCH: {
+			const auto offset = instr.Btype.signed_imm() / 4;
+			// goto branch: restarts function
+			bool ge = tinfo.has_branch && (offset == -(long) i);
+			// forward label: branch inside code block
+			int fl = 0;
+			if (offset > 0 && i+offset < tinfo.len) {
+				fl = i+offset;
+				labels.insert(fl);
+			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch<W>(code, false, " == ", tinfo, i, instr, func);
+				add_branch<W>(code, { false, ge, fl }, " == ", tinfo, i, instr, func);
 				break;
 			case 0x1: // NE
-				add_branch<W>(code, false, " != ", tinfo, i, instr, func);
+				add_branch<W>(code, { false, ge, fl }, " != ", tinfo, i, instr, func);
 				break;
 			case 0x2:
 			case 0x3:
 				ILLEGAL_AND_EXIT();
 			case 0x4: // LT
-				add_branch<W>(code, true, " < ", tinfo, i, instr, func);
+				add_branch<W>(code, { true, ge, fl }, " < ", tinfo, i, instr, func);
 				break;
 			case 0x5: // GE
-				add_branch<W>(code, true, " >= ", tinfo, i, instr, func);
+				add_branch<W>(code, { true, ge, fl }, " >= ", tinfo, i, instr, func);
 				break;
 			case 0x6: // LTU
-				add_branch<W>(code, false, " < ", tinfo, i, instr, func);
+				add_branch<W>(code, { false, ge, fl }, " < ", tinfo, i, instr, func);
 				break;
 			case 0x7: // GEU
-				add_branch<W>(code, false, " >= ", tinfo, i, instr, func);
+				add_branch<W>(code, { false, ge, fl }, " >= ", tinfo, i, instr, func);
 				break;
-			} break;
+			} } break;
 		case RV32I_JALR:
 			// jump to register + immediate
 			if (instr.Itype.rd != 0) {
@@ -188,14 +212,21 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 				+ " + " + from_imm(instr.Itype.signed_imm()) + " - 4, " + INSTRUCTION_COUNT(i) + ");",
 				"}\n");
 			return;
-		case RV32I_JAL:
+		case RV32I_JAL: {
 			if (instr.Jtype.rd != 0) {
 				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
-			add_code(code,
-				"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
-				"}");
-			return; // !
+			// forward label: jump inside code block
+			const auto offset = instr.Jtype.jump_offset() / 4;
+			if (offset > 0 && i+offset < tinfo.len) {
+				unsigned fl = i+offset;
+				labels.insert(fl);
+				add_code(code, "goto " + FUNCLABEL(fl) + ";");
+			} else {
+				add_code(code,
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
+					"return;");
+			} } break;
 		case RV32I_OP_IMM: {
 			const auto dst = from_reg(instr.Itype.rd);
 			const auto src = from_reg(tinfo, instr.Itype.rs1);
@@ -700,9 +731,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, si
 	}
 	// A code block should have a proper return already,
 	// and if not, it must be an unterminated illegal-op-block.
-	code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(len-1) + ");\n}\n";
+	code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(tinfo.len-1) + ");\n}\n";
 }
 
-template void CPU<4>::emit(std::string&, const std::string&, instr_pair*, size_t, const TransInfo<4>&) const;
-template void CPU<8>::emit(std::string&, const std::string&, instr_pair*, size_t, const TransInfo<8>&) const;
+template void CPU<4>::emit(std::string&, const std::string&, instr_pair*, const TransInfo<4>&) const;
+template void CPU<8>::emit(std::string&, const std::string&, instr_pair*, const TransInfo<8>&) const;
 } // riscv
