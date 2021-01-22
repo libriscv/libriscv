@@ -10,7 +10,7 @@
 
 namespace riscv
 {
-	static constexpr int  LOOP_OFFSET_MAX = 80;
+	static constexpr int  LOOP_OFFSET_MAX = 160;
 	static constexpr bool SCAN_FOR_GP = true;
 
 	inline timespec time_now();
