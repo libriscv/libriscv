@@ -84,5 +84,6 @@ namespace riscv
 		address_type<W> gp;
 		size_t len;
 		bool has_branch;
+		bool forward_jumps;
 	};
 }

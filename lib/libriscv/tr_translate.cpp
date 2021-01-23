@@ -68,7 +68,8 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 	address_t basepc, std::vector<instr_pair>& ipairs) const
 {
 	// Disable translator with NO_TRANSLATE=1
-	if (getenv("NO_TRANSLATE")) {
+	// or by setting max blocks to zero.
+	if (getenv("NO_TRANSLATE") || 0 == options.translate_blocks_max) {
 		machine().memory.set_binary_translated(nullptr);
 		return;
 	}
@@ -132,7 +133,6 @@ if constexpr (SCAN_FOR_GP) {
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
 				if (it->second.opcode() == RV32I_JALR ||
-					//it->second.opcode() == RV32I_JAL ||
 					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0 && it->second.Itype.imm == 1))
 				{
 					++it; break;
@@ -194,8 +194,11 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 	{
 		std::string func =
 			"f" + std::to_string(block.addr);
-		emit(code, func, &block.instr,
-			{block.addr, gp, block.length, block.has_branch});
+		emit(code, func, &block.instr, {
+			block.addr, gp, block.length,
+			block.has_branch,
+			options.forward_jumps
+		});
 		dlmappings.push_back({block.instr, std::move(func)});
 	}
 #ifdef BINTR_TIMING
@@ -204,8 +207,8 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 #endif
 
 	if (verbose) {
-		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
-			icounter, dlmappings.size(), (long) gp);
+		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX  FWJ=%d\n",
+			icounter, dlmappings.size(), (long) gp, options.forward_jumps);
 	}
 	// nothing to compile without mappings
 	if (dlmappings.empty()) {

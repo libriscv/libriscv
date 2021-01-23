@@ -176,7 +176,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			bool ge = tinfo.has_branch && (offset == -(long) i);
 			// forward label: branch inside code block
 			int fl = 0;
-			if (offset > 0 && i+offset < tinfo.len) {
+			if (tinfo.forward_jumps && offset > 0 && i+offset < tinfo.len) {
 				fl = i+offset;
 				labels.insert(fl);
 			}
@@ -218,10 +218,15 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			}
 			// forward label: jump inside code block
 			const auto offset = instr.Jtype.jump_offset() / 4;
-			if (offset > 0 && i+offset < tinfo.len) {
+			if (tinfo.forward_jumps && offset > 0 && i+offset < tinfo.len) {
 				unsigned fl = i+offset;
 				labels.insert(fl);
 				add_code(code, "goto " + FUNCLABEL(fl) + ";");
+			} else if (!tinfo.forward_jumps) {
+				add_code(code,
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
+					"}");
+				return; // Exit when forward jumps are disabled
 			} else {
 				add_code(code,
 					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
