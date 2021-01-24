@@ -63,16 +63,22 @@ private:
 template <int W>
 struct RSPClient
 {
+	using StopFunc = riscv::Function<void(RSPClient<W>&)>;
 	int current_exception() const;
+	bool is_closed() const noexcept { return m_closed; }
 
 	bool process_one();
 	bool send(const char* str);
 	bool sendf(const char* fmt, ...);
 	void reply_ack();
 	void reply_ok();
+	void interrupt();
 	void kill();
 
+	auto& machine() { return *m_machine; }
+	void set_machine(Machine<W>& m) { m_machine = &m; }
 	void set_verbose(bool v) { m_verbose = v; }
+	void on_stopped(StopFunc f) { m_on_stopped = f; }
 
 	RSPClient(riscv::Machine<W>& m, int fd);
 	~RSPClient();
@@ -96,11 +102,14 @@ private:
 	void handle_writemem();
 	void report_gprs();
 	void report_status();
-	riscv::Machine<W>& m_machine;
+	void close_now();
+	riscv::Machine<W>* m_machine;
 	int  sockfd;
+	bool m_closed  = false;
 	bool m_verbose = false;
 	std::string buffer;
 	riscv::address_type<W> m_bp = 0;
+	StopFunc m_on_stopped = nullptr;
 };
 
 template <int W>
@@ -153,12 +162,18 @@ RSP<W>::~RSP() {
 
 template <int W> inline
 RSPClient<W>::RSPClient(riscv::Machine<W>& m, int fd)
-	: m_machine{m}, sockfd(fd)  {}
+	: m_machine{&m}, sockfd(fd)  {}
 template <int W> inline
 RSPClient<W>::~RSPClient() {
-	close(this->sockfd);
+	if (!is_closed())
+		close(this->sockfd);
 }
 
+template <int W> inline
+void RSPClient<W>::close_now() {
+	this->m_closed = true;
+	close(this->sockfd);
+}
 template <int W>
 int RSPClient<W>::forge_packet(
 	char* dst, size_t dstlen, const char* data, int datalen)
@@ -202,11 +217,13 @@ bool RSPClient<W>::sendf(const char* fmt, ...)
 	}
 	int len = ::write(sockfd, buffer, plen);
 	if (len <= 0) {
+		this->close_now();
 		return false;
 	}
 	// Acknowledgement
 	int rlen = ::read(sockfd, buffer, 1);
 	if (rlen <= 0) {
+		this->close_now();
 		return false;
 	}
 	return (buffer[0] == '+');
@@ -221,11 +238,13 @@ bool RSPClient<W>::send(const char* str)
 	}
 	int len = ::write(sockfd, buffer, plen);
 	if (len <= 0) {
+		this->close_now();
 		return false;
 	}
 	// Acknowledgement
 	int rlen = ::read(sockfd, buffer, 1);
 	if (rlen <= 0) {
+		this->close_now();
 		return false;
 	}
 	return (buffer[0] == '+');
@@ -236,6 +255,7 @@ bool RSPClient<W>::process_one()
 	char tmp[1024];
 	int len = ::read(this->sockfd, tmp, sizeof(tmp));
 	if (len <= 0) {
+		this->close_now();
 		return false;
 	}
 	if (UNLIKELY(m_verbose)) {
@@ -244,7 +264,10 @@ bool RSPClient<W>::process_one()
 	for (int i = 0; i < len; i++)
 	{
 		char c = tmp[i];
-		if (c == '$') {
+		if (buffer.empty() && c == '+') {
+			/* Ignore acks? */
+		}
+		else if (c == '$') {
 			this->buffer.clear();
 		}
 		else if (c == '#') {
@@ -361,15 +384,15 @@ template <int W>
 void RSPClient<W>::handle_continue()
 {
 	try {
-		if (m_bp == m_machine.cpu.pc()) {
+		if (m_bp == m_machine->cpu.pc()) {
 			send("S05");
 			return;
 		}
-		while (!m_machine.stopped()) {
-			m_machine.cpu.simulate();
-			m_machine.increment_counter(1);
+		while (!m_machine->stopped()) {
+			m_machine->cpu.simulate();
+			m_machine->increment_counter(1);
 			// Breakpoint
-			if (m_machine.cpu.pc() == this->m_bp)
+			if (m_machine->cpu.pc() == this->m_bp)
 				break;
 		}
 	} catch (...) {
@@ -381,9 +404,12 @@ template <int W>
 void RSPClient<W>::handle_step()
 {
 	try {
-		if (!m_machine.stopped()) {
-			m_machine.cpu.simulate();
-			m_machine.increment_counter(1);
+		if (!m_machine->stopped()) {
+			m_machine->cpu.simulate();
+			m_machine->increment_counter(1);
+		} else {
+			send("E01");
+			return;
 		}
 	} catch (...) {
 
@@ -408,7 +434,7 @@ void RSPClient<W>::handle_executing()
 {
 	if (strncmp("vCont?", buffer.data(), strlen("vCont?")) == 0)
 	{
-		send("vContc;s");
+		send("vCont;c;s");
 	}
 	else if (strncmp("vCont;c", buffer.data(), strlen("vCont;c")) == 0)
 	{
@@ -454,7 +480,7 @@ void RSPClient<W>::handle_readmem()
 	try {
 		for (unsigned i = 0; i < len; i++) {
 			uint8_t val =
-			m_machine.memory.template read<uint8_t> (addr + i);
+			m_machine->memory.template read<uint8_t> (addr + i);
 			*d++ = lut[(val >> 4) & 0xF];
 			*d++ = lut[(val >> 0) & 0xF];
 		}
@@ -490,7 +516,7 @@ void RSPClient<W>::handle_writemem()
 			if (data == '{' && i+1 < rlen) {
 				data = bin[++i] ^ 0x20;
 			}
-			m_machine.memory.template write<uint8_t> (addr+i, data);
+			m_machine->memory.template write<uint8_t> (addr+i, data);
 		}
 		reply_ok();
 	} catch (...) {
@@ -500,10 +526,16 @@ void RSPClient<W>::handle_writemem()
 template <int W>
 void RSPClient<W>::report_status()
 {
-	if (!m_machine.stopped())
-		sendf("S%02x", 5); /* Just send TRAP */
-	else
-		send("vStopped");
+	if (!m_machine->stopped())
+		send("S05"); /* Just send TRAP */
+	else {
+		if (m_on_stopped != nullptr) {
+			m_on_stopped(*this);
+		} else {
+			//send("vStopped");
+			send("S05"); /* Just send TRAP */
+		}
+	}
 }
 template <int W>
 template <typename T>
@@ -524,11 +556,11 @@ void RSPClient<W>::handle_writereg()
 	value = __builtin_bswap64(value);
 
 	if (idx < 32) {
-		m_machine.cpu.reg(idx) = value;
+		m_machine->cpu.reg(idx) = value;
 		send("OK");
 	} else if (idx == 32) {
-		m_machine.cpu.jump(value);
-		m_machine.stop(false);
+		m_machine->cpu.jump(value);
+		m_machine->stop(false);
 		send("OK");
 	} else {
 		send("E01");
@@ -538,7 +570,7 @@ void RSPClient<W>::handle_writereg()
 template <int W>
 void RSPClient<W>::report_gprs()
 {
-	auto& regs = m_machine.cpu.registers();
+	auto& regs = m_machine->cpu.registers();
 	char data[1024];
 	char* d = data;
 	/* GPRs */
@@ -562,6 +594,10 @@ void RSPClient<W>::reply_ok() {
 template <int W> inline
 int RSPClient<W>::current_exception() const {
 	return 0;
+}
+template <int W>
+void RSPClient<W>::interrupt() {
+	send("S05");
 }
 template <int W>
 void RSPClient<W>::kill() {
