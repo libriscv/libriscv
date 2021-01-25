@@ -77,6 +77,7 @@ struct RSPClient
 
 	auto& machine() { return *m_machine; }
 	void set_machine(Machine<W>& m) { m_machine = &m; }
+	void set_instruction_limit(uint64_t limit) { m_ilimit = limit; }
 	void set_verbose(bool v) { m_verbose = v; }
 	void on_stopped(StopFunc f) { m_on_stopped = f; }
 
@@ -104,6 +105,7 @@ private:
 	void report_status();
 	void close_now();
 	riscv::Machine<W>* m_machine;
+	uint64_t m_ilimit = 100'000;
 	int  sockfd;
 	bool m_closed  = false;
 	bool m_verbose = false;
@@ -388,15 +390,21 @@ void RSPClient<W>::handle_continue()
 			send("S05");
 			return;
 		}
+		uint64_t n = m_ilimit;
 		while (!m_machine->stopped()) {
 			m_machine->cpu.simulate();
 			m_machine->increment_counter(1);
 			// Breakpoint
 			if (m_machine->cpu.pc() == this->m_bp)
 				break;
+			// Instruction limit
+			if (n-- == 0)
+				break;
 		}
-	} catch (...) {
-
+	} catch (const std::exception& e) {
+		fprintf(stderr, "Exception: %s\n", e.what());
+		send("S01");
+		return;
 	}
 	report_status();
 }
@@ -408,12 +416,12 @@ void RSPClient<W>::handle_step()
 			m_machine->cpu.simulate();
 			m_machine->increment_counter(1);
 		} else {
-			send("E01");
+			send("S00");
 			return;
 		}
 	} catch (const std::exception& e) {
 		fprintf(stderr, "Exception: %s\n", e.what());
-		send("E01");
+		send("S01");
 		return;
 	}
 	report_status();
