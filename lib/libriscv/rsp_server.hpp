@@ -411,8 +411,10 @@ void RSPClient<W>::handle_step()
 			send("E01");
 			return;
 		}
-	} catch (...) {
-
+	} catch (const std::exception& e) {
+		fprintf(stderr, "Exception: %s\n", e.what());
+		send("E01");
+		return;
 	}
 	report_status();
 }
