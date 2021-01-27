@@ -443,13 +443,19 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			break;
 		case RV32I_SYSTEM:
 			if (instr.Itype.funct3 == 0x0) {
-				if (instr.Itype.imm == 1) {
+				if (instr.Itype.imm == 0) {
+					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(17) + ", " + INSTRUCTION_COUNT(i) + ")))\n"
+					       "  return;\n";
+					break;
+				} if (instr.Itype.imm == 1) {
 					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
 					return; // !!
+				} if (instr.Itype.imm == 0x7ff) {
+					code += "api.stop(cpu, " + INSTRUCTION_COUNT(i) + ");\n";
+					return; // !!
 				} else {
-					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(17) + ", " + INSTRUCTION_COUNT(i) + ")))\n"
-						"  return;\n";
-					break;
+					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+					return; // !!
 				}
 			} else {
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";

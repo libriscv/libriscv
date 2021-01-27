@@ -133,7 +133,7 @@ if constexpr (SCAN_FOR_GP) {
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
 				if (it->second.opcode() == RV32I_JALR ||
-					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0 && it->second.Itype.imm == 1))
+					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0 && it->second.Itype.imm != 0))
 				{
 					++it; break;
 				}
@@ -312,6 +312,11 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			// otherwise, update instruction counter and exit
 			cpu.machine().increment_counter(val);
 			return 1;
+		},
+		.stop = [] (CPU<W>& cpu, uint64_t val) {
+			cpu.registers().pc += val * 4;
+			cpu.machine().increment_counter(val);
+			cpu.machine().stop();
 		},
 		.ebreak = [] (CPU<W>& cpu, uint64_t val) {
 			cpu.registers().pc += val * 4;

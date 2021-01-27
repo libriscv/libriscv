@@ -194,7 +194,7 @@ void _exit(int code)
 {
 	register long a0 asm("a0") = code;
 
-	asm("r%=: ebreak \nj r%=" : : "r"(a0));
+	asm ("r%=: .insn i SYSTEM, 0, %0, x0, 0x7ff \nj r%=\n" :: "r"(a0));
 	__builtin_unreachable();
 }
 
