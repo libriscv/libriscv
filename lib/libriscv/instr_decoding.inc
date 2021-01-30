@@ -128,6 +128,8 @@
 							DECODER(DECODED_INSTR(SYSCALL));
 						} else if (instruction.Itype.imm == 1) {
 							DECODER(DECODED_INSTR(EBREAK));
+						} else if (instruction.Itype.imm == 0x7ff) {
+							DECODER(DECODED_INSTR(STOP));
 						}
 					}
 					DECODER(DECODED_INSTR(SYSTEM));

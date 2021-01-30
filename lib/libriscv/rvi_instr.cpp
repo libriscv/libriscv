@@ -642,6 +642,11 @@ namespace riscv
 		cpu.machine().ebreak();
 	}, DECODED_INSTR(SYSTEM).printer);
 
+	INSTRUCTION(STOP,
+	[] (auto& cpu, rv32i_instruction) {
+		cpu.machine().stop();
+	}, DECODED_INSTR(SYSTEM).printer);
+
 	INSTRUCTION(LUI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();
