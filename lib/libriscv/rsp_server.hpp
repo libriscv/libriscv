@@ -2,6 +2,7 @@
 #include "machine.hpp"
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
@@ -50,7 +51,8 @@ template <int W> struct RSPClient;
 template <int W>
 struct RSP
 {
-	RSPClient<W>* accept();
+	// Wait for a connection for @timeout_secs
+	RSPClient<W>* accept(int timeout_secs = 10);
 	int  fd() const noexcept { return server_fd; }
 
 	RSP(riscv::Machine<W>&, uint16_t);
@@ -64,7 +66,6 @@ template <int W>
 struct RSPClient
 {
 	using StopFunc = riscv::Function<void(RSPClient<W>&)>;
-	int current_exception() const;
 	bool is_closed() const noexcept { return m_closed; }
 
 	bool process_one();
@@ -118,7 +119,7 @@ template <int W>
 RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	: m_machine{m}
 {
-	this->server_fd = socket(AF_INET, SOCK_STREAM, 0);
+	this->server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
 	int opt = 1;
 	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
@@ -141,8 +142,21 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	}
 }
 template <int W>
-RSPClient<W>* RSP<W>::accept()
+RSPClient<W>* RSP<W>::accept(int timeout_secs)
 {
+	struct timeval tv {
+		.tv_sec = timeout_secs,
+		.tv_usec = 0
+	};
+	fd_set fds;
+	FD_ZERO(&fds);
+	FD_SET(server_fd, &fds);
+
+	const int ret = select(server_fd + 1, &fds, NULL, NULL, &tv);
+	if (ret <= 0) {
+		return nullptr;
+	}
+
 	struct sockaddr_in address;
 	int addrlen = sizeof(address);
 	int sockfd = ::accept(server_fd, (struct sockaddr*) &address,
@@ -150,8 +164,18 @@ RSPClient<W>* RSP<W>::accept()
     if (sockfd < 0) {
 		return nullptr;
 	}
+	// Disable Nagle
 	int opt = 1;
 	if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt))) {
+		close(sockfd);
+		return nullptr;
+	}
+	// Enable receive and send timeouts
+	tv = {
+		.tv_sec = 60,
+		.tv_usec = 0
+	};
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO | SO_SNDTIMEO, &tv, sizeof(tv))) {
 		close(sockfd);
 		return nullptr;
 	}
@@ -600,10 +624,6 @@ void RSPClient<W>::reply_ack() {
 template <int W> inline
 void RSPClient<W>::reply_ok() {
 	send("OK");
-}
-template <int W> inline
-int RSPClient<W>::current_exception() const {
-	return 0;
 }
 template <int W>
 void RSPClient<W>::interrupt() {
