@@ -353,6 +353,14 @@ namespace riscv
 				}
 			}
 			break;
+		case 0x6: // ORI: Or sign-extended 12-bit immediate
+			cpu.reg(instr.Itype.rd) =
+				cpu.reg(instr.Itype.rs1) | instr.Itype.signed_imm();
+			break;
+		case 0x7: // ANDI: And sign-extended 12-bit immediate
+			cpu.reg(instr.Itype.rd) =
+				cpu.reg(instr.Itype.rs1) & instr.Itype.signed_imm();
+			break;
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
@@ -411,20 +419,6 @@ namespace riscv
 		// ADDI: Add sign-extended 12-bit immediate
 		cpu.reg(instr.Itype.rd) =
 			cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	}, DECODED_INSTR(OP_IMM).printer);
-
-	INSTRUCTION(OP_IMM_ORI,
-	[] (auto& cpu, rv32i_instruction instr) {
-		// ORI: Or sign-extended 12-bit immediate
-		cpu.reg(instr.Itype.rd) =
-			cpu.reg(instr.Itype.rs1) | instr.Itype.signed_imm();
-	}, DECODED_INSTR(OP_IMM).printer);
-
-	INSTRUCTION(OP_IMM_ANDI,
-	[] (auto& cpu, rv32i_instruction instr) {
-		// ANDI: And sign-extended 12-bit immediate
-		cpu.reg(instr.Itype.rd) =
-			cpu.reg(instr.Itype.rs1) & instr.Itype.signed_imm();
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP_IMM_LI,
@@ -582,22 +576,6 @@ namespace riscv
 							RISCV::regname(instr.Rtype.rd));
 		}
 	});
-
-	INSTRUCTION(OP_ADD,
-	[] (auto& cpu, rv32i_instruction instr) {
-		auto& dst = cpu.reg(instr.Rtype.rd);
-		const auto& src1 = cpu.reg(instr.Rtype.rs1);
-		const auto& src2 = cpu.reg(instr.Rtype.rs2);
-		dst = src1 + src2;
-	}, DECODED_INSTR(OP).printer);
-
-	INSTRUCTION(OP_SUB,
-	[] (auto& cpu, rv32i_instruction instr) {
-		auto& dst = cpu.reg(instr.Rtype.rd);
-		const auto& src1 = cpu.reg(instr.Rtype.rs1);
-		const auto& src2 = cpu.reg(instr.Rtype.rs2);
-		dst = src1 - src2;
-	}, DECODED_INSTR(OP).printer);
 
 	INSTRUCTION(SYSTEM,
 	[] (auto& cpu, rv32i_instruction instr) {

@@ -97,10 +97,6 @@
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
 						case 0x1: // SLLI
 							DECODER(DECODED_INSTR(OP_IMM_SLLI));
-						case 0x6: // ORI
-							DECODER(DECODED_INSTR(OP_IMM_ORI));
-						case 0x7: // ANDI
-							DECODER(DECODED_INSTR(OP_IMM_ANDI));
 						default:
 							DECODER(DECODED_INSTR(OP_IMM));
 						}
@@ -109,16 +105,7 @@
 				case RV32I_OP:
 					if (instruction.Rtype.rd != 0)
 					{
-						switch (instruction.Rtype.jumptable_friendly_op()) {
-						case 0x0: // ADD / SUB
-							if (!instruction.Rtype.is_f7()) {
-								DECODER(DECODED_INSTR(OP_ADD));
-							} else {
-								DECODER(DECODED_INSTR(OP_SUB));
-							}
-						default:
-							DECODER(DECODED_INSTR(OP));
-						}
+						DECODER(DECODED_INSTR(OP));
 					}
 					DECODER(DECODED_INSTR(NOP));
 				case RV32I_SYSTEM:
