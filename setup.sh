@@ -6,8 +6,10 @@ git submodule update --init
 pushd lib/EASTL
 git submodule update --init
 popd
-pushd emulator
-mkdir -p build
-pushd build
-cmake .. && make -j4
-popd
+if [[ -z "${NO_BUILD}" ]]; then
+	pushd emulator
+	mkdir -p build
+	pushd build
+	cmake .. && make -j4
+	popd
+fi
