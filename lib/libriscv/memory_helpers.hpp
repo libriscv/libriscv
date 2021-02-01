@@ -59,16 +59,39 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 }
 
 template <int W>
-void Memory<W>::memview(address_t addr, size_t len,
-	Function<void(const uint8_t*, size_t)> callback) const
+template <typename T>
+inline void Memory<W>::foreach_helper(T& mem, address_t addr, size_t len,
+	Function<void(T&, address_t, const uint8_t*, size_t)> callback)
+{
+	address_t boff = 0;
+	while (len != 0)
+	{
+		const size_t offset = addr & (Page::size()-1);
+		const size_t size = std::min(Page::size() - offset, len);
+		const auto& page = mem.get_page(addr);
+		if (page.attr.read) {
+			callback(mem, boff, page.data() + offset, size);
+		} else {
+			protection_fault(addr);
+		}
+
+		addr += size;
+		boff += size;
+		len  -= size;
+	}
+}
+template <int W>
+template <typename T>
+inline void Memory<W>::memview_helper(T& mem, address_t addr, size_t len,
+	Function<void(T&, const uint8_t*, size_t)> callback)
 {
 	const size_t offset = addr & (Page::size()-1);
 	// fast-path
 	if (LIKELY(offset + len <= Page::size()))
 	{
-		const auto& page = this->get_page(addr);
+		const auto& page = mem.get_page(addr);
 		if (page.attr.read) {
-			callback(page.data() + offset, len);
+			callback(mem, page.data() + offset, len);
 		} else {
 			protection_fault(addr);
 		}
@@ -76,8 +99,33 @@ void Memory<W>::memview(address_t addr, size_t len,
 	}
 	// slow path
 	uint8_t* buffer = (uint8_t*) __builtin_alloca(len);
-	memcpy_out(buffer, addr, len);
-	callback(buffer, len);
+	mem.memcpy_out(buffer, addr, len);
+	callback(mem, buffer, len);
+}
+
+template <int W>
+void Memory<W>::foreach(address_t addr, size_t len,
+	Function<void(const Memory<W>&, address_t, const uint8_t*, size_t)> callback) const
+{
+	foreach_helper(*this, addr, len, std::move(callback));
+}
+template <int W>
+void Memory<W>::foreach(address_t addr, size_t len,
+	Function<void(Memory<W>&, address_t, const uint8_t*, size_t)> callback)
+{
+	foreach_helper(*this, addr, len, std::move(callback));
+}
+template <int W>
+void Memory<W>::memview(address_t addr, size_t len,
+	Function<void(const Memory<W>&, const uint8_t*, size_t)> callback) const
+{
+	memview_helper(*this, addr, len, std::move(callback));
+}
+template <int W>
+void Memory<W>::memview(address_t addr, size_t len,
+	Function<void(Memory<W>&, const uint8_t*, size_t)> callback)
+{
+	memview_helper(*this, addr, len, std::move(callback));
 }
 template <int W>
 template <typename T>

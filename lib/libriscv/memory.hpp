@@ -36,19 +36,27 @@ namespace riscv
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
 		void memcpy_out(void* dst, address_t src, size_t) const;
-		// gives a sequential view of the data at address, with the possibility
-		// of optimizing away a copy if the data crosses no page-boundaries
+		// Gives a chunk-wise view of the data at address, with a callback
+		// invocation at each page boundary. @offs is the current byte offset.
+		void foreach(address_t addr, size_t len,
+			Function<void(Memory&, address_t offs, const uint8_t*, size_t)> callback);
+		void foreach(address_t addr, size_t len,
+			Function<void(const Memory&, address_t offs, const uint8_t*, size_t)>) const;
+		// Gives a sequential view of the data at address, with the possibility
+		// of optimizing away a copy if the data crosses no page-boundaries.
 		void memview(address_t addr, size_t len,
-					Function<void(const uint8_t*, size_t)> callback) const;
-		// gives const-ref access to pod-type T in guest memory
+			Function<void(Memory&, const uint8_t*, size_t)> callback);
+		void memview(address_t addr, size_t len,
+			Function<void(const Memory&, const uint8_t*, size_t)> callback) const;
+		// Gives const-ref access to pod-type T viewed as sequential memory. (See above)
 		template <typename T>
 		void memview(address_t addr, Function<void(const T&)> callback) const;
-		// compare bounded memory
+		// Compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
-		// gather fragmented virtual memory into an array of buffers
+		// Gather fragmented virtual memory into an array of buffers
 		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16384) const;
-		// read a zero-terminated string directly from guests memory
+		// Read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t maxlen = 1024) const;
 		size_t strlen(address_t addr, size_t maxlen = 4096) const;
 
@@ -59,12 +67,12 @@ namespace riscv
 		auto& machine() { return this->m_machine; }
 		const auto& machine() const { return this->m_machine; }
 
-		// call interface
+		// Call interface
 		address_t resolve_address(const char* sym) const;
 		address_t resolve_section(const char* name) const;
 		address_t exit_address() const noexcept;
 		void      set_exit_address(address_t new_exit);
-		// basic backtraces
+		// Basic backtraces and symbol lookups
 		struct Callsite {
 			std::string name = "(null)";
 			address_t   address = 0x0;
@@ -74,10 +82,10 @@ namespace riscv
 		Callsite lookup(address_t) const;
 		void print_backtrace(void(*print_function)(const char*, size_t));
 
-		// memory usage
+		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
 		size_t owned_pages_active() const noexcept;
-		// page handling
+		// Page handling
 		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
 		const Page& get_page(address_t) const noexcept;
@@ -147,6 +155,13 @@ namespace riscv
 		const Page& get_pageno_slowpath(address_t) const noexcept;
 		const Page& get_readable_page(address_t);
 		Page& get_writable_page(address_t);
+		// Helpers
+		template <typename T>
+		static void foreach_helper(T& mem, address_t addr, size_t len,
+			Function<void(T&, address_t, const uint8_t*, size_t)> callback);
+		template <typename T>
+		static void memview_helper(T& mem, address_t addr, size_t len,
+			Function<void(T&, const uint8_t*, size_t)> callback);
 		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;

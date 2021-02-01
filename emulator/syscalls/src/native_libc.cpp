@@ -154,10 +154,9 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool /*trusted*/)
 		auto [dst, src, len] =
 			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
-		m.memory.memview(src, len,
-			[&m] (const uint8_t* data, size_t len) {
-				auto dst = m.template sysarg <address_type<W>> (0);
-				m.memory.memcpy(dst, data, len);
+		m.memory.foreach(src, len,
+			[dst = dst] (auto& m, address_type<W> off, const uint8_t* data, size_t len) {
+				m.memcpy(dst + off, data, len);
 			});
 		m.increment_counter(2 * len);
 		m.set_result(dst);
