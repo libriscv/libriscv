@@ -311,6 +311,9 @@ namespace riscv
 			this->m_stack_address = 0x40000000;
 		}
 
+		// the default exit function is simply 'exit'
+		this->m_exit_address = resolve_address("exit");
+
 		if (this->m_verbose_loader) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}
