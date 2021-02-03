@@ -270,6 +270,7 @@ namespace riscv
 	INSTRUCTION(JALR,
 	[] (auto& cpu, rv32i_instruction instr) {
 		// jump to register + immediate
+		// NOTE: if rs1 == rd, avoid clobber by storing address first
 		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		// Link *next* instruction (rd = PC + 4)
 		if (LIKELY(instr.Itype.rd != 0)) {
