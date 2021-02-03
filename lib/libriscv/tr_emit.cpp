@@ -203,15 +203,17 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 				add_branch<W>(code, { false, ge, fl }, " >= ", tinfo, i, instr, func);
 				break;
 			} } break;
-		case RV32I_JALR:
+		case RV32I_JALR: {
 			// jump to register + immediate
+			// NOTE: We need to remember RS1 because it can be clobbered by RD
+			add_code(code, "addr_t jrs1 = " + from_reg(tinfo, instr.Itype.rs1) + ";");
 			if (instr.Itype.rd != 0) {
-				add_code(code, from_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";\n");
+				add_code(code, from_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";");
 			}
-			add_code(code, "api.jump(cpu, " + from_reg(tinfo, instr.Itype.rs1)
-				+ " + " + from_imm(instr.Itype.signed_imm()) + " - 4, " + INSTRUCTION_COUNT(i) + ");",
-				"}\n");
-			return;
+			add_code(code, "api.jump(cpu, jrs1 + "
+				+ from_imm(instr.Itype.signed_imm()) + " - 4, " + INSTRUCTION_COUNT(i) + ");",
+				"}");
+			} return;
 		case RV32I_JAL: {
 			if (instr.Jtype.rd != 0) {
 				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
