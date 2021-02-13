@@ -87,13 +87,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 	code += "extern void " + func + "(CPU* cpu) {\n";
 	// branches can jump back, within limits
 	if (tinfo.has_branch) {
-		code += "int c = 0; " + func + "_start:\n";
+		code += "int c = 0; " + func + "_start:;\n";
 	}
 	for (size_t i = 0; i < tinfo.len; i++) {
 		const auto& instr = ip[i].second;
-		// forward branches
+		// forward branches (empty statement)
 		if (labels.count(i) > 0) {
-			code.append(FUNCLABEL(i) + ":\n");
+			code.append(FUNCLABEL(i) + ":;\n");
 			labels.erase(i);
 		}
 		// instruction generation
