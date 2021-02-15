@@ -121,8 +121,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 					add_code(code,
 					"api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
-					add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddr_t)(int32_t)api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					if constexpr (W == 4) {
+						add_code(code,
+							from_reg(instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					} else {
+						add_code(code,
+							from_reg(instr.Itype.rd) + " = (saddr_t)(int32_t)api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					}
 				} break;
 			case 0x3: // I64
 				if (instr.Itype.rd == 0) {
