@@ -52,7 +52,7 @@ template <int W>
 struct RSP
 {
 	// Wait for a connection for @timeout_secs
-	RSPClient<W>* accept(int timeout_secs = 10);
+	std::unique_ptr<RSPClient<W>> accept(int timeout_secs = 10);
 	int  fd() const noexcept { return server_fd; }
 
 	RSP(riscv::Machine<W>&, uint16_t);
@@ -142,7 +142,7 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	}
 }
 template <int W>
-RSPClient<W>* RSP<W>::accept(int timeout_secs)
+std::unique_ptr<RSPClient<W>> RSP<W>::accept(int timeout_secs)
 {
 	struct timeval tv {
 		.tv_sec = timeout_secs,
@@ -179,7 +179,7 @@ RSPClient<W>* RSP<W>::accept(int timeout_secs)
 		close(sockfd);
 		return nullptr;
 	}
-	return new RSPClient(m_machine, sockfd);
+	return std::make_unique<RSPClient<W>>(m_machine, sockfd);
 }
 template <int W> inline
 RSP<W>::~RSP() {
