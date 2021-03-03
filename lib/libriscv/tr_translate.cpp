@@ -1,4 +1,4 @@
-#include <EASTL/hash_set.h>
+#include <cmath>
 #include <dlfcn.h>
 #include <unistd.h>
 #include "machine.hpp"
@@ -6,6 +6,7 @@
 #include "rv32i_instr.hpp"
 #include "tr_api.hpp"
 #include "util/crc32.hpp"
+#include <unordered_set>
 //#define BINTR_TIMING
 
 namespace riscv
@@ -24,7 +25,7 @@ namespace riscv
 	#define TIME_POINT(x)  /* */
 #endif
 
-static eastl::hash_set<uint32_t> good_insn
+static std::unordered_set<uint32_t> good_insn
 {
 	RV32I_LOAD,
 	RV32I_STORE,
@@ -107,8 +108,8 @@ if constexpr (SCAN_FOR_GP) {
 	size_t icounter = 0;
 	auto it = ipairs.begin();
 	std::vector<std::pair<decltype(it), address_t>> loops;
-	eastl::hash_set<address_t> already_generated;
-	eastl::hash_set<address_t> already_looped;
+	std::unordered_set<address_t> already_generated;
+	std::unordered_set<address_t> already_looped;
 	struct CodeBlock {
 		instr_pair& instr;
 		size_t      length;

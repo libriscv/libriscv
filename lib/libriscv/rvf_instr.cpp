@@ -1,5 +1,6 @@
 #include "rvfd.hpp"
 #include "instr_helpers.hpp"
+#include <cmath>
 
 namespace riscv
 {

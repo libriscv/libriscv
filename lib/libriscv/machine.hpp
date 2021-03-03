@@ -2,7 +2,6 @@
 #include "cpu.hpp"
 #include "memory.hpp"
 #include "riscvbase.hpp"
-#include <EASTL/fixed_vector.h>
 #include <array>
 
 namespace riscv
@@ -159,7 +158,7 @@ namespace riscv
 		bool         m_stopped = false;
 		uint64_t     m_counter = 0;
 		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers {};
-		mutable eastl::fixed_vector<Function<void()>, 16> m_destructor_callbacks;
+		mutable std::vector<Function<void()>> m_destructor_callbacks;
 		Function<void(int)> m_on_unhandled_syscall = nullptr;
 		Function<void(int, int, int)> m_on_unhandled_csr = nullptr;
 		void* m_userdata = nullptr;

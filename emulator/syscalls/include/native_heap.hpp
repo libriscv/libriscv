@@ -7,8 +7,13 @@
 #include <cassert>
 #include <deque>
 #include <functional>
+#ifdef RISCV_USE_EASTL
 #include <EASTL/fixed_list.h>
 #include <EASTL/fixed_vector.h>
+#else
+#include <list>
+#include <vector>
+#endif
 
 #ifndef LIKELY
 #define LIKELY(x) __builtin_expect((x), 1)
@@ -71,9 +76,14 @@ private:
 	void foreach(std::function<void(const Chunk&)>) const;
 
 	static const size_t MAX_ALLOCS = 128;
-	//std::deque<Chunk> m_chunks;
+
+#ifdef RISCV_USE_EASTL
 	eastl::fixed_list<Chunk, MAX_ALLOCS> m_chunks;
 	eastl::fixed_vector<Chunk*, MAX_ALLOCS> m_free_chunks;
+#else
+	std::deque<Chunk> m_chunks;
+	std::vector<Chunk*> m_free_chunks;
+#endif
 	Chunk  m_base_chunk;
 };
 

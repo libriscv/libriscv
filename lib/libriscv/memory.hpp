@@ -4,9 +4,13 @@
 #include <cassert>
 #include <cstring>
 #include <stdexcept>
+#ifdef RISCV_USE_EASTL
 #include <EASTL/allocator_malloc.h>
 #include <EASTL/fixed_hash_map.h>
 #include <EASTL/string_map.h>
+#else
+#include <unordered_map>
+#endif
 #include "util/buffer.hpp" // <string>
 
 namespace riscv
@@ -68,7 +72,7 @@ namespace riscv
 		const auto& machine() const { return this->m_machine; }
 
 		// Call interface
-		address_t resolve_address(const char* sym) const;
+		address_t resolve_address(const std::string& sym) const;
 		address_t resolve_section(const char* name) const;
 		address_t exit_address() const noexcept;
 		void      set_exit_address(address_t new_exit);
@@ -191,7 +195,11 @@ namespace riscv
 
 		std::array<CachedPage<W, const Page>, RISCV_PAGE_CACHE> m_rd_cache;
 		std::array<CachedPage<W, Page>, RISCV_PAGE_CACHE> m_wr_cache;
+#ifdef RISCV_USE_EASTL
 		eastl::fixed_hash_map<address_t, Page, 128, 64>  m_pages;
+#else
+		std::unordered_map<address_t, Page> m_pages;
+#endif
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
 #ifdef RISCV_SHARED_PAGETABLES
@@ -213,10 +221,12 @@ namespace riscv
 		const bool m_original_machine;
 
 #ifndef RISCV_DISABLE_SYM_LOOKUP
+#ifdef RISCV_USE_EASTL
 		// lookup tree for ELF symbol names
-		mutable eastl::string_map<address_t,
-				eastl::str_less<const char*>,
-				eastl::allocator_malloc> sym_lookup;
+		mutable eastl::unordered_map<std::string, address_t> sym_lookup;
+#else
+		mutable std::unordered_map<std::string, address_t> sym_lookup;
+#endif
 #endif
 		// ELF programs linear .text segment
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
