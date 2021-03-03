@@ -1,7 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <stdexcept>
-#include <EASTL/hash_set.h>
+#include <unordered_set>
 #include "types.hpp"
 
 namespace riscv
@@ -43,6 +42,6 @@ namespace riscv
 			}
 		}
 
-		eastl::hash_set<address_t> m_reservations;
+		std::unordered_set<address_t> m_reservations;
 	};
 }
