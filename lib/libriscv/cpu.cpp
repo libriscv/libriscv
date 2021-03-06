@@ -9,6 +9,18 @@
 namespace riscv
 {
 	template <int W>
+	CPU<W>::CPU(Machine<W>& machine, const Machine<W>& other)
+		: m_machine { machine }
+	{
+		this->m_exec_data  = other.cpu.m_exec_data;
+		this->m_exec_begin = other.cpu.m_exec_begin;
+		this->m_exec_end   = other.cpu.m_exec_end;
+
+		this->registers() = other.cpu.registers();
+		// TODO: copy atomics here
+		this->jump(this->pc());
+	}
+	template <int W>
 	void CPU<W>::reset()
 	{
 		static_assert(offsetof(CPU, m_regs) == 0, "Registers must be first");

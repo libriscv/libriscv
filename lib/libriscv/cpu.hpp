@@ -75,6 +75,7 @@ namespace riscv
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 
 		CPU(Machine<W>&);
+		CPU(Machine<W>&, const Machine<W>& other); // Fork
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;

@@ -342,9 +342,6 @@ namespace riscv
 		// base address, size and PC-relative data pointer for instructions
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
 		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;
-		this->machine().cpu.initialize_exec_segs(
-			master.memory.m_exec_pagedata.get() - m_exec_pagedata_base,
-			m_exec_pagedata_base, m_exec_pagedata_base + m_exec_pagedata_size);
 #ifdef RISCV_INSTR_CACHE
 		this->m_exec_decoder = master.memory.m_exec_decoder;
 #endif

@@ -7,12 +7,9 @@ inline Machine<W>::Machine(std::string_view binary, MachineOptions<W> options)
 }
 template <int W>
 inline Machine<W>::Machine(const Machine& other, MachineOptions<W> options)
-	: cpu(*this), memory(*this, other, options)
+	: cpu(*this, other), memory(*this, other, options)
 {
-	cpu.registers() = other.cpu.registers();
 	this->increment_counter(other.instruction_counter());
-	// TODO: copy atomics here
-	cpu.jump(cpu.pc());
 }
 
 template <int W>
