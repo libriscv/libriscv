@@ -17,15 +17,17 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 		machine32.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
 		machine64.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
 		machine64.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
-		// On the 64-bit machine we will fuzz using the execute segment
+		// We need to initialize execute segments
+		auto* data32 = machine32.memory.get_page(V).data();
+		machine32.cpu.initialize_exec_segs(data32 - V, V, V + 0x1000);
 		auto* data64 = machine64.memory.get_page(V).data();
 		machine64.cpu.initialize_exec_segs(data64 - V, V, V + 0x1000);
 		return;
 	}
 
 	// Copy fuzzer data to 0x2000 and reset the stack pointer.
-	machine32.copy_to_guest(V, data, len);
 	machine32.cpu.reg(2) = V;
+	machine32.copy_to_guest(V, data, len);
 	machine32.cpu.jump(V);
 #ifdef RISCV_DEBUG
 	machine32.verbose_instructions = true;
@@ -40,8 +42,8 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 	}
 
 	// Again for 64-bit
-	machine64.copy_to_guest(V, data, len);
 	machine64.cpu.reg(2) = V;
+	machine64.copy_to_guest(V, data, len);
 	machine64.cpu.jump(V);
 	try {
 		for (int i = 0; i < CYCLES; i++)

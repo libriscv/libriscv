@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.9)
 project(riscv CXX)
 
-#option(RISCV_DEBUG "" ON)
+# Instruction cache does not work without ELF loader (for now)
+option(RISCV_ICACHE "" OFF)
 add_subdirectory(../lib lib)
 
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
