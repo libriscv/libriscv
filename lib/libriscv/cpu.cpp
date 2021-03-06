@@ -14,8 +14,10 @@ namespace riscv
 		static_assert(offsetof(CPU, m_regs) == 0, "Registers must be first");
 		this->m_regs = {};
 		this->reset_stack_pointer();
-		// jumping causes some extra calculations
-		this->jump(machine().memory.start_address());
+		// We can't jump if there's been no ELF loader
+		if (!machine().memory.binary().empty()) {
+			this->jump(machine().memory.start_address());
+		}
 		// reset the page cache
 		this->m_cache = {};
 	}

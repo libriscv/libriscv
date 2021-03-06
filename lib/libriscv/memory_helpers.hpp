@@ -1,6 +1,6 @@
 #pragma once
 
-template <int W>
+template <int W> inline
 void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 {
 	while (len > 0)
@@ -18,7 +18,7 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 	}
 }
 
-template <int W>
+template <int W> inline
 void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 {
 	auto* src = (uint8_t*) vsrc;
@@ -38,7 +38,7 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 	}
 }
 
-template <int W>
+template <int W> inline
 void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 {
 	auto* dst = (uint8_t*) vdst;

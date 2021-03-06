@@ -40,6 +40,7 @@ namespace riscv
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
 		void memcpy_out(void* dst, address_t src, size_t) const;
+		void memcpy_unsafe(address_t dst, const void* src, size_t); // No page protections
 		// Gives a chunk-wise view of the data at address, with a callback
 		// invocation at each page boundary. @offs is the current byte offset.
 		void foreach(address_t addr, size_t len,

@@ -17,9 +17,9 @@ namespace riscv
 		using address_t = address_type<W>; // one unsigned memory address
 
 		// see common.hpp for MachineOptions
-		Machine(std::string_view binary, MachineOptions<W>);
-		Machine(const std::vector<uint8_t>& bin, MachineOptions<W>);
-		Machine(const Machine&, MachineOptions<W>); //<- Fork
+		Machine(std::string_view binary, MachineOptions<W> = {});
+		Machine(const std::vector<uint8_t>& bin, MachineOptions<W> = {});
+		Machine(const Machine&, MachineOptions<W> = {}); //<- Fork
 		~Machine();
 
 		// Simulate a RISC-V machine until @max_instructions have been
@@ -39,7 +39,7 @@ namespace riscv
 		CPU<W>    cpu;
 		Memory<W> memory;
 
-		// Copy data into the guests memory
+		// Copy data into the guests memory (without page protections)
 		address_t copy_to_guest(address_t dst, const void* buf, size_t length);
 		// Push something onto the stack, and move the stack pointer
 		address_t stack_push(const void* data, size_t length);

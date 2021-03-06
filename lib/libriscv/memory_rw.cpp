@@ -188,6 +188,26 @@ namespace riscv
 		}
 	}
 
+	template <int W>
+	void Memory<W>::memcpy_unsafe(address_t dst, const void* vsrc, size_t len)
+	{
+		auto* src = (uint8_t*) vsrc;
+		while (len != 0)
+		{
+			const size_t offset = dst & (Page::size()-1); // offset within page
+			const size_t size = std::min(Page::size() - offset, len);
+			auto& page = this->create_page(dst >> Page::SHIFT);
+			if (UNLIKELY(!page.has_data()))
+				protection_fault(dst);
+
+			std::copy(src, src + size, page.data() + offset);
+
+			dst += size;
+			src += size;
+			len -= size;
+		}
+	}
+
 	template struct Memory<4>;
 	template struct Memory<8>;
 }

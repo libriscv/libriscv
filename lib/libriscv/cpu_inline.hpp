@@ -14,22 +14,22 @@ inline void CPU<W>::reset_stack_pointer() noexcept
 template<int W> constexpr
 inline void CPU<W>::jump(const address_t dst)
 {
-	this->registers().pc = dst;
 #ifdef RISCV_INBOUND_JUMPS_ONLY
-	if (UNLIKELY(this->pc() < m_exec_begin || this->pc() >= m_exec_end)) {
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+	if (UNLIKELY(dst < m_exec_begin || dst >= m_exec_end)) {
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, dst);
 	}
 #endif
 	// it's possible to jump to a misaligned address
 	if constexpr (!compressed_enabled) {
-		if (UNLIKELY(this->pc() & 0x3)) {
-			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
+		if (UNLIKELY(dst & 0x3)) {
+			trigger_exception(MISALIGNED_INSTRUCTION, dst);
 		}
 	} else {
-		if (UNLIKELY(this->pc() & 0x1)) {
-			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
+		if (UNLIKELY(dst & 0x1)) {
+			trigger_exception(MISALIGNED_INSTRUCTION, dst);
 		}
 	}
+	this->registers().pc = dst;
 }
 
 #ifdef RISCV_DEBUG
