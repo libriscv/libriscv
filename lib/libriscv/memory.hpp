@@ -218,14 +218,6 @@ namespace riscv
 
 		const std::string_view m_binary;
 
-#ifndef RISCV_DISABLE_SYM_LOOKUP
-#ifdef RISCV_USE_EASTL
-		// lookup tree for ELF symbol names
-		mutable eastl::unordered_map<std::string, address_t> sym_lookup;
-#else
-		mutable std::unordered_map<std::string, address_t> sym_lookup;
-#endif
-#endif
 		// ELF programs linear .text segment
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;

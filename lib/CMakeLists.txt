@@ -67,7 +67,7 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC
 		RISCV_BINARY_TRANSLATION=1
 		RISCV_TRANSLATION_CACHE=1)
-	target_link_libraries(riscv dl)
+	target_link_libraries(riscv PUBLIC dl)
 endif()
 if (RISCV_SHARED_PT)
 	target_compile_definitions(riscv PUBLIC

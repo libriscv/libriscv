@@ -214,9 +214,12 @@ address_type<W> Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t
 }
 
 template <int W>
-inline address_type<W> Machine<W>::address_of(const char* name) const
-{
+inline address_type<W> Machine<W>::address_of(const char* name) const {
 	return memory.resolve_address(name);
+}
+template <int W>
+inline address_type<W> Machine<W>::address_of(const std::string& name) const {
+	return memory.resolve_address(name.c_str());
 }
 
 template <int W>

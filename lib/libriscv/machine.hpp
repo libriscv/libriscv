@@ -106,6 +106,7 @@ namespace riscv
 
 		// returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name) const;
+		address_t address_of(const std::string& name) const;
 
 		// Call a function when the machine gets destroyed
 		void add_destructor_callback(Function<void()> callback) const;
