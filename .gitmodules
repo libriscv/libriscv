@@ -4,6 +4,3 @@
 [submodule "webapi/cpp-httplib"]
 	path = webapi/cpp-httplib
 	url = https://github.com/yhirose/cpp-httplib.git
-[submodule "lib/EASTL"]
-	path = lib/EASTL
-	url = https://github.com/fwsGonzo/EASTL.git

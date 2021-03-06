@@ -12,7 +12,6 @@ option(RISCV_SHARED_PT "Enable shared page tables (performance penalty)" OFF)
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
 endif()
-option(RISCV_USE_EASTL "Enable EASTL dependency for extra performance" OFF)
 
 set (SOURCES
 		libriscv/cpu.cpp
@@ -73,11 +72,4 @@ if (RISCV_SHARED_PT)
 	target_compile_definitions(riscv PUBLIC
 		RISCV_SHARED_PAGETABLES=1
 	)
-endif()
-
-if (RISCV_USE_EASTL)
-	add_subdirectory(EASTL)
-	target_compile_definitions(EASTL PUBLIC EASTL_EXCEPTIONS_ENABLED=1)
-	target_compile_options(EASTL PRIVATE -Wno-unused-parameter)
-	target_link_libraries(riscv PUBLIC EASTL)
 endif()
