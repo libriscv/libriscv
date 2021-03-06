@@ -14,11 +14,8 @@ namespace riscv
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
 					MachineOptions<W> options)
 		: m_machine{mach},
-		  m_binary{bin},
-		  m_load_program     {options.load_program},
-		  m_protect_segments {options.protect_segments},
-		  m_verbose_loader   {options.verbose_loader},
-		  m_original_machine {options.owning_machine == nullptr}
+		  m_original_machine {true},
+		  m_binary{bin}
 	{
 		if (options.page_fault_handler != nullptr)
 		{
@@ -45,18 +42,21 @@ namespace riscv
 					return mem.allocate_page(page);
 				};
 		}
-		// when an owning machine is passed, its state will be used instead
-		if (options.owning_machine == nullptr) {
-			// initialize paging (which clears all pages) before loading binary
-			this->initial_paging();
-			// load ELF binary into virtual memory
-			if (!m_binary.empty())
-				this->binary_loader(options);
-		}
-		else {
-			this->machine_loader(*options.owning_machine);
-		}
+		// initialize paging (which clears all pages) before loading binary
+		this->initial_paging();
+		// load ELF binary into virtual memory
+		if (!m_binary.empty())
+			this->binary_loader(options);
 	}
+	template <int W>
+	Memory<W>::Memory(Machine<W>& mach, const Machine<W>& other, MachineOptions<W> options)
+	  : m_machine{mach},
+	    m_original_machine {false},
+		m_binary{other.memory.binary()}
+	{
+		this->machine_loader(other, options);
+	}
+
 	template <int W>
 	Memory<W>::~Memory()
 	{
@@ -117,7 +117,7 @@ namespace riscv
 			throw std::runtime_error("Bogus ELF segment virtual base");
 		}
 
-		if (this->m_verbose_loader) {
+		if (options.verbose_loader) {
 		printf("* Loading program of size %zu from %p to virtual %p\n",
 				len, src, (void*) (uintptr_t) hdr->p_vaddr);
 		}
@@ -127,7 +127,7 @@ namespace riscv
 			 .write = (hdr->p_flags & PF_W) != 0,
 			 .exec  = (hdr->p_flags & PF_X) != 0
 		};
-		if (this->m_verbose_loader) {
+		if (options.verbose_loader) {
 		printf("* Program segment readable: %d writable: %d  executable: %d\n",
 				attr.read, attr.write, attr.exec);
 		}
@@ -185,7 +185,7 @@ namespace riscv
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
 
-		if (this->m_protect_segments) {
+		if (options.protect_segments) {
 			this->set_page_attr(hdr->p_vaddr, len, attr);
 		}
 		else {
@@ -285,7 +285,7 @@ namespace riscv
 			{
 				case PT_LOAD:
 					// loadable program segments
-					if (this->m_load_program) {
+					if (options.load_program) {
 						binary_load_ph(options, hdr);
 					}
 					seg++;
@@ -314,14 +314,16 @@ namespace riscv
 		// the default exit function is simply 'exit'
 		this->m_exit_address = resolve_address("exit");
 
-		if (this->m_verbose_loader) {
+		if (options.verbose_loader) {
 		printf("* Entry is at %p\n", (void*) (uintptr_t) this->start_address());
 		}
 	}
 
 	template <int W>
-	void Memory<W>::machine_loader(const Machine<W>& master)
+	void Memory<W>::machine_loader(const Machine<W>& master, const MachineOptions<W>&)
 	{
+		this->m_page_fault_handler = master.memory.m_page_fault_handler;
+
 		for (const auto& it : master.memory.pages())
 		{
 			const auto& page = it.second;
@@ -333,7 +335,10 @@ namespace riscv
 			attr.non_owning = true;
 			m_pages.try_emplace(it.first, attr, (PageData*) page.data());
 		}
-		this->set_exit_address(master.memory.exit_address());
+		this->m_start_address = master.memory.m_start_address;
+		this->m_stack_address = master.memory.m_stack_address;
+		this->m_exit_address = master.memory.m_exit_address;
+
 		// base address, size and PC-relative data pointer for instructions
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
 		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;

@@ -140,6 +140,7 @@ namespace riscv
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
 		Memory(Machine<W>&, std::string_view, MachineOptions<W>);
+		Memory(Machine<W>&, const Machine<W>&, MachineOptions<W>);
 		~Memory();
 	private:
 		struct MemoryArea {
@@ -185,11 +186,11 @@ namespace riscv
 			return &symtab[symidx];
 		}
 		// ELF loader
-		void binary_loader(const MachineOptions<W>& options);
+		void binary_loader(const MachineOptions<W>&);
 		void binary_load_ph(const MachineOptions<W>&, const Phdr*);
 		void serialize_pages(MemoryArea&, address_t, const char*, size_t, PageAttributes);
-		// machine cloning
-		void machine_loader(const Machine<W>&);
+		// Machine copy-on-write fork
+		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
 
 		Machine<W>& m_machine;
 
@@ -206,8 +207,6 @@ namespace riscv
 		page_readf_cb_t m_page_readf_handler = nullptr;
 #endif
 
-		const std::string_view m_binary;
-
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		MemoryArea m_ropages;
 #endif
@@ -215,10 +214,9 @@ namespace riscv
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
 		address_t m_exit_address  = 0;
-		const bool m_load_program;
-		const bool m_protect_segments;
-		const bool m_verbose_loader;
 		const bool m_original_machine;
+
+		const std::string_view m_binary;
 
 #ifndef RISCV_DISABLE_SYM_LOOKUP
 #ifdef RISCV_USE_EASTL

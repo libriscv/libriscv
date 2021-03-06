@@ -1,30 +1,24 @@
 
 template <int W>
-inline Machine<W>::Machine(std::string_view binary,
-							MachineOptions<W> options)
+inline Machine<W>::Machine(std::string_view binary, MachineOptions<W> options)
 	: cpu(*this), memory(*this, binary, options)
 {
-	if (options.owning_machine == nullptr)
-		cpu.reset();
-	else {
-		const auto& src = *options.owning_machine;
-		cpu.registers() = src.cpu.registers();
-		this->increment_counter(src.instruction_counter());
-		// TODO: copy atomics here
-		cpu.jump(cpu.pc());
-	}
+	cpu.reset();
 }
 template <int W>
-inline Machine<W>::Machine(std::string_view binary, uint64_t mmax)
-	: Machine(binary, MachineOptions<W> { .memory_max = mmax }) {}
+inline Machine<W>::Machine(const Machine& other, MachineOptions<W> options)
+	: cpu(*this), memory(*this, other, options)
+{
+	cpu.registers() = other.cpu.registers();
+	this->increment_counter(other.instruction_counter());
+	// TODO: copy atomics here
+	cpu.jump(cpu.pc());
+}
 
 template <int W>
 inline Machine<W>::Machine(const std::vector<uint8_t>& bin, MachineOptions<W> opts)
 	: Machine(std::string_view{(char*) bin.data(), bin.size()}, opts) {}
 
-template <int W>
-inline Machine<W>::Machine(const std::vector<uint8_t>& binary, uint64_t mmax)
-	: Machine(binary, MachineOptions<W> { .memory_max = mmax }) {}
 
 template <int W>
 inline void Machine<W>::stop(bool v) noexcept {

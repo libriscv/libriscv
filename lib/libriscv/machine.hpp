@@ -18,11 +18,8 @@ namespace riscv
 
 		// see common.hpp for MachineOptions
 		Machine(std::string_view binary, MachineOptions<W>);
-		Machine(std::string_view binary,
-				uint64_t memory_max = 16ull << 20 /* 16mb */);
-		Machine(const std::vector<uint8_t>&, MachineOptions<W>);
-		Machine(const std::vector<uint8_t>&,
-				uint64_t memory_max = 16ull << 20 /* 16mb */);
+		Machine(const std::vector<uint8_t>& bin, MachineOptions<W>);
+		Machine(const Machine&, MachineOptions<W>); //<- Fork
 		~Machine();
 
 		// Simulate a RISC-V machine until @max_instructions have been
