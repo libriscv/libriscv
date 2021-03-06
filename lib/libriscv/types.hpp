@@ -16,8 +16,6 @@ namespace riscv
 	template <int N>
 	using isa_type = typename std::conditional<(N == 4), RV32I, RV64I>::type;
 
-	using interrupt_t = uint8_t;
-
 	enum exceptions
 	{
 		ILLEGAL_OPCODE,
@@ -45,9 +43,6 @@ namespace riscv
 
 	template <int W>
 	struct Instruction {
-		using isa_t     = isa_type<W>;           // 32- or 64-bit architecture
-		using format_t  = instruction_format; // one machine instruction
-
 		instruction_handler<W> handler; // callback for executing one instruction
 		instruction_printer<W> printer; // callback for logging one instruction
 	};

@@ -148,7 +148,7 @@ namespace riscv
 	}
 
 	template<int W> __attribute__((cold))
-	void CPU<W>::trigger_exception(interrupt_t intr, address_t data)
+	void CPU<W>::trigger_exception(int intr, address_t data)
 	{
 		switch (intr)
 		{

@@ -49,7 +49,7 @@ namespace riscv
 		void amo(format_t, void(*op)(CPU&, register_type<W>&, uint32_t));
 #endif
 		__attribute__((noreturn))
-		static void trigger_exception(interrupt_t, address_t = 0) COLD_PATH();
+		static void trigger_exception(int, address_t = 0) COLD_PATH();
 
 #ifdef RISCV_DEBUG
 		// debugging
