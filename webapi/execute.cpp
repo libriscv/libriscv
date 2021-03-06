@@ -34,7 +34,9 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 
 	State<4> state;
 	// go-time: create machine, execute code
-	riscv::Machine<riscv::RISCV32> machine { binary, MAX_MEMORY };
+	riscv::Machine<riscv::RISCV32> machine { binary, {
+		.memory_max = MAX_MEMORY
+	}};
 
 	machine.setup_linux({"program"}, env);
 	setup_linux_syscalls(state, machine);
@@ -43,11 +45,10 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 	// run the machine until potential break
 	bool break_used = false;
 	machine.install_syscall_handler(0,
-	[&break_used] (auto& machine) -> long {
-		break_used = true;
-		machine.stop();
-		return 0;
-	});
+		[&break_used] (auto& machine) {
+			break_used = true;
+			machine.stop();
+		});
 
 	// execute until we are inside main()
 	uint32_t main_address = 0x0;
@@ -68,7 +69,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		try {
 			while (LIKELY(!machine.stopped())) {
 				machine.cpu.simulate();
-				if (UNLIKELY(machine.cpu.instruction_counter() >= MAX_INSTRUCTIONS))
+				if (UNLIKELY(machine.instruction_counter() >= MAX_INSTRUCTIONS))
 					break;
 				if (machine.cpu.registers().pc == main_address)
 					break;
@@ -80,7 +81,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		const uint64_t st1 = micros_now();
 		asm("" : : : "memory");
 		res.set_header("X-Startup-Time", std::to_string(st1 - st0));
-		const auto instructions = machine.cpu.instruction_counter();
+		const auto instructions = machine.instruction_counter();
 		res.set_header("X-Startup-Instructions", std::to_string(instructions));
 		// cache for 10 seconds (it's only the output of a program)
 		res.set_header("Cache-Control", "max-age=10");
@@ -88,7 +89,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 	if (machine.cpu.registers().pc == main_address)
 	{
 		// reset PC here for benchmarking
-		machine.cpu.reset_instruction_counter();
+		machine.reset_instruction_counter();
 		std::deque<uint64_t> samples;
 		state.output.clear();
 
@@ -98,7 +99,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 
 		try {
 			machine.simulate(MAX_INSTRUCTIONS);
-			if (machine.cpu.instruction_counter() == MAX_INSTRUCTIONS) {
+			if (machine.instruction_counter() == MAX_INSTRUCTIONS) {
 				res.set_header("X-Exception", "Maximum instructions reached");
 			}
 		} catch (const std::exception& e) {
@@ -123,7 +124,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 			res.set_header("X-Runtime-Median", std::to_string(median));
 			res.set_header("X-Runtime-Highest", std::to_string(highest));
 		}
-		const auto instructions = std::to_string(machine.cpu.instruction_counter());
+		const auto instructions = std::to_string(machine.instruction_counter());
 		res.set_header("X-Instruction-Count", instructions);
 		res.set_header("X-Binary-Size", std::to_string(binary.size()));
 		const size_t active_mem = machine.memory.pages_active() * 4096;
