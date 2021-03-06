@@ -138,8 +138,8 @@ $ ./emulator
 
 You can limit the amount of (virtual) memory the machine can use like so:
 ```C++
-	const uint32_t max_memory = 1024 * 1024 * 64;
-	riscv::Machine<riscv::RISCV32> machine { binary, max_memory };
+	const uint32_t memsize = 1024 * 1024 * 64;
+	riscv::Machine<riscv::RISCV32> machine { binary, { .memory_max = memsize } };
 ```
 
 You can limit the amount of instructions to simulate at a time like so:
@@ -155,9 +155,8 @@ You can find details on the Linux system call ABI online as well as in the `sysc
 
 You can create a 64kb machine without a binary, and no ELF loader will be invoked.
 ```C++
-	const uint32_t max_memory = 65536;
 	std::vector<uint8_t> nothing; // taken as reference
-	riscv::Machine<riscv::RISCV32> machine { nothing, max_memory };
+	riscv::Machine<riscv::RISCV32> machine { nothing, { .memory_max = 65536 }};
 ```
 
 Now you can copy your machine code directly into memory:
