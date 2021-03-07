@@ -1,8 +1,10 @@
 #include "memory.hpp"
-#include <dlfcn.h>
 #include <stdexcept>
 #ifdef __GNUG__
 #include "decoder_cache.cpp"
+#endif
+#ifdef RISCV_BINARY_TRANSLATION
+#include <dlfcn.h> // Linux-only
 #endif
 
 extern "C" char *
