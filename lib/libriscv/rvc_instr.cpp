@@ -219,7 +219,7 @@ namespace riscv
 				}
 				return;
 			case 1: { // C.SRAI (preserve sign)
-					constexpr auto bit = 1ul << (sizeof(dst) * 8 - 1);
+					const auto bit = RVREGTYPE(cpu){1} << (sizeof(dst) * 8 - 1);
 					const bool is_signed = (dst & bit) != 0;
 					if constexpr (RVIS64BIT(cpu)) {
 						const uint32_t shifts = ci.CAB.shift64_imm();

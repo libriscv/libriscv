@@ -343,7 +343,7 @@ namespace riscv
 				else
 					dst = src >> instr.Itype.shift_imm();
 			} else { // SRAI: preserve the sign bit
-				constexpr auto bit = 1ul << (sizeof(src) * 8 - 1);
+				const auto bit = RVREGTYPE(cpu){1} << (sizeof(src) * 8 - 1);
 				const bool is_signed = (src & bit) != 0;
 				if constexpr (RVIS64BIT(cpu)) {
 					const uint32_t shifts = instr.Itype.shift64_imm();
@@ -474,7 +474,7 @@ namespace riscv
 						dst = src1 >> (src2 & 0x1F); // max 31 shifts!
 					}
 				} else { // SRA
-					constexpr auto bit = 1ul << (sizeof(src1) * 8 - 1);
+					const auto bit = RVREGTYPE(cpu){1} << (sizeof(src1) * 8 - 1);
 					const bool is_signed = (src1 & bit) != 0;
 					if constexpr (RVIS64BIT(cpu)) {
 						const uint32_t shifts = src2 & 0x3F; // max 63 shifts!
