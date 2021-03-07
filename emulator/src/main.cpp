@@ -21,7 +21,9 @@ int main(int argc, const char** argv)
 		"hello_world", "test!"
 	};
 
-	riscv::Machine<MARCH> machine { binary, MAX_MEMORY };
+	riscv::Machine<MARCH> machine { binary, {
+		.memory_max = MAX_MEMORY
+	}};
 
 	// somewhere to store the guest outputs and exit status
 	State<MARCH> state;
