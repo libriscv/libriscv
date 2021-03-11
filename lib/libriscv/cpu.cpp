@@ -125,6 +125,14 @@ namespace riscv
 #  endif
 # else
 		instruction = this->read_next_instruction();
+	#ifdef RISCV_DEBUG
+		// instruction logging
+		if (machine().verbose_instructions)
+		{
+			const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction));
+			printf("%s\n", string.c_str());
+		}
+	#endif
 		// decode & execute instruction directly
 		this->execute(instruction);
 # endif
