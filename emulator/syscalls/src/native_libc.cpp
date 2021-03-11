@@ -224,8 +224,8 @@ void setup_native_memory_syscalls(Machine<W>& machine, bool /*trusted*/)
 	}}, {NATIVE_SYSCALLS_BASE+19, [] (auto& m) {
 		// Print backtrace n+19
 		m.memory.print_backtrace(
-			[] (const char* buffer, size_t len) {
-				printf("%.*s\n", (int)len, buffer);
+			[] (std::string_view line) {
+				printf("%.*s\n", (int)line.size(), line.begin());
 			});
 		m.set_result(0);
 	}}});

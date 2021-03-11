@@ -156,3 +156,9 @@ inline void Memory<W>::set_exit_address(address_t addr)
 {
 	this->m_exit_address = addr;
 }
+
+template <int W>
+inline bool Memory<W>::is_executable(address_t addr)
+{
+	return addr >= m_exec_pagedata_base && addr < m_exec_pagedata_base + m_exec_pagedata_size;
+}

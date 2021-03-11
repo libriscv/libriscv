@@ -508,7 +508,7 @@ namespace riscv
 		return {};
 	}
 	template <int W>
-	void Memory<W>::print_backtrace(void(*print_function)(const char*, size_t))
+	void Memory<W>::print_backtrace(void(*print_function)(std::string_view))
 	{
 		auto print_trace =
 			[this, print_function] (const int N, const address_type<W> addr) {
@@ -526,7 +526,10 @@ namespace riscv
 						"[%d] 0x%016lx + 0x%.3x: %s",
 						N, site.address, site.offset, site.name.c_str());
 				}
-				print_function(buffer, len);
+				if (len > 0)
+					print_function({buffer, (size_t)len});
+				else
+					print_function("Scuffed frame. Should not happen!");
 			};
 		print_trace(0, this->machine().cpu.pc());
 		print_trace(1, this->machine().cpu.reg(RISCV::REG_RA));

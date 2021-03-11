@@ -79,7 +79,7 @@ namespace riscv
 			size_t      size    = 0;
 		};
 		Callsite lookup(address_t) const;
-		void print_backtrace(void(*print_function)(const char*, size_t));
+		void print_backtrace(void(*print_function)(std::string_view));
 
 		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
@@ -117,6 +117,9 @@ namespace riscv
 		// create pages for non-owned (shared) memory with given attributes
 		void insert_non_owned_memory(
 			address_t dst, void* src, size_t size, PageAttributes = {});
+
+		// Returns true if the address is inside the executable code segment
+		bool is_executable(address_t addr);
 
 #ifdef RISCV_INSTR_CACHE
 		void generate_decoder_cache(const MachineOptions<W>&, address_t pbase, address_t va, size_t len);
