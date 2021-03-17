@@ -15,8 +15,9 @@ static const std::vector<uint32_t> instructions =
 
 void test_rv32i()
 {
-	const uint32_t memory = 65536;
-	riscv::Machine<riscv::RISCV32> m { std::string_view{}, memory };
+	riscv::Machine<riscv::RISCV32> m { std::string_view{}, {
+		.memory_max = 65536
+	} };
 	// install instructions
 	const size_t bytes = sizeof(instructions[0]) * instructions.size();
 	m.copy_to_guest(0x1000, instructions.data(), bytes);
@@ -27,15 +28,15 @@ void test_rv32i()
 	m.cpu.jump(0x1000);
 
 	// stack frame
-	m.cpu.reg(RISCV::REG_SP) = 0x120000 - 288;
-	const uint32_t current_sp = m.cpu.reg(RISCV::REG_SP);
+	m.cpu.reg(REG_SP) = 0x120000 - 288;
+	const uint32_t current_sp = m.cpu.reg(REG_SP);
 
 	// execute LUI a2, 0x65000
 	m.simulate(1);
-	assert(m.cpu.reg(RISCV::REG_ARG2) == 0x65000);
+	assert(m.cpu.reg(REG_ARG2) == 0x65000);
 	// execute LUI a1, 0x65000
 	m.simulate(1);
-	assert(m.cpu.reg(RISCV::REG_ARG1) == 0x65000);
+	assert(m.cpu.reg(REG_ARG1) == 0x65000);
 	// execute SW  s6, [SP + 256]
 	m.cpu.reg(22) = 0x12345678;
 	m.simulate(1);

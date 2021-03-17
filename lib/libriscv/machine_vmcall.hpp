@@ -3,9 +3,9 @@ template <int W>
 template <typename... Args> constexpr
 inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 {
-	cpu.reg(RISCV::REG_RA) = memory.exit_address();
-	[[maybe_unused]] int iarg = RISCV::REG_ARG0;
-	[[maybe_unused]] int farg = RISCV::REG_FA0;
+	cpu.reg(REG_RA) = memory.exit_address();
+	[[maybe_unused]] int iarg = REG_ARG0;
+	[[maybe_unused]] int farg = REG_FA0;
 	([&] {
 		if constexpr (std::is_integral_v<Args>) {
 			cpu.reg(iarg++) = args;
@@ -37,7 +37,7 @@ inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 	// execute function
 	this->simulate<Throw>(MAXI);
 	// address-sized integer return value
-	return cpu.reg(RISCV::REG_ARG0);
+	return cpu.reg(REG_ARG0);
 }
 
 template <int W>
@@ -58,7 +58,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	}
 	const bool is_stopped = this->m_stopped;
 	// we need to make some stack room
-	this->cpu.reg(RISCV::REG_SP) -= 1024u;
+	this->cpu.reg(REG_SP) -= 1024u;
 	// setup calling convention
 	this->setup_call(call_addr, std::forward<Args>(args)...);
 	this->realign_stack();
@@ -74,7 +74,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	}
 	// restore registers and return value
 	this->m_stopped = is_stopped;
-	const auto retval = cpu.reg(RISCV::REG_ARG0);
+	const auto retval = cpu.reg(REG_ARG0);
 	if constexpr (StoreRegs) {
 		cpu.registers() = regs;
 	}

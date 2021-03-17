@@ -532,7 +532,7 @@ namespace riscv
 					print_function("Scuffed frame. Should not happen!");
 			};
 		print_trace(0, this->machine().cpu.pc());
-		print_trace(1, this->machine().cpu.reg(RISCV::REG_RA));
+		print_trace(1, this->machine().cpu.reg(REG_RA));
 	}
 
 	template <int W>

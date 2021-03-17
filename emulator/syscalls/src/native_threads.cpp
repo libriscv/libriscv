@@ -115,14 +115,14 @@ multithreading<W>* setup_native_threads(
 				CHILD_SETTID, tls, 0x0, stack, tls);
 			// set PC back to clone point - 4
 			machine.cpu.registers().pc =
-				machine.cpu.reg(riscv::RISCV::REG_RA) - 4;
+				machine.cpu.reg(riscv::REG_RA) - 4;
 			// suspend and store return value for parent: child TID
 			auto* parent = mt->get_thread();
 			parent->suspend(thread->tid);
 			// activate and setup a function call
 			thread->activate();
 			// exit into the exit function which frees the thread
-			machine.cpu.reg(riscv::RISCV::REG_RA) = fini;
+			machine.cpu.reg(riscv::REG_RA) = fini;
 			// move 6 arguments back
 			std::memmove(&machine.cpu.reg(10), &machine.cpu.reg(12),
 				6 * sizeof(address_type<W>));
@@ -135,8 +135,8 @@ multithreading<W>* setup_native_threads(
 			auto* mt    = data->mt;
 			auto* arena = data->arena;
 
-			auto retval = machine.cpu.reg(riscv::RISCV::REG_RETVAL);
-			auto self = machine.cpu.reg(riscv::RISCV::REG_TP);
+			auto retval = machine.cpu.reg(riscv::REG_RETVAL);
+			auto self = machine.cpu.reg(riscv::REG_TP);
 			// TODO: check this return value
 			arena->free(self);
 			// exit thread instead

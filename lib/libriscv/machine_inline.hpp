@@ -119,23 +119,23 @@ inline T Machine<W>::sysarg(int idx) const
 	if constexpr (std::is_integral_v<T>) {
 		// 64-bit integers on 32-bit uses 2 registers
 		if constexpr (sizeof(T) > W) {
-			return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx))
-				| static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx + 1)) << 32;
+			return static_cast<T> (cpu.reg(REG_ARG0 + idx))
+				| static_cast<T> (cpu.reg(REG_ARG0 + idx + 1)) << 32;
 		}
-		return static_cast<T> (cpu.reg(RISCV::REG_ARG0 + idx));
+		return static_cast<T> (cpu.reg(REG_ARG0 + idx));
 	}
 	else if constexpr (std::is_same_v<T, float>)
-		return cpu.registers().getfl(RISCV::REG_FA0 + idx).f32[0];
+		return cpu.registers().getfl(REG_FA0 + idx).f32[0];
 	else if constexpr (std::is_same_v<T, double>)
-		return cpu.registers().getfl(RISCV::REG_FA0 + idx).f64;
+		return cpu.registers().getfl(REG_FA0 + idx).f64;
 	else if constexpr (std::is_same_v<T, riscv::Buffer>)
 		return memory.rvbuffer(
-			cpu.reg(RISCV::REG_ARG0 + idx), cpu.reg(RISCV::REG_ARG0 + idx + 1));
+			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 	else if constexpr (is_stdstring<T>::value)
-		return memory.memstring(cpu.reg(RISCV::REG_ARG0 + idx));
+		return memory.memstring(cpu.reg(REG_ARG0 + idx));
 	else if constexpr (std::is_pod_v<std::remove_reference<T>>) {
 		T value;
-		memory.memcpy_out(&value, cpu.reg(RISCV::REG_ARG0 + idx), sizeof(T));
+		memory.memcpy_out(&value, cpu.reg(REG_ARG0 + idx), sizeof(T));
 		return value;
 	} else
 		static_assert(always_false<T>, "Unknown type");
@@ -181,12 +181,12 @@ inline void Machine<W>::set_result(Args... args) {
 	size_t f = 0;
 	([&] {
 		if constexpr (std::is_integral_v<Args>) {
-			cpu.registers().at(RISCV::REG_ARG0 + i++) = args;
+			cpu.registers().at(REG_ARG0 + i++) = args;
 		}
 		else if constexpr (std::is_same_v<Args, float>)
-			cpu.registers().getfl(RISCV::REG_FA0 + f++).set_float(args);
+			cpu.registers().getfl(REG_FA0 + f++).set_float(args);
 		else if constexpr (std::is_same_v<Args, double>)
-			cpu.registers().getfl(RISCV::REG_FA0 + f++).set_double(args);
+			cpu.registers().getfl(REG_FA0 + f++).set_double(args);
 		else
 			static_assert(always_false<Args>, "Unknown type");
 	}(), ...);
@@ -222,7 +222,7 @@ inline address_type<W> Machine<W>::address_of(const std::string& name) const {
 template <int W>
 address_type<W> Machine<W>::stack_push(const void* data, size_t length)
 {
-	auto& sp = cpu.reg(RISCV::REG_SP);
+	auto& sp = cpu.reg(REG_SP);
 	sp = (sp - length) & ~(W-1); // maintain word alignment
 	this->copy_to_guest(sp, data, length);
 	return sp;
@@ -243,7 +243,7 @@ template <int W>
 void Machine<W>::realign_stack()
 {
 	// the RISC-V calling convention mandates a 16-byte alignment
-	cpu.reg(RISCV::REG_SP) &= ~(address_t) 0xF;
+	cpu.reg(REG_SP) &= ~(address_t) 0xF;
 }
 
 template <int W>

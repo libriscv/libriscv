@@ -16,7 +16,7 @@ namespace riscv
 	template <int W>
 	long Machine<W>::unknown_syscall_handler(Machine<W>& machine)
 	{
-		const auto syscall_number = machine.cpu.reg(RISCV::REG_ECALL);
+		const auto syscall_number = machine.cpu.reg(REG_ECALL);
 		if (UNLIKELY(machine.m_on_unhandled_syscall != nullptr)) {
 			machine.m_on_unhandled_syscall(syscall_number);
 		}
@@ -25,7 +25,7 @@ namespace riscv
 		if (syscall_number != SYSCALL_EBREAK) {
 			return -38; // -ENOSYS
 		}
-		return machine.cpu.reg(RISCV::REG_RETVAL);
+		return machine.cpu.reg(REG_RETVAL);
 #else
 		return -38;
 #endif
@@ -51,7 +51,7 @@ namespace riscv
 		argv.push_back(0x0);
 
 		// Extra aligned SP and copy the arguments over
-		auto& sp = cpu.reg(RISCV::REG_SP);
+		auto& sp = cpu.reg(REG_SP);
 		const size_t argsize = argv.size() * sizeof(argv[0]);
 		sp -= argsize;
 		sp &= ~0xF; // mandated 16-byte stack alignment
@@ -98,7 +98,7 @@ namespace riscv
 	{
 		// start installing at near-end of address space, leaving room on both sides
 		// stack below and installation above
-		auto dst = this->cpu.reg(RISCV::REG_SP);
+		auto dst = this->cpu.reg(REG_SP);
 
 		// inception :)
 		auto gen = std::default_random_engine(time(0));
@@ -171,7 +171,7 @@ namespace riscv
 		dst &= ~0xF; // mandated 16-byte stack alignment
 		this->copy_to_guest(dst, argv.data(), argsize);
 		// re-initialize machine stack-pointer
-		this->cpu.reg(RISCV::REG_SP) = dst;
+		this->cpu.reg(REG_SP) = dst;
 	}
 
 	uint64_t u64_monotonic_time()
@@ -189,7 +189,7 @@ namespace riscv
 			switch (instr.Itype.imm)
 			{
 			case 0: // ECALL
-				cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
+				cpu.machine().system_call(cpu.reg(REG_ECALL));
 				return;
 			case 1: // EBREAK
 				cpu.machine().ebreak();

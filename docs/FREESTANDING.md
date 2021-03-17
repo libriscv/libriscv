@@ -7,7 +7,7 @@ If you want a completely freestanding environment in your embedded program you w
 You will want to avoid using a low address as the initial stack value, as it could mean that some stack pointer value will be evaluated as 0x0 (null) with some bad luck, which could mysteriously fail one of your own checks or asserts. Additionally, the machine automatically makes the zero-page unreadable on start to help you catch accesses to the zero-page, which are typically bugs. It's fine to start the stack at 0x0 though, as the address will wrap around and start pushing bytes at the top of the address space, at least in 32-bit.
 
 ```C++
-machine.cpu.reg(RISCV::REG_SP) = 0x0;
+machine.cpu.reg(riscv::REG_SP) = 0x0;
 ```
 
 Additionally, compile your binary with `-nostdlib -nostdinc` and possibly `-ffreestanding` if you don't have an embedded compiler.

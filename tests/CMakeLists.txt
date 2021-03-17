@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.9)
 project(riscv CXX)
 
 option(RISCV_DEBUG "" ON)
+option(RISCV_ICACHE "" OFF)
 add_subdirectory(../lib lib)
 target_compile_options(riscv PUBLIC "-g" "-Wall" "-Wextra" "-Wno-unused")
 

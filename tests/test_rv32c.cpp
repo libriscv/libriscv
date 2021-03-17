@@ -1,12 +1,14 @@
 #include "testable_instruction.hpp"
+#include <libriscv/rvc.hpp>
 #include <cassert>
 using namespace riscv;
 
 
 void test_rv32c()
 {
-	const uint32_t memory = 65536;
-	riscv::Machine<RISCV32> machine { std::string_view{}, memory };
+	riscv::Machine<RISCV32> machine { std::string_view{}, {
+		.memory_max = 65536
+	} };
 	machine.verbose_instructions = true;
 
 	// C.SRLI imm = [0, 31] CI_CODE(0b100, 0b01):
@@ -22,7 +24,7 @@ void test_rv32c()
 		const testable_insn<RISCV32> insn {
 			.name  = "C.SRLI",
 			.bits  = ci.whole,
-			.reg   = RISCV::REG_ARG0,
+			.reg   = REG_ARG0,
 			.index = i,
 			.initial_value = 0xFFFFFFFF
 		};
@@ -46,7 +48,7 @@ void test_rv32c()
 		const testable_insn<RISCV32> insn {
 			.name  = "C.SRAI",
 			.bits  = ci.whole,
-			.reg   = RISCV::REG_ARG0,
+			.reg   = REG_ARG0,
 			.index = i,
 			.initial_value = 0xFFFFFFFF
 		};
@@ -70,7 +72,7 @@ void test_rv32c()
 		const testable_insn<RISCV32> insn {
 			.name  = "C.ANDI",
 			.bits  = ci.whole,
-			.reg   = RISCV::REG_ARG0,
+			.reg   = REG_ARG0,
 			.index = i,
 			.initial_value = 0xFFFFFFFF
 		};
@@ -97,7 +99,7 @@ void test_rv32c()
 		const testable_insn<RISCV32> insn {
 			.name  = "C.SLLI",
 			.bits  = ci.whole,
-			.reg   = RISCV::REG_ARG0,
+			.reg   = REG_ARG0,
 			.index = i,
 			.initial_value = 0xA
 		};
@@ -108,5 +110,5 @@ void test_rv32c()
 		assert(b);
 	}
 
-	printf("%lu instructions passed.\n", machine.cpu.instruction_counter());
+	printf("%lu instructions passed.\n", machine.instruction_counter());
 }

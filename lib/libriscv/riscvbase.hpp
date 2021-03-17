@@ -2,27 +2,27 @@
 
 namespace riscv
 {
+	static const uint32_t REG_ZERO = 0;
+	static const uint32_t REG_RA   = 1;
+	static const uint32_t REG_SP   = 2;
+	static const uint32_t REG_GP   = 3;
+	static const uint32_t REG_TP   = 4;
+	static const uint32_t REG_T0   = 5;
+	static const uint32_t REG_RETVAL = 10;
+	static const uint32_t REG_ARG0   = 10;
+	static const uint32_t REG_ARG1   = 11;
+	static const uint32_t REG_ARG2   = 12;
+	static const uint32_t REG_ARG3   = 13;
+	static const uint32_t REG_ARG4   = 14;
+	static const uint32_t REG_ARG5   = 15;
+	static const uint32_t REG_ARG6   = 16;
+	static const uint32_t REG_ARG7   = 17;
+	static const uint32_t REG_ECALL  = 17;
+	/* floating-point helpers */
+	static const uint32_t REG_FA0    = 10;
+
 	struct RISCV
 	{
-		static const uint32_t REG_ZERO = 0;
-		static const uint32_t REG_RA   = 1;
-		static const uint32_t REG_SP   = 2;
-		static const uint32_t REG_GP   = 3;
-		static const uint32_t REG_TP   = 4;
-		static const uint32_t REG_T0   = 5;
-		static const uint32_t REG_RETVAL = 10;
-		static const uint32_t REG_ARG0   = 10;
-		static const uint32_t REG_ARG1   = 11;
-		static const uint32_t REG_ARG2   = 12;
-		static const uint32_t REG_ARG3   = 13;
-		static const uint32_t REG_ARG4   = 14;
-		static const uint32_t REG_ARG5   = 15;
-		static const uint32_t REG_ARG6   = 16;
-		static const uint32_t REG_ARG7   = 17;
-		static const uint32_t REG_ECALL  = 17;
-		/* floating-point helpers */
-		static const uint32_t REG_FA0    = 10;
-
 		static const char* regname(const uint32_t reg) noexcept
 		{
 			switch (reg) {

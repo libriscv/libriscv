@@ -85,8 +85,8 @@ template <int W>
 inline multithreading<W>::multithreading(riscv::Machine<W>& mach)
 	: machine(mach), main_thread(*this, 0, 0x0, 0x0)
 {
-	main_thread.stored_regs.get(riscv::RISCV::REG_SP)
-		= machine.cpu.reg(riscv::RISCV::REG_SP);
+	main_thread.stored_regs.get(riscv::REG_SP)
+		= machine.cpu.reg(riscv::REG_SP);
 	m_current = &main_thread;
 }
 
@@ -99,8 +99,8 @@ inline void thread<W>::resume()
 	m.cpu.registers() = this->stored_regs;
 	THPRINT("Returning to tid=%ld tls=0x%X stack=0x%X\n",
 			this->tid,
-			this->stored_regs.get(riscv::RISCV::REG_TP),
-			this->stored_regs.get(riscv::RISCV::REG_SP));
+			this->stored_regs.get(riscv::REG_TP),
+			this->stored_regs.get(riscv::REG_SP));
 }
 
 template <int W>
@@ -116,7 +116,7 @@ inline void thread<W>::suspend(address_t return_value)
 {
 	this->suspend();
 	// set the *future* return value for this thread
-	this->stored_regs.get(riscv::RISCV::REG_ARG0) = return_value;
+	this->stored_regs.get(riscv::REG_ARG0) = return_value;
 }
 
 template <int W>
@@ -133,7 +133,7 @@ inline void thread<W>::block(int reason, address_t return_value)
 {
 	this->block(reason);
 	// set the block reason as the next return value
-	this->stored_regs.get(riscv::RISCV::REG_ARG0) = return_value;
+	this->stored_regs.get(riscv::REG_ARG0) = return_value;
 }
 
 template <int W>
@@ -166,8 +166,8 @@ inline thread<W>::thread(
 	multithreading<W>& mt, int ttid, address_t tls, address_t stack)
 	: threading(mt), tid(ttid)
 {
-	this->stored_regs.get(riscv::RISCV::REG_TP) = tls;
-	this->stored_regs.get(riscv::RISCV::REG_SP) = stack;
+	this->stored_regs.get(riscv::REG_TP) = tls;
+	this->stored_regs.get(riscv::REG_SP) = stack;
 }
 
 template <int W>
@@ -175,8 +175,8 @@ inline void thread<W>::activate()
 {
 	threading.m_current = this;
 	auto& cpu = threading.machine.cpu;
-	cpu.reg(riscv::RISCV::REG_TP) = this->stored_regs.get(riscv::RISCV::REG_TP);
-	cpu.reg(riscv::RISCV::REG_SP) = this->stored_regs.get(riscv::RISCV::REG_SP);
+	cpu.reg(riscv::REG_TP) = this->stored_regs.get(riscv::REG_TP);
+	cpu.reg(riscv::REG_SP) = this->stored_regs.get(riscv::REG_SP);
 }
 
 template <int W>
@@ -232,7 +232,7 @@ inline bool multithreading<W>::suspend_and_yield()
 	// don't go through the ardous yielding process when alone
 	if (suspended.empty()) {
 		// set the return value for sched_yield
-		machine.cpu.reg(riscv::RISCV::REG_ARG0) = 0;
+		machine.cpu.reg(riscv::REG_ARG0) = 0;
 		return false;
 	}
 	// suspend current thread, and return 0 when resumed
@@ -263,12 +263,12 @@ inline bool multithreading<W>::yield_to(int tid, bool store_retval)
 	auto* thread = get_thread();
 	auto* next   = get_thread(tid);
 	if (next == nullptr) {
-		if (store_retval) machine.cpu.reg(riscv::RISCV::REG_ARG0) = -1;
+		if (store_retval) machine.cpu.reg(riscv::REG_ARG0) = -1;
 		return false;
 	}
 	if (thread == next) {
 		// immediately returning back to caller
-		if (store_retval) machine.cpu.reg(riscv::RISCV::REG_ARG0) = 0;
+		if (store_retval) machine.cpu.reg(riscv::REG_ARG0) = 0;
 		return false;
 	}
 	// suspend current thread
@@ -305,7 +305,7 @@ inline void multithreading<W>::unblock(int tid)
 		else ++it;
 	}
 	// given thread id was not blocked
-	machine.cpu.reg(riscv::RISCV::REG_ARG0) = -1;
+	machine.cpu.reg(riscv::REG_ARG0) = -1;
 }
 template <int W>
 inline bool multithreading<W>::wakeup_blocked(int reason)

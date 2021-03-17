@@ -28,7 +28,7 @@ static void fused_li_ecall(
 			cpu.increment_pc(fop.ilen);
 		else
 			cpu.increment_pc(4);
-		cpu.reg(RISCV::REG_ECALL) = fop.sysno;
+		cpu.reg(REG_ECALL) = fop.sysno;
 		cpu.machine().unchecked_system_call(fop.sysno);
 	};
 }
@@ -86,7 +86,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 	{
 		// fastest possible system calls
 		const uint16_t sysno = i1.second.Itype.signed_imm();
-		if (i1.second.Itype.rd == RISCV::REG_ECALL && sysno < RISCV_SYSCALLS_MAX)
+		if (i1.second.Itype.rd == REG_ECALL && sysno < RISCV_SYSCALLS_MAX)
 		{
 			fused_li_ecall<W>(i1, i2, sysno);
 			return true;
@@ -196,7 +196,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 	{
 		const rv32c_instruction ci { i1.second };
 		const uint16_t sysno = ci.CI.signed_imm();
-		if (ci.CI.rd == RISCV::REG_ECALL && sysno < RISCV_SYSCALLS_MAX)
+		if (ci.CI.rd == REG_ECALL && sysno < RISCV_SYSCALLS_MAX)
 		{
 			fused_li_ecall<W>(i1, i2, sysno);
 			return true;

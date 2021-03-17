@@ -287,7 +287,7 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// RISC-V's RET instruction: return to register + immediate
-		const char* variant = (instr.Itype.rs1 == RISCV::REG_RA) ? "RET" : "JMP";
+		const char* variant = (instr.Itype.rs1 == REG_RA) ? "RET" : "JMP";
 		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		return snprintf(buffer, len, "%s %s%+ld (0x%lX)", variant,
 						RISCV::regname(instr.Itype.rs1),
@@ -613,7 +613,7 @@ namespace riscv
 
 	INSTRUCTION(SYSCALL,
 	[] (auto& cpu, rv32i_instruction) {
-		cpu.machine().system_call(cpu.reg(RISCV::REG_ECALL));
+		cpu.machine().system_call(cpu.reg(REG_ECALL));
 	}, DECODED_INSTR(SYSTEM).printer);
 
 	INSTRUCTION(EBREAK,
