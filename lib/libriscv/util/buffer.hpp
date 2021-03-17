@@ -62,6 +62,16 @@ namespace riscv
 	inline void Buffer::append_page(const char* buffer, size_t len)
 	{
 		assert(len <= Page::size());
+		// In some cases we can continue the last entry
+		if (!m_data.empty()) {
+			auto& last = m_data.back();
+			if (last.first + last.second == buffer) {
+				last.second += len;
+				m_len += len;
+				return;
+			}
+		}
+		// Otherwise, append new entry
 		m_len += len;
 		m_data.emplace_back(buffer, len);
 	}
