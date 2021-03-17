@@ -2,6 +2,10 @@
 
 _libriscv_ is a RISC-V emulator that is highly embeddable and configurable. This project is intended to be included in a CMake build system, and should not be installed anywhere. There are several CMake options that control RISC-V extensions and how the emulator behaves.
 
+The emulator has a binary translation mode that has currently only been tested on Linux.
+
+While this emulator has a focus on performance, one higher priority is the ability to map any memory anywhere with permissions, custom fault handlers and such things. This allows you to take the memory of one machine and map it into another, and does have a slight performance penalty compared to an emulator that can only have sequential memory.
+
 ## Benchmarks against Lua
 
 My primary motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using.
@@ -209,6 +213,6 @@ If you have arenas available you can replace the default page fault handler with
 
 ## Binary translation
 
-Instead of JIT, the emulator supports translating binaries to native code using any local C or C++ compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myprogram`.
+Instead of JIT, the emulator supports translating binaries to native code using any local C or C++ compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`.
 
-The binary translation feature (accessible by enabling RISCV_EXPERIMENTAL) can greatly improve performance in some cases, at a great up-front cost. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is a work in progress.
+The binary translation feature (accessible by enabling RISCV_EXPERIMENTAL) can greatly improve performance in some cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is a work in progress.
