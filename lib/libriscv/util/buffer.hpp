@@ -24,8 +24,6 @@ namespace riscv
 		void   copy_to(std::vector<uint8_t>&) const;
 		void   foreach(std::function<void(const char*, size_t)> cb);
 		std::string to_string() const;
-		char* to_buffer(char* dest) const;
-		char* to_buffer() const;
 
 		Buffer() = default;
 		void append_page(const char* data, size_t len);
@@ -84,19 +82,5 @@ namespace riscv
 			result.append(entry.first, entry.first + entry.second);
 		}
 		return result;
-	}
-
-	inline char* Buffer::to_buffer(char* buffer) const
-	{
-		char* dest = buffer;
-		for (const auto& entry : m_data) {
-			std::copy(entry.first, entry.first + entry.second, dest);
-			dest += entry.second;
-		}
-		return buffer;
-	}
-	inline char* Buffer::to_buffer() const
-	{
-		return to_buffer(new char[this->m_len]);
 	}
 }
