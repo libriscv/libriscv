@@ -3,8 +3,7 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
-#include <stdexcept>
-#include <unordered_map>
+#include <map>
 #include "util/buffer.hpp" // <string>
 
 namespace riscv
@@ -195,7 +194,7 @@ namespace riscv
 		std::array<CachedPage<W, const Page>, RISCV_PAGE_CACHE> m_rd_cache;
 		std::array<CachedPage<W, Page>, RISCV_PAGE_CACHE> m_wr_cache;
 
-		std::unordered_map<address_t, Page, PageHash<address_t>> m_pages;
+		std::map<address_t, Page> m_pages;
 
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;

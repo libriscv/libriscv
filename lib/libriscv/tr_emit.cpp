@@ -3,6 +3,7 @@
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include <set>
+#include <stdexcept>
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x))

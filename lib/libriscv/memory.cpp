@@ -38,11 +38,7 @@ namespace riscv
 					throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
 				};
 		} else {
-			this->m_page_fault_handler =
-				[] (auto& mem, const size_t page) -> Page&
-				{
-					return mem.allocate_page(page);
-				};
+			throw MachineException(OUT_OF_MEMORY, "Max memory was zero", 0);
 		}
 		// initialize paging (which clears all pages) before loading binary
 		this->initial_paging();

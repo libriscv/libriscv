@@ -6,6 +6,7 @@
 #include "rv32i_instr.hpp"
 #include "tr_api.hpp"
 #include "util/crc32.hpp"
+#include <stdexcept>
 #include <unordered_set>
 //#define BINTR_TIMING
 
