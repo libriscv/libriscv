@@ -129,6 +129,13 @@ struct Page
 #endif
 };
 
+template <typename T>
+struct PageHash {
+	unsigned operator() (const T& key) const noexcept {
+		return key*2654435761;
+	}
+};
+
 inline Page::Page(const PageAttributes& a, PageData* data)
 	: attr(a)
 {
