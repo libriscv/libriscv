@@ -13,7 +13,7 @@ static std::string cflags()
 {
 	const char* cflags = getenv("CFLAGS");
 	if (cflags) return std::string(cflags);
-	return "";
+	return "-O2 -march=native"; /* We always want *some* optimizations */
 }
 static bool keep_code()
 {
