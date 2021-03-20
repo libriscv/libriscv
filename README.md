@@ -155,6 +155,31 @@ Similarly, when making a function call into the VM you can also add this limit a
 
 You can find details on the Linux system call ABI online as well as in the `syscalls.hpp`, and `syscalls.cpp` files in the src folder. You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
 
+## Handling instructions one by one
+
+You can create your own custom instruction loop if you want to do things manually by yourself:
+
+```C++
+#include <libriscv/machine.hpp>
+#include <libriscv/rv32i_instr.hpp>
+...
+auto& cpu = machine.cpu;
+while (!machine.stopped()) {
+	// Get 32- or 16-bits instruction
+	auto instr = cpu.read_next_instruction();
+	// Decode instruction to get an instruction handler
+	auto handlers = cpu.decode(instr);
+	if (false) {
+		// Print instruction to terminal
+		auto assembly = cpu.to_string(instr, handlers);
+		printf("%.*s\n", (int)assembly.size(), assembly.c_str());
+	}
+	// Execute one instruction, and increment PC
+	handlers.handler(cpu, instr);
+	cpu.increment_pc(instr.length());
+}
+```
+
 ## Setting up your own machine environment
 
 You can create a 64kb machine without a binary, and no ELF loader will be invoked.
