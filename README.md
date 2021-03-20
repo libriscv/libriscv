@@ -179,6 +179,7 @@ while (!machine.stopped()) {
 	cpu.increment_pc(instr.length());
 }
 ```
+NOTE: Make sure to disable instruction caching when doing this. Some features like instruction fusing will modify instruction bits for performance reasons, which may be only compatible with the instruction cache mechanism, as well as binary translation.
 
 ## Setting up your own machine environment
 
@@ -230,7 +231,7 @@ It can also be used as a script backend for a game engine, as it's quite a bit f
 
 Use Clang (newer is better) to compile the emulator with. It is somewhere between 20-25% faster on most everything.
 
-Use GCC to build the RISC-V binaries. Use -O2 or -O3 and use the regular standard extensions: `-march=rv32gc -mabi=ilp32d`. Enable the RISCV_EXPERIMENTAL option for the best performance unless you are using libriscv as a sandbox. Use `-march=rv32g` for the absolute best performance, if you have that choice. Difference is minimal so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable LTO and `-march=native` if you can.
+Use GCC to build the RISC-V binaries. Use -O2 or -O3 and use the regular standard extensions: `-march=rv32gc -mabi=ilp32d`. Enable the RISCV_EXPERIMENTAL option for the best performance unless you are using libriscv as a sandbox. Use `-march=rv32g` for the absolute best performance, if you have that choice. Difference is minimal so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable LTO if you can.
 
 Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my [rvscript](https://github.com/fwsGonzo/rvscript) repository. It's a complex topic that cannot be explained in one paragraph.
 
