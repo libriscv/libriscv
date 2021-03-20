@@ -37,7 +37,7 @@ namespace riscv
 	template <int W>
 	using instruction_handler = void (*)(CPU<W>&, instruction_format);
 	template <int W>
-	using instruction_printer = int  (*)(char*, size_t, CPU<W>&, instruction_format);
+	using instruction_printer = int  (*)(char*, size_t, const CPU<W>&, instruction_format);
 	template <int W>
 	using register_type  = address_type<W>;
 

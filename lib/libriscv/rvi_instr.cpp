@@ -13,9 +13,12 @@ namespace riscv
 	});
 
 	INSTRUCTION(UNIMPLEMENTED,
-	[] (auto& cpu, rv32i_instruction /* instr */) {
+	[] (auto& cpu, rv32i_instruction instr) {
 		// handler
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		if (instr.length() == 4)
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
+		else
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.half[0]);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		// printer

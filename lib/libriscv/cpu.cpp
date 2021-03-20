@@ -186,6 +186,15 @@ namespace riscv
 	}
 
 	template <int W> __attribute__((cold))
+	std::string CPU<W>::to_string(format_t format, const instruction_t& instr) const
+	{
+		if constexpr (W == 4)
+			return RV32I::to_string(*this, format, instr);
+		else
+			return RV64I::to_string(*this, format, instr);
+	}
+
+	template <int W> __attribute__((cold))
 	std::string Registers<W>::to_string() const
 	{
 		char buffer[600];

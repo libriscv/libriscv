@@ -23,7 +23,7 @@
 								DECODER(DECODED_INSTR(LOAD_I32));
 							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
 						case 0x3:
-							if constexpr (RVIS64BIT(*this)) {
+							if constexpr (sizeof(address_t) == 8) {
 								if (instruction.Itype.rd != 0)
 									DECODER(DECODED_INSTR(LOAD_U64));
 								DECODER(DECODED_INSTR(LOAD_U64_DUMMY));
@@ -56,7 +56,7 @@
 						case 0x2:
 							DECODER(DECODED_INSTR(STORE_I32_IMM));
 						case 0x3:
-							if constexpr (RVIS64BIT(*this)) {
+							if constexpr (sizeof(address_t) == 8) {
 								DECODER(DECODED_INSTR(STORE_I64_IMM));
 							}
 							break;
@@ -255,7 +255,7 @@
 						}
 						break;
 					case 0x3:
-					if constexpr (RVIS64BIT(*this)) {
+					if constexpr (sizeof(address_t) == 8) {
 						switch (instruction.Atype.funct5)
 						{
 						case 0b00010:
@@ -305,7 +305,7 @@
 						DECODER(DECODED_COMPR(C0_REG_LW));
 					}
 					else if (ci.CL.funct3 == 0x3) {
-						if constexpr (RVIS64BIT(*this)) { // C.LD
+						if constexpr (sizeof(address_t) == 8) { // C.LD
 							DECODER(DECODED_COMPR(C0_REG_LD));
 						} else { // C.FLW
 							DECODER(DECODED_COMPR(C0_REG_FLW));
@@ -324,7 +324,7 @@
 					case 6: // C.SW
 						DECODER(DECODED_COMPR(C0_REG_SW));
 					case 7: // C.SD / C.FSW
-						if constexpr (RVIS64BIT(*this)) {
+						if constexpr (sizeof(address_t) == 8) {
 							DECODER(DECODED_COMPR(C0_REG_SD));
 						} else {
 							DECODER(DECODED_COMPR(C0_REG_FSW));
@@ -338,7 +338,7 @@
 					}
 					DECODER(DECODED_INSTR(NOP));
 				case CI_CODE(0b001, 0b01): // C.ADDIW / C.JAL
-					if constexpr (RVIS64BIT(*this)) {
+					if constexpr (sizeof(address_t) == 8) {
 						if (ci.CI.rd != 0) {
 							DECODER(DECODED_COMPR(C1_ADDIW));
 						}
@@ -385,7 +385,7 @@
 						DECODER(DECODED_COMPR(C2_LWSP));
 					}
 					else if (ci.CI2.funct3 == 0x3) {
-						if constexpr (RVIS64BIT(*this)) {
+						if constexpr (sizeof(address_t) == 8) {
 							// C.LDSP
 							DECODER(DECODED_COMPR(C2_LDSP));
 						} else {
@@ -434,7 +434,7 @@
 						DECODER(DECODED_COMPR(C2_SWSP));
 					}
 					else if (ci.CSS.funct3 == 7) {
-						if constexpr (RVIS64BIT(*this)) {
+						if constexpr (sizeof(address_t) == 8) {
 							// SDSP
 							DECODER(DECODED_COMPR(C2_SDSP));
 						} else {

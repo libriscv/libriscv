@@ -32,6 +32,12 @@ inline void CPU<W>::jump(const address_t dst)
 	this->registers().pc = dst;
 }
 
+template <int W>
+inline void CPU<W>::initialize_exec_segs(const uint8_t* data, address_t begin, address_t end)
+{
+	m_exec_data = data; m_exec_begin = begin; m_exec_end = end;
+}
+
 #ifdef RISCV_DEBUG
 
 template <int W>

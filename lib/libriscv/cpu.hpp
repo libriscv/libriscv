@@ -37,6 +37,7 @@ namespace riscv
 		auto& reg(uint32_t idx) { return registers().get(idx); }
 		const auto& reg(uint32_t idx) const { return registers().get(idx); }
 		auto& cireg(uint16_t idx) { return registers().get(idx + 0x8); }
+		const auto& cireg(uint16_t idx) const { return registers().get(idx + 0x8); }
 		auto& ciflp(uint16_t idx) { return registers().getfl(idx + 0x8); }
 
 		auto& machine() noexcept { return this->m_machine; }
@@ -59,10 +60,9 @@ namespace riscv
 	    void break_checks();
 		static void default_pausepoint(CPU&);
 #endif
-		const instruction_t& decode(format_t) const;
-		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t end)
-			{ m_exec_data = data; m_exec_begin = begin; m_exec_end = end; }
-		const uint8_t* exec_seg_data() const { return m_exec_data; }
+		format_t read_next_instruction();
+		static const instruction_t& decode(format_t);
+		std::string to_string(format_t format, const instruction_t& instr) const;
 
 		// serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
@@ -76,11 +76,12 @@ namespace riscv
 
 		CPU(Machine<W>&);
 		CPU(Machine<W>&, const Machine<W>& other); // Fork
+		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t end);
+		const uint8_t* exec_seg_data() const { return m_exec_data; }
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
 
-		format_t read_next_instruction();
 		format_t read_next_instruction_slowpath() COLD_PATH();
 		void execute(format_t);
 		void emit(std::string& code, const std::string& symb, instr_pair* blk, const TransInfo<W>&) const;

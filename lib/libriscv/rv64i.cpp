@@ -14,7 +14,7 @@
 namespace riscv
 {
 	template<>
-	const CPU<8>::instruction_t& CPU<8>::decode(const format_t instruction) const
+	const CPU<8>::instruction_t& CPU<8>::decode(const format_t instruction)
 	{
 #define DECODER(x) return(x)
 #include "instr_decoding.inc"
@@ -29,7 +29,7 @@ namespace riscv
 #undef DECODER
 	}
 
-	std::string RV64I::to_string(CPU<8>& cpu, instruction_format format, const instruction_t& instr)
+	std::string RV64I::to_string(const CPU<8>& cpu, instruction_format format, const instruction_t& instr)
 	{
 		char buffer[256];
 		char ibuffer[128];
