@@ -257,9 +257,13 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	    const auto flags  = machine.template sysarg<int>(3);
 		SYSPRINT("SYSCALL mmap called, addr %#X  len %u prot %#x flags %#X\n",
 	            addr_g, length, prot, flags);
-	    if (addr_g == 0 && (length % Page::size()) == 0)
+        if (length % Page::size() != 0) {
+            machine.set_result(-1); // = MAP_FAILED;
+            return;
+        }
+        static address_type<W> nextfree = heap_start<W>;
+	    if (addr_g == 0 || addr_g == nextfree)
 	    {
-	        static address_type<W> nextfree = heap_start<W>;
 	        const address_type<W> addr = nextfree;
 			// anon pages need to be zeroed
 			if (flags & MAP_ANONYMOUS) {
