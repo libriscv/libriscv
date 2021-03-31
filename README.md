@@ -6,9 +6,11 @@ The emulator has a binary translation mode that has currently only been tested o
 
 While this emulator has a focus on performance, one higher priority is the ability to map any memory anywhere with permissions, custom fault handlers and such things. This allows you to take the memory of one machine and map it into another, and does have a slight performance penalty compared to an emulator that can only have sequential memory.
 
+It is my experience that using a single flat mmap-range for memory would simplify memory operations and optimize some benchmarks, as I have written this feature for this emulator once already. It would benefit calculations like finding the first 10M primes. However, it is incompatible with fast forking of machines. mmap does not have a fast method of unmapping a copy-on-write memory range, and it scales poorly. Instead, it is thousands of times faster to just copy page metadata and use memory sharing with copy-on-write mechanisms.
+
 ## Benchmarks against Lua
 
-My primary motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using.
+My primary motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation.
 
 [Benchmarks with binary translation enabled](https://gist.github.com/fwsGonzo/c77befe81c5957b87b96726e98466946)
 
@@ -17,6 +19,8 @@ My primary motivation when writing this emulator was to use it in a game engine,
 [LuaJIT benchmarks](https://gist.github.com/fwsGonzo/f874ba58f2bab1bf502cad47a9b2fbed)
 
 [Lua 5.4 benchmarks](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
+
+Optimized compiled code is, however, much faster.
 
 ## Installing a RISC-V GCC compiler
 
@@ -85,6 +89,8 @@ And finally, the `micro` project implements the absolutely minimal freestanding 
 
 The emulator currently supports RV32GC, and RV64GC (IMAFDC).
 The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions), and there is a test-suite for these instructions, however they haven't been extensively tested as there are generally few FP-instructions in normal programs.
+
+Binary translation currently only supports RV32G and RV64G.
 
 Note: There is no support for the B-, E- and Q-extensions.
 
@@ -183,26 +189,29 @@ NOTE: Make sure to disable instruction caching when doing this. Some features li
 
 ## Setting up your own machine environment
 
-You can create a 64kb machine without a binary, and no ELF loader will be invoked.
+You can create a 64kb machine without a binary, and no ELF loader will be invoked. Make sure you disable experimental features, as they may require you to set up execute segments before you can execute code.
+
 ```C++
-	std::vector<uint8_t> nothing; // taken as reference
-	riscv::Machine<riscv::RISCV32> machine { nothing, { .memory_max = 65536 }};
+	std::string_view empty;
+	riscv::Machine<riscv::RISCV32> machine { empty, { .memory_max = 65536 }};
 ```
 
 Now you can copy your machine code directly into memory:
 ```C++
-	std::vector<uint8_t> my_program_data;
+	std::vector<uint8_t> my_program;
 	const uint32_t dst = 0x1000;
-	machine.copy_to_guest(dst, my_program_data.data(), my_program_data.size());
+	machine.copy_to_guest(dst, my_program.data(), my_program.size());
+	// We will be making it execute-only (although you may want to enable read)
+	machine.memory.set_page_attr(dst, my_program.size(),
+		{.read = false, .write = false, .exec = true});
 ```
 
 Finally, let's jump to the program entry, and start execution:
 ```C++
-	// example PC start address
-	const uint32_t entry_point = 0x1068;
-	machine.cpu.jump(entry_point);
+	// Example PC start address
+	machine.cpu.jump(0x1068);
 
-	// geronimo!
+	// Geronimo!
 	machine.simulate(5'000);
 ```
 
@@ -212,9 +221,11 @@ The fuzzing program does this, so have a look at that.
 
 [System calls](docs/SYSCALLS.md)
 
-[Freestanding environment](docs/FREESTANDING.md)
+[Freestanding environments](docs/FREESTANDING.md)
 
 [Function calls into the VM](docs/VMCALL.md)
+
+[Debugging in the VM](docs/DEBUGGING.md)
 
 
 ## Why a RISC-V library
