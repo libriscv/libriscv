@@ -133,7 +133,7 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(port);
 	if (bind(server_fd, (struct sockaddr*) &address,
-            sizeof(address)) < 0) {
+			sizeof(address)) < 0) {
 		close(server_fd);
 		throw std::runtime_error("GDB listener failed to bind to port");
 	}
@@ -161,8 +161,8 @@ std::unique_ptr<RSPClient<W>> RSP<W>::accept(int timeout_secs)
 	struct sockaddr_in address;
 	int addrlen = sizeof(address);
 	int sockfd = ::accept(server_fd, (struct sockaddr*) &address,
-        	(socklen_t*) &addrlen);
-    if (sockfd < 0) {
+			(socklen_t*) &addrlen);
+	if (sockfd < 0) {
 		return nullptr;
 	}
 	// Disable Nagle

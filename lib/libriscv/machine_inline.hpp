@@ -171,7 +171,7 @@ inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
 template <int W>
 template<typename... Args>
 inline auto Machine<W>::sysargs() const {
-    return resolve_args<Args...>(std::index_sequence_for<Args...>{});
+	return resolve_args<Args...>(std::index_sequence_for<Args...>{});
 }
 
 template <int W>

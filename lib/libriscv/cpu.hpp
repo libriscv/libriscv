@@ -54,10 +54,10 @@ namespace riscv
 
 #ifdef RISCV_DEBUG
 		// debugging
-	    void breakpoint(address_t address, breakpoint_t = default_pausepoint);
-	    auto& breakpoints() { return this->m_breakpoints; }
-	    void break_on_steps(int steps);
-	    void break_checks();
+		void breakpoint(address_t address, breakpoint_t = default_pausepoint);
+		auto& breakpoints() { return this->m_breakpoints; }
+		void break_on_steps(int steps);
+		void break_checks();
 		static void default_pausepoint(CPU&);
 #endif
 		format_t read_next_instruction();
@@ -96,9 +96,9 @@ namespace riscv
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
-	    mutable int32_t m_break_steps = 0;
-	    mutable int32_t m_break_steps_cnt = 0;
-	    std::map<address_t, breakpoint_t> m_breakpoints;
+		mutable int32_t m_break_steps = 0;
+		mutable int32_t m_break_steps_cnt = 0;
+		std::map<address_t, breakpoint_t> m_breakpoints;
 		bool break_time() const;
 		friend struct Machine<W>;
 #endif

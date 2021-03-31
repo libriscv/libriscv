@@ -49,16 +49,16 @@ namespace riscv
 
 	class MachineException : public std::exception {
 	public:
-	    explicit MachineException(const int type, const char* text, const uint64_t data = 0)
+		explicit MachineException(const int type, const char* text, const uint64_t data = 0)
 			: m_type{type}, m_data{data}, m_msg{text} {}
 
-	    virtual ~MachineException() throw() {}
+		virtual ~MachineException() throw() {}
 
 		int         type() const throw() { return m_type; }
 		uint64_t    data() const throw() { return m_data; }
-	    const char* what() const throw() override { return m_msg; }
+		const char* what() const throw() override { return m_msg; }
 	protected:
-	    const int      m_type;
+		const int      m_type;
 		const uint64_t m_data;
 		const char*    m_msg;
 	};
