@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <unordered_set>
+#include <set>
 #include "types.hpp"
 
 namespace riscv
@@ -16,11 +16,9 @@ namespace riscv
 			check_alignment(size, addr);
 			if (LIKELY(m_reservations.size() < MAX_RESV))
 				m_reservations.insert(addr);
-#ifdef __exceptions
 			else
 				throw MachineException(DEADLOCK_REACHED,
 					"Not enough room for memory reservations", addr);
-#endif
 		}
 
 		// Volume I: RISC-V Unprivileged ISA V20190608 p.49:
@@ -35,13 +33,11 @@ namespace riscv
 		inline void check_alignment(int size, address_t addr)
 		{
 			if (UNLIKELY(addr & (size-1))) {
-#ifdef __exceptions
 				throw MachineException(INVALID_ALIGNMENT,
 					"Load-Reserved address is misaligned", addr);
-#endif
 			}
 		}
 
-		std::unordered_set<address_t> m_reservations;
+		std::set<address_t> m_reservations;
 	};
 }
