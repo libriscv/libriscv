@@ -1,8 +1,5 @@
 
 set(SYSCALLS_SOURCES
-	src/native_libc.cpp
-	src/native_threads.cpp
-	src/posix_threads.cpp
 	src/syscalls.cpp
 )
 

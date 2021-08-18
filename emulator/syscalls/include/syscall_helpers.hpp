@@ -28,21 +28,3 @@ void setup_newlib_syscalls(State<W>&, riscv::Machine<W>&);
 
 template <int W>
 void setup_linux_syscalls(State<W>&, riscv::Machine<W>&);
-
-namespace sas_alloc {
-	struct Arena;
-}
-
-template <int W>
-sas_alloc::Arena* setup_native_heap_syscalls(riscv::Machine<W>&, uint64_t, size_t);
-template <int W>
-sas_alloc::Arena* setup_native_heap_syscalls(riscv::Machine<W>&, uint64_t, size_t, riscv::Function<void* (size_t)>);
-
-template <int W>
-void setup_native_memory_syscalls(riscv::Machine<W>&, bool trusted);
-
-extern uint64_t arena_malloc(sas_alloc::Arena*, size_t len);
-extern int  arena_free(sas_alloc::Arena*, uint64_t addr);
-extern void arena_transfer(const sas_alloc::Arena* from, sas_alloc::Arena* to);
-
-#include "threads.hpp"

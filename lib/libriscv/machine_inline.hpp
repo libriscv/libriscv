@@ -1,23 +1,5 @@
 
 template <int W>
-inline Machine<W>::Machine(std::string_view binary, MachineOptions<W> options)
-	: cpu(*this), memory(*this, binary, options)
-{
-	cpu.reset();
-}
-template <int W>
-inline Machine<W>::Machine(const Machine& other, MachineOptions<W> options)
-	: cpu(*this, other), memory(*this, other, options)
-{
-	this->increment_counter(other.instruction_counter());
-}
-
-template <int W>
-inline Machine<W>::Machine(const std::vector<uint8_t>& bin, MachineOptions<W> opts)
-	: Machine(std::string_view{(char*) bin.data(), bin.size()}, opts) {}
-
-
-template <int W>
 inline void Machine<W>::stop(bool v) noexcept {
 	m_stopped = v;
 }
@@ -63,29 +45,15 @@ inline void Machine<W>::reset()
 }
 
 template <int W> inline
-void Machine<W>::install_syscall_handler(int sysn, const syscall_t& handler)
+void Machine<W>::install_syscall_handler(size_t sysn, const syscall_t& handler)
 {
-	new (&m_syscall_handlers.at(sysn)) syscall_t(handler);
+   new (&syscall_handlers.at(sysn)) syscall_t(handler);
 }
 template <int W> inline
-void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>> syscalls)
+void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>> syscalls)
 {
-	for (auto& scall : syscalls)
-		this->install_syscall_handler(scall.first, std::move(scall.second));
-}
-template <int W>
-template <size_t N> inline
-void Machine<W>::install_syscall_handler_range(int base, const std::array<const syscall_t, N>& syscalls)
-{
-	auto* first = &m_syscall_handlers.at(base);
-	if (m_syscall_handlers.size() >= base + syscalls.size())
-	{
-		std::copy(syscalls.begin(), syscalls.end(), first);
-	}
-}
-template <int W> inline
-auto& Machine<W>::get_syscall_handler(int sysn) {
-	return m_syscall_handlers.at(sysn);
+   for (auto& scall : syscalls)
+	   this->install_syscall_handler(scall.first, std::move(scall.second));
 }
 
 template <int W>
@@ -93,7 +61,7 @@ inline void Machine<W>::system_call(size_t syscall_number)
 {
 	if (LIKELY(syscall_number < RISCV_SYSCALLS_MAX))
 	{
-		const auto& handler = m_syscall_handlers[syscall_number];
+		const auto& handler = Machine::syscall_handlers[syscall_number];
 		if (LIKELY(handler != nullptr)) {
 			handler(*this);
 			return;
@@ -104,7 +72,7 @@ inline void Machine<W>::system_call(size_t syscall_number)
 template <int W>
 inline void Machine<W>::unchecked_system_call(size_t syscall_number)
 {
-	const auto& handler = m_syscall_handlers[syscall_number];
+	const auto& handler = Machine::syscall_handlers[syscall_number];
 	if (LIKELY(handler != nullptr)) {
 		handler(*this);
 	} else {

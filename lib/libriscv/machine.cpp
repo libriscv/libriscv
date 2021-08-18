@@ -1,11 +1,30 @@
 #include "machine.hpp"
+#include "native_heap.hpp"
 #include "rv32i_instr.hpp"
+#include "threads.hpp"
 #include "util/auxvec.hpp"
 #include <time.h>
 #include <random>
 
 namespace riscv
 {
+	template <int W>
+	inline Machine<W>::Machine(std::string_view binary, MachineOptions<W> options)
+		: cpu(*this), memory(*this, binary, options), m_arena{nullptr}, m_mt{nullptr}
+	{
+		cpu.reset();
+	}
+	template <int W>
+	inline Machine<W>::Machine(const Machine& other, MachineOptions<W> options)
+		: cpu(*this, other), memory(*this, other, options), m_arena{nullptr}, m_mt{nullptr}
+	{
+		this->increment_counter(other.instruction_counter());
+	}
+
+	template <int W>
+	inline Machine<W>::Machine(const std::vector<uint8_t>& bin, MachineOptions<W> opts)
+		: Machine(std::string_view{(char*) bin.data(), bin.size()}, opts) {}
+
 	template <int W>
 	Machine<W>::~Machine()
 	{
@@ -17,9 +36,7 @@ namespace riscv
 	long Machine<W>::unknown_syscall_handler(Machine<W>& machine)
 	{
 		const auto syscall_number = machine.cpu.reg(REG_ECALL);
-		if (UNLIKELY(machine.m_on_unhandled_syscall != nullptr)) {
-			machine.m_on_unhandled_syscall(syscall_number);
-		}
+		machine.on_unhandled_syscall(machine, syscall_number);
 #ifndef RISCV_EBREAK_MEANS_STOP
 		// EBREAK should not modify registers
 		if (syscall_number != SYSCALL_EBREAK) {
@@ -233,9 +250,7 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
 				return;
 			default:
-				if (m_on_unhandled_csr != nullptr) {
-					m_on_unhandled_csr(instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
-				}
+				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 			}
 			break;
 		}

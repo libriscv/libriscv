@@ -3,47 +3,39 @@
 // by fwsGonzo, originally based on allocator written in C by Snaipe
 //
 #pragma once
+#include "common.hpp"
 #include <cstddef>
 #include <cassert>
 #include <deque>
 #include <functional>
-#include <list>
-#include <vector>
 
-#ifndef LIKELY
-#define LIKELY(x) __builtin_expect((x), 1)
-#endif
-#ifndef UNLIKELY
-#define UNLIKELY(x) __builtin_expect((x), 0)
-#endif
-
-namespace sas_alloc
+namespace riscv
 {
 struct Arena;
 
-struct Chunk
+struct ArenaChunk
 {
 	using PointerType = uint32_t;
 
-	Chunk() = default;
-	Chunk(Chunk* n, Chunk* p, size_t s, bool f, PointerType d)
+	ArenaChunk() = default;
+	ArenaChunk(ArenaChunk* n, ArenaChunk* p, size_t s, bool f, PointerType d)
 		: next(n), prev(p), size(s), free(f), data(d) {}
 
-	Chunk* next = nullptr;
-	Chunk* prev = nullptr;
+	ArenaChunk* next = nullptr;
+	ArenaChunk* prev = nullptr;
 	size_t size = 0;
 	bool   free = false;
 	PointerType data = 0;
 
-	Chunk* find(PointerType ptr);
-	Chunk* find_free(size_t size);
+	ArenaChunk* find(PointerType ptr);
+	ArenaChunk* find_free(size_t size);
 	void   merge_next(Arena&);
 	void   split_next(Arena&, size_t size);
 };
 
 struct Arena
 {
-	using PointerType = Chunk::PointerType;
+	using PointerType = ArenaChunk::PointerType;
 	Arena(PointerType base, PointerType end);
 
 	PointerType malloc(size_t size);
@@ -56,29 +48,29 @@ struct Arena
 
 	void transfer(Arena& other) const;
 
-	inline Chunk& base_chunk() {
+	inline ArenaChunk& base_chunk() {
 		return m_base_chunk;
 	}
 	template <typename... Args>
-	Chunk* new_chunk(Args&&... args);
-	void   free_chunk(Chunk*);
-	Chunk* find_chunk(PointerType ptr);
+	ArenaChunk* new_chunk(Args&&... args);
+	void   free_chunk(ArenaChunk*);
+	ArenaChunk* find_chunk(PointerType ptr);
 
 private:
 	inline size_t word_align(size_t size) {
 		return (size + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
 	}
-	void foreach(std::function<void(const Chunk&)>) const;
+	void foreach(std::function<void(const ArenaChunk&)>) const;
 
-	std::deque<Chunk> m_chunks;
-	std::vector<Chunk*> m_free_chunks;
-	Chunk  m_base_chunk;
+	std::deque<ArenaChunk> m_chunks;
+	std::vector<ArenaChunk*> m_free_chunks;
+	ArenaChunk  m_base_chunk;
 };
 
 // find exact free chunk that matches ptr
-inline Chunk* Chunk::find(PointerType ptr)
+inline ArenaChunk* ArenaChunk::find(PointerType ptr)
 {
-	Chunk* ch = this;
+	ArenaChunk* ch = this;
 	while (ch != nullptr) {
 		if (!ch->free && ch->data == ptr)
 			return ch;
@@ -87,9 +79,9 @@ inline Chunk* Chunk::find(PointerType ptr)
 	return nullptr;
 }
 // find free chunk that has at least given size
-inline Chunk* Chunk::find_free(size_t size)
+inline ArenaChunk* ArenaChunk::find_free(size_t size)
 {
-    Chunk* ch = this;
+    ArenaChunk* ch = this;
 	while (ch != nullptr) {
 		if (ch->free && ch->size >= size)
 			return ch;
@@ -98,9 +90,9 @@ inline Chunk* Chunk::find_free(size_t size)
 	return nullptr;
 }
 // merge this and next into this chunk
-inline void Chunk::merge_next(Arena& arena)
+inline void ArenaChunk::merge_next(Arena& arena)
 {
-	Chunk* freech = this->next;
+	ArenaChunk* freech = this->next;
 	this->size += freech->size;
 	this->next = freech->next;
 	if (this->next) {
@@ -109,9 +101,9 @@ inline void Chunk::merge_next(Arena& arena)
 	arena.free_chunk(freech);
 }
 
-inline void Chunk::split_next(Arena& arena, size_t size)
+inline void ArenaChunk::split_next(Arena& arena, size_t size)
 {
-	Chunk* newch = arena.new_chunk(
+	ArenaChunk* newch = arena.new_chunk(
 		this->next,
 		this,
 		this->size - size,
@@ -126,7 +118,7 @@ inline void Chunk::split_next(Arena& arena, size_t size)
 }
 
 template <typename... Args>
-inline Chunk* Arena::new_chunk(Args&&... args)
+inline ArenaChunk* Arena::new_chunk(Args&&... args)
 {
 	if (UNLIKELY(m_free_chunks.empty())) {
 		m_chunks.emplace_back(std::forward<Args>(args)...);
@@ -134,13 +126,13 @@ inline Chunk* Arena::new_chunk(Args&&... args)
 	}
 	auto* chunk = m_free_chunks.back();
 	m_free_chunks.pop_back();
-	return new (chunk) Chunk {std::forward<Args>(args)...};
+	return new (chunk) ArenaChunk {std::forward<Args>(args)...};
 }
-inline void Arena::free_chunk(Chunk* chunk)
+inline void Arena::free_chunk(ArenaChunk* chunk)
 {
 	m_free_chunks.push_back(chunk);
 }
-inline Chunk* Arena::find_chunk(PointerType ptr)
+inline ArenaChunk* Arena::find_chunk(PointerType ptr)
 {
 	for (auto& chunk : m_chunks) {
 		if (!chunk.free && chunk.data == ptr)
@@ -153,7 +145,7 @@ inline Arena::PointerType Arena::malloc(size_t size)
 {
 	size_t length = word_align(size);
 	length = std::max(length, (size_t) 8);
-	Chunk* ch = base_chunk().find_free(length);
+	ArenaChunk* ch = base_chunk().find_free(length);
 
 	if (ch != nullptr) {
 		ch->split_next(*this, length);
@@ -165,7 +157,7 @@ inline Arena::PointerType Arena::malloc(size_t size)
 
 inline size_t Arena::size(PointerType ptr, bool allow_free)
 {
-	Chunk* ch = base_chunk().find(ptr);
+	ArenaChunk* ch = base_chunk().find(ptr);
 	if (UNLIKELY(ch == nullptr || (ch->free && !allow_free)))
 		return 0;
 	return ch->size;
@@ -173,7 +165,7 @@ inline size_t Arena::size(PointerType ptr, bool allow_free)
 
 inline int Arena::free(PointerType ptr)
 {
-	Chunk* ch = base_chunk().find(ptr);
+	ArenaChunk* ch = base_chunk().find(ptr);
 	if (UNLIKELY(ch == nullptr))
 		return -1;
 
@@ -196,9 +188,9 @@ inline Arena::Arena(PointerType arena_base, PointerType arena_end)
 	m_base_chunk.free = true;
 }
 
-inline void Arena::foreach(std::function<void(const Chunk&)> callback) const
+inline void Arena::foreach(std::function<void(const ArenaChunk&)> callback) const
 {
-	const Chunk* ch = &this->m_base_chunk;
+	const ArenaChunk* ch = &this->m_base_chunk;
     while (ch != nullptr) {
 		callback(*ch);
 		ch = ch->next;
@@ -208,7 +200,7 @@ inline void Arena::foreach(std::function<void(const Chunk&)> callback) const
 inline size_t Arena::bytes_free() const
 {
 	size_t size = 0;
-	foreach([&size] (const Chunk& chunk) {
+	foreach([&size] (const ArenaChunk& chunk) {
 		if (chunk.free) size += chunk.size;
 	});
 	return size;
@@ -216,7 +208,7 @@ inline size_t Arena::bytes_free() const
 inline size_t Arena::bytes_used() const
 {
 	size_t size = 0;
-	foreach([&size] (const Chunk& chunk) {
+	foreach([&size] (const ArenaChunk& chunk) {
 		if (!chunk.free) size += chunk.size;
 	});
 	return size;
@@ -228,9 +220,9 @@ inline void Arena::transfer(Arena& other) const
 	other.m_chunks.clear();
 	other.m_free_chunks.clear();
 
-	Chunk* last = &other.m_base_chunk;
+	ArenaChunk* last = &other.m_base_chunk;
 
-	const Chunk* chunk = m_base_chunk.next;
+	const ArenaChunk* chunk = m_base_chunk.next;
 	while (chunk != nullptr)
 	{
 		other.m_chunks.push_back(*chunk);
@@ -245,4 +237,4 @@ inline void Arena::transfer(Arena& other) const
 	}
 }
 
-} // namespace foreign_heap
+} // namespace riscv

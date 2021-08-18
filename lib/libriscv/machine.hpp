@@ -47,15 +47,6 @@ namespace riscv
 		template <typename T>
 		address_t stack_push(const T& pod_type);
 
-		// Install a system call handler for a the given syscall number.
-		// Pass nullptr to uninstall a system call handler.
-		void install_syscall_handler(int, const syscall_t&);
-		void install_syscall_handlers(std::initializer_list<std::pair<int, syscall_t>>);
-		template <size_t N>
-		void install_syscall_handler_range(int base, const std::array<const syscall_t, N>&);
-		auto& get_syscall_handler(int);
-		void on_unhandled_syscall(Function<void(int)> callback) { m_on_unhandled_syscall = callback; }
-
 		// Push all strings on stack and then create a mini-argv on SP
 		void setup_argv(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
 		// Full Linux-compatible stack with program headers
@@ -124,15 +115,40 @@ namespace riscv
 		static constexpr bool verbose_registers = false;
 #endif
 
+		// Custom user pointer
+		template <typename T> void set_userdata(T* data) { m_userdata = data; }
+		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
+
 		// Call an installed system call handler
 		void system_call(size_t);
 		void unchecked_system_call(size_t);
 		void ebreak();
+		void install_syscall_handler(size_t, const syscall_t&);
+		void install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>>);
+
+		static inline std::array<syscall_t, RISCV_SYSCALLS_MAX>
+			syscall_handlers = {};
+		static inline Function<void(Machine&, int)>
+			on_unhandled_syscall = [] (Machine<W>&, int) {};
+
 		// Execute CSRs
 		void system(union rv32i_instruction);
 
-		template <typename T> void set_userdata(T* data) { m_userdata = data; }
-		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
+		static inline Function<void(Machine&, int, int, int)>
+			on_unhandled_csr = [] (Machine<W>&, int, int, int) {};
+
+		// Optional custom native-performance arena
+		const Arena& arena() const noexcept { return *m_arena; }
+		Arena& arena() noexcept { return *m_arena; }
+		void setup_native_heap(size_t sysnum, uint64_t addr, size_t size);
+		// Optional custom memory-related system calls
+		void setup_native_memory(size_t sysnum, bool safe = true);
+
+		// Optional posix and custom threads implementations
+		const MultiThreading<W>& threads() const noexcept { return *m_mt; }
+		MultiThreading<W>& threads() noexcept { return *m_mt; }
+		void setup_posix_threads();
+		void setup_native_threads(const size_t syscall_base);
 
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
@@ -153,13 +169,14 @@ namespace riscv
 		static long unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
+		void setup_native_heap_internal(const size_t);
+
 		bool         m_stopped = false;
 		uint64_t     m_counter = 0;
-		std::array<syscall_t, RISCV_SYSCALLS_MAX> m_syscall_handlers {};
 		mutable std::vector<Function<void()>> m_destructor_callbacks;
-		Function<void(int)> m_on_unhandled_syscall = nullptr;
-		Function<void(int, int, int)> m_on_unhandled_csr = nullptr;
 		void* m_userdata = nullptr;
+		std::unique_ptr<Arena> m_arena;
+		std::unique_ptr<MultiThreading<W>> m_mt;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
 	};
 

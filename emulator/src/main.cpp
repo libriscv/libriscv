@@ -4,7 +4,7 @@ static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 200;
 #include <include/syscall_helpers.hpp>
-#include <include/threads.hpp>
+#include <libriscv/threads.hpp>
 static constexpr int MARCH = (USE_64BIT ? riscv::RISCV64 : riscv::RISCV32);
 
 int main(int argc, const char** argv)
@@ -37,7 +37,7 @@ int main(int argc, const char** argv)
 		// some extra syscalls
 		setup_linux_syscalls(state, machine);
 		// multi-threading
-		setup_multithreading(state, machine);
+		machine.setup_posix_threads();
 	}
 	else if constexpr (newlib_mini_guest)
 	{
@@ -47,19 +47,19 @@ int main(int argc, const char** argv)
 	}
 	else if constexpr (micro_guest) {
 		machine.setup_argv(args);
+		machine.setup_native_heap(5, 0x40000000, 6*1024*1024);
+		machine.setup_native_memory(10, false);
+		machine.setup_native_threads(30);
 		setup_minimal_syscalls(state, machine);
-		setup_native_heap_syscalls(machine, 0x40000000, 6*1024*1024);
-		setup_native_memory_syscalls(machine, false);
-		setup_native_threads(machine);
 	}
 	else {
 		fprintf(stderr, "Unknown emulation mode! Exiting...\n");
 		exit(1);
 	}
 
-	machine.on_unhandled_syscall([] (int number) {
+	machine.on_unhandled_syscall = [] (auto&, int number) {
 		printf("Unhandled system call: %d\n", number);
-	});
+	};
 
 	/*
 	machine.cpu.breakpoint(machine.address_of("main"));

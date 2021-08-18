@@ -19,6 +19,9 @@ set (SOURCES
 		libriscv/machine.cpp
 		libriscv/memory.cpp
 		libriscv/memory_rw.cpp
+		libriscv/native_libc.cpp
+		libriscv/native_threads.cpp
+		libriscv/posix_threads.cpp
 		libriscv/rv32i.cpp
 		libriscv/rv64i.cpp
 		libriscv/serialize.cpp
