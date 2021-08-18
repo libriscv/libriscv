@@ -214,10 +214,4 @@ void Machine<W>::realign_stack()
 	cpu.reg(REG_SP) &= ~(address_t) 0xF;
 }
 
-template <int W>
-inline void Machine<W>::add_destructor_callback(Function<void()> cb) const
-{
-	m_destructor_callbacks.push_back(std::move(cb));
-}
-
 #include "machine_vmcall.hpp"

@@ -28,8 +28,6 @@ namespace riscv
 	template <int W>
 	Machine<W>::~Machine()
 	{
-		for (auto rit = m_destructor_callbacks.rbegin(); rit != m_destructor_callbacks.rend(); ++rit)
-			(*rit)();
 	}
 
 	template <int W>

@@ -12,8 +12,7 @@ namespace riscv
 	template <int W>
 	struct Machine
 	{
-		using syscall_t = Function<void(Machine&)>;
-		using syscall_fptr_t = void(*)(Machine&);
+		using syscall_t = void(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address
 
 		// see common.hpp for MachineOptions
@@ -99,9 +98,6 @@ namespace riscv
 		address_t address_of(const char* name) const;
 		address_t address_of(const std::string& name) const;
 
-		// Call a function when the machine gets destroyed
-		void add_destructor_callback(Function<void()> callback) const;
-
 #ifdef RISCV_DEBUG
 		// Immediately block execution, print registers and current instruction.
 		void print_and_pause();
@@ -128,14 +124,14 @@ namespace riscv
 
 		static inline std::array<syscall_t, RISCV_SYSCALLS_MAX>
 			syscall_handlers = {};
-		static inline Function<void(Machine&, int)>
-			on_unhandled_syscall = [] (Machine<W>&, int) {};
+		static inline void (*on_unhandled_syscall) (Machine&, int)
+			= [] (Machine<W>&, int) {};
 
 		// Execute CSRs
 		void system(union rv32i_instruction);
 
-		static inline Function<void(Machine&, int, int, int)>
-			on_unhandled_csr = [] (Machine<W>&, int, int, int) {};
+		static inline void (*on_unhandled_csr) (Machine&, int, int, int)
+			= [] (Machine<W>&, int, int, int) {};
 
 		// Optional custom native-performance arena
 		const Arena& arena() const noexcept { return *m_arena; }
@@ -173,7 +169,6 @@ namespace riscv
 
 		bool         m_stopped = false;
 		uint64_t     m_counter = 0;
-		mutable std::vector<Function<void()>> m_destructor_callbacks;
 		void* m_userdata = nullptr;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
