@@ -53,7 +53,7 @@ template <int W> inline
 void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>> syscalls)
 {
    for (auto& scall : syscalls)
-	   this->install_syscall_handler(scall.first, std::move(scall.second));
+	   install_syscall_handler(scall.first, std::move(scall.second));
 }
 
 template <int W>

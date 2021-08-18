@@ -123,8 +123,8 @@ namespace riscv
 		void system_call(size_t);
 		void unchecked_system_call(size_t);
 		void ebreak();
-		void install_syscall_handler(size_t, const syscall_t&);
-		void install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>>);
+		static void install_syscall_handler(size_t, const syscall_t&);
+		static void install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>>);
 
 		static inline std::array<syscall_t, RISCV_SYSCALLS_MAX>
 			syscall_handlers = {};
