@@ -356,3 +356,35 @@ void Memory<W>::memcpy(
 		len --;
 	}
 }
+
+template <int W>
+size_t Memory<W>::gather_buffers_from_range(
+	size_t cnt, vBuffer buffers[cnt], address_t addr, size_t len)
+{
+	size_t index = 0;
+	vBuffer* last = nullptr;
+	while (len != 0 && index < cnt)
+	{
+		const size_t offset = addr & (Page::SIZE-1);
+		const size_t size = std::min(Page::SIZE - offset, len);
+		auto& page = get_pageno(page_number(addr));
+		if (UNLIKELY(!page.attr.read))
+			protection_fault(addr);
+
+		auto* ptr = (const char*) &page.data()[offset];
+		if (last && ptr == last->ptr + last->len) {
+			last->len += size;
+		} else {
+			last = &buffers[index];
+			last->ptr = ptr;
+			last->len = size;
+			index ++;
+		}
+		addr += size;
+		len -= size;
+	}
+	if (UNLIKELY(len != 0)) {
+		throw MachineException(OUT_OF_MEMORY, "Out of buffers", index);
+	}
+	return index;
+}
