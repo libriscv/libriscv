@@ -46,7 +46,7 @@ struct Arena
 	size_t bytes_used() const;
 	size_t chunks_used() const noexcept { return m_chunks.size(); }
 
-	void transfer(Arena& other) const;
+	void transfer(Arena& dest) const;
 
 	inline ArenaChunk& base_chunk() {
 		return m_base_chunk;
@@ -214,19 +214,19 @@ inline size_t Arena::bytes_used() const
 	return size;
 }
 
-inline void Arena::transfer(Arena& other) const
+inline void Arena::transfer(Arena& dest) const
 {
-	other.m_base_chunk = m_base_chunk;
-	other.m_chunks.clear();
-	other.m_free_chunks.clear();
+	dest.m_base_chunk = m_base_chunk;
+	dest.m_chunks.clear();
+	dest.m_free_chunks.clear();
 
-	ArenaChunk* last = &other.m_base_chunk;
+	ArenaChunk* last = &dest.m_base_chunk;
 
 	const ArenaChunk* chunk = m_base_chunk.next;
 	while (chunk != nullptr)
 	{
-		other.m_chunks.push_back(*chunk);
-		auto& new_chunk = other.m_chunks.back();
+		dest.m_chunks.push_back(*chunk);
+		auto& new_chunk = dest.m_chunks.back();
 		new_chunk.prev = last;
 		new_chunk.next = nullptr;
 		last->next = &new_chunk;

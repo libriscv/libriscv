@@ -16,9 +16,9 @@ namespace riscv
 		using address_t = address_type<W>; // one unsigned memory address
 
 		// see common.hpp for MachineOptions
-		Machine(std::string_view binary, MachineOptions<W> = {});
-		Machine(const std::vector<uint8_t>& bin, MachineOptions<W> = {});
-		Machine(const Machine&, MachineOptions<W> = {}); //<- Fork
+		Machine(std::string_view binary, const MachineOptions<W>& = {});
+		Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& = {});
+		Machine(const Machine&, const MachineOptions<W>& = {}); //<- Fork
 		~Machine();
 
 		// Simulate a RISC-V machine until @max_instructions have been
