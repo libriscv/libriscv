@@ -8,15 +8,11 @@ While this emulator has a focus on performance, one higher priority is the abili
 
 It is my experience that using a single flat mmap-range for memory would simplify memory operations and optimize some benchmarks, as I have written this feature for this emulator once already. It would benefit calculations like finding the first 10M primes. However, it is incompatible with fast forking of machines. mmap does not have a fast method of unmapping a copy-on-write memory range, and it scales poorly. Instead, it is thousands of times faster to just copy page metadata and use memory sharing with copy-on-write mechanisms.
 
-## Benchmarks against Lua
+## Benchmarks
 
 My primary motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation.
 
-[Benchmarks with binary translation enabled](https://gist.github.com/fwsGonzo/c77befe81c5957b87b96726e98466946)
-
 [STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
-
-[LuaJIT benchmarks](https://gist.github.com/fwsGonzo/f874ba58f2bab1bf502cad47a9b2fbed)
 
 [Lua 5.4 benchmarks](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
 
