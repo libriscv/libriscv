@@ -1,10 +1,9 @@
 #include <libriscv/machine.hpp>
+#include <include/syscall_helpers.hpp>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 200;
-#include <include/syscall_helpers.hpp>
-#include <libriscv/threads.hpp>
 static constexpr int MARCH = (USE_64BIT ? riscv::RISCV64 : riscv::RISCV32);
 
 int main(int argc, const char** argv)
@@ -17,8 +16,9 @@ int main(int argc, const char** argv)
 
 	const auto binary = load_file(filename);
 
-	std::vector<std::string> args = {
-		"hello_world", "test!"
+	const std::vector<std::string> args = {
+		filename,
+		"test!"
 	};
 
 	riscv::Machine<MARCH> machine { binary, {

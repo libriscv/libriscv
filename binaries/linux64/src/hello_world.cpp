@@ -58,7 +58,7 @@ int main (int argc, char *argv[], char *envp[])
 	assert(testval == 22);
 	printf("* Global ctors seem to be working!\n");
 	// auxvec, arguments to main():
-	assert(argc > 0 && std::string("hello_world") == argv[0]);
+	assert(argc > 0);
 	for (int i = 0; i < argc; i++) {
 		printf("arg%d: %s\n", i, argv[i]);
 	}
