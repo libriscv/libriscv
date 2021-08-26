@@ -12,10 +12,15 @@ pushd $GCC_TRIPLE
 NIMCACHE=$PWD/nimcache
 mkdir -p $NIMCACHE
 
+# find nim and replace /bin/nim with /lib
+NIM_LIBS=`whereis nim`
+NIM_LIBS="${NIM_LIBS##*: }"
+NIM_LIBS="${NIM_LIBS/bin*/lib}"
+
 nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc --threads:off -d:release -c ${NIMFILE}
 jq '.compile[] [0]' $NIMCACHE/*.json > buildfiles.txt
 
-cmake .. -G Ninja -DGCC_TRIPLE=$GCC_TRIPLE
+cmake .. -G Ninja -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS
 ninja
 popd
 
