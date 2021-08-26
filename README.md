@@ -50,15 +50,6 @@ The last step is to add your compiler to PATH so that it becomes visible to buil
 export PATH=$PATH:$HOME/riscv/bin
 ```
 
-## Installing a RISC-V GCC embedded compiler
-
-```
-$ xpm install --global @xpack-dev-tools/riscv-none-embed-gcc@latest
-```
-See more here: https://gnu-mcu-eclipse.github.io/install/
-
-This compiler will build the smallest executables. See the micro examples in the binaries folder. Don't start with this unless you already know how to write startup code.
-
 ## Building and running a test program
 
 From one of the binary subfolders:
