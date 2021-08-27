@@ -25,9 +25,6 @@ int main(int argc, const char** argv)
 		.memory_max = MAX_MEMORY
 	}};
 
-	// somewhere to store the guest outputs and exit status
-	State<MARCH> state;
-
 	if constexpr (full_linux_guest)
 	{
 		std::vector<std::string> env = {
@@ -35,14 +32,14 @@ int main(int argc, const char** argv)
 		};
 		machine.setup_linux(args, env);
 		// some extra syscalls
-		setup_linux_syscalls(state, machine);
+		setup_linux_syscalls(machine);
 		// multi-threading
 		machine.setup_posix_threads();
 	}
 	else if constexpr (newlib_mini_guest)
 	{
 		// the minimum number of syscalls needed for malloc and C++ exceptions
-		setup_newlib_syscalls(state, machine);
+		setup_newlib_syscalls(machine);
 		machine.setup_argv(args);
 	}
 	else if constexpr (micro_guest) {
@@ -50,7 +47,7 @@ int main(int argc, const char** argv)
 		machine.setup_native_heap(5, 0x40000000, 6*1024*1024);
 		machine.setup_native_memory(10, false);
 		machine.setup_native_threads(30);
-		setup_minimal_syscalls(state, machine);
+		setup_minimal_syscalls(machine);
 	}
 	else {
 		fprintf(stderr, "Unknown emulation mode! Exiting...\n");
@@ -124,11 +121,8 @@ int main(int argc, const char** argv)
 		machine.print_and_pause();
 #endif
 	}
-	printf(">>> Program exited, exit code = %d\n", state.exit_code);
+	printf(">>> Program exited, exit code = %d\n", machine.return_value<int> ());
 	printf("Instructions executed: %zu\n", (size_t) machine.instruction_counter());
-#ifndef RISCV_DEBUG
-	printf("\n*** Guest output ***\n%s\n", state.output.c_str());
-#endif
 	printf("Pages in use: %zu (%zu kB memory)\n",
 			machine.memory.pages_active(), machine.memory.pages_active() * 4);
 	return 0;

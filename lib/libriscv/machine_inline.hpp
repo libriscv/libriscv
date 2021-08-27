@@ -44,6 +44,12 @@ inline void Machine<W>::reset()
 	memory.reset();
 }
 
+template <int W>
+inline void Machine<W>::print(const char* buffer, size_t len)
+{
+	this->m_printer(buffer, len);
+}
+
 template <int W> inline
 void Machine<W>::install_syscall_handler(size_t sysn, const syscall_t& handler)
 {

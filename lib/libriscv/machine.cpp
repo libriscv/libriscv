@@ -9,6 +9,12 @@
 namespace riscv
 {
 	template <int W>
+	typename Machine<W>::printer_func Machine<W>::m_default_printer =
+		[] (const char* buffer, size_t len) {
+			printf("%.*s", (int)len, buffer);
+		};
+
+	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
 		: cpu(*this), memory(*this, binary, options), m_arena{nullptr}, m_mt{nullptr}
 	{

@@ -89,25 +89,26 @@ Load a binary and let the machine simulate from `_start` (ELF entry-point):
 
 int main(int /*argc*/, const char** /*argv*/)
 {
-	// load binary from file
+	// Load ELF binary from file
 	const std::vector<uint8_t> binary /* = ... */;
 
 	using namespace riscv;
-	// create a 64-bit machine
-	Machine<RISCV64> machine { binary };
 
-	// install the `exit` system call handler
-	machine.install_syscall_handler(93,
-	 [] (auto& machine) {
-		 const auto [code] = machine.template sysargs <int> ();
+	// Install the `exit` system call handler
+	Machine<RISCV64>::install_syscall_handler(93,
+	 [] (Machine<RISCV64>& machine) {
+		 const int code = machine.return_value <int> ();
 		 printf(">>> Program exited, exit code = %d\n", code);
 		 machine.stop();
 	 });
 
-	// add program arguments on the stack
+	// Create a 64-bit machine
+	Machine<RISCV64> machine { binary };
+
+	// Add program arguments on the stack
 	machine.setup_argv({"emulator", "test!"});
 
-	// this function will run until the exit syscall has stopped the
+	// This function will run until the exit syscall has stopped the
 	// machine, an exception happens which stops execution, or the
 	// instruction counter reaches the given limit (1M):
 	try {

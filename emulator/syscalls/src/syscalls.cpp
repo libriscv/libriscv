@@ -27,10 +27,7 @@ template <> struct guest_iovec<8> {
 template <int W>
 void syscall_exit(Machine<W>& machine)
 {
-	auto* state = machine.template get_userdata<State<W>> ();
-	state->exit_code = machine.template sysarg<int> (0);
 	machine.stop();
-	machine.set_result(state->exit_code);
 }
 
 template <int W>
@@ -40,18 +37,16 @@ void syscall_write(Machine<W>& machine)
 	const auto address = machine.template sysarg<address_type<W>>(1);
 	const size_t len   = machine.template sysarg<address_type<W>>(2);
 	SYSPRINT("SYSCALL write: addr = 0x%X, len = %zu\n", address, len);
-	auto* state = machine.template get_userdata<State<W>> ();
-	// we only accept standard pipes, for now :)
+	// We only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
-		char buffer[1024];
-		const size_t len_g = std::min(sizeof(buffer), len);
-		machine.memory.memcpy_out(buffer, address, len_g);
-		state->output += std::string(buffer, len_g);
-#ifdef RISCV_DEBUG
-		machine.set_result(write(fd, buffer, len));
-#else
-		machine.set_result(len_g);
-#endif
+        /* Zero-copy retrieval of buffers */
+		riscv::vBuffer buffers[4];
+		size_t cnt =
+            machine.memory.gather_buffers_from_range(4, buffers, address, len);
+        for (size_t i = 0; i < cnt; i++) {
+            machine.print(buffers[i].ptr, buffers[i].len);
+        }
+		machine.set_result(len);
 		return;
 	}
 	machine.set_result(-EBADF);
@@ -74,23 +69,22 @@ void syscall_writev(Machine<W>& machine)
 	if (fd >= 0 && fd < 3) {
         const size_t size = sizeof(guest_iovec<W>) * count;
 
-		auto* state = machine.template get_userdata<State<W>> ();
         std::vector<guest_iovec<W>> vec(count);
         machine.memory.memcpy_out(vec.data(), iov_g, size);
 
-        int res = 0;
+        ssize_t res = 0;
         for (const auto& iov : vec)
         {
-			char buffer[1024];
             auto src_g = (address_type<W>) iov.iov_base;
-            auto len_g = std::min(sizeof(buffer), (size_t) iov.iov_len);
-            machine.memory.memcpy_out(buffer, src_g, len_g);
-			state->output += std::string(buffer, len_g);
-#ifdef RISCV_DEBUG
-			res += write(fd, buffer, len_g);
-#else
+            auto len_g = (size_t) iov.iov_len;
+            /* Zero-copy retrieval of buffers */
+            riscv::vBuffer buffers[4];
+    		size_t cnt =
+                machine.memory.gather_buffers_from_range(4, buffers, src_g, len_g);
+            for (size_t i = 0; i < cnt; i++) {
+                machine.print(buffers[i].ptr, buffers[i].len);
+            }
 			res += len_g;
-#endif
         }
 		machine.set_result(res);
         return;
@@ -125,7 +119,7 @@ void syscall_ebreak(riscv::Machine<W>& machine)
 #ifdef RISCV_DEBUG
 	machine.print_and_pause();
 #else
-	throw std::runtime_error("Unhandled EBREAK instruction");
+	throw std::runtime_error("EBREAK instruction");
 #endif
 }
 
@@ -335,26 +329,25 @@ inline void add_mman_syscalls(Machine<W>& machine)
 }
 
 template <int W>
-inline void setup_minimal_syscalls(State<W>& state, Machine<W>& machine)
+inline void setup_minimal_syscalls(Machine<W>& machine)
 {
-	machine.set_userdata(&state);
 	machine.install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
 	machine.install_syscall_handler(64, syscall_write<W>);
 	machine.install_syscall_handler(93, syscall_exit<W>);
 }
 
 template <int W>
-inline void setup_newlib_syscalls(State<W>& state, Machine<W>& machine)
+inline void setup_newlib_syscalls(Machine<W>& machine)
 {
-	setup_minimal_syscalls<W>(state, machine);
+	setup_minimal_syscalls<W>(machine);
 	machine.install_syscall_handler(214, syscall_brk<W>);
 	add_mman_syscalls(machine);
 }
 
 template <int W>
-void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
+void setup_linux_syscalls(Machine<W>& machine)
 {
-	setup_minimal_syscalls<W>(state, machine);
+	setup_minimal_syscalls<W>(machine);
 
 	// fcntl
 	machine.install_syscall_handler(25, syscall_stub_zero<W>);
@@ -413,10 +406,10 @@ void setup_linux_syscalls(State<W>& state, Machine<W>& machine)
 }
 
 /* le sigh */
-template void setup_minimal_syscalls<4>(State<4>&, Machine<4>&);
-template void setup_newlib_syscalls<4>(State<4>&, Machine<4>&);
-template void setup_linux_syscalls<4>(State<4>&, Machine<4>&);
+template void setup_minimal_syscalls<4>(Machine<4>&);
+template void setup_newlib_syscalls<4>(Machine<4>&);
+template void setup_linux_syscalls<4>(Machine<4>&);
 
-template void setup_minimal_syscalls<8>(State<8>&, Machine<8>&);
-template void setup_newlib_syscalls<8>(State<8>&, Machine<8>&);
-template void setup_linux_syscalls<8>(State<8>&, Machine<8>&);
+template void setup_minimal_syscalls<8>(Machine<8>&);
+template void setup_newlib_syscalls<8>(Machine<8>&);
+template void setup_linux_syscalls<8>(Machine<8>&);

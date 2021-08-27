@@ -14,6 +14,7 @@ namespace riscv
 	{
 		using syscall_t = void(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address
+		using printer_func = std::function<void(const char*, size_t)>;
 
 		// see common.hpp for MachineOptions
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
@@ -64,6 +65,10 @@ namespace riscv
 		template <typename... Args>
 		inline void set_result(Args... args);
 
+		// A shortcut to getting a return or exit value
+		template <typename T>
+		inline T return_value() const { return sysarg<T> (0); }
+
 		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.
 		// the function must use the C ABI calling convention.
@@ -94,7 +99,7 @@ namespace riscv
 		template<typename... Args> constexpr
 		void setup_call(address_t call_addr, Args&&... args);
 
-		// returns the address of a symbol in the ELF symtab, or zero
+		// Returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name) const;
 		address_t address_of(const std::string& name) const;
 
@@ -114,6 +119,10 @@ namespace riscv
 		// Custom user pointer
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }
 		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
+
+		// Stdout, stderr
+		void print(const char*, size_t);
+		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
 
 		// Call an installed system call handler
 		void system_call(size_t);
@@ -170,9 +179,11 @@ namespace riscv
 		bool         m_stopped = false;
 		uint64_t     m_counter = 0;
 		void* m_userdata = nullptr;
+		printer_func m_printer = m_default_printer;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
 		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
+		static printer_func m_default_printer;
 	};
 
 #include "machine_inline.hpp"
