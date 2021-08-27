@@ -63,7 +63,3 @@ endfunction()
 add_emulator(rvlinux  EMULATOR_MODE_LINUX=1)
 add_emulator(rvnewlib EMULATOR_MODE_NEWLIB=1)
 add_emulator(rvmicro  EMULATOR_MODE_MICRO=1)
-
-add_emulator(rvlinux64  EMULATOR_MODE_LINUX=1 EMULATOR_MODE_64BIT=1)
-add_emulator(rvnewlib64 EMULATOR_MODE_NEWLIB=1 EMULATOR_MODE_64BIT=1)
-add_emulator(rvmicro64  EMULATOR_MODE_MICRO=1 EMULATOR_MODE_64BIT=1)

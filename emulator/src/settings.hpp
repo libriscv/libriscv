@@ -1,11 +1,5 @@
 #pragma once
 
-#if defined(EMULATOR_MODE_64BIT)
-	static constexpr bool USE_64BIT = true;
-#else
-	static constexpr bool USE_64BIT = false;
-#endif
-
 #if defined(EMULATOR_MODE_LINUX)
 	static constexpr bool full_linux_guest = true;
 #else

@@ -4,24 +4,16 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 200;
-static constexpr int MARCH = (USE_64BIT ? riscv::RISCV64 : riscv::RISCV32);
 
-int main(int argc, const char** argv)
+template <int W>
+static void run_program(const std::vector<uint8_t>& binary, const std::string& filename)
 {
-	if (argc < 2) {
-		fprintf(stderr, "Provide RISC-V binary as argument!\n");
-		exit(1);
-	}
-	const std::string filename = argv[1];
-
-	const auto binary = load_file(filename);
-
 	const std::vector<std::string> args = {
 		filename,
 		"test!"
 	};
 
-	riscv::Machine<MARCH> machine { binary, {
+	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY
 	}};
 
@@ -121,10 +113,30 @@ int main(int argc, const char** argv)
 		machine.print_and_pause();
 #endif
 	}
-	printf(">>> Program exited, exit code = %d\n", machine.return_value<int> ());
-	printf("Instructions executed: %zu\n", (size_t) machine.instruction_counter());
+	printf(">>> Program exited, exit code = %d\n",
+		machine.template return_value<int> ());
+	printf("Instructions executed: %zu\n",
+		(size_t) machine.instruction_counter());
 	printf("Pages in use: %zu (%zu kB memory)\n",
-			machine.memory.pages_active(), machine.memory.pages_active() * 4);
+		machine.memory.pages_active(), machine.memory.pages_active() * 4);
+}
+
+int main(int argc, const char** argv)
+{
+	if (argc < 2) {
+		fprintf(stderr, "Provide RISC-V binary as argument!\n");
+		exit(1);
+	}
+	const std::string filename = argv[1];
+
+	const auto binary = load_file(filename);
+	assert(binary.size() >= 64);
+
+	if (binary[4] == ELFCLASS64)
+		run_program<riscv::RISCV64> (binary, filename);
+	else
+		run_program<riscv::RISCV32> (binary, filename);
+
 	return 0;
 }
 
