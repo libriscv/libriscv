@@ -61,12 +61,12 @@ namespace riscv
 		std::vector<address_t> argv;
 		argv.push_back(args.size()); // argc
 		for (const auto& string : args) {
-			const auto sp = stack_push(string.data(), string.size());
+			const auto sp = stack_push(string);
 			argv.push_back(sp);
 		}
 		argv.push_back(0x0);
 		for (const auto& string : env) {
-			const auto sp = stack_push(string.data(), string.size());
+			const auto sp = stack_push(string);
 			argv.push_back(sp);
 		}
 		argv.push_back(0x0);
@@ -75,7 +75,7 @@ namespace riscv
 		auto& sp = cpu.reg(REG_SP);
 		const size_t argsize = argv.size() * sizeof(argv[0]);
 		sp -= argsize;
-		sp &= ~0xF; // mandated 16-byte stack alignment
+		sp &= ~(address_t)0xF; // mandated 16-byte stack alignment
 
 		this->copy_to_guest(sp, argv.data(), argsize);
 	}
@@ -94,9 +94,9 @@ namespace riscv
 	void push_arg(Machine<W>& m, std::vector<address_type<W>>& vec, address_type<W>& dst, const std::string& str)
 	{
 		dst -= str.size();
-		dst &= ~(W-1); // maintain alignment
+		dst &= ~(address_type<W>)(W-1); // maintain alignment
 		vec.push_back(dst);
-		m.copy_to_guest(dst, (const uint8_t*) str.data(), str.size());
+		m.copy_to_guest(dst, str.data(), str.size()+1);
 	}
 	template <int W> static inline
 	void push_aux(std::vector<address_type<W>>& vec, AuxVec<address_type<W>> aux)
@@ -108,7 +108,7 @@ namespace riscv
 	void push_down(Machine<W>& m, address_type<W>& dst, const void* data, size_t size)
 	{
 		dst -= size;
-		dst &= ~(W-1); // maintain alignment
+		dst &= ~(address_type<W>)(W-1); // maintain alignment
 		m.copy_to_guest(dst, data, size);
 	}
 
@@ -130,8 +130,8 @@ namespace riscv
 		push_down(*this, dst, canary.data(), canary.size());
 		const auto canary_addr = dst;
 
-		const std::string platform = (W == 4) ? "RISC-V 32-bit" : "RISC-V 64-bit";
-		push_down(*this, dst, platform.data(), platform.size());
+		const char* platform = (W == 4) ? "RISC-V 32-bit" : "RISC-V 64-bit";
+		push_down(*this, dst, platform, strlen(platform)+1);
 		const auto platform_addr = dst;
 
 		// Program headers

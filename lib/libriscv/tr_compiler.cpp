@@ -41,7 +41,7 @@ namespace riscv
 		char namebuffer[64];
 		strncpy(namebuffer, "/tmp/rvtrcode-XXXXXX", sizeof(namebuffer));
 		// open a temporary file with owner privs
-		int fd = mkstemp(namebuffer);
+		const int fd = mkstemp(namebuffer);
 		if (fd < 0) {
 			return nullptr;
 		}

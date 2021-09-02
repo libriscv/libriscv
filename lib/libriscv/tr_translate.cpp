@@ -26,7 +26,7 @@ namespace riscv
 	#define TIME_POINT(x)  /* */
 #endif
 
-static std::unordered_set<uint32_t> good_insn
+static const std::unordered_set<uint32_t> good_insn
 {
 	RV32I_LOAD,
 	RV32I_STORE,
@@ -128,7 +128,7 @@ if constexpr (SCAN_FOR_GP) {
 		}
 		if (gucci<W>(*it))
 		{
-			auto block = it;
+			const auto block = it;
 			bool has_branch = false;
 			bool has_loop = false;
 			// measure block length
