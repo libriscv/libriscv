@@ -36,7 +36,7 @@
 #define RISCV_RODATA_SEGMENT_IS_SHARED 1
 #endif
 
-#if defined(RISCV_INSTR_CACHE) && defined(RISCV_EXPERIMENTAL)
+#if defined(RISCV_INSTR_CACHE) && defined(RISCV_INSTR_CACHE_PREGEN)
 // NOTE: this feature disables virtual execute memory
 #define RISCV_INBOUND_JUMPS_ONLY 1
 #endif
