@@ -223,11 +223,21 @@ inline void yield_until(const std::function<bool()>& condition)
 }
 inline long yield()
 {
-	return syscall(THREAD_SYSCALLS_BASE+2);
+	register long a0 asm("a0");
+	register long syscall_id asm("a7") = THREAD_SYSCALLS_BASE+2;
+
+	asm volatile ("scall" : "=r"(a0) : "r"(syscall_id) : "memory");
+
+	return a0;
 }
 inline long yield_to(int tid)
 {
-	return syscall(THREAD_SYSCALLS_BASE+3, tid);
+	register long a0 asm("a0") = tid;
+	register long syscall_id asm("a7") = THREAD_SYSCALLS_BASE+3;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id) : "memory");
+
+	return a0;
 }
 inline long yield_to(Thread* thread)
 {
@@ -236,22 +246,36 @@ inline long yield_to(Thread* thread)
 
 inline long block(int reason)
 {
-	return syscall(THREAD_SYSCALLS_BASE+4, reason);
+	register long a0 asm("a0") = reason;
+	register long syscall_id asm("a7") = THREAD_SYSCALLS_BASE+4;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id) : "memory");
+
+	return a0;
 }
 inline void block(const std::function<bool()>& condition, int reason)
 {
 	while (!condition()) {
 		if (block(reason) < 0) break;
-		asm("" ::: "memory");
 	}
 }
 inline long wakeup_one_blocked(int reason)
 {
-	return syscall(THREAD_SYSCALLS_BASE+5, reason);
+	register long a0 asm("a0") = reason;
+	register long syscall_id asm("a7") = THREAD_SYSCALLS_BASE+5;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id) : "memory");
+
+	return a0;
 }
 inline long unblock(int tid)
 {
-	return syscall(THREAD_SYSCALLS_BASE+6, tid);
+	register long a0 asm("a0") = tid;
+	register long syscall_id asm("a7") = THREAD_SYSCALLS_BASE+6;
+
+	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id) : "memory");
+
+	return a0;
 }
 
 __attribute__((noreturn))
