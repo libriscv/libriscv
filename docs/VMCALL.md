@@ -6,7 +6,7 @@ It's possible to make function calls into the virtual machine, but there are a h
 
 It is not unsafe to call `_exit()` or any other equivalent function directly, as all it does is invoke the EXIT system call, which immediately stops execution of the program. In a normal operating system this also makes the execution environment (usually a process) disappear, and releases all the resources back. In this case we just want to preserve the machine state (which is in a good known state) while also stopping execution, so that we can call into the programs functions directly.
 
-Once the machine is no longer running, but still left in a state in which we can call into it, we have to make sure that our callable function in the VM is present in the symbol table of the ELF, so that we can find the address of this function. In addition, `_exit` must also be present in the ELF symbol tables, as it will be used as a way to exit the VM call and also optionally return a status code. This is done via hooking up the exit system call behind the scenes and extracting the exit status code after execution stops.
+Once the machine is no longer running, but still left in a state in which we can call into it, we have to make sure that our callable function in the VM is present in the symbol table of the ELF, so that we can find the address of this function.
 
 A third, and final, stumbling block is sometimes having functions, even those marked with `__attribute__((used))`, not appearing in the ELF symbol table, which is a linker issue. This can happen when using `-gc-sections` and friends. You can test if your symbol is visible to the emulator by using `machine.address_of("myFunction")` which returns a memory address. If the address is 0, then the name was not found in the symbol table, which makes `vmcall(...)` impossible to perform. Calling will most likely cause a CPU exception on address 0, which by default has no execute privileges.
 
@@ -57,37 +57,6 @@ do {
 
 Note that for the sake of this example we have not wrapped the call to `simulate()` in a try..catch, but if a CPU exception happens, it will throw a `riscv::MachineException`, and possibly exceptions from your own system call handlers.
 
-## Minimal exit function
-
-If you want to hand-write an exit function for your binary, it technically only requires 2 instructions. Here is a pseudo-assembly implementation:
-
-```
-_exit:
-	li a7, 93 # EXIT system call number
-	ecall     # A0 should already have the exit value
-```
-
-vmcall works by faking being called from `_exit`, and so when your function returns, it returns directly to `_exit`, with A0 already being the exit value.
-
-If you have some ideas on how to make vmcalls easier to do without requiring an exit function, please contact me or create an issue.
-
-An even smaller variant is making the handler for the `ebreak` instruction stop the machine. The `ebreak` instruction has a fixed system-call number which is defined by `RISCV_SYSCALL_EBREAK_NR`. An example implementation:
-```
-fast_exit:
-	ebreak     # A0 should already have the exit value
-```
-Or in inline assembly:
-```
-asm(".global fast_exit\n"
-	"fast_exit:\n"
-	"ebreak\n");
-```
-
-To change the exit-address used by vmcall to this very slightly faster implementation, simply use:
-```
-machine.memory.set_exit_address(machine.address_of("fast_exit"));
-```
-
 ## Maximizing success and optimizing calls
 
 Check that the symbol exists using the `Machine::address_of()` function. It will cache the address anyway, and be re-used by the vmcall function. If you are going to use `-gc-sections` then you should know about the linker argument `--undefined=symbolname` to make sure the symbol will never get removed. Also make sure to mark the function as `extern "C"` if you are using C++. You can pass arguments to the linker from the compiler frontend using `-Wl,<linker arg>`. For example `-Wl,--undefined=test` will retain test even through linker GC. To minimize the size of the binaries use `--retain-symbols-file` instead of -s or -S to the linker (see: man ld).
@@ -97,6 +66,8 @@ Build your executable with `-O2 -march=rv32g -mabi=ilp32d` or `-O2 -march=rv32im
 Use `Memory::memview()` or `Memory::memstring()` to handle arguments passed from guest to host. They have fast-paths for strings and structs that don't cross page-boundaries. Use `std::deque` instead of `std::vector` inside the guest where possible. The fastest way to append data to a list is using a `std::array` with a pointer: `*ptr++ = value;`.
 
 You can provide arguments to main with `Machine::setup_argv()`. They are all regular C++ strings, and will be passed into the VM in a way that is understood by normal C runtimes.
+
+It is also important to cache the address of the function, to avoid having to translate the string function name on every call. There are many ways to do this and for example a map<string, address> would work. You can find the address by calling `machine.address_of("myFunction")`.
 
 ## Interrupting a running machine
 

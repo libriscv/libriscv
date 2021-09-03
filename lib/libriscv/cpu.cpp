@@ -18,7 +18,6 @@ namespace riscv
 
 		this->registers() = other.cpu.registers();
 		// TODO: copy atomics here
-		this->jump(this->pc());
 	}
 	template <int W>
 	void CPU<W>::reset()
