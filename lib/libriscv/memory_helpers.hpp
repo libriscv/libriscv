@@ -359,7 +359,7 @@ void Memory<W>::memcpy(
 
 template <int W>
 size_t Memory<W>::gather_buffers_from_range(
-	size_t cnt, vBuffer buffers[cnt], address_t addr, size_t len)
+	size_t cnt, vBuffer buffers[], address_t addr, size_t len)
 {
 	size_t index = 0;
 	vBuffer* last = nullptr;

@@ -38,7 +38,7 @@ namespace riscv
 		/* Fill an array of buffers pointing to complete guest virtual [addr, len].
 		   Throws an exception if there was a protection violation.
 		   Returns the number of buffers filled, or an exception if not enough. */
-		size_t gather_buffers_from_range(size_t cnt, vBuffer[cnt], address_t addr, size_t len);
+		size_t gather_buffers_from_range(size_t cnt, vBuffer[], address_t addr, size_t len);
 		// Gives a chunk-wise view of the data at address, with a callback
 		// invocation at each page boundary. @offs is the current byte offset.
 		void foreach(address_t addr, size_t len,

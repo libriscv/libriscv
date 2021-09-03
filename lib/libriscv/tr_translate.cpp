@@ -189,7 +189,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 
 	// Code generation
 	std::vector<NamedIPair<W>> dlmappings;
-	extern std::string bintr_code;
+	extern const std::string bintr_code;
 	std::string code = bintr_code;
 
 	for (const auto& block : blocks)
