@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
-GCC_TRIPLE="riscv32-unknown-elf"
-export CC=$GCC_TRIPLE-gcc
-export CXX=$GCC_TRIPLE-g++
-NIMCPU="--cpu=riscv32"
+GCC_TRIPLE="riscv64-linux-gnu"
+export CC=$GCC_TRIPLE-gcc-10
+export CXX=$GCC_TRIPLE-g++-10
+NIMCPU="--cpu=riscv64"
 NIMFILE="$PWD/${1:-hello.nim}"
 
 mkdir -p $GCC_TRIPLE

@@ -9,18 +9,17 @@ option(DEBUGGING   "Add debugging information" OFF)
 #
 # Build configuration
 #
-if (GCC_TRIPLE STREQUAL "riscv32-unknown-elf")
-	set(RISCV_ABI "-march=rv32g -mabi=ilp32d")
+if (GCC_TRIPLE STREQUAL "riscv32-linux-gnu")
+	set(RISCV_ABI "-march=rv32gc -mabi=ilp32d")
 else()
-	set(RISCV_ABI "-march=rv64g -mabi=lp64d")
+	set(RISCV_ABI "-march=rv64gc -mabi=lp64d")
 endif()
 set(WARNINGS  "-Wall -Wextra -Werror=return-type -Wno-unused")
-set(COMMON    "-O1 -fno-math-errno -fno-stack-protector")
+set(COMMON    "-O2 -fno-math-errno")
 if (DEBUGGING)
 	set (COMMON "${COMMON} -ggdb3 -O0")
 endif()
 set(FLAGS "${WARNINGS} ${RISCV_ABI} ${COMMON}")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Ttext 0x120000")
 
 if (LTO)
 	set(FLAGS "${FLAGS} -flto -ffat-lto-objects")

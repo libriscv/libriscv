@@ -1,2 +1,2 @@
-riscv32-unknown-elf/
-riscv64-unknown-elf/
+riscv32-*/
+riscv64-*/
