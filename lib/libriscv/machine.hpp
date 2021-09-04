@@ -39,8 +39,10 @@ namespace riscv
 		CPU<W>    cpu;
 		Memory<W> memory;
 
-		// Copy data into the guests memory (without page protections)
-		address_t copy_to_guest(address_t dst, const void* buf, size_t length);
+		// Copy data into the guests memory (*without* page protections)
+		void copy_to_guest(address_t dst, const void* buf, size_t len);
+		// Copy data from the guests memory (*with* page protections)
+		void copy_from_guest(void* dst, address_t buf, size_t len);
 		// Push something onto the stack, and move the stack pointer
 		address_t stack_push(const void* data, size_t length);
 		address_t stack_push(const std::string& string);
@@ -155,6 +157,9 @@ namespace riscv
 		void setup_posix_threads();
 		void setup_native_threads(const size_t syscall_base);
 
+		void set_sighandler(address_t addr) { m_sighandler = addr; }
+		address_t sighandler() const noexcept { return m_sighandler; }
+
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
@@ -179,6 +184,7 @@ namespace riscv
 		bool         m_stopped = false;
 		uint64_t     m_counter = 0;
 		void* m_userdata = nullptr;
+		address_t    m_sighandler = 0;
 		printer_func m_printer = m_default_printer;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;

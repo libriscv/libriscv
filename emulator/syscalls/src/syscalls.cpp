@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/signal.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -115,6 +116,18 @@ void syscall_ebreak(riscv::Machine<W>& machine)
 #else
 	throw std::runtime_error("EBREAK instruction");
 #endif
+}
+
+template <int W>
+void syscall_sigaction(Machine<W>& machine)
+{
+	const auto buffer = machine.template sysarg<address_type<W>>(1);
+	struct sigaction sa;
+	machine.copy_from_guest(&sa, buffer, sizeof(sa));
+	// There is typically only one relevant handler,
+	// and languages use it to print backtraces.
+	machine.set_sighandler((address_type<W>)(uintptr_t)sa.sa_handler);
+	machine.set_result(0);
 }
 
 template <int W>
@@ -352,9 +365,11 @@ void setup_linux_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(25, syscall_stub_zero<W>);
 	// ioctl
 	machine.install_syscall_handler(29, syscall_stub_zero<W>);
+	// rt_sigaction
+	machine.install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
 	machine.install_syscall_handler(135, syscall_stub_zero<W>);
-	// rt_sigprocmask
+	// gettimeofday
 	machine.install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid
 	machine.install_syscall_handler(172, syscall_stub_zero<W>);

@@ -7,6 +7,9 @@ static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 200;
 
 template <int W>
+static void run_sighandler(riscv::Machine<W>&);
+
+template <int W>
 static void run_program(const std::vector<uint8_t>& binary, const std::string& filename)
 {
 	const std::vector<std::string> args = {
@@ -120,11 +123,15 @@ static void run_program(const std::vector<uint8_t>& binary, const std::string& f
 				me.type(), me.what(), me.data());
 #ifdef RISCV_DEBUG
 		machine.print_and_pause();
+#else
+		run_sighandler(machine);
 #endif
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
 #ifdef RISCV_DEBUG
 		machine.print_and_pause();
+#else
+		run_sighandler(machine);
 #endif
 	}
 	printf(">>> Program exited, exit code = %d\n",
@@ -152,6 +159,23 @@ int main(int argc, const char** argv)
 		run_program<riscv::RISCV32> (binary, filename);
 
 	return 0;
+}
+
+template <int W>
+void run_sighandler(riscv::Machine<W>& machine)
+{
+	const auto handler = machine.sighandler();
+	if (handler == 0x0)
+		return;
+	machine.set_sighandler(0x0);
+
+	machine.stack_push(machine.cpu.reg(riscv::REG_RA));
+	machine.cpu.reg(riscv::REG_RA) = machine.cpu.pc();
+	machine.cpu.reg(riscv::REG_ARG0) = 11; /* SIGSEGV */
+	machine.cpu.jump(handler);
+	machine.simulate(60'000);
+
+	machine.set_sighandler(handler);
 }
 
 #include <stdexcept>
