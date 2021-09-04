@@ -337,6 +337,7 @@ namespace riscv
 		this->m_start_address = master.memory.m_start_address;
 		this->m_stack_address = master.memory.m_stack_address;
 		this->m_exit_address = master.memory.m_exit_address;
+		this->m_mmap_address = master.memory.m_mmap_address;
 
 		// base address, size and PC-relative data pointer for instructions
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
