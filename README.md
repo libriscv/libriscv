@@ -18,7 +18,16 @@ Optimized compiled code is faster even when interpreted.
 
 ## Installing a RISC-V GCC compiler
 
-To get C++ exceptions and other things, you will need a (limited) Linux userspace environment. You sometimes need to build this cross-compiler yourself:
+On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler for running Linux programs with a one-liner:
+
+```
+sudo apt install gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
+```
+
+Now you have a full C/C++ compiler for RISC-V. It is typically configured to use the C-extension, so make sure you have that enabled.
+
+
+To build smaller and leaner programs you will need a (limited) Linux userspace environment. You sometimes need to build this cross-compiler yourself:
 
 ```
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
@@ -43,14 +52,6 @@ The last step is to add your compiler to PATH so that it becomes visible to buil
 ```
 export PATH=$PATH:$HOME/riscv/bin
 ```
-
-On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler with a one-liner:
-
-```
-sudo apt install gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
-```
-
-Now you have a full C/C++ compiler for RISC-V.
 
 ## Building and running a test program
 
