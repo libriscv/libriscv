@@ -51,7 +51,7 @@ inline void Machine<W>::print(const char* buffer, size_t len)
 }
 
 template <int W> inline
-void Machine<W>::install_syscall_handler(size_t sysn, const syscall_t& handler)
+void Machine<W>::install_syscall_handler(size_t sysn, syscall_t handler)
 {
    new (&syscall_handlers.at(sysn)) syscall_t(handler);
 }
@@ -59,7 +59,7 @@ template <int W> inline
 void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>> syscalls)
 {
    for (auto& scall : syscalls)
-	   install_syscall_handler(scall.first, std::move(scall.second));
+	   install_syscall_handler(scall.first, scall.second);
 }
 
 template <int W>
