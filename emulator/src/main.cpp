@@ -1,4 +1,5 @@
 #include <libriscv/machine.hpp>
+#include <libriscv/rsp_server.hpp>
 #include <include/syscall_helpers.hpp>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
@@ -100,6 +101,19 @@ static void run_program(const std::vector<uint8_t>& binary, const std::string& f
 #endif
 
 	try {
+		// If you run the emulator with DEBUG=1, you can
+		// connect with GDB built for RISC-V.
+		if (getenv("DEBUG")) {
+			printf("GDB server is listening on localhost:2159\n");
+			riscv::RSP<W> server { machine, 2159 };
+			auto client = server.accept();
+			if (client != nullptr) {
+				printf("GDB is connected\n");
+				//client->set_verbose(true);
+				while (client->process_one());
+			}
+		}
+		// Normal RISC-V simulation
 		machine.simulate();
 	} catch (riscv::MachineException& me) {
 		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
