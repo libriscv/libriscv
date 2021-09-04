@@ -6,12 +6,6 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 using namespace riscv;
-template <int W>
-static const address_type<W> sbrk_start = 0x40000000;
-template <int W>
-static const address_type<W> sbrk_max   = sbrk_start<W> + 0x1000000;
-template <int W>
-static const address_type<W> heap_start = sbrk_max<W>;
 
 template <int W> struct guest_iovec;
 
@@ -160,23 +154,17 @@ void syscall_readlinkat(Machine<W>& machine)
 template <int W>
 void syscall_brk(Machine<W>& machine)
 {
-	static address_type<W> sbrk_end = sbrk_start<W>;
-	const auto new_end = machine.template sysarg<address_type<W>>(0);
-	if constexpr (verbose_syscalls) {
-		printf("SYSCALL brk called, current = 0x%X new = 0x%X\n", sbrk_end, new_end);
+	auto new_end = machine.template sysarg<address_type<W>>(0);
+	if (new_end > machine.memory.heap_address() + Memory<W>::BRK_MAX) {
+		new_end = machine.memory.heap_address() + Memory<W>::BRK_MAX;
+	} else if (new_end < machine.memory.heap_address()) {
+		new_end = machine.memory.heap_address();
 	}
-    if (new_end == 0) {
-		machine.set_result(sbrk_end);
-		return;
-	}
-    sbrk_end = new_end;
-    sbrk_end = std::max(sbrk_end, sbrk_start<W>);
-    sbrk_end = std::min(sbrk_end, sbrk_max<W>);
 
 	if constexpr (verbose_syscalls) {
-		printf("* New sbrk() end: 0x%X\n", sbrk_end);
+		printf("SYSCALL brk 0x%lX\n", (uint64_t)new_end);
 	}
-	machine.set_result(sbrk_end);
+	machine.set_result(new_end);
 }
 
 template <int W>
@@ -249,23 +237,22 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto length = machine.template sysarg<address_type<W>>(1);
 		const auto prot   = machine.template sysarg<int>(2);
 	    const auto flags  = machine.template sysarg<int>(3);
-		SYSPRINT("SYSCALL mmap called, addr %#X  len %u prot %#x flags %#X\n",
+		SYSPRINT(">>> mmap(addr %#X, len %u, prot %#x, flags %#X)\n",
 	            addr_g, length, prot, flags);
         if (length % Page::size() != 0) {
             machine.set_result(-1); // = MAP_FAILED;
             return;
         }
-        static address_type<W> nextfree = heap_start<W>;
+        auto& nextfree = machine.memory.mmap_address();
 	    if (addr_g == 0 || addr_g == nextfree)
 	    {
-	        const address_type<W> addr = nextfree;
 			// anon pages need to be zeroed
 			if (flags & MAP_ANONYMOUS) {
 				// ... but they are already CoW
 				//machine.memory.memset(addr, 0, length);
 			}
+			machine.set_result(nextfree);
 	        nextfree += length;
-			machine.set_result(addr);
 	        return;
 	    }
 		machine.set_result(-1); // = MAP_FAILED;
@@ -277,10 +264,15 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto old_size = machine.template sysarg<address_type<W>>(1);
 		const auto new_size = machine.template sysarg<address_type<W>>(2);
 	    const auto flags    = machine.template sysarg<int>(3);
-		SYSPRINT("SYSCALL mremap called, addr %#X  len %u newsize %u flags %#X\n",
+		SYSPRINT(">>> mremap(addr %#X, len %u, newsize %u, flags %#X)\n",
 	            old_addr, old_size, new_size, flags);
-		if (flags & MREMAP_FIXED) {
-			// ...
+		auto& nextfree = machine.memory.mmap_address();
+		// We allow the common case of reallocating the
+		// last mapping to a bigger one
+		if (old_addr + old_size == nextfree) {
+			nextfree = old_addr + new_size;
+			machine.set_result(old_addr);
+			return;
 		}
 		machine.set_result(-1);
 	});
