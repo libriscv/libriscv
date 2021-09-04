@@ -228,6 +228,12 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto len  = machine.template sysarg<address_type<W>> (1);
 		SYSPRINT(">>> munmap(0x%X, len=%u)\n", addr, len);
 		machine.memory.free_pages(addr, len);
+		auto& nextfree = machine.memory.mmap_address();
+		if (addr + len == nextfree) {
+			nextfree = addr;
+			if (nextfree < machine.memory.heap_address() + Memory<W>::BRK_MAX)
+				nextfree = machine.memory.heap_address() + Memory<W>::BRK_MAX;
+		}
 		machine.set_result(0);
 	});
 	// mmap
@@ -249,7 +255,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 			// anon pages need to be zeroed
 			if (flags & MAP_ANONYMOUS) {
 				// ... but they are already CoW
-				//machine.memory.memset(addr, 0, length);
+				//machine.memory.memset(nextfree, 0, length);
 			}
 			machine.set_result(nextfree);
 	        nextfree += length;
@@ -281,7 +287,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	[] (Machine<W>& machine) {
 		const auto addr = machine.template sysarg<address_type<W>> (0);
 		const auto len  = machine.template sysarg<address_type<W>> (1);
-		const int      prot = machine.template sysarg<int> (2);
+		const int  prot = machine.template sysarg<int> (2);
 		SYSPRINT(">>> mprotect(0x%X, len=%u, prot=%x)\n", addr, len, prot);
 		machine.memory.set_page_attr(addr, len, {
 			.read  = bool(prot & 1),
@@ -296,7 +302,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto addr  = machine.template sysarg<address_type<W>> (0);
 		const auto len   = machine.template sysarg<address_type<W>> (1);
 		const int advice = machine.template sysarg<int> (2);
-		SYSPRINT(">>> madvise(0x%X, len=%u, prot=%x)\n", addr, len, advice);
+		SYSPRINT(">>> madvise(0x%lX, len=%zu, prot=%x)\n",
+			(uint64_t)addr, (size_t)len, advice);
 		switch (advice) {
 			case MADV_NORMAL:
 			case MADV_RANDOM:

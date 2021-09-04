@@ -7,7 +7,7 @@ option(GCSECTIONS  "Garbage collect empty sections" ON)
 
 set(RISCV_ABI "-march=rv64g -mabi=lp64d")
 set(WARNINGS  "-Wall -Wextra")
-set(COMMON    "-O2 -fno-stack-protector")
+set(COMMON    "-O2")
 set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON}")
 
 if (DEBUGGING)

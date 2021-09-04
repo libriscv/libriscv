@@ -2,31 +2,29 @@
 
 _libriscv_ is a RISC-V emulator that is highly embeddable and configurable. This project is intended to be included in a CMake build system, and should not be installed anywhere. There are several CMake options that control RISC-V extensions and how the emulator behaves.
 
-The emulator has a binary translation mode that has currently only been tested on Linux.
+The emulator has a binary translation mode that has currently only been tested on Linux, but the performance should be good enough with just enabling experimental + icache.
 
 While this emulator has a focus on performance, one higher priority is the ability to map any memory anywhere with permissions, custom fault handlers and such things. This allows you to take the memory of one machine and map it into another, and does have a slight performance penalty compared to an emulator that can only have sequential memory.
 
-It is my experience that using a single flat mmap-range for memory would simplify memory operations and optimize some benchmarks, as I have written this feature for this emulator once already. It would benefit calculations like finding the first 10M primes. However, it is incompatible with fast forking of machines. mmap does not have a fast method of unmapping a copy-on-write memory range, and it scales poorly. Instead, it is thousands of times faster to just copy page metadata and use memory sharing with copy-on-write mechanisms.
-
 ## Benchmarks
 
-My primary motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation.
+One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation.
 
 [STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
 
 [Lua 5.4 benchmarks](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
 
-Optimized compiled code is, however, much faster.
+Optimized compiled code is faster even when interpreted.
 
 ## Installing a RISC-V GCC compiler
 
-To get C++ exceptions and other things, you will need a (limited) Linux userspace environment. You will need to build this cross-compiler yourself:
+To get C++ exceptions and other things, you will need a (limited) Linux userspace environment. You sometimes need to build this cross-compiler yourself:
 
 ```
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
 cd riscv-gnu-toolchain
 ./configure --prefix=$HOME/riscv --with-arch=rv32g --with-abi=ilp32d
-make -j4
+make
 ```
 This will build a newlib cross-compiler with C++ exception support. The ABI is ilp32d, which is for 32-bit and 64-bit floating-point instruction set support. It is much faster than software implementations of binary IEEE floating-point arithmetic.
 
@@ -36,7 +34,7 @@ Note that if you want a full glibc cross-compiler instead, simply appending `lin
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
 cd riscv-gnu-toolchain
 ./configure --prefix=$HOME/riscv --with-arch=rv64g --with-abi=lp64d
-make -j4
+make
 ```
 The incantation for 64-bit RISC-V.
 
@@ -45,6 +43,14 @@ The last step is to add your compiler to PATH so that it becomes visible to buil
 ```
 export PATH=$PATH:$HOME/riscv/bin
 ```
+
+On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler with a one-liner:
+
+```
+sudo apt install gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
+```
+
+Now you have a full C/C++ compiler for RISC-V.
 
 ## Building and running a test program
 
