@@ -2,5 +2,6 @@
 emulator/rvmicro
 emulator/rvnewlib
 emulator/rvlinux
+tests/autotest/emulator/emulator
 fuzz/crash-*
 webapi/tests/binary
