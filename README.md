@@ -66,7 +66,7 @@ Building the emulator and booting the newlib `hello_world`:
 cd emulator
 mkdir -p build && cd build
 cmake .. && make -j4
-./rvnewlib ../../binaries/newlib/build/hello_world
+./rvlinux ../../binaries/linux64/build/hello_world
 ```
 
 The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib. `rvlinux` has all the system calls necessary to run a normal userspace linux binary.
@@ -79,6 +79,12 @@ The `full` example project uses the Linux-configured cross compiler and will exp
 
 And finally, the `micro` project implements the absolutely minimal freestanding RV32GC C/C++ environment. You won't have a heap implementation, so no new/delete. And you can't printf values because you don't have a C standard library, so you can only write strings and buffers using the write system call. Still, the stripped binary is only 784 bytes, and will execute only ~120 instructions running the whole program! The `micro` project actually initializes zero-initialized memory, calls global constructors and passes program arguments to main.
 
+## Remote debugging using GDB
+
+If you have built the emulator, you can use `DEBUG=1 ./emulator /path/to/program` to enable GDB to connect. Start your GDB like so: `riscv64-unknown-elf-gdb /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote localhost:2159`. Now you can step through the code.
+
+Most modern languages embed their own pretty printers for debuginfo which enables you to go line by line in your favorite language.
+
 ## Instruction set support
 
 The emulator currently supports RV32GC, and RV64GC (IMAFDC).
@@ -86,7 +92,7 @@ The F and D-extensions should be 100% supported (32- and 64-bit floating point i
 
 Binary translation currently only supports RV32G and RV64G.
 
-Note: There is no support for the B-, E- and Q-extensions.
+Note: There is no support for the B-, E-, V- and Q-extensions.
 
 ## Usage
 
