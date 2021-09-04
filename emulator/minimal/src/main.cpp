@@ -8,12 +8,11 @@ int main(int /*argc*/, const char** /*argv*/)
 	using namespace riscv;
 	Machine<RISCV64> machine { binary };
 	// install a system call handler
-	machine.install_syscall_handler(93,
-	 [] (auto& machine) {
-		 const auto [code] = machine.template sysargs <int> ();
+	Machine<RISCV64>::install_syscall_handler(93,
+	 [] (Machine<RISCV64>& machine) {
+		 const auto [code] = machine.sysargs <int> ();
 		 printf(">>> Program exited, exit code = %d\n", code);
 		 machine.stop();
-		 return 0;
 	 });
 
 	// add program arguments on the stack
