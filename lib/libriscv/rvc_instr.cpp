@@ -30,7 +30,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		static const std::array<const char*, 4> f3 = {
-			"???", "FLD", "LW", "FLW"
+			"???", "FLD", "LW", RVIS64BIT(cpu) ? "LD" : "FLW"
 		};
 		const rv32c_instruction ci { instr };
 		return snprintf(buffer, len, "C.%s %s, [%s+%u = 0x%lX]",
@@ -424,7 +424,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		static const std::array<const char*, 4> f3 = {
-			"XXX", "FSDSP", "SWSP", "FSWSP"
+			"XXX", "FSDSP", "SWSP", RVIS64BIT(cpu) ? "SDSP" : "FSWSP"
 		};
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CSS.offset(4);
@@ -447,7 +447,14 @@ namespace riscv
 		auto addr = cpu.reg(REG_SP) + ci.CSFSD.offset();
 		auto value = cpu.reg(ci.CSFSD.rs2);
 		cpu.machine().memory.template write<uint64_t> (addr, value);
-	}, DECODED_COMPR(C2_FSDSP).printer);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	{
+		const rv32c_instruction ci { instr };
+		auto address = cpu.reg(REG_SP) + ci.CSFSD.offset();
+		return snprintf(buffer, len, "C.SDSP [SP%+d], %s (0x%lX)",
+						ci.CSFSD.offset(), RISCV::regname(ci.CSS.rs2), (long) address);
+	});
 
 	COMPRESSED_INSTR(C2_FSWSP,
 	[] (auto& cpu, rv32i_instruction instr) {
