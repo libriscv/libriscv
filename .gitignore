@@ -1,4 +1,6 @@
 **/build/
-build_debug/
+emulator/rvmicro
+emulator/rvnewlib
+emulator/rvlinux
 fuzz/crash-*
 webapi/tests/binary
