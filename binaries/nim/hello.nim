@@ -1,4 +1,5 @@
 import json
+proc crash() {.importc.}
 
 var hisName = "John"
 let herAge = 31

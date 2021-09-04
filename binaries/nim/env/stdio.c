@@ -10,3 +10,8 @@ int ftrylockfile(FILE *filehandle) {
 void funlockfile(FILE *filehandle) {
 	(void)filehandle;
 }
+
+void crash() {
+	void (*nowhere) () = (void(*)()) 0x0;
+	nowhere();
+}

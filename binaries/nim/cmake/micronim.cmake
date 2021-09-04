@@ -3,7 +3,7 @@ project(builder C)
 #set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(LTO         "Link-time optimizations" ON)
-option(GCSECTIONS  "Garbage collect empty sections" OFF)
+option(GCSECTIONS  "Garbage collect empty sections" ON)
 option(DEBUGGING   "Add debugging information" OFF)
 
 #
@@ -22,7 +22,7 @@ endif()
 set(FLAGS "${WARNINGS} ${RISCV_ABI} ${COMMON}")
 
 if (LTO)
-	set(FLAGS "${FLAGS} -flto -ffat-lto-objects")
+	set(FLAGS "${FLAGS} -flto")
 endif()
 
 if (GCSECTIONS)

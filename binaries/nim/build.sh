@@ -17,11 +17,11 @@ NIM_LIBS=`whereis nim`
 NIM_LIBS="${NIM_LIBS##*: }"
 NIM_LIBS="${NIM_LIBS/bin*/lib}"
 
-nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc --threads:off -d:release -c ${NIMFILE}
+nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc --threads:off --stackTrace:on -d:release -c ${NIMFILE}
 jq '.compile[] [0]' $NIMCACHE/*.json > buildfiles.txt
 
-cmake .. -G Ninja -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS
-ninja
+cmake .. -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS -DCMAKE_BUILD_TYPE=Release
+make -j4
 popd
 
 # print the filename
