@@ -24,7 +24,8 @@ namespace riscv
 	inline Machine<W>::Machine(const Machine& other, const MachineOptions<W>& options)
 		: cpu(*this, other), memory(*this, other, options), m_arena{nullptr}, m_mt{nullptr}
 	{
-		this->increment_counter(other.instruction_counter());
+		this->m_counter = other.m_counter;
+		this->m_max_counter = other.m_max_counter;
 	}
 
 	template <int W>

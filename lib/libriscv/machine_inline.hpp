@@ -1,40 +1,36 @@
 
 template <int W>
-inline void Machine<W>::stop(bool v) noexcept {
-	m_stopped = v;
+inline void Machine<W>::stop() noexcept {
+	m_max_counter = 0;
 }
 template <int W>
 inline bool Machine<W>::stopped() const noexcept {
-	return m_stopped;
+	return m_counter >= m_max_counter;
 }
 
 template <int W>
 template <bool Throw>
 inline void Machine<W>::simulate(uint64_t max_instr)
 {
-	this->m_stopped = false;
 	if (max_instr != 0) {
-		const uint64_t max = m_counter + max_instr;
-		while (m_counter < max)
-		{
+		m_max_counter = m_counter + max_instr;
+		while (LIKELY(!stopped())) {
 			cpu.simulate();
-			this->m_counter ++;
-			if (UNLIKELY(this->stopped()))
-				return;
+			m_counter ++;
 		}
 		if constexpr (Throw) {
+			if (UNLIKELY(m_max_counter != 0))
 			throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
 				"Instruction count limit reached", max_instr);
 		}
-	}
-	else {
-		uint64_t i = 0;
-		while (LIKELY(!this->stopped())) {
+	} else {
+		m_max_counter = UINT64_MAX;
+		while (LIKELY(m_max_counter != 0)) {
 			cpu.simulate();
-			i++;
+			m_counter ++;
 		}
-		this->m_counter += i;
 	}
+
 }
 
 template <int W>

@@ -28,13 +28,14 @@ namespace riscv
 		template <bool Throw = false>
 		void simulate(uint64_t max_instructions = 0);
 
-		void stop(bool v = true) noexcept;
+		void stop() noexcept;
 		bool stopped() const noexcept;
 		void reset();
 
 		uint64_t instruction_counter() const noexcept { return m_counter; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
+		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
 
 		CPU<W>    cpu;
 		Memory<W> memory;
@@ -186,8 +187,8 @@ namespace riscv
 		auto resolve_args(std::index_sequence<indices...>) const;
 		void setup_native_heap_internal(const size_t);
 
-		bool         m_stopped = false;
 		uint64_t     m_counter = 0;
+		uint64_t     m_max_counter = 0;
 		void* m_userdata = nullptr;
 		address_t    m_sighandler = 0;
 		printer_func m_printer = m_default_printer;

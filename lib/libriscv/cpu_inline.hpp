@@ -11,7 +11,7 @@ inline void CPU<W>::reset_stack_pointer() noexcept
 	this->reg(2) = machine().memory.stack_initial();
 }
 
-template<int W> constexpr
+template<int W>
 inline void CPU<W>::jump(const address_t dst)
 {
 #ifdef RISCV_INBOUND_JUMPS_ONLY
@@ -29,6 +29,17 @@ inline void CPU<W>::jump(const address_t dst)
 			trigger_exception(MISALIGNED_INSTRUCTION, dst);
 		}
 	}
+	this->registers().pc = dst;
+}
+
+template<int W>
+inline void CPU<W>::unchecked_jump(const address_t dst)
+{
+#ifdef RISCV_INBOUND_JUMPS_ONLY
+	if (UNLIKELY(dst < m_exec_begin || dst >= m_exec_end)) {
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, dst);
+	}
+#endif
 	this->registers().pc = dst;
 }
 
