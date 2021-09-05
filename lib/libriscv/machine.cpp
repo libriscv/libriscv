@@ -37,19 +37,10 @@ namespace riscv
 	}
 
 	template <int W>
-	long Machine<W>::unknown_syscall_handler(Machine<W>& machine)
+	void Machine<W>::unknown_syscall_handler(Machine<W>& machine)
 	{
 		const auto syscall_number = machine.cpu.reg(REG_ECALL);
 		machine.on_unhandled_syscall(machine, syscall_number);
-#ifndef RISCV_EBREAK_MEANS_STOP
-		// EBREAK should not modify registers
-		if (syscall_number != SYSCALL_EBREAK) {
-			return -38; // -ENOSYS
-		}
-		return machine.cpu.reg(REG_RETVAL);
-#else
-		return -38;
-#endif
 	}
 
 	template <int W>
@@ -210,13 +201,13 @@ namespace riscv
 			switch (instr.Itype.imm)
 			{
 			case 0: // ECALL
-				cpu.machine().system_call(cpu.reg(REG_ECALL));
+				this->system_call(cpu.reg(REG_ECALL));
 				return;
 			case 1: // EBREAK
-				cpu.machine().ebreak();
+				this->ebreak();
 				return;
 			case 0x7FF: // Stop machine
-				cpu.machine().stop();
+				this->stop();
 				return;
 			}
 			break;
@@ -241,11 +232,11 @@ namespace riscv
 				return;
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.machine().instruction_counter();
+				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter();
 				return;
 			case 0xC80: // CSR RDCYCLE (upper)
 			case 0xC82: // RDINSTRET (upper)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.machine().instruction_counter() >> 32u;
+				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter() >> 32u;
 				return;
 			case 0xC01: // CSR RDTIME (lower)
 				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time();

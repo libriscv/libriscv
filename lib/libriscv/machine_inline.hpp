@@ -53,37 +53,26 @@ inline void Machine<W>::print(const char* buffer, size_t len)
 template <int W> inline
 void Machine<W>::install_syscall_handler(size_t sysn, syscall_t handler)
 {
-   new (&syscall_handlers.at(sysn)) syscall_t(handler);
+	syscall_handlers.at(sysn) = handler;
 }
 template <int W> inline
 void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>> syscalls)
 {
-   for (auto& scall : syscalls)
-	   install_syscall_handler(scall.first, scall.second);
+	for (auto& scall : syscalls)
+		install_syscall_handler(scall.first, scall.second);
 }
 
 template <int W>
 inline void Machine<W>::system_call(size_t syscall_number)
 {
-	if (LIKELY(syscall_number < RISCV_SYSCALLS_MAX))
-	{
-		const auto& handler = Machine::syscall_handlers[syscall_number];
-		if (LIKELY(handler != nullptr)) {
-			handler(*this);
-			return;
-		}
-	}
-	unknown_syscall_handler(*this);
+	const auto& handler = Machine::syscall_handlers.at(syscall_number);
+	handler(*this);
 }
 template <int W>
 inline void Machine<W>::unchecked_system_call(size_t syscall_number)
 {
 	const auto& handler = Machine::syscall_handlers[syscall_number];
-	if (LIKELY(handler != nullptr)) {
-		handler(*this);
-	} else {
-		unknown_syscall_handler(*this);
-	}
+	handler(*this);
 }
 
 template <int W>
