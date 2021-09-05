@@ -596,7 +596,6 @@ void RSPClient<W>::handle_writereg()
 		send("OK");
 	} else if (idx == 32) {
 		m_machine->cpu.jump(value);
-		m_machine->stop(false);
 		send("OK");
 	} else {
 		send("E01");

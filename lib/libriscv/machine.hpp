@@ -35,6 +35,7 @@ namespace riscv
 		uint64_t instruction_counter() const noexcept { return m_counter; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
+		uint64_t max_instructions() const noexcept { return m_max_counter; }
 		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
 
 		CPU<W>    cpu;
