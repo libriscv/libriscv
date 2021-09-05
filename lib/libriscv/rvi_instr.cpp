@@ -193,7 +193,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 == reg2) {
-			cpu.unchecked_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
 	},
@@ -225,7 +225,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 != reg2) {
-			cpu.unchecked_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -235,7 +235,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (RVTOSIGNED(reg1) < RVTOSIGNED(reg2)) {
-			cpu.unchecked_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -245,7 +245,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (RVTOSIGNED(reg1) >= RVTOSIGNED(reg2)) {
-			cpu.unchecked_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -255,7 +255,7 @@ namespace riscv
 		const auto& reg1 = cpu.reg(instr.Btype.rs1);
 		const auto& reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 < reg2) {
-			cpu.unchecked_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -265,7 +265,7 @@ namespace riscv
 		const auto& reg1 = cpu.reg(instr.Btype.rs1);
 		const auto& reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 >= reg2) {
-			cpu.unchecked_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -304,7 +304,7 @@ namespace riscv
 			cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
 		}
 		// And Jump (relative)
-		cpu.unchecked_jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
+		cpu.aligned_jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
 			printf(">>> CALL 0x%lX <-- %s = 0x%lX\n", (long) cpu.pc(),

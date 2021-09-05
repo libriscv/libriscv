@@ -33,7 +33,7 @@ inline void CPU<W>::jump(const address_t dst)
 }
 
 template<int W>
-inline void CPU<W>::unchecked_jump(const address_t dst)
+inline void CPU<W>::aligned_jump(const address_t dst)
 {
 #ifdef RISCV_INBOUND_JUMPS_ONLY
 	if (UNLIKELY(dst < m_exec_begin || dst >= m_exec_end)) {
@@ -41,6 +41,12 @@ inline void CPU<W>::unchecked_jump(const address_t dst)
 	}
 #endif
 	this->registers().pc = dst;
+}
+
+template<int W>
+inline void CPU<W>::increment_pc(int delta)
+{
+	registers().pc += delta;
 }
 
 template <int W>

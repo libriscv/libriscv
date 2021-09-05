@@ -112,6 +112,7 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};
 #endif
+		this->aligned_jump(this->pc());
 	}
 	template <int W>
 	void Memory<W>::deserialize_from(const std::vector<uint8_t>& vec,

@@ -93,6 +93,8 @@ inline void thread<W>::resume()
 			this->tid,
 			this->stored_regs.get(REG_TP),
 			this->stored_regs.get(REG_SP));
+	// this will ensure PC is executable in all cases
+	m.cpu.aligned_jump(m.cpu.pc());
 }
 
 template <int W>

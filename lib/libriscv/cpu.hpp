@@ -28,9 +28,9 @@ namespace riscv
 		void reset_stack_pointer() noexcept;
 
 		address_t pc() const noexcept { return registers().pc; }
-		void increment_pc(int delta) { registers().pc += delta; }
+		void increment_pc(int delta);
 		void jump(address_t);
-		void unchecked_jump(address_t);
+		void aligned_jump(address_t);
 
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }

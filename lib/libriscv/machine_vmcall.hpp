@@ -69,6 +69,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 		this->m_max_counter = max_counter;
 		if constexpr (StoreRegs) {
 			cpu.registers() = regs;
+			cpu.aligned_jump(cpu.pc());
 		}
 		throw;
 	}
@@ -77,6 +78,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	const auto retval = cpu.reg(REG_ARG0);
 	if constexpr (StoreRegs) {
 		cpu.registers() = regs;
+		cpu.aligned_jump(cpu.pc());
 	}
 	return retval;
 }
