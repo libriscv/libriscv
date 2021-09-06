@@ -83,7 +83,7 @@ namespace riscv
 		return read_next_instruction_slowpath();
 	}
 
-	template<int W>
+	template<int W> __attribute__((hot))
 	void CPU<W>::simulate()
 	{
 		format_t instruction;

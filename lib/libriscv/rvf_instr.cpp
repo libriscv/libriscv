@@ -5,7 +5,7 @@
 namespace riscv
 {
 	FLOAT_INSTR(FLW,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
@@ -24,7 +24,7 @@ namespace riscv
 						fi.Itype.signed_imm());
 	});
 	FLOAT_INSTR(FLD,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
@@ -33,7 +33,7 @@ namespace riscv
 	}, DECODED_FLOAT(FLW).printer);
 
 	FLOAT_INSTR(FSW,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& src = cpu.registers().getfl(fi.Stype.rs2);
@@ -52,7 +52,7 @@ namespace riscv
 						RISCV::flpname(fi.Stype.rs2));
 	});
 	FLOAT_INSTR(FSD,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& src = cpu.registers().getfl(fi.Stype.rs2);
@@ -61,7 +61,7 @@ namespace riscv
 	}, DECODED_FLOAT(FSW).printer);
 
 	FLOAT_INSTR(FMADD,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -89,7 +89,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FMSUB,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -117,7 +117,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FNMADD,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -144,7 +144,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FNMSUB,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -173,7 +173,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FADD,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -199,7 +199,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FSUB,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -225,7 +225,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FMUL,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -251,7 +251,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FDIV,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
@@ -277,7 +277,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FSQRT,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -304,7 +304,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FMIN_FMAX,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -343,7 +343,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FEQ_FLT_FLE,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -388,7 +388,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FCVT_SD_DS,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -415,7 +415,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FCVT_W_SD,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -448,7 +448,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FCVT_SD_W,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
@@ -481,7 +481,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FSGNJ_NX,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
@@ -549,7 +549,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FMV_X_W, // 1110
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.reg(fi.R4type.rd);
@@ -580,7 +580,7 @@ namespace riscv
 	});
 
 	FLOAT_INSTR(FMV_W_X, // 1111
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
