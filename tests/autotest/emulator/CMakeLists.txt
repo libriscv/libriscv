@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 project(emulator CXX)
 
-add_subdirectory(../../lib lib)
+add_subdirectory(../../../lib lib)
 
 set(SOURCES
 	src/main.cpp
