@@ -17,7 +17,9 @@ namespace riscv
 		this->m_exec_end   = other.cpu.m_exec_end;
 
 		this->registers() = other.cpu.registers();
-		// TODO: copy atomics here
+#ifdef RISCV_EXT_ATOMICS
+		this->m_atomics = other.cpu.m_atomics;
+#endif
 	}
 	template <int W>
 	void CPU<W>::reset()
