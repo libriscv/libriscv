@@ -44,6 +44,13 @@ namespace riscv
 		machine.on_unhandled_syscall(machine, syscall_number);
 	}
 
+	template <int W> __attribute__((cold))
+	void Machine<W>::timeout_exception(uint64_t max_instr)
+	{
+		throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
+			"Instruction count limit reached", max_instr);
+	}
+
 	template <int W>
 	void Machine<W>::setup_argv(
 		const std::vector<std::string>& args,

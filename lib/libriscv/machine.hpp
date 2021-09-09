@@ -26,7 +26,7 @@ namespace riscv
 		// executed, or the machine has been stopped.
 		// NOTE: if @max_instructions is 0, then run until stop
 		template <bool Throw = false>
-		void simulate(uint64_t max_instructions = 0);
+		void simulate(uint64_t max_instructions = UINT64_MAX);
 
 		void stop() noexcept;
 		bool stopped() const noexcept;
@@ -84,17 +84,17 @@ namespace riscv
 		// NOTE: relies on an exit function to stop execution after returning.
 		// _exit must call the exit (93) system call and not call destructors,
 		// which is the norm.
-		template<uint64_t MAXI = 0, bool Throw = true, typename... Args> constexpr
+		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args> constexpr
 		address_t vmcall(const char* func_name, Args&&... args);
 
-		template<uint64_t MAXI = 0, bool Throw = true, typename... Args> constexpr
+		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args> constexpr
 		address_t vmcall(address_t func_addr, Args&&... args);
 
 		// Saves and restores registers before calling
-		template<uint64_t MAXI = 0, bool Throw = true, bool StoreRegs = true, typename... Args>
+		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, bool StoreRegs = true, typename... Args>
 		address_t preempt(const char* func_name, Args&&... args);
 
-		template<uint64_t MAXI = 0, bool Throw = true, bool StoreRegs = true, typename... Args>
+		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, bool StoreRegs = true, typename... Args>
 		address_t preempt(address_t func_addr, Args&&... args);
 
 		// Sets up a function call only, executes no instructions.
@@ -187,6 +187,7 @@ namespace riscv
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
 		void setup_native_heap_internal(const size_t);
+		void timeout_exception(uint64_t);
 
 		uint64_t     m_counter = 0;
 		uint64_t     m_max_counter = 0;

@@ -23,7 +23,7 @@ namespace riscv
 		using breakpoint_t = Function<void(CPU<W>&)>; // machine instruction
 		using instruction_t = Instruction<W>;
 
-		void simulate();
+		void simulate(uint64_t);
 		void step_one();
 		void reset();
 		void reset_stack_pointer() noexcept;

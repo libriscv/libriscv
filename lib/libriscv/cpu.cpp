@@ -84,15 +84,25 @@ namespace riscv
 	}
 
 	template<int W> __attribute__((hot))
-	void CPU<W>::simulate()
+	void CPU<W>::simulate(uint64_t max)
 	{
+		// Calculate the instruction limit
 #ifndef RISCV_BINARY_TRANSLATION
-		uint64_t counter = machine().instruction_counter();
-		while (LIKELY(counter < machine().max_instructions())) {
+		machine().set_max_instructions(max);
+		uint64_t counter = 0;
+
+		for (; counter < machine().max_instructions(); counter++) {
 #else
 		/* With binary translation we need to modify the counter from anywhere */ ;;
-		while (LIKELY(machine().instruction_counter() < machine().max_instructions())) {
+		if (max != UINT64_MAX)
+			machine().set_max_instructions(machine().instruction_counter() + max);
+		else
+			machine().set_max_instructions(UINT64_MAX);
+
+		for (; machine().instruction_counter() < machine().max_instructions();
+			machine().increment_counter(1)) {
 #endif
+
 			format_t instruction;
 #ifdef RISCV_DEBUG
 			this->break_checks();
@@ -160,20 +170,16 @@ namespace riscv
 				registers().pc += instruction.length();
 			else
 				registers().pc += 4;
-
-		#ifndef RISCV_BINARY_TRANSLATION
-			counter ++;
-		#else
-			machine().increment_counter(1);
-		#endif
 		} // while not stopped
+	#ifndef RISCV_BINARY_TRANSLATION
+		machine().increment_counter(counter);
+	#endif
 	} // CPU::simulate
 
 	template<int W>
 	void CPU<W>::step_one()
 	{
-		machine().set_max_instructions(machine().instruction_counter() + 1);
-		this->simulate();
+		this->simulate(1);
 	}
 
 	template<int W> __attribute__((cold))
