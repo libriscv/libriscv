@@ -418,8 +418,7 @@ void RSPClient<W>::handle_continue()
 		}
 		uint64_t n = m_ilimit;
 		while (!m_machine->stopped()) {
-			m_machine->cpu.simulate();
-			m_machine->increment_counter(1);
+			m_machine->cpu.step_one();
 			// Breakpoint
 			if (m_machine->cpu.pc() == this->m_bp)
 				break;
@@ -439,8 +438,7 @@ void RSPClient<W>::handle_step()
 {
 	try {
 		if (!m_machine->stopped()) {
-			m_machine->cpu.simulate();
-			m_machine->increment_counter(1);
+			m_machine->cpu.step_one();
 		} else {
 			send("S00");
 			return;

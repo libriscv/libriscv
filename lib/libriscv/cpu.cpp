@@ -86,9 +86,16 @@ namespace riscv
 	template<int W> __attribute__((hot))
 	void CPU<W>::simulate()
 	{
-		format_t instruction;
+#ifndef RISCV_BINARY_TRANSLATION
+		uint64_t counter = machine().instruction_counter();
+		while (LIKELY(counter < machine().max_instructions())) {
+#else
+		/* With binary translation we need to modify the counter from anywhere */ ;;
+		while (LIKELY(machine().instruction_counter() < machine().max_instructions())) {
+#endif
+			format_t instruction;
 #ifdef RISCV_DEBUG
-		this->break_checks();
+			this->break_checks();
 #endif
 
 # ifdef RISCV_INSTR_CACHE
@@ -125,35 +132,48 @@ namespace riscv
 		}
 #  endif
 # else
-		instruction = this->read_next_instruction();
+			instruction = this->read_next_instruction();
 	#ifdef RISCV_DEBUG
-		// instruction logging
-		if (machine().verbose_instructions)
-		{
-			const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction));
-			printf("%s\n", string.c_str());
-		}
+			// instruction logging
+			if (machine().verbose_instructions)
+			{
+				const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction));
+				printf("%s\n", string.c_str());
+			}
 	#endif
-		// decode & execute instruction directly
-		this->execute(instruction);
+			// decode & execute instruction directly
+			this->execute(instruction);
 # endif
 
 #ifdef RISCV_DEBUG
-		if (UNLIKELY(machine().verbose_registers))
-		{
-			auto regs = this->registers().to_string();
-			printf("\n%s\n\n", regs.c_str());
-			if (UNLIKELY(machine().verbose_fp_registers)) {
-				printf("%s\n", registers().flp_to_string().c_str());
+			if (UNLIKELY(machine().verbose_registers))
+			{
+				auto regs = this->registers().to_string();
+				printf("\n%s\n\n", regs.c_str());
+				if (UNLIKELY(machine().verbose_fp_registers)) {
+					printf("%s\n", registers().flp_to_string().c_str());
+				}
 			}
-		}
 #endif
+			// increment PC
+			if constexpr (compressed_enabled)
+				registers().pc += instruction.length();
+			else
+				registers().pc += 4;
 
-		// increment PC
-		if constexpr (compressed_enabled)
-			registers().pc += instruction.length();
-		else
-			registers().pc += 4;
+		#ifndef RISCV_BINARY_TRANSLATION
+			counter ++;
+		#else
+			machine().increment_counter(1);
+		#endif
+		} // while not stopped
+	} // CPU::simulate
+
+	template<int W>
+	void CPU<W>::step_one()
+	{
+		machine().set_max_instructions(machine().instruction_counter() + 1);
+		this->simulate();
 	}
 
 	template<int W> __attribute__((cold))

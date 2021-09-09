@@ -14,10 +14,7 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 {
 	if (max_instr != 0) {
 		m_max_counter = m_counter + max_instr;
-		while (LIKELY(!stopped())) {
-			cpu.simulate();
-			m_counter ++;
-		}
+		cpu.simulate();
 		if constexpr (Throw) {
 			if (UNLIKELY(m_max_counter != 0))
 			throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
@@ -25,10 +22,7 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 		}
 	} else {
 		m_max_counter = UINT64_MAX;
-		while (LIKELY(m_max_counter != 0)) {
-			cpu.simulate();
-			m_counter ++;
-		}
+		cpu.simulate();
 	}
 
 }

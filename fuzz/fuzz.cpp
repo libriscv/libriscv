@@ -30,8 +30,7 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 #endif
 	try {
 		// Let's avoid loops
-		for (int i = 0; i < CYCLES; i++)
-			machine32.cpu.simulate();
+		machine32.simulate<false>(CYCLES);
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
@@ -41,8 +40,7 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 	machine64.copy_to_guest(V, data, len);
 	machine64.cpu.jump(V);
 	try {
-		for (int i = 0; i < CYCLES; i++)
-			machine64.cpu.simulate();
+		machine64.simulate<false>(CYCLES);
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}

@@ -174,7 +174,7 @@ auto& cpu = machine.cpu;
 while (!machine.stopped()) {
 	// Get 32- or 16-bits instruction
 	auto instr = cpu.read_next_instruction();
-	// Decode instruction to get an instruction handler
+	// Decode instruction to get instruction info
 	auto handlers = cpu.decode(instr);
 	if (false) {
 		// Print instruction to terminal

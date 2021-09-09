@@ -24,6 +24,7 @@ namespace riscv
 		using instruction_t = Instruction<W>;
 
 		void simulate();
+		void step_one();
 		void reset();
 		void reset_stack_pointer() noexcept;
 

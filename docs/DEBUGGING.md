@@ -32,11 +32,11 @@ An example of how to use the built-in CLI to step through instruction by instruc
 
 ## Debugging manually with libriscv
 
-By simulating a single instruction using `CPU::simulate()` we can programmatically apply any conditions we want:
+By simulating a single instruction using `CPU::step_one()` we can programmatically apply any conditions we want:
 
 ```C++
 while (!machine.stopped()) {
-    machine.cpu.simulate();
+    machine.cpu.step_one();
     if (machine.cpu.reg(10) == 0x1234) machine.print_and_pause();
 }
 ```
