@@ -33,27 +33,24 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE_PREGEN
 		std::vector<typename CPU<W>::instr_pair> ipairs;
 
-		// generate instruction handler pointers for machine code
-		for (address_t dst = pbase; dst < pbase + plen;)
+		/* Generate all instruction pointers for executable code.
+		   Cannot step outside of this area when pregen is enabled,
+		   so it's fine to leave the boundries alone. */
+		for (address_t dst = addr; dst < addr + len;)
 		{
 			const size_t cacheno = page_number(dst - pbase);
 			const size_t offset = dst & (Page::size()-1);
 			auto& cache = decoder_array[cacheno];
 			auto& entry = cache.get(offset / cache.DIVISOR);
 
-			if (dst >= addr && dst < addr + len)
-			{
-				auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
-			#ifdef RISCV_DEBUG
-				ipairs.emplace_back(entry.handler, instruction);
-			#else
-				ipairs.emplace_back(entry, instruction);
-			#endif
+			auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
+		#ifdef RISCV_DEBUG
+			ipairs.emplace_back(entry.handler, instruction);
+		#else
+			ipairs.emplace_back(entry, instruction);
+		#endif
 
-				cache.convert(machine().cpu.decode(instruction), entry);
-			} else {
-				cache.convert(machine().cpu.decode({0}), entry);
-			}
+			cache.convert(machine().cpu.decode(instruction), entry);
 			if constexpr (compressed_enabled)
 				dst += 2; /* We need to handle all entries */
 			else
