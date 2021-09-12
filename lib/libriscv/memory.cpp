@@ -155,7 +155,8 @@ namespace riscv
 			std::memcpy(&m_exec_pagedata[prelen], src, len);
 			std::memset(&m_exec_pagedata[prelen + len], 0,   postlen);
 			// Create a STOP instruction at the end of execute area
-			*(uint32_t*)&m_exec_pagedata[prelen + len] = 0x7ff00073;
+			const uint32_t stop_instr = 0x7ff00073;
+			std::memcpy(&m_exec_pagedata[prelen + len], &stop_instr, sizeof(stop_instr));
 			this->m_exit_address = hdr->p_vaddr + len;
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
