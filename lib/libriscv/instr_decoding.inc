@@ -42,9 +42,12 @@
 								DECODER(DECODED_INSTR(LOAD_U32));
 							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
 						case 0x7:
-							if (instruction.Itype.rd != 0)
-								DECODER(DECODED_INSTR(LOAD_U128));
-							DECODER(DECODED_INSTR(LOAD_U128_DUMMY));
+							if constexpr (sizeof(address_t) >= 16) {
+								if (instruction.Itype.rd != 0)
+									DECODER(DECODED_INSTR(LOAD_U128));
+								DECODER(DECODED_INSTR(LOAD_U128_DUMMY));
+							}
+							[[fallthrough]];
 						default:
 							DECODER(DECODED_INSTR(ILLEGAL));
 					}
@@ -68,7 +71,7 @@
 							if constexpr (sizeof(address_t) >= 16) {
 								DECODER(DECODED_INSTR(STORE_I128_IMM));
 							}
-							break;
+							[[fallthrough]];
 						default:
 							DECODER(DECODED_INSTR(ILLEGAL));
 					}
