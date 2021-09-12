@@ -77,6 +77,7 @@ namespace riscv
 
 		CPU(Machine<W>&);
 		CPU(Machine<W>&, const Machine<W>& other); // Fork
+		void init_execute_area(const uint8_t* data, address_t begin, address_t length);
 		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t length);
 		const uint8_t* exec_seg_data() const { return m_exec_data; }
 	private:

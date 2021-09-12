@@ -7,8 +7,7 @@ static void init_program_at(Machine<RISCV128>& machine,
 {
 	machine.memory.set_page_attr(base_addr, 0xA000, {.read = true, .write = false, .exec = true});
 	machine.copy_to_guest(base_addr, bin, bin_len);
-	machine.cpu.initialize_exec_segs(bin - base_addr, base_addr, bin_len);
-	machine.memory.generate_decoder_cache({}, base_addr, base_addr, bin_len);
+	machine.cpu.init_execute_area(bin, base_addr, bin_len);
 	machine.cpu.jump(base_addr);
 }
 

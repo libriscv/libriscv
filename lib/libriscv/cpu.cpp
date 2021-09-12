@@ -42,6 +42,15 @@ namespace riscv
 		this->m_cache = {};
 	}
 
+	template <int W>
+	void CPU<W>::init_execute_area(const uint8_t* data, address_t begin, address_t length)
+	{
+		this->initialize_exec_segs(data - begin, begin, length);
+	#ifdef RISCV_INSTR_CACHE
+		machine().memory.generate_decoder_cache({}, begin, begin, length);
+	#endif
+	}
+
 	template <int W> __attribute__((noinline))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath()
 	{
