@@ -16,4 +16,6 @@
 #define RVTOSIGNED(x) (static_cast<typename std::make_signed<decltype(x)>::type> (x))
 #define RVSIGNTYPE(x) typename std::make_signed<RVREGTYPE(x)>::type
 #define RVSIGNEXTW(x) (RVSIGNTYPE(x)) (int32_t)
-#define RVIS64BIT(x) (sizeof(RVREGTYPE(x)) == 8)
+#define RVSIGNEXTD(x) (RVSIGNTYPE(x)) (int64_t)
+#define RVIS64BIT(x)  (sizeof(RVREGTYPE(x)) == 8)
+#define RVIS128BIT(x) (sizeof(RVREGTYPE(x)) == 16)

@@ -24,6 +24,7 @@ set (SOURCES
 		libriscv/posix_threads.cpp
 		libriscv/rv32i.cpp
 		libriscv/rv64i.cpp
+		libriscv/rv128i.cpp
 		libriscv/serialize.cpp
 		libriscv/util/crc32c.cpp
 	)
@@ -61,7 +62,7 @@ if (RISCV_ICACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE=1)
 endif()
 if (RISCV_EXPERIMENTAL)
-	target_compile_definitions(riscv PRIVATE RISCV_INSTR_CACHE_PREGEN=1)
+	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE_PREGEN=1)
 endif()
 if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)

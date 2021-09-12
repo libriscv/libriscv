@@ -34,6 +34,21 @@ namespace riscv
 #undef DECODER
 	}
 
+	template <> __attribute__((cold))
+	std::string Registers<4>::to_string() const
+	{
+		char buffer[600];
+		int  len = 0;
+		for (int i = 1; i < 32; i++) {
+			len += snprintf(buffer+len, sizeof(buffer) - len,
+					"[%s\t%08X] ", RISCV::regname(i), this->get(i));
+			if (i % 5 == 4) {
+				len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
+			}
+		}
+		return std::string(buffer, len);
+	}
+
 	std::string RV32I::to_string(const CPU<4>& cpu, instruction_format format, const instruction_t& instr)
 	{
 		char buffer[256];

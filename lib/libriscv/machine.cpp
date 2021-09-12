@@ -263,4 +263,5 @@ namespace riscv
 
 	template struct Machine<4>;
 	template struct Machine<8>;
+	template struct Machine<16>;
 }

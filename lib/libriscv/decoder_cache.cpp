@@ -13,7 +13,7 @@ namespace riscv
 	void Memory<W>::generate_decoder_cache(const MachineOptions<W>& options,
 		address_t pbase, address_t addr, size_t len)
 	{
-		constexpr address_t PMASK = Page::size()-1;
+		constexpr size_t PMASK = Page::size()-1;
 		const size_t prelen  = addr - pbase;
 		const size_t midlen  = len + prelen;
 		const size_t plen =
@@ -30,12 +30,12 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE_PREGEN
 		std::vector<typename CPU<W>::instr_pair> ipairs;
 
-		auto* exec_offset = m_exec_pagedata.get() - pbase;
+		auto* exec_offset = machine().cpu.exec_seg_data();
 		// generate instruction handler pointers for machine code
 		for (address_t dst = pbase; dst < pbase + plen;)
 		{
 			const size_t cacheno = page_number(dst - pbase);
-			const address_t offset = dst & (Page::size()-1);
+			const size_t offset = dst & (Page::size()-1);
 			auto& cache = decoder_array[cacheno];
 			auto& entry = cache.get(offset / cache.DIVISOR);
 
@@ -58,6 +58,8 @@ namespace riscv
 				dst += 4;
 		}
 
+		/* We do not support translation and fusing for RV128I */
+		if constexpr (W != 16) {
 #ifdef RISCV_BINARY_TRANSLATION
 		machine().cpu.try_translate(options, addr, ipairs);
 #endif
@@ -68,6 +70,7 @@ namespace riscv
 				n += 1;
 		}
 #endif
+		}
 
 #else
 		// zero the whole thing
@@ -80,5 +83,6 @@ namespace riscv
 #ifndef __GNUG__
 	template struct Memory<4>;
 	template struct Memory<8>;
+	template struct Memory<16>;
 #endif
 }

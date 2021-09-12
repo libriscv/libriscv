@@ -23,10 +23,10 @@
 								DECODER(DECODED_INSTR(LOAD_I32));
 							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
 						case 0x3:
-							if constexpr (sizeof(address_t) == 8) {
+							if constexpr (sizeof(address_t) >= 8) {
 								if (instruction.Itype.rd != 0)
-									DECODER(DECODED_INSTR(LOAD_U64));
-								DECODER(DECODED_INSTR(LOAD_U64_DUMMY));
+									DECODER(DECODED_INSTR(LOAD_I64));
+								DECODER(DECODED_INSTR(LOAD_I64_DUMMY));
 							}
 							break;
 						case 0x4:
@@ -41,6 +41,10 @@
 							if (instruction.Itype.rd != 0)
 								DECODER(DECODED_INSTR(LOAD_U32));
 							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
+						case 0x7:
+							if (instruction.Itype.rd != 0)
+								DECODER(DECODED_INSTR(LOAD_U128));
+							DECODER(DECODED_INSTR(LOAD_U128_DUMMY));
 						default:
 							DECODER(DECODED_INSTR(ILLEGAL));
 					}
@@ -56,8 +60,13 @@
 						case 0x2:
 							DECODER(DECODED_INSTR(STORE_I32_IMM));
 						case 0x3:
-							if constexpr (sizeof(address_t) == 8) {
+							if constexpr (sizeof(address_t) >= 8) {
 								DECODER(DECODED_INSTR(STORE_I64_IMM));
+							}
+							break;
+						case 0x4:
+							if constexpr (sizeof(address_t) >= 16) {
+								DECODER(DECODED_INSTR(STORE_I128_IMM));
 							}
 							break;
 						default:
@@ -153,6 +162,20 @@
 						default:
 							DECODER(DECODED_INSTR(OP32));
 						}
+					} else {
+						DECODER(DECODED_INSTR(NOP));
+					}
+				case RV128I_OP_IMM64:
+					if (instruction.Itype.rd != 0)
+					{
+						DECODER(DECODED_INSTR(OP_IMM64));
+					} else {
+						DECODER(DECODED_INSTR(NOP));
+					}
+				case RV128I_OP64:
+					if (instruction.Rtype.rd != 0)
+					{
+						DECODER(DECODED_INSTR(OP64));
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}

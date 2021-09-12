@@ -8,13 +8,16 @@ namespace riscv
 {
 	struct RV32I;
 	struct RV64I;
+	struct RV128I;
 	template <int W> struct CPU;
 
 	template <int N>
-	using address_type = typename std::conditional<(N == 4), uint32_t, uint64_t>::type;
+	using address_type = typename std::conditional<(N == 4), uint32_t,
+		typename std::conditional<(N == 8), uint64_t, __uint128_t>::type>::type;
 
 	template <int N>
-	using isa_type = typename std::conditional<(N == 4), RV32I, RV64I>::type;
+	using isa_type = typename std::conditional<(N == 4), RV32I,
+		typename std::conditional<(N == 8), RV64I, RV128I>::type>::type;
 
 	enum exceptions
 	{

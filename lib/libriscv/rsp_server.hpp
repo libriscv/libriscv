@@ -67,7 +67,7 @@ private:
 template <int W>
 struct RSPClient
 {
-	using StopFunc = riscv::Function<void(RSPClient<W>&)>;
+	using StopFunc = std::function<void(RSPClient<W>&)>;
 	bool is_closed() const noexcept { return m_closed; }
 
 	bool process_one();

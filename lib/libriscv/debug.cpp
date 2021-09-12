@@ -3,6 +3,7 @@
 #include "rv32i_instr.hpp"
 #include "rv32i.hpp"
 #include "rv64i.hpp"
+#include "rv128i.hpp"
 #include <cstdio>
 #include <cstdlib>
 
@@ -268,4 +269,5 @@ void CPU<W>::break_checks()
 
 	template struct CPU<4>;
 	template struct CPU<8>;
+    template struct CPU<16>;
 } // namespace riscv

@@ -134,29 +134,29 @@ template <int W>
 void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/)
 {
 	this->install_syscall_handlers({
-		{syscall_base+0, [] (auto& m) {
+		{syscall_base+0, [] (Machine<W>& m) {
 		// Memcpy n+0
 		auto [dst, src, len] =
-			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
 		m.memory.foreach(src, len,
-			[dst = dst] (auto& m, address_type<W> off, const uint8_t* data, size_t len) {
+			[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
 				m.memcpy(dst + off, data, len);
 			});
 		m.increment_counter(2 * len);
 		m.set_result(dst);
-	}}, {syscall_base+1, [] (auto& m) {
+	}}, {syscall_base+1, [] (Machine<W>& m) {
 		// Memset n+1
 		const auto [dst, value, len] =
-			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
 		m.memory.memset(dst, value, len);
 		m.increment_counter(len);
 		m.set_result(dst);
-	}}, {syscall_base+2, [] (auto& m) {
+	}}, {syscall_base+2, [] (Machine<W>& m) {
 		// Memmove n+2
 		auto [dst, src, len] =
-			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memmove(%#lX, %#lX, %lu)\n",
 			(long) dst, (long) src, (long) len);
 		if (src < dst)
@@ -173,25 +173,25 @@ void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/
 		}
 		m.increment_counter(2 * len);
 		m.set_result(dst);
-	}}, {syscall_base+3, [] (auto& m) {
+	}}, {syscall_base+3, [] (Machine<W>& m) {
 		// Memcmp n+3
 		auto [p1, p2, len] =
-			m.template sysargs<address_type<W>, address_type<W>, address_type<W>> ();
+			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
 		m.increment_counter(2 * len);
 		m.set_result(m.memory.memcmp(p1, p2, len));
-	}}, {syscall_base+5, [] (auto& m) {
+	}}, {syscall_base+5, [] (Machine<W>& m) {
 		// Strlen n+5
-		auto [addr] = m.template sysargs<address_type<W>> ();
+		auto [addr] = m.sysargs<address_type<W>> ();
 		uint32_t len = m.memory.strlen(addr, 4096);
 		m.increment_counter(2 * len);
 		m.set_result(len);
 		MPRINT("SYSCALL strlen(%#lX) = %lu\n",
 			(long) addr, (long) len);
-	}}, {syscall_base+6, [] (auto& m) {
+	}}, {syscall_base+6, [] (Machine<W>& m) {
 		// Strncmp n+6
 		auto [a1, a2, maxlen] =
-			m.template sysargs<address_type<W>, address_type<W>, uint32_t> ();
+			m.sysargs<address_type<W>, address_type<W>, uint32_t> ();
 		MPRINT("SYSCALL strncmp(%#lX, %#lX, %u)\n", (long)a1, (long)a2, maxlen);
 		uint32_t len = 0;
 		while (len < maxlen) {
@@ -206,7 +206,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/
 		}
 		m.increment_counter(2 + 2 * len);
 		m.set_result(0);
-	}}, {syscall_base+14, [] (auto& m) {
+	}}, {syscall_base+14, [] (Machine<W>& m) {
 		// Print backtrace n+14
 		m.memory.print_backtrace(
 			[] (std::string_view line) {

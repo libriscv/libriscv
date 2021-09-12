@@ -61,7 +61,7 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 template <int W>
 template <typename T>
 inline void Memory<W>::foreach_helper(T& mem, address_t addr, size_t len,
-	Function<void(T&, address_t, const uint8_t*, size_t)> callback)
+	std::function<void(T&, address_t, const uint8_t*, size_t)> callback)
 {
 	address_t boff = 0;
 	while (len != 0)
@@ -83,7 +83,7 @@ inline void Memory<W>::foreach_helper(T& mem, address_t addr, size_t len,
 template <int W>
 template <typename T>
 inline void Memory<W>::memview_helper(T& mem, address_t addr, size_t len,
-	Function<void(T&, const uint8_t*, size_t)> callback)
+	std::function<void(T&, const uint8_t*, size_t)> callback)
 {
 	const size_t offset = addr & (Page::size()-1);
 	// fast-path
@@ -105,32 +105,32 @@ inline void Memory<W>::memview_helper(T& mem, address_t addr, size_t len,
 
 template <int W>
 void Memory<W>::foreach(address_t addr, size_t len,
-	Function<void(const Memory<W>&, address_t, const uint8_t*, size_t)> callback) const
+	std::function<void(const Memory<W>&, address_t, const uint8_t*, size_t)> callback) const
 {
 	foreach_helper(*this, addr, len, std::move(callback));
 }
 template <int W>
 void Memory<W>::foreach(address_t addr, size_t len,
-	Function<void(Memory<W>&, address_t, const uint8_t*, size_t)> callback)
+	std::function<void(Memory<W>&, address_t, const uint8_t*, size_t)> callback)
 {
 	foreach_helper(*this, addr, len, std::move(callback));
 }
 template <int W>
 void Memory<W>::memview(address_t addr, size_t len,
-	Function<void(const Memory<W>&, const uint8_t*, size_t)> callback) const
+	std::function<void(const Memory<W>&, const uint8_t*, size_t)> callback) const
 {
 	memview_helper(*this, addr, len, std::move(callback));
 }
 template <int W>
 void Memory<W>::memview(address_t addr, size_t len,
-	Function<void(Memory<W>&, const uint8_t*, size_t)> callback)
+	std::function<void(Memory<W>&, const uint8_t*, size_t)> callback)
 {
 	memview_helper(*this, addr, len, std::move(callback));
 }
 template <int W>
 template <typename T>
 void Memory<W>::memview(address_t addr,
-	Function<void(const T&)> callback) const
+	std::function<void(const T&)> callback) const
 {
 	static_assert(std::is_trivial_v<T>, "Type T must be Plain-Old-Data");
 	const size_t offset = addr & (Page::size()-1);
@@ -158,7 +158,7 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 	size_t pageno = page_number(addr);
 	// fast-path
 	{
-		address_t offset = addr & (Page::size()-1);
+		const size_t offset = addr & (Page::size()-1);
 		const Page& page = this->get_pageno(pageno);
 		if (UNLIKELY(!page.attr.read))
 			protection_fault(addr);
@@ -206,7 +206,7 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	if (UNLIKELY(!page.attr.read))
 		protection_fault(addr);
 
-	const address_t offset = addr & (Page::size()-1);
+	const size_t offset = addr & (Page::size()-1);
 	auto* start = (const char*) &page.data()[offset];
 	const size_t max_bytes = std::min(Page::size() - offset, datalen);
 

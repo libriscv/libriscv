@@ -17,9 +17,9 @@ namespace riscv
 	{
 		using address_t = address_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
-		using page_fault_cb_t = Function<Page&(Memory&, size_t)>;
-		using page_readf_cb_t = Function<const Page&(const Memory&, size_t)>;
-		using page_write_cb_t = Function<void(Memory&, Page&)>;
+		using page_fault_cb_t = std::function<Page&(Memory&, size_t)>;
+		using page_readf_cb_t = std::function<const Page&(const Memory&, size_t)>;
+		using page_write_cb_t = std::function<void(Memory&, Page&)>;
 		static constexpr address_t BRK_MAX    = 0x1000000;
 		static constexpr address_t HEAP_START = 0x40000000;
 
@@ -44,18 +44,18 @@ namespace riscv
 		// Gives a chunk-wise view of the data at address, with a callback
 		// invocation at each page boundary. @offs is the current byte offset.
 		void foreach(address_t addr, size_t len,
-			Function<void(Memory&, address_t offs, const uint8_t*, size_t)> callback);
+			std::function<void(Memory&, address_t offs, const uint8_t*, size_t)> callback);
 		void foreach(address_t addr, size_t len,
-			Function<void(const Memory&, address_t offs, const uint8_t*, size_t)>) const;
+			std::function<void(const Memory&, address_t offs, const uint8_t*, size_t)>) const;
 		// Gives a sequential view of the data at address, with the possibility
 		// of optimizing away a copy if the data crosses no page-boundaries.
 		void memview(address_t addr, size_t len,
-			Function<void(Memory&, const uint8_t*, size_t)> callback);
+			std::function<void(Memory&, const uint8_t*, size_t)> callback);
 		void memview(address_t addr, size_t len,
-			Function<void(const Memory&, const uint8_t*, size_t)> callback) const;
+			std::function<void(const Memory&, const uint8_t*, size_t)> callback) const;
 		// Gives const-ref access to pod-type T viewed as sequential memory. (See above)
 		template <typename T>
-		void memview(address_t addr, Function<void(const T&)> callback) const;
+		void memview(address_t addr, std::function<void(const T&)> callback) const;
 		// Compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
@@ -169,10 +169,10 @@ namespace riscv
 		// Helpers
 		template <typename T>
 		static void foreach_helper(T& mem, address_t addr, size_t len,
-			Function<void(T&, address_t, const uint8_t*, size_t)> callback);
+			std::function<void(T&, address_t, const uint8_t*, size_t)> callback);
 		template <typename T>
 		static void memview_helper(T& mem, address_t addr, size_t len,
-			Function<void(T&, const uint8_t*, size_t)> callback);
+			std::function<void(T&, const uint8_t*, size_t)> callback);
 		// ELF stuff
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;

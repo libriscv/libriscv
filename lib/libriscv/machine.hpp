@@ -6,8 +6,9 @@
 
 namespace riscv
 {
-	static constexpr int RISCV32 = 4;
-	static constexpr int RISCV64 = 8;
+	static constexpr int RISCV32  = 4;
+	static constexpr int RISCV64  = 8;
+	static constexpr int RISCV128 = 16;
 
 	template <int W>
 	struct Machine
@@ -196,7 +197,7 @@ namespace riscv
 		printer_func m_printer = m_default_printer;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
-		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
+		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;
 	};
 

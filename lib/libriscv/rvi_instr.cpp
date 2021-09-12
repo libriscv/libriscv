@@ -46,8 +46,7 @@ namespace riscv
 		reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		// printer
-		static std::array<const char*, 8> f3 = {"LD.B", "LD.H", "LD.W", "LD.D", "LD.BU", "LD.HU", "LD.WU", "???"};
+		static std::array<const char*, 8> f3 = {"LD.B", "LD.H", "LD.W", "LD.D", "LD.BU", "LD.HU", "LD.WU", "LD.Q"};
 		return snprintf(buffer, len, "%s %s, [%s%+ld = 0x%lX]",
 						f3[instr.Itype.funct3], RISCV::regname(instr.Itype.rd),
 						RISCV::regname(instr.Itype.rs1), (long) instr.Itype.signed_imm(),
@@ -91,6 +90,21 @@ namespace riscv
 		cpu.machine().memory.template read<uint32_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
+	INSTRUCTION(LOAD_I64,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	{
+		auto& reg = cpu.reg(instr.Itype.rd);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = (RVSIGNTYPE(cpu)) (int64_t) cpu.machine().memory.template read<uint64_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(LOAD_I64_DUMMY,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	{
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		cpu.machine().memory.template read<uint64_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
 	INSTRUCTION(LOAD_U8,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
@@ -123,11 +137,19 @@ namespace riscv
 		reg = cpu.machine().memory.template read<uint64_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
-	INSTRUCTION(LOAD_U64_DUMMY,
+	INSTRUCTION(LOAD_U128,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	{
+		auto& reg = cpu.reg(instr.Itype.rd);
+		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		reg = cpu.machine().memory.template read<__uint128_t>(addr);
+	}, DECODED_INSTR(LOAD_I8).printer);
+
+	INSTRUCTION(LOAD_U128_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
 	{
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		cpu.machine().memory.template read<uint64_t>(addr);
+		cpu.machine().memory.template read<__uint128_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(STORE_I8_IMM,
@@ -139,7 +161,7 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		// printer
-		static std::array<const char*, 4> f3 = {"ST.B", "ST.H", "ST.W", "ST.D"};
+		static std::array<const char*, 5> f3 = {"ST.B", "ST.H", "ST.W", "ST.D", "ST.Q"};
 		const auto idx = std::min(instr.Stype.funct3, instr.to_word(f3.size()));
 		return snprintf(buffer, len, "%s %s, [%s%+ld] (0x%lX)",
 						f3[idx], RISCV::regname(instr.Stype.rs2),
@@ -177,6 +199,14 @@ namespace riscv
 		const auto& value = cpu.reg(instr.Stype.rs2);
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 		cpu.machine().memory.template write<uint64_t>(addr, value);
+	}, DECODED_INSTR(STORE_I8_IMM).printer);
+
+	INSTRUCTION(STORE_I128_IMM,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	{
+		const auto& value = cpu.reg(instr.Stype.rs2);
+		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		cpu.machine().memory.template write<__uint128_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
 #ifdef RISCV_DEBUG
@@ -815,6 +845,84 @@ namespace riscv
 		const int32_t src1 = cpu.reg(instr.Rtype.rs1);
 		const int32_t src2 = cpu.reg(instr.Rtype.rs2);
 		dst = RVSIGNEXTW(cpu) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
+	}, DECODED_INSTR(OP32).printer);
+
+	INSTRUCTION(OP_IMM64,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const int64_t src = cpu.reg(instr.Itype.rs1);
+		switch (instr.Itype.funct3) {
+		case 0x0:
+			// ADDI.D: Add sign-extended 12-bit immediate
+			dst = RVSIGNEXTD(cpu) (src + instr.Itype.shift64_imm());
+			return;
+		case 0x1: // SLLI.D:
+			dst = RVSIGNEXTD(cpu) (src << instr.Itype.shift64_imm());
+			return;
+		case 0x5: // SRLI.D / SRAI.D:
+			if (LIKELY(!instr.Itype.is_srai())) {
+				dst = RVSIGNEXTD(cpu) (src >> instr.Itype.shift64_imm());
+			} else { // SRAIW: preserve the sign bit
+				const uint32_t shifts = instr.Itype.shift64_imm();
+				const bool is_signed = (src & 0x80000000) != 0;
+				dst = RVSIGNEXTD(cpu) RV64I::SRA(is_signed, shifts, src);
+			}
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	}, DECODED_INSTR(OP_IMM32).printer);
+
+	INSTRUCTION(OP64,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Rtype.rd);
+		const int64_t src1 = cpu.reg(instr.Rtype.rs1);
+		const int64_t src2 = cpu.reg(instr.Rtype.rs2);
+
+		switch (instr.Rtype.jumptable_friendly_op()) {
+			case 0x0: // ADD.D / SUB.D
+				dst = RVSIGNEXTD(cpu) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
+				return;
+			case 0x1: // SLL.D
+				dst = RVSIGNEXTD(cpu) (src1 << (src2 & 0x1F));
+				return;
+			case 0x5: // SRL.D
+				if (!instr.Rtype.is_f7()) {
+					dst = RVSIGNEXTD(cpu) (src1 >> (src2 & 0x3F));
+				} else { // SRA.D
+					const bool is_signed = (src1 & 0x80000000) != 0;
+					const uint32_t shifts = src2 & 0x3F; // max 63 shifts!
+					dst = RVSIGNEXTD(cpu) (RV64I::SRA(is_signed, shifts, src1));
+				}
+				return;
+			// M-extension
+			case 0x10: // MUL.D
+				dst = (int64_t) (src1 * src2);
+				return;
+			case 0x14: // DIV.D
+				// division by zero is not an exception
+				if (LIKELY((uint64_t) src2 != 0)) {
+					dst = RVSIGNEXTD(cpu) (src1 / src2);
+				}
+				return;
+			case 0x15: // DIVU.D
+				if (LIKELY((uint64_t) src2 != 0)) {
+					dst = RVSIGNEXTD(cpu) ((uint64_t) src1 / (uint64_t) src2);
+				}
+				return;
+			case 0x16: // REM.D
+				if (LIKELY(src2 != 0)) {
+					if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
+						dst = RVSIGNEXTD(cpu) (src1 % src2);
+					}
+				}
+				return;
+			case 0x17: // REMU.D
+				if (LIKELY((uint32_t) src2 != 0)) {
+					dst = RVSIGNEXTD(cpu) ((uint64_t) src1 % (uint64_t) src2);
+				}
+				return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	}, DECODED_INSTR(OP32).printer);
 
 	INSTRUCTION(FENCE,

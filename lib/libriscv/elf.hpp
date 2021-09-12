@@ -25,8 +25,18 @@ namespace riscv
 		using Sym  = Elf64_Sym;
 	};
 
+	template <>
+	struct Elf<16>
+	{
+		using Ehdr = Elf64_Ehdr;
+		using Phdr = Elf64_Phdr;
+		using Shdr = Elf64_Shdr;
+		using Sym  = Elf64_Sym;
+	};
+
 	using Elf32 = Elf<4>;
 	using Elf64 = Elf<8>;
+	using Elf128 = Elf<16>;
 
 	template <typename Class>
 	inline bool validate_header(const Class* hdr)

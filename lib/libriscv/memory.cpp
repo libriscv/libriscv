@@ -40,11 +40,12 @@ namespace riscv
 		} else {
 			throw MachineException(OUT_OF_MEMORY, "Max memory was zero", 0);
 		}
-		// initialize paging (which clears all pages) before loading binary
-		this->initial_paging();
-		// load ELF binary into virtual memory
-		if (!m_binary.empty())
+		if (!m_binary.empty()) {
+			// Add a zero-page at the start of address space
+			this->initial_paging();
+			// load ELF binary into virtual memory
 			this->binary_loader(options);
+		}
 	}
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, const Machine<W>& other, MachineOptions<W> options)
@@ -158,7 +159,7 @@ namespace riscv
 			this->m_exit_address = hdr->p_vaddr + len;
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
-			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, hdr->p_vaddr + len + 4);
+			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, len + 4);
 #if defined(RISCV_INSTR_CACHE)
 			this->generate_decoder_cache(options, pbase, hdr->p_vaddr, len + 4);
 #endif
@@ -447,9 +448,12 @@ namespace riscv
 		if constexpr (W == 4) {
 			len = snprintf(buffer, sizeof(buffer),
 				"[0x%08X] %s", addr, get_page(addr).to_string().c_str());
-		} else {
+		} else if constexpr (W == 8) {
 			len = snprintf(buffer, sizeof(buffer),
 				"[0x%016lX] %s", addr, get_page(addr).to_string().c_str());
+		} else if constexpr (W == 16) {
+			len = snprintf(buffer, sizeof(buffer),
+				"[0x%016lX] %s", (uint64_t)addr, get_page(addr).to_string().c_str());
 		}
 		return std::string(buffer, len);
 	}
@@ -519,10 +523,14 @@ namespace riscv
 					len = snprintf(buffer, sizeof(buffer),
 						"[%d] 0x%08x + 0x%.3x: %s",
 						N, site.address, site.offset, site.name.c_str());
-				} else {
+				} else if constexpr (W == 8) {
 					len = snprintf(buffer, sizeof(buffer),
 						"[%d] 0x%016lx + 0x%.3x: %s",
 						N, site.address, site.offset, site.name.c_str());
+				} else if constexpr (W == 16) {
+					len = snprintf(buffer, sizeof(buffer),
+						"[%d] 0x%016lx + 0x%.3x: %s",
+						N, (uint64_t)site.address, site.offset, site.name.c_str());
 				}
 				if (len > 0)
 					print_function({buffer, (size_t)len});
@@ -542,4 +550,5 @@ namespace riscv
 
 	template struct Memory<4>;
 	template struct Memory<8>;
+	template struct Memory<16>;
 }

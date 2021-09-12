@@ -1,7 +1,7 @@
 #pragma once
 #include <type_traits>
+#include <functional>
 #include <string>
-#include <vector>
 
 #ifndef LIKELY
 #define LIKELY(x) __builtin_expect((x), 1)
@@ -37,8 +37,8 @@
 #endif
 
 #if defined(RISCV_INSTR_CACHE) && defined(RISCV_INSTR_CACHE_PREGEN)
-// NOTE: this feature disables virtual execute memory
-#define RISCV_INBOUND_JUMPS_ONLY 1
+// WARNING: this feature disables virtual execute memory
+#define RISCV_INBOUND_JUMPS_ONLY
 #endif
 
 namespace riscv
@@ -83,8 +83,6 @@ namespace riscv
 #endif
 }
 
-#include "util/function.hpp"
-
 namespace riscv
 {
 	template <int W> struct Memory;
@@ -99,7 +97,7 @@ namespace riscv
 		bool protect_segments = true;
 		bool verbose_loader = false;
 
-		Function<struct Page&(Memory<W>&, size_t)> page_fault_handler = nullptr;
+		std::function<struct Page&(Memory<W>&, size_t)> page_fault_handler = nullptr;
 
 #ifdef RISCV_BINARY_TRANSLATION
 		unsigned block_size_treshold = 8;

@@ -1,7 +1,6 @@
 #pragma once
 #include "common.hpp"
 #include "types.hpp"
-#include "util/function.hpp"
 #include <cassert>
 #include <memory>
 
@@ -35,7 +34,7 @@ struct Page
 {
 	static constexpr unsigned SIZE  = PageData::SIZE;
 	static constexpr unsigned SHIFT = PageData::SHIFT;
-	using mmio_cb_t = Function<int64_t (Page&, uint32_t, int, int64_t)>;
+	using mmio_cb_t = std::function<int64_t (Page&, uint32_t, int, int64_t)>;
 
 	// create a new blank page
 	Page() { m_page.reset(new PageData {}); };

@@ -1,10 +1,17 @@
 #include "machine.hpp"
-#include "common.hpp"
 #include "decoder_cache.hpp"
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
 #include "rv32i.hpp"
 #include "rv64i.hpp"
+#include "rv128i.hpp"
+
+#define INSTRUCTION_LOGGING()	\
+	if (machine().verbose_instructions) { \
+		const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)); \
+		printf("%s\n", string.c_str()); \
+	}
+
 
 namespace riscv
 {
@@ -122,12 +129,7 @@ namespace riscv
 			}
 		#endif
 		#ifdef RISCV_DEBUG
-			// instruction logging
-			if (machine().verbose_instructions)
-			{
-				const auto string = isa_type<W>::to_string(*this, instruction, cache_entry);
-				printf("%s\n", string.c_str());
-			}
+			INSTRUCTION_LOGGING();
 			// execute instruction
 			cache_entry.handler(*this, instruction);
 		#else
@@ -137,6 +139,9 @@ namespace riscv
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
 			instruction = read_next_instruction_slowpath();
+	#ifdef RISCV_DEBUG
+			INSTRUCTION_LOGGING();
+	#endif
 			// decode & execute instruction directly
 			this->execute(instruction);
 		}
@@ -144,12 +149,7 @@ namespace riscv
 # else
 			instruction = this->read_next_instruction();
 	#ifdef RISCV_DEBUG
-			// instruction logging
-			if (machine().verbose_instructions)
-			{
-				const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction));
-				printf("%s\n", string.c_str());
-			}
+			INSTRUCTION_LOGGING();
 	#endif
 			// decode & execute instruction directly
 			this->execute(instruction);
@@ -217,23 +217,11 @@ namespace riscv
 	{
 		if constexpr (W == 4)
 			return RV32I::to_string(*this, format, instr);
-		else
+		else if constexpr (W == 8)
 			return RV64I::to_string(*this, format, instr);
-	}
-
-	template <int W> __attribute__((cold))
-	std::string Registers<W>::to_string() const
-	{
-		char buffer[600];
-		int  len = 0;
-		for (int i = 1; i < 32; i++) {
-			len += snprintf(buffer+len, sizeof(buffer) - len,
-					"[%s\t%08lX] ", RISCV::regname(i), (long) this->get(i));
-			if (i % 5 == 4) {
-				len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
-			}
-		}
-		return std::string(buffer, len);
+		else if constexpr (W == 16)
+			return RV128I::to_string(*this, format, instr);
+		return "Unknown architecture";
 	}
 
 	template <int W> __attribute__((cold))
@@ -258,4 +246,6 @@ namespace riscv
 	template struct Registers<4>;
 	template struct CPU<8>;
 	template struct Registers<8>;
+	template struct CPU<16>;
+	template struct Registers<16>;
 }

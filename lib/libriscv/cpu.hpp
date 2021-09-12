@@ -5,7 +5,6 @@
 #ifdef RISCV_EXT_ATOMICS
 #include "rva.hpp"
 #endif
-#include "util/function.hpp"
 #ifdef RISCV_DEBUG
 #include <map>
 #endif
@@ -18,9 +17,9 @@ namespace riscv
 	template<int W>
 	struct CPU
 	{
-		using address_t = address_type<W>;          // one unsigned memory address
-		using format_t  = instruction_format; // one machine instruction
-		using breakpoint_t = Function<void(CPU<W>&)>; // machine instruction
+		using address_t = address_type<W>;     // one unsigned memory address
+		using format_t  = instruction_format;  // machine instruction format
+		using breakpoint_t = std::function<void(CPU<W>&)>;
 		using instruction_t = Instruction<W>;
 
 		void simulate(uint64_t);
@@ -78,7 +77,7 @@ namespace riscv
 
 		CPU(Machine<W>&);
 		CPU(Machine<W>&, const Machine<W>& other); // Fork
-		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t end);
+		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t length);
 		const uint8_t* exec_seg_data() const { return m_exec_data; }
 	private:
 		Registers<W> m_regs;
@@ -107,7 +106,7 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
 #endif
-		static_assert((W == 4 || W == 8), "Must be either 4-byte or 8-byte ISA");
+		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 	};
 
 #include "cpu_inline.hpp"
