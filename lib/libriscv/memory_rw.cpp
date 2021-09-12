@@ -6,7 +6,7 @@ namespace riscv
 	const Page& Memory<W>::get_readable_page(address_t address)
 	{
 		const auto pageno = page_number(address);
-		auto& entry = m_rd_cache[pageno % m_rd_cache.size()];
+		auto& entry = m_rd_cache;
 		if (entry.pageno == pageno)
 			return *entry.page;
 		const auto& potential = get_pageno(pageno);
@@ -21,7 +21,7 @@ namespace riscv
 	Page& Memory<W>::get_writable_page(address_t address)
 	{
 		const auto pageno = page_number(address);
-		auto& entry = m_wr_cache[pageno % m_wr_cache.size()];
+		auto& entry = m_wr_cache;
 		if (entry.pageno == pageno)
 			return *entry.page;
 		auto& potential = create_page(pageno);
@@ -71,16 +71,20 @@ namespace riscv
 	template <int W>
 	void Memory<W>::free_pages(address_t dst, size_t len)
 	{
+		address_t pageno = page_number(dst);
+		len /= Page::size();
 		while (len > 0)
 		{
-			const size_t size = std::min(Page::size(), len);
-			const address_t pageno = dst >> Page::SHIFT;
 			auto& page = this->get_pageno(pageno);
 			if (!page.is_cow_page()) {
 				m_pages.erase(pageno);
+				if (m_rd_cache.pageno == pageno)
+					m_rd_cache.page = &Page::cow_page();
+				if (m_wr_cache.pageno == pageno)
+					m_wr_cache.reset();
 			}
-			dst += size;
-			len -= size;
+			pageno ++;
+			len --;
 		}
 	}
 

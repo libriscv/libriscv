@@ -88,12 +88,11 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
 }
 
 template <int W> inline void
-Memory<W>::invalidate_page(address_t pageno, Page& page)
+Memory<W>::invalidate_page(address_t pageno, const Page& page)
 {
-	auto& entry = m_rd_cache[pageno & (m_rd_cache.size()-1)];
 	// it's only possible to a have CoW read-only page
-	if (entry.pageno == pageno) {
-		entry.page = &page;
+	if (m_rd_cache.pageno == pageno) {
+		m_rd_cache.page = &page;
 	}
 }
 

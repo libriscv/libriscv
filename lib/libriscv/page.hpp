@@ -187,8 +187,10 @@ inline int64_t Page::passthrough(uint32_t off, int mode, int64_t val)
 
 // Helper class for caching pages
 template <int W, typename T> struct CachedPage {
-	address_type<W> pageno = -1;
+	address_type<W> pageno = (address_type<W>)-1;
 	T* page = nullptr;
+
+	void reset() { pageno = (address_type<W>)-1; page = nullptr; }
 };
 
 }

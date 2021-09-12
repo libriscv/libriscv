@@ -104,7 +104,7 @@ namespace riscv
 		// Page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(size_t page, Args&& ...);
-		void  invalidate_page(address_t pageno, Page&);
+		void  invalidate_page(address_t pageno, const Page&);
 		void  free_pages(address_t, size_t len);
 		// Page fault when writing to unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
@@ -200,8 +200,8 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
-		std::array<CachedPage<W, const Page>, RISCV_PAGE_CACHE> m_rd_cache;
-		std::array<CachedPage<W, Page>, RISCV_PAGE_CACHE> m_wr_cache;
+		CachedPage<W, const Page> m_rd_cache;
+		CachedPage<W, Page> m_wr_cache;
 
 		std::unordered_map<address_t, Page> m_pages;
 
