@@ -550,7 +550,7 @@ namespace riscv
 				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
 				} else if constexpr (RVIS64BIT(cpu)) {
-					RV64I::MUL128(dst, src1, src2);
+					dst = ((__int128_t) src1 * (__int128_t) src2) >> 64ul;
 				} else {
 					dst = 0;
 				}
@@ -559,7 +559,7 @@ namespace riscv
 				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((int64_t) src1 * (uint64_t) src2) >> 32u;
 				} else if constexpr (RVIS64BIT(cpu)) {
-					RV64I::MUL128(dst, src1, src2);
+					dst = ((__int128_t) src1 * (__uint128_t) src2) >> 64ul;
 				} else {
 					dst = 0;
 				}
@@ -568,7 +568,7 @@ namespace riscv
 				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;
 				} else if constexpr (RVIS64BIT(cpu)) {
-					RV64I::MUL128(dst, src1, src2);
+					dst = ((__uint128_t) src1 * (__uint128_t) src2) >> 64ul;
 				} else {
 					dst = 0;
 				}
