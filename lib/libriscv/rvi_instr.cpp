@@ -1,5 +1,6 @@
 #include "rv32i.hpp"
 #include "rv64i.hpp"
+#include "rv128i.hpp"
 #include "instr_helpers.hpp"
 #include "rvc.hpp"
 
@@ -374,14 +375,19 @@ namespace riscv
 			break;
 		case 0x5: // SRLI / SRAI:
 			if (LIKELY(!instr.Itype.is_srai())) {
-				if constexpr (RVIS64BIT(cpu))
+				if constexpr (RVIS128BIT(cpu))
+					dst = src >> instr.Itype.shift128_imm();
+				else if constexpr (RVIS64BIT(cpu))
 					dst = src >> instr.Itype.shift64_imm();
 				else
 					dst = src >> instr.Itype.shift_imm();
 			} else { // SRAI: preserve the sign bit
 				const auto bit = RVREGTYPE(cpu){1} << (sizeof(src) * 8 - 1);
 				const bool is_signed = (src & bit) != 0;
-				if constexpr (RVIS64BIT(cpu)) {
+				if constexpr (RVIS128BIT(cpu)) {
+					const uint32_t shifts = instr.Itype.shift128_imm();
+					dst = RV128I::SRA(is_signed, shifts, src);
+				} else if constexpr (RVIS64BIT(cpu)) {
 					const uint32_t shifts = instr.Itype.shift64_imm();
 					dst = RV64I::SRA(is_signed, shifts, src);
 				} else {
@@ -469,7 +475,9 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// SLLI: Logical left-shift 5/6-bit immediate
-		if constexpr (RVIS64BIT(cpu))
+		if constexpr (RVIS128BIT(cpu))
+			dst = src << instr.Itype.shift128_imm();
+		else if constexpr (RVIS64BIT(cpu))
 			dst = src << instr.Itype.shift64_imm();
 		else
 			dst = src << instr.Itype.shift_imm();
@@ -487,7 +495,9 @@ namespace riscv
 				dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
 				return;
 			case 0x1: // SLL
-				if constexpr (RVIS64BIT(cpu)) {
+				if constexpr (RVIS128BIT(cpu)) {
+					dst = src1 << (src2 & 0x7F);
+				} else if constexpr (RVIS64BIT(cpu)) {
 					dst = src1 << (src2 & 0x3F);
 				} else {
 					dst = src1 << (src2 & 0x1F);
@@ -504,7 +514,9 @@ namespace riscv
 				return;
 			case 0x5: // SRL / SRA
 				if (!instr.Rtype.is_f7()) { // SRL
-					if constexpr (RVIS64BIT(cpu)) {
+					if constexpr (RVIS128BIT(cpu)) {
+						dst = src1 >> (src2 & 0x7F); // max 127 shifts!
+					} else if constexpr (RVIS64BIT(cpu)) {
 						dst = src1 >> (src2 & 0x3F); // max 63 shifts!
 					} else {
 						dst = src1 >> (src2 & 0x1F); // max 31 shifts!
@@ -512,7 +524,10 @@ namespace riscv
 				} else { // SRA
 					const auto bit = RVREGTYPE(cpu){1} << (sizeof(src1) * 8 - 1);
 					const bool is_signed = (src1 & bit) != 0;
-					if constexpr (RVIS64BIT(cpu)) {
+					if constexpr (RVIS128BIT(cpu)) {
+						const uint32_t shifts = src2 & 0x7F; // max 127 shifts!
+						dst = RV128I::SRA(is_signed, shifts, src1);
+					} else if constexpr (RVIS64BIT(cpu)) {
 						const uint32_t shifts = src2 & 0x3F; // max 63 shifts!
 						dst = RV64I::SRA(is_signed, shifts, src1);
 					} else {
@@ -532,24 +547,30 @@ namespace riscv
 				dst = RVTOSIGNED(src1) * RVTOSIGNED(src2);
 				return;
 			case 0x11: // MULH (signed x signed)
-				if constexpr (!RVIS64BIT(cpu)) {
+				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
-				} else {
+				} else if constexpr (RVIS64BIT(cpu)) {
 					RV64I::MUL128(dst, src1, src2);
+				} else {
+					dst = 0;
 				}
 				return;
 			case 0x12: // MULHSU (signed x unsigned)
-				if constexpr (!RVIS64BIT(cpu)) {
+				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((int64_t) src1 * (uint64_t) src2) >> 32u;
-				} else {
+				} else if constexpr (RVIS64BIT(cpu)) {
 					RV64I::MUL128(dst, src1, src2);
+				} else {
+					dst = 0;
 				}
 				return;
 			case 0x13: // MULHU (unsigned x unsigned)
-				if constexpr (!RVIS64BIT(cpu)) {
+				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;
-				} else {
+				} else if constexpr (RVIS64BIT(cpu)) {
 					RV64I::MUL128(dst, src1, src2);
+				} else {
+					dst = 0;
 				}
 				return;
 			case 0x14: // DIV
@@ -573,11 +594,13 @@ namespace riscv
 				return;
 			case 0x16: // REM
 				if (LIKELY(src2 != 0)) {
-					if constexpr (RVIS64BIT(cpu)) {
+					if constexpr(RVIS32BIT(cpu)) {
+						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
+							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
+					} else if constexpr (RVIS64BIT(cpu)) {
 						if (LIKELY(!(src1 == -9223372036854775808ull && src2 == -1ull)))
 							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
 					} else {
-					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
 					}
 				}
