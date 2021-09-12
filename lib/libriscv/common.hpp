@@ -55,11 +55,11 @@ namespace riscv
 
 #ifdef RISCV_DEBUG
 	static constexpr bool debugging_enabled = true;
+	static constexpr bool memory_alignment_check = true;
 #else
 	static constexpr bool debugging_enabled = false;
-#endif
-	// assert on misaligned reads/writes
 	static constexpr bool memory_alignment_check = false;
+#endif
 
 #ifdef RISCV_EXT_ATOMICS
 	static constexpr bool atomics_enabled = true;

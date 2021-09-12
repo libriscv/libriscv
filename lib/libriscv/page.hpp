@@ -64,7 +64,8 @@ struct Page
 	inline T& aligned_read(uint32_t offset) const
 	{
 		if constexpr (memory_alignment_check) {
-			assert(offset % sizeof(T) == 0);
+			if (offset % sizeof(T))
+				throw MachineException(INVALID_ALIGNMENT, "Misaligned read", offset);
 		}
 		return *(T*) &page().buffer8[offset];
 	}
@@ -73,7 +74,8 @@ struct Page
 	inline void aligned_write(uint32_t offset, T value)
 	{
 		if constexpr (memory_alignment_check) {
-			assert(offset % sizeof(T) == 0);
+			if (offset % sizeof(T))
+				throw MachineException(INVALID_ALIGNMENT, "Misaligned write", offset);
 		}
 		*(T*) &page().buffer8[offset] = value;
 	}
