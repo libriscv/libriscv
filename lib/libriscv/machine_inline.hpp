@@ -45,9 +45,9 @@ void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<size_t
 }
 
 template <int W>
-inline void Machine<W>::system_call(size_t syscall_number)
+inline void Machine<W>::system_call(size_t sysnum)
 {
-	const auto& handler = Machine::syscall_handlers.at(syscall_number);
+	const auto& handler = Machine::syscall_handlers.at(sysnum);
 	handler(*this);
 }
 template <int W>

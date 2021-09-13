@@ -27,11 +27,11 @@ namespace riscv
 		delete[] this->m_decoder_cache;
 		this->m_decoder_cache = &decoder_array[0];
 
-		auto* exec_offset = machine().cpu.exec_seg_data();
-		assert(exec_offset && "Must have set CPU execute segment");
-
 #ifdef RISCV_INSTR_CACHE_PREGEN
 		std::vector<typename CPU<W>::instr_pair> ipairs;
+
+		auto* exec_offset = machine().cpu.exec_seg_data();
+		assert(exec_offset && "Must have set CPU execute segment");
 
 		/* Generate all instruction pointers for executable code.
 		   Cannot step outside of this area when pregen is enabled,
