@@ -121,6 +121,27 @@ void Machine<W>::setup_posix_threads()
 		thread->activate();
 		machine.set_result(0);
 	});
+	// prlimit64
+	this->install_syscall_handler(261,
+	[] (Machine<W>& machine) {
+		const int resource = machine.template sysarg<int> (1);
+		const auto old_addr = machine.template sysarg<address_type<W>> (3);
+		struct {
+			address_type<W> cur = 0;
+			address_type<W> max = 0;
+		} lim;
+		constexpr int RISCV_RLIMIT_STACK = 3;
+		if (old_addr != 0) {
+			if (resource == RISCV_RLIMIT_STACK) {
+				lim.cur = 0x200000;
+				lim.max = 0x200000;
+			}
+			machine.copy_to_guest(old_addr, &lim, sizeof(lim));
+			machine.set_result(0);
+		} else {
+			machine.set_result(-EINVAL);
+		}
+	});
 }
 
 template struct Machine<4>;
