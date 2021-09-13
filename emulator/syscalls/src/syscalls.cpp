@@ -8,15 +8,10 @@
 #include <sys/uio.h>
 using namespace riscv;
 
-template <int W> struct guest_iovec;
-
-template <> struct guest_iovec<4> {
-    uint32_t iov_base;
-    int32_t  iov_len;
-};
-template <> struct guest_iovec<8> {
-    uint64_t iov_base;
-    int64_t  iov_len;
+template <int W>
+struct guest_iovec {
+	address_type<W> iov_base;
+	address_type<W> iov_len;
 };
 
 template <int W>
@@ -34,13 +29,13 @@ void syscall_write(Machine<W>& machine)
 	SYSPRINT("SYSCALL write: addr = 0x%X, len = %zu\n", address, len);
 	// We only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
-        /* Zero-copy retrieval of buffers */
+		/* Zero-copy retrieval of buffers */
 		riscv::vBuffer buffers[4];
 		size_t cnt =
-            machine.memory.gather_buffers_from_range(4, buffers, address, len);
-        for (size_t i = 0; i < cnt; i++) {
-            machine.print(buffers[i].ptr, buffers[i].len);
-        }
+			machine.memory.gather_buffers_from_range(4, buffers, address, len);
+		for (size_t i = 0; i < cnt; i++) {
+			machine.print(buffers[i].ptr, buffers[i].len);
+		}
 		machine.set_result(len);
 		return;
 	}
@@ -62,27 +57,27 @@ void syscall_writev(Machine<W>& machine)
 	}
 	// we only accept standard pipes, for now :)
 	if (fd >= 0 && fd < 3) {
-        const size_t size = sizeof(guest_iovec<W>) * count;
+		const size_t size = sizeof(guest_iovec<W>) * count;
 
-        std::vector<guest_iovec<W>> vec(count);
-        machine.memory.memcpy_out(vec.data(), iov_g, size);
+		std::vector<guest_iovec<W>> vec(count);
+		machine.memory.memcpy_out(vec.data(), iov_g, size);
 
-        ssize_t res = 0;
-        for (const auto& iov : vec)
-        {
-            auto src_g = (address_type<W>) iov.iov_base;
-            auto len_g = (size_t) iov.iov_len;
-            /* Zero-copy retrieval of buffers */
-            riscv::vBuffer buffers[4];
-    		size_t cnt =
-                machine.memory.gather_buffers_from_range(4, buffers, src_g, len_g);
-            for (size_t i = 0; i < cnt; i++) {
-                machine.print(buffers[i].ptr, buffers[i].len);
-            }
+		ssize_t res = 0;
+		for (const auto& iov : vec)
+		{
+			auto src_g = (address_type<W>) iov.iov_base;
+			auto len_g = (size_t) iov.iov_len;
+			/* Zero-copy retrieval of buffers */
+			riscv::vBuffer buffers[4];
+			size_t cnt =
+				machine.memory.gather_buffers_from_range(4, buffers, src_g, len_g);
+			for (size_t i = 0; i < cnt; i++) {
+				machine.print(buffers[i].ptr, buffers[i].len);
+			}
 			res += len_g;
-        }
+		}
 		machine.set_result(res);
-        return;
+		return;
 	}
 	machine.set_result(-EBADF);
 }
@@ -143,7 +138,7 @@ void syscall_gettimeofday(Machine<W>& machine)
 	} else {
 		machine.copy_to_guest(buffer, &tv, sizeof(tv));
 	}
-    machine.set_result(0);
+	machine.set_result(0);
 }
 
 template <int W>
@@ -152,7 +147,7 @@ void syscall_openat(Machine<W>& machine)
 	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL openat called, fd = %d  \n", fd);
 	(void) fd;
-    machine.set_result(-EBADF);
+	machine.set_result(-EBADF);
 }
 
 template <int W>
@@ -161,7 +156,7 @@ void syscall_readlinkat(Machine<W>& machine)
 	const int fd = machine.template sysarg<int>(0);
 	SYSPRINT("SYSCALL readlinkat called, fd = %d  \n", fd);
 	(void) fd;
-    machine.set_result(-EBADF);
+	machine.set_result(-EBADF);
 }
 
 template <int W>
@@ -211,23 +206,23 @@ void syscall_uname(Machine<W>& machine)
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL uname called, buffer = 0x%X\n", buffer);
 	}
-    static constexpr int UTSLEN = 65;
-    struct uts32 {
-        char sysname [UTSLEN];
-        char nodename[UTSLEN];
-        char release [UTSLEN];
-        char version [UTSLEN];
-        char machine [UTSLEN];
-        char domain  [UTSLEN];
-    } uts;
-    strcpy(uts.sysname, "RISC-V C++ Emulator");
-    strcpy(uts.nodename,"libriscv");
-    strcpy(uts.release, "5.0.0");
-    strcpy(uts.version, "");
-    strcpy(uts.machine, "rv32imafdc");
-    strcpy(uts.domain,  "(none)");
+	static constexpr int UTSLEN = 65;
+	struct uts32 {
+		char sysname [UTSLEN];
+		char nodename[UTSLEN];
+		char release [UTSLEN];
+		char version [UTSLEN];
+		char machine [UTSLEN];
+		char domain  [UTSLEN];
+	} uts;
+	strcpy(uts.sysname, "RISC-V C++ Emulator");
+	strcpy(uts.nodename,"libriscv");
+	strcpy(uts.release, "5.0.0");
+	strcpy(uts.version, "");
+	strcpy(uts.machine, "rv32imafdc");
+	strcpy(uts.domain,  "(none)");
 
-    machine.copy_to_guest(buffer, &uts, sizeof(uts32));
+	machine.copy_to_guest(buffer, &uts, sizeof(uts32));
 	machine.set_result(0);
 }
 
@@ -255,25 +250,25 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto addr_g = machine.template sysarg<address_type<W>>(0);
 		const auto length = machine.template sysarg<address_type<W>>(1);
 		const auto prot   = machine.template sysarg<int>(2);
-	    const auto flags  = machine.template sysarg<int>(3);
+		const auto flags  = machine.template sysarg<int>(3);
 		SYSPRINT(">>> mmap(addr %#X, len %u, prot %#x, flags %#X)\n",
-	            addr_g, length, prot, flags);
-        if (length % Page::size() != 0) {
-            machine.set_result(-1); // = MAP_FAILED;
-            return;
-        }
-        auto& nextfree = machine.memory.mmap_address();
-	    if (addr_g == 0 || addr_g == nextfree)
-	    {
+				addr_g, length, prot, flags);
+		if (length % Page::size() != 0) {
+			machine.set_result(-1); // = MAP_FAILED;
+			return;
+		}
+		auto& nextfree = machine.memory.mmap_address();
+		if (addr_g == 0 || addr_g == nextfree)
+		{
 			// anon pages need to be zeroed
 			if (flags & MAP_ANONYMOUS) {
 				// ... but they are already CoW
 				//machine.memory.memset(nextfree, 0, length);
 			}
 			machine.set_result(nextfree);
-	        nextfree += length;
-	        return;
-	    }
+			nextfree += length;
+			return;
+		}
 		machine.set_result(-1); // = MAP_FAILED;
 	});
 	// mremap
@@ -282,9 +277,9 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto old_addr = machine.template sysarg<address_type<W>>(0);
 		const auto old_size = machine.template sysarg<address_type<W>>(1);
 		const auto new_size = machine.template sysarg<address_type<W>>(2);
-	    const auto flags    = machine.template sysarg<int>(3);
+		const auto flags    = machine.template sysarg<int>(3);
 		SYSPRINT(">>> mremap(addr %#X, len %u, newsize %u, flags %#X)\n",
-	            old_addr, old_size, new_size, flags);
+				old_addr, old_size, new_size, flags);
 		auto& nextfree = machine.memory.mmap_address();
 		// We allow the common case of reallocating the
 		// last mapping to a bigger one
