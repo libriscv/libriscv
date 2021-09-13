@@ -1,9 +1,13 @@
 #include "rv32i.hpp"
 #include "instr_helpers.hpp"
-static const char atomic_type[] { '?', '?', 'W', 'D' };
+static const char atomic_type[] { '?', '?', 'W', 'D', 'Q', '?', '?', '?' };
 static const char* atomic_name2[] {
 	"AMOADD", "AMOXOR", "AMOOR", "AMOAND", "AMOMIN", "AMOMAX", "AMOMINU", "AMOMAXU"
 };
+#define AMOSIZE_W   0x2
+#define AMOSIZE_D   0x3
+#define AMOSIZE_Q   0x4
+
 
 namespace riscv
 {
@@ -25,6 +29,8 @@ namespace riscv
 		if (instr.Atype.rd != 0) {
 			if constexpr (sizeof(Type) == 4)
 				this->reg(instr.Atype.rd) = (int32_t) mem;
+			else if constexpr (sizeof(Type) == 8)
+				this->reg(instr.Atype.rd) = (int64_t) mem;
 			else
 				this->reg(instr.Atype.rd) = mem;
 		}
@@ -43,7 +49,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "%s.%c [%s] %s, %s",
 						atomic_name2[instr.Atype.funct5 >> 2],
-						atomic_type[instr.Atype.funct3 & 3],
+						atomic_type[instr.Atype.funct3 & 7],
                         RISCV::regname(instr.Atype.rs1),
                         RISCV::regname(instr.Atype.rs2),
                         RISCV::regname(instr.Atype.rd));
@@ -119,6 +125,46 @@ namespace riscv
 	},
 	DECODED_ATOMIC(AMOADD_W).printer);
 
+	ATOMIC_INSTR(AMOADD_Q,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		cpu.template amo<__uint128_t>(instr,
+		[] (auto& cpu, auto& value, auto rs2) {
+			value += cpu.reg(rs2);
+		});
+	},
+	DECODED_ATOMIC(AMOADD_W).printer);
+
+	ATOMIC_INSTR(AMOXOR_Q,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		cpu.template amo<__uint128_t>(instr,
+		[] (auto& cpu, auto& value, auto rs2) {
+			value ^= cpu.reg(rs2);
+		});
+	},
+	DECODED_ATOMIC(AMOADD_W).printer);
+
+	ATOMIC_INSTR(AMOOR_Q,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		cpu.template amo<__uint128_t>(instr,
+		[] (auto& cpu, auto& value, auto rs2) {
+			value |= cpu.reg(rs2);
+		});
+	},
+	DECODED_ATOMIC(AMOADD_W).printer);
+
+	ATOMIC_INSTR(AMOAND_Q,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		cpu.template amo<__uint128_t>(instr,
+		[] (auto& cpu, auto& value, auto rs2) {
+			value &= cpu.reg(rs2);
+		});
+	},
+	DECODED_ATOMIC(AMOADD_W).printer);
+
 	ATOMIC_INSTR(AMOSWAP_W,
 	[] (auto& cpu, rv32i_instruction instr)
 	{
@@ -133,7 +179,7 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "AMOSWAP.%c [%s] %s, %s",
-						atomic_type[instr.Atype.funct3 & 3],
+						atomic_type[instr.Atype.funct3 & 7],
                         RISCV::regname(instr.Atype.rs1),
                         RISCV::regname(instr.Atype.rs2),
                         RISCV::regname(instr.Atype.rd));
@@ -153,28 +199,55 @@ namespace riscv
 	},
 	DECODED_ATOMIC(AMOSWAP_W).printer);
 
+	ATOMIC_INSTR(AMOSWAP_Q,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		cpu.template amo<__uint128_t>(instr,
+		[] (auto& cpu, auto& value, auto rs2) {
+			if (rs2 != 0) {
+				value = cpu.reg(rs2);
+			} else {
+				value = 0;
+			}
+		});
+	},
+	DECODED_ATOMIC(AMOSWAP_W).printer);
+
     ATOMIC_INSTR(LOAD_RESV,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto addr = cpu.reg(instr.Atype.rs1);
 		// switch on atomic type
-		if (instr.Atype.funct3 == 0x2)
+		if (instr.Atype.funct3 == AMOSIZE_W)
 		{
 			cpu.atomics().load_reserve(4, addr);
 			auto value = cpu.machine().memory.template read<uint32_t> (addr);
 			if (instr.Atype.rd != 0)
 				cpu.reg(instr.Atype.rd) = (int32_t) value;
 		}
-		else if (instr.Atype.funct3 == 0x3)
+		else if (instr.Atype.funct3 == AMOSIZE_D)
 		{
-			cpu.atomics().load_reserve(8, addr);
-			auto value = cpu.machine().memory.template read<uint64_t> (addr);
-			if (instr.Atype.rd != 0)
-				cpu.reg(instr.Atype.rd) = value;
+			if constexpr (RVISGE64BIT(cpu)) {
+				cpu.atomics().load_reserve(8, addr);
+				auto value = cpu.machine().memory.template read<uint64_t> (addr);
+				if (instr.Atype.rd != 0)
+					cpu.reg(instr.Atype.rd) = value;
+			} else
+				cpu.trigger_exception(ILLEGAL_OPCODE);
+		}
+		else if (instr.Atype.funct3 == AMOSIZE_Q)
+		{
+			if constexpr (RVIS128BIT(cpu)) {
+				cpu.atomics().load_reserve(16, addr);
+				auto value = cpu.machine().memory.template read<__uint128_t> (addr);
+				if (instr.Atype.rd != 0)
+					cpu.reg(instr.Atype.rd) = value;
+			} else
+				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "LR.%c [%s], %s",
-				atomic_type[instr.Atype.funct3 & 3],
+				atomic_type[instr.Atype.funct3 & 7],
 				RISCV::regname(instr.Atype.rs1),
 				RISCV::regname(instr.Atype.rd));
 	});
@@ -183,26 +256,39 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		const auto addr = cpu.reg(instr.Atype.rs1);
 		bool resv = false;
-		if (instr.Atype.funct3 == 0x2)
+		if (instr.Atype.funct3 == AMOSIZE_W)
 		{
 			resv = cpu.atomics().store_conditional(4, addr);
 			if (resv) {
 				cpu.machine().memory.template write<uint32_t> (addr, cpu.reg(instr.Atype.rs2));
 			}
 		}
-		else if (instr.Atype.funct3 == 0x3)
+		else if (instr.Atype.funct3 == AMOSIZE_D)
 		{
-			resv = cpu.atomics().store_conditional(8, addr);
-			if (resv) {
-				cpu.machine().memory.template write<uint64_t> (addr, cpu.reg(instr.Atype.rs2));
-			}
+			if constexpr (RVISGE64BIT(cpu)) {
+				resv = cpu.atomics().store_conditional(8, addr);
+				if (resv) {
+					cpu.machine().memory.template write<uint64_t> (addr, cpu.reg(instr.Atype.rs2));
+				}
+			} else
+				cpu.trigger_exception(ILLEGAL_OPCODE);
+		}
+		else if (instr.Atype.funct3 == AMOSIZE_Q)
+		{
+			if constexpr (RVIS128BIT(cpu)) {
+				resv = cpu.atomics().store_conditional(16, addr);
+				if (resv) {
+					cpu.machine().memory.template write<__uint128_t> (addr, cpu.reg(instr.Atype.rs2));
+				}
+			} else
+				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 		if (instr.Atype.rd != 0)
 			cpu.reg(instr.Atype.rd) = (resv) ? 0 : 1;
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		return snprintf(buffer, len, "SC.%c [%s], %s res=%s",
-				atomic_type[instr.Atype.funct3 & 3],
+				atomic_type[instr.Atype.funct3 & 7],
 				RISCV::regname(instr.Atype.rs1),
 				RISCV::regname(instr.Atype.rs2),
 				RISCV::regname(instr.Atype.rd));

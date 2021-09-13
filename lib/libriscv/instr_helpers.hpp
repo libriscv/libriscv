@@ -20,3 +20,4 @@
 #define RVIS32BIT(x)  (sizeof(RVREGTYPE(x)) == 4)
 #define RVIS64BIT(x)  (sizeof(RVREGTYPE(x)) == 8)
 #define RVIS128BIT(x) (sizeof(RVREGTYPE(x)) == 16)
+#define RVISGE64BIT(x)  (sizeof(RVREGTYPE(x)) >= 8)

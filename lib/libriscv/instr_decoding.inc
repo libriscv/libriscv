@@ -259,9 +259,8 @@
 				case RV32A_ATOMIC:
 					switch (instruction.Atype.funct3)
 					{
-					case 0x2:
-						switch (instruction.Atype.funct5)
-						{
+					case AMOSIZE_W:
+						switch (instruction.Atype.funct5) {
 						case 0b00010:
 							if (instruction.Atype.rs2 == 0)
 								DECODER(DECODED_ATOMIC(LOAD_RESV));
@@ -280,10 +279,9 @@
 							DECODER(DECODED_ATOMIC(AMOAND_W));
 						}
 						break;
-					case 0x3:
-					if constexpr (sizeof(address_t) == 8) {
-						switch (instruction.Atype.funct5)
-						{
+					case AMOSIZE_D:
+					if constexpr (sizeof(address_t) >= 8) {
+						switch (instruction.Atype.funct5) {
 						case 0b00010:
 							if (instruction.Atype.rs2 == 0)
 								DECODER(DECODED_ATOMIC(LOAD_RESV));
@@ -300,6 +298,28 @@
 							DECODER(DECODED_ATOMIC(AMOOR_D));
 						case 0b01100:
 							DECODER(DECODED_ATOMIC(AMOAND_D));
+						}
+						break;
+					}
+					case AMOSIZE_Q:
+					if constexpr (sizeof(address_t) == 16) {
+						switch (instruction.Atype.funct5) {
+						case 0b00010:
+							if (instruction.Atype.rs2 == 0)
+								DECODER(DECODED_ATOMIC(LOAD_RESV));
+							DECODER(DECODED_INSTR(ILLEGAL));
+						case 0b00011:
+							DECODER(DECODED_ATOMIC(STORE_COND));
+						case 0b00000:
+							DECODER(DECODED_ATOMIC(AMOADD_Q));
+						case 0b00001:
+							DECODER(DECODED_ATOMIC(AMOSWAP_Q));
+						case 0b00100:
+							DECODER(DECODED_ATOMIC(AMOXOR_Q));
+						case 0b01000:
+							DECODER(DECODED_ATOMIC(AMOOR_Q));
+						case 0b01100:
+							DECODER(DECODED_ATOMIC(AMOAND_Q));
 						}
 						break;
 					}
