@@ -5,8 +5,6 @@
 git submodule update --init
 if [[ -z "${NO_BUILD}" ]]; then
 	pushd emulator
-	mkdir -p build
-	pushd build
-	cmake .. && make -j4
+	source build.sh
 	popd
 fi

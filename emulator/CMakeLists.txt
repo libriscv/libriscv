@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.9)
 project(riscv CXX)
 
 option(LTO         "Enable interprocedural optimizations" ON)
-option(NATIVE      "Enable native instructions" ON)
+option(NATIVE      "Enable native instructions" OFF)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
 option(LINKER_GC   "Enable linker section garbage collection" OFF)
@@ -27,7 +27,7 @@ endif()
 
 # GC-sections
 if (LINKER_GC)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections" "-fdata-sections")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-gc-sections")
 endif()
 
