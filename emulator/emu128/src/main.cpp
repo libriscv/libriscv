@@ -1,6 +1,7 @@
 #include <libriscv/machine.hpp>
 #include "program.h" /* program_bin */
 using namespace riscv;
+static std::string load_file(const std::string&);
 
 static void init_program_at(Machine<RISCV128>& machine,
 	__uint128_t base_addr, const uint8_t* bin, size_t bin_len)
@@ -11,12 +12,19 @@ static void init_program_at(Machine<RISCV128>& machine,
 	machine.cpu.jump(base_addr);
 }
 
-int main(int /*argc*/, const char** /*argv*/)
+int main(int argc, const char** argv)
 {
 	Machine<RISCV128> machine { std::string_view{} };
 
 	static const __uint128_t BASE_ADDRESS = 0x1000000;
-	init_program_at(machine, BASE_ADDRESS, _tmp_program_bin, _tmp_program_bin_len);
+	if (argc == 1) {
+		init_program_at(machine, BASE_ADDRESS,
+			_tmp_program_bin, _tmp_program_bin_len);
+	} else {
+		static auto vec = load_file(argv[1]);
+		init_program_at(machine, BASE_ADDRESS,
+			(const uint8_t*)vec.data(), vec.size());
+	}
 
 	/* Install a system call handler that stops the machine. */
 	Machine<RISCV128>::install_syscall_handler(1,
@@ -51,4 +59,27 @@ int main(int /*argc*/, const char** /*argv*/)
 
 	printf("\n\nFinal machine registers:\n%s\n",
 		machine.cpu.registers().to_string().c_str());
+}
+
+#include <stdexcept>
+#include <unistd.h>
+std::string load_file(const std::string& filename)
+{
+    size_t size = 0;
+    FILE* f = fopen(filename.c_str(), "rb");
+    if (f == NULL) throw std::runtime_error("Could not open file: " + filename);
+
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    std::string result;
+	result.resize(size);
+    if (size != fread(result.data(), 1, size, f))
+    {
+        fclose(f);
+        throw std::runtime_error("Error when reading from file: " + filename);
+    }
+    fclose(f);
+    return result;
 }
