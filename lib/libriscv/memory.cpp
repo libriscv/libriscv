@@ -28,7 +28,7 @@ namespace riscv
 			const address_t pages_max = options.memory_max >> Page::SHIFT;
 			assert(pages_max >= 1);
 			this->m_page_fault_handler =
-				[pages_max] (auto& mem, const size_t page) -> Page&
+				[pages_max] (auto& mem, const address_t page) -> Page&
 				{
 					// create page on-demand
 					if (mem.pages_active() < pages_max)

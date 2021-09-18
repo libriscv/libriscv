@@ -17,8 +17,8 @@ namespace riscv
 	{
 		using address_t = address_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
-		using page_fault_cb_t = std::function<Page&(Memory&, size_t)>;
-		using page_readf_cb_t = std::function<const Page&(const Memory&, size_t)>;
+		using page_fault_cb_t = std::function<Page&(Memory&, address_t)>;
+		using page_readf_cb_t = std::function<const Page&(const Memory&, address_t)>;
 		using page_write_cb_t = std::function<void(Memory&, Page&)>;
 		static constexpr address_t BRK_MAX    = 0x1000000;
 		static constexpr address_t HEAP_START = 0x40000000;
@@ -103,7 +103,7 @@ namespace riscv
 		std::string get_page_info(address_t addr) const;
 		// Page creation & destruction
 		template <typename... Args>
-		Page& allocate_page(size_t page, Args&& ...);
+		Page& allocate_page(address_t page, Args&& ...);
 		void  invalidate_page(address_t pageno, const Page&);
 		void  free_pages(address_t, size_t len);
 		// Page fault when writing to unused memory

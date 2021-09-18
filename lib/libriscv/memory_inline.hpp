@@ -98,7 +98,7 @@ Memory<W>::invalidate_page(address_t pageno, const Page& page)
 
 template <int W>
 template <typename... Args> inline
-Page& Memory<W>::allocate_page(const size_t page, Args&&... args)
+Page& Memory<W>::allocate_page(const address_t page, Args&&... args)
 {
 	const auto& it = pages().try_emplace(page, std::forward<Args> (args)...);
 	// if this page was read-cached, invalidate it
