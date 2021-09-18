@@ -163,11 +163,9 @@ namespace riscv
 		cpu.machine().memory.template write<uint8_t>(addr, value);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		// printer
-		static std::array<const char*, 5> f3 = {"ST.B", "ST.H", "ST.W", "ST.D", "ST.Q"};
-		const auto idx = std::min(instr.Stype.funct3, instr.to_word(f3.size()));
+		static std::array<const char*, 8> f3 = {"ST.B", "ST.H", "ST.W", "ST.D", "ST.Q", "???", "???", "???"};
 		return snprintf(buffer, len, "%s %s, [%s%+ld] (0x%lX)",
-						f3[idx], RISCV::regname(instr.Stype.rs2),
+						f3[instr.Stype.funct3], RISCV::regname(instr.Stype.rs2),
 						RISCV::regname(instr.Stype.rs1), (long) instr.Stype.signed_imm(),
 						(long) cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm());
 	});
@@ -646,6 +644,8 @@ namespace riscv
 		static std::array<const char*, 2> etype = {"ECALL", "EBREAK"};
 		if (instr.Itype.imm < 2 && instr.Itype.funct3 == 0) {
 			return snprintf(buffer, len, "SYS %s", etype.at(instr.Itype.imm));
+		} else if (instr.Itype.imm == 0x105 && instr.Itype.funct3 == 0) {
+			return snprintf(buffer, len, "SYS WFI");
 		} else if (instr.Itype.funct3 == 0x2) {
 			// CSRRS
 			switch (instr.Itype.imm) {
@@ -680,7 +680,7 @@ namespace riscv
 		cpu.machine().ebreak();
 	}, DECODED_INSTR(SYSTEM).printer);
 
-	INSTRUCTION(STOP,
+	INSTRUCTION(WFI,
 	[] (auto& cpu, rv32i_instruction) RVINSTR_ATTR() {
 		cpu.machine().stop();
 	}, DECODED_INSTR(SYSTEM).printer);

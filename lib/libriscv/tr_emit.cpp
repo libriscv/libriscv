@@ -458,7 +458,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 				} if (instr.Itype.imm == 1) {
 					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
 					return; // !!
-				} if (instr.Itype.imm == 0x7ff) {
+				} if (instr.Itype.imm == 261) {
 					code += "api.stop(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
 					return; // !!
 				} else {
