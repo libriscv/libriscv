@@ -120,7 +120,7 @@ namespace riscv
 			}
 			int32_t jump_offset() const noexcept {
 				constexpr uint32_t ext = 0xFFF00000;
-				const int64_t  jo  = (imm3 << 1) | (imm2 << 11) | (imm1 << 12);
+				const int32_t jo  = (imm3 << 1) | (imm2 << 11) | (imm1 << 12);
 				return jo | (sign() ? ext : 0);
 			}
 		} Jtype;

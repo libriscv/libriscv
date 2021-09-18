@@ -155,7 +155,7 @@ template <int W>
 std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 {
 	std::string result;
-	size_t pageno = page_number(addr);
+	address_t pageno = page_number(addr);
 	// fast-path
 	{
 		const size_t offset = addr & (Page::size()-1);
@@ -201,7 +201,7 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	if (UNLIKELY(datalen + 1 >= maxlen))
 		protection_fault(addr);
 
-	size_t pageno = page_number(addr);
+	address_t pageno = page_number(addr);
 	const Page& page = this->get_pageno(pageno);
 	if (UNLIKELY(!page.attr.read))
 		protection_fault(addr);
@@ -233,7 +233,7 @@ size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 
 	do {
 		const address_t offset = addr & (Page::size()-1);
-		size_t pageno = page_number(addr);
+		const address_t pageno = page_number(addr);
 		const Page& page = this->get_pageno(pageno);
 		if (UNLIKELY(!page.attr.read))
 			protection_fault(addr);
