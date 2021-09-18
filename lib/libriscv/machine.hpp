@@ -126,7 +126,7 @@ namespace riscv
 		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
 
 		// Stdout, stderr
-		void print(const char*, size_t);
+		void print(const char*, size_t) const;
 		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
 
 		// Call an installed system call handler

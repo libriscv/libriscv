@@ -27,7 +27,7 @@ inline void Machine<W>::reset()
 }
 
 template <int W>
-inline void Machine<W>::print(const char* buffer, size_t len)
+inline void Machine<W>::print(const char* buffer, size_t len) const
 {
 	this->m_printer(buffer, len);
 }
