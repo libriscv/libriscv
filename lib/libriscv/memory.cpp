@@ -176,7 +176,7 @@ namespace riscv
 		}
 		// We would normally never allow this
 		if (attr.exec && attr.write) {
-			throw std::runtime_error("Insecure ELF has writable machine code");
+			fprintf(stderr, "WARNING: Insecure ELF has writable machine code\n");
 		}
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED

@@ -1,6 +1,7 @@
 #pragma once
 #include <type_traits>
 #include "util/elf.h"
+#include "util/elf128.h"
 
 namespace riscv
 {
@@ -28,10 +29,10 @@ namespace riscv
 	template <>
 	struct Elf<16>
 	{
-		using Ehdr = Elf64_Ehdr;
-		using Phdr = Elf64_Phdr;
-		using Shdr = Elf64_Shdr;
-		using Sym  = Elf64_Sym;
+		using Ehdr = Elf128_Ehdr;
+		using Phdr = Elf128_Phdr;
+		using Shdr = Elf128_Shdr;
+		using Sym  = Elf128_Sym;
 	};
 
 	using Elf32 = Elf<4>;
@@ -48,7 +49,10 @@ namespace riscv
 			return false;
 		if constexpr (std::is_same_v<Class, Elf32_Ehdr>)
 			return hdr->e_ident[EI_CLASS] == ELFCLASS32;
-		else
+		else if constexpr (std::is_same_v<Class, Elf64_Ehdr>)
 			return hdr->e_ident[EI_CLASS] == ELFCLASS64;
+		else if constexpr (std::is_same_v<Class, Elf128_Ehdr>)
+			return hdr->e_ident[EI_CLASS] == ELFCLASS128;
+		return false;
 	}
 }

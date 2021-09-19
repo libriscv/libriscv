@@ -1,5 +1,4 @@
 #include <libriscv/machine.hpp>
-#include "program.h" /* program_bin */
 using namespace riscv;
 static std::string load_file(const std::string&);
 
@@ -14,17 +13,13 @@ static void init_program_at(Machine<RISCV128>& machine,
 
 int main(int argc, const char** argv)
 {
-	Machine<RISCV128> machine { std::string_view{} };
-
-	static const __uint128_t BASE_ADDRESS = 0x100000;
-	if (argc == 1) {
-		init_program_at(machine, BASE_ADDRESS,
-			_tmp_program_bin, _tmp_program_bin_len);
-	} else {
-		static auto vec = load_file(argv[1]);
-		init_program_at(machine, BASE_ADDRESS,
-			(const uint8_t*)vec.data(), vec.size());
+	if (argc < 2) {
+		fprintf(stderr, "128-bit ELF required\n");
+		exit(1);
 	}
+
+	auto binary = load_file(argv[1]);
+	Machine<RISCV128> machine { binary };
 
 	/* Install a system call handler that stops the machine. */
 	Machine<RISCV128>::install_syscall_handler(1,
