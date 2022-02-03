@@ -11,9 +11,10 @@ set(SOURCES
 	src/main.cpp
 )
 
-set(CMAKE_CXX_FLAGS "-O2")
-if (RISCV_DEBUG)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O1")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+	# Use the compiler defaults for debugging
+else()
+	set(CMAKE_CXX_FLAGS "-O2")
 endif()
 if (SANITIZE)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined")
