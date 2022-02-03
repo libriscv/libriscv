@@ -13,6 +13,25 @@ if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
 endif()
 
+include(FetchContent)
+FetchContent_Declare(
+	robinhood
+	GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
+	CONFIGURE_COMMAND ""
+	BUILD_COMMAND ""
+	GIT_TAG master
+	GIT_SHALLOW TRUE
+	GIT_PROGRESS TRUE)
+
+FetchContent_GetProperties(robinhood)
+if (NOT robinhood_POPULATED)
+	FetchContent_Populate(robinhood)
+endif()
+
+add_library(robinhood INTERFACE)
+target_include_directories(robinhood INTERFACE ${robinhood_SOURCE_DIR}/src/include)
+message(STATUS "robinhood sources: ${robinhood_SOURCE_DIR}")
+
 set (SOURCES
 		libriscv/cpu.cpp
 		libriscv/decoder_cache.cpp
@@ -46,6 +65,7 @@ add_library(riscv ${SOURCES})
 set_target_properties(riscv PROPERTIES CXX_STANDARD 17)
 target_include_directories(riscv PUBLIC .)
 target_compile_options(riscv PRIVATE -Wall -Wextra)
+target_link_libraries(riscv PUBLIC robinhood)
 if (RISCV_DEBUG)
 	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
 endif()

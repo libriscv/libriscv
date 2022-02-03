@@ -334,7 +334,10 @@ namespace riscv
 			auto attr = page.attr;
 			attr.is_cow = true;
 			attr.non_owning = true;
-			m_pages.try_emplace(it.first, attr, (PageData*) page.data());
+			m_pages.emplace(std::piecewise_construct,
+				std::forward_as_tuple(it.first),
+				std::forward_as_tuple(attr, (PageData*) page.data())
+			);
 		}
 		this->m_start_address = master.memory.m_start_address;
 		this->m_stack_address = master.memory.m_stack_address;
@@ -353,6 +356,8 @@ namespace riscv
 		this->m_ropages.end   = master.memory.m_ropages.end;
 		this->m_ropages.pages.reset(master.memory.m_ropages.pages.get());
 #endif
+		// invalidate all cached pages, because references are invalidated
+		this->invalidate_cache();
 	}
 
 	template <int W>

@@ -11,9 +11,9 @@ sudo apt install -y graphviz
 echo -e "\n>>> Building RISC-V Linux emulator..."
 
 pushd emulator
-mkdir -p build
-pushd build
-cmake .. -G Ninja -DGPROF=ON -DCMAKE_BUILD_TYPE=Debug -DRISCV_EXPERIMENTAL=ON
+mkdir -p build_callgraph
+pushd build_callgraph
+cmake .. -G Ninja -DGPROF=ON -DCMAKE_BUILD_TYPE=Debug
 ninja
 popd
 

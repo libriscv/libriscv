@@ -3,6 +3,7 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
+#include <robin_hood.h>
 #include <map>
 #include "util/buffer.hpp" // <string>
 
@@ -104,7 +105,7 @@ namespace riscv
 		// Page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(address_t page, Args&& ...);
-		void  invalidate_page(address_t pageno, const Page&);
+		void  invalidate_cache(address_t pageno = -1, Page* = nullptr);
 		void  free_pages(address_t, size_t len);
 		// Page fault when writing to unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
@@ -203,7 +204,7 @@ namespace riscv
 		CachedPage<W, const Page> m_rd_cache;
 		CachedPage<W, Page> m_wr_cache;
 
-		std::unordered_map<address_t, Page> m_pages;
+		robin_hood::unordered_flat_map<address_t, Page> m_pages;
 
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;

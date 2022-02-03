@@ -149,10 +149,15 @@ namespace riscv
 			// so now we own the page data
 			PageAttributes new_attr = page.attr;
 			new_attr.non_owning = false;
-			m_pages.try_emplace(page.addr, new_attr, data);
+			m_pages.emplace(std::piecewise_construct,
+				std::forward_as_tuple(page.addr),
+				std::forward_as_tuple(new_attr, data)
+			);
 
 			off += Page::size();
 		}
+		// page tables have been changed
+		this->invalidate_cache();
 	}
 
 	template struct Machine<4>;

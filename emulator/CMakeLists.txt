@@ -11,11 +11,6 @@ set(SOURCES
 	src/main.cpp
 )
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-	# Use the compiler defaults for debugging
-else()
-	set(CMAKE_CXX_FLAGS "-O2")
-endif()
 if (SANITIZE)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined")
 endif()
@@ -41,6 +36,7 @@ if (LTO)
 	else()
 		message(STATUS "IPO / LTO not supported: <${error}>")
 	endif()
+	#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -fuse-ld=lld")
 endif()
 
 add_subdirectory(../lib lib)

@@ -78,14 +78,12 @@ namespace riscv
 			auto& page = this->get_pageno(pageno);
 			if (!page.is_cow_page()) {
 				m_pages.erase(pageno);
-				if (m_rd_cache.pageno == pageno)
-					m_rd_cache.page = &Page::cow_page();
-				if (m_wr_cache.pageno == pageno)
-					m_wr_cache.reset();
 			}
 			pageno ++;
 			len --;
 		}
+		// invalidate all cached pages, because references are invalidated
+		this->invalidate_cache();
 	}
 
 	template <int W>
@@ -140,14 +138,19 @@ namespace riscv
 		attr.non_owning = true;
 		// NOTE: If you insert a const Page, DON'T modify it! The machine
 		// won't, unless system-calls do or manual intervention happens!
-		auto res = m_pages.try_emplace(pageno, attr, const_cast<PageData*> (shared_page.m_page.get()));
+		auto res = m_pages.emplace(std::piecewise_construct,
+			std::forward_as_tuple(pageno),
+			std::forward_as_tuple(attr, const_cast<PageData*> (shared_page.m_page.get()))
+		);
+		// invalidate all cached pages, because references are invalidated
+		this->invalidate_cache();
 		// try overwriting instead, if emplace failed
 		if (res.second == false) {
-			auto& page = res.first->second;
+			Page& page = res.first->second;
 			new (&page) Page{attr, const_cast<PageData*> (shared_page.m_page.get())};
 			return page;
 		}
-		return m_pages[pageno];
+		return res.first->second;
 	}
 
 	template <int W>
@@ -162,8 +165,13 @@ namespace riscv
 		{
 			const auto pageno = (dst + i) >> Page::SHIFT;
 			PageData* pdata = reinterpret_cast<PageData*> ((char*) src + i);
-			m_pages.try_emplace(pageno, attr, pdata);
+			m_pages.emplace(std::piecewise_construct,
+				std::forward_as_tuple(pageno),
+				std::forward_as_tuple(attr, pdata)
+			);
 		}
+		// invalidate all cached pages, because references are invalidated
+		this->invalidate_cache();
 	}
 
 	template <int W> void
