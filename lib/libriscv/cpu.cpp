@@ -70,8 +70,23 @@ namespace riscv
 		const auto offset = this->pc() & (Page::size()-1);
 		format_t instruction;
 
+		// Unfortunately, we have to under-align words for C-extension
+		// If the C-extension if disabled, we can read whole words.
+		union unaligned32 {
+			uint32_t to32() const noexcept {
+#ifdef RISCV_EXT_COMPRESSED
+				return data[0] | (uint32_t)data[1] << 16u;
+			}
+			uint16_t data[2];
+#else
+				return data;
+			}
+			uint32_t data;
+#endif
+		};
+
 		if (LIKELY(offset <= Page::size()-4)) {
-			instruction.whole = *(uint32_t*) (page.data() + offset);
+			instruction.whole = ((unaligned32*) (page.data() + offset))->to32();
 			return instruction;
 		}
 		// It's not possible to jump to a misaligned address,
