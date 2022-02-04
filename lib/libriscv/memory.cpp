@@ -410,7 +410,7 @@ namespace riscv
 				ELF32_ST_TYPE(sym->st_info), sym->st_name);
 		} else {
 			printf("-> Sym is at 0x%lX with size %lu, type %u name %u\n",
-				sym->st_value, sym->st_size,
+				(long)sym->st_value, sym->st_size,
 				ELF64_ST_TYPE(sym->st_info), sym->st_name);
 		}
 	}

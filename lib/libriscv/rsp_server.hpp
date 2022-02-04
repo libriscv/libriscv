@@ -207,6 +207,7 @@ int RSPClient<W>::forge_packet(
 	char* dst, size_t dstlen, const char* data, int datalen)
 {
 	char* d = dst;
+	const char* maxd = &dst[dstlen];
 	*d++ = '$';
 	uint8_t csum = 0;
 	for (int i = 0; i < datalen; i++) {
@@ -218,7 +219,12 @@ int RSPClient<W>::forge_packet(
 		}
 		*d++ = c;
 		csum += c;
+		// Bounds-check the destination buffer
+		if (UNLIKELY(d + 3 > maxd))
+			break;
 	}
+	if (UNLIKELY(d + 3 > maxd))
+		throw std::runtime_error("Unable to forge RSP packet: Not enough space");
 	*d++ = '#';
 	*d++ = lut[(csum >> 4) & 0xF];
 	*d++ = lut[(csum >> 0) & 0xF];
@@ -618,7 +624,8 @@ void RSPClient<W>::report_gprs()
 
 template <int W> inline
 void RSPClient<W>::reply_ack() {
-	write(sockfd, "+", 1);
+	ssize_t len = write(sockfd, "+", 1);
+	if (len < 0) throw std::runtime_error("RSPClient: Unable to ACK");
 }
 template <int W> inline
 void RSPClient<W>::reply_ok() {
