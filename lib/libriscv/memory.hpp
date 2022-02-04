@@ -204,7 +204,7 @@ namespace riscv
 		CachedPage<W, const Page> m_rd_cache;
 		CachedPage<W, Page> m_wr_cache;
 
-		robin_hood::unordered_flat_map<address_t, Page> m_pages;
+		robin_hood::unordered_node_map<address_t, Page> m_pages;
 
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;

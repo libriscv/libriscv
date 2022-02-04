@@ -90,17 +90,19 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
 template <int W> inline void
 Memory<W>::invalidate_cache(address_t pageno, Page* page)
 {
-	m_rd_cache.pageno = pageno;
-	m_rd_cache.page = page;
-	m_wr_cache.pageno = pageno;
-	m_wr_cache.page = page;
+	// It is possible to keep the write page as long as the
+	// page tables are node-based. In that case, we only have
+	// to invalidate the read page when it matches.
+	if (m_rd_cache.pageno == pageno) {
+		m_rd_cache.page = page;
+	}
 }
 
 template <int W>
 template <typename... Args> inline
 Page& Memory<W>::allocate_page(const address_t page, Args&&... args)
 {
-	const auto& it = m_pages.emplace(std::piecewise_construct,
+	const auto it = m_pages.emplace(std::piecewise_construct,
 		std::forward_as_tuple(page),
 		std::forward_as_tuple(std::forward<Args> (args)...)
 	);
