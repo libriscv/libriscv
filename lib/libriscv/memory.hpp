@@ -3,7 +3,9 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
+#ifdef RISCV_USE_RH_HASH
 #include <robin_hood.h>
+#endif
 #include <map>
 #include "util/buffer.hpp" // <string>
 
@@ -204,7 +206,11 @@ namespace riscv
 		CachedPage<W, const Page> m_rd_cache;
 		CachedPage<W, Page> m_wr_cache;
 
+#ifdef RISCV_USE_RH_HASH
 		robin_hood::unordered_node_map<address_t, Page> m_pages;
+#else
+		std::unordered_map<address_t, Page> m_pages;
+#endif
 
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;

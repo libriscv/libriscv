@@ -9,28 +9,32 @@ option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 option(RISCV_SHARED_PT "Enable shared page tables (performance penalty)" OFF)
+option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
+
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
 endif()
 
-include(FetchContent)
-FetchContent_Declare(
-	robinhood
-	GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
-	CONFIGURE_COMMAND ""
-	BUILD_COMMAND ""
-	GIT_TAG master
-	GIT_SHALLOW TRUE
-	GIT_PROGRESS TRUE)
+if (RISCV_USE_RH_HASH)
+	include(FetchContent)
+	FetchContent_Declare(
+		robinhood
+		GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
+		CONFIGURE_COMMAND ""
+		BUILD_COMMAND ""
+		GIT_TAG master
+		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE)
 
-FetchContent_GetProperties(robinhood)
-if (NOT robinhood_POPULATED)
-	FetchContent_Populate(robinhood)
+	FetchContent_GetProperties(robinhood)
+	if (NOT robinhood_POPULATED)
+		FetchContent_Populate(robinhood)
+	endif()
+
+	add_library(robinhood INTERFACE)
+	target_include_directories(robinhood INTERFACE ${robinhood_SOURCE_DIR}/src/include)
+	message(STATUS "robinhood sources: ${robinhood_SOURCE_DIR}")
 endif()
-
-add_library(robinhood INTERFACE)
-target_include_directories(robinhood INTERFACE ${robinhood_SOURCE_DIR}/src/include)
-message(STATUS "robinhood sources: ${robinhood_SOURCE_DIR}")
 
 set (SOURCES
 		libriscv/cpu.cpp
@@ -65,7 +69,10 @@ add_library(riscv ${SOURCES})
 set_target_properties(riscv PROPERTIES CXX_STANDARD 17)
 target_include_directories(riscv PUBLIC .)
 target_compile_options(riscv PRIVATE -Wall -Wextra)
-target_link_libraries(riscv PUBLIC robinhood)
+if (RISCV_USE_RH_HASH)
+	target_link_libraries(riscv PUBLIC robinhood)
+	target_compile_definitions(riscv PUBLIC RISCV_USE_RH_HASH=1)
+endif()
 if (RISCV_DEBUG)
 	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
 endif()
