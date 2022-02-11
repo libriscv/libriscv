@@ -1,4 +1,5 @@
 **/build/
+**/build_callgraph/
 emulator/rvmicro
 emulator/rvnewlib
 emulator/rvlinux

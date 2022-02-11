@@ -113,15 +113,39 @@ void syscall_ebreak(riscv::Machine<W>& machine)
 #endif
 }
 
+static inline bool is_exception_signal(int sig) {
+	// SIGILL, SIGABRT, SIGFPE, SIGSEGV
+	return sig == 4 || sig == 6 || sig == 8 || sig == 11;
+}
+
+template <int W>
+void syscall_signal(Machine<W>& machine)
+{
+	const int signal = machine.template sysarg<address_type<W>>(0);
+	const auto handler = machine.template sysarg<address_type<W>>(1);
+	if (is_exception_signal(signal)) {
+		// There is typically only one default handler,
+		// and languages use it to print backtraces.
+		//printf("Signal handler: 0x%lX\n", handler);
+		machine.set_sighandler(handler);
+	}
+	machine.set_result(0);
+}
+
 template <int W>
 void syscall_sigaction(Machine<W>& machine)
 {
+	const int signal = machine.template sysarg<address_type<W>>(0);
 	const auto buffer = machine.template sysarg<address_type<W>>(1);
 	struct sigaction sa;
 	machine.copy_from_guest(&sa, buffer, sizeof(sa));
-	// There is typically only one relevant handler,
-	// and languages use it to print backtraces.
-	machine.set_sighandler((address_type<W>)(uintptr_t)sa.sa_handler);
+
+	if (is_exception_signal(signal)) {
+		// There is typically only one relevant handler,
+		// and languages use it to print backtraces.
+		//printf("Signal %d handler: 0x%lX\n", signal, (uintptr_t)sa.sa_handler);
+		machine.set_sighandler((address_type<W>)(uintptr_t)sa.sa_handler);
+	}
 	machine.set_result(0);
 }
 
@@ -360,10 +384,14 @@ void setup_linux_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(25, syscall_stub_zero<W>);
 	// ioctl
 	machine.install_syscall_handler(29, syscall_stub_zero<W>);
+
+	// signal
+	machine.install_syscall_handler(48, syscall_signal<W>);
 	// rt_sigaction
 	machine.install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
 	machine.install_syscall_handler(135, syscall_stub_zero<W>);
+
 	// gettimeofday
 	machine.install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid

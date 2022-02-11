@@ -2,7 +2,6 @@
 set -e
 GCC_TRIPLE="riscv64-linux-gnu"
 export CC=$GCC_TRIPLE-gcc-10
-export CXX=$GCC_TRIPLE-g++-10
 NIMCPU="--cpu=riscv64"
 NIMFILE="$PWD/${1:-hello.nim}"
 
@@ -17,7 +16,7 @@ NIM_LIBS=`whereis nim`
 NIM_LIBS="${NIM_LIBS##*: }"
 NIM_LIBS="${NIM_LIBS/bin*/lib}"
 
-nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc --threads:off --stackTrace:on -d:release -c ${NIMFILE}
+nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc=true -d:debug -c ${NIMFILE}
 jq '.compile[] [0]' $NIMCACHE/*.json > buildfiles.txt
 
 cmake .. -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS -DCMAKE_BUILD_TYPE=Release
