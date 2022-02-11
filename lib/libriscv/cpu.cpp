@@ -202,7 +202,14 @@ namespace riscv
 	template<int W>
 	void CPU<W>::step_one()
 	{
+		// This will make sure we can do one step while still preserving
+		// the max instructions that we had before. As a result the
+		// instruction counter can become larger than max_instructions,
+		// but that is completely fine. More importantly, this makes it
+		// easier to step one instruction in various cases.
+		auto old_maxi = machine().max_instructions();
 		this->simulate(1);
+		machine().set_max_instructions(old_maxi);
 	}
 
 	template<int W> __attribute__((cold))

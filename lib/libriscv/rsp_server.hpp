@@ -422,15 +422,15 @@ void RSPClient<W>::handle_continue()
 			send("S05");
 			return;
 		}
-		m_machine->set_max_instructions(m_ilimit);
-		uint64_t n = m_ilimit;
-		while (n > 0 && m_machine->max_instructions() > 0) {
+		// This will activate the machine again, as we explicitly
+		// want to continue running.
+		m_machine->set_max_instructions(
+			m_machine->max_instructions() + m_ilimit);
+
+		while (!m_machine->stopped()) {
 			m_machine->cpu.step_one();
 			// Breakpoint
 			if (m_machine->cpu.pc() == this->m_bp)
-				break;
-			// Instruction limit
-			if (n-- == 0)
 				break;
 		}
 	} catch (const std::exception& e) {
