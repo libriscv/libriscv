@@ -16,10 +16,17 @@ NIM_LIBS=`whereis nim`
 NIM_LIBS="${NIM_LIBS##*: }"
 NIM_LIBS="${NIM_LIBS/bin*/lib}"
 
-nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc=true -d:debug -c ${NIMFILE}
-jq '.compile[] [0]' $NIMCACHE/*.json > buildfiles.txt
+if [[ -z "${DEBUG}" ]]; then
+	nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc=true -d:release -c ${NIMFILE}
+	jq '.compile[] [0]' $NIMCACHE/*.json > buildfiles.txt
 
-cmake .. -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS -DCMAKE_BUILD_TYPE=Release
+	cmake .. -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS -DCMAKE_BUILD_TYPE=Release -DDEBUGGING=OFF
+else
+	nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc=true --debugger=native -c ${NIMFILE}
+	jq '.compile[] [0]' $NIMCACHE/*.json > buildfiles.txt
+
+	cmake .. -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS -DCMAKE_BUILD_TYPE=Debug -DDEBUGGING=ON
+fi
 make -j4
 popd
 
