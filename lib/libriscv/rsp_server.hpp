@@ -108,7 +108,7 @@ private:
 	void report_status();
 	void close_now();
 	riscv::Machine<W>* m_machine;
-	uint64_t m_ilimit = 100'000;
+	uint64_t m_ilimit = 16'000'000UL;
 	int  sockfd;
 	bool m_closed  = false;
 	bool m_verbose = false;
@@ -422,8 +422,9 @@ void RSPClient<W>::handle_continue()
 			send("S05");
 			return;
 		}
+		m_machine->set_max_instructions(m_ilimit);
 		uint64_t n = m_ilimit;
-		while (!m_machine->stopped()) {
+		while (n > 0 && m_machine->max_instructions() > 0) {
 			m_machine->cpu.step_one();
 			// Breakpoint
 			if (m_machine->cpu.pc() == this->m_bp)
