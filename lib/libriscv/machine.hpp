@@ -36,7 +36,7 @@ namespace riscv
 
 		// Simulate a RISC-V machine until @max_instructions have been
 		// executed, or the machine has been stopped.
-		template <bool Throw = false>
+		template <bool Throw = true>
 		void simulate(uint64_t max_instructions = UINT64_MAX);
 
 		void stop() noexcept;
