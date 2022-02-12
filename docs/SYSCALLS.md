@@ -54,8 +54,8 @@ void syscall_write(Machine<W>& machine)
 {
 	const auto [fd, address, len] =
 		machine.template sysargs <int, address_type<W>, address_type<W>> ();
-	// we only accept standard pipes, for now :)
-	if (fd >= 0 && fd < 3) {
+	// We only accept standard output pipes, for now :)
+	if (fd == 1 || fd == 2) {
 		char buffer[1024];
 		const size_t len_g = std::min(sizeof(buffer), len);
 		machine.memory.memcpy_out(buffer, address, len_g);

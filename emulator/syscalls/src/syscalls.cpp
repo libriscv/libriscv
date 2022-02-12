@@ -27,8 +27,8 @@ void syscall_write(Machine<W>& machine)
 	const auto address = machine.template sysarg<address_type<W>>(1);
 	const size_t len   = machine.template sysarg<address_type<W>>(2);
 	SYSPRINT("SYSCALL write: addr = 0x%X, len = %zu\n", address, len);
-	// We only accept standard pipes, for now :)
-	if (fd >= 0 && fd < 3) {
+	// We only accept standard output pipes, for now :)
+	if (fd == 1 || fd == 2) {
 		/* Zero-copy retrieval of buffers */
 		riscv::vBuffer buffers[4];
 		size_t cnt =
@@ -55,8 +55,8 @@ void syscall_writev(Machine<W>& machine)
 		machine.set_result(-EINVAL);
 		return;
 	}
-	// we only accept standard pipes, for now :)
-	if (fd >= 0 && fd < 3) {
+	// We only accept standard output pipes, for now :)
+	if (fd == 1 || fd == 2) {
 		const size_t size = sizeof(guest_iovec<W>) * count;
 
 		std::vector<guest_iovec<W>> vec(count);
@@ -98,7 +98,6 @@ void syscall_close(riscv::Machine<W>& machine)
 		machine.set_result(0);
 		return;
 	}
-	printf(">>> Close %d\n", fd);
 	machine.set_result(-1);
 }
 
