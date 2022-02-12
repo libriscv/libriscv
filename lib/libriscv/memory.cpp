@@ -105,7 +105,7 @@ namespace riscv
 		const auto*  src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
 		if (m_binary.size() <= hdr->p_offset ||
-			hdr->p_offset + len <= hdr->p_offset)
+			hdr->p_offset + len < hdr->p_offset)
 		{
 			throw std::runtime_error("Bogus ELF program segment offset");
 		}
