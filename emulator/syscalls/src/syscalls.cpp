@@ -15,8 +15,22 @@ struct guest_iovec {
 };
 
 template <int W>
+void syscall_stub_zero(Machine<W>& machine) {
+	machine.set_result(0);
+}
+
+template <int W>
+void syscall_stub_nosys(Machine<W>& machine) {
+	machine.set_result(-ENOSYS);
+}
+
+template <int W>
 void syscall_exit(Machine<W>& machine)
 {
+	// Stop sets the max instruction counter to zero, allowing most
+	// instruction loops to end. It is, however, not the only way
+	// to exit a program. Tighter integrations with the library should
+	// provide their own methods.
 	machine.stop();
 }
 
@@ -83,11 +97,6 @@ void syscall_writev(Machine<W>& machine)
 }
 
 template <int W>
-void syscall_stub_zero(Machine<W>& machine) {
-	machine.set_result(0);
-}
-
-template <int W>
 void syscall_close(riscv::Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
@@ -115,20 +124,6 @@ void syscall_ebreak(riscv::Machine<W>& machine)
 static inline bool is_exception_signal(int sig) {
 	// SIGILL, SIGABRT, SIGFPE, SIGSEGV
 	return sig == 4 || sig == 6 || sig == 8 || sig == 11;
-}
-
-template <int W>
-void syscall_signal(Machine<W>& machine)
-{
-	const int signal = machine.template sysarg<address_type<W>>(0);
-	const auto handler = machine.template sysarg<address_type<W>>(1);
-	if (is_exception_signal(signal)) {
-		// There is typically only one default handler,
-		// and languages use it to print backtraces.
-		//printf("Signal handler: 0x%lX\n", handler);
-		machine.set_sighandler(handler);
-	}
-	machine.set_result(0);
 }
 
 template <int W>
@@ -383,9 +378,9 @@ void setup_linux_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(25, syscall_stub_zero<W>);
 	// ioctl
 	machine.install_syscall_handler(29, syscall_stub_zero<W>);
+	// faccessat
+	machine.install_syscall_handler(48, syscall_stub_nosys<W>);
 
-	// signal
-	machine.install_syscall_handler(48, syscall_signal<W>);
 	// rt_sigaction
 	machine.install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
