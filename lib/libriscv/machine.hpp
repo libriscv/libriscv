@@ -10,6 +10,17 @@ namespace riscv
 	static constexpr int RISCV64  = 8;
 	static constexpr int RISCV128 = 16;
 
+	// Machine is a RISC-V emulator. The W template parameter is
+	// used to determine the bit-architecture, like so:
+	// 32-bit:  Machine<RISCV32>, 64-bit:  Machine<RISCV64>
+	// 128-bit: Machine<RISCV128>
+	//
+	// It is instantiated with an ELF binary that contains the
+	// *statically* built RISC-V program to run:
+	//
+	//  std::vector<uint8_t> mybinary = load_file("riscv_program.elf");
+	//  Machine<RISCV64> machine { mybinary };
+	//
 	template <int W>
 	struct Machine
 	{
@@ -17,7 +28,7 @@ namespace riscv
 		using address_t = address_type<W>; // one unsigned memory address
 		using printer_func = std::function<void(const char*, size_t)>;
 
-		// see common.hpp for MachineOptions
+		// See common.hpp for MachineOptions
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
 		Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& = {});
 		Machine(const Machine&, const MachineOptions<W>& = {}); //<- Fork
@@ -25,7 +36,6 @@ namespace riscv
 
 		// Simulate a RISC-V machine until @max_instructions have been
 		// executed, or the machine has been stopped.
-		// NOTE: if @max_instructions is 0, then run until stop
 		template <bool Throw = false>
 		void simulate(uint64_t max_instructions = UINT64_MAX);
 
@@ -77,21 +87,13 @@ namespace riscv
 		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.
 		// the function must use the C ABI calling convention.
-		// The value of machine.stopped() should be false if the machine
-		// reached max instructions without completing the function call.
-		// Supports integers, floating-point values and strings.
-		// Passing 0 to max instructions will disable the limit, and potentially
-		// run forever.
-		// NOTE: relies on an exit function to stop execution after returning.
-		// _exit must call the exit (93) system call and not call destructors,
-		// which is the norm.
 		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args> constexpr
 		address_t vmcall(const char* func_name, Args&&... args);
 
 		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args> constexpr
 		address_t vmcall(address_t func_addr, Args&&... args);
 
-		// Saves and restores registers before calling
+		// Saves and restores registers while calling given function
 		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, bool StoreRegs = true, typename... Args>
 		address_t preempt(const char* func_name, Args&&... args);
 
@@ -171,7 +173,7 @@ namespace riscv
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
-		// Returns true if the guest environment contains native code
+		// Returns true if the Machine has loaded native code
 		// generated from binary translation.
 		bool is_binary_translated() const { return memory.is_binary_translated(); }
 
@@ -192,7 +194,7 @@ namespace riscv
 
 		uint64_t     m_counter = 0;
 		uint64_t     m_max_counter = 0;
-		void* m_userdata = nullptr;
+		void*        m_userdata = nullptr;
 		address_t    m_sighandler = 0;
 		printer_func m_printer = m_default_printer;
 		std::unique_ptr<Arena> m_arena;

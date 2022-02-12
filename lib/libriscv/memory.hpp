@@ -71,17 +71,17 @@ namespace riscv
 		address_t start_address() const noexcept { return this->m_start_address; }
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
 		void set_stack_initial(address_t addr) { this->m_stack_address = addr; }
+		address_t exit_address() const noexcept;
+		void      set_exit_address(address_t new_exit);
 		address_t heap_address() const noexcept { return HEAP_START; }
 		address_t& mmap_address() noexcept { return m_mmap_address; }
 
 		auto& machine() { return this->m_machine; }
 		const auto& machine() const { return this->m_machine; }
 
-		// Call interface
+		// Symbol table functions
 		address_t resolve_address(const std::string& sym) const;
 		address_t resolve_section(const char* name) const;
-		address_t exit_address() const noexcept;
-		void      set_exit_address(address_t new_exit);
 		// Basic backtraces and symbol lookups
 		struct Callsite {
 			std::string name = "(null)";
@@ -90,7 +90,7 @@ namespace riscv
 			size_t      size    = 0;
 		};
 		Callsite lookup(address_t) const;
-		void print_backtrace(void(*print_function)(std::string_view));
+		void print_backtrace(void(*printer_function)(std::string_view));
 
 		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
