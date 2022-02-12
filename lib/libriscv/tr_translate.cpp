@@ -71,7 +71,7 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 {
 	// Disable translator with NO_TRANSLATE=1
 	// or by setting max blocks to zero.
-	if (getenv("NO_TRANSLATE") || 0 == options.translate_blocks_max) {
+	if (0 == options.translate_blocks_max || getenv("NO_TRANSLATE")) {
 		machine().memory.set_binary_translated(nullptr);
 		return;
 	}
