@@ -92,10 +92,11 @@ namespace riscv
 	template <int W> static inline
 	void push_arg(Machine<W>& m, std::vector<address_type<W>>& vec, address_type<W>& dst, const std::string& str)
 	{
-		dst -= str.size();
+		const size_t size = str.size()+1;
+		dst -= size;
 		dst &= ~(address_type<W>)(W-1); // maintain alignment
 		vec.push_back(dst);
-		m.copy_to_guest(dst, str.data(), str.size()+1);
+		m.copy_to_guest(dst, str.data(), size);
 	}
 	template <int W> static inline
 	void push_aux(std::vector<address_type<W>>& vec, AuxVec<address_type<W>> aux)
