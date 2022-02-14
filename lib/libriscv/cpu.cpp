@@ -119,7 +119,7 @@ namespace riscv
 		// Calculate the instruction limit
 #ifndef RISCV_BINARY_TRANSLATION
 		machine().set_max_instructions(max);
-		uint64_t counter = 0;
+		uint64_t counter = machine().instruction_counter();
 
 		for (; counter < machine().max_instructions(); counter++) {
 #else
@@ -195,7 +195,7 @@ namespace riscv
 				registers().pc += 4;
 		} // while not stopped
 	#ifndef RISCV_BINARY_TRANSLATION
-		machine().increment_counter(counter);
+		machine().set_instruction_counter(counter);
 	#endif
 	} // CPU::simulate
 
