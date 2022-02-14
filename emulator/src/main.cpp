@@ -115,9 +115,14 @@ static void run_program(const std::vector<uint8_t>& binary, const std::string& f
 				//client->set_verbose(true);
 				while (client->process_one());
 			}
+			if (!machine.stopped()) {
+				// Run remainder of program
+				machine.simulate();
+			}
+		} else {
+			// Normal RISC-V simulation
+			machine.simulate();
 		}
-		// Normal RISC-V simulation
-		machine.simulate();
 	} catch (riscv::MachineException& me) {
 		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
 				me.type(), me.what(), me.data());

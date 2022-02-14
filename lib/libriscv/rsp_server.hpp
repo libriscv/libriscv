@@ -190,7 +190,10 @@ RSP<W>::~RSP() {
 
 template <int W> inline
 RSPClient<W>::RSPClient(riscv::Machine<W>& m, int fd)
-	: m_machine{&m}, sockfd(fd)  {}
+	: m_machine{&m}, sockfd(fd)
+{
+	m_machine->set_max_instructions(m_ilimit);
+}
 template <int W> inline
 RSPClient<W>::~RSPClient() {
 	if (!is_closed())
@@ -422,18 +425,24 @@ void RSPClient<W>::handle_continue()
 			send("S05");
 			return;
 		}
-		// This will activate the machine again, as we explicitly
-		// want to continue running.
-		m_machine->set_max_instructions(
-			m_machine->max_instructions() + m_ilimit);
+		uint64_t n = m_ilimit;
 
-		while (!m_machine->stopped()) {
+		while (n > 0) {
+			// When stepping the machine will look stopped
+			// simply by checking stopped(), however the stop()
+			// function sets the max instruction counter to 0
 			m_machine->cpu.step_one();
 			// Breakpoint
 			if (m_machine->cpu.pc() == this->m_bp)
 				break;
+			// Stopped (usual way)
+			if (m_machine->max_instructions() == 0)
+				break;
+			n--;
 		}
 	} catch (const std::exception& e) {
+		// Is this the right thing to do?
+		m_machine->stop();
 		fprintf(stderr, "Exception: %s\n", e.what());
 		send("S01");
 		return;
