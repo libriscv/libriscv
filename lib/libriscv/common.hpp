@@ -14,12 +14,12 @@
 #define COLD_PATH() __attribute__((cold))
 #endif
 
-#ifndef RISCV_SYSCALL_EBREAK_NR
-#define RISCV_SYSCALL_EBREAK_NR    0
-#endif
-
 #ifndef RISCV_SYSCALLS_MAX
 #define RISCV_SYSCALLS_MAX   384
+#endif
+
+#ifndef RISCV_SYSCALL_EBREAK_NR
+#define RISCV_SYSCALL_EBREAK_NR    (RISCV_SYSCALLS_MAX-1)
 #endif
 
 #ifdef RISCV_DEBUG

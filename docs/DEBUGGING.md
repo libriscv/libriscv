@@ -80,7 +80,7 @@ One powerful option is opening up for a remote debugger on-demand. To do this yo
 
 In other words, call the `gdb_listen` function above during anytime you want to have a look at what's going on.
 
-The most likely system call candidate for this behavior is for handling EBREAK interruptions. The emulator defines `RISCV_SYSCALL_EBREAK_NR` by default to 0, but it can be overridden. Reaching EBREAK is always handled as a system call in the emulator.
+The most likely system call candidate for this behavior is for handling EBREAK interruptions. The emulator defines `RISCV_SYSCALL_EBREAK_NR` by default to `RISCV_SYSCALLS_MAX-1`, but it can be overridden. Reaching EBREAK is always handled as a system call in the emulator.
 
 To avoid having to repeat yourself, create a GDB script to automatically connect and enter TUI mode:
 ```

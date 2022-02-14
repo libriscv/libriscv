@@ -86,11 +86,10 @@ You will need to handle the EXIT system call on the outside of the machine as we
 
 ```C++
 template <int W>
-long syscall_exit(riscv::Machine<W>& machine)
+void syscall_exit(riscv::Machine<W>& machine)
 {
 	printf(">>> Program exited, exit code = %d\n", machine.template sysarg<int> (0));
 	machine.stop();
-	return 0;
 }
 ```
 And installed as a 32-bit system call handler like this:
@@ -112,6 +111,17 @@ inline long syscall(long n, long arg0)
 	return a0;
 }
 ```
+
 All integer and pointer arguments are in the a0 to a6 registers, which adds up to 7 arguments in total. The return value of the system call is written back into a0. If you want to create a custom system call that fills some values into a struct, you should allocate room for that struct inside the guest, and just pass the pointer to that struct as one of the arguments to the system call.
 
 If you have done all this you should now have the absolute minimum C and C++ freestanding environment up and running. Have fun!
+
+## Main arguments
+
+On Linux, main() takes several arguments:
+
+```
+int main(int argc, char** argc, char** envp);
+```
+
+Here, envp is the pointer to the environment variables. It is a list of strings that ends with a NULL value.
