@@ -77,26 +77,29 @@
 #include <cstdio>
 #include <string>
 #include <thread> // C++ threads
-#define BENCHMARK_LOCATION()  asm volatile("ebreak" ::: "memory")
+inline void benchmark(void(*callback)()) {
+	register void* a0 asm("a0") = (void*)callback;
+	asm volatile ("ebreak" :: "r"(a0) : "memory");
+}
 
 int main()
 {
-    printf("Test!\n");
-    BENCHMARK_LOCATION();
+    printf("Test!\\n");
 
-	auto* cpp_thread = new std::thread(
-		[] (int a, long long b, std::string c) -> void {
-			assert(a == 1);
-			assert(b == 2LL);
-			assert(c == std::string("test"));
-			printf("Hello from a thread!\n");
-		},
-		1, 2L, std::string("test")
-	);
-	cpp_thread->join();
-
-    BENCHMARK_LOCATION();
-	delete cpp_thread;
+	for (size_t i = 0; i < 100; i++)
+		benchmark([] {
+			auto* cpp_thread = new std::thread(
+				[] (int a, long long b, std::string c) -> void {
+					assert(a == 1);
+					assert(b == 2LL);
+					assert(c == std::string("test"));
+					printf("Hello from a thread!\\n");
+				},
+				1, 2L, std::string("test")
+			);
+			cpp_thread->join();
+			delete cpp_thread;
+		});
 
 	return 666;
 }
@@ -136,9 +139,9 @@ int main()
 						$('#exit_status').text(xhdr.getResponseHeader('X-Exit-Code'));
 						$('#instr_count').text(xhdr.getResponseHeader('X-Instruction-Count'));
 						var usage = xhdr.getResponseHeader('X-Memory-Usage');
-						var highest = xhdr.getResponseHeader('X-Memory-Highest');
+						var highest = xhdr.getResponseHeader('X-Memory-Max');
 						$('#mem_usage').text(
-							String(bytesToSize(usage)) + ", top: " +
+							String(bytesToSize(usage)) + ", max: " +
 							String(bytesToSize(highest))
 						);
 						var bsize = xhdr.getResponseHeader('X-Binary-Size');
