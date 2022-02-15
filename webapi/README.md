@@ -4,12 +4,18 @@ Compile and run RISC-V on a website
 
 It's not very secure because it's not being run in a docker container anymore. I am not an expert on containers, even though I have been using this service inside a container before. Regardless, it should not be too hard to execute into a container instead of directly compiling files. Have a look at `sanitize.py` for the compiler arguments.
 
+The API is created in a way where the Varnish cache will take most of the load by caching executables and even the results (for a shorter time). See the `varnish/cache.vcl` for more information on how this is configured. As a result the hosted page is snappy and reliable.
+
+
 ### Usage
 
 1. Install Varnish
-2. Run varnishd -a :8080 -f $PWD/cache.vcl -F
+	- sudo apt install varnish
+2. Start Varnish (tab 1)
+	- cd varnish
+	- varnishd -a :8080 -f $PWD/cache.vcl -F
 	- If you need a custom working folder just add -n /tmp/varnishd
-3. Build webapi
+3. Build webapi (tab 2)
 	- mkdir -p build && pushd build
 	- cmake ..
 	- make -j6
