@@ -34,6 +34,7 @@ struct thread
 
 	thread(MultiThreading<W>&, int tid,
 			address_t tls, address_t stack);
+	thread(MultiThreading<W>&, const thread& other);
 	void exit();
 	void suspend();
 	void suspend(address_t return_value);
@@ -62,24 +63,46 @@ struct MultiThreading
 	bool      wakeup_blocked(int reason);
 
 	MultiThreading(Machine<W>&);
+	MultiThreading(Machine<W>&, const MultiThreading&);
 	Machine<W>& machine;
-	std::vector<thread_t*> blocked;
-	std::vector<thread_t*> suspended;
-	std::unordered_map<int, thread_t> threads;
+	std::vector<thread_t*> m_blocked;
+	std::vector<thread_t*> m_suspended;
+	std::unordered_map<int, thread_t> m_threads;
 	int        thread_counter = 0;
 	thread_t*  m_current = nullptr;
-	thread_t   main_thread;
 };
 
 /** Implementation **/
 
 template <int W>
 inline MultiThreading<W>::MultiThreading(Machine<W>& mach)
-	: machine(mach), main_thread(*this, 0, 0x0, 0x0)
+	: machine(mach)
 {
-	main_thread.stored_regs.get(REG_SP)
-		= machine.cpu.reg(REG_SP);
-	m_current = &main_thread;
+	// Create the main thread
+	auto it = m_threads.try_emplace(0, *this, 0, 0x0, mach.cpu.reg(REG_SP));
+	m_current = &it.first->second;
+}
+
+template <int W>
+inline MultiThreading<W>::MultiThreading(Machine<W>& mach, const MultiThreading<W>& other)
+	: machine(mach)
+{
+	for (const auto& it : other.m_threads) {
+		const int tid = it.first;
+		m_threads.try_emplace(tid, *this, it.second);
+	}
+	/* Copy each suspended by pointer lookup */
+	m_suspended.reserve(other.m_suspended.size());
+	for (const auto* t : other.m_suspended) {
+		m_suspended.push_back(get_thread(t->tid));
+	}
+	/* Copy each blocked by pointer lookup */
+	m_blocked.reserve(other.m_blocked.size());
+	for (const auto* t : other.m_blocked) {
+		m_blocked.push_back(get_thread(t->tid));
+	}
+	/* Copy current thread */
+	m_current = get_thread(other.m_current->tid);
 }
 
 template <int W>
@@ -102,7 +125,7 @@ inline void thread<W>::suspend()
 {
 	this->stored_regs = threading.machine.cpu.registers();
 	// add to suspended (NB: can throw)
-	threading.suspended.push_back(this);
+	threading.m_suspended.push_back(this);
 }
 
 template <int W>
@@ -119,7 +142,7 @@ inline void thread<W>::block(int reason)
 	this->stored_regs = threading.machine.cpu.registers();
 	this->block_reason = reason;
 	// add to blocked (NB: can throw)
-	threading.blocked.push_back(this);
+	threading.m_blocked.push_back(this);
 }
 
 template <int W>
@@ -139,8 +162,8 @@ inline thread<W>* MultiThreading<W>::get_thread()
 template <int W>
 inline thread<W>* MultiThreading<W>::get_thread(int tid)
 {
-	auto it = threads.find(tid);
-	if (it == threads.end()) return nullptr;
+	auto it = m_threads.find(tid);
+	if (it == m_threads.end()) return nullptr;
 	return &it->second;
 }
 
@@ -148,9 +171,9 @@ template <int W>
 inline void MultiThreading<W>::wakeup_next()
 {
 	// resume a waiting thread
-	assert(!suspended.empty());
-	auto* next = suspended.front();
-	suspended.erase(suspended.begin());
+	assert(!m_suspended.empty());
+	auto* next = m_suspended.front();
+	m_suspended.erase(m_suspended.begin());
 	// resume next thread
 	next->resume();
 }
@@ -163,6 +186,13 @@ inline thread<W>::thread(
 	this->stored_regs.get(REG_TP) = tls;
 	this->stored_regs.get(REG_SP) = stack;
 }
+
+template <int W>
+inline thread<W>::thread(
+	MultiThreading<W>& mt, const thread& other)
+	: threading(mt), tid(other.tid), stored_regs(other.stored_regs),
+	  clear_tid(other.clear_tid), block_reason(other.block_reason)
+{}
 
 template <int W>
 inline void thread<W>::activate()
@@ -202,7 +232,7 @@ inline thread<W>* MultiThreading<W>::create(
 			address_t stack, address_t tls)
 {
 	const int tid = ++this->thread_counter;
-	auto it = threads.emplace(tid, thread_t{*this, tid, tls, stack});
+	auto it = m_threads.emplace(tid, thread_t{*this, tid, tls, stack});
 	thread_t* thread = &it.first->second;
 
 	// flag for write child TID
@@ -224,7 +254,7 @@ inline bool MultiThreading<W>::suspend_and_yield()
 {
 	auto* thread = get_thread();
 	// don't go through the ardous yielding process when alone
-	if (suspended.empty()) {
+	if (m_suspended.empty()) {
 		// set the return value for sched_yield
 		machine.cpu.reg(REG_ARG0) = 0;
 		return false;
@@ -240,7 +270,7 @@ template <int W>
 inline bool MultiThreading<W>::block(int reason)
 {
 	auto* thread = get_thread();
-	if (UNLIKELY(suspended.empty())) {
+	if (UNLIKELY(m_suspended.empty())) {
 		// TODO: Stop the machine here?
 		return false; // continue immediately?
 	}
@@ -271,9 +301,9 @@ inline bool MultiThreading<W>::yield_to(int tid, bool store_retval)
 	else
 		thread->suspend();
 	// remove the next thread from suspension
-	for (auto it = suspended.begin(); it != suspended.end(); ++it) {
+	for (auto it = m_suspended.begin(); it != m_suspended.end(); ++it) {
 		if (*it == next) {
-			suspended.erase(it);
+			m_suspended.erase(it);
 			break;
 		}
 	}
@@ -285,7 +315,7 @@ inline bool MultiThreading<W>::yield_to(int tid, bool store_retval)
 template <int W>
 inline void MultiThreading<W>::unblock(int tid)
 {
-	for (auto it = blocked.begin(); it != blocked.end(); )
+	for (auto it = m_blocked.begin(); it != m_blocked.end(); )
 	{
 		if ((*it)->tid == tid)
 		{
@@ -293,7 +323,7 @@ inline void MultiThreading<W>::unblock(int tid)
 			get_thread()->suspend(0);
 			// resume this thread
 			(*it)->resume();
-			blocked.erase(it);
+			m_blocked.erase(it);
 			return;
 		}
 		else ++it;
@@ -304,7 +334,7 @@ inline void MultiThreading<W>::unblock(int tid)
 template <int W>
 inline bool MultiThreading<W>::wakeup_blocked(int reason)
 {
-	for (auto it = blocked.begin(); it != blocked.end(); )
+	for (auto it = m_blocked.begin(); it != m_blocked.end(); )
 	{
 		// compare against block reason
 		if ((*it)->block_reason == reason)
@@ -313,7 +343,7 @@ inline bool MultiThreading<W>::wakeup_blocked(int reason)
 			get_thread()->suspend(0);
 			// resume this thread
 			(*it)->resume();
-			blocked.erase(it);
+			m_blocked.erase(it);
 			return true;
 		}
 		else ++it;
@@ -325,9 +355,9 @@ inline bool MultiThreading<W>::wakeup_blocked(int reason)
 template <int W>
 inline void MultiThreading<W>::erase_thread(int tid)
 {
-	auto it = threads.find(tid);
-	assert(it != threads.end());
-	threads.erase(it);
+	auto it = m_threads.find(tid);
+	assert(it != m_threads.end());
+	m_threads.erase(it);
 }
 
 } // riscv

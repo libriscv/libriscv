@@ -26,6 +26,9 @@ namespace riscv
 	{
 		this->m_counter = other.m_counter;
 		this->m_max_counter = other.m_max_counter;
+		if (other.m_mt) {
+			m_mt.reset(new MultiThreading {*this, *other.m_mt});
+		}
 	}
 
 	template <int W>
