@@ -6,6 +6,8 @@ The emulator has a binary translation mode that has currently only been tested o
 
 While this emulator has a focus on performance, one higher priority is the ability to map any memory anywhere with permissions, custom fault handlers and such things. This allows you to take the memory of one machine and map it into another, and does have a slight performance penalty compared to an emulator that can only have sequential memory.
 
+Instruction counting is used to limit the time spent executing code and can be used to prevent infinite loops. It can also help keep frame budgets for long running background scripting tasks as running out of instructions simply halts execution, and it can be resumed from where it stopped.
+
 ## Benchmarks
 
 One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation.
@@ -149,6 +151,8 @@ $ ./emulator
 >>> Runtime exception: Execution space protection fault
 ```
 
+The solution is to load a RISC-V binary into the vector `binary` so that the machine is created using a RISC-V ELF binary.
+
 You can limit the amount of (virtual) memory the machine can use like so:
 ```C++
 	const uint32_t memsize = 1024 * 1024 * 64;
@@ -157,10 +161,12 @@ You can limit the amount of (virtual) memory the machine can use like so:
 
 You can limit the amount of instructions to simulate at a time like so:
 ```C++
-	const uint64_t max_instructions = 1000;
+	const uint64_t max_instructions = 2500;
 	machine.simulate(max_instructions);
 ```
-Similarly, when making a function call into the VM you can also add this limit as a template parameter to the `vmcall()` function.
+If the simulator runs out of instructions it will throw an exception. The exception is harmless and is only inteded to inform that the task took too long to complete. It is possible to keep calling `simulate` until the machine is finished running. It is finished running when the call to simulate does not throw an exception.
+
+When making a function call into the VM you can also add this limit as a template parameter to the `vmcall()` function.
 
 You can find details on the Linux system call ABI online as well as in the `syscalls.hpp`, and `syscalls.cpp` files in the src folder. You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
 
