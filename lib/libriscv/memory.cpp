@@ -136,9 +136,10 @@ namespace riscv
 			constexpr address_t PMASK = Page::size()-1;
 			const address_t pbase = (hdr->p_vaddr - 0x4) & ~(address_t) PMASK;
 			const size_t prelen  = hdr->p_vaddr - pbase;
-			// The first 4 of the last 8 bytes is the STOP instruction
+			// The first 4 bytes is instruction alignment
+			// The middle 4 bytes is the STOP instruction
 			// The last 8 bytes is zeroed out (illegal instruction)
-			const size_t midlen  = len + prelen + 8;
+			const size_t midlen  = len + prelen + 12;
 			const size_t plen =
 				(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
 			const size_t postlen = plen - midlen;
@@ -154,10 +155,14 @@ namespace riscv
 			std::memset(&m_exec_pagedata[0],      0,   prelen);
 			std::memcpy(&m_exec_pagedata[prelen], src, len);
 			std::memset(&m_exec_pagedata[prelen + len], 0,   postlen);
+
 			// Create a STOP instruction at the end of execute area
+			// It is used by vmcall and preempt to stop after a function call
+			address_t exit_lenalign = address_t(len + 0x3) & ~address_t(0x3);
+			this->m_exit_address = hdr->p_vaddr + exit_lenalign;
 			const uint32_t stop_instr = 0x7ff00073;
-			std::memcpy(&m_exec_pagedata[prelen + len], &stop_instr, sizeof(stop_instr));
-			this->m_exit_address = hdr->p_vaddr + len;
+			std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &stop_instr, sizeof(stop_instr));
+
 			// This is what the CPU instruction fetcher will use
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, len + 4);
