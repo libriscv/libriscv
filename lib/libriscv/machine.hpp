@@ -130,6 +130,7 @@ namespace riscv
 
 		// Stdout, stderr
 		void print(const char*, size_t) const;
+		auto& get_printer() const noexcept { return m_printer; }
 		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
 
 		// Call an installed system call handler
