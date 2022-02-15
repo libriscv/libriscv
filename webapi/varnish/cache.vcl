@@ -1,8 +1,8 @@
 vcl 4.0;
-import std;
 import accept;
 import bodyaccess;
 import file;
+import std;
 
 backend default {
 	.host = "localhost";
@@ -17,17 +17,17 @@ acl authorized {
 
 sub vcl_init {
 	new format = accept.rule("text/plain");
-	new fs = file.init("/path/to/varnish/www");
+	new fs = file.init(std.getenv("PWD") + "/www");
 }
 
-sub vcl_recv
-{
-	if (std.port(local.ip) == 80) {
+sub vcl_recv {
+	if (std.port(local.ip) == 80 || std.port(local.ip) == 8080) {
 		if (client.ip ~ authorized) {
 			set req.http.x-hmethod = req.method;
 			std.cache_req_body(15MB);
 			return (hash);
 		}
+		# This is a redirect to the HTTPS version of the site
 		return (synth(700, "https://my.web.site/"));
 	}
 

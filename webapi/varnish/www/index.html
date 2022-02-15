@@ -61,7 +61,7 @@
 	</div>
 	<hr />
 	<div id="about">
-		Code is executed by <a href="https://github.com/fwsGonzo/libriscv">libriscv</a> the C++17 RISC-V emulator. Each benchmark is 100 samples, measured in microseconds.
+		Code is executed by <a href="https://github.com/fwsGonzo/libriscv">libriscv</a> the C++17 RISC-V emulator. Samples are in microseconds.
 	</div>
 </body>
 
@@ -75,20 +75,27 @@
 		// default hello world code:
 		editor.setValue(`#include <cassert>
 #include <cstdio>
+#include <string>
 #include <thread> // C++ threads
+#define BENCHMARK_LOCATION()  asm volatile("ebreak" ::: "memory")
 
 int main()
 {
+    printf("Test!\n");
+    BENCHMARK_LOCATION();
+
 	auto* cpp_thread = new std::thread(
 		[] (int a, long long b, std::string c) -> void {
 			assert(a == 1);
 			assert(b == 2LL);
 			assert(c == std::string("test"));
-			printf("Hello from a thread!\\n");
+			printf("Hello from a thread!\n");
 		},
 		1, 2L, std::string("test")
 	);
 	cpp_thread->join();
+
+    BENCHMARK_LOCATION();
 	delete cpp_thread;
 
 	return 666;
@@ -123,7 +130,7 @@ int main()
 							"Low: " + xhdr.getResponseHeader('X-Runtime-Lowest') +
 							"  Median: " + xhdr.getResponseHeader('X-Runtime-Median') +
 							"  High: " + xhdr.getResponseHeader('X-Runtime-Highest') +
-							"  (First: " + xhdr.getResponseHeader('X-Runtime-First') + 
+							"  (First: " + xhdr.getResponseHeader('X-Runtime-First') +
 							")");
 
 						$('#exit_status').text(xhdr.getResponseHeader('X-Exit-Code'));

@@ -6,7 +6,6 @@ option(NATIVE      "Enable native instructions" ON)
 
 add_subdirectory(../lib lib)
 add_subdirectory(../emulator/syscalls syscalls)
-target_compile_options(riscv PUBLIC -std=c++17)
 
 set(SOURCES
 	server.cpp
@@ -15,6 +14,7 @@ set(SOURCES
 )
 
 add_executable(webapi ${SOURCES})
+set_target_properties(webapi PROPERTIES CXX_STANDARD 17)
 target_link_libraries(webapi syscalls riscv pthread m)
 target_include_directories(webapi PRIVATE "cpp-httplib")
 target_include_directories(webapi PRIVATE ${CMAKE_BINARY_DIR})
@@ -25,10 +25,13 @@ target_compile_definitions(webapi PRIVATE
 			"CPPHTTPLIB_THREAD_POOL_COUNT=16")
 
 if (LTO)
-	set_target_properties(riscv PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
-	set_property(TARGET webapi PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-	if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-		target_link_libraries(webapi "-fuse-ld=lld")
+	include(CheckIPOSupported)
+	check_ipo_supported(RESULT supported OUTPUT error)
+	if (supported)
+		message(STATUS "IPO / LTO enabled")
+		set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+	else()
+		message(STATUS "IPO / LTO not supported: <${error}>")
 	endif()
 endif()
 if (NATIVE)

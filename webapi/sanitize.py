@@ -11,9 +11,10 @@ os.chdir(project_base + "/" + project_dir)
 python_codefile = "code.cpp"
 python_status   = "status.txt"
 # docker volume paths
-dc_codefile = project_dir + "/" + python_codefile
-dc_binary   = project_dir + "/binary"
-dc_symmap   = project_dir + "/symbols.map"
+dc_codefile = python_codefile
+dc_binary   = "binary"
+dc_symmap   = "symbols.map"
+
 fo = open("symbols.map", "w")
 fo.write("main")
 fo.close()
@@ -37,20 +38,19 @@ dc_shared = "/usr/outside"
 
 dc_extra = []
 if method == "linux":
-	dc_instance = "linux-rv32gc"
-	dc_gnucpp = "riscv32-unknown-linux-gnu-g++"
+	dc_instance = "linux-rv64gc"
+	dc_gnucpp = "riscv64-linux-gnu-g++-10"
 	dc_extra = ["-pthread"]
 else:
-	dc_instance = "newlib-rv32gc"
-	dc_gnucpp = "riscv32-unknown-elf-g++"
+	dc_instance = "newlib-rv64gc"
+	dc_gnucpp = "riscv64-unknown-elf-g++"
 
 # compile the code
-cmd = ["docker", "exec", dc_instance,
-		dc_gnucpp, "-march=rv32g", "-mabi=ilp32d", "-static"] + dc_extra + [
-		"-std=c++17", "-O2", "-fstack-protector", dc_codefile, "-o", dc_binary,
-		"-ffunction-sections", "-fdata-sections", "-Wl,-gc-sections",
-		"-Wl,--retain-symbols-file=" + dc_symmap,
-		"-Wl,--undefined=pthread_join"] # this fixes a glibc bug
+cmd = [ #"docker", "exec", dc_instance,
+		dc_gnucpp, "-march=rv64gc", "-mabi=lp64d", "-static"] + dc_extra + [
+		"-std=c++17", "-O2", dc_codefile, "-o", dc_binary,
+		# Fixes a g++ bug where thread::join jumps to 0x0 (missing pthread_join)
+		"-Wl,--undefined=pthread_join"] # DO NOT REMOVE
 print(cmd)
 
 result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

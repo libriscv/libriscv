@@ -5,7 +5,7 @@
 
 static const char* ADDRESS = "127.0.0.1";
 static const uint16_t PORT = 1234;
-static const uint16_t CACHE_PORT = 80;
+static const uint16_t CACHE_PORT = 8080;
 
 int main(void)
 {
@@ -73,6 +73,7 @@ int main(void)
 				res.set_content(cres->body, "text/plain");
 			} else {
 				res.status = 500;
+				res.set_header("X-Error", "Failed POST to /compile");
 			}
 		});
 

@@ -2,14 +2,13 @@
 
 #include <libriscv/machine.hpp>
 #include <include/syscall_helpers.hpp>
-#include <include/threads.hpp>
+#include <libriscv/threads.hpp>
 using namespace httplib;
 
-// avoid endless loops, code that takes too long and excessive memory usage
-static const uint64_t MAX_BINARY       = 16'000'000;
-static const uint64_t MAX_INSTRUCTIONS = 2'000'000;
-static const uint32_t MAX_MEMORY       = 32 * 1024 * 1024;
-static const uint32_t BENCH_SAMPLES    = 100;
+// Avoid endless loops, code that takes too long and excessive memory usage
+static const uint64_t MAX_BINARY       = 32'000'000UL;
+static const uint64_t MAX_INSTRUCTIONS = 6'000'000UL;
+static const uint64_t MAX_MEMORY       = 32UL * 1024 * 1024;
 
 static const std::vector<std::string> env = {
 	"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
@@ -32,66 +31,59 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		res.set_header("X-Error", "Empty binary");
 	}
 
-	State<4> state;
 	// go-time: create machine, execute code
-	riscv::Machine<riscv::RISCV32> machine { binary, {
+	riscv::Machine<riscv::RISCV64> machine { binary, {
 		.memory_max = MAX_MEMORY
 	}};
 
 	machine.setup_linux({"program"}, env);
-	setup_linux_syscalls(state, machine);
-	setup_multithreading(state, machine);
+	setup_linux_syscalls(machine);
+	machine.setup_posix_threads();
 
-	// run the machine until potential break
-	bool break_used = false;
-	machine.install_syscall_handler(0,
-		[&break_used] (auto& machine) {
-			break_used = true;
-			machine.stop();
-		});
+	std::string output = "";
+	machine.set_printer([&output] (const char* text, size_t len) {
+		output.append(text, len);
+	});
 
-	// execute until we are inside main()
-	uint32_t main_address = 0x0;
+	struct StartupState {
+		bool break_used = false;
+	} startup_state;
+	machine.set_userdata(&startup_state);
+
+	// Stop (pause) the machine when he hit a trap/break instruction
+	machine.install_syscall_handler(riscv::SYSCALL_EBREAK,
+	[] (auto& machine) {
+		auto* state = machine.template get_userdata<StartupState>();
+		state->break_used = true;
+		machine.stop();
+		// When we return from this function the internal PC will increment
+		// past this instruction, which allows the Machine to be resumed
+		// just after the break, afterwards.
+	});
+
+	// Execute until we have hit a break
+	const uint64_t st0 = micros_now();
+	asm("" : : : "memory");
 	try {
-		main_address = machine.address_of("main");
-		if (main_address == 0x0) {
-			res.set_header("X-Exception", "The address of main() was not found");
-		}
+		machine.simulate(MAX_INSTRUCTIONS);
 	} catch (std::exception& e) {
 		res.set_header("X-Exception", e.what());
 	}
-	if (main_address != 0x0)
+	asm("" : : : "memory");
+	const uint64_t st1 = micros_now();
+	asm("" : : : "memory");
+	res.set_header("X-Startup-Time", std::to_string(st1 - st0));
+	const auto ic = machine.instruction_counter();
+	res.set_header("X-Startup-Instructions", std::to_string(ic));
+	// cache for 10 seconds (it's only the output of a program)
+	res.set_header("Cache-Control", "max-age=10");
+
+	if (startup_state.break_used == true)
 	{
-		const uint64_t st0 = micros_now();
-		asm("" : : : "memory");
-		// execute insruction by instruction until
-		// we have entered main(), then break
-		try {
-			while (LIKELY(!machine.stopped())) {
-				machine.cpu.simulate();
-				if (UNLIKELY(machine.instruction_counter() >= MAX_INSTRUCTIONS))
-					break;
-				if (machine.cpu.registers().pc == main_address)
-					break;
-			}
-		} catch (std::exception& e) {
-			res.set_header("X-Exception", e.what());
-		}
-		asm("" : : : "memory");
-		const uint64_t st1 = micros_now();
-		asm("" : : : "memory");
-		res.set_header("X-Startup-Time", std::to_string(st1 - st0));
-		const auto instructions = machine.instruction_counter();
-		res.set_header("X-Startup-Instructions", std::to_string(instructions));
-		// cache for 10 seconds (it's only the output of a program)
-		res.set_header("Cache-Control", "max-age=10");
-	}
-	if (machine.cpu.registers().pc == main_address)
-	{
-		// reset PC here for benchmarking
+		startup_state.break_used = false;
+		// Reset PC here for benchmarking
 		machine.reset_instruction_counter();
 		std::deque<uint64_t> samples;
-		state.output.clear();
 
 		asm("" : : : "memory");
 		const uint64_t t0 = micros_now();
@@ -99,10 +91,8 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 
 		try {
 			machine.simulate(MAX_INSTRUCTIONS);
-			if (machine.instruction_counter() == MAX_INSTRUCTIONS) {
-				res.set_header("X-Exception", "Maximum instructions reached");
-			}
 		} catch (const std::exception& e) {
+			printf("Exception after break: %s\n", e.what());
 			res.set_header("X-Exception", e.what());
 		}
 
@@ -111,8 +101,6 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		asm("" : : : "memory");
 		samples.push_back(t1 - t0);
 
-		res.status = 200;
-		res.set_header("X-Exit-Code", std::to_string(state.exit_code));
 		if (!samples.empty()) {
 			const uint64_t first = samples[0];
 			std::sort(samples.begin(), samples.end());
@@ -124,18 +112,36 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 			res.set_header("X-Runtime-Median", std::to_string(median));
 			res.set_header("X-Runtime-Highest", std::to_string(highest));
 		}
-		const auto instructions = std::to_string(machine.instruction_counter());
-		res.set_header("X-Instruction-Count", instructions);
-		res.set_header("X-Binary-Size", std::to_string(binary.size()));
-		const size_t active_mem = machine.memory.pages_active() * 4096;
-		res.set_header("X-Memory-Usage", std::to_string(active_mem));
-		res.set_header("X-Memory-Max", std::to_string(MAX_MEMORY));
-		res.set_content(state.output, "text/plain");
+		const auto ic = machine.instruction_counter();
+		res.set_header("X-Instruction-Count", std::to_string(ic));
+
+		// If ebreak was used again to delineate the benchmark,
+		// we can finish the execution of main here without
+		// resetting the instruction counter.
+		if (startup_state.break_used) {
+			try {
+				machine.simulate(MAX_INSTRUCTIONS);
+			} catch (const std::exception& e) {
+				printf("Exception after break: %s\n", e.what());
+				res.set_header("X-Exception", e.what());
+			}
+		}
 	}
 	else {
-		res.set_header("X-Exception", "Could not enter main()");
-		res.set_header("X-Instruction-Count", std::to_string(MAX_INSTRUCTIONS));
+		res.set_header("X-Instruction-Count", "0");
 	}
+
+	res.set_header("X-Binary-Size", std::to_string(binary.size()));
+	const size_t active_mem = machine.memory.pages_active() * 4096;
+	res.set_header("X-Memory-Usage", std::to_string(active_mem));
+	res.set_header("X-Memory-Max", std::to_string(MAX_MEMORY));
+	res.set_content(output, "text/plain");
+
+	// A0 is both a return value and first argument, matching
+	// any calls to exit()
+	const int exit_code = machine.cpu.reg(10);
+	res.status = 200;
+	res.set_header("X-Exit-Code", std::to_string(exit_code));
 }
 
 void execute(const Request& req, Response& res, const ContentReader& creader)

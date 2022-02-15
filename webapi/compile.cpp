@@ -33,7 +33,15 @@ void compile(const Request& req, Response& res)
 	res.set_header("X-Method", method);
 
 	const std::string progpath = project_path(program_id);
-	// create project folder
+	// Create temporary project base folder
+	if (create_folder(project_base()) < 0) {
+		if (errno != EEXIST) {
+			res.status = 500;
+			res.set_header("X-Error", "Failed to create program base folder");
+			return;
+		}
+	}
+	// Create temporary project folder
 	if (create_folder(progpath) < 0) {
 		if (errno != EEXIST) {
 			res.status = 500;
