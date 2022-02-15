@@ -35,7 +35,10 @@ inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 	// setup calling convention
 	this->setup_call(call_addr, std::forward<Args>(args)...);
 	// execute function
-	this->simulate<Throw>(MAXI);
+	if (MAXI != 0)
+		this->simulate<Throw>(MAXI);
+	else
+		this->simulate<Throw>(max_instructions());
 	// address-sized integer return value
 	return cpu.reg(REG_ARG0);
 }
@@ -56,7 +59,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	if constexpr (StoreRegs) {
 		regs = cpu.registers();
 	}
-	const uint64_t max_counter = this->m_max_counter;
+	const uint64_t max_counter = this->max_instructions();
 	// we need to make some stack room
 	this->cpu.reg(REG_SP) -= 1024u;
 	// setup calling convention
@@ -64,7 +67,10 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	this->realign_stack();
 	// execute function
 	try {
-		this->simulate<Throw>(MAXI);
+		if (MAXI != 0)
+			this->simulate<Throw>(MAXI);
+		else
+			this->simulate<Throw>(max_instructions());
 	} catch (...) {
 		this->m_max_counter = max_counter;
 		if constexpr (StoreRegs) {
