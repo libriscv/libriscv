@@ -18,7 +18,7 @@ template <typename... Args>
 inline void print(Args&&... args) {
 	([&] {
 		const String str {args};
-		write(0, str.data, str.len);
+		write(1, str.data, str.len);
 	}(), ...);
 }
 
