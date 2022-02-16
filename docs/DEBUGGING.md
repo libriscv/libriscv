@@ -47,9 +47,13 @@ Setting the max instructions will prevent the machine from appearing stopped. Th
 
 ## Debugging remotely with GDB
 
-To get a GDB capable of debugging RISC-V you will need to download and build the [RISC-V toolchain](https://github.com/riscv-collab/riscv-gnu-toolchain). Building GDB is always enabled when configuring. There is no difference between the 32- and 64-bit versions, afaik. On Windows you can get access to riscvXX-...-gdb using WSL2.
+To get a GDB capable of debugging RISC-V you will need to install your distros equivalent of `gdb-multiarch`. It will have RISC-V support built in, and it will detect the architecture of ELF programs you load in it.
 
-Once you have a RISC-V aware GDB you can `target remote localhost:2159` to connect when the emulator is waiting for a debugger.
+```
+sudo apt install gdb-multiarch
+```
+
+Once you have a RISC-V aware GDB you can start it with `gdb-multiarch my.elf`. Once inside GDB execute `target remote localhost:2159` to connect when the emulator is waiting for a debugger.
 
 ```C++
 #include <libriscv/rsp_server.hpp>
@@ -64,7 +68,8 @@ void gdb_listen(uint16_t port, Machine<W>& machine)
 		while (client->process_one());
 	}
 	// Finish the *remainder* of the program
-	machine.simulate();
+	if (!machine.stopped())
+		machine.simulate(/* machine.max_instructions() */);
 }
 ```
 

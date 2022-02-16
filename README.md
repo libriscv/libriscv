@@ -83,7 +83,7 @@ And finally, the `micro` project implements the absolutely minimal freestanding 
 
 ## Remote debugging using GDB
 
-If you have built the emulator, you can use `DEBUG=1 ./emulator /path/to/program` to enable GDB to connect. Start your GDB like so: `riscv64-unknown-elf-gdb /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote localhost:2159`. Now you can step through the code.
+If you have built the emulator, you can use `DEBUG=1 ./emulator /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote localhost:2159`. Now you can step through the code.
 
 Most modern languages embed their own pretty printers for debuginfo which enables you to go line by line in your favorite language.
 
