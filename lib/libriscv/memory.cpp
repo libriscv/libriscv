@@ -164,10 +164,15 @@ namespace riscv
 			std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &stop_instr, sizeof(stop_instr));
 
 			// This is what the CPU instruction fetcher will use
+			// 0...len: The regular execute segment
+			// len..+ 4: The STOP function
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, len + 4);
 #if defined(RISCV_INSTR_CACHE)
-			this->generate_decoder_cache(options, pbase, hdr->p_vaddr, len + 4);
+			// + 8: An invalid instruction that prevents crashes if someone
+			// accidentally starts the emulator after a STOP happened.
+			// The invalid instruction must be a part of the decoder cache.
+			this->generate_decoder_cache(options, pbase, hdr->p_vaddr, len + 8);
 #endif
 			(void) options;
 			// Nothing more to do here, if execute-only
