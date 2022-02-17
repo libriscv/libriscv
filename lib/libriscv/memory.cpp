@@ -138,7 +138,7 @@ namespace riscv
 			const size_t prelen  = hdr->p_vaddr - pbase;
 			// The first 4 bytes is instruction alignment
 			// The middle 4 bytes is the STOP instruction
-			// The last 8 bytes is zeroed out (illegal instruction)
+			// The last 8 bytes is a relative jump (JR -4)
 			const size_t midlen  = len + prelen + 12;
 			const size_t plen =
 				(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
@@ -160,8 +160,13 @@ namespace riscv
 			// It is used by vmcall and preempt to stop after a function call
 			address_t exit_lenalign = address_t(len + 0x3) & ~address_t(0x3);
 			this->m_exit_address = hdr->p_vaddr + exit_lenalign;
-			const uint32_t stop_instr = 0x7ff00073;
-			std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &stop_instr, sizeof(stop_instr));
+			struct {
+				// STOP
+				const uint32_t stop_instr = 0x7ff00073;
+				// JR -4 (jump back to STOP)
+				const uint32_t jr4_instr = 0xffc00067;
+			} instrdata;
+			std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
 
 			// This is what the CPU instruction fetcher will use
 			// 0...len: The regular execute segment
@@ -169,9 +174,11 @@ namespace riscv
 			auto* exec_offset = m_exec_pagedata.get() - pbase;
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, len + 4);
 #if defined(RISCV_INSTR_CACHE)
-			// + 8: An invalid instruction that prevents crashes if someone
-			// accidentally starts the emulator after a STOP happened.
-			// The invalid instruction must be a part of the decoder cache.
+			// + 8: A jump instruction that prevents crashes if someone
+			// resumes the emulator after a STOP happened. It also helps
+			// the debugger by not causing an exception, and will instead
+			// loop back to the STOP instruction.
+			// The instruction must be a part of the decoder cache.
 			this->generate_decoder_cache(options, pbase, hdr->p_vaddr, len + 8);
 #endif
 			(void) options;
