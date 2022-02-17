@@ -163,8 +163,8 @@ namespace riscv
 			struct {
 				// STOP
 				const uint32_t stop_instr = 0x7ff00073;
-				// JR -4 (jump back to STOP)
-				const uint32_t jr4_instr = 0xffc00067;
+				// JMP -4 (jump back to STOP)
+				const uint32_t jr4_instr = 0xffdff06f;
 			} instrdata;
 			std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
 
