@@ -315,7 +315,7 @@ void syscall_readlinkat(Machine<W>& machine)
 	path[sizeof(path)-1] = 0;
 
 	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
-		vfd, path, (long)buffer, (size_t)bufsize);
+		vfd, path, (long)g_buf, (size_t)bufsize);
 
 	char buffer[16384];
 	if (bufsize > sizeof(buffer)) {
