@@ -168,17 +168,23 @@ namespace riscv
 		// Optional custom memory-related system calls
 		void setup_native_memory(size_t sysnum, bool safe = true);
 
-		// System calls and threads implementations
-		const MultiThreading<W>& threads() const noexcept { return *m_mt; }
-		MultiThreading<W>& threads() noexcept { return *m_mt; }
+		// System calls, files and threads implementations
 		bool has_file_descriptors() const noexcept { return m_fds != nullptr; }
-		const FileDescriptors& fds() const;
-		FileDescriptors& fds();
+		// The "minimum": lseek, read, write, exit (provided for example usage)
 		void setup_minimal_syscalls();
+		// Enough to run minimal newlib programs
 		void setup_newlib_syscalls();
+		// Set up every supported system call, emulating Linux
 		void setup_linux_syscalls(bool filesystem = true, bool sockets = true);
 		void setup_posix_threads();
 		void setup_native_threads(const size_t syscall_base);
+		// Threads: Access to thread internal structures
+		const MultiThreading<W>& threads() const noexcept { return *m_mt; }
+		MultiThreading<W>& threads() noexcept { return *m_mt; }
+		// FileDescriptors: Access to translation between guest fds
+		// and real system fds. The destructor also closes all opened files.
+		const FileDescriptors& fds() const;
+		FileDescriptors& fds();
 
 		void set_sighandler(address_t addr) { m_sighandler = addr; }
 		address_t sighandler() const noexcept { return m_sighandler; }
