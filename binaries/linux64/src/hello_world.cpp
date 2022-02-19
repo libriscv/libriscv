@@ -83,7 +83,7 @@ int main (int argc, char *argv[], char *envp[])
 	}
 	// test filesystem support
 	auto hostname = load_file("/etc/hostname");
-	printf("Hostname: %.*s\n", (int)hostname.size(), hostname.data());
+	printf("Hostname: %.*s", (int)hostname.size(), hostname.data());
 	// test pthreads support
 	extern void test_threads();
 	test_threads();
