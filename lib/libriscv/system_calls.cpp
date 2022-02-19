@@ -222,9 +222,13 @@ static void syscall_openat(Machine<W>& machine)
 			}
 		}
 		int real_fd = openat(machine.fds().translate(dir_fd), path, flags);
-		const int vfd = machine.fds().assign(real_fd);
-
-		machine.set_result(vfd);
+		if (real_fd > 0) {
+			const int vfd = machine.fds().assign(real_fd);
+			machine.set_result(vfd);
+		} else {
+			// Translate errno() into kernel API return value
+			machine.set_result(-errno);
+		}
 		return;
 	}
 
@@ -301,9 +305,44 @@ static void syscall_ioctl(Machine<W>& machine)
 template <int W>
 void syscall_readlinkat(Machine<W>& machine)
 {
-	const int fd = machine.template sysarg<int>(0);
-	SYSPRINT("SYSCALL readlinkat, fd: %d\n", fd);
-	(void) fd;
+	const int vfd = machine.template sysarg<int>(0);
+	const auto g_path = machine.template sysarg<address_type<W>>(1);
+	const auto g_buf = machine.template sysarg<address_type<W>>(2);
+	const auto bufsize = machine.template sysarg<address_type<W>>(3);
+
+	char path[PATH_MAX];
+	machine.copy_from_guest(path, g_path, sizeof(path)-1);
+	path[sizeof(path)-1] = 0;
+
+	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
+		vfd, path, (long)buffer, (size_t)bufsize);
+
+	char buffer[16384];
+	if (bufsize > sizeof(buffer)) {
+		machine.set_result(-ENOMEM);
+		return;
+	}
+
+	if (machine.has_file_descriptors()) {
+
+		if (machine.fds().filter_open != nullptr) {
+			if (!machine.fds().filter_open(machine.template get_userdata<void>(), path)) {
+				machine.set_result(-EPERM);
+				return;
+			}
+		}
+		const int real_fd = machine.fds().translate(vfd);
+
+		const int res = readlinkat(real_fd, path, buffer, bufsize);
+		if (res > 0) {
+			// TODO: Only necessary if g_buf is not sequential.
+			machine.copy_to_guest(g_buf, buffer, res);
+		}
+
+		machine.set_result(res);
+		return;
+	}
+
 	machine.set_result(-ENOSYS);
 }
 
