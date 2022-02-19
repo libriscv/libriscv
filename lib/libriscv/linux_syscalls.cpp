@@ -47,18 +47,31 @@ void syscall_exit(Machine<W>& machine)
 }
 
 template <int W>
+void syscall_lseek(Machine<W>& machine)
+{
+	const int fd      = machine.template sysarg<int>(0);
+	const auto offset = machine.template sysarg<int64_t>(1);
+	const int whence  = machine.template sysarg<int>(2);
+	SYSPRINT("SYSCALL lseek, fd: %d, offset: 0x%lX, whence: %d\n",
+		fd, (long)offset, whence);
+
+	const int real_fd = machine.fds().get(fd);
+	int64_t res = lseek(real_fd, offset, whence);
+	machine.set_result(res);
+}
+template <int W>
 void syscall_read(Machine<W>& machine)
 {
 	const int  fd      = machine.template sysarg<int>(0);
 	const auto address = machine.template sysarg<address_type<W>>(1);
 	const size_t len   = machine.template sysarg<address_type<W>>(2);
-	SYSPRINT("SYSCALL read: addr = 0x%lX, len = %zu\n", (long)address, len);
-	// We only accept stdin, for now :)
+	SYSPRINT("SYSCALL read, addr: 0x%lX, len: %zu\n", (long)address, len);
+	// We have special stdin handling
 	if (fd == 0) {
-		// Zero-copy retrieval of buffers
-		riscv::vBuffer buffers[4];
+		// Gather up to 64kb in pages we can read into
+		riscv::vBuffer buffers[16];
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(4, buffers, address, len);
+			machine.memory.gather_buffers_from_range(16, buffers, address, len);
 		for (size_t i = 0; i < cnt; i++) {
 			machine.stdin(buffers[i].ptr, buffers[i].len);
 		}
@@ -66,10 +79,10 @@ void syscall_read(Machine<W>& machine)
 		return;
 	} else if (machine.has_file_descriptors()) {
 		const int real_fd = machine.fds().get(fd);
-		// Retrieval of buffers that we can read into
-		riscv::vBuffer buffers[16];
+		// Gather up to 1MB of pages we can read into
+		riscv::vBuffer buffers[256];
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(16, buffers, address, len);
+			machine.memory.gather_buffers_from_range(256, buffers, address, len);
 		// Could probably be a writev call, tbh
 		for (size_t i = 0; i < cnt; i++) {
 			read(real_fd, buffers[i].ptr, buffers[i].len);
@@ -85,13 +98,13 @@ void syscall_write(Machine<W>& machine)
 	const int  fd      = machine.template sysarg<int>(0);
 	const auto address = machine.template sysarg<address_type<W>>(1);
 	const size_t len   = machine.template sysarg<address_type<W>>(2);
-	SYSPRINT("SYSCALL write: addr = 0x%lX, len = %zu\n", (long)address, len);
+	SYSPRINT("SYSCALL write, addr: 0x%lX, len: %zu\n", (long)address, len);
 	// We only accept standard output pipes, for now :)
 	if (fd == 1 || fd == 2) {
-		// Zero-copy retrieval of buffers
-		riscv::vBuffer buffers[4];
+		// Zero-copy retrieval of buffers (64kb)
+		riscv::vBuffer buffers[16];
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(4, buffers, address, len);
+			machine.memory.gather_buffers_from_range(16, buffers, address, len);
 		for (size_t i = 0; i < cnt; i++) {
 			machine.print(buffers[i].ptr, buffers[i].len);
 		}
@@ -99,10 +112,10 @@ void syscall_write(Machine<W>& machine)
 		return;
 	} else if (machine.has_file_descriptors()) {
 		int real_fd = machine.fds().get(fd);
-		// Zero-copy retrieval of buffers
-		riscv::vBuffer buffers[16];
+		// Zero-copy retrieval of buffers (256kb)
+		riscv::vBuffer buffers[64];
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(16, buffers, address, len);
+			machine.memory.gather_buffers_from_range(64, buffers, address, len);
 		// Could probably be a writev call, tbh
 		for (size_t i = 0; i < cnt; i++) {
 			write(real_fd, buffers[i].ptr, buffers[i].len);
@@ -120,7 +133,7 @@ void syscall_writev(Machine<W>& machine)
 	const auto iov_g  = machine.template sysarg<address_type<W>>(1);
 	const auto count  = machine.template sysarg<int>(2);
 	if constexpr (false) {
-		printf("SYSCALL writev called, iov = %#X  cnt = %d\n", iov_g, count);
+		printf("SYSCALL writev, iov: %#X  cnt: %d\n", iov_g, count);
 	}
 	if (count < 0 || count > 256) {
 		machine.set_result(-EINVAL);
@@ -158,14 +171,15 @@ void syscall_close(riscv::Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL close called, fd = %d\n", fd);
+		printf("SYSCALL close, fd: %d\n", fd);
 	}
 	if (fd <= 2) {
+		// TODO: Do we really want to close them?
 		machine.set_result(0);
 		return;
 	} else if (machine.has_file_descriptors()) {
-		machine.fds().close(fd);
-		machine.set_result(0);
+		machine.set_result(
+			machine.fds().close(fd) >= 0 ? 0 : -EBADF);
 		return;
 	}
 	machine.set_result(-EBADF);
@@ -208,7 +222,7 @@ template <int W>
 void syscall_gettimeofday(Machine<W>& machine)
 {
 	const auto buffer = machine.template sysarg<address_type<W>>(0);
-	SYSPRINT("SYSCALL gettimeofday called, buffer = 0x%X\n", buffer);
+	SYSPRINT("SYSCALL gettimeofday, buffer: 0x%lX\n", (long)buffer);
 	struct timeval tv;
 	gettimeofday(&tv, nullptr);
 	if constexpr (W == 4) {
@@ -230,7 +244,7 @@ void syscall_openat(Machine<W>& machine)
 	machine.copy_from_guest(path, g_path, sizeof(path)-1);
 	path[sizeof(path)-1] = 0;
 
-	SYSPRINT("SYSCALL openat called, dir_fd = %d path=%s flags=0x%X\n",
+	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X\n",
 		dir_fd, path, flags);
 
 	if (machine.has_file_descriptors()) {
@@ -248,9 +262,9 @@ template <int W>
 void syscall_readlinkat(Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
-	SYSPRINT("SYSCALL readlinkat called, fd = %d  \n", fd);
+	SYSPRINT("SYSCALL readlinkat, fd: %d\n", fd);
 	(void) fd;
-	machine.set_result(-EBADF);
+	machine.set_result(-ENOSYS);
 }
 
 template <int W>
@@ -264,7 +278,7 @@ void syscall_brk(Machine<W>& machine)
 	}
 
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL brk 0x%lX\n", (uint64_t)new_end);
+		printf("SYSCALL brk, new_end: 0x%lX\n", (long)new_end);
 	}
 	machine.set_result(new_end);
 }
@@ -275,8 +289,8 @@ void syscall_stat(Machine<W>& machine)
 	const auto  fd      = machine.template sysarg<int>(0);
 	const auto  buffer  = machine.template sysarg<address_type<W>>(1);
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL stat called, fd = %d  buffer = 0x%X\n",
-				fd, buffer);
+		printf("SYSCALL stat, fd: %d  buffer: 0x%lX\n",
+				fd, (long)buffer);
 	}
 	if (false) {
 		struct stat result;
@@ -298,7 +312,7 @@ void syscall_uname(Machine<W>& machine)
 {
 	const auto buffer = machine.template sysarg<address_type<W>>(0);
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL uname called, buffer = 0x%X\n", buffer);
+		printf("SYSCALL uname, buffer: 0x%lX\n", (long)buffer);
 	}
 	static constexpr int UTSLEN = 65;
 	struct uts32 {
@@ -328,7 +342,7 @@ inline void add_mman_syscalls(Machine<W>& machine)
 	[] (Machine<W>& machine) {
 		const auto addr = machine.template sysarg<address_type<W>> (0);
 		const auto len  = machine.template sysarg<address_type<W>> (1);
-		SYSPRINT(">>> munmap(0x%X, len=%u)\n", addr, len);
+		SYSPRINT(">>> munmap(0x%lX, len=%zu)\n", (long)addr, (size_t)len);
 		machine.memory.free_pages(addr, len);
 		auto& nextfree = machine.memory.mmap_address();
 		if (addr + len == nextfree) {
@@ -345,8 +359,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto length = machine.template sysarg<address_type<W>>(1);
 		const auto prot   = machine.template sysarg<int>(2);
 		const auto flags  = machine.template sysarg<int>(3);
-		SYSPRINT(">>> mmap(addr %#X, len %u, prot %#x, flags %#X)\n",
-				addr_g, length, prot, flags);
+		SYSPRINT(">>> mmap(addr 0x%lX, len %zu, prot %#x, flags %#X)\n",
+				(long)addr_g, (size_t)length, prot, flags);
 		if (addr_g % Page::size() != 0 || length % Page::size() != 0) {
 			machine.set_result(-1); // = MAP_FAILED;
 			return;
@@ -386,8 +400,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto old_size = machine.template sysarg<address_type<W>>(1);
 		const auto new_size = machine.template sysarg<address_type<W>>(2);
 		const auto flags    = machine.template sysarg<int>(3);
-		SYSPRINT(">>> mremap(addr %#X, len %u, newsize %u, flags %#X)\n",
-				old_addr, old_size, new_size, flags);
+		SYSPRINT(">>> mremap(addr 0x%lX, len %zu, newsize %zu, flags %#X)\n",
+				(long)old_addr, (size_t)old_size, (size_t)new_size, flags);
 		auto& nextfree = machine.memory.mmap_address();
 		// We allow the common case of reallocating the
 		// last mapping to a bigger one
@@ -405,7 +419,8 @@ inline void add_mman_syscalls(Machine<W>& machine)
 		const auto addr = machine.template sysarg<address_type<W>> (0);
 		const auto len  = machine.template sysarg<address_type<W>> (1);
 		const int  prot = machine.template sysarg<int> (2);
-		SYSPRINT(">>> mprotect(0x%X, len=%u, prot=%x)\n", addr, len, prot);
+		SYSPRINT(">>> mprotect(0x%lX, len=%zu, prot=%x)\n",
+			(long)addr, (size_t)len, prot);
 		machine.memory.set_page_attr(addr, len, {
 			.read  = bool(prot & 1),
 			.write = bool(prot & 2),
@@ -448,6 +463,7 @@ template <int W>
 void Machine<W>::setup_minimal_syscalls()
 {
 	this->install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
+	this->install_syscall_handler(62, syscall_lseek<W>);
 	this->install_syscall_handler(63, syscall_read<W>);
 	this->install_syscall_handler(64, syscall_write<W>);
 	this->install_syscall_handler(93, syscall_exit<W>);
