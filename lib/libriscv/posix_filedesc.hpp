@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <map>
 #include "types.hpp"
 
@@ -15,6 +16,14 @@ struct FileDescriptors
 
 	std::map<int, int> translation;
 	int counter = 0x1000;
+
+	bool permit_filesystem = false;
+	bool permit_file_write = false;
+	bool permit_sockets = false;
+
+	std::function<bool(const char*)> filter_open = nullptr;
+	std::function<bool(const char*)> filter_stat = nullptr;
+	std::function<bool(uint64_t)> filter_ioctl = nullptr;
 };
 
 inline FileDescriptors::~FileDescriptors()

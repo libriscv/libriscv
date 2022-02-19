@@ -13,6 +13,7 @@ static constexpr bool verbose_syscalls = false;
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/ioctl.h>
 #include <sys/signal.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -27,23 +28,56 @@ struct guest_iovec {
 };
 
 template <int W>
-void syscall_stub_zero(Machine<W>& machine) {
+static void syscall_stub_zero(Machine<W>& machine) {
 	machine.set_result(0);
 }
 
 template <int W>
-void syscall_stub_nosys(Machine<W>& machine) {
+static void syscall_stub_nosys(Machine<W>& machine) {
 	machine.set_result(-ENOSYS);
 }
 
 template <int W>
-void syscall_exit(Machine<W>& machine)
+static void syscall_exit(Machine<W>& machine)
 {
 	// Stop sets the max instruction counter to zero, allowing most
 	// instruction loops to end. It is, however, not the only way
 	// to exit a program. Tighter integrations with the library should
 	// provide their own methods.
 	machine.stop();
+}
+
+template <int W>
+static void syscall_ebreak(riscv::Machine<W>& machine)
+{
+	printf("\n>>> EBREAK at %#lX\n", (long) machine.cpu.pc());
+#ifdef RISCV_DEBUG
+	machine.print_and_pause();
+#else
+	throw MachineException(UNHANDLED_SYSCALL, "EBREAK instruction");
+#endif
+}
+
+static inline bool is_exception_signal(int sig) {
+	// SIGILL, SIGABRT, SIGFPE, SIGSEGV
+	return sig == 4 || sig == 6 || sig == 8 || sig == 11;
+}
+
+template <int W>
+static void syscall_sigaction(Machine<W>& machine)
+{
+	const int signal = machine.template sysarg<address_type<W>>(0);
+	const auto buffer = machine.template sysarg<address_type<W>>(1);
+	struct sigaction sa;
+	machine.copy_from_guest(&sa, buffer, sizeof(sa));
+
+	if (is_exception_signal(signal)) {
+		// There is typically only one relevant handler,
+		// and languages use it to print backtraces.
+		//printf("Signal %d handler: 0x%lX\n", signal, (uintptr_t)sa.sa_handler);
+		machine.set_sighandler((address_type<W>)(uintptr_t)sa.sa_handler);
+	}
+	machine.set_result(0);
 }
 
 template <int W>
@@ -60,7 +94,7 @@ void syscall_lseek(Machine<W>& machine)
 	machine.set_result(res);
 }
 template <int W>
-void syscall_read(Machine<W>& machine)
+static void syscall_read(Machine<W>& machine)
 {
 	const int  fd      = machine.template sysarg<int>(0);
 	const auto address = machine.template sysarg<address_type<W>>(1);
@@ -83,7 +117,7 @@ void syscall_read(Machine<W>& machine)
 		riscv::vBuffer buffers[256];
 		size_t cnt =
 			machine.memory.gather_buffers_from_range(256, buffers, address, len);
-		// Could probably be a writev call, tbh
+		// Could probably be a readv call, tbh
 		for (size_t i = 0; i < cnt; i++) {
 			read(real_fd, buffers[i].ptr, buffers[i].len);
 		}
@@ -93,7 +127,7 @@ void syscall_read(Machine<W>& machine)
 	machine.set_result(-EBADF);
 }
 template <int W>
-void syscall_write(Machine<W>& machine)
+static void syscall_write(Machine<W>& machine)
 {
 	const int  fd      = machine.template sysarg<int>(0);
 	const auto address = machine.template sysarg<address_type<W>>(1);
@@ -110,7 +144,7 @@ void syscall_write(Machine<W>& machine)
 		}
 		machine.set_result(len);
 		return;
-	} else if (machine.has_file_descriptors()) {
+	} else if (machine.has_file_descriptors() && machine.fds().permit_file_write) {
 		int real_fd = machine.fds().get(fd);
 		// Zero-copy retrieval of buffers (256kb)
 		riscv::vBuffer buffers[64];
@@ -127,7 +161,7 @@ void syscall_write(Machine<W>& machine)
 }
 
 template <int W>
-void syscall_writev(Machine<W>& machine)
+static void syscall_writev(Machine<W>& machine)
 {
 	const int  fd     = machine.template sysarg<int>(0);
 	const auto iov_g  = machine.template sysarg<address_type<W>>(1);
@@ -167,7 +201,38 @@ void syscall_writev(Machine<W>& machine)
 }
 
 template <int W>
-void syscall_close(riscv::Machine<W>& machine)
+static void syscall_openat(Machine<W>& machine)
+{
+	const int dir_fd = machine.template sysarg<int>(0);
+	const auto g_path = machine.template sysarg<address_type<W>>(1);
+	const int flags  = machine.template sysarg<int>(2);
+	char path[PATH_MAX];
+	machine.copy_from_guest(path, g_path, sizeof(path)-1);
+	path[sizeof(path)-1] = 0;
+
+	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X\n",
+		dir_fd, path, flags);
+
+	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
+
+		if (machine.fds().filter_open != nullptr) {
+			if (!machine.fds().filter_open(path)) {
+				machine.set_result(-EPERM);
+				return;
+			}
+		}
+		int real_fd = openat(machine.fds().translate(dir_fd), path, flags);
+		const int vfd = machine.fds().assign(real_fd);
+
+		machine.set_result(vfd);
+		return;
+	}
+
+	machine.set_result(-EBADF);
+}
+
+template <int W>
+static void syscall_close(riscv::Machine<W>& machine)
 {
 	const int fd = machine.template sysarg<int>(0);
 	if constexpr (verbose_syscalls) {
@@ -186,72 +251,47 @@ void syscall_close(riscv::Machine<W>& machine)
 }
 
 template <int W>
-void syscall_ebreak(riscv::Machine<W>& machine)
+static void syscall_fcntl(Machine<W>& machine)
 {
-	printf("\n>>> EBREAK at %#lX\n", (long) machine.cpu.pc());
-#ifdef RISCV_DEBUG
-	machine.print_and_pause();
-#else
-	throw MachineException(UNHANDLED_SYSCALL, "EBREAK instruction");
-#endif
-}
-
-static inline bool is_exception_signal(int sig) {
-	// SIGILL, SIGABRT, SIGFPE, SIGSEGV
-	return sig == 4 || sig == 6 || sig == 8 || sig == 11;
-}
-
-template <int W>
-void syscall_sigaction(Machine<W>& machine)
-{
-	const int signal = machine.template sysarg<address_type<W>>(0);
-	const auto buffer = machine.template sysarg<address_type<W>>(1);
-	struct sigaction sa;
-	machine.copy_from_guest(&sa, buffer, sizeof(sa));
-
-	if (is_exception_signal(signal)) {
-		// There is typically only one relevant handler,
-		// and languages use it to print backtraces.
-		//printf("Signal %d handler: 0x%lX\n", signal, (uintptr_t)sa.sa_handler);
-		machine.set_sighandler((address_type<W>)(uintptr_t)sa.sa_handler);
-	}
-	machine.set_result(0);
-}
-
-template <int W>
-void syscall_gettimeofday(Machine<W>& machine)
-{
-	const auto buffer = machine.template sysarg<address_type<W>>(0);
-	SYSPRINT("SYSCALL gettimeofday, buffer: 0x%lX\n", (long)buffer);
-	struct timeval tv;
-	gettimeofday(&tv, nullptr);
-	if constexpr (W == 4) {
-		int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
-		machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
-	} else {
-		machine.copy_to_guest(buffer, &tv, sizeof(tv));
-	}
-	machine.set_result(0);
-}
-
-template <int W>
-void syscall_openat(Machine<W>& machine)
-{
-	const int dir_fd = machine.template sysarg<int>(0);
-	const auto g_path = machine.template sysarg<address_type<W>>(1);
-	const int flags  = machine.template sysarg<int>(2);
-	char path[PATH_MAX];
-	machine.copy_from_guest(path, g_path, sizeof(path)-1);
-	path[sizeof(path)-1] = 0;
-
-	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X\n",
-		dir_fd, path, flags);
+	const int vfd = machine.template sysarg<int>(0);
+	const auto cmd = machine.template sysarg<int>(1);
+	const auto arg1 = machine.template sysarg<address_type<W>>(2);
+	const auto arg2 = machine.template sysarg<address_type<W>>(3);
+	const auto arg3 = machine.template sysarg<address_type<W>>(4);
+	SYSPRINT("SYSCALL fcntl, fd: %d  cmd: 0x%X\n", vfd, cmd);
 
 	if (machine.has_file_descriptors()) {
-		int real_fd = openat(machine.fds().translate(dir_fd), path, flags);
-		const int vfd = machine.fds().assign(real_fd);
+		int real_fd = machine.fds().translate(vfd);
+		int res = fcntl(real_fd, cmd, arg1, arg2, arg3);
+		machine.set_result(res);
+		return;
+	}
 
-		machine.set_result(vfd);
+	machine.set_result(-EBADF);
+}
+
+template <int W>
+static void syscall_ioctl(Machine<W>& machine)
+{
+	const int vfd = machine.template sysarg<int>(0);
+	const auto req = machine.template sysarg<uint64_t>(1);
+	const auto arg1 = machine.template sysarg<address_type<W>>(2);
+	const auto arg2 = machine.template sysarg<address_type<W>>(3);
+	const auto arg3 = machine.template sysarg<address_type<W>>(4);
+	const auto arg4 = machine.template sysarg<address_type<W>>(5);
+	SYSPRINT("SYSCALL ioctl, fd: %d  req: 0x%lX\n", vfd, req);
+
+	if (machine.has_file_descriptors()) {
+		if (machine.fds().filter_ioctl != nullptr) {
+			if (!machine.fds().filter_ioctl(req)) {
+				machine.set_result(-EPERM);
+				return;
+			}
+		}
+
+		int real_fd = machine.fds().translate(vfd);
+		int res = ioctl(real_fd, req, arg1, arg2, arg3, arg4);
+		machine.set_result(res);
 		return;
 	}
 
@@ -268,7 +308,110 @@ void syscall_readlinkat(Machine<W>& machine)
 }
 
 template <int W>
-void syscall_brk(Machine<W>& machine)
+static void syscall_fstat(Machine<W>& machine)
+{
+	const auto vfd = machine.template sysarg<int> (0);
+	const auto buffer = machine.template sysarg<address_type<W>> (1);
+
+	SYSPRINT("SYSCALL fstat, fd: %d buf: 0x%lX)\n",
+			vfd, (long)buffer);
+
+	if (machine.has_file_descriptors()) {
+
+		int real_fd = machine.fds().translate(vfd);
+		struct stat st;
+		int res = ::fstat(real_fd, &st);
+
+		machine.copy_to_guest(buffer, &st, sizeof(struct stat));
+		machine.set_result(res);
+		return;
+	}
+
+	machine.set_result(-ENOSYS);
+}
+template <int W>
+static void syscall_statx(Machine<W>& machine)
+{
+	const int   dir_fd = machine.template sysarg<int> (0);
+	const auto  g_path = machine.template sysarg<address_type<W>> (1);
+	const int    flags = machine.template sysarg<int> (2);
+	const auto    mask = machine.template sysarg<uint32_t> (3);
+	const auto  buffer = machine.template sysarg<address_type<W>> (4);
+
+	char path[PATH_MAX];
+	machine.copy_from_guest(path, g_path, sizeof(path)-1);
+	path[sizeof(path)-1] = 0;
+
+	SYSPRINT("SYSCALL statx, fd: %d path: %s flags: %x buf: 0x%lX)\n",
+			dir_fd, path, flags, (long)buffer);
+
+	if (machine.has_file_descriptors()) {
+		if (machine.fds().filter_stat != nullptr) {
+			if (!machine.fds().filter_stat(path)) {
+				machine.set_result(-EPERM);
+				return;
+			}
+		}
+
+		struct statx st;
+		int res = ::statx(dir_fd, path, flags, mask, &st);
+
+		machine.copy_to_guest(buffer, &st, sizeof(struct statx));
+		machine.set_result(res);
+		return;
+	}
+
+	machine.set_result(-ENOSYS);
+}
+
+template <int W>
+static void syscall_gettimeofday(Machine<W>& machine)
+{
+	const auto buffer = machine.template sysarg<address_type<W>>(0);
+	SYSPRINT("SYSCALL gettimeofday, buffer: 0x%lX\n", (long)buffer);
+	struct timeval tv;
+	gettimeofday(&tv, nullptr);
+	if constexpr (W == 4) {
+		int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
+		machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
+	} else {
+		machine.copy_to_guest(buffer, &tv, sizeof(tv));
+	}
+	machine.set_result(0);
+}
+
+template <int W>
+static void syscall_uname(Machine<W>& machine)
+{
+	const auto buffer = machine.template sysarg<address_type<W>>(0);
+	SYSPRINT("SYSCALL uname, buffer: 0x%lX\n", (long)buffer);
+	static constexpr int UTSLEN = 65;
+	struct {
+		char sysname [UTSLEN];
+		char nodename[UTSLEN];
+		char release [UTSLEN];
+		char version [UTSLEN];
+		char machine [UTSLEN];
+		char domain  [UTSLEN];
+	} uts;
+	strcpy(uts.sysname, "RISC-V C++ Emulator");
+	strcpy(uts.nodename,"libriscv");
+	strcpy(uts.release, "5.0.0");
+	strcpy(uts.version, "");
+	if constexpr (W == 4)
+		strcpy(uts.machine, "rv32imafdc");
+	else if constexpr (W == 8)
+		strcpy(uts.machine, "rv64imafdc");
+	else
+		strcpy(uts.machine, "rv128imafdc");
+	strcpy(uts.domain,  "(none)");
+
+	machine.copy_to_guest(buffer, &uts, sizeof(uts));
+	machine.set_result(0);
+}
+
+template <int W>
+static void syscall_brk(Machine<W>& machine)
 {
 	auto new_end = machine.template sysarg<address_type<W>>(0);
 	if (new_end > machine.memory.heap_address() + Memory<W>::BRK_MAX) {
@@ -284,58 +427,7 @@ void syscall_brk(Machine<W>& machine)
 }
 
 template <int W>
-void syscall_stat(Machine<W>& machine)
-{
-	const auto  fd      = machine.template sysarg<int>(0);
-	const auto  buffer  = machine.template sysarg<address_type<W>>(1);
-	if constexpr (verbose_syscalls) {
-		printf("SYSCALL stat, fd: %d  buffer: 0x%lX\n",
-				fd, (long)buffer);
-	}
-	if (false) {
-		struct stat result;
-		std::memset(&result, 0, sizeof(result));
-		result.st_dev     = 6;
-		result.st_ino     = fd;
-		result.st_mode    = 0x21b6;
-		result.st_nlink   = 1;
-		result.st_rdev    = 265;
-		result.st_blksize = 512;
-		result.st_blocks  = 0;
-		machine.copy_to_guest(buffer, &result, sizeof(result));
-	}
-	machine.set_result(-EBADF);
-}
-
-template <int W>
-void syscall_uname(Machine<W>& machine)
-{
-	const auto buffer = machine.template sysarg<address_type<W>>(0);
-	if constexpr (verbose_syscalls) {
-		printf("SYSCALL uname, buffer: 0x%lX\n", (long)buffer);
-	}
-	static constexpr int UTSLEN = 65;
-	struct uts32 {
-		char sysname [UTSLEN];
-		char nodename[UTSLEN];
-		char release [UTSLEN];
-		char version [UTSLEN];
-		char machine [UTSLEN];
-		char domain  [UTSLEN];
-	} uts;
-	strcpy(uts.sysname, "RISC-V C++ Emulator");
-	strcpy(uts.nodename,"libriscv");
-	strcpy(uts.release, "5.0.0");
-	strcpy(uts.version, "");
-	strcpy(uts.machine, "rv32imafdc");
-	strcpy(uts.domain,  "(none)");
-
-	machine.copy_to_guest(buffer, &uts, sizeof(uts32));
-	machine.set_result(0);
-}
-
-template <int W>
-inline void add_mman_syscalls(Machine<W>& machine)
+static void add_mman_syscalls(Machine<W>& machine)
 {
 	// munmap
 	machine.install_syscall_handler(215,
@@ -483,11 +575,17 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->setup_minimal_syscalls();
 
 	// fcntl
-	this->install_syscall_handler(25, syscall_stub_zero<W>);
+	this->install_syscall_handler(25, syscall_fcntl<W>);
 	// ioctl
-	this->install_syscall_handler(29, syscall_stub_zero<W>);
+	this->install_syscall_handler(29, syscall_ioctl<W>);
 	// faccessat
 	this->install_syscall_handler(48, syscall_stub_nosys<W>);
+
+	this->install_syscall_handler(56, syscall_openat<W>);
+	this->install_syscall_handler(57, syscall_close<W>);
+	this->install_syscall_handler(66, syscall_writev<W>);
+	this->install_syscall_handler(78, syscall_readlinkat<W>);
+	this->install_syscall_handler(80, syscall_fstat<W>);
 
 	// rt_sigaction
 	this->install_syscall_handler(134, syscall_sigaction<W>);
@@ -507,12 +605,6 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// getegid
 	this->install_syscall_handler(177, syscall_stub_zero<W>);
 
-	this->install_syscall_handler(56, syscall_openat<W>);
-	this->install_syscall_handler(57, syscall_close<W>);
-	this->install_syscall_handler(66, syscall_writev<W>);
-	this->install_syscall_handler(78, syscall_readlinkat<W>);
-	this->install_syscall_handler(80, syscall_stat<W>);
-
 	this->install_syscall_handler(160, syscall_uname<W>);
 	this->install_syscall_handler(214, syscall_brk<W>);
 
@@ -522,32 +614,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 		m_fds.reset(new FileDescriptors);
 
 	// statx
-	this->install_syscall_handler(291,
-	[] (Machine<W>& machine) {
-		struct statx {
-			uint32_t stx_mask;
-			uint32_t stx_blksize = 512;
-			uint64_t stx_attributes;
-			uint32_t stx_nlink = 1;
-			uint32_t stx_uid = 0;
-			uint32_t stx_gid = 0;
-			uint16_t stx_mode = S_IFCHR;
-			uint64_t stx_size = 0;
-			uint64_t stx_blocks = 0;
-		};
-		const int      fd   = machine.template sysarg<int> (0);
-		const auto     path = machine.template sysarg<address_type<W>> (1);
-		const int     flags = machine.template sysarg<int> (2);
-		const auto   buffer = machine.template sysarg<address_type<W>> (4);
-		SYSPRINT(">>> xstat(fd=%d, path=0x%lX, flags=%x, buf=0x%lX)\n",
-				fd, (long)path, flags, (long)buffer);
-		(void) fd;
-		(void) path;
-		statx s;
-		s.stx_mask = flags;
-		machine.copy_to_guest(buffer, &s, sizeof(statx));
-		machine.set_result(0);
-	});
+	this->install_syscall_handler(291, syscall_statx<W>);
 }
 
 template void Machine<4>::setup_minimal_syscalls();

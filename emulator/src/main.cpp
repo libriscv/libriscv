@@ -26,8 +26,16 @@ static void run_program(const std::vector<uint8_t>& binary, const std::string& f
 			"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
 		};
 		machine.setup_linux(args, env);
-		// some extra syscalls
+		// Linux system to open files and access internet
 		machine.setup_linux_syscalls();
+		machine.fds().permit_filesystem = true;
+		machine.fds().permit_sockets = true;
+		// Only allow opening /etc/hostname
+		machine.fds().filter_open = [] (const char* path) {
+			if (strcmp(path, "/etc/hostname") == 0)
+				return true;
+			return false;
+		};
 		// multi-threading
 		machine.setup_posix_threads();
 	}
