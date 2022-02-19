@@ -30,8 +30,10 @@ static void run_program(const std::vector<uint8_t>& binary, const std::string& f
 		machine.setup_linux_syscalls();
 		machine.fds().permit_filesystem = true;
 		machine.fds().permit_sockets = true;
-		// Only allow opening /etc/hostname
-		machine.fds().filter_open = [] (const char* path) {
+		// Only allow opening certain file paths. The void* argument is
+		// the user-provided pointer set in the RISC-V machine.
+		machine.fds().filter_open = [] (void* user, const char* path) {
+			(void) user;
 			if (strcmp(path, "/etc/hostname") == 0)
 				return true;
 			return false;

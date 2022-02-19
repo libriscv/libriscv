@@ -21,9 +21,9 @@ struct FileDescriptors
 	bool permit_file_write = false;
 	bool permit_sockets = false;
 
-	std::function<bool(const char*)> filter_open = nullptr;
-	std::function<bool(const char*)> filter_stat = nullptr;
-	std::function<bool(uint64_t)> filter_ioctl = nullptr;
+	std::function<bool(void*, const char*)> filter_open = nullptr;
+	std::function<bool(void*, const char*)> filter_stat = nullptr;
+	std::function<bool(void*, uint64_t)> filter_ioctl = nullptr;
 };
 
 inline FileDescriptors::~FileDescriptors()

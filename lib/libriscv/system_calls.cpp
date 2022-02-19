@@ -216,7 +216,7 @@ static void syscall_openat(Machine<W>& machine)
 	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
 
 		if (machine.fds().filter_open != nullptr) {
-			if (!machine.fds().filter_open(path)) {
+			if (!machine.fds().filter_open(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
 				return;
 			}
@@ -283,7 +283,7 @@ static void syscall_ioctl(Machine<W>& machine)
 
 	if (machine.has_file_descriptors()) {
 		if (machine.fds().filter_ioctl != nullptr) {
-			if (!machine.fds().filter_ioctl(req)) {
+			if (!machine.fds().filter_ioctl(machine.template get_userdata<void>(), req)) {
 				machine.set_result(-EPERM);
 				return;
 			}
@@ -347,7 +347,7 @@ static void syscall_statx(Machine<W>& machine)
 
 	if (machine.has_file_descriptors()) {
 		if (machine.fds().filter_stat != nullptr) {
-			if (!machine.fds().filter_stat(path)) {
+			if (!machine.fds().filter_stat(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
 				return;
 			}
