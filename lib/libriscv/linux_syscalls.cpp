@@ -1,11 +1,12 @@
 #include <libriscv/machine.hpp>
-static constexpr bool verbose_syscalls = false;
 
-#define SYSCALL_VERBOSE 1
+//#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
 #define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+static constexpr bool verbose_syscalls = true;
 #else
 #define SYSPRINT(fmt, ...) /* fmt */
+static constexpr bool verbose_syscalls = false;
 #endif
 
 #include <linux/limits.h>
