@@ -1,6 +1,5 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/rsp_server.hpp>
-#include <include/syscall_helpers.hpp>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 
@@ -28,14 +27,14 @@ static void run_program(const std::vector<uint8_t>& binary, const std::string& f
 		};
 		machine.setup_linux(args, env);
 		// some extra syscalls
-		setup_linux_syscalls(machine);
+		machine.setup_linux_syscalls();
 		// multi-threading
 		machine.setup_posix_threads();
 	}
 	else if constexpr (newlib_mini_guest)
 	{
 		// the minimum number of syscalls needed for malloc and C++ exceptions
-		setup_newlib_syscalls(machine);
+		machine.setup_newlib_syscalls();
 		machine.setup_argv(args);
 	}
 	else if constexpr (micro_guest) {
@@ -43,7 +42,7 @@ static void run_program(const std::vector<uint8_t>& binary, const std::string& f
 		machine.setup_native_heap(5, 0x40000000, 6*1024*1024);
 		machine.setup_native_memory(10, false);
 		machine.setup_native_threads(30);
-		setup_minimal_syscalls(machine);
+		machine.setup_minimal_syscalls();
 	}
 	else {
 		fprintf(stderr, "Unknown emulation mode! Exiting...\n");

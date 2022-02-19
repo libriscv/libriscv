@@ -13,7 +13,7 @@ namespace riscv
 {
 	template<int W> struct Machine;
 	template<int W> struct DecoderCache;
-	struct vBuffer { const char* ptr; size_t len; };
+	struct vBuffer { char* ptr; size_t len; };
 
 	template<int W>
 	struct Memory

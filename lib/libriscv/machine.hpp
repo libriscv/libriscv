@@ -2,6 +2,7 @@
 #include "cpu.hpp"
 #include "memory.hpp"
 #include "riscvbase.hpp"
+#include "posix_filedesc.hpp"
 #include <array>
 
 namespace riscv
@@ -132,6 +133,10 @@ namespace riscv
 		void print(const char*, size_t) const;
 		auto& get_printer() const noexcept { return m_printer; }
 		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
+		// Stdin
+		void stdin(const char*, size_t) const;
+		auto& get_stdin() const noexcept { return m_stdin; }
+		void set_stdin(printer_func sin) { m_stdin = std::move(sin); }
 
 		// Call an installed system call handler
 		void system_call(size_t);
@@ -163,9 +168,15 @@ namespace riscv
 		// Optional custom memory-related system calls
 		void setup_native_memory(size_t sysnum, bool safe = true);
 
-		// Optional posix and custom threads implementations
+		// System calls and threads implementations
 		const MultiThreading<W>& threads() const noexcept { return *m_mt; }
 		MultiThreading<W>& threads() noexcept { return *m_mt; }
+		bool has_file_descriptors() const noexcept { return m_fds != nullptr; }
+		const FileDescriptors& fds() const;
+		FileDescriptors& fds();
+		void setup_minimal_syscalls();
+		void setup_newlib_syscalls();
+		void setup_linux_syscalls(bool filesystem = true, bool sockets = true);
 		void setup_posix_threads();
 		void setup_native_threads(const size_t syscall_base);
 
@@ -199,8 +210,10 @@ namespace riscv
 		void*        m_userdata = nullptr;
 		address_t    m_sighandler = 0;
 		printer_func m_printer = m_default_printer;
+		printer_func m_stdin = [] (const char*, size_t) {};
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
+		std::unique_ptr<FileDescriptors> m_fds;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;
 	};

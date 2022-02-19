@@ -40,11 +40,10 @@ if (LTO)
 endif()
 
 add_subdirectory(../lib lib)
-add_subdirectory(syscalls)
 
 function (add_emulator NAME)
 	add_executable(${NAME} ${SOURCES})
-	target_link_libraries(${NAME} riscv syscalls)
+	target_link_libraries(${NAME} riscv)
 	set_target_properties(${NAME} PROPERTIES CXX_STANDARD 17)
 	message(STATUS "ARGN is ${ARGN}")
 	target_compile_definitions(${NAME} PRIVATE ${ARGN})

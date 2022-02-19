@@ -371,7 +371,7 @@ size_t Memory<W>::gather_buffers_from_range(
 		if (UNLIKELY(!page.attr.read))
 			protection_fault(addr);
 
-		auto* ptr = (const char*) &page.data()[offset];
+		auto* ptr = (char*) &page.data()[offset];
 		if (last && ptr == last->ptr + last->len) {
 			last->len += size;
 		} else {

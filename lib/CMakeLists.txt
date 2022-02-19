@@ -44,6 +44,7 @@ set (SOURCES
 		libriscv/memory_rw.cpp
 		libriscv/native_libc.cpp
 		libriscv/native_threads.cpp
+		libriscv/linux_syscalls.cpp
 		libriscv/posix_threads.cpp
 		libriscv/rv32i.cpp
 		libriscv/rv64i.cpp

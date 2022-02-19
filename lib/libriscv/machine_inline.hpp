@@ -31,6 +31,11 @@ inline void Machine<W>::print(const char* buffer, size_t len) const
 {
 	this->m_printer(buffer, len);
 }
+template <int W>
+inline void Machine<W>::stdin(const char* buffer, size_t len) const
+{
+	this->m_stdin(buffer, len);
+}
 
 template <int W> inline
 void Machine<W>::install_syscall_handler(size_t sysn, syscall_t handler)
@@ -194,6 +199,19 @@ void Machine<W>::realign_stack()
 {
 	// the RISC-V calling convention mandates a 16-byte alignment
 	cpu.reg(REG_SP) &= ~(address_t) 0xF;
+}
+
+template <int W>
+const FileDescriptors& Machine<W>::fds() const
+{
+	if (m_fds != nullptr) return *m_fds;
+	throw MachineException(ILLEGAL_OPERATION, "No access to files or sockets", 0);
+}
+template <int W>
+FileDescriptors& Machine<W>::fds()
+{
+	if (m_fds != nullptr) return *m_fds;
+	throw MachineException(ILLEGAL_OPERATION, "No access to files or sockets", 0);
 }
 
 #include "machine_vmcall.hpp"
