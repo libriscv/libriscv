@@ -81,6 +81,9 @@ int main (int argc, char *argv[], char *envp[])
 	catch (std::exception& e) {
 		printf("Error: %s\n", e.what());
 	}
+	// test filesystem support
+	auto hostname = load_file("/etc/hostname");
+	printf("Hostname: %.*s\n", (int)hostname.size(), hostname.data());
 	// test pthreads support
 	extern void test_threads();
 	test_threads();
@@ -90,12 +93,11 @@ int main (int argc, char *argv[], char *envp[])
 #include <unistd.h>
 std::vector<uint8_t> load_file(const std::string& filename)
 {
-    size_t size = 0;
     FILE* f = fopen(filename.c_str(), "rb");
     if (f == NULL) throw std::runtime_error("Could not open file: " + filename);
 
     fseek(f, 0, SEEK_END);
-    size = ftell(f);
+    const size_t size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
     std::vector<uint8_t> result(size);
