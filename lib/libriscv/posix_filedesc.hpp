@@ -50,7 +50,8 @@ inline int FileDescriptors::translate(int virtfd)
 {
 	auto it = translation.find(virtfd);
 	if (it != translation.end()) return it->second;
-	return virtfd;
+	// Only allow direct access to standard pipes and errors
+	return (virtfd <= 2) ? virtfd : -1;
 }
 inline int FileDescriptors::close(int virtfd)
 {

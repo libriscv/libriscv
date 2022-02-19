@@ -29,11 +29,13 @@ struct guest_iovec {
 
 template <int W>
 static void syscall_stub_zero(Machine<W>& machine) {
+	SYSPRINT("SYSCALL stubbed (zero): %d\n", (int)machine.cpu.reg(17));
 	machine.set_result(0);
 }
 
 template <int W>
 static void syscall_stub_nosys(Machine<W>& machine) {
+	SYSPRINT("SYSCALL stubbed (nosys): %d\n", (int)machine.cpu.reg(17));
 	machine.set_result(-ENOSYS);
 }
 
@@ -358,10 +360,12 @@ static void syscall_fstat(Machine<W>& machine)
 	if (machine.has_file_descriptors()) {
 
 		int real_fd = machine.fds().translate(vfd);
+
 		struct stat st;
 		int res = ::fstat(real_fd, &st);
-
-		machine.copy_to_guest(buffer, &st, sizeof(struct stat));
+		if (res == 0) {
+			machine.copy_to_guest(buffer, &st, sizeof(struct stat));
+		}
 		machine.set_result(res);
 		return;
 	}
