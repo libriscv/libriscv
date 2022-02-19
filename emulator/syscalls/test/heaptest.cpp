@@ -1,8 +1,7 @@
-#include "native_heap.hpp"
+#include <libriscv/native_heap.hpp>
 #include <cassert>
 #include <cstdlib>
 #include <vector>
-using namespace sas_alloc;
 static const uintptr_t BEGIN = 0x1000000;
 static const uintptr_t END   = 0x2000000;
 
@@ -19,7 +18,7 @@ struct Allocation {
 	size_t    size;
 };
 
-static Allocation alloc_random(Arena& arena)
+static Allocation alloc_random(riscv::Arena& arena)
 {
 	const size_t size = randInt(0, 8000);
 	const uintptr_t addr = arena.malloc(size);
@@ -33,7 +32,7 @@ static Allocation alloc_random(Arena& arena)
 
 int main()
 {
-	Arena arena {BEGIN, END};
+	riscv::Arena arena {BEGIN, END};
 	std::vector<Allocation> allocs;
 
 	// General allocation test

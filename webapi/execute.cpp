@@ -1,7 +1,6 @@
 #include "server.hpp"
 
 #include <libriscv/machine.hpp>
-#include <include/syscall_helpers.hpp>
 #include <libriscv/threads.hpp>
 using namespace httplib;
 
@@ -39,7 +38,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 	riscv::Machine<riscv::RISCV64> machine { binary, options };
 
 	machine.setup_linux({"program"}, env);
-	setup_linux_syscalls(machine);
+	machine.setup_linux_syscalls();
 	machine.setup_posix_threads();
 
 	std::string output = "";
