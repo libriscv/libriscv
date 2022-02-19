@@ -16,10 +16,11 @@ void Machine<W>::setup_posix_threads()
 				tid, (int) status);
 		if (tid != 0) {
 			// exit thread instead
-			machine.threads().get_thread()->exit();
-			// should be a new thread now
-			assert(machine.threads().get_thread()->tid != tid);
-			return;
+			if (machine.threads().get_thread()->exit()) {
+				// Should be a new thread now
+				assert(machine.threads().get_thread()->tid != tid);
+				return;
+			}
 		}
 		machine.stop();
 		machine.set_result(status);
@@ -144,6 +145,6 @@ void Machine<W>::setup_posix_threads()
 	});
 }
 
-template struct Machine<4>;
-template struct Machine<8>;
+template void Machine<4>::setup_posix_threads();
+template void Machine<8>::setup_posix_threads();
 } // riscv

@@ -35,7 +35,7 @@ struct thread
 	thread(MultiThreading<W>&, int tid,
 			address_t tls, address_t stack);
 	thread(MultiThreading<W>&, const thread& other);
-	void exit();
+	bool exit(); // Returns false when we *cannot* continue
 	void suspend();
 	void suspend(address_t return_value);
 	void block(int reason);
@@ -204,11 +204,12 @@ inline void thread<W>::activate()
 }
 
 template <int W>
-inline void thread<W>::exit()
+inline bool thread<W>::exit()
 {
 	const bool exiting_myself = (threading.get_thread() == this);
-	// temporary copy of thread manager
-	auto& thr  = this->threading;
+	// Copy of reference to thread manager and thread ID
+	auto& thr = this->threading;
+	const int tid = this->tid;
 	// CLONE_CHILD_CLEARTID: set userspace TID value to zero
 	if (this->clear_tid) {
 		THPRINT("Clearing thread value for tid=%d at 0x%X\n",
@@ -216,14 +217,17 @@ inline void thread<W>::exit()
 		threading.machine.memory.
 			template write<address_type<W>> (this->clear_tid, 0);
 	}
-	// delete this thread
-	threading.erase_thread(this->tid);
+	// Delete this thread
+	threading.erase_thread(tid);
 
-	if (exiting_myself)
+	// It's not likely that we can wakeup_next if tid == 0
+	if (exiting_myself && tid > 0)
 	{
-		// resume next thread in suspended list
+		// Resume next thread in suspended list
 		thr.wakeup_next();
 	}
+	// tid == 0: Main thread exited
+	return (tid == 0);
 }
 
 template <int W>
