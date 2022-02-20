@@ -82,6 +82,11 @@ namespace riscv
 		template <typename... Args>
 		inline void set_result(Args... args);
 
+		// Forward the result of a C library function call that
+		// returns 0 or positive on success, and -1 on failure. errno
+		// will be passed on to the guest on failure.
+		void set_result_or_error(int);
+
 		// A shortcut to getting a return or exit value
 		template <typename T>
 		inline T return_value() const { return sysarg<T> (0); }

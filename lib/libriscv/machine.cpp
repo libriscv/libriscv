@@ -3,6 +3,7 @@
 #include "rv32i_instr.hpp"
 #include "threads.hpp"
 #include "util/auxvec.hpp"
+#include <errno.h>
 #include <time.h>
 #include <random>
 
@@ -45,6 +46,15 @@ namespace riscv
 	{
 		const auto syscall_number = machine.cpu.reg(REG_ECALL);
 		machine.on_unhandled_syscall(machine, syscall_number);
+	}
+
+	template <int W>
+	void Machine<W>::set_result_or_error(int result)
+	{
+		if (result >= 0)
+			set_result(result);
+		else
+			set_result(-errno);
 	}
 
 	template <int W> __attribute__((cold))
