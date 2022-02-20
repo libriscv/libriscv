@@ -35,14 +35,13 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+1,
 	[] (Machine<W>& machine) {
 		const int status = machine.template sysarg<int> (0);
-		const int tid = machine.threads().get_thread()->tid;
+		const int tid = machine.threads().get_tid();
 		THPRINT(">>> Exit on tid=%d, exit status = %d\n",
 				tid, (int) status);
-		if (tid != 0) {
-			// exit thread instead
-			machine.threads().get_thread()->exit();
-			// should be a new thread now
-			assert(machine.threads().get_thread()->tid != tid);
+		// Exit returns true if the program ended
+		if (!machine.threads().get_thread()->exit()) {
+			// Should be a new thread now
+			assert(machine.threads().get_tid() != tid);
 			return;
 		}
 		machine.stop();

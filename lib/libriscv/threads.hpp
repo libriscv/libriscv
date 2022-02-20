@@ -19,7 +19,7 @@ static const uint32_t CHILD_SETTID   = 0x01000000; /* set the TID in the child *
 #endif
 
 template <int W>
-struct thread
+struct Thread
 {
 	using address_t = address_type<W>;
 
@@ -32,9 +32,9 @@ struct thread
 	// the current or last blocked reason
 	int block_reason = 0;
 
-	thread(MultiThreading<W>&, int tid,
+	Thread(MultiThreading<W>&, int tid,
 			address_t tls, address_t stack);
-	thread(MultiThreading<W>&, const thread& other);
+	Thread(MultiThreading<W>&, const Thread& other);
 	bool exit(); // Returns false when we *cannot* continue
 	void suspend();
 	void suspend(address_t return_value);
@@ -48,10 +48,11 @@ template <int W>
 struct MultiThreading
 {
 	using address_t = address_type<W>;
-	using thread_t  = thread<W>;
+	using thread_t  = Thread<W>;
 
 	thread_t* create(int flags, address_t ctid, address_t ptid,
 					address_t stack, address_t tls);
+	int       get_tid() const { return m_current->tid; }
 	thread_t* get_thread();
 	thread_t* get_thread(int tid); /* or nullptr */
 	bool      suspend_and_yield();
@@ -106,7 +107,7 @@ inline MultiThreading<W>::MultiThreading(Machine<W>& mach, const MultiThreading<
 }
 
 template <int W>
-inline void thread<W>::resume()
+inline void Thread<W>::resume()
 {
 	threading.m_current = this;
 	auto& m = threading.machine;
@@ -121,7 +122,7 @@ inline void thread<W>::resume()
 }
 
 template <int W>
-inline void thread<W>::suspend()
+inline void Thread<W>::suspend()
 {
 	this->stored_regs = threading.machine.cpu.registers();
 	// add to suspended (NB: can throw)
@@ -129,7 +130,7 @@ inline void thread<W>::suspend()
 }
 
 template <int W>
-inline void thread<W>::suspend(address_t return_value)
+inline void Thread<W>::suspend(address_t return_value)
 {
 	this->suspend();
 	// set the *future* return value for this thread
@@ -137,7 +138,7 @@ inline void thread<W>::suspend(address_t return_value)
 }
 
 template <int W>
-inline void thread<W>::block(int reason)
+inline void Thread<W>::block(int reason)
 {
 	this->stored_regs = threading.machine.cpu.registers();
 	this->block_reason = reason;
@@ -146,7 +147,7 @@ inline void thread<W>::block(int reason)
 }
 
 template <int W>
-inline void thread<W>::block(int reason, address_t return_value)
+inline void Thread<W>::block(int reason, address_t return_value)
 {
 	this->block(reason);
 	// set the block reason as the next return value
@@ -154,13 +155,13 @@ inline void thread<W>::block(int reason, address_t return_value)
 }
 
 template <int W>
-inline thread<W>* MultiThreading<W>::get_thread()
+inline Thread<W>* MultiThreading<W>::get_thread()
 {
 	return this->m_current;
 }
 
 template <int W>
-inline thread<W>* MultiThreading<W>::get_thread(int tid)
+inline Thread<W>* MultiThreading<W>::get_thread(int tid)
 {
 	auto it = m_threads.find(tid);
 	if (it == m_threads.end()) return nullptr;
@@ -179,7 +180,7 @@ inline void MultiThreading<W>::wakeup_next()
 }
 
 template <int W>
-inline thread<W>::thread(
+inline Thread<W>::Thread(
 	MultiThreading<W>& mt, int ttid, address_t tls, address_t stack)
 	: threading(mt), tid(ttid)
 {
@@ -188,14 +189,14 @@ inline thread<W>::thread(
 }
 
 template <int W>
-inline thread<W>::thread(
-	MultiThreading<W>& mt, const thread& other)
+inline Thread<W>::Thread(
+	MultiThreading<W>& mt, const Thread& other)
 	: threading(mt), tid(other.tid), stored_regs(other.stored_regs),
 	  clear_tid(other.clear_tid), block_reason(other.block_reason)
 {}
 
 template <int W>
-inline void thread<W>::activate()
+inline void Thread<W>::activate()
 {
 	threading.m_current = this;
 	auto& cpu = threading.machine.cpu;
@@ -204,7 +205,7 @@ inline void thread<W>::activate()
 }
 
 template <int W>
-inline bool thread<W>::exit()
+inline bool Thread<W>::exit()
 {
 	const bool exiting_myself = (threading.get_thread() == this);
 	// Copy of reference to thread manager and thread ID
@@ -217,27 +218,29 @@ inline bool thread<W>::exit()
 		threading.machine.memory.
 			template write<address_type<W>> (this->clear_tid, 0);
 	}
-	// Delete this thread
-	threading.erase_thread(tid);
+	// Delete this thread (except main thread)
+	if (tid != 0) {
+		threading.erase_thread(tid);
 
-	// It's not likely that we can wakeup_next if tid == 0
-	if (exiting_myself && tid > 0)
-	{
 		// Resume next thread in suspended list
-		thr.wakeup_next();
+		// Exiting main thread is a "process exit", so we don't wakeup_next
+		if (exiting_myself) {
+			thr.wakeup_next();
+		}
 	}
+
 	// tid == 0: Main thread exited
 	return (tid == 0);
 }
 
 template <int W>
-inline thread<W>* MultiThreading<W>::create(
+inline Thread<W>* MultiThreading<W>::create(
 			int flags, address_t ctid, address_t ptid,
 			address_t stack, address_t tls)
 {
 	const int tid = ++this->thread_counter;
-	auto it = m_threads.emplace(tid, thread_t{*this, tid, tls, stack});
-	thread_t* thread = &it.first->second;
+	auto it = m_threads.emplace(tid, Thread{*this, tid, tls, stack});
+	auto* thread = &it.first->second;
 
 	// flag for write child TID
 	if (flags & CHILD_SETTID) {

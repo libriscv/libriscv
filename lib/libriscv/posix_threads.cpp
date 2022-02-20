@@ -11,13 +11,12 @@ void Machine<W>::setup_posix_threads()
 	this->install_syscall_handler(93,
 	[] (Machine<W>& machine) {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
-		const int tid = machine.threads().get_thread()->tid;
 		THPRINT(">>> Exit on tid=%d, exit code = %d\n",
-				tid, (int) status);
+				machine.threads().get_tid(), (int) status);
 		// Exit returns true if the program ended
 		if (!machine.threads().get_thread()->exit()) {
 			// Should be a new thread now
-			assert(machine.threads().get_thread()->tid != tid);
+			assert(machine.threads().get_tid() != tid);
 			return;
 		}
 		machine.stop();
@@ -32,7 +31,7 @@ void Machine<W>::setup_posix_threads()
 		THPRINT(">>> set_tid_address(0x%X)\n", clear_tid);
 
 		machine.threads().get_thread()->clear_tid = clear_tid;
-		machine.set_result(machine.threads().get_thread()->tid);
+		machine.set_result(machine.threads().get_tid());
 	});
 	// set_robust_list
 	this->install_syscall_handler(99,
@@ -62,8 +61,8 @@ void Machine<W>::setup_posix_threads()
 	// gettid
 	this->install_syscall_handler(178,
 	[] (Machine<W>& machine) {
-		THPRINT(">>> gettid() = %ld\n", machine.threads().get_thread()->tid);
-		machine.set_result(machine.threads().get_thread()->tid);
+		THPRINT(">>> gettid() = %ld\n", machine.threads().get_tid());
+		machine.set_result(machine.threads().get_tid());
 	});
 	// futex
 	this->install_syscall_handler(98,
