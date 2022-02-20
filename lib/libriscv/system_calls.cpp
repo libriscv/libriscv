@@ -126,10 +126,18 @@ static void syscall_read(Machine<W>& machine)
 		size_t cnt =
 			machine.memory.gather_buffers_from_range(256, buffers, address, len);
 		// Could probably be a readv call, tbh
+		size_t bytes = 0;
 		for (size_t i = 0; i < cnt; i++) {
-			read(real_fd, buffers[i].ptr, buffers[i].len);
+			ssize_t res = read(real_fd, buffers[i].ptr, buffers[i].len);
+			if (res >= 0) {
+				bytes += res;
+				if ((size_t)res < buffers[i].len) break;
+			} else {
+				machine.set_result_or_error(res);
+				return;
+			}
 		}
-		machine.set_result(len);
+		machine.set_result(bytes);
 		return;
 	}
 	machine.set_result(-EBADF);
