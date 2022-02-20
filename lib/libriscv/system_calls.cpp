@@ -1,6 +1,6 @@
 #include <libriscv/machine.hpp>
 
-//#define SYSCALL_VERBOSE 1
+#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
 #define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 static constexpr bool verbose_syscalls = true;
@@ -20,6 +20,8 @@ static constexpr bool verbose_syscalls = false;
 #include <sys/uio.h>
 
 namespace riscv {
+	template <int W>
+	void add_socket_syscalls(Machine<W>&);
 
 template <int W>
 struct guest_iovec {
@@ -93,7 +95,11 @@ void syscall_lseek(Machine<W>& machine)
 
 	const int real_fd = machine.fds().get(fd);
 	int64_t res = lseek(real_fd, offset, whence);
-	machine.set_result(res);
+	if (res >= 0) {
+		machine.set_result(res);
+	} else {
+		machine.set_result(-errno);
+	}
 }
 template <int W>
 static void syscall_read(Machine<W>& machine)
@@ -152,11 +158,21 @@ static void syscall_write(Machine<W>& machine)
 		riscv::vBuffer buffers[64];
 		size_t cnt =
 			machine.memory.gather_buffers_from_range(64, buffers, address, len);
+		size_t bytes = 0;
 		// Could probably be a writev call, tbh
 		for (size_t i = 0; i < cnt; i++) {
-			write(real_fd, buffers[i].ptr, buffers[i].len);
+			ssize_t res = write(real_fd, buffers[i].ptr, buffers[i].len);
+			if (res >= 0) {
+				bytes += res;
+				// Detect partial writes
+				if ((size_t)res < buffers[i].len) break;
+			} else {
+				// Detect write errors
+				machine.set_result_or_error(res);
+				return;
+			}
 		}
-		machine.set_result(len);
+		machine.set_result(bytes);
 		return;
 	}
 	machine.set_result(-EBADF);
@@ -269,7 +285,7 @@ static void syscall_fcntl(Machine<W>& machine)
 	if (machine.has_file_descriptors()) {
 		int real_fd = machine.fds().translate(vfd);
 		int res = fcntl(real_fd, cmd, arg1, arg2, arg3);
-		machine.set_result(res);
+		machine.set_result_or_error(res);
 		return;
 	}
 
@@ -297,7 +313,7 @@ static void syscall_ioctl(Machine<W>& machine)
 
 		int real_fd = machine.fds().translate(vfd);
 		int res = ioctl(real_fd, req, arg1, arg2, arg3, arg4);
-		machine.set_result(res);
+		machine.set_result_or_error(res);
 		return;
 	}
 
@@ -341,7 +357,7 @@ void syscall_readlinkat(Machine<W>& machine)
 			machine.copy_to_guest(g_buf, buffer, res);
 		}
 
-		machine.set_result(res);
+		machine.set_result_or_error(res);
 		return;
 	}
 
@@ -352,10 +368,10 @@ template <int W>
 static void syscall_fstat(Machine<W>& machine)
 {
 	const auto vfd = machine.template sysarg<int> (0);
-	const auto buffer = machine.template sysarg<address_type<W>> (1);
+	const auto g_buf = machine.template sysarg<address_type<W>> (1);
 
 	SYSPRINT("SYSCALL fstat, fd: %d buf: 0x%lX)\n",
-			vfd, (long)buffer);
+			vfd, (long)g_buf);
 
 	if (machine.has_file_descriptors()) {
 
@@ -364,9 +380,50 @@ static void syscall_fstat(Machine<W>& machine)
 		struct stat st;
 		int res = ::fstat(real_fd, &st);
 		if (res == 0) {
-			machine.copy_to_guest(buffer, &st, sizeof(struct stat));
+			// The RISC-V stat structure is different from x86
+			struct riscv_stat {
+				uint64_t st_dev;		/* Device.  */
+				uint64_t st_ino;		/* File serial number.  */
+				uint32_t st_mode;	/* File mode.  */
+				uint32_t st_nlink;	/* Link count.  */
+				uint32_t st_uid;		/* User ID of the file's owner.  */
+				uint32_t st_gid;		/* Group ID of the file's group. */
+				uint64_t st_rdev;	/* Device number, if device.  */
+				uint64_t __pad1;
+				int64_t  st_size;	/* Size of file, in bytes.  */
+				int32_t  st_blksize;	/* Optimal block size for I/O.  */
+				int32_t  __pad2;
+				int64_t  st_blocks;	/* Number 512-byte blocks allocated. */
+				int64_t  rv_atime;	/* Time of last access.  */
+				uint64_t rv_atime_nsec;
+				int64_t  rv_mtime;	/* Time of last modification.  */
+				uint64_t rv_mtime_nsec;
+				int64_t  rv_ctime;	/* Time of last status change.  */
+				uint64_t rv_ctime_nsec;
+				uint32_t __unused4;
+				uint32_t __unused5;
+			};
+			// Convert to RISC-V structure
+			struct riscv_stat rst;
+			rst.st_dev = st.st_dev;
+			rst.st_ino = st.st_ino;
+			rst.st_mode = st.st_mode;
+			rst.st_nlink = st.st_nlink;
+			rst.st_uid = st.st_uid;
+			rst.st_gid = st.st_gid;
+			rst.st_rdev = st.st_rdev;
+			rst.st_size = st.st_size;
+			rst.st_blksize = st.st_blksize;
+			rst.st_blocks = st.st_blocks;
+			rst.rv_atime = st.st_atime;
+			rst.rv_atime_nsec = st.st_atim.tv_nsec;
+			rst.rv_mtime = st.st_mtime;
+			rst.rv_mtime_nsec = st.st_mtim.tv_nsec;
+			rst.rv_ctime = st.st_ctime;
+			rst.rv_ctime_nsec = st.st_ctim.tv_nsec;
+			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
 		}
-		machine.set_result(res);
+		machine.set_result_or_error(res);
 		return;
 	}
 
@@ -398,9 +455,10 @@ static void syscall_statx(Machine<W>& machine)
 
 		struct statx st;
 		int res = ::statx(dir_fd, path, flags, mask, &st);
-
-		machine.copy_to_guest(buffer, &st, sizeof(struct statx));
-		machine.set_result(res);
+		if (res == 0) {
+			machine.copy_to_guest(buffer, &st, sizeof(struct statx));
+		}
+		machine.set_result_or_error(res);
 		return;
 	}
 
@@ -413,14 +471,31 @@ static void syscall_gettimeofday(Machine<W>& machine)
 	const auto buffer = machine.template sysarg<address_type<W>>(0);
 	SYSPRINT("SYSCALL gettimeofday, buffer: 0x%lX\n", (long)buffer);
 	struct timeval tv;
-	gettimeofday(&tv, nullptr);
-	if constexpr (W == 4) {
-		int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
-		machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
-	} else {
-		machine.copy_to_guest(buffer, &tv, sizeof(tv));
+	const int res = gettimeofday(&tv, nullptr);
+	if (res >= 0) {
+		if constexpr (W == 4) {
+			int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
+			machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
+		} else {
+			machine.copy_to_guest(buffer, &tv, sizeof(tv));
+		}
 	}
-	machine.set_result(0);
+	machine.set_result_or_error(res);
+}
+template <int W>
+static void syscall_clock_gettime(Machine<W>& machine)
+{
+	const auto clkid = machine.template sysarg<int>(0);
+	const auto buffer = machine.template sysarg<address_type<W>>(1);
+	SYSPRINT("SYSCALL clock_gettime, clkid: %x buffer: 0x%lX\n",
+		clkid, (long)buffer);
+
+	struct timespec ts;
+	const int res = clock_gettime(clkid, &ts);
+	if (res >= 0) {
+		machine.copy_to_guest(buffer, &ts, sizeof(ts));
+	}
+	machine.set_result_or_error(res);
 }
 
 template <int W>
@@ -628,8 +703,13 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(57, syscall_close<W>);
 	this->install_syscall_handler(66, syscall_writev<W>);
 	this->install_syscall_handler(78, syscall_readlinkat<W>);
+	// 79: fstatat
+	this->install_syscall_handler(79, syscall_stub_nosys<W>);
+	// 80: fstat
 	this->install_syscall_handler(80, syscall_fstat<W>);
 
+	// clock_gettime
+	this->install_syscall_handler(113, syscall_clock_gettime<W>);
 	// rt_sigaction
 	this->install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
@@ -653,8 +733,11 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 
 	add_mman_syscalls(*this);
 
-	if (filesystem || sockets)
+	if (filesystem || sockets) {
 		m_fds.reset(new FileDescriptors);
+		if (sockets)
+			add_socket_syscalls(*this);
+	}
 
 	// statx
 	this->install_syscall_handler(291, syscall_statx<W>);
