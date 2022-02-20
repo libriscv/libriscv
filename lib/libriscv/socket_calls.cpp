@@ -83,6 +83,33 @@ static void syscall_listen(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_accept(Machine<W>& machine)
+{
+	const auto [sockfd, g_addr, g_addrlen] =
+		machine.template sysargs<int, address_type<W>, address_type<W>> ();
+
+	SYSPRINT("SYSCALL accept, sockfd: %d addr: 0x%lX\n",
+		sockfd, (long)g_addr);
+
+	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
+
+		const int real_fd = machine.fds().translate(sockfd);
+
+		struct sockaddr addr;
+		socklen_t addrlen;
+
+		int res = accept(real_fd, &addr, &addrlen);
+		if (res >= 0) {
+			machine.copy_to_guest(g_addr, &addr, addrlen);
+			machine.copy_to_guest(g_addrlen, &addrlen, sizeof(addrlen));
+		}
+		machine.set_result_or_error(res);
+		return;
+	}
+	machine.set_result(-EBADF);
+}
+
+template <int W>
 static void syscall_setsockopt(Machine<W>& machine)
 {
 	const auto [sockfd, level, optname, g_opt, optlen] =
@@ -116,6 +143,7 @@ void add_socket_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(198, syscall_socket<W>);
 	machine.install_syscall_handler(200, syscall_bind<W>);
 	machine.install_syscall_handler(201, syscall_listen<W>);
+	machine.install_syscall_handler(202, syscall_accept<W>);
 	machine.install_syscall_handler(208, syscall_setsockopt<W>);
 
 }

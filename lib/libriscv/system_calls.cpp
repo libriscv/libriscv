@@ -273,6 +273,21 @@ static void syscall_close(riscv::Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_dup(Machine<W>& machine)
+{
+	const int vfd = machine.template sysarg<int>(0);
+	SYSPRINT("SYSCALL dup, fd: %d\n", vfd);
+
+	if (machine.has_file_descriptors()) {
+		int real_fd = machine.fds().translate(vfd);
+		int res = dup(real_fd);
+		machine.set_result_or_error(res);
+		return;
+	}
+	machine.set_result(-EBADF);
+}
+
+template <int W>
 static void syscall_fcntl(Machine<W>& machine)
 {
 	const int vfd = machine.template sysarg<int>(0);
@@ -288,7 +303,6 @@ static void syscall_fcntl(Machine<W>& machine)
 		machine.set_result_or_error(res);
 		return;
 	}
-
 	machine.set_result(-EBADF);
 }
 
@@ -316,7 +330,6 @@ static void syscall_ioctl(Machine<W>& machine)
 		machine.set_result_or_error(res);
 		return;
 	}
-
 	machine.set_result(-EBADF);
 }
 
@@ -360,7 +373,82 @@ void syscall_readlinkat(Machine<W>& machine)
 		machine.set_result_or_error(res);
 		return;
 	}
+	machine.set_result(-ENOSYS);
+}
 
+// The RISC-V stat structure is different from x86
+struct riscv_stat {
+	uint64_t st_dev;		/* Device.  */
+	uint64_t st_ino;		/* File serial number.  */
+	uint32_t st_mode;	/* File mode.  */
+	uint32_t st_nlink;	/* Link count.  */
+	uint32_t st_uid;		/* User ID of the file's owner.  */
+	uint32_t st_gid;		/* Group ID of the file's group. */
+	uint64_t st_rdev;	/* Device number, if device.  */
+	uint64_t __pad1;
+	int64_t  st_size;	/* Size of file, in bytes.  */
+	int32_t  st_blksize;	/* Optimal block size for I/O.  */
+	int32_t  __pad2;
+	int64_t  st_blocks;	/* Number 512-byte blocks allocated. */
+	int64_t  rv_atime;	/* Time of last access.  */
+	uint64_t rv_atime_nsec;
+	int64_t  rv_mtime;	/* Time of last modification.  */
+	uint64_t rv_mtime_nsec;
+	int64_t  rv_ctime;	/* Time of last status change.  */
+	uint64_t rv_ctime_nsec;
+	uint32_t __unused4;
+	uint32_t __unused5;
+};
+inline void copy_stat_buffer(struct stat& st, struct riscv_stat& rst)
+{
+	rst.st_dev = st.st_dev;
+	rst.st_ino = st.st_ino;
+	rst.st_mode = st.st_mode;
+	rst.st_nlink = st.st_nlink;
+	rst.st_uid = st.st_uid;
+	rst.st_gid = st.st_gid;
+	rst.st_rdev = st.st_rdev;
+	rst.st_size = st.st_size;
+	rst.st_blksize = st.st_blksize;
+	rst.st_blocks = st.st_blocks;
+	rst.rv_atime = st.st_atime;
+	rst.rv_atime_nsec = st.st_atim.tv_nsec;
+	rst.rv_mtime = st.st_mtime;
+	rst.rv_mtime_nsec = st.st_mtim.tv_nsec;
+	rst.rv_ctime = st.st_ctime;
+	rst.rv_ctime_nsec = st.st_ctim.tv_nsec;
+}
+
+template <int W>
+static void syscall_fstatat(Machine<W>& machine)
+{
+	const auto vfd = machine.template sysarg<int> (0);
+	const auto g_path = machine.template sysarg<address_type<W>> (1);
+	const auto g_buf = machine.template sysarg<address_type<W>> (2);
+	const auto flags = machine.template sysarg<int> (3);
+
+	char path[PATH_MAX];
+	machine.copy_from_guest(path, g_path, sizeof(path)-1);
+	path[sizeof(path)-1] = 0;
+
+	SYSPRINT("SYSCALL fstatat, fd: %d path: %s buf: 0x%lX flags: %#x)\n",
+			vfd, path, (long)g_buf, flags);
+
+	if (machine.has_file_descriptors()) {
+
+		int real_fd = machine.fds().translate(vfd);
+
+		struct stat st;
+		const int res = ::fstatat(real_fd, path, &st, flags);
+		if (res == 0) {
+			// Convert to RISC-V structure
+			struct riscv_stat rst;
+			copy_stat_buffer(st, rst);
+			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
+		}
+		machine.set_result_or_error(res);
+		return;
+	}
 	machine.set_result(-ENOSYS);
 }
 
@@ -380,53 +468,14 @@ static void syscall_fstat(Machine<W>& machine)
 		struct stat st;
 		int res = ::fstat(real_fd, &st);
 		if (res == 0) {
-			// The RISC-V stat structure is different from x86
-			struct riscv_stat {
-				uint64_t st_dev;		/* Device.  */
-				uint64_t st_ino;		/* File serial number.  */
-				uint32_t st_mode;	/* File mode.  */
-				uint32_t st_nlink;	/* Link count.  */
-				uint32_t st_uid;		/* User ID of the file's owner.  */
-				uint32_t st_gid;		/* Group ID of the file's group. */
-				uint64_t st_rdev;	/* Device number, if device.  */
-				uint64_t __pad1;
-				int64_t  st_size;	/* Size of file, in bytes.  */
-				int32_t  st_blksize;	/* Optimal block size for I/O.  */
-				int32_t  __pad2;
-				int64_t  st_blocks;	/* Number 512-byte blocks allocated. */
-				int64_t  rv_atime;	/* Time of last access.  */
-				uint64_t rv_atime_nsec;
-				int64_t  rv_mtime;	/* Time of last modification.  */
-				uint64_t rv_mtime_nsec;
-				int64_t  rv_ctime;	/* Time of last status change.  */
-				uint64_t rv_ctime_nsec;
-				uint32_t __unused4;
-				uint32_t __unused5;
-			};
 			// Convert to RISC-V structure
 			struct riscv_stat rst;
-			rst.st_dev = st.st_dev;
-			rst.st_ino = st.st_ino;
-			rst.st_mode = st.st_mode;
-			rst.st_nlink = st.st_nlink;
-			rst.st_uid = st.st_uid;
-			rst.st_gid = st.st_gid;
-			rst.st_rdev = st.st_rdev;
-			rst.st_size = st.st_size;
-			rst.st_blksize = st.st_blksize;
-			rst.st_blocks = st.st_blocks;
-			rst.rv_atime = st.st_atime;
-			rst.rv_atime_nsec = st.st_atim.tv_nsec;
-			rst.rv_mtime = st.st_mtime;
-			rst.rv_mtime_nsec = st.st_mtim.tv_nsec;
-			rst.rv_ctime = st.st_ctime;
-			rst.rv_ctime_nsec = st.st_ctim.tv_nsec;
+			copy_stat_buffer(st, rst);
 			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
 		}
 		machine.set_result_or_error(res);
 		return;
 	}
-
 	machine.set_result(-ENOSYS);
 }
 template <int W>
@@ -461,7 +510,6 @@ static void syscall_statx(Machine<W>& machine)
 		machine.set_result_or_error(res);
 		return;
 	}
-
 	machine.set_result(-ENOSYS);
 }
 
@@ -692,6 +740,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 {
 	this->setup_minimal_syscalls();
 
+	// dup
+	this->install_syscall_handler(23, syscall_dup<W>);
 	// fcntl
 	this->install_syscall_handler(25, syscall_fcntl<W>);
 	// ioctl
@@ -704,7 +754,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(66, syscall_writev<W>);
 	this->install_syscall_handler(78, syscall_readlinkat<W>);
 	// 79: fstatat
-	this->install_syscall_handler(79, syscall_stub_nosys<W>);
+	this->install_syscall_handler(79, syscall_fstatat<W>);
 	// 80: fstat
 	this->install_syscall_handler(80, syscall_fstat<W>);
 
