@@ -31,10 +31,8 @@ int main()
 	socklen_t clientlen; /* byte size of client's address */
 	struct sockaddr_in serveraddr; /* server's addr */
 	struct sockaddr_in clientaddr; /* client addr */
-	struct hostent *hostp; /* client host info */
 	char buf[BUFSIZE]; /* message buffer */
 	char *hostaddrp; /* dotted decimal host addr string */
-	int n; /* message byte size */
 
 	/*
 	* socket: create the parent socket
@@ -55,7 +53,7 @@ int main()
 	/*
 	* build the server's Internet address
 	*/
-	bzero((char *) &serveraddr, sizeof(serveraddr));
+	memset(&serveraddr, 0, sizeof(serveraddr));
 
 	/* this is an Internet address */
 	serveraddr.sin_family = AF_INET;
@@ -100,17 +98,17 @@ int main()
 		hostaddrp = inet_ntoa(clientaddr.sin_addr);
 		if (hostaddrp == NULL)
 			error("ERROR on inet_ntoa\n");
-		printf("server established connection with %s\n",
+		printf("Server established connection with %s\n",
 			hostaddrp);
 
 		/*
 		 * read: read input string from the client
 		 */
-		bzero(buf, BUFSIZE);
-		n = read(childfd, buf, BUFSIZE);
+		memset(buf, 0, BUFSIZE);
+		ssize_t n = read(childfd, buf, BUFSIZE);
 		if (n < 0)
 			error("ERROR reading from socket");
-		printf("server received %d bytes: %s", n, buf);
+		printf("Server received %ld bytes: %s", (long)n, buf);
 
 		/*
 		 * write: echo the input string back to the client
