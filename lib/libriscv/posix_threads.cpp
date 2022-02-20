@@ -14,13 +14,11 @@ void Machine<W>::setup_posix_threads()
 		const int tid = machine.threads().get_thread()->tid;
 		THPRINT(">>> Exit on tid=%d, exit code = %d\n",
 				tid, (int) status);
-		if (tid != 0) {
-			// exit thread instead
-			if (machine.threads().get_thread()->exit()) {
-				// Should be a new thread now
-				assert(machine.threads().get_thread()->tid != tid);
-				return;
-			}
+		// Exit returns true if the program ended
+		if (!machine.threads().get_thread()->exit()) {
+			// Should be a new thread now
+			assert(machine.threads().get_thread()->tid != tid);
+			return;
 		}
 		machine.stop();
 		machine.set_result(status);
