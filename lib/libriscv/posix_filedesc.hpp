@@ -7,14 +7,23 @@ namespace riscv {
 
 struct FileDescriptors
 {
-	int assign(int);
+	int assign_file(int vfd) { return assign(vfd, false); }
+	int assign_socket(int vfd) { return assign(vfd, true); }
+	int assign(int vfd, bool socket);
 	int get(int);
 	int translate(int);
 	int close(int);
 
+	bool is_socket(int) const;
+	bool permit_write(int vfd) {
+		if (is_socket(vfd)) return true;
+		else return permit_file_write;
+	}
+
 	~FileDescriptors();
 
 	std::map<int, int> translation;
+	std::set<int> sockets;
 	int counter = 0x1000;
 
 	bool permit_filesystem = false;
@@ -34,10 +43,11 @@ inline FileDescriptors::~FileDescriptors()
 	}
 }
 
-inline int FileDescriptors::assign(int real_fd)
+inline int FileDescriptors::assign(int real_fd, bool socket)
 {
 	const int virtfd = counter++;
 	translation[virtfd] = real_fd;
+	if (socket) sockets.insert(virtfd);
 	return virtfd;
 }
 inline int FileDescriptors::get(int virtfd)
@@ -57,13 +67,18 @@ inline int FileDescriptors::close(int virtfd)
 {
 	auto it = translation.find(virtfd);
 	if (it != translation.end()) {
+		const int real_fd = it->second;
 		// Remove the virt FD
 		translation.erase(it);
-		// Close the real FD
-		close(it->second);
-		return it->second;
+		sockets.erase(virtfd);
+		return real_fd;
 	}
 	return -EBADF;
+}
+
+inline bool FileDescriptors::is_socket(int virtfd) const
+{
+	return sockets.count(virtfd) > 0;
 }
 
 } // riscv

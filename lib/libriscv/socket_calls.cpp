@@ -1,6 +1,6 @@
 #include <libriscv/machine.hpp>
 
-#define SOCKETCALL_VERBOSE 1
+//#define SOCKETCALL_VERBOSE 1
 #ifdef SOCKETCALL_VERBOSE
 #define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
@@ -24,7 +24,7 @@ static void syscall_socket(Machine<W>& machine)
 
 		int real_fd = socket(domain, type, proto);
 		if (real_fd > 0) {
-			const int vfd = machine.fds().assign(real_fd);
+			const int vfd = machine.fds().assign_socket(real_fd);
 			machine.set_result(vfd);
 		} else {
 			// Translate errno() into kernel API return value
@@ -94,15 +94,44 @@ static void syscall_accept(Machine<W>& machine)
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
 		const int real_fd = machine.fds().translate(sockfd);
+		alignas(16) char buffer[128];
+		socklen_t addrlen = sizeof(buffer);
 
-		struct sockaddr addr;
-		socklen_t addrlen;
-
-		int res = accept(real_fd, &addr, &addrlen);
+		int res = accept(real_fd, (struct sockaddr *)buffer, &addrlen);
 		if (res >= 0) {
-			machine.copy_to_guest(g_addr, &addr, addrlen);
+			// Assign and translate the new fd to virtual fd
+			res = machine.fds().assign_socket(res);
+			machine.copy_to_guest(g_addr, buffer, addrlen);
 			machine.copy_to_guest(g_addrlen, &addrlen, sizeof(addrlen));
 		}
+		machine.set_result_or_error(res);
+		return;
+	}
+	machine.set_result(-EBADF);
+}
+
+template <int W>
+static void syscall_connect(Machine<W>& machine)
+{
+	const auto [sockfd, g_addr, addrlen] =
+		machine.template sysargs<int, address_type<W>, address_type<W>> ();
+
+	SYSPRINT("SYSCALL connect, sockfd: %d addr: 0x%lX len: %zu\n",
+		sockfd, (long)g_addr, (size_t)addrlen);
+
+	if (addrlen > 256) {
+		machine.set_result(-ENOMEM);
+		return;
+	}
+
+	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
+
+		const int real_fd = machine.fds().translate(sockfd);
+		alignas(16) char buffer[256];
+		machine.copy_from_guest(buffer, g_addr, addrlen);
+
+		const int res = connect(real_fd, (struct sockaddr *)buffer, addrlen);
+		printf("connect: %d\n", res);
 		machine.set_result_or_error(res);
 		return;
 	}
@@ -144,6 +173,7 @@ void add_socket_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(200, syscall_bind<W>);
 	machine.install_syscall_handler(201, syscall_listen<W>);
 	machine.install_syscall_handler(202, syscall_accept<W>);
+	machine.install_syscall_handler(203, syscall_connect<W>);
 	machine.install_syscall_handler(208, syscall_setsockopt<W>);
 
 }

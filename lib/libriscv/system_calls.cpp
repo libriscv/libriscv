@@ -1,6 +1,6 @@
 #include <libriscv/machine.hpp>
 
-#define SYSCALL_VERBOSE 1
+//#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
 #define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 static constexpr bool verbose_syscalls = true;
@@ -137,12 +137,13 @@ static void syscall_read(Machine<W>& machine)
 template <int W>
 static void syscall_write(Machine<W>& machine)
 {
-	const int  fd      = machine.template sysarg<int>(0);
+	const int  vfd     = machine.template sysarg<int>(0);
 	const auto address = machine.template sysarg<address_type<W>>(1);
 	const size_t len   = machine.template sysarg<address_type<W>>(2);
-	SYSPRINT("SYSCALL write, addr: 0x%lX, len: %zu\n", (long)address, len);
+	SYSPRINT("SYSCALL write, fd: %d addr: 0x%lX, len: %zu\n",
+		vfd, (long)address, len);
 	// We only accept standard output pipes, for now :)
-	if (fd == 1 || fd == 2) {
+	if (vfd == 1 || vfd == 2) {
 		// Zero-copy retrieval of buffers (64kb)
 		riscv::vBuffer buffers[16];
 		size_t cnt =
@@ -152,8 +153,8 @@ static void syscall_write(Machine<W>& machine)
 		}
 		machine.set_result(len);
 		return;
-	} else if (machine.has_file_descriptors() && machine.fds().permit_file_write) {
-		int real_fd = machine.fds().get(fd);
+	} else if (machine.has_file_descriptors() && machine.fds().permit_write(vfd)) {
+		int real_fd = machine.fds().get(vfd);
 		// Zero-copy retrieval of buffers (256kb)
 		riscv::vBuffer buffers[64];
 		size_t cnt =
@@ -241,7 +242,7 @@ static void syscall_openat(Machine<W>& machine)
 		}
 		int real_fd = openat(machine.fds().translate(dir_fd), path, flags);
 		if (real_fd > 0) {
-			const int vfd = machine.fds().assign(real_fd);
+			const int vfd = machine.fds().assign_file(real_fd);
 			machine.set_result(vfd);
 		} else {
 			// Translate errno() into kernel API return value
@@ -256,17 +257,21 @@ static void syscall_openat(Machine<W>& machine)
 template <int W>
 static void syscall_close(riscv::Machine<W>& machine)
 {
-	const int fd = machine.template sysarg<int>(0);
+	const int vfd = machine.template sysarg<int>(0);
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL close, fd: %d\n", fd);
+		printf("SYSCALL close, fd: %d\n", vfd);
 	}
-	if (fd <= 2) {
+
+	if (vfd >= 0 && vfd <= 2) {
 		// TODO: Do we really want to close them?
 		machine.set_result(0);
 		return;
 	} else if (machine.has_file_descriptors()) {
-		machine.set_result(
-			machine.fds().close(fd) >= 0 ? 0 : -EBADF);
+		const int res = machine.fds().close(vfd);
+		if (res > 0) {
+			::close(res);
+		}
+		machine.set_result(res >= 0 ? 0 : -EBADF);
 		return;
 	}
 	machine.set_result(-EBADF);
