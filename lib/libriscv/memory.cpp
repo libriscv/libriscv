@@ -3,9 +3,6 @@
 #ifdef __GNUG__
 #include "decoder_cache.cpp"
 #endif
-#ifdef RISCV_BINARY_TRANSLATION
-#include <dlfcn.h> // Linux-only
-#endif
 
 extern "C" char *
 __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
@@ -68,10 +65,6 @@ namespace riscv
 #endif
 #ifdef RISCV_INSTR_CACHE
 		delete[] m_decoder_cache;
-#endif
-#ifdef RISCV_BINARY_TRANSLATION
-		if (m_bintr_dl)
-			dlclose(m_bintr_dl);
 #endif
 	}
 

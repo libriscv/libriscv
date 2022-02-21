@@ -11,10 +11,6 @@ option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 option(RISCV_SHARED_PT "Enable shared page tables (performance penalty)" OFF)
 option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
 
-if (RISCV_EXPERIMENTAL)
-	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
-endif()
-
 if (RISCV_USE_RH_HASH)
 	include(FetchContent)
 	FetchContent_Declare(
@@ -58,14 +54,6 @@ if (RISCV_DEBUG)
 		libriscv/debug.cpp
 	)
 endif()
-if (RISCV_BINARY_TRANSLATION)
-	list(APPEND SOURCES
-		libriscv/tr_api.cpp
-		libriscv/tr_compiler.cpp
-		libriscv/tr_emit.cpp
-		libriscv/tr_translate.cpp
-	)
-endif()
 
 add_library(riscv ${SOURCES})
 set_target_properties(riscv PROPERTIES CXX_STANDARD 17)
@@ -92,11 +80,6 @@ if (RISCV_ICACHE)
 endif()
 if (RISCV_EXPERIMENTAL)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE_PREGEN=1)
-endif()
-if (RISCV_BINARY_TRANSLATION)
-	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
-	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
-	target_link_libraries(riscv PUBLIC dl)
 endif()
 if (RISCV_SHARED_PT)
 	target_compile_definitions(riscv PUBLIC RISCV_SHARED_PAGETABLES=1)

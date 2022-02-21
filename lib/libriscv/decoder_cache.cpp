@@ -57,11 +57,8 @@ namespace riscv
 				dst += 4;
 		}
 
-		/* We do not support translation and fusing for RV128I */
+		/* We do not support fusing for RV128I */
 		if constexpr (W != 16) {
-#ifdef RISCV_BINARY_TRANSLATION
-		machine().cpu.try_translate(options, addr, ipairs);
-#endif
 #ifndef RISCV_DEBUG /* When debugging we want to preserve all information */
 		for (size_t n = 0; n < ipairs.size()-1; n++)
 		{

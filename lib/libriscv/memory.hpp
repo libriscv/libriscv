@@ -140,9 +140,6 @@ namespace riscv
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 
-		bool is_binary_translated() const { return m_bintr_dl != nullptr; }
-		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
-
 		// serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
 		// returns the machine to a previously stored state
@@ -243,7 +240,6 @@ namespace riscv
 		dchandler_t* m_exec_decoder = nullptr;
 		DecoderCache<W>* m_decoder_cache = nullptr;
 #endif
-		mutable void* m_bintr_dl = nullptr;
 	};
 #include "memory_inline.hpp"
 #include "memory_helpers.hpp"

@@ -197,10 +197,6 @@ namespace riscv
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
-		// Returns true if the Machine has loaded native code
-		// generated from binary translation.
-		bool is_binary_translated() const { return memory.is_binary_translated(); }
-
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
 		// Returns the machine to a previously stored state
