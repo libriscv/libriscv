@@ -45,9 +45,6 @@ namespace riscv
 		bool stopped() const noexcept;
 		void reset();
 
-		uint64_t instruction_counter() const noexcept { return cpu.instruction_counter(); }
-		void     increment_counter(uint64_t val) noexcept { cpu.increment_counter(val); }
-
 		CPU<W>    cpu;
 		Memory<W> memory;
 
@@ -162,6 +159,11 @@ namespace riscv
 
 		static inline void (*on_unhandled_csr) (Machine&, int, int, int)
 			= [] (Machine<W>&, int, int, int) {};
+
+		// Shortcut to the instruction counter belonging to the CPU
+		uint64_t instruction_counter() const noexcept { return cpu.instruction_counter(); }
+		// Used by heavy system calls to lower the max amount of instructions
+		void     penalize(uint64_t penalty) noexcept;
 
 		// Optional custom native-performance arena
 		const Arena& arena() const noexcept { return *m_arena; }

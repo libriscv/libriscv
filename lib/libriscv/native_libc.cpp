@@ -143,7 +143,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/
 			[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
 				m.memcpy(dst + off, data, len);
 			});
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 		m.set_result(dst);
 	}}, {syscall_base+1, [] (Machine<W>& m) {
 		// Memset n+1
@@ -151,7 +151,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
 		m.memory.memset(dst, value, len);
-		m.increment_counter(len);
+		m.penalize(len);
 		m.set_result(dst);
 	}}, {syscall_base+2, [] (Machine<W>& m) {
 		// Memmove n+2
@@ -171,20 +171,20 @@ void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/
 					m.memory.template read<uint8_t> (src + len));
 			}
 		}
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 		m.set_result(dst);
 	}}, {syscall_base+3, [] (Machine<W>& m) {
 		// Memcmp n+3
 		auto [p1, p2, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 		m.set_result(m.memory.memcmp(p1, p2, len));
 	}}, {syscall_base+5, [] (Machine<W>& m) {
 		// Strlen n+5
 		auto [addr] = m.sysargs<address_type<W>> ();
 		uint32_t len = m.memory.strlen(addr, 4096);
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 		m.set_result(len);
 		MPRINT("SYSCALL strlen(%#lX) = %lu\n",
 			(long) addr, (long) len);
@@ -198,13 +198,13 @@ void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/
 			const uint8_t v1 = m.memory.template read<uint8_t> (a1 ++);
 			const uint8_t v2 = m.memory.template read<uint8_t> (a2 ++);
 			if (v1 != v2 || v1 == 0) {
-				m.increment_counter(2 + 2 * len);
+				m.penalize(2 + 2 * len);
 				m.set_result(v1 - v2);
 				return;
 			}
 			len ++;
 		}
-		m.increment_counter(2 + 2 * len);
+		m.penalize(2 + 2 * len);
 		m.set_result(0);
 	}}, {syscall_base+14, [] (Machine<W>& m) {
 		// Print backtrace n+14

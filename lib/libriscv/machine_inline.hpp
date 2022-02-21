@@ -7,6 +7,14 @@ template <int W>
 inline bool Machine<W>::stopped() const noexcept {
 	return cpu.instruction_counter() >= cpu.max_instructions();
 }
+template <int W>
+inline void Machine<W>::penalize(uint64_t val) noexcept {
+	uint64_t max = cpu.max_instructions();
+	uint64_t new_max = cpu.max_instructions() - val;
+	new_max &= -(new_max <= max);
+	cpu.set_max_instructions(new_max);
+}
+
 
 template <int W>
 template <bool Throw>
