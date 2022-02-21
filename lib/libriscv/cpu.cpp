@@ -137,7 +137,8 @@ namespace riscv
 			// When compressed is enabled along with instruction cache,
 			// we are not caching the 2-byte offsets, only the 4-byte offsets
 			// within pages. So we execute the 2-byte aligned instructions.
-			if (UNLIKELY(this->pc() & 3)) {
+			if (UNLIKELY(this->pc() & 2)) {
+				// It's a poorly decoded compressed instruction anyway
 				this->execute(instruction);
 			} else {
 		#endif
