@@ -275,7 +275,7 @@ static void syscall_close(riscv::Machine<W>& machine)
 		machine.set_result(0);
 		return;
 	} else if (machine.has_file_descriptors()) {
-		const int res = machine.fds().close(vfd);
+		const int res = machine.fds().erase(vfd);
 		if (res > 0) {
 			::close(res);
 		}
@@ -813,5 +813,12 @@ template void Machine<4>::setup_linux_syscalls(bool, bool);
 template void Machine<8>::setup_minimal_syscalls();
 template void Machine<8>::setup_newlib_syscalls();
 template void Machine<8>::setup_linux_syscalls(bool, bool);
+
+FileDescriptors::~FileDescriptors() {
+	// Close all the real FDs
+	for (const auto& it : translation) {
+		::close(it.second);
+	}
+}
 
 } // riscv
