@@ -203,6 +203,7 @@ namespace riscv
 
 		CachedPage<W, const Page> m_rd_cache;
 		CachedPage<W, Page> m_wr_cache;
+		friend struct CPU<W>;
 
 #ifdef RISCV_USE_RH_HASH
 		robin_hood::unordered_node_map<address_t, Page> m_pages;

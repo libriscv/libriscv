@@ -1,7 +1,7 @@
 
 template <int W>
-inline CPU<W>::CPU(Machine<W>& machine)
-	: m_machine { machine }
+inline CPU<W>::CPU(Machine<W>& machine, int cpuid)
+	: m_machine { machine }, m_cpuid(cpuid)
 {
 }
 template <int W>

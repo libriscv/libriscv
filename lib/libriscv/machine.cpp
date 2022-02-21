@@ -17,7 +17,7 @@ namespace riscv
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
-		: cpu(*this), memory(*this, binary, options), m_arena{nullptr}, m_mt{nullptr}
+		: cpu(*this, 0), memory(*this, binary, options), m_arena{nullptr}, m_mt{nullptr}
 	{
 		cpu.reset();
 	}
@@ -25,8 +25,6 @@ namespace riscv
 	inline Machine<W>::Machine(const Machine& other, const MachineOptions<W>& options)
 		: cpu(*this, other), memory(*this, other, options), m_arena{nullptr}, m_mt{nullptr}
 	{
-		this->m_counter = other.m_counter;
-		this->m_max_counter = other.m_max_counter;
 		if (other.m_mt) {
 			m_mt.reset(new MultiThreading {*this, *other.m_mt});
 		}
@@ -216,7 +214,7 @@ namespace riscv
 	}
 
 	template <int W>
-	void Machine<W>::system(union rv32i_instruction instr)
+	void Machine<W>::system(CPU<W>& cpu, union rv32i_instruction instr)
 	{
 		switch (instr.Itype.funct3) {
 		case 0x0: // SYSTEM functions
@@ -254,11 +252,11 @@ namespace riscv
 				return;
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
-				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter();
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.instruction_counter();
 				return;
 			case 0xC80: // CSR RDCYCLE (upper)
 			case 0xC82: // RDINSTRET (upper)
-				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter() >> 32u;
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.instruction_counter() >> 32u;
 				return;
 			case 0xC01: // CSR RDTIME (lower)
 				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time();

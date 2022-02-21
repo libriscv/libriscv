@@ -1,7 +1,7 @@
 
 template <int W>
 template <typename... Args> constexpr
-inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
+inline void Machine<W>::setup_call(CPU<W>& cpu, address_t call_addr, Args&&... args)
 {
 	cpu.reg(REG_RA) = memory.exit_address();
 	[[maybe_unused]] int iarg = REG_ARG0;
@@ -25,6 +25,12 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 	}(), ...);
 	cpu.jump(call_addr);
 }
+template <int W>
+template <typename... Args> constexpr
+inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
+{
+	setup_call(cpu, call_addr, std::forward<Args> (args)...);
+}
 
 template <int W>
 template <uint64_t MAXI, bool Throw, typename... Args> constexpr
@@ -38,7 +44,7 @@ inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 	if (MAXI != 0)
 		this->simulate<Throw>(MAXI);
 	else
-		this->simulate<Throw>(max_instructions());
+		this->simulate<Throw>(cpu.max_instructions());
 	// address-sized integer return value
 	return cpu.reg(REG_ARG0);
 }
@@ -59,7 +65,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 	if constexpr (StoreRegs) {
 		regs = cpu.registers();
 	}
-	const uint64_t max_counter = this->max_instructions();
+	const uint64_t max_counter = cpu.max_instructions();
 	// we need to make some stack room
 	this->cpu.reg(REG_SP) -= 1024u;
 	// setup calling convention
@@ -70,9 +76,9 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 		if (MAXI != 0)
 			this->simulate<Throw>(MAXI);
 		else
-			this->simulate<Throw>(max_instructions());
+			this->simulate<Throw>(cpu.max_instructions());
 	} catch (...) {
-		this->m_max_counter = max_counter;
+		cpu.set_max_instructions(max_counter);
 		if constexpr (StoreRegs) {
 			cpu.registers() = regs;
 			cpu.aligned_jump(cpu.pc());
@@ -80,7 +86,7 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 		throw;
 	}
 	// restore registers and return value
-	this->m_max_counter = max_counter;
+	cpu.set_max_instructions(max_counter);
 	const auto retval = cpu.reg(REG_ARG0);
 	if constexpr (StoreRegs) {
 		cpu.registers() = regs;
@@ -95,4 +101,32 @@ address_type<W> Machine<W>::preempt(const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
 	return preempt<MAXI, Throw, StoreRegs>(call_addr, std::forward<Args>(args)...);
+}
+
+template <int W>
+template<bool Throw, typename... Args> inline
+void Machine<W>::multiprocess(unsigned num_cpus,
+	address_t func, uint64_t maxi, address_t stack, size_t stack_size,
+	Args&&... args)
+{
+#ifdef RISCV_MULTIPROCESS
+	m_vcpus.clear();
+	// Create vCPU 1...N
+	for (size_t i = 1; i < num_cpus; i++)
+	{
+		m_vcpus.emplace_back(*this, i);
+		auto& vcpu = m_vcpus.back();
+		vcpu.reg(REG_GP) = cpu.reg(REG_GP);
+		vcpu.reg(REG_TP) = cpu.reg(REG_TP);
+		vcpu.reg(REG_SP) = stack + i * stack_size;
+		vcpu.set_max_instructions(maxi);
+		setup_call(vcpu, func, std::forward<Args> (args)...);
+	}
+	// Send work to thread pool
+	this->begin_multiprocessing(m_vcpus.size());
+#else
+	(void) num_cpus; (void) func; (void) maxi; (void) stack; (void) stack_size;
+	struct { void f(Args const & ... ) {} } sink; sink.f(args...);
+	throw MachineException(ILLEGAL_OPERATION, "Multiprocessing not enabled");
+#endif
 }

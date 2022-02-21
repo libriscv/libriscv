@@ -17,6 +17,7 @@ namespace riscv
 
 		Registers<W> registers;
 		uint64_t     counter;
+		uint64_t     max_counter;
 
 		uint64_t start_address = 0;
 		uint64_t stack_address = 0;
@@ -42,7 +43,8 @@ namespace riscv
 			.mem_offset = sizeof(SerializedMachine<W>),
 
 			.registers = cpu.registers(),
-			.counter   = this->instruction_counter(),
+			.counter   = cpu.instruction_counter(),
+			.max_counter   = cpu.max_instructions(),
 
 			.start_address = memory.start_address(),
 			.stack_address = memory.stack_initial(),
@@ -97,7 +99,6 @@ namespace riscv
 			return -3;
 		if (header.attr_size != sizeof(PageAttributes))
 			return -4;
-		this->m_counter = header.counter;
 		cpu.deserialize_from(vec, header);
 		memory.deserialize_from(vec, header);
 		return 0;
@@ -109,6 +110,8 @@ namespace riscv
 		// restore CPU registers and counters
 		this->m_regs = state.registers;
 		this->m_cache = {};
+		this->m_counter = state.counter;
+		this->m_max_counter = state.max_counter;
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};
 #endif

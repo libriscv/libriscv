@@ -192,7 +192,7 @@ template <int W> inline
 RSPClient<W>::RSPClient(riscv::Machine<W>& m, int fd)
 	: m_machine{&m}, sockfd(fd)
 {
-	m_machine->set_max_instructions(m_ilimit);
+	m_machine->cpu.set_max_instructions(m_ilimit);
 }
 template <int W> inline
 RSPClient<W>::~RSPClient() {
@@ -436,7 +436,7 @@ void RSPClient<W>::handle_continue()
 			if (m_machine->cpu.pc() == this->m_bp)
 				break;
 			// Stopped (usual way)
-			if (m_machine->max_instructions() == 0)
+			if (m_machine->cpu.max_instructions() == 0)
 				break;
 			n--;
 		}

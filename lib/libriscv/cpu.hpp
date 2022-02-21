@@ -32,6 +32,13 @@ namespace riscv
 		void jump(address_t);
 		void aligned_jump(address_t);
 
+		uint64_t instruction_counter() const noexcept { return m_counter; }
+		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
+		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
+		void     reset_instruction_counter() noexcept { m_counter = 0; }
+		uint64_t max_instructions() const noexcept { return m_max_counter; }
+		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
+
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }
 
@@ -43,6 +50,10 @@ namespace riscv
 
 		auto& machine() noexcept { return this->m_machine; }
 		const auto& machine() const noexcept { return this->m_machine; }
+
+		// Cached memory reads and writes
+		const Page& get_readable_page(address_t);
+		Page& get_writable_page(address_t);
 
 #ifdef RISCV_EXT_ATOMICS
 		auto& atomics() noexcept { return this->m_atomics; }
@@ -74,7 +85,7 @@ namespace riscv
 		using instr_pair = std::pair<instruction_handler<W>&, format_t&>;
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 
-		CPU(Machine<W>&);
+		CPU(Machine<W>&, int);
 		CPU(Machine<W>&, const Machine<W>& other); // Fork
 		void init_execute_area(const uint8_t* data, address_t begin, address_t length);
 		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t length);
@@ -82,6 +93,9 @@ namespace riscv
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
+
+		uint64_t     m_counter = 0;
+		uint64_t     m_max_counter = 0;
 
 		format_t read_next_instruction_slowpath() COLD_PATH();
 		void execute(format_t);
@@ -93,6 +107,14 @@ namespace riscv
 
 		// Page cache for execution on virtual memory
 		CachedPage<W, const Page> m_cache;
+#ifdef RISCV_MULTIPROCESS
+		// Page cache for reading and writing virtual memory
+		CachedPage<W, const Page> m_rd_cache;
+		CachedPage<W, Page> m_wr_cache;
+#endif
+
+		// The CPU number
+		const int m_cpuid;
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints

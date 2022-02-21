@@ -17,8 +17,11 @@ namespace riscv
 {
 	template <int W>
 	CPU<W>::CPU(Machine<W>& machine, const Machine<W>& other)
-		: m_machine { machine }
+		: m_machine { machine }, m_cpuid(other.cpu.m_cpuid)
 	{
+		this->m_counter = other.cpu.m_counter;
+		this->m_max_counter = other.cpu.m_max_counter;
+
 		this->m_exec_data  = other.cpu.m_exec_data;
 		this->m_exec_begin = other.cpu.m_exec_begin;
 		this->m_exec_end   = other.cpu.m_exec_end;
@@ -117,11 +120,11 @@ namespace riscv
 	void CPU<W>::simulate(uint64_t max)
 	{
 		// Calculate the instruction limit
-		machine().set_max_instructions(max);
-		uint64_t counter = machine().instruction_counter();
+		this->set_max_instructions(max);
+		uint64_t counter = this->instruction_counter();
 
 	try {
-		for (; counter < machine().max_instructions(); counter++) {
+		for (; counter < this->max_instructions(); counter++) {
 
 			format_t instruction;
 #ifdef RISCV_DEBUG
@@ -198,13 +201,13 @@ namespace riscv
 		} // while not stopped
 	// Catch all exceptions to finalize instruction counter
 	} catch (...) {
-		machine().set_instruction_counter(counter);
+		this->set_instruction_counter(counter);
 		// Then re-throw to handle the exception outside
 		throw;
 	}
 
 		// Finalize instruction counter
-		machine().set_instruction_counter(counter);
+		this->set_instruction_counter(counter);
 	} // CPU::simulate
 
 	template<int W>
@@ -213,7 +216,7 @@ namespace riscv
 		// This will make sure we can do one step while still preserving
 		// the max instructions that we had before. If the machine is stopped
 		// the old count is not preserved.
-		this->simulate(machine().instruction_counter() + 1);
+		this->simulate(this->instruction_counter() + 1);
 	}
 
 	template<int W> __attribute__((cold))

@@ -1,11 +1,11 @@
 
 template <int W>
 inline void Machine<W>::stop() noexcept {
-	m_max_counter = 0;
+	cpu.set_max_instructions(0);
 }
 template <int W>
 inline bool Machine<W>::stopped() const noexcept {
-	return m_counter >= m_max_counter;
+	return cpu.instruction_counter() >= cpu.max_instructions();
 }
 
 template <int W>
@@ -14,7 +14,7 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 {
 	cpu.simulate(max_instr);
 	if constexpr (Throw) {
-		if (UNLIKELY(m_max_counter != 0))
+		if (UNLIKELY(cpu.max_instructions() != 0))
 			timeout_exception(max_instr);
 	}
 }

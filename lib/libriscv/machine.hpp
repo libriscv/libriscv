@@ -1,6 +1,7 @@
 #pragma once
 #include "cpu.hpp"
 #include "memory.hpp"
+#include "multiprocess.hpp"
 #include "riscvbase.hpp"
 #include "posix_filedesc.hpp"
 #include <array>
@@ -44,12 +45,8 @@ namespace riscv
 		bool stopped() const noexcept;
 		void reset();
 
-		uint64_t instruction_counter() const noexcept { return m_counter; }
-		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
-		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
-		void     reset_instruction_counter() noexcept { m_counter = 0; }
-		uint64_t max_instructions() const noexcept { return m_max_counter; }
-		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
+		uint64_t instruction_counter() const noexcept { return cpu.instruction_counter(); }
+		void     increment_counter(uint64_t val) noexcept { cpu.increment_counter(val); }
 
 		CPU<W>    cpu;
 		Memory<W> memory;
@@ -161,7 +158,7 @@ namespace riscv
 			= [] (Machine<W>&, int) {};
 
 		// Execute CSRs
-		void system(union rv32i_instruction);
+		void system(CPU<W>&, union rv32i_instruction);
 
 		static inline void (*on_unhandled_csr) (Machine&, int, int, int)
 			= [] (Machine<W>&, int, int, int) {};
@@ -194,6 +191,16 @@ namespace riscv
 		void set_sighandler(address_t addr) { m_sighandler = addr; }
 		address_t sighandler() const noexcept { return m_sighandler; }
 
+		// Available when RISCV_MULTIPROCESS is enabled.
+		// multiprocess() executes a single function with many CPUs,
+		// each of which has their own CPU ID. Using this we can partition
+		// the workload and work on it concurrently.
+		bool is_multiprocessing() const noexcept { return !m_vcpus.empty(); }
+		template<bool Throw = true, typename... Args>
+		void multiprocess(unsigned cpus, address_t func, uint64_t maxi,
+			address_t stack, size_t stack_size, Args&&... args);
+		void multiprocess_wait();
+
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
@@ -206,14 +213,14 @@ namespace riscv
 		int deserialize_from(const std::vector<uint8_t>&);
 
 	private:
+		template<typename... Args> constexpr
+		void setup_call(CPU<W>& cpu, address_t call_addr, Args&&... args);
 		static void unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
 		void setup_native_heap_internal(const size_t);
 		void timeout_exception(uint64_t);
 
-		uint64_t     m_counter = 0;
-		uint64_t     m_max_counter = 0;
 		void*        m_userdata = nullptr;
 		address_t    m_sighandler = 0;
 		printer_func m_printer = m_default_printer;
@@ -223,6 +230,13 @@ namespace riscv
 		std::unique_ptr<FileDescriptors> m_fds;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;
+	public:
+#ifdef RISCV_MULTIPROCESS
+		std::vector<CPU<W>> m_vcpus;
+		std::unique_ptr<ThreadPool> m_threadpool = nullptr;
+		std::mutex multiprocessing_lock;
+		void begin_multiprocessing(size_t num_cpus);
+#endif
 	};
 
 #include "machine_inline.hpp"

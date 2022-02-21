@@ -637,7 +637,7 @@ namespace riscv
 
 	INSTRUCTION(SYSTEM,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
-		cpu.machine().system(instr);
+		cpu.machine().system(cpu, instr);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
 		// system functions

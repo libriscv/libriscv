@@ -4,7 +4,14 @@ template <int W>
 template <typename T> inline
 T Memory<W>::read(address_t address)
 {
-	const auto& page = get_readable_page(address);
+	// The read/write caches are on the CPUs
+#ifdef RISCV_MULTIPROCESS
+	const auto& page = machine().is_multiprocessing()
+			? machine().cpu.get_readable_page(address)
+			: this->get_readable_page(address);
+#else
+	const auto& page = this->get_readable_page(address);
+#endif
 
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {
@@ -20,7 +27,14 @@ template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
-	auto& page = get_writable_page(address);
+	// The read/write caches are on the CPUs
+#ifdef RISCV_MULTIPROCESS
+	auto& page = machine().is_multiprocessing()
+			? machine().cpu.get_writable_page(address)
+			: this->get_writable_page(address);
+#else
+	auto& page = this->get_writable_page(address);
+#endif
 
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {
@@ -37,7 +51,13 @@ template <int W>
 template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
-	auto& page = get_writable_page(address);
+#ifdef RISCV_MULTIPROCESS
+	auto& page = machine().is_multiprocessing()
+			? machine().cpu.get_writable_page(address)
+			: this->get_writable_page(address);
+#else
+	auto& page = this->get_writable_page(address);
+#endif
 
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {

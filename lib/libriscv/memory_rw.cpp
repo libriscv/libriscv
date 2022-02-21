@@ -71,6 +71,10 @@ namespace riscv
 	template <int W>
 	void Memory<W>::free_pages(address_t dst, size_t len)
 	{
+#ifdef RISCV_MULTIPROCESS
+		if (machine().is_multiprocessing())
+			throw MachineException(ILLEGAL_OPERATION, "Cannot free pages while multiprocessing");
+#endif
 		address_t pageno = page_number(dst);
 		len /= Page::size();
 		while (len > 0)
