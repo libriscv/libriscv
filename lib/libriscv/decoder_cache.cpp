@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "rv32i_instr.hpp"
+//#define RISCV_INSTRUCTION_FUSING
 
 namespace riscv
 {
@@ -28,7 +29,9 @@ namespace riscv
 		this->m_decoder_cache = &decoder_array[0];
 
 #ifdef RISCV_INSTR_CACHE_PREGEN
+	#ifdef RISCV_INSTRUCTION_FUSING
 		std::vector<typename CPU<W>::instr_pair> ipairs;
+	#endif
 
 		auto* exec_offset = machine().cpu.exec_seg_data();
 		assert(exec_offset && "Must have set CPU execute segment");
@@ -38,35 +41,29 @@ namespace riscv
 		   so it's fine to leave the boundries alone. */
 		for (address_t dst = addr; dst < addr + len;)
 		{
-			const size_t cacheno = page_number(dst - pbase);
-			const size_t offset = dst & (Page::size()-1);
-			auto& cache = decoder_array[cacheno];
-			auto& entry = cache.get(offset / cache.DIVISOR);
+			auto& entry = m_exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
 			auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
-		#ifdef RISCV_DEBUG
-			ipairs.emplace_back(entry.handler, instruction);
-		#else
+		#ifdef RISCV_INSTRUCTION_FUSING
 			ipairs.emplace_back(entry, instruction);
 		#endif
 
-			cache.convert(machine().cpu.decode(instruction), entry);
-			if constexpr (compressed_enabled)
-				dst += 2; /* We need to handle all entries */
-			else
-				dst += 4;
+			DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
+			// We do not cache 2-byte mid-aligned instructions
+			dst += 4;
 		}
 
+		/* When debugging we want to preserve all information */
+#if defined(RISCV_INSTRUCTION_FUSING)
 		/* We do not support fusing for RV128I */
 		if constexpr (W != 16) {
-#ifndef RISCV_DEBUG /* When debugging we want to preserve all information */
-		for (size_t n = 0; n < ipairs.size()-1; n++)
-		{
-			if (machine().cpu.try_fuse(ipairs[n+0], ipairs[n+1]))
-				n += 1;
+			for (size_t n = 0; n < ipairs.size()-1; n++)
+			{
+				if (machine().cpu.try_fuse(ipairs[n+0], ipairs[n+1]))
+					n += 1;
+			}
 		}
 #endif
-		}
 
 #else
 		// zero the whole thing

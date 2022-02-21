@@ -6,16 +6,19 @@
 namespace riscv {
 
 template <int W>
+struct DecoderData {
+#ifdef RISCV_DEBUG
+	using Handler = Instruction<W>;
+#else
+	using Handler = instruction_handler<W>;
+#endif
+	Handler handler;
+};
+
+template <int W>
 struct DecoderCache
 {
-#ifdef RISCV_DEBUG
-	using handler = Instruction<W>;
-#else
-	using handler = instruction_handler<W>;
-#endif
-	// we are making room for the maximum amount of
-	// compressed instructions, which are 16-bits
-	static constexpr size_t DIVISOR = (compressed_enabled) ? 2 : 4;
+	static constexpr size_t DIVISOR = 4;
 
 	inline auto& get(size_t idx) noexcept {
 		return cache[idx];
@@ -25,22 +28,22 @@ struct DecoderCache
 		return &cache[0];
 	}
 
-	static void convert(const Instruction<W>& insn, handler& entry) {
+	static void convert(const Instruction<W>& insn, DecoderData<W>& entry) {
 #ifdef RISCV_DEBUG
-		entry = insn;
+		entry.handler = insn;
 #else
-		entry = insn.handler;
+		entry.handler = insn.handler;
 #endif
 	}
-	static bool isset(const handler& entry) {
+	static bool isset(const DecoderData<W>& entry) {
 #ifdef RISCV_DEBUG
-		return entry.handler != nullptr;
+		return entry.handler.handler != nullptr;
 #else
-		return entry != nullptr;
+		return entry.handler != nullptr;
 #endif
 	}
 
-	std::array<handler, PageSize / DIVISOR> cache = {};
+	std::array<DecoderData<W>, PageSize / DIVISOR> cache = {};
 };
 
 }

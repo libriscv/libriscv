@@ -120,7 +120,7 @@ namespace riscv
 		machine().set_max_instructions(max);
 		uint64_t counter = machine().instruction_counter();
 
-		try {
+	try {
 		for (; counter < machine().max_instructions(); counter++) {
 
 			format_t instruction;
@@ -133,7 +133,15 @@ namespace riscv
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 #  endif
 			instruction = format_t { *(uint32_t*) &m_exec_data[this->pc()] };
-			// retrieve instructions directly from the constant cache
+		#ifdef RISCV_EXT_COMPRESSED
+			// When compressed is enabled along with instruction cache,
+			// we are not caching the 2-byte offsets, only the 4-byte offsets
+			// within pages. So we execute the 2-byte aligned instructions.
+			if (UNLIKELY(this->pc() & 3)) {
+				this->execute(instruction);
+			} else {
+		#endif
+			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
 				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<W>::DIVISOR];
 		#ifndef RISCV_INSTR_CACHE_PREGEN
@@ -144,10 +152,13 @@ namespace riscv
 		#ifdef RISCV_DEBUG
 			INSTRUCTION_LOGGING();
 			// execute instruction
-			cache_entry.handler(*this, instruction);
+			cache_entry.handler.handler(*this, instruction);
 		#else
 			// execute instruction
-			cache_entry(*this, instruction);
+			cache_entry.handler(*this, instruction);
+		#endif
+		#ifdef RISCV_EXT_COMPRESSED
+			}
 		#endif
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
@@ -184,13 +195,12 @@ namespace riscv
 			else
 				registers().pc += 4;
 		} // while not stopped
-
-		// Catch all exceptions to finalize instruction counter
-		} catch (...) {
-			machine().set_instruction_counter(counter);
-			// Then re-throw to handle the exception outside
-			throw;
-		}
+	// Catch all exceptions to finalize instruction counter
+	} catch (...) {
+		machine().set_instruction_counter(counter);
+		// Then re-throw to handle the exception outside
+		throw;
+	}
 
 		// Finalize instruction counter
 		machine().set_instruction_counter(counter);
