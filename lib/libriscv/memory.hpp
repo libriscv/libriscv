@@ -23,7 +23,7 @@ namespace riscv
 		using mmio_cb_t = Page::mmio_cb_t;
 		using page_fault_cb_t = std::function<Page&(Memory&, address_t)>;
 		using page_readf_cb_t = std::function<const Page&(const Memory&, address_t)>;
-		using page_write_cb_t = std::function<void(Memory&, Page&)>;
+		using page_write_cb_t = std::function<void(Memory&, address_t, Page&)>;
 		static constexpr address_t BRK_MAX    = 0x1000000;
 		static constexpr address_t HEAP_START = 0x40000000;
 
@@ -120,8 +120,8 @@ namespace riscv
 #endif
 		// Page write on copy-on-write page
 		void set_page_write_handler(page_write_cb_t h) { this->m_page_write_handler = h; }
-		static void default_page_write(Memory&, Page& page);
-		static const Page& default_page_read(const Memory&, size_t);
+		static void default_page_write(Memory&, address_t, Page& page);
+		static const Page& default_page_read(const Memory&, address_t);
 		// NOTE: use print_and_pause() to immediately break!
 		void trap(address_t page_addr, mmio_cb_t callback);
 		// shared pages (regular pages will have priority!)

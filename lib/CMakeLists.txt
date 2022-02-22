@@ -8,6 +8,7 @@ option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
+option(RISCV_MULTIPROCESS  "Enable multiprocessing" ON)
 option(RISCV_SHARED_PT "Enable shared page tables (performance penalty)" OFF)
 option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
 
@@ -38,6 +39,7 @@ set (SOURCES
 		libriscv/machine.cpp
 		libriscv/memory.cpp
 		libriscv/memory_rw.cpp
+		libriscv/multiprocessing.cpp
 		libriscv/native_libc.cpp
 		libriscv/native_threads.cpp
 		libriscv/posix_threads.cpp
@@ -80,6 +82,10 @@ if (RISCV_ICACHE)
 endif()
 if (RISCV_EXPERIMENTAL)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE_PREGEN=1)
+endif()
+if (RISCV_MULTIPROCESS)
+	target_link_libraries(riscv PUBLIC pthread)
+	target_compile_definitions(riscv PUBLIC RISCV_MULTIPROCESS=1)
 endif()
 if (RISCV_SHARED_PT)
 	target_compile_definitions(riscv PUBLIC RISCV_SHARED_PAGETABLES=1)

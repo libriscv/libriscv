@@ -113,6 +113,14 @@ namespace riscv
 		template<typename... Args> constexpr
 		void setup_call(address_t call_addr, Args&&... args);
 
+		// multiprocess() executes a single function with many machines,
+		// each of which uses memory pages from this machine. Using this
+		// we can partition workloads and work on them concurrently.
+		bool is_multiprocessing() const noexcept;
+		bool multiprocess(unsigned cpus, address_t func, uint64_t maxi,
+			address_t stack, size_t stack_size, address_t data);
+		void multiprocess_wait();
+
 		// Returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name) const;
 		address_t address_of(const std::string& name) const;
@@ -190,6 +198,8 @@ namespace riscv
 		// and real system fds. The destructor also closes all opened files.
 		const FileDescriptors& fds() const;
 		FileDescriptors& fds();
+		// Multiprocessing structure, lazily created
+		Multiprocessing<W>& smp();
 
 		void set_sighandler(address_t addr) { m_sighandler = addr; }
 		address_t sighandler() const noexcept { return m_sighandler; }
@@ -221,6 +231,7 @@ namespace riscv
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
 		std::unique_ptr<FileDescriptors> m_fds;
+		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;
 	};

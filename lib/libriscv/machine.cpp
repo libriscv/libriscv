@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include "multiprocessing.hpp"
 #include "native_heap.hpp"
 #include "rv32i_instr.hpp"
 #include "threads.hpp"

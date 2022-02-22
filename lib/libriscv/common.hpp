@@ -78,6 +78,7 @@ namespace riscv
 {
 	template <int W> struct Memory;
 	template <int W> struct MultiThreading;
+	template <int W> struct Multiprocessing;
 	struct Arena;
 
 	template <int W>

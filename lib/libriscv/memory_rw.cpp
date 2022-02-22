@@ -42,7 +42,7 @@ namespace riscv
 				// don't enter page write handler with no-data page
 				if (UNLIKELY(!page.has_data() || !page.attr.write))
 					protection_fault(pageno * Page::size());
-				m_page_write_handler(*this, page);
+				m_page_write_handler(*this, pageno, page);
 			}
 			return page;
 		}
@@ -87,13 +87,13 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::default_page_write(Memory<W>&, Page& page)
+	void Memory<W>::default_page_write(Memory<W>&, address_t, Page& page)
 	{
 		page.make_writable();
 	}
 
 	template <int W>
-	const Page& Memory<W>::default_page_read(const Memory<W>&, size_t)
+	const Page& Memory<W>::default_page_read(const Memory<W>&, address_t)
 	{
 		return Page::cow_page();
 	}
