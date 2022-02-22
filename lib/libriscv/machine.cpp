@@ -214,20 +214,20 @@ namespace riscv
 	}
 
 	template <int W>
-	void Machine<W>::system(CPU<W>& cpu, union rv32i_instruction instr)
+	void Machine<W>::system(CPU<W>& vcpu, union rv32i_instruction instr)
 	{
 		switch (instr.Itype.funct3) {
 		case 0x0: // SYSTEM functions
 			switch (instr.Itype.imm)
 			{
 			case 0: // ECALL
-				this->system_call(cpu.reg(REG_ECALL));
+				this->system_call(vcpu.reg(REG_ECALL));
 				return;
 			case 1: // EBREAK
 				this->ebreak();
 				return;
 			case 0x7FF: // Stop machine
-				this->stop();
+				vcpu.stop();
 				return;
 			}
 			break;
@@ -239,30 +239,30 @@ namespace riscv
 			switch (instr.Itype.imm)
 			{
 			case 0x001: // fflags (accrued exceptions)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
-				if (wr) cpu.registers().fcsr().fflags = cpu.reg(instr.Itype.rs1);
+				if (rd) vcpu.reg(instr.Itype.rd) = vcpu.registers().fcsr().fflags;
+				if (wr) vcpu.registers().fcsr().fflags = vcpu.reg(instr.Itype.rs1);
 				return;
 			case 0x002: // frm (rounding-mode)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
-				if (wr) cpu.registers().fcsr().frm = cpu.reg(instr.Itype.rs1);
+				if (rd) vcpu.reg(instr.Itype.rd) = vcpu.registers().fcsr().frm;
+				if (wr) vcpu.registers().fcsr().frm = vcpu.reg(instr.Itype.rs1);
 				return;
 			case 0x003: // fcsr (control and status register)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
-				if (wr) cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1);
+				if (rd) vcpu.reg(instr.Itype.rd) = vcpu.registers().fcsr().whole;
+				if (wr) vcpu.registers().fcsr().whole = vcpu.reg(instr.Itype.rs1);
 				return;
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.instruction_counter();
+				if (rd) vcpu.reg(instr.Itype.rd) = vcpu.instruction_counter();
 				return;
 			case 0xC80: // CSR RDCYCLE (upper)
 			case 0xC82: // RDINSTRET (upper)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.instruction_counter() >> 32u;
+				if (rd) vcpu.reg(instr.Itype.rd) = vcpu.instruction_counter() >> 32u;
 				return;
 			case 0xC01: // CSR RDTIME (lower)
-				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time();
+				if (rd) vcpu.reg(instr.Itype.rd) = u64_monotonic_time();
 				return;
 			case 0xC81: // CSR RDTIME (upper)
-				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
+				if (rd) vcpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
 				return;
 			default:
 				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
@@ -270,7 +270,7 @@ namespace riscv
 			break;
 		}
 		// if we got here, its an illegal operation!
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		vcpu.trigger_exception(ILLEGAL_OPERATION);
 	}
 
 	template struct Machine<4>;

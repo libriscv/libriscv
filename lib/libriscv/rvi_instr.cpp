@@ -682,7 +682,7 @@ namespace riscv
 
 	INSTRUCTION(WFI,
 	[] (auto& cpu, rv32i_instruction) RVINSTR_ATTR() {
-		cpu.machine().stop();
+		cpu.stop();
 	}, DECODED_INSTR(SYSTEM).printer);
 
 	INSTRUCTION(LUI,

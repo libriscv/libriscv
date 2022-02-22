@@ -1,7 +1,7 @@
 
 template <int W>
 inline void Machine<W>::stop() noexcept {
-	cpu.set_max_instructions(0);
+	cpu.stop();
 }
 template <int W>
 inline bool Machine<W>::stopped() const noexcept {
@@ -221,5 +221,27 @@ FileDescriptors& Machine<W>::fds()
 	if (m_fds != nullptr) return *m_fds;
 	throw MachineException(ILLEGAL_OPERATION, "No access to files or sockets", 0);
 }
+
+template <int W>
+bool Machine<W>::is_multiprocessing() const noexcept
+{
+#ifdef RISCV_MULTIPROCESS
+	return !m_vcpus.empty();
+#else
+	return false;
+#endif
+}
+#ifndef RISCV_MULTIPROCESS
+template <int W>
+void Machine<W>::multiprocess(unsigned num_cpus,
+	address_t func, uint64_t maxi, address_t stack, size_t stack_size,
+	address_t data)
+{
+	(void) num_cpus; (void) func; (void) maxi; (void) stack; (void) stack_size; (void) data;
+	throw MachineException(ILLEGAL_OPERATION, "Multiprocessing not enabled");
+}
+template <int W>
+void Machine<W>::multiprocess_wait() { }
+#endif
 
 #include "machine_vmcall.hpp"

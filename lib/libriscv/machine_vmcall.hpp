@@ -1,35 +1,35 @@
 
 template <int W>
-template <typename... Args> constexpr
-inline void Machine<W>::setup_call(CPU<W>& cpu, address_t call_addr, Args&&... args)
+template <typename... Args>
+inline void Machine<W>::setup_call(CPU<W>& vcpu, address_t call_addr, Args&&... args)
 {
-	cpu.reg(REG_RA) = memory.exit_address();
+	vcpu.reg(REG_RA) = this->memory.exit_address();
 	[[maybe_unused]] int iarg = REG_ARG0;
 	[[maybe_unused]] int farg = REG_FA0;
 	([&] {
 		if constexpr (std::is_integral_v<Args>) {
-			cpu.reg(iarg++) = args;
+			vcpu.reg(iarg++) = args;
 			if constexpr (sizeof(Args) > W) // upper 32-bits for 64-bit integers
-				cpu.reg(iarg++) = args >> 32;
+				vcpu.reg(iarg++) = args >> 32;
 		}
 		else if constexpr (is_stdstring<Args>::value)
-			cpu.reg(iarg++) = stack_push(args.data(), args.size()+1);
+			vcpu.reg(iarg++) = stack_push(args.data(), args.size()+1);
 		else if constexpr (is_string<Args>::value)
-			cpu.reg(iarg++) = stack_push(args, strlen(args)+1);
+			vcpu.reg(iarg++) = stack_push(args, strlen(args)+1);
 		else if constexpr (std::is_floating_point_v<Args>)
-			cpu.registers().getfl(farg++).set_float(args);
+			vcpu.registers().getfl(farg++).set_float(args);
 		else if constexpr (std::is_pod_v<std::remove_reference<Args>>)
-			cpu.reg(iarg++) = stack_push(&args, sizeof(args));
+			vcpu.reg(iarg++) = stack_push(&args, sizeof(args));
 		else
 			static_assert(always_false<decltype(args)>, "Unknown type");
 	}(), ...);
-	cpu.jump(call_addr);
+	vcpu.jump(call_addr);
 }
 template <int W>
-template <typename... Args> constexpr
+template <typename... Args>
 inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 {
-	setup_call(cpu, call_addr, std::forward<Args> (args)...);
+	setup_call(this->cpu, call_addr, std::forward<Args> (args)...);
 }
 
 template <int W>
@@ -101,32 +101,4 @@ address_type<W> Machine<W>::preempt(const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
 	return preempt<MAXI, Throw, StoreRegs>(call_addr, std::forward<Args>(args)...);
-}
-
-template <int W>
-template<bool Throw, typename... Args> inline
-void Machine<W>::multiprocess(unsigned num_cpus,
-	address_t func, uint64_t maxi, address_t stack, size_t stack_size,
-	Args&&... args)
-{
-#ifdef RISCV_MULTIPROCESS
-	m_vcpus.clear();
-	// Create vCPU 1...N
-	for (size_t i = 1; i < num_cpus; i++)
-	{
-		m_vcpus.emplace_back(*this, i);
-		auto& vcpu = m_vcpus.back();
-		vcpu.reg(REG_GP) = cpu.reg(REG_GP);
-		vcpu.reg(REG_TP) = cpu.reg(REG_TP);
-		vcpu.reg(REG_SP) = stack + i * stack_size;
-		vcpu.set_max_instructions(maxi);
-		setup_call(vcpu, func, std::forward<Args> (args)...);
-	}
-	// Send work to thread pool
-	this->begin_multiprocessing(m_vcpus.size());
-#else
-	(void) num_cpus; (void) func; (void) maxi; (void) stack; (void) stack_size;
-	struct { void f(Args const & ... ) {} } sink; sink.f(args...);
-	throw MachineException(ILLEGAL_OPERATION, "Multiprocessing not enabled");
-#endif
 }

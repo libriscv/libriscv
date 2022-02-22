@@ -32,6 +32,19 @@ namespace riscv
 #endif
 	}
 	template <int W>
+	CPU<W>::CPU(const CPU<W>& other, int cpuid)
+		: m_machine { other.m_machine }, m_cpuid(cpuid)
+	{
+		this->m_counter = other.m_counter;
+		this->m_max_counter = other.m_max_counter;
+
+		this->m_exec_data  = other.m_exec_data;
+		this->m_exec_begin = other.m_exec_begin;
+		this->m_exec_end   = other.m_exec_end;
+
+		this->registers() = other.registers();
+	}
+	template <int W>
 	void CPU<W>::reset()
 	{
 		this->m_regs = {};

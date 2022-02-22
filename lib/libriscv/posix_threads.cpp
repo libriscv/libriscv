@@ -15,8 +15,6 @@ void Machine<W>::setup_posix_threads()
 				machine.threads().get_tid(), (int) status);
 		// Exit returns true if the program ended
 		if (!machine.threads().get_thread()->exit()) {
-			// Should be a new thread now
-			assert(machine.threads().get_tid() != tid);
 			return;
 		}
 		machine.stop();

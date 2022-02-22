@@ -24,9 +24,11 @@ namespace riscv
 
 		void simulate(uint64_t);
 		void step_one();
+		void stop() noexcept;
 		void reset();
 		void reset_stack_pointer() noexcept;
 
+		int  cpu_id() const noexcept { return m_cpuid; }
 		address_t pc() const noexcept { return registers().pc; }
 		void increment_pc(int delta);
 		void jump(address_t);
@@ -86,6 +88,7 @@ namespace riscv
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 
 		CPU(Machine<W>&, int);
+		CPU(const CPU<W>& other, int); // vCPU
 		CPU(Machine<W>&, const Machine<W>& other); // Fork
 		void init_execute_area(const uint8_t* data, address_t begin, address_t length);
 		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t length);
@@ -107,11 +110,6 @@ namespace riscv
 
 		// Page cache for execution on virtual memory
 		CachedPage<W, const Page> m_cache;
-#ifdef RISCV_MULTIPROCESS
-		// Page cache for reading and writing virtual memory
-		CachedPage<W, const Page> m_rd_cache;
-		CachedPage<W, Page> m_wr_cache;
-#endif
 
 		// The CPU number
 		const int m_cpuid;

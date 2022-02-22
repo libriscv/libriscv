@@ -104,7 +104,7 @@ namespace riscv
 		// Sets up a function call only, executes no instructions.
 		// Supports integers, floating-point values and strings.
 		// Strings will be put on stack, which is not restored automatically.
-		template<typename... Args> constexpr
+		template<typename... Args>
 		void setup_call(address_t call_addr, Args&&... args);
 
 		// Returns the address of a symbol in the ELF symtab, or zero
@@ -197,10 +197,9 @@ namespace riscv
 		// multiprocess() executes a single function with many CPUs,
 		// each of which has their own CPU ID. Using this we can partition
 		// the workload and work on it concurrently.
-		bool is_multiprocessing() const noexcept { return !m_vcpus.empty(); }
-		template<bool Throw = true, typename... Args>
+		bool is_multiprocessing() const noexcept;
 		void multiprocess(unsigned cpus, address_t func, uint64_t maxi,
-			address_t stack, size_t stack_size, Args&&... args);
+			address_t stack, size_t stack_size, address_t data);
 		void multiprocess_wait();
 
 		// Realign the stack pointer, to make sure that function calls succeed
@@ -215,7 +214,7 @@ namespace riscv
 		int deserialize_from(const std::vector<uint8_t>&);
 
 	private:
-		template<typename... Args> constexpr
+		template<typename... Args>
 		void setup_call(CPU<W>& cpu, address_t call_addr, Args&&... args);
 		static void unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
@@ -237,7 +236,7 @@ namespace riscv
 		std::vector<CPU<W>> m_vcpus;
 		std::unique_ptr<ThreadPool> m_threadpool = nullptr;
 		std::mutex multiprocessing_lock;
-		void begin_multiprocessing(size_t num_cpus);
+		void begin_multiprocessing();
 #endif
 	};
 

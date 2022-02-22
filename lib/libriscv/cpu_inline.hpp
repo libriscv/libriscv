@@ -5,6 +5,11 @@ inline CPU<W>::CPU(Machine<W>& machine, int cpuid)
 {
 }
 template <int W>
+inline void CPU<W>::stop() noexcept
+{
+	set_max_instructions(0);
+}
+template <int W>
 inline void CPU<W>::reset_stack_pointer() noexcept
 {
 	// initial stack location

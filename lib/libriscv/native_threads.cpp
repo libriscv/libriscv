@@ -40,7 +40,6 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 		// Exit returns true if the program ended
 		if (!machine.threads().get_thread()->exit()) {
 			// Should be a new thread now
-			assert(machine.threads().get_tid() != tid);
 			return;
 		}
 		machine.stop();
