@@ -120,7 +120,6 @@ namespace riscv
 		machine().set_max_instructions(max);
 		uint64_t counter = machine().instruction_counter();
 
-	try {
 		for (; counter < machine().max_instructions(); counter++) {
 
 			format_t instruction;
@@ -196,12 +195,6 @@ namespace riscv
 			else
 				registers().pc += 4;
 		} // while not stopped
-	// Catch all exceptions to finalize instruction counter
-	} catch (...) {
-		machine().set_instruction_counter(counter);
-		// Then re-throw to handle the exception outside
-		throw;
-	}
 
 		// Finalize instruction counter
 		machine().set_instruction_counter(counter);
