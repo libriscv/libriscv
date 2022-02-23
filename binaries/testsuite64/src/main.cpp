@@ -1,3 +1,4 @@
+#include <array>
 #include <cassert>
 #include <cstdio>
 #include <cfloat>
@@ -38,10 +39,12 @@ int main()
 	assert(test_fmin(0.999f, 0.998f) == 0.998f);
 
 	assert(test_ftod(4.0f) == 4.0);
+	assert(test_ftod(2.0) == 2.0f);
 	assert(test_ftod(1.5f) == 1.5);
 	assert(kinda64(test_ftod(0.999f), 0.999));
 
 	assert(test_dtof(4.0) == 4.0f);
+	assert(test_dtof(2.0) == 2.0f);
 	assert(test_dtof(1.5) == 1.5f);
 	assert(kinda32(test_dtof(0.999), 0.999f));
 
@@ -51,9 +54,15 @@ int main()
 	assert(test_dneg(-16.0) == 16.0);
 
 	assert(test_fmadd(4.0f, 4.0f, 16.0f) == 32.0f);
+	assert(test_fmadd(4.0f, 2.0f, 0.0f) == 8.0f);
+	assert(test_fmadd(1.0f, 1.0f, 31.0f) == 32.0f);
 	assert(test_fmsub(4.0f, 4.0f, 16.0f) == 0.0f);
-	//assert(test_fnmadd(4.0f, 4.0f, 0.0f) == -16.0f);
-	//assert(test_fnmsub(4.0f, 4.0f, -16.0f) == 0.0f);
+	assert(test_fnmadd(4.0f, 4.0f, 0.0f) == -16.0f);
+	assert(test_fnmsub(4.0f, 4.0f, -16.0f) == 0.0f);
+
+	std::array<float, 8> a = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+	std::array<float, 8> b = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
+	assert(test_dotp(a.data(), b.data(), a.size()) == 8.0f);
 
 	assert(test_fsqrt(4.0f) == 2.0f);
 	assert(test_fsqrt(2.0f) > 1.41f);

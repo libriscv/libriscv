@@ -46,6 +46,11 @@ float test_fnmadd(float a, float b, float c) {
 float test_fnmsub(float a, float b, float c) {
 	return -(a * b) - c;
 }
+float test_dotp(float* a, float* b, unsigned count) {
+	float sum = 0.0f;
+	for (size_t i = 0; i < count; i++) sum += a[i] * b[i];
+	return sum;
+}
 
 float  test_fsqrt(float val) {
 	return std::sqrt(val);
