@@ -29,7 +29,7 @@ namespace riscv
 		this->m_decoder_cache = &decoder_array[0];
 
 #ifdef RISCV_INSTR_CACHE_PREGEN
-	#ifdef RISCV_INSTRUCTION_FUSING
+	#if defined(RISCV_INSTRUCTION_FUSING) || defined(RISCV_BINARY_TRANSLATION)
 		std::vector<typename CPU<W>::instr_pair> ipairs;
 	#endif
 
@@ -44,14 +44,21 @@ namespace riscv
 			auto& entry = m_exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
 			auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
-		#ifdef RISCV_INSTRUCTION_FUSING
-			ipairs.emplace_back(entry, instruction);
+		#if defined(RISCV_INSTRUCTION_FUSING) || defined(RISCV_BINARY_TRANSLATION)
+			ipairs.emplace_back(entry.handler, instruction);
 		#endif
 
 			DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
 			// We do not cache 2-byte mid-aligned instructions
 			dst += 4;
 		}
+
+#ifdef RISCV_BINARY_TRANSLATION
+		/* We do not support binary translation for RV128I */
+		if constexpr (W != 16) {
+			machine().cpu.try_translate(options, addr, ipairs);
+		}
+#endif
 
 		/* When debugging we want to preserve all information */
 #if defined(RISCV_INSTRUCTION_FUSING)

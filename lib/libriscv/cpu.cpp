@@ -117,10 +117,21 @@ namespace riscv
 	void CPU<W>::simulate(uint64_t max)
 	{
 		// Calculate the instruction limit
+#ifndef RISCV_BINARY_TRANSLATION
 		machine().set_max_instructions(max);
 		uint64_t counter = machine().instruction_counter();
 
 		for (; counter < machine().max_instructions(); counter++) {
+#else
+		/* With binary translation we need to modify the counter from anywhere */ ;;
+		if (max != UINT64_MAX)
+			machine().set_max_instructions(machine().instruction_counter() + max);
+		else
+			machine().set_max_instructions(UINT64_MAX);
+
+		for (; machine().instruction_counter() < machine().max_instructions();
+			machine().increment_counter(1)) {
+#endif
 
 			format_t instruction;
 #ifdef RISCV_DEBUG
@@ -196,8 +207,10 @@ namespace riscv
 				registers().pc += 4;
 		} // while not stopped
 
+#ifndef RISCV_BINARY_TRANSLATION
 		// Finalize instruction counter
 		machine().set_instruction_counter(counter);
+#endif
 	} // CPU::simulate
 
 	template<int W>
