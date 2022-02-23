@@ -47,10 +47,12 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 	{
 		const address_t sp = stack + i * stack_size;
 		smp().async_work(
-		[=] () {
+		[=] () -> int {
 			Machine<W> fork { *this };
-			fork.cpu.reg(REG_SP) = sp;
+			fork.set_userdata(this->get_userdata<void>());
+			fork.set_printer([] (const char*, size_t) {});
 			fork.set_max_instructions(maxi);
+			fork.cpu.reg(REG_SP) = sp;
 			fork.setup_call(func, (unsigned)i, (address_t)data);
 
 			if (smp().shared_page_faults) {
@@ -73,10 +75,11 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 			// For most workloads, we will only need a copy-on-write handler
 			fork.memory.set_page_write_handler(
 			[this] (auto&, address_t pageno, Page& page) -> void {
-				std::lock_guard<std::mutex> lk(this->smp().m_lock);
 				// Release old page if non-owned
 				if (page.attr.non_owning && page.m_page.get() != nullptr)
 					page.m_page.release();
+
+				std::lock_guard<std::mutex> lk(this->m_smp->m_lock);
 				// Create new page in master VM
 				auto& master_page = this->memory.create_page(pageno);
 				// Return back page with memory loaned from master VM
@@ -85,7 +88,12 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 				page.m_page.reset(master_page.m_page.get());
 			});
 
-			fork.simulate<true> (maxi);
+			try {
+				fork.simulate<true> (maxi);
+			} catch (...) {
+				return i;
+			}
+			return 0;
 		});
 	}
 	return true;
