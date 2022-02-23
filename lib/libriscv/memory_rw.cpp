@@ -56,19 +56,6 @@ namespace riscv
 	}
 
 	template <int W>
-	const Page& Memory<W>::get_pageno_slowpath(address_t pageno) const noexcept
-	{
-#ifdef RISCV_SHARED_PAGETABLES
-		// we can provide pages from even other machines
-		// by mapping memory completely separately
-		if (UNLIKELY(m_page_readf_handler != nullptr))
-			return m_page_readf_handler(*this, pageno);
-#endif
-		(void) pageno;
-		return Page::cow_page();
-	}
-
-	template <int W>
 	void Memory<W>::free_pages(address_t dst, size_t len)
 	{
 		address_t pageno = page_number(dst);

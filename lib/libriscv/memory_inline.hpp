@@ -84,7 +84,7 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
 	if (LIKELY(it != m_pages.end())) {
 		return it->second;
 	}
-	return get_pageno_slowpath(pageno);
+	return m_page_readf_handler(*this, pageno);
 }
 
 template <int W> inline void

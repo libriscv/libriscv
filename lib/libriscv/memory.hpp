@@ -112,12 +112,12 @@ namespace riscv
 		void  free_pages(address_t, size_t len);
 		// Page fault when writing to unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
-#ifdef RISCV_SHARED_PAGETABLES
+
 		// Page fault when reading unused memory. Primarily used for
 		// pagetable sharing across machines, enabled with RISCV_SHARED_PT.
 		void set_page_readf_handler(page_readf_cb_t h) { this->m_page_readf_handler = h; }
 		void reset_page_readf_handler() { this->m_page_readf_handler = default_page_read; }
-#endif
+
 		// Page write on copy-on-write page
 		void set_page_write_handler(page_write_cb_t h) { this->m_page_write_handler = h; }
 		static void default_page_write(Memory&, address_t, Page& page);
@@ -164,7 +164,6 @@ namespace riscv
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);
-		const Page& get_pageno_slowpath(address_t) const noexcept;
 		const Page& get_readable_page(address_t);
 		Page& get_writable_page(address_t);
 		// Helpers
@@ -212,9 +211,7 @@ namespace riscv
 
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
-#ifdef RISCV_SHARED_PAGETABLES
-		page_readf_cb_t m_page_readf_handler = nullptr;
-#endif
+		page_readf_cb_t m_page_readf_handler = default_page_read;
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		MemoryArea m_ropages;
