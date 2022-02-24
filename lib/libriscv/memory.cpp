@@ -338,15 +338,19 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::machine_loader(const Machine<W>& master, const MachineOptions<W>&)
+	void Memory<W>::machine_loader(
+		const Machine<W>& master, const MachineOptions<W>&)
 	{
 		this->m_page_fault_handler = master.memory.m_page_fault_handler;
 
+		// Hardly any pages are dont_fork, so we estimate that
+		// all master pages will be loaned.
+		m_pages.reserve(master.memory.pages().size());
 		for (const auto& it : master.memory.pages())
 		{
 			const auto& page = it.second;
 			// skip pages marked as don't fork
-			if (page.attr.dont_fork) continue;
+			if (UNLIKELY(page.attr.dont_fork)) continue;
 			// just make every page CoW and non-owning
 			auto attr = page.attr;
 			attr.is_cow = true;
