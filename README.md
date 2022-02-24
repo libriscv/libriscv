@@ -259,7 +259,7 @@ If you have arenas available you can replace the default page fault handler with
 
 ## Multiprocessing
 
-There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing. With multiprocessing I was able to achieve 2-2.5x speedup using 4 CPUs for 4096 dot-product calculations.
+There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing. With multiprocessing I was able to achieve 2.7x speedup using 4 CPUs for 8192 dot-product calculations.
 
 ## Binary translation
 

@@ -64,10 +64,10 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 	if (UNLIKELY(is_multiprocessing()))
 		return false;
 
-	Latch latch{num_cpus - 1};
+	Latch latch{num_cpus};
 
-	// Create vCPU 1...N
-	for (unsigned i = 1; i < num_cpus; i++)
+	// Create worker 0...N
+	for (unsigned i = 0; i < num_cpus; i++)
 	{
 		const address_t sp = stack + i * stack_size;
 		smp().async_work(
