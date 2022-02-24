@@ -4,6 +4,28 @@
 
 namespace riscv {
 
+struct Latch {
+	std::size_t remaining;
+	std::mutex mtx;
+	std::condition_variable cv;
+
+	Latch(std::size_t s) : remaining(s) {}
+
+	void arrive()
+	{
+		auto lock = std::unique_lock(mtx);
+		remaining--;
+		if (remaining == 0) cv.notify_all();
+	}
+	void wait()
+	{
+		auto lock = std::unique_lock(mtx);
+		cv.wait(lock,
+			[&] { return remaining == 0; }
+		);
+	}
+};
+
 template <int W>
 Multiprocessing<W>& Machine<W>::smp()
 {
@@ -42,13 +64,18 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 	if (UNLIKELY(is_multiprocessing()))
 		return false;
 
+	Latch latch{num_cpus - 1};
+
 	// Create vCPU 1...N
 	for (unsigned i = 1; i < num_cpus; i++)
 	{
 		const address_t sp = stack + i * stack_size;
 		smp().async_work(
-		[=] () -> int {
+		[=, &latch] () -> int {
+
 			Machine<W> fork { *this };
+			latch.arrive();
+
 			fork.set_userdata(this->get_userdata<void>());
 			fork.set_printer([] (const char*, size_t) {});
 			fork.set_max_instructions(maxi);
@@ -95,7 +122,10 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 			}
 			return 0;
 		});
-	}
+	} // foreach CPU
+
+	latch.wait();
+
 	return true;
 }
 template <int W>
