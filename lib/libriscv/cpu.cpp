@@ -121,6 +121,7 @@ namespace riscv
 		machine().set_max_instructions(max);
 		uint64_t counter = machine().instruction_counter();
 
+	try {
 		for (; counter < machine().max_instructions(); counter++) {
 #else
 		/* With binary translation we need to modify the counter from anywhere */ ;;
@@ -206,8 +207,13 @@ namespace riscv
 			else
 				registers().pc += 4;
 		} // while not stopped
-
 #ifndef RISCV_BINARY_TRANSLATION
+	// Catch all exceptions to finalize instruction counter
+	} catch (...) {
+		machine().set_instruction_counter(counter);
+		// Then re-throw to handle the exception outside
+		throw;
+	}
 		// Finalize instruction counter
 		machine().set_instruction_counter(counter);
 #endif
