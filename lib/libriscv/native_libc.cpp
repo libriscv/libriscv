@@ -123,6 +123,18 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 }
 
 template <int W>
+const Arena& Machine<W>::arena() const {
+	if (UNLIKELY(m_arena == nullptr))
+		throw MachineException(ILLEGAL_OPERATION, "Arena not created on this machine");
+	return *m_arena;
+}
+template <int W>
+Arena& Machine<W>::arena() {
+	if (UNLIKELY(m_arena == nullptr))
+		throw MachineException(ILLEGAL_OPERATION, "Arena not created on this machine");
+	return *m_arena;
+}
+template <int W>
 void Machine<W>::setup_native_heap(size_t sysnum, uint64_t base, size_t max_memory)
 {
 	m_arena.reset(new Arena(base, base + max_memory));

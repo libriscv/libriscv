@@ -16,8 +16,8 @@
 namespace riscv
 {
 	template <int W>
-	CPU<W>::CPU(Machine<W>& machine, const Machine<W>& other)
-		: m_machine { machine }
+	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
+		: m_machine { machine }, m_cpuid { cpu_id }
 	{
 		this->m_exec_data  = other.cpu.m_exec_data;
 		this->m_exec_begin = other.cpu.m_exec_begin;

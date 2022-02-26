@@ -18,13 +18,19 @@ namespace riscv
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
-		: cpu(*this), memory(*this, binary, options), m_arena{nullptr}, m_mt{nullptr}
+		: cpu(*this, options.cpu_id),
+		  memory(*this, binary, options),
+		  m_arena{nullptr},
+		  m_mt{nullptr}
 	{
 		cpu.reset();
 	}
 	template <int W>
 	inline Machine<W>::Machine(const Machine& other, const MachineOptions<W>& options)
-		: cpu(*this, other), memory(*this, other, options), m_arena{nullptr}, m_mt{nullptr}
+		: cpu(*this, options.cpu_id, other),
+		  memory(*this, other, options),
+		  m_arena{nullptr}, // TODO: transfer arena?
+		  m_mt{nullptr}
 	{
 		this->m_counter = other.m_counter;
 		this->m_max_counter = other.m_max_counter;
@@ -267,8 +273,21 @@ namespace riscv
 			case 0xC81: // CSR RDTIME (upper)
 				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
 				return;
+			case 0xF11: // CSR marchid
+				if (rd) cpu.reg(instr.Itype.rd) = 0;
+				return;
+			case 0xF12: // CSR mvendorid
+				if (rd) cpu.reg(instr.Itype.rd) = 0;
+				return;
+			case 0xF13: // CSR mimpid
+				if (rd) cpu.reg(instr.Itype.rd) = 1;
+				return;
+			case 0xF14: // CSR mhartid
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.cpu_id();
+				return;
 			default:
 				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				return;
 			}
 			break;
 		}

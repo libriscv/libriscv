@@ -34,6 +34,7 @@ namespace riscv
 
 		auto& registers() { return this->m_regs; }
 		const auto& registers() const { return this->m_regs; }
+		int cpu_id() const noexcept { return m_cpuid; }
 
 		auto& reg(uint32_t idx) { return registers().get(idx); }
 		const auto& reg(uint32_t idx) const { return registers().get(idx); }
@@ -75,8 +76,8 @@ namespace riscv
 		void try_translate(const MachineOptions<W>&, address_t pc, std::vector<instr_pair>&) const;
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 
-		CPU(Machine<W>&);
-		CPU(Machine<W>&, const Machine<W>& other); // Fork
+		CPU(Machine<W>&, unsigned cpu_id);
+		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
 		void init_execute_area(const uint8_t* data, address_t begin, address_t length);
 		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t length);
 		const uint8_t* exec_seg_data() const { return m_exec_data; }
@@ -95,6 +96,8 @@ namespace riscv
 
 		// Page cache for execution on virtual memory
 		CachedPage<W, const Page> m_cache;
+
+		const unsigned m_cpuid;
 
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints

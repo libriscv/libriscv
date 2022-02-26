@@ -117,8 +117,7 @@ namespace riscv
 		// each of which uses memory pages from this machine. Using this
 		// we can partition workloads and work on them concurrently.
 		bool is_multiprocessing() const noexcept;
-		bool multiprocess(unsigned cpus, address_t func, uint64_t maxi,
-			address_t stack, size_t stack_size, address_t data);
+		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize);
 		void multiprocess_wait();
 
 		// Returns the address of a symbol in the ELF symtab, or zero
@@ -175,8 +174,8 @@ namespace riscv
 			= [] (Machine<W>&, int, int, int) {};
 
 		// Optional custom native-performance arena
-		const Arena& arena() const noexcept { return *m_arena; }
-		Arena& arena() noexcept { return *m_arena; }
+		const Arena& arena() const;
+		Arena& arena();
 		void setup_native_heap(size_t sysnum, uint64_t addr, size_t size);
 		// Optional custom memory-related system calls
 		void setup_native_memory(size_t sysnum, bool safe = true);

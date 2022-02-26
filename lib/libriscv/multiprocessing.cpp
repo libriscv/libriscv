@@ -57,9 +57,8 @@ void Multiprocessing<W>::wait()
 }
 
 template <int W>
-bool Machine<W>::multiprocess(unsigned num_cpus,
-	address_t func, uint64_t maxi, address_t stack, size_t stack_size,
-	address_t data)
+bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
+	address_t stack, address_t stksize)
 {
 	if (UNLIKELY(is_multiprocessing()))
 		return false;
@@ -67,20 +66,22 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 	Latch latch{num_cpus};
 
 	// Create worker 0...N
-	for (unsigned i = 0; i < num_cpus; i++)
+	for (unsigned id = 1; id <= num_cpus; id++)
 	{
-		const address_t sp = stack + i * stack_size;
+		const address_t sp = stack + stksize * id;
 		smp().async_work(
-		[=, &latch] () -> int {
+		[=, &latch] () -> unsigned {
 
-			Machine<W> fork { *this };
+			Machine<W> fork { *this, { .cpu_id = id } };
+			// TODO: threads need to be accessed through the main VM
 			latch.arrive();
 
 			fork.set_userdata(this->get_userdata<void>());
 			fork.set_printer([] (const char*, size_t) {});
 			fork.set_max_instructions(maxi);
-			fork.cpu.reg(REG_SP) = sp;
-			fork.setup_call(func, (unsigned)i, (address_t)data);
+			fork.cpu.increment_pc(4); // Step over current ECALL
+			fork.cpu.reg(REG_SP) = sp; // Per-CPU stack
+			fork.cpu.reg(REG_ARG0) = id; // Return value
 
 			if (smp().shared_page_faults) {
 				fork.memory.set_page_fault_handler(
@@ -118,7 +119,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus,
 			try {
 				fork.simulate<true> (maxi);
 			} catch (...) {
-				return i;
+				return id;
 			}
 			return 0;
 		});

@@ -105,6 +105,9 @@ namespace riscv
 		Page& create_page(address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
 		std::string get_page_info(address_t addr) const;
+		static inline address_t page_number(const address_t address) {
+			return address >> Page::SHIFT;
+		}
 		// Page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(address_t page, Args&& ...);
@@ -161,9 +164,6 @@ namespace riscv
 			bool contains(address_t pg) const noexcept { return pg >= begin && pg < end; }
 		};
 		inline auto& create_attr(const address_t address);
-		static inline address_t page_number(const address_t address) {
-			return address >> Page::SHIFT;
-		}
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);
