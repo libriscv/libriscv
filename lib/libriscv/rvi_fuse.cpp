@@ -170,7 +170,6 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 			return true;
 		}
 	}
-#if 0
 	// ST x, n-0*W + ST y, n-1*W fused
 	if (i1.first == DECODED_INSTR(STORE_I32_IMM).handler &&
 		i2.first == DECODED_INSTR(STORE_I32_IMM).handler &&
@@ -183,12 +182,12 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 	if (i1.first == DECODED_INSTR(STORE_I64_IMM).handler &&
 		i2.first == DECODED_INSTR(STORE_I64_IMM).handler &&
 		i1.second.Stype.signed_imm()-8 == i2.second.Stype.signed_imm() &&
+		i1.second.Stype.rs1 == i2.second.Stype.rs1 &&
 		!compressed_enabled)
 	{
 		fused_store<W, uint64_t> (i1, i2);
 		return true;
 	}
-#endif
 # ifdef RISCV_EXT_COMPRESSED
 	// C.LI + ECALL fused
 	else if (i1.first == DECODED_INSTR(C1_LI).handler &&
