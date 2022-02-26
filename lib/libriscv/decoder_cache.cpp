@@ -4,7 +4,6 @@
 #include <stdexcept>
 
 #include "rv32i_instr.hpp"
-//#define RISCV_INSTRUCTION_FUSING
 
 namespace riscv
 {
@@ -31,6 +30,7 @@ namespace riscv
 #ifdef RISCV_INSTR_CACHE_PREGEN
 	#if defined(RISCV_INSTRUCTION_FUSING) || defined(RISCV_BINARY_TRANSLATION)
 		std::vector<typename CPU<W>::instr_pair> ipairs;
+		ipairs.reserve(len / 4);
 	#endif
 
 		auto* exec_offset = machine().cpu.exec_seg_data();

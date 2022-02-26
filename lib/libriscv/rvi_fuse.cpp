@@ -54,13 +54,13 @@ static void fused_store(
 		}
 		uint32_t whole;
 	};
-	i1.second.whole = FusedStores {
+	i1.second.whole = FusedStores {{
 		.imm = (uint32_t) (i1.second.Stype.imm1 | (i1.second.Stype.imm2 << 5)),
 		.src1 = i1.second.Stype.rs2,
 		.src2 = i2.second.Stype.rs2,
 		.dst  = i1.second.Stype.rs1,
 		.opcode = i1.second.Stype.opcode,
-	}.whole;
+	}}.whole;
 	i1.first = [] (auto& cpu, rv32i_instruction instr) {
 		auto& fop = view_as<FusedStores> (instr);
 
