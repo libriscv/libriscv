@@ -1,8 +1,8 @@
 #include "memory.hpp"
+
+#include "machine.hpp"
+#include "decoder_cache.hpp"
 #include <stdexcept>
-#ifdef __GNUG__
-#include "decoder_cache.cpp"
-#endif
 #ifdef RISCV_BINARY_TRANSLATION
 #include <dlfcn.h> // Linux-only
 #endif
