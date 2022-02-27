@@ -16,10 +16,7 @@ The API is created in a way where the Varnish cache will take most of the load b
 	- varnishd -a :8080 -f $PWD/cache.vcl -F
 	- If you need a custom working folder just add -n /tmp/varnishd
 3. Build webapi (tab 2)
-	- mkdir -p build && pushd build
-	- cmake ..
-	- make -j6
-	- popd
+	- Check the [build.sh script](build.sh) for an example
 4. Start the WebAPI server
 	- ./build/webapi
 5. Go to http://localhost:8080
