@@ -75,7 +75,7 @@ void Machine<W>::setup_posix_threads()
 		if ((futex_op & 0xF) == FUTEX_WAIT)
 	    {
 			THPRINT("FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
-			while (machine.memory.template read<address_type<W>> (addr) == val) {
+			while (machine.memory.template read<address_type<W>> (addr) == (address_t)val) {
 				if (machine.threads().suspend_and_yield()) {
 					return;
 				}
