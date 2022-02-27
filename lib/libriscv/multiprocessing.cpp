@@ -138,7 +138,7 @@ void Machine<W>::multiprocess_wait()
 #else // RISCV_MULTIPROCESS
 
 template <int W>
-bool Machine<W>::multiprocess(unsigned, address_t, uint64_t, address_t, size_t, address_t) {
+bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t) {
 	return false;
 }
 template <int W>
