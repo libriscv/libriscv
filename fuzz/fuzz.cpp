@@ -3,7 +3,9 @@
 
 static const std::vector<uint8_t> empty;
 static bool init = false;
-static const int W = RISCV_ARCH;
+static constexpr int W = RISCV_ARCH;
+static constexpr uint32_t CYCLES = 5000;
+
 
 /* It is necessary to link with libgcc when fuzzing.
    See llvm.org/PR30643 for details. */
@@ -46,7 +48,6 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 	static riscv::Machine<W> machine { empty };
 	constexpr uint32_t S = 0x1000;
 	constexpr uint32_t V = 0x2000;
-	constexpr uint32_t CYCLES = 5000;
 
 	if (UNLIKELY(len == 0 || init == false)) {
 		init = true;
@@ -77,7 +78,8 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 	const std::string_view bin {(const char*) data, len};
 	try {
 		const MachineOptions<W> options { .allow_write_exec_segment = true };
-		Machine<W> m32 { bin, options };
+		Machine<W> machine { bin, options };
+		machine.simulate(CYCLES);
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
