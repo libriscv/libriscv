@@ -9,13 +9,10 @@ template <int W>
 static void run_sighandler(riscv::Machine<W>&);
 
 template <int W>
-static void run_program(const std::vector<uint8_t>& binary, const std::string& filename)
+static void run_program(
+	const std::vector<uint8_t>& binary,
+	const std::vector<std::string>& args)
 {
-	const std::vector<std::string> args = {
-		filename,
-		"test!"
-	};
-
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY
 	}};
@@ -162,15 +159,20 @@ int main(int argc, const char** argv)
 		fprintf(stderr, "Provide RISC-V binary as argument!\n");
 		exit(1);
 	}
-	const std::string filename = argv[1];
+
+	std::vector<std::string> args;
+	for (int i = 1; i < argc; i++) {
+		args.push_back(argv[i]);
+	}
+	const std::string& filename = args.front();
 
 	const auto binary = load_file(filename);
 	assert(binary.size() >= 64);
 
 	if (binary[4] == ELFCLASS64)
-		run_program<riscv::RISCV64> (binary, filename);
+		run_program<riscv::RISCV64> (binary, args);
 	else
-		run_program<riscv::RISCV32> (binary, filename);
+		run_program<riscv::RISCV32> (binary, args);
 
 	return 0;
 }
