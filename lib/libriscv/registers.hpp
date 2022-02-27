@@ -8,7 +8,7 @@ namespace riscv
 	union fp64reg {
 		int32_t i32[2];
 		float   f32[2];
-		int64_t i64;
+		int64_t i64 = 0;
 		double  f64;
 		struct {
 			uint32_t bits  : 31;
@@ -67,10 +67,10 @@ namespace riscv
 
 		address_t pc = 0;
 	private:
-		std::array<register_t, 32> m_reg;
-		std::array<fp64reg, 32> m_regfl;
+		std::array<register_t, 32> m_reg {};
+		std::array<fp64reg, 32> m_regfl {};
 		// FP control register
-		FCSR m_fcsr;
+		FCSR m_fcsr {};
 	};
 
 	static_assert(sizeof(fp64reg) == 8, "FP-register is 64-bit");
