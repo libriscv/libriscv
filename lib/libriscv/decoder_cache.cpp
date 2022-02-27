@@ -43,7 +43,11 @@ namespace riscv
 
 			auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
 			if (binary_translation_enabled || options.instruction_fusing) {
+#ifdef RISCV_DEBUG
+				ipairs.emplace_back(entry.handler.handler, instruction);
+#else
 				ipairs.emplace_back(entry.handler, instruction);
+#endif
 			}
 
 			DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
