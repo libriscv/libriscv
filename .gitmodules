@@ -4,3 +4,6 @@
 [submodule "webapi/cpp-httplib"]
 	path = webapi/cpp-httplib
 	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "tests/Catch2"]
+	path = tests/Catch2
+	url = https://github.com/catchorg/Catch2.git
