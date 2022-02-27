@@ -102,6 +102,7 @@ private:
 	void handle_executing();
 	void handle_multithread();
 	void handle_readmem();
+	void handle_readreg();
 	void handle_writereg();
 	void handle_writemem();
 	void report_gprs();
@@ -346,6 +347,9 @@ void RSPClient<W>::process_data()
 		break;
 	case 'm':
 		handle_readmem();
+		break;
+	case 'p':
+		handle_readreg();
 		break;
 	case 'P':
 		handle_writereg();
@@ -598,6 +602,68 @@ void RSPClient<W>::putreg(char*& d, const char* end, const T& reg)
 }
 
 template <int W>
+void RSPClient<W>::handle_readreg()
+{
+	uint32_t idx = 0;
+	sscanf(buffer.c_str(), "p%x", &idx);
+	if (idx > 68) {
+		send("E01");
+		return;
+	}
+
+	char valdata[32];
+	size_t vallen = 0;
+
+	if (idx >= 33)
+	{
+#ifdef RISCV_EXT_FLOATS
+		if (idx < 66) {
+			const auto& fl = m_machine->cpu.registers().getfl(idx - 33);
+			vallen = sizeof(fl.i64);
+			std::memcpy(valdata, &fl.i64, vallen);
+		} else {
+			uint32_t reg = 0;
+			switch (idx) {
+			case 66: reg = m_machine->cpu.registers().fcsr().fflags; break;
+			case 67: reg = m_machine->cpu.registers().fcsr().frm; break;
+			case 68: reg = m_machine->cpu.registers().fcsr().whole; break;
+			}
+			vallen = sizeof(reg);
+			std::memcpy(valdata, &reg, vallen);
+		}
+#else
+		send("E01");
+		return;
+#endif
+	}
+	if (idx == 32)
+	{
+		const auto reg = m_machine->cpu.pc();
+		vallen = sizeof(reg);
+		std::memcpy(valdata, &reg, vallen);
+	}
+	else if (idx < 32)
+	{
+		const auto reg = m_machine->cpu.reg(idx);
+		vallen = sizeof(reg);
+		std::memcpy(valdata, &reg, vallen);
+	}
+
+	char data[32];
+	char* d = data;
+	try {
+		for (unsigned i = 0; i < vallen; i++) {
+			*d++ = lut[(valdata[i] >> 4) & 0xF];
+			*d++ = lut[(valdata[i] >> 0) & 0xF];
+		}
+	} catch (...) {
+		send("E01");
+		return;
+	}
+	*d++ = 0;
+	send(data);
+}
+template <int W>
 void RSPClient<W>::handle_writereg()
 {
 	uint64_t value = 0;
@@ -611,6 +677,21 @@ void RSPClient<W>::handle_writereg()
 	} else if (idx == 32) {
 		m_machine->cpu.jump(value);
 		send("OK");
+	} else if (idx >= 33 && idx <= 68) {
+#ifdef RISCV_EXT_FLOATS
+		switch (idx) {
+		case 66: m_machine->cpu.registers().fcsr().fflags = value; break;
+		case 67: m_machine->cpu.registers().fcsr().frm = value; break;
+		case 68: m_machine->cpu.registers().fcsr().whole = value; break;
+		default:
+			auto& fl = m_machine->cpu.registers().getfl(idx - 33);
+			fl.i64 = value;
+		}
+		send("OK");
+#else
+		send("E01");
+		return;
+#endif
 	} else {
 		send("E01");
 	}
