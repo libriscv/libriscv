@@ -93,6 +93,7 @@ namespace riscv
 		unsigned cpu_id = 0;
 		bool load_program = true;
 		bool protect_segments = true;
+		bool allow_write_exec_segment = false;
 		bool verbose_loader = false;
 		// Instruction fusing is an experimental optimizing feature
 		// Can only be enabled with the RISCV_EXPERIMENTAL CMake option
