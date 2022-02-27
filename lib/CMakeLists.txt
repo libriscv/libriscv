@@ -69,7 +69,7 @@ if (RISCV_BINARY_TRANSLATION)
 endif()
 
 add_library(riscv ${SOURCES})
-set_target_properties(riscv PROPERTIES CXX_STANDARD 17)
+target_compile_features(riscv PUBLIC cxx_std_17)
 target_include_directories(riscv PUBLIC .)
 target_compile_options(riscv PRIVATE -Wall -Wextra)
 if (RISCV_USE_RH_HASH)
