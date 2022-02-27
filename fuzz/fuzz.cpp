@@ -3,6 +3,7 @@
 
 static const std::vector<uint8_t> empty;
 static bool init = false;
+static const int W = RISCV_ARCH;
 
 /* It is necessary to link with libgcc when fuzzing.
    See llvm.org/PR30643 for details. */
@@ -42,55 +43,29 @@ __muloti4(__int128_t a, __int128_t b, int* overflow) {
 
 static void fuzz_instruction_set(const uint8_t* data, size_t len)
 {
-	static riscv::Machine<riscv::RISCV32> machine32 { empty };
-	static riscv::Machine<riscv::RISCV64> machine64 { empty };
-	static riscv::Machine<riscv::RISCV128> machine128 { empty };
+	static riscv::Machine<W> machine { empty };
 	constexpr uint32_t S = 0x1000;
 	constexpr uint32_t V = 0x2000;
 	constexpr uint32_t CYCLES = 5000;
 
 	if (UNLIKELY(len == 0 || init == false)) {
 		init = true;
-		machine32.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
-		machine32.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
-		machine64.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
-		machine64.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
-		machine128.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
-		machine128.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
+		machine.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
+		machine.memory.set_page_attr(V, 0x1000, {.read = true, .write = false, .exec = true});
 		return;
 	}
 
 	// Copy fuzzer data to 0x2000 and reset the stack pointer.
-	machine32.cpu.reg(2) = V;
-	machine32.copy_to_guest(V, data, len);
-	machine32.cpu.jump(V);
+	machine.cpu.reg(riscv::REG_SP) = V;
+	machine.copy_to_guest(V, data, len);
+	machine.cpu.jump(V);
 #ifdef RISCV_DEBUG
-	machine32.verbose_instructions = true;
-	machine32.verbose_registers = true;
+	machine.verbose_instructions = true;
+	machine.verbose_registers = true;
 #endif
 	try {
 		// Let's avoid loops
-		machine32.simulate<false>(CYCLES);
-	} catch (const std::exception& e) {
-		//printf(">>> Exception: %s\n", e.what());
-	}
-
-	// Again for 64-bit
-	machine64.cpu.reg(2) = V;
-	machine64.copy_to_guest(V, data, len);
-	machine64.cpu.jump(V);
-	try {
-		machine64.simulate<false>(CYCLES);
-	} catch (const std::exception& e) {
-		//printf(">>> Exception: %s\n", e.what());
-	}
-
-	// And.. one last time for 128-bit
-	machine128.cpu.reg(2) = V;
-	machine128.copy_to_guest(V, data, len);
-	machine128.cpu.jump(V);
-	try {
-		machine128.simulate<false>(CYCLES);
+		machine.simulate<false>(CYCLES);
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
@@ -98,14 +73,11 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 
 static void fuzz_elf_loader(const uint8_t* data, size_t len)
 {
+	using namespace riscv;
 	const std::string_view bin {(const char*) data, len};
 	try {
-		riscv::Machine<riscv::RISCV32> m32 { bin };
-	} catch (const std::exception& e) {
-		//printf(">>> Exception: %s\n", e.what());
-	}
-	try {
-		riscv::Machine<riscv::RISCV64> m64 { bin };
+		const MachineOptions<W> options { .allow_write_exec_segment = true };
+		Machine<W> m32 { bin, options };
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
@@ -114,6 +86,11 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 extern "C"
 void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
 {
-	//fuzz_elf_loader(data, len);
+#if defined(FUZZ_ELF)
+	fuzz_elf_loader(data, len);
+#elif defined(FUZZ_VM)
 	fuzz_instruction_set(data, len);
+#else
+	#error "Unknown fuzzing mode"
+#endif
 }
