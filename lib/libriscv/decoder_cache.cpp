@@ -68,8 +68,9 @@ namespace riscv
 		}
 
 #else
-		// zero the whole thing
-		std::memset(decoder_array, 0, n_pages * sizeof(decoder_array[0]));
+		// Default-initialize the whole thing
+		for (size_t p = 0; p < n_pages; p++)
+			decoder_array[p] = {};
 #endif
 		(void) options;
 	}
