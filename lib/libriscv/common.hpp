@@ -94,6 +94,9 @@ namespace riscv
 		bool load_program = true;
 		bool protect_segments = true;
 		bool verbose_loader = false;
+		// Instruction fusing is an experimental optimizing feature
+		// Can only be enabled with the RISCV_EXPERIMENTAL CMake option
+		bool instruction_fusing = false;
 
 		std::function<struct Page&(Memory<W>&, size_t)> page_fault_handler = nullptr;
 
