@@ -200,8 +200,8 @@ template <int W>
 inline Thread<W>::Thread(
 	MultiThreading<W>& mt, const Thread& other)
 	: threading(mt), tid(other.tid), stored_regs(other.stored_regs),
-	  clear_tid(other.clear_tid), stack_base(other.stack_base),
-	  stack_size(other.stack_size), block_reason(other.block_reason)
+	  stack_base(other.stack_base), stack_size(other.stack_size),
+	  clear_tid(other.clear_tid), block_reason(other.block_reason)
 {}
 
 template <int W>
