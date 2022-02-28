@@ -98,6 +98,8 @@ namespace riscv
 		// Instruction fusing is an experimental optimizing feature
 		// Can only be enabled with the RISCV_EXPERIMENTAL CMake option
 		bool instruction_fusing = false;
+		// Number of workers dedicated to multiprocessing
+		unsigned multiprocessing_workers = 4;
 
 		std::function<struct Page&(Memory<W>&, size_t)> page_fault_handler = nullptr;
 

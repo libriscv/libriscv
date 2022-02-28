@@ -21,7 +21,8 @@ namespace riscv
 		: cpu(*this, options.cpu_id),
 		  memory(*this, binary, options),
 		  m_arena{nullptr},
-		  m_mt{nullptr}
+		  m_mt{nullptr},
+		  m_multiprocessing_workers{options.multiprocessing_workers}
 	{
 		cpu.reset();
 	}
@@ -30,7 +31,8 @@ namespace riscv
 		: cpu(*this, options.cpu_id, other),
 		  memory(*this, other, options),
 		  m_arena{nullptr}, // TODO: transfer arena?
-		  m_mt{nullptr}
+		  m_mt{nullptr},
+		  m_multiprocessing_workers{options.multiprocessing_workers}
 	{
 		this->m_counter = other.m_counter;
 		this->m_max_counter = other.m_max_counter;

@@ -235,6 +235,7 @@ namespace riscv
 		std::unique_ptr<MultiThreading<W>> m_mt;
 		std::unique_ptr<FileDescriptors> m_fds;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
+		const unsigned m_multiprocessing_workers;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;
 	};

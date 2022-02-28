@@ -30,7 +30,7 @@ template <int W>
 Multiprocessing<W>& Machine<W>::smp()
 {
 	if (UNLIKELY(m_smp == nullptr))
-		m_smp.reset(new Multiprocessing<W>);
+		m_smp.reset(new Multiprocessing<W> (m_multiprocessing_workers));
 	return *m_smp;
 }
 
@@ -42,6 +42,10 @@ bool Machine<W>::is_multiprocessing() const noexcept
 }
 
 #ifdef RISCV_MULTIPROCESS
+
+template <int W>
+Multiprocessing<W>::Multiprocessing(size_t workers)
+	: m_threadpool { workers }  {}
 
 template <int W>
 void Multiprocessing<W>::async_work(std::function<void()> wrk)
@@ -186,7 +190,10 @@ void Machine<W>::multiprocess_wait()
 #else // RISCV_MULTIPROCESS
 
 template <int W>
-bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t) {
+Multiprocessing<W>::Multiprocessing(size_t) {}
+
+template <int W>
+bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t, bool) {
 	return false;
 }
 template <int W>
