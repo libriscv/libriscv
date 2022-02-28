@@ -58,7 +58,7 @@ void Multiprocessing<W>::wait()
 
 template <int W>
 bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
-	address_t stack, address_t stksize)
+	address_t stack, address_t stksize, bool do_fork)
 {
 	if (UNLIKELY(is_multiprocessing()))
 		return false;
@@ -69,60 +69,108 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	for (unsigned id = 1; id <= num_cpus; id++)
 	{
 		const address_t sp = stack + stksize * id;
-		smp().async_work(
-		[=, &latch] () -> unsigned {
+		const address_t stackpage = Memory<W>::page_number(stack);
+		const address_t stackendpage = stackpage + Memory<W>::page_number(stksize);
 
-			Machine<W> fork { *this, { .cpu_id = id } };
-			// TODO: threads need to be accessed through the main VM
-			latch.arrive();
+		if (do_fork == false) {
+			smp().async_work(
+			[=, &latch] () -> unsigned {
 
-			fork.set_userdata(this->get_userdata<void>());
-			fork.set_printer([] (const char*, size_t) {});
-			fork.set_max_instructions(maxi);
-			fork.cpu.increment_pc(4); // Step over current ECALL
-			fork.cpu.reg(REG_SP) = sp; // Per-CPU stack
-			fork.cpu.reg(REG_ARG0) = id; // Return value
+				Machine<W> fork { *this, { .cpu_id = id } };
+				// TODO: threads need to be accessed through the main VM
+				latch.arrive();
 
-			if (smp().shared_page_faults) {
-				fork.memory.set_page_fault_handler(
-				[this] (auto& mem, const address_t pageno) -> Page& {
-					std::lock_guard<std::mutex> lk(this->smp().m_lock);
+				fork.set_userdata(this->get_userdata<void>());
+				fork.set_printer([] (const char*, size_t) {});
+				fork.set_max_instructions(maxi);
+				fork.cpu.increment_pc(4); // Step over current ECALL
+				fork.cpu.reg(REG_SP) = sp; // Per-CPU stack
+				fork.cpu.reg(REG_ARG0) = id; // Return value
+
+				if (smp().shared_page_faults) {
+					fork.memory.set_page_fault_handler(
+					[this] (auto& mem, const address_t pageno) -> Page& {
+						std::lock_guard<std::mutex> lk(this->smp().m_lock);
+						auto& master_page = this->memory.create_page(pageno);
+						// Install the page as non-owned (loaned) memory
+						return mem.install_shared_page(pageno, master_page);
+					});
+				}
+				if (smp().shared_read_faults) {
+					fork.memory.set_page_readf_handler(
+					[this] (const auto&, address_t pageno) -> const Page& {
+						std::lock_guard<std::mutex> lk(this->smp().m_lock);
+						return this->memory.get_pageno(pageno);
+					});
+				}
+
+				// For most workloads, we will only need a copy-on-write handler
+				fork.memory.set_page_write_handler(
+				[this] (auto&, address_t pageno, Page& page) -> void {
+					// Release old page if non-owned
+					if (page.attr.non_owning && page.m_page.get() != nullptr)
+						page.m_page.release();
+
+					std::lock_guard<std::mutex> lk(this->m_smp->m_lock);
+					// Create new page in master VM
 					auto& master_page = this->memory.create_page(pageno);
-					// Install the page as non-owned (loaned) memory
-					return mem.install_shared_page(pageno, master_page);
+					// Return back page with memory loaned from master VM
+					page.attr = master_page.attr;
+					page.attr.non_owning = true;
+					page.m_page.reset(master_page.m_page.get());
 				});
-			}
-			if (smp().shared_read_faults) {
-				fork.memory.set_page_readf_handler(
-				[this] (const auto&, address_t pageno) -> const Page& {
-					std::lock_guard<std::mutex> lk(this->smp().m_lock);
-					return this->memory.get_pageno(pageno);
-				});
-			}
 
-			// For most workloads, we will only need a copy-on-write handler
-			fork.memory.set_page_write_handler(
-			[this] (auto&, address_t pageno, Page& page) -> void {
-				// Release old page if non-owned
-				if (page.attr.non_owning && page.m_page.get() != nullptr)
-					page.m_page.release();
-
-				std::lock_guard<std::mutex> lk(this->m_smp->m_lock);
-				// Create new page in master VM
-				auto& master_page = this->memory.create_page(pageno);
-				// Return back page with memory loaned from master VM
-				page.attr = master_page.attr;
-				page.attr.non_owning = true;
-				page.m_page.reset(master_page.m_page.get());
+				try {
+					fork.simulate<true> (maxi);
+				} catch (...) {
+					return id;
+				}
+				return 0;
 			});
+		} else {
+			// Fork variant
+			smp().async_work(
+			[=, &latch] () -> unsigned {
 
-			try {
-				fork.simulate<true> (maxi);
-			} catch (...) {
-				return id;
-			}
-			return 0;
-		});
+				Machine<W> fork { *this, { .cpu_id = id } };
+				// TODO: threads need to be accessed through the main VM
+				latch.arrive();
+
+				fork.set_userdata(this->get_userdata<void>());
+				fork.set_printer([] (const char*, size_t) {});
+				fork.set_max_instructions(maxi);
+				fork.cpu.increment_pc(4); // Step over current ECALL
+				fork.cpu.reg(REG_ARG0) = id; // Return value
+
+				// For most workloads, we will only need a copy-on-write handler
+				fork.memory.set_page_write_handler(
+				[this, stackpage, stackendpage] (auto&, address_t pageno, Page& page) -> void
+				{
+					if (pageno >= stackpage && pageno < stackendpage) {
+						page.make_writable();
+						return;
+					}
+					// Release old page if non-owned
+					if (page.attr.non_owning && page.m_page.get() != nullptr)
+						page.m_page.release();
+
+					std::lock_guard<std::mutex> lk(this->m_smp->m_lock);
+					// Create new page in master VM
+					auto& master_page = this->memory.create_page(pageno);
+					// Return back page with memory loaned from master VM
+					page.attr = master_page.attr;
+					page.attr.non_owning = true;
+					page.m_page.reset(master_page.m_page.get());
+				});
+
+				try {
+					fork.simulate<true> (maxi);
+				} catch (...) {
+					return id;
+				}
+				return 0;
+			});
+		}
 	} // foreach CPU
 
 	latch.wait();
