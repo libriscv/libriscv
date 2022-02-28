@@ -18,10 +18,12 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 		const auto  func = machine.template sysarg<address_type<W>> (1);
 		const auto   tls = machine.template sysarg<address_type<W>> (2);
 		const auto flags = machine.template sysarg<uint32_t> (3);
-		THPRINT(">>> clone(func=0x%X, stack=0x%X, tls=0x%X)\n",
-				func, stack, tls);
+		const auto sbase = machine.template sysarg<address_type<W>> (4);
+		const auto ssize = machine.template sysarg<address_type<W>> (5);
+		//printf(">>> clone(func=0x%lX, stack=0x%lX, tls=0x%lX, stack base=0x%lX size=0x%lX)\n",
+		//		(long)func, (long)stack, (long)tls, (long)sbase, (long)ssize);
 		auto* thread = machine.threads().create(
-			CHILD_SETTID | flags, tls, 0x0, stack, tls);
+			CHILD_SETTID | flags, tls, 0x0, stack, tls, sbase, ssize);
 		// suspend and store return value for parent: child TID
 		auto* parent = machine.threads().get_thread();
 		parent->suspend(thread->tid);
@@ -93,7 +95,7 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 		const auto  func = machine.template sysarg<address_type<W>> (0);
 		const auto  fini = machine.template sysarg<address_type<W>> (1);
 		auto* thread = machine.threads().create(
-			CHILD_SETTID, tls, 0x0, stack, tls);
+			CHILD_SETTID, tls, 0x0, stack, tls, tls, STACK_SIZE);
 		// set PC back to clone point - 4
 		machine.cpu.registers().pc =
 			machine.cpu.reg(riscv::REG_RA) - 4;

@@ -25,15 +25,19 @@ struct Thread
 
 	MultiThreading<W>& threading;
 	const int tid;
-	// for returning to this thread
+	// For returning to this thread
 	Registers<W> stored_regs;
-	// address zeroed when exiting
+	// Base address of the stack
+	address_t stack_base;
+	// Size of the stack
+	address_t stack_size;
+	// Address zeroed when exiting
 	address_t clear_tid = 0;
-	// the current or last blocked reason
+	// The current or last blocked reason
 	int block_reason = 0;
 
-	Thread(MultiThreading<W>&, int tid,
-			address_t tls, address_t stack);
+	Thread(MultiThreading<W>&, int tid, address_t tls,
+		address_t stack, address_t stkbase, address_t stksize);
 	Thread(MultiThreading<W>&, const Thread& other);
 	bool exit(); // Returns false when we *cannot* continue
 	void suspend();
@@ -51,7 +55,7 @@ struct MultiThreading
 	using thread_t  = Thread<W>;
 
 	thread_t* create(int flags, address_t ctid, address_t ptid,
-					address_t stack, address_t tls);
+		address_t stack, address_t tls, address_t stkbase, address_t stksize);
 	int       get_tid() const { return m_current->tid; }
 	thread_t* get_thread();
 	thread_t* get_thread(int tid); /* or nullptr */
@@ -79,8 +83,11 @@ template <int W>
 inline MultiThreading<W>::MultiThreading(Machine<W>& mach)
 	: machine(mach)
 {
+	// Best guess for default stack boundries
+	const address_t base = 0x1000;
+	const address_t size = mach.memory.stack_initial() - base;
 	// Create the main thread
-	auto it = m_threads.try_emplace(0, *this, 0, 0x0, mach.cpu.reg(REG_SP));
+	auto it = m_threads.try_emplace(0, *this, 0, 0x0, mach.cpu.reg(REG_SP), base, size);
 	m_current = &it.first->second;
 }
 
@@ -181,8 +188,9 @@ inline void MultiThreading<W>::wakeup_next()
 
 template <int W>
 inline Thread<W>::Thread(
-	MultiThreading<W>& mt, int ttid, address_t tls, address_t stack)
-	: threading(mt), tid(ttid)
+	MultiThreading<W>& mt, int ttid, address_t tls,
+	address_t stack, address_t stkbase, address_t stksize)
+	 : threading(mt), tid(ttid), stack_base(stkbase), stack_size(stksize)
 {
 	this->stored_regs.get(REG_TP) = tls;
 	this->stored_regs.get(REG_SP) = stack;
@@ -192,7 +200,8 @@ template <int W>
 inline Thread<W>::Thread(
 	MultiThreading<W>& mt, const Thread& other)
 	: threading(mt), tid(other.tid), stored_regs(other.stored_regs),
-	  clear_tid(other.clear_tid), block_reason(other.block_reason)
+	  clear_tid(other.clear_tid), stack_base(other.stack_base),
+	  stack_size(other.stack_size), block_reason(other.block_reason)
 {}
 
 template <int W>
@@ -236,10 +245,10 @@ inline bool Thread<W>::exit()
 template <int W>
 inline Thread<W>* MultiThreading<W>::create(
 			int flags, address_t ctid, address_t ptid,
-			address_t stack, address_t tls)
+			address_t stack, address_t tls, address_t stkbase, address_t stksize)
 {
 	const int tid = ++this->thread_counter;
-	auto it = m_threads.emplace(tid, Thread{*this, tid, tls, stack});
+	auto it = m_threads.emplace(tid, Thread{*this, tid, tls, stack, stkbase, stksize});
 	auto* thread = &it.first->second;
 
 	// flag for write child TID

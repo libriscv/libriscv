@@ -111,7 +111,7 @@ void Machine<W>::setup_posix_threads()
 		THPRINT(">>> clone(func=0x%X, stack=0x%X, flags=%x, args=0x%X,"
 				" parent=%p, ctid=0x%X ptid=0x%X, tls=0x%X)\n",
 				func, stack, flags, args, parent, ctid, ptid, tls);
-		auto* thread = machine.threads().create(flags, ctid, ptid, stack, tls);
+		auto* thread = machine.threads().create(flags, ctid, ptid, stack, tls, 0, 0);
 		// store return value for parent: child TID
 		parent->suspend(thread->tid);
 		// activate and return 0 for the child

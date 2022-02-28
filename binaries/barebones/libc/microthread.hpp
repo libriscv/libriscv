@@ -153,10 +153,11 @@ inline auto create(const T& func, Args&&... args)
 
 	extern void trampoline(Thread*);
 	asm("" ::: "memory"); /* avoid dead-store optimization */
-	/* stack, func, tls, flags = CHILD_CLEARTID */
+	/* stack, func, tls, flags = CHILD_CLEARTID, stack_base, stack_size */
 	const long sp   = (long) stack_top;
 	const long tls  = (long) thread;
-	(void) syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0x200000);
+	(void) syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0x200000,
+		(long)stack_bot, Thread::STACK_SIZE);
 	// parent path (reordering doesn't matter)
 	return Thread_ptr(thread);
 }
@@ -182,7 +183,8 @@ inline int oneshot(const T& func, Args&&... args)
 	extern void trampoline(Thread*);
 	const long sp   = (long) stack_top;
 	const long tls  = (long) thread;
-	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0);
+	return syscall(THREAD_SYSCALLS_BASE+0, sp, (long) &trampoline, tls, 0,
+		(long)stack_bot, Thread::STACK_SIZE);
 }
 
 extern "C" long threadcall_executor(...);
