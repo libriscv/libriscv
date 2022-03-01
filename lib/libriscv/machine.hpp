@@ -3,6 +3,7 @@
 #include "memory.hpp"
 #include "riscvbase.hpp"
 #include "posix_filedesc.hpp"
+#include "signals.hpp"
 #include <array>
 
 namespace riscv
@@ -199,9 +200,12 @@ namespace riscv
 		FileDescriptors& fds();
 		// Multiprocessing structure, lazily created
 		Multiprocessing<W>& smp();
-
-		void set_sighandler(address_t addr) { m_sighandler = addr; }
-		address_t sighandler() const noexcept { return m_sighandler; }
+		// Signal structure, lazily created
+		Signals<W>& signals() {
+			if (m_signals == nullptr) m_signals.reset(new Signals<W>);
+			return *m_signals;
+		}
+		SignalAction<W>& sigaction(int sig) { return signals().sig.at(sig-1); }
 
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
@@ -228,13 +232,13 @@ namespace riscv
 		uint64_t     m_counter = 0;
 		uint64_t     m_max_counter = 0;
 		void*        m_userdata = nullptr;
-		address_t    m_sighandler = 0;
 		printer_func m_printer = m_default_printer;
 		printer_func m_stdin = [] (const char*, size_t) {};
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
 		std::unique_ptr<FileDescriptors> m_fds;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
+		std::unique_ptr<Signals<W>> m_signals = nullptr;
 		const unsigned m_multiprocessing_workers;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;

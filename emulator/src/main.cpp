@@ -180,10 +180,12 @@ int main(int argc, const char** argv)
 template <int W>
 void run_sighandler(riscv::Machine<W>& machine)
 {
-	const auto handler = machine.sighandler();
+	constexpr int SIGSEGV = 11;
+	auto& action = machine.sigaction(SIGSEGV);
+	auto handler = action.handler;
 	if (handler == 0x0)
 		return;
-	machine.set_sighandler(0x0);
+	action.handler = 0x0; // Avoid re-triggering(?)
 
 	machine.stack_push(machine.cpu.reg(riscv::REG_RA));
 	machine.cpu.reg(riscv::REG_RA) = machine.cpu.pc();
@@ -191,7 +193,7 @@ void run_sighandler(riscv::Machine<W>& machine)
 	machine.cpu.jump(handler);
 	machine.simulate(60'000);
 
-	machine.set_sighandler(handler);
+	action.handler = handler;
 }
 
 #include <stdexcept>

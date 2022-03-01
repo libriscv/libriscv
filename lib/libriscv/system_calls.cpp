@@ -14,10 +14,10 @@ static constexpr bool verbose_syscalls = false;
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
-#include <sys/signal.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
+#define SA_ONSTACK	0x08000000
 
 namespace riscv {
 	template <int W>
@@ -62,25 +62,50 @@ static void syscall_ebreak(riscv::Machine<W>& machine)
 #endif
 }
 
-static inline bool is_exception_signal(int sig) {
-	// SIGILL, SIGABRT, SIGFPE, SIGSEGV
-	return sig == 4 || sig == 6 || sig == 8 || sig == 11;
+template <int W>
+static void syscall_sigaltstack(Machine<W>& machine)
+{
+	const auto ss = machine.template sysarg<address_type<W>>(0);
+	const auto old_ss = machine.template sysarg<address_type<W>>(1);
+	SYSPRINT("SYSCALL sigaltstack, ss: 0x%lX old_ss: 0x%lX\n",
+		(long)ss, (long)old_ss);
+
+	if (old_ss != 0x0) {
+		machine.copy_to_guest(old_ss, &machine.signals().stack, sizeof(SignalStack<W>));
+	}
+	if (ss != 0x0) {
+		machine.copy_from_guest(&machine.signals().stack, ss, sizeof(machine.signals().stack));
+	}
+
+	machine.set_result(0);
 }
 
 template <int W>
 static void syscall_sigaction(Machine<W>& machine)
 {
 	const int signal = machine.template sysarg<address_type<W>>(0);
-	const auto buffer = machine.template sysarg<address_type<W>>(1);
-	struct sigaction sa;
-	machine.copy_from_guest(&sa, buffer, sizeof(sa));
+	const auto action = machine.template sysarg<address_type<W>>(1);
+	const auto old_action = machine.template sysarg<address_type<W>>(2);
+	SYSPRINT("SYSCALL sigaction, signal: %d, action: 0x%lX old_action: 0x%lX\n",
+		signal, (long)action, (long)old_action);
+	auto& sigact = machine.sigaction(signal);
 
-	if (is_exception_signal(signal)) {
-		// There is typically only one relevant handler,
-		// and languages use it to print backtraces.
-		//printf("Signal %d handler: 0x%lX\n", signal, (uintptr_t)sa.sa_handler);
-		machine.set_sighandler((address_type<W>)(uintptr_t)sa.sa_handler);
+	struct riscv_sigaction {
+		address_type<W> sa_handler;
+		unsigned long sa_flags;
+	} sa {};
+	if (old_action != 0x0) {
+		sa.sa_handler = sigact.handler;
+		sa.sa_flags   = (sigact.altstack ? SA_ONSTACK : 0x0);
+		machine.copy_to_guest(old_action, &sa, sizeof(sa));
 	}
+	if (action != 0x0) {
+		machine.copy_from_guest(&sa, action, sizeof(sa));
+		//printf("Signal %d handler: 0x%lX\n", signal, (uintptr_t)sa.sa_handler);
+		sigact.handler = sa.sa_handler;
+		sigact.altstack = (sa.sa_flags & SA_ONSTACK) != 0;
+	}
+
 	machine.set_result(0);
 }
 
@@ -627,14 +652,19 @@ static void add_mman_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(222,
 	[] (Machine<W>& machine) {
 		const auto addr_g = machine.template sysarg<address_type<W>>(0);
-		const auto length = machine.template sysarg<address_type<W>>(1);
+		auto length = machine.template sysarg<address_type<W>>(1);
 		const auto prot   = machine.template sysarg<int>(2);
 		const auto flags  = machine.template sysarg<int>(3);
 		SYSPRINT(">>> mmap(addr 0x%lX, len %zu, prot %#x, flags %#X)\n",
 				(long)addr_g, (size_t)length, prot, flags);
-		if (addr_g % Page::size() != 0 || length % Page::size() != 0) {
+		if (addr_g % Page::size() != 0) {
 			machine.set_result(-1); // = MAP_FAILED;
+			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = MAP_FAILED\n",
+					(long)addr_g, (size_t)length);
 			return;
+		}
+		if (length % Page::size() == 0) {
+			length = (length + (Page::size()-1)) & ~address_type<W>(Page::size()-1);
 		}
 		auto& nextfree = machine.memory.mmap_address();
 		if (addr_g == 0 || addr_g == nextfree)
@@ -645,11 +675,14 @@ static void add_mman_syscalls(Machine<W>& machine)
 				//machine.memory.memset(nextfree, 0, length);
 			}
 			machine.set_result(nextfree);
+			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX\n",
+					(long)addr_g, (size_t)length, (long)nextfree);
 			nextfree += length;
 			return;
 		} else if (addr_g < nextfree) {
-			printf("Invalid mapping attempted\n");
-			machine.set_result(-1); // = MAP_FAILED;
+			//printf("Invalid mapping attempted\n");
+			//machine.set_result(-1); // = MAP_FAILED;
+			machine.set_result(addr_g);
 			return;
 		} else { // addr_g != 0x0
 			address_type<W> addr_end = addr_g + length;
@@ -771,8 +804,12 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// 80: fstat
 	this->install_syscall_handler(80, syscall_fstat<W>);
 
+	// nanosleep
+	this->install_syscall_handler(101, syscall_stub_zero<W>);
 	// clock_gettime
 	this->install_syscall_handler(113, syscall_clock_gettime<W>);
+	// sigaltstack
+	this->install_syscall_handler(132, syscall_sigaltstack<W>);
 	// rt_sigaction
 	this->install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
