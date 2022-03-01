@@ -8,8 +8,8 @@ namespace riscv
 	template <int W>
 	struct AtomicMemory
 	{
-		using address_t = address_type<W>;          // one unsigned memory address
-		static constexpr size_t MAX_RESV = 32;
+		using address_t = address_type<W>;
+		static constexpr size_t MAX_RESV = 64;
 
 		void load_reserve(int size, address_t addr)
 		{
