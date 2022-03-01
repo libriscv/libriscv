@@ -3,7 +3,7 @@ set -e
 
 mkdir -p build_debug
 pushd build_debug
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DLTO=OFF -DLINKER_GC=OFF
+cmake .. -DRISCV_DEBUG=ON
 make -j6
 popd
 
