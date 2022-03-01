@@ -45,6 +45,7 @@ set (SOURCES
 		libriscv/multiprocessing.cpp
 		libriscv/native_libc.cpp
 		libriscv/native_threads.cpp
+		libriscv/posix_signals.cpp
 		libriscv/posix_threads.cpp
 		libriscv/socket_calls.cpp
 		libriscv/system_calls.cpp

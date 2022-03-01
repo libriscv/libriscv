@@ -120,10 +120,10 @@ inline void Thread<W>::resume()
 	auto& m = threading.machine;
 	// restore registers
 	m.cpu.registers() = this->stored_regs;
-	THPRINT("Returning to tid=%ld tls=0x%X stack=0x%X\n",
+	THPRINT("Returning to tid=%d tls=0x%lX stack=0x%lX\n",
 			this->tid,
-			this->stored_regs.get(REG_TP),
-			this->stored_regs.get(REG_SP));
+			(long)this->stored_regs.get(REG_TP),
+			(long)this->stored_regs.get(REG_SP));
 	// this will ensure PC is executable in all cases
 	m.cpu.aligned_jump(m.cpu.pc());
 }
@@ -222,8 +222,8 @@ inline bool Thread<W>::exit()
 	const int tid = this->tid;
 	// CLONE_CHILD_CLEARTID: set userspace TID value to zero
 	if (this->clear_tid) {
-		THPRINT("Clearing thread value for tid=%d at 0x%X\n",
-				this->tid, this->clear_tid);
+		THPRINT("Clearing thread value for tid=%d at 0x%lX\n",
+				this->tid, (long)this->clear_tid);
 		threading.machine.memory.
 			template write<address_type<W>> (this->clear_tid, 0);
 	}

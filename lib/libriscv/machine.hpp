@@ -194,6 +194,7 @@ namespace riscv
 		// Threads: Access to thread internal structures
 		const MultiThreading<W>& threads() const noexcept { return *m_mt; }
 		MultiThreading<W>& threads() noexcept { return *m_mt; }
+		int gettid() const;
 		// FileDescriptors: Access to translation between guest fds
 		// and real system fds. The destructor also closes all opened files.
 		const FileDescriptors& fds() const;
@@ -205,7 +206,7 @@ namespace riscv
 			if (m_signals == nullptr) m_signals.reset(new Signals<W>);
 			return *m_signals;
 		}
-		SignalAction<W>& sigaction(int sig) { return signals().sig.at(sig-1); }
+		SignalAction<W>& sigaction(int sig) { return signals().signals.at(sig-1); }
 
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();

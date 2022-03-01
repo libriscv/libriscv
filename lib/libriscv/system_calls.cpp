@@ -1,4 +1,5 @@
 #include <libriscv/machine.hpp>
+#include <libriscv/threads.hpp>
 
 //#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
@@ -67,14 +68,19 @@ static void syscall_sigaltstack(Machine<W>& machine)
 {
 	const auto ss = machine.template sysarg<address_type<W>>(0);
 	const auto old_ss = machine.template sysarg<address_type<W>>(1);
-	SYSPRINT("SYSCALL sigaltstack, ss: 0x%lX old_ss: 0x%lX\n",
-		(long)ss, (long)old_ss);
+	SYSPRINT("SYSCALL sigaltstack, tid=%d ss: 0x%lX old_ss: 0x%lX\n",
+		machine.gettid(), (long)ss, (long)old_ss);
+
+	auto& stack = machine.signals().per_thread(machine.gettid()).stack;
 
 	if (old_ss != 0x0) {
-		machine.copy_to_guest(old_ss, &machine.signals().stack, sizeof(SignalStack<W>));
+		machine.copy_to_guest(old_ss, &stack, sizeof(stack));
 	}
 	if (ss != 0x0) {
-		machine.copy_from_guest(&machine.signals().stack, ss, sizeof(machine.signals().stack));
+		machine.copy_from_guest(&stack, ss, sizeof(stack));
+
+		SYSPRINT("<<< sigaltstack sp: 0x%lX flags: 0x%X size: 0x%lX\n",
+			(long)stack.ss_sp, stack.ss_flags, (long)stack.ss_size);
 	}
 
 	machine.set_result(0);
@@ -101,9 +107,10 @@ static void syscall_sigaction(Machine<W>& machine)
 	}
 	if (action != 0x0) {
 		machine.copy_from_guest(&sa, action, sizeof(sa));
-		//printf("Signal %d handler: 0x%lX\n", signal, (uintptr_t)sa.sa_handler);
 		sigact.handler = sa.sa_handler;
 		sigact.altstack = (sa.sa_flags & SA_ONSTACK) != 0;
+		SYSPRINT("<<< sigaction %d handler: 0x%lX altstack: %d\n",
+			signal, (long)sigact.handler, sigact.altstack);
 	}
 
 	machine.set_result(0);
