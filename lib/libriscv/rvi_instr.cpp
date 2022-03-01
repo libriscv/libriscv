@@ -235,18 +235,18 @@ namespace riscv
 		static std::array<const char*, 8> f1z = {"BEQ", "BNE", "???", "???", "BGTZ", "BLEZ", "BLTU", "BGEU"};
 		static std::array<const char*, 8> f2z = {"BEQZ", "BNEZ", "???", "???", "BLTZ", "BGEZ", "BLTU", "BGEU"};
 		if (instr.Btype.rs1 != 0 && instr.Btype.rs2) {
-			return snprintf(buffer, len, "%s %s, %s => PC%+ld (0x%lX)",
+			return snprintf(buffer, len, "%s %s (0x%lX), %s (0x%lX) => PC%+ld (0x%lX)",
 							f3[instr.Btype.funct3],
-							RISCV::regname(instr.Btype.rs1),
-							RISCV::regname(instr.Btype.rs2),
+							RISCV::regname(instr.Btype.rs1), (long)cpu.reg(instr.Btype.rs1),
+							RISCV::regname(instr.Btype.rs2), (long)cpu.reg(instr.Btype.rs2),
 							(long) instr.Btype.signed_imm(),
 							(long) cpu.pc() + instr.Btype.signed_imm());
 		} else {
 			auto& array = (instr.Btype.rs1) ? f2z : f1z;
 			auto  reg   = (instr.Btype.rs1) ? instr.Btype.rs1 : instr.Btype.rs2;
-			return snprintf(buffer, len, "%s %s => PC%+ld (0x%lX)",
+			return snprintf(buffer, len, "%s %s (0x%lX) => PC%+ld (0x%lX)",
 							array[instr.Btype.funct3],
-							RISCV::regname(reg),
+							RISCV::regname(reg), (long)cpu.reg(reg),
 							(long) instr.Btype.signed_imm(),
 							(long) cpu.pc() + instr.Btype.signed_imm());
 		}
