@@ -51,9 +51,8 @@ void Machine<W>::setup_posix_threads()
 		THPRINT(">>> tgkill on tid=%d\n", tid);
 		auto* thread = machine.threads().get_thread(tid);
 		if (thread != nullptr) {
-			// exit thread instead
-			thread->exit();
-			return;
+			if (!thread->exit())
+				return;
 		}
 		machine.stop();
 	});
