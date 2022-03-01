@@ -244,10 +244,11 @@ namespace riscv
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		return snprintf(buffer, len, "LR.%c [%s], %s",
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+		const long addr = cpu.reg(instr.Atype.rs1);
+		return snprintf(buffer, len, "LR.%c [%s = 0x%lX], %s",
 				atomic_type[instr.Atype.funct3 & 7],
-				RISCV::regname(instr.Atype.rs1),
+				RISCV::regname(instr.Atype.rs1), addr,
 				RISCV::regname(instr.Atype.rd));
 	});
 
