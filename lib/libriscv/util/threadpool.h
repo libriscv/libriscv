@@ -21,6 +21,7 @@
 //    distribution.
 //
 // Modified for log4cplus, copyright (c) 2014-2015 Václav Zeman.
+// Started using packaged_task, copyright (c) 2022 Alf-Andrë Walla
 
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
@@ -46,13 +47,7 @@ public:
         = (std::max)(2u, std::thread::hardware_concurrency()));
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args)
-        -> std::future<
-#if defined(__cpp_lib_is_invocable) && __cpp_lib_is_invocable >= 201703
-            typename std::invoke_result<F&&, Args&&...>::type
-#else
-            typename std::result_of<F&& (Args&&...)>::type
-#endif
-    >;
+        -> std::future<std::invoke_result_t<F, Args...>>;
     void wait_until_empty();
     void wait_until_nothing_in_flight();
     void set_queue_size_limit(std::size_t limit);
@@ -68,7 +63,7 @@ private:
     // target pool size
     std::size_t pool_size;
     // the task queue
-    std::queue< std::function<void()> > tasks;
+    std::queue< std::packaged_task<void()> > tasks;
     // queue length limit
     std::size_t max_queue_size = 100000;
     // stop signal
@@ -119,26 +114,15 @@ inline ThreadPool::ThreadPool(std::size_t threads)
 // add new work item to the pool
 template<class F, class... Args>
 auto ThreadPool::enqueue(F&& f, Args&&... args)
-    -> std::future<
-#if defined(__cpp_lib_is_invocable) && __cpp_lib_is_invocable >= 201703
-      typename std::invoke_result<F&&, Args&&...>::type
-#else
-      typename std::result_of<F&& (Args&&...)>::type
-#endif
-      >
+    -> std::future<std::invoke_result_t<F, Args...>>
 {
-#if defined(__cpp_lib_is_invocable) && __cpp_lib_is_invocable >= 201703
-    using return_type = typename std::invoke_result<F&&, Args&&...>::type;
-#else
-    using return_type = typename std::result_of<F&& (Args&&...)>::type;
-#endif
+    using return_type = std::invoke_result_t<F, Args...>;
 
+	std::packaged_task<return_type()> task(
+	            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+	        );
 
-    auto task = std::make_shared< std::packaged_task<return_type()> >(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
-
-    std::future<return_type> res = task->get_future();
+    std::future<return_type> res = task.get_future();
 
     std::unique_lock<std::mutex> lock(queue_mutex);
     if (tasks.size () >= max_queue_size)
@@ -154,7 +138,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
     if (stop)
         throw std::runtime_error("enqueue on stopped ThreadPool");
 
-    tasks.emplace([task](){ (*task)(); });
+    tasks.emplace(std::move(task));
     std::atomic_fetch_add_explicit(&in_flight,
         std::size_t(1),
         std::memory_order_relaxed);
@@ -243,7 +227,7 @@ inline void ThreadPool::start_worker(
         {
             for(;;)
             {
-                std::function<void()> task;
+                std::packaged_task<void()> task;
                 bool notify;
 
                 {

@@ -48,9 +48,9 @@ Multiprocessing<W>::Multiprocessing(size_t workers)
 	: m_threadpool { workers }  {}
 
 template <int W>
-void Multiprocessing<W>::async_work(std::function<void()> wrk)
+void Multiprocessing<W>::async_work(std::function<void()>&& wrk)
 {
-	m_threadpool.enqueue(wrk);
+	m_threadpool.enqueue(std::move(wrk));
 	this->processing = true;
 }
 template <int W>

@@ -8,7 +8,7 @@ struct Multiprocessing
 {
 	Multiprocessing(size_t);
 #ifdef RISCV_MULTIPROCESS
-	void async_work(std::function<void()> wrk);
+	void async_work(std::function<void()>&& wrk);
 	void wait();
 	bool is_multiprocessing() const noexcept { return this->processing; }
 
