@@ -11,7 +11,8 @@ void Machine<W>::setup_posix_threads()
 	this->install_syscall_handler(93,
 	[] (Machine<W>& machine) {
 		const uint32_t status = machine.template sysarg<uint32_t> (0);
-		THPRINT(">>> Exit on tid=%d, exit code = %d\n",
+		THPRINT(machine,
+			">>> Exit on tid=%d, exit code = %d\n",
 				machine.threads().get_tid(), (int) status);
 		// Exit returns true if the program ended
 		if (!machine.threads().get_thread()->exit()) {
@@ -27,7 +28,8 @@ void Machine<W>::setup_posix_threads()
 	this->install_syscall_handler(96,
 	[] (Machine<W>& machine) {
 		const int clear_tid = machine.template sysarg<address_type<W>> (0);
-		THPRINT(">>> set_tid_address(0x%X)\n", clear_tid);
+		THPRINT(machine,
+			">>> set_tid_address(0x%X)\n", clear_tid);
 
 		machine.threads().get_thread()->clear_tid = clear_tid;
 		machine.set_result(machine.threads().get_tid());
@@ -40,7 +42,7 @@ void Machine<W>::setup_posix_threads()
 	// sched_yield
 	this->install_syscall_handler(124,
 	[] (Machine<W>& machine) {
-		THPRINT(">>> sched_yield()\n");
+		THPRINT(machine, ">>> sched_yield()\n");
 		// begone!
 		machine.threads().suspend_and_yield();
 	});
@@ -49,7 +51,8 @@ void Machine<W>::setup_posix_threads()
 	[] (Machine<W>& machine) {
 		const int tid = machine.template sysarg<int> (1);
 		const int signal = machine.template sysarg<int> (2);
-		THPRINT(">>> tgkill on tid=%d signal=%d\n", tid, signal);
+		THPRINT(machine,
+			">>> tgkill on tid=%d signal=%d\n", tid, signal);
 		auto* thread = machine.threads().get_thread(tid);
 		if (thread != nullptr) {
 			auto& sigact = machine.sigaction(signal);
@@ -60,7 +63,8 @@ void Machine<W>::setup_posix_threads()
 			} else {
 				// Jump to signal handler and change to altstack, if set
 				machine.signals().enter(machine, signal);
-				THPRINT("<<< tgkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
+				THPRINT(machine,
+					"<<< tgkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
 					signal, (long)sigact.handler, (long)machine.cpu.reg(REG_SP));
 				return;
 			}
@@ -70,7 +74,8 @@ void Machine<W>::setup_posix_threads()
 	// gettid
 	this->install_syscall_handler(178,
 	[] (Machine<W>& machine) {
-		THPRINT(">>> gettid() = %d\n", machine.threads().get_tid());
+		THPRINT(machine,
+			">>> gettid() = %d\n", machine.threads().get_tid());
 		machine.set_result(machine.threads().get_tid());
 	});
 	// futex
@@ -81,10 +86,12 @@ void Machine<W>::setup_posix_threads()
 		const auto addr = machine.template sysarg<address_type<W>> (0);
 		const int futex_op = machine.template sysarg<int> (1);
 		const int      val = machine.template sysarg<int> (2);
-		THPRINT(">>> futex(0x%lX, op=%d, val=%d)\n", (long) addr, futex_op, val);
+		THPRINT(machine,
+			">>> futex(0x%lX, op=%d, val=%d)\n", (long) addr, futex_op, val);
 		if ((futex_op & 0xF) == FUTEX_WAIT)
 	    {
-			THPRINT("FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
+			THPRINT(machine,
+				"FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
 			while (machine.memory.template read<address_type<W>> (addr) == (address_t)val) {
 				if (machine.threads().suspend_and_yield()) {
 					return;
@@ -94,7 +101,8 @@ void Machine<W>::setup_posix_threads()
 			machine.set_result(0);
 			return;
 		} else if ((futex_op & 0xF) == FUTEX_WAKE) {
-			THPRINT("FUTEX: Waking others on %d\n", val);
+			THPRINT(machine,
+				"FUTEX: Waking others on %d\n", val);
 			if (machine.threads().suspend_and_yield()) {
 				return;
 			}
@@ -118,7 +126,8 @@ void Machine<W>::setup_posix_threads()
 		const auto   tls = machine.template sysarg<address_type<W>> (5);
 		const auto  ctid = machine.template sysarg<address_type<W>> (6);
 		auto* parent = machine.threads().get_thread();
-		THPRINT(">>> clone(func=0x%lX, stack=0x%lX, flags=%x, args=0x%lX,"
+		THPRINT(machine,
+			">>> clone(func=0x%lX, stack=0x%lX, flags=%x, args=0x%lX,"
 				" parent=%p, ctid=0x%lX ptid=0x%lX, tls=0x%lX)\n",
 				(long)func, (long)stack, flags, (long)args, parent,
 				(long)ctid, (long)ptid, (long)tls);

@@ -150,6 +150,10 @@ namespace riscv
 		void stdin(const char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
 		void set_stdin(printer_func sin) { m_stdin = std::move(sin); }
+		// Debug printer
+		void debug_print(const char*, size_t) const;
+		auto& get_debug_printer() const noexcept { return m_debug_printer; }
+		void set_debug_printer(printer_func pf = m_default_printer) { m_debug_printer = std::move(pf); }
 
 		// Call an installed system call handler
 		void system_call(size_t);
@@ -165,8 +169,9 @@ namespace riscv
 		}
 		static inline std::array<syscall_t, RISCV_SYSCALLS_MAX>
 			syscall_handlers = initialize_syscalls();
-		static inline void (*on_unhandled_syscall) (Machine&, int)
-			= [] (Machine<W>&, int) {};
+		static inline void (*on_unhandled_syscall) (Machine&, int) = [] (Machine<W>& m, int num) {
+				auto txt = "Unhandled system call: " + std::to_string(num) + "\n"; m.debug_print(txt.c_str(), txt.size());
+			};
 
 		// Execute CSRs
 		void system(union rv32i_instruction);
@@ -234,6 +239,7 @@ namespace riscv
 		uint64_t     m_max_counter = 0;
 		void*        m_userdata = nullptr;
 		printer_func m_printer = m_default_printer;
+		printer_func m_debug_printer = m_default_printer;
 		printer_func m_stdin = [] (const char*, size_t) {};
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;

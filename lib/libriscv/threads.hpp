@@ -13,7 +13,9 @@ static const uint32_t CHILD_SETTID   = 0x01000000; /* set the TID in the child *
 
 //#define THREADS_DEBUG 1
 #ifdef THREADS_DEBUG
-#define THPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define THPRINT(machine, fmt, ...) \
+	{ char thrpbuf[1024]; machine.debug_print(thrpbuf, \
+		snprintf(thrpbuf, sizeof(thrpbuf), fmt, ##__VA_ARGS__)); }
 #else
 #define THPRINT(fmt, ...) /* fmt */
 #endif
@@ -120,7 +122,8 @@ inline void Thread<W>::resume()
 	auto& m = threading.machine;
 	// restore registers
 	m.cpu.registers() = this->stored_regs;
-	THPRINT("Returning to tid=%d tls=0x%lX stack=0x%lX\n",
+	THPRINT(threading.machine,
+		"Returning to tid=%d tls=0x%lX stack=0x%lX\n",
 			this->tid,
 			(long)this->stored_regs.get(REG_TP),
 			(long)this->stored_regs.get(REG_SP));
@@ -222,7 +225,8 @@ inline bool Thread<W>::exit()
 	const int tid = this->tid;
 	// CLONE_CHILD_CLEARTID: set userspace TID value to zero
 	if (this->clear_tid) {
-		THPRINT("Clearing thread value for tid=%d at 0x%lX\n",
+		THPRINT(threading.machine,
+			"Clearing thread value for tid=%d at 0x%lX\n",
 				this->tid, (long)this->clear_tid);
 		threading.machine.memory.
 			template write<address_type<W>> (this->clear_tid, 0);

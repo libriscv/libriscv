@@ -37,7 +37,8 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+1,
 	[] (Machine<W>& machine) {
 		const int status = machine.template sysarg<int> (0);
-		THPRINT(">>> Exit on tid=%d, exit status = %d\n",
+		THPRINT(machine,
+			">>> Exit on tid=%d, exit status = %d\n",
 				machine.threads().get_tid(), (int) status);
 		// Exit returns true if the program ended
 		if (!machine.threads().get_thread()->exit()) {
@@ -86,7 +87,7 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 		// invoke clone threadcall
 		const auto tls = machine.arena().malloc(STACK_SIZE);
 		if (UNLIKELY(tls == 0)) {
-			fprintf(stderr,
+			THPRINT(machine,
 				"Error: Thread stack allocation failed: %#x\n", tls);
 			machine.set_result(-1);
 			return;

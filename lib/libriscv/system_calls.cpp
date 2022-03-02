@@ -3,7 +3,9 @@
 
 //#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
-#define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define SYSPRINT(fmt, ...) \
+	{ char syspbuf[1024]; machine.debug_print(syspbuf, \
+		snprintf(syspbuf, sizeof(syspbuf), fmt, ##__VA_ARGS__)); }
 static constexpr bool verbose_syscalls = true;
 #else
 #define SYSPRINT(fmt, ...) /* fmt */

@@ -56,10 +56,6 @@ static void run_program(
 		exit(1);
 	}
 
-	machine.on_unhandled_syscall = [] (auto&, int number) {
-		printf("Unhandled system call: %d\n", number);
-	};
-
 	/*
 	machine.cpu.breakpoint(machine.address_of("main"));
 	machine.cpu.breakpoint(0x10730);
@@ -110,8 +106,8 @@ static void run_program(
 #endif
 
 	try {
-		// If you run the emulator with DEBUG=1, you can
-		// connect with GDB built for RISC-V.
+		// If you run the emulator with DEBUG=1, you can connect
+		// with gdb-multiarch using target remote localhost:2159.
 		if (getenv("DEBUG")) {
 			printf("GDB server is listening on localhost:2159\n");
 			riscv::RSP<W> server { machine, 2159 };

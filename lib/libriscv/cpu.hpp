@@ -105,6 +105,7 @@ namespace riscv
 		mutable int32_t m_break_steps_cnt = 0;
 		std::map<address_t, breakpoint_t> m_breakpoints;
 		bool break_time() const;
+		void register_debug_logging() const;
 		friend struct Machine<W>;
 #endif
 #ifdef RISCV_EXT_ATOMICS

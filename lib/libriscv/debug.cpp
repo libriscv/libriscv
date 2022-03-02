@@ -267,6 +267,17 @@ void CPU<W>::break_checks()
     }
 }
 
+template<int W>
+void CPU<W>::register_debug_logging() const
+{
+	auto regs = "\n" + this->registers().to_string() + "\n\n";
+	machine().print(regs.data(), regs.size());
+	if (UNLIKELY(machine().verbose_fp_registers)) {
+		regs = registers().flp_to_string() + "\n";
+		machine().print(regs.data(), regs.size());
+	}
+}
+
 	template struct CPU<4>;
 	template struct CPU<8>;
     template struct CPU<16>;

@@ -8,8 +8,8 @@
 
 #define INSTRUCTION_LOGGING()	\
 	if (machine().verbose_instructions) { \
-		const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)); \
-		printf("%s\n", string.c_str()); \
+		const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n"; \
+		machine().print(string.c_str(), string.size()); \
 	}
 
 
@@ -183,13 +183,8 @@ namespace riscv
 # endif
 
 #ifdef RISCV_DEBUG
-			if (UNLIKELY(machine().verbose_registers))
-			{
-				auto regs = this->registers().to_string();
-				printf("\n%s\n\n", regs.c_str());
-				if (UNLIKELY(machine().verbose_fp_registers)) {
-					printf("%s\n", registers().flp_to_string().c_str());
-				}
+			if (UNLIKELY(machine().verbose_registers)) {
+				this->register_debug_logging();
 			}
 #endif
 			// increment PC

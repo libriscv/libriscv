@@ -7,13 +7,16 @@
 #include <errno.h>
 #include <time.h>
 #include <random>
+extern "C" {
+	ssize_t write(int fd, const void *buf, size_t count);
+}
 
 namespace riscv
 {
 	template <int W>
 	typename Machine<W>::printer_func Machine<W>::m_default_printer =
 		[] (const char* buffer, size_t len) {
-			printf("%.*s", (int)len, buffer);
+			write(1, buffer, len);
 		};
 
 	template <int W>
