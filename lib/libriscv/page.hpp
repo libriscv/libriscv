@@ -23,17 +23,16 @@ struct PageAttributes
 };
 
 struct alignas(8) PageData {
-	static constexpr unsigned SIZE  = PageSize;
-	static constexpr unsigned SHIFT = 12;
-	static_assert((1 << SHIFT) == PageSize, "Page shift value must match page size");
 
-	std::array<uint8_t, SIZE> buffer8 = {0};
+	std::array<uint8_t, PageSize> buffer8 = {0};
 };
 
 struct Page
 {
-	static constexpr unsigned SIZE  = PageData::SIZE;
-	static constexpr unsigned SHIFT = PageData::SHIFT;
+	static constexpr unsigned SIZE  = PageSize;
+	static constexpr unsigned SHIFT = 31 - __builtin_clz(PageSize);
+	static_assert((1u << SHIFT) == PageSize, "Page shift value must match page size");
+
 	using mmio_cb_t = std::function<int64_t (Page&, uint32_t, int, int64_t)>;
 
 	// create a new blank page
@@ -128,13 +127,6 @@ struct Page
 
 	mmio_cb_t m_trap = nullptr;
 #endif
-};
-
-template <typename T>
-struct PageHash {
-	unsigned operator() (const T& key) const noexcept {
-		return key*2654435761;
-	}
 };
 
 inline Page::Page(const PageAttributes& a, PageData* data)

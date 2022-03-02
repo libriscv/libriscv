@@ -22,6 +22,10 @@
 #define RISCV_SYSCALL_EBREAK_NR    (RISCV_SYSCALLS_MAX-1)
 #endif
 
+#ifndef RISCV_PAGE_SIZE
+#define RISCV_PAGE_SIZE  4096
+#endif
+
 #ifdef RISCV_DEBUG
 # ifndef RISCV_MEMORY_TRAPS_ENABLED
 #   define RISCV_MEMORY_TRAPS_ENABLED
@@ -41,7 +45,7 @@ namespace riscv
 {
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
 
-	static constexpr int PageSize = 4096;
+	static constexpr int PageSize = RISCV_PAGE_SIZE;
 
 #ifdef RISCV_MEMORY_TRAPS_ENABLED
 	static constexpr bool memory_traps_enabled = true;
