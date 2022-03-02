@@ -40,6 +40,9 @@ namespace std {
 	void __throw_length_error(char const*) {
 		abort_message("C++ length error exception");
 	}
+	void __throw_bad_array_new_length() {
+		abort_message("C++ bad array new length exception");
+	}
 	void __throw_logic_error(char const*) {
 		abort_message("C++ length error exception");
 	}
