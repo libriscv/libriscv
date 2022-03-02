@@ -16,7 +16,9 @@ One motivation when writing this emulator was to use it in a game engine, and so
 
 [Lua 5.4 benchmarks](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
 
-Optimized compiled code is faster even when interpreted.
+[LuaJIT benchmarks](https://gist.github.com/fwsGonzo/d7ee7acb52b11ef5a51982d5b46734ca)
+
+As we can see, for this purpose the compiled code is faster.
 
 ## Installing a RISC-V GCC compiler
 
