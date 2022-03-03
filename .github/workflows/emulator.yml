@@ -17,6 +17,9 @@ jobs:
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
     steps:
     - uses: actions/checkout@v2
 
