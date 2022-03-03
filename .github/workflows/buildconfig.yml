@@ -9,12 +9,12 @@ on:
 env:
   BUILD_TYPE: Release
 
-defaults:
-  run:
-    working-directory: ${{github.workspace}}/tests/buildconfig
 jobs:
   config_matrix:
     name: Build configuration matrix
+    defaults:
+      run:
+        working-directory: ${{github.workspace}}/tests/buildconfig
     runs-on: ubuntu-latest
 
     steps:
