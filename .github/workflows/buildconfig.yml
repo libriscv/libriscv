@@ -9,12 +9,13 @@ on:
 env:
   BUILD_TYPE: Release
 
+defaults:
+  run:
+    working-directory: ${{github.workspace}}/tests/buildconfig
 jobs:
-  build:
+  config_matrix:
+    name: Build configuration matrix
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{github.workspace}}/tests/buildconfig
 
     steps:
     - uses: actions/checkout@v2
