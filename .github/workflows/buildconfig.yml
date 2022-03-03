@@ -14,11 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./app
+        working-directory: ${{github.workspace}}/tests/buildconfig
 
     steps:
     - uses: actions/checkout@v2
-    - working-directory: ${{github.workspace}}/tests/buildconfig
 
     - name: Default build
       run: bash ci.sh
