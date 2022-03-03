@@ -13,6 +13,11 @@ jobs:
       run:
         working-directory: ${{github.workspace}}/tests/buildconfig
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [g++-10, clang++-12]
+    env:
+      CXX: ${{ matrix.compiler }}
 
     steps:
     - uses: actions/checkout@v2
