@@ -748,9 +748,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			throw std::runtime_error("Unhandled instruction in code emitter");
 		}
 	}
-	// A code block should have a proper return already,
-	// and if not, it must be an unterminated illegal-op-block.
-	code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(tinfo.len-1) + ");\n}\n";
+	// If the function ends with an unimplemented instruction,
+	// we must gracefully finish, setting new PC and incrementing IC
+	code += "api.finish(cpu, " + std::to_string(tinfo.len-1) + ", " + INSTRUCTION_COUNT(tinfo.len-1) + ");\n}\n";
 }
 
 template void CPU<4>::emit(std::string&, const std::string&, instr_pair*, const TransInfo<4>&) const;

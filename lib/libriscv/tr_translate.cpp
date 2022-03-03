@@ -308,6 +308,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			cpu.jump(addr);
 			cpu.machine().increment_counter(val);
 		},
+		.finish = [] (CPU<W>& cpu, address_type<W> off, uint64_t val) {
+			cpu.increment_pc(off * 4);
+			cpu.machine().increment_counter(val);
+		},
 		.syscall = [] (CPU<W>& cpu, address_type<W> n, uint64_t val) -> int {
 			auto old_pc = cpu.pc();
 			cpu.registers().pc += val * 4;
