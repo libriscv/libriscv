@@ -13,7 +13,7 @@ static std::string cflags()
 {
 	const char* cflags = getenv("CFLAGS");
 	if (cflags) return std::string(cflags);
-	return "-O2 -march=native"; /* We always want *some* optimizations */
+	return "";
 }
 static bool keep_code()
 {
@@ -28,8 +28,8 @@ namespace riscv
 {
 	std::string compile_command(int arch)
 	{
-		return compiler() + " -O0 -s -std=c99 -fPIC -shared -x c "
-		" -ffreestanding -nostdlib -fexceptions -fno-omit-frame-pointer "
+		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
+		" -ffreestanding -nostdlib -fexceptions "
 		 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
 		 + " -pipe " + cflags();
 	}
