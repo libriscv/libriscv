@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [ master ]
 
-env:
-  BUILD_TYPE: Release
-
 jobs:
   config_matrix:
     name: Build configuration matrix
@@ -55,4 +52,3 @@ jobs:
 
     - name: Multiprocessing debug build
       run: bash ci.sh -DRISCV_MULTIPROCESS=ON -DRISCV_DEBUG=ON
-
