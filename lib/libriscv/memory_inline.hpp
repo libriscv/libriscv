@@ -4,7 +4,7 @@ template <int W>
 template <typename T> inline
 T Memory<W>::read(address_t address)
 {
-	const auto& page = get_readable_page(address);
+	const auto& page = cached_readable_page(address);
 
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {
@@ -20,7 +20,7 @@ template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
-	auto& page = get_writable_page(address);
+	auto& page = cached_writable_page(address);
 
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {
@@ -37,7 +37,7 @@ template <int W>
 template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
-	auto& page = get_writable_page(address);
+	auto& page = cached_writable_page(address);
 
 #ifdef RISCV_PAGE_TRAPS_ENABLED
 	if constexpr (memory_traps_enabled) {
@@ -50,8 +50,30 @@ void Memory<W>::write(address_t address, T value)
 	page.template aligned_write<T>(address & (Page::size()-1), value);
 }
 
+template <int W> inline
+const Page& Memory<W>::cached_readable_page(address_t address) const
+{
+	const auto pageno = page_number(address);
+	auto& entry = m_rd_cache;
+	if (entry.pageno == pageno)
+		return *entry.page;
+	entry = {pageno, &get_readable_pageno(pageno)};
+	return *entry.page;
+}
+
+template <int W> inline
+Page& Memory<W>::cached_writable_page(address_t address)
+{
+	const auto pageno = page_number(address);
+	auto& entry = m_wr_cache;
+	if (entry.pageno == pageno)
+		return *entry.page;
+	entry = {pageno, &create_writable_pageno(pageno)};
+	return *entry.page;
+}
+
 template <int W>
-inline const Page& Memory<W>::get_page(const address_t address) const noexcept
+inline const Page& Memory<W>::get_page(const address_t address) const
 {
 	const auto page = page_number(address);
 	return get_pageno(page);
@@ -73,17 +95,17 @@ inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 }
 
 template <int W>
-inline const Page& Memory<W>::get_pageno(const address_t pageno) const noexcept
+inline const Page& Memory<W>::get_pageno(const address_t pageno) const
 {
+	auto it = m_pages.find(pageno);
+	if (LIKELY(it != m_pages.end())) {
+		return it->second;
+	}
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 	if (m_ropages.contains(pageno)) {
 		return m_ropages.pages[pageno - m_ropages.begin];
 	}
 #endif
-	auto it = m_pages.find(pageno);
-	if (LIKELY(it != m_pages.end())) {
-		return it->second;
-	}
 	return m_page_readf_handler(*this, pageno);
 }
 
@@ -127,7 +149,7 @@ template <int W>
 inline void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 {
 #ifdef RISCV_PAGE_TRAPS_ENABLED
-	auto& page = create_page(page_number(page_addr));
+	auto& page = create_writable_pageno(page_number(page_addr));
 	page.set_trap(callback);
 #else
 	(void) page_addr;

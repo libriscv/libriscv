@@ -3,71 +3,52 @@
 namespace riscv
 {
 	template <int W>
-	const Page& Memory<W>::get_readable_page(address_t address)
+	const Page& Memory<W>::get_readable_pageno(const address_t pageno) const
 	{
-		const auto pageno = page_number(address);
-		auto& entry = m_rd_cache;
-		if (entry.pageno == pageno)
-			return *entry.page;
-		const auto& potential = get_pageno(pageno);
-		if (UNLIKELY(!potential.attr.read)) {
-			this->protection_fault(address);
-		}
-		entry = {pageno, &potential};
-		return potential;
+		const auto& page = get_pageno(pageno);
+		if (LIKELY(page.attr.read))
+			return page;
+		this->protection_fault(pageno * Page::size());
 	}
 
 	template <int W>
-	Page& Memory<W>::get_writable_page(address_t address)
-	{
-		const auto pageno = page_number(address);
-		auto& entry = m_wr_cache;
-		if (entry.pageno == pageno)
-			return *entry.page;
-		auto& potential = create_page(pageno);
-		if (UNLIKELY(!potential.attr.write)) {
-			this->protection_fault(address);
-		}
-		entry = {pageno, &potential};
-		return potential;
-	}
-
-	template <int W>
-	Page& Memory<W>::create_page(const address_t pageno)
+	Page& Memory<W>::create_writable_pageno(const address_t pageno)
 	{
 		auto it = m_pages.find(pageno);
 		if (it != m_pages.end()) {
 			Page& page = it->second;
-			if (UNLIKELY(page.attr.is_cow)) {
-				// don't enter page write handler with no-data page
-				if (UNLIKELY(!page.has_data() || !page.attr.write))
-					protection_fault(pageno * Page::size());
+			if (LIKELY(page.attr.write)) {
+				return page;
+			} else if (page.attr.is_cow) {
 				m_page_write_handler(*this, pageno, page);
+				return page;
 			}
-			return page;
+		} else {
+		#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+			if (UNLIKELY(m_ropages.contains(pageno))) {
+				this->protection_fault(pageno * Page::size());
+			}
+		#endif
+			// Handler must produce a new page, or throw
+			Page& page = m_page_fault_handler(*this, pageno);
+			if (LIKELY(page.attr.write))
+				return page;
 		}
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		if (UNLIKELY(m_ropages.contains(pageno))) {
-			this->protection_fault(pageno * Page::size());
-		}
-#endif
-		// this callback must produce a new page, or throw
-		return m_page_fault_handler(*this, pageno);
+		this->protection_fault(pageno * Page::size());
 	}
 
 	template <int W>
 	void Memory<W>::free_pages(address_t dst, size_t len)
 	{
 		address_t pageno = page_number(dst);
-		len /= Page::size();
-		while (len > 0)
+		address_t end = pageno + (len /= Page::size());
+		while (pageno < end)
 		{
-			auto& page = this->get_pageno(pageno);
-			if (!page.is_cow_page()) {
-				m_pages.erase(pageno);
+			auto it = m_pages.find(pageno);
+			if (it != m_pages.end()) {
+				m_pages.erase(it);
 			}
 			pageno ++;
-			len --;
 		}
 		// invalidate all cached pages, because references are invalidated
 		this->invalidate_cache();
@@ -171,14 +152,14 @@ namespace riscv
 			const address_t pageno = page_number(dst);
 			// unfortunately, have to create pages for non-default attrs
 			if (!is_default) {
-				this->create_page(pageno).attr = options;
+				this->create_writable_pageno(pageno).attr = options;
 			} else {
 				// set attr on non-COW pages only!
 				const auto& page = this->get_pageno(pageno);
 				if (page.attr.is_cow == false) {
 					// this page has been written to, or had attrs set,
 					// otherwise it would still be CoW.
-					this->create_page(pageno).attr = options;
+					this->create_writable_pageno(pageno).attr = options;
 				}
 			}
 
@@ -195,9 +176,7 @@ namespace riscv
 		{
 			const size_t offset = dst & (Page::size()-1); // offset within page
 			const size_t size = std::min(Page::size() - offset, len);
-			auto& page = this->create_page(dst >> Page::SHIFT);
-			if (UNLIKELY(!page.has_data()))
-				protection_fault(dst);
+			auto& page = this->create_writable_pageno(dst >> Page::SHIFT);
 
 			std::copy(src, src + size, page.data() + offset);
 

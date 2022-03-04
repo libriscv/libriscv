@@ -13,7 +13,7 @@ struct PageAttributes
 	bool exec = false;
 	bool is_cow = false;
 	bool non_owning = false;
-	bool dont_fork = false;
+	bool unused = false;
 	uint16_t user_defined = 0; /* Use this for yourself */
 
 	bool is_default() const noexcept {
@@ -23,7 +23,6 @@ struct PageAttributes
 };
 
 struct alignas(8) PageData {
-
 	std::array<uint8_t, PageSize> buffer8 = {0};
 };
 
@@ -79,9 +78,6 @@ struct Page
 		*(T*) &page().buffer8[offset] = value;
 	}
 
-	bool has_data() const noexcept {
-		return m_page != nullptr;
-	}
 	auto* data() noexcept {
 		return page().buffer8.data();
 	}
@@ -109,6 +105,7 @@ struct Page
 		} else {
 			m_page.reset(new PageData {});
 		}
+		attr.write = true;
 		attr.is_cow = false;
 		attr.non_owning = false;
 	}

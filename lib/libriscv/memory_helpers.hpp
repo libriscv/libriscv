@@ -7,9 +7,7 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t size = std::min(Page::size() - offset, len);
-		auto& page = this->create_page(dst >> Page::SHIFT);
-		if (UNLIKELY(!page.attr.write))
-			protection_fault(dst);
+		auto& page = this->create_writable_pageno(dst >> Page::SHIFT);
 
 		__builtin_memset(page.data() + offset, value, size);
 
@@ -26,9 +24,7 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t size = std::min(Page::size() - offset, len);
-		auto& page = this->create_page(dst >> Page::SHIFT);
-		if (UNLIKELY(!page.attr.write))
-			protection_fault(dst);
+		auto& page = this->create_writable_pageno(dst >> Page::SHIFT);
 
 		std::copy(src, src + size, page.data() + offset);
 
@@ -159,9 +155,7 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 	// fast-path
 	{
 		const size_t offset = addr & (Page::size()-1);
-		const Page& page = this->get_pageno(pageno);
-		if (UNLIKELY(!page.attr.read))
-			protection_fault(addr);
+		const Page& page = this->get_readable_pageno(pageno);
 
 		const char* start = (const char*) &page.data()[offset];
 		const char* pgend = (const char*) &page.data()[std::min(Page::size(), offset + max_len)];
@@ -178,9 +172,7 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 	{
 		const size_t max_bytes = std::min(Page::size(), max_len - result.size());
 		pageno ++;
-		const Page& page = this->get_pageno(pageno);
-		if (UNLIKELY(!page.attr.read))
-			protection_fault(addr);
+		const Page& page = this->get_readable_pageno(pageno);
 
 		const char* start = (const char*) page.data();
 		const char* endptr = (const char*) &page.data()[max_bytes];
@@ -202,9 +194,7 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 		protection_fault(addr);
 
 	address_t pageno = page_number(addr);
-	const Page& page = this->get_pageno(pageno);
-	if (UNLIKELY(!page.attr.read))
-		protection_fault(addr);
+	const Page& page = this->get_readable_pageno(pageno);
 
 	const size_t offset = addr & (Page::size()-1);
 	auto* start = (const char*) &page.data()[offset];
@@ -217,9 +207,7 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	{
 		const size_t max_bytes = std::min(Page::size(), datalen - result.size());
 		pageno ++;
-		const Page& page = this->get_pageno(pageno);
-		if (UNLIKELY(!page.attr.read))
-			protection_fault(addr);
+		const Page& page = this->get_readable_pageno(pageno);
 
 		result.append_page((const char*) page.data(), max_bytes);
 	}
@@ -234,9 +222,7 @@ size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 	do {
 		const address_t offset = addr & (Page::size()-1);
 		const address_t pageno = page_number(addr);
-		const Page& page = this->get_pageno(pageno);
-		if (UNLIKELY(!page.attr.read))
-			protection_fault(addr);
+		const Page& page = this->get_readable_pageno(pageno);
 
 		const char* start = (const char*) &page.data()[offset];
 		const size_t max_bytes = Page::size() - offset;
@@ -259,10 +245,8 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 	const auto pageno2 = this->page_number(p2);
 	if (pageno1 == ((p1 + len-1) >> Page::SHIFT) &&
 		pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
-		auto& page1 = this->get_pageno(pageno1);
-		auto& page2 = this->get_pageno(pageno2);
-		if (UNLIKELY(!page1.attr.read || !page2.attr.read))
-			protection_fault(p1);
+		auto& page1 = this->get_readable_pageno(pageno1);
+		auto& page2 = this->get_readable_pageno(pageno2);
 
 		const uint8_t* s1 = page1.data() + p1 % Page::SIZE;
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
@@ -275,10 +259,8 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 		while (len > 0) {
 			const auto pageno1 = this->page_number(p1);
 			const auto pageno2 = this->page_number(p2);
-			auto& page1 = this->get_pageno(pageno1);
-			auto& page2 = this->get_pageno(pageno2);
-			if (UNLIKELY(!page1.has_data() || !page2.has_data() || !page1.attr.read || !page2.attr.read))
-				protection_fault(p1);
+			auto& page1 = this->get_readable_pageno(pageno1);
+			auto& page2 = this->get_readable_pageno(pageno2);
 
 			v1 = page1.data()[p1 % Page::SIZE];
 			v2 = page2.data()[p2 % Page::SIZE];
@@ -297,9 +279,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	// NOTE: fast implementation if no pointer crosses page boundary
 	const auto pageno2 = this->page_number(p2);
 	if (pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
-		auto& page2 = this->get_pageno(pageno2);
-		if (UNLIKELY(!page2.attr.read))
-			protection_fault(p2);
+		auto& page2 = this->get_readable_pageno(pageno2);
 
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
 		return __builtin_memcmp(s1, s2, len);
@@ -309,9 +289,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 		uint8_t v2 = 0;
 		while (len > 0) {
 			const auto pageno2 = this->page_number(p2);
-			auto& page2 = this->get_pageno(pageno2);
-			if (UNLIKELY(!page2.attr.read))
-				protection_fault(p2);
+			auto& page2 = this->get_readable_pageno(pageno2);
 
 			v2 = page2.data()[p2 % Page::SIZE];
 			if (*s1 != v2) break;
@@ -367,9 +345,7 @@ size_t Memory<W>::gather_buffers_from_range(
 	{
 		const size_t offset = addr & (Page::SIZE-1);
 		const size_t size = std::min(Page::SIZE - offset, len);
-		auto& page = get_pageno(page_number(addr));
-		if (UNLIKELY(!page.attr.read))
-			protection_fault(addr);
+		auto& page = get_readable_pageno(page_number(addr));
 
 		auto* ptr = (char*) &page.data()[offset];
 		if (last && ptr == last->ptr + last->len) {

@@ -352,11 +352,12 @@ namespace riscv
 		for (const auto& it : master.memory.pages())
 		{
 			const auto& page = it.second;
-			// skip pages marked as don't fork
-			if (UNLIKELY(page.attr.dont_fork)) continue;
-			// just make every page CoW and non-owning
+			// Make every page non-owning
 			auto attr = page.attr;
-			attr.is_cow = true;
+			if (attr.write) {
+				attr.write = false;
+				attr.is_cow = true;
+			}
 			attr.non_owning = true;
 			m_pages.emplace(std::piecewise_construct,
 				std::forward_as_tuple(it.first),

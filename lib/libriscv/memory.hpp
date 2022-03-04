@@ -99,10 +99,11 @@ namespace riscv
 		// Page handling
 		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
-		const Page& get_page(address_t) const noexcept;
+		const Page& get_page(address_t) const;
 		const Page& get_exec_pageno(address_t npage) const; // throws
-		const Page& get_pageno(address_t npage) const noexcept;
-		Page& create_page(address_t npage);
+		const Page& get_pageno(address_t npage) const;
+		const Page& get_readable_pageno(address_t npage) const;
+		Page& create_writable_pageno(address_t npage);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
 		std::string get_page_info(address_t addr) const;
 		static inline address_t page_number(const address_t address) {
@@ -167,8 +168,8 @@ namespace riscv
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);
-		const Page& get_readable_page(address_t);
-		Page& get_writable_page(address_t);
+		const Page& cached_readable_page(address_t) const;
+		Page& cached_writable_page(address_t);
 		// Helpers
 		template <typename T>
 		static void foreach_helper(T& mem, address_t addr, size_t len,
@@ -203,11 +204,11 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
-		CachedPage<W, const Page> m_rd_cache;
-		CachedPage<W, Page> m_wr_cache;
+		mutable CachedPage<W, const Page> m_rd_cache;
+		mutable CachedPage<W, Page> m_wr_cache;
 
 #ifdef RISCV_USE_RH_HASH
-		robin_hood::unordered_node_map<address_t, Page> m_pages;
+		robin_hood::unordered_map<address_t, Page> m_pages;
 #else
 		std::unordered_map<address_t, Page> m_pages;
 #endif
