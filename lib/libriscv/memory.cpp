@@ -225,26 +225,28 @@ namespace riscv
 		address_t addr, const char* src, size_t size, PageAttributes attr)
 	{
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		constexpr address_t PMASK = Page::size()-1;
-		const address_t pbase = addr & ~(address_t) PMASK;
-		const size_t prelen  = addr - pbase;
-		const size_t midlen  = size + prelen;
-		const size_t plen =
-			(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
-		const size_t postlen = plen - midlen;
-		// Detect bogus values
-		if (UNLIKELY(prelen > plen || prelen + size > plen)) {
-			throw std::runtime_error("Segment virtual base was bogus");
-		}
-		assert(plen % Page::size() == 0);
-		// Create the whole memory range
-		auto* pagedata = new uint8_t[plen];
-		std::memset(&pagedata[0],      0,     prelen);
-		std::memcpy(&pagedata[prelen], src,   size);
-		std::memset(&pagedata[prelen + size], 0,   postlen);
+		constexpr address_t PSIZEMASK = Page::size()-1;
+		const address_t prebase = addr & ~PSIZEMASK;
+		const address_t prelen  = addr - prebase;
+		const address_t postbase = (addr + size) & ~PSIZEMASK;
+		const address_t lastpage_len = (addr + size) - postbase;
+		const address_t postlen = Page::size() - lastpage_len;
+		// The total length should be a page-sized length
+		const address_t total_len = prelen + size + postlen;
+		assert((total_len & ~PSIZEMASK) == 0);
+
+		// Create the first and last page
+		// TODO: Make this a PageData struct for alignment guarantees
+		auto* pagedata = new uint8_t[Page::size() * 2] {};
+		// Fill in the first page (at page 0)
+		std::memset(&pagedata[0], 0,   prelen);
+		std::memcpy(&pagedata[prelen], src,  Page::size() - prelen);
+		// Fill in the last page (at page 1)
+		std::memset(&pagedata[Page::size() + lastpage_len], 0,   postlen);
+		std::memcpy(&pagedata[Page::size()], &src[postbase - addr], lastpage_len);
 		area.data.reset(pagedata);
 
-		const size_t npages = plen / Page::size();
+		const size_t npages = total_len / Page::size();
 		area.pages.reset(new Page[npages]);
 		// Create share-able range
 		area.begin = addr / Page::size();
@@ -252,9 +254,17 @@ namespace riscv
 
 		for (size_t i = 0; i < npages; i++) {
 			area.pages[i].attr = attr;
-			// None of the pages own this memory
+			// None of the pages own their page memory
 			area.pages[i].attr.non_owning = true;
-			area.pages[i].m_page.reset((PageData*) &pagedata[i * Page::size()]);
+
+			// We have custom page data for the first and last page
+			if (i == 0 || i == npages-1) {
+				const size_t offset = (i == 0) ? 0 : Page::size();
+				area.pages[i].m_page.reset((PageData*) &pagedata[offset]);
+			} else {
+				const size_t offset = i * Page::size() - prelen;
+				area.pages[i].m_page.reset((PageData*) &src[offset]);
+			}
 		}
 #endif
 	}
