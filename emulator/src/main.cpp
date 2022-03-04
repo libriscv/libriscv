@@ -128,6 +128,11 @@ static void run_program(
 	} catch (riscv::MachineException& me) {
 		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
 				me.type(), me.what(), me.data());
+		if (me.type() == riscv::UNIMPLEMENTED_INSTRUCTION || me.type() == riscv::MISALIGNED_INSTRUCTION) {
+			printf(">>> Is an instruction extension disabled?\n");
+			printf(">>> A-extension: %d  C-extension: %d  F-extension: %d\n",
+				riscv::atomics_enabled, riscv::compressed_enabled, riscv::floating_point_enabled);
+		}
 #ifdef RISCV_DEBUG
 		machine.print_and_pause();
 #else
@@ -179,15 +184,17 @@ void run_sighandler(riscv::Machine<W>& machine)
 	constexpr int SIGSEGV = 11;
 	auto& action = machine.sigaction(SIGSEGV);
 	auto handler = action.handler;
-	if (handler == 0x0)
+	if (handler == 0x0 || handler == (riscv::address_type<W>)-1)
 		return;
 	action.handler = 0x0; // Avoid re-triggering(?)
 
 	machine.stack_push(machine.cpu.reg(riscv::REG_RA));
 	machine.cpu.reg(riscv::REG_RA) = machine.cpu.pc();
 	machine.cpu.reg(riscv::REG_ARG0) = 11; /* SIGSEGV */
-	machine.cpu.jump(handler);
-	machine.simulate(60'000);
+	try {
+		machine.cpu.jump(handler);
+		machine.simulate(60'000);
+	} catch (...) {}
 
 	action.handler = handler;
 }
