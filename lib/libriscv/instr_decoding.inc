@@ -150,8 +150,16 @@
 						switch (instruction.Itype.funct3) {
 						case 0x0: // ADDIW
 							DECODER(DECODED_INSTR(OP_IMM32_ADDIW));
+						case 0x1: // SLLIW
+							DECODER(DECODED_INSTR(OP_IMM32_SLLIW));
+						case 0x5: // SRLIW / SRAIW
+							if (!instruction.Itype.is_srai()) {
+								DECODER(DECODED_INSTR(OP_IMM32_SRLIW));
+							} else {
+								DECODER(DECODED_INSTR(OP_IMM32_SRAIW));
+							}
 						default:
-							DECODER(DECODED_INSTR(OP_IMM32));
+							DECODER(DECODED_INSTR(ILLEGAL));
 						}
 					} else {
 						DECODER(DECODED_INSTR(NOP));
@@ -160,8 +168,11 @@
 					if (instruction.Rtype.rd != 0)
 					{
 						switch (instruction.Rtype.jumptable_friendly_op()) {
-						case 0x0: // ADDW / SUBW
-							DECODER(DECODED_INSTR(OP32_ADDW));
+						case 0x0: // ADDW
+							if (!instruction.Rtype.is_f7()) {
+								DECODER(DECODED_INSTR(OP32_ADDW));
+							}
+							[[fallthrough]];
 						default:
 							DECODER(DECODED_INSTR(OP32));
 						}

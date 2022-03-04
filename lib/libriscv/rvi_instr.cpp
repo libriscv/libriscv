@@ -707,27 +707,7 @@ namespace riscv
 	});
 
 	INSTRUCTION(OP_IMM32,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
-		auto& dst = cpu.reg(instr.Itype.rd);
-		const int32_t src = cpu.reg(instr.Itype.rs1);
-		switch (instr.Itype.funct3) {
-		case 0x0:
-			// ADDIW: Add sign-extended 12-bit immediate
-			dst = RVSIGNEXTW(cpu) (src + instr.Itype.signed_imm());
-			return;
-		case 0x1: // SLLIW:
-			dst = RVSIGNEXTW(cpu) (src << instr.Itype.shift_imm());
-			return;
-		case 0x5: // SRLIW / SRAIW:
-			if (LIKELY(!instr.Itype.is_srai())) {
-				dst = RVSIGNEXTW(cpu) (src >> instr.Itype.shift_imm());
-			} else { // SRAIW: preserve the sign bit
-				const uint32_t shifts = instr.Itype.shift_imm();
-				const bool is_signed = (src & 0x80000000) != 0;
-				dst = RVSIGNEXTW(cpu) RV32I::SRA(is_signed, shifts, src);
-			}
-			return;
-		}
+	[] (auto& cpu, rv32i_instruction) {
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
@@ -784,6 +764,32 @@ namespace riscv
 		const int32_t src = cpu.reg(instr.Itype.rs1);
 		// ADDIW: Add 32-bit sign-extended 12-bit immediate
 		dst = RVSIGNEXTW(cpu) (src + instr.Itype.signed_imm());
+	}, DECODED_INSTR(OP_IMM32).printer);
+
+	INSTRUCTION(OP_IMM32_SLLIW,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const int32_t src = cpu.reg(instr.Itype.rs1);
+		// SLLIW: Shift-Left Logical 0-31 immediate
+		dst = RVSIGNEXTW(cpu) (src << instr.Itype.shift_imm());
+	}, DECODED_INSTR(OP_IMM32).printer);
+
+	INSTRUCTION(OP_IMM32_SRLIW,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const int32_t src = cpu.reg(instr.Itype.rs1);
+		// SRLIW: Shift-Right Logical 0-31 immediate
+		dst = RVSIGNEXTW(cpu) (src >> instr.Itype.shift_imm());
+	}, DECODED_INSTR(OP_IMM32).printer);
+
+	INSTRUCTION(OP_IMM32_SRAIW,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const int32_t src = cpu.reg(instr.Itype.rs1);
+		// SRAIW: preserve the sign bit
+		const uint32_t shifts = instr.Itype.shift_imm();
+		const bool is_signed = (src & 0x80000000) != 0;
+		dst = RVSIGNEXTW(cpu) RV32I::SRA(is_signed, shifts, src);
 	}, DECODED_INSTR(OP_IMM32).printer);
 
 	INSTRUCTION(OP32,
@@ -870,7 +876,7 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Rtype.rd);
 		const int32_t src1 = cpu.reg(instr.Rtype.rs1);
 		const int32_t src2 = cpu.reg(instr.Rtype.rs2);
-		dst = RVSIGNEXTW(cpu) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
+		dst = RVSIGNEXTW(cpu) (src1 + src2);
 	}, DECODED_INSTR(OP32).printer);
 
 	INSTRUCTION(OP_IMM64,
