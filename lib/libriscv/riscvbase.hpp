@@ -8,6 +8,7 @@ namespace riscv
 	static const uint32_t REG_GP   = 3;
 	static const uint32_t REG_TP   = 4;
 	static const uint32_t REG_T0   = 5;
+	static const uint32_t REG_T1   = 6;
 	static const uint32_t REG_RETVAL = 10;
 	static const uint32_t REG_ARG0   = 10;
 	static const uint32_t REG_ARG1   = 11;
