@@ -67,14 +67,14 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	if (UNLIKELY(is_multiprocessing()))
 		return false;
 
+	const address_t stackpage = Memory<W>::page_number(stack);
+	const address_t stackendpage = Memory<W>::page_number(stack + stksize);
 	Latch latch{num_cpus};
 
 	// Create worker 0...N
 	for (unsigned id = 1; id <= num_cpus; id++)
 	{
 		const address_t sp = stack + stksize * id;
-		const address_t stackpage = Memory<W>::page_number(stack);
-		const address_t stackendpage = stackpage + Memory<W>::page_number(stksize);
 
 		if (do_fork == false) {
 			smp().async_work(
@@ -134,11 +134,9 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 		} else {
 			// Fork variant
 			smp().async_work(
-			[=, &latch] () -> unsigned {
+			[=] () -> unsigned {
 
 				Machine<W> fork { *this, { .cpu_id = id } };
-				// TODO: threads need to be accessed through the main VM
-				latch.arrive();
 
 				fork.set_userdata(this->get_userdata<void>());
 				fork.set_printer([] (const char*, size_t) {});
@@ -177,7 +175,16 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 		}
 	} // foreach CPU
 
-	latch.wait();
+	if (do_fork == false) {
+		// When not forking, we will only wait for the Machine forks
+		// to complete.
+		latch.wait();
+	} else {
+		// Immediately wait if we are forking everything
+		// We don't want the main vCPU to trample the stack that the workers
+		// may be relying on. It's perfectly safe to immediately wait.
+		multiprocess_wait();
+	}
 
 	return true;
 }
