@@ -26,12 +26,6 @@
 #define RISCV_PAGE_SIZE  4096
 #endif
 
-#ifdef RISCV_DEBUG
-# ifndef RISCV_MEMORY_TRAPS_ENABLED
-#   define RISCV_MEMORY_TRAPS_ENABLED
-# endif
-#endif
-
 #ifndef RISCV_RODATA_SEGMENT_IS_SHARED
 #define RISCV_RODATA_SEGMENT_IS_SHARED 1
 #endif
@@ -47,11 +41,7 @@ namespace riscv
 
 	static constexpr int PageSize = RISCV_PAGE_SIZE;
 
-#ifdef RISCV_MEMORY_TRAPS_ENABLED
 	static constexpr bool memory_traps_enabled = true;
-#else
-	static constexpr bool memory_traps_enabled = false;
-#endif
 
 #ifdef RISCV_DEBUG
 	static constexpr bool debugging_enabled = true;

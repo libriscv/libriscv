@@ -112,7 +112,8 @@ namespace riscv
 		// Page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(address_t page, Args&& ...);
-		void  invalidate_cache(address_t pageno = -1, Page* = nullptr);
+		void  invalidate_cache(address_t pageno, Page*) const;
+		void  invalidate_reset_cache() const;
 		void  free_pages(address_t, size_t len);
 		// Page fault when writing to unused memory
 		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
@@ -168,8 +169,8 @@ namespace riscv
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);
-		const Page& cached_readable_page(address_t) const;
-		Page& cached_writable_page(address_t);
+		const PageData& cached_readable_page(address_t, size_t) const;
+		PageData& cached_writable_page(address_t);
 		// Helpers
 		template <typename T>
 		static void foreach_helper(T& mem, address_t addr, size_t len,
@@ -204,8 +205,8 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
-		mutable CachedPage<W, const Page> m_rd_cache;
-		mutable CachedPage<W, Page> m_wr_cache;
+		mutable CachedPage<W, const PageData> m_rd_cache;
+		mutable CachedPage<W, PageData> m_wr_cache;
 
 #ifdef RISCV_USE_RH_HASH
 		robin_hood::unordered_map<address_t, Page> m_pages;

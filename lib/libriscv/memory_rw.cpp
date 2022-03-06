@@ -50,8 +50,8 @@ namespace riscv
 			}
 			pageno ++;
 		}
-		// invalidate all cached pages, because references are invalidated
-		this->invalidate_cache();
+		// TODO: This can be improved by invalidating matches only
+		this->invalidate_reset_cache();
 	}
 
 	template <int W>
@@ -110,8 +110,8 @@ namespace riscv
 			std::forward_as_tuple(pageno),
 			std::forward_as_tuple(attr, const_cast<PageData*> (shared_page.m_page.get()))
 		);
-		// invalidate all cached pages, because references are invalidated
-		this->invalidate_cache();
+		// TODO: Can be improved by invalidating more intelligently
+		this->invalidate_reset_cache();
 		// try overwriting instead, if emplace failed
 		if (res.second == false) {
 			Page& page = res.first->second;
@@ -138,8 +138,8 @@ namespace riscv
 				std::forward_as_tuple(attr, pdata)
 			);
 		}
-		// invalidate all cached pages, because references are invalidated
-		this->invalidate_cache();
+		// TODO: Can be improved by invalidating more intelligently
+		this->invalidate_reset_cache();
 	}
 
 	template <int W> void

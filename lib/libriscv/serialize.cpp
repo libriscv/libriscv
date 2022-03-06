@@ -157,7 +157,7 @@ namespace riscv
 			off += Page::size();
 		}
 		// page tables have been changed
-		this->invalidate_cache();
+		this->invalidate_reset_cache();
 	}
 
 	template struct Machine<4>;

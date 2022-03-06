@@ -57,6 +57,16 @@ static void run_program(
 	}
 
 	/*
+	machine.memory.trap(0x3FFFD000,
+		[&machine] (riscv::Page& page, uint32_t off, int mode, int64_t val)
+		{
+			if (mode & riscv::TRAP_WRITE) {
+				printf("> write: 0x%X -> 0x%X (%u)\n", off, (int) val, (int) val);
+			} else {
+				printf("> read: 0x%X -> %d\n", off, page.page().aligned_read<uint32_t> (off));
+			}
+			machine.print_and_pause();
+		});
 	machine.cpu.breakpoint(machine.address_of("main"));
 	machine.cpu.breakpoint(0x10730);
 	machine.cpu.breakpoint(0x5B540, //0x5B518,
@@ -67,32 +77,6 @@ static void run_program(
 			cpu.machine().print_and_pause();
 		});
 
-	machine.memory.trap(0x3FFFD000,
-		[&machine] (riscv::Page& page, uint32_t off, int mode, int64_t val) -> int64_t
-		{
-			if (off == 0xC3C) {
-				if (mode & riscv::TRAP_WRITE) {
-					printf("> write: 0x%X -> 0x%X (%u)\n", off, (int) val, (int) val);
-				} else {
-					printf("> read: 0x%X -> %d\n", off, page.aligned_read<uint32_t> (off));
-				}
-				machine.print_and_pause();
-			}
-			return page.passthrough(off, mode, val);
-		});
-
-
-	machine.memory.trap(0x3FFFE000,
-		[&machine] (riscv::Page& page, uint32_t off, int mode, int64_t val) -> int64_t
-		{
-			if (mode & riscv::TRAP_WRITE) {
-				printf("> 0x3fffe write: 0x%X -> 0x%X (%c)\n", off, (int) val, (char) val);
-			}
-			//machine.print_and_pause();
-			//machine.verbose_registers = true;
-			machine.verbose_instructions = true;
-			return page.passthrough(off, mode, val);
-		});
 	machine.verbose_instructions = true;
 	machine.verbose_jumps = true;
 	machine.verbose_registers = true;

@@ -394,7 +394,7 @@ namespace riscv
 		this->m_ropages.pages.reset(master.memory.m_ropages.pages.get());
 #endif
 		// invalidate all cached pages, because references are invalidated
-		this->invalidate_cache();
+		this->invalidate_reset_cache();
 	}
 
 	template <int W>

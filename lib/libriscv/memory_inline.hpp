@@ -4,72 +4,70 @@ template <int W>
 template <typename T> inline
 T Memory<W>::read(address_t address)
 {
-	const auto& page = cached_readable_page(address);
-
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-	if constexpr (memory_traps_enabled) {
-		if (UNLIKELY(page.has_trap())) {
-			return page.trap(address & (Page::size()-1), sizeof(T) | TRAP_READ, 0);
-		}
-	}
-#endif
-	return page.template aligned_read<T>(address & (Page::size()-1));
+	const auto& pagedata = cached_readable_page(address, sizeof(T));
+	return pagedata.template aligned_read<T>(address & (Page::size()-1));
 }
 
 template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
-	auto& page = cached_writable_page(address);
-
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-	if constexpr (memory_traps_enabled) {
-		if (UNLIKELY(page.has_trap())) {
-			page.trap(address & (Page::size()-1), sizeof(T) | TRAP_WRITE, value);
-			return;
-		}
-	}
-#endif
-	return page.template aligned_read<T>(address & (Page::size()-1));
+	auto& pagedata = cached_writable_page(address);
+	return pagedata.template aligned_read<T>(address & (Page::size()-1));
 }
 
 template <int W>
 template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
-	auto& page = cached_writable_page(address);
+	const auto pageno = page_number(address);
+	auto& entry = m_wr_cache;
+	if (entry.pageno == pageno) {
+		entry.page->template aligned_write<T>(address & (Page::size()-1), value);
+		return;
+	}
 
-#ifdef RISCV_PAGE_TRAPS_ENABLED
-	if constexpr (memory_traps_enabled) {
+	auto& page = create_writable_pageno(pageno);
+	if (LIKELY(page.attr.cacheable)) {
+		entry = {pageno, &page.page()};
+	} else if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
 			page.trap(address & (Page::size()-1), sizeof(T) | TRAP_WRITE, value);
-			return;
 		}
 	}
-#endif
-	page.template aligned_write<T>(address & (Page::size()-1), value);
+	page.page().template aligned_write<T>(address & (Page::size()-1), value);
 }
 
 template <int W> inline
-const Page& Memory<W>::cached_readable_page(address_t address) const
+const PageData& Memory<W>::cached_readable_page(address_t address, size_t len) const
 {
 	const auto pageno = page_number(address);
 	auto& entry = m_rd_cache;
 	if (entry.pageno == pageno)
 		return *entry.page;
-	entry = {pageno, &get_readable_pageno(pageno)};
-	return *entry.page;
+
+	auto& page = get_readable_pageno(pageno);
+	if (LIKELY(page.attr.cacheable)) {
+		entry = {pageno, &page.page()};
+	} else if constexpr (memory_traps_enabled) {
+		if (UNLIKELY(page.has_trap())) {
+			page.trap(address & (Page::size()-1), len | TRAP_READ, 0);
+		}
+	}
+	return page.page();
 }
 
 template <int W> inline
-Page& Memory<W>::cached_writable_page(address_t address)
+PageData& Memory<W>::cached_writable_page(address_t address)
 {
 	const auto pageno = page_number(address);
 	auto& entry = m_wr_cache;
 	if (entry.pageno == pageno)
 		return *entry.page;
-	entry = {pageno, &create_writable_pageno(pageno)};
-	return *entry.page;
+	auto& page = create_writable_pageno(pageno);
+	if (LIKELY(page.attr.cacheable))
+		entry = {pageno, &page.page()};
+	return page.page();
 }
 
 template <int W>
@@ -110,14 +108,21 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const
 }
 
 template <int W> inline void
-Memory<W>::invalidate_cache(address_t pageno, Page* page)
+Memory<W>::invalidate_cache(address_t pageno, Page* page) const
 {
-	// It is possible to keep the write page as long as the
-	// page tables are node-based. In that case, we only have
+	// NOTE: It is only possible to keep the write page as long as
+	// the page tables are node-based. In that case, we only have
 	// to invalidate the read page when it matches.
 	if (m_rd_cache.pageno == pageno) {
-		m_rd_cache.page = page;
+		m_rd_cache.pageno = (address_t)-1;
 	}
+	(void)page;
+}
+template <int W> inline void
+Memory<W>::invalidate_reset_cache() const
+{
+	m_rd_cache.pageno = (address_t)-1;
+	m_wr_cache.pageno = (address_t)-1;
 }
 
 template <int W>
@@ -128,10 +133,9 @@ Page& Memory<W>::allocate_page(const address_t page, Args&&... args)
 		std::forward_as_tuple(page),
 		std::forward_as_tuple(std::forward<Args> (args)...)
 	);
-	// invalidate all cached pages, because references are invalidated
-	// prediction: we are going to use this page for reading and writing
+	// Invalidate only this page
 	this->invalidate_cache(page, &it.first->second);
-	// return new page
+	// Return new default-writable page
 	return it.first->second;
 }
 
@@ -148,13 +152,14 @@ inline size_t Memory<W>::owned_pages_active() const noexcept
 template <int W>
 inline void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 {
-#ifdef RISCV_PAGE_TRAPS_ENABLED
+	// This can probably be improved, but this will force-create
+	// a page if it doesn't exist. At least this way the trap will
+	// always work. Less surprises this way.
 	auto& page = create_writable_pageno(page_number(page_addr));
+	// Disabling caching will force the slow-path for the page,
+	// and enables page traps when RISCV_DEBUG is enabled.
+	page.attr.cacheable = false;
 	page.set_trap(callback);
-#else
-	(void) page_addr;
-	(void) callback;
-#endif
 }
 
 template <int W>
