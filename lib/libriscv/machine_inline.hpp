@@ -32,7 +32,7 @@ inline void Machine<W>::print(const char* buffer, size_t len) const
 	this->m_printer(buffer, len);
 }
 template <int W>
-inline long Machine<W>::stdin(const char* buffer, size_t len) const
+inline long Machine<W>::stdin(char* buffer, size_t len) const
 {
 	return this->m_stdin(buffer, len);
 }

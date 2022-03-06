@@ -144,14 +144,17 @@ static void syscall_read(Machine<W>& machine)
 	SYSPRINT("SYSCALL read, addr: 0x%lX, len: %zu\n", (long)address, len);
 	// We have special stdin handling
 	if (fd == 0) {
-		// Gather up to 64kb in pages we can read into
-		riscv::vBuffer buffers[16];
-		size_t cnt =
-			machine.memory.gather_buffers_from_range(16, buffers, address, len);
-		for (size_t i = 0; i < cnt; i++) {
-			machine.stdin(buffers[i].ptr, buffers[i].len);
+		// Arbitrary maximum read length
+		if (len > 1024 * 1024 * 16) {
+			machine.set_result(-ENOMEM);
+			return;
 		}
-		machine.set_result(len);
+		auto buffer = std::unique_ptr<char[]> (new char[len]);
+		long result = machine.stdin(buffer.get(), len);
+		if (result > 0) {
+			machine.copy_to_guest(address, buffer.get(), result);
+		}
+		machine.set_result(result);
 		return;
 	} else if (machine.has_file_descriptors()) {
 		const int real_fd = machine.fds().get(fd);

@@ -29,7 +29,7 @@ namespace riscv
 		using syscall_t = void(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address
 		using printer_func = std::function<void(const char*, size_t)>;
-		using stdin_func = std::function<long(const char*, size_t)>;
+		using stdin_func = std::function<long(char*, size_t)>;
 
 		// See common.hpp for MachineOptions
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
@@ -148,7 +148,7 @@ namespace riscv
 		auto& get_printer() const noexcept { return m_printer; }
 		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
 		// Stdin
-		long stdin(const char*, size_t) const;
+		long stdin(char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
 		void set_stdin(stdin_func sin) { m_stdin = std::move(sin); }
 		// Debug printer

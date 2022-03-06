@@ -9,20 +9,23 @@
 #include <random>
 extern "C" {
 	ssize_t write(int fd, const void *buf, size_t count);
+	ssize_t read(int fd, void *buf, size_t count);
 }
 
 namespace riscv
 {
+	static void default_printer_function(const char* buffer, size_t len) {
+		::write(1, buffer, len);
+	}
+	static long default_stdin_function(char* buffer, size_t len) {
+		return ::read(0, buffer, len);
+	}
 	template <int W>
-	typename Machine<W>::printer_func Machine<W>::m_default_printer =
-		[] (const char* buffer, size_t len) {
-			write(1, buffer, len);
-		};
+	typename Machine<W>::printer_func Machine<W>::m_default_printer
+		= default_printer_function;
 	template <int W>
-	typename Machine<W>::stdin_func Machine<W>::m_default_stdin =
-		[] (const char*, size_t) -> long {
-			return 0;
-		};
+	typename Machine<W>::stdin_func Machine<W>::m_default_stdin
+		= default_stdin_function;
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
