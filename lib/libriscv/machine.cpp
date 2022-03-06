@@ -18,6 +18,11 @@ namespace riscv
 		[] (const char* buffer, size_t len) {
 			write(1, buffer, len);
 		};
+	template <int W>
+	typename Machine<W>::stdin_func Machine<W>::m_default_stdin =
+		[] (const char*, size_t) -> long {
+			return 0;
+		};
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)

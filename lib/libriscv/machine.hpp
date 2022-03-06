@@ -29,6 +29,7 @@ namespace riscv
 		using syscall_t = void(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address
 		using printer_func = std::function<void(const char*, size_t)>;
+		using stdin_func = std::function<long(const char*, size_t)>;
 
 		// See common.hpp for MachineOptions
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
@@ -147,9 +148,9 @@ namespace riscv
 		auto& get_printer() const noexcept { return m_printer; }
 		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
 		// Stdin
-		void stdin(const char*, size_t) const;
+		long stdin(const char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
-		void set_stdin(printer_func sin) { m_stdin = std::move(sin); }
+		void set_stdin(stdin_func sin) { m_stdin = std::move(sin); }
 		// Debug printer
 		void debug_print(const char*, size_t) const;
 		auto& get_debug_printer() const noexcept { return m_debug_printer; }
@@ -240,7 +241,7 @@ namespace riscv
 		void*        m_userdata = nullptr;
 		printer_func m_printer = m_default_printer;
 		printer_func m_debug_printer = m_default_printer;
-		printer_func m_stdin = [] (const char*, size_t) {};
+		stdin_func   m_stdin = m_default_stdin;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
 		std::unique_ptr<FileDescriptors> m_fds;
@@ -249,6 +250,7 @@ namespace riscv
 		const unsigned m_multiprocessing_workers;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;
+		static stdin_func   m_default_stdin;
 	};
 
 #include "machine_inline.hpp"
