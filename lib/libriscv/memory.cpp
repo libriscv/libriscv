@@ -233,7 +233,7 @@ namespace riscv
 		const address_t postlen = Page::size() - lastpage_len;
 		// The total length should be a page-sized length
 		const address_t total_len = prelen + size + postlen;
-		assert((total_len & ~PSIZEMASK) == 0);
+		assert((total_len & ~PSIZEMASK) == total_len);
 
 		// Create the first and last page
 		// TODO: Make this a PageData struct for alignment guarantees
