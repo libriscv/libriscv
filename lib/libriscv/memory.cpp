@@ -362,6 +362,8 @@ namespace riscv
 		for (const auto& it : master.memory.pages())
 		{
 			const auto& page = it.second;
+			// Skip pages marked as dont_fork
+			if (page.attr.dont_fork) continue;
 			// Make every page non-owning
 			auto attr = page.attr;
 			if (attr.write) {
