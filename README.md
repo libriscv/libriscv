@@ -18,9 +18,10 @@ One motivation when writing this emulator was to use it in a game engine, and so
 
 [Lua 5.4 benchmarks](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
 
-[LuaJIT benchmarks](https://gist.github.com/fwsGonzo/d7ee7acb52b11ef5a51982d5b46734ca)
+[LuaJIT vs Interpreted RISC-V](https://gist.github.com/fwsGonzo/d7ee7acb52b11ef5a51982d5b46734ca)
 
-As we can see, for this purpose the compiled code is faster.
+[LuaJIT vs Binary Translated RISC-V](https://gist.github.com/fwsGonzo/c77befe81c5957b87b96726e98466946)
+
 
 ## Installing a RISC-V GCC compiler
 
