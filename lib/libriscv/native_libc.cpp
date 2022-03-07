@@ -105,13 +105,13 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		const auto dst = machine.template sysarg<address_type<W>>(0);
 		const auto& arena = machine.arena();
 		struct Result {
-			const uint32_t bf;
-			const uint32_t bu;
-			const uint32_t cu;
+			const address_type<W> bf;
+			const address_type<W> bu;
+			const address_type<W> cu;
 		} result = {
-			.bf = (uint32_t) arena.bytes_free(),
-			.bu = (uint32_t) arena.bytes_used(),
-			.cu = (uint32_t) arena.chunks_used()
+			.bf = (address_type<W>) arena.bytes_free(),
+			.bu = (address_type<W>) arena.bytes_used(),
+			.cu = (address_type<W>) arena.chunks_used()
 		};
 		int ret = (dst != 0) ? 0 : -1;
 		HPRINT("SYSCALL meminfo(0x%X) = %d\n", dst, ret);
