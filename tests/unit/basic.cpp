@@ -1,17 +1,18 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <libriscv/machine.hpp>
-extern std::vector<uint8_t> build_and_load(const std::string& code);
+extern std::vector<uint8_t> build_and_load(
+	const std::string& code, const std::string& args = "-O2 -static");
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
 
-TEST_CASE("Instantiate machines", "[Instantiate]")
+TEST_CASE("Instantiate machine", "[Instantiate]")
 {
 	const auto binary = build_and_load(R"M(
-int main() {
-	return 666;
-})M");
+	int main() {
+		return 666;
+	})M");
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 
 	// The stack is usually set to under the program area
@@ -21,15 +22,43 @@ int main() {
 	REQUIRE(machine.memory.start_address() > 0x10000);
 }
 
+TEST_CASE("Instantiate machine using shared ELF", "[Instantiate]")
+{
+	REQUIRE_THROWS([] {
+		const auto binary = build_and_load(R"M(
+		int main() {
+			return 666;
+		})M", "-shared");
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.simulate(MAX_INSTRUCTIONS);
+	}());
+}
+
+TEST_CASE("Execute minimal machine", "[Minimal]")
+{
+	const auto binary = build_and_load(R"M(
+	__asm__(".global _start\n"
+	"_start:\n"
+	"	li a0, 666\n"
+	"	li a7, 1\n"
+	"	ecall\n");
+	)M", "-static -ffreestanding -nostartfiles");
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.install_syscall_handler(1,
+		[] (auto& machine) { machine.stop(); });
+	machine.simulate(3);
+	REQUIRE(machine.return_value<int>() == 666);
+}
+
 TEST_CASE("Catch output from write system call", "[Output]")
 {
 	bool output_is_hello_world = false;
 	const auto binary = build_and_load(R"M(
-extern long write(int, const void*, unsigned long);
-int main() {
-	write(1, "Hello World!", 12);
-	return 666;
-})M");
+	extern long write(int, const void*, unsigned long);
+	int main() {
+		write(1, "Hello World!", 12);
+		return 666;
+	})M");
 
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	// We need to install Linux system calls for maximum gucciness

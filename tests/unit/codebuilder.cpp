@@ -8,9 +8,9 @@ static constexpr bool VERBOSE_COMPILER = true;
 static const std::string DEFAULT_COMPILER = "riscv64-linux-gnu-gcc-10";
 
 std::string compile_command(const std::string& cc,
-	const std::string& outfile, const std::string& codefile)
+	const std::string& args, const std::string& outfile)
 {
-	return cc + " -O2 -static -std=c11 -x c -o " + outfile + " " + codefile;
+	return cc + " -std=c11 -x c -o " + outfile + " " + args;
 }
 std::string env_with_default(const char* var, const std::string& defval) {
 	std::string value = defval;
@@ -38,7 +38,7 @@ std::vector<uint8_t> load_file(const std::string& filename)
 	return result;
 }
 
-std::vector<uint8_t> build_and_load(const std::string& code)
+std::vector<uint8_t> build_and_load(const std::string& code, const std::string& args)
 {
 	// Create temporary filenames for code and binary
 	char code_filename[64];
@@ -57,12 +57,14 @@ std::vector<uint8_t> build_and_load(const std::string& code)
 	}
 	// Compile code to binary file
 	char bin_filename[256];
-	const uint32_t checksum = crc32(code.c_str(), code.size());
+	const uint32_t code_checksum = crc32(code.c_str(), code.size());
+	const uint32_t final_checksum = crc32(code_checksum, args.c_str(), args.size());
 	(void)snprintf(bin_filename, sizeof(bin_filename),
-		"/tmp/binary-%08X", checksum);
+		"/tmp/binary-%08X", final_checksum);
 
 	auto cc = env_with_default("cc", DEFAULT_COMPILER);
-	auto command = compile_command(cc, bin_filename, code_filename);
+	auto command = compile_command(cc,
+		std::string(code_filename) + " " + args, bin_filename);
 	if constexpr (VERBOSE_COMPILER) {
 		printf("Command: %s\n", command.c_str());
 	}
