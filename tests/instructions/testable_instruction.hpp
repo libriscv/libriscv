@@ -21,15 +21,15 @@ namespace riscv
 	{
 		static const address_type<W> MEMBASE = 0x1000;
 		// create page, make it executable
-		auto& page = machine.memory.create_page(MEMBASE >> Page::SHIFT);
+		auto& page = machine.memory.create_writable_pageno(MEMBASE >> Page::SHIFT);
 		page.attr.exec = true;
 		page.attr.read = true; // needed for debugging
 		// jump to beginning of page, write instruction
 		machine.cpu.jump(MEMBASE);
-		page.template aligned_write<uint32_t> (MEMBASE & (Page::size()-1), insn.bits);
+		page.page().template aligned_write<uint32_t> (MEMBASE & (Page::size()-1), insn.bits);
 		// execute instruction
 		machine.cpu.reg(insn.reg) = insn.initial_value;
-		machine.simulate(1);
+		machine.cpu.step_one();
 		// call instruction validation callback
 		if ( callback(machine.cpu, insn) ) return true;
 		fprintf(stderr, "Failed test: %s on iteration %d\n", insn.name, insn.index);

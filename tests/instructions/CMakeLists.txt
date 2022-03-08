@@ -3,7 +3,7 @@ project(riscv CXX)
 
 option(RISCV_DEBUG "" ON)
 option(RISCV_ICACHE "" OFF)
-add_subdirectory(../lib lib)
+add_subdirectory(../../lib lib)
 target_compile_options(riscv PUBLIC -g -Wall -Wextra -Wno-unused)
 
 set(SOURCES
@@ -16,7 +16,6 @@ set(SOURCES
 
 add_executable(tests ${SOURCES})
 target_link_libraries(tests riscv)
-set_target_properties(tests PROPERTIES CXX_STANDARD 17)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	target_link_libraries(tests --rtlib=compiler-rt -lgcc_s)

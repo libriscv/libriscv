@@ -5,7 +5,7 @@ using namespace riscv;
 #define assert_mem(m, type, addr, value) \
 		assert(m.memory.template read<type> (addr) == value)
 
-static const std::vector<uint32_t> instructions =
+static const std::array<uint32_t, 4> instructions =
 {
 	0x00065637, // lui     a2,0x65
 	0x000655b7, // lui     a1,0x65
@@ -19,10 +19,9 @@ void test_rv32i()
 		.memory_max = 65536
 	} };
 	// install instructions
-	const size_t bytes = sizeof(instructions[0]) * instructions.size();
-	m.copy_to_guest(0x1000, instructions.data(), bytes);
+	m.copy_to_guest(0x1000, instructions.data(), sizeof(instructions));
 	// make the instructions readable & executable
-	m.memory.set_page_attr(0x1000, bytes, {
+	m.memory.set_page_attr(0x1000, Page::size(), {
 		 .read = true, .write = false, .exec = true
 	});
 	m.cpu.jump(0x1000);
@@ -32,17 +31,17 @@ void test_rv32i()
 	const uint32_t current_sp = m.cpu.reg(REG_SP);
 
 	// execute LUI a2, 0x65000
-	m.simulate(1);
+	m.cpu.step_one();
 	assert(m.cpu.reg(REG_ARG2) == 0x65000);
 	// execute LUI a1, 0x65000
-	m.simulate(1);
+	m.cpu.step_one();
 	assert(m.cpu.reg(REG_ARG1) == 0x65000);
 	// execute SW  s6, [SP + 256]
 	m.cpu.reg(22) = 0x12345678;
-	m.simulate(1);
+	m.cpu.step_one();
 	assert_mem(m, uint32_t, current_sp + 256, m.cpu.reg(22));
 	// execute ADDI s6, [SP + 180]
 	m.cpu.reg(22) = 0x0;
-	m.simulate(1);
+	m.cpu.step_one();
 	assert(m.cpu.reg(22) == current_sp + 180);
 }
