@@ -202,7 +202,7 @@ namespace riscv
 		// This will make sure we can do one step while still preserving
 		// the max instructions that we had before. If the machine is stopped
 		// the old count is not preserved.
-		this->simulate(machine().instruction_counter() + 1);
+		this->simulate(1);
 	}
 
 	template<int W> __attribute__((cold))
