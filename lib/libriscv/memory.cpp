@@ -274,11 +274,17 @@ namespace riscv
 	void Memory<W>::binary_loader(const MachineOptions<W>& options)
 	{
 		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
-			throw std::runtime_error("ELF binary too short");
+			throw std::runtime_error("ELF program too short");
 		}
 		const auto* elf = (Ehdr*) m_binary.data();
 		if (UNLIKELY(!validate_header<Ehdr> (elf))) {
 			throw std::runtime_error("Invalid ELF header! Mixup between 32- and 64-bit?");
+		}
+		if (UNLIKELY(elf->e_type != ET_EXEC)) {
+			throw std::runtime_error("ELF program is not an executable type. Trying to load a dynamic library?");
+		}
+		if (UNLIKELY(elf->e_machine != EM_RISCV)) {
+			throw std::runtime_error("ELF program is not a RISC-V executable. Wrong architecture.");
 		}
 
 		// enumerate & load loadable segments
@@ -286,7 +292,7 @@ namespace riscv
 		if (UNLIKELY(program_headers <= 0)) {
 			throw std::runtime_error("ELF with no program-headers");
 		}
-		if (UNLIKELY(program_headers >= 10)) {
+		if (UNLIKELY(program_headers >= 16)) {
 			throw std::runtime_error("ELF with too many program-headers");
 		}
 		if (UNLIKELY(elf->e_phoff > 0x4000)) {
@@ -325,8 +331,7 @@ namespace riscv
 					seg++;
 					break;
 				case PT_GNU_STACK:
-					//printf("GNU_STACK: 0x%X\n", hdr->p_vaddr);
-					this->m_stack_address = hdr->p_vaddr; // ??
+					// This seems to be a mark for executable stack. Big NO!
 					break;
 				case PT_GNU_RELRO:
 					//throw std::runtime_error(
