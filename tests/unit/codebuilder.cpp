@@ -64,7 +64,7 @@ std::vector<uint8_t> build_and_load(const std::string& code, const std::string& 
 
 	auto cc = env_with_default("cc", DEFAULT_COMPILER);
 	auto command = compile_command(cc,
-		std::string(code_filename) + " " + args, bin_filename);
+		args + " " + std::string(code_filename), bin_filename);
 	if constexpr (VERBOSE_COMPILER) {
 		printf("Command: %s\n", command.c_str());
 	}

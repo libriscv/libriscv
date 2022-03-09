@@ -81,3 +81,32 @@ TEST_CASE("Catch output from write system call", "[Output]")
 	// and the data matched 'Hello World!'.
 	REQUIRE(output_is_hello_world);
 }
+
+TEST_CASE("Calculate fib(50)", "[Compute]")
+{
+	const auto binary = build_and_load(R"M(
+	#include <stdlib.h>
+	long fib(long n, long acc, long prev)
+	{
+		if (n < 1)
+			return acc;
+		else
+			return fib(n - 1, prev + acc, acc);
+	}
+	long main(int argc, char** argv) {
+		const long n = atoi(argv[1]);
+		return fib(n, 0, 1);
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// We need to install Linux system calls for maximum gucciness
+	machine.setup_linux_syscalls();
+	// We need to create a Linux environment for runtimes to work well
+	machine.setup_linux(
+		{"basic", "50"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	// Run for at most 4 seconds before giving up
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	REQUIRE(machine.return_value<long>() == 12586269025L);
+}
