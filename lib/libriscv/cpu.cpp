@@ -202,7 +202,10 @@ namespace riscv
 		// This will make sure we can do one step while still preserving
 		// the max instructions that we had before. If the machine is stopped
 		// the old count is not preserved.
+		auto old_maxi = machine().max_instructions();
 		this->simulate(1);
+		if (machine().max_instructions() != 0)
+			machine().set_max_instructions(old_maxi);
 	}
 
 	template<int W> __attribute__((cold))
