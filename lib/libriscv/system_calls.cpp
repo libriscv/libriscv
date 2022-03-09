@@ -816,6 +816,9 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// 80: fstat
 	this->install_syscall_handler(80, syscall_fstat<W>);
 
+	// 94: exit_group (single-threaded)
+	this->install_syscall_handler(94, syscall_exit<W>);
+
 	// nanosleep
 	this->install_syscall_handler(101, syscall_stub_zero<W>);
 	// clock_gettime
