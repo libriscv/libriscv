@@ -1,0 +1,33 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CC: riscv64-linux-gnu-gcc-10
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    working-directory: ${{github.workspace}}/tests/unit
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt install -y gcc-10-riscv64-linux-gnu
+        git submodule update --init ${{github.workspace}}/tests/Catch2
+
+    - name: Configure
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build the unittests
+      run: cmake --build ${{github.workspace}}/build
+
+    - name: Run tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest --verbose .
