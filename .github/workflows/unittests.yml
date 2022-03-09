@@ -12,7 +12,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    working-directory: ${{github.workspace}}/tests/unit
+    defaults:
+      run:
+        working-directory: ${{github.workspace}}/tests/unit
 
     steps:
     - uses: actions/checkout@v2
