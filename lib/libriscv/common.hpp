@@ -41,7 +41,11 @@ namespace riscv
 
 	static constexpr int PageSize = RISCV_PAGE_SIZE;
 
+#ifdef RISCV_MEMORY_TRAPS
 	static constexpr bool memory_traps_enabled = true;
+#else
+	static constexpr bool memory_traps_enabled = false;
+#endif
 
 #ifdef RISCV_DEBUG
 	static constexpr bool debugging_enabled = true;
