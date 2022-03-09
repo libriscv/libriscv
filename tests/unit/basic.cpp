@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <libriscv/machine.hpp>
 extern std::vector<uint8_t> build_and_load(
@@ -50,6 +51,51 @@ TEST_CASE("Execute minimal machine", "[Minimal]")
 	REQUIRE(machine.return_value<int>() == 666);
 }
 
+TEST_CASE("Execution timeout", "[Minimal]")
+{
+	const auto binary = build_and_load(R"M(
+	__asm__(".global _start\n"
+	"_start:\n"
+	"	j _start\n");
+	)M", "-static -ffreestanding -nostartfiles");
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// Simulate 250k instructions before giving up
+	REQUIRE_THROWS_WITH([&] {
+		machine.simulate(250'000);
+	}(), Catch::Matchers::ContainsSubstring("limit reached"));
+}
+
+TEST_CASE("Verify program arguments and environment", "[Runtime]")
+{
+	const auto binary = build_and_load(R"M(
+	#include <string.h>
+	extern char* getenv(char*);
+	int main(int argc, char** argv) {
+		if (strcmp(argv[0], "program") != 0)
+			return -1;
+		if (strcmp(argv[1], "this is a test") != 0)
+			return -1;
+		if (strcmp(getenv("LC_ALL"), "C") != 0)
+			return -1;
+		if (strcmp(getenv("USER"), "root") != 0)
+			return -1;
+		return 666;
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// We need to install Linux system calls for maximum gucciness
+	machine.setup_linux_syscalls();
+	// We need to create a Linux environment for runtimes to work well
+	machine.setup_linux(
+		{"program", "this is a test"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	// Run for at most X instructions before giving up
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	REQUIRE(machine.return_value<int>() == 666);
+}
+
 TEST_CASE("Catch output from write system call", "[Output]")
 {
 	bool output_is_hello_world = false;
@@ -72,7 +118,7 @@ TEST_CASE("Catch output from write system call", "[Output]")
 		std::string text{data, data + size};
 		output_is_hello_world = (text == "Hello World!");
 	});
-	// Run for at most 4 seconds before giving up
+	// Run for at most X instructions before giving up
 	machine.simulate(MAX_INSTRUCTIONS);
 
 	REQUIRE(machine.return_value<int>() == 666);
@@ -105,7 +151,7 @@ TEST_CASE("Calculate fib(50)", "[Compute]")
 	machine.setup_linux(
 		{"basic", "50"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
-	// Run for at most 4 seconds before giving up
+	// Run for at most X instructions before giving up
 	machine.simulate(MAX_INSTRUCTIONS);
 
 	REQUIRE(machine.return_value<long>() == 12586269025L);
