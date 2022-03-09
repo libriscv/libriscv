@@ -99,6 +99,7 @@ private:
 	void handle_breakpoint();
 	void handle_continue();
 	void handle_step();
+	void handle_exception(const std::exception&);
 	void handle_executing();
 	void handle_multithread();
 	void handle_readmem();
@@ -444,11 +445,13 @@ void RSPClient<W>::handle_continue()
 				break;
 			n--;
 		}
+		// Break reasons
+		if (n == 0 || m_machine->stopped() || m_machine->cpu.pc() == this->m_bp) {
+			send("S05");
+			return;
+		}
 	} catch (const std::exception& e) {
-		// Is this the right thing to do?
-		m_machine->stop();
-		fprintf(stderr, "Exception: %s\n", e.what());
-		send("S01");
+		handle_exception(e);
 		return;
 	}
 	report_status();
@@ -460,15 +463,24 @@ void RSPClient<W>::handle_step()
 		if (!m_machine->stopped()) {
 			m_machine->cpu.step_one();
 		} else {
-			send("S00");
+			send("S01");
 			return;
 		}
 	} catch (const std::exception& e) {
-		fprintf(stderr, "Exception: %s\n", e.what());
-		send("S01");
+		handle_exception(e);
 		return;
 	}
 	report_status();
+}
+template <int W>
+void RSPClient<W>::handle_exception(const std::exception& e)
+{
+	char buffer[1024];
+	int len = snprintf(buffer, sizeof(buffer), "Exception: %s\n", e.what());
+	m_machine->debug_print(buffer, len);
+	// Is this the right thing to do?
+	m_machine->stop();
+	send("S01");
 }
 template <int W>
 void RSPClient<W>::handle_breakpoint()
