@@ -8,10 +8,9 @@ option(NATIVE      "Enable native instructions" OFF)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(STATIC_BUILD "Build a static executable" OFF)
 
-option(RISCV_EXT_A "" OFF)
+option(RISCV_DEBUG "" ON)
 option(RISCV_EXT_C "" OFF)
 add_subdirectory(../../lib lib)
-target_compile_options(riscv PUBLIC -O2 -Wall -Wextra)
 
 set(SOURCES
 	src/main.cpp
@@ -46,8 +45,6 @@ function (add_emulator NAME)
 	add_executable(${NAME} ${SOURCES})
 	target_link_libraries(${NAME} riscv)
 	set_target_properties(${NAME} PROPERTIES CXX_STANDARD 17)
-	message(STATUS "ARGN is ${ARGN}")
-	target_compile_definitions(${NAME} PRIVATE ${ARGN})
 
 	if (LTO)
 		set_property(TARGET ${NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)

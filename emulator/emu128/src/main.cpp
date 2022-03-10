@@ -44,7 +44,9 @@ int main(int argc, const char** argv)
 	   instruction counter reaches the given limit (1M): */
 	try {
 #ifdef RISCV_DEBUG
-		machine.verbose_instructions = true;
+		if (getenv("DEBUG")) {
+			machine.verbose_instructions = true;
+		}
 		//machine.verbose_registers = true;
 #endif
 		machine.simulate(1'000'000);
