@@ -103,7 +103,7 @@ if constexpr (SCAN_FOR_GP) {
 	}
 #ifdef BINTR_TIMING
 	TIME_POINT(t1);
-	printf(">> GP scan took %ld ns\n", nanodiff(t0, t1));
+	printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(t0, t1), (long)gp);
 #endif
 } // SCAN_FOR_GP
 
@@ -366,7 +366,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 #ifdef BINTR_TIMING
 	TIME_POINT(t12);
 	printf(">> Activating binary translation took %ld ns\n", nanodiff(t11, t12));
-	printf(">> Bintr totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
+	printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
 #endif
 }
 
