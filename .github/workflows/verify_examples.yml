@@ -34,6 +34,8 @@ jobs:
     - name: Build the linux64 example program
       run: cmake --build ${{github.workspace}}/build_linux64
 
-    - name: Run test
+    - name: Run linux64 example program
       working-directory: ${{github.workspace}}/build_emu
-      run: ./rvlinux ${{github.workspace}}/build_linux64/hello_world
+      run: |
+        ./rvlinux ${{github.workspace}}/build_linux64/hello_world > output.log
+        if ! grep -q "SUCCESS" "output.log"; then cat "output.log"; exit 1; fi
