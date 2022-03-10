@@ -1,0 +1,39 @@
+name: Verify example programs
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt install -y gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
+
+    - name: Configure emulator
+      env:
+        CC: clang-12
+        CXX: clang++-12
+      run: cmake emulator -B ${{github.workspace}}/build_emu -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Configure linux64
+      env:
+        CC: riscv64-linux-gnu-gcc-10
+        CXX: riscv64-linux-gnu-g++-10
+      run: cmake binaries/linux64 -B ${{github.workspace}}/build_linux64 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build the emulator
+      run: cmake --build ${{github.workspace}}/build_emu
+
+    - name: Build the linux64 example program
+      run: cmake --build ${{github.workspace}}/build_linux64
+
+    - name: Run test
+      working-directory: ${{github.workspace}}/build_emu
+      run: ./rvlinux ${{github.workspace}}/build_linux64/hello_world
