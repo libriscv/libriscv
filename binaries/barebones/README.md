@@ -1,23 +1,20 @@
 Barebones RISC-V binary
 ===========================
 
-Has a tiny libc. Enough for simple optimized inline C++. `malloc` and `free` etc. is implemented as system calls for native performance.
+To run this you will have to use the _rvmicro emulator_. It activates a non-standard system call implementation specially made for these tiny binaries. It is intended to be usable for sandboxed C/C++ program execution.
 
-To run this you will have to disable newlib/linux options in the emulator:
-```
-	static constexpr bool full_linux_guest = false;
-	static constexpr bool newlib_mini_guest = false;
-```
-Which branches into this:
-```
-	setup_minimal_syscalls(state, machine);
-	setup_native_heap_syscalls(state, machine);
-```
-It activates a non-standard system call implementation made for these tiny binaries. Perhaps one day it will be usable for sandboxed C++ program execution.
+## Accelerated runtimes
+
+Has a tiny libc mode. Enough for simple optimized C++. If you enable newlib mode you will get a full standard library, except threads. In both modes functions like `malloc`, `free`, `memcpy`, `memcmp`, `strlen` and many others are implemented as system calls for better performance. The tiny libc is a bit of a mess but it can easily be improved upon as the barebones C standard functions are easy to implement.
+
+The linux64 program takes 11 milliseconds to complete on my machine. The barebones examples both take less than 2 milliseconds to complete, and they do a lot more work testing the multi-threading.
 
 Have a look at `libc/heap.hpp` for the syscall numbers and calling.
 
+## Tiny builds
 
-## Minimal build
+A minimal 32-bit tiny libc build with MINIMAL, LTO and GCSECTIONS enabled yields a _9.5kB binary_ that uses 260kB memory.
 
-A minimal build with MINIMAL and LTO enabled yields a 4792b binary that uses 28kB memory.
+A minimal 64-bit Newlib build with MINIMAL, LTO and GCSECTIONS enabled yields a _284kB binary_ that uses 196kB memory.
+
+The reason for the difference in memory use is likely that newlib puts more things in .rodata which is heavily optimized in the emulator. Most rodata pages re-use the binary instead of duplicating the data, and it doesn't count towards the memory usage for various reasons. rodata is shared between all forks of the machine, and it makes sense to not count memory that is only required for the main VM.

@@ -3,27 +3,42 @@ project(hello_world C CXX)
 
 option(MINIMAL     "Minimal build" ON)
 option(LTO         "Link-time optimizations" ON)
-option(GCSECTIONS  "Garbage collect empty sections" OFF)
-set(VERSION_FILE   "symbols.map" CACHE STRING "Retained symbols file")
+option(GCSECTIONS  "Garbage collect empty sections" ON)
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-	set(RISCV_ABI "-target riscv32 -march=rv32imfd -mabi=ilp32d")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+if (RISCV_ARCH STREQUAL "32")
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		set(RISCV_ABI "-target riscv32 -march=rv32imfd -mabi=ilp32d")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+	else()
+		set(RISCV_ABI "-march=rv32imfd -mabi=ilp32d")
+	endif()
 else()
-	set(RISCV_ABI "-march=rv32imfd -mabi=ilp32d")
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		set(RISCV_ABI "-target riscv64 -march=rv64imfd -mabi=ilp64d")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+	else()
+		set(RISCV_ABI "-march=rv64imfd -mabi=lp64d")
+	endif()
 endif()
 
 set(WARNINGS  "-Wall -Wextra")
-set(COMMON    "-O2 -fstack-protector -nostdlib -fno-builtin")
+set(COMMON    "-fstack-protector -fno-builtin")
+if (NOT LIBC_USE_STDLIB)
+	set(COMMON "${COMMON} -nostdlib")
+endif()
 set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
 set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON} -fno-exceptions -fno-rtti")
 
+# Priority: Debug > Minimal > Release
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -ggdb3")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -ggdb3")
 elseif (MINIMAL)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os -fno-stack-protector")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Os -fno-stack-protector")
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 endif()
 
 if (LTO)
@@ -35,19 +50,8 @@ if (GCSECTIONS)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-gc-sections")
-	file(STRINGS "${CMAKE_SOURCE_DIR}/${VERSION_FILE}" SYMBOLS)
-	foreach(SYMBOL ${SYMBOLS})
-		if (NOT ${SYMBOL} STREQUAL "")
-			message(STATUS "Symbol retained: ${SYMBOL}")
-			set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--undefined=${SYMBOL}")
-		endif()
-	endforeach()
 endif()
 
-
-set(SOURCES
-	src/hello_world.cpp
-)
 
 set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
@@ -55,9 +59,16 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
 add_subdirectory(ext)
 add_subdirectory(libc)
 
-add_executable(hello_world ${SOURCES})
-target_link_libraries(hello_world -static -Wl,--whole-archive libc -Wl,--no-whole-archive)
-# place ELF into the top binary folder
-set_target_properties(hello_world
-	PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+
+function (add_micro_executable NAME)
+	add_executable(${NAME} ${ARGN})
+	target_link_libraries(${NAME} -static -Wl,--whole-archive libc -Wl,--no-whole-archive)
+	# Place ELF binary into the top build folder
+	set_target_properties(${NAME}
+		PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+	)
+endfunction()
+
+add_micro_executable(hello_world
+	src/hello_world.cpp
 )
