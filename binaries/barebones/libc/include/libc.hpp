@@ -34,7 +34,7 @@ extern void  free(void*) _NOTHROW;
 #include "syscall.hpp"
 
 inline int sys_write(const void* data, size_t len) {
-	return syscall(SYSCALL_WRITE, 0, (long) data, len);
+	return syscall(SYSCALL_WRITE, 1, (long) data, len);
 }
 
 inline void put_string(const char* string)

@@ -5,11 +5,6 @@
 static struct _reent reent;
 struct _reent* _impure_ptr = &reent;
 
-// this is used for vmcalls
-asm(".global fastexit\n"
-	"fastexit:\n"
-	"\tebreak\n");
-
 extern "C" {
 	__attribute__((noreturn))
 	void _exit(int exitval) {
@@ -24,10 +19,10 @@ init_stdlib()
 {
 	_REENT_INIT_PTR_ZEROED(_impure_ptr);
 
-	// 2. enable printf facilities
+	// 2. Enable printf facilities
 	init_printf(NULL, __print_putchr);
 
-	// 4. call global C/C++ constructors
+	// 3. Call global C/C++ constructors
 	extern void(*__init_array_start [])();
 	extern void(*__init_array_end [])();
 	const int count = __init_array_end - __init_array_start;
@@ -41,13 +36,10 @@ void libc_start(int argc, char** argv)
 {
 	init_stdlib();
 
-	// call main() :)
+	// Call main() :)
 	extern int main(int, char**);
 	_exit(main(argc, argv));
 }
-
-__attribute__((weak))
-int main(int, char**) { return 0; }
 
 // 1. wrangle with argc and argc
 // 2. initialize the global pointer to __global_pointer

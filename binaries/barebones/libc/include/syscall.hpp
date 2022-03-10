@@ -1,10 +1,10 @@
 #pragma once
 
 #ifndef NATIVE_SYSCALLS_BASE
-#define NATIVE_SYSCALLS_BASE    1  /* They start at 1 */
+#define NATIVE_SYSCALLS_BASE    1  /* libc starts at 1 */
 #endif
 #ifndef THREAD_SYSCALLS_BASE
-#define THREAD_SYSCALLS_BASE  500  /* They start at 500 */
+#define THREAD_SYSCALLS_BASE   30  /* Threads start at 30 */
 #endif
 
 #define SYSCALL_MALLOC    (NATIVE_SYSCALLS_BASE+0)
