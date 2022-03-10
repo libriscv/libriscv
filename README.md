@@ -97,7 +97,7 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 The emulator currently supports RV32GC, RV64GC (IMAFDC) and RV128G.
 The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions), and there is a test-suite for these instructions, however they haven't been extensively tested as there are generally few FP-instructions in normal programs.
 
-The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emulator/emu128 folder.
+The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emu128 folder.
 
 Binary translation currently only supports RV32G and RV64G.
 
