@@ -339,6 +339,13 @@ namespace riscv
 					break;
 			}
 		}
+		// It's very easy for the stack address to wrap around during
+		// setup if we allow it to start this low. Instead, we set it
+		// to the end of the address space.
+		if (this->m_stack_address <= 0x20000) {
+			this->m_stack_address = (~(address_t)0) & (~(address_t)0xF);
+		}
+
 
 		//this->relocate_section(".rela.dyn", ".symtab");
 

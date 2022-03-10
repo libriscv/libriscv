@@ -46,8 +46,8 @@ static void run_program(
 	}
 	else if constexpr (micro_guest) {
 		machine.setup_argv(args);
-		machine.setup_native_heap(5, 0x40000000, 6*1024*1024);
-		machine.setup_native_memory(10, false);
+		machine.setup_native_heap(1, 0x40000000, 6*1024*1024);
+		machine.setup_native_memory(6);
 		machine.setup_native_threads(30);
 		machine.setup_minimal_syscalls();
 	}
@@ -154,10 +154,14 @@ int main(int argc, const char** argv)
 	const auto binary = load_file(filename);
 	assert(binary.size() >= 64);
 
-	if (binary[4] == ELFCLASS64)
-		run_program<riscv::RISCV64> (binary, args);
-	else
-		run_program<riscv::RISCV32> (binary, args);
+	try {
+		if (binary[4] == ELFCLASS64)
+			run_program<riscv::RISCV64> (binary, args);
+		else
+			run_program<riscv::RISCV32> (binary, args);
+	} catch (const std::exception& e) {
+		printf("Exception: %s\n", e.what());
+	}
 
 	return 0;
 }

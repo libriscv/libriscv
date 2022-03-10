@@ -185,7 +185,7 @@ namespace riscv
 		Arena& arena();
 		void setup_native_heap(size_t sysnum, uint64_t addr, size_t size);
 		// Optional custom memory-related system calls
-		void setup_native_memory(size_t sysnum, bool safe = true);
+		void setup_native_memory(size_t sysnum);
 
 		// System calls, files and threads implementations
 		bool has_file_descriptors() const noexcept { return m_fds != nullptr; }

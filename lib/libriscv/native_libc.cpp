@@ -143,7 +143,7 @@ void Machine<W>::setup_native_heap(size_t sysnum, uint64_t base, size_t max_memo
 }
 
 template <int W>
-void Machine<W>::setup_native_memory(const size_t syscall_base, bool /*trusted*/)
+void Machine<W>::setup_native_memory(const size_t syscall_base)
 {
 	this->install_syscall_handlers({
 		{syscall_base+0, [] (Machine<W>& m) {
