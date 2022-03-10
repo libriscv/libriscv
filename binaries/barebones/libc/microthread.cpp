@@ -19,11 +19,12 @@ namespace microthread
 	}
 
 	static Thread main_thread {nullptr};
-	__attribute__((constructor))
+	__attribute__((constructor, naked, used))
 	void init_threads()
 	{
-		main_thread.tid = 0;
-		asm("mv tp, %0" : : "r"(&main_thread) : "tp");
+		register long tp asm("tp");
+		asm volatile("mv %0, %1" : "=r"(tp) : "r"(&main_thread));
+		asm volatile("ret");
 	}
 }
 

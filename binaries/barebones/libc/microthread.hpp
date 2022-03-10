@@ -92,7 +92,7 @@ struct Thread
 
 	~Thread() {}
 
-	int   tid;
+	int tid = 0;
 	union {
 		long  return_value;
 		std::function<void()> startfunc;
