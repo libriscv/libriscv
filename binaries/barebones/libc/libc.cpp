@@ -2,9 +2,18 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+
 #ifdef NATIVE_MEM_SYSCALLS
+#define NATIVE_MEM_FUNCATTR __attribute__((noinline))
 #include <include/syscall.hpp>
+#define SYS_IARRAY *(const char(*)[size])
+#define SYS_OARRAY *(char(*)[size])
+#define SYS_IUARRAY *(const char*)
+#define SYS_OUARRAY *(char*)
+#else
+#define NATIVE_MEM_FUNCATTR /* */
 #endif
+
 #ifndef USE_NEWLIB
 extern "C" struct _reent* _impure_ptr;
 void* __dso_handle;
@@ -15,7 +24,7 @@ extern "C" int* __errno() {
 }
 #endif
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 void* memset(void* vdest, int ch, size_t size)
 {
 #ifndef NATIVE_MEM_SYSCALLS
@@ -24,10 +33,17 @@ void* memset(void* vdest, int ch, size_t size)
 		dest[i] = ch;
 	return dest;
 #else
-	return (void*) syscall(SYSCALL_MEMSET, (long) vdest, ch, size);
+	register void*   a0 asm("a0") = vdest;
+	register int     a1 asm("a1") = ch;
+	register size_t  a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMSET;
+
+	asm volatile ("ecall" : "=m"(SYS_OARRAY a0)
+		: "r"(a1), "r"(a2), "r"(syscall_id) : "memory");
+	return vdest;
 #endif
 }
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 void* memcpy(void* vdest, const void* vsrc, size_t size)
 {
 #ifndef NATIVE_MEM_SYSCALLS
@@ -35,12 +51,18 @@ void* memcpy(void* vdest, const void* vsrc, size_t size)
 	char* dest = (char*) vdest;
 	for (size_t i = 0; i < size; i++)
 		dest[i] = src[i];
-	return dest;
 #else
-	return (void*) syscall(SYSCALL_MEMCPY, (long) vdest, (long) vsrc, size);
+	register void*       a0 asm("a0") = vdest;
+	register const void* a1 asm("a1") = vsrc;
+	register size_t      a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMCPY;
+
+	asm volatile ("ecall" : "=m"(SYS_OARRAY a0)
+		: "m"(SYS_IARRAY a1), "r"(a2), "r"(syscall_id) : "memory");
 #endif
+	return vdest;
 }
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 void* memmove(void* vdest, const void* vsrc, size_t size)
 {
 #ifndef NATIVE_MEM_SYSCALLS
@@ -58,32 +80,69 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 	}
 	return dest;
 #else
-	return (void*) syscall(SYSCALL_MEMMOVE, (long) vdest, (long) vsrc, size);
+	register void*       a0 asm("a0") = vdest;
+	register const void* a1 asm("a1") = vsrc;
+	register size_t      a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMMOVE;
+
+	asm volatile ("ecall" : "+m"(SYS_OARRAY a0)
+		: "m"(SYS_IARRAY a1), "r"(a2), "r"(syscall_id) : "memory");
+	return vdest;
 #endif
 }
 
 #ifdef NATIVE_MEM_SYSCALLS
 
-extern "C"
-int memcmp(const void* ptr1, const void* ptr2, size_t n)
+extern "C" NATIVE_MEM_FUNCATTR
+int memcmp(const void* ptr1, const void* ptr2, size_t size)
 {
-	return syscall(SYSCALL_MEMCMP, (long) ptr1, (long) ptr2, n);
+	register const void* a0 asm("a0") = ptr1;
+	register const void* a1 asm("a1") = ptr2;
+	register size_t      a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMCMP;
+	register int out_a0 asm("a0");
+
+	asm volatile ("ecall" : "=r"(out_a0)
+		: "m"(SYS_IARRAY a0), "m"(SYS_IARRAY a1), "r"(a2), "r"(syscall_id));
+	return out_a0;
 }
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 size_t strlen(const char* str)
 {
-	return syscall(SYSCALL_STRLEN, (long) str);
+	register const char* a0 asm("a0") = str;
+	register long syscall_id asm("a7") = SYSCALL_STRLEN;
+	register size_t out_a0 asm("a0");
+
+	asm volatile ("ecall" : "=r"(out_a0)
+		: "m"(SYS_IUARRAY a0), "r"(syscall_id));
+	return out_a0;
 }
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
+int strncmp(const char* str1, const char* str2, size_t n)
+{
+	register const char* a0 asm("a0") = str1;
+	register const char* a1 asm("a1") = str2;
+	register size_t      a2 asm("a2") = n;
+	register long syscall_id asm("a7") = SYSCALL_STRCMP;
+	register size_t out_a0 asm("a0");
+
+	asm volatile ("ecall" : "=r"(out_a0)
+		: "m"(SYS_IUARRAY a0), "m"(SYS_IUARRAY a1), "r"(a2), "r"(syscall_id));
+	return out_a0;
+}
+extern "C" NATIVE_MEM_FUNCATTR
 int strcmp(const char* str1, const char* str2)
 {
-	return syscall(SYSCALL_STRCMP, (long) str1, (long) str2, 4096);
-}
-extern "C"
-int strncmp(const char* s1, const char* s2, size_t n)
-{
-	return syscall(SYSCALL_STRCMP, (long) s1, (long) s2, n);
+	register const char* a0 asm("a0") = str1;
+	register const char* a1 asm("a1") = str2;
+	register size_t      a2 asm("a2") = 4096;
+	register long syscall_id asm("a7") = SYSCALL_STRCMP;
+	register size_t out_a0 asm("a0");
+
+	asm volatile ("ecall" : "=r"(out_a0)
+		: "m"(SYS_IUARRAY a0), "m"(SYS_IUARRAY a1), "r"(a2), "r"(syscall_id));
+	return out_a0;
 }
 
 #endif
@@ -194,7 +253,7 @@ void _exit(int code)
 {
 	register long a0 asm("a0") = code;
 
-	asm ("r%=: .insn i SYSTEM, 0, %0, x0, 0x7ff \nj r%=\n" :: "r"(a0));
+	asm volatile("r%=: .insn i SYSTEM, 0, %0, x0, 0x7ff \nj r%=\n" :: "r"(a0));
 	__builtin_unreachable();
 }
 
