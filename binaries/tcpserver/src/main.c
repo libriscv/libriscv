@@ -1,122 +1,107 @@
-/*
- * tcpserver.c - A simple TCP echo server
- * usage: tcpserver <port>
- */
-
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <netdb.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define BUFSIZE 1024
-#define PORT_NO 8081
-
-/*
- * error - wrapper for perror
- */
 void error(const char *msg) {
 	perror(msg);
 	exit(1);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-	int parentfd; /* parent socket */
-	int childfd; /* child socket */
-	socklen_t clientlen; /* byte size of client's address */
-	struct sockaddr_in serveraddr; /* server's addr */
-	struct sockaddr_in clientaddr; /* client addr */
-	char buf[BUFSIZE]; /* message buffer */
-	char *hostaddrp; /* dotted decimal host addr string */
+	uint16_t server_port = 8081;
+	if (argc > 1) {
+		server_port = atoi(argv[1]);
+	}
 
 	/*
-	* socket: create the parent socket
+	* socket: create TCP stream fd
 	*/
-	parentfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (parentfd < 0)
-		error("ERROR opening socket");
+	const int listenfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (listenfd < 0)
+		error("Error creating TCP socket");
 
-	/* setsockopt: Handy debugging trick that lets
-	* us rerun the server immediately after we kill it;
-	* otherwise we have to wait about 20 secs.
-	* Eliminates "ERROR on binding: Address already in use" error.
-	*/
 	const int optval = 1;
-	setsockopt(parentfd, SOL_SOCKET, SO_REUSEADDR,
-		&optval , sizeof(int));
+	setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
+		&optval, sizeof(int));
 
-	/*
-	* build the server's Internet address
-	*/
-	memset(&serveraddr, 0, sizeof(serveraddr));
-
-	/* this is an Internet address */
+	struct sockaddr_in serveraddr = {};
 	serveraddr.sin_family = AF_INET;
-
-	/* let the system figure out our IP address */
 	serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	/* this is the port we will listen on */
-	serveraddr.sin_port = htons((unsigned short)PORT_NO);
+	serveraddr.sin_port = htons(server_port);
 
 	/*
 	* bind: associate the parent socket with a port
 	*/
-	if (bind(parentfd, (struct sockaddr *) &serveraddr,
+	if (bind(listenfd, (struct sockaddr *) &serveraddr,
 		sizeof(serveraddr)) < 0)
-	error("ERROR on binding");
+		error("Bind error. Port already in use?");
 
 	/*
-	* listen: make this socket ready to accept connection requests
+	* listen: listen for incoming TCP connection requests
 	*/
-	if (listen(parentfd, 5) < 0) /* allow 5 requests to queue up */
+	if (listen(listenfd, 5) < 0)
 		error("ERROR on listen");
 
-	printf("Listening on port %u\n", PORT_NO);
+	printf("Listening on port %u\n", server_port);
 
 	/*
 	* main loop: wait for a connection request, echo input line,
 	* then close connection.
 	*/
-	clientlen = sizeof(clientaddr);
 	while (1) {
 		/*
 		 * accept: wait for a connection request
 		 */
-		childfd = accept(parentfd, (struct sockaddr *)&clientaddr, &clientlen);
-		if (childfd < 0)
-			error("ERROR on accept");
+		struct sockaddr_in clientaddr;
+		socklen_t clientlen = sizeof(clientaddr);
+		const int clientfd =
+			accept(listenfd, (struct sockaddr *)&clientaddr, &clientlen);
+		if (clientfd < 0) {
+			printf("ERROR %s on server accept\n", strerror(errno));
+			continue;
+		}
 
 		/*
-		 * gethostbyaddr: determine who sent the message
+		 * inet_ntoa: print who sent the message
 		 */
-		hostaddrp = inet_ntoa(clientaddr.sin_addr);
-		if (hostaddrp == NULL)
+		char* ipstr = inet_ntoa(clientaddr.sin_addr);
+		if (ipstr == NULL)
 			error("ERROR on inet_ntoa\n");
 		printf("Server established connection with %s\n",
-			hostaddrp);
+			ipstr);
 
 		/*
 		 * read: read input string from the client
 		 */
-		memset(buf, 0, BUFSIZE);
-		ssize_t n = read(childfd, buf, BUFSIZE);
-		if (n < 0)
-			error("ERROR reading from socket");
-		printf("Server received %ld bytes: %s", (long)n, buf);
+		char buffer[8192];
+		const ssize_t rb = read(clientfd, buffer, sizeof(buffer));
+		if (rb < 0) {
+			printf("ERROR %s reading from socket\n", strerror(errno));
+			close(clientfd);
+		} else if (rb == 0) {
+			close(clientfd);
+			continue;
+		}
+		printf("Server received %u bytes: %.*s",
+			(unsigned)rb, (int)rb, buffer);
 
 		/*
 		 * write: echo the input string back to the client
 		 */
-		n = write(childfd, buf, strlen(buf));
-		if (n < 0)
-			error("ERROR writing to socket");
+		const ssize_t wb = write(clientfd, buffer, rb);
+		if (wb < 0) {
+			printf("ERROR %s writing to socket\n", strerror(errno));
+			close(clientfd);
+			continue;
+		}
 
-		close(childfd);
+		close(clientfd);
 	}
 }
