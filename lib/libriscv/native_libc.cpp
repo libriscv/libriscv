@@ -156,7 +156,6 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 				m.memcpy(dst + off, data, len);
 			});
 		m.increment_counter(2 * len);
-		m.set_result(dst);
 	}}, {syscall_base+1, [] (Machine<W>& m) {
 		// Memset n+1
 		const auto [dst, value, len] =
@@ -164,7 +163,6 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
 		m.memory.memset(dst, value, len);
 		m.increment_counter(len);
-		m.set_result(dst);
 	}}, {syscall_base+2, [] (Machine<W>& m) {
 		// Memmove n+2
 		auto [dst, src, len] =
@@ -184,7 +182,6 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			}
 		}
 		m.increment_counter(2 * len);
-		m.set_result(dst);
 	}}, {syscall_base+3, [] (Machine<W>& m) {
 		// Memcmp n+3
 		auto [p1, p2, len] =
