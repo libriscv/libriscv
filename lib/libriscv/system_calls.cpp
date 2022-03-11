@@ -14,6 +14,8 @@ static constexpr bool verbose_syscalls = false;
 
 #include <linux/limits.h>
 #include <fcntl.h>
+#include <signal.h>
+#undef sa_handler
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
@@ -849,6 +851,11 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	add_mman_syscalls(*this);
 
 	if (filesystem || sockets) {
+		// Workaround for a broken "feature"
+		// Sockets that are already closed cause SIGPIPE signal
+		// Signals are nearly useless, and unhandled will stop the emulator
+		signal(SIGPIPE, SIG_IGN);
+
 		m_fds.reset(new FileDescriptors);
 		if (sockets)
 			add_socket_syscalls(*this);
