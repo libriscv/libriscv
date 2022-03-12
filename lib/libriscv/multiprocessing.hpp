@@ -9,12 +9,13 @@ struct Multiprocessing
 	Multiprocessing(size_t);
 #ifdef RISCV_MULTIPROCESS
 	void async_work(std::function<void()>&& wrk);
-	void wait();
+	long wait();
 	bool is_multiprocessing() const noexcept { return this->processing; }
 
 	ThreadPool m_threadpool;
 	std::mutex m_lock;
 	bool processing = false;
+	bool failures = false;
 	static constexpr bool shared_page_faults = false;
 	static constexpr bool shared_read_faults = false;
 #else

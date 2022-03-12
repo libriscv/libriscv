@@ -54,10 +54,11 @@ void Multiprocessing<W>::async_work(std::function<void()>&& wrk)
 	this->processing = true;
 }
 template <int W>
-void Multiprocessing<W>::wait()
+long Multiprocessing<W>::wait()
 {
 	m_threadpool.wait_until_nothing_in_flight();
 	this->processing = false;
+	return this->failures ? -1 : 0;
 }
 
 template <int W>
@@ -69,6 +70,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 	const address_t stackpage = Memory<W>::page_number(stack);
 	const address_t stackendpage = Memory<W>::page_number(stack + stksize);
+	smp().failures = false;
 	Latch latch{num_cpus};
 
 	// Create worker 0...N
@@ -78,7 +80,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 		if (do_fork == false) {
 			smp().async_work(
-			[=, &latch] () -> unsigned {
+			[=, &latch] {
 
 				Machine<W> fork { *this, { .cpu_id = id } };
 				// TODO: threads need to be accessed through the main VM
@@ -127,15 +129,13 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 				try {
 					fork.simulate<true> (maxi);
 				} catch (...) {
-					return id;
+					smp().failures = true;
 				}
-				return 0;
 			});
 		} else {
 			// Fork variant
 			smp().async_work(
-			[=] () -> unsigned {
-
+			[=] {
 				Machine<W> fork { *this, { .cpu_id = id } };
 
 				fork.set_userdata(this->get_userdata<void>());
@@ -168,9 +168,8 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 				try {
 					fork.simulate<true> (maxi);
 				} catch (...) {
-					return id;
+					smp().failures = true;
 				}
-				return 0;
 			});
 		}
 	} // foreach CPU
@@ -189,9 +188,9 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	return true;
 }
 template <int W>
-void Machine<W>::multiprocess_wait()
+long Machine<W>::multiprocess_wait()
 {
-	smp().wait();
+	return smp().wait();
 }
 
 #else // RISCV_MULTIPROCESS
@@ -204,7 +203,7 @@ bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t, bool) {
 	return false;
 }
 template <int W>
-void Machine<W>::multiprocess_wait() { }
+long Machine<W>::multiprocess_wait() { return -1: }
 
 #endif // RISCV_MULTIPROCESS
 

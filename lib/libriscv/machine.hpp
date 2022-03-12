@@ -120,7 +120,7 @@ namespace riscv
 		// we can partition workloads and work on them concurrently.
 		bool is_multiprocessing() const noexcept;
 		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize, bool fork = false);
-		void multiprocess_wait();
+		long multiprocess_wait();
 
 		// Returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name) const;
