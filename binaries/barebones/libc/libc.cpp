@@ -13,6 +13,8 @@
 #else
 #define NATIVE_MEM_FUNCATTR /* */
 #endif
+#define STRINGIFY_HELPER(x) #x
+#define STRINGIFY(x) STRINGIFY_HELPER(x)
 
 #ifndef USE_NEWLIB
 extern "C" struct _reent* _impure_ptr;
@@ -24,48 +26,25 @@ extern "C" int* __errno() {
 }
 #endif
 
-extern "C" NATIVE_MEM_FUNCATTR
+#ifndef NATIVE_MEM_SYSCALLS
+extern "C"
 void* memset(void* vdest, int ch, size_t size)
 {
-#ifndef NATIVE_MEM_SYSCALLS
 	char* dest = (char*) vdest;
 	for (size_t i = 0; i < size; i++)
 		dest[i] = ch;
 	return dest;
-#else
-	register void*   a0 asm("a0") = vdest;
-	register int     a1 asm("a1") = ch;
-	register size_t  a2 asm("a2") = size;
-	register long syscall_id asm("a7") = SYSCALL_MEMSET;
-
-	asm volatile ("ecall" : "=m"(SYS_OARRAY a0)
-		: "r"(a1), "r"(a2), "r"(syscall_id) : "memory");
-	return vdest;
-#endif
 }
-extern "C" NATIVE_MEM_FUNCATTR
 void* memcpy(void* vdest, const void* vsrc, size_t size)
 {
-#ifndef NATIVE_MEM_SYSCALLS
 	const char* src = (const char*) vsrc;
 	char* dest = (char*) vdest;
 	for (size_t i = 0; i < size; i++)
 		dest[i] = src[i];
-#else
-	register void*       a0 asm("a0") = vdest;
-	register const void* a1 asm("a1") = vsrc;
-	register size_t      a2 asm("a2") = size;
-	register long syscall_id asm("a7") = SYSCALL_MEMCPY;
-
-	asm volatile ("ecall" : "=m"(SYS_OARRAY a0)
-		: "m"(SYS_IARRAY a1), "r"(a2), "r"(syscall_id) : "memory");
-#endif
 	return vdest;
 }
-extern "C" NATIVE_MEM_FUNCATTR
 void* memmove(void* vdest, const void* vsrc, size_t size)
 {
-#ifndef NATIVE_MEM_SYSCALLS
 	const char* src = (const char*) vsrc;
 	char* dest = (char*) vdest;
 	if (dest <= src)
@@ -79,71 +58,81 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 			dest[i] = src[i];
 	}
 	return dest;
+}
+
 #else
-	register void*       a0 asm("a0") = vdest;
-	register const void* a1 asm("a1") = vsrc;
-	register size_t      a2 asm("a2") = size;
-	register long syscall_id asm("a7") = SYSCALL_MEMMOVE;
 
-	asm volatile ("ecall" : "+m"(SYS_OARRAY a0)
-		: "m"(SYS_IARRAY a1), "r"(a2), "r"(syscall_id) : "memory");
-	return vdest;
+#ifdef USE_NEWLIB
+#define memset  "__wrap_memset"
+#define memcpy  "__wrap_memcpy"
+#define memmove "__wrap_memmove"
+#define memcmp  "__wrap_memcmp"
+#define memmove "__wrap_memmove"
+
+#define strlen  "__wrap_strlen"
+#define strcmp  "__wrap_strcmp"
+#define strncmp "__wrap_strncmp"
+#else
+#define memset  "memset"
+#define memcpy  "memcpy"
+#define memmove "memmove"
+#define memcmp  "memcmp"
+#define memmove "memmove"
+
+#define strlen  "strlen"
+#define strcmp  "strcmp"
+#define strncmp "strncmp"
 #endif
-}
 
-#ifdef NATIVE_MEM_SYSCALLS
+asm(".global " memset "\n"
+".type " memset ", @function\n"
+memset ":\n"
+"li a7, " STRINGIFY(SYSCALL_MEMSET) "\n"
+"ecall\n"
+"ret\n");
 
-extern "C" NATIVE_MEM_FUNCATTR
-int memcmp(const void* ptr1, const void* ptr2, size_t size)
-{
-	register const void* a0 asm("a0") = ptr1;
-	register const void* a1 asm("a1") = ptr2;
-	register size_t      a2 asm("a2") = size;
-	register long syscall_id asm("a7") = SYSCALL_MEMCMP;
-	register int out_a0 asm("a0");
+asm(".global " memcpy "\n"
+".type " memcpy ", @function\n"
+memcpy ":\n"
+"li a7, " STRINGIFY(SYSCALL_MEMCPY) "\n"
+"ecall\n"
+"ret\n");
 
-	asm volatile ("ecall" : "=r"(out_a0)
-		: "m"(SYS_IARRAY a0), "m"(SYS_IARRAY a1), "r"(a2), "r"(syscall_id));
-	return out_a0;
-}
+asm(".global " memmove "\n"
+".type " memmove ", @function\n"
+memmove ":\n"
+"li a7, " STRINGIFY(SYSCALL_MEMMOVE) "\n"
+"ecall\n"
+"ret\n");
 
-extern "C" NATIVE_MEM_FUNCATTR
-size_t strlen(const char* str)
-{
-	register const char* a0 asm("a0") = str;
-	register long syscall_id asm("a7") = SYSCALL_STRLEN;
-	register size_t out_a0 asm("a0");
+asm(".global " memcmp "\n"
+".type " memcmp ", @function\n"
+memcmp ":\n"
+"li a7, " STRINGIFY(SYSCALL_MEMCMP) "\n"
+"ecall\n"
+"ret\n");
 
-	asm volatile ("ecall" : "=r"(out_a0)
-		: "m"(SYS_IUARRAY a0), "r"(syscall_id));
-	return out_a0;
-}
-extern "C" NATIVE_MEM_FUNCATTR
-int strncmp(const char* str1, const char* str2, size_t n)
-{
-	register const char* a0 asm("a0") = str1;
-	register const char* a1 asm("a1") = str2;
-	register size_t      a2 asm("a2") = n;
-	register long syscall_id asm("a7") = SYSCALL_STRCMP;
-	register size_t out_a0 asm("a0");
+asm(".global " strlen "\n"
+".type " strlen ", @function\n"
+strlen ":\n"
+"li a7, " STRINGIFY(SYSCALL_STRLEN) "\n"
+"ecall\n"
+"ret\n");
 
-	asm volatile ("ecall" : "=r"(out_a0)
-		: "m"(SYS_IUARRAY a0), "m"(SYS_IUARRAY a1), "r"(a2), "r"(syscall_id));
-	return out_a0;
-}
-extern "C" NATIVE_MEM_FUNCATTR
-int strcmp(const char* str1, const char* str2)
-{
-	register const char* a0 asm("a0") = str1;
-	register const char* a1 asm("a1") = str2;
-	register size_t      a2 asm("a2") = 4096;
-	register long syscall_id asm("a7") = SYSCALL_STRCMP;
-	register size_t out_a0 asm("a0");
+asm(".global " strcmp "\n"
+".type " strcmp ", @function\n"
+strcmp ":\n"
+"li a2, 4096\n"
+"li a7, " STRINGIFY(SYSCALL_STRCMP) "\n"
+"ecall\n"
+"ret\n");
 
-	asm volatile ("ecall" : "=r"(out_a0)
-		: "m"(SYS_IUARRAY a0), "m"(SYS_IUARRAY a1), "r"(a2), "r"(syscall_id));
-	return out_a0;
-}
+asm(".global " strncmp "\n"
+".type " strncmp ", @function\n"
+strncmp ":\n"
+"li a7, " STRINGIFY(SYSCALL_STRCMP) "\n"
+"ecall\n"
+"ret\n");
 
 #endif
 

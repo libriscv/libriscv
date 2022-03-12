@@ -2,6 +2,13 @@
 #include <include/libc.hpp>
 #include <cstdlib>
 
+#ifdef USE_NEWLIB
+#define malloc  __wrap_malloc
+#define calloc  __wrap_calloc
+#define realloc __wrap_realloc
+#define free    __wrap_free
+#endif
+
 #if 1
 
 extern "C"
@@ -25,33 +32,10 @@ void free(void* ptr)
 	sys_free(ptr);
 }
 
-/* Newlib internal reentrancy-safe heap functions.
-   Our system calls are safe because they are atomic. */
-extern "C"
-void* _malloc_r(struct _reent*, size_t size)
-{
-	return sys_malloc(size);
-}
-extern "C"
-void* _calloc_r(struct _reent*, size_t count, size_t size)
-{
-	return sys_calloc(count, size);
-}
-extern "C"
-void* _realloc_r(struct _reent*, void* ptr, size_t newsize)
-{
-	return sys_realloc(ptr, newsize);
-}
-extern "C"
-void _free_r(struct _reent*, void* ptr)
-{
-	sys_free(ptr);
-}
-
 #else
 
 static const uintptr_t sbrk_start = 0x40000000;
-static const uintptr_t sbrk_max   = sbrk_start + 0x1000000;
+static const uintptr_t sbrk_max   = sbrk_start + 0x2000000;
 
 extern "C"
 long _sbrk(uintptr_t new_end)

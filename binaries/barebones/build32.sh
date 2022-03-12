@@ -5,6 +5,6 @@ export CXX=riscv32-unknown-elf-g++
 
 mkdir -p build32
 pushd build32
-cmake .. -DRISCV_ARCH=32 -DLIBC_USE_STDLIB=OFF -DCMAKE_TOOLCHAIN_FILE=micro_toolchain.cmake
+cmake .. -DRISCV_ARCH=32 -DLIBC_USE_STDLIB=ON -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake
 make -j4
 popd

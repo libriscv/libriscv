@@ -59,9 +59,16 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
 add_subdirectory(ext)
 add_subdirectory(libc)
 
-
 function (add_micro_executable NAME)
 	add_executable(${NAME} ${ARGN})
+	if (LIBC_USE_STDLIB)
+	# Accelerated wrappers for standard memory and string functions
+	target_link_libraries(${NAME} -Wl,--wrap,memset,--wrap,memcpy,--wrap,memmove,--wrap,memcmp)
+	target_link_libraries(${NAME} -Wl,--wrap,strlen,--wrap,strcmp,--wrap,strncmp)
+	# Accelerated wrappers for heap management
+	target_link_libraries(${NAME} -Wl,--wrap,malloc,--wrap,calloc,--wrap,realloc,--wrap,free)
+	endif()
+	# Add the whole libc directly as source files
 	target_link_libraries(${NAME} -static -Wl,--whole-archive libc -Wl,--no-whole-archive)
 	# Place ELF binary into the top build folder
 	set_target_properties(${NAME}
