@@ -70,8 +70,8 @@ static void syscall_ebreak(riscv::Machine<W>& machine)
 template <int W>
 static void syscall_sigaltstack(Machine<W>& machine)
 {
-	const auto ss = machine.template sysarg<address_type<W>>(0);
-	const auto old_ss = machine.template sysarg<address_type<W>>(1);
+	const auto ss = machine.sysarg(0);
+	const auto old_ss = machine.sysarg(1);
 	SYSPRINT("SYSCALL sigaltstack, tid=%d ss: 0x%lX old_ss: 0x%lX\n",
 		machine.gettid(), (long)ss, (long)old_ss);
 
@@ -93,9 +93,9 @@ static void syscall_sigaltstack(Machine<W>& machine)
 template <int W>
 static void syscall_sigaction(Machine<W>& machine)
 {
-	const int signal = machine.template sysarg<address_type<W>>(0);
-	const auto action = machine.template sysarg<address_type<W>>(1);
-	const auto old_action = machine.template sysarg<address_type<W>>(2);
+	const int signal = machine.sysarg(0);
+	const auto action = machine.sysarg(1);
+	const auto old_action = machine.sysarg(2);
 	SYSPRINT("SYSCALL sigaction, signal: %d, action: 0x%lX old_action: 0x%lX\n",
 		signal, (long)action, (long)old_action);
 	auto& sigact = machine.sigaction(signal);
@@ -141,8 +141,8 @@ template <int W>
 static void syscall_read(Machine<W>& machine)
 {
 	const int  fd      = machine.template sysarg<int>(0);
-	const auto address = machine.template sysarg<address_type<W>>(1);
-	const size_t len   = machine.template sysarg<address_type<W>>(2);
+	const auto address = machine.sysarg(1);
+	const size_t len   = machine.sysarg(2);
 	SYSPRINT("SYSCALL read, addr: 0x%lX, len: %zu\n", (long)address, len);
 	// We have special stdin handling
 	if (fd == 0) {
@@ -185,8 +185,8 @@ template <int W>
 static void syscall_write(Machine<W>& machine)
 {
 	const int  vfd     = machine.template sysarg<int>(0);
-	const auto address = machine.template sysarg<address_type<W>>(1);
-	const size_t len   = machine.template sysarg<address_type<W>>(2);
+	const auto address = machine.sysarg(1);
+	const size_t len   = machine.sysarg(2);
 	SYSPRINT("SYSCALL write, fd: %d addr: 0x%lX, len: %zu\n",
 		vfd, (long)address, len);
 	// We only accept standard output pipes, for now :)
@@ -230,7 +230,7 @@ template <int W>
 static void syscall_writev(Machine<W>& machine)
 {
 	const int  fd     = machine.template sysarg<int>(0);
-	const auto iov_g  = machine.template sysarg<address_type<W>>(1);
+	const auto iov_g  = machine.sysarg(1);
 	const auto count  = machine.template sysarg<int>(2);
 	if constexpr (false) {
 		printf("SYSCALL writev, iov: %#X  cnt: %d\n", iov_g, count);
@@ -270,7 +270,7 @@ template <int W>
 static void syscall_openat(Machine<W>& machine)
 {
 	const int dir_fd = machine.template sysarg<int>(0);
-	const auto g_path = machine.template sysarg<address_type<W>>(1);
+	const auto g_path = machine.sysarg(1);
 	const int flags  = machine.template sysarg<int>(2);
 	char path[PATH_MAX];
 	machine.copy_from_guest(path, g_path, sizeof(path)-1);
@@ -344,9 +344,9 @@ static void syscall_fcntl(Machine<W>& machine)
 {
 	const int vfd = machine.template sysarg<int>(0);
 	const auto cmd = machine.template sysarg<int>(1);
-	const auto arg1 = machine.template sysarg<address_type<W>>(2);
-	const auto arg2 = machine.template sysarg<address_type<W>>(3);
-	const auto arg3 = machine.template sysarg<address_type<W>>(4);
+	const auto arg1 = machine.sysarg(2);
+	const auto arg2 = machine.sysarg(3);
+	const auto arg3 = machine.sysarg(4);
 	SYSPRINT("SYSCALL fcntl, fd: %d  cmd: 0x%X\n", vfd, cmd);
 
 	if (machine.has_file_descriptors()) {
@@ -363,10 +363,10 @@ static void syscall_ioctl(Machine<W>& machine)
 {
 	const int vfd = machine.template sysarg<int>(0);
 	const auto req = machine.template sysarg<uint64_t>(1);
-	const auto arg1 = machine.template sysarg<address_type<W>>(2);
-	const auto arg2 = machine.template sysarg<address_type<W>>(3);
-	const auto arg3 = machine.template sysarg<address_type<W>>(4);
-	const auto arg4 = machine.template sysarg<address_type<W>>(5);
+	const auto arg1 = machine.sysarg(2);
+	const auto arg2 = machine.sysarg(3);
+	const auto arg3 = machine.sysarg(4);
+	const auto arg4 = machine.sysarg(5);
 	SYSPRINT("SYSCALL ioctl, fd: %d  req: 0x%lX\n", vfd, req);
 
 	if (machine.has_file_descriptors()) {
@@ -389,9 +389,9 @@ template <int W>
 void syscall_readlinkat(Machine<W>& machine)
 {
 	const int vfd = machine.template sysarg<int>(0);
-	const auto g_path = machine.template sysarg<address_type<W>>(1);
-	const auto g_buf = machine.template sysarg<address_type<W>>(2);
-	const auto bufsize = machine.template sysarg<address_type<W>>(3);
+	const auto g_path = machine.sysarg(1);
+	const auto g_buf = machine.sysarg(2);
+	const auto bufsize = machine.sysarg(3);
 
 	char path[PATH_MAX];
 	machine.copy_from_guest(path, g_path, sizeof(path)-1);
@@ -475,8 +475,8 @@ template <int W>
 static void syscall_fstatat(Machine<W>& machine)
 {
 	const auto vfd = machine.template sysarg<int> (0);
-	const auto g_path = machine.template sysarg<address_type<W>> (1);
-	const auto g_buf = machine.template sysarg<address_type<W>> (2);
+	const auto g_path = machine.sysarg(1);
+	const auto g_buf = machine.sysarg(2);
 	const auto flags = machine.template sysarg<int> (3);
 
 	char path[PATH_MAX];
@@ -508,7 +508,7 @@ template <int W>
 static void syscall_fstat(Machine<W>& machine)
 {
 	const auto vfd = machine.template sysarg<int> (0);
-	const auto g_buf = machine.template sysarg<address_type<W>> (1);
+	const auto g_buf = machine.sysarg(1);
 
 	SYSPRINT("SYSCALL fstat, fd: %d buf: 0x%lX)\n",
 			vfd, (long)g_buf);
@@ -534,10 +534,10 @@ template <int W>
 static void syscall_statx(Machine<W>& machine)
 {
 	const int   dir_fd = machine.template sysarg<int> (0);
-	const auto  g_path = machine.template sysarg<address_type<W>> (1);
+	const auto  g_path = machine.sysarg(1);
 	const int    flags = machine.template sysarg<int> (2);
 	const auto    mask = machine.template sysarg<uint32_t> (3);
-	const auto  buffer = machine.template sysarg<address_type<W>> (4);
+	const auto  buffer = machine.sysarg(4);
 
 	char path[PATH_MAX];
 	machine.copy_from_guest(path, g_path, sizeof(path)-1);
@@ -568,7 +568,7 @@ static void syscall_statx(Machine<W>& machine)
 template <int W>
 static void syscall_gettimeofday(Machine<W>& machine)
 {
-	const auto buffer = machine.template sysarg<address_type<W>>(0);
+	const auto buffer = machine.sysarg(0);
 	SYSPRINT("SYSCALL gettimeofday, buffer: 0x%lX\n", (long)buffer);
 	struct timeval tv;
 	const int res = gettimeofday(&tv, nullptr);
@@ -586,7 +586,7 @@ template <int W>
 static void syscall_clock_gettime(Machine<W>& machine)
 {
 	const auto clkid = machine.template sysarg<int>(0);
-	const auto buffer = machine.template sysarg<address_type<W>>(1);
+	const auto buffer = machine.sysarg(1);
 	SYSPRINT("SYSCALL clock_gettime, clkid: %x buffer: 0x%lX\n",
 		clkid, (long)buffer);
 
@@ -601,7 +601,7 @@ static void syscall_clock_gettime(Machine<W>& machine)
 template <int W>
 static void syscall_uname(Machine<W>& machine)
 {
-	const auto buffer = machine.template sysarg<address_type<W>>(0);
+	const auto buffer = machine.sysarg(0);
 	SYSPRINT("SYSCALL uname, buffer: 0x%lX\n", (long)buffer);
 	static constexpr int UTSLEN = 65;
 	struct {
@@ -631,7 +631,7 @@ static void syscall_uname(Machine<W>& machine)
 template <int W>
 static void syscall_brk(Machine<W>& machine)
 {
-	auto new_end = machine.template sysarg<address_type<W>>(0);
+	auto new_end = machine.sysarg(0);
 	if (new_end > machine.memory.heap_address() + Memory<W>::BRK_MAX) {
 		new_end = machine.memory.heap_address() + Memory<W>::BRK_MAX;
 	} else if (new_end < machine.memory.heap_address()) {
@@ -650,8 +650,8 @@ static void add_mman_syscalls(Machine<W>& machine)
 	// munmap
 	machine.install_syscall_handler(215,
 	[] (Machine<W>& machine) {
-		const auto addr = machine.template sysarg<address_type<W>> (0);
-		const auto len  = machine.template sysarg<address_type<W>> (1);
+		const auto addr = machine.sysarg(0);
+		const auto len  = machine.sysarg(1);
 		SYSPRINT(">>> munmap(0x%lX, len=%zu)\n", (long)addr, (size_t)len);
 		machine.memory.free_pages(addr, len);
 		auto& nextfree = machine.memory.mmap_address();
@@ -665,8 +665,8 @@ static void add_mman_syscalls(Machine<W>& machine)
 	// mmap
 	machine.install_syscall_handler(222,
 	[] (Machine<W>& machine) {
-		const auto addr_g = machine.template sysarg<address_type<W>>(0);
-		auto length = machine.template sysarg<address_type<W>>(1);
+		const auto addr_g = machine.sysarg(0);
+		auto length = machine.sysarg(1);
 		const auto prot   = machine.template sysarg<int>(2);
 		const auto flags  = machine.template sysarg<int>(3);
 		SYSPRINT(">>> mmap(addr 0x%lX, len %zu, prot %#x, flags %#X)\n",
@@ -714,9 +714,9 @@ static void add_mman_syscalls(Machine<W>& machine)
 	// mremap
 	machine.install_syscall_handler(163,
 	[] (Machine<W>& machine) {
-		const auto old_addr = machine.template sysarg<address_type<W>>(0);
-		const auto old_size = machine.template sysarg<address_type<W>>(1);
-		const auto new_size = machine.template sysarg<address_type<W>>(2);
+		const auto old_addr = machine.sysarg(0);
+		const auto old_size = machine.sysarg(1);
+		const auto new_size = machine.sysarg(2);
 		const auto flags    = machine.template sysarg<int>(3);
 		SYSPRINT(">>> mremap(addr 0x%lX, len %zu, newsize %zu, flags %#X)\n",
 				(long)old_addr, (size_t)old_size, (size_t)new_size, flags);
@@ -734,8 +734,8 @@ static void add_mman_syscalls(Machine<W>& machine)
 	// mprotect
 	machine.install_syscall_handler(226,
 	[] (Machine<W>& machine) {
-		const auto addr = machine.template sysarg<address_type<W>> (0);
-		const auto len  = machine.template sysarg<address_type<W>> (1);
+		const auto addr = machine.sysarg(0);
+		const auto len  = machine.sysarg(1);
 		const int  prot = machine.template sysarg<int> (2);
 		SYSPRINT(">>> mprotect(0x%lX, len=%zu, prot=%x)\n",
 			(long)addr, (size_t)len, prot);
@@ -749,8 +749,8 @@ static void add_mman_syscalls(Machine<W>& machine)
 	// madvise
 	machine.install_syscall_handler(233,
 	[] (Machine<W>& machine) {
-		const auto addr  = machine.template sysarg<address_type<W>> (0);
-		const auto len   = machine.template sysarg<address_type<W>> (1);
+		const auto addr  = machine.sysarg(0);
+		const auto len   = machine.sysarg(1);
 		const int advice = machine.template sysarg<int> (2);
 		SYSPRINT(">>> madvise(0x%lX, len=%zu, prot=%x)\n",
 			(uint64_t)addr, (size_t)len, advice);

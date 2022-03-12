@@ -72,7 +72,7 @@ namespace riscv
 		void setup_linux(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
 
 		// Retrieve arguments during a system call
-		template <typename T>
+		template <typename T = address_t>
 		inline T sysarg(int arg) const;
 
 		// Retrieve all arguments by given types during a system call
@@ -90,7 +90,7 @@ namespace riscv
 		void set_result_or_error(int);
 
 		// A shortcut to getting a return or exit value
-		template <typename T>
+		template <typename T = address_t>
 		inline T return_value() const { return sysarg<T> (0); }
 
 		// Calls into the virtual machine, returning the value returned from

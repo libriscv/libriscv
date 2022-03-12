@@ -130,8 +130,9 @@ static void run_program(
 		run_sighandler(machine);
 #endif
 	}
-	printf(">>> Program exited, exit code = %d\n",
-		machine.template return_value<int> ());
+	const auto retval = machine.return_value();
+	printf(">>> Program exited, exit code = %ld (0x%lX)\n",
+		(long)retval, (long)retval);
 	printf("Instructions executed: %zu\n",
 		(size_t) machine.instruction_counter());
 	printf("Pages in use: %zu (%zu kB memory)\n",
