@@ -610,7 +610,7 @@ namespace riscv
 				return;
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		if (!instr.Rtype.is_32M())
 		{
@@ -618,20 +618,22 @@ namespace riscv
 				"ADD", "SLL", "SLT", "SLTU", "XOR", "SRL", "OR", "AND",
 				"SUB", "SLL", "SLT", "SLTU", "XOR", "SRA", "OR", "AND"};
 			const int EX = instr.Rtype.is_f7() ? 8 : 0;
-			return snprintf(buffer, len, "%s %s %s, %s",
+			return snprintf(buffer, len, "%s %s %s, %s (0x%lX)",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3 + EX],
 							RISCV::regname(instr.Rtype.rs2),
-							RISCV::regname(instr.Rtype.rd));
+							RISCV::regname(instr.Rtype.rd),
+							(long)cpu.reg(instr.Rtype.rd));
 		}
 		else {
 			static std::array<const char*, 8> func3 = {
 				"MUL", "MULH", "MULHSU", "MULHU", "DIV", "DIVU", "REM", "REMU"};
-			return snprintf(buffer, len, "%s %s %s, %s",
+			return snprintf(buffer, len, "%s %s %s, %s (0x%lX)",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3],
 							RISCV::regname(instr.Rtype.rs2),
-							RISCV::regname(instr.Rtype.rd));
+							RISCV::regname(instr.Rtype.rd),
+							(long)cpu.reg(instr.Rtype.rd));
 		}
 	});
 
