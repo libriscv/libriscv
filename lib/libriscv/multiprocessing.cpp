@@ -203,7 +203,7 @@ bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t, bool) {
 	return false;
 }
 template <int W>
-long Machine<W>::multiprocess_wait() { return -1: }
+long Machine<W>::multiprocess_wait() { return -1; }
 
 #endif // RISCV_MULTIPROCESS
 
