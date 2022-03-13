@@ -196,6 +196,7 @@ template <int W>
 template <typename T>
 address_type<W> Machine<W>::stack_push(const T& type)
 {
+	static_assert(std::is_standard_layout_v<T>, "Must be a POD type");
 	return stack_push(&type, sizeof(T));
 }
 
