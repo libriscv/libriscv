@@ -15,6 +15,9 @@ if (NOT LIBC_USE_STDLIB)
 	)
 endif()
 
+set_source_files_properties(libc.cpp
+	PROPERTIES COMPILE_FLAGS -fno-builtin)
+
 add_library(libc STATIC ${LIBC_SOURCES})
 target_include_directories(libc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(libc PUBLIC tinyprintf)

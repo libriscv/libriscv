@@ -63,76 +63,121 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 #else
 
 #ifdef USE_NEWLIB
-#define memset  "__wrap_memset"
-#define memcpy  "__wrap_memcpy"
-#define memmove "__wrap_memmove"
-#define memcmp  "__wrap_memcmp"
-#define memmove "__wrap_memmove"
+#define memset  __wrap_memset
+#define memcpy  __wrap_memcpy
+#define memmove __wrap_memmove
+#define memcmp  __wrap_memcmp
 
-#define strlen  "__wrap_strlen"
-#define strcmp  "__wrap_strcmp"
-#define strncmp "__wrap_strncmp"
-#else
-#define memset  "memset"
-#define memcpy  "memcpy"
-#define memmove "memmove"
-#define memcmp  "memcmp"
-#define memmove "memmove"
-
-#define strlen  "strlen"
-#define strcmp  "strcmp"
-#define strncmp "strncmp"
+#define strlen  __wrap_strlen
+#define strcmp  __wrap_strcmp
+#define strncmp __wrap_strncmp
 #endif
 
-asm(".global " memset "\n"
-".type " memset ", @function\n"
-memset ":\n"
-"li a7, " STRINGIFY(SYSCALL_MEMSET) "\n"
-"ecall\n"
-"ret\n");
+extern "C"
+void* memset(void* vdest, const int ch, size_t size)
+{
+	register char*   a0 asm("a0") = (char*)vdest;
+	register int     a1 asm("a1") = ch;
+	register size_t  a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMSET;
 
-asm(".global " memcpy "\n"
-".type " memcpy ", @function\n"
-memcpy ":\n"
-"li a7, " STRINGIFY(SYSCALL_MEMCPY) "\n"
-"ecall\n"
-"ret\n");
+	asm volatile ("ecall"
+	:	"=m"(*(char(*)[size]) a0)
+	:	"r"(a0), "r"(a1), "r"(a2), "r"(syscall_id));
+	return vdest;
+}
 
-asm(".global " memmove "\n"
-".type " memmove ", @function\n"
-memmove ":\n"
-"li a7, " STRINGIFY(SYSCALL_MEMMOVE) "\n"
-"ecall\n"
-"ret\n");
+extern "C"
+void* memcpy(void* vdest, const void* vsrc, size_t size)
+{
+	register char*       a0 asm("a0") = (char*)vdest;
+	register const char* a1 asm("a1") = (const char*)vsrc;
+	register size_t      a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMCPY;
 
-asm(".global " memcmp "\n"
-".type " memcmp ", @function\n"
-memcmp ":\n"
-"li a7, " STRINGIFY(SYSCALL_MEMCMP) "\n"
-"ecall\n"
-"ret\n");
+	asm volatile ("ecall"
+	:	"=m"(*(char(*)[size]) a0)
+	:	"r"(a0),
+		"r"(a1), "m"(*(const char(*)[size]) a1),
+		"r"(a2), "r"(syscall_id));
+	return vdest;
+}
 
-asm(".global " strlen "\n"
-".type " strlen ", @function\n"
-strlen ":\n"
-"li a7, " STRINGIFY(SYSCALL_STRLEN) "\n"
-"ecall\n"
-"ret\n");
+extern "C"
+void* memmove(void* vdest, const void* vsrc, size_t size)
+{
+	// An assumption is being made here that since vsrc might be
+	// inside vdest, we cannot assume that vsrc is const anymore.
+	register char*  a0 asm("a0") = (char*)vdest;
+	register char*  a1 asm("a1") = (char*)vsrc;
+	register size_t a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMMOVE;
 
-asm(".global " strcmp "\n"
-".type " strcmp ", @function\n"
-strcmp ":\n"
-"li a2, 4096\n"
-"li a7, " STRINGIFY(SYSCALL_STRCMP) "\n"
-"ecall\n"
-"ret\n");
+	asm volatile ("ecall"
+		: "=m"(*(char(*)[size]) a0), "=m"(*(char(*)[size]) a1)
+		: "r"(a0), "r"(a1), "r"(a2), "r"(syscall_id));
+	return vdest;
+}
 
-asm(".global " strncmp "\n"
-".type " strncmp ", @function\n"
-strncmp ":\n"
-"li a7, " STRINGIFY(SYSCALL_STRCMP) "\n"
-"ecall\n"
-"ret\n");
+extern "C"
+int memcmp(const void* m1, const void* m2, size_t size)
+{
+	register const char* a0 asm("a0") = (const char*)m1;
+	register const char* a1 asm("a1") = (const char*)m2;
+	register size_t      a2 asm("a2") = size;
+	register long syscall_id asm("a7") = SYSCALL_MEMCMP;
+	register int         a0_out asm("a0");
+
+	asm volatile ("ecall" : "=r"(a0_out) :
+		"r"(a0), "m"(*(const char(*)[size]) a0),
+		"r"(a1), "m"(*(const char(*)[size]) a1),
+		"r"(a2), "r"(syscall_id));
+	return a0_out;
+}
+
+extern "C"
+size_t strlen(const char* str)
+{
+	register const char* a0 asm("a0") = str;
+	register size_t      a0_out asm("a0");
+	register long syscall_id asm("a7") = SYSCALL_STRLEN;
+
+	asm volatile ("ecall" : "=r"(a0_out) :
+		"r"(a0), "m"(*(const char(*)[4096]) a0), "r"(syscall_id));
+	return a0_out;
+}
+
+extern "C"
+int strcmp(const char* str1, const char* str2)
+{
+	register const char* a0 asm("a0") = str1;
+	register const char* a1 asm("a1") = str2;
+	register size_t      a2 asm("a2") = 4096;
+	register size_t      a0_out asm("a0");
+	register long syscall_id asm("a7") = SYSCALL_STRCMP;
+
+	asm volatile ("ecall" : "=r"(a0_out) :
+		"r"(a0), "m"(*(const char(*)[4096]) a0),
+		"r"(a1), "m"(*(const char(*)[4096]) a1),
+		"r"(a2), "r"(syscall_id));
+	return a0_out;
+}
+
+extern "C"
+int strncmp(const char* str1, const char* str2, size_t maxlen)
+{
+	register const char* a0 asm("a0") = str1;
+	register const char* a1 asm("a1") = str2;
+	register size_t      a2 asm("a2") = maxlen;
+	register size_t      a0_out asm("a0");
+	register long syscall_id asm("a7") = SYSCALL_STRCMP;
+
+	asm volatile ("ecall" : "=r"(a0_out) :
+		"r"(a0), "m"(*(const char(*)[maxlen]) a0),
+		"r"(a1), "m"(*(const char(*)[maxlen]) a1),
+		"r"(a2), "r"(syscall_id));
+	return a0_out;
+}
 
 #endif
 
@@ -202,6 +247,7 @@ int strncmp(const char* s1, const char* s2, size_t n)
     }
 }
 #endif
+
 extern "C"
 char* strcat(char* dest, const char* src)
 {

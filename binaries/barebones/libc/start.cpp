@@ -32,13 +32,13 @@ init_stdlib()
 }
 
 extern "C" __attribute__((visibility("hidden"), used))
-void libc_start(int argc, char** argv)
+void libc_start(int argc, char** argv, char** envp)
 {
 	init_stdlib();
 
 	// Call main() :)
-	extern int main(int, char**);
-	_exit(main(argc, argv));
+	extern int main(int, char**, char**);
+	_exit(main(argc, argv, envp));
 }
 
 // 1. wrangle with argc and argc
