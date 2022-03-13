@@ -441,7 +441,7 @@ namespace riscv
 								RISCV::regname(instr.Itype.rd),
 								RISCV::regname(instr.Itype.rs1),
 								(long) instr.Itype.signed_imm(),
-								(long) cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm());
+								(long) cpu.reg(instr.Itype.rs1));
 			} else {
 				return snprintf(buffer, len, "NOT %s, %s",
 								RISCV::regname(instr.Itype.rd),
@@ -779,9 +779,9 @@ namespace riscv
 	INSTRUCTION(OP_IMM32_SRLIW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
 		auto& dst = cpu.reg(instr.Itype.rd);
-		const int32_t src = cpu.reg(instr.Itype.rs1);
+		const uint32_t src = cpu.reg(instr.Itype.rs1);
 		// SRLIW: Shift-Right Logical 0-31 immediate
-		dst = RVSIGNEXTW(cpu) (src >> instr.Itype.shift_imm());
+		dst = src >> instr.Itype.shift_imm();
 	}, DECODED_INSTR(OP_IMM32).printer);
 
 	INSTRUCTION(OP_IMM32_SRAIW,
