@@ -86,6 +86,9 @@ static void run_program(
 #ifdef RISCV_DEBUG
 	// print all instructions by default, when debugging is enabled
 	machine.verbose_instructions = true;
+	if (getenv("VERBOSE")) {
+		machine.verbose_registers = true;
+	}
 	machine.print_and_pause();
 #endif
 
@@ -131,12 +134,16 @@ static void run_program(
 #endif
 	}
 	const auto retval = machine.return_value();
-	printf(">>> Program exited, exit code = %ld (0x%lX)\n",
-		(long)retval, (long)retval);
-	printf("Instructions executed: %zu\n",
-		(size_t) machine.instruction_counter());
-	printf("Pages in use: %zu (%zu kB memory)\n",
-		machine.memory.pages_active(), machine.memory.pages_active() * 4);
+	// You can silence this output by setting SILENT=1, like so:
+	// SILENT=1 ./rvlinux myprogram
+	if (getenv("SILENT") == nullptr) {
+		printf(">>> Program exited, exit code = %ld (0x%lX)\n",
+			(long)retval, (long)retval);
+		printf("Instructions executed: %zu\n",
+			(size_t) machine.instruction_counter());
+		printf("Pages in use: %zu (%zu kB memory)\n",
+			machine.memory.pages_active(), machine.memory.pages_active() * 4);
+	}
 }
 
 int main(int argc, const char** argv)
