@@ -483,7 +483,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 				break;
 			case 0x5: // SRLIW / SRAIW:
 				if (LIKELY(!instr.Itype.is_srai())) {
-					add_code(code, dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
+					add_code(code, dst + " = (uint32_t)" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ";");
 				} else { // SRAIW: preserve the sign bit
 					add_code(code,
 					"{const uint32_t shifts = " + from_imm(instr.Itype.shift_imm()) + ";",
