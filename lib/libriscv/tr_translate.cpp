@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include "machine.hpp"
+#include "decoder_cache.hpp"
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "tr_api.hpp"
@@ -59,27 +60,93 @@ inline bool gucci(const typename CPU<W>::instr_pair& ip) {
 }
 
 template <int W>
+inline instruction_handler<W>& instruction_handler_at(const Machine<W>& machine, address_type<W> addr) {
+	auto& cache_entry =
+		machine.memory.get_decoder_cache()[addr / DecoderCache<W>::DIVISOR];
+#ifdef RISCV_DEBUG
+	return cache_entry.handler.handler;
+#else
+	return cache_entry.handler;
+#endif
+}
+
+template <int W>
 struct NamedIPair {
-	using instr_pair = typename CPU<W>::instr_pair;
-	instr_pair& ipair;
+	address_type<W> addr;
 	std::string symbol;
 };
 
 template <int W>
-void CPU<W>::try_translate(const MachineOptions<W>& options,
-	address_t basepc, std::vector<instr_pair>& ipairs) const
+int CPU<W>::load_translation(const MachineOptions<W>& options,
+	std::string* filename) const
 {
-	// Run with VERBOSE=1 to see command and output
-	const bool verbose = (getenv("VERBOSE") != nullptr);
 	// Disable translator with NO_TRANSLATE=1
 	// or by setting max blocks to zero.
 	if (0 == options.translate_blocks_max || getenv("NO_TRANSLATE")) {
-		if (verbose) {
+		if (getenv("VERBOSE")) {
 			printf("Binary translation disabled\n");
 		}
 		machine().memory.set_binary_translated(nullptr);
-		return;
+		return -1;
 	}
+	if (machine().memory.is_binary_translated()) {
+		throw std::runtime_error("Machine already reports binary translation");
+	}
+
+	// Checksum the execute segment + compiler flags
+	TIME_POINT(t5);
+	extern std::string compile_command(int arch);
+	const auto cc = compile_command(W);
+	const uint32_t checksum =
+		crc32c(&exec_seg_data()[exec_begin()], exec_end() - exec_begin())
+		^ crc32c(cc.c_str(), cc.size());
+
+	char filebuffer[256];
+	int len = snprintf(filebuffer, sizeof(filebuffer),
+		"/tmp/rvbintr-%08X", checksum);
+	if (len <= 0)
+		return -1;
+
+	void* dylib = nullptr;
+#ifdef BINTR_TIMING
+	TIME_POINT(t6);
+	printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
+#endif
+
+	// Always check if there is an existing file
+	if (access(filebuffer, R_OK) == 0) {
+		TIME_POINT(t7);
+		dylib = dlopen(filebuffer, RTLD_LAZY);
+	#ifdef BINTR_TIMING
+		TIME_POINT(t8);
+		printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
+	#endif
+	}
+
+	// We must compile ourselves
+	if (dylib == nullptr) {
+		if (filename) *filename = std::string(filebuffer);
+		return 1;
+	}
+
+	this->activate_dylib(dylib);
+
+	// close dylib when machine is destructed
+	machine().memory.set_binary_translated(dylib);
+#ifdef BINTR_TIMING
+	TIME_POINT(t10);
+	printf(">> Loading binary translation took %ld ns\n", nanodiff(t5, t10));
+#endif
+	return 0;
+}
+
+template <int W>
+void CPU<W>::try_translate(const MachineOptions<W>& options,
+	const std::string& filename, address_t basepc, std::vector<instr_pair>& ipairs) const
+{
+	// Run with VERBOSE=1 to see command and output
+	const bool verbose = (getenv("VERBOSE") != nullptr);
+
 	address_t gp = 0;
 	TIME_POINT(t0);
 if constexpr (SCAN_FOR_GP) {
@@ -204,8 +271,24 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 			block.has_branch,
 			options.forward_jumps
 		});
-		dlmappings.push_back({block.instr, std::move(func)});
+		dlmappings.push_back({block.addr, std::move(func)});
 	}
+	// Append all instruction handler -> dl function mappings
+	code += "const uint32_t no_mappings = "
+		+ std::to_string(dlmappings.size()) + ";\n";
+	code += R"V0G0N(
+struct Mapping {
+	addr_t addr;
+	void (*handler)();
+};
+const struct Mapping mappings[] = {
+)V0G0N";
+	for (const auto& mapping : dlmappings)
+	{
+		code += "{" + std::to_string(mapping.addr) + ", " + mapping.symbol + "},\n";
+	}
+	code += "};\n";
+
 #ifdef BINTR_TIMING
 	TIME_POINT(t4);
 	printf(">> Code generation took %ld ns\n", nanodiff(t3, t4));
@@ -222,54 +305,37 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		}
 		return;
 	}
-	if (machine().memory.is_binary_translated()) {
-		throw std::runtime_error("Machine already reports binary translation");
-	}
-	TIME_POINT(t5);
-	const size_t code_size = code.size();
-	// add compiler arguments to make it part of checksum
-	extern std::string compile_command(int arch);
-	code.append(compile_command(W));
-	// create cacheable filename
-	const uint32_t checksum = crc32c(code.c_str(), code.size());
-	char filename[256];
-	int len = snprintf(filename, sizeof(filename),
-		"/tmp/rvbintr-%08X", checksum);
-	if (len <= 0) {
+
+	TIME_POINT(t9);
+	extern void* compile(const std::string& code, int arch, const char*);
+	void* dylib = compile(code, W, filename.c_str());
+#ifdef BINTR_TIMING
+	TIME_POINT(t10);
+	printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
+#endif
+	// Check compilation result
+	if (dylib == nullptr) {
 		return;
 	}
-	void* dylib = nullptr;
-	code.resize(code_size); // remove compiler arguments
+
+	this->activate_dylib(dylib);
+
+#ifndef RISCV_TRANSLATION_CACHE
+	// Delete the program if the shared ELF is unwanted
+	unlink(filename.c_str());
+#endif
+
+	// close dylib when machine is destructed
+	machine().memory.set_binary_translated(dylib);
 #ifdef BINTR_TIMING
-	TIME_POINT(t6);
-	printf(">> Code hashing took %ld ns\n", nanodiff(t5, t6));
+	TIME_POINT(t12);
+	printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
 #endif
+}
 
-#ifdef RISCV_TRANSLATION_CACHE
-	if (access(filename, R_OK) == 0) {
-		TIME_POINT(t7);
-		dylib = dlopen(filename, RTLD_LAZY);
-	#ifdef BINTR_TIMING
-		TIME_POINT(t8);
-		printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
-	#endif
-	}
-#endif
-	// compile ourselves
-	if (dylib == nullptr) {
-		TIME_POINT(t9);
-		extern void* compile(const std::string& code, int arch, const char*);
-		dylib = compile(code, W, filename);
-	#ifdef BINTR_TIMING
-		TIME_POINT(t10);
-		printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
-	#endif
-		// check compilation result
-		if (dylib == nullptr) {
-			return;
-		}
-	}
-
+template <int W>
+void CPU<W>::activate_dylib(void* dylib) const
+{
 	TIME_POINT(t11);
 	// map the API callback table
 	auto* ptr = dlsym(dylib, "init");
@@ -278,6 +344,7 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		dlclose(dylib);
 		return;
 	}
+
 	auto func = (void (*)(const CallbackTable<W>&)) ptr;
 	func(CallbackTable<W>{
 		.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
@@ -349,29 +416,40 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		},
 	});
 
-	// map all the functions
-	for (auto& mapping : dlmappings) {
-		auto* func = dlsym(dylib, mapping.symbol.c_str());
-		if (func != nullptr) {
-			mapping.ipair.first = (instruction_handler<W>) func;
+	// Map all the functions to instruction handlers
+	uint32_t* no_mappings = (uint32_t *)dlsym(dylib, "no_mappings");
+	struct Mapping {
+		address_t addr;
+		instruction_handler<W> handler;
+	};
+	Mapping* mappings = (Mapping *)dlsym(dylib, "mappings");
+
+	if (no_mappings == nullptr || mappings == nullptr) {
+		throw std::runtime_error("Invalid mappings in binary translation program");
+	}
+
+	// Apply mappings to decoder cache
+	const auto nmappings = *no_mappings;
+	for (size_t i = 0; i < nmappings; i++) {
+		if (mappings[i].handler != nullptr) {
+			instruction_handler_at(machine(), mappings[i].addr) =
+				(instruction_handler<W>) mappings[i].handler;
 		}
 	}
 
-#ifndef RISCV_TRANSLATION_CACHE
-	// delete program
-	unlink(filename);
-#endif
-	// close dylib when machine is destructed
-	machine().memory.set_binary_translated(dylib);
 #ifdef BINTR_TIMING
 	TIME_POINT(t12);
-	printf(">> Activating binary translation took %ld ns\n", nanodiff(t11, t12));
-	printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
+	printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
 #endif
 }
 
-	template void CPU<4>::try_translate(const MachineOptions<4>&, address_t, std::vector<instr_pair>&) const;
-	template void CPU<8>::try_translate(const MachineOptions<8>&, address_t, std::vector<instr_pair>&) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, address_t, std::vector<instr_pair>&) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, address_t, std::vector<instr_pair>&) const;
+	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*) const;
+	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*) const;
+	template void CPU<4>::activate_dylib(void*) const;
+	template void CPU<8>::activate_dylib(void*) const;
+
 	static_assert(!compressed_enabled,
 		"C-extension incompatible with binary translation");
 

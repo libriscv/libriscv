@@ -28,11 +28,37 @@ namespace riscv
 		this->m_decoder_cache = &decoder_array[0];
 
 #ifdef RISCV_INSTR_CACHE_PREGEN
-		std::vector<typename CPU<W>::instr_pair> ipairs;
-		ipairs.reserve(len / 4);
-
 		auto* exec_offset = machine().cpu.exec_seg_data();
 		assert(exec_offset && "Must have set CPU execute segment");
+
+	#ifdef RISCV_BINARY_TRANSLATION
+		std::string bintr_filename;
+	if constexpr (W != 16) {
+		int load_result = machine().cpu.load_translation(options, &bintr_filename);
+		// If we loaded a cached translated program, and fusing is
+		// disabled, then we can fast-path the decoder cache
+		if (load_result == 0 && !options.instruction_fusing) {
+			/* Generate all instruction pointers for executable code.
+			   Cannot step outside of this area when pregen is enabled,
+			   so it's fine to leave the boundries alone. */
+			for (address_t dst = addr; dst < addr + len;)
+			{
+				auto& entry = m_exec_decoder[dst / DecoderCache<W>::DIVISOR];
+
+				auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
+				if (!DecoderCache<W>::isset(entry)) {
+					DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
+				}
+				// We do not cache 2-byte mid-aligned instructions
+				dst += 4;
+			}
+			return;
+		} // Success, not fusing
+	} // W != 16
+	#endif
+
+		std::vector<typename CPU<W>::instr_pair> ipairs;
+		ipairs.reserve(len / 4);
 
 		/* Generate all instruction pointers for executable code.
 		   Cannot step outside of this area when pregen is enabled,
@@ -49,28 +75,28 @@ namespace riscv
 				ipairs.emplace_back(entry.handler, instruction);
 #endif
 			}
-
 			DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
 			// We do not cache 2-byte mid-aligned instructions
 			dst += 4;
 		}
 
-#ifdef RISCV_BINARY_TRANSLATION
 		/* We do not support binary translation for RV128I */
+		/* We do not support fusing for RV128I */
 		if constexpr (W != 16) {
-			machine().cpu.try_translate(options, addr, ipairs);
+
+#ifdef RISCV_BINARY_TRANSLATION
+		if (!machine().is_binary_translated()) {
+			machine().cpu.try_translate(options, bintr_filename, addr, ipairs);
 		}
 #endif
-
-		/* We do not support fusing for RV128I */
-		if (options.instruction_fusing && W != 16) {
+		if (options.instruction_fusing) {
 			for (size_t n = 0; n < ipairs.size()-1; n++)
 			{
 				if (machine().cpu.try_fuse(ipairs[n+0], ipairs[n+1]))
 					n += 1;
 			}
 		}
-
+	} // W != 16
 #else
 		// Default-initialize the whole thing
 		for (size_t p = 0; p < n_pages; p++)

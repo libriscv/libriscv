@@ -66,21 +66,25 @@ namespace riscv
 		static const instruction_t& decode(format_t);
 		std::string to_string(format_t format, const instruction_t& instr) const;
 
-		// serializes all the machine state + a tiny header to @vec
+		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
-		// returns the machine to a previously stored state
+		// Returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
-		// instruction fusing (icache only)
+		// Instruction fusing (icache only)
 		using instr_pair = std::pair<instruction_handler<W>&, format_t&>;
-		void try_translate(const MachineOptions<W>&, address_t pc, std::vector<instr_pair>&) const;
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
+		// Binary translation functions
+		int  load_translation(const MachineOptions<W>&, std::string* filename) const;
+		void try_translate(const MachineOptions<W>&, const std::string&, address_t pc, std::vector<instr_pair>&) const;
 
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
 		void init_execute_area(const uint8_t* data, address_t begin, address_t length);
 		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t length);
-		const uint8_t* exec_seg_data() const { return m_exec_data; }
+		address_t exec_begin() const noexcept { return m_exec_begin; }
+		address_t exec_end()   const noexcept { return m_exec_end; }
+		const uint8_t* exec_seg_data() const noexcept { return m_exec_data; }
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
@@ -111,6 +115,7 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
 #endif
+		void activate_dylib(void*) const;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 	};
 
