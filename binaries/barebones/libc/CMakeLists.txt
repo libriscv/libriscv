@@ -1,4 +1,5 @@
 option(LIBC_USE_STDLIB "Enable standard libraries" ON)
+option(LIBC_WRAP_NATIVE "" ON)
 
 set(LIBC_SOURCES
 	assert.cpp
@@ -25,6 +26,10 @@ target_compile_definitions(libc PRIVATE NATIVE_MEM_SYSCALLS=1)
 
 if (LIBC_USE_STDLIB)
 	target_compile_definitions(libc PRIVATE USE_NEWLIB=1)
+endif()
+if (LIBC_WRAP_NATIVE)
+	target_compile_definitions(libc PRIVATE
+		WRAP_NATIVE_SYSCALLS=1)
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")

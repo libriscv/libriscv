@@ -4,7 +4,7 @@
 #include <cstring>
 
 #ifdef NATIVE_MEM_SYSCALLS
-#define NATIVE_MEM_FUNCATTR __attribute__((noinline))
+#define NATIVE_MEM_FUNCATTR /* */
 #include <include/syscall.hpp>
 #define SYS_IARRAY *(const char(*)[size])
 #define SYS_OARRAY *(char(*)[size])
@@ -62,7 +62,7 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 
 #else
 
-#ifdef USE_NEWLIB
+#if defined(USE_NEWLIB) && defined(WRAP_NATIVE_SYSCALLS)
 #define memset  __wrap_memset
 #define memcpy  __wrap_memcpy
 #define memmove __wrap_memmove
@@ -73,7 +73,7 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 #define strncmp __wrap_strncmp
 #endif
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 void* memset(void* vdest, const int ch, size_t size)
 {
 	register char*   a0 asm("a0") = (char*)vdest;
@@ -103,7 +103,7 @@ void* memcpy(void* vdest, const void* vsrc, size_t size)
 	return vdest;
 }
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 void* memmove(void* vdest, const void* vsrc, size_t size)
 {
 	// An assumption is being made here that since vsrc might be
@@ -119,7 +119,7 @@ void* memmove(void* vdest, const void* vsrc, size_t size)
 	return vdest;
 }
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 int memcmp(const void* m1, const void* m2, size_t size)
 {
 	register const char* a0 asm("a0") = (const char*)m1;
@@ -135,7 +135,7 @@ int memcmp(const void* m1, const void* m2, size_t size)
 	return a0_out;
 }
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 size_t strlen(const char* str)
 {
 	register const char* a0 asm("a0") = str;
@@ -147,7 +147,7 @@ size_t strlen(const char* str)
 	return a0_out;
 }
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 int strcmp(const char* str1, const char* str2)
 {
 	register const char* a0 asm("a0") = str1;
@@ -163,7 +163,7 @@ int strcmp(const char* str1, const char* str2)
 	return a0_out;
 }
 
-extern "C"
+extern "C" NATIVE_MEM_FUNCATTR
 int strncmp(const char* str1, const char* str2, size_t maxlen)
 {
 	register const char* a0 asm("a0") = str1;
