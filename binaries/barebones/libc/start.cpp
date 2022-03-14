@@ -45,15 +45,19 @@ void libc_start(int argc, char** argv, char** envp)
 // 2. initialize the global pointer to __global_pointer
 // NOTE: have to disable relaxing first
 asm
-("   .global _start             \t\n\
+("  .global _start				\t\n\
 _start:                         \t\n\
-     lw   a0, 0(sp) 			\t\n\
-	 addi a1, sp, 4		 		\t\n\
-	 andi sp, sp, -16 /* not needed */\t\n\
-     .option push 				\t\n\
-	 .option norelax 			\t\n\
-	 1:auipc gp, %pcrel_hi(__global_pointer$) \t\n\
-	 addi  gp, gp, %pcrel_lo(1b) \t\n\
-	.option pop					\t\n\
+    lw   a0, 0(sp) 				\t\n"
+#if __riscv_xlen == 32
+	"addi a1, sp, 4		 		\t\n"
+#else
+	"addi a1, sp, 8		 		\t\n"
+#endif
+	"andi sp, sp, -16 /* not needed */\t\n\
+.option push 					\t\n\
+.option norelax 				\t\n\
+	1:auipc gp, %pcrel_hi(__global_pointer$) \t\n\
+	addi  gp, gp, %pcrel_lo(1b) \t\n\
+.option pop						\t\n\
 	call libc_start				\t\n\
 ");
