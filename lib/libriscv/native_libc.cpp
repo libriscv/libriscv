@@ -169,16 +169,31 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memmove(%#lX, %#lX, %lu)\n",
 			(long) dst, (long) src, (long) len);
-		if (src < dst)
+		// If the buffers don't overlap, we can use memcpy which copies forwards
+		if (dst < src) {
+			m.memory.foreach(src, len,
+				[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
+					m.memcpy(dst + off, data, len);
+				});
+		}
+		else if (len > 0)
 		{
-			for (unsigned i = 0; i != len; i++) {
-				m.memory.template write<uint8_t> (dst + i,
-					m.memory.template read<uint8_t> (src + i));
-			}
-		} else {
-			while (len-- != 0) {
-				m.memory.template write<uint8_t> (dst + len,
-					m.memory.template read<uint8_t> (src + len));
+			constexpr size_t wordsize = sizeof(address_type<W>);
+			if (dst % wordsize == 0 && src % wordsize == 0 && len % wordsize == 0)
+			{
+				// Copy whole registers backwards
+				// We start at len because unsigned doesn't have negative numbers
+				// so we will have to read and write from index i-1 instead.
+				for (unsigned i = len; i != 0; i -= wordsize) {
+					m.memory.template write<address_type<W>> (dst + i-wordsize,
+						m.memory.template read<address_type<W>> (src + i-wordsize));
+				}
+			} else {
+				// Copy byte by byte backwards
+				for (unsigned i = len; i != 0; i--) {
+					m.memory.template write<uint8_t> (dst + i-1,
+						m.memory.template read<uint8_t> (src + i-1));
+				}
 			}
 		}
 		m.increment_counter(2 * len);
