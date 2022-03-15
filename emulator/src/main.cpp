@@ -177,8 +177,8 @@ int main(int argc, const char** argv)
 template <int W>
 void run_sighandler(riscv::Machine<W>& machine)
 {
-	constexpr int SIGSEGV = 11;
-	auto& action = machine.sigaction(SIGSEGV);
+	constexpr int SIG_SEGV = 11;
+	auto& action = machine.sigaction(SIG_SEGV);
 	auto handler = action.handler;
 	if (handler == 0x0 || handler == (riscv::address_type<W>)-1)
 		return;

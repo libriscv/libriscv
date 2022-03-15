@@ -7,9 +7,17 @@
 #define SYSPRINT(fmt, ...) /* fmt */
 #endif
 
+#ifndef WIN32
 #include <sys/socket.h>
+#else
+#include <winsock2.h>
+#include <WS2tcpip.h>
+WSADATA global_winsock_data;
+bool winsock_initialized = false;
+#endif
 
 namespace riscv {
+
 
 template <int W>
 static void syscall_socket(Machine<W>& machine)
@@ -22,7 +30,14 @@ static void syscall_socket(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		int real_fd = socket(domain, type, proto);
+#ifdef WIN32
+        if (!winsock_initialized) {
+            WSAStartup(MAKEWORD(2, 2), &global_winsock_data);
+            winsock_initialized = true;
+        }
+#endif
+
+		auto real_fd = socket(domain, type, proto);
 		if (real_fd > 0) {
 			const int vfd = machine.fds().assign_socket(real_fd);
 			machine.set_result(vfd);
@@ -51,7 +66,7 @@ static void syscall_bind(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const int real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(sockfd);
 		alignas(struct sockaddr) char buffer[addrlen];
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
@@ -73,7 +88,7 @@ static void syscall_listen(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const int real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(sockfd);
 
 		int res = listen(real_fd, backlog);
 		machine.set_result_or_error(res);
@@ -93,7 +108,7 @@ static void syscall_accept(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const int real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(sockfd);
 		alignas(16) char buffer[128];
 		socklen_t addrlen = sizeof(buffer);
 
@@ -126,7 +141,7 @@ static void syscall_connect(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const int real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(sockfd);
 		alignas(16) char buffer[256];
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
@@ -154,7 +169,7 @@ static void syscall_setsockopt(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const int real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(sockfd);
 		char buffer[optlen];
 		machine.copy_from_guest(buffer, g_opt, optlen);
 
