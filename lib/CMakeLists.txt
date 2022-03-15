@@ -49,13 +49,21 @@ set (SOURCES
 		libriscv/posix_signals.cpp
 		libriscv/posix_threads.cpp
 		libriscv/socket_calls.cpp
-		libriscv/system_calls.cpp
 		libriscv/rv32i.cpp
 		libriscv/rv64i.cpp
 		libriscv/rv128i.cpp
 		libriscv/serialize.cpp
 		libriscv/util/crc32c.cpp
 	)
+if (WIN32)
+	list(APPEND SOURCES
+		libriscv/win32/system_calls.cpp
+	)
+else()
+	list(APPEND SOURCES
+		libriscv/linux/system_calls.cpp
+	)
+endif()
 if (RISCV_DEBUG)
 	list(APPEND SOURCES
 		libriscv/debug.cpp
@@ -109,4 +117,7 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv PUBLIC dl)
+endif()
+if(WIN32)
+	target_link_libraries(riscv PUBLIC wsock32 ws2_32)
 endif()

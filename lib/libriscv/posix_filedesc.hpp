@@ -7,15 +7,21 @@ namespace riscv {
 
 struct FileDescriptors
 {
+#ifndef WIN32
+    typedef int real_fd_type;
+#else
+        typedef uint64_t real_fd_type; //Because SOCKET is uint64_t
+#endif
+
 	// Insert and manage real FDs, return virtual FD
-	int assign_file(int fd) { return assign(fd, false); }
-	int assign_socket(int fd) { return assign(fd, true); }
-	int assign(int fd, bool socket);
+	int assign_file(real_fd_type fd) { return assign(fd, false); }
+	int assign_socket(real_fd_type fd) { return assign(fd, true); }
+	int assign(real_fd_type fd, bool socket);
 	// Get real FD from virtual FD
-	int get(int vfd);
-	int translate(int vfd);
+    real_fd_type get(int vfd);
+    real_fd_type translate(int vfd);
 	// Remove virtual FD and return real FD
-	int erase(int vfd);
+    real_fd_type erase(int vfd);
 
 	bool is_socket(int) const;
 	bool permit_write(int vfd) {
@@ -25,7 +31,8 @@ struct FileDescriptors
 
 	~FileDescriptors();
 
-	std::map<int, int> translation;
+    std::map<int, real_fd_type> translation;
+
 
 	static constexpr int FILE_D_BASE = 0x1000;
 	static constexpr int SOCKET_D_BASE = 0x40001000;
@@ -41,7 +48,7 @@ struct FileDescriptors
 	std::function<bool(void*, uint64_t)> filter_ioctl = nullptr;
 };
 
-inline int FileDescriptors::assign(int real_fd, bool socket)
+inline int FileDescriptors::assign(FileDescriptors::real_fd_type real_fd, bool socket)
 {
 	int virtfd;
 	if (!socket)
@@ -52,24 +59,24 @@ inline int FileDescriptors::assign(int real_fd, bool socket)
 	translation.emplace(virtfd, real_fd);
 	return virtfd;
 }
-inline int FileDescriptors::get(int virtfd)
+inline FileDescriptors::real_fd_type FileDescriptors::get(int virtfd)
 {
 	auto it = translation.find(virtfd);
 	if (it != translation.end()) return it->second;
 	return -EBADF;
 }
-inline int FileDescriptors::translate(int virtfd)
+inline FileDescriptors::real_fd_type FileDescriptors::translate(int virtfd)
 {
 	auto it = translation.find(virtfd);
 	if (it != translation.end()) return it->second;
 	// Only allow direct access to standard pipes and errors
 	return (virtfd <= 2) ? virtfd : -1;
 }
-inline int FileDescriptors::erase(int virtfd)
+inline FileDescriptors::real_fd_type FileDescriptors::erase(int virtfd)
 {
 	auto it = translation.find(virtfd);
 	if (it != translation.end()) {
-		const int real_fd = it->second;
+        FileDescriptors::real_fd_type real_fd = it->second;
 		// Remove the virt FD
 		translation.erase(it);
 		return real_fd;

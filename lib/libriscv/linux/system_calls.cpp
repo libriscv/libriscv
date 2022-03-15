@@ -843,7 +843,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(175, syscall_stub_zero<W>);
 	// getgid
 	this->install_syscall_handler(176, syscall_stub_zero<W>);
-	// getegid
+	// getegid
 	this->install_syscall_handler(177, syscall_stub_zero<W>);
 
 	this->install_syscall_handler(160, syscall_uname<W>);
