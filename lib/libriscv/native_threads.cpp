@@ -84,7 +84,9 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	// N+8: clone threadcall
 	this->install_syscall_handler(syscall_base+8,
 	[] (Machine<W>& machine) {
-		// invoke clone threadcall
+		const auto func  = machine.template sysarg(0);
+		const auto fini  = machine.template sysarg(1);
+
 		const auto tls = machine.arena().malloc(STACK_SIZE);
 		if (UNLIKELY(tls == 0)) {
 			THPRINT(machine,
@@ -93,8 +95,7 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 			return;
 		}
 		const auto stack = ((tls + STACK_SIZE) & ~0xF);
-		const auto  func = machine.template sysarg<address_type<W>> (0);
-		const auto  fini = machine.template sysarg<address_type<W>> (1);
+
 		auto* thread = machine.threads().create(
 			CHILD_SETTID, tls, 0x0, stack, tls, tls, STACK_SIZE);
 		// set PC back to clone point - 4
@@ -107,9 +108,6 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 		thread->activate();
 		// exit into the exit function which frees the thread
 		machine.cpu.reg(riscv::REG_RA) = fini;
-		// move 6 arguments back
-		std::memmove(&machine.cpu.reg(10), &machine.cpu.reg(12),
-			6 * sizeof(address_type<W>));
 		// geronimo!
 		machine.cpu.jump(func - 4);
 	});

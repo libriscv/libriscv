@@ -42,11 +42,10 @@ int     oneshot(const T& func, Args&&... args);
 
 /* Create a new self-governing thread that directly starts on the
    threads start function, with a special return address that
-   self-deletes and exits the thread safely. Arguments can be passed,
-   but they must be used by value, unless you know what you are doing.
-   Returns thread id on success. The first argument is the Thread&. */
-template <typename T, typename... Args>
-long    direct(const T& func, Args&&... args);
+   self-deletes and exits the thread safely. Arguments cannot be passed,
+   but a limited amount of capture storage exists. */
+using direct_funcptr = void(*)();
+inline long direct(direct_funcptr);
 
 /* Waits for a thread to finish and then returns the exit status
    of the thread. The thread is then deleted, freeing memory. */
@@ -81,8 +80,6 @@ struct Thread
 
 	Thread(std::function<void()> start)
 	 	: startfunc{std::move(start)} {}
-	Thread(void(*func)(), void* data)
-		: tinyfunc{func}, tinydata{data} {}
 
 	long resume()   { return yield_to(this); }
 	long suspend()  { return yield(); }
@@ -96,10 +93,6 @@ struct Thread
 	union {
 		long  return_value;
 		std::function<void()> startfunc;
-		struct {
-			void (*tinyfunc) ();
-			void* tinydata;
-		};
 	};
 };
 struct ThreadDeleter {
@@ -115,22 +108,25 @@ inline bool Thread::has_exited() const {
 }
 
 inline Thread* self() {
+#ifdef __GNUG__
+	register Thread* tp asm("tp");
+	asm("" : "=r"(tp));
+#else
 	Thread* tp;
 	asm("mv %0, tp" : "=r"(tp));
-	return (Thread*) tp;
+#endif
+	return tp;
 }
 
 inline int gettid() {
 	return self()->tid;
 }
 
-inline void* getdata() {
-	return self()->tinydata;
-}
-
 template <typename T, typename... Args>
 inline auto create(const T& func, Args&&... args)
 {
+	static_assert( std::is_invocable_v<T, Args...> );
+
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (stack_bot == nullptr) return Thread_ptr{};
 	char* stack_top = stack_bot + Thread::STACK_SIZE;
@@ -164,6 +160,7 @@ inline auto create(const T& func, Args&&... args)
 template <typename T, typename... Args>
 inline int oneshot(const T& func, Args&&... args)
 {
+	static_assert( std::is_invocable_v<T, Args...> );
 	static_assert(std::is_same_v<void, decltype(func(args...))>,
 				"Free threads have no return value!");
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
@@ -187,16 +184,19 @@ inline int oneshot(const T& func, Args&&... args)
 		(long)stack_bot, Thread::STACK_SIZE);
 }
 
-extern "C" long threadcall_executor(...);
+extern "C" long threadcall_create(direct_funcptr, void(*)());
 extern "C" void threadcall_destructor();
 
-template <typename T, typename... Args>
-inline long direct(const T& func, Args&&... args)
+inline long direct(direct_funcptr starter)
 {
-	using Ret = decltype(func(args...));
-	auto fptr = static_cast<Ret(*)(Args...)> (func);
-	auto dptr = threadcall_destructor;
-	return threadcall_executor(fptr, dptr, std::forward<Args> (args)...);
+	register direct_funcptr a0 asm("a0") = starter;
+	register void(*a1)()       asm("a1") = threadcall_destructor;
+	register long syscall_id asm("a7") = THREAD_SYSCALLS_BASE+8;
+	register long a0_out asm("a0");
+
+	asm volatile ("ecall" : "=r"(a0_out) :
+		"r"(a0), "m"(*a0), "r"(a1), "m"(*a1), "r"(syscall_id));
+	return a0_out;
 }
 
 inline long join(Thread* thread)

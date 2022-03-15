@@ -12,11 +12,6 @@ namespace microthread
 		syscall(THREAD_SYSCALLS_BASE+1, 0);
 		__builtin_unreachable();
 	}
-	void direct_starter(Thread* thread)
-	{
-		thread->tinyfunc();
-		oneshot_exit();
-	}
 
 	static Thread main_thread {nullptr};
 	__attribute__((constructor, naked, used))
@@ -28,16 +23,12 @@ namespace microthread
 	}
 }
 
-extern "C"
-__attribute__((noinline))
-long threadcall_executor(...)
-{
-	return syscall(THREAD_SYSCALLS_BASE+8);
-}
+#define STRINGIFY_HELPER(x) #x
+#define STRINGIFY(x) STRINGIFY_HELPER(x)
 
-extern "C"
-void threadcall_destructor()
-{
-	syscall(THREAD_SYSCALLS_BASE+9);
-	__builtin_unreachable();
-}
+// This function never returns (so no ret)
+asm(".global threadcall_destructor\n"
+".type threadcall_destructor, @function\n"
+"threadcall_destructor:\n"
+"	li a7, " STRINGIFY(THREAD_SYSCALLS_BASE+9) "\n"
+"	ecall\n");
