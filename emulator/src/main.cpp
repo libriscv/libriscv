@@ -111,6 +111,10 @@ static void run_program(
 	} catch (riscv::MachineException& me) {
 		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
 				me.type(), me.what(), me.data());
+		machine.memory.print_backtrace(
+			[] (std::string_view line) {
+				printf("-> %.*s\n", (int)line.size(), line.begin());
+			});
 		if (me.type() == riscv::UNIMPLEMENTED_INSTRUCTION || me.type() == riscv::MISALIGNED_INSTRUCTION) {
 			printf(">>> Is an instruction extension disabled?\n");
 			printf(">>> A-extension: %d  C-extension: %d  F-extension: %d\n",
@@ -123,6 +127,10 @@ static void run_program(
 #endif
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
+		machine.memory.print_backtrace(
+			[] (std::string_view line) {
+				printf("-> %.*s\n", (int)line.size(), line.begin());
+			});
 #ifdef RISCV_DEBUG
 		machine.print_and_pause();
 #else
