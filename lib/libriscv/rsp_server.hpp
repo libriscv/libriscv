@@ -42,6 +42,11 @@
 **/
 
 namespace riscv {
+#ifndef WIN32
+    typedef int socket_fd_type;
+#else
+    typedef uint64_t socket_fd_type;
+#endif
 template <int W> struct RSPClient;
 
 template <int W>
@@ -49,14 +54,14 @@ struct RSP
 {
 	// Wait for a connection for @timeout_secs
 	std::unique_ptr<RSPClient<W>> accept(int timeout_secs = 10);
-	int  fd() const noexcept { return server_fd; }
+    socket_fd_type  fd() const noexcept { return server_fd; }
 
 	RSP(riscv::Machine<W>&, uint16_t);
 	~RSP();
 
 private:
 	riscv::Machine<W>& m_machine;
-	int server_fd;
+    socket_fd_type server_fd;
 };
 template <int W>
 struct RSPClient
@@ -78,7 +83,7 @@ struct RSPClient
 	void set_verbose(bool v) { m_verbose = v; }
 	void on_stopped(StopFunc f) { m_on_stopped = f; }
 
-	RSPClient(riscv::Machine<W>& m, int fd);
+	RSPClient(riscv::Machine<W>& m, socket_fd_type fd);
 	~RSPClient();
 
 private:
@@ -105,7 +110,7 @@ private:
 	void close_now();
 	riscv::Machine<W>* m_machine;
 	uint64_t m_ilimit = 16'000'000UL;
-	int  sockfd;
+    socket_fd_type  sockfd;
 	bool m_closed  = false;
 	bool m_verbose = false;
 	std::string buffer;
@@ -118,28 +123,18 @@ private:
 #ifdef __linux__
 #include "linux/rsp_server.hpp"
 #else
-#warning "Implement me"
+#include "win32/rsp_server.hpp"
 #endif
 
 namespace riscv {
 
 template <int W> inline
-RSPClient<W>::RSPClient(riscv::Machine<W>& m, int fd)
+RSPClient<W>::RSPClient(riscv::Machine<W>& m, socket_fd_type fd)
 	: m_machine{&m}, sockfd(fd)
 {
 	m_machine->set_max_instructions(m_ilimit);
 }
-template <int W> inline
-RSPClient<W>::~RSPClient() {
-	if (!is_closed())
-		close(this->sockfd);
-}
 
-template <int W> inline
-void RSPClient<W>::close_now() {
-	this->m_closed = true;
-	close(this->sockfd);
-}
 template <int W>
 int RSPClient<W>::forge_packet(
 	char* dst, size_t dstlen, const char* data, int datalen)
@@ -176,86 +171,7 @@ int RSPClient<W>::forge_packet(
 	int datalen = vsnprintf(data, sizeof(data), fmt, args);
 	return forge_packet(dst, dstlen, data, datalen);
 }
-template <int W>
-bool RSPClient<W>::sendf(const char* fmt, ...)
-{
-	char buffer[PACKET_SIZE];
-	va_list args;
-	va_start(args, fmt);
-	int plen = forge_packet(buffer, sizeof(buffer), fmt, args);
-	va_end(args);
-	if (UNLIKELY(m_verbose)) {
-		printf("TX >>> %.*s\n", plen, buffer);
-	}
-	int len = ::write(sockfd, buffer, plen);
-	if (len <= 0) {
-		this->close_now();
-		return false;
-	}
-	// Acknowledgement
-	int rlen = ::read(sockfd, buffer, 1);
-	if (rlen <= 0) {
-		this->close_now();
-		return false;
-	}
-	return (buffer[0] == '+');
-}
-template <int W>
-bool RSPClient<W>::send(const char* str)
-{
-	char buffer[PACKET_SIZE];
-	int plen = forge_packet(buffer, sizeof(buffer), str, strlen(str));
-	if (UNLIKELY(m_verbose)) {
-		printf("TX >>> %.*s\n", plen, buffer);
-	}
-	int len = ::write(sockfd, buffer, plen);
-	if (len <= 0) {
-		this->close_now();
-		return false;
-	}
-	// Acknowledgement
-	int rlen = ::read(sockfd, buffer, 1);
-	if (rlen <= 0) {
-		this->close_now();
-		return false;
-	}
-	return (buffer[0] == '+');
-}
-template <int W>
-bool RSPClient<W>::process_one()
-{
-	char tmp[1024];
-	int len = ::read(this->sockfd, tmp, sizeof(tmp));
-	if (len <= 0) {
-		this->close_now();
-		return false;
-	}
-	if (UNLIKELY(m_verbose)) {
-		printf("RX <<< %.*s\n", len, tmp);
-	}
-	for (int i = 0; i < len; i++)
-	{
-		char c = tmp[i];
-		if (buffer.empty() && c == '+') {
-			/* Ignore acks? */
-		}
-		else if (c == '$') {
-			this->buffer.clear();
-		}
-		else if (c == '#') {
-			reply_ack();
-			process_data();
-			this->buffer.clear();
-			i += 2;
-		}
-		else {
-			this->buffer.append(&c, 1);
-			if (buffer.size() >= PACKET_SIZE)
-				break;
-		}
-	}
-	return true;
-}
+
 template <int W>
 void RSPClient<W>::process_data()
 {
@@ -659,21 +575,12 @@ void RSPClient<W>::report_gprs()
 }
 
 template <int W> inline
-void RSPClient<W>::reply_ack() {
-	ssize_t len = write(sockfd, "+", 1);
-	if (len < 0) throw std::runtime_error("RSPClient: Unable to ACK");
-}
-template <int W> inline
 void RSPClient<W>::reply_ok() {
 	send("OK");
 }
 template <int W>
 void RSPClient<W>::interrupt() {
 	send("S05");
-}
-template <int W>
-void RSPClient<W>::kill() {
-	close(sockfd);
 }
 
 } // riscv

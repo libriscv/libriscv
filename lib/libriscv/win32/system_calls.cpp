@@ -16,9 +16,6 @@ static constexpr bool verbose_syscalls = false;
 #include <sys/time.h>
 #include <sys/stat.h>
 
-// Remove stdin define from MinGW
-#undef stdin
-
 #define SA_ONSTACK	0x08000000
 
 namespace riscv {

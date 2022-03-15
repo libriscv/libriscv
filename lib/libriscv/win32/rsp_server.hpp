@@ -3,10 +3,7 @@
 #define _GNU_SOURCE
 #endif
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
+#include "ws2.hpp"
 #include <unistd.h>
 
 namespace riscv {
@@ -15,12 +12,16 @@ template <int W>
 RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	: m_machine{m}
 {
-	this->server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    ws2::init();
+
+	this->server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    u_long mode = 1;
+    ioctlsocket(server_fd, FIONBIO, &mode); // SOCK_NONBLOCK
 
 	int opt = 1;
-	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
-		&opt, sizeof(opt))) {
-		close(server_fd);
+	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_BROADCAST, // SO_BROADCAST = SO_REUSEPORT
+        (const char*)&opt, sizeof(opt))) {
+        closesocket(server_fd);
 		throw std::runtime_error("Failed to enable REUSEADDR/PORT");
 	}
 	struct sockaddr_in address;
@@ -29,11 +30,11 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	address.sin_port = htons(port);
 	if (bind(server_fd, (struct sockaddr*) &address,
 			sizeof(address)) < 0) {
-		close(server_fd);
+        closesocket(server_fd);
 		throw std::runtime_error("GDB listener failed to bind to port");
 	}
 	if (listen(server_fd, 2) < 0) {
-		close(server_fd);
+        closesocket(server_fd);
 		throw std::runtime_error("GDB listener failed to listen on port");
 	}
 }
@@ -62,36 +63,33 @@ std::unique_ptr<RSPClient<W>> RSP<W>::accept(int timeout_secs)
 	}
 	// Disable Nagle
 	int opt = 1;
-	if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt))) {
-		close(sockfd);
+	if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (const char*)&opt, sizeof(opt))) {
+        closesocket(sockfd);
 		return nullptr;
 	}
 	// Enable receive and send timeouts
-	tv = {
-		.tv_sec = 60,
-		.tv_usec = 0
-	};
-	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO | SO_SNDTIMEO, &tv, sizeof(tv))) {
-		close(sockfd);
+	DWORD timeout = 60*1000;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO | SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout))) {
+        closesocket(sockfd);
 		return nullptr;
 	}
 	return std::make_unique<RSPClient<W>>(m_machine, sockfd);
 }
 template <int W> inline
 RSP<W>::~RSP() {
-	close(server_fd);
+    closesocket(server_fd);
 }
 
 template <int W> inline
 RSPClient<W>::~RSPClient() {
     if (!is_closed())
-        close(this->sockfd);
+        closesocket(this->sockfd);
 }
 
 template <int W> inline
 void RSPClient<W>::close_now() {
     this->m_closed = true;
-    close(this->sockfd);
+    closesocket(this->sockfd);
 }
 
 template <int W>
@@ -105,13 +103,13 @@ bool RSPClient<W>::sendf(const char* fmt, ...)
     if (UNLIKELY(m_verbose)) {
         printf("TX >>> %.*s\n", plen, buffer);
     }
-    int len = ::write(sockfd, buffer, plen);
+    int len =  ::send(sockfd, buffer, plen, 0);
     if (len <= 0) {
         this->close_now();
         return false;
     }
     // Acknowledgement
-    int rlen = ::read(sockfd, buffer, 1);
+    int rlen = ::recv(sockfd, buffer, 1, 0);
     if (rlen <= 0) {
         this->close_now();
         return false;
@@ -133,7 +131,7 @@ bool RSPClient<W>::send(const char* str)
         return false;
     }
     // Acknowledgement
-    int rlen = ::read(sockfd, buffer, 1);
+    int rlen = ::recv(sockfd, buffer, 1, 0);
     if (rlen <= 0) {
         this->close_now();
         return false;
@@ -144,7 +142,7 @@ template <int W>
 bool RSPClient<W>::process_one()
 {
     char tmp[1024];
-    int len = ::read(this->sockfd, tmp, sizeof(tmp));
+    int len = ::recv(this->sockfd, tmp, sizeof(tmp), 0);
     if (len <= 0) {
         this->close_now();
         return false;
@@ -178,12 +176,13 @@ bool RSPClient<W>::process_one()
 
 template <int W> inline
 void RSPClient<W>::reply_ack() {
-    ssize_t len = write(sockfd, "+", 1);
+    ssize_t len = ::send(sockfd, "+", 1, 0);
     if (len < 0) throw std::runtime_error("RSPClient: Unable to ACK");
 }
 
 template <int W>
 void RSPClient<W>::kill() {
-    close(sockfd);
+    closesocket(sockfd);
 }
+
 } // riscv
