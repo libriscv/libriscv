@@ -56,41 +56,37 @@ static void run_program(
 		exit(1);
 	}
 
-	/*
-	machine.memory.trap(0x3FFFD000,
-		[&machine] (riscv::Page& page, uint32_t off, int mode, int64_t val)
-		{
-			if (mode & riscv::TRAP_WRITE) {
-				printf("> write: 0x%X -> 0x%X (%u)\n", off, (int) val, (int) val);
-			} else {
-				printf("> read: 0x%X -> %d\n", off, page.page().aligned_read<uint32_t> (off));
-			}
-			machine.print_and_pause();
-		});
-	machine.cpu.breakpoint(machine.address_of("main"));
-	machine.cpu.breakpoint(0x10730);
-	machine.cpu.breakpoint(0x5B540, //0x5B518,
-		[] (auto& cpu)
-		{
-			printf("Exchanging SR1 = %u with SR1 = 15\n", cpu.reg(9));
-			cpu.reg(9) = 15;
-			cpu.machine().print_and_pause();
-		});
+	if constexpr(riscv::debugging_enabled)
+	{
+		// Print all instructions by default
+		const bool vi = true;
+		// With VERBOSE=1 we also print register values after
+		// every instruction.
+		const bool vr = (getenv("VERBOSE") != nullptr);
+		// If you want to start debugging from the beginning,
+		// set FROM_START=1.
+		const bool debug_from_start = getenv("FROM_START") != nullptr;
 
-	machine.verbose_instructions = true;
-	machine.verbose_jumps = true;
-	machine.verbose_registers = true;
-	machine.verbose_fp_registers = true;
-	machine.throw_on_unhandled_syscall = true;
-	*/
-#ifdef RISCV_DEBUG
-	// print all instructions by default, when debugging is enabled
-	machine.verbose_instructions = true;
-	if (getenv("VERBOSE")) {
-		machine.verbose_registers = true;
+		auto main_address = machine.address_of("main");
+		if (debug_from_start || main_address == 0x0) {
+			machine.verbose_instructions = vi;
+			machine.verbose_registers = vr;
+			// Without main() this is a custom or stripped program,
+			// so we break immediately.
+			machine.print_and_pause();
+		} else {
+			// Automatic breakpoint at main() to help debug certain programs
+			machine.cpu.breakpoint(machine.address_of("main"),
+			[vi, vr] (auto& cpu) {
+				// Remove the breakpoint to speed up debugging
+				cpu.erase_breakpoint(cpu.pc());
+				cpu.machine().verbose_instructions = vi;
+				cpu.machine().verbose_registers = vr;
+				printf("\n*\n* Entered main() @ 0x%lX\n*\n", (long)cpu.pc());
+				cpu.machine().print_and_pause();
+			});
+		}
 	}
-	machine.print_and_pause();
-#endif
 
 	try {
 		// If you run the emulator with DEBUG=1, you can connect

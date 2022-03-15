@@ -6,7 +6,7 @@
 #include "rva.hpp"
 #endif
 #ifdef RISCV_DEBUG
-#include <map>
+#include <unordered_map>
 #endif
 #include <vector>
 
@@ -57,6 +57,7 @@ namespace riscv
 #ifdef RISCV_DEBUG
 		// debugging
 		void breakpoint(address_t address, breakpoint_t = default_pausepoint);
+		void erase_breakpoint(address_t address) { breakpoint(address, nullptr); }
 		auto& breakpoints() { return this->m_breakpoints; }
 		void break_on_steps(int steps);
 		void break_checks();
@@ -107,7 +108,7 @@ namespace riscv
 		// instruction step & breakpoints
 		mutable int32_t m_break_steps = 0;
 		mutable int32_t m_break_steps_cnt = 0;
-		std::map<address_t, breakpoint_t> m_breakpoints;
+		std::unordered_map<address_t, breakpoint_t> m_breakpoints;
 		bool break_time() const;
 		void register_debug_logging() const;
 		friend struct Machine<W>;

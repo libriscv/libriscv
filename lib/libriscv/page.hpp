@@ -118,7 +118,8 @@ struct Page
 	std::unique_ptr<PageData> m_page;
 
 	bool has_trap() const noexcept { return m_trap != nullptr; }
-	void set_trap(mmio_cb_t newtrap) const noexcept { this->m_trap = newtrap; }
+	// NOTE: Setting a trap makes the page uncacheable
+	void set_trap(mmio_cb_t newtrap) const;
 	void trap(uint32_t offset, int mode, int64_t value) const;
 	static int trap_mode(int mode) noexcept { return mode & 0xF000; }
 
@@ -135,6 +136,15 @@ inline Page::Page(const PageAttributes& a, PageData* data)
 inline void Page::trap(uint32_t offset, int mode, int64_t value) const
 {
 	this->m_trap((Page&) *this, offset, mode, value);
+}
+inline void Page::set_trap(mmio_cb_t newtrap) const {
+#  ifdef RISCV_MEMORY_TRAPS
+	this->attr.cacheable = false;
+	this->m_trap = newtrap;
+#  else
+	(void) newtrap;
+	throw MachineException(FEATURE_DISABLED, "Memory traps have not been enabled");
+#  endif
 }
 
 inline std::string Page::to_string() const

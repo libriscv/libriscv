@@ -59,7 +59,10 @@ inline void CPU<W>::initialize_exec_segs(const uint8_t* data, address_t begin, a
 
 template <int W>
 inline void CPU<W>::breakpoint(address_t addr, breakpoint_t func) {
-	this->m_breakpoints[addr] = func;
+	if (func)
+		this->m_breakpoints[addr] = func;
+	else
+		this->m_breakpoints.erase(addr);
 }
 
 template <int W>
