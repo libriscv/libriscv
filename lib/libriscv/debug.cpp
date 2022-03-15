@@ -52,12 +52,16 @@ static void print_help(CPU<W>& cpu)
   usage: command [options]
 	commands:
 	  ?, help               Show this informational text
+	  q, quit               Exit the interactive debugger
 	  c, continue           Continue execution, disable stepping
 	  s, step [steps=1]     Run [steps] instructions, then break
-	  b, break [addr]       Breakpoint on executing [addr]
+	  b, break [addr]       Breakpoint when PC == addr
+	  b, break [name]       Resolve symbol to addr, use as breakpoint
 	  rb [addr]             Breakpoint on reading from [addr]
 	  wb [addr]             Breakpoint on writing to [addr]
 	  clear                 Clear all breakpoints
+	  bt, backtrace         Display primitive backtrace
+	  a, addrof [name]      Resolve symbol name to address (or 0x0)
 	  read [addr] (len=1)   Read from [addr] (len) bytes and print
 	  write [addr] [value]  Write [value] to memory location [addr]
 	  print [addr] [length] Print [addr] as a string of [length] bytes
@@ -116,13 +120,41 @@ static bool execute_commands(CPU<W>& cpu)
 			dprintf(cpu, ">>> Not enough parameters: break [addr]\n");
 			return true;
 		}
-		unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
-		cpu.breakpoint(hex);
+		const auto addr = cpu.machine().address_of(params[1]);
+		if (addr != 0x0) {
+			dprintf(cpu, "Breakpoint on %s with address 0x%lX\n",
+				params[1].c_str(), addr);
+			cpu.breakpoint(addr);
+		} else {
+			unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
+			dprintf(cpu, "Breakpoint on address 0x%lX\n", hex);
+			cpu.breakpoint(hex);
+		}
 		return true;
 	}
 	else if (cmd == "clear")
 	{
 		cpu.breakpoints().clear();
+		return true;
+	}
+	else if (cmd == "bt" || cmd == "backtrace")
+	{
+		cpu.machine().memory.print_backtrace(
+			[&cpu] (std::string_view line) {
+				dprintf(cpu, "-> %.*s\n", (int)line.size(), line.begin());
+			});
+		return true;
+	}
+	else if (cmd == "a" || cmd == "addrof")
+	{
+		if (params.size() < 2)
+		{
+			dprintf(cpu, ">>> Not enough parameters: addrof [name]\n");
+			return true;
+		}
+		const auto addr = cpu.machine().address_of(params[1]);
+		dprintf(cpu, "The address of %s is 0x%lX.%s\n",
+			params[1].c_str(), addr, addr == 0x0 ? " (Likely not found)" : "");
 		return true;
 	}
 	// verbose instructions

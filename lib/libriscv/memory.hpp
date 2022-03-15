@@ -91,7 +91,7 @@ namespace riscv
 			size_t      size    = 0;
 		};
 		Callsite lookup(address_t) const;
-		void print_backtrace(void(*printer_function)(std::string_view));
+		void print_backtrace(std::function<void(std::string_view)>);
 
 		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
