@@ -10,10 +10,9 @@
 #ifndef WIN32
 #include <sys/socket.h>
 #else
-#include <winsock2.h>
-#include <WS2tcpip.h>
-WSADATA global_winsock_data;
-bool winsock_initialized = false;
+#include "win32/ws2.hpp"
+WSADATA riscv::ws2::global_winsock_data;
+bool riscv::ws2::winsock_initialized = false;
 #endif
 
 namespace riscv {
@@ -29,14 +28,9 @@ static void syscall_socket(Machine<W>& machine)
 		domain, type, proto);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
-
 #ifdef WIN32
-        if (!winsock_initialized) {
-            WSAStartup(MAKEWORD(2, 2), &global_winsock_data);
-            winsock_initialized = true;
-        }
+        ws2::init();
 #endif
-
 		auto real_fd = socket(domain, type, proto);
 		if (real_fd > 0) {
 			const int vfd = machine.fds().assign_socket(real_fd);
