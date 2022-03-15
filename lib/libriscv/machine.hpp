@@ -148,9 +148,9 @@ namespace riscv
 		auto& get_printer() const noexcept { return m_printer; }
 		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
 		// Stdin
-		long stdin(char*, size_t) const;
+		long stdin_read(char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
-		void set_stdin(stdin_func sin) { m_stdin = std::move(sin); }
+		void set_stdin(stdin_func sin = m_default_stdin) { m_stdin = std::move(sin); }
 		// Debug printer
 		void debug_print(const char*, size_t) const;
 		auto& get_debug_printer() const noexcept { return m_debug_printer; }

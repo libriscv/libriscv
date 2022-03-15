@@ -151,8 +151,9 @@ static void syscall_read(Machine<W>& machine)
 			machine.set_result(-ENOMEM);
 			return;
 		}
+		// TODO: We can use gather buffers here to avoid the copy
 		auto buffer = std::unique_ptr<char[]> (new char[len]);
-		long result = machine.stdin(buffer.get(), len);
+		long result = machine.stdin_read(buffer.get(), len);
 		if (result > 0) {
 			machine.copy_to_guest(address, buffer.get(), result);
 		}
@@ -164,7 +165,7 @@ static void syscall_read(Machine<W>& machine)
 		riscv::vBuffer buffers[256];
 		size_t cnt =
 			machine.memory.gather_buffers_from_range(256, buffers, address, len);
-		// Could probably be a readv call, tbh
+		// TODO: Could probably be a readv call
 		size_t bytes = 0;
 		for (size_t i = 0; i < cnt; i++) {
 			ssize_t res = read(real_fd, buffers[i].ptr, buffers[i].len);
