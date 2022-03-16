@@ -1,5 +1,6 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/rsp_server.hpp>
+#include <inttypes.h>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 
@@ -82,7 +83,7 @@ static void run_program(
 				cpu.erase_breakpoint(cpu.pc());
 				cpu.machine().verbose_instructions = vi;
 				cpu.machine().verbose_registers = vr;
-				printf("\n*\n* Entered main() @ 0x%lX\n*\n", (long)cpu.pc());
+				printf("\n*\n* Entered main() @ 0x%" PRIX64 "\n*\n", uint64_t(cpu.pc()));
 				cpu.machine().print_and_pause();
 			});
 		}
@@ -109,7 +110,7 @@ static void run_program(
 			machine.simulate();
 		}
 	} catch (riscv::MachineException& me) {
-		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
+		printf(">>> Machine exception %d: %s (data: 0x%" PRIX64 ")\n",
 				me.type(), me.what(), me.data());
 		machine.memory.print_backtrace(
 			[] (std::string_view line) {

@@ -1,5 +1,6 @@
 #include "rv32i.hpp"
 #include "instr_helpers.hpp"
+#include <inttypes.h>
 static const char atomic_type[] { '?', '?', 'W', 'D', 'Q', '?', '?', '?' };
 static const char* atomic_name2[] {
 	"AMOADD", "AMOXOR", "AMOOR", "AMOAND", "AMOMIN", "AMOMAX", "AMOMINU", "AMOMAXU"
@@ -246,9 +247,9 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		const long addr = cpu.reg(instr.Atype.rs1);
-		return snprintf(buffer, len, "LR.%c [%s = 0x%lX], %s",
+		return snprintf(buffer, len, "LR.%c [%s = 0x%" PRIX64 "], %s",
 				atomic_type[instr.Atype.funct3 & 7],
-				RISCV::regname(instr.Atype.rs1), addr,
+				RISCV::regname(instr.Atype.rs1), uint64_t(addr),
 				RISCV::regname(instr.Atype.rd));
 	});
 

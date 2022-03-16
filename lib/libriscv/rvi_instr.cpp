@@ -3,6 +3,7 @@
 #include "rv128i.hpp"
 #include "instr_helpers.hpp"
 #include "rvc.hpp"
+#include <inttypes.h>
 
 namespace riscv
 {
@@ -48,10 +49,10 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		static std::array<const char*, 8> f3 = {"LD.B", "LD.H", "LD.W", "LD.D", "LD.BU", "LD.HU", "LD.WU", "LD.Q"};
-		return snprintf(buffer, len, "%s %s, [%s%+ld = 0x%lX]",
+		return snprintf(buffer, len, "%s %s, [%s%+" PRId32 " = 0x%" PRIX64 "]",
 						f3[instr.Itype.funct3], RISCV::regname(instr.Itype.rd),
-						RISCV::regname(instr.Itype.rs1), (long) instr.Itype.signed_imm(),
-						(long) cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm());
+						RISCV::regname(instr.Itype.rs1), instr.Itype.signed_imm(),
+						uint64_t(cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm()));
 	});
 
 	INSTRUCTION(LOAD_I8_DUMMY,
@@ -164,10 +165,10 @@ namespace riscv
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		static std::array<const char*, 8> f3 = {"ST.B", "ST.H", "ST.W", "ST.D", "ST.Q", "???", "???", "???"};
-		return snprintf(buffer, len, "%s %s, [%s%+ld] (0x%lX)",
+		return snprintf(buffer, len, "%s %s, [%s%+d] (0x%" PRIX64 ")",
 						f3[instr.Stype.funct3], RISCV::regname(instr.Stype.rs2),
-						RISCV::regname(instr.Stype.rs1), (long) instr.Stype.signed_imm(),
-						(long) cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm());
+						RISCV::regname(instr.Stype.rs1), instr.Stype.signed_imm(),
+						uint64_t(cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm()));
 	});
 
 	INSTRUCTION(STORE_I8,
@@ -214,7 +215,7 @@ namespace riscv
 #ifdef RISCV_DEBUG
 #define VERBOSE_BRANCH() \
 	if (UNLIKELY(cpu.machine().verbose_jumps)) { \
-		printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 4); \
+		printf(">>> BRANCH jump to 0x%" PRIX64 "\n", uint64_t(cpu.pc() + 4)); \
 	}
 #else
 #define VERBOSE_BRANCH() /* */
@@ -235,20 +236,20 @@ namespace riscv
 		static std::array<const char*, 8> f1z = {"BEQ", "BNE", "???", "???", "BGTZ", "BLEZ", "BLTU", "BGEU"};
 		static std::array<const char*, 8> f2z = {"BEQZ", "BNEZ", "???", "???", "BLTZ", "BGEZ", "BLTU", "BGEU"};
 		if (instr.Btype.rs1 != 0 && instr.Btype.rs2) {
-			return snprintf(buffer, len, "%s %s (0x%lX), %s (0x%lX) => PC%+ld (0x%lX)",
+			return snprintf(buffer, len, "%s %s (0x%" PRIX64 "), %s (0x%" PRIX64 ") => PC%+d (0x%" PRIX64 ")",
 							f3[instr.Btype.funct3],
-							RISCV::regname(instr.Btype.rs1), (long)cpu.reg(instr.Btype.rs1),
-							RISCV::regname(instr.Btype.rs2), (long)cpu.reg(instr.Btype.rs2),
-							(long) instr.Btype.signed_imm(),
-							(long) cpu.pc() + instr.Btype.signed_imm());
+							RISCV::regname(instr.Btype.rs1), uint64_t(cpu.reg(instr.Btype.rs1)),
+							RISCV::regname(instr.Btype.rs2), uint64_t(cpu.reg(instr.Btype.rs2)),
+							instr.Btype.signed_imm(),
+							uint64_t(cpu.pc() + instr.Btype.signed_imm()));
 		} else {
 			auto& array = (instr.Btype.rs1) ? f2z : f1z;
 			auto  reg   = (instr.Btype.rs1) ? instr.Btype.rs1 : instr.Btype.rs2;
-			return snprintf(buffer, len, "%s %s (0x%lX) => PC%+ld (0x%lX)",
+			return snprintf(buffer, len, "%s %s (0x%" PRIX64 ") => PC%+d (0x%" PRIX64 ")",
 							array[instr.Btype.funct3],
-							RISCV::regname(reg), (long)cpu.reg(reg),
-							(long) instr.Btype.signed_imm(),
-							(long) cpu.pc() + instr.Btype.signed_imm());
+							RISCV::regname(reg), uint64_t(cpu.reg(reg)),
+							instr.Btype.signed_imm(),
+							uint64_t(cpu.pc() + instr.Btype.signed_imm()));
 		}
 	});
 
@@ -314,9 +315,11 @@ namespace riscv
 		cpu.jump(address - 4);
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
-		printf(">>> JMP 0x%lX <-- %s = 0x%lX%+ld\n", (long) address,
+		printf(">>> JMP 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "%+d\n",
+				uint64_t(address),
 				RISCV::regname(instr.Itype.rs1),
-				(long) cpu.reg(instr.Itype.rs1), (long) instr.Itype.signed_imm());
+				uint64_t(cpu.reg(instr.Itype.rs1)),
+				instr.Itype.signed_imm());
 		}
 #endif
 	},
@@ -324,9 +327,9 @@ namespace riscv
 		// RISC-V's RET instruction: return to register + immediate
 		const char* variant = (instr.Itype.rs1 == REG_RA) ? "RET" : "JMP";
 		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		return snprintf(buffer, len, "%s %s%+ld (0x%lX)", variant,
+		return snprintf(buffer, len, "%s %s%+d (0x%" PRIX64 ")", variant,
 						RISCV::regname(instr.Itype.rs1),
-						(long) instr.Itype.signed_imm(), (long) address);
+						instr.Itype.signed_imm(), uint64_t(address));
 	});
 
 	INSTRUCTION(JAL,
@@ -339,21 +342,22 @@ namespace riscv
 		cpu.aligned_jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
-			printf(">>> CALL 0x%lX <-- %s = 0x%lX\n", (long) cpu.pc(),
+			printf(">>> CALL 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "\n",
+					uint64_t(cpu.pc()),
 					RISCV::regname(instr.Jtype.rd),
-					(long) cpu.reg(instr.Jtype.rd));
+					uint64_t(cpu.reg(instr.Jtype.rd)));
 		}
 #endif
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
 		if (instr.Jtype.rd != 0) {
-		return snprintf(buffer, len, "JAL %s, PC%+ld (0x%lX)",
-						RISCV::regname(instr.Jtype.rd), (long) instr.Jtype.jump_offset(),
-						(long) cpu.pc() + instr.Jtype.jump_offset());
+		return snprintf(buffer, len, "JAL %s, PC%+d (0x%" PRIX64 ")",
+						RISCV::regname(instr.Jtype.rd), instr.Jtype.jump_offset(),
+						uint64_t(cpu.pc() + instr.Jtype.jump_offset()));
 		}
-		return snprintf(buffer, len, "JMP PC%+ld (0x%lX)",
-						(long) instr.Jtype.jump_offset(),
-						(long) cpu.pc() + instr.Jtype.jump_offset());
+		return snprintf(buffer, len, "JMP PC%+d (0x%" PRIX64 ")",
+						instr.Jtype.jump_offset(),
+						uint64_t(cpu.pc() + instr.Jtype.jump_offset()));
 	});
 
 	INSTRUCTION(OP_IMM,
@@ -420,28 +424,28 @@ namespace riscv
 		}
 		else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 1) {
 			const auto shift = (RVIS64BIT(cpu)) ? instr.Itype.shift64_imm() : instr.Itype.shift_imm();
-			return snprintf(buffer, len, "SLLI %s, %s << %u (0x%lX)",
+			return snprintf(buffer, len, "SLLI %s, %s << %u (0x%" PRIX64 ")",
 							RISCV::regname(instr.Itype.rd),
 							RISCV::regname(instr.Itype.rs1),
 							shift,
-							(long) cpu.reg(instr.Itype.rs1) << shift);
+							uint64_t(cpu.reg(instr.Itype.rs1) << shift));
 		} else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 5) {
 			const auto shift = (RVIS64BIT(cpu)) ? instr.Itype.shift64_imm() : instr.Itype.shift_imm();
-			return snprintf(buffer, len, "%s %s, %s >> %u (0x%lX)",
+			return snprintf(buffer, len, "%s %s, %s >> %u (0x%" PRIX64 ")",
 							(instr.Itype.is_srai() ? "SRAI" : "SRLI"),
 							RISCV::regname(instr.Itype.rd),
 							RISCV::regname(instr.Itype.rs1),
 							shift,
-							(long) cpu.reg(instr.Itype.rs1) >> shift);
+							uint64_t(cpu.reg(instr.Itype.rs1) >> shift));
 		} else if (instr.Itype.rs1 != 0) {
 			static std::array<const char*, 8> func3 = {"ADDI", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
 			if (!(instr.Itype.funct3 == 4 && instr.Itype.signed_imm() == -1)) {
-				return snprintf(buffer, len, "%s %s, %s%+ld (0x%lX)",
+				return snprintf(buffer, len, "%s %s, %s%+d (0x%" PRIX64 ")",
 								func3[instr.Itype.funct3],
 								RISCV::regname(instr.Itype.rd),
 								RISCV::regname(instr.Itype.rs1),
-								(long) instr.Itype.signed_imm(),
-								(long) cpu.reg(instr.Itype.rs1));
+								instr.Itype.signed_imm(),
+								uint64_t(cpu.reg(instr.Itype.rs1)));
 			} else {
 				return snprintf(buffer, len, "NOT %s, %s",
 								RISCV::regname(instr.Itype.rd),
@@ -449,10 +453,10 @@ namespace riscv
 			}
 		}
 		static std::array<const char*, 8> func3 = {"LINT", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
-		return snprintf(buffer, len, "%s %s, %ld",
+		return snprintf(buffer, len, "%s %s, %d (0x%X)",
 						func3[instr.Itype.funct3],
 						RISCV::regname(instr.Itype.rd),
-						(long) instr.Itype.signed_imm());
+						instr.Itype.signed_imm(), instr.Itype.signed_imm());
 	});
 
 	INSTRUCTION(OP_IMM_ADDI,
@@ -618,22 +622,22 @@ namespace riscv
 				"ADD", "SLL", "SLT", "SLTU", "XOR", "SRL", "OR", "AND",
 				"SUB", "SLL", "SLT", "SLTU", "XOR", "SRA", "OR", "AND"};
 			const int EX = instr.Rtype.is_f7() ? 8 : 0;
-			return snprintf(buffer, len, "%s %s %s, %s (0x%lX)",
+			return snprintf(buffer, len, "%s %s %s, %s (0x%" PRIX64 ")",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3 + EX],
 							RISCV::regname(instr.Rtype.rs2),
 							RISCV::regname(instr.Rtype.rd),
-							(long)cpu.reg(instr.Rtype.rd));
+							uint64_t(cpu.reg(instr.Rtype.rd)));
 		}
 		else {
 			static std::array<const char*, 8> func3 = {
 				"MUL", "MULH", "MULHSU", "MULHU", "DIV", "DIVU", "REM", "REMU"};
-			return snprintf(buffer, len, "%s %s %s, %s (0x%lX)",
+			return snprintf(buffer, len, "%s %s %s, %s (0x%" PRIX64 ")",
 							RISCV::regname(instr.Rtype.rs1),
 							func3[instr.Rtype.funct3],
 							RISCV::regname(instr.Rtype.rs2),
 							RISCV::regname(instr.Rtype.rd),
-							(long)cpu.reg(instr.Rtype.rd));
+							uint64_t(cpu.reg(instr.Rtype.rd)));
 		}
 	});
 
@@ -692,9 +696,9 @@ namespace riscv
 		cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
-		return snprintf(buffer, len, "LUI %s, 0x%lX",
+		return snprintf(buffer, len, "LUI %s, 0x%X",
 						RISCV::regname(instr.Utype.rd),
-						(long) instr.Utype.upper_imm());
+						instr.Utype.upper_imm());
 	});
 
 	INSTRUCTION(AUIPC,
@@ -702,10 +706,10 @@ namespace riscv
 		cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.upper_imm();
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
-		return snprintf(buffer, len, "AUIPC %s, PC+0x%lX (0x%lX)",
+		return snprintf(buffer, len, "AUIPC %s, PC+0x%X (0x%" PRIX64 ")",
 						RISCV::regname(instr.Utype.rd),
-						(long) instr.Utype.upper_imm(),
-						(long) cpu.pc() + instr.Utype.upper_imm());
+						instr.Utype.upper_imm(),
+						uint64_t(cpu.pc() + instr.Utype.upper_imm()));
 	});
 
 	INSTRUCTION(OP_IMM32,
@@ -726,27 +730,27 @@ namespace riscv
 							RISCV::regname(instr.Itype.rs1));
 		}
 		else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 1) {
-			return snprintf(buffer, len, "SLLIW %s, %s << %u (0x%lX)",
+			return snprintf(buffer, len, "SLLIW %s, %s << %u (0x%" PRIX64 ")",
 							RISCV::regname(instr.Itype.rd),
 							RISCV::regname(instr.Itype.rs1),
 							instr.Itype.shift_imm(),
-							(long) cpu.reg(instr.Itype.rs1) << instr.Itype.shift_imm());
+							uint64_t(cpu.reg(instr.Itype.rs1) << instr.Itype.shift_imm()));
 		} else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 5) {
-			return snprintf(buffer, len, "%sW %s, %s >> %u (0x%lX)",
+			return snprintf(buffer, len, "%sW %s, %s >> %u (0x%" PRIX64 ")",
 							(instr.Itype.is_srai() ? "SRAI" : "SRLI"),
 							RISCV::regname(instr.Itype.rd),
 							RISCV::regname(instr.Itype.rs1),
 							instr.Itype.shift_imm(),
-							(long) cpu.reg(instr.Itype.rs1) >> instr.Itype.shift_imm());
+							uint64_t(cpu.reg(instr.Itype.rs1) >> instr.Itype.shift_imm()));
 		} else if (instr.Itype.rs1 != 0) {
 			static std::array<const char*, 8> func3 = {"ADDI", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
 			if (!(instr.Itype.funct3 == 4 && instr.Itype.signed_imm() == -1)) {
-				return snprintf(buffer, len, "%sW %s, %s%+ld (0x%lX)",
+				return snprintf(buffer, len, "%sW %s, %s%+d (0x%" PRIX64 ")",
 								func3[instr.Itype.funct3],
 								RISCV::regname(instr.Itype.rd),
 								RISCV::regname(instr.Itype.rs1),
-								(long) instr.Itype.signed_imm(),
-								(long) cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm());
+								instr.Itype.signed_imm(),
+								uint64_t(cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm()));
 			} else {
 				return snprintf(buffer, len, "NOTW %s, %s",
 								RISCV::regname(instr.Itype.rd),
@@ -754,10 +758,10 @@ namespace riscv
 			}
 		}
 		static std::array<const char*, 8> func3 = {"LINT", "SLLI", "SLTI", "SLTU", "XORI", "SRLI", "ORI", "ANDI"};
-		return snprintf(buffer, len, "%sW %s, %ld",
+		return snprintf(buffer, len, "%sW %s, %d (0x%X)",
 						func3[instr.Itype.funct3],
 						RISCV::regname(instr.Itype.rd),
-						(long) instr.Itype.signed_imm());
+						instr.Itype.signed_imm(), instr.Itype.signed_imm());
 	});
 
 	INSTRUCTION(OP_IMM32_ADDIW,
