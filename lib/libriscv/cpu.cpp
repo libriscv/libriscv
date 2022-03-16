@@ -116,6 +116,9 @@ namespace riscv
 	template<int W> __attribute__((hot))
 	void CPU<W>::simulate(uint64_t max)
 	{
+#ifdef RISCV_INSTR_CACHE
+		auto* exec_decoder = machine().memory.get_decoder_cache();
+#endif
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
 			machine().set_max_instructions(machine().instruction_counter() + max);
@@ -135,18 +138,9 @@ namespace riscv
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 #  endif
 			instruction = format_t { *(uint32_t*) &m_exec_data[this->pc()] };
-		#ifdef RISCV_EXT_COMPRESSED
-			// When compressed is enabled along with instruction cache,
-			// we are not caching the 2-byte offsets, only the 4-byte offsets
-			// within pages. So we execute the 2-byte aligned instructions.
-			if (UNLIKELY(this->pc() & 2)) {
-				// It's a poorly decoded compressed instruction anyway
-				this->execute(instruction);
-			} else {
-		#endif
 			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
-				machine().memory.get_decoder_cache()[this->pc() / DecoderCache<W>::DIVISOR];
+				exec_decoder[this->pc() / DecoderCache<W>::DIVISOR];
 		#ifndef RISCV_INSTR_CACHE_PREGEN
 			if (UNLIKELY(!DecoderCache<W>::isset(cache_entry))) {
 				DecoderCache<W>::convert(this->decode(instruction), cache_entry);
@@ -159,9 +153,6 @@ namespace riscv
 		#else
 			// execute instruction
 			cache_entry.handler(*this, instruction);
-		#endif
-		#ifdef RISCV_EXT_COMPRESSED
-			}
 		#endif
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {

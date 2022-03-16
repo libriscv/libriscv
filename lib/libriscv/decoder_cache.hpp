@@ -18,7 +18,7 @@ struct DecoderData {
 template <int W>
 struct DecoderCache
 {
-	static constexpr size_t DIVISOR = 4;
+	static constexpr size_t DIVISOR = (compressed_enabled) ? 2 : 4;
 
 	inline auto& get(size_t idx) noexcept {
 		return cache[idx];

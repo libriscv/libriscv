@@ -49,8 +49,7 @@ namespace riscv
 				if (!DecoderCache<W>::isset(entry)) {
 					DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
 				}
-				// We do not cache 2-byte mid-aligned instructions
-				dst += 4;
+				dst += (compressed_enabled) ? 2 : 4;
 			}
 			return;
 		} // Success, not fusing
@@ -76,8 +75,7 @@ namespace riscv
 #endif
 			}
 			DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
-			// We do not cache 2-byte mid-aligned instructions
-			dst += 4;
+			dst += (compressed_enabled) ? 2 : 4;
 		}
 
 		/* We do not support binary translation for RV128I */
