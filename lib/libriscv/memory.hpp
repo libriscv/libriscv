@@ -6,7 +6,6 @@
 #ifdef RISCV_USE_RH_HASH
 #include <robin_hood.h>
 #endif
-#include <map>
 #include "util/buffer.hpp" // <string>
 
 namespace riscv

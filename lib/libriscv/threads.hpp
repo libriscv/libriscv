@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdio>
-#include <stdexcept>
 #include <unordered_map>
 #include <libriscv/machine.hpp>
 
