@@ -1,15 +1,67 @@
 #pragma once
 
 template <int W> inline
+void Memory<W>::memzero(address_t dst, size_t len)
+{
+#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+	// Check if we are trying to memzero the custom RO area
+	const address_t p_begin = page_number(dst);
+	const address_t p_end = page_number(dst + len);
+	if (UNLIKELY(m_ropages.contains(p_begin, p_end))) {
+		this->protection_fault(dst);
+	}
+#endif
+	while (len > 0)
+	{
+		const size_t offset = dst & (Page::size()-1); // offset within page
+		const size_t size = std::min(Page::size() - offset, len);
+		const address_t pageno = page_number(dst);
+		// We only use the page table now because we have previously
+		// checked special regions.
+		auto it = m_pages.find(pageno);
+		// If we don't find a page, we can treat it as a CoW zero page
+		if (it != m_pages.end()) {
+			Page& page = it->second;
+			if (page.attr.is_cow) {
+				m_page_write_handler(*this, pageno, page);
+			}
+			if (page.attr.write) {
+				// Zero the existing writable page
+				std::memset(page.data() + offset, 0, size);
+			} else {
+				this->protection_fault(dst);
+			}
+		} else {
+			// Check if the page being read is known to be all zeroes
+			const Page& page = m_page_readf_handler(*this, pageno);
+			// If not, the page fault gives us a new blank page.
+			// Theoretically the handler can do anything, so do the
+			// due diligence of checking if the page is writable.
+			if (!page.is_cow_page()) {
+				auto& new_page = m_page_fault_handler(*this, pageno);
+				if (!new_page.attr.write)
+					this->protection_fault(dst);
+			}
+		}
+
+		dst += size;
+		len -= size;
+	}
+}
+
+template <int W> inline
 void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 {
+	if (value == 0) {
+		memzero(dst, len); return;
+	}
 	while (len > 0)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t size = std::min(Page::size() - offset, len);
 		auto& page = this->create_writable_pageno(dst >> Page::SHIFT);
 
-		__builtin_memset(page.data() + offset, value, size);
+		std::memset(page.data() + offset, value, size);
 
 		dst += size;
 		len -= size;
@@ -232,9 +284,7 @@ size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 		addr += len;
 	} while (len < maxlen);
 
-	if (len <= maxlen)
-		return len;
-	return maxlen;
+	return (len <= maxlen) ? len : maxlen;
 }
 
 template <int W>

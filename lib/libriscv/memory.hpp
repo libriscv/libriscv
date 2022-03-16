@@ -35,6 +35,7 @@ namespace riscv
 		template <typename T>
 		void write(address_t dst, T value);
 
+		void memzero(address_t dst, size_t len);
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
@@ -163,6 +164,9 @@ namespace riscv
 			std::unique_ptr<Page[]> pages = nullptr;
 			std::unique_ptr<uint8_t[]> data = nullptr;
 			bool contains(address_t pg) const noexcept { return pg >= begin && pg < end; }
+			bool contains(address_t x1, address_t x2) const noexcept {
+				return x1 < end && x2 >= begin;
+			}
 		};
 		inline auto& create_attr(const address_t address);
 		void clear_all_pages();

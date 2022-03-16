@@ -8,6 +8,9 @@
 #define MPRINT(fmt, ...) /* */
 
 namespace riscv {
+	// An arbitrary maximum length just to stop *somewhere*
+	static constexpr size_t   STRLEN_MAX = 64'000u;
+	static constexpr uint64_t COMPLEX_CALL_PENALTY = 2'000u;
 
 template <int W>
 void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
@@ -20,6 +23,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		auto data = machine.arena().malloc(len);
 		HPRINT("SYSCALL malloc(%zu) = 0x%X\n", len, data);
 		machine.set_result(data);
+		machine.increment_counter(COMPLEX_CALL_PENALTY);
 	});
 	// Calloc n+1
 	this->install_syscall_handler(syscall_base+1,
@@ -31,10 +35,11 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		auto data = machine.arena().malloc(len);
 		HPRINT("SYSCALL calloc(%u, %u) = 0x%X\n", count, size, data);
 		if (data != 0) {
-			// TODO: optimize this (CoW), **can throw**
-			machine.memory.memset(data, 0, len);
+			// Optimized to skip zero pages
+			machine.memory.memzero(data, len);
 		}
 		machine.set_result(data);
+		machine.increment_counter(COMPLEX_CALL_PENALTY);
 	});
 	// Realloc n+2
 	this->install_syscall_handler(syscall_base+2,
@@ -50,7 +55,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 				if (srclen >= newlen) {
 					return;
 				}
-				// XXX: really have to know what we are doing here
+				// XXX: We really have to know what we are doing here, as
 				// we are freeing in the hopes of getting the same chunk
 				// back, in which case the copy could be completely skipped.
 				machine.arena().free(src);
@@ -60,13 +65,16 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 				if (data == 0) {
 					machine.arena().malloc(srclen);
 					machine.set_result(data);
+					machine.increment_counter(COMPLEX_CALL_PENALTY);
 					return;
 				}
 				else if (data != src)
 				{
+					// XXX: Should this be a memmove?
 					machine.memory.memcpy(data, machine, src, srclen);
 				}
 				machine.set_result(data);
+				machine.increment_counter(COMPLEX_CALL_PENALTY);
 				return;
 			} else {
 				HPRINT("SYSCALL realloc(0x%X:??, %zu) = 0x0\n", src, newlen);
@@ -75,9 +83,11 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			auto data = machine.arena().malloc(newlen);
 			HPRINT("SYSCALL realloc(0x0, %zu) = 0x%lX\n", newlen, (long) data);
 			machine.set_result(data);
+			machine.increment_counter(COMPLEX_CALL_PENALTY);
 			return;
 		}
 		machine.set_result(0);
+		machine.increment_counter(COMPLEX_CALL_PENALTY);
 	});
 	// Free n+3
 	this->install_syscall_handler(syscall_base+3,
@@ -92,10 +102,12 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			if (ptr != 0x0 && ret < 0) {
 				throw std::runtime_error("Possible double-free for freed pointer");
 			}
+			machine.increment_counter(COMPLEX_CALL_PENALTY);
 			return;
 		}
 		HPRINT("SYSCALL free(0x0) = 0\n");
 		machine.set_result(0);
+		machine.increment_counter(COMPLEX_CALL_PENALTY);
 		return;
 	});
 	// Meminfo n+4
@@ -119,6 +131,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			machine.copy_to_guest(dst, &result, sizeof(result));
 		}
 		machine.set_result(ret);
+		machine.increment_counter(COMPLEX_CALL_PENALTY);
 	});
 }
 
@@ -207,7 +220,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 	}}, {syscall_base+5, [] (Machine<W>& m) {
 		// Strlen n+5
 		auto [addr] = m.sysargs<address_type<W>> ();
-		uint32_t len = m.memory.strlen(addr, 4096);
+		uint32_t len = m.memory.strlen(addr, STRLEN_MAX);
 		m.increment_counter(2 * len);
 		m.set_result(len);
 		MPRINT("SYSCALL strlen(%#lX) = %lu\n",
@@ -233,10 +246,12 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 	}}, {syscall_base+14, [] (Machine<W>& m) {
 		// Print backtrace n+14
 		m.memory.print_backtrace(
-			[] (std::string_view line) {
-				printf("%.*s\n", (int)line.size(), line.begin());
+			[&] (std::string_view line) {
+				m.print(line.begin(), line.size());
+				m.print("\n", 1);
 			});
 		m.set_result(0);
+		m.increment_counter(COMPLEX_CALL_PENALTY);
 	}}});
 }
 
