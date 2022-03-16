@@ -86,6 +86,10 @@ The `full` example project uses the Linux-configured cross compiler and will exp
 
 And finally, the `micro` project implements the absolutely minimal freestanding RV32GC C/C++ environment. You won't have a heap implementation, so no new/delete. And you can't printf values because you don't have a C standard library, so you can only write strings and buffers using the write system call. Still, the stripped binary is only 784 bytes, and will execute only ~120 instructions running the whole program! The `micro` project actually initializes zero-initialized memory, calls global constructors and passes program arguments to main.
 
+## Building for Windows
+
+There is a `build_mingw.sh` script that can build the emulator for MinGW 64 when cross-compiling on Linux. To be able to build it, install the `g++-mingw-w64-x86-64` package. If you are building inside MinGW 64 on (actual) Windows, then you should not have to do anything special. You will need the common build tools like make, cmake and a c++ compiler.
+
 ## Remote debugging using GDB
 
 If you have built the emulator, you can use `DEBUG=1 ./emulator /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote localhost:2159`. Now you can step through the code.
