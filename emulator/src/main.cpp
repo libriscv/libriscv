@@ -142,10 +142,10 @@ static void run_program(
 	// You can silence this output by setting SILENT=1, like so:
 	// SILENT=1 ./rvlinux myprogram
 	if (getenv("SILENT") == nullptr) {
-		printf(">>> Program exited, exit code = %ld (0x%lX)\n",
-			(long)retval, (long)retval);
-		printf("Instructions executed: %zu\n",
-			(size_t) machine.instruction_counter());
+		printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
+			int64_t(retval), uint64_t(retval));
+		printf("Instructions executed: %" PRIu64 "\n",
+			machine.instruction_counter());
 		printf("Pages in use: %zu (%zu kB memory)\n",
 			machine.memory.pages_active(), machine.memory.pages_active() * 4);
 	}
