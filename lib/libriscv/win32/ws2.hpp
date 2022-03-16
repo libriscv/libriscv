@@ -1,6 +1,6 @@
 #pragma once
 #include <winsock2.h>
-#include <WS2tcpip.h>
+#include <ws2tcpip.h>
 
 namespace riscv {
 namespace ws2 {
