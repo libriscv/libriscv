@@ -2,6 +2,7 @@
 
 #include "machine.hpp"
 #include "decoder_cache.hpp"
+#include <inttypes.h>
 #include <stdexcept>
 #ifdef RISCV_BINARY_TRANSLATION
 #include <dlfcn.h> // Linux-only
@@ -446,12 +447,12 @@ namespace riscv
 	static void elf_print_sym(const Sym* sym)
 	{
 		if constexpr (sizeof(Sym::st_value) == 4) {
-			printf("-> Sym is at 0x%X with size %u, type %u name %u\n",
+			printf("-> Sym is at 0x%" PRIX32 " with size %" PRIu32 ", type %u name %u\n",
 				sym->st_value, sym->st_size,
 				ELF32_ST_TYPE(sym->st_info), sym->st_name);
 		} else {
-			printf("-> Sym is at 0x%lX with size %lu, type %u name %u\n",
-				(long)sym->st_value, sym->st_size,
+			printf("-> Sym is at 0x%" PRIX64 " with size %" PRIu64 ", type %u name %u\n",
+				(uint64_t)sym->st_value, sym->st_size,
 				ELF64_ST_TYPE(sym->st_info), sym->st_name);
 		}
 	}
@@ -494,13 +495,13 @@ namespace riscv
 		int len;
 		if constexpr (W == 4) {
 			len = snprintf(buffer, sizeof(buffer),
-				"[0x%08X] %s", addr, get_page(addr).to_string().c_str());
+				"[0x%08" PRIX32 "] %s", addr, get_page(addr).to_string().c_str());
 		} else if constexpr (W == 8) {
 			len = snprintf(buffer, sizeof(buffer),
-				"[0x%016lX] %s", addr, get_page(addr).to_string().c_str());
+				"[0x%016" PRIX64 "] %s", addr, get_page(addr).to_string().c_str());
 		} else if constexpr (W == 16) {
 			len = snprintf(buffer, sizeof(buffer),
-				"[0x%016lX] %s", (uint64_t)addr, get_page(addr).to_string().c_str());
+				"[0x%016" PRIX64 "] %s", (uint64_t)addr, get_page(addr).to_string().c_str());
 		}
 		return std::string(buffer, len);
 	}
@@ -569,15 +570,15 @@ namespace riscv
 				int len;
 				if constexpr (W == 4) {
 					len = snprintf(buffer, sizeof(buffer),
-						"[%d] 0x%08x + 0x%.3x: %s",
+						"[%d] 0x%08" PRIx32 " + 0x%.3" PRIx32 ": %s",
 						N, site.address, site.offset, site.name.c_str());
 				} else if constexpr (W == 8) {
 					len = snprintf(buffer, sizeof(buffer),
-						"[%d] 0x%016lx + 0x%.3x: %s",
+						"[%d] 0x%016" PRIX64 " + 0x%.3" PRIx32 ": %s",
 						N, site.address, site.offset, site.name.c_str());
 				} else if constexpr (W == 16) {
 					len = snprintf(buffer, sizeof(buffer),
-						"[%d] 0x%016lx + 0x%.3x: %s",
+						"[%d] 0x%016" PRIx64 " + 0x%.3" PRIx32 ": %s",
 						N, (uint64_t)site.address, site.offset, site.name.c_str());
 				}
 				if (len > 0)

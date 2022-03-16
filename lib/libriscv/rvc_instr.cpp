@@ -1,5 +1,6 @@
 #include "rvc.hpp"
 #include "instr_helpers.hpp"
+#include <inttypes.h>
 
 namespace riscv
 {
@@ -14,9 +15,9 @@ namespace riscv
 		if (UNLIKELY(ci.whole == 0)) {
 			return snprintf(buffer, len, "INVALID: All zeroes");
 		}
-		return snprintf(buffer, len, "C.ADDI4SPN %s, SP+%u (0x%lX)",
+		return snprintf(buffer, len, "C.ADDI4SPN %s, SP+%u (0x%" PRIx64 ")",
 						RISCV::ciname(ci.CIW.srd), ci.CIW.offset(),
-						(long) cpu.reg(REG_SP) + ci.CIW.offset());
+						uint64_t(cpu.reg(REG_SP) + ci.CIW.offset()));
 	});
 
 	// LW, LD, LQ, FLW, FLD
@@ -121,7 +122,7 @@ namespace riscv
 	{
 		const rv32c_instruction ci { instr };
 		if (ci.CI.rd != 0) {
-			return snprintf(buffer, len, "C.ADDI %s, %ld",
+			return snprintf(buffer, len, "C.ADDI %s, %" PRId64,
 							RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
 		}
 		if (ci.CI.imm1 != 0 || ci.CI.imm2 != 0)
@@ -145,9 +146,10 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.JAL %s, PC%+ld (0x%lX)",
+		return snprintf(buffer, len, "C.JAL %s, PC%+" PRId64 " (0x%" PRIX64 ")",
 						RISCV::regname(REG_RA),
-						ci.CJ.signed_imm(), (long) cpu.pc() + ci.CJ.signed_imm());
+						ci.CJ.signed_imm(),
+						uint64_t(cpu.pc() + ci.CJ.signed_imm()));
 	});
 
 	COMPRESSED_INSTR(C1_ADDIW,
@@ -159,7 +161,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.ADDIW %s, %+ld",
+		return snprintf(buffer, len, "C.ADDIW %s, %+" PRId64,
 						RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
 	});
 
@@ -172,7 +174,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.LI %s, %+ld",
+		return snprintf(buffer, len, "C.LI %s, %+" PRId64,
 						RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
 	});
 
@@ -186,11 +188,11 @@ namespace riscv
 	{
 		const rv32c_instruction ci { instr };
 		if (ci.CI.rd != 0 && ci.CI.rd != 2) {
-			return snprintf(buffer, len, "C.LUI %s, 0x%lX",
+			return snprintf(buffer, len, "C.LUI %s, 0x%" PRIX64,
 							RISCV::regname(ci.CI.rd),
-							ci.CI.signed_imm() << 12);
+							uint64_t(ci.CI.signed_imm() << 12));
 		} else if (ci.CI.rd == 2) {
-			return snprintf(buffer, len, "C.ADDI16SP %s, %+ld",
+			return snprintf(buffer, len, "C.ADDI16SP %s, %+" PRId64,
 							RISCV::regname(ci.CI.rd),
 							ci.CI16.signed_imm());
 		}
@@ -276,7 +278,7 @@ namespace riscv
 					RVIS64BIT(cpu) ? ci.CAB.shift64_imm() : ci.CAB.shift_imm());
 		}
 		else if ((ci.CA.funct6 & 0x3) == 2) {
-			return snprintf(buffer, len, "C.ANDI %s, %+ld",
+			return snprintf(buffer, len, "C.ANDI %s, %+" PRId64,
 							RISCV::ciname(ci.CAB.srd), ci.CAB.signed_imm());
 		}
 		const int op = ci.CA.funct2 | (ci.CA.funct6 & 0x4);
@@ -301,8 +303,8 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.JMP 0x%lX",
-			(long) cpu.pc() + ci.CJ.signed_imm());
+		return snprintf(buffer, len, "C.JMP 0x%" PRIX64,
+			uint64_t(cpu.pc() + ci.CJ.signed_imm()));
 	});
 
 	COMPRESSED_INSTR(C1_BEQZ,
@@ -314,7 +316,7 @@ namespace riscv
 			cpu.jump(cpu.pc() + ci.CB.signed_imm() - 2);
 #ifdef RISCV_DEBUG
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
-				printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 2);
+				printf(">>> BRANCH jump to 0x%" PRIX64 "\n", uint64_t(cpu.pc() + 2));
 			}
 #endif
 		}
@@ -322,9 +324,9 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.BEQZ %s, PC%+ld (0x%lX)",
+		return snprintf(buffer, len, "C.BEQZ %s, PC%+" PRId64 " (0x%" PRIX64 ")",
 						RISCV::ciname(ci.CB.srs1), ci.CB.signed_imm(),
-						(long) cpu.pc() + ci.CB.signed_imm());
+						uint64_t(cpu.pc() + ci.CB.signed_imm()));
 	});
 
 	COMPRESSED_INSTR(C1_BNEZ,
@@ -336,7 +338,7 @@ namespace riscv
 			cpu.jump(cpu.pc() + ci.CB.signed_imm() - 2);
 #ifdef RISCV_DEBUG
 			if (UNLIKELY(cpu.machine().verbose_jumps)) {
-				printf(">>> BRANCH jump to 0x%lX\n", (long) cpu.pc() + 2);
+				printf(">>> BRANCH jump to 0x%" PRIX64 "\n", (uint64_t)(cpu.pc() + 2));
 			}
 #endif
 		}
@@ -344,9 +346,9 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.BNEZ %s, PC%+ld (0x%lX)",
+		return snprintf(buffer, len, "C.BNEZ %s, PC%+" PRId64 " (0x%" PRIX64 ")",
 						RISCV::ciname(ci.CB.srs1), ci.CB.signed_imm(),
-						(long) cpu.pc() + ci.CB.signed_imm());
+						uint64_t(cpu.pc() + ci.CB.signed_imm()));
 	});
 
 	// C.SLLI, LWSP, LDSP, LQSP, FLWSP, FLDSP
@@ -376,8 +378,8 @@ namespace riscv
 			auto address = (ci.CI2.funct3 != 0x1) ?
 						  cpu.reg(REG_SP) + ci.CI2.offset()
 						: cpu.reg(REG_SP) + ci.CIFLD.offset();
-			return snprintf(buffer, len, "C.%s %s, [SP+%u] (0x%lX)", f3[ci.CI2.funct3],
-							regname, ci.CI2.offset(), (long) address);
+			return snprintf(buffer, len, "C.%s %s, [SP+%u] (0x%" PRIX64 ")", f3[ci.CI2.funct3],
+							regname, ci.CI2.offset(), uint64_t(address));
 		}
 		return snprintf(buffer, len, "C.HINT %s", RISCV::regname(ci.CI2.rd));
 	});

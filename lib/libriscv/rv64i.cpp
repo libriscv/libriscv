@@ -1,5 +1,6 @@
 #include "rv32i_instr.hpp"
 #include "machine.hpp"
+#include <inttypes.h>
 
 #define INSTRUCTION(x, ...) static constexpr CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr64i_##x
@@ -56,13 +57,13 @@ namespace riscv
 		int  len = 0;
 		if (format.length() == 4) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[0x%lX] %08X %.*s",
+					"[0x%" PRIX64 "] %08" PRIx32 " %.*s",
 					cpu.pc(), format.whole, ibuflen, ibuffer);
 		}
 		else if (format.length() == 2) {
 			len = snprintf(buffer, sizeof(buffer),
-					"[0x%lX]     %04hX %.*s",
-					cpu.pc(), (uint16_t) format.whole, ibuflen, ibuffer);
+					"[0x%" PRIX64 "]     %04" PRIx16 " %.*s",
+					cpu.pc(), (uint16_t)format.whole, ibuflen, ibuffer);
 		}
 		else {
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION_LENGTH,
