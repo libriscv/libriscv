@@ -212,7 +212,7 @@ namespace riscv
 			if (m_signals == nullptr) m_signals.reset(new Signals<W>);
 			return *m_signals;
 		}
-		SignalAction<W>& sigaction(int sig) { return signals().signals.at(sig-1); }
+		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
 
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();

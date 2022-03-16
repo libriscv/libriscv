@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <set>
 
 namespace riscv {
@@ -34,9 +35,8 @@ struct SignalPerThread {
 
 template <int W>
 struct Signals {
+	SignalAction<W>& get(int sig);
 	void enter(Machine<W>&, int sig);
-
-	std::array<SignalAction<W>, 64> signals {};
 
 	// TODO: Lock this in the future, for multiproessing
 	auto& per_thread(int tid) { return m_per_thread[tid]; }
@@ -44,6 +44,7 @@ struct Signals {
 	Signals();
 	~Signals();
 private:
+	std::array<SignalAction<W>, 64> signals {};
 	std::map<int, SignalPerThread<W>> m_per_thread;
 };
 
