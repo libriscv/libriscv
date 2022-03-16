@@ -253,6 +253,9 @@ namespace riscv
 			case 1: // EBREAK
 				this->ebreak();
 				return;
+			case 0x105: // WFI
+				this->stop();
+				return;
 			case 0x7FF: // Stop machine
 				this->stop();
 				return;
