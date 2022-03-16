@@ -193,9 +193,9 @@ inline long direct(direct_funcptr starter)
 	register void(*a1)()       asm("a1") = threadcall_destructor;
 	register long syscall_id asm("a7") = THREAD_SYSCALLS_BASE+8;
 	register long a0_out asm("a0");
-
+	// Clobbers memory because it's like a function call
 	asm volatile ("ecall" : "=r"(a0_out) :
-		"r"(a0), "m"(*a0), "r"(a1), "m"(*a1), "r"(syscall_id));
+		"r"(a0), "m"(*a0), "r"(a1), "m"(*a1), "r"(syscall_id) : "memory");
 	return a0_out;
 }
 

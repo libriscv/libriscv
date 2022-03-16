@@ -98,9 +98,6 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 
 		auto* thread = machine.threads().create(
 			CHILD_SETTID, tls, 0x0, stack, tls, tls, STACK_SIZE);
-		// set PC back to clone point - 4
-		machine.cpu.registers().pc =
-			machine.cpu.reg(riscv::REG_RA) - 4;
 		// suspend and store return value for parent: child TID
 		auto* parent = machine.threads().get_thread();
 		parent->suspend(thread->tid);
