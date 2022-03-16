@@ -55,7 +55,7 @@ set (SOURCES
 		libriscv/serialize.cpp
 		libriscv/util/crc32c.cpp
 	)
-if (WIN32)
+if (WIN32 OR MINGW_TOOLCHAIN)
 	list(APPEND SOURCES
 		libriscv/win32/system_calls.cpp
 	)
@@ -117,6 +117,6 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv PUBLIC dl)
 endif()
-if(WIN32)
+if (WIN32 OR MINGW_TOOLCHAIN)
 	target_link_libraries(riscv PUBLIC wsock32 ws2_32)
 endif()

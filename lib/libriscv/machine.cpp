@@ -8,8 +8,13 @@
 #include <time.h>
 #include <random>
 extern "C" {
+#ifdef WIN32
+	int write(int fd, const void *buf, unsigned count);
+	int read(int fd, void *buf, unsigned count);
+#else
 	ssize_t write(int fd, const void *buf, size_t count);
 	ssize_t read(int fd, void *buf, size_t count);
+#endif
 }
 
 namespace riscv

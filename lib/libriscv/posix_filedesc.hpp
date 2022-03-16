@@ -10,7 +10,7 @@ struct FileDescriptors
 #ifndef WIN32
     typedef int real_fd_type;
 #else
-        typedef uint64_t real_fd_type; //Because SOCKET is uint64_t
+    typedef uint64_t real_fd_type; // Because SOCKET is uint64_t
 #endif
 
 	// Insert and manage real FDs, return virtual FD
