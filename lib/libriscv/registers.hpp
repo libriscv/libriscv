@@ -38,7 +38,7 @@ namespace riscv
 	};
 
 	template <int W>
-	struct alignas(16) Registers
+	struct Registers
 	{
 		using address_t  = address_type<W>;   // one unsigned memory address
 		using register_t = register_type<W>;  // integer register
@@ -74,4 +74,4 @@ namespace riscv
 	};
 
 	static_assert(sizeof(fp64reg) == 8, "FP-register is 64-bit");
-}
+} // riscv

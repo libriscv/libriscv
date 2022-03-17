@@ -113,7 +113,7 @@ namespace riscv
 		return read_next_instruction_slowpath();
 	}
 
-	template<int W> __attribute__((hot))
+	template<int W> __attribute__((hot, no_sanitize("undefined")))
 	void CPU<W>::simulate(uint64_t max)
 	{
 #ifdef RISCV_INSTR_CACHE
@@ -138,7 +138,19 @@ namespace riscv
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 #  endif
+			// Instructions may be unaligned with C-extension
+			// On amd64 we take the cost, because it's faster
+#    if defined(RISCV_EXT_COMPRESSED) && !defined(__x86_64__)
+			union Align32 {
+				uint16_t data[2];
+				operator uint32_t() {
+					return data[0] | uint32_t(data[1]) << 16;
+				}
+			};
+			instruction = format_t { *(Align32*) &exec_seg_data[this->pc()] };
+#    else
 			instruction = format_t { *(uint32_t*) &exec_seg_data[this->pc()] };
+#    endif
 			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
 				exec_decoder[this->pc() / DecoderCache<W>::DIVISOR];

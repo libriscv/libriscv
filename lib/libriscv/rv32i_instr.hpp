@@ -159,4 +159,4 @@ namespace riscv
 		}
 	};
 	static_assert(sizeof(rv32i_instruction) == 4, "Instruction is 4 bytes");
-}
+} // riscv

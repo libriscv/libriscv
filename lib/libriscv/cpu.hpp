@@ -121,4 +121,4 @@ namespace riscv
 	};
 
 #include "cpu_inline.hpp"
-}
+} // riscv

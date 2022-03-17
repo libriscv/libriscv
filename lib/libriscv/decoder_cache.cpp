@@ -65,14 +65,17 @@ namespace riscv
 		{
 			auto& entry = m_exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
-			auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
 			if (binary_translation_enabled || options.instruction_fusing) {
+				// This may be a misaligned reference
+				// XXX: Will this even work on ARM?
+				auto& instref = *(rv32i_instruction*) &exec_offset[dst];
 #ifdef RISCV_DEBUG
-				ipairs.emplace_back(entry.handler.handler, instruction);
+				ipairs.emplace_back(entry.handler.handler, instref);
 #else
-				ipairs.emplace_back(entry.handler, instruction);
+				ipairs.emplace_back(entry.handler, instref);
 #endif
 			}
+			auto instruction = *(rv32i_instruction*) &exec_offset[dst];
 			DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
 			dst += (compressed_enabled) ? 2 : 4;
 		}
