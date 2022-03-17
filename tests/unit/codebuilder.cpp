@@ -5,12 +5,18 @@
 #include <unistd.h>
 #include "crc32.hpp"
 static constexpr bool VERBOSE_COMPILER = true;
-static const std::string DEFAULT_COMPILER = "riscv64-linux-gnu-gcc-10";
+static const std::string DEFAULT_C_COMPILER = "riscv64-linux-gnu-gcc-10";
+static const std::string DEFAULT_CXX_COMPILER = "riscv64-linux-gnu-g++-10";
 
-std::string compile_command(const std::string& cc,
+std::string c_compile_command(const std::string& cc,
 	const std::string& args, const std::string& outfile)
 {
 	return cc + " -std=c11 -x c -o " + outfile + " " + args;
+}
+std::string cpp_compile_command(const std::string& cxx,
+	const std::string& args, const std::string& outfile)
+{
+	return cxx + " -std=c++17 -x c++ -o " + outfile + " " + args;
 }
 std::string env_with_default(const char* var, const std::string& defval) {
 	std::string value = defval;
@@ -38,7 +44,8 @@ std::vector<uint8_t> load_file(const std::string& filename)
 	return result;
 }
 
-std::vector<uint8_t> build_and_load(const std::string& code, const std::string& args)
+std::vector<uint8_t> build_and_load(
+	const std::string& code, const std::string& args, bool cpp)
 {
 	// Create temporary filenames for code and binary
 	char code_filename[64];
@@ -62,9 +69,16 @@ std::vector<uint8_t> build_and_load(const std::string& code, const std::string& 
 	(void)snprintf(bin_filename, sizeof(bin_filename),
 		"/tmp/binary-%08X", final_checksum);
 
-	auto cc = env_with_default("cc", DEFAULT_COMPILER);
-	auto command = compile_command(cc,
-		args + " " + std::string(code_filename), bin_filename);
+	std::string command;
+	if (cpp == false) {
+		auto cc = env_with_default("RCC", DEFAULT_C_COMPILER);
+		command = c_compile_command(cc,
+			args + " " + std::string(code_filename), bin_filename);
+	} else {
+		auto cxx = env_with_default("RCXX", DEFAULT_CXX_COMPILER);
+		command = cpp_compile_command(cxx,
+			args + " " + std::string(code_filename), bin_filename);
+	}
 	if constexpr (VERBOSE_COMPILER) {
 		printf("Command: %s\n", command.c_str());
 	}

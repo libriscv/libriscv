@@ -21,7 +21,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt install -y gcc-10-riscv64-linux-gnu
+        sudo apt install -y gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
         git submodule update --init ${{github.workspace}}/tests/Catch2
 
     - name: Configure

@@ -1,4 +1,5 @@
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 template <uint32_t POLYNOMIAL>

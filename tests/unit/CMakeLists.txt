@@ -15,6 +15,7 @@ function(add_unit_test NAME)
 		${ARGN}
 		codebuilder.cpp
 	)
+	target_compile_definitions(${NAME} PUBLIC SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}")
 	target_link_libraries(${NAME} riscv Catch2WithMain)
 	add_test(
 		NAME test_${NAME}
@@ -22,4 +23,5 @@ function(add_unit_test NAME)
 	)
 endfunction()
 
-add_unit_test(basic basic.cpp)
+add_unit_test(basic    basic.cpp)
+add_unit_test(checksum checksum.cpp)
