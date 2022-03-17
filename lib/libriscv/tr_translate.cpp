@@ -7,7 +7,6 @@
 #include "rv32i_instr.hpp"
 #include "tr_api.hpp"
 #include "util/crc32.hpp"
-#include <stdexcept>
 #include <unordered_set>
 //#define BINTR_TIMING
 
@@ -90,7 +89,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return -1;
 	}
 	if (machine().memory.is_binary_translated()) {
-		throw std::runtime_error("Machine already reports binary translation");
+		throw MachineException(ILLEGAL_OPERATION, "Machine already reports binary translation");
 	}
 
 	// Checksum the execute segment + compiler flags
@@ -425,7 +424,7 @@ void CPU<W>::activate_dylib(void* dylib) const
 	Mapping* mappings = (Mapping *)dlsym(dylib, "mappings");
 
 	if (no_mappings == nullptr || mappings == nullptr) {
-		throw std::runtime_error("Invalid mappings in binary translation program");
+		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
 	}
 
 	// Apply mappings to decoder cache

@@ -1,7 +1,6 @@
 #include "memory.hpp"
 #include "machine.hpp"
 #include "decoder_cache.hpp"
-#include <stdexcept>
 
 #include "rv32i_instr.hpp"
 

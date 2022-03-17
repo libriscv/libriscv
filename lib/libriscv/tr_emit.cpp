@@ -3,7 +3,6 @@
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include <set>
-#include <stdexcept>
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x))
@@ -745,7 +744,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			} else ILLEGAL_AND_EXIT();
 			} break; // RV32F_FPFUNC
 		default:
-			throw std::runtime_error("Unhandled instruction in code emitter");
+			throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter");
 		}
 	}
 	// If the function ends with an unimplemented instruction,

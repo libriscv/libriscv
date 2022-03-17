@@ -3,7 +3,6 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include <inttypes.h>
-#include <stdexcept>
 #ifdef RISCV_BINARY_TRANSLATION
 #include <dlfcn.h> // Linux-only
 #endif
@@ -108,13 +107,13 @@ namespace riscv
 		if (m_binary.size() <= hdr->p_offset ||
 			hdr->p_offset + len < hdr->p_offset)
 		{
-			throw std::runtime_error("Bogus ELF program segment offset");
+			throw MachineException(INVALID_PROGRAM, "Bogus ELF program segment offset");
 		}
 		if (m_binary.size() < hdr->p_offset + len) {
-			throw std::runtime_error("Not enough room for ELF program segment");
+			throw MachineException(INVALID_PROGRAM, "Not enough room for ELF program segment");
 		}
 		if (hdr->p_vaddr + len < hdr->p_vaddr) {
-			throw std::runtime_error("Bogus ELF segment virtual base");
+			throw MachineException(INVALID_PROGRAM, "Bogus ELF segment virtual base");
 		}
 
 		if (options.verbose_loader) {
@@ -147,7 +146,7 @@ namespace riscv
 			//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
 			//	hdr->p_vaddr, len, pbase, pbase + plen, prelen, len, postlen, plen);
 			if (UNLIKELY(prelen > plen || prelen + len > plen)) {
-				throw std::runtime_error("Segment virtual base was bogus");
+				throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 			}
 			// Create the whole executable memory range
 			m_exec_pagedata.reset(new uint8_t[plen]);
@@ -188,14 +187,14 @@ namespace riscv
 				return;
 		} else if (attr.exec) {
 #ifdef RISCV_INSTR_CACHE
-			throw std::runtime_error(
+			throw MachineException(INVALID_PROGRAM,
 				"Binary can not have more than one executable segment!");
 #endif
 		}
 		// We would normally never allow this
 		if (attr.exec && attr.write) {
 			if (options.allow_write_exec_segment == false) {
-				throw std::runtime_error(
+				throw MachineException(INVALID_PROGRAM,
 					"Insecure ELF has writable executable code");
 			}
 		}
@@ -275,32 +274,32 @@ namespace riscv
 	void Memory<W>::binary_loader(const MachineOptions<W>& options)
 	{
 		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
-			throw std::runtime_error("ELF program too short");
+			throw MachineException(INVALID_PROGRAM, "ELF program too short");
 		}
 		const auto* elf = (Ehdr*) m_binary.data();
 		if (UNLIKELY(!validate_header<Ehdr> (elf))) {
-			throw std::runtime_error("Invalid ELF header! Mixup between 32- and 64-bit?");
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Mixup between 32- and 64-bit?");
 		}
 		if (UNLIKELY(elf->e_type != ET_EXEC)) {
-			throw std::runtime_error("ELF program is not an executable type. Trying to load a dynamic library?");
+			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load a dynamic library?");
 		}
 		if (UNLIKELY(elf->e_machine != EM_RISCV)) {
-			throw std::runtime_error("ELF program is not a RISC-V executable. Wrong architecture.");
+			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.");
 		}
 
 		// enumerate & load loadable segments
 		const auto program_headers = elf->e_phnum;
 		if (UNLIKELY(program_headers <= 0)) {
-			throw std::runtime_error("ELF with no program-headers");
+			throw MachineException(INVALID_PROGRAM, "ELF with no program-headers");
 		}
 		if (UNLIKELY(program_headers >= 16)) {
-			throw std::runtime_error("ELF with too many program-headers");
+			throw MachineException(INVALID_PROGRAM, "ELF with too many program-headers");
 		}
 		if (UNLIKELY(elf->e_phoff > 0x4000)) {
-			throw std::runtime_error("ELF program-headers have bogus offset");
+			throw MachineException(INVALID_PROGRAM, "ELF program-headers have bogus offset");
 		}
 		if (UNLIKELY(elf->e_phoff + program_headers * sizeof(Phdr) > m_binary.size())) {
-			throw std::runtime_error("ELF program-headers are outside the binary");
+			throw MachineException(INVALID_PROGRAM, "ELF program-headers are outside the binary");
 		}
 
 		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
@@ -318,7 +317,7 @@ namespace riscv
 					ph->p_vaddr + ph->p_filesz >= hdr->p_vaddr) {
 					// Normally we would not care, but no normal ELF
 					// has overlapping segments, so treat as bogus.
-					throw std::runtime_error("Overlapping ELF segments");
+					throw MachineException(INVALID_PROGRAM, "Overlapping ELF segments");
 				}
 			}
 

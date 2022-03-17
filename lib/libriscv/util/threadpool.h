@@ -35,7 +35,7 @@
 #include <future>
 #include <atomic>
 #include <functional>
-#include <stdexcept>
+#include <exception>
 #include <algorithm>
 #include <cassert>
 
@@ -101,6 +101,18 @@ private:
     };
 };
 
+class ThreadPoolException : public std::exception {
+public:
+	explicit ThreadPoolException(const char* text)
+		: m_msg{text} {}
+
+	virtual ~ThreadPoolException() throw() {}
+
+	const char* what() const throw() override { return m_msg; }
+protected:
+	const char*    m_msg;
+};
+
 // the constructor just launches some amount of workers
 inline ThreadPool::ThreadPool(std::size_t threads)
     : pool_size(threads)
@@ -136,7 +148,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
 
     // don't allow enqueueing after stopping the pool
     if (stop)
-        throw std::runtime_error("enqueue on stopped ThreadPool");
+        throw ThreadPoolException("enqueue on stopped ThreadPool");
 
     tasks.emplace(std::move(task));
     std::atomic_fetch_add_explicit(&in_flight,

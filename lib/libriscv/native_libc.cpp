@@ -1,6 +1,5 @@
 #include "machine.hpp"
 #include "native_heap.hpp"
-#include <stdexcept>
 
 //#define HPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #define HPRINT(fmt, ...) /* */
@@ -100,7 +99,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			HPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
 			machine.set_result(ret);
 			if (ptr != 0x0 && ret < 0) {
-				throw std::runtime_error("Possible double-free for freed pointer");
+				throw MachineException(SYSTEM_CALL_FAILED, "Possible double-free for freed pointer");
 			}
 			machine.penalize(COMPLEX_CALL_PENALTY);
 			return;
@@ -138,13 +137,13 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 template <int W>
 const Arena& Machine<W>::arena() const {
 	if (UNLIKELY(m_arena == nullptr))
-		throw MachineException(ILLEGAL_OPERATION, "Arena not created on this machine");
+		throw MachineException(SYSTEM_CALL_FAILED, "Arena not created on this machine");
 	return *m_arena;
 }
 template <int W>
 Arena& Machine<W>::arena() {
 	if (UNLIKELY(m_arena == nullptr))
-		throw MachineException(ILLEGAL_OPERATION, "Arena not created on this machine");
+		throw MachineException(SYSTEM_CALL_FAILED, "Arena not created on this machine");
 	return *m_arena;
 }
 template <int W>

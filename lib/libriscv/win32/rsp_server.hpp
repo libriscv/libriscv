@@ -1,10 +1,6 @@
 #pragma once
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include <sys/types.h>
 #include "ws2.hpp"
-#include <unistd.h>
 
 namespace riscv {
 
@@ -22,7 +18,7 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_BROADCAST, // SO_BROADCAST = SO_REUSEPORT
         (const char*)&opt, sizeof(opt))) {
         closesocket(server_fd);
-		throw std::runtime_error("Failed to enable REUSEADDR/PORT");
+		throw MachineException(SYSTEM_CALL_FAILED, "Failed to enable REUSEADDR/PORT");
 	}
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -31,11 +27,11 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	if (bind(server_fd, (struct sockaddr*) &address,
 			sizeof(address)) < 0) {
         closesocket(server_fd);
-		throw std::runtime_error("GDB listener failed to bind to port");
+		throw MachineException(SYSTEM_CALL_FAILED, "GDB listener failed to bind to port");
 	}
 	if (listen(server_fd, 2) < 0) {
         closesocket(server_fd);
-		throw std::runtime_error("GDB listener failed to listen on port");
+		throw MachineException(SYSTEM_CALL_FAILED, "GDB listener failed to listen on port");
 	}
 }
 template <int W>
@@ -177,7 +173,7 @@ bool RSPClient<W>::process_one()
 template <int W> inline
 void RSPClient<W>::reply_ack() {
     ssize_t len = ::send(sockfd, "+", 1, 0);
-    if (len < 0) throw std::runtime_error("RSPClient: Unable to ACK");
+    if (len < 0) throw MachineException(SYSTEM_CALL_FAILED, "RSPClient: Unable to ACK");
 }
 
 template <int W>

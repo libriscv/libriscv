@@ -1,7 +1,7 @@
 #pragma once
 #include "machine.hpp"
 #include <cstdarg>
-#include <stdexcept>
+#include <unistd.h>
 
 /**
   The ‘org.gnu.gdb.riscv.cpu’ feature is required
@@ -157,7 +157,7 @@ int RSPClient<W>::forge_packet(
 			break;
 	}
 	if (UNLIKELY(d + 3 > maxd))
-		throw std::runtime_error("Unable to forge RSP packet: Not enough space");
+		throw MachineException(OUT_OF_MEMORY, "Unable to forge RSP packet: Not enough space");
 	*d++ = '#';
 	*d++ = lut[(csum >> 4) & 0xF];
 	*d++ = lut[(csum >> 0) & 0xF];
