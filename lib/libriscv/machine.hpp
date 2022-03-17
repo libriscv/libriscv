@@ -50,6 +50,7 @@ namespace riscv
 		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
+		void     penalize(uint64_t val) noexcept { m_counter += val; }
 		uint64_t max_instructions() const noexcept { return m_max_counter; }
 		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
 

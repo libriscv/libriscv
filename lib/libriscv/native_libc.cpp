@@ -23,7 +23,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		auto data = machine.arena().malloc(len);
 		HPRINT("SYSCALL malloc(%zu) = 0x%X\n", len, data);
 		machine.set_result(data);
-		machine.increment_counter(COMPLEX_CALL_PENALTY);
+		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Calloc n+1
 	this->install_syscall_handler(syscall_base+1,
@@ -39,7 +39,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			machine.memory.memzero(data, len);
 		}
 		machine.set_result(data);
-		machine.increment_counter(COMPLEX_CALL_PENALTY);
+		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Realloc n+2
 	this->install_syscall_handler(syscall_base+2,
@@ -65,7 +65,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 				if (data == 0) {
 					machine.arena().malloc(srclen);
 					machine.set_result(data);
-					machine.increment_counter(COMPLEX_CALL_PENALTY);
+					machine.penalize(COMPLEX_CALL_PENALTY);
 					return;
 				}
 				else if (data != src)
@@ -74,7 +74,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 					machine.memory.memcpy(data, machine, src, srclen);
 				}
 				machine.set_result(data);
-				machine.increment_counter(COMPLEX_CALL_PENALTY);
+				machine.penalize(COMPLEX_CALL_PENALTY);
 				return;
 			} else {
 				HPRINT("SYSCALL realloc(0x%X:??, %zu) = 0x0\n", src, newlen);
@@ -83,11 +83,11 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			auto data = machine.arena().malloc(newlen);
 			HPRINT("SYSCALL realloc(0x0, %zu) = 0x%lX\n", newlen, (long) data);
 			machine.set_result(data);
-			machine.increment_counter(COMPLEX_CALL_PENALTY);
+			machine.penalize(COMPLEX_CALL_PENALTY);
 			return;
 		}
 		machine.set_result(0);
-		machine.increment_counter(COMPLEX_CALL_PENALTY);
+		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Free n+3
 	this->install_syscall_handler(syscall_base+3,
@@ -102,12 +102,12 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			if (ptr != 0x0 && ret < 0) {
 				throw std::runtime_error("Possible double-free for freed pointer");
 			}
-			machine.increment_counter(COMPLEX_CALL_PENALTY);
+			machine.penalize(COMPLEX_CALL_PENALTY);
 			return;
 		}
 		HPRINT("SYSCALL free(0x0) = 0\n");
 		machine.set_result(0);
-		machine.increment_counter(COMPLEX_CALL_PENALTY);
+		machine.penalize(COMPLEX_CALL_PENALTY);
 		return;
 	});
 	// Meminfo n+4
@@ -131,7 +131,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			machine.copy_to_guest(dst, &result, sizeof(result));
 		}
 		machine.set_result(ret);
-		machine.increment_counter(COMPLEX_CALL_PENALTY);
+		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 }
 
@@ -168,14 +168,14 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
 				m.memcpy(dst + off, data, len);
 			});
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 	}}, {syscall_base+1, [] (Machine<W>& m) {
 		// Memset n+1
 		const auto [dst, value, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
 		m.memory.memset(dst, value, len);
-		m.increment_counter(len);
+		m.penalize(len);
 	}}, {syscall_base+2, [] (Machine<W>& m) {
 		// Memmove n+2
 		auto [dst, src, len] =
@@ -209,19 +209,19 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 				}
 			}
 		}
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 	}}, {syscall_base+3, [] (Machine<W>& m) {
 		// Memcmp n+3
 		auto [p1, p2, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 		m.set_result(m.memory.memcmp(p1, p2, len));
 	}}, {syscall_base+5, [] (Machine<W>& m) {
 		// Strlen n+5
 		auto [addr] = m.sysargs<address_type<W>> ();
 		uint32_t len = m.memory.strlen(addr, STRLEN_MAX);
-		m.increment_counter(2 * len);
+		m.penalize(2 * len);
 		m.set_result(len);
 		MPRINT("SYSCALL strlen(%#lX) = %lu\n",
 			(long) addr, (long) len);
@@ -235,13 +235,13 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			const uint8_t v1 = m.memory.template read<uint8_t> (a1 ++);
 			const uint8_t v2 = m.memory.template read<uint8_t> (a2 ++);
 			if (v1 != v2 || v1 == 0) {
-				m.increment_counter(2 + 2 * len);
+				m.penalize(2 + 2 * len);
 				m.set_result(v1 - v2);
 				return;
 			}
 			len ++;
 		}
-		m.increment_counter(2 + 2 * len);
+		m.penalize(2 + 2 * len);
 		m.set_result(0);
 	}}, {syscall_base+14, [] (Machine<W>& m) {
 		// Print backtrace n+14
@@ -251,7 +251,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 				m.print("\n", 1);
 			});
 		m.set_result(0);
-		m.increment_counter(COMPLEX_CALL_PENALTY);
+		m.penalize(COMPLEX_CALL_PENALTY);
 	}}});
 }
 
