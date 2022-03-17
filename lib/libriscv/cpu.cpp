@@ -118,6 +118,7 @@ namespace riscv
 	{
 #ifdef RISCV_INSTR_CACHE
 		auto* exec_decoder = machine().memory.get_decoder_cache();
+		auto* exec_seg_data = this->m_exec_data;
 #endif
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
@@ -137,7 +138,7 @@ namespace riscv
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 #  endif
-			instruction = format_t { *(uint32_t*) &m_exec_data[this->pc()] };
+			instruction = format_t { *(uint32_t*) &exec_seg_data[this->pc()] };
 			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
 				exec_decoder[this->pc() / DecoderCache<W>::DIVISOR];
