@@ -1,5 +1,4 @@
 #include <libriscv/machine.hpp>
-#include <include/syscall_helpers.hpp>
 static inline std::vector<uint8_t> load_file(const std::string&);
 
 int main(int argc, const char** argv)
@@ -26,7 +25,7 @@ int main(int argc, const char** argv)
 	};
 	machine.setup_linux(args, env);
 	// some extra syscalls
-	setup_linux_syscalls(machine);
+	machine.setup_linux_syscalls();
 	// multi-threading
 	machine.setup_posix_threads();
 

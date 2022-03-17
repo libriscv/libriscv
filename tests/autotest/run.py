@@ -23,7 +23,7 @@ def compare_program(testname, program):
 			stdout=subprocess.PIPE, stderr=subprocess.PIPE,
 			input=program)
 
-		result = subprocess.run(['emulator/emulator', tmp.name],
+		result = subprocess.run(['emulator/build/emulator', tmp.name],
 			stdout=subprocess.PIPE)
 
 		emu = result.stdout.decode('utf-8')
