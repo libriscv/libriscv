@@ -30,9 +30,9 @@ static void run_program(
 		machine.fds().permit_sockets = true;
 		// Only allow opening certain file paths. The void* argument is
 		// the user-provided pointer set in the RISC-V machine.
-		machine.fds().filter_open = [] (void* user, const char* path) {
+		machine.fds().filter_open = [] (void* user, const std::string& path) {
 			(void) user;
-			if (strcmp(path, "/etc/hostname") == 0)
+			if (path == "/etc/hostname")
 				return true;
 			return false;
 		};

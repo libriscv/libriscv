@@ -21,7 +21,7 @@ TEST_CASE("Instantiate machine", "[Instantiate]")
 	// libriscv will counteract this to make sure the stack can be
 	// populated with runtime environment stuff, like program arguments,
 	// and will put the stack at the end of the address space.
-	REQUIRE(machine.memory.stack_initial() == 0xfffffffffffff000);
+	REQUIRE(machine.memory.stack_initial() == 0x0);
 	// The starting address is somewhere in the program area
 	REQUIRE(machine.memory.start_address() > 0x10000);
 }

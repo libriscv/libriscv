@@ -12,7 +12,6 @@ static constexpr bool verbose_syscalls = true;
 static constexpr bool verbose_syscalls = false;
 #endif
 
-#include <linux/limits.h>
 #include <fcntl.h>
 #include <signal.h>
 #undef sa_handler
@@ -21,7 +20,6 @@ static constexpr bool verbose_syscalls = false;
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/uio.h>
 #define SA_ONSTACK	0x08000000
 
 namespace riscv {
@@ -273,12 +271,11 @@ static void syscall_openat(Machine<W>& machine)
 	const int dir_fd = machine.template sysarg<int>(0);
 	const auto g_path = machine.sysarg(1);
 	const int flags  = machine.template sysarg<int>(2);
-	char path[PATH_MAX];
-	machine.copy_from_guest(path, g_path, sizeof(path)-1);
-	path[sizeof(path)-1] = 0;
+	// We do it this way to prevent accessing memory out of bounds
+	const auto path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X\n",
-		dir_fd, path, flags);
+		dir_fd, path.c_str(), flags);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
 
@@ -288,7 +285,7 @@ static void syscall_openat(Machine<W>& machine)
 				return;
 			}
 		}
-		int real_fd = openat(machine.fds().translate(dir_fd), path, flags);
+		int real_fd = openat(machine.fds().translate(dir_fd), path.c_str(), flags);
 		if (real_fd > 0) {
 			const int vfd = machine.fds().assign_file(real_fd);
 			machine.set_result(vfd);
@@ -394,12 +391,10 @@ void syscall_readlinkat(Machine<W>& machine)
 	const auto g_buf = machine.sysarg(2);
 	const auto bufsize = machine.sysarg(3);
 
-	char path[PATH_MAX];
-	machine.copy_from_guest(path, g_path, sizeof(path)-1);
-	path[sizeof(path)-1] = 0;
+	const auto path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
-		vfd, path, (long)g_buf, (size_t)bufsize);
+		vfd, path.c_str(), (long)g_buf, (size_t)bufsize);
 
 	char buffer[16384];
 	if (bufsize > sizeof(buffer)) {
@@ -417,7 +412,7 @@ void syscall_readlinkat(Machine<W>& machine)
 		}
 		const int real_fd = machine.fds().translate(vfd);
 
-		const int res = readlinkat(real_fd, path, buffer, bufsize);
+		const int res = readlinkat(real_fd, path.c_str(), buffer, bufsize);
 		if (res > 0) {
 			// TODO: Only necessary if g_buf is not sequential.
 			machine.copy_to_guest(g_buf, buffer, res);
@@ -480,19 +475,17 @@ static void syscall_fstatat(Machine<W>& machine)
 	const auto g_buf = machine.sysarg(2);
 	const auto flags = machine.template sysarg<int> (3);
 
-	char path[PATH_MAX];
-	machine.copy_from_guest(path, g_path, sizeof(path)-1);
-	path[sizeof(path)-1] = 0;
+	const auto path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL fstatat, fd: %d path: %s buf: 0x%lX flags: %#x)\n",
-			vfd, path, (long)g_buf, flags);
+			vfd, path.c_str(), (long)g_buf, flags);
 
 	if (machine.has_file_descriptors()) {
 
 		int real_fd = machine.fds().translate(vfd);
 
 		struct stat st;
-		const int res = ::fstatat(real_fd, path, &st, flags);
+		const int res = ::fstatat(real_fd, path.c_str(), &st, flags);
 		if (res == 0) {
 			// Convert to RISC-V structure
 			struct riscv_stat rst;
@@ -540,12 +533,10 @@ static void syscall_statx(Machine<W>& machine)
 	const auto    mask = machine.template sysarg<uint32_t> (3);
 	const auto  buffer = machine.sysarg(4);
 
-	char path[PATH_MAX];
-	machine.copy_from_guest(path, g_path, sizeof(path)-1);
-	path[sizeof(path)-1] = 0;
+	const auto path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL statx, fd: %d path: %s flags: %x buf: 0x%lX)\n",
-			dir_fd, path, flags, (long)buffer);
+			dir_fd, path.c_str(), flags, (long)buffer);
 
 	if (machine.has_file_descriptors()) {
 		if (machine.fds().filter_stat != nullptr) {
@@ -556,7 +547,7 @@ static void syscall_statx(Machine<W>& machine)
 		}
 
 		struct statx st;
-		int res = ::statx(dir_fd, path, flags, mask, &st);
+		int res = ::statx(dir_fd, path.c_str(), flags, mask, &st);
 		if (res == 0) {
 			machine.copy_to_guest(buffer, &st, sizeof(struct statx));
 		}
@@ -853,8 +844,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 
 	if (filesystem || sockets) {
 		// Workaround for a broken "feature"
-		// Sockets that are already closed cause SIGPIPE signal
-		// Signals are nearly useless, and unhandled will stop the emulator
+		// Closing sockets that are already closed cause SIGPIPE signal
 		signal(SIGPIPE, SIG_IGN);
 
 		m_fds.reset(new FileDescriptors);

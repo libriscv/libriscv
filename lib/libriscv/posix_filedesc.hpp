@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <string>
 #include <map>
 #include "types.hpp"
 
@@ -43,8 +44,8 @@ struct FileDescriptors
 	bool permit_file_write = false;
 	bool permit_sockets = false;
 
-	std::function<bool(void*, const char*)> filter_open = nullptr;
-	std::function<bool(void*, const char*)> filter_stat = nullptr;
+	std::function<bool(void*, const std::string&)> filter_open = nullptr;
+	std::function<bool(void*, const std::string&)> filter_stat = nullptr;
 	std::function<bool(void*, uint64_t)> filter_ioctl = nullptr;
 };
 
