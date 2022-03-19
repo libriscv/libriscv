@@ -725,9 +725,12 @@ namespace riscv
 						uint64_t(cpu.pc() + instr.Utype.upper_imm()));
 	});
 
-	INSTRUCTION(OP_IMM32,
-	[] (auto& cpu, rv32i_instruction) {
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+	INSTRUCTION(OP_IMM32_ADDIW,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const int32_t src = cpu.reg(instr.Itype.rs1);
+		// ADDIW: Add 32-bit sign-extended 12-bit immediate
+		dst = RVSIGNEXTW(cpu) (src + instr.Itype.signed_imm());
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		if (instr.Itype.imm == 0)
@@ -777,21 +780,13 @@ namespace riscv
 						instr.Itype.signed_imm(), instr.Itype.signed_imm());
 	});
 
-	INSTRUCTION(OP_IMM32_ADDIW,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
-		auto& dst = cpu.reg(instr.Itype.rd);
-		const int32_t src = cpu.reg(instr.Itype.rs1);
-		// ADDIW: Add 32-bit sign-extended 12-bit immediate
-		dst = RVSIGNEXTW(cpu) (src + instr.Itype.signed_imm());
-	}, DECODED_INSTR(OP_IMM32).printer);
-
 	INSTRUCTION(OP_IMM32_SLLIW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const int32_t src = cpu.reg(instr.Itype.rs1);
 		// SLLIW: Shift-Left Logical 0-31 immediate
 		dst = RVSIGNEXTW(cpu) (src << instr.Itype.shift_imm());
-	}, DECODED_INSTR(OP_IMM32).printer);
+	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
 	INSTRUCTION(OP_IMM32_SRLIW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
@@ -799,7 +794,7 @@ namespace riscv
 		const uint32_t src = cpu.reg(instr.Itype.rs1);
 		// SRLIW: Shift-Right Logical 0-31 immediate
 		dst = src >> instr.Itype.shift_imm();
-	}, DECODED_INSTR(OP_IMM32).printer);
+	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
 	INSTRUCTION(OP_IMM32_SRAIW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
@@ -809,7 +804,7 @@ namespace riscv
 		const uint32_t shifts = instr.Itype.shift_imm();
 		const bool is_signed = (src & 0x80000000) != 0;
 		dst = RVSIGNEXTW(cpu) RV32I::SRA(is_signed, shifts, src);
-	}, DECODED_INSTR(OP_IMM32).printer);
+	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
 	INSTRUCTION(OP32,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
@@ -921,7 +916,7 @@ namespace riscv
 			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
-	}, DECODED_INSTR(OP_IMM32).printer);
+	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
 	INSTRUCTION(OP64,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
