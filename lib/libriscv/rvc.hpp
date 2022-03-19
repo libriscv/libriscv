@@ -27,6 +27,10 @@ namespace riscv
 				const uint64_t ext = 0xFFFFFFFFFFFFFFE0;
 				return imm1 | (sign() ? ext : 0);
 			}
+			int32_t upper_imm() const noexcept {
+				const uint32_t ext = 0xFFFE0000;
+				return (imm1 << 12) | (sign() ? ext : 0);
+			}
 			uint32_t shift_imm() const noexcept {
 				return imm1;
 			}

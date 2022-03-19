@@ -202,8 +202,8 @@ namespace riscv
 	COMPRESSED_INSTR(C1_LUI,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const rv32c_instruction ci { instr };
-		// LUI rd, imm[17:12]
-		cpu.reg(ci.CI.rd) = (RVREGTYPE(cpu)) ci.CI.signed_imm() << 12;
+		// LUI rd, imm[17:12] (sign-extended)
+		cpu.reg(ci.CI.rd) = (int32_t) ci.CI.upper_imm();
 	}, DECODED_COMPR(C1_ADDI16SP).printer);
 
 	COMPRESSED_INSTR(C1_ALU_OPS,
