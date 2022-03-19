@@ -1,4 +1,4 @@
-name: CMake
+name: Linux emulator
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: CMake emulator
+    - name: CMake configuration
       working-directory: ${{github.workspace}}/emulator
       env:
         CXX: ${{ matrix.compiler }}
