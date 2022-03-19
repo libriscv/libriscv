@@ -97,7 +97,11 @@
 				case RV32I_JALR:
 					DECODER(DECODED_INSTR(JALR));
 				case RV32I_JAL:
-					DECODER(DECODED_INSTR(JAL));
+					if (instruction.Jtype.rd != 0) {
+						DECODER(DECODED_INSTR(JAL));
+					} else {
+						DECODER(DECODED_INSTR(JMPI));
+					}
 				case RV32I_OP_IMM:
 					if (LIKELY(instruction.Itype.rd != 0))
 					{

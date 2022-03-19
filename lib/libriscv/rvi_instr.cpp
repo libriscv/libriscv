@@ -335,10 +335,8 @@ namespace riscv
 	INSTRUCTION(JAL,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
 		// Link *next* instruction (rd = PC + 4)
-		if (LIKELY(instr.Jtype.rd != 0)) {
-			cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
-		}
-		// And Jump (relative)
+		cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
+		// And jump relative
 		cpu.aligned_jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
@@ -359,6 +357,20 @@ namespace riscv
 						instr.Jtype.jump_offset(),
 						uint64_t(cpu.pc() + instr.Jtype.jump_offset()));
 	});
+
+	INSTRUCTION(JMPI,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		// Jump relative
+		cpu.aligned_jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
+#ifdef RISCV_DEBUG
+		if (UNLIKELY(cpu.machine().verbose_jumps)) {
+			printf(">>> JMP 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "\n",
+					uint64_t(cpu.pc()),
+					RISCV::regname(instr.Jtype.rd),
+					uint64_t(cpu.reg(instr.Jtype.rd)));
+		}
+#endif
+	}, DECODED_INSTR(JAL).printer);
 
 	INSTRUCTION(OP_IMM,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
