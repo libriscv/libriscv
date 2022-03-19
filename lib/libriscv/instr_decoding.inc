@@ -11,39 +11,39 @@
 				case RV32I_LOAD:
 					switch (instruction.Itype.funct3) {
 						case 0x0:
-							if (instruction.Itype.rd != 0)
+							if (LIKELY(instruction.Itype.rd != 0))
 								DECODER(DECODED_INSTR(LOAD_I8));
 							DECODER(DECODED_INSTR(LOAD_I8_DUMMY));
 						case 0x1:
-							if (instruction.Itype.rd != 0)
+							if (LIKELY(instruction.Itype.rd != 0))
 								DECODER(DECODED_INSTR(LOAD_I16));
 							DECODER(DECODED_INSTR(LOAD_I16_DUMMY));
 						case 0x2:
-							if (instruction.Itype.rd != 0)
+							if (LIKELY(instruction.Itype.rd != 0))
 								DECODER(DECODED_INSTR(LOAD_I32));
 							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
 						case 0x3:
 							if constexpr (sizeof(address_t) >= 8) {
-								if (instruction.Itype.rd != 0)
+								if (LIKELY(instruction.Itype.rd != 0))
 									DECODER(DECODED_INSTR(LOAD_I64));
 								DECODER(DECODED_INSTR(LOAD_I64_DUMMY));
 							}
 							break;
 						case 0x4:
-							if (instruction.Itype.rd != 0)
+							if (LIKELY(instruction.Itype.rd != 0))
 								DECODER(DECODED_INSTR(LOAD_U8));
 							DECODER(DECODED_INSTR(LOAD_I8_DUMMY));
 						case 0x5:
-							if (instruction.Itype.rd != 0)
+							if (LIKELY(instruction.Itype.rd != 0))
 								DECODER(DECODED_INSTR(LOAD_U16));
 							DECODER(DECODED_INSTR(LOAD_I16_DUMMY));
 						case 0x6:
-							if (instruction.Itype.rd != 0)
+							if (LIKELY(instruction.Itype.rd != 0))
 								DECODER(DECODED_INSTR(LOAD_U32));
 							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
 						case 0x7:
 							if constexpr (sizeof(address_t) >= 16) {
-								if (instruction.Itype.rd != 0)
+								if (LIKELY(instruction.Itype.rd != 0))
 									DECODER(DECODED_INSTR(LOAD_U128));
 								DECODER(DECODED_INSTR(LOAD_U128_DUMMY));
 							}
@@ -99,7 +99,7 @@
 				case RV32I_JAL:
 					DECODER(DECODED_INSTR(JAL));
 				case RV32I_OP_IMM:
-					if (instruction.Itype.rd != 0)
+					if (LIKELY(instruction.Itype.rd != 0))
 					{
 						switch (instruction.Itype.funct3) {
 						case 0x0: // ADDI
@@ -115,13 +115,22 @@
 					}
 					DECODER(DECODED_INSTR(NOP));
 				case RV32I_OP:
-					if (instruction.Rtype.rd != 0)
+					if (LIKELY(instruction.Rtype.rd != 0))
 					{
-						DECODER(DECODED_INSTR(OP));
+						switch (instruction.Rtype.jumptable_friendly_op()) {
+						case 0x0:
+							if (!instruction.Rtype.is_f7()) {
+								DECODER(DECODED_INSTR(OP_ADD));
+							} else {
+								DECODER(DECODED_INSTR(OP_SUB));
+							}
+						default:
+							DECODER(DECODED_INSTR(OP));
+						}
 					}
 					DECODER(DECODED_INSTR(NOP));
 				case RV32I_SYSTEM:
-					if (instruction.Itype.funct3 == 0)
+					if (LIKELY(instruction.Itype.funct3 == 0))
 					{
 						if (instruction.Itype.imm == 0) {
 							DECODER(DECODED_INSTR(SYSCALL));
@@ -133,19 +142,19 @@
 					}
 					DECODER(DECODED_INSTR(SYSTEM));
 				case RV32I_LUI:
-					if (instruction.Utype.rd != 0) {
+					if (LIKELY(instruction.Utype.rd != 0)) {
 						DECODER(DECODED_INSTR(LUI));
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
 				case RV32I_AUIPC:
-					if (instruction.Utype.rd != 0) {
+					if (LIKELY(instruction.Utype.rd != 0)) {
 						DECODER(DECODED_INSTR(AUIPC));
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
 				case RV64I_OP_IMM32:
-					if (instruction.Itype.rd != 0)
+					if (LIKELY(instruction.Itype.rd != 0))
 					{
 						switch (instruction.Itype.funct3) {
 						case 0x0: // ADDIW
@@ -165,7 +174,7 @@
 						DECODER(DECODED_INSTR(NOP));
 					}
 				case RV64I_OP32:
-					if (instruction.Rtype.rd != 0)
+					if (LIKELY(instruction.Rtype.rd != 0))
 					{
 						switch (instruction.Rtype.jumptable_friendly_op()) {
 						case 0x0: // ADDW
@@ -180,14 +189,14 @@
 						DECODER(DECODED_INSTR(NOP));
 					}
 				case RV128I_OP_IMM64:
-					if (instruction.Itype.rd != 0)
+					if (LIKELY(instruction.Itype.rd != 0))
 					{
 						DECODER(DECODED_INSTR(OP_IMM64));
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
 				case RV128I_OP64:
-					if (instruction.Rtype.rd != 0)
+					if (LIKELY(instruction.Rtype.rd != 0))
 					{
 						DECODER(DECODED_INSTR(OP64));
 					} else {

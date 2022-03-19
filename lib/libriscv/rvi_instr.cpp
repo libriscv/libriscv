@@ -493,9 +493,6 @@ namespace riscv
 		const auto src2 = cpu.reg(instr.Rtype.rs2);
 
 		switch (instr.Rtype.jumptable_friendly_op()) {
-			case 0x0: // ADD / SUB
-				dst = src1 + (!instr.Rtype.is_f7() ? src2 : -src2);
-				return;
 			case 0x1: // SLL
 				if constexpr (RVIS128BIT(cpu)) {
 					dst = src1 << (src2 & 0x7F);
@@ -677,6 +674,18 @@ namespace riscv
 			return snprintf(buffer, len, "SYS ???");
 		}
 	});
+
+	INSTRUCTION(OP_ADD,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Rtype.rd);
+		dst = cpu.reg(instr.Rtype.rs1) + cpu.reg(instr.Rtype.rs2);
+	}, DECODED_INSTR(OP).printer);
+
+	INSTRUCTION(OP_SUB,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Rtype.rd);
+		dst = cpu.reg(instr.Rtype.rs1) - cpu.reg(instr.Rtype.rs2);
+	}, DECODED_INSTR(OP).printer);
 
 	INSTRUCTION(SYSCALL,
 	[] (auto& cpu, rv32i_instruction) RVINSTR_ATTR() {
