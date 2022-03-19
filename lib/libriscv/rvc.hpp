@@ -23,8 +23,8 @@ namespace riscv
 			bool sign() const noexcept {
 				return imm2;
 			}
-			int64_t signed_imm() const noexcept {
-				const uint64_t ext = 0xFFFFFFFFFFFFFFE0;
+			int32_t signed_imm() const noexcept {
+				const uint32_t ext = 0xFFFFFFE0;
 				return imm1 | (sign() ? ext : 0);
 			}
 			int32_t upper_imm() const noexcept {
@@ -77,9 +77,9 @@ namespace riscv
 			bool sign() const noexcept {
 				return imm9;
 			}
-			int64_t signed_imm() const noexcept {
-				const uint64_t ext = 0xFFFFFFFFFFFFFE00;
-				int64_t val = imm4 | (imm5 << 1) | (imm6 << 2) | (imm78 << 3);
+			int32_t signed_imm() const noexcept {
+				const uint32_t ext = 0xFFFFFE00;
+				int32_t val = imm4 | (imm5 << 1) | (imm6 << 2) | (imm78 << 3);
 				return (val << 4) | (sign() ? ext : 0); // scaled by 16
 			}
 		} CI16;
@@ -188,8 +188,8 @@ namespace riscv
 			uint32_t shift64_imm() const noexcept {
 				return imm04 | (imm5 << 5);
 			}
-			int64_t signed_imm() const noexcept {
-				const uint64_t ext = 0xFFFFFFFFFFFFFFE0;
+			int32_t signed_imm() const noexcept {
+				const uint32_t ext = 0xFFFFFFE0;
 				return imm04 | (imm5 ? ext : 0);
 			}
 		} CAB;
@@ -207,9 +207,9 @@ namespace riscv
 			bool sign() const noexcept {
 				return off8;
 			}
-			int64_t signed_imm() const noexcept {
-				int64_t val = (off12 | (off34 << 2) | (off5 << 4) | (off67 << 5));
-				const uint64_t ext = 0xFFFFFFFFFFFFFF00; // 7 immediate bits + 1 sign
+			int32_t signed_imm() const noexcept {
+				int32_t val = (off12 | (off34 << 2) | (off5 << 4) | (off67 << 5));
+				const uint32_t ext = 0xFFFFFF00; // 7 immediate bits + 1 sign
 				return (val << 1) | (sign() ? ext : 0);
 			}
 		} CB;
@@ -230,10 +230,10 @@ namespace riscv
 			bool sign() const noexcept {
 				return off11;
 			}
-			int64_t signed_imm() const noexcept {
-				int64_t val = (off13 | (off4 << 3) | (off5 << 4) | (off6 << 5)
+			int32_t signed_imm() const noexcept {
+				int32_t val = (off13 | (off4 << 3) | (off5 << 4) | (off6 << 5)
 							| (off7 << 6) | (off89 << 7) | (off10 << 9));
-				const uint64_t ext = 0xFFFFFFFFFFFFF800; // 12 immediate bits
+				const uint32_t ext = 0xFFFFF800; // 12 immediate bits
 				return (val << 1) | (sign() ? ext : 0);
 			}
 		} CJ;

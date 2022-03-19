@@ -122,7 +122,7 @@ namespace riscv
 	{
 		const rv32c_instruction ci { instr };
 		if (ci.CI.rd != 0) {
-			return snprintf(buffer, len, "C.ADDI %s, %" PRId64,
+			return snprintf(buffer, len, "C.ADDI %s, %" PRId32,
 							RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
 		}
 		if (ci.CI.imm1 != 0 || ci.CI.imm2 != 0)
@@ -146,7 +146,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.JAL %s, PC%+" PRId64 " (0x%" PRIX64 ")",
+		return snprintf(buffer, len, "C.JAL %s, PC%+" PRId32 " (0x%" PRIX64 ")",
 						RISCV::regname(REG_RA),
 						ci.CJ.signed_imm(),
 						uint64_t(cpu.pc() + ci.CJ.signed_imm()));
@@ -161,7 +161,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.ADDIW %s, %+" PRId64,
+		return snprintf(buffer, len, "C.ADDIW %s, %+" PRId32,
 						RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
 	});
 
@@ -174,7 +174,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.LI %s, %+" PRId64,
+		return snprintf(buffer, len, "C.LI %s, %+" PRId32,
 						RISCV::regname(ci.CI.rd), ci.CI.signed_imm());
 	});
 
@@ -188,11 +188,11 @@ namespace riscv
 	{
 		const rv32c_instruction ci { instr };
 		if (ci.CI.rd != 0 && ci.CI.rd != 2) {
-			return snprintf(buffer, len, "C.LUI %s, 0x%" PRIX64,
+			return snprintf(buffer, len, "C.LUI %s, 0x%" PRIX32,
 							RISCV::regname(ci.CI.rd),
-							uint64_t(ci.CI.signed_imm() << 12));
+							ci.CI.upper_imm());
 		} else if (ci.CI.rd == 2) {
-			return snprintf(buffer, len, "C.ADDI16SP %s, %+" PRId64,
+			return snprintf(buffer, len, "C.ADDI16SP %s, %+" PRId32,
 							RISCV::regname(ci.CI.rd),
 							ci.CI16.signed_imm());
 		}
@@ -278,7 +278,7 @@ namespace riscv
 					RVIS64BIT(cpu) ? ci.CAB.shift64_imm() : ci.CAB.shift_imm());
 		}
 		else if ((ci.CA.funct6 & 0x3) == 2) {
-			return snprintf(buffer, len, "C.ANDI %s, %+" PRId64,
+			return snprintf(buffer, len, "C.ANDI %s, %+" PRId32,
 							RISCV::ciname(ci.CAB.srd), ci.CAB.signed_imm());
 		}
 		const int op = ci.CA.funct2 | (ci.CA.funct6 & 0x4);
@@ -324,7 +324,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.BEQZ %s, PC%+" PRId64 " (0x%" PRIX64 ")",
+		return snprintf(buffer, len, "C.BEQZ %s, PC%+" PRId32 " (0x%" PRIX64 ")",
 						RISCV::ciname(ci.CB.srs1), ci.CB.signed_imm(),
 						uint64_t(cpu.pc() + ci.CB.signed_imm()));
 	});
@@ -346,7 +346,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
 	{
 		const rv32c_instruction ci { instr };
-		return snprintf(buffer, len, "C.BNEZ %s, PC%+" PRId64 " (0x%" PRIX64 ")",
+		return snprintf(buffer, len, "C.BNEZ %s, PC%+" PRId32 " (0x%" PRIX64 ")",
 						RISCV::ciname(ci.CB.srs1), ci.CB.signed_imm(),
 						uint64_t(cpu.pc() + ci.CB.signed_imm()));
 	});
