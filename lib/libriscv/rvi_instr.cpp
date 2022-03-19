@@ -368,44 +368,32 @@ namespace riscv
 		switch (instr.Itype.funct3) {
 		case 0x2: // SLTI:
 			dst = (RVTOSIGNED(src) < instr.Itype.signed_imm()) ? 1 : 0;
-			break;
+			return;
 		case 0x3: // SLTU:
 			dst = (src < (unsigned) instr.Itype.signed_imm()) ? 1 : 0;
-			break;
+			return;
 		case 0x4: // XORI:
 			dst = src ^ instr.Itype.signed_imm();
-			break;
-		case 0x5: // SRLI / SRAI:
-			if (LIKELY(!instr.Itype.is_srai())) {
-				if constexpr (RVIS128BIT(cpu))
-					dst = src >> instr.Itype.shift128_imm();
-				else if constexpr (RVIS64BIT(cpu))
-					dst = src >> instr.Itype.shift64_imm();
-				else
-					dst = src >> instr.Itype.shift_imm();
-			} else { // SRAI: preserve the sign bit
-				const auto bit = RVREGTYPE(cpu){1} << (sizeof(src) * 8 - 1);
-				const bool is_signed = (src & bit) != 0;
-				if constexpr (RVIS128BIT(cpu)) {
-					const uint32_t shifts = instr.Itype.shift128_imm();
-					dst = RV128I::SRA(is_signed, shifts, src);
-				} else if constexpr (RVIS64BIT(cpu)) {
-					const uint32_t shifts = instr.Itype.shift64_imm();
-					dst = RV64I::SRA(is_signed, shifts, src);
-				} else {
-					const uint32_t shifts = instr.Itype.shift_imm();
-					dst = RV32I::SRA(is_signed, shifts, src);
-				}
+			return;
+		case 0x5: { // SRLI / SRAI:
+			// SRAI: preserve the sign bit
+			const auto bit = RVREGTYPE(cpu){1} << (sizeof(src) * 8 - 1);
+			const bool is_signed = (src & bit) != 0;
+			if constexpr (RVIS128BIT(cpu)) {
+				const uint32_t shifts = instr.Itype.shift128_imm();
+				dst = RV128I::SRA(is_signed, shifts, src);
+			} else if constexpr (RVIS64BIT(cpu)) {
+				const uint32_t shifts = instr.Itype.shift64_imm();
+				dst = RV64I::SRA(is_signed, shifts, src);
+			} else {
+				const uint32_t shifts = instr.Itype.shift_imm();
+				dst = RV32I::SRA(is_signed, shifts, src);
 			}
-			break;
+			} return;
 		case 0x6: // ORI: Or sign-extended 12-bit immediate
 			cpu.reg(instr.Itype.rd) =
 				cpu.reg(instr.Itype.rs1) | instr.Itype.signed_imm();
-			break;
-		case 0x7: // ANDI: And sign-extended 12-bit immediate
-			cpu.reg(instr.Itype.rd) =
-				cpu.reg(instr.Itype.rs1) & instr.Itype.signed_imm();
-			break;
+			return;
 		}
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
@@ -476,13 +464,32 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
-		// SLLI: Logical left-shift 5/6-bit immediate
+		// SLLI: Logical left-shift 5/6/7-bit immediate
 		if constexpr (RVIS128BIT(cpu))
 			dst = src << instr.Itype.shift128_imm();
 		else if constexpr (RVIS64BIT(cpu))
 			dst = src << instr.Itype.shift64_imm();
 		else
 			dst = src << instr.Itype.shift_imm();
+	}, DECODED_INSTR(OP_IMM).printer);
+
+	INSTRUCTION(OP_IMM_SRLI,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		// SRLI: Shift-right logical 5/6/7-bit immediate
+		if constexpr (RVIS128BIT(cpu))
+			dst = cpu.reg(instr.Itype.rs1) >> instr.Itype.shift128_imm();
+		else if constexpr (RVIS64BIT(cpu))
+			dst = cpu.reg(instr.Itype.rs1) >> instr.Itype.shift64_imm();
+		else
+			dst = cpu.reg(instr.Itype.rs1) >> instr.Itype.shift_imm();
+	}, DECODED_INSTR(OP_IMM).printer);
+
+	INSTRUCTION(OP_IMM_ANDI,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		// ANDI: And sign-extended 12-bit immediate
+		dst = cpu.reg(instr.Itype.rs1) & instr.Itype.signed_imm();
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP,

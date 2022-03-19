@@ -109,6 +109,14 @@
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
 						case 0x1: // SLLI
 							DECODER(DECODED_INSTR(OP_IMM_SLLI));
+						case 0x5: // SRLI / SRAI
+							if (LIKELY(!instruction.Itype.is_srai())) {
+								DECODER(DECODED_INSTR(OP_IMM_SRLI));
+							} else {
+								DECODER(DECODED_INSTR(OP_IMM));
+							}
+						case 0x7: // ANDI
+							DECODER(DECODED_INSTR(OP_IMM_ANDI));
 						default:
 							DECODER(DECODED_INSTR(OP_IMM));
 						}
