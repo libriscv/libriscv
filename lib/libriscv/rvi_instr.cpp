@@ -8,21 +8,21 @@
 namespace riscv
 {
 	INSTRUCTION(NOP,
-	[] (auto& /* cpu */, rv32i_instruction /* instr */) RVINSTR_ATTR() {
+	[] (auto& /* cpu */, rv32i_instruction /* instr */) RVINSTR_COLDATTR() {
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction) RVPRINTR_ATTR() {
 		return snprintf(buffer, len, "NOP");
 	});
 
 	INSTRUCTION(UNIMPLEMENTED,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR() {
 		// handler
 		if (instr.length() == 4)
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 		else
 			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.half[0]);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR() {
 		// printer
 		if (instr.length() == 4) {
 			return snprintf(buffer, len, "UNIMPLEMENTED: 4-byte 0x%X (0x%X)",
@@ -36,7 +36,7 @@ namespace riscv
 	});
 
 	INSTRUCTION(ILLEGAL,
-	[] (auto& cpu, rv32i_instruction /* instr */) RVINSTR_ATTR() {
+	[] (auto& cpu, rv32i_instruction /* instr */) RVINSTR_COLDATTR() {
 		cpu.trigger_exception(ILLEGAL_OPCODE);
 	}, DECODED_INSTR(UNIMPLEMENTED).printer);
 
@@ -47,7 +47,7 @@ namespace riscv
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		static std::array<const char*, 8> f3 = {"LD.B", "LD.H", "LD.W", "LD.D", "LD.BU", "LD.HU", "LD.WU", "LD.Q"};
 		return snprintf(buffer, len, "%s %s, [%s%+" PRId32 " = 0x%" PRIX64 "]",
 						f3[instr.Itype.funct3], RISCV::regname(instr.Itype.rd),
@@ -56,7 +56,7 @@ namespace riscv
 	});
 
 	INSTRUCTION(LOAD_I8_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
 	{
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		cpu.machine().memory.template read<uint8_t>(addr);
@@ -71,7 +71,7 @@ namespace riscv
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_I16_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
 	{
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		cpu.machine().memory.template read<uint16_t>(addr);
@@ -86,7 +86,7 @@ namespace riscv
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_I32_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
 	{
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		cpu.machine().memory.template read<uint32_t>(addr);
@@ -101,7 +101,7 @@ namespace riscv
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_I64_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
 	{
 		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		cpu.machine().memory.template read<uint64_t>(addr);
@@ -149,7 +149,7 @@ namespace riscv
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_U128_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
 	{
 		auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 		addr &= ~(__uint128_t)0xF;
@@ -163,7 +163,7 @@ namespace riscv
 		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 		cpu.machine().memory.template write<uint8_t>(addr, value);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		static std::array<const char*, 8> f3 = {"ST.B", "ST.H", "ST.W", "ST.D", "ST.Q", "???", "???", "???"};
 		return snprintf(buffer, len, "%s %s, [%s%+d] (0x%" PRIX64 ")",
 						f3[instr.Stype.funct3], RISCV::regname(instr.Stype.rs2),
@@ -230,7 +230,7 @@ namespace riscv
 			VERBOSE_BRANCH()
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		// BRANCH compares two registers, BQE = equal taken, BNE = notequal taken
 		static std::array<const char*, 8> f3 = {"BEQ", "BNE", "???", "???", "BLT", "BGE", "BLTU", "BGEU"};
 		static std::array<const char*, 8> f1z = {"BEQ", "BNE", "???", "???", "BGTZ", "BLEZ", "BLTU", "BGEU"};
@@ -323,7 +323,7 @@ namespace riscv
 		}
 #endif
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		// RISC-V's RET instruction: return to register + immediate
 		const char* variant = (instr.Itype.rs1 == REG_RA) ? "RET" : "JMP";
 		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
@@ -349,7 +349,7 @@ namespace riscv
 		}
 #endif
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		if (instr.Jtype.rd != 0) {
 		return snprintf(buffer, len, "JAL %s, PC%+d (0x%" PRIX64 ")",
 						RISCV::regname(instr.Jtype.rd), instr.Jtype.jump_offset(),
@@ -408,7 +408,7 @@ namespace riscv
 			break;
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
 	{
 		if (instr.Itype.imm == 0)
 		{
@@ -614,7 +614,7 @@ namespace riscv
 				return;
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
 	{
 		if (!instr.Rtype.is_32M())
 		{
@@ -642,16 +642,18 @@ namespace riscv
 	});
 
 	INSTRUCTION(SYSTEM,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR() {
 		cpu.machine().system(instr);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR() {
 		// system functions
 		static std::array<const char*, 2> etype = {"ECALL", "EBREAK"};
 		if (instr.Itype.imm < 2 && instr.Itype.funct3 == 0) {
 			return snprintf(buffer, len, "SYS %s", etype.at(instr.Itype.imm));
 		} else if (instr.Itype.imm == 0x105 && instr.Itype.funct3 == 0) {
 			return snprintf(buffer, len, "SYS WFI");
+		} else if (instr.Itype.imm == 0x7FF && instr.Itype.funct3 == 0) {
+			return snprintf(buffer, len, "SYS STOP");
 		} else if (instr.Itype.funct3 == 0x2) {
 			// CSRRS
 			switch (instr.Itype.imm) {
@@ -681,11 +683,6 @@ namespace riscv
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
 	}, DECODED_INSTR(SYSTEM).printer);
 
-	INSTRUCTION(EBREAK,
-	[] (auto& cpu, rv32i_instruction) RVINSTR_ATTR() {
-		cpu.machine().ebreak();
-	}, DECODED_INSTR(SYSTEM).printer);
-
 	INSTRUCTION(WFI,
 	[] (auto& cpu, rv32i_instruction) RVINSTR_ATTR() {
 		cpu.machine().stop();
@@ -695,7 +692,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
 		cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR() {
 		return snprintf(buffer, len, "LUI %s, 0x%X",
 						RISCV::regname(instr.Utype.rd),
 						instr.Utype.upper_imm());
@@ -705,7 +702,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR() {
 		cpu.reg(instr.Utype.rd) = cpu.pc() + instr.Utype.upper_imm();
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		return snprintf(buffer, len, "AUIPC %s, PC+0x%X (0x%" PRIX64 ")",
 						RISCV::regname(instr.Utype.rd),
 						instr.Utype.upper_imm(),
@@ -716,7 +713,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction) {
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
 		if (instr.Itype.imm == 0)
 		{
 			// this is the official NOP instruction (ADDI x0, x0, 0)
@@ -853,7 +850,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR() {
 		if (!instr.Rtype.is_32M())
 		{
 			static std::array<const char*, 8*2> func3 = {
@@ -964,10 +961,10 @@ namespace riscv
 	}, DECODED_INSTR(OP32).printer);
 
 	INSTRUCTION(FENCE,
-	[] (auto&, rv32i_instruction /* instr */) {
+	[] (auto&, rv32i_instruction /* instr */) RVINSTR_COLDATTR() {
 		// literally do nothing, unless...
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction) -> int {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction) RVPRINTR_ATTR() {
 		// printer
 		return snprintf(buffer, len, "FENCE");
 	});
