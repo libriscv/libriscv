@@ -38,7 +38,7 @@ void Memory<W>::memzero(address_t dst, size_t len)
 			// Theoretically the handler can do anything, so do the
 			// due diligence of checking if the page is writable.
 			if (!page.is_cow_page()) {
-				auto& new_page = m_page_fault_handler(*this, pageno);
+				auto& new_page = m_page_fault_handler(*this, pageno, size != Page::size());
 				if (!new_page.attr.write)
 					this->protection_fault(dst);
 			}
@@ -56,7 +56,7 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t size = std::min(Page::size() - offset, len);
-		auto& page = this->create_writable_pageno(dst >> Page::SHIFT);
+		auto& page = this->create_writable_pageno(dst / Page::size(), size != Page::size());
 
 		std::memset(page.data() + offset, value, size);
 
@@ -73,7 +73,7 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
 		const size_t size = std::min(Page::size() - offset, len);
-		auto& page = this->create_writable_pageno(dst >> Page::SHIFT);
+		auto& page = this->create_writable_pageno(dst / Page::size(), size != Page::size());
 
 		std::copy(src, src + size, page.data() + offset);
 

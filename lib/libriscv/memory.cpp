@@ -28,15 +28,16 @@ namespace riscv
 			const address_t pages_max = options.memory_max >> Page::SHIFT;
 			assert(pages_max >= 1);
 			this->m_page_fault_handler =
-				[pages_max] (auto& mem, const address_t page) -> Page&
+			[pages_max] (auto& mem, const address_t page, bool init) -> Page&
+			{
+				// create page on-demand
+				if (mem.pages_active() < pages_max)
 				{
-					// create page on-demand
-					if (mem.pages_active() < pages_max)
-					{
-						return mem.allocate_page(page);
-					}
-					throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
-				};
+					return mem.allocate_page(page,
+						init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
+				}
+				throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
+			};
 		} else {
 			throw MachineException(OUT_OF_MEMORY, "Max memory was zero", 0);
 		}

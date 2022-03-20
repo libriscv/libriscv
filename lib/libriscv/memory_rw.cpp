@@ -12,7 +12,7 @@ namespace riscv
 	}
 
 	template <int W>
-	Page& Memory<W>::create_writable_pageno(const address_t pageno)
+	Page& Memory<W>::create_writable_pageno(const address_t pageno, bool init)
 	{
 		auto it = m_pages.find(pageno);
 		if (it != m_pages.end()) {
@@ -30,7 +30,8 @@ namespace riscv
 			}
 		#endif
 			// Handler must produce a new page, or throw
-			Page& page = m_page_fault_handler(*this, pageno);
+			Page& page = m_page_fault_handler(*this, pageno,
+				init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
 			if (LIKELY(page.attr.write))
 				return page;
 		}

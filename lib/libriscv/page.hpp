@@ -24,7 +24,7 @@ struct PageAttributes
 };
 
 struct alignas(8) PageData {
-	std::array<uint8_t, PageSize> buffer8 = {0};
+	std::array<uint8_t, PageSize> buffer8;
 
 	template <typename T>
 	inline T& aligned_read(uint32_t offset) const
@@ -45,6 +45,10 @@ struct alignas(8) PageData {
 		}
 		*(T*) &buffer8[offset] = value;
 	}
+
+	PageData() : buffer8{} {}
+	enum Initialization { INITIALIZED, UNINITIALIZED };
+	PageData(Initialization i) { if (i == INITIALIZED) buffer8 = {}; }
 };
 
 struct Page
@@ -57,6 +61,8 @@ struct Page
 
 	// create a new blank page
 	Page() { m_page.reset(new PageData {}); };
+	// create a new possibly uninitialized page
+	Page(PageData::Initialization i) { m_page.reset(new PageData {i}); };
 	// copy another page (or data)
 	Page(const PageAttributes& a, const PageData& d = {})
 		: attr(a), m_page(new PageData{d}) { attr.non_owning = false; }

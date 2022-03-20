@@ -99,7 +99,7 @@ namespace riscv
 		// Number of workers dedicated to multiprocessing
 		unsigned multiprocessing_workers = 4;
 
-		std::function<struct Page&(Memory<W>&, size_t)> page_fault_handler = nullptr;
+		std::function<struct Page&(Memory<W>&, size_t, bool)> page_fault_handler = nullptr;
 
 #ifdef RISCV_BINARY_TRANSLATION
 		unsigned block_size_treshold = 8;

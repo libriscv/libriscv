@@ -95,9 +95,9 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				if (smp().shared_page_faults) {
 					fork.memory.set_page_fault_handler(
-					[this] (auto& mem, const address_t pageno) -> Page& {
+					[this] (auto& mem, const address_t pageno, bool init) -> Page& {
 						std::lock_guard<std::mutex> lk(this->smp().m_lock);
-						auto& master_page = this->memory.create_writable_pageno(pageno);
+						auto& master_page = this->memory.create_writable_pageno(pageno, init);
 						// Install the page as non-owned (loaned) memory
 						return mem.install_shared_page(pageno, master_page);
 					});
@@ -118,7 +118,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 						page.m_page.release();
 
 					std::lock_guard<std::mutex> lk(this->m_smp->m_lock);
-					// Create new page in master VM
+					// Create new page in main VM (most likely it already exists)
 					auto& master_page = this->memory.create_writable_pageno(pageno);
 					// Return back page with memory loaned from master VM
 					page.attr = master_page.attr;

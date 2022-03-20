@@ -20,7 +20,7 @@ namespace riscv
 	{
 		using address_t = address_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
-		using page_fault_cb_t = std::function<Page&(Memory&, address_t)>;
+		using page_fault_cb_t = std::function<Page&(Memory&, address_t, bool)>;
 		using page_readf_cb_t = std::function<const Page&(const Memory&, address_t)>;
 		using page_write_cb_t = std::function<void(Memory&, address_t, Page&)>;
 		static constexpr address_t BRK_MAX    = 0x1000000;
@@ -103,7 +103,7 @@ namespace riscv
 		const Page& get_exec_pageno(address_t npage) const; // throws
 		const Page& get_pageno(address_t npage) const;
 		const Page& get_readable_pageno(address_t npage) const;
-		Page& create_writable_pageno(address_t npage);
+		Page& create_writable_pageno(address_t npage, bool initialize = true);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
 		std::string get_page_info(address_t addr) const;
 		static inline address_t page_number(const address_t address) {
