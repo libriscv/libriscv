@@ -99,7 +99,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			HPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
 			machine.set_result(ret);
 			if (ptr != 0x0 && ret < 0) {
-				throw MachineException(SYSTEM_CALL_FAILED, "Possible double-free for freed pointer");
+				throw MachineException(SYSTEM_CALL_FAILED, "Possible double-free for freed pointer", ptr);
 			}
 			machine.penalize(COMPLEX_CALL_PENALTY);
 			return;
