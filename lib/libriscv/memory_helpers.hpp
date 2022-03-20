@@ -52,9 +52,6 @@ void Memory<W>::memzero(address_t dst, size_t len)
 template <int W> inline
 void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 {
-	if (value == 0) {
-		memzero(dst, len); return;
-	}
 	while (len > 0)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page
