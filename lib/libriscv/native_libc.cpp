@@ -58,12 +58,12 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 				// we are freeing in the hopes of getting the same chunk
 				// back, in which case the copy could be completely skipped.
 				machine.arena().free(src);
-				auto data = machine.arena().malloc(newlen);
+				address_type<W> data = machine.arena().malloc(newlen);
 				HPRINT("SYSCALL realloc(0x%X:%zu, %zu) = 0x%X\n", src, srclen, newlen, data);
 				// If the reallocation fails, return NULL
 				if (data == 0) {
 					machine.arena().malloc(srclen);
-					machine.set_result(data);
+					machine.set_result(0);
 					machine.penalize(COMPLEX_CALL_PENALTY);
 					return;
 				}
@@ -77,9 +77,10 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 				return;
 			} else {
 				HPRINT("SYSCALL realloc(0x%X:??, %zu) = 0x0\n", src, newlen);
+				throw MachineException(OUT_OF_MEMORY, "Realloc failed to find previous allocation", src);
 			}
 		} else {
-			auto data = machine.arena().malloc(newlen);
+			address_type<W> data = machine.arena().malloc(newlen);
 			HPRINT("SYSCALL realloc(0x0, %zu) = 0x%lX\n", newlen, (long) data);
 			machine.set_result(data);
 			machine.penalize(COMPLEX_CALL_PENALTY);
