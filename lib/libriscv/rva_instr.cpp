@@ -37,14 +37,14 @@ namespace riscv
 	}
 
 	ATOMIC_INSTR(AMOADD_W,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
 			return __sync_fetch_and_add(&value, cpu.reg(rs2));
 		});
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR() {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		return snprintf(buffer, len, "%s.%c [%s] %s, %s",
 						atomic_name2[instr.Atype.funct5 >> 2],
 						atomic_type[instr.Atype.funct3 & 7],
@@ -54,7 +54,7 @@ namespace riscv
 	});
 
 	ATOMIC_INSTR(AMOXOR_W,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -64,7 +64,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOOR_W,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -74,7 +74,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOAND_W,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -84,7 +84,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOADD_D,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -94,7 +94,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOXOR_D,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -104,7 +104,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOOR_D,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -114,7 +114,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOAND_D,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -124,7 +124,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOADD_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<__int128_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -136,7 +136,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOXOR_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<__int128_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -148,7 +148,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOOR_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<__int128_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -160,7 +160,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOAND_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<__int128_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -172,7 +172,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOADD_W).printer);
 
 	ATOMIC_INSTR(AMOSWAP_W,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -181,7 +181,7 @@ namespace riscv
 			return old_value;
 		});
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR() {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		return snprintf(buffer, len, "AMOSWAP.%c [%s] %s, %s",
 						atomic_type[instr.Atype.funct3 & 7],
                         RISCV::regname(instr.Atype.rs1),
@@ -190,7 +190,7 @@ namespace riscv
 	});
 
 	ATOMIC_INSTR(AMOSWAP_D,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -202,7 +202,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOSWAP_W).printer);
 
 	ATOMIC_INSTR(AMOSWAP_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		cpu.template amo<__int128_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
@@ -214,7 +214,7 @@ namespace riscv
 	DECODED_ATOMIC(AMOSWAP_W).printer);
 
     ATOMIC_INSTR(LOAD_RESV,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		const auto addr = cpu.reg(instr.Atype.rs1);
 		// switch on atomic type
@@ -246,7 +246,7 @@ namespace riscv
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR() {
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
 		const long addr = cpu.reg(instr.Atype.rs1);
 		return snprintf(buffer, len, "LR.%c [%s = 0x%" PRIX64 "], %s",
 				atomic_type[instr.Atype.funct3 & 7],
@@ -255,7 +255,7 @@ namespace riscv
 	});
 
     ATOMIC_INSTR(STORE_COND,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR()
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		const auto addr = cpu.reg(instr.Atype.rs1);
 		bool resv = false;
@@ -289,7 +289,7 @@ namespace riscv
 		if (instr.Atype.rd != 0)
 			cpu.reg(instr.Atype.rd) = (resv) ? 0 : 1;
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR() {
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		return snprintf(buffer, len, "SC.%c [%s], %s res=%s",
 				atomic_type[instr.Atype.funct3 & 7],
 				RISCV::regname(instr.Atype.rs1),
