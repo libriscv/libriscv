@@ -724,7 +724,7 @@ namespace riscv
 
 	INSTRUCTION(LUI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
-		cpu.reg(instr.Utype.rd) = (int32_t) instr.Utype.upper_imm();
+		cpu.reg(instr.Utype.rd) = RVSIGNEXTW(cpu) instr.Utype.upper_imm();
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		return snprintf(buffer, len, "LUI %s, 0x%X",
@@ -735,7 +735,7 @@ namespace riscv
 	INSTRUCTION(AUIPC,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		cpu.reg(instr.Utype.rd) =
-			cpu.pc() + instr.Utype.upper_imm());
+			cpu.pc() + (RVSIGNEXTW(cpu) instr.Utype.upper_imm());
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
 		return snprintf(buffer, len, "AUIPC %s, PC+0x%X (0x%" PRIX64 ")",
