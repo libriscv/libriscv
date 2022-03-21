@@ -603,10 +603,16 @@ namespace riscv
 						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 							dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
 					}
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x15: // DIVU
-				if (LIKELY(src2 != 0)) dst = src1 / src2;
+				if (LIKELY(src2 != 0)) {
+					dst = src1 / src2;
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
+				}
 				return;
 			case 0x16: // REM
 				if (LIKELY(src2 != 0)) {
@@ -624,6 +630,8 @@ namespace riscv
 			case 0x17: // REMU
 				if (LIKELY(src2 != 0)) {
 					dst = src1 % src2;
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 		}
@@ -845,16 +853,20 @@ namespace riscv
 				return;
 			case 0x14: // DIVW
 				// division by zero is not an exception
-				if (LIKELY((uint32_t) src2 != 0)) {
+				if (LIKELY(src2 != 0)) {
 					// division of -2147483648 by -1 cannot be represented in type 'int'
 					if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
 						dst = RVSIGNEXTW(cpu) (src1 / src2);
 					}
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x15: // DIVUW
 				if (LIKELY((uint32_t) src2 != 0)) {
 					dst = RVSIGNEXTW(cpu) ((uint32_t) src1 / (uint32_t) src2);
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x16: // REMW
@@ -862,11 +874,15 @@ namespace riscv
 					if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
 						dst = RVSIGNEXTW(cpu) (src1 % src2);
 					}
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x17: // REMUW
 				if (LIKELY((uint32_t) src2 != 0)) {
 					dst = RVSIGNEXTW(cpu) ((uint32_t) src1 % (uint32_t) src2);
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 		}
@@ -940,7 +956,7 @@ namespace riscv
 				dst = RVSIGNEXTD(cpu) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
 				return;
 			case 0x1: // SLL.D
-				dst = RVSIGNEXTD(cpu) (src1 << (src2 & 0x1F));
+				dst = RVSIGNEXTD(cpu) (src1 << (src2 & 0x3F));
 				return;
 			case 0x5: // SRL.D
 				if (!instr.Rtype.is_f7()) {
@@ -959,11 +975,15 @@ namespace riscv
 				// division by zero is not an exception
 				if (LIKELY((uint64_t) src2 != 0)) {
 					dst = RVSIGNEXTD(cpu) (src1 / src2);
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x15: // DIVU.D
-				if (LIKELY((uint64_t) src2 != 0)) {
+				if (LIKELY(src2 != 0)) {
 					dst = RVSIGNEXTD(cpu) ((uint64_t) src1 / (uint64_t) src2);
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x16: // REM.D
@@ -971,11 +991,15 @@ namespace riscv
 					if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
 						dst = RVSIGNEXTD(cpu) (src1 % src2);
 					}
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x17: // REMU.D
-				if (LIKELY((uint32_t) src2 != 0)) {
+				if (LIKELY(src2 != 0)) {
 					dst = RVSIGNEXTD(cpu) ((uint64_t) src1 % (uint64_t) src2);
+				} else {
+					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 		}
