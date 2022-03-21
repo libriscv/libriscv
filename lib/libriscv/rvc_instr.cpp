@@ -9,7 +9,7 @@ namespace riscv
 		const rv32c_instruction ci { instr };
 		cpu.cireg(ci.CIW.srd) = cpu.reg(REG_SP) + ci.CIW.offset();
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		if (UNLIKELY(ci.whole == 0)) {
@@ -28,7 +28,7 @@ namespace riscv
 		cpu.ciflp(ci.CL.srd).load_u64(
 				cpu.machine().memory.template read<uint64_t> (address));
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		static const std::array<const char*, 4> f3 = {
 			"???", "FLD", "LW", RVIS64BIT(cpu) ? "LD" : "FLW"
@@ -71,7 +71,7 @@ namespace riscv
 		const auto value   = cpu.ciflp(ci.CSD.srs2).i64;
 		cpu.machine().memory.template write<uint64_t> (address, value);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		static const std::array<const char*, 4> f3 = {
 			"Reserved instruction", "FSD", "SW", "FSW"
@@ -118,7 +118,7 @@ namespace riscv
 		// C.ADDI (non-hint, not NOP)
 		cpu.reg(ci.CI.rd) += ci.CI.signed_imm();
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		if (ci.CI.rd != 0) {
@@ -143,7 +143,7 @@ namespace riscv
 		}
 #endif
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		return snprintf(buffer, len, "C.JAL %s, PC%+" PRId32 " (0x%" PRIX64 ")",
@@ -158,7 +158,7 @@ namespace riscv
 		// C.ADDIW rd, imm[5:0]
 		cpu.reg(ci.CI.rd) = RVSIGNEXTW(cpu) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		return snprintf(buffer, len, "C.ADDIW %s, %+" PRId32,
@@ -171,7 +171,7 @@ namespace riscv
 		// C.LI rd, imm[5:0]
 		cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		return snprintf(buffer, len, "C.LI %s, %+" PRId32,
@@ -184,7 +184,7 @@ namespace riscv
 		// C.ADDI16SP rd, imm[17:12]
 		cpu.reg(REG_SP) += ci.CI16.signed_imm();
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		if (ci.CI.rd != 0 && ci.CI.rd != 2) {
@@ -268,7 +268,7 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPCODE);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		if ((ci.CA.funct6 & 0x3) < 2) {
@@ -300,7 +300,7 @@ namespace riscv
 		}
 #endif
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		return snprintf(buffer, len, "C.JMP 0x%" PRIX64,
@@ -321,7 +321,7 @@ namespace riscv
 #endif
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		return snprintf(buffer, len, "C.BEQZ %s, PC%+" PRId32 " (0x%" PRIX64 ")",
@@ -343,7 +343,7 @@ namespace riscv
 #endif
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		return snprintf(buffer, len, "C.BNEZ %s, PC%+" PRId32 " (0x%" PRIX64 ")",
@@ -361,7 +361,7 @@ namespace riscv
 			cpu.reg(ci.CI.rd) <<= ci.CI.shift_imm();
 		}
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		if (ci.CI2.funct3 == 0x0 && ci.CI2.rd != 0) {
@@ -423,7 +423,7 @@ namespace riscv
 		uint64_t value = cpu.registers().getfl(ci.CSFSD.rs2).i64;
 		cpu.machine().memory.template write<uint64_t> (addr, value);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		static const std::array<const char*, 4> f3 = {
 			"XXX", "FSDSP", "SWSP", RVIS64BIT(cpu) ? "SDSP" : "FSWSP"
@@ -450,7 +450,7 @@ namespace riscv
 		auto value = cpu.reg(ci.CSFSD.rs2);
 		cpu.machine().memory.template write<uint64_t> (addr, value);
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CSFSD.offset();
@@ -478,7 +478,7 @@ namespace riscv
 		}
 #endif
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR()
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		const bool topbit = ci.whole & (1 << 12);
@@ -526,7 +526,7 @@ namespace riscv
 	}, DECODED_COMPR(C2_JR).printer);
 
 	COMPRESSED_INSTR(C2_EBREAK,
-	[] (auto& cpu, rv32i_instruction) RVINSTR_COLDATTR() {
+	[] (auto& cpu, rv32i_instruction) RVINSTR_COLDATTR {
 		cpu.machine().ebreak();
 	}, DECODED_COMPR(C2_JR).printer);
 }
