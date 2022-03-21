@@ -804,7 +804,7 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const uint32_t src = cpu.reg(instr.Itype.rs1);
 		// SRLIW: Shift-Right Logical 0-31 immediate
-		dst = src >> instr.Itype.shift_imm();
+		dst = RVSIGNEXTW(cpu) (src >> instr.Itype.shift_imm());
 	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
 	INSTRUCTION(OP_IMM32_SRAIW,
@@ -824,8 +824,8 @@ namespace riscv
 		const int32_t src2 = cpu.reg(instr.Rtype.rs2);
 
 		switch (instr.Rtype.jumptable_friendly_op()) {
-			case 0x0: // ADDW / SUBW
-				dst = RVSIGNEXTW(cpu) (src1 + (!instr.Rtype.is_f7() ? src2 : -src2));
+			case 0x0: // SUBW
+				dst = RVSIGNEXTW(cpu) (src1 - src2);
 				return;
 			case 0x1: // SLLW
 				dst = RVSIGNEXTW(cpu) (src1 << (src2 & 0x1F));
@@ -841,7 +841,7 @@ namespace riscv
 				return;
 			// M-extension
 			case 0x10: // MULW
-				dst = (int32_t) (src1 * src2);
+				dst = RVSIGNEXTW(cpu) (src1 * src2);
 				return;
 			case 0x14: // DIVW
 				// division by zero is not an exception
@@ -953,7 +953,7 @@ namespace riscv
 				return;
 			// M-extension
 			case 0x10: // MUL.D
-				dst = (int64_t) (src1 * src2);
+				dst = RVSIGNEXTD(cpu) (src1 * src2);
 				return;
 			case 0x14: // DIV.D
 				// division by zero is not an exception
