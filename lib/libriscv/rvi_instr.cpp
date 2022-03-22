@@ -747,7 +747,7 @@ namespace riscv
 	INSTRUCTION(OP_IMM32_ADDIW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Itype.rd);
-		const int32_t src = cpu.reg(instr.Itype.rs1);
+		const uint32_t src = cpu.reg(instr.Itype.rs1);
 		// ADDIW: Add 32-bit sign-extended 12-bit immediate
 		dst = RVSIGNEXTW(cpu) (src + instr.Itype.signed_imm());
 	},
@@ -828,8 +828,8 @@ namespace riscv
 	INSTRUCTION(OP32,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Rtype.rd);
-		const int32_t src1 = cpu.reg(instr.Rtype.rs1);
-		const int32_t src2 = cpu.reg(instr.Rtype.rs2);
+		const auto src1 = cpu.reg(instr.Rtype.rs1);
+		const auto src2 = cpu.reg(instr.Rtype.rs2);
 
 		switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // SUBW
@@ -848,31 +848,31 @@ namespace riscv
 				}
 				return;
 			// M-extension
-			case 0x10: // MULW
-				dst = RVSIGNEXTW(cpu) (src1 * src2);
+			case 0x10: // MULW (signed 32-bit multiply, sign-extended)
+				dst = RVSIGNEXTW(cpu) ((int32_t)src1 * (int32_t)src2);
 				return;
 			case 0x14: // DIVW
 				// division by zero is not an exception
 				if (LIKELY(src2 != 0)) {
 					// division of -2147483648 by -1 cannot be represented in type 'int'
-					if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
-						dst = RVSIGNEXTW(cpu) (src1 / src2);
+					if (LIKELY(!((int32_t)src1 == -2147483648 && (int32_t)src2 == -1))) {
+						dst = RVSIGNEXTW(cpu) ((int32_t)src1 / (int32_t)src2);
 					}
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x15: // DIVUW
-				if (LIKELY((uint32_t) src2 != 0)) {
-					dst = RVSIGNEXTW(cpu) ((uint32_t) src1 / (uint32_t) src2);
+				if (LIKELY(src2 != 0)) {
+					dst = RVSIGNEXTW(cpu) (src1 / src2);
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x16: // REMW
 				if (LIKELY(src2 != 0)) {
-					if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
-						dst = RVSIGNEXTW(cpu) (src1 % src2);
+					if (LIKELY(!((int32_t)src1 == -2147483648 && (int32_t)src2 == -1))) {
+						dst = RVSIGNEXTW(cpu) ((int32_t)src1 % (int32_t)src2);
 					}
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
@@ -880,7 +880,7 @@ namespace riscv
 				return;
 			case 0x17: // REMUW
 				if (LIKELY((uint32_t) src2 != 0)) {
-					dst = RVSIGNEXTW(cpu) ((uint32_t) src1 % (uint32_t) src2);
+					dst = RVSIGNEXTW(cpu) (src1 % src2);
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}
@@ -915,15 +915,15 @@ namespace riscv
 	INSTRUCTION(OP32_ADDW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Rtype.rd);
-		const int32_t src1 = cpu.reg(instr.Rtype.rs1);
-		const int32_t src2 = cpu.reg(instr.Rtype.rs2);
+		const uint32_t src1 = cpu.reg(instr.Rtype.rs1);
+		const uint32_t src2 = cpu.reg(instr.Rtype.rs2);
 		dst = RVSIGNEXTW(cpu) (src1 + src2);
 	}, DECODED_INSTR(OP32).printer);
 
 	INSTRUCTION(OP_IMM64,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Itype.rd);
-		const int64_t src = cpu.reg(instr.Itype.rs1);
+		const uint64_t src = cpu.reg(instr.Itype.rs1);
 		switch (instr.Itype.funct3) {
 		case 0x0:
 			// ADDI.D: Add sign-extended 12-bit immediate
@@ -948,8 +948,8 @@ namespace riscv
 	INSTRUCTION(OP64,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Rtype.rd);
-		const int64_t src1 = cpu.reg(instr.Rtype.rs1);
-		const int64_t src2 = cpu.reg(instr.Rtype.rs2);
+		const uint64_t src1 = cpu.reg(instr.Rtype.rs1);
+		const uint64_t src2 = cpu.reg(instr.Rtype.rs2);
 
 		switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD.D / SUB.D
@@ -969,27 +969,27 @@ namespace riscv
 				return;
 			// M-extension
 			case 0x10: // MUL.D
-				dst = RVSIGNEXTD(cpu) (src1 * src2);
+				dst = RVSIGNEXTD(cpu) ((int64_t)src1 * (int64_t)src2);
 				return;
 			case 0x14: // DIV.D
 				// division by zero is not an exception
-				if (LIKELY((uint64_t) src2 != 0)) {
-					dst = RVSIGNEXTD(cpu) (src1 / src2);
+				if (LIKELY(src2 != 0)) {
+					dst = RVSIGNEXTD(cpu) ((int64_t)src1 / (int64_t)src2);
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x15: // DIVU.D
 				if (LIKELY(src2 != 0)) {
-					dst = RVSIGNEXTD(cpu) ((uint64_t) src1 / (uint64_t) src2);
+					dst = RVSIGNEXTD(cpu) (src1 / src2);
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}
 				return;
 			case 0x16: // REM.D
 				if (LIKELY(src2 != 0)) {
-					if (LIKELY(!(src1 == -2147483648 && src2 == -1))) {
-						dst = RVSIGNEXTD(cpu) (src1 % src2);
+					if (LIKELY(!((int64_t)src1 == -2147483648 && (int64_t)src2 == -1))) {
+						dst = RVSIGNEXTD(cpu) ((int64_t)src1 % (int64_t)src2);
 					}
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
@@ -997,7 +997,7 @@ namespace riscv
 				return;
 			case 0x17: // REMU.D
 				if (LIKELY(src2 != 0)) {
-					dst = RVSIGNEXTD(cpu) ((uint64_t) src1 % (uint64_t) src2);
+					dst = RVSIGNEXTD(cpu) (src1 % src2);
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}

@@ -438,12 +438,12 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			if (UNLIKELY(instr.Utype.rd == 0))
 				ILLEGAL_AND_EXIT();
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = (int32_t) " + from_imm(instr.Utype.upper_imm()) + ";");
+				from_reg(instr.Utype.rd) + " = " + SIGNEXTW + " " + from_imm(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_AUIPC:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				ILLEGAL_AND_EXIT();
-			add_code(code,
+			add_code(code, // XXX: This might not be right: upper_imm is 32-bit sign-extended
 				from_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_FENCE:
@@ -471,7 +471,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			if (UNLIKELY(instr.Itype.rd == 0))
 				ILLEGAL_AND_EXIT();
 			const auto dst = from_reg(instr.Itype.rd);
-			const auto src = "(int32_t)" + from_reg(tinfo, instr.Itype.rs1);
+			const auto src = "(uint32_t)" + from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0:
 				// ADDIW: Add sign-extended 12-bit immediate
@@ -482,7 +482,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 				break;
 			case 0x5: // SRLIW / SRAIW:
 				if (LIKELY(!instr.Itype.is_srai())) {
-					add_code(code, dst + " = (uint32_t)" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ";");
+					add_code(code, dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
 				} else { // SRAIW: preserve the sign bit
 					add_code(code,
 					"{const uint32_t shifts = " + from_imm(instr.Itype.shift_imm()) + ";",
@@ -498,8 +498,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			if (UNLIKELY(instr.Rtype.rd == 0))
 				ILLEGAL_AND_EXIT();
 			const auto dst = from_reg(instr.Rtype.rd);
-			const auto src1 = "(int32_t)" + from_reg(tinfo, instr.Rtype.rs1);
-			const auto src2 = "(int32_t)" + from_reg(tinfo, instr.Rtype.rs2);
+			const auto src1 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs1);
+			const auto src2 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs2);
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADDW / SUBW
@@ -523,30 +523,30 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 				break;
 			// M-extension
 			case 0x10: // MULW
-				add_code(code, dst + " = (int32_t) (" + src1 + " * " + src2 + ");");
+				add_code(code, dst + " = " + SIGNEXTW + "(" + src1 + " * " + src2 + ");");
 				break;
 			case 0x14: // DIVW
 				// division by zero is not an exception
 				add_code(code,
-				"if (LIKELY((uint32_t)" + src2 + " != 0))",
-				"if (LIKELY(!(" + src1 + " == -2147483648 && " + src2 + " == -1)))",
-				dst + " = " + SIGNEXTW + " (" + src1 + " / " + src2 + ");");
+				"if (LIKELY(" + src2 + " != 0))",
+				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
+				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " / (int32_t)" + src2 + ");");
 				break;
 			case 0x15: // DIVUW
 				add_code(code,
-				"if (LIKELY((uint32_t)" + src2 + " != 0))",
-				dst + " = " + SIGNEXTW + " ((uint32_t)" + src1 + " / (uint32_t)" + src2 + ");");
+				"if (LIKELY(" + src2 + " != 0))",
+				dst + " = " + SIGNEXTW + " (" + src1 + " / " + src2 + ");");
 				break;
 			case 0x16: // REMW
 				add_code(code,
 				"if (LIKELY(" + src2 + " != 0))",
-				"if (LIKELY(!(" + src1 + " == -2147483648 && " + src2 + " == -1)))",
-				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
+				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
+				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " % (int32_t)" + src2 + ");");
 				break;
 			case 0x17: // REMUW
 				add_code(code,
-				"if (LIKELY((uint32_t)" + src2 + " != 0))",
-				dst + " = " + SIGNEXTW + " ((uint32_t)" + src1 + " % (uint32_t)" + src2 + ");");
+				"if (LIKELY(" + src2 + " != 0))",
+				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
