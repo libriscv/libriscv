@@ -309,6 +309,14 @@
 							DECODER(DECODED_ATOMIC(AMOOR_W));
 						case 0b01100:
 							DECODER(DECODED_ATOMIC(AMOAND_W));
+						case 0b10000:
+							DECODER(DECODED_ATOMIC(AMOMIN_W));
+						case 0b10100:
+							DECODER(DECODED_ATOMIC(AMOMAX_W));
+						case 0b11000:
+							DECODER(DECODED_ATOMIC(AMOMINU_W));
+						case 0b11100:
+							DECODER(DECODED_ATOMIC(AMOMAXU_W));
 						}
 						break;
 					case AMOSIZE_D:
@@ -330,6 +338,14 @@
 							DECODER(DECODED_ATOMIC(AMOOR_D));
 						case 0b01100:
 							DECODER(DECODED_ATOMIC(AMOAND_D));
+						case 0b10000:
+							DECODER(DECODED_ATOMIC(AMOMIN_D));
+						case 0b10100:
+							DECODER(DECODED_ATOMIC(AMOMAX_D));
+						case 0b11000:
+							DECODER(DECODED_ATOMIC(AMOMINU_D));
+						case 0b11100:
+							DECODER(DECODED_ATOMIC(AMOMAXU_D));
 						}
 						break;
 					}
