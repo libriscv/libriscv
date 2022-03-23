@@ -23,8 +23,9 @@ TEST_CASE("Verify CRC32", "[Emulation]")
 			crc32(arr, 3),
 			crc32(arr, 4),
 			crc32(arr, 5),
+			crc32(arr, 6),
 		};
-		for (unsigned i = 0; i < 5; i++) {
+		for (unsigned i = 0; i < 6; i++) {
 			assert(c[i] == crc32(arr, i+1));
 		}
 		return 0;
