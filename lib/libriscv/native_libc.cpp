@@ -24,7 +24,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	{
 		const size_t len = machine.template sysarg<address_type<W>>(0);
 		auto data = machine.arena().malloc(len);
-		HPRINT("SYSCALL malloc(%zu) = 0x%X\n", len, data);
+		HPRINT("SYSCALL malloc(%zu) = 0x%lX\n", len, (long)data);
 		machine.set_result(data);
 		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
@@ -36,7 +36,8 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			machine.template sysargs<address_type<W>, address_type<W>> ();
 		const size_t len = count * size;
 		auto data = machine.arena().malloc(len);
-		HPRINT("SYSCALL calloc(%u, %u) = 0x%X\n", count, size, data);
+		HPRINT("SYSCALL calloc(%zu, %zu) = 0x%lX\n",
+			(size_t)count, (size_t)size, (long)data);
 		if (data != 0) {
 			// Optimized to skip zero pages
 			machine.memory.memzero(data, len);
@@ -52,7 +53,8 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		const auto newlen = machine.template sysarg<address_type<W>>(1);
 
 		const auto [data, srclen] = machine.arena().realloc(src, newlen);
-		HPRINT("SYSCALL realloc(0x%X:%zu, %zu) = 0x%X\n", src, srclen, newlen, data);
+		HPRINT("SYSCALL realloc(0x%lX:%zu, %zu) = 0x%lX\n",
+			(long)src, (size_t)srclen, (size_t)newlen, (long)data);
 		// When data != src, srclen is the old length
 		// The chunks are non-overlapping, so we can use forwards memcpy
 		if (data != src) {
@@ -71,7 +73,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		if (ptr != 0)
 		{
 			int ret = machine.arena().free(ptr);
-			HPRINT("SYSCALL free(0x%X) = %d\n", ptr, ret);
+			HPRINT("SYSCALL free(0x%lX) = %d\n", (long)ptr, ret);
 			machine.set_result(ret);
 			if (ptr != 0x0 && ret < 0) {
 				throw MachineException(SYSTEM_CALL_FAILED, "Possible double-free for freed pointer", ptr);
@@ -100,7 +102,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			.cu = (address_type<W>) arena.chunks_used()
 		};
 		int ret = (dst != 0) ? 0 : -1;
-		HPRINT("SYSCALL meminfo(0x%X) = %d\n", dst, ret);
+		HPRINT("SYSCALL meminfo(0x%lX) = %d\n", (long)dst, ret);
 		if (ret == 0) {
 			machine.copy_to_guest(dst, &result, sizeof(result));
 		}
@@ -137,7 +139,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		// Memcpy n+0
 		auto [dst, src, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-		MPRINT("SYSCALL memcpy(%#X, %#X, %u)\n", dst, src, len);
+		MPRINT("SYSCALL memcpy(%#lX, %#lX, %zu)\n", (long)dst, (long)src, (size_t)len);
 		m.memory.foreach(src, len,
 			[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
 				m.memcpy(dst + off, data, len);
@@ -146,16 +148,16 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 	}}, {syscall_base+1, [] (Machine<W>& m) {
 		// Memset n+1
 		const auto [dst, value, len] =
-			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-		MPRINT("SYSCALL memset(%#X, %#X, %u)\n", dst, value, len);
+			m.sysargs<address_type<W>, int, address_type<W>> ();
+		MPRINT("SYSCALL memset(%#lX, %#X, %zu)\n", (long)dst, value, (size_t)len);
 		m.memory.memset(dst, value, len);
 		m.penalize(len);
 	}}, {syscall_base+2, [] (Machine<W>& m) {
 		// Memmove n+2
 		auto [dst, src, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-		MPRINT("SYSCALL memmove(%#lX, %#lX, %lu)\n",
-			(long) dst, (long) src, (long) len);
+		MPRINT("SYSCALL memmove(%#lX, %#lX, %zu)\n",
+			(long) dst, (long) src, (size_t)len);
 		// If the buffers don't overlap, we can use memcpy which copies forwards
 		if (dst < src) {
 			m.memory.foreach(src, len,
@@ -188,7 +190,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		// Memcmp n+3
 		auto [p1, p2, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
-		MPRINT("SYSCALL memcmp(%#X, %#X, %u)\n", p1, p2, len);
+		MPRINT("SYSCALL memcmp(%#lX, %#lX, %zu)\n", (long)p1, (long)p2, (size_t)len);
 		m.penalize(2 * len);
 		m.set_result(m.memory.memcmp(p1, p2, len));
 	}}, {syscall_base+5, [] (Machine<W>& m) {
@@ -197,8 +199,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		uint32_t len = m.memory.strlen(addr, STRLEN_MAX);
 		m.penalize(2 * len);
 		m.set_result(len);
-		MPRINT("SYSCALL strlen(%#lX) = %lu\n",
-			(long) addr, (long) len);
+		MPRINT("SYSCALL strlen(%#lX) = %u\n", (long)addr, len);
 	}}, {syscall_base+6, [] (Machine<W>& m) {
 		// Strncmp n+6
 		auto [a1, a2, maxlen] =
