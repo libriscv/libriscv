@@ -42,7 +42,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = (RVSIGNTYPE(cpu)) (int8_t) cpu.machine().memory.template read<uint8_t>(addr);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
@@ -56,7 +56,7 @@ namespace riscv
 	INSTRUCTION(LOAD_I8_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		cpu.machine().memory.template read<uint8_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -64,14 +64,14 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint16_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_I16_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		cpu.machine().memory.template read<uint16_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -79,14 +79,14 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint32_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_I32_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		cpu.machine().memory.template read<uint32_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -94,14 +94,14 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = (RVSIGNTYPE(cpu)) (int64_t) cpu.machine().memory.template read<uint64_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_I64_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		cpu.machine().memory.template read<uint64_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -109,7 +109,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = cpu.machine().memory.template read<uint8_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -117,7 +117,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = cpu.machine().memory.template read<uint16_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -125,7 +125,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = cpu.machine().memory.template read<uint32_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -133,7 +133,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		const auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = cpu.machine().memory.template read<uint64_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
@@ -141,7 +141,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
-		auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		addr &= ~(__uint128_t)0xF;
 		reg = cpu.machine().memory.template read<__uint128_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
@@ -149,7 +149,7 @@ namespace riscv
 	INSTRUCTION(LOAD_U128_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
-		auto addr = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		addr &= ~(__uint128_t)0xF;
 		cpu.machine().memory.template read<__uint128_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
@@ -158,7 +158,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
-		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		const auto addr  = cpu.reg(instr.Stype.rs1) + RVIMM(cpu, instr.Stype);
 		cpu.machine().memory.template write<uint8_t>(addr, value);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
@@ -181,7 +181,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
-		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		const auto addr  = cpu.reg(instr.Stype.rs1) + RVIMM(cpu, instr.Stype);
 		cpu.machine().memory.template write<uint16_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
@@ -189,7 +189,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
-		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		const auto addr  = cpu.reg(instr.Stype.rs1) + RVIMM(cpu, instr.Stype);
 		cpu.machine().memory.template write<uint32_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
@@ -197,7 +197,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
-		const auto addr  = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		const auto addr  = cpu.reg(instr.Stype.rs1) + RVIMM(cpu, instr.Stype);
 		cpu.machine().memory.template write<uint64_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
@@ -205,7 +205,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
-		auto addr = cpu.reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		auto addr = cpu.reg(instr.Stype.rs1) + RVIMM(cpu, instr.Stype);
 		addr &= ~(__uint128_t)0xF;
 		cpu.machine().memory.template write<__uint128_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8_IMM).printer);
@@ -224,7 +224,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 == reg2) {
-			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	},
@@ -256,7 +256,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 != reg2) {
-			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -266,7 +266,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (RVTOSIGNED(reg1) < RVTOSIGNED(reg2)) {
-			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -276,7 +276,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (RVTOSIGNED(reg1) >= RVTOSIGNED(reg2)) {
-			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -286,7 +286,7 @@ namespace riscv
 		const auto& reg1 = cpu.reg(instr.Btype.rs1);
 		const auto& reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 < reg2) {
-			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -296,7 +296,7 @@ namespace riscv
 		const auto& reg1 = cpu.reg(instr.Btype.rs1);
 		const auto& reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 >= reg2) {
-			cpu.aligned_jump(cpu.pc() + instr.Btype.signed_imm() - 4);
+			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -305,7 +305,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		// jump to register + immediate
 		// NOTE: if rs1 == rd, avoid clobber by storing address first
-		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto address = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		// Link *next* instruction (rd = PC + 4)
 		if (LIKELY(instr.Itype.rd != 0)) {
 			cpu.reg(instr.Itype.rd) = cpu.pc() + 4;
@@ -324,7 +324,7 @@ namespace riscv
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
 		// RISC-V's RET instruction: return to register + immediate
 		const char* variant = (instr.Itype.rs1 == REG_RA) ? "RET" : "JMP";
-		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto address = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		return snprintf(buffer, len, "%s %s%+d (0x%" PRIX64 ")", variant,
 						RISCV::regname(instr.Itype.rs1),
 						instr.Itype.signed_imm(), uint64_t(address));
@@ -376,14 +376,14 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		switch (instr.Itype.funct3) {
-		case 0x2: // SLTI:
-			dst = (RVTOSIGNED(src) < instr.Itype.signed_imm()) ? 1 : 0;
+		case 0x2: // SLTI: Set less than immediate
+			dst = (RVTOSIGNED(src) < RVIMM(cpu, instr.Itype)) ? 1 : 0;
 			return;
-		case 0x3: // SLTU:
-			dst = (src < (unsigned) instr.Itype.signed_imm()) ? 1 : 0;
+		case 0x3: // SLTIU: Sign-extend, then treat as unsigned
+			dst = (src < (RVREGTYPE(cpu)) RVIMM(cpu, instr.Itype)) ? 1 : 0;
 			return;
 		case 0x4: // XORI:
-			dst = src ^ instr.Itype.signed_imm();
+			dst = src ^ RVIMM(cpu, instr.Itype);
 			return;
 		case 0x5: { // SRLI / SRAI:
 			// SRAI: preserve the sign bit
@@ -402,7 +402,7 @@ namespace riscv
 			} return;
 		case 0x6: // ORI: Or sign-extended 12-bit immediate
 			cpu.reg(instr.Itype.rd) =
-				cpu.reg(instr.Itype.rs1) | instr.Itype.signed_imm();
+				cpu.reg(instr.Itype.rs1) | RVIMM(cpu, instr.Itype);
 			return;
 		}
 	},
@@ -461,13 +461,13 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		// ADDI: Add sign-extended 12-bit immediate
 		cpu.reg(instr.Itype.rd) =
-			cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+			cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP_IMM_LI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		// LI: Load sign-extended 12-bit immediate
-		cpu.reg(instr.Itype.rd) = instr.Itype.signed_imm();
+		cpu.reg(instr.Itype.rd) = RVIMM(cpu, instr.Itype);
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP_IMM_SLLI,
@@ -499,7 +499,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Itype.rd);
 		// ANDI: And sign-extended 12-bit immediate
-		dst = cpu.reg(instr.Itype.rs1) & instr.Itype.signed_imm();
+		dst = cpu.reg(instr.Itype.rs1) & RVIMM(cpu, instr.Itype);
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP,
@@ -566,7 +566,7 @@ namespace riscv
 				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
 				} else if constexpr (RVIS64BIT(cpu)) {
-					dst = ((__int128_t) src1 * (__int128_t) src2) >> 64ul;
+					dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
 				} else {
 					dst = 0;
 				}
@@ -575,7 +575,7 @@ namespace riscv
 				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((int64_t) src1 * (uint64_t) src2) >> 32u;
 				} else if constexpr (RVIS64BIT(cpu)) {
-					dst = ((__int128_t) src1 * (__uint128_t) src2) >> 64ul;
+					dst = ((__int128_t) src1 * (__uint128_t) src2) >> 64u;
 				} else {
 					dst = 0;
 				}
@@ -584,7 +584,7 @@ namespace riscv
 				if constexpr (RVIS32BIT(cpu)) {
 					dst = ((uint64_t) src1 * (uint64_t) src2) >> 32u;
 				} else if constexpr (RVIS64BIT(cpu)) {
-					dst = ((__uint128_t) src1 * (__uint128_t) src2) >> 64ul;
+					dst = ((__uint128_t) src1 * (__uint128_t) src2) >> 64u;
 				} else {
 					dst = 0;
 				}
@@ -828,8 +828,8 @@ namespace riscv
 	INSTRUCTION(OP32,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Rtype.rd);
-		const auto src1 = cpu.reg(instr.Rtype.rs1);
-		const auto src2 = cpu.reg(instr.Rtype.rs2);
+		const uint32_t src1 = cpu.reg(instr.Rtype.rs1);
+		const uint32_t src2 = cpu.reg(instr.Rtype.rs2);
 
 		switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // SUBW
@@ -879,7 +879,7 @@ namespace riscv
 				}
 				return;
 			case 0x17: // REMUW
-				if (LIKELY((uint32_t) src2 != 0)) {
+				if (LIKELY(src2 != 0)) {
 					dst = RVSIGNEXTW(cpu) (src1 % src2);
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
