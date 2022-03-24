@@ -9,71 +9,59 @@
 			{
 				// RV32IM
 				case RV32I_LOAD:
-					switch (instruction.Itype.funct3) {
+					if (LIKELY(instruction.Itype.rd != 0)) {
+						switch (instruction.Itype.funct3) {
 						case 0x0:
-							if (LIKELY(instruction.Itype.rd != 0))
-								DECODER(DECODED_INSTR(LOAD_I8));
-							DECODER(DECODED_INSTR(LOAD_I8_DUMMY));
+							DECODER(DECODED_INSTR(LOAD_I8));
 						case 0x1:
-							if (LIKELY(instruction.Itype.rd != 0))
-								DECODER(DECODED_INSTR(LOAD_I16));
-							DECODER(DECODED_INSTR(LOAD_I16_DUMMY));
+							DECODER(DECODED_INSTR(LOAD_I16));
 						case 0x2:
-							if (LIKELY(instruction.Itype.rd != 0))
-								DECODER(DECODED_INSTR(LOAD_I32));
-							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
+							DECODER(DECODED_INSTR(LOAD_I32));
 						case 0x3:
 							if constexpr (sizeof(address_t) >= 8) {
-								if (LIKELY(instruction.Itype.rd != 0))
-									DECODER(DECODED_INSTR(LOAD_I64));
-								DECODER(DECODED_INSTR(LOAD_I64_DUMMY));
+								DECODER(DECODED_INSTR(LOAD_I64));
 							}
-							break;
+							DECODER(DECODED_INSTR(ILLEGAL));
 						case 0x4:
-							if (LIKELY(instruction.Itype.rd != 0))
-								DECODER(DECODED_INSTR(LOAD_U8));
-							DECODER(DECODED_INSTR(LOAD_I8_DUMMY));
+							DECODER(DECODED_INSTR(LOAD_U8));
 						case 0x5:
-							if (LIKELY(instruction.Itype.rd != 0))
-								DECODER(DECODED_INSTR(LOAD_U16));
-							DECODER(DECODED_INSTR(LOAD_I16_DUMMY));
+							DECODER(DECODED_INSTR(LOAD_U16));
 						case 0x6:
-							if (LIKELY(instruction.Itype.rd != 0))
-								DECODER(DECODED_INSTR(LOAD_U32));
-							DECODER(DECODED_INSTR(LOAD_I32_DUMMY));
+							DECODER(DECODED_INSTR(LOAD_U32));
 						case 0x7:
 							if constexpr (sizeof(address_t) >= 16) {
-								if (LIKELY(instruction.Itype.rd != 0))
-									DECODER(DECODED_INSTR(LOAD_U128));
-								DECODER(DECODED_INSTR(LOAD_U128_DUMMY));
+								DECODER(DECODED_INSTR(LOAD_U128));
 							}
 							[[fallthrough]];
 						default:
 							DECODER(DECODED_INSTR(ILLEGAL));
+						}
+					} else {
+						DECODER(DECODED_INSTR(LOAD_X_DUMMY));
 					}
 					break;
 				case RV32I_STORE:
 					switch (instruction.Stype.funct3) {
-						case 0x0:
-							if (instruction.Stype.signed_imm() == 0)
-								DECODER(DECODED_INSTR(STORE_I8));
-							DECODER(DECODED_INSTR(STORE_I8_IMM));
-						case 0x1:
-							DECODER(DECODED_INSTR(STORE_I16_IMM));
-						case 0x2:
-							DECODER(DECODED_INSTR(STORE_I32_IMM));
-						case 0x3:
-							if constexpr (sizeof(address_t) >= 8) {
-								DECODER(DECODED_INSTR(STORE_I64_IMM));
-							}
-							break;
-						case 0x4:
-							if constexpr (sizeof(address_t) >= 16) {
-								DECODER(DECODED_INSTR(STORE_I128_IMM));
-							}
-							[[fallthrough]];
-						default:
-							DECODER(DECODED_INSTR(ILLEGAL));
+					case 0x0:
+						if (instruction.Stype.signed_imm() == 0)
+							DECODER(DECODED_INSTR(STORE_I8));
+						DECODER(DECODED_INSTR(STORE_I8_IMM));
+					case 0x1:
+						DECODER(DECODED_INSTR(STORE_I16_IMM));
+					case 0x2:
+						DECODER(DECODED_INSTR(STORE_I32_IMM));
+					case 0x3:
+						if constexpr (sizeof(address_t) >= 8) {
+							DECODER(DECODED_INSTR(STORE_I64_IMM));
+						}
+						DECODER(DECODED_INSTR(ILLEGAL));
+					case 0x4:
+						if constexpr (sizeof(address_t) >= 16) {
+							DECODER(DECODED_INSTR(STORE_I128_IMM));
+						}
+						[[fallthrough]];
+					default:
+						DECODER(DECODED_INSTR(ILLEGAL));
 					}
 					break;
 				case RV32I_BRANCH:

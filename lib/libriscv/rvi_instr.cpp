@@ -53,26 +53,12 @@ namespace riscv
 						uint64_t(cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm()));
 	});
 
-	INSTRUCTION(LOAD_I8_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
-		cpu.machine().memory.template read<uint8_t>(addr);
-	}, DECODED_INSTR(LOAD_I8).printer);
-
 	INSTRUCTION(LOAD_I16,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
 		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = (RVSIGNTYPE(cpu)) (int16_t) cpu.machine().memory.template read<uint16_t>(addr);
-	}, DECODED_INSTR(LOAD_I8).printer);
-
-	INSTRUCTION(LOAD_I16_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
-		cpu.machine().memory.template read<uint16_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_I32,
@@ -83,26 +69,12 @@ namespace riscv
 		reg = (RVSIGNTYPE(cpu)) (int32_t) cpu.machine().memory.template read<uint32_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
-	INSTRUCTION(LOAD_I32_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
-		cpu.machine().memory.template read<uint32_t>(addr);
-	}, DECODED_INSTR(LOAD_I8).printer);
-
 	INSTRUCTION(LOAD_I64,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		auto& reg = cpu.reg(instr.Itype.rd);
 		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 		reg = (RVSIGNTYPE(cpu)) (int64_t) cpu.machine().memory.template read<uint64_t>(addr);
-	}, DECODED_INSTR(LOAD_I8).printer);
-
-	INSTRUCTION(LOAD_I64_DUMMY,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		const auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
-		cpu.machine().memory.template read<uint64_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(LOAD_U8,
@@ -146,12 +118,36 @@ namespace riscv
 		reg = cpu.machine().memory.template read<__uint128_t>(addr);
 	}, DECODED_INSTR(LOAD_I8).printer);
 
-	INSTRUCTION(LOAD_U128_DUMMY,
+	INSTRUCTION(LOAD_X_DUMMY,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		auto addr = cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
-		addr &= ~(__uint128_t)0xF;
-		cpu.machine().memory.template read<__uint128_t>(addr);
+		switch (instr.Itype.funct3) {
+		case 0x0:
+			cpu.machine().memory.template read<uint8_t>(addr);
+			return;
+		case 0x1:
+			cpu.machine().memory.template read<uint16_t>(addr);
+			return;
+		case 0x2:
+			cpu.machine().memory.template read<uint32_t>(addr);
+			return;
+		case 0x3:
+			if constexpr (RVISGE64BIT(cpu)) {
+				cpu.machine().memory.template read<uint64_t>(addr);
+				return;
+			} else {
+				cpu.trigger_exception(ILLEGAL_OPCODE);
+			} break;
+		case 0x7:
+			if constexpr (RVIS128BIT(cpu)) {
+				addr &= ~(__uint128_t)0xF;
+				cpu.machine().memory.template read<__uint128_t>(addr);
+				return;
+			} else {
+				cpu.trigger_exception(ILLEGAL_OPCODE);
+			} break;
+		}
 	}, DECODED_INSTR(LOAD_I8).printer);
 
 	INSTRUCTION(STORE_I8_IMM,
