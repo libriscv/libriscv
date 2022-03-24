@@ -29,16 +29,19 @@ struct ArenaChunk
 
 	ArenaChunk* find(PointerType ptr);
 	ArenaChunk* find_free(size_t size);
-	void   merge_next(Arena&);
-	void   split_next(Arena&, size_t size);
+	void merge_next(Arena&);
+	void split_next(Arena&, size_t size);
+	void subsume_next(Arena&, size_t extra);
 };
 
 struct Arena
 {
+	static constexpr size_t ALIGNMENT = 8u;
 	using PointerType = ArenaChunk::PointerType;
 	Arena(PointerType base, PointerType end);
 
 	PointerType malloc(size_t size);
+	std::tuple<PointerType, size_t> realloc(PointerType old, size_t size);
 	size_t      size(PointerType src, bool allow_free = false);
 	signed int  free(PointerType);
 
@@ -56,10 +59,14 @@ struct Arena
 	void   free_chunk(ArenaChunk*);
 	ArenaChunk* find_chunk(PointerType ptr);
 
-private:
-	inline size_t word_align(size_t size) {
-		return (size + (sizeof(size_t) - 1)) & ~(sizeof(size_t) - 1);
+	static size_t word_align(size_t size) {
+		return (size + (ALIGNMENT-1)) & ~(ALIGNMENT-1);
 	}
+	static size_t fixup_size(size_t size) {
+		// The minimum allocation is 8 bytes
+		return std::max(ALIGNMENT, word_align(size));
+	}
+private:
 	void foreach(std::function<void(const ArenaChunk&)>) const;
 
 	std::deque<ArenaChunk> m_chunks;
@@ -99,6 +106,27 @@ inline void ArenaChunk::merge_next(Arena& arena)
 		this->next->prev = this;
 	}
 	arena.free_chunk(freech);
+}
+
+inline void ArenaChunk::subsume_next(Arena& arena, size_t newlen)
+{
+	assert(this->size < newlen);
+	newlen = Arena::fixup_size(newlen);
+	ArenaChunk* ch = this->next;
+	assert(ch);
+
+	size_t subsume = std::min(newlen - this->size, ch->size);
+	this->size += subsume;
+	ch->size   -= subsume;
+
+	// Free the next chunk if we eat all of it
+	if (ch->size == 0) {
+		this->next = ch->next;
+		if (this->next) {
+			this->next->prev = this;
+		}
+		arena.free_chunk(ch);
+	}
 }
 
 inline void ArenaChunk::split_next(Arena& arena, size_t size)
@@ -143,8 +171,7 @@ inline ArenaChunk* Arena::find_chunk(PointerType ptr)
 
 inline Arena::PointerType Arena::malloc(size_t size)
 {
-	size_t length = word_align(size);
-	length = std::max(length, (size_t) 8);
+	const size_t length = fixup_size(size);
 	ArenaChunk* ch = base_chunk().find_free(length);
 
 	if (ch != nullptr) {
@@ -153,6 +180,34 @@ inline Arena::PointerType Arena::malloc(size_t size)
 		return ch->data;
 	}
 	return 0;
+}
+
+inline std::tuple<Arena::PointerType, size_t>
+	Arena::realloc(PointerType ptr, size_t size)
+{
+	if (ptr == 0x0) // Regular malloc
+		return {malloc(size), 0};
+
+	ArenaChunk* ch = base_chunk().find(ptr);
+	if (UNLIKELY(ch == nullptr))
+		return {0, 0}; // Failure
+
+	size = fixup_size(size);
+	if (ch->size >= size) // Already long enough?
+		return {ch->data, ch->size};
+
+	// We return the old length to aid memcpy
+	const size_t old_len = ch->size;
+	while (ch->size < size) {
+		// Try to eat from the next chunk
+		if (ch->next && ch->next->free) {
+			ch->subsume_next(*this, size);
+			if (ch->size >= size)
+				return {ch->data, old_len};
+		} else break;
+	}
+
+	return {malloc(size), old_len};
 }
 
 inline size_t Arena::size(PointerType ptr, bool allow_free)

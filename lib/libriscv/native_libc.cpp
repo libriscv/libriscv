@@ -1,10 +1,14 @@
 #include "machine.hpp"
 #include "native_heap.hpp"
 
-//#define HPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+//#define VERBOSE_NATSYS
+#ifdef VERBOSE_NATSYS
+#define HPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define MPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#else
 #define HPRINT(fmt, ...) /* */
-//#define MPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #define MPRINT(fmt, ...) /* */
+#endif
 
 namespace riscv {
 	// An arbitrary maximum length just to stop *somewhere*
@@ -44,49 +48,19 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+2,
 	[] (auto& machine)
 	{
-		const address_type<W> src = machine.template sysarg<address_type<W>>(0);
-		const size_t newlen = machine.template sysarg<address_type<W>>(1);
-		if (src != 0)
-		{
-			const size_t srclen = machine.arena().size(src, false);
-			if (srclen > 0)
-			{
-				if (srclen >= newlen) {
-					return;
-				}
-				// XXX: We really have to know what we are doing here, as
-				// we are freeing in the hopes of getting the same chunk
-				// back, in which case the copy could be completely skipped.
-				machine.arena().free(src);
-				address_type<W> data = machine.arena().malloc(newlen);
-				HPRINT("SYSCALL realloc(0x%X:%zu, %zu) = 0x%X\n", src, srclen, newlen, data);
-				// If the reallocation fails, return NULL
-				if (data == 0) {
-					machine.arena().malloc(srclen);
-					machine.set_result(0);
-					machine.penalize(COMPLEX_CALL_PENALTY);
-					return;
-				}
-				else if (data != src)
-				{
-					// XXX: Should this be a memmove?
-					machine.memory.memcpy(data, machine, src, srclen);
-				}
-				machine.set_result(data);
-				machine.penalize(COMPLEX_CALL_PENALTY);
-				return;
-			} else {
-				HPRINT("SYSCALL realloc(0x%X:??, %zu) = 0x0\n", src, newlen);
-				throw MachineException(OUT_OF_MEMORY, "Realloc failed to find previous allocation", src);
-			}
-		} else {
-			address_type<W> data = machine.arena().malloc(newlen);
-			HPRINT("SYSCALL realloc(0x0, %zu) = 0x%lX\n", newlen, (long) data);
-			machine.set_result(data);
-			machine.penalize(COMPLEX_CALL_PENALTY);
-			return;
+		const auto src = machine.template sysarg<address_type<W>>(0);
+		const auto newlen = machine.template sysarg<address_type<W>>(1);
+
+		const auto [data, srclen] = machine.arena().realloc(src, newlen);
+		HPRINT("SYSCALL realloc(0x%X:%zu, %zu) = 0x%X\n", src, srclen, newlen, data);
+		// When data != src, srclen is the old length
+		// The chunks are non-overlapping, so we can use forwards memcpy
+		if (data != src) {
+			machine.memory.memcpy(data, machine, src, srclen);
+			machine.arena().free(src); // This always succeeds
+			machine.penalize(2 * srclen);
 		}
-		machine.set_result(0);
+		machine.set_result(data);
 		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Free n+3
@@ -243,6 +217,15 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		}
 		m.penalize(2 + 2 * len);
 		m.set_result(0);
+	}}, {syscall_base+13, [] (Machine<W>& m) {
+		// Describe value n+13
+		auto [desc, value] =
+			m.sysargs<std::string, address_type<W>> ();
+		char buffer[256];
+		const int len =
+			snprintf(buffer, sizeof(buffer),
+			"SYSCALL describe %s: 0x%lX (%ld)\n", desc.c_str(), (long)value, (long)value);
+		m.debug_print(buffer, len);
 	}}, {syscall_base+14, [] (Machine<W>& m) {
 		// Print backtrace n+14
 		m.memory.print_backtrace(
