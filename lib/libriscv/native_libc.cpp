@@ -1,7 +1,7 @@
 #include "machine.hpp"
 #include "native_heap.hpp"
 
-//#define VERBOSE_NATSYS
+#define VERBOSE_NATSYS
 #ifdef VERBOSE_NATSYS
 #define HPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #define MPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)

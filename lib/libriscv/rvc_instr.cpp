@@ -44,14 +44,14 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
-		cpu.cireg(ci.CL.srd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read<uint32_t> (address);
+		cpu.cireg(ci.CL.srd) = (int32_t) cpu.machine().memory.template read<uint32_t> (address);
 	}, DECODED_COMPR(C0_REG_FLD).printer);
 
 	COMPRESSED_INSTR(C0_REG_LD,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
-		cpu.cireg(ci.CSD.srs2) =
+		cpu.cireg(ci.CSD.srs2) = (int64_t)
 				cpu.machine().memory.template read<uint64_t> (address);
 	}, DECODED_COMPR(C0_REG_FLD).printer);
 
@@ -156,7 +156,8 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		const rv32c_instruction ci { instr };
 		// C.ADDIW rd, imm[5:0]
-		cpu.reg(ci.CI.rd) = RVSIGNEXTW(cpu) (cpu.reg(ci.CI.rd) + ci.CI.signed_imm());
+		const uint32_t src = cpu.reg(ci.CI.rd);
+		cpu.reg(ci.CI.rd) = (int32_t) (src + ci.CI.signed_imm());
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
 	{
@@ -253,12 +254,12 @@ namespace riscv
 						return;
 					case 0x4: // C.SUBW
 					if constexpr (RVIS64BIT(cpu)) {
-						dst = RVSIGNEXTW(cpu) (dst - src);
+						dst = (int32_t) ((uint32_t)dst - (uint32_t)src);
 						return;
 					}
 					case 0x5: // C.ADDW
 					if constexpr (RVIS64BIT(cpu)) {
-						dst = RVSIGNEXTW(cpu) (dst + src);
+						dst = (int32_t) ((uint32_t)dst + (uint32_t)src);
 						return;
 					}
 					case 0x6: // RESERVED
@@ -396,14 +397,14 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CI2.offset();
-		cpu.reg(ci.CI2.rd) = RVSIGNEXTW(cpu) cpu.machine().memory.template read <uint32_t> (address);
+		cpu.reg(ci.CI2.rd) = (int32_t) cpu.machine().memory.template read <uint32_t> (address);
 	}, DECODED_COMPR(C2_SLLI).printer);
 
 	COMPRESSED_INSTR(C2_LDSP,
 	[] (auto& cpu, rv32i_instruction instr) {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CIFLD.offset();
-		cpu.reg(ci.CIFLD.rd) =
+		cpu.reg(ci.CIFLD.rd) = (int64_t)
 			cpu.machine().memory.template read <uint64_t> (address);
 	}, DECODED_COMPR(C2_SLLI).printer);
 

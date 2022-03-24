@@ -17,9 +17,8 @@
 #define RVREGTYPE(x) typename std::remove_reference_t<decltype(x)>::address_t
 #define RVTOSIGNED(x) (static_cast<typename std::make_signed<decltype(x)>::type> (x))
 #define RVSIGNTYPE(x) typename std::make_signed<RVREGTYPE(x)>::type
-#define RVSIGNEXTW(x) (RVSIGNTYPE(x)) (int32_t)
-#define RVSIGNEXTD(x) (RVSIGNTYPE(x)) (int64_t)
-#define RVIMM(x, y)   RVSIGNTYPE(x)(y.signed_imm())
+#define RVIMM(x, y)   y.signed_imm()
+#define RVXLEN(x)     (8u*sizeof(RVREGTYPE(x)))
 #define RVIS32BIT(x)  (sizeof(RVREGTYPE(x)) == 4)
 #define RVIS64BIT(x)  (sizeof(RVREGTYPE(x)) == 8)
 #define RVIS128BIT(x) (sizeof(RVREGTYPE(x)) == 16)
