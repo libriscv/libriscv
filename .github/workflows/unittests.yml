@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [ master ]
 
-env:
-  CC: riscv64-linux-gnu-gcc-10
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,6 +20,7 @@ jobs:
       run: |
         sudo apt install -y gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
         git submodule update --init ${{github.workspace}}/tests/Catch2
+        git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
 
     - name: Configure
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}

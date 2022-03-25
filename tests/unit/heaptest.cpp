@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <libriscv/native_heap.hpp>
-#include <cstdlib>
 #include <vector>
 static const uintptr_t BEGIN = 0x1000000;
 static const uintptr_t END   = 0x2000000;
 #define IS_WITHIN(addr) (addr >= BEGIN && addr < END)
+#define HPRINT(fmt, ...) /* */
 
 int randInt(int min, int max) {
 	return min + (rand() % static_cast<int>(max - min + 1));
@@ -68,14 +68,14 @@ TEST_CASE("Basic heap usage", "[Heap]")
 		for (int a = 0; a < A; a++) {
 			allocs.push_back(alloc_random(arena));
 			const auto alloc = allocs.back();
-			printf("Alloc %lX size: %4zu,  arena size: %4zu\n",
+			HPRINT("Alloc %lX size: %4zu,  arena size: %4zu\n",
 				alloc.addr, alloc.size, arena.size(alloc.addr));
 		}
 		const int B = std::min(randInt(2, allocs.size()), (int)allocs.size());
 		for (int b = 0; b < B; b++) {
 			auto& origin = allocs.at(b);
 			const auto [alloc, size] = realloc_random(arena, origin.addr);
-			printf("Realloc %lX size: %4zu, arena size: %4zu  (origin %lX oldsize %zu)\n",
+			HPRINT("Realloc %lX size: %4zu, arena size: %4zu  (origin %lX oldsize %zu)\n",
 				alloc.addr, size, alloc.size, origin.addr, origin.size);
 			if (alloc.addr == origin.addr) {
 				origin.size = alloc.size;
@@ -95,7 +95,7 @@ TEST_CASE("Basic heap usage", "[Heap]")
 			const auto idx = randUpto(allocs.size());
 			const auto alloc = allocs.at(idx);
 			allocs.erase(allocs.begin() + idx, allocs.begin() + idx + 1);
-			printf("Free %lX size: %4zu, arena size: %4zu\n",
+			HPRINT("Free %lX size: %4zu, arena size: %4zu\n",
 				alloc.addr, alloc.size, arena.size(alloc.addr));
 			REQUIRE(arena.size(alloc.addr) == alloc.size);
 	  		REQUIRE(arena.free(alloc.addr) == 0);
