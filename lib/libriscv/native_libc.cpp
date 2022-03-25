@@ -1,7 +1,7 @@
 #include "machine.hpp"
 #include "native_heap.hpp"
 
-#define VERBOSE_NATSYS
+//#define VERBOSE_NATSYS
 #ifdef VERBOSE_NATSYS
 #define HPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #define MPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
@@ -49,17 +49,16 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+2,
 	[] (auto& machine)
 	{
-		const auto src = machine.template sysarg<address_type<W>>(0);
-		const auto newlen = machine.template sysarg<address_type<W>>(1);
+		const auto src = machine.sysarg(0);
+		const auto newlen = machine.sysarg(1);
 
 		const auto [data, srclen] = machine.arena().realloc(src, newlen);
 		HPRINT("SYSCALL realloc(0x%lX:%zu, %zu) = 0x%lX\n",
 			(long)src, (size_t)srclen, (size_t)newlen, (long)data);
-		// When data != src, srclen is the old length
-		// The chunks are non-overlapping, so we can use forwards memcpy
-		if (data != src) {
+		// When data != src, srclen is the old length, and the
+		// chunks are non-overlapping, so we can use forwards memcpy.
+		if (data != src && srclen != 0) {
 			machine.memory.memcpy(data, machine, src, srclen);
-			machine.arena().free(src); // This always succeeds
 			machine.penalize(2 * srclen);
 		}
 		machine.set_result(data);
@@ -69,7 +68,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+3,
 	[] (auto& machine)
 	{
-		const auto ptr = machine.template sysarg<address_type<W>>(0);
+		const auto ptr = machine.sysarg(0);
 		if (ptr != 0)
 		{
 			int ret = machine.arena().free(ptr);
@@ -90,7 +89,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+4,
 	[] (auto& machine)
 	{
-		const auto dst = machine.template sysarg<address_type<W>>(0);
+		const auto dst = machine.sysarg(0);
 		const auto& arena = machine.arena();
 		struct Result {
 			const address_type<W> bf;

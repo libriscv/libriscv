@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(libriscv_unittests CXX)
 
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -ggdb3")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -O1 -ggdb3")
 
 option(RISCV_ICACHE "" ON)
 add_subdirectory(../../lib lib)
@@ -25,3 +25,4 @@ endfunction()
 
 add_unit_test(basic    basic.cpp)
 add_unit_test(checksum checksum.cpp)
+add_unit_test(heap     heaptest.cpp)

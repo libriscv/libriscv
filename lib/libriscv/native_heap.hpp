@@ -67,6 +67,7 @@ struct Arena
 		return std::max(ALIGNMENT, word_align(size));
 	}
 private:
+	void internal_free(ArenaChunk* ch);
 	void foreach(std::function<void(const ArenaChunk&)>) const;
 
 	std::deque<ArenaChunk> m_chunks;
@@ -111,15 +112,18 @@ inline void ArenaChunk::merge_next(Arena& arena)
 inline void ArenaChunk::subsume_next(Arena& arena, size_t newlen)
 {
 	assert(this->size < newlen);
-	newlen = Arena::fixup_size(newlen);
 	ArenaChunk* ch = this->next;
 	assert(ch);
 
-	size_t subsume = std::min(newlen - this->size, ch->size);
-	this->size += subsume;
-	ch->size   -= subsume;
+	if (this->size + ch->size < newlen)
+		return;
 
-	// Free the next chunk if we eat all of it
+	const size_t subsume = newlen - this->size;
+	ch->size -= subsume;
+	ch->data += subsume;
+	this->size = newlen;
+
+	// Free the next chunk if we ate all of it
 	if (ch->size == 0) {
 		this->next = ch->next;
 		if (this->next) {
@@ -169,6 +173,19 @@ inline ArenaChunk* Arena::find_chunk(PointerType ptr)
 	return nullptr;
 }
 
+inline void Arena::internal_free(ArenaChunk* ch)
+{
+	ch->free = true;
+	// merge chunks ahead and behind us
+	if (ch->next && ch->next->free) {
+		ch->merge_next(*this);
+	}
+	if (ch->prev && ch->prev->free) {
+		ch = ch->prev;
+		ch->merge_next(*this);
+	}
+}
+
 inline Arena::PointerType Arena::malloc(size_t size)
 {
 	const size_t length = fixup_size(size);
@@ -183,31 +200,36 @@ inline Arena::PointerType Arena::malloc(size_t size)
 }
 
 inline std::tuple<Arena::PointerType, size_t>
-	Arena::realloc(PointerType ptr, size_t size)
+	Arena::realloc(PointerType ptr, size_t newsize)
 {
 	if (ptr == 0x0) // Regular malloc
-		return {malloc(size), 0};
+		return {malloc(newsize), 0};
 
 	ArenaChunk* ch = base_chunk().find(ptr);
-	if (UNLIKELY(ch == nullptr))
+	if (UNLIKELY(ch == nullptr || ch->free))
 		return {0, 0}; // Failure
 
-	size = fixup_size(size);
-	if (ch->size >= size) // Already long enough?
-		return {ch->data, ch->size};
+	newsize = fixup_size(newsize);
+	if (ch->size >= newsize) // Already long enough?
+		return {ch->data, 0};
 
 	// We return the old length to aid memcpy
 	const size_t old_len = ch->size;
-	while (ch->size < size) {
-		// Try to eat from the next chunk
-		if (ch->next && ch->next->free) {
-			ch->subsume_next(*this, size);
-			if (ch->size >= size)
-				return {ch->data, old_len};
-		} else break;
+	// Try to eat from the next chunk
+	if (ch->next && ch->next->free) {
+		ch->subsume_next(*this, newsize);
+		if (ch->size >= newsize)
+			return {ch->data, 0};
 	}
 
-	return {malloc(size), old_len};
+	// Fallback to malloc, then free the old chunk
+	ptr = malloc(newsize);
+	if (ptr != 0x0) {
+		this->internal_free(ch);
+		return {ptr, old_len};
+	}
+
+	return {0x0, 0x0};
 }
 
 inline size_t Arena::size(PointerType ptr, bool allow_free)
@@ -221,18 +243,10 @@ inline size_t Arena::size(PointerType ptr, bool allow_free)
 inline int Arena::free(PointerType ptr)
 {
 	ArenaChunk* ch = base_chunk().find(ptr);
-	if (UNLIKELY(ch == nullptr))
+	if (UNLIKELY(ch == nullptr || ch->free))
 		return -1;
 
-	ch->free = true;
-	// merge chunks ahead and behind us
-	if (ch->next && ch->next->free) {
-		ch->merge_next(*this);
-	}
-	if (ch->prev && ch->prev->free) {
-		ch = ch->prev;
-		ch->merge_next(*this);
-	}
+	this->internal_free(ch);
 	return 0;
 }
 
