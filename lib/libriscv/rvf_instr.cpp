@@ -19,8 +19,8 @@ namespace riscv
 		};
 		return snprintf(buffer, len, "%s %s, [%s%+d]",
 						insn[fi.Itype.funct3],
-                        RISCV::flpname(fi.Itype.rd),
-                        RISCV::regname(fi.Stype.rs1),
+						RISCV::flpname(fi.Itype.rd),
+						RISCV::regname(fi.Stype.rs1),
 						fi.Itype.signed_imm());
 	});
 	FLOAT_INSTR(FLD,
@@ -47,7 +47,7 @@ namespace riscv
 		};
 		return snprintf(buffer, len, "%s [%s%+d], %s",
 						insn[fi.Stype.funct3],
-                        RISCV::regname(fi.Stype.rs1),
+						RISCV::regname(fi.Stype.rs1),
 						fi.Stype.signed_imm(),
 						RISCV::flpname(fi.Stype.rs2));
 	});
@@ -557,17 +557,14 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 		case 0x0: // FMV.X.W
 			dst = rs1.i32[0];
-			break;
+			return;
 		case 0x1: // FMV.X.D
-			if constexpr (RVIS64BIT(cpu)) {
+			if constexpr (RVISGE64BIT(cpu)) {
 				dst = rs1.i64;
-				break;
-			} else {
-				cpu.trigger_exception(ILLEGAL_OPERATION);
+				return;
 			}
-		default:
-			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32f_instruction fi { instr };
@@ -588,17 +585,14 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 		case 0x0: // FMV.W.X
 			dst.load_u32(rs1);
-			break;
+			return;
 		case 0x1: // FMV.D.X
-			if constexpr (RVIS64BIT(cpu)) {
+			if constexpr (RVISGE64BIT(cpu)) {
 				dst.load_u64(rs1);
-				break;
-			} else {
-				cpu.trigger_exception(ILLEGAL_OPERATION);
+				return;
 			}
-		default:
-			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32f_instruction fi { instr };
