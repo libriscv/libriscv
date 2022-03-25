@@ -12,7 +12,8 @@
 
 namespace riscv {
 	// An arbitrary maximum length just to stop *somewhere*
-	static constexpr size_t   STRLEN_MAX = 64'000u;
+	static constexpr uint64_t MEMCPY_MAX = 1024ull * 1024u * 512u; // 512M
+	static constexpr uint32_t STRLEN_MAX = 64'000u;
 	static constexpr uint64_t COMPLEX_CALL_PENALTY = 2'000u;
 
 template <int W>
@@ -22,7 +23,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+0,
 	[] (auto& machine)
 	{
-		const size_t len = machine.template sysarg<address_type<W>>(0);
+		const size_t len = machine.sysarg(0);
 		auto data = machine.arena().malloc(len);
 		HPRINT("SYSCALL malloc(%zu) = 0x%lX\n", len, (long)data);
 		machine.set_result(data);
@@ -139,6 +140,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		auto [dst, src, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcpy(%#lX, %#lX, %zu)\n", (long)dst, (long)src, (size_t)len);
+		if (UNLIKELY(len > MEMCPY_MAX))
+			throw MachineException(SYSTEM_CALL_FAILED, "memcpy length too large", len);
 		m.memory.foreach(src, len,
 			[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
 				m.memcpy(dst + off, data, len);
@@ -149,6 +152,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		const auto [dst, value, len] =
 			m.sysargs<address_type<W>, int, address_type<W>> ();
 		MPRINT("SYSCALL memset(%#lX, %#X, %zu)\n", (long)dst, value, (size_t)len);
+		if (UNLIKELY(len > MEMCPY_MAX))
+			throw MachineException(SYSTEM_CALL_FAILED, "memset length too large", len);
 		m.memory.memset(dst, value, len);
 		m.penalize(len);
 	}}, {syscall_base+2, [] (Machine<W>& m) {
@@ -157,6 +162,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memmove(%#lX, %#lX, %zu)\n",
 			(long) dst, (long) src, (size_t)len);
+		if (UNLIKELY(len > MEMCPY_MAX))
+			throw MachineException(SYSTEM_CALL_FAILED, "memmove length too large", len);
 		// If the buffers don't overlap, we can use memcpy which copies forwards
 		if (dst < src) {
 			m.memory.foreach(src, len,
@@ -190,6 +197,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		auto [p1, p2, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcmp(%#lX, %#lX, %zu)\n", (long)p1, (long)p2, (size_t)len);
+		if (UNLIKELY(len > MEMCPY_MAX))
+			throw MachineException(SYSTEM_CALL_FAILED, "memcmp length too large", len);
 		m.penalize(2 * len);
 		m.set_result(m.memory.memcmp(p1, p2, len));
 	}}, {syscall_base+5, [] (Machine<W>& m) {
@@ -204,6 +213,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		auto [a1, a2, maxlen] =
 			m.sysargs<address_type<W>, address_type<W>, uint32_t> ();
 		MPRINT("SYSCALL strncmp(%#lX, %#lX, %u)\n", (long)a1, (long)a2, maxlen);
+		maxlen = std::min(maxlen, STRLEN_MAX);
 		uint32_t len = 0;
 		while (len < maxlen) {
 			const uint8_t v1 = m.memory.template read<uint8_t> (a1 ++);
