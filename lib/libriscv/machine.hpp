@@ -191,9 +191,9 @@ namespace riscv
 		// System calls, files and threads implementations
 		bool has_file_descriptors() const noexcept { return m_fds != nullptr; }
 		// The "minimum": lseek, read, write, exit (provided for example usage)
-		void setup_minimal_syscalls();
+		static void setup_minimal_syscalls();
 		// Enough to run minimal newlib programs
-		void setup_newlib_syscalls();
+		static void setup_newlib_syscalls();
 		// Set up every supported system call, emulating Linux
 		void setup_linux_syscalls(bool filesystem = true, bool sockets = true);
 		void setup_posix_threads();

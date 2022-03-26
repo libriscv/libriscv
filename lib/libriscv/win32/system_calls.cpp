@@ -649,9 +649,9 @@ static void syscall_brk(Machine<W> &machine) {
 }
 
 template<int W>
-static void add_mman_syscalls(Machine<W> &machine) {
+static void add_mman_syscalls() {
     // munmap
-    machine.install_syscall_handler(215,
+    Machine<W>::install_syscall_handler(215,
                                     [](Machine<W> &machine) {
                                         const auto addr = machine.sysarg(0);
                                         const auto len = machine.sysarg(1);
@@ -666,7 +666,7 @@ static void add_mman_syscalls(Machine<W> &machine) {
                                         machine.set_result(0);
                                     });
     // mmap
-    machine.install_syscall_handler(222,
+    Machine<W>::install_syscall_handler(222,
                                     [](Machine<W> &machine) {
                                         const auto addr_g = machine.sysarg(0);
                                         auto length = machine.sysarg(1);
@@ -715,7 +715,7 @@ static void add_mman_syscalls(Machine<W> &machine) {
                                         machine.set_result(-1); // = MAP_FAILED;
                                     });
     // mremap
-    machine.install_syscall_handler(163,
+    Machine<W>::install_syscall_handler(163,
                                     [](Machine<W> &machine) {
                                         const auto old_addr = machine.sysarg(0);
                                         const auto old_size = machine.sysarg(1);
@@ -735,7 +735,7 @@ static void add_mman_syscalls(Machine<W> &machine) {
                                         machine.set_result(-1);
                                     });
     // mprotect
-    machine.install_syscall_handler(226,
+    Machine<W>::install_syscall_handler(226,
                                     [](Machine<W> &machine) {
                                         const auto addr = machine.sysarg(0);
                                         const auto len = machine.sysarg(1);
@@ -750,7 +750,7 @@ static void add_mman_syscalls(Machine<W> &machine) {
                                         machine.set_result(0);
                                     });
     // madvise
-    machine.install_syscall_handler(233,
+    Machine<W>::install_syscall_handler(233,
                                     [](Machine<W> &machine) {
                                         const auto addr = machine.sysarg(0);
                                         const auto len = machine.sysarg(1);
@@ -782,18 +782,18 @@ static void add_mman_syscalls(Machine<W> &machine) {
 
 template<int W>
 void Machine<W>::setup_minimal_syscalls() {
-    this->install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
-    this->install_syscall_handler(62, syscall_lseek<W>);
-    this->install_syscall_handler(63, syscall_read<W>);
-    this->install_syscall_handler(64, syscall_write<W>);
-    this->install_syscall_handler(93, syscall_exit<W>);
+    install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
+    install_syscall_handler(62, syscall_lseek<W>);
+    install_syscall_handler(63, syscall_read<W>);
+    install_syscall_handler(64, syscall_write<W>);
+    install_syscall_handler(93, syscall_exit<W>);
 }
 
 template<int W>
 void Machine<W>::setup_newlib_syscalls() {
-    this->setup_minimal_syscalls();
-    this->install_syscall_handler(214, syscall_brk<W>);
-    add_mman_syscalls(*this);
+    setup_minimal_syscalls();
+    install_syscall_handler(214, syscall_brk<W>);
+    add_mman_syscalls<W>();
 }
 
 template<int W>
@@ -848,7 +848,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets) {
     this->install_syscall_handler(160, syscall_uname<W>);
     this->install_syscall_handler(214, syscall_brk<W>);
 
-    add_mman_syscalls(*this);
+    add_mman_syscalls<W>();
 
     if (filesystem || sockets) {
         m_fds.reset(new FileDescriptors);
