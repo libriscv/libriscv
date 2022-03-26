@@ -15,7 +15,7 @@
 #endif
 
 #ifndef RISCV_SYSCALLS_MAX
-#define RISCV_SYSCALLS_MAX   384
+#define RISCV_SYSCALLS_MAX   512
 #endif
 
 #ifndef RISCV_SYSCALL_EBREAK_NR
