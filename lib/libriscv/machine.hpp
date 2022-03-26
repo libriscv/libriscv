@@ -53,6 +53,10 @@ namespace riscv
 		void     penalize(uint64_t val) noexcept { m_counter += val; }
 		uint64_t max_instructions() const noexcept { return m_max_counter; }
 		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
+		// This function returns true only when a simulation ended caused by
+		// reaching the instruction limit. It will not be true if the machine
+		// stopped normally. Use machine.stopped() for that.
+		bool     instruction_limit_reached() const noexcept;
 
 		CPU<W>    cpu;
 		Memory<W> memory;
