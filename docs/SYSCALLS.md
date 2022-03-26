@@ -122,12 +122,12 @@ If in doubt, just use `address_type<W>` for the syscall argument, and it will be
 
 ## The RISC-V system call ABI
 
-On RISC-V a system call has its own instruction: `ECALL` or `SCALL`, depending on disassembler. A system call can have up to 7 arguments and has 1 return value. The arguments are in registers A0-A6, in that order, and the return value is written into A0 before giving back control to the guest. A7 contains the system call number. These are all integer registers.
+On RISC-V a system call has its own instruction: `ECALL`, depending on disassembler. A system call can have up to 7 arguments and has 1 return value. The arguments are in registers A0-A6, in that order, and the return value is written into A0 before giving back control to the guest. A7 contains the system call number. These are all integer registers.
 
 To pass larger data around, the guest should allocate buffers of the appropriate size and pass the address of the buffers as arguments to the system call.
 
 ## Special note on EBREAK
 
-The EBREAK instruction is handled as a system call in this emulator, specifically it uses the system call number `riscv::SYSCALL_EBREAK`, which at the time of writing is zero (0), however it can be changed in the common header.
+The EBREAK instruction is handled as a system call in this emulator, specifically it uses the system call number `riscv::SYSCALL_EBREAK`, which at the time of writing is put at the end of the system call table (N-1), however it can be changed in the common header or by setting a global define `RISCV_SYSCALL_EBREAK_NR` to a specific number.
 
-EBREAK is very convenient for debugging purposes, as adding it somewhere in the code is very simple: `asm("ebreak");`.
+EBREAK is very convenient for debugging purposes, as adding it somewhere in the code is very simple: `asm("ebreak");`. Be careful of `__builtin_trap()`, as it erroneously assumes that you are never returning, and the compiler will stop producing instructions after it.
