@@ -344,7 +344,8 @@ namespace riscv
 		// if we allow it to start this low. Instead, we move it
 		// to the end of the machines address space.
 		if (this->m_stack_address < 0x80000) {
-			this->m_stack_address = 0x0;
+			// XXX: Closer to the end and the Golang runtime will fail
+			this->m_stack_address = ~(address_t)0 - 0xFFF;
 		}
 
 		//this->relocate_section(".rela.dyn", ".symtab");
