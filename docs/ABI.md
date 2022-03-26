@@ -34,8 +34,8 @@ PC     Program counter
 
 All instructions 4-byte aligned, except for C-extension where instructions are 2-byte aligned. It is even allowed to have a 2-byte aligned 4-byte instruction cross a page boundary, unfortunately.
 
-The misalignment exception happens on the branch jump that would cause the misalignment.
+Instruction misalignment exceptions happen on the branch jump that would cause the misalignment, preventing the machine from going into an invalid state.
 
 GP must be initialized to some symbol (`__global_pointer`) in the middle of the data section.
 
-The stack pointer can start at the beginning of the ELF virtual address space.
+The stack pointer can start at the beginning of the ELF virtual address space and must be 16-byte aligned.

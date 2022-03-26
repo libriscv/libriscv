@@ -47,9 +47,11 @@ for (char* bss = &__bss_start; bss < &__BSS_END__; bss++) {
 }
 ```
 
+Memory is initially zero in the emulator, and so the BSS zeroing can be skipped.
+
 After this you might want to initialize your heap, if you have one. If not, consider getting a tiny heap implementation from an open source project. Perhaps also initialize some early standard out (stdout) facility so that you can get feedback from subsystems that print errors during initialization.
 
-Next up is calling global constructors, which while not common in C is very common in C++, and doesn't contribute much to the binary size:
+Next up is calling global constructors, which while not common in C is very common in C++ and other languages, and doesn't contribute much to the binary size:
 
 ```C++
 extern void(*__init_array_start [])();

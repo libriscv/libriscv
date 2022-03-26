@@ -115,7 +115,7 @@ for (;;) {
 
 Note that for the sake of this example we have not wrapped the call to `simulate()` in a try..catch, but if a CPU exception happens, it will throw a `riscv::MachineException`, and possibly exceptions from your own system call handlers.
 
-It is also possible to simulate without timeout exceptions. It is a template parameter that defaults to true. You can compare the max instructions counter to non-zero to see if the machine didn't stop from a call to `machine.stop()`.
+It is also possible and desirable to simulate without timeout exceptions. It is a template parameter that defaults to true. You can compare the max instructions counter to non-zero to see if the machine didn't stop from a call to `machine.stop()`. That is, simply compare `machine.max_instructions()` to zero. System calls that stop the machine normally will set `max_instructions` to zero. If the machine runs out of instructions, the comparison `machine.instruction_counter() >= machine.max_instructions()` will be true. The helper function `machine.instruction_limit_reached()` will tell you if the instruction limit was reached during simulation, but it *will not* tell you if the machine stopped normally. Use `machine.stopped()` for that.
 
 ## Maximizing success and optimizing calls
 

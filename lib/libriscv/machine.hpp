@@ -53,6 +53,10 @@ namespace riscv
 		void     penalize(uint64_t val) noexcept { m_counter += val; }
 		uint64_t max_instructions() const noexcept { return m_max_counter; }
 		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
+		// This function returns true only when a simulation ended caused by
+		// reaching the instruction limit. It will not be true if the machine
+		// stopped normally. Use machine.stopped() for that.
+		bool     instruction_limit_reached() const noexcept;
 
 		CPU<W>    cpu;
 		Memory<W> memory;
@@ -191,9 +195,9 @@ namespace riscv
 		// System calls, files and threads implementations
 		bool has_file_descriptors() const noexcept { return m_fds != nullptr; }
 		// The "minimum": lseek, read, write, exit (provided for example usage)
-		void setup_minimal_syscalls();
+		static void setup_minimal_syscalls();
 		// Enough to run minimal newlib programs
-		void setup_newlib_syscalls();
+		static void setup_newlib_syscalls();
 		// Set up every supported system call, emulating Linux
 		void setup_linux_syscalls(bool filesystem = true, bool sockets = true);
 		void setup_posix_threads();

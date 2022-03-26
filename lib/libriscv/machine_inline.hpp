@@ -7,6 +7,10 @@ template <int W>
 inline bool Machine<W>::stopped() const noexcept {
 	return m_counter >= m_max_counter;
 }
+template <int W>
+inline bool Machine<W>::instruction_limit_reached() const noexcept {
+	return m_counter >= m_max_counter && m_max_counter != 0;
+}
 
 template <int W>
 template <bool Throw>
@@ -14,6 +18,8 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 {
 	cpu.simulate(max_instr);
 	if constexpr (Throw) {
+		// It is a timeout exception if the max counter is non-zero and
+		// the simulation ended. Otherwise, the machine stopped normally.
 		if (UNLIKELY(m_max_counter != 0))
 			timeout_exception(max_instr);
 	}
