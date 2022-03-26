@@ -50,19 +50,18 @@ void Machine<W>::setup_posix_threads()
 	this->install_syscall_handler(131,
 	[] (Machine<W>& machine) {
 		const int tid = machine.template sysarg<int> (1);
-		const int signal = machine.template sysarg<int> (2);
+		const int sig = machine.template sysarg<int> (2);
 		THPRINT(machine,
-			">>> tgkill on tid=%d signal=%d\n", tid, signal);
+			">>> tgkill on tid=%d signal=%d\n", tid, sig);
 		auto* thread = machine.threads().get_thread(tid);
 		if (thread != nullptr) {
-			auto& sigact = machine.sigaction(signal);
 			// If the signal is unhandled, exit the thread
-			if (sigact.is_unset()) {
+			if (sig != 0 && machine.sigaction(sig).is_unset()) {
 				if (!thread->exit())
 					return;
 			} else {
 				// Jump to signal handler and change to altstack, if set
-				machine.signals().enter(machine, signal);
+				machine.signals().enter(machine, sig);
 				THPRINT(machine,
 					"<<< tgkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
 					signal, (long)sigact.handler, (long)machine.cpu.reg(REG_SP));

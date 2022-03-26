@@ -34,6 +34,8 @@ static void run_program(
 			(void) user;
 			if (path == "/etc/hostname")
 				return true;
+			if (path == "/dev/urandom")
+				return true;
 			return false;
 		};
 		// multi-threading

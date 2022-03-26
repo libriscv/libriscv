@@ -20,6 +20,8 @@ SignalAction<W>& Signals<W>::get(int sig) {
 template <int W>
 void Signals<W>::enter(Machine<W>& machine, int sig)
 {
+	if (sig == 0) return;
+
 	auto& sigact = signals.at(sig);
 	if (sigact.altstack) {
 		auto* thread = machine.threads().get_thread();

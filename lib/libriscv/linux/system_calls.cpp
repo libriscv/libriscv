@@ -91,12 +91,14 @@ static void syscall_sigaltstack(Machine<W>& machine)
 template <int W>
 static void syscall_sigaction(Machine<W>& machine)
 {
-	const int signal = machine.sysarg(0);
+	const int sig = machine.sysarg(0);
 	const auto action = machine.sysarg(1);
 	const auto old_action = machine.sysarg(2);
 	SYSPRINT("SYSCALL sigaction, signal: %d, action: 0x%lX old_action: 0x%lX\n",
-		signal, (long)action, (long)old_action);
-	auto& sigact = machine.sigaction(signal);
+		sig, (long)action, (long)old_action);
+	if (sig == 0) return;
+
+	auto& sigact = machine.sigaction(sig);
 
 	struct riscv_sigaction {
 		address_type<W> sa_handler;
@@ -112,7 +114,7 @@ static void syscall_sigaction(Machine<W>& machine)
 		sigact.handler = sa.sa_handler;
 		sigact.altstack = (sa.sa_flags & SA_ONSTACK) != 0;
 		SYSPRINT("<<< sigaction %d handler: 0x%lX altstack: %d\n",
-			signal, (long)sigact.handler, sigact.altstack);
+			sig, (long)sigact.handler, sigact.altstack);
 	}
 
 	machine.set_result(0);
@@ -231,8 +233,8 @@ static void syscall_writev(Machine<W>& machine)
 	const int  fd     = machine.template sysarg<int>(0);
 	const auto iov_g  = machine.sysarg(1);
 	const auto count  = machine.template sysarg<int>(2);
-	if constexpr (false) {
-		printf("SYSCALL writev, iov: %#X  cnt: %d\n", iov_g, count);
+	if constexpr (verbose_syscalls) {
+		printf("SYSCALL writev, iov: 0x%lX  cnt: %d\n", (long)iov_g, count);
 	}
 	if (count < 0 || count > 256) {
 		machine.set_result(-EINVAL);
@@ -817,6 +819,24 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(101, syscall_stub_zero<W>);
 	// clock_gettime
 	this->install_syscall_handler(113, syscall_clock_gettime<W>);
+	// kill
+	this->install_syscall_handler(130,
+	[] (Machine<W>& machine) {
+		const int pid = machine.template sysarg<int> (1);
+		const int sig = machine.template sysarg<int> (2);
+		SYSPRINT(">>> kill on pid=%d signal=%d\n", pid, sig);
+		// If the signal zero or unset, ignore it
+		if (sig == 0 || machine.sigaction(sig).is_unset()) {
+			return;
+		} else {
+			// Jump to signal handler and change to altstack, if set
+			machine.signals().enter(machine, sig);
+			SYSPRINT("<<< tgkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
+				sig, (long)machine.cpu.pc(), (long)machine.cpu.reg(REG_SP));
+			return;
+		}
+		machine.stop();
+	});
 	// sigaltstack
 	this->install_syscall_handler(132, syscall_sigaltstack<W>);
 	// rt_sigaction
