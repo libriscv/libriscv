@@ -292,21 +292,18 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		const auto addr = cpu.reg(instr.Atype.rs1);
+		RVREGTYPE(cpu) value;
 		// switch on atomic type
 		if (instr.Atype.funct3 == AMOSIZE_W)
 		{
 			cpu.atomics().load_reserve(4, addr);
-			auto value = cpu.machine().memory.template read<uint32_t> (addr);
-			if (instr.Atype.rd != 0)
-				cpu.reg(instr.Atype.rd) = (int32_t) value;
+			value = (int32_t) cpu.machine().memory.template read<uint32_t> (addr);
 		}
 		else if (instr.Atype.funct3 == AMOSIZE_D)
 		{
 			if constexpr (RVISGE64BIT(cpu)) {
 				cpu.atomics().load_reserve(8, addr);
-				auto value = cpu.machine().memory.template read<uint64_t> (addr);
-				if (instr.Atype.rd != 0)
-					cpu.reg(instr.Atype.rd) = value;
+				value = (int64_t) cpu.machine().memory.template read<uint64_t> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
@@ -314,12 +311,12 @@ namespace riscv
 		{
 			if constexpr (RVIS128BIT(cpu)) {
 				cpu.atomics().load_reserve(16, addr);
-				auto value = cpu.machine().memory.template read<__uint128_t> (addr);
-				if (instr.Atype.rd != 0)
-					cpu.reg(instr.Atype.rd) = value;
+				value = cpu.machine().memory.template read<__uint128_t> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
+		if (instr.Atype.rd != 0)
+			cpu.reg(instr.Atype.rd) = value;
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
 		const long addr = cpu.reg(instr.Atype.rs1);
@@ -361,8 +358,9 @@ namespace riscv
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
+		// Write non-zero value to RD on failure
 		if (instr.Atype.rd != 0)
-			cpu.reg(instr.Atype.rd) = (resv) ? 0 : 1;
+			cpu.reg(instr.Atype.rd) = !resv;
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		return snprintf(buffer, len, "SC.%c [%s], %s res=%s",
