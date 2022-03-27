@@ -1,16 +1,38 @@
 #include <heap.hpp>
 #include <include/libc.hpp>
 #include <cstdlib>
-#define NATIVE_MEM_FUNCATTR /* */
+#ifdef USE_NEWLIB
+#include <malloc.h>
+#endif
+#define NATIVE_MEM_FUNCATTR __attribute__((noinline, used))
+#define STRINGIFY_HELPER(x) #x
+#define STRINGIFY(x) STRINGIFY_HELPER(x)
 
-#if defined(USE_NEWLIB) && defined(WRAP_NATIVE_SYSCALLS)
+#if 1
+
+#if defined(WRAP_NATIVE_SYSCALLS)
 #define malloc  __wrap_malloc
 #define calloc  __wrap_calloc
 #define realloc __wrap_realloc
 #define free    __wrap_free
+#define _sbrk    __wrap__sbrk
+#define _malloc_r    __wrap__malloc_r
+#define _calloc_r    __wrap__calloc_r
+#define _realloc_r   __wrap__realloc_r
+#define _free_r      __wrap__free_r
+#define _memalign_r  __wrap__memalign_r
+#define memalign       __wrap_memalign
+#define aligned_alloc  __wrap_aligned_alloc
+#define posix_memalign __wrap_posix_memalign
 #endif
 
-#if 1
+#define GENERATE_SYSCALL_WRAPPER(name, number) \
+	asm(".global " #name "\n" #name ":\n  li a7, " STRINGIFY(number) "\n  ecall\n  ret\n");
+
+GENERATE_SYSCALL_WRAPPER(sys_malloc,  SYSCALL_MALLOC);
+GENERATE_SYSCALL_WRAPPER(sys_calloc,  SYSCALL_CALLOC);
+GENERATE_SYSCALL_WRAPPER(sys_realloc, SYSCALL_REALLOC);
+GENERATE_SYSCALL_WRAPPER(sys_free,    SYSCALL_FREE);
 
 extern "C" NATIVE_MEM_FUNCATTR
 void* malloc(size_t size)
@@ -20,38 +42,93 @@ void* malloc(size_t size)
 extern "C" NATIVE_MEM_FUNCATTR
 void* calloc(size_t count, size_t size)
 {
-	register size_t  a0 asm("a0") = count;
-	register size_t  a1 asm("a1") = size;
-	register long syscall_id asm("a7") = SYSCALL_CALLOC;
-	register void*   a0_out asm("a0");
-
-	asm volatile ("ecall"
-		:	"=r"(a0_out)
-		:	"r"(a0), "r"(a1), "r"(syscall_id));
-	return a0_out;
+	return sys_calloc(count, size);
 }
 extern "C" NATIVE_MEM_FUNCATTR
 void* realloc(void* ptr, size_t newsize)
 {
-	register void*   a0 asm("a0") = ptr;
-	register size_t  a1 asm("a1") = newsize;
-	register long syscall_id asm("a7") = SYSCALL_REALLOC;
-
-	asm volatile ("ecall"
-		:	"+r"(a0)
-		:	"r"(a1), "r"(syscall_id));
-	return a0;
+	return sys_realloc(ptr, newsize);
 }
 extern "C" NATIVE_MEM_FUNCATTR
 void free(void* ptr)
 {
 	sys_free(ptr);
 }
+extern "C" NATIVE_MEM_FUNCATTR
+void* reallocf(void *ptr, size_t newsize)
+{
+	void* newptr = realloc(ptr, newsize);
+	if (newptr == nullptr) free(ptr);
+	return newptr;
+}
+extern "C" NATIVE_MEM_FUNCATTR
+void* memalign(size_t align, size_t bytes)
+{
+	// XXX: TODO: Make an accelerated memalign system call
+	void* freelist[1024]; // Enough for 4K alignment
+	size_t freecounter = 0;
+	void* ptr = nullptr;
+
+	while (true) {
+		ptr = sys_malloc(bytes);
+		if (ptr == nullptr) break;
+		bool aligned = ((uintptr_t)ptr & (align-1)) == 0;
+		if (aligned) break;
+		sys_free(ptr);
+		// Allocate 8 bytes to advance the next pointer
+		freelist[freecounter++] = sys_malloc(8);
+	}
+
+	for (size_t i = 0; i < freecounter; i++) sys_free(freelist[i]);
+	return ptr;
+}
+extern "C" NATIVE_MEM_FUNCATTR
+int posix_memalign(void **memptr, size_t alignment, size_t size)
+{
+	void* ptr = memalign(alignment, size);
+	*memptr = ptr;
+	return 0;
+}
+extern "C" NATIVE_MEM_FUNCATTR
+void* aligned_alloc(size_t alignment, size_t size)
+{
+	return memalign(alignment, size);
+}
+
+// Re-entrant newlib internal versions
+extern "C" NATIVE_MEM_FUNCATTR
+void* _malloc_r(_reent*, size_t bytes) {
+	return malloc(bytes);
+}
+extern "C" NATIVE_MEM_FUNCATTR
+void* _calloc_r(_reent*, size_t count, size_t size) {
+	return calloc(count, size);
+}
+extern "C" NATIVE_MEM_FUNCATTR
+void* _realloc_r(_reent*, void* ptr, size_t bytes) {
+	return realloc(ptr, bytes);
+}
+extern "C" NATIVE_MEM_FUNCATTR
+void _free_r(_reent*, void* ptr) {
+	free(ptr);
+}
+extern "C" NATIVE_MEM_FUNCATTR
+void* _memalign_r(_reent*, size_t align, size_t bytes) {
+	return memalign(align, bytes);
+}
+
+// These newlib internal functions are disabled now
+extern "C"
+uintptr_t _sbrk(uintptr_t new_end)
+{
+	asm("unimp");
+	__builtin_unreachable();
+}
 
 #else
 
-static const uintptr_t sbrk_start = 0x40000000;
-static const uintptr_t sbrk_max   = sbrk_start + 0x2000000;
+static const uintptr_t sbrk_start = 0xF0000000;
+static const uintptr_t sbrk_max   = 0xFF000000;
 
 extern "C"
 long _sbrk(uintptr_t new_end)

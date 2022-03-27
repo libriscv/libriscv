@@ -58,14 +58,16 @@ int main(int argc, char** argv)
 			"system calls in the emulator.\n");
 	static const char* hello = "Hello %s World v%d.%d!\n";
 	assert(testval == 22);
-	// heap test
-	auto b = std::unique_ptr<std::string> (new std::string(""));
-	assert(b != nullptr);
-	// copy into string
-	*b = hello;
-	// va_list & stdarg test
-	int len = printf(b->c_str(), "RISC-V", 1, 0);
-	assert(len > 0);
+	// Heap test
+	{
+		auto b = std::make_unique<char[]> (64);
+		assert(b != nullptr);
+		// copy into string
+		strcpy(b.get(), hello);
+		// va_list & stdarg test
+		int len = printf(b.get(), "RISC-V", 1, 0);
+		assert(len > 0); (void) len;
+	}
 
 	printf("Main thread tid=%d\n", microthread::gettid());
 

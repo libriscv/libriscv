@@ -1,5 +1,5 @@
 option(LIBC_USE_STDLIB "Enable standard libraries" ON)
-option(LIBC_WRAP_NATIVE "" ON)
+option(LIBC_WRAP_NATIVE "" OFF)
 
 set(LIBC_SOURCES
 	assert.cpp

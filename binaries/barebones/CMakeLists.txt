@@ -63,7 +63,7 @@ add_subdirectory(libc)
 
 function (add_micro_executable NAME)
 	add_executable(${NAME} ${ARGN})
-	if (LIBC_USE_STDLIB)
+	if (LIBC_WRAP_NATIVE)
 	# Accelerated wrappers for standard memory and string functions
 	target_link_libraries(${NAME} -Wl,--wrap,memset,--wrap,memcpy,--wrap,memmove,--wrap,memcmp)
 	target_link_libraries(${NAME} -Wl,--wrap,strlen,--wrap,strcmp,--wrap,strncmp)

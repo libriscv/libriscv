@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
-export CC=clang-12
-export CXX=clang++-12
+export CC=clang-15
+export CXX=clang++-15
 
 mkdir -p build32_clang
 pushd build32_clang

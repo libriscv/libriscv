@@ -1,5 +1,6 @@
 #include <include/syscall.hpp>
 #include <include/printf.hpp>
+#include <cstdint>
 #include <cstdarg>
 
 uint64_t __stack_chk_guard = 0x123456780C0A00FF;

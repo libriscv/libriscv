@@ -12,28 +12,10 @@ struct MemInfo {
 	size_t chunks_used;
 };
 
-inline void* sys_malloc(size_t len)
-{
-	register size_t  a0 asm("a0") = len;
-	register long syscall_id asm("a7") = SYSCALL_MALLOC;
-	register void*   a0_out asm("a0");
-
-	asm volatile ("ecall"
-		:	"=r"(a0_out)
-		:	"r"(a0), "r"(syscall_id));
-	return a0_out;
-}
-inline int sys_free(void* ptr)
-{
-	register void*   a0 asm("a0") = ptr;
-	register long syscall_id asm("a7") = SYSCALL_FREE;
-	register long    a0_out asm("a0");
-
-	asm volatile ("ecall"
-		:	"=r"(a0_out)
-		:	"r"(a0), "r"(syscall_id));
-	return a0_out;
-}
+extern "C" void* sys_malloc(size_t);
+extern "C" void* sys_calloc(size_t, size_t);
+extern "C" void* sys_realloc(void*, size_t);
+extern "C" long  sys_free(void*);
 
 inline int sys_meminfo(void* ptr, size_t len)
 {
