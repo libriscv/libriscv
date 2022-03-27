@@ -307,6 +307,7 @@ namespace riscv
 		const auto program_begin = phdr->p_vaddr;
 		this->m_start_address = elf->e_entry;
 		this->m_stack_address = program_begin;
+		this->m_heap_address = 0;
 
 		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
@@ -339,7 +340,16 @@ namespace riscv
 					//	"Dynamically linked ELF binaries are not supported");
 					break;
 			}
+
+			address_t endm = hdr->p_vaddr + hdr->p_memsz;
+			endm += Page::size()-1; endm &= ~address_t(Page::size()-1);
+			if (this->m_heap_address < endm)
+				this->m_heap_address = endm;
 		}
+		// The base mmap address starts at heap start + BRK_MAX
+		// TODO: We should check if the heap starts too close to the end
+		// of the address space now, and move it around if necessary.
+		this->m_mmap_address = m_heap_address + BRK_MAX;
 		// It's very easy for the stack address to reach the zero page
 		// if we allow it to start this low. Instead, we move it
 		// to the end of the machines address space.
@@ -384,6 +394,7 @@ namespace riscv
 		this->m_start_address = master.memory.m_start_address;
 		this->m_stack_address = master.memory.m_stack_address;
 		this->m_exit_address = master.memory.m_exit_address;
+		this->m_heap_address = master.memory.m_heap_address;
 		this->m_mmap_address = master.memory.m_mmap_address;
 
 		// base address, size and PC-relative data pointer for instructions

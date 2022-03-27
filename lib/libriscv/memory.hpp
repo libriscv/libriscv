@@ -24,7 +24,6 @@ namespace riscv
 		using page_readf_cb_t = std::function<const Page&(const Memory&, address_t)>;
 		using page_write_cb_t = std::function<void(Memory&, address_t, Page&)>;
 		static constexpr address_t BRK_MAX    = 0x1000000;
-		static constexpr address_t HEAP_START = 0x40000000;
 
 		template <typename T>
 		T read(address_t src);
@@ -74,7 +73,8 @@ namespace riscv
 		void set_stack_initial(address_t addr) { this->m_stack_address = addr; }
 		address_t exit_address() const noexcept;
 		void      set_exit_address(address_t new_exit);
-		address_t heap_address() const noexcept { return HEAP_START; }
+		address_t heap_address() const noexcept { return this->m_heap_address; }
+		address_t mmap_start() const noexcept { return this->m_heap_address + BRK_MAX; }
 		address_t& mmap_address() noexcept { return m_mmap_address; }
 
 		auto& machine() { return this->m_machine; }
@@ -228,7 +228,8 @@ namespace riscv
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
 		address_t m_exit_address  = 0;
-		address_t m_mmap_address  = HEAP_START + BRK_MAX;
+		address_t m_mmap_address  = 0;
+		address_t m_heap_address  = 0;
 		const bool m_original_machine;
 
 		const std::string_view m_binary;
