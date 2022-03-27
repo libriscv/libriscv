@@ -40,8 +40,9 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		HPRINT("SYSCALL calloc(%zu, %zu) = 0x%lX\n",
 			(size_t)count, (size_t)size, (long)data);
 		if (data != 0) {
-			// Optimized to skip zero pages
-			machine.memory.memzero(data, len);
+			// XXX: Not using memzero as it has known issues
+			machine.memory.memset(data, 0, len);
+			machine.penalize(len);
 		}
 		machine.set_result(data);
 		machine.penalize(COMPLEX_CALL_PENALTY);
