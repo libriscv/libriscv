@@ -54,11 +54,13 @@ void Multiprocessing<W>::async_work(std::function<void()>&& wrk)
 	this->processing = true;
 }
 template <int W>
-long Multiprocessing<W>::wait()
+typename Multiprocessing<W>::failure_bits_t Multiprocessing<W>::wait()
 {
-	m_threadpool.wait_until_nothing_in_flight();
-	this->processing = false;
-	return this->failures ? -1 : 0;
+	if (this->processing) {
+		m_threadpool.wait_until_nothing_in_flight();
+		this->processing = false;
+	}
+	return this->failures;
 }
 
 template <int W>
@@ -70,10 +72,10 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 	const address_t stackpage = Memory<W>::page_number(stack);
 	const address_t stackendpage = Memory<W>::page_number(stack + stksize);
-	smp().failures = false;
+	smp().failures = 0x0;
 	Latch latch{num_cpus};
 
-	// Create worker 0...N
+	// Create worker 1...N
 	for (unsigned id = 1; id <= num_cpus; id++)
 	{
 		const address_t sp = stack + stksize * id;
@@ -88,7 +90,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				fork.set_userdata(this->get_userdata<void>());
 				fork.set_printer([] (const char*, size_t) {});
-				fork.set_max_instructions(maxi);
+				fork.set_stdin([] (char*, size_t) -> long { return 0; });
 				fork.cpu.increment_pc(4); // Step over current ECALL
 				fork.cpu.reg(REG_SP) = sp; // Per-CPU stack
 				fork.cpu.reg(REG_ARG0) = id; // Return value
@@ -129,7 +131,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 				try {
 					fork.simulate<true> (maxi);
 				} catch (...) {
-					smp().failures = true;
+					__sync_fetch_and_or(&smp().failures, 1u << id);
 				}
 			});
 		} else {
@@ -140,13 +142,13 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				fork.set_userdata(this->get_userdata<void>());
 				fork.set_printer([] (const char*, size_t) {});
-				fork.set_max_instructions(maxi);
+				fork.set_stdin([] (char*, size_t) -> long { return 0; });
 				fork.cpu.increment_pc(4); // Step over current ECALL
 				fork.cpu.reg(REG_ARG0) = id; // Return value
 
 				// For most workloads, we will only need a copy-on-write handler
 				fork.memory.set_page_write_handler(
-				[this, stackpage, stackendpage] (auto&, address_t pageno, Page& page) -> void
+				[this, stackpage, stackendpage] (auto&, address_t pageno, Page& page)
 				{
 					if (pageno >= stackpage && pageno < stackendpage) {
 						page.make_writable();
@@ -167,8 +169,8 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				try {
 					fork.simulate<true> (maxi);
-				} catch (...) {
-					smp().failures = true;
+				} catch (const std::exception& e) {
+					__sync_fetch_and_or(&smp().failures, 1u << id);
 				}
 			});
 		}
@@ -188,7 +190,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	return true;
 }
 template <int W>
-long Machine<W>::multiprocess_wait()
+uint32_t Machine<W>::multiprocess_wait()
 {
 	return smp().wait();
 }
@@ -203,7 +205,7 @@ bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t, bool) {
 	return false;
 }
 template <int W>
-long Machine<W>::multiprocess_wait() { return -1; }
+uint32_t Machine<W>::multiprocess_wait() { return -1; }
 
 #endif // RISCV_MULTIPROCESS
 

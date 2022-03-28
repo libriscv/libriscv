@@ -158,7 +158,8 @@ TEST_CASE("Multiprocessing dot-product forever", "[Compute]")
 		multiprocess(MP_WORKERS, multiprocessing_forever, &mp_work);
 		// Wait and stop workers here
 		long result = multiprocess_wait();
-		assert(result < 0);
+		// Result will have bits set for each failing vCPU (except vCPU 0)
+		assert(result == 0b11110);
 
 		// Verify results
 		assert(mp_work.final_sum() == 0);
