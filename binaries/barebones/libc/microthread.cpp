@@ -1,7 +1,11 @@
 #include "microthread.hpp"
 
+extern "C" void microthread_set_tp(void*);
+
 namespace microthread
 {
+	Thread main_thread {nullptr};
+
 	void trampoline(Thread* thread)
 	{
 		thread->startfunc();
@@ -13,15 +17,19 @@ namespace microthread
 		__builtin_unreachable();
 	}
 
-	static Thread main_thread {nullptr};
-	__attribute__((constructor, naked, used))
-	void init_threads()
+	__attribute__((constructor, used))
+	static void init_threads()
 	{
-		register long tp asm("tp");
-		asm volatile("mv %0, %1" : "=r"(tp) : "r"(&main_thread));
-		asm volatile("ret");
+		microthread_set_tp(&main_thread);
 	}
 }
+
+asm(".section .text\n"
+".global microthread_set_tp\n"
+".type microthread_set_tp, @function\n"
+"microthread_set_tp:\n"
+"  mv tp, a0\n"
+"  ret\n");
 
 #define STRINGIFY_HELPER(x) #x
 #define STRINGIFY(x) STRINGIFY_HELPER(x)
