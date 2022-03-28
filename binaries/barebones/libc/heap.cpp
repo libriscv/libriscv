@@ -7,6 +7,7 @@
 #define NATIVE_MEM_FUNCATTR __attribute__((noinline, used))
 #define STRINGIFY_HELPER(x) #x
 #define STRINGIFY(x) STRINGIFY_HELPER(x)
+//#define VERBOSE_HEAP
 
 #if 1
 
@@ -37,22 +38,46 @@ GENERATE_SYSCALL_WRAPPER(sys_free,    SYSCALL_FREE);
 extern "C" NATIVE_MEM_FUNCATTR
 void* malloc(size_t size)
 {
-	return sys_malloc(size);
+	void* result = sys_malloc(size);
+	#ifdef VERBOSE_HEAP
+		fmt_print("malloc(", size, ") = ", result);
+		if (result == nullptr)
+			fmt_print("** WARNING: malloc(", size, ") FAILED");
+	#endif
+	return result;
 }
 extern "C" NATIVE_MEM_FUNCATTR
 void* calloc(size_t count, size_t size)
 {
-	return sys_calloc(count, size);
+	void* result = sys_calloc(count, size);
+	#ifdef VERBOSE_HEAP
+		fmt_print("calloc(", count * size, ") = ", result);
+		if (result == nullptr)
+			fmt_print("** WARNING: calloc(", count * size, ") FAILED");
+	#endif
+	return result;
 }
 extern "C" NATIVE_MEM_FUNCATTR
 void* realloc(void* ptr, size_t newsize)
 {
-	return sys_realloc(ptr, newsize);
+	void* result = sys_realloc(ptr, newsize);
+	#ifdef VERBOSE_HEAP
+		fmt_print("realloc(", ptr, ", ", newsize, ") = ", result);
+		if (result == nullptr)
+			fmt_print("** WARNING: realloc(", ptr, ", ", newsize, ") FAILED");
+	#endif
+	return result;
 }
 extern "C" NATIVE_MEM_FUNCATTR
 void free(void* ptr)
 {
-	sys_free(ptr);
+	int result = sys_free(ptr);
+	#ifdef VERBOSE_HEAP
+		fmt_print("free(", ptr, ") = ", result);
+		if (result < 0)
+			fmt_print("** WARNING: free(", ptr, ") FAILED");
+	#endif
+	(void) result;
 }
 extern "C" NATIVE_MEM_FUNCATTR
 void* reallocf(void *ptr, size_t newsize)
@@ -80,6 +105,9 @@ void* memalign(size_t align, size_t bytes)
 	}
 
 	for (size_t i = 0; i < freecounter; i++) sys_free(freelist[i]);
+	#ifdef VERBOSE_HEAP
+		fmt_print("memalign(", align, ", bytes = ", bytes, ") = ", ptr);
+	#endif
 	return ptr;
 }
 extern "C" NATIVE_MEM_FUNCATTR
@@ -119,7 +147,7 @@ void* _memalign_r(_reent*, size_t align, size_t bytes) {
 
 // These newlib internal functions are disabled now
 extern "C"
-uintptr_t _sbrk(uintptr_t new_end)
+uintptr_t _sbrk(uintptr_t /*new_end*/)
 {
 	asm("unimp");
 	__builtin_unreachable();

@@ -10,6 +10,12 @@ long write(int fd, const void* data, size_t len)
 }
 
 extern "C"
+long _write_r(_reent*, int fd, const void* data, size_t len)
+{
+	return syscall(SYSCALL_WRITE, fd, (long) data, len);
+}
+
+extern "C"
 int puts(const char* string)
 {
 	const long len = __builtin_strlen(string);
