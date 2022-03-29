@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <include/libc.hpp>
 #include <include/printf.hpp>
+#include <include/syscall.hpp>
+
+extern "C"
+long sys_write(const void* data, size_t len)
+{
+	return syscall(SYSCALL_WRITE, 1, (long) data, len);
+}
 
 #undef printf
 __attribute__((format (printf, 1, 2)))
