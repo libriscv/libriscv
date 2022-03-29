@@ -17,8 +17,15 @@ struct PageAttributes
 	bool cacheable = true;
 	uint8_t user_defined = 0; /* Use this for yourself */
 
+	constexpr bool is_cacheable() const noexcept {
+		// Cacheable only makes sense when memory traps are enabled
+		if constexpr (memory_traps_enabled)
+			return cacheable;
+		else
+			return true;
+	}
 	bool is_default() const noexcept {
-		PageAttributes def {};
+		constexpr PageAttributes def {};
 		return this->read == def.read && this->write == def.write && this->exec == def.exec;
 	}
 };
@@ -47,6 +54,7 @@ struct alignas(8) PageData {
 	}
 
 	PageData() : buffer8{} {}
+	PageData(const PageData& other) : buffer8{other.buffer8} {}
 	enum Initialization { INITIALIZED, UNINITIALIZED };
 	PageData(Initialization i) { if (i == INITIALIZED) buffer8 = {}; }
 };

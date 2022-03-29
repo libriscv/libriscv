@@ -28,7 +28,7 @@ void Memory<W>::write(address_t address, T value)
 	}
 
 	auto& page = create_writable_pageno(pageno);
-	if (LIKELY(page.attr.cacheable)) {
+	if (LIKELY(page.attr.is_cacheable())) {
 		entry = {pageno, &page.page()};
 	} else if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
@@ -47,7 +47,7 @@ const PageData& Memory<W>::cached_readable_page(address_t address, size_t len) c
 		return *entry.page;
 
 	auto& page = get_readable_pageno(pageno);
-	if (LIKELY(page.attr.cacheable)) {
+	if (LIKELY(page.attr.is_cacheable())) {
 		entry = {pageno, &page.page()};
 	} else if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
@@ -65,7 +65,7 @@ PageData& Memory<W>::cached_writable_page(address_t address)
 	if (entry.pageno == pageno)
 		return *entry.page;
 	auto& page = create_writable_pageno(pageno);
-	if (LIKELY(page.attr.cacheable))
+	if (LIKELY(page.attr.is_cacheable()))
 		entry = {pageno, &page.page()};
 	return page.page();
 }
