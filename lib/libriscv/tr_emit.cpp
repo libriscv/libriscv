@@ -5,7 +5,7 @@
 #include <set>
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
-#define PCRELS(x) std::to_string(PCRELA(x))
+#define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define INSTRUCTION_COUNT(i) ((tinfo.has_branch ? "c + " : "") + std::to_string(i))
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
 
