@@ -169,7 +169,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				try {
 					fork.simulate<true> (maxi);
-				} catch (const std::exception& e) {
+				} catch (...) {
 					__sync_fetch_and_or(&smp().failures, 1u << id);
 				}
 			});
