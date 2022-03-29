@@ -75,6 +75,11 @@ namespace riscv
 #else
 	static constexpr bool binary_translation_enabled = false;
 #endif
+#ifdef RISCV_FAST_SIMULATOR
+	static constexpr bool fast_simulator_enabled = true;
+#else
+	static constexpr bool fast_simulator_enabled = false;
+#endif
 }
 
 namespace riscv
@@ -96,6 +101,9 @@ namespace riscv
 		// Instruction fusing is an experimental optimizing feature
 		// Can only be enabled with the RISCV_EXPERIMENTAL CMake option
 		bool instruction_fusing = false;
+		// Fast simulator can improve run-times, when enabled from RISCV_EXPERIMENTAL
+		// and then the RISCV_FAST_SIMULATOR CMake option. Incompatible with RISCV_DEBUG.
+		bool fast_simulator = fast_simulator_enabled;
 		// Number of workers dedicated to multiprocessing
 		unsigned multiprocessing_workers = 4;
 

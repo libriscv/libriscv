@@ -67,7 +67,7 @@ TEST_CASE("Basic heap usage", "[Heap]")
 		const int A = randInt(2, 50);
 		for (int a = 0; a < A; a++) {
 			allocs.push_back(alloc_random(arena));
-			const auto alloc = allocs.back();
+			[[maybe_unused]] const auto alloc = allocs.back();
 			HPRINT("Alloc %lX size: %4zu,  arena size: %4zu\n",
 				alloc.addr, alloc.size, arena.size(alloc.addr));
 		}

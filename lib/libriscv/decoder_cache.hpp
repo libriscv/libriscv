@@ -9,8 +9,10 @@ template <int W>
 struct DecoderData {
 #ifdef RISCV_DEBUG
 	using Handler = Instruction<W>;
+	void set(instruction_handler<W> fn) { handler.handler = fn; }
 #else
 	using Handler = instruction_handler<W>;
+	void set(instruction_handler<W> fn) { handler = fn; }
 #endif
 	Handler handler;
 };
