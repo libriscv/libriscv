@@ -148,7 +148,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				// For most workloads, we will only need a copy-on-write handler
 				fork.memory.set_page_write_handler(
-				[this, stackpage, stackendpage] (auto&, address_t pageno, Page& page)
+				[=] (auto&, address_t pageno, Page& page)
 				{
 					if (pageno >= stackpage && pageno < stackendpage) {
 						page.make_writable();
@@ -165,6 +165,16 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 					page.attr = master_page.attr;
 					page.attr.non_owning = true;
 					page.m_page.reset(master_page.m_page.get());
+				});
+				fork.memory.set_page_fault_handler(
+				[=] (auto& mem, const address_t pageno, bool init) -> Page& {
+					if (pageno >= stackpage && pageno < stackendpage) {
+						return this->memory.create_writable_pageno(pageno, init);
+					}
+					std::lock_guard<std::mutex> lk(this->smp().m_lock);
+					auto& master_page = this->memory.create_writable_pageno(pageno, init);
+					// Install the page as non-owned (loaned) memory
+					return mem.install_shared_page(pageno, master_page);
 				});
 
 				try {

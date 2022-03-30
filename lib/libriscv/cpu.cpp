@@ -5,16 +5,18 @@
 #include "rv32i.hpp"
 #include "rv64i.hpp"
 #include "rv128i.hpp"
+#include <inttypes.h>
 
-#define INSTRUCTION_LOGGING()	\
-	if (machine().verbose_instructions) { \
-		const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n"; \
-		machine().print(string.c_str(), string.size()); \
+#define INSTRUCTION_LOGGING(cpu)	\
+	if ((cpu).machine().verbose_instructions) { \
+		const auto string = isa_type<W>::to_string(cpu, instruction, decode(instruction)) + "\n"; \
+		(cpu).machine().print(string.c_str(), string.size()); \
 	}
-
 
 namespace riscv
 {
+	[[maybe_unused]] static constexpr bool VERBOSE_FASTSIM = false;
+
 	template <int W>
 	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
 		: m_machine { machine }, m_cpuid { cpu_id }
@@ -24,6 +26,10 @@ namespace riscv
 		this->m_exec_end   = other.cpu.m_exec_end;
 
 		this->registers() = other.cpu.registers();
+#ifdef RISCV_FAST_SIMULATOR
+		this->m_qcdata = other.cpu.m_qcdata;
+		this->m_fastsim_vector = m_qcdata->data();
+#endif
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = other.cpu.m_atomics;
 #endif
@@ -160,18 +166,30 @@ namespace riscv
 			}
 		#endif
 		#ifdef RISCV_DEBUG
-			INSTRUCTION_LOGGING();
-			// execute instruction
+			INSTRUCTION_LOGGING(*this);
+			// Execute instruction
 			cache_entry.handler.handler(*this, instruction);
 		#else
-			// execute instruction
+			// Debugging aid when fast simulator is behaving strangely
+			if constexpr (VERBOSE_FASTSIM) {
+				const auto string = [&] () -> std::string {
+					if (cache_entry.handler != &fast_simulator)
+						return isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n";
+					char buffer[1024];
+					return std::string(buffer, snprintf(buffer, sizeof(buffer),
+						"[0x%" PRIX64 "] %08" PRIx32 " Fast simulator index (%u)\n",
+						(uint64_t)this->pc(), instruction.whole, instruction.half[0]));
+					}();
+				machine().print(string.c_str(), string.size());
+			} // Debugging aid
+			// Execute instruction
 			cache_entry.handler(*this, instruction);
 		#endif
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
 			instruction = read_next_instruction_slowpath();
 	#ifdef RISCV_DEBUG
-			INSTRUCTION_LOGGING();
+			INSTRUCTION_LOGGING(*this);
 	#endif
 			// decode & execute instruction directly
 			this->execute(instruction);
@@ -180,7 +198,7 @@ namespace riscv
 # else
 			instruction = this->read_next_instruction();
 	#ifdef RISCV_DEBUG
-			INSTRUCTION_LOGGING();
+			INSTRUCTION_LOGGING(*this);
 	#endif
 			// decode & execute instruction directly
 			this->execute(instruction);
@@ -212,6 +230,90 @@ namespace riscv
 			machine().set_max_instructions(old_maxi);
 	}
 
+#ifdef RISCV_FAST_SIMULATOR
+	template<int W> __attribute__((hot, no_sanitize("undefined")))
+	void CPU<W>::fast_simulator(CPU& cpu, instruction_format instref)
+	{
+		auto pc = cpu.pc();
+		auto fsindex = instref.half[0];
+	restart_fastsim:
+		const auto& qcvec = cpu.m_fastsim_vector[fsindex];
+		//printf("Fast simulation of %zu instructions at 0x%lX\n",
+		//	qcvec.data.size(), (long)pc);
+
+	restart_sequence:
+		size_t index = 0;
+		if constexpr (false && compressed_enabled) {
+			address_t base_pc = qcvec.base_pc;
+			while (base_pc < pc) {
+				const rv32i_instruction instr{ qcvec.data[index].instr };
+				base_pc += instr.length();
+				index ++;
+				//printf("Index %zu with PC 0x%lX / 0x%lX\n", index, (long)base_pc, (long)pc);
+			}
+		} else {
+			index = (pc - qcvec.base_pc) / 4;
+		}
+		// NOTE: Increment counter based on where we start
+		cpu.machine().increment_counter(qcvec.data.size() - index);
+
+		const auto* idata = &qcvec.data[index];
+		const auto* iend  = &qcvec.data[qcvec.data.size()];
+		for (; idata < iend; idata++) {
+			const format_t instruction {idata->instr};
+			// Some instructions use PC offsets
+			cpu.registers().pc = pc;
+			// Debugging aid when fast simulator is behaving strangely
+			if constexpr (VERBOSE_FASTSIM) {
+				const auto string = isa_type<W>::to_string(cpu, instruction, decode(instruction)) + "\n";
+				cpu.machine().print(string.c_str(), string.size());
+			}
+			// Execute instruction using handler and 32-bit wrapper
+			idata->handler(cpu, instruction);
+			// increment *local* PC
+			if constexpr (compressed_enabled)
+				pc += instruction.length();
+			else
+				pc += 4;
+		} // idata
+
+		if (UNLIKELY(cpu.machine().instruction_limit_reached()))
+			return;
+
+		// Fast path, but need to check if we are running out of
+		// instructions by checking the counter.
+		if constexpr (compressed_enabled) {
+			// The outer simulator will miscalculate the size of the instruction
+			cpu.registers().pc += qcvec.incrementor;
+			//pc += qcvec.incrementor;
+		} else {
+			pc = cpu.pc() + 4;
+			if (pc >= qcvec.base_pc && pc < qcvec.end_pc) {
+				goto restart_sequence;
+			}
+		}
+
+		// Check if the next instruction handler is this very function.
+		// If so, restart procedure with updated fastsim index.
+		if constexpr (false) {
+			auto* exec_decoder = cpu.machine().memory.get_decoder_cache();
+			auto* exec_seg_data = cpu.m_exec_data;
+			// Unfortunately, it is slower than simply returning.
+			auto& cache_entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			if (cache_entry.handler == &fast_simulator) {
+				fsindex = *(uint16_t *) &exec_seg_data[pc];
+				//printf("Restarting at 0x%lX with index %u / %zu\n",
+				//	(long)pc, fsindex, cpu.m_qcdata->size());
+				goto restart_fastsim;
+			}
+		}
+
+		// Compensate for the outer simulator incrementing the
+		// instruction counter.
+		cpu.machine().increment_counter(-1);
+	} // CPU::fast_simulator
+#endif
+
 	template<int W> __attribute__((cold))
 	void CPU<W>::trigger_exception(int intr, address_t data)
 	{
@@ -236,6 +338,9 @@ namespace riscv
 		case UNIMPLEMENTED_INSTRUCTION:
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION,
 					"Unimplemented instruction executed", data);
+		case DEADLOCK_REACHED:
+			throw MachineException(DEADLOCK_REACHED,
+					"Atomics deadlock reached", data);
 		default:
 			throw MachineException(UNKNOWN_EXCEPTION,
 					"Unknown exception", intr);

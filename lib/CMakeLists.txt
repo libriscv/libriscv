@@ -14,6 +14,7 @@ option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
+	option(RISCV_FAST_SIMULATOR      "Enable fast simulator mode" ON)
 endif()
 
 if (RISCV_USE_RH_HASH)
@@ -94,6 +95,9 @@ if (RISCV_EXT_A)
 endif()
 if (RISCV_EXT_C)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_COMPRESSED=1)
+	# The fast simulator is not currently working well with compressed
+	# instructions, and so we temporarily disable it until resolved.
+	set(RISCV_FAST_SIMULATOR OFF)
 endif()
 if (RISCV_EXT_F)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_FLOATS=1)
@@ -116,6 +120,18 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv PUBLIC dl)
+	# The fast simulator is incompatible with binary translation (for now)
+	# Binary translation is so much faster that it does not matter.
+	set(RISCV_FAST_SIMULATOR OFF)
+endif()
+if (RISCV_FAST_SIMULATOR)
+	# The fast simulator is incompatible with RISCV_DEBUG because it
+	# modifies the instruction stream.
+	if (RISCV_DEBUG)
+		message(WARNING "RISCV_FAST_SIMULATOR disabled by RISCV_DEBUG")
+	else()
+		target_compile_definitions(riscv PUBLIC RISCV_FAST_SIMULATOR=1)
+	endif()
 endif()
 if (WIN32 OR MINGW_TOOLCHAIN)
 	target_link_libraries(riscv PUBLIC wsock32 ws2_32)

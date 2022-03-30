@@ -1,0 +1,33 @@
+name: Experimantal Unit Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{github.workspace}}/tests/unit
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt install -y gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
+        git submodule update --init ${{github.workspace}}/tests/Catch2
+        git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
+
+    - name: Configure
+      run: cmake -B ${{github.workspace}}/build -DRISCV_EXPERIMENTAL=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build the unittests
+      run: cmake --build ${{github.workspace}}/build
+
+    - name: Run tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest --verbose .
