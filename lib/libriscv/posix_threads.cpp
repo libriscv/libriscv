@@ -91,11 +91,14 @@ void Machine<W>::setup_posix_threads()
 	    {
 			THPRINT(machine,
 				"FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
+			// XXX: Workaround for FUTEX problem
+			//machine.memory.template write<address_type<W>> (addr, 0);
+			//return;
 			while (machine.memory.template read<address_type<W>> (addr) == (address_t)val) {
 				if (machine.threads().suspend_and_yield()) {
 					return;
 				}
-				machine.cpu.trigger_exception(DEADLOCK_REACHED);
+				throw MachineException(DEADLOCK_REACHED, "FUTEX deadlock", addr);
 			}
 			machine.set_result(0);
 			return;
