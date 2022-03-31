@@ -309,7 +309,6 @@ namespace riscv
 		this->m_stack_address = program_begin;
 		this->m_heap_address = 0;
 
-		int seg = 0;
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
 		{
 			// Detect overlapping segments
@@ -330,7 +329,6 @@ namespace riscv
 					if (options.load_program) {
 						binary_load_ph(options, hdr);
 					}
-					seg++;
 					break;
 				case PT_GNU_STACK:
 					// This seems to be a mark for executable stack. Big NO!
