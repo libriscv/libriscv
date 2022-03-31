@@ -1,19 +1,20 @@
-#include "memory.hpp"
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
+#include "rv32i_instr.hpp"
+#include "rvc.hpp"
+
+#ifdef RISCV_FAST_SIMULATOR
+#include "fastsim.hpp"
 #ifdef RISCV_USE_RH_HASH
 #include <robin_hood.h>
 template <typename T>
-using qc_unordered_set = robin_hood::unordered_set<T>;
+using qc_unordered_set = robin_hood::unordered_flat_set<T>;
 #else
 #include <unordered_set>
 template <typename T>
 using qc_unordered_set = std::unordered_set<T>;
 #endif
-
-#include "rv32i_instr.hpp"
-#include "rvc.hpp"
 
 namespace riscv
 {
@@ -24,9 +25,9 @@ namespace riscv
 		RV32I_JAL,
 		RV32I_SYSTEM,
 	};
-	[[maybe_unused]] static constexpr size_t QC_TRESHOLD = 8;
-	[[maybe_unused]] static constexpr size_t QC_MAX = 0xFFFF;
-	[[maybe_unused]] static constexpr size_t FS_MAXI = 4096;
+	static constexpr size_t QC_TRESHOLD = 8;
+	static constexpr size_t QC_MAX = 0xFFFF;
+	static constexpr size_t FS_MAXI = 4096;
 
 	template <int W>
 	static bool fastsim_gucci_opcode(rv32i_instruction instr) {
@@ -55,7 +56,11 @@ namespace riscv
 			return true;
 		}
 	}
+}
+#endif // RISCV_FAST_SIMULATOR
 
+namespace riscv
+{
 #ifdef RISCV_INSTR_CACHE
 	template <int W>
 	void Memory<W>::generate_decoder_cache(const MachineOptions<W>& options,
@@ -113,9 +118,8 @@ namespace riscv
 #ifdef RISCV_FAST_SIMULATOR
 		size_t qc_lastidx = (options.fast_simulator) ? 0 : QC_MAX;
 		size_t qc_failure = 0;
-		rv32i_instruction qc_instr;
 		bool fs_skip = false;
-		typename CPU<W>::QCVec qcvec;
+		QCVec<W> qcvec;
 		qcvec.base_pc = addr;
 		//static_assert(!compressed_enabled, "C-extension with fast simulator is under construction");
 #endif
@@ -153,7 +157,7 @@ namespace riscv
 
 #ifdef RISCV_FAST_SIMULATOR
 			if (LIKELY(qc_lastidx < QC_MAX) && !fs_skip) {
-				qc_instr = instruction;
+				const rv32i_instruction qc_instr = instruction;
 				if (fastsim_gucci_opcode<W>(qc_instr) && qcvec.data.size() < FS_MAXI) {
 					qcvec.data.push_back({qc_instr.whole, decoded.handler});
 				} else {
@@ -187,12 +191,12 @@ namespace riscv
 						qcvec.incrementor = rv32i_instruction{qcvec.data.front().instr}.length();
 						qcvec.incrementor -= will_be_long ? 4 : 2;
 						// Add the instruction data array to the CPU
-						machine().cpu.add_qc(std::move(qcvec));
+						machine().cpu.add_qc(qcvec);
 						qc_lastidx ++;
 					} else {
-						qcvec.data.clear();
 						qc_failure ++;
 					}
+					qcvec.data.clear();
 					qcvec.base_pc = dst + qc_instr.length();
 				}
 			} // options.fast_simulator
@@ -215,6 +219,7 @@ namespace riscv
 		}
 
 #ifdef RISCV_FAST_SIMULATOR
+		machine().cpu.finish_qc();
 		if (options.verbose_loader) {
 			printf("Fast sim conversion blocks: %zu\n", qc_lastidx);
 			printf("Fast sim conversion failure: %zu\n", qc_failure);
