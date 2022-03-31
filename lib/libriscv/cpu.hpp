@@ -87,23 +87,8 @@ namespace riscv
 		address_t exec_end()   const noexcept { return m_exec_end; }
 		const uint8_t* exec_seg_data() const noexcept { return m_exec_data; }
 #ifdef RISCV_FAST_SIMULATOR
-		struct QCData {
-			uint32_t instr;
-			instruction_handler<W> handler;
-		};
-		struct QCVec {
-			address_t base_pc;
-			address_t end_pc;
-			uint16_t  incrementor;
-			std::vector<QCData> data;
-		};
-		using qcdata_map_t = std::vector<QCVec>;
-		void add_qc(QCVec data) {
-			if (this->m_qcdata == nullptr)
-				this->m_qcdata = std::make_shared<qcdata_map_t> ();
-			this->m_qcdata->push_back(std::move(data));
-			this->m_fastsim_vector = this->m_qcdata->data();
-		}
+		void add_qc(const struct QCVec<W>& data);
+		void finish_qc();
 #endif
 		static void fast_simulator(CPU&, instruction_format);
 	private:
@@ -125,8 +110,8 @@ namespace riscv
 		const unsigned m_cpuid;
 
 #ifdef RISCV_FAST_SIMULATOR
-		std::shared_ptr<qcdata_map_t> m_qcdata;
-		const QCVec* m_fastsim_vector = nullptr;
+		std::shared_ptr<std::vector<struct QCVec<W>>> m_qcdata;
+		const struct QCVec<W>* m_fastsim_vector = nullptr;
 #endif
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints

@@ -5,7 +5,9 @@
 #include "rv32i.hpp"
 #include "rv64i.hpp"
 #include "rv128i.hpp"
-#include <inttypes.h>
+#ifdef RISCV_FAST_SIMULATOR
+#include "fastsim.hpp"
+#endif
 
 #define INSTRUCTION_LOGGING(cpu)	\
 	if ((cpu).machine().verbose_instructions) { \
@@ -172,15 +174,7 @@ namespace riscv
 		#else
 			// Debugging aid when fast simulator is behaving strangely
 			if constexpr (VERBOSE_FASTSIM) {
-				const auto string = [&] () -> std::string {
-					if (cache_entry.handler != &fast_simulator)
-						return isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n";
-					char buffer[1024];
-					return std::string(buffer, snprintf(buffer, sizeof(buffer),
-						"[0x%" PRIX64 "] %08" PRIx32 " Fast simulator index (%u)\n",
-						(uint64_t)this->pc(), instruction.whole, instruction.half[0]));
-					}();
-				machine().print(string.c_str(), string.size());
+				verbose_fast_sim(*this, cache_entry.handler, instruction);
 			} // Debugging aid
 			// Execute instruction
 			cache_entry.handler(*this, instruction);
