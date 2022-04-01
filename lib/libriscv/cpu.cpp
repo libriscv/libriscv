@@ -230,10 +230,10 @@ namespace riscv
 	{
 		auto pc = cpu.pc();
 		auto fsindex = instref.half[0];
-	restart_fastsim:
+	//restart_fastsim:
 		const auto& qcvec = cpu.m_fastsim_vector[fsindex];
-		//printf("Fast simulation of %zu instructions at 0x%lX\n",
-		//	qcvec.data.size(), (long)pc);
+		//printf("Fast sim index %u with %zu instr at 0x%lX (0x%lX)\n",
+		//	fsindex, qcvec.data.size(), (long)pc, cpu.pc());
 
 	restart_sequence:
 		size_t index = 0;
@@ -283,6 +283,8 @@ namespace riscv
 		} else {
 			pc = cpu.pc() + 4;
 			if (pc >= qcvec.base_pc && pc < qcvec.end_pc) {
+				//printf("Restarting sequence %u at 0x%lX with %zu instr\n",
+				//	fsindex, (long)pc, cpu.m_qcdata->size());
 				goto restart_sequence;
 			}
 		}

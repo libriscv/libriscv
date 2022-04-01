@@ -197,7 +197,7 @@ namespace riscv
 						qc_failure ++;
 					}
 					qcvec.data.clear();
-					qcvec.base_pc = dst + qc_instr.length();
+					qcvec.base_pc = dst + instruction.length();
 				}
 			} // options.fast_simulator
 #endif
