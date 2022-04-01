@@ -230,7 +230,6 @@ namespace riscv
 	{
 		auto pc = cpu.pc();
 		auto fsindex = instref.half[0];
-	//restart_fastsim:
 		const auto& qcvec = cpu.m_fastsim_vector[fsindex];
 		//printf("Fast sim index %u with %zu instr at 0x%lX (0x%lX)\n",
 		//	fsindex, qcvec.data.size(), (long)pc, cpu.pc());
@@ -286,21 +285,6 @@ namespace riscv
 				//printf("Restarting sequence %u at 0x%lX with %zu instr\n",
 				//	fsindex, (long)pc, cpu.m_qcdata->size());
 				goto restart_sequence;
-			}
-		}
-
-		// Check if the next instruction handler is this very function.
-		// If so, restart procedure with updated fastsim index.
-		if constexpr (false) {
-			auto* exec_decoder = cpu.machine().memory.get_decoder_cache();
-			auto* exec_seg_data = cpu.m_exec_data;
-			// Unfortunately, it is slower than simply returning.
-			auto& cache_entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
-			if (cache_entry.handler == &fast_simulator) {
-				fsindex = *(uint16_t *) &exec_seg_data[pc];
-				//printf("Restarting at 0x%lX with index %u / %zu\n",
-				//	(long)pc, fsindex, cpu.m_qcdata->size());
-				goto restart_fastsim;
 			}
 		}
 
