@@ -118,11 +118,13 @@ namespace riscv
 #ifdef RISCV_FAST_SIMULATOR
 		size_t qc_lastidx = (options.fast_simulator) ? 0 : QC_MAX;
 		size_t qc_failure = 0;
-		bool fs_skip = false;
 		QCVec<W> qcvec;
 		qcvec.base_pc = addr;
 		//static_assert(!compressed_enabled, "C-extension with fast simulator is under construction");
 #endif
+		// When compressed instructions are enabled, many decoder
+		// entries are illegal because they between instructions.
+		bool was_full_instruction = true;
 
 		/* Generate all instruction pointers for executable code.
 		   Cannot step outside of this area when pregen is enabled,
@@ -131,7 +133,7 @@ namespace riscv
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
-			if (binary_translation_enabled || options.instruction_fusing) {
+			if (binary_translation_enabled) {
 				// This may be a misaligned reference
 				// XXX: Will this even work on ARM?
 				auto& instref = *(rv32i_instruction*) &exec_offset[dst];
@@ -150,15 +152,44 @@ namespace riscv
 				}
 			};
 			rv32i_instruction instruction { *(Align32*) &exec_offset[dst] };
+			const auto original = instruction;
 
-			// Insert decoded instruction in decoder cache
-			auto decoded = machine().cpu.decode(instruction);
+			// Insert decoded instruction into decoder cache
+			Instruction<W> decoded;
+			bool is_rewritten = false;
+			if (!was_full_instruction) {
+				// An illegal instruction
+				decoded = machine().cpu.decode(rv32i_instruction{0});
+			} else if constexpr (debugging_enabled || binary_translation_enabled) {
+				// When debugging we will want to see the original encoding, as
+				// well as needing more trust in the decoding.
+				// With binary translation we will have to do rewrites later on,
+				// if they are even helpful.
+				decoded = machine().cpu.decode(instruction);
+			} else {
+				bool try_fuse = options.instruction_fusing;
+				// Improve many instruction handlers by rewriting instructions
+				decoded = machine().cpu.decode_rewrite(dst, instruction);
+				// Write the instruction back to execute segment using
+				// the *original* instructions length, if it changed.
+				is_rewritten = original.whole != instruction.whole;
+				if (is_rewritten) {
+					assert(original.length() == instruction.length());
+					std::memcpy((void*)&exec_offset[dst], &instruction, original.length());
+					try_fuse = false;
+				}
+				if (!is_rewritten && try_fuse) {
+					// TODO: Instruction fusing here
+				}
+			}
 			DecoderCache<W>::convert(decoded, entry);
 
 #ifdef RISCV_FAST_SIMULATOR
-			if (LIKELY(qc_lastidx < QC_MAX) && !fs_skip) {
+			if (LIKELY(qc_lastidx < QC_MAX) && was_full_instruction) {
 				const rv32i_instruction qc_instr = instruction;
-				if (fastsim_gucci_opcode<W>(qc_instr) && qcvec.data.size() < FS_MAXI) {
+				// We will verify the original instruction only,
+				// as it should still have the same semantics.
+				if (fastsim_gucci_opcode<W>(original) && qcvec.data.size() < FS_MAXI) {
 					qcvec.data.push_back({qc_instr.whole, decoded.handler});
 				} else {
 					if (qcvec.data.size()+1 >= QC_TRESHOLD) {
@@ -205,15 +236,15 @@ namespace riscv
 			if constexpr (compressed_enabled) {
 				// With compressed we always step forward 2 bytes at a time
 				dst += 2;
-#ifdef RISCV_FAST_SIMULATOR
-				if (fs_skip) {
-					fs_skip = false;
-				} else if (instruction.length() == 4) {
-					// We advanced only 2 but the real instruction was 4 bytes
-					// Remember the instruction and skip one fast sim iteration
-					fs_skip = true;
+				if (was_full_instruction) {
+					// For it to be a full instruction again,
+					// the length needs to match.
+					was_full_instruction = (original.length() == 2);
+				} else {
+					// If it wasn't a full instruction last time, it
+					// will for sure be one now.
+					was_full_instruction = true;
 				}
-#endif
 			} else
 				dst += 4;
 		}
@@ -227,7 +258,6 @@ namespace riscv
 #endif
 
 		/* We do not support binary translation for RV128I */
-		/* We do not support fusing for RV128I */
 		if constexpr (W != 16) {
 
 #ifdef RISCV_BINARY_TRANSLATION
@@ -235,13 +265,6 @@ namespace riscv
 			machine().cpu.try_translate(options, bintr_filename, addr, ipairs);
 		}
 #endif
-		if (options.instruction_fusing) {
-			for (size_t n = 0; n < ipairs.size()-1; n++)
-			{
-				if (machine().cpu.try_fuse(ipairs[n+0], ipairs[n+1]))
-					n += 1;
-			}
-		}
 	} // W != 16
 #else
 		// Default-initialize the whole thing
@@ -255,4 +278,4 @@ namespace riscv
 	template struct Memory<4>;
 	template struct Memory<8>;
 	template struct Memory<16>;
-}
+} // riscv

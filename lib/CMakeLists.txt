@@ -70,6 +70,11 @@ if (RISCV_DEBUG)
 		libriscv/debug.cpp
 	)
 endif()
+if (RISCV_EXPERIMENTAL AND NOT RISCV_BINARY_TRANSLATION)
+	list(APPEND SOURCES
+		libriscv/decoder_rewriter.cpp
+	)
+endif()
 if (RISCV_BINARY_TRANSLATION)
 	list(APPEND SOURCES
 		libriscv/tr_api.cpp
