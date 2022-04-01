@@ -6,6 +6,8 @@
 
 namespace riscv
 {
+	static const unsigned PCAL= compressed_enabled ? 2 : 4;
+
 	union FasterBtype {
 		struct {
 			uint8_t opcode : 3;
@@ -60,6 +62,18 @@ namespace riscv
 		// NOTE: Set aside the first 2 bits to preserve the instruction length
 		switch (original.opcode()) {
 		case RV32I_BRANCH: {
+			// Ignore unaligned branches. This will allow us to
+			// jump unaligned with all branch instructions.
+			const auto bdest = pc + original.Btype.signed_imm() - 4;
+			if ((bdest % PCAL) != 0) break;
+			// We verify if the jump is within the execute segment
+			// and if not, we fallback to the regular branch decoding
+		#ifdef RISCV_INBOUND_JUMPS_ONLY
+			if (UNLIKELY(bdest < m_exec_begin || bdest >= m_exec_end)) {
+				break;
+			}
+		#endif
+
 			if (original.Btype.rs2 == 0) {
 				ZeroBtype rewritten;
 				rewritten.opcode = original.Btype.opcode;
@@ -75,31 +89,31 @@ namespace riscv
 						[] (auto& cpu, auto instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (cpu.reg(rop.rs1) == 0) {
-								cpu.jump(cpu.pc() + rop.signed_imm());
+								cpu.registers().pc += rop.signed_imm();
 							}
 						}); // BEQ
 				case 0x1: // BRANCH_NE
 					return rewritten_instruction<W>(
-						[] (auto& cpu, rv32i_instruction instr) {
+						[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (cpu.reg(rop.rs1) != 0) {
-								cpu.jump(cpu.pc() + rop.signed_imm());
+								cpu.registers().pc += rop.signed_imm();
 							}
 						}); // BNE
 				case 0x4: // BRANCH_LT
 					return rewritten_instruction<W>(
-						[] (auto& cpu, rv32i_instruction instr) {
+						[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (sign_type(cpu.reg(rop.rs1)) < 0) {
-								cpu.jump(cpu.pc() + rop.signed_imm());
+								cpu.registers().pc += rop.signed_imm();
 							}
 						}); // BLT
 				case 0x5: // BRANCH_GE
 					return rewritten_instruction<W>(
-						[] (auto& cpu, rv32i_instruction instr) {
+						[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (sign_type(cpu.reg(rop.rs1)) >= 0) {
-								cpu.jump(cpu.pc() + rop.signed_imm());
+								cpu.registers().pc += rop.signed_imm();
 							}
 						}); // BGE
 				default:
@@ -124,47 +138,47 @@ namespace riscv
 					[] (auto& cpu, auto instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
 						if (cpu.reg(rop.rs1) == cpu.reg(rop.rs2)) {
-							cpu.jump(cpu.pc() + rop.signed_imm());
+							cpu.registers().pc += rop.signed_imm();
 						}
 					}); // BEQ
 			case 0x1: // BRANCH_NE
 				return rewritten_instruction<W>(
-					[] (auto& cpu, rv32i_instruction instr) {
+					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
 						if (cpu.reg(rop.rs1) != cpu.reg(rop.rs2)) {
-							cpu.jump(cpu.pc() + rop.signed_imm());
+							cpu.registers().pc += rop.signed_imm();
 						}
 					}); // BNE
 			case 0x4: // BRANCH_LT
 				return rewritten_instruction<W>(
-					[] (auto& cpu, rv32i_instruction instr) {
+					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
 						if (sign_type(cpu.reg(rop.rs1)) < sign_type(cpu.reg(rop.rs2))) {
-							cpu.jump(cpu.pc() + rop.signed_imm());
+							cpu.registers().pc += rop.signed_imm();
 						}
 					}); // BLT
 			case 0x5: // BRANCH_GE
 				return rewritten_instruction<W>(
-					[] (auto& cpu, rv32i_instruction instr) {
+					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
 						if (sign_type(cpu.reg(rop.rs1)) >= sign_type(cpu.reg(rop.rs2))) {
-							cpu.jump(cpu.pc() + rop.signed_imm());
+							cpu.registers().pc += rop.signed_imm();
 						}
 					}); // BGE
 			case 0x6: // BRANCH_LTU
 				return rewritten_instruction<W>(
-					[] (auto& cpu, rv32i_instruction instr) {
+					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
 						if (cpu.reg(rop.rs1) < cpu.reg(rop.rs2)) {
-							cpu.jump(cpu.pc() + rop.signed_imm());
+							cpu.registers().pc += rop.signed_imm();
 						}
 					}); // BLTU
 			case 0x7: // BRANCH_GEU
 				return rewritten_instruction<W>(
-					[] (auto& cpu, rv32i_instruction instr) {
+					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
 						if (cpu.reg(rop.rs1) >= cpu.reg(rop.rs2)) {
-							cpu.jump(cpu.pc() + rop.signed_imm());
+							cpu.registers().pc += rop.signed_imm();
 						}
 					}); // BGEU
 			default:

@@ -65,7 +65,7 @@ namespace riscv
 #endif
 		format_t read_next_instruction() const;
 		static const instruction_t& decode(format_t);
-		static instruction_t decode_rewrite(address_t pc, format_t&);
+		instruction_t decode_rewrite(address_t pc, format_t&);
 		std::string to_string(format_t format, const instruction_t& instr) const;
 		std::string current_instruction_to_string() const;
 
