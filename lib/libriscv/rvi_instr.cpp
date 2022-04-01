@@ -220,7 +220,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 == reg2) {
-			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
+			cpu.jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	},
@@ -252,7 +252,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 != reg2) {
-			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
+			cpu.jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -262,7 +262,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (RVTOSIGNED(reg1) < RVTOSIGNED(reg2)) {
-			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
+			cpu.jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -272,7 +272,7 @@ namespace riscv
 		const auto reg1 = cpu.reg(instr.Btype.rs1);
 		const auto reg2 = cpu.reg(instr.Btype.rs2);
 		if (RVTOSIGNED(reg1) >= RVTOSIGNED(reg2)) {
-			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
+			cpu.jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -282,7 +282,7 @@ namespace riscv
 		const auto& reg1 = cpu.reg(instr.Btype.rs1);
 		const auto& reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 < reg2) {
-			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
+			cpu.jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -292,7 +292,7 @@ namespace riscv
 		const auto& reg1 = cpu.reg(instr.Btype.rs1);
 		const auto& reg2 = cpu.reg(instr.Btype.rs2);
 		if (reg1 >= reg2) {
-			cpu.aligned_jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
+			cpu.jump(cpu.pc() + RVIMM(cpu, instr.Btype) - 4);
 			VERBOSE_BRANCH()
 		}
 	}, DECODED_INSTR(BRANCH_EQ).printer);
@@ -331,7 +331,7 @@ namespace riscv
 		// Link *next* instruction (rd = PC + 4)
 		cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
 		// And jump relative
-		cpu.aligned_jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
+		cpu.jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
 			printf(">>> CALL 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "\n",
@@ -355,7 +355,7 @@ namespace riscv
 	INSTRUCTION(JMPI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		// Jump relative
-		cpu.aligned_jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
+		cpu.jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
 #ifdef RISCV_DEBUG
 		if (UNLIKELY(cpu.machine().verbose_jumps)) {
 			printf(">>> JMP 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "\n",
