@@ -64,7 +64,7 @@ void Machine<W>::setup_posix_threads()
 				machine.signals().enter(machine, sig);
 				THPRINT(machine,
 					"<<< tgkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
-					signal, (long)sigact.handler, (long)machine.cpu.reg(REG_SP));
+					sig, (long)machine.sigaction(sig).handler, (long)machine.cpu.reg(REG_SP));
 				return;
 			}
 		}
@@ -94,6 +94,37 @@ void Machine<W>::setup_posix_threads()
 			// XXX: Workaround for FUTEX problem
 			//machine.memory.template write<address_type<W>> (addr, 0);
 			//return;
+			while (machine.memory.template read<address_type<W>> (addr) == (address_t)val) {
+				if (machine.threads().suspend_and_yield()) {
+					return;
+				}
+				throw MachineException(DEADLOCK_REACHED, "FUTEX deadlock", addr);
+			}
+			machine.set_result(0);
+			return;
+		} else if ((futex_op & 0xF) == FUTEX_WAKE) {
+			THPRINT(machine,
+				"FUTEX: Waking others on %d\n", val);
+			if (machine.threads().suspend_and_yield()) {
+				return;
+			}
+			machine.set_result(0);
+			return;
+		}
+		machine.set_result(-EINVAL);
+	});
+	// futex_time64
+	this->install_syscall_handler(422,
+	[] (Machine<W>& machine) {
+		const auto addr = machine.template sysarg<address_type<W>> (0);
+		const int futex_op = machine.template sysarg<int> (1);
+		const int      val = machine.template sysarg<int> (2);
+		THPRINT(machine,
+			">>> futex(0x%lX, op=%d, val=%d)\n", (long) addr, futex_op, val);
+		if ((futex_op & 0xF) == FUTEX_WAIT)
+	    {
+			THPRINT(machine,
+				"FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
 			while (machine.memory.template read<address_type<W>> (addr) == (address_t)val) {
 				if (machine.threads().suspend_and_yield()) {
 					return;

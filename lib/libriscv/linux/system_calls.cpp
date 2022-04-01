@@ -124,15 +124,15 @@ template <int W>
 void syscall_lseek(Machine<W>& machine)
 {
 	const int fd      = machine.template sysarg<int>(0);
-	const auto offset = machine.template sysarg<int64_t>(1);
+	const long offset = machine.template sysarg<address_type<W>>(1);
 	const int whence  = machine.template sysarg<int>(2);
 	SYSPRINT("SYSCALL lseek, fd: %d, offset: 0x%lX, whence: %d\n",
-		fd, (long)offset, whence);
+		fd, offset, whence);
 
 	const int real_fd = machine.fds().get(fd);
-	int64_t res = lseek(real_fd, offset, whence);
+	long res = lseek(real_fd, offset, whence);
 	if (res >= 0) {
-		machine.set_result(res);
+		machine.set_result((address_type<W>)res);
 	} else {
 		machine.set_result(-errno);
 	}
@@ -608,7 +608,7 @@ static void syscall_uname(Machine<W>& machine)
 	} uts;
 	strcpy(uts.sysname, "RISC-V C++ Emulator");
 	strcpy(uts.nodename,"libriscv");
-	strcpy(uts.release, "5.0.0");
+	strcpy(uts.release, "5.6.0");
 	strcpy(uts.version, "");
 	if constexpr (W == 4)
 		strcpy(uts.machine, "rv32imafdc");
