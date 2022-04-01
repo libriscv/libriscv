@@ -76,13 +76,6 @@ namespace riscv
 			uint32_t rd     : 5;
 			uint32_t imm    : 20;
 
-			bool sign() const noexcept {
-				return imm & 0x80000;
-			}
-			int32_t signed_imm() const noexcept {
-				constexpr uint32_t ext = 0xFFF00000;
-				return imm | (sign() ? ext : 0);
-			}
 			int32_t upper_imm() const noexcept {
 				return imm << 12u;
 			}
