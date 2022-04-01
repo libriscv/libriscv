@@ -59,7 +59,7 @@ namespace riscv
 	}
 
 	template <int W> __attribute__((noinline))
-	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath()
+	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
 	{
 		// Fallback: Read directly from page memory
 		const auto pageno = this->pc() >> Page::SHIFT;
@@ -112,7 +112,7 @@ namespace riscv
 	}
 
 	template <int W>
-	typename CPU<W>::format_t CPU<W>::read_next_instruction()
+	typename CPU<W>::format_t CPU<W>::read_next_instruction() const
 	{
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
@@ -337,6 +337,13 @@ namespace riscv
 		else if constexpr (W == 16)
 			return RV128I::to_string(*this, format, instr);
 		return "Unknown architecture";
+	}
+
+	template <int W> __attribute__((cold))
+	std::string CPU<W>::current_instruction_to_string() const
+	{
+		const auto instruction = this->read_next_instruction();
+		return isa_type<W>::to_string(*this, instruction, decode(instruction));
 	}
 
 	template <int W> __attribute__((cold))

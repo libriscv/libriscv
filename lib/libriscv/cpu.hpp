@@ -63,10 +63,11 @@ namespace riscv
 		void break_checks();
 		static void default_pausepoint(CPU&);
 #endif
-		format_t read_next_instruction();
+		format_t read_next_instruction() const;
 		static const instruction_t& decode(format_t);
 		static instruction_t decode_rewrite(address_t pc, format_t&);
 		std::string to_string(format_t format, const instruction_t& instr) const;
+		std::string current_instruction_to_string() const;
 
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
@@ -96,7 +97,7 @@ namespace riscv
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
 
-		format_t read_next_instruction_slowpath() COLD_PATH();
+		format_t read_next_instruction_slowpath() const COLD_PATH();
 		void execute(format_t);
 		void emit(std::string& code, const std::string& symb, instr_pair* blk, const TransInfo<W>&) const;
 
@@ -106,7 +107,7 @@ namespace riscv
 		address_t m_exec_end   = 0;
 
 		// Page cache for execution on virtual memory
-		CachedPage<W, const Page> m_cache;
+		mutable CachedPage<W, const Page> m_cache;
 
 		const unsigned m_cpuid;
 
