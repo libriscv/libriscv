@@ -640,8 +640,8 @@ namespace riscv
 			return snprintf(buffer, len, "SYS WFI");
 		} else if (instr.Itype.imm == 0x7FF && instr.Itype.funct3 == 0) {
 			return snprintf(buffer, len, "SYS STOP");
-		} else if (instr.Itype.funct3 == 0x2) {
-			// CSRRS
+		} else if (instr.Itype.funct3 == 0x1 || instr.Itype.funct3 == 0x2) {
+			// CSRRW / CSRRS
 			switch (instr.Itype.imm) {
 				case 0x001:
 					return snprintf(buffer, len, "RDCSR FFLAGS %s", RISCV::regname(instr.Itype.rd));
@@ -650,7 +650,10 @@ namespace riscv
 				case 0x003:
 					return snprintf(buffer, len, "RDCSR FCSR %s", RISCV::regname(instr.Itype.rd));
 				case 0xC00:
-					return snprintf(buffer, len, "RDCYCLE.L %s", RISCV::regname(instr.Itype.rd));
+					if (instr.Itype.rd == 0 && instr.Itype.rs1 == 0)
+						return snprintf(buffer, len, "UNIMP");
+					else
+						return snprintf(buffer, len, "RDCYCLE.L %s", RISCV::regname(instr.Itype.rd));
 				case 0xC01:
 					return snprintf(buffer, len, "RDINSTRET.L %s", RISCV::regname(instr.Itype.rd));
 				case 0xC80:

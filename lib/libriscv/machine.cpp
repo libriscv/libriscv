@@ -282,8 +282,15 @@ namespace riscv
 				return;
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
-				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter();
-				return;
+				if (rd) {
+					cpu.reg(instr.Itype.rd) = this->instruction_counter();
+					return;
+				} else {
+					if (instr.Itype.rs1 == 0) // UNIMP instruction
+						cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.Itype.imm);
+					else // CYCLE is not writable
+						cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
+				}
 			case 0xC80: // CSR RDCYCLE (upper)
 			case 0xC82: // RDINSTRET (upper)
 				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter() >> 32u;
@@ -313,7 +320,7 @@ namespace riscv
 			break;
 		}
 		// if we got here, its an illegal operation!
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.funct3);
 	}
 
 	template struct Machine<4>;
