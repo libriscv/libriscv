@@ -559,7 +559,7 @@ namespace riscv
 					if constexpr (RVIS64BIT(cpu)) {
 						// vi_instr.cpp:444:2: runtime error:
 						// division of -9223372036854775808 by -1 cannot be represented in type 'long'
-						if (LIKELY(!(src1 == -9223372036854775808ull && src2 == -1ull)))
+						if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
 							dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
 					} else {
 						// rv32i_instr.cpp:301:2: runtime error:
@@ -584,7 +584,7 @@ namespace riscv
 						if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
 					} else if constexpr (RVIS64BIT(cpu)) {
-						if (LIKELY(!(src1 == -9223372036854775808ull && src2 == -1ull)))
+						if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
 							dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
 					} else {
 						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
@@ -936,7 +936,8 @@ namespace riscv
 			case 0x14: // DIV.D
 				// division by zero is not an exception
 				if (LIKELY(src2 != 0)) {
-					dst = (int64_t) ((int64_t)src1 / (int64_t)src2);
+					if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
+						dst = (int64_t) ((int64_t)src1 / (int64_t)src2);
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}
@@ -950,9 +951,8 @@ namespace riscv
 				return;
 			case 0x16: // REM.D
 				if (LIKELY(src2 != 0)) {
-					if (LIKELY(!((int64_t)src1 == -2147483648 && (int64_t)src2 == -1))) {
+					if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
 						dst = (int64_t) ((int64_t)src1 % (int64_t)src2);
-					}
 				} else {
 					dst = (RVREGTYPE(cpu)) -1;
 				}
