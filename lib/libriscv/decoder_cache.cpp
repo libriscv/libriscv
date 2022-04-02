@@ -86,40 +86,21 @@ namespace riscv
 
 	#ifdef RISCV_BINARY_TRANSLATION
 		std::string bintr_filename;
-	if constexpr (W != 16) {
-		int load_result = machine().cpu.load_translation(options, &bintr_filename);
-		// If we loaded a cached translated program, and fusing is
-		// disabled, then we can fast-path the decoder cache
-		if (load_result == 0 && !options.instruction_fusing) {
-			/* Generate all instruction pointers for executable code.
-			   Cannot step outside of this area when pregen is enabled,
-			   so it's fine to leave the boundries alone. */
-			for (address_t dst = addr; dst < addr + len;)
-			{
-				auto& entry = m_exec_decoder[dst / DecoderCache<W>::DIVISOR];
+		// This can be improved somewhat, by fetching them on demand
+		// instead of building a vector of the whole execute segment.
+		std::vector<typename CPU<W>::instr_pair> ipairs;
+		ipairs.reserve(len / 4);
 
-				auto& instruction = *(rv32i_instruction*) &exec_offset[dst];
-				if (!DecoderCache<W>::isset(entry)) {
-					DecoderCache<W>::convert(machine().cpu.decode(instruction), entry);
-				}
-				dst += (compressed_enabled) ? 2 : 4;
-			}
-			return;
-		} // Success, not fusing
+	if constexpr (W != 16) {
+		machine().cpu.load_translation(options, &bintr_filename);
 	} // W != 16
 	#endif
-
-		std::vector<typename CPU<W>::instr_pair> ipairs;
-		if (binary_translation_enabled || options.instruction_fusing) {
-			ipairs.reserve(len / 4);
-		}
 
 #ifdef RISCV_FAST_SIMULATOR
 		size_t qc_lastidx = (options.fast_simulator) ? 0 : QC_MAX;
 		size_t qc_failure = 0;
 		QCVec<W> qcvec;
 		qcvec.base_pc = addr;
-		//static_assert(!compressed_enabled, "C-extension with fast simulator is under construction");
 #endif
 		// When compressed instructions are enabled, many decoder
 		// entries are illegal because they between instructions.
@@ -132,16 +113,27 @@ namespace riscv
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
-			if (binary_translation_enabled) {
-				// This may be a misaligned reference
-				// XXX: Will this even work on ARM?
-				auto& instref = *(rv32i_instruction*) &exec_offset[dst];
-#ifdef RISCV_DEBUG
-				ipairs.emplace_back(entry.handler.handler, instref);
-#else
-				ipairs.emplace_back(entry.handler, instref);
+#ifdef RISCV_BINARY_TRANSLATION
+				if (machine().is_binary_translated()) {
+					if (DecoderCache<W>::isset(entry)) {
+						dst += 4;
+	#ifdef RISCV_FAST_SIMULATOR
+						qcvec.data.clear();
+						qcvec.base_pc = dst;
+	#endif
+						continue;
+					}
+				} else if constexpr (W != 16) {
+					// This may be a misaligned reference
+					// XXX: Will this even work on ARM?
+					auto& instref = *(rv32i_instruction*) &exec_offset[dst];
+	#ifdef RISCV_DEBUG
+					ipairs.emplace_back(entry.handler.handler, instref);
+	#else
+					ipairs.emplace_back(entry.handler, instref);
+	#endif
+				}
 #endif
-			}
 
 			// Load unaligned instruction from execute segment
 			union Align32 {
@@ -159,11 +151,9 @@ namespace riscv
 			if (!was_full_instruction) {
 				// An illegal instruction
 				decoded = machine().cpu.decode(rv32i_instruction{0});
-			} else if constexpr (debugging_enabled || binary_translation_enabled) {
+			} else if constexpr (debugging_enabled) {
 				// When debugging we will want to see the original encoding, as
 				// well as needing more trust in the decoding.
-				// With binary translation we will have to do rewrites later on,
-				// if they are even helpful.
 				decoded = machine().cpu.decode(instruction);
 			} else {
 				bool try_fuse = options.instruction_fusing;
@@ -260,15 +250,14 @@ namespace riscv
 		}
 #endif
 
+#ifdef RISCV_BINARY_TRANSLATION
 		/* We do not support binary translation for RV128I */
 		if constexpr (W != 16) {
-
-#ifdef RISCV_BINARY_TRANSLATION
-		if (!machine().is_binary_translated()) {
-			machine().cpu.try_translate(options, bintr_filename, addr, ipairs);
-		}
+			if (!machine().is_binary_translated()) {
+				machine().cpu.try_translate(options, bintr_filename, addr, ipairs);
+			}
+		} // W != 16
 #endif
-	} // W != 16
 	}
 #endif // RISCV_INSTR_CACHE
 

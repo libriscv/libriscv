@@ -74,7 +74,7 @@ if (RISCV_ICACHE)
 		libriscv/decoder_cache.cpp
 	)
 endif()
-if (RISCV_EXPERIMENTAL AND NOT RISCV_BINARY_TRANSLATION)
+if (RISCV_EXPERIMENTAL)
 	list(APPEND SOURCES
 		libriscv/decoder_rewriter.cpp
 	)
@@ -131,9 +131,6 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv PUBLIC dl)
-	# The fast simulator is incompatible with binary translation (for now)
-	# Binary translation is so much faster that it does not matter.
-	set(RISCV_FAST_SIMULATOR OFF)
 endif()
 if (RISCV_FAST_SIMULATOR)
 	# The fast simulator is incompatible with RISCV_DEBUG because it
