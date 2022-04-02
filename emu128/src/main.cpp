@@ -51,6 +51,7 @@ int main(int argc, const char** argv)
 #endif
 		machine.simulate(1'000'000);
 	} catch (const std::exception& e) {
+		fprintf(stderr ,"%s\n", machine.cpu.current_instruction_to_string().c_str());
 		fprintf(stderr, ">>> Runtime exception: %s\n", e.what());
 	}
 

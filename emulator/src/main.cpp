@@ -112,6 +112,7 @@ static void run_program(
 			machine.simulate();
 		}
 	} catch (riscv::MachineException& me) {
+		printf("%s\n", machine.cpu.current_instruction_to_string().c_str());
 		printf(">>> Machine exception %d: %s (data: 0x%" PRIX64 ")\n",
 				me.type(), me.what(), me.data());
 		machine.memory.print_backtrace(
