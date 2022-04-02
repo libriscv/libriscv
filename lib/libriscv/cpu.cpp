@@ -43,7 +43,18 @@ namespace riscv
 		this->reset_stack_pointer();
 		// We can't jump if there's been no ELF loader
 		if (!machine().memory.binary().empty()) {
-			this->jump(machine().memory.start_address());
+			const auto initial_pc = machine().memory.start_address();
+#ifndef RISCV_INBOUND_JUMPS_ONLY
+			// Validate that the initial PC is executable.
+			// Inbound jumps feature does not allow other execute areas.
+			// When execute-only is active, there is no reachable execute pages.
+			const auto& page = machine().memory.get_page(initial_pc);
+			if (UNLIKELY(!page.attr.exec)) {
+				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
+			}
+#endif
+			// This function will (at most) validate the execute segment
+			this->jump(initial_pc);
 		}
 		// reset the page cache
 		this->m_cache = {};

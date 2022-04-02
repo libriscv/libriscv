@@ -42,6 +42,7 @@ TEST_CASE("Execute minimal machine", "[Minimal]")
 {
 	const auto binary = build_and_load(R"M(
 	__asm__(".global _start\n"
+	".section .text\n"
 	"_start:\n"
 	"	li a0, 666\n"
 	"	li a7, 1\n"
@@ -50,7 +51,7 @@ TEST_CASE("Execute minimal machine", "[Minimal]")
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	machine.install_syscall_handler(1,
 		[] (auto& machine) { machine.stop(); });
-	machine.simulate(3);
+	machine.simulate(10);
 	REQUIRE(machine.return_value<int>() == 666);
 }
 
@@ -58,6 +59,7 @@ TEST_CASE("Execution timeout", "[Minimal]")
 {
 	const auto binary = build_and_load(R"M(
 	__asm__(".global _start\n"
+	".section .text\n"
 	"_start:\n"
 	"	j _start\n");
 	)M", "-static -ffreestanding -nostartfiles");

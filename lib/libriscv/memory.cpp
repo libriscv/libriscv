@@ -103,7 +103,7 @@ namespace riscv
 	template <int W>
 	void Memory<W>::binary_load_ph(const MachineOptions<W>& options, const Phdr* hdr)
 	{
-		const auto*  src = m_binary.data() + hdr->p_offset;
+		const auto* src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
 		if (m_binary.size() <= hdr->p_offset ||
 			hdr->p_offset + len < hdr->p_offset)
@@ -121,6 +121,11 @@ namespace riscv
 		printf("* Loading program of size %zu from %p to virtual %p\n",
 				len, src, (void*) (uintptr_t) hdr->p_vaddr);
 		}
+		// Serialize pages cannot be called with len == 0,
+		// and there is nothing further to do.
+		if (UNLIKELY(len == 0))
+			return;
+
 		// segment permissions
 		const PageAttributes attr {
 			 .read  = (hdr->p_flags & PF_R) != 0,
@@ -147,6 +152,11 @@ namespace riscv
 			//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
 			//	hdr->p_vaddr, len, pbase, pbase + plen, prelen, len, postlen, plen);
 			if (UNLIKELY(prelen > plen || prelen + len > plen)) {
+				throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
+			}
+			// An additional wrap-around check because we are adding 12 bytes
+			// as well as additional padding to len.
+			if (UNLIKELY(pbase + plen < pbase)) {
 				throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 			}
 			// Create the whole executable memory range
@@ -182,7 +192,6 @@ namespace riscv
 			// The instruction must be a part of the decoder cache.
 			this->generate_decoder_cache(options, pbase, hdr->p_vaddr, len + 8);
 #endif
-			(void) options;
 			// Nothing more to do here, if execute-only
 			if (!attr.read)
 				return;
@@ -202,8 +211,10 @@ namespace riscv
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		if (attr.read && !attr.write && m_ropages.end == 0) {
-			serialize_pages(m_ropages, hdr->p_vaddr, src, len, attr);
-			return;
+			// If the serialization fails, we will fallback to memcpy
+			// with set_page_attr, like normal.
+			if (serialize_pages(m_ropages, hdr->p_vaddr, src, len, attr))
+				return;
 		}
 #endif
 
@@ -222,11 +233,19 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::serialize_pages(MemoryArea& area,
+	bool Memory<W>::serialize_pages(MemoryArea& area,
 		address_t addr, const char* src, size_t size, PageAttributes attr)
 	{
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
-		constexpr address_t PSIZEMASK = Page::size()-1;
+		static constexpr address_t PSIZEMASK = Page::size()-1;
+		// It is not an optimization to store 1-2 pages
+		if (size < 2*Page::size()) {
+			area.pages = nullptr;
+			area.begin = 0;
+			area.end = 0;
+			return false;
+		}
+
 		const address_t prebase = addr & ~PSIZEMASK;
 		const address_t prelen  = addr - prebase;
 		const address_t postbase = (addr + size) & ~PSIZEMASK;
@@ -268,6 +287,7 @@ namespace riscv
 			}
 		}
 #endif
+		return true;
 	}
 
 	// ELF32 and ELF64 loader
