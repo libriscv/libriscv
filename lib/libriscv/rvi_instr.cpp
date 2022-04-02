@@ -3,6 +3,7 @@
 #include "rv128i.hpp"
 #include "instr_helpers.hpp"
 #include "rvc.hpp"
+#include <atomic>
 #include <inttypes.h>
 
 namespace riscv
@@ -970,7 +971,8 @@ namespace riscv
 
 	INSTRUCTION(FENCE,
 	[] (auto&, rv32i_instruction /* instr */) RVINSTR_COLDATTR {
-		// literally do nothing, unless...
+		// Do a full barrier, for now
+		std::atomic_thread_fence(std::memory_order_seq_cst);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction) RVPRINTR_ATTR {
 		// printer

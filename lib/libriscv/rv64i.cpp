@@ -1,6 +1,5 @@
 #include "rv32i_instr.hpp"
 #include "machine.hpp"
-#include <inttypes.h>
 
 #define INSTRUCTION(x, ...) static constexpr CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr64i_##x
