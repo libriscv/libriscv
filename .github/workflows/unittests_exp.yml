@@ -1,4 +1,4 @@
-name: Experimantal Unit Tests
+name: Experimental Unit Tests
 
 on:
   push:
