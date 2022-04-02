@@ -7,7 +7,7 @@
 //#include "type_name.hpp"
 extern "C" void _exit(int);
 
-inline uint32_t rdcycle()
+inline auto rdcycle()
 {
 	union {
 		uint64_t whole;
@@ -61,13 +61,16 @@ int main()
 	std::string new_s = std::regex_replace(s, long_word_regex, "[$&]");
 	printf("%s\n", new_s.c_str());
 
+	printf("Testing exception\n");
+	const auto cycle0 = rdcycle();
 	try {
-		printf("Testing exception\n");
 		throw std::runtime_error("Hello Exceptions!");
 	}
 	catch (const std::exception& e) {
 		printf("Caught exception: %s\n", e.what());
 	}
+	const auto cycle1 = rdcycle();
+	printf("It took %llu instructions to throw, catch and print the exception\n", cycle1-cycle0);
 
 	// if we don't return from main we can continue calling functions in the VM
 	// exit(int) will call destructors, which breaks the C runtime environment
