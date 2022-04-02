@@ -74,9 +74,14 @@ inline unsigned multiprocess(unsigned cpus, multiprocess_func_t func, void* data
 
 	return sys_multiprocess(cpus, mp_data.stacks, MP_STACK_SIZE, func, data);
 }
+__attribute__((always_inline))
 inline unsigned multiprocess(unsigned cpus)
 {
-	return sys_multiprocess_fork(cpus);
+	register unsigned a0 asm("a0") = cpus;
+	register int     sid asm("a7") = 1; // multiprocess_fork
+
+	asm volatile ("ecall" : "+r"(a0) : "r"(sid));
+	return a0;
 }
 inline long multiprocess_wait()
 {
@@ -93,12 +98,6 @@ asm(".global sys_multiprocess\n"
 "   mv a1, a4\n"       // Move work data to argument 1
 "   jalr zero, a3\n"   // Direct jump to work function
 "sys_multiprocess_ret:\n"
-"   ret\n");           // Return to caller
-
-asm(".global sys_multiprocess_fork\n"
-"sys_multiprocess_fork:\n"
-"	li a7, 1\n"
-"	ecall\n"
 "   ret\n");           // Return to caller
 
 asm(".global sys_multiprocess_wait\n"
