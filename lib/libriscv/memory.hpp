@@ -234,6 +234,7 @@ namespace riscv
 		const std::string_view m_binary;
 
 		// ELF programs linear .text segment
+		auto* get_exec_segment(address_t pbase) { return m_exec_pagedata.get() - pbase; }
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;
 		address_t m_exec_pagedata_base = 0;

@@ -182,7 +182,7 @@ namespace riscv
 			// This is what the CPU instruction fetcher will use
 			// 0...len: The regular execute segment
 			// len..+ 4: The STOP function
-			auto* exec_offset = m_exec_pagedata.get() - pbase;
+			auto* exec_offset = this->get_exec_segment(pbase);
 			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, len + 4);
 #if defined(RISCV_INSTR_CACHE)
 			// + 8: A jump instruction that prevents crashes if someone

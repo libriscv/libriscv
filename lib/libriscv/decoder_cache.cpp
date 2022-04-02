@@ -80,8 +80,8 @@ namespace riscv
 		delete[] this->m_decoder_cache;
 		this->m_decoder_cache = &decoder_array[0];
 
-		auto* exec_offset = machine().cpu.exec_seg_data();
-		assert(exec_offset && "Must have set CPU execute segment");
+		auto* exec_segment = this->get_exec_segment(pbase);
+		assert(exec_segment != nullptr && "Must have set CPU execute segment");
 		auto* exec_decoder = this->m_exec_decoder;
 
 	#ifdef RISCV_BINARY_TRANSLATION
@@ -126,7 +126,7 @@ namespace riscv
 				} else if constexpr (W != 16) {
 					// This may be a misaligned reference
 					// XXX: Will this even work on ARM?
-					auto& instref = *(rv32i_instruction*) &exec_offset[dst];
+					auto& instref = *(rv32i_instruction*) &exec_segment[dst];
 	#ifdef RISCV_DEBUG
 					ipairs.emplace_back(entry.handler.handler, instref);
 	#else
@@ -142,7 +142,7 @@ namespace riscv
 					return data[0] | uint32_t(data[1]) << 16;
 				}
 			};
-			rv32i_instruction instruction { *(Align32*) &exec_offset[dst] };
+			rv32i_instruction instruction { *(Align32*) &exec_segment[dst] };
 			const auto original = instruction;
 
 			// Insert decoded instruction into decoder cache
@@ -165,7 +165,7 @@ namespace riscv
 					is_rewritten = original.whole != instruction.whole;
 					if (is_rewritten) {
 						assert(original.length() == instruction.length());
-						std::memcpy((void*)&exec_offset[dst], &instruction, original.length());
+						std::memcpy((void*)&exec_segment[dst], &instruction, original.length());
 						try_fuse = false;
 					}
 				} else {
@@ -195,7 +195,7 @@ namespace riscv
 						for (size_t i = 0; i < max; i++)
 						{
 							// Write the resulting index into the instruction stream
-							auto* half = (uint16_t*) &exec_offset[pc];
+							auto* half = (uint16_t*) &exec_segment[pc];
 							half[0] = qc_lastidx;
 							// Set the fast simulator handler at current PC
 							auto& qc_entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
