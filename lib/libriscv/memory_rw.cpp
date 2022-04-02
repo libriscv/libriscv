@@ -151,38 +151,26 @@ namespace riscv
 		{
 			const size_t size = std::min(Page::size(), len);
 			const address_t pageno = page_number(dst);
-			// unfortunately, have to create pages for non-default attrs
-			if (!is_default) {
-				this->create_writable_pageno(pageno).attr = options;
-			} else {
-				// set attr on non-COW pages only!
-				const auto& page = this->get_pageno(pageno);
-				if (page.attr.is_cow == false) {
-					// this page has been written to, or had attrs set,
-					// otherwise it would still be CoW.
-					this->create_writable_pageno(pageno).attr = options;
+			auto it = pages().find(pageno);
+			if (it != pages().end()) {
+				auto& page = it->second;
+				if (page.is_cow_page()) {
+					// The special zero-CoW page is an internal optimization
+					// We can ignore the page if the default attrs apply.
+					if (!is_default)
+						this->create_writable_pageno(pageno).attr = options;
+				} else {
+					// There is a page there
+					page.attr = options;
 				}
+			} else {
+				// If the page was not found, it was likely (also) the
+				// special zero-CoW page.
+				if (!is_default)
+					this->create_writable_pageno(pageno).attr = options;
 			}
 
 			dst += size;
-			len -= size;
-		}
-	}
-
-	template <int W>
-	void Memory<W>::memcpy_unsafe(address_t dst, const void* vsrc, size_t len)
-	{
-		auto* src = (uint8_t*) vsrc;
-		while (len != 0)
-		{
-			const size_t offset = dst & (Page::size()-1); // offset within page
-			const size_t size = std::min(Page::size() - offset, len);
-			auto& page = this->create_writable_pageno(dst >> Page::SHIFT);
-
-			std::copy(src, src + size, page.data() + offset);
-
-			dst += size;
-			src += size;
 			len -= size;
 		}
 	}

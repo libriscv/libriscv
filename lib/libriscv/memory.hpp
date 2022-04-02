@@ -39,7 +39,6 @@ namespace riscv
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
 		void memcpy_out(void* dst, address_t src, size_t) const;
-		void memcpy_unsafe(address_t dst, const void* src, size_t); // No page protections
 		/* Fill an array of buffers pointing to complete guest virtual [addr, len].
 		   Throws an exception if there was a protection violation.
 		   Returns the number of buffers filled, or an exception if not enough. */
