@@ -162,11 +162,6 @@ namespace riscv
 			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
 				exec_decoder[this->pc() / DecoderCache<W>::DIVISOR];
-		#ifndef RISCV_INSTR_CACHE_PREGEN
-			if (UNLIKELY(!DecoderCache<W>::isset(cache_entry))) {
-				DecoderCache<W>::convert(this->decode(instruction), cache_entry);
-			}
-		#endif
 		#ifdef RISCV_DEBUG
 			INSTRUCTION_LOGGING(*this);
 			// Execute instruction

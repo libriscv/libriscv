@@ -80,7 +80,6 @@ namespace riscv
 		delete[] this->m_decoder_cache;
 		this->m_decoder_cache = &decoder_array[0];
 
-#ifdef RISCV_INSTR_CACHE_PREGEN
 		auto* exec_offset = machine().cpu.exec_seg_data();
 		assert(exec_offset && "Must have set CPU execute segment");
 		auto* exec_decoder = this->m_exec_decoder;
@@ -168,15 +167,19 @@ namespace riscv
 				decoded = machine().cpu.decode(instruction);
 			} else {
 				bool try_fuse = options.instruction_fusing;
-				// Improve many instruction handlers by rewriting instructions
-				decoded = machine().cpu.decode_rewrite(dst, instruction);
-				// Write the instruction back to execute segment using
-				// the *original* instructions length, if it changed.
-				is_rewritten = original.whole != instruction.whole;
-				if (is_rewritten) {
-					assert(original.length() == instruction.length());
-					std::memcpy((void*)&exec_offset[dst], &instruction, original.length());
-					try_fuse = false;
+				if constexpr (decoder_rewriter_enabled) {
+					// Improve many instruction handlers by rewriting instructions
+					decoded = machine().cpu.decode_rewrite(dst, instruction);
+					// Write the instruction back to execute segment using
+					// the *original* instructions length, if it changed.
+					is_rewritten = original.whole != instruction.whole;
+					if (is_rewritten) {
+						assert(original.length() == instruction.length());
+						std::memcpy((void*)&exec_offset[dst], &instruction, original.length());
+						try_fuse = false;
+					}
+				} else {
+					decoded = machine().cpu.decode(instruction);
 				}
 				if (!is_rewritten && try_fuse) {
 					// TODO: Instruction fusing here
@@ -266,14 +269,8 @@ namespace riscv
 		}
 #endif
 	} // W != 16
-#else
-		// Default-initialize the whole thing
-		for (size_t p = 0; p < n_pages; p++)
-			decoder_array[p] = {};
-#endif
-		(void) options;
 	}
-#endif
+#endif // RISCV_INSTR_CACHE
 
 	template struct Memory<4>;
 	template struct Memory<8>;

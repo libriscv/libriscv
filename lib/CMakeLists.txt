@@ -40,7 +40,6 @@ endif()
 
 set (SOURCES
 		libriscv/cpu.cpp
-		libriscv/decoder_cache.cpp
 		libriscv/machine.cpp
 		libriscv/memory.cpp
 		libriscv/memory_rw.cpp
@@ -68,6 +67,11 @@ endif()
 if (RISCV_DEBUG)
 	list(APPEND SOURCES
 		libriscv/debug.cpp
+	)
+endif()
+if (RISCV_ICACHE)
+	list(APPEND SOURCES
+		libriscv/decoder_cache.cpp
 	)
 endif()
 if (RISCV_EXPERIMENTAL AND NOT RISCV_BINARY_TRANSLATION)
@@ -110,8 +114,10 @@ endif()
 if (RISCV_ICACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE=1)
 endif()
-if (RISCV_EXPERIMENTAL AND RISCV_ICACHE)
-	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE_PREGEN=1)
+if (RISCV_ICACHE AND RISCV_EXPERIMENTAL)
+	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
+	message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
+	target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
 endif()
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)

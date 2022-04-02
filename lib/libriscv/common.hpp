@@ -30,11 +30,6 @@
 #define RISCV_RODATA_SEGMENT_IS_SHARED 1
 #endif
 
-#if defined(RISCV_INSTR_CACHE) && defined(RISCV_INSTR_CACHE_PREGEN)
-// WARNING: this feature disables virtual execute memory
-#define RISCV_INBOUND_JUMPS_ONLY
-#endif
-
 namespace riscv
 {
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
@@ -74,6 +69,11 @@ namespace riscv
 	static constexpr bool binary_translation_enabled = true;
 #else
 	static constexpr bool binary_translation_enabled = false;
+#endif
+#ifdef RISCV_DECODER_REWRITER
+	static constexpr bool decoder_rewriter_enabled = true;
+#else
+	static constexpr bool decoder_rewriter_enabled = false;
 #endif
 #ifdef RISCV_FAST_SIMULATOR
 	static constexpr bool fast_simulator_enabled = true;

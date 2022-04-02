@@ -72,7 +72,7 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-#ifdef RISCV_INSTR_CACHE_PREGEN
+#ifdef RISCV_INSTR_CACHE
 #include "rvi_fuse.cpp"
 template bool CPU<8>::try_fuse(instr_pair, instr_pair) const;
 #endif

@@ -79,7 +79,6 @@ static void fused_store(
 template <int W>
 bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 {
-#ifdef RISCV_INSTR_CACHE_PREGEN
 	// LI + ECALL fused
 	if (i1.first == DECODED_INSTR(OP_IMM_LI).handler &&
 		i2.first == DECODED_INSTR(SYSCALL).handler)
@@ -202,9 +201,5 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 		}
 	}
 # endif
-#else
-	(void) i1;
-	(void) i2;
-#endif
 	return false;
 }
