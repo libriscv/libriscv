@@ -200,7 +200,7 @@ while (!machine.stopped()) {
 	cpu.increment_pc(instr.length());
 }
 ```
-NOTE: Make sure to disable instruction caching when doing this. Some features like instruction fusing will modify instruction bits for performance reasons, which may be only compatible with the instruction cache mechanism, as well as binary translation.
+NOTE: Make sure to disable RISCV_EXPERIMENTAL when doing this. One of the experimental features enables a mode that only allows a single execute segment, and disallowing you to jump outside of it. It exists purely to improve performance of a standard static RISC-V executable.
 
 ## Setting up your own machine environment
 
@@ -257,15 +257,15 @@ It can also be used as a script backend for a game engine, as it's quite a bit f
 
 Use Clang (newer is better) to compile the emulator with. It is faster on most benchmarks.
 
-Use GCC to build the RISC-V binaries, specifically the RISC-V GNU toolchain. Use -O2 or -O3 and use the regular standard extensions: `-march=rv64gc -mabi=lp64d`. Enable the RISCV_EXPERIMENTAL option for the best performance unless you are using libriscv as a sandbox. Use `-march=rv64g` for the absolute best performance, if you have that choice. Difference is ~5% so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable LTO if you can, both in the guest program and for the emulator.
+Use GCC to build the RISC-V binaries, specifically the RISC-V GNU toolchain. Use -O2 or -O3 and use the regular standard extensions: `-march=rv64gc -mabi=lp64d`. Enable the RISCV_EXPERIMENTAL option for the best performance, unless you are adding your own execute pages. Use `-march=rv64g` for the absolute best performance, if you have that choice. Difference is ~5% so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable LTO if you can, both in the guest program and for the emulator.
 
 Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my [rvscript](https://github.com/fwsGonzo/rvscript) repository. It's a complex topic that cannot be explained in one paragraph.
 
-If you have arenas available you can replace the default page fault handler with your own that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the forking constructor option. It will apply copy-on-write to all pages on the newly created machine and share text and rodata. Also, enable RISCV_EXPERIMENTAL so that the decoder cache will be generated ahead of time.
+If you have arenas available you can replace the default page fault handler with your own that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the forking constructor option. It will apply copy-on-write to all pages on the newly created machine and share text, rodata and the instruction cache. Also, enable RISCV_EXPERIMENTAL so that the decoder cache will be generated ahead of time.
 
 ## Multiprocessing
 
-There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases. With multiprocessing I was able to achieve 2.7x speedup using 4 CPUs for 8192 dot-product calculations.
+There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases. With multiprocessing I was able to achieve 3x speedup using 4 CPUs for 8192 dot-product calculations.
 
 ## Binary translation
 
