@@ -12,7 +12,7 @@ The emulator has a binary translation mode that has currently only been tested o
 
 ## Benchmarks
 
-One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation.
+One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation. However, compiled code should in theory be faster.
 
 [STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
 
@@ -21,8 +21,6 @@ One motivation when writing this emulator was to use it in a game engine, and so
 [LuaJIT vs Interpreted RISC-V](https://gist.github.com/fwsGonzo/d7ee7acb52b11ef5a51982d5b46734ca)
 
 [LuaJIT vs Binary Translated RISC-V](https://gist.github.com/fwsGonzo/c77befe81c5957b87b96726e98466946)
-
-However, compiled code is faster.
 
 ## Installing a RISC-V GCC compiler
 
