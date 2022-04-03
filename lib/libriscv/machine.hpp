@@ -32,9 +32,17 @@ namespace riscv
 		using stdin_func = std::function<long(char*, size_t)>;
 
 		// See common.hpp for MachineOptions
+		// The machine takes the binary as a const reference and does not
+		// own it, instead the binary data must be kept alive with the machine
+		// and not moved.
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
 		Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& = {});
-		Machine(const Machine&, const MachineOptions<W>& = {}); //<- Fork
+		// The forking constructor creates a new machine based on @main,
+		// and loans all memory using Copy-on-Write mechanisms. Additionally,
+		// all cached structures like execute segment, rodata and the
+		// instruction cache is also loaned. The main machine must not be
+		// destroyed or (in most cases) modified while the fork is running.
+		Machine(const Machine& main, const MachineOptions<W>& = {});
 		~Machine();
 
 		// Simulate a RISC-V machine until @max_instructions have been
@@ -44,10 +52,22 @@ namespace riscv
 		template <bool Throw = true>
 		void simulate(uint64_t max_instructions = UINT64_MAX);
 
+		// Sets the machines max instructions counter to zero, which effectively
+		// causes the machine to stop. instruction_limit_reached() will return
+		// false indicating that the machine did not stop because an instruction
+		// limit was reached, and instead stopped naturally.
 		void stop() noexcept;
+		// Returns true if the machine is stopped, including when the
+		// instruction limit was reached.
 		bool stopped() const noexcept;
+		// Resets the machine to the initial state. It is, however, not a
+		// reliable way to reset complex machines with all kinds of features
+		// attached to it, and should almost never be used. It is recommended
+		// to create a new machine instead, or rely on forking to facilitate
+		// quickly creating and destroying a machine.
 		void reset();
 
+		// Returns the precise number of instructions executed.
 		uint64_t instruction_counter() const noexcept { return m_counter; }
 		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
@@ -63,31 +83,33 @@ namespace riscv
 		CPU<W>    cpu;
 		Memory<W> memory;
 
-		// Copy data into the guests memory (*without* page protections)
+		// Copy data into the guests memory (*with* page protections).
 		void copy_to_guest(address_t dst, const void* buf, size_t len);
-		// Copy data from the guests memory (*with* page protections)
+		// Copy data from the guests memory (*with* page protections).
 		void copy_from_guest(void* dst, address_t buf, size_t len);
-		// Push something onto the stack, and move the stack pointer
+		// Push something onto the stack, moving the current stack pointer.
 		address_t stack_push(const void* data, size_t length);
 		address_t stack_push(const std::string& string);
 		template <typename T>
 		address_t stack_push(const T& pod_type);
 
-		// Push all strings on stack and then create a mini-argv on SP
+		// Push all strings on stack and then create a mini-argv on SP.
 		void setup_argv(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
-		// Full Linux-compatible stack with program headers
+		// Full Linux-compatible stack with program headers.
 		void setup_linux(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
 
 		// Retrieve arguments during a system call
+		// Example: auto arg0 = machine.sysarg <int> (0);
 		template <typename T = address_t>
 		inline T sysarg(int arg) const;
-
 		// Retrieve all arguments by given types during a system call
+		// Example: auto [a, b] = machine.sysargs <int, address_type<W>> ();
 		template <typename... Args>
 		inline auto sysargs() const;
 
 		// Set the result of a system or function call
 		// Only supports primitive types like integers and floats
+		// Example: machine.set_result <int, int, float> (123, 456, 789.0f);
 		template <typename... Args>
 		inline void set_result(Args... args);
 
@@ -102,7 +124,7 @@ namespace riscv
 
 		// Calls into the virtual machine, returning the value returned from
 		// @function_name, which must be visible in the ELF symbol tables.
-		// the function must use the C ABI calling convention.
+		// The function must use the C ABI calling convention.
 		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args> constexpr
 		address_t vmcall(const char* func_name, Args&&... args);
 
