@@ -120,55 +120,44 @@ int main(int /*argc*/, const char** /*argv*/)
 
 	using namespace riscv;
 
-	// Install the `exit` system call handler (for all 64-bit machines):
-	// Note that there are several helper functions to install a bunch
-	// of pre-made system call handlers so that you can run complex programs.
-	Machine<RISCV64>::install_syscall_handler(93,
-	 [] (Machine<RISCV64>& machine) {
-		 const int code = machine.return_value <int> ();
-		 printf(">>> Program exited, exit code = %d\n", code);
-		 machine.stop();
-	 });
-
 	// Create a 64-bit machine
 	Machine<RISCV64> machine { binary };
 
-	// Add program arguments on the stack
-	machine.setup_argv({"emulator", "test!"});
+	// Add program arguments on the stack, and set a few basic
+	// environment variables.
+	machine.setup_linux(
+		{"myprogram", "1st argument!", "2nd argument!"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	// Add all the basic Linux system calls.
+	// This includes `exit` and `exit_group` which we will override below.
+	machine.setup_linux_syscalls();
+
+	// Install our own `exit` system call handler (for all 64-bit machines).
+	Machine<RISCV64>::install_syscall_handler(93, // exit
+		[] (Machine<RISCV64>& machine) {
+			const int code = machine.return_value <int> ();
+			printf(">>> Program exited, exit code = %d\n", code);
+			machine.stop();
+		});
+	// We also use the same system call handler again for `exit_group`,
+	// which is another way that C libraries will use to end the process.
+	Machine<RISCV64>::install_syscall_handler(94, // exit_group
+		Machine<RISCV64>::syscall_handlers.at(93));
+
+	// NOTE: We absolutely don't have to create our own system calls handlers,
+	// but it's fun to take control of the environment inside the machine!
 
 	// This function will run until the exit syscall has stopped the
 	// machine, an exception happens which stops execution, or the
-	// instruction counter reaches the given limit (1M):
+	// instruction counter reaches the given 1M instruction limit:
 	try {
-		machine.simulate(1'000'000);
+		machine.simulate(1'000'000UL);
 	} catch (const std::exception& e) {
 		fprintf(stderr, ">>> Runtime exception: %s\n", e.what());
 	}
 }
 ```
-
-Note that this example cannot run (for example) a Newlib executable. For that, simply replace the line that sets the exit system call handler with a helper function that adds a ton of pre-made system calls:
-
-```C++
-machine.setup_newlib_syscalls();
-```
-
-You can find the example above in the `emulator/minimal` folder. It's a normal CMake project, so you can build it like so:
-
-```
-mkdir -p build && cd build
-cmake .. && make -j4
-./emulator
-```
-
-If you run the program as-is with no program loaded, you will get an `Execution space protection fault`, which means the emulator tried to execute on non-executable memory.
-
-```
-$ ./emulator
->>> Runtime exception: Execution space protection fault
-```
-
-The solution is to load a RISC-V binary into the vector `binary` so that the machine is created using a RISC-V ELF binary.
 
 You can limit the amount of (virtual) memory the machine can use like so:
 ```C++
