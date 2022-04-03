@@ -38,7 +38,9 @@ namespace riscv
 		~Machine();
 
 		// Simulate a RISC-V machine until @max_instructions have been
-		// executed, or the machine has been stopped.
+		// executed, or the machine has been stopped. If Throw == true,
+		// the machine will throw a MachineTimeoutException if it hits the
+		// given instruction limit.
 		template <bool Throw = true>
 		void simulate(uint64_t max_instructions = UINT64_MAX);
 

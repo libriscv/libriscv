@@ -76,7 +76,9 @@ cmake .. && make -j4
 
 The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib. `rvlinux` has all the system calls necessary to run a normal userspace linux binary.
 
-Building and running your own ELF files that can run in freestanding RV32GC is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal, except you can more easily implement system functions. The fun part is of course the extremely small binaries and total control over the environment.
+## Example programs
+
+Building and running your own ELF files that can run in freestanding RV32G is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal, except you can more easily implement system functions. The fun part is of course the extremely small binaries and total control over the environment.
 
 The `newlib` example projects have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries.
 
@@ -86,7 +88,7 @@ Finally, the `micro` project implements the absolutely minimal freestanding RV32
 
 ## Building for Windows
 
-There is a `build_mingw.sh` script that can build the emulator for MinGW 64 when cross-compiling on Linux. To be able to build it, install the `g++-mingw-w64-x86-64` package. If you are building inside MinGW 64 on (actual) Windows, then you should not have to do anything special. You will need the common build tools like make, cmake and a c++ compiler.
+There is a `build_mingw.sh` script that can build the emulator for MinGW 64 when cross-compiling on Linux. To be able to build it, install the `g++-mingw-w64-x86-64` package. If you are building inside MinGW 64 on (actual) Windows, then you should not have to do anything special. You will need the common build tools like make, cmake and a C++17-capable compiler.
 
 ## Remote debugging using GDB
 
@@ -101,13 +103,11 @@ The F and D-extensions should be 100% supported (32- and 64-bit floating point i
 
 The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emu128 folder.
 
-Binary translation currently only supports RV32G and RV64G.
+Note: There is no support for the B-, E-, V- and Q-extensions. Binary translation currently only supports RV32G and RV64G.
 
-Note: There is no support for the B-, E-, V- and Q-extensions.
+## Example usage when embedded into a project
 
-## Usage
-
-Load a binary and let the machine simulate from `_start` (ELF entry-point):
+Load a Linux program built for RISC-V and run through main:
 ```C++
 #include <libriscv/machine.hpp>
 
@@ -118,7 +118,7 @@ int main(int /*argc*/, const char** /*argv*/)
 
 	using namespace riscv;
 
-	// Create a 64-bit machine
+	// Create a 64-bit machine (with default options, see: libriscv/common.hpp)
 	Machine<RISCV64> machine { binary };
 
 	// Add program arguments on the stack, and set a few basic
@@ -156,6 +156,13 @@ int main(int /*argc*/, const char** /*argv*/)
 	}
 }
 ```
+
+In order to have the machine not throw an exception when the instruction limit is reached, you can call simulate with the template argument false, instead:
+
+```C++
+machine.simulate<false>(1'000'000UL);
+```
+If the machine runs out of instructions, it will simply stop running. Use `machine.instruction_limit_reached()` to check if the machine stopped running because it hit the instruction limit.
 
 You can limit the amount of (virtual) memory the machine can use like so:
 ```C++
