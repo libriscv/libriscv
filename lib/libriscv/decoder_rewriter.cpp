@@ -35,6 +35,20 @@ namespace riscv
 	};
 	static_assert(sizeof(ZeroBtype) == 4, "is a 4-byte instruction");
 
+	union FasterStype {
+		struct {
+			uint8_t opcode : 3;
+			uint8_t rsy    : 5;
+			uint8_t rsx;
+			int16_t imm;
+		};
+		uint32_t whole;
+		int32_t signed_imm() const noexcept {
+			return imm;
+		}
+	};
+	static_assert(sizeof(FasterStype) == 4, "is a 4-byte instruction");
+
 	template <int W> RVPRINTR_ATTR
 	int rewritten_instr_printer(char* buffer, size_t len, const CPU<W>&, rv32i_instruction) {
 		return snprintf(buffer, len, "Rewritten instruction");
@@ -186,6 +200,80 @@ namespace riscv
 				instr = original;
 			} // BRANCH type
 			} // RV32I_BRANCH
+		case RV32I_STORE:
+			if (original.Stype.rs2 == 0) {
+				// Accelerate store zero
+				FasterStype rewritten;
+				rewritten.opcode = original.Stype.opcode;
+				rewritten.rsx = original.Stype.rs1;
+				rewritten.imm = original.Stype.signed_imm();
+				assert(original.Stype.signed_imm() == rewritten.signed_imm());
+				switch (original.Stype.funct3) {
+				case 0x0: // STORE zero i8
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterStype> (instr);
+							cpu.machine().memory.template write<uint8_t>(
+								cpu.reg(rop.rsx) + rop.imm, 0);
+						}); // i8
+				case 0x1: // STORE zero i16
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterStype> (instr);
+							cpu.machine().memory.template write<uint16_t>(
+								cpu.reg(rop.rsx) + rop.imm, 0);
+						}); // i16
+				case 0x2: // STORE zero i32
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterStype> (instr);
+							cpu.machine().memory.template write<uint32_t>(
+								cpu.reg(rop.rsx) + rop.imm, 0);
+						}); // i32
+				case 0x3: // STORE zero i64
+					instr.whole = rewritten.whole;
+					if constexpr (sizeof(address_t) >= 8) {
+						return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterStype> (instr);
+							cpu.machine().memory.template write<uint64_t>(
+								cpu.reg(rop.rsx) + rop.imm, 0);
+						}); // i64
+					} // 64-bit
+				} // STORE func3
+			}
+			else if (original.Stype.signed_imm() != 0) {
+				// Accelerate store imm
+				FasterStype rewritten;
+				rewritten.opcode = original.Stype.opcode;
+				rewritten.rsx = original.Stype.rs1;
+				rewritten.rsy = original.Stype.rs2;
+				rewritten.imm = original.Stype.signed_imm();
+				assert(original.Stype.signed_imm() == rewritten.signed_imm());
+				switch (original.Stype.funct3) {
+				case 0x2: // STORE rs1+imm, i32
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterStype> (instr);
+							cpu.machine().memory.template write<uint32_t>(
+								cpu.reg(rop.rsx) + RVIMM(cpu, rop), cpu.reg(rop.rsy));
+						}); // i32
+				case 0x3: // STORE rs1+imm, i64
+					instr.whole = rewritten.whole;
+					if constexpr (sizeof(address_t) >= 8) {
+						return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterStype> (instr);
+							cpu.machine().memory.template write<uint64_t>(
+								cpu.reg(rop.rsx) + RVIMM(cpu, rop), cpu.reg(rop.rsy));
+						}); // i64
+					} // 64-bit
+				} // STORE func3
+			} // RV32I_STORE
 		} // opcode
 		return decode(original);
 	}

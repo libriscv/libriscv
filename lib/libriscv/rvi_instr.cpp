@@ -455,6 +455,11 @@ namespace riscv
 		cpu.reg(instr.Itype.rd) = (RVSIGNTYPE(cpu)) RVIMM(cpu, instr.Itype);
 	}, DECODED_INSTR(OP_IMM).printer);
 
+	INSTRUCTION(OP_MV,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		cpu.reg(instr.Itype.rd) = cpu.reg(instr.Itype.rs1);
+	}, DECODED_INSTR(OP_IMM).printer);
+
 	INSTRUCTION(OP_IMM_SLLI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Itype.rd);
