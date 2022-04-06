@@ -7,6 +7,7 @@
 namespace riscv
 {
 	static const unsigned PCAL= compressed_enabled ? 2 : 4;
+	static const unsigned PCALBITS = compressed_enabled ? 1 : 2;
 
 	union FasterBtype {
 		struct {
@@ -48,6 +49,15 @@ namespace riscv
 		}
 	};
 	static_assert(sizeof(FasterStype) == 4, "is a 4-byte instruction");
+
+	union FasterJtype {
+		struct {
+			uint32_t opcode : 2;
+			uint32_t imm    : 30;
+		};
+		uint32_t whole;
+	};
+	static_assert(sizeof(FasterJtype) == 4, "is a 4-byte instruction");
 
 	template <int W> RVPRINTR_ATTR
 	int rewritten_instr_printer(char* buffer, size_t len, const CPU<W>&, rv32i_instruction) {
@@ -200,6 +210,7 @@ namespace riscv
 				instr = original;
 			} // BRANCH type
 			} // RV32I_BRANCH
+			break;
 		case RV32I_STORE:
 			if (original.Stype.rs2 == 0) {
 				// Accelerate store zero
@@ -274,6 +285,32 @@ namespace riscv
 					} // 64-bit
 				} // STORE func3
 			} // RV32I_STORE
+			break;
+		case RV32I_JAL: {
+			const auto addr = pc + original.Jtype.jump_offset() - 4;
+			const bool is_aligned = addr % PCAL == 0;
+			const bool below30 = addr < (uint64_t(1) << (30 + PCALBITS));
+			FasterJtype rewritten;
+			rewritten.opcode = original.Jtype.opcode;
+			rewritten.imm = addr >> PCALBITS;
+			if (is_aligned && below30 && original.Jtype.rd == 0) {
+				instr.whole = rewritten.whole;
+				return rewritten_instruction<W>(
+					[] (auto& cpu, auto instr) RVINSTR_ATTR {
+						const auto& rop = view_as<FasterJtype> (instr);
+						cpu.aligned_jump(rop.imm << PCALBITS);
+					}); // JAL zero, pc+imm
+			} else if (is_aligned && below30 && original.Jtype.rd == REG_RA) {
+				instr.whole = rewritten.whole;
+				return rewritten_instruction<W>(
+					[] (auto& cpu, auto instr) RVINSTR_ATTR {
+						const auto& rop = view_as<FasterJtype> (instr);
+						cpu.reg(REG_RA) = cpu.pc() + 4;
+						cpu.aligned_jump(rop.imm << PCALBITS);
+					}); // JAL RA, pc+imm
+			}
+			} // RV32I_JAL
+			break;
 		} // opcode
 		return decode(original);
 	}
