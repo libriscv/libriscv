@@ -97,6 +97,8 @@
 						case 0x0: // ADDI
 							if (instruction.Itype.rs1 == 0) {
 								DECODER(DECODED_INSTR(OP_IMM_LI));
+							} else if (instruction.Itype.imm == 0) {
+								DECODER(DECODED_INSTR(OP_MV));
 							}
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
 						case 0x1: // SLLI
