@@ -15,7 +15,7 @@ namespace riscv
 		bool is_sequential() const noexcept { return m_data.size() == 1; }
 		const auto& first() const { return m_data[0]; }
 		const char* c_str() const noexcept { return first().first; }
-		const char* data() noexcept { return first().first; }
+		const char* data() const noexcept { return first().first; }
 		size_t      size() const noexcept { return m_len; }
 
 		auto strview() const noexcept { return std::string_view{c_str(), size()}; }
