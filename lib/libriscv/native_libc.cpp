@@ -131,6 +131,13 @@ void Machine<W>::setup_native_heap(size_t sysnum, uint64_t base, size_t max_memo
 
 	this->setup_native_heap_internal(sysnum);
 }
+template <int W>
+void Machine<W>::transfer_arena_from(const Machine& other)
+{
+	m_arena.reset(new Arena(other.arena()));
+	// XXX: We do not install the (same) system call
+	// handlers again. They should are already be installed.
+}
 
 template <int W>
 void Machine<W>::setup_native_memory(const size_t syscall_base)

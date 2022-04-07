@@ -38,6 +38,7 @@ struct Arena
 {
 	static constexpr size_t ALIGNMENT = 8u;
 	using PointerType = ArenaChunk::PointerType;
+	Arena(const Arena& other);
 	Arena(PointerType base, PointerType end);
 
 	PointerType malloc(size_t size);
@@ -281,6 +282,11 @@ inline size_t Arena::bytes_used() const
 		if (!chunk.free) size += chunk.size;
 	});
 	return size;
+}
+
+inline Arena::Arena(const Arena& other)
+{
+	other.transfer(*this);
 }
 
 inline void Arena::transfer(Arena& dest) const
