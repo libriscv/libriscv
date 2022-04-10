@@ -140,14 +140,13 @@ namespace riscv
 		if (attr.exec && machine().cpu.exec_seg_data() == nullptr)
 		{
 			constexpr address_t PMASK = Page::size()-1;
-			const address_t pbase = (hdr->p_vaddr - 0x4) & ~(address_t) PMASK;
+			const address_t pbase = (hdr->p_vaddr - 0x4) & ~PMASK;
 			const size_t prelen  = hdr->p_vaddr - pbase;
 			// The first 4 bytes is instruction alignment
 			// The middle 4 bytes is the STOP instruction
 			// The last 8 bytes is a relative jump (JR -4)
 			const size_t midlen  = len + prelen + 12;
-			const size_t plen =
-				(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
+			const size_t plen = (midlen + PMASK) & ~PMASK;
 			const size_t postlen = plen - midlen;
 			//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
 			//	hdr->p_vaddr, len, pbase, pbase + plen, prelen, len, postlen, plen);

@@ -89,7 +89,7 @@ namespace riscv
 		address_t exec_end()   const noexcept { return m_exec_end; }
 		const uint8_t* exec_seg_data() const noexcept { return m_exec_data; }
 #ifdef RISCV_FAST_SIMULATOR
-		void add_qc(const struct QCVec<W>& data);
+		void add_qc(struct QCVec<W> data);
 		void finish_qc();
 #endif
 		static void fast_simulator(CPU&, instruction_format);

@@ -20,6 +20,8 @@ namespace riscv
 
 		uint64_t start_address = 0;
 		uint64_t stack_address = 0;
+		uint64_t mmap_address  = 0;
+		uint64_t heap_address  = 0;
 		uint64_t exit_address  = 0;
 	};
 	struct SerializedPage
@@ -46,6 +48,8 @@ namespace riscv
 
 			.start_address = memory.start_address(),
 			.stack_address = memory.stack_initial(),
+			.mmap_address  = memory.mmap_address(),
+			.heap_address  = memory.heap_address(),
 			.exit_address  = memory.exit_address(),
 		};
 		const auto* hptr = (const uint8_t*) &header;
@@ -120,6 +124,8 @@ namespace riscv
 	{
 		this->m_start_address = state.start_address;
 		this->m_stack_address = state.stack_address;
+		this->m_mmap_address  = state.mmap_address;
+		this->m_heap_address  = state.heap_address;
 		this->m_exit_address  = state.exit_address;
 
 		[[maybe_unused]]
@@ -132,12 +138,15 @@ namespace riscv
 
 		if (m_exec_pagedata != nullptr && m_exec_pagedata_size > 0)
 		{
-			// NOTE: this only works if you restore to the same machine
 			// TODO: serialize the executable memory separately?
+			// XXX: this only works if you restore to the same machine
+			// XXX: Does not work with FASTSIM
+#ifndef RISCV_FAST_SIMULATOR
 			this->insert_non_owned_memory(
 				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, {
 					.read = true, .write = false, .exec = true
 				});
+#endif
 		}
 
 		size_t off = state.mem_offset;

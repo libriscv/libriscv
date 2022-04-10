@@ -4,24 +4,32 @@
 
 namespace riscv
 {
+	[[maybe_unused]] static constexpr bool VERBOSE_FASTSIM = false;
+
 	template <int W>
 	struct QCData {
-		uint32_t instr;
 		instruction_handler<W> handler;
+		uint32_t instr;
+		uint16_t idxend;
+		uint8_t  original_opcode;
+		uint8_t  reserved;
 	};
 	template <int W>
 	struct QCVec {
 		address_type<W> base_pc;
 		address_type<W> end_pc;
+#ifdef RISCV_EXT_COMPRESSED
 		uint16_t  incrementor;
+#endif
 		std::vector<QCData<W>> data;
 	};
 
 	template <int W> inline
-	void CPU<W>::add_qc(const QCVec<W>& data) {
+	void CPU<W>::add_qc(QCVec<W> data) {
 		if (this->m_qcdata == nullptr)
 			this->m_qcdata = std::make_shared<std::vector<QCVec<W>>> ();
-		this->m_qcdata->push_back(data);
+		data.data.shrink_to_fit();
+		this->m_qcdata->push_back(std::move(data));
 	}
 	template <int W> inline
 	void CPU<W>::finish_qc() {
