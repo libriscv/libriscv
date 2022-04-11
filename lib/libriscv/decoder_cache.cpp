@@ -6,33 +6,23 @@
 
 #ifdef RISCV_FAST_SIMULATOR
 #include "fastsim.hpp"
-#ifdef RISCV_USE_RH_HASH
-#include <robin_hood.h>
-template <typename T>
-using qc_unordered_set = robin_hood::unordered_flat_set<T>;
-#else
-#include <unordered_set>
-template <typename T>
-using qc_unordered_set = std::unordered_set<T>;
-#endif
-
 namespace riscv
 {
-	static const qc_unordered_set<uint8_t> fsim_jumpy_insn
-	{
-		RV32I_BRANCH,
-		RV32I_JALR,
-		RV32I_JAL,
-		RV32I_SYSTEM,
-	};
-	static constexpr size_t QC_TRESHOLD = 8;
-	static constexpr size_t QC_MAX = 0xFFFF;
-	static constexpr size_t FS_MAXI = 4096;
+	static constexpr size_t  QC_TRESHOLD = 8;
+	static constexpr size_t  QC_MAX = 0xFFFF;
+	static constexpr int32_t FS_JALI = 40;
+	static constexpr size_t  FS_MAXI = 65534;
 
 	template <int W>
-	static bool fastsim_gucci_opcode(rv32i_instruction instr) {
-		if (instr.is_long())
-			return fsim_jumpy_insn.count(instr.opcode()) == 0;
+	static bool fastsim_gucci_opcode(rv32i_instruction instr)
+	{
+		if (instr.is_long()) {
+			if (UNLIKELY(instr.opcode() == RV32I_JALR)) return false;
+			if (UNLIKELY(instr.opcode() == RV32I_JAL)) {
+				return (std::abs(instr.Jtype.jump_offset()) < FS_JALI * 4);
+			}
+			return true;
+		}
 		const rv32c_instruction ci { instr };
 		#define CI_CODE(x, y) ((x << 13) | (y))
 		switch (ci.opcode()) {
@@ -56,7 +46,55 @@ namespace riscv
 			return true;
 		}
 	}
+	template <int W>
+	static void realize_qcvec(QCVec<W>& qcvec, size_t fsidx, uint8_t* exec_segment, DecoderData<W>* exec_decoder)
+	{
+		//printf("Fast sim idx %zu at 0x%lX -> 0x%lX, %zu good instructions\n",
+		//	fsidx, (long)qcvec.base_pc, (long)qcvec.end_pc, qcvec.data.size());
+
+		// Count distance to next branching instruction backwards
+		// and fill in idxend for all entries along the way.
+		unsigned idxend = qcvec.data.size();
+		for (int i = (int)qcvec.data.size()-1; i >= 0; i--)
+		{
+			auto& cdata = qcvec.data[i];
+			const auto opcode = cdata.original_opcode;
+			if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
+				|| opcode == RV32I_JAL || opcode == RV32I_JALR)
+				idxend = i + 1;
+			cdata.idxend = idxend;
+			//printf("fs: %zu i: %d  idxend: %u\n", qc_lastidx, i, cdata.idxend);
+		}
+
+		auto pc = qcvec.base_pc;
+		for (size_t i = 0; i < qcvec.data.size(); i++)
+		{
+			// Write the current FSim index into the instruction stream
+			auto* half = (uint16_t*) &exec_segment[pc];
+			half[0] = fsidx;
+			// Set the fast simulator handler at current PC
+			auto& qc_entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			qc_entry.set(&CPU<W>::fast_simulator);
+			// Advance to the next accelerated instruction
+			if constexpr (compressed_enabled) {
+				const auto& idata = qcvec.data[i];
+				pc += rv32i_instruction{idata.instr}.length();
+			} else pc += 4;
+		}
+#  ifdef RISCV_EXT_COMPRESSED
+		// The outer simulator (once fast sim ends) will be
+		// trying to calculate the instruction length based
+		// on the index number written into the 16-bit
+		// instruction. To compensate, we add the real
+		// instructions length and subtract the "wrong" length.
+		const bool will_be_long = (qc_lastidx & 0x3) == 0x3;
+		qcvec.incrementor = rv32i_instruction{qcvec.data.front().instr}.length();
+		qcvec.incrementor -= will_be_long ? 4 : 2;
+#  endif
+	}
 }
+#else
+#define VERBOSE_FASTSIM  false
 #endif // RISCV_FAST_SIMULATOR
 
 namespace riscv
@@ -69,8 +107,7 @@ namespace riscv
 		constexpr size_t PMASK = Page::size()-1;
 		const size_t prelen  = addr - pbase;
 		const size_t midlen  = len + prelen;
-		const size_t plen =
-			(PMASK & midlen) ? ((midlen + Page::size()) & ~PMASK) : midlen;
+		const size_t plen = (midlen + PMASK) & ~PMASK;
 
 		const size_t n_pages = plen / Page::size();
 		auto* decoder_array = new DecoderCache<W> [n_pages];
@@ -98,6 +135,7 @@ namespace riscv
 
 #ifdef RISCV_FAST_SIMULATOR
 		size_t qc_lastidx = (options.fast_simulator) ? 0 : QC_MAX;
+		size_t qc_instrcnt = 0;
 		size_t qc_failure = 0;
 		QCVec<W> qcvec;
 		qcvec.base_pc = addr;
@@ -157,7 +195,8 @@ namespace riscv
 				decoded = machine().cpu.decode(instruction);
 			} else {
 				bool try_fuse = options.instruction_fusing;
-				if constexpr (decoder_rewriter_enabled) {
+				// Fast simulator gets confusing instruction logging with instr rewrites
+				if constexpr (decoder_rewriter_enabled && !VERBOSE_FASTSIM) {
 					// Improve many instruction handlers by rewriting instructions
 					decoded = machine().cpu.decode_rewrite(dst, instruction);
 					// Write the instruction back to execute segment using
@@ -180,48 +219,32 @@ namespace riscv
 #ifdef RISCV_FAST_SIMULATOR
 			if (LIKELY(qc_lastidx < QC_MAX) && was_full_instruction) {
 				const rv32i_instruction qc_instr = instruction;
+				// Store original opcode in the QCData struct so that
+				// we can go back and put end indices correctly. In theory
+				// we could just overwrite idxend to save a member, but
+				// it might be useful to know the original opcode in case
+				// the opcode rewriter has some issue.
+				const uint8_t original_opcode = original.opcode();
 				// We will verify the original instruction only,
 				// as it should still have the same semantics.
 				if (fastsim_gucci_opcode<W>(original) && qcvec.data.size() < FS_MAXI) {
-					qcvec.data.push_back({qc_instr.whole, decoded.handler});
+					qcvec.data.push_back({decoded.handler, qc_instr.whole, 0, original_opcode, 0});
 				} else {
 					if (qcvec.data.size()+1 >= QC_TRESHOLD) {
-						qcvec.data.push_back({qc_instr.whole, decoded.handler});
-						qcvec.end_pc = dst + qc_instr.length();
-						//printf("Fast simulator at 0x%lX, %zu good instructions\n",
-						//	(long)qcvec.base_pc, qcvec.data.size());
-						auto pc = qcvec.base_pc;
-						const size_t max = compressed_enabled ? 1 : qcvec.data.size();
-						for (size_t i = 0; i < max; i++)
-						{
-							// Write the resulting index into the instruction stream
-							auto* half = (uint16_t*) &exec_segment[pc];
-							half[0] = qc_lastidx;
-							// Set the fast simulator handler at current PC
-							auto& qc_entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
-							qc_entry.set(&CPU<W>::fast_simulator);
-							// Advance to the next accelerated instruction
-							if constexpr (compressed_enabled) {
-								const auto& idata = qcvec.data[i];
-								pc += rv32i_instruction{idata.instr}.length();
-							} else pc += 4;
-						}
-						// The outer simulator (once fast sim ends) will be
-						// trying to calculate the instruction length based
-						// on the index number written into the 16-bit
-						// instruction. To compensate, we add the real
-						// instructions length and subtract the "wrong" length.
-						const bool will_be_long = (qc_lastidx & 0x3) == 0x3;
-						qcvec.incrementor = rv32i_instruction{qcvec.data.front().instr}.length();
-						qcvec.incrementor -= will_be_long ? 4 : 2;
+						qcvec.data.push_back({decoded.handler, qc_instr.whole, 0, original_opcode, 0});
+						qcvec.end_pc = dst + (compressed_enabled ? qc_instr.length() : 4);
+
+						realize_qcvec<W>(qcvec, qc_lastidx, exec_segment, exec_decoder);
+
 						// Add the instruction data array to the CPU
-						machine().cpu.add_qc(qcvec);
 						qc_lastidx ++;
+						qc_instrcnt += qcvec.data.size();
+						machine().cpu.add_qc(std::move(qcvec));
 					} else {
 						qc_failure ++;
 					}
 					qcvec.data.clear();
-					qcvec.base_pc = dst + instruction.length();
+					qcvec.base_pc = dst + (compressed_enabled ? instruction.length() : 4);
 				}
 			} // options.fast_simulator
 #endif
@@ -245,7 +268,7 @@ namespace riscv
 #ifdef RISCV_FAST_SIMULATOR
 		machine().cpu.finish_qc();
 		if (options.verbose_loader) {
-			printf("Fast sim conversion blocks: %zu\n", qc_lastidx);
+			printf("Fast sim conversion blocks: %zu  Instructions: %zu\n", qc_lastidx, qc_instrcnt);
 			printf("Fast sim conversion failure: %zu\n", qc_failure);
 		}
 #endif

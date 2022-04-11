@@ -7,6 +7,8 @@
 #include "rv128i.hpp"
 #ifdef RISCV_FAST_SIMULATOR
 #include "fastsim.hpp"
+#else
+#define VERBOSE_FASTSIM false
 #endif
 
 #define INSTRUCTION_LOGGING(cpu)	\
@@ -17,8 +19,6 @@
 
 namespace riscv
 {
-	[[maybe_unused]] static constexpr bool VERBOSE_FASTSIM = false;
-
 	template <int W>
 	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
 		: m_machine { machine }, m_cpuid { cpu_id }
@@ -237,27 +237,26 @@ namespace riscv
 		auto pc = cpu.pc();
 		auto fsindex = instref.half[0];
 		const auto& qcvec = cpu.m_fastsim_vector[fsindex];
-		//printf("Fast sim index %u with %zu instr at 0x%lX (0x%lX)\n",
-		//	fsindex, qcvec.data.size(), (long)pc, cpu.pc());
-
-	restart_sequence:
-		size_t index = 0;
-		if constexpr (false && compressed_enabled) {
-			address_t base_pc = qcvec.base_pc;
-			while (base_pc < pc) {
-				const rv32i_instruction instr{ qcvec.data[index].instr };
-				base_pc += instr.length();
-				index ++;
-				//printf("Index %zu with PC 0x%lX / 0x%lX\n", index, (long)base_pc, (long)pc);
-			}
-		} else {
-			index = (pc - qcvec.base_pc) / 4;
+		if constexpr (VERBOSE_FASTSIM) {
+			printf("Fast sim index %u with %zu instr at 0x%lX (BASE 0x%lX END 0x%lX)\n",
+				fsindex, qcvec.data.size(), (long)pc, (long)qcvec.base_pc, (long)qcvec.end_pc);
 		}
-		// NOTE: Increment counter based on where we start
-		cpu.machine().increment_counter(qcvec.data.size() - index);
+
+	restart_sequence:;
+		//if (pc < qcvec.base_pc)
+		//	throw MachineException(INVALID_PROGRAM, "Fast simulator is invalid", pc);
+		const size_t index = (pc - qcvec.base_pc) / 4;
 
 		const auto* idata = &qcvec.data[index];
-		const auto* iend  = &qcvec.data[qcvec.data.size()];
+		const auto* iend  = &qcvec.data[idata->idxend];
+		// NOTE: Increment counter based on where we start
+		cpu.machine().increment_counter(iend - idata);
+
+		if constexpr (VERBOSE_FASTSIM) {
+			printf("Fast sim %u with index %zu -> %u at 0x%lX (BASE 0x%lX END 0x%lX)\n",
+				fsindex, index, idata->idxend, (long)pc, (long)qcvec.base_pc, (long)qcvec.end_pc);
+		}
+
 		for (; idata < iend; idata++) {
 			const format_t instruction {idata->instr};
 			// Some instructions use PC offsets
@@ -270,28 +269,19 @@ namespace riscv
 			// Execute instruction using handler and 32-bit wrapper
 			idata->handler(cpu, instruction);
 			// increment *local* PC
-			if constexpr (compressed_enabled)
-				pc += instruction.length();
-			else
-				pc += 4;
+			pc += 4;
 		} // idata
 
-		if (UNLIKELY(cpu.machine().instruction_limit_reached()))
+		// Fast path, but need to check if we are running out of
+		// instructions or stopped by checking the counter.
+		if (UNLIKELY(cpu.machine().stopped()))
 			return;
 
-		// Fast path, but need to check if we are running out of
-		// instructions by checking the counter.
-		if constexpr (compressed_enabled) {
-			// The outer simulator will miscalculate the size of the instruction
-			cpu.registers().pc += qcvec.incrementor;
-			//pc += qcvec.incrementor;
-		} else {
-			pc = cpu.pc() + 4;
-			if (pc >= qcvec.base_pc && pc < qcvec.end_pc) {
-				//printf("Restarting sequence %u at 0x%lX with %zu instr\n",
-				//	fsindex, (long)pc, cpu.m_qcdata->size());
-				goto restart_sequence;
-			}
+		pc = cpu.pc() + 4;
+		if (pc >= qcvec.base_pc && pc < qcvec.end_pc) {
+			//printf("Restarting sequence %u at 0x%lX with %zu instr\n",
+			//	fsindex, (long)pc, cpu.m_qcdata->size());
+			goto restart_sequence;
 		}
 
 		// Compensate for the outer simulator incrementing the
