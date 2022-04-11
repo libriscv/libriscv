@@ -88,11 +88,6 @@ namespace riscv
 		address_t exec_begin() const noexcept { return m_exec_begin; }
 		address_t exec_end()   const noexcept { return m_exec_end; }
 		const uint8_t* exec_seg_data() const noexcept { return m_exec_data; }
-#ifdef RISCV_FAST_SIMULATOR
-		void add_qc(struct QCVec<W> data);
-		void finish_qc();
-#endif
-		static void fast_simulator(CPU&, instruction_format);
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
@@ -111,10 +106,6 @@ namespace riscv
 
 		const unsigned m_cpuid;
 
-#ifdef RISCV_FAST_SIMULATOR
-		std::shared_ptr<std::vector<struct QCVec<W>>> m_qcdata;
-		const struct QCVec<W>* m_fastsim_vector = nullptr;
-#endif
 #ifdef RISCV_DEBUG
 		// instruction step & breakpoints
 		mutable int32_t m_break_steps = 0;

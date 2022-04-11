@@ -5,11 +5,6 @@
 #include "rv32i.hpp"
 #include "rv64i.hpp"
 #include "rv128i.hpp"
-#ifdef RISCV_FAST_SIMULATOR
-#include "fastsim.hpp"
-#else
-#define VERBOSE_FASTSIM false
-#endif
 
 #define INSTRUCTION_LOGGING(cpu)	\
 	if ((cpu).machine().verbose_instructions) { \
@@ -19,6 +14,8 @@
 
 namespace riscv
 {
+	[[maybe_unused]] static constexpr bool VERBOSE_FASTSIM = false;
+
 	template <int W>
 	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
 		: m_machine { machine }, m_cpuid { cpu_id }
@@ -28,10 +25,6 @@ namespace riscv
 		this->m_exec_end   = other.cpu.m_exec_end;
 
 		this->registers() = other.cpu.registers();
-#ifdef RISCV_FAST_SIMULATOR
-		this->m_qcdata = other.cpu.m_qcdata;
-		this->m_fastsim_vector = m_qcdata->data();
-#endif
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = other.cpu.m_atomics;
 #endif
@@ -157,6 +150,47 @@ namespace riscv
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 #  endif
+			auto pc = this->pc();
+#  ifdef RISCV_FAST_SIMULATOR
+			(void) exec_seg_data;
+restart_fastsim:
+			// Retrieve handler directly from the instruction handler cache
+			auto& cache_entry =
+				exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			const size_t count = cache_entry.idxend;
+			//printf("Fast sim count: %zu\n", count);
+			machine().increment_counter(count);
+			auto* decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			auto* decoder_end = &decoder[count];
+
+			while (decoder < decoder_end) {
+				auto& cache_entry = *decoder++;
+				const format_t instruction {cache_entry.instr};
+				// Some instructions use PC offsets
+				registers().pc = pc;
+				// Debugging aid when fast simulator is behaving strangely
+				if constexpr (VERBOSE_FASTSIM) {
+					const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n";
+					machine().print(string.c_str(), string.size());
+				}
+				// Execute instruction using handler and 32-bit wrapper
+				cache_entry.handler(*this, instruction);
+				// increment *local* PC
+				pc += 4;
+			} // fsim data
+
+			if (!machine().stopped()) {
+				pc = registers().pc + 4;
+				goto restart_fastsim;
+			}
+
+			registers().pc += 4;
+			break;
+#  else // RISCV_FAST_SIMULATOR
+			// Retrieve handler directly from the instruction handler cache
+			auto& cache_entry =
+				exec_decoder[pc / DecoderCache<W>::DIVISOR];
+
 			// Instructions may be unaligned with C-extension
 			// On amd64 we take the cost, because it's faster
 #    if defined(RISCV_EXT_COMPRESSED) && !defined(__x86_64__)
@@ -166,26 +200,20 @@ namespace riscv
 					return data[0] | uint32_t(data[1]) << 16;
 				}
 			};
-			instruction = format_t { *(Align32*) &exec_seg_data[this->pc()] };
-#    else
-			instruction = format_t { *(uint32_t*) &exec_seg_data[this->pc()] };
-#    endif
-			// Retrieve handler directly from the instruction handler cache
-			auto& cache_entry =
-				exec_decoder[this->pc() / DecoderCache<W>::DIVISOR];
+			instruction = format_t { *(Align32*) &exec_seg_data[pc] };
+#    else  // aligned/unaligned loads
+			instruction = format_t { *(uint32_t*) &exec_seg_data[pc] };
+#    endif // aligned/unaligned loads
+
 		#ifdef RISCV_DEBUG
 			INSTRUCTION_LOGGING(*this);
 			// Execute instruction
 			cache_entry.handler.handler(*this, instruction);
 		#else
-			// Debugging aid when fast simulator is behaving strangely
-			if constexpr (VERBOSE_FASTSIM) {
-				verbose_fast_sim(*this, cache_entry.handler, instruction);
-			} // Debugging aid
 			// Execute instruction
 			cache_entry.handler(*this, instruction);
 		#endif
-#  ifndef RISCV_INBOUND_JUMPS_ONLY
+#   ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
 			instruction = read_next_instruction_slowpath();
 	#ifdef RISCV_DEBUG
@@ -194,7 +222,8 @@ namespace riscv
 			// decode & execute instruction directly
 			this->execute(instruction);
 		}
-#  endif
+#   endif // RISCV_INBOUND_JUMPS_ONLY
+#  endif // RISCV_FAST_SIMULATOR
 # else
 			instruction = this->read_next_instruction();
 	#ifdef RISCV_DEBUG
@@ -229,66 +258,6 @@ namespace riscv
 		if (machine().max_instructions() != 0)
 			machine().set_max_instructions(old_maxi);
 	}
-
-#ifdef RISCV_FAST_SIMULATOR
-	template<int W> __attribute__((hot, no_sanitize("undefined")))
-	void CPU<W>::fast_simulator(CPU& cpu, instruction_format instref)
-	{
-		auto pc = cpu.pc();
-		auto fsindex = instref.half[0];
-		const auto& qcvec = cpu.m_fastsim_vector[fsindex];
-		if constexpr (VERBOSE_FASTSIM) {
-			printf("Fast sim index %u with %zu instr at 0x%lX (BASE 0x%lX END 0x%lX)\n",
-				fsindex, qcvec.data.size(), (long)pc, (long)qcvec.base_pc, (long)qcvec.end_pc);
-		}
-
-	restart_sequence:;
-		//if (pc < qcvec.base_pc)
-		//	throw MachineException(INVALID_PROGRAM, "Fast simulator is invalid", pc);
-		const size_t index = (pc - qcvec.base_pc) / 4;
-
-		const auto* idata = &qcvec.data[index];
-		const auto* iend  = &qcvec.data[idata->idxend];
-		// NOTE: Increment counter based on where we start
-		cpu.machine().increment_counter(iend - idata);
-
-		if constexpr (VERBOSE_FASTSIM) {
-			printf("Fast sim %u with index %zu -> %u at 0x%lX (BASE 0x%lX END 0x%lX)\n",
-				fsindex, index, idata->idxend, (long)pc, (long)qcvec.base_pc, (long)qcvec.end_pc);
-		}
-
-		for (; idata < iend; idata++) {
-			const format_t instruction {idata->instr};
-			// Some instructions use PC offsets
-			cpu.registers().pc = pc;
-			// Debugging aid when fast simulator is behaving strangely
-			if constexpr (VERBOSE_FASTSIM) {
-				const auto string = isa_type<W>::to_string(cpu, instruction, decode(instruction)) + "\n";
-				cpu.machine().print(string.c_str(), string.size());
-			}
-			// Execute instruction using handler and 32-bit wrapper
-			idata->handler(cpu, instruction);
-			// increment *local* PC
-			pc += 4;
-		} // idata
-
-		// Fast path, but need to check if we are running out of
-		// instructions or stopped by checking the counter.
-		if (UNLIKELY(cpu.machine().stopped()))
-			return;
-
-		pc = cpu.pc() + 4;
-		if (pc >= qcvec.base_pc && pc < qcvec.end_pc) {
-			//printf("Restarting sequence %u at 0x%lX with %zu instr\n",
-			//	fsindex, (long)pc, cpu.m_qcdata->size());
-			goto restart_sequence;
-		}
-
-		// Compensate for the outer simulator incrementing the
-		// instruction counter.
-		cpu.machine().increment_counter(-1);
-	} // CPU::fast_simulator
-#endif
 
 	template<int W> __attribute__((cold))
 	void CPU<W>::trigger_exception(int intr, address_t data)

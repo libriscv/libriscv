@@ -15,6 +15,12 @@ struct DecoderData {
 	void set(instruction_handler<W> fn) { handler = fn; }
 #endif
 	Handler handler;
+#ifdef RISCV_FAST_SIMULATOR
+	uint32_t instr;
+	uint16_t idxend;
+	uint8_t  original_opcode;
+	uint8_t  reserved;
+#endif
 };
 
 template <int W>
