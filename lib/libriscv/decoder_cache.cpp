@@ -9,7 +9,7 @@ namespace riscv
 {
 	template <int W>
 	static void realize_fastsim(address_type<W> base_pc, size_t count,
-		uint8_t* exec_segment, DecoderData<W>* exec_decoder)
+		DecoderData<W>* exec_decoder)
 	{
 		// Count distance to next branching instruction backwards
 		// and fill in idxend for all entries along the way.
@@ -19,7 +19,6 @@ namespace riscv
 			// Set the fast simulator handler at current PC
 			const auto pc = base_pc + i * 4;
 			auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
-			entry.instr = *(uint32_t*) &exec_segment[pc];
 
 			// All opcodes that can modify PC
 			const auto opcode = entry.original_opcode;
@@ -148,6 +147,11 @@ namespace riscv
 			}
 			DecoderCache<W>::convert(decoded, entry);
 
+#ifdef RISCV_FAST_SIMULATOR
+			// Cache the (modified) instruction bits
+			entry.instr = instruction.whole;
+#endif
+
 			// Increment PC after everything
 			if constexpr (compressed_enabled) {
 				// With compressed we always step forward 2 bytes at a time
@@ -166,7 +170,7 @@ namespace riscv
 		}
 
 #ifdef RISCV_FAST_SIMULATOR
-		realize_fastsim<W>(addr, len / 4, exec_segment, exec_decoder);
+		realize_fastsim<W>(addr, len / 4, exec_decoder);
 #endif
 
 #ifdef RISCV_BINARY_TRANSLATION

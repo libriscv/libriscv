@@ -157,15 +157,15 @@ restart_fastsim:
 			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
 				exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			// The number of instructions to run until we have to check
+			// if we run out of instructions or PC changed.
 			const size_t count = cache_entry.idxend;
-			//printf("Fast sim count: %zu\n", count);
 			machine().increment_counter(count);
-			auto* decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			auto* decoder = &cache_entry;
 			auto* decoder_end = &decoder[count];
 
 			while (decoder < decoder_end) {
-				auto& cache_entry = *decoder++;
-				const format_t instruction {cache_entry.instr};
+				const format_t instruction {decoder->instr};
 				// Some instructions use PC offsets
 				registers().pc = pc;
 				// Debugging aid when fast simulator is behaving strangely
@@ -174,22 +174,26 @@ restart_fastsim:
 					machine().print(string.c_str(), string.size());
 				}
 				// Execute instruction using handler and 32-bit wrapper
-				cache_entry.handler(*this, instruction);
+				decoder->handler(*this, instruction);
 				// increment *local* PC
-				pc += 4;
+				if constexpr (compressed_enabled) {
+					pc += instruction.length();
+					decoder += instruction.length() / 2;
+				} else {
+					pc += 4;
+					decoder++;
+				}
 			} // fsim data
 
-			if (!machine().stopped()) {
+			if (LIKELY(!machine().stopped())) {
 				pc = registers().pc + 4;
 				goto restart_fastsim;
 			}
 
 			registers().pc += 4;
 			break;
+
 #  else // RISCV_FAST_SIMULATOR
-			// Retrieve handler directly from the instruction handler cache
-			auto& cache_entry =
-				exec_decoder[pc / DecoderCache<W>::DIVISOR];
 
 			// Instructions may be unaligned with C-extension
 			// On amd64 we take the cost, because it's faster
@@ -205,6 +209,9 @@ restart_fastsim:
 			instruction = format_t { *(uint32_t*) &exec_seg_data[pc] };
 #    endif // aligned/unaligned loads
 
+			// Retrieve handler directly from the instruction handler cache
+			auto& cache_entry =
+				exec_decoder[pc / DecoderCache<W>::DIVISOR];
 		#ifdef RISCV_DEBUG
 			INSTRUCTION_LOGGING(*this);
 			// Execute instruction
