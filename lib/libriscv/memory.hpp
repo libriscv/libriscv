@@ -3,6 +3,8 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
+#include <unordered_map>
+
 #ifdef RISCV_USE_RH_HASH
 #include <robin_hood.h>
 #endif

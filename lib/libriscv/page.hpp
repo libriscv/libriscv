@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include <cassert>
 #include <memory>
+#include <array>
 
 namespace riscv {
 
