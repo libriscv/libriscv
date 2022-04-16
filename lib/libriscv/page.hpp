@@ -4,6 +4,7 @@
 #include <cassert>
 #include <memory>
 #include <array>
+#include <unordered_map>
 
 namespace riscv {
 
