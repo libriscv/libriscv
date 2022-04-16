@@ -9,7 +9,7 @@ option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 option(RISCV_MEMORY_TRAPS  "Enable memory page traps" OFF)
-option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
+option(RISCV_MULTIPROCESS  "Enable multiprocessing" ON)
 option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
 
 if (RISCV_EXPERIMENTAL)
