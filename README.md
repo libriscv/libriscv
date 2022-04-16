@@ -12,7 +12,7 @@ The emulator has a binary translation mode that has currently only been tested o
 
 ## Benchmarks
 
-CoreMark 1.0 : 2847.183024 / GCC11.1.0 -O2 -march=rv64g -mabi=lp64d
+CoreMark 1.0 : 1263.053739 / GCC11.1.0 -O2 -static -march=rv64g -mabi=lp64d
 
 One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation. However, compiled code should in theory be faster.
 
