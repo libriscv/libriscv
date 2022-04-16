@@ -6,6 +6,7 @@ option(NATIVE      "Enable native instructions" ON)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
 option(LINKER_GC   "Enable linker section garbage collection" OFF)
+option(STATIC_BUILD "Built the emulator statically" ON)
 
 set(SOURCES
 	src/main.cpp
@@ -47,6 +48,9 @@ function (add_emulator NAME)
 	target_link_libraries(${NAME} riscv)
 	message(STATUS "ARGN is ${ARGN}")
 	target_compile_definitions(${NAME} PRIVATE ${ARGN})
+	if (STATIC_BUILD)
+		target_link_libraries(${NAME} -static)
+	endif()
 
 	if (SANITIZE)
 		target_link_libraries(${NAME} "-fsanitize=address,undefined")
