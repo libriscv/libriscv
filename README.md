@@ -12,7 +12,7 @@ The emulator has a binary translation mode that has currently only been tested o
 
 ## Benchmarks
 
-`fib(64000)` currently runs at 675 MIPS as measured in the [libriscv benchmark repo](https://github.com/fwsGonzo/script_bench/).
+CoreMark 1.0 : 2847.183024 / GCC11.1.0 -O2 -march=rv64g -mabi=lp64d
 
 One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation. However, compiled code should in theory be faster.
 
