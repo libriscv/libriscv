@@ -15,7 +15,8 @@ static void run_program(
 	const std::vector<std::string>& args)
 {
 	riscv::Machine<W> machine { binary, {
-		.memory_max = MAX_MEMORY
+		.memory_max = MAX_MEMORY,
+		.verbose_loader = (getenv("VERBOSE") != nullptr)
 	}};
 
 	if constexpr (full_linux_guest)
