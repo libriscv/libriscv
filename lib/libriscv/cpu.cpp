@@ -125,6 +125,7 @@ namespace riscv
 		return read_next_instruction_slowpath();
 	}
 
+#ifndef RISCV_FAST_SIMULATOR
 	template<int W> __attribute__((hot, no_sanitize("undefined")))
 	void CPU<W>::simulate(uint64_t max)
 	{
@@ -151,49 +152,6 @@ namespace riscv
 		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
 #  endif
 			auto pc = this->pc();
-#  ifdef RISCV_FAST_SIMULATOR
-			(void) exec_seg_data;
-restart_fastsim:
-			// Retrieve handler directly from the instruction handler cache
-			auto& cache_entry =
-				exec_decoder[pc / DecoderCache<W>::DIVISOR];
-			// The number of instructions to run until we have to check
-			// if we run out of instructions or PC changed.
-			const size_t count = cache_entry.idxend;
-			machine().increment_counter(count);
-			auto* decoder = &cache_entry;
-			auto* decoder_end = &decoder[count];
-
-			while (decoder < decoder_end) {
-				const format_t instruction {decoder->instr};
-				// Some instructions use PC offsets
-				registers().pc = pc;
-				// Debugging aid when fast simulator is behaving strangely
-				if constexpr (VERBOSE_FASTSIM) {
-					const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n";
-					machine().print(string.c_str(), string.size());
-				}
-				// Execute instruction using handler and 32-bit wrapper
-				decoder->handler(*this, instruction);
-				// increment *local* PC
-				if constexpr (compressed_enabled) {
-					pc += instruction.length();
-					decoder += instruction.length() / 2;
-				} else {
-					pc += 4;
-					decoder++;
-				}
-			} // fsim data
-
-			if (LIKELY(!machine().stopped())) {
-				pc = registers().pc + 4;
-				goto restart_fastsim;
-			}
-
-			registers().pc += 4;
-			break;
-
-#  else // RISCV_FAST_SIMULATOR
 
 			// Instructions may be unaligned with C-extension
 			// On amd64 we take the cost, because it's faster
@@ -230,7 +188,6 @@ restart_fastsim:
 			this->execute(instruction);
 		}
 #   endif // RISCV_INBOUND_JUMPS_ONLY
-#  endif // RISCV_FAST_SIMULATOR
 # else
 			instruction = this->read_next_instruction();
 	#ifdef RISCV_DEBUG
@@ -253,6 +210,55 @@ restart_fastsim:
 		} // while not stopped
 
 	} // CPU::simulate
+
+#else // RISCV_FAST_SIMULATOR
+
+	template<int W> __attribute__((hot))
+	void CPU<W>::simulate(uint64_t imax)
+	{
+		auto* exec_decoder = machine().memory.get_decoder_cache();
+
+		if (imax != UINT64_MAX)
+			machine().set_max_instructions(machine().instruction_counter() + imax);
+		else
+			machine().set_max_instructions(UINT64_MAX);
+
+		auto pc = this->pc();
+		do {
+			// Retrieve handler directly from the instruction handler cache
+			auto* decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			// The number of instructions to run until we can check
+			// if we ran out of instructions or PC changed.
+			const size_t count = decoder->idxend;
+			machine().increment_counter(count);
+			auto* decoder_end = &decoder[count];
+			// There is always one instruction we can run
+			do {
+				const format_t instruction {decoder->instr};
+				// Some instructions use PC offsets
+				registers().pc = pc;
+				// Debugging aid when fast simulator is behaving strangely
+				if constexpr (VERBOSE_FASTSIM) {
+					const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n";
+					machine().print(string.c_str(), string.size());
+				}
+				// Execute instruction using handler and 32-bit wrapper
+				decoder->handler(*this, instruction);
+				// increment *local* PC
+				if constexpr (compressed_enabled) {
+					pc += instruction.length();
+					decoder += instruction.length() / 2;
+				} else {
+					pc += 4;
+					decoder++;
+				}
+			} while (decoder < decoder_end);
+			pc = registers().pc + 4;
+
+		} while (!machine().stopped());
+		registers().pc = pc;
+	} // CPU::simulate
+#endif // RISCV_FAST_SIMULATOR
 
 	template<int W>
 	void CPU<W>::step_one()
