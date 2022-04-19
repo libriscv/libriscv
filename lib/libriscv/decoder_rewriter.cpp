@@ -9,6 +9,17 @@ namespace riscv
 	static const unsigned PCAL= compressed_enabled ? 2 : 4;
 	static const unsigned PCALBITS = compressed_enabled ? 1 : 2;
 
+	union MoveType {
+		struct {
+			uint8_t opcode;
+			uint8_t rs2;
+			uint8_t rs1;
+			uint8_t unused;
+		};
+		uint32_t whole;
+	};
+	static_assert(sizeof(MoveType) == 4, "is a 4-byte instruction");
+
 	union FasterBtype {
 		struct {
 			uint8_t opcode : 3;
@@ -82,12 +93,57 @@ namespace riscv
 		const auto original = instr;
 		(void) pc;
 
-		// Rewrite all B-type instructions to become saner
-		// NOTE: Set aside the first 2 bits to preserve the instruction length
+		// NOTE: Every rewritten instruction sets aside
+		// the first 2 bits to preserve the instruction length
 		switch (original.opcode()) {
+		case RV32I_OP_IMM: {
+			// rd=0 is a no-op in all cases, and we only care about
+			// ADDI which is the most used instruction of all.
+			if (original.Itype.rd != 0 && original.Itype.funct3 == 0x0)
+			{	// OP_IMM.ADDI
+				if (original.Itype.rs1 == 0) { // LI
+					ZeroBtype rewritten;
+					rewritten.opcode = original.Itype.opcode;
+					rewritten.rs1 = original.Itype.rd;
+					rewritten.imm = original.Itype.signed_imm();
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<ZeroBtype> (instr);
+							// LI: Load sign-extended 12-bit immediate
+							cpu.reg(rop.rs1) = (RVSIGNTYPE(cpu)) rop.imm;
+						}); // OP_IMM.LI
+				} else if (original.Itype.imm == 0) { // MV
+					MoveType rewritten;
+					rewritten.opcode = original.Itype.opcode;
+					rewritten.rs1 = original.Itype.rd;
+					rewritten.rs2 = original.Itype.rs1;
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<MoveType> (instr);
+							cpu.reg(rop.rs1) = cpu.reg(rop.rs2);
+						}); // OP_IMM.MV
+				}
+				FasterBtype rewritten;
+				rewritten.opcode = original.Itype.opcode;
+				rewritten.rs1 = original.Itype.rd;
+				rewritten.rs2 = original.Itype.rs1;
+				rewritten.imm = original.Itype.signed_imm();
+				instr.whole = rewritten.whole;
+				return rewritten_instruction<W>(
+					[] (auto& cpu, auto instr) RVINSTR_ATTR {
+						const auto& rop = view_as<FasterBtype> (instr);
+						cpu.reg(rop.rs1) =
+							(RVSIGNTYPE(cpu)) (cpu.reg(rop.rs2) + rop.imm);
+					}); // OP_IMM.ADDI
+			}
+			break;
+			} // RV32I_OP_IMM
 		case RV32I_BRANCH: {
+			// Rewrite all B-type instructions to become faster.
 			// Ignore unaligned branches. This will allow us to
-			// jump unaligned with all branch instructions.
+			// jump unaligned with (mostly) all branch instructions.
 			const auto bdest = pc + original.Btype.signed_imm() - 4;
 			if ((bdest % PCAL) != 0) break;
 			// We verify if the jump is within the execute segment
