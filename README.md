@@ -8,7 +8,7 @@ While this emulator has a focus on performance, one higher priority is the abili
 
 The emulator has a binary translation mode that has currently only been tested on Linux, but the performance should be good enough with the default build options.
 
-[![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml)
+[![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
 ## Benchmarks
 
