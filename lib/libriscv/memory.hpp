@@ -80,6 +80,7 @@ namespace riscv
 
 		auto& machine() { return this->m_machine; }
 		const auto& machine() const { return this->m_machine; }
+		bool is_forked() const noexcept { return !this->m_original_machine; }
 
 		// Symbol table functions
 		address_t resolve_address(const std::string& sym) const;

@@ -151,6 +151,10 @@ namespace riscv
 		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize, bool fork = false);
 		uint32_t multiprocess_wait();
 
+		// Returns true if this machine is forked from another, and thus
+		// dependent on the original machine to function properly.
+		bool is_forked() const noexcept { return memory.is_forked(); }
+
 		// Returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name) const;
 		address_t address_of(const std::string& name) const;
