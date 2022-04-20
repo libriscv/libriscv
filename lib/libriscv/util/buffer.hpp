@@ -76,6 +76,9 @@ namespace riscv
 
 	inline std::string Buffer::to_string() const
 	{
+		if (is_sequential()) {
+			return std::string(c_str(), size());
+		}
 		std::string result;
 		result.reserve(this->m_len);
 		for (const auto& entry : m_data) {
