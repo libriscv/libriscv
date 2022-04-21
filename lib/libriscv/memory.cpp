@@ -16,9 +16,21 @@ namespace riscv
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
 					MachineOptions<W> options)
 		: m_machine{mach},
+#ifdef RISCV_FLAT_MEMORY
+		  m_memdata {new uint8_t[options.memory_max]},
+		  m_memsize {options.memory_max},
+#endif
 		  m_original_machine {true},
 		  m_binary{bin}
 	{
+#ifdef RISCV_FLAT_MEMORY
+		if (UNLIKELY(this->m_memsize < bin.size()))
+			throw MachineException(OUT_OF_MEMORY, "Out of memory", this->m_memsize);
+		if (!m_binary.empty()) {
+			// Load ELF binary into flat memory
+			this->binary_loader(options);
+		}
+#else
 		if (options.page_fault_handler != nullptr)
 		{
 			this->m_page_fault_handler = std::move(options.page_fault_handler);
@@ -47,10 +59,15 @@ namespace riscv
 			// load ELF binary into virtual memory
 			this->binary_loader(options);
 		}
+#endif // RISCV_FLAT_MEMORY
 	}
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, const Machine<W>& other, MachineOptions<W> options)
 	  : m_machine{mach},
+#ifdef RISCV_FLAT_MEMORY
+	    m_memdata{other.memory.m_memdata.get()},
+		m_memsize{other.memory.m_memsize},
+#endif
 	    m_original_machine {false},
 		m_binary{other.memory.binary()}
 	{
@@ -61,6 +78,12 @@ namespace riscv
 	Memory<W>::~Memory()
 	{
 		this->clear_all_pages();
+#ifdef RISCV_FLAT_MEMORY
+		// only the original machine owns memdata range
+		if (!this->m_original_machine) {
+			m_memdata.release();
+		}
+#endif
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		// only the original machine owns rodata range
 		if (!this->m_original_machine) {
@@ -87,8 +110,7 @@ namespace riscv
 	void Memory<W>::clear_all_pages()
 	{
 		this->m_pages.clear();
-		this->m_rd_cache = {};
-		this->m_wr_cache = {};
+		this->invalidate_reset_cache();
 	}
 
 	template <int W>
@@ -207,15 +229,20 @@ namespace riscv
 					"Insecure ELF has writable executable code");
 			}
 		}
+#ifdef RISCV_FLAT_MEMORY
+		fault_if_unreadable(hdr->p_vaddr, len);
+		std::memcpy(&m_memdata[hdr->p_vaddr], src, len);
+		return;
+#else
 
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+# ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		if (attr.read && !attr.write && m_ropages.end == 0) {
 			// If the serialization fails, we will fallback to memcpy
 			// with set_page_attr, like normal.
 			if (serialize_pages(m_ropages, hdr->p_vaddr, src, len, attr))
 				return;
 		}
-#endif
+# endif
 
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
@@ -229,6 +256,7 @@ namespace riscv
 				 .read = true, .write = true, .exec = true
 			});
 		}
+#endif
 	}
 
 	template <int W>
@@ -367,6 +395,9 @@ namespace riscv
 		// TODO: We should check if the heap starts too close to the end
 		// of the address space now, and move it around if necessary.
 		this->m_mmap_address = m_heap_address + BRK_MAX;
+
+		// Flat memory cannot use the top end of the address space
+#ifndef RISCV_FLAT_MEMORY
 		// It's very easy for the stack address to reach the zero page
 		// if we allow it to start this low. Instead, we move it
 		// to the end of the machines address space.
@@ -374,6 +405,7 @@ namespace riscv
 			// XXX: Closer to the end and the Golang runtime will fail
 			this->m_stack_address = ~(address_t)0 - 0xFFF;
 		}
+#endif
 
 		//this->relocate_section(".rela.dyn", ".symtab");
 

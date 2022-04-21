@@ -122,7 +122,11 @@ namespace riscv
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
 
+#ifdef RISCV_FLAT_MEMORY
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+#else
 		return read_next_instruction_slowpath();
+#endif
 	}
 
 #ifndef RISCV_FAST_SIMULATOR
