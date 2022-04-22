@@ -15,6 +15,7 @@ option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
 	option(RISCV_FAST_SIMULATOR      "Enable fast simulator mode" ON)
+	option(RISCV_FLAT_MEMORY         "Enable faster flat memory mode" OFF)
 endif()
 
 if (RISCV_USE_RH_HASH)
@@ -104,9 +105,12 @@ if (RISCV_EXT_A)
 endif()
 if (RISCV_EXT_C)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_COMPRESSED=1)
-	# The fast simulator is not currently working well with compressed
-	# instructions, and so we temporarily disable it until resolved.
-	set(RISCV_FAST_SIMULATOR OFF)
+	if (RISCV_FAST_SIMULATOR)
+		# The fast simulator is not currently working well with compressed
+		# instructions, and so we temporarily disable it until resolved.
+		message(WARNING "RISCV_FAST_SIMULATOR incompatible with RISCV_EXT_C")
+		set(RISCV_FAST_SIMULATOR OFF)
+	endif()
 endif()
 if (RISCV_EXT_F)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_FLOATS=1)
@@ -115,9 +119,9 @@ if (RISCV_ICACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE=1)
 endif()
 if (RISCV_ICACHE AND RISCV_EXPERIMENTAL)
-	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
 	message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
 	target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
+	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
 endif()
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
@@ -131,6 +135,14 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv PUBLIC dl)
+	# The fast simulator is not currently working well with fastsim
+	# because it is unable to detect that binary translator has taken over.
+	# The best solution is for binary translator to always translate the
+	# whole program.
+	#set(RISCV_FAST_SIMULATOR OFF)
+endif()
+if (RISCV_FLAT_MEMORY)
+	target_compile_definitions(riscv PUBLIC RISCV_FLAT_MEMORY=1)
 endif()
 if (RISCV_FAST_SIMULATOR)
 	# The fast simulator is incompatible with RISCV_DEBUG because it

@@ -87,4 +87,10 @@ namespace riscv
 		bool has_branch;
 		bool forward_jumps;
 	};
+
+	template <int W>
+	struct TransInstr {
+		instruction_handler<W>& handler;
+		uint32_t instr;
+	};
 }

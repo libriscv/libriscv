@@ -29,7 +29,7 @@ namespace riscv
 	std::string compile_command(int arch)
 	{
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
-		" -ffreestanding -nostdlib -fexceptions "
+		" -ffreestanding -fno-builtin -nostdlib -fexceptions "
 		 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
 		 + " -pipe " + cflags();
 	}

@@ -39,6 +39,7 @@ namespace riscv
 		void memzero(address_t dst, size_t len);
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
+		void memcpy_unsafe(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
 		void memcpy_out(void* dst, address_t src, size_t) const;
 		/* Fill an array of buffers pointing to complete guest virtual [addr, len].
@@ -138,7 +139,7 @@ namespace riscv
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
 		// Returns true if the address is inside the executable code segment
-		bool is_executable(address_t addr);
+		bool is_executable(address_t addr, size_t = 4) const noexcept;
 
 #ifdef RISCV_INSTR_CACHE
 		void generate_decoder_cache(const MachineOptions<W>&, address_t pbase, address_t va, size_t len);
@@ -210,8 +211,16 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
+#ifdef RISCV_FLAT_MEMORY
+		std::unique_ptr<uint8_t[]> m_memdata;
+		const size_t m_memsize;
+		void fault_if_readonly(address_t, size_t) const;
+		void fault_if_unreadable(address_t, size_t) const;
+
+#else
 		mutable CachedPage<W, const PageData> m_rd_cache;
 		mutable CachedPage<W, PageData> m_wr_cache;
+#endif // RISCV_FLAT_MEMORY
 
 #ifdef RISCV_USE_RH_HASH
 		robin_hood::unordered_map<address_t, Page> m_pages;
@@ -248,5 +257,10 @@ namespace riscv
 		mutable void* m_bintr_dl = nullptr;
 	};
 #include "memory_inline.hpp"
-#include "memory_helpers.hpp"
+#ifdef RISCV_FLAT_MEMORY
+#include "memory_helpers_flat.hpp"
+#else
+#include "memory_inline_pages.hpp"
+#include "memory_helpers_paging.hpp"
+#endif
 }

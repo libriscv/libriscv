@@ -14,8 +14,9 @@ The emulator has a binary translation mode that has currently only been tested o
 
 | Algorithm | Result |
 |--|--|
-| fib(128000) | instr 1280010000, time 1.791892, 714 mips |
-| CoreMark 1.0 | 1317 / GCC11.1.0 -O2 -static -march=rv64g -mabi=lp64d |
+| fib(128000) | instr 1280010000, time 1.773460, 722 mips |
+| CoreMark 1.0 : 3191 / GCC11.1.0 -O2 -static -march=rv64g -mabi=lp64d |
+
 > Machine: Intel(R) Core(TM) i7-8850H CPU @ 2.60GHz
 
 One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation. However, compiled code should in theory be faster.
