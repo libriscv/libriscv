@@ -83,6 +83,17 @@ static inline uint64_t SRA64(int is_signed, uint32_t shifts, uint64_t value)
 	return (value >> shifts) | sign_shifted;
 }
 
+void* memcpy(void * restrict dst, const void * restrict src, unsigned len)
+{
+	char *src8 = (char *)src;
+	char *dst8 = (char *)dst;
+
+	for (unsigned i = 0; i < len; i++)
+		dst8[i] = src8[i];
+
+	return dst;
+}
+
 // https://stackoverflow.com/questions/28868367/getting-the-high-part-of-64-bit-integer-multiplication
 // As written by catid
 static inline uint64_t MUL128(

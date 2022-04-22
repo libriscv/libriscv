@@ -24,12 +24,12 @@ inline std::string from_reg(const TransInfo<W>& tinfo, int reg) {
 		return std::to_string(tinfo.gp);
 	else if (reg != 0)
 		return "cpu->r[" + std::to_string(reg) + "]";
-	return "0";
+	return "(addr_t)0";
 }
 inline std::string from_reg(int reg) {
 	if (reg != 0)
 		return "cpu->r[" + std::to_string(reg) + "]";
-	return "0";
+	return "(addr_t)0";
 }
 inline std::string from_fpreg(int reg) {
 	return "cpu->fr[" + std::to_string(reg) + "]";
@@ -240,13 +240,14 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 					"return;");
 			} } break;
 		case RV32I_OP_IMM: {
+			// NOP
+			if (UNLIKELY(instr.Itype.rd == 0)) break;
 			const auto dst = from_reg(instr.Itype.rd);
 			const auto src = from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
 				if (instr.Itype.signed_imm() == 0) {
-					if (instr.Itype.rd != 0) // NOP: x0 = 0
-						add_code(code, dst + " = " + src + ";");
+					add_code(code, dst + " = " + src + ";");
 				} else {
 					emit_op(code, " + ", " += ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				} break;
@@ -302,6 +303,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 			}
 			} break;
 		case RV32I_OP:
+			if (UNLIKELY(instr.Rtype.rd == 0)) break;
+
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD / SUB
 				if (!instr.Rtype.is_f7())

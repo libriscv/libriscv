@@ -116,7 +116,9 @@ if (RISCV_ICACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE=1)
 endif()
 if (RISCV_ICACHE AND RISCV_EXPERIMENTAL)
-	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
+	if (NOT RISCV_BINARY_TRANSLATION)
+		target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
+	endif()
 	message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
 	target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
 endif()
@@ -132,6 +134,11 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv PUBLIC dl)
+	# The fast simulator is not currently working well with fastsim
+	# because it is unable to detect that binary translator has taken over.
+	# The best solution is for binary translator to always translate the
+	# whole program.
+	set(RISCV_FAST_SIMULATOR OFF)
 endif()
 if (RISCV_FLAT_MEMORY)
 	target_compile_definitions(riscv PUBLIC RISCV_FLAT_MEMORY=1)
