@@ -79,7 +79,7 @@ namespace riscv
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 		// Binary translation functions
 		int  load_translation(const MachineOptions<W>&, std::string* filename) const;
-		void try_translate(const MachineOptions<W>&, const std::string&, address_t pc, std::vector<instr_pair>&) const;
+		void try_translate(const MachineOptions<W>&, const std::string&, address_t pc, std::vector<TransInstr<W>>&) const;
 
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
@@ -94,7 +94,7 @@ namespace riscv
 
 		format_t read_next_instruction_slowpath() const COLD_PATH();
 		void execute(format_t);
-		void emit(std::string& code, const std::string& symb, instr_pair* blk, const TransInfo<W>&) const;
+		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
 		const uint8_t* m_exec_data = nullptr;

@@ -50,11 +50,11 @@ static const std::unordered_set<uint32_t> good_insn
 };
 
 template <int W>
-inline uint32_t opcode(const typename CPU<W>::instr_pair& ip) {
-	return ip.second.opcode();
+inline uint32_t opcode(const TransInstr<W>& ti) {
+	return rv32i_instruction{ti.instr}.opcode();
 }
 template <int W>
-inline bool gucci(const typename CPU<W>::instr_pair& ip) {
+inline bool gucci(const TransInstr<W>& ip) {
 	return good_insn.count(opcode<W>(ip)) > 0;
 }
 
@@ -141,7 +141,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
-	const std::string& filename, address_t basepc, std::vector<instr_pair>& ipairs) const
+	const std::string& filename, address_t basepc, std::vector<TransInstr<W>>& ipairs) const
 {
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = (getenv("VERBOSE") != nullptr);
@@ -151,22 +151,24 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 if constexpr (SCAN_FOR_GP) {
 	// We assume that GP is initialized with AUIPC,
 	// followed by OP_IMM (and maybe OP_IMM32)
-	for (auto it = ipairs.begin(); it != ipairs.end(); ++it)
-	if (it->second.opcode() == RV32I_AUIPC) {
-		const auto auipc = it->second;
-		if (auipc.Utype.rd == 3) { // GP
-			// calculate current PC for AUIPC
-			const address_t pc = basepc + 4 * (it - ipairs.begin());
-			const auto addi = (it+1)->second;
-			if (addi.opcode() == RV32I_OP_IMM && addi.Itype.funct3 == 0x0) {
-				//printf("Found OP_IMM: ADDI  rd=%d, rs1=%d\n", addi.Itype.rd, addi.Itype.rs1);
-				if (addi.Itype.rd == 3 && addi.Itype.rs1 == 3) { // GP
-					gp = pc + auipc.Utype.upper_imm() + addi.Itype.signed_imm();
-					break;
+	for (auto it = ipairs.begin(); it != ipairs.end(); ++it) {
+		const rv32i_instruction instruction {it->instr};
+		if (instruction.opcode() == RV32I_AUIPC) {
+			const auto auipc = instruction;
+			if (auipc.Utype.rd == 3) { // GP
+				// calculate current PC for AUIPC
+				const address_t pc = basepc + 4 * (it - ipairs.begin());
+				const auto addi = rv32i_instruction {(it+1)->instr};
+				if (addi.opcode() == RV32I_OP_IMM && addi.Itype.funct3 == 0x0) {
+					//printf("Found OP_IMM: ADDI  rd=%d, rs1=%d\n", addi.Itype.rd, addi.Itype.rs1);
+					if (addi.Itype.rd == 3 && addi.Itype.rs1 == 3) { // GP
+						gp = pc + auipc.Utype.upper_imm() + addi.Itype.signed_imm();
+						break;
+					}
 				}
 			}
-		}
-	}
+		} // opcode
+	} // iterator
 #ifdef BINTR_TIMING
 	TIME_POINT(t1);
 	printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(t0, t1), (long)gp);
@@ -181,7 +183,7 @@ if constexpr (SCAN_FOR_GP) {
 	std::unordered_set<address_t> already_generated;
 	std::unordered_set<address_t> already_looped;
 	struct CodeBlock {
-		instr_pair& instr;
+		TransInstr<W>& instr;
 		size_t      length;
 		address_t   addr;
 		bool        has_branch;
@@ -197,25 +199,26 @@ if constexpr (SCAN_FOR_GP) {
 		}
 		if (gucci<W>(*it))
 		{
+			const rv32i_instruction instruction {it->instr};
+			const auto opcode = instruction.opcode();
 			const auto block = it;
 			bool has_branch = false;
 			bool has_loop = false;
 			// measure block length
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
-				if (it->second.opcode() == RV32I_JALR ||
-					(it->second.opcode() == RV32I_SYSTEM && it->second.Itype.funct3 == 0x0 && it->second.Itype.imm != 0))
+				if (opcode == RV32I_JALR ||
+					(opcode == RV32I_SYSTEM && instruction.Itype.funct3 == 0x0 && instruction.Itype.imm != 0))
 				{
 					++it; break;
 				}
 if constexpr (LOOP_OFFSET_MAX > 0) {
 				// loop detection (negative branch offsets)
-				if (it->second.opcode() == RV32I_BRANCH && it->second.Btype.sign()) {
+				if (opcode == RV32I_BRANCH && instruction.Btype.sign()) {
 					has_branch = true;
 					// detect jump location
-					const auto& instr = it->second;
 					const size_t length = it - block;
-					const auto offset = instr.Btype.signed_imm();
+					const auto offset = instruction.Btype.signed_imm();
 					const auto dst = basepc + (4 * length) + offset;
 					if (offset > -LOOP_OFFSET_MAX && already_looped.count(dst) == 0) {
 						loops.push_back({it + offset / 4, dst});
@@ -442,8 +445,8 @@ void CPU<W>::activate_dylib(void* dylib) const
 #endif
 }
 
-	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, address_t, std::vector<instr_pair>&) const;
-	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, address_t, std::vector<instr_pair>&) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, address_t, std::vector<TransInstr<4>>&) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, address_t, std::vector<TransInstr<8>>&) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*) const;
 	template void CPU<4>::activate_dylib(void*) const;

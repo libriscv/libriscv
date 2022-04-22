@@ -80,7 +80,7 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 }
 
 template <int W>
-void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, const TransInfo<W>& tinfo) const
+void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
 {
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	std::set<unsigned> labels;
@@ -90,7 +90,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 		code += "int c = 0; " + func + "_start:;\n";
 	}
 	for (size_t i = 0; i < tinfo.len; i++) {
-		const auto& instr = ip[i].second;
+		const auto instr = rv32i_instruction {ip[i].instr};
 		// forward branches (empty statement)
 		if (labels.count(i) > 0) {
 			code.append(FUNCLABEL(i) + ":;\n");
@@ -755,6 +755,6 @@ void CPU<W>::emit(std::string& code, const std::string& func, instr_pair* ip, co
 	code += "api.finish(cpu, " + std::to_string(tinfo.len-1) + ", " + INSTRUCTION_COUNT(tinfo.len-1) + ");\n}\n";
 }
 
-template void CPU<4>::emit(std::string&, const std::string&, instr_pair*, const TransInfo<4>&) const;
-template void CPU<8>::emit(std::string&, const std::string&, instr_pair*, const TransInfo<8>&) const;
+template void CPU<4>::emit(std::string&, const std::string&, TransInstr<4>*, const TransInfo<4>&) const;
+template void CPU<8>::emit(std::string&, const std::string&, TransInstr<8>*, const TransInfo<8>&) const;
 } // riscv

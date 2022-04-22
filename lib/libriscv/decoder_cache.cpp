@@ -62,7 +62,7 @@ namespace riscv
 		std::string bintr_filename;
 		// This can be improved somewhat, by fetching them on demand
 		// instead of building a vector of the whole execute segment.
-		std::vector<typename CPU<W>::instr_pair> ipairs;
+		std::vector<TransInstr<W>> ipairs;
 		ipairs.reserve(len / 4);
 
 	if constexpr (W != 16) {
@@ -81,24 +81,6 @@ namespace riscv
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
-#ifdef RISCV_BINARY_TRANSLATION
-				if (machine().is_binary_translated()) {
-					if (DecoderCache<W>::isset(entry)) {
-						dst += 4;
-						continue;
-					}
-				} else if constexpr (W != 16) {
-					// This may be a misaligned reference
-					// XXX: Will this even work on ARM?
-					auto& instref = *(rv32i_instruction*) &exec_segment[dst];
-	#ifdef RISCV_DEBUG
-					ipairs.emplace_back(entry.handler.handler, instref);
-	#else
-					ipairs.emplace_back(entry.handler, instref);
-	#endif
-				}
-#endif
-
 			// Load unaligned instruction from execute segment
 			union Align32 {
 				uint16_t data[2];
@@ -106,12 +88,32 @@ namespace riscv
 					return data[0] | uint32_t(data[1]) << 16;
 				}
 			};
-			rv32i_instruction instruction { *(Align32*) &exec_segment[dst] };
-			const auto original = instruction;
+			const rv32i_instruction instruction { *(Align32*) &exec_segment[dst] };
+			rv32i_instruction rewritten = instruction;
+
+#ifdef RISCV_BINARY_TRANSLATION
+			if (machine().is_binary_translated()) {
+				if (DecoderCache<W>::isset(entry)) {
+					#ifdef RISCV_FAST_SIMULATOR
+					// XXX: With fastsim we could pretend the original opcode
+					// is a JAL here, which would break the fastsim loop
+					entry.original_opcode = RV32I_JAL;
+					#endif
+					dst += 4;
+					continue;
+				}
+			} else if constexpr (W != 16) {
+#  ifdef RISCV_DEBUG
+				ipairs.push_back({entry.handler.handler, instruction.whole});
+#  else
+				ipairs.push_back({entry.handler, instruction.whole});
+#  endif
+			}
+#endif // RISCV_BINARY_TRANSLATION
 
 #ifdef RISCV_FAST_SIMULATOR
 			// Help the fastsim determine the real opcodes
-			entry.original_opcode = original.opcode();
+			entry.original_opcode = instruction.opcode();
 #endif
 
 			// Insert decoded instruction into decoder cache
@@ -129,14 +131,14 @@ namespace riscv
 				// Fast simulator gets confusing instruction logging with instr rewrites
 				if constexpr (decoder_rewriter_enabled) {
 					// Improve many instruction handlers by rewriting instructions
-					decoded = machine().cpu.decode_rewrite(dst, instruction);
+					decoded = machine().cpu.decode_rewrite(dst, rewritten);
 					// Write the instruction back to execute segment using
 					// the *original* instructions length, if it changed.
-					is_rewritten = original.whole != instruction.whole;
+					// But only if we do not need it later, eg. binary translation.
+					is_rewritten = rewritten.whole != instruction.whole;
 					if (is_rewritten) {
-						assert(original.length() == instruction.length());
-						std::memcpy((void*)&exec_segment[dst], &instruction, original.length());
-						try_fuse = false;
+						assert(rewritten.length() == instruction.length());
+						std::memcpy((void*)&exec_segment[dst], &rewritten, instruction.length());
 					}
 				} else {
 					decoded = machine().cpu.decode(instruction);
@@ -149,7 +151,7 @@ namespace riscv
 
 #ifdef RISCV_FAST_SIMULATOR
 			// Cache the (modified) instruction bits
-			entry.instr = instruction.whole;
+			entry.instr = rewritten.whole;
 #endif
 
 			// Increment PC after everything
@@ -159,7 +161,7 @@ namespace riscv
 				if (was_full_instruction) {
 					// For it to be a full instruction again,
 					// the length needs to match.
-					was_full_instruction = (original.length() == 2);
+					was_full_instruction = (instruction.length() == 2);
 				} else {
 					// If it wasn't a full instruction last time, it
 					// will for sure be one now.
