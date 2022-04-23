@@ -1,12 +1,12 @@
 # System Calls
 
-System calls are services the programming running inside the emulator requests from the host to function properly and be able to do useful things other than just calculations. For example, the only way to be able to print text in *your* terminal from inside the virtual machine is to request the system to do that, and then hope that it does! The host system is under no obligation to do anything, especially if it doesn't seem like a good idea to do!
+System calls are services that the program running inside the emulator can request from the host to function properly, and be able to do useful things other than just calculations. For example, the only way to be able to print text in *your* terminal from inside the virtual machine is to request the system to do that, and then hope that it does! The host system is under no obligation to do anything, especially if it doesn't seem like a good idea to do!
 
-If you use `printf("Hello world!\n");` in your program, it will likely cause a call to the `write` system call wrapper. This wrapper then does the actual system call itself, which boils down to setting up the arguments and then executing `ECALL`. At that point the emulator itself will stop executing the virtual machine (the guest) and instead handle this system call. When it's done handling the system call it will continue running the virtual machine. The return value of the system call usually indicates whether or not it succeeded or not.
+If you use `printf("Hello world!\n");` in your program, it will likely cause a call to the `write` system call wrapper. This wrapper then does the actual system call itself, which boils down to setting up the arguments and then executing an `ECALL` instruction. At that point the emulator itself will stop executing the virtual machine (the guest) and instead handle this system call. When it's done handling the system call it will continue running the virtual machine. The return value of the system call usually indicates whether or not it succeeded or not.
 
 ## System call numbers
 
-The numbers are taken from `linux-headers/include/asm-generic/unistd.h` in the riscv-gnu-toolchain, which are ultimately Linux system call numbers. You can also make up your own system calls, and even how to do a system call (the ABI).
+The numbers are taken from `linux-headers/include/asm-generic/unistd.h` in the riscv-gnu-toolchain, which are ultimately Linux system call numbers. You can also make up your own system calls, and even how to do a system call (the ABI). [List of system call numbers](https://github.com/riscv-collab/riscv-gnu-toolchain/blob/master/linux-headers/include/asm-generic/unistd.h).
 
 Example:
 ```
@@ -16,7 +16,7 @@ Example:
 
 ## Standard library system calls
 
-When running a RISC-V program in the emulator, you can see messages about unhandled system calls if you provide a callback function to with `machine.on_unhandled_syscall(...)`.
+When running a RISC-V program in the emulator, you can see messages about unhandled system calls as long as you provide a callback function to the machine by setting `machine.on_unhandled_syscall = my_function;`. Unhandled system calls return `-ENOSYS` by default. To implement missing system calls, you have to set a handler for it.
 
 These are system calls executed by the C and C++ standard libraries, and some of them are not optional. For example, there is no graceful way to shutdown the program without implementing `exit` (93) or `exit_group` (94).
 
@@ -29,9 +29,11 @@ Let's start with an example of handing exit:
 template <int W>
 void syscall_exit(Machine<W>& machine)
 {
+	// Get the first argument as an int
 	auto [exit_code] = machine.template sysargs <int> ();
 	// Do something with exit_code
 	printf("The machine exited with code: %d\n", exit_code);
+	// The exit system call makes the machine stop running
 	machine.stop();
 }
 ```
@@ -59,8 +61,8 @@ void syscall_write(Machine<W>& machine)
 		char buffer[1024];
 		const size_t len_g = std::min(sizeof(buffer), len);
 		machine.memory.memcpy_out(buffer, address, len_g);
-		// write buffer to our terminal!
-		machine.set_result(write(fd, buffer, len_g));
+		// Write buffer to our terminal!
+		machine.set_result_or_error(write(fd, buffer, len_g));
 		return;
 	}
 	machine.set_result(-EBADF);
@@ -68,7 +70,7 @@ void syscall_write(Machine<W>& machine)
 ```
 Here we extract 3 arguments, `int fd, void* buffer, size_t len`, looks familiar? We have to make sure fd is one of the known standard pipes, otherwise the VM could start writing to real files open in the host process!
 
-The return value of a call into a kernel is usually a success or error indication, and the way to set an error is to negate a POSIX error code. Success is often 0, however in this case the return value is the bytes written.
+The return value of a call into a kernel is usually a success or error indication, and the way to set an error is to negate a POSIX error code. Success is often 0, however in this case the return value is the bytes written. To make sure we pass on errno properly, we use the helper function `machine.set_result_or_error()`. It takes care of handling the common error case for us.
 
 ## Installing system calls
 
@@ -122,12 +124,14 @@ If in doubt, just use `address_type<W>` for the syscall argument, and it will be
 
 ## The RISC-V system call ABI
 
-On RISC-V a system call has its own instruction: `ECALL`, depending on disassembler. A system call can have up to 7 arguments and has 1 return value. The arguments are in registers A0-A6, in that order, and the return value is written into A0 before giving back control to the guest. A7 contains the system call number. These are all integer registers.
+On RISC-V a system call has its own instruction: `ECALL`. A system call can have up to 7 arguments and has 1 return value. The arguments are in registers A0-A6, in that order, and the return value is written into A0 before giving back control to the guest. A7 contains the system call number. These are all integer/pointer registers.
 
 To pass larger data around, the guest should allocate buffers of the appropriate size and pass the address of the buffers as arguments to the system call.
 
 ## Special note on EBREAK
 
-The EBREAK instruction is handled as a system call in this emulator, specifically it uses the system call number `riscv::SYSCALL_EBREAK`, which at the time of writing is put at the end of the system call table (N-1), however it can be changed in the common header or by setting a global define `RISCV_SYSCALL_EBREAK_NR` to a specific number.
+The `EBREAK` instruction is handled as a system call in this emulator, specifically it uses the system call number `riscv::SYSCALL_EBREAK`, which at the time of writing is put at the end of the system call table (N-1), however it can be changed in the common header or by setting a global define `RISCV_SYSCALL_EBREAK_NR` to a specific number.
 
-EBREAK is very convenient for debugging purposes, as adding it somewhere in the code is very simple: `asm("ebreak");`. Be careful of `__builtin_trap()`, as it erroneously assumes that you are never returning, and the compiler will stop producing instructions after it.
+`EBREAK` is very convenient for debugging purposes, as adding it somewhere in the code is very simple: `asm("ebreak");`.
+
+NOTE: Be careful of `__builtin_trap()`, as it erroneously assumes that you are never returning, and the compiler will stop producing instructions after it.
