@@ -16,7 +16,7 @@ WORKDIR /libriscv
 
 
 ## TODO: ADD YOUR BUILD INSTRUCTIONS HERE.
-RUN /libriscv/fuzzer.sh
+RUN /libriscv/fuzz/fuzzer.sh
 # Package Stage
 FROM --platform=linux/amd64 ubuntu:20.04
 
