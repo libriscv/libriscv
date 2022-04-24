@@ -39,3 +39,17 @@ jobs:
       run: |
         ./rvlinux ${{github.workspace}}/build_linux64/hello_world > output.log
         if ! grep -q "SUCCESS" "output.log"; then cat "output.log"; exit 1; fi
+
+    - name: Configure STREAM
+      env:
+        CC: riscv64-linux-gnu-gcc-10
+      run: cmake binaries/STREAM -B ${{github.workspace}}/build_STREAM -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build the STREAM benchmark
+      run: cmake --build ${{github.workspace}}/build_STREAM
+
+    - name: Run STREAM benchmark in emulator
+      working-directory: ${{github.workspace}}/build_emu
+      run: |
+        ./rvlinux ${{github.workspace}}/build_STREAM/stream > output.log
+        if ! grep -q "Solution Validates" "output.log"; then cat "output.log"; exit 1; fi
