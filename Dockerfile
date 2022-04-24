@@ -8,7 +8,7 @@ RUN apt-get update && \
 ## Add source code to the build stage.
 ADD . /libriscv
 #ADD fuzzer.sh /
-#ADD  CMakeLists.txt /libriscv/
+ADD  CMakeLists.txt /libriscv/
 #ADD CMakeLists.txt /lib
 ADD ./lib/CMakeLists.txt /lib
 ADD ./lib/libriscv /lib/libriscv
