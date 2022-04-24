@@ -234,11 +234,15 @@ namespace riscv
 			// The number of instructions to run until we can check
 			// if we ran out of instructions or PC changed.
 			size_t count = decoder->idxend;
+			if constexpr (VERBOSE_FASTSIM) {
+				printf("Fastsim at PC=0x%lX count=%zu\n", (long)pc, count);
+			}
 			machine().increment_counter(count);
 			auto* decoder_end = &decoder[count];
+			unsigned length = 0;
 			// We want to run 4 instructions at a time, except for
 			// the last one, which we will "always" do next
-			while (decoder+4 < decoder_end)
+			while (decoder+4 < decoder_end && !compressed_enabled)
 			{
 				registers().pc = pc + 0;
 				decoder[0].handler(*this, format_t {decoder[0].instr});
@@ -265,14 +269,20 @@ namespace riscv
 				decoder->handler(*this, instruction);
 				// increment *local* PC
 				if constexpr (compressed_enabled) {
-					pc += instruction.length();
-					decoder += instruction.length() / 2;
+					length = instruction.length();
+					pc += length;
+					decoder += length / 2;
 				} else {
 					pc += 4;
 					decoder++;
 				}
 			} while (decoder < decoder_end);
-			pc = registers().pc + 4;
+			// The loop above ended because PC could have changed.
+			// Update to real PC by reading from register memory.
+			if constexpr (compressed_enabled)
+				pc = registers().pc + length;
+			else
+				pc = registers().pc + 4;
 
 		} while (!machine().stopped());
 		registers().pc = pc;

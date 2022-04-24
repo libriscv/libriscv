@@ -18,8 +18,7 @@ struct DecoderData {
 #ifdef RISCV_FAST_SIMULATOR
 	uint32_t instr;
 	uint16_t idxend;
-	uint8_t  original_opcode;
-	uint8_t  reserved;
+	uint16_t original_opcode;
 #endif
 };
 

@@ -75,7 +75,7 @@ if (RISCV_ICACHE)
 		libriscv/decoder_cache.cpp
 	)
 endif()
-if (RISCV_EXPERIMENTAL)
+if (RISCV_ICACHE AND RISCV_EXPERIMENTAL)
 	list(APPEND SOURCES
 		libriscv/decoder_rewriter.cpp
 	)
@@ -105,12 +105,6 @@ if (RISCV_EXT_A)
 endif()
 if (RISCV_EXT_C)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_COMPRESSED=1)
-	if (RISCV_FAST_SIMULATOR)
-		# The fast simulator is not currently working well with compressed
-		# instructions, and so we temporarily disable it until resolved.
-		message(WARNING "RISCV_FAST_SIMULATOR incompatible with RISCV_EXT_C")
-		set(RISCV_FAST_SIMULATOR OFF)
-	endif()
 endif()
 if (RISCV_EXT_F)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_FLOATS=1)
@@ -135,16 +129,11 @@ if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
 	target_link_libraries(riscv PUBLIC dl)
-	# The fast simulator is not currently working well with fastsim
-	# because it is unable to detect that binary translator has taken over.
-	# The best solution is for binary translator to always translate the
-	# whole program.
-	#set(RISCV_FAST_SIMULATOR OFF)
 endif()
 if (RISCV_FLAT_MEMORY)
 	target_compile_definitions(riscv PUBLIC RISCV_FLAT_MEMORY=1)
 endif()
-if (RISCV_FAST_SIMULATOR)
+if (RISCV_ICACHE AND RISCV_FAST_SIMULATOR)
 	# The fast simulator is incompatible with RISCV_DEBUG because it
 	# modifies the instruction stream.
 	if (RISCV_DEBUG)

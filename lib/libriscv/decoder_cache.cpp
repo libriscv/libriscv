@@ -8,25 +8,89 @@
 namespace riscv
 {
 	template <int W>
-	static void realize_fastsim(address_type<W> base_pc, size_t count,
+	static bool is_regular_compressed(uint16_t instr) {
+		const rv32c_instruction ci { instr };
+		#define CI_CODE(x, y) ((x << 13) | (y))
+		switch (ci.opcode()) {
+		case CI_CODE(0b001, 0b01):
+			if constexpr (W >= 8) return true; // C.ADDIW
+			return false; // C.JAL 32-bit
+		case CI_CODE(0b101, 0b01): // C.JMP
+		case CI_CODE(0b110, 0b01): // C.BEQZ
+		case CI_CODE(0b111, 0b01): // C.BNEZ
+			return false;
+		case CI_CODE(0b100, 0b10): { // VARIOUS
+				const bool topbit = ci.whole & (1 << 12);
+				if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0) {
+					return false; // C.JR rd
+				} else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0) {
+					return false; // C.JALR ra, rd+0
+				} // TODO: Handle C.EBREAK
+				return true;
+			}
+		default:
+			return true;
+		}
+	}
+
+	template <int W>
+	static void realize_fastsim(
+		address_type<W> base_pc, address_type<W> last_pc,
 		DecoderData<W>* exec_decoder)
 	{
-		// Count distance to next branching instruction backwards
-		// and fill in idxend for all entries along the way.
-		unsigned idxend = 0;
-		for (int i = (int)count-1; i >= 0; i--)
+		if constexpr (compressed_enabled)
 		{
-			// Set the fast simulator handler at current PC
-			const auto pc = base_pc + i * 4;
-			auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			address_type<W> pc = base_pc;
+			while (pc < last_pc) {
+				std::vector<DecoderData<W>*> data;
+				size_t datalength = 0;
+				while (pc < last_pc) {
+					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
+					data.push_back(&entry);
 
-			// All opcodes that can modify PC
-			const auto opcode = entry.original_opcode;
-			if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
-				|| opcode == RV32I_JAL || opcode == RV32I_JALR)
-				idxend = 0;
-			idxend ++;
-			entry.idxend = idxend;
+					// Only the first 16 bits are preserved of the original
+					const auto instr16 = entry.original_opcode;
+					const auto opcode = rv32i_instruction{instr16}.opcode();
+					const auto length = rv32i_instruction{instr16}.length();
+					pc += length;
+					datalength += length / 2;
+
+					// All opcodes that can modify PC
+					if (length == 2)
+					{
+						if (!is_regular_compressed<W>(instr16))
+							break;
+					} else {
+						if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
+							|| opcode == RV32I_JAL || opcode == RV32I_JALR)
+							break;
+					}
+				}
+				for (auto* entry : data) {
+					entry->idxend = datalength;
+					const auto length = rv32i_instruction{entry->original_opcode}.length();
+					datalength -= length / 2;
+				}
+			}
+		} else { // !compressed_enabled
+			// Count distance to next branching instruction backwards
+			// and fill in idxend for all entries along the way.
+			unsigned idxend = 0;
+			address_type<W> pc = last_pc - 4;
+			while (pc >= base_pc)
+			{
+				auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				const auto opcode = rv32i_instruction{entry.original_opcode}.opcode();
+
+				// All opcodes that can modify PC and stop the machine
+				if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
+					|| opcode == RV32I_JAL || opcode == RV32I_JALR)
+					idxend = 0;
+				idxend ++;
+				entry.idxend = idxend;
+
+				pc -= 4;
+			}
 		}
 	}
 }
@@ -77,7 +141,8 @@ namespace riscv
 		/* Generate all instruction pointers for executable code.
 		   Cannot step outside of this area when pregen is enabled,
 		   so it's fine to leave the boundries alone. */
-		for (address_t dst = addr; dst < addr + len;)
+		address_t dst = addr;
+		for (; dst < addr + len;)
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
@@ -113,7 +178,9 @@ namespace riscv
 
 #ifdef RISCV_FAST_SIMULATOR
 			// Help the fastsim determine the real opcodes
-			entry.original_opcode = instruction.opcode();
+			// Also, put whole 16-bit instructions there.
+			entry.original_opcode = instruction.half[0];
+			entry.idxend = 0;
 #endif
 
 			// Insert decoded instruction into decoder cache
@@ -172,7 +239,7 @@ namespace riscv
 		}
 
 #ifdef RISCV_FAST_SIMULATOR
-		realize_fastsim<W>(addr, len / 4, exec_decoder);
+		realize_fastsim<W>(addr, dst, exec_decoder);
 #endif
 
 #ifdef RISCV_BINARY_TRANSLATION
