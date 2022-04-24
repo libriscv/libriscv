@@ -37,12 +37,23 @@ void syscall_exit(Machine<W>& machine)
 	machine.stop();
 }
 ```
-Our exit system call handler extracts the exit status code from the first argument to the system call, stops the machine and then returns a mandatory value. The return value in this system call is not important, as the machine has already been stopped and isn't expecting to return from the system call it just ran.
+Our exit system call handler extracts the exit status code from the first argument to the system call, prints it to stdout and then stops the machine. Installing the system call handler in a machine is straight-forward:
+
+```C++
+machine.install_syscall_handler(93, syscall_exit<RISCV64>);
+machine.install_syscall_handler(94, machine.syscall_handlers.at(93));
+```
+Here we installed a 64-bit system call handler for both `exit` (93) and `exit_group` (94).
+
+```C++
+Machine<RISCV64>::install_syscall_handler(93, syscall_exit<RISCV64>);
+```
+System call handlers are static by design to avoid system call setup overhead when creating machines.
 
 Stopping the machine in practice just means exiting the `Machine::simulate()` loop.
 
 Be careful about modifying registers during system calls, as it may cause problems
-in the simulated program. The program may only be expecting you to modify register A0.
+in the simulated program. The program may only be expecting you to modify register A0 (return value) or modifying memory pointed to by a system call argument.
 
 ## Handling an advanced system call
 
