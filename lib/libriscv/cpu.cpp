@@ -129,9 +129,8 @@ namespace riscv
 #endif
 	}
 
-#ifndef RISCV_FAST_SIMULATOR
 	template<int W> __attribute__((hot, no_sanitize("undefined")))
-	void CPU<W>::simulate(uint64_t max)
+	void CPU<W>::simulate_precise(uint64_t max)
 	{
 #ifdef RISCV_INSTR_CACHE
 		auto* exec_decoder = machine().memory.get_decoder_cache();
@@ -213,7 +212,14 @@ namespace riscv
 				registers().pc += 4;
 		} // while not stopped
 
-	} // CPU::simulate
+	} // CPU::simulate_precise
+
+#ifndef RISCV_FAST_SIMULATOR
+	template<int W> __attribute__((hot))
+	void CPU<W>::simulate(uint64_t imax)
+	{
+		simulate_precise(imax);
+	}
 
 #else // RISCV_FAST_SIMULATOR
 
@@ -296,7 +302,7 @@ namespace riscv
 		// the max instructions that we had before. If the machine is stopped
 		// the old count is not preserved.
 		auto old_maxi = machine().max_instructions();
-		this->simulate(1);
+		this->simulate_precise(1);
 		if (machine().max_instructions() != 0)
 			machine().set_max_instructions(old_maxi);
 	}

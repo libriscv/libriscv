@@ -23,6 +23,7 @@ namespace riscv
 		using instruction_t = Instruction<W>;
 
 		void simulate(uint64_t);
+		void simulate_precise(uint64_t); // Never fuses instructions
 		void step_one();
 		void reset();
 		void reset_stack_pointer() noexcept;
