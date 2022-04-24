@@ -1,4 +1,4 @@
-roject: libriscv 
+project: libriscv 
 target: fuzzme
 
 cmds:
