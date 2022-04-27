@@ -94,13 +94,11 @@ namespace riscv
 		bool load_program = true;
 		bool protect_segments = true;
 		bool allow_write_exec_segment = false;
+		bool enforce_exec_only = false;
 		bool verbose_loader = false;
 		// Instruction fusing is an experimental optimizing feature
 		// Can only be enabled with the RISCV_EXPERIMENTAL CMake option
 		bool instruction_fusing = false;
-		// Fast simulator can improve run-times, when enabled from RISCV_EXPERIMENTAL
-		// and then the RISCV_FAST_SIMULATOR CMake option. Incompatible with RISCV_DEBUG.
-		bool fast_simulator = fast_simulator_enabled;
 
 		std::function<struct Page&(Memory<W>&, size_t, bool)> page_fault_handler = nullptr;
 

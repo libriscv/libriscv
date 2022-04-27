@@ -224,9 +224,15 @@ namespace riscv
 		}
 		// We would normally never allow this
 		if (attr.exec && attr.write) {
-			if (options.allow_write_exec_segment == false) {
+			if (!options.allow_write_exec_segment) {
 				throw MachineException(INVALID_PROGRAM,
 					"Insecure ELF has writable executable code");
+			}
+		}
+		// In some cases we want to enforce execute-only
+		if (attr.exec && (attr.read || attr.write)) {
+			if (options.enforce_exec_only) {
+				throw MachineException(INVALID_PROGRAM, "Execute segment must be execute-only");
 			}
 		}
 #ifdef RISCV_FLAT_MEMORY
