@@ -314,6 +314,8 @@ namespace riscv
 				value = cpu.machine().memory.template read<__uint128_t> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
+		} else {
+			cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 		if (instr.Atype.rd != 0)
 			cpu.reg(instr.Atype.rd) = value;
