@@ -67,10 +67,12 @@ namespace riscv
 
 		address_t pc = 0;
 	private:
+		// General purpose registers
 		std::array<register_t, 32> m_reg {};
-		std::array<fp64reg, 32> m_regfl {};
 		// FP control register
 		FCSR m_fcsr {};
+		// General FP registers
+		std::array<fp64reg, 32> m_regfl {};
 	};
 
 	static_assert(sizeof(fp64reg) == 8, "FP-register is 64-bit");

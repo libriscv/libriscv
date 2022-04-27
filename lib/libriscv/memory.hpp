@@ -149,8 +149,12 @@ namespace riscv
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 
-		bool is_binary_translated() const { return m_bintr_dl != nullptr; }
+#ifdef RISCV_BINARY_TRANSLATION
+		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
 		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
+#else
+		bool is_binary_translated() const noexcept { return false; }
+#endif
 
 		// serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec);
@@ -254,7 +258,9 @@ namespace riscv
 		DecoderData<W>* m_exec_decoder = nullptr;
 		DecoderCache<W>* m_decoder_cache = nullptr;
 #endif
+#ifdef RISCV_BINARY_TRANSLATION
 		mutable void* m_bintr_dl = nullptr;
+#endif
 	};
 #include "memory_inline.hpp"
 #ifdef RISCV_FLAT_MEMORY

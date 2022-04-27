@@ -99,7 +99,9 @@ TEST_CASE("Verify program arguments and environment", "[Runtime]")
 
 TEST_CASE("Catch output from write system call", "[Output]")
 {
-	bool output_is_hello_world = false;
+	struct State {
+		bool output_is_hello_world = false;
+	} state;
 	const auto binary = build_and_load(R"M(
 	extern long write(int, const void*, unsigned long);
 	int main() {
@@ -115,9 +117,11 @@ TEST_CASE("Catch output from write system call", "[Output]")
 		{"basic"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 
-	machine.set_printer([&] (const char* data, size_t size) {
+	machine.set_userdata(&state);
+	machine.set_printer([] (const auto& m, const char* data, size_t size) {
+		auto* state = m.template get_userdata<State> ();
 		std::string text{data, data + size};
-		output_is_hello_world = (text == "Hello World!");
+		state->output_is_hello_world = (text == "Hello World!");
 	});
 	// Run for at most X instructions before giving up
 	machine.simulate(MAX_INSTRUCTIONS);
@@ -126,7 +130,7 @@ TEST_CASE("Catch output from write system call", "[Output]")
 
 	// We require that the write system call forwarded to the printer
 	// and the data matched 'Hello World!'.
-	REQUIRE(output_is_hello_world);
+	REQUIRE(state.output_is_hello_world);
 }
 
 TEST_CASE("Calculate fib(50)", "[Compute]")

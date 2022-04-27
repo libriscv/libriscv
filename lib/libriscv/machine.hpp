@@ -28,8 +28,8 @@ namespace riscv
 	{
 		using syscall_t = void(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address
-		using printer_func = std::function<void(const char*, size_t)>;
-		using stdin_func = std::function<long(char*, size_t)>;
+		using printer_func = void(*)(const Machine&, const char*, size_t);
+		using stdin_func = long(*)(const Machine&, char*, size_t);
 
 		// See common.hpp for MachineOptions
 		// The machine takes the binary as a const reference and does not
@@ -174,20 +174,20 @@ namespace riscv
 
 		// Custom user pointer
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }
-		template <typename T> T* get_userdata() { return static_cast<T*> (m_userdata); }
+		template <typename T> T* get_userdata() const noexcept { return static_cast<T*> (m_userdata); }
 
 		// Stdout, stderr
 		void print(const char*, size_t) const;
 		auto& get_printer() const noexcept { return m_printer; }
-		void set_printer(printer_func pf = m_default_printer) { m_printer = std::move(pf); }
+		void set_printer(printer_func pf = m_default_printer) const { m_printer = std::move(pf); }
 		// Stdin
 		long stdin_read(char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
-		void set_stdin(stdin_func sin = m_default_stdin) { m_stdin = std::move(sin); }
+		void set_stdin(stdin_func sin = m_default_stdin) const { m_stdin = std::move(sin); }
 		// Debug printer
 		void debug_print(const char*, size_t) const;
 		auto& get_debug_printer() const noexcept { return m_debug_printer; }
-		void set_debug_printer(printer_func pf = m_default_printer) { m_debug_printer = std::move(pf); }
+		void set_debug_printer(printer_func pf = m_default_printer) const { m_debug_printer = std::move(pf); }
 
 		// Call an installed system call handler
 		void system_call(size_t);
@@ -240,7 +240,7 @@ namespace riscv
 		const FileDescriptors& fds() const;
 		FileDescriptors& fds();
 		// Multiprocessing structure, lazily created
-		Multiprocessing<W>& smp();
+		Multiprocessing<W>& smp(unsigned workers = 4);
 		// Signal structure, lazily created
 		Signals<W>& signals() {
 			if (m_signals == nullptr) m_signals.reset(new Signals<W>);
@@ -272,16 +272,15 @@ namespace riscv
 
 		uint64_t     m_counter = 0;
 		uint64_t     m_max_counter = 0;
-		void*        m_userdata = nullptr;
-		printer_func m_printer = m_default_printer;
-		printer_func m_debug_printer = m_default_printer;
-		stdin_func   m_stdin = m_default_stdin;
+		mutable void*        m_userdata = nullptr;
+		mutable printer_func m_printer = m_default_printer;
+		mutable printer_func m_debug_printer = m_default_printer;
+		mutable stdin_func   m_stdin = m_default_stdin;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt;
 		std::unique_ptr<FileDescriptors> m_fds;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		std::unique_ptr<Signals<W>> m_signals = nullptr;
-		const unsigned m_multiprocessing_workers;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static printer_func m_default_printer;
 		static stdin_func   m_default_stdin;

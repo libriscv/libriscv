@@ -27,10 +27,10 @@ struct Latch {
 };
 
 template <int W>
-Multiprocessing<W>& Machine<W>::smp()
+Multiprocessing<W>& Machine<W>::smp(unsigned workers)
 {
 	if (UNLIKELY(m_smp == nullptr))
-		m_smp.reset(new Multiprocessing<W> (m_multiprocessing_workers));
+		m_smp.reset(new Multiprocessing<W> (workers));
 	return *m_smp;
 }
 
@@ -89,8 +89,8 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 				latch.arrive();
 
 				fork.set_userdata(this->get_userdata<void>());
-				fork.set_printer([] (const char*, size_t) {});
-				fork.set_stdin([] (char*, size_t) -> long { return 0; });
+				fork.set_printer([] (const auto&, const char*, size_t) {});
+				fork.set_stdin([] (const auto&, char*, size_t) -> long { return 0; });
 				fork.cpu.increment_pc(4); // Step over current ECALL
 				fork.cpu.reg(REG_SP) = sp; // Per-CPU stack
 				fork.cpu.reg(REG_ARG0) = id; // Return value
@@ -141,8 +141,8 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 				Machine<W> fork { *this, { .cpu_id = id } };
 
 				fork.set_userdata(this->get_userdata<void>());
-				fork.set_printer([] (const char*, size_t) {});
-				fork.set_stdin([] (char*, size_t) -> long { return 0; });
+				fork.set_printer([] (const auto&, const char*, size_t) {});
+				fork.set_stdin([] (const auto&, char*, size_t) -> long { return 0; });
 				fork.cpu.increment_pc(4); // Step over current ECALL
 				fork.cpu.reg(REG_ARG0) = id; // Return value
 

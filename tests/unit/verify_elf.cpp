@@ -26,15 +26,19 @@ TEST_CASE("Golang Hello World", "[Verify]")
 		{"golang-riscv64-hello-world"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 
-	bool output_is_hello_world = false;
-	machine.set_printer([&] (const char* data, size_t size) {
+	struct State {
+		bool output_is_hello_world = false;
+	} state;
+	machine.set_userdata(&state);
+	machine.set_printer([] (const auto& m, const char* data, size_t size) {
+		auto* state = m.template get_userdata<State> ();
 		std::string text{data, data + size};
-		output_is_hello_world = (text == "hello world");
+		state->output_is_hello_world = (text == "hello world");
 	});
 
 	// Run for at most X instructions before giving up
 	machine.simulate(MAX_INSTRUCTIONS);
 
 	REQUIRE(machine.return_value() == 0);
-	REQUIRE(output_is_hello_world);
+	REQUIRE(state.output_is_hello_world);
 }

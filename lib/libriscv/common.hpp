@@ -101,8 +101,6 @@ namespace riscv
 		// Fast simulator can improve run-times, when enabled from RISCV_EXPERIMENTAL
 		// and then the RISCV_FAST_SIMULATOR CMake option. Incompatible with RISCV_DEBUG.
 		bool fast_simulator = fast_simulator_enabled;
-		// Number of workers dedicated to multiprocessing
-		unsigned multiprocessing_workers = 4;
 
 		std::function<struct Page&(Memory<W>&, size_t, bool)> page_fault_handler = nullptr;
 

@@ -49,8 +49,10 @@ namespace riscv
 			// This function will (at most) validate the execute segment
 			this->jump(initial_pc);
 		}
+#ifndef RISCV_INBOUND_JUMPS_ONLY
 		// reset the page cache
 		this->m_cache = {};
+#endif
 	}
 
 	template <int W>
@@ -62,6 +64,7 @@ namespace riscv
 	#endif
 	}
 
+#ifndef RISCV_INBOUND_JUMPS_ONLY
 	template <int W> __attribute__((noinline))
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
 	{
@@ -114,6 +117,7 @@ namespace riscv
 
 		return instruction;
 	}
+#endif // RISCV_INBOUND_JUMPS_ONLY
 
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction() const
@@ -122,7 +126,7 @@ namespace riscv
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
 
-#ifdef RISCV_FLAT_MEMORY
+#if defined(RISCV_FLAT_MEMORY) || defined(RISCV_INBOUND_JUMPS_ONLY)
 		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 #else
 		return read_next_instruction_slowpath();

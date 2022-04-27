@@ -19,26 +19,23 @@ extern "C" {
 
 namespace riscv
 {
-	static void default_printer_function(const char* buffer, size_t len) {
-		::write(1, buffer, len);
-	}
-	static long default_stdin_function(char* buffer, size_t len) {
-		return ::read(0, buffer, len);
-	}
 	template <int W>
 	typename Machine<W>::printer_func Machine<W>::m_default_printer
-		= default_printer_function;
+		= [] (auto&, const char* buffer, size_t len) {
+			::write(1, buffer, len);
+		};
 	template <int W>
 	typename Machine<W>::stdin_func Machine<W>::m_default_stdin
-		= default_stdin_function;
+		= [] (auto&, char* buffer, size_t len) -> long {
+			return ::read(0, buffer, len);
+		};
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
 		: cpu(*this, options.cpu_id),
 		  memory(*this, binary, options),
 		  m_arena{nullptr},
-		  m_mt{nullptr},
-		  m_multiprocessing_workers{options.multiprocessing_workers}
+		  m_mt{nullptr}
 	{
 		cpu.reset();
 	}
@@ -47,8 +44,7 @@ namespace riscv
 		: cpu(*this, options.cpu_id, other),
 		  memory(*this, other, options),
 		  m_arena{nullptr}, // TODO: transfer arena?
-		  m_mt{nullptr},
-		  m_multiprocessing_workers{options.multiprocessing_workers}
+		  m_mt{nullptr}
 	{
 		this->m_counter = other.m_counter;
 		this->m_max_counter = other.m_max_counter;

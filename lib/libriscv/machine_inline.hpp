@@ -35,17 +35,17 @@ inline void Machine<W>::reset()
 template <int W>
 inline void Machine<W>::print(const char* buffer, size_t len) const
 {
-	this->m_printer(buffer, len);
+	this->m_printer(*this, buffer, len);
 }
 template <int W>
 inline long Machine<W>::stdin_read(char* buffer, size_t len) const
 {
-	return this->m_stdin(buffer, len);
+	return this->m_stdin(*this, buffer, len);
 }
 template <int W>
 inline void Machine<W>::debug_print(const char* buffer, size_t len) const
 {
-	this->m_debug_printer(buffer, len);
+	this->m_debug_printer(*this, buffer, len);
 }
 
 template <int W> inline
