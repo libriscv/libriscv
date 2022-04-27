@@ -219,7 +219,7 @@ namespace riscv
 		void setup_native_heap(size_t sysnum, uint64_t addr, size_t size);
 		void transfer_arena_from(const Machine& other);
 		// Optional custom memory-related system calls
-		void setup_native_memory(size_t sysnum);
+		static void setup_native_memory(size_t sysnum);
 
 		// System calls, files and threads implementations
 		bool has_file_descriptors() const noexcept { return m_fds != nullptr; }
@@ -267,7 +267,7 @@ namespace riscv
 		static void unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
-		void setup_native_heap_internal(const size_t);
+		static void setup_native_heap_internal(const size_t);
 		void timeout_exception(uint64_t);
 
 		uint64_t     m_counter = 0;

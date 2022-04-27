@@ -20,7 +20,7 @@ template <int W>
 void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 {
 	// Malloc n+0
-	this->install_syscall_handler(syscall_base+0,
+	Machine<W>::install_syscall_handler(syscall_base+0,
 	[] (auto& machine)
 	{
 		const size_t len = machine.sysarg(0);
@@ -30,7 +30,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Calloc n+1
-	this->install_syscall_handler(syscall_base+1,
+	Machine<W>::install_syscall_handler(syscall_base+1,
 	[] (auto& machine)
 	{
 		const auto [count, size] =
@@ -48,7 +48,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Realloc n+2
-	this->install_syscall_handler(syscall_base+2,
+	Machine<W>::install_syscall_handler(syscall_base+2,
 	[] (auto& machine)
 	{
 		const auto src = machine.sysarg(0);
@@ -67,7 +67,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Free n+3
-	this->install_syscall_handler(syscall_base+3,
+	Machine<W>::install_syscall_handler(syscall_base+3,
 	[] (auto& machine)
 	{
 		const auto ptr = machine.sysarg(0);
@@ -88,7 +88,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		return;
 	});
 	// Meminfo n+4
-	this->install_syscall_handler(syscall_base+4,
+	Machine<W>::install_syscall_handler(syscall_base+4,
 	[] (auto& machine)
 	{
 		const auto dst = machine.sysarg(0);
@@ -142,7 +142,7 @@ void Machine<W>::transfer_arena_from(const Machine& other)
 template <int W>
 void Machine<W>::setup_native_memory(const size_t syscall_base)
 {
-	this->install_syscall_handlers({
+	Machine<W>::install_syscall_handlers({
 		{syscall_base+0, [] (Machine<W>& m) {
 		// Memcpy n+0
 		auto [dst, src, len] =
