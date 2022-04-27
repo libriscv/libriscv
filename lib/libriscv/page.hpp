@@ -101,6 +101,7 @@ struct Page
 	const auto* data() const noexcept {
 		return page().buffer8.data();
 	}
+	void new_data(PageData* data, bool data_owned);
 
 	static constexpr size_t size() noexcept {
 		return SIZE;
@@ -146,6 +147,14 @@ inline Page::Page(const PageAttributes& a, PageData* data)
 {
 	attr.non_owning = true;
 	m_page.reset(data);
+}
+
+inline void Page::new_data(PageData* data, bool data_owned)
+{
+	if (this->attr.non_owning)
+		this->m_page.release();
+	this->m_page.reset(data);
+	this->attr.non_owning = !data_owned;
 }
 
 inline void Page::trap(uint32_t offset, int mode, int64_t value) const
