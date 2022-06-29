@@ -6,20 +6,13 @@ RUN apt-get update && \
     apt-get install -y lld
 
 ## Add source code to the build stage.
-ADD . /libriscv
-#ADD fuzzer.sh /
-ADD  CMakeLists.txt /libriscv/
-#ADD CMakeLists.txt /lib
-ADD ./lib/CMakeLists.txt /lib
-ADD ./lib/libriscv /lib/libriscv
-WORKDIR /libriscv
+COPY fuzz/ ./fuzz
+COPY lib/ ./lib
+WORKDIR /fuzz
 
 
 ## TODO: ADD YOUR BUILD INSTRUCTIONS HERE.
-RUN /libriscv/fuzz/fuzzer.sh
-# Package Stage
-FROM --platform=linux/amd64 ubuntu:20.04
+RUN ./fuzzer.sh
 
 ## TODO: Change <Path in Builder Stage>
-COPY --from=builder /libriscv/build/vmfuzzer32 /
-CMD /vmfuzzer32 -fork=1 -handle_fpe=0
+CMD ./build/vmfuzzer32 -fork=1 -handle_fpe=0
