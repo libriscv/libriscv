@@ -1,5 +1,5 @@
 project: libriscv 
-target: fuzzme_2
+target: vmfuzzer32
 
 cmds:
-  - cmd: ./build/vmfuzzer32 -fork=1 -handle_fpe=0
+  - cmd: ./vmfuzzer32 -fork=1 -handle_fpe=0
