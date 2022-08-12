@@ -203,7 +203,6 @@ if constexpr (SCAN_FOR_GP) {
 			const auto opcode = instruction.opcode();
 			const auto block = it;
 			bool has_branch = false;
-			bool has_loop = false;
 			// measure block length
 			while (++it != ipairs.end()) {
 				// we can include this but not continue after
@@ -222,7 +221,6 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 					const auto dst = basepc + (4 * length) + offset;
 					if (offset > -LOOP_OFFSET_MAX && already_looped.count(dst) == 0) {
 						loops.push_back({it + offset / 4, dst});
-						has_loop = true;
 						already_looped.insert(dst);
 					}
 				}
