@@ -67,6 +67,10 @@ struct MultiThreading
 	bool      block(int reason);
 	void      unblock(int tid);
 	bool      wakeup_blocked(int reason);
+	/* A suspended thread can at any time be resumed. */
+	auto&     suspended_threads() { return m_suspended; }
+	/* A blocked thread can only be resumed by unblocking it. */
+	auto&     blocked_threads() { return m_blocked; }
 
 	MultiThreading(Machine<W>&);
 	MultiThreading(Machine<W>&, const MultiThreading&);
