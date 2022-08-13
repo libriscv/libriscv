@@ -179,15 +179,15 @@ namespace riscv
 		// Stdout, stderr
 		void print(const char*, size_t) const;
 		auto& get_printer() const noexcept { return m_printer; }
-		void set_printer(printer_func pf = m_default_printer) const { m_printer = std::move(pf); }
+		void set_printer(printer_func pf = m_default_printer) const { m_printer = pf; }
 		// Stdin
 		long stdin_read(char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
-		void set_stdin(stdin_func sin = m_default_stdin) const { m_stdin = std::move(sin); }
+		void set_stdin(stdin_func sin = m_default_stdin) const { m_stdin = sin; }
 		// Debug printer
 		void debug_print(const char*, size_t) const;
 		auto& get_debug_printer() const noexcept { return m_debug_printer; }
-		void set_debug_printer(printer_func pf = m_default_printer) const { m_debug_printer = std::move(pf); }
+		void set_debug_printer(printer_func pf = m_default_printer) const { m_debug_printer = pf; }
 
 		// Call an installed system call handler
 		void system_call(size_t);
