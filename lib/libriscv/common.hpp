@@ -12,7 +12,7 @@
 #endif
 
 #ifndef RISCV_PAGE_SIZE
-#define RISCV_PAGE_SIZE  4096
+#define RISCV_PAGE_SIZE  4096UL
 #endif
 
 #ifndef RISCV_RODATA_SEGMENT_IS_SHARED
@@ -23,7 +23,7 @@ namespace riscv
 {
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
 
-	static constexpr int PageSize = RISCV_PAGE_SIZE;
+	static constexpr size_t PageSize = RISCV_PAGE_SIZE;
 
 #ifdef RISCV_MEMORY_TRAPS
 	static constexpr bool memory_traps_enabled = true;
