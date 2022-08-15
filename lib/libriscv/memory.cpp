@@ -422,30 +422,33 @@ namespace riscv
 
 	template <int W>
 	void Memory<W>::machine_loader(
-		const Machine<W>& master, const MachineOptions<W>&)
+		const Machine<W>& master, const MachineOptions<W>& options)
 	{
 		// Some machines don't need custom PF handlers
 		this->m_page_fault_handler = master.memory.m_page_fault_handler;
 
-		// Hardly any pages are dont_fork, so we estimate that
-		// all master pages will be loaned.
-		m_pages.reserve(master.memory.pages().size());
-		for (const auto& it : master.memory.pages())
+		if (options.minimal_fork == false)
 		{
-			const auto& page = it.second;
-			// Skip pages marked as dont_fork
-			if (page.attr.dont_fork) continue;
-			// Make every page non-owning
-			auto attr = page.attr;
-			if (attr.write) {
-				attr.write = false;
-				attr.is_cow = true;
+			// Hardly any pages are dont_fork, so we estimate that
+			// all master pages will be loaned.
+			m_pages.reserve(master.memory.pages().size());
+			for (const auto& it : master.memory.pages())
+			{
+				const auto& page = it.second;
+				// Skip pages marked as dont_fork
+				if (page.attr.dont_fork) continue;
+				// Make every page non-owning
+				auto attr = page.attr;
+				if (attr.write) {
+					attr.write = false;
+					attr.is_cow = true;
+				}
+				attr.non_owning = true;
+				m_pages.emplace(std::piecewise_construct,
+					std::forward_as_tuple(it.first),
+					std::forward_as_tuple(attr, (PageData*) page.data())
+				);
 			}
-			attr.non_owning = true;
-			m_pages.emplace(std::piecewise_construct,
-				std::forward_as_tuple(it.first),
-				std::forward_as_tuple(attr, (PageData*) page.data())
-			);
 		}
 		this->m_start_address = master.memory.m_start_address;
 		this->m_stack_address = master.memory.m_stack_address;

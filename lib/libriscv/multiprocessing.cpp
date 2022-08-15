@@ -4,28 +4,6 @@
 
 namespace riscv {
 
-struct Latch {
-	std::size_t remaining;
-	std::mutex mtx;
-	std::condition_variable cv;
-
-	Latch(std::size_t s) : remaining(s) {}
-
-	void arrive()
-	{
-		auto lock = std::unique_lock(mtx);
-		remaining--;
-		if (remaining == 0) cv.notify_all();
-	}
-	void wait()
-	{
-		auto lock = std::unique_lock(mtx);
-		cv.wait(lock,
-			[&] { return remaining == 0; }
-		);
-	}
-};
-
 template <int W>
 Multiprocessing<W>& Machine<W>::smp(unsigned workers)
 {
@@ -65,7 +43,7 @@ typename Multiprocessing<W>::failure_bits_t Multiprocessing<W>::wait()
 
 template <int W>
 bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
-	address_t stack, address_t stksize, bool do_fork)
+	address_t stack, address_t stksize, std::function<void(Machine&)> setup_cb)
 {
 	if (UNLIKELY(is_multiprocessing()))
 		return false;
@@ -73,71 +51,15 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	const address_t stackpage = Memory<W>::page_number(stack);
 	const address_t stackendpage = Memory<W>::page_number(stack + stksize);
 	smp().failures = 0x0;
-	Latch latch{num_cpus};
 
 	// Create worker 1...N
 	for (unsigned id = 1; id <= num_cpus; id++)
 	{
-		const address_t sp = stack + stksize * id;
-
-		if (do_fork == false) {
-			smp().async_work(
-			[=, &latch] {
-
-				Machine<W> fork { *this, { .cpu_id = id } };
-				// TODO: threads need to be accessed through the main VM
-				latch.arrive();
-
-				fork.set_userdata(this->get_userdata<void>());
-				fork.set_printer([] (const auto&, const char*, size_t) {});
-				fork.set_stdin([] (const auto&, char*, size_t) -> long { return 0; });
-				fork.cpu.increment_pc(4); // Step over current ECALL
-				fork.cpu.reg(REG_SP) = sp; // Per-CPU stack
-				fork.cpu.reg(REG_ARG0) = id; // Return value
-
-				if (smp().shared_page_faults) {
-					fork.memory.set_page_fault_handler(
-					[this] (auto& mem, const address_t pageno, bool init) -> Page& {
-						std::lock_guard<std::mutex> lk(this->smp().m_lock);
-						auto& master_page = this->memory.create_writable_pageno(pageno, init);
-						// Install the page as non-owned (loaned) memory
-						return mem.install_shared_page(pageno, master_page);
-					});
-				}
-				if (smp().shared_read_faults) {
-					fork.memory.set_page_readf_handler(
-					[this] (const auto&, address_t pageno) -> const Page& {
-						std::lock_guard<std::mutex> lk(this->smp().m_lock);
-						return this->memory.get_pageno(pageno);
-					});
-				}
-
-				// For most workloads, we will only need a copy-on-write handler
-				fork.memory.set_page_write_handler(
-				[this] (auto&, address_t pageno, Page& page) -> void {
-					// Release old page if non-owned
-					if (page.attr.non_owning && page.m_page.get() != nullptr)
-						page.m_page.release();
-
-					std::lock_guard<std::mutex> lk(this->m_smp->m_lock);
-					// Create new page in main VM (most likely it already exists)
-					auto& master_page = this->memory.create_writable_pageno(pageno);
-					// Return back page with memory loaned from master VM
-					page.attr = master_page.attr;
-					page.attr.non_owning = true;
-					page.m_page.reset(master_page.m_page.get());
-				});
-
-				try {
-					fork.simulate<true> (maxi);
-				} catch (...) {
-					__sync_fetch_and_or(&smp().failures, 1u << id);
-				}
-			});
-		} else {
-			// Fork variant
-			smp().async_work(
-			[=] {
+		// Fork variant
+		smp().async_work(
+		[=] {
+			try {
+				// NOTE: minimal_fork causes a ton of contention. Avoid! */
 				Machine<W> fork { *this, { .cpu_id = id } };
 
 				fork.set_userdata(this->get_userdata<void>());
@@ -166,36 +88,34 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 					page.attr.non_owning = true;
 					page.m_page.reset(master_page.m_page.get());
 				});
+				fork.memory.set_page_readf_handler(
+				[this] (auto&, address_t pageno) -> const Page& {
+					std::lock_guard<std::mutex> lk(this->smp().m_lock);
+					return this->memory.get_pageno(pageno);
+				});
 				fork.memory.set_page_fault_handler(
 				[=] (auto& mem, const address_t pageno, bool init) -> Page& {
 					if (pageno >= stackpage && pageno < stackendpage) {
-						return this->memory.create_writable_pageno(pageno, init);
+						return mem.create_writable_pageno(pageno, init);
 					}
 					std::lock_guard<std::mutex> lk(this->smp().m_lock);
-					auto& master_page = this->memory.create_writable_pageno(pageno, init);
-					// Install the page as non-owned (loaned) memory
-					return mem.install_shared_page(pageno, master_page);
+					return this->memory.create_writable_pageno(pageno, init);
 				});
 
-				try {
-					fork.simulate<true> (maxi);
-				} catch (...) {
-					__sync_fetch_and_or(&smp().failures, 1u << id);
-				}
-			});
-		}
+				if (setup_cb != nullptr)
+					setup_cb(fork);
+
+				fork.simulate<true> (maxi);
+			} catch (...) {
+				__sync_fetch_and_or(&smp().failures, 1u << id);
+			}
+		});
 	} // foreach CPU
 
-	if (do_fork == false) {
-		// When not forking, we will only wait for the Machine forks
-		// to complete.
-		latch.wait();
-	} else {
-		// Immediately wait if we are forking everything
-		// We don't want the main vCPU to trample the stack that the workers
-		// may be relying on. It's perfectly safe to immediately wait.
-		multiprocess_wait();
-	}
+	// Immediately wait if we are forking everything
+	// We don't want the main vCPU to trample the stack that the workers
+	// may be relying on. It's perfectly safe to immediately wait.
+	multiprocess_wait();
 
 	return true;
 }
@@ -211,7 +131,7 @@ template <int W>
 Multiprocessing<W>::Multiprocessing(size_t) {}
 
 template <int W>
-bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t, bool) {
+bool Machine<W>::multiprocess(unsigned, uint64_t, address_t, address_t, std::function<void(Machine&)>) {
 	return false;
 }
 template <int W>

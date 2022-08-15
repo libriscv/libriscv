@@ -60,21 +60,14 @@ extern "C" long sys_multiprocess(unsigned, void*, size_t, multiprocess_func_t, v
 extern "C" long sys_multiprocess_fork(unsigned);
 extern "C" long sys_multiprocess_wait();
 
-static struct {
-	uint64_t* stacks = nullptr;
-	unsigned  cpus = 0;
-} mp_data;
 inline unsigned multiprocess(unsigned cpus, multiprocess_func_t func, void* data)
 {
-	if (mp_data.cpus < cpus) {
-		mp_data.cpus = cpus;
-		delete[] mp_data.stacks;
-		mp_data.stacks = new uint64_t[(MP_STACK_SIZE * cpus) / sizeof(uint64_t)];
-	}
+	static uint64_t* mp_stacks = nullptr;
+	if (mp_stacks == nullptr)
+		mp_stacks = new uint64_t[MP_STACK_SIZE / sizeof(uint64_t)];
 
-	return sys_multiprocess(cpus, mp_data.stacks, MP_STACK_SIZE, func, data);
+	return sys_multiprocess(cpus, mp_stacks, MP_STACK_SIZE, func, data);
 }
-__attribute__((always_inline))
 inline unsigned multiprocess(unsigned cpus)
 {
 	register unsigned a0 asm("a0") = cpus;
@@ -85,7 +78,11 @@ inline unsigned multiprocess(unsigned cpus)
 }
 inline long multiprocess_wait()
 {
-	return sys_multiprocess_wait();
+	register unsigned a0 asm("a0");
+	register int     sid asm("a7") = 2;
+
+	asm volatile ("ecall" : "=r"(a0) : "r"(sid) : "memory");
+	return a0;
 }
 
 asm(".global sys_multiprocess\n"
@@ -99,9 +96,3 @@ asm(".global sys_multiprocess\n"
 "   jalr zero, a3\n"   // Direct jump to work function
 "sys_multiprocess_ret:\n"
 "   ret\n");           // Return to caller
-
-asm(".global sys_multiprocess_wait\n"
-"sys_multiprocess_wait:\n"
-"	li a7, 2\n"
-"	ecall\n"
-"   ret\n");

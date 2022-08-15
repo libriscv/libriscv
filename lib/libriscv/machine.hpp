@@ -148,7 +148,8 @@ namespace riscv
 		// each of which uses memory pages from this machine. Using this
 		// we can partition workloads and work on them concurrently.
 		bool is_multiprocessing() const noexcept;
-		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize, bool fork = false);
+		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize,
+			std::function<void(Machine&)> per_machine_setup_cb = nullptr);
 		uint32_t multiprocess_wait();
 
 		// Returns true if this machine is forked from another, and thus

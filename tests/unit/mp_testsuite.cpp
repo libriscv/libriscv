@@ -25,7 +25,7 @@ static void install_multiprocessing_syscalls()
 		// to query glibc for the stack values.
 		const uint64_t stack_base = 0xFF000000;
 		const uint64_t stack_size = 0x00FFF000;
-		machine.multiprocess(vcpus, MAX_INSTRUCTIONS, stack_base, stack_size, true);
+		machine.multiprocess(vcpus, MAX_INSTRUCTIONS, stack_base, stack_size);
 		machine.set_result(0);
 	});
 	Machine<RISCV64>::install_syscall_handler(2,
@@ -34,7 +34,6 @@ static void install_multiprocessing_syscalls()
 			machine.set_result(machine.multiprocess_wait());
 		} else {
 			machine.stop();
-			machine.set_result(0);
 		}
 	});
 }
@@ -49,8 +48,15 @@ TEST_CASE("Singleprocessing dot-product", "[Compute]")
 		initialize_work(mp_work);
 		mp_work.workers = 1;
 
-		// Method 0: Do it on this CPU.
-		multiprocessing_function<WORK_SIZE> (0, &mp_work);
+		// Fork this machine and wait until multiprocessing
+		// ends, by calling multiprocess_wait() on all workers. Each
+		// worker uses the current stack, copy-on-write.
+		unsigned cpu = multiprocess(1);
+		if (cpu != 0) {
+			multiprocessing_function<WORK_SIZE> (cpu-1, &mp_work);
+		}
+		long result = multiprocess_wait();
+		assert(result == 0);
 
 		// Verify results
 		assert(mp_work.final_sum() == WORK_SIZE);
@@ -60,44 +66,9 @@ TEST_CASE("Singleprocessing dot-product", "[Compute]")
 
 	Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	machine.setup_linux_syscalls();
-	machine.setup_linux(
-		{"singleprocessing"},
-		{"LC_TYPE=C", "LC_ALL=C", "USER=groot"});
-	// Run for at most X instructions before giving up
-	machine.simulate(MAX_INSTRUCTIONS);
-
-	REQUIRE(machine.return_value<long>() == 16384);
-}
-
-TEST_CASE("Multiprocessing dot-product", "[Compute]")
-{
-	const auto binary = build_and_load(R"M(
-	#include <cassert>
-	#include "mp_testsuite.hpp"
-
-	int main(int, char**) {
-		initialize_work(mp_work);
-		mp_work.workers = MP_WORKERS;
-
-		// Method 1: Start new workers, each with their own stacks
-		// then call the given function. Most of this is handled
-		// in RISC-V assembly.
-		multiprocess(MP_WORKERS, multiprocessing_function<WORK_SIZE>, &mp_work);
-		// Wait and stop workers here
-		long result = multiprocess_wait();
-		assert(result == 0);
-
-		// Verify results
-		assert(mp_work.final_sum() == WORK_SIZE);
-		assert(mp_work.counter == MP_WORKERS);
-		return mp_work.final_sum();
-	})M", "-O2 -static -I" + cwd, true);
-
-	Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
-	machine.setup_linux_syscalls();
 	install_multiprocessing_syscalls();
 	machine.setup_linux(
-		{"multiprocessing"},
+		{"singleprocessing"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=groot"});
 	// Run for at most X instructions before giving up
 	machine.simulate(MAX_INSTRUCTIONS);
@@ -115,10 +86,9 @@ TEST_CASE("Multiprocessing (forked) dot-product", "[Compute]")
 		initialize_work(mp_work);
 		mp_work.workers = MP_WORKERS;
 
-		// Method 2: Fork this machine and wait until multiprocessing
+		// Fork this machine and wait until multiprocessing
 		// ends, by calling multiprocess_wait() on all workers. Each
-		// worker uses the current stack, copy-on-write. No need for
-		// hand-written assembly to handle this variant.
+		// worker uses the current stack, copy-on-write.
 		unsigned cpu = multiprocess(MP_WORKERS);
 		if (cpu != 0) {
 			multiprocessing_function<WORK_SIZE> (cpu-1, &mp_work);

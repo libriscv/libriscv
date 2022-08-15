@@ -32,8 +32,10 @@ namespace riscv
 			// Handler must produce a new page, or throw
 			Page& page = m_page_fault_handler(*this, pageno,
 				init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
-			if (LIKELY(page.attr.write))
+			if (LIKELY(page.attr.write)) {
+				this->invalidate_cache(pageno, &page);
 				return page;
+			}
 		}
 		this->protection_fault(pageno * Page::size());
 	}

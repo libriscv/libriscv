@@ -18,8 +18,8 @@ struct Multiprocessing
 	std::mutex m_lock;
 	bool processing = false;
 	failure_bits_t failures = 0; // Bitmap of failed vCPU tasks
-	static constexpr bool shared_page_faults = false;
-	static constexpr bool shared_read_faults = false;
+	static constexpr bool shared_page_faults = true;
+	static constexpr bool shared_read_faults = true;
 #else
 	bool is_multiprocessing() const noexcept { return false; }
 #endif

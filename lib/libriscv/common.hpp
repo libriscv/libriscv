@@ -3,17 +3,6 @@
 #include <functional>
 #include <string>
 
-#ifndef LIKELY
-#define LIKELY(x) __builtin_expect((x), 1)
-#endif
-#ifndef UNLIKELY
-#define UNLIKELY(x) __builtin_expect((x), 0)
-#endif
-
-#ifndef COLD_PATH
-#define COLD_PATH() __attribute__((cold))
-#endif
-
 #ifndef RISCV_SYSCALLS_MAX
 #define RISCV_SYSCALLS_MAX   512
 #endif
@@ -96,6 +85,8 @@ namespace riscv
 		bool allow_write_exec_segment = false;
 		bool enforce_exec_only = false;
 		bool verbose_loader = false;
+		// Minimal fork does not loan any pages from the source Machine
+		bool minimal_fork = false;
 		// Instruction fusing is an experimental optimizing feature
 		// Can only be enabled with the RISCV_EXPERIMENTAL CMake option
 		bool instruction_fusing = false;
@@ -127,4 +118,15 @@ namespace riscv
 
 	template<class T>
 	struct is_stdstring : public std::is_same<T, std::basic_string<char>> {};
-}
+} // riscv
+
+#ifndef LIKELY
+#define LIKELY(x) __builtin_expect((x), 1)
+#endif
+#ifndef UNLIKELY
+#define UNLIKELY(x) __builtin_expect((x), 0)
+#endif
+
+#ifndef COLD_PATH
+#define COLD_PATH() __attribute__((cold))
+#endif
