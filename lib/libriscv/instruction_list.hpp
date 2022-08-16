@@ -38,3 +38,5 @@
 #define RV32F__FCVT_SD_W  0b11010
 #define RV32F__FMV_X_W    0b11100
 #define RV32F__FMV_W_X    0b11110
+
+#define RV32V_OP        0b1010111

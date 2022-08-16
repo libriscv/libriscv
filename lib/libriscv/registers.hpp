@@ -1,7 +1,11 @@
 #pragma once
 #include "types.hpp"
 #include <array>
+#include <memory>
 #include <string>
+#ifdef RISCV_EXT_VECTOR
+#include "rvv_registers.hpp"
+#endif
 
 namespace riscv
 {
@@ -38,7 +42,7 @@ namespace riscv
 	};
 
 	template <int W>
-	struct alignas(16) Registers
+	struct alignas(32) Registers
 	{
 		using address_t  = address_type<W>;   // one unsigned memory address
 		using register_t = register_type<W>;  // integer register
@@ -65,6 +69,34 @@ namespace riscv
 		std::string to_string() const;
 		std::string flp_to_string() const;
 
+#ifdef RISCV_EXT_VECTOR
+		auto& rvv() { return *m_rvv; }
+		const auto& rvv() const { return *m_rvv; }
+#endif
+
+		Registers() {
+#ifdef RISCV_EXT_VECTOR
+			m_rvv.reset(new VectorRegisters<W>);
+#endif
+		}
+		Registers(const Registers& other)
+			: pc    { other.pc }, m_reg { other.m_reg }, m_fcsr { other.m_fcsr }, m_regfl { other.m_regfl }
+		{
+#ifdef RISCV_EXT_VECTOR
+			m_rvv.reset(new VectorRegisters<W> (other.rvv()));
+#endif
+		}
+		Registers& operator =(const Registers& other) {
+			this->pc    = other.pc;
+			this->m_reg = other.m_reg;
+			this->m_fcsr = other.m_fcsr;
+			this->m_regfl = other.m_regfl;
+#ifdef RISCV_EXT_VECTOR
+			m_rvv.reset(new VectorRegisters<W>(other.rvv()));
+#endif
+			return *this;
+		}
+
 		address_t pc = 0;
 	private:
 		// General purpose registers
@@ -73,6 +105,9 @@ namespace riscv
 		FCSR m_fcsr {};
 		// General FP registers
 		std::array<fp64reg, 32> m_regfl {};
+#ifdef RISCV_EXT_VECTOR
+		std::unique_ptr<VectorRegisters<W>> m_rvv = nullptr;
+#endif
 	};
 
 	static_assert(sizeof(fp64reg) == 8, "FP-register is 64-bit");

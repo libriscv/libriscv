@@ -150,6 +150,13 @@ namespace riscv
 		inline uint32_t fpfunc() const noexcept {
 			return whole >> (32 - 5);
 		}
+
+		inline uint32_t vwidth() const noexcept {
+			return (whole >> 12) & 0x7;
+		}
+		inline uint32_t vsetfunc() const noexcept {
+			return whole >> 30;
+		}
 	};
 	static_assert(sizeof(rv32i_instruction) == 4, "Instruction is 4 bytes");
 } // riscv

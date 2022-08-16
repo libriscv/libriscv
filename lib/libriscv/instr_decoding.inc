@@ -215,6 +215,10 @@
 						DECODER(DECODED_FLOAT(FLW));
 					case 0x3: // FLD
 						DECODER(DECODED_FLOAT(FLD));
+#ifdef RISCV_EXT_VECTOR
+					case 0x6: // VLE32
+						DECODER(DECODED_VECTOR(VLE32));
+#endif
 					default:
 						DECODER(DECODED_INSTR(ILLEGAL));
 					}
@@ -226,6 +230,10 @@
 						DECODER(DECODED_FLOAT(FSW));
 					case 0x3: // FSD
 						DECODER(DECODED_FLOAT(FSD));
+#ifdef RISCV_EXT_VECTOR
+					case 0x6: // VSE32
+						DECODER(DECODED_VECTOR(VSE32));
+#endif
 					default:
 						DECODER(DECODED_INSTR(ILLEGAL));
 					}
@@ -273,6 +281,28 @@
 							DECODER(DECODED_INSTR(NOP));
 						case 0b11110:
 							DECODER(DECODED_FLOAT(FMV_W_X));
+					}
+					break;
+#endif
+#ifdef RISCV_EXT_VECTOR
+				case RV32V_OP:
+					switch (instruction.vwidth()) {
+					case 0x0: // OPI.VV
+						DECODER(DECODED_VECTOR(VOPI_VV));
+					case 0x1: // OPF.VV
+						DECODER(DECODED_VECTOR(VOPF_VV));
+					case 0x2: // OPM.VV
+						DECODER(DECODED_VECTOR(VOPM_VV));
+					case 0x7: // Vector Configuration
+						switch (instruction.vsetfunc()) {
+						case 0x0:
+						case 0x1:
+							DECODER(DECODED_VECTOR(VSETVLI));
+						case 0x2:
+							DECODER(DECODED_VECTOR(VSETVL));
+						case 0x3:
+							DECODER(DECODED_VECTOR(VSETIVLI));
+						}
 					}
 					break;
 #endif
