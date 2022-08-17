@@ -104,11 +104,47 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr)
 	{
 		const rv32v_instruction vi { instr };
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		auto& rvv = cpu.registers().rvv();
+		switch (vi.OPVV.funct6) {
+		case 0b000000: // VADD
+			for (size_t i = 0; i < rvv.u32(0).size(); i++) {
+				rvv.u32(vi.OPVV.vd)[i] = rvv.u32(vi.OPVV.vs1)[i] + rvv.u32(vi.OPVV.vs2)[i];
+			}
+			break;
+		case 0b000010: // VSUB
+			for (size_t i = 0; i < rvv.u32(0).size(); i++) {
+				rvv.u32(vi.OPVV.vd)[i] = rvv.u32(vi.OPVV.vs1)[i] - rvv.u32(vi.OPVV.vs2)[i];
+			}
+			break;
+		case 0b001001: // VAND
+			for (size_t i = 0; i < rvv.u32(0).size(); i++) {
+				rvv.u32(vi.OPVV.vd)[i] = rvv.u32(vi.OPVV.vs1)[i] & rvv.u32(vi.OPVV.vs2)[i];
+			}
+			break;
+		case 0b001010: // VOR
+			for (size_t i = 0; i < rvv.u32(0).size(); i++) {
+				rvv.u32(vi.OPVV.vd)[i] = rvv.u32(vi.OPVV.vs1)[i] | rvv.u32(vi.OPVV.vs2)[i];
+			}
+			break;
+		case 0b001011: // VXOR
+			for (size_t i = 0; i < rvv.u32(0).size(); i++) {
+				rvv.u32(vi.OPVV.vd)[i] = rvv.u32(vi.OPVV.vs1)[i] ^ rvv.u32(vi.OPVV.vs2)[i];
+			}
+			break;
+		case 0b001100: // VRGATHER
+			for (size_t i = 0; i < rvv.u32(0).size(); i++) {
+				const auto vs1 = rvv.u32(vi.OPVV.vs1)[i];
+				rvv.u32(vi.OPVV.vd)[i] = (vs1 >= rvv.u32(0).size()) ? 0 : rvv.u32(vi.OPVV.vs2)[vs1];
+			}
+			break;
+		default:
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32v_instruction vi { instr };
-		return snprintf(buffer, len, "VOPI.VV %s, %s, %s",
+		return snprintf(buffer, len, "%s %s, %s, %s",
+						VOPNAMES[0][vi.OPVV.funct6],
 						RISCV::vecname(vi.VLS.vd),
 						RISCV::regname(vi.VLS.rs1),
 						RISCV::regname(vi.VLS.rs2));
@@ -119,28 +155,28 @@ namespace riscv
 	{
 		const rv32v_instruction vi { instr };
 		auto& rvv = cpu.registers().rvv();
-		switch (vi.OPFVV.funct6) {
+		switch (vi.OPVV.funct6) {
 		case 0b000000: // VFADD
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
-				rvv.f32(vi.OPFVV.vd)[i] = rvv.f32(vi.OPFVV.vs1)[i] + rvv.f32(vi.OPFVV.vs2)[i];
+				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] + rvv.f32(vi.OPVV.vs2)[i];
 			}
 			break;
 		case 0b000001:   // VFREDUSUM
 		case 0b000011: { // VFREDOSUM
 			float sum = 0.0f;
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
-				sum += rvv.f32(vi.OPFVV.vs1)[i] + rvv.f32(vi.OPFVV.vs2)[i];
+				sum += rvv.f32(vi.OPVV.vs1)[i] + rvv.f32(vi.OPVV.vs2)[i];
 			}
-			rvv.f32(vi.OPFVV.vd)[0] = sum;
+			rvv.f32(vi.OPVV.vd)[0] = sum;
 			} break;
 		case 0b000010: // VFSUB
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
-				rvv.f32(vi.OPFVV.vd)[i] = rvv.f32(vi.OPFVV.vs1)[i] - rvv.f32(vi.OPFVV.vs2)[i];
+				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] - rvv.f32(vi.OPVV.vs2)[i];
 			}
 			break;
 		case 0b100100: // VFMUL
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
-				rvv.f32(vi.OPFVV.vd)[i] = rvv.f32(vi.OPFVV.vs1)[i] * rvv.f32(vi.OPFVV.vs2)[i];
+				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] * rvv.f32(vi.OPVV.vs2)[i];
 			}
 			break;
 		default:
@@ -150,10 +186,10 @@ namespace riscv
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32v_instruction vi { instr };
 		return snprintf(buffer, len, "%s.VV %s, %s, %s",
-						VOPNAMES[2][vi.OPFVV.funct6],
-						RISCV::vecname(vi.OPFVV.vd),
-						RISCV::vecname(vi.OPFVV.vs1),
-						RISCV::vecname(vi.OPFVV.vs2));
+						VOPNAMES[2][vi.OPVV.funct6],
+						RISCV::vecname(vi.OPVV.vd),
+						RISCV::vecname(vi.OPVV.vs1),
+						RISCV::vecname(vi.OPVV.vs2));
 	});
 
 	VECTOR_INSTR(VOPM_VV,

@@ -24,6 +24,7 @@ namespace riscv
 		using register_t = register_type<W>;  // integer register
 
 		auto& f32(unsigned idx) { return m_vec[idx].f32; }
+		auto& u32(unsigned idx) { return m_vec[idx].u32; }
 
 		register_t vtype() const noexcept {
 			return 0u;
