@@ -115,5 +115,44 @@ namespace riscv
 		{
 			return flpname(reg + 0x8);
 		}
+
+		static const char* vecname(const uint32_t reg) noexcept
+		{
+			switch (reg) {
+				case 0: return "V0";
+				case 1: return "V1";
+				case 2: return "V2";
+				case 3: return "V3";
+				case 4: return "V4";
+				case 5: return "V5";
+				case 6: return "V6";
+				case 7: return "V7";
+				case 8: return "V8";
+				case 9: return "V9";
+				case 10: return "V10";
+				case 11: return "V11";
+				case 12: return "V12";
+				case 13: return "V13";
+				case 14: return "V14";
+				case 15: return "V15";
+				case 16: return "V16";
+				case 17: return "V17";
+				case 18: return "V18";
+				case 19: return "V19";
+				case 20: return "V20";
+				case 21: return "V21";
+				case 22: return "V22";
+				case 23: return "V23";
+				case 24: return "V24";
+				case 25: return "V25";
+				case 26: return "V26";
+				case 27: return "V27";
+				case 28: return "V28";
+				case 29: return "V29";
+				case 30: return "V30";
+				case 31: return "V31";
+			}
+			return "Invalid vector register";
+		}
 	};
 }

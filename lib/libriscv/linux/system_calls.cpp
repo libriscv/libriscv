@@ -775,9 +775,11 @@ template <int W>
 void Machine<W>::setup_minimal_syscalls()
 {
 	install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
+	install_syscall_handler(57, syscall_stub_zero<W>); // close
 	install_syscall_handler(62, syscall_lseek<W>);
 	install_syscall_handler(63, syscall_read<W>);
 	install_syscall_handler(64, syscall_write<W>);
+	install_syscall_handler(80, syscall_stub_nosys<W>); // fstat
 	install_syscall_handler(93, syscall_exit<W>);
 }
 

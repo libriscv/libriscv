@@ -13,6 +13,9 @@
 #ifdef RISCV_EXT_ATOMICS
 #include "rva_instr.cpp"
 #endif
+#ifdef RISCV_EXT_VECTOR
+#include "rvv_instr.cpp"
+#endif
 #include "instruction_list.hpp"
 
 namespace riscv

@@ -1,5 +1,8 @@
+**/.build/
 **/build/
 **/build_*/
+riscv64-unknown-elf/
+riscv32-unknown-elf/
 emulator/*rvmicro
 emulator/*rvnewlib
 emulator/*rvlinux

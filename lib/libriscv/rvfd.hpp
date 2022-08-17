@@ -1,3 +1,4 @@
+#pragma once
 #include "rv32i.hpp"
 
 namespace riscv

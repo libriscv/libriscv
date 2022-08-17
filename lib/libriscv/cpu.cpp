@@ -332,6 +332,9 @@ namespace riscv
 			// NOTE: only check for this when jumping or branching
 			throw MachineException(MISALIGNED_INSTRUCTION,
 					"Misaligned instruction executed", data);
+		case INVALID_ALIGNMENT:
+			throw MachineException(INVALID_ALIGNMENT,
+					"Invalid alignment for address", data);
 		case UNIMPLEMENTED_INSTRUCTION:
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION,
 					"Unimplemented instruction executed", data);

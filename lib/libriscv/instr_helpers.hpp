@@ -2,6 +2,7 @@
 
 #define ATOMIC_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
 #define FLOAT_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
+#define VECTOR_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
 #define COMPRESSED_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
 #define RVINSTR_ATTR __attribute__((hot))
 #define RVINSTR_COLDATTR __attribute__((cold))
@@ -9,6 +10,7 @@
 
 #define DECODED_ATOMIC(x) DECODED_INSTR(x)
 #define DECODED_FLOAT(x) DECODED_INSTR(x)
+#define DECODED_VECTOR(x) DECODED_INSTR(x)
 #define DECODED_COMPR(x) DECODED_INSTR(x)
 
 #define CI_CODE(x, y) ((x << 13) | (y))

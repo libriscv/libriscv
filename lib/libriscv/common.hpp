@@ -54,6 +54,11 @@ namespace riscv
 #else
 	static constexpr bool floating_point_enabled = false;
 #endif
+#ifdef RISCV_EXT_VECTOR
+	static constexpr unsigned vector_extension = RISCV_EXT_VECTOR;
+#else
+	static constexpr unsigned vector_extension = 0;
+#endif
 #ifdef RISCV_BINARY_TRANSLATION
 	static constexpr bool binary_translation_enabled = true;
 #else
