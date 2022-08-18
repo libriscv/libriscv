@@ -6,7 +6,7 @@ option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 set(VERSION_FILE   "symbols.map" CACHE STRING "Retained symbols file")
 
-set(RISCV_ABI "-march=rv64g -mabi=lp64d")
+set(RISCV_ABI "-march=rv64g_zba -mabi=lp64d")
 set(WARNINGS  "-Wall -Wextra")
 set(COMMON    "-O2 -fno-stack-protector")
 set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++2a ${COMMON}")

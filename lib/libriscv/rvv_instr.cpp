@@ -205,4 +205,47 @@ namespace riscv
 						RISCV::regname(vi.VLS.rs1),
 						RISCV::regname(vi.VLS.rs2));
 	});
+
+	VECTOR_INSTR(VOPF_VF,
+	[] (auto& cpu, rv32i_instruction instr)
+	{
+		const rv32v_instruction vi { instr };
+		auto& rvv = cpu.registers().rvv();
+		const float scalar = cpu.registers().getfl(vi.OPVV.vs1).f32[0];
+		const auto vector = vi.OPVV.vs2;
+		switch (vi.OPVV.funct6) {
+		case 0b000000: // VFADD.VF
+			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] + scalar;
+			}
+			break;
+		case 0b000001:   // VFREDUSUM.VF
+		case 0b000011: { // VFREDOSUM.VF
+			float sum = 0.0f;
+			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+				sum += rvv.f32(vector)[i] + scalar;
+			}
+			rvv.f32(vi.OPVV.vd)[0] = sum;
+			} break;
+		case 0b000010: // VFSUB.VF
+			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] - scalar;
+			}
+			break;
+		case 0b100100: // VFMUL.VF
+			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] * scalar;
+			}
+			break;
+		default:
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		}
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32v_instruction vi { instr };
+		return snprintf(buffer, len, "VOPF.VF %s, %s, %s",
+						RISCV::vecname(vi.VLS.vd),
+						RISCV::regname(vi.VLS.rs1),
+						RISCV::regname(vi.VLS.rs2));
+	});
 }
