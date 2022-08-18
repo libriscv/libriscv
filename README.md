@@ -34,7 +34,7 @@ One motivation when writing this emulator was to use it in a game engine, and so
 On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler for running Linux programs with a one-liner:
 
 ```
-sudo apt install gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
+sudo apt install gcc-11-riscv64-linux-gnu g++-11-riscv64-linux-gnu
 ```
 
 Now you have a full C/C++ compiler for RISC-V. It is typically configured to use the C-extension, so make sure you have that enabled. Note that this compiler has been built with the C-extension enabled for compressed instructions (and as a result produces smaller executables), which is not the fastest mode for emulation.
@@ -110,7 +110,7 @@ The F and D-extensions should be 100% supported (32- and 64-bit floating point i
 
 The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emu128 folder.
 
-Note: There is no support for the B-, E-, V- and Q-extensions. Binary translation currently only supports RV32G and RV64G.
+Note: There is no support for the E- and Q-extensions. Zba is supported. A minimal set of the V-extension is currently being worked on. Binary translation currently only supports RV32G and RV64G.
 
 ## Example usage when embedded into a project
 

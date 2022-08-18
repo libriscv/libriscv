@@ -22,7 +22,7 @@ namespace riscv
 			}
 			uint32_t jumptable_friendly_op() const noexcept {
 				// use bit 4 for RV32M extension
-				return funct3 | ((funct7 & 1) << 4);
+				return funct3 | (funct7 << 4);
 			}
 		} Rtype;
 		// immediate format
