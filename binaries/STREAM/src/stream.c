@@ -47,6 +47,9 @@
 # include <limits.h>
 # include <sys/time.h>
 
+#ifdef __riscv
+#define TUNED
+#endif
 /*-----------------------------------------------------------------------
  * INSTRUCTIONS:
  *
@@ -306,7 +309,7 @@ main()
     for (k=0; k<NTIMES; k++)
 	{
 	times[0][k] = mysecond();
-#if 1
+#ifdef TUNED
         tuned_STREAM_Copy();
 #else
 #pragma omp parallel for
@@ -316,7 +319,7 @@ main()
 	times[0][k] = mysecond() - times[0][k];
 
 	times[1][k] = mysecond();
-#if 1
+#ifdef TUNED
         tuned_STREAM_Scale(scalar);
 #else
 #pragma omp parallel for
@@ -326,7 +329,7 @@ main()
 	times[1][k] = mysecond() - times[1][k];
 
 	times[2][k] = mysecond();
-#if 1
+#ifdef TUNED
         tuned_STREAM_Add();
 #else
 #pragma omp parallel for
@@ -336,7 +339,7 @@ main()
 	times[2][k] = mysecond() - times[2][k];
 
 	times[3][k] = mysecond();
-#if 1
+#ifdef TUNED
         tuned_STREAM_Triad(scalar);
 #else
 #pragma omp parallel for
@@ -550,6 +553,7 @@ void checkSTREAMresults ()
 #define VLOAD(elem, vec) asm("vle32.v "#vec", %1" : : "r"(elem), "m"(elem))
 #define VSTORE(elem, vec) asm("vse32.v "#vec", %1" : "=m"(elem) : "m"(elem))
 #define FLOAD(reg, scalar) asm("fmv.s.x "#reg", %0" : : "r"(scalar) : #reg)
+#ifdef TUNED
 
 void tuned_STREAM_Copy()
 {
@@ -672,3 +676,5 @@ void tuned_STREAM_Triad(STREAM_TYPE scalar)
 		VSTORE(a[j + 24], v4);
 	}
 }
+
+#endif // TUNED
