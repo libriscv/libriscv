@@ -18,6 +18,10 @@ static void run_program(
 		.memory_max = MAX_MEMORY,
 		.verbose_loader = (getenv("VERBOSE") != nullptr)
 	}};
+#ifdef RISCV_FLAT_MEMORY
+	machine.memory.set_stack_initial(0x8000000);
+	machine.cpu.reset_stack_pointer();
+#endif
 
 	if constexpr (full_linux_guest)
 	{
