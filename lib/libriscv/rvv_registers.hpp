@@ -16,6 +16,7 @@ namespace riscv
 		std::array<float,  VSIZE / 4> f32;
 		std::array<double, VSIZE / 8> f64;
 	};
+	static_assert(sizeof(VectorLane) == RISCV_EXT_VECTOR, "Vectors are 32 bytes");
 
 	template <int W>
 	struct alignas(RISCV_EXT_VECTOR) VectorRegisters
@@ -23,6 +24,7 @@ namespace riscv
 		using address_t  = address_type<W>;   // one unsigned memory address
 		using register_t = register_type<W>;  // integer register
 
+		auto& get(unsigned idx) noexcept { return m_vec[idx]; }
 		auto& f32(unsigned idx) { return m_vec[idx].f32; }
 		auto& u32(unsigned idx) { return m_vec[idx].u32; }
 

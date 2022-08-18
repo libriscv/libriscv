@@ -67,7 +67,7 @@ namespace riscv
 		const auto addr = cpu.reg(vi.VLS.rs1);
 		if (addr % VectorLane::size() == 0) {
 			auto& rvv = cpu.registers().rvv();
-			cpu.machine().memory.memcpy_out(&rvv.f32(vi.VLS.vd), addr, VectorLane::size());
+			rvv.get(vi.VLS.vd) = cpu.machine().memory.template read<VectorLane> (addr);
 		} else {
 			cpu.trigger_exception(INVALID_ALIGNMENT, addr);
 		}
@@ -87,7 +87,7 @@ namespace riscv
 		const auto addr = cpu.reg(vi.VLS.rs1);
 		if (addr % VectorLane::size() == 0) {
 			auto& rvv = cpu.registers().rvv();
-			cpu.machine().copy_to_guest(addr, &rvv.f32(vi.VLS.vd), VectorLane::size());
+			cpu.machine().memory.template write<VectorLane> (addr, rvv.get(vi.VLS.vd));
 		} else {
 			cpu.trigger_exception(INVALID_ALIGNMENT, addr);
 		}
