@@ -47,9 +47,6 @@
 # include <limits.h>
 # include <sys/time.h>
 
-#ifdef __riscv
-#define TUNED
-#endif
 /*-----------------------------------------------------------------------
  * INSTRUCTIONS:
  *
