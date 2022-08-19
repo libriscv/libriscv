@@ -252,18 +252,36 @@ namespace riscv
 			unsigned length = 0;
 			// We want to run 4 instructions at a time, except for
 			// the last one, which we will "always" do next
-			while (decoder+4 < decoder_end && !compressed_enabled)
+			if constexpr (!compressed_enabled)
 			{
-				registers().pc = pc + 0;
-				decoder[0].handler(*this, format_t {decoder[0].instr});
-				registers().pc = pc + 4;
-				decoder[1].handler(*this, format_t {decoder[1].instr});
-				registers().pc = pc + 8;
-				decoder[2].handler(*this, format_t {decoder[2].instr});
-				registers().pc = pc + 12;
-				decoder[3].handler(*this, format_t {decoder[3].instr});
-				pc += 16;
-				decoder += 4;
+				while (decoder + 4 < decoder_end)
+				{
+					registers().pc = pc + 0;
+					decoder[0].handler(*this, format_t {decoder[0].instr});
+					registers().pc = pc + 4;
+					decoder[1].handler(*this, format_t {decoder[1].instr});
+					registers().pc = pc + 8;
+					decoder[2].handler(*this, format_t {decoder[2].instr});
+					registers().pc = pc + 12;
+					decoder[3].handler(*this, format_t {decoder[3].instr});
+					pc += 16;
+					decoder += 4;
+				}
+			} else { // Conservative compressed version
+				while (decoder + 4 < decoder_end)
+				{
+					registers().pc = pc;
+					decoder->handler(*this, format_t{decoder->instr});
+
+					pc += decoder->opcode_length;
+					decoder += decoder->opcode_length / 2;
+
+					registers().pc = pc;
+					decoder->handler(*this, format_t{decoder->instr});
+
+					pc += decoder->opcode_length;
+					decoder += decoder->opcode_length / 2;
+				}
 			}
 			// There is always one instruction we can run
 			do {
@@ -279,7 +297,7 @@ namespace riscv
 				decoder->handler(*this, instruction);
 				// increment *local* PC
 				if constexpr (compressed_enabled) {
-					length = instruction.length();
+					length = decoder->opcode_length;
 					pc += length;
 					decoder += length / 2;
 				} else {

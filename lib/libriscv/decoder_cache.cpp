@@ -40,9 +40,12 @@ namespace riscv
 	{
 		if constexpr (compressed_enabled)
 		{
+			// Go through entire executable segment and measure lengths
+			// Record entries while looking for jumping instruction, then
+			// fill out data and opcode lengths previous instructions.
+			std::vector<DecoderData<W>*> data;
 			address_type<W> pc = base_pc;
 			while (pc < last_pc) {
-				std::vector<DecoderData<W>*> data;
 				size_t datalength = 0;
 				while (pc < last_pc) {
 					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
@@ -67,10 +70,14 @@ namespace riscv
 					}
 				}
 				for (auto* entry : data) {
-					entry->idxend = datalength;
 					const auto length = rv32i_instruction{entry->original_opcode}.length();
+					entry->idxend = datalength;
+					// XXX: original_opcode gets overwritten here by opcode_length
+					// which simplifies future simulation by simplifying length.
+					entry->opcode_length = length;
 					datalength -= length / 2;
 				}
+				data.clear();
 			}
 		} else { // !compressed_enabled
 			// Count distance to next branching instruction backwards
@@ -179,6 +186,7 @@ namespace riscv
 #ifdef RISCV_FAST_SIMULATOR
 			// Help the fastsim determine the real opcodes
 			// Also, put whole 16-bit instructions there.
+			// NOTE: Gets overwritten for opcode_length later.
 			entry.original_opcode = instruction.half[0];
 			entry.idxend = 0;
 #endif
