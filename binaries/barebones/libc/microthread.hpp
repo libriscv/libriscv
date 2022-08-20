@@ -55,7 +55,8 @@ long    join(Thread*);
 void    exit(long status);
 
 /* Yield until condition is true */
-void    yield_until(const std::function<bool()>& condition);
+template <typename Functor>
+void    yield_until(Functor&& condition);
 /* Return back to another suspended thread. Returns 0 on success. */
 long    yield();
 long    yield_to(int tid); /* Return to a specific suspended thread. */
@@ -63,7 +64,8 @@ long    yield_to(Thread*);
 
 /* Block a thread with a specific reason. */
 long    block(int reason = 0);
-void    block(const std::function<bool()>& condition, int reason = 0);
+template <typename Functor>
+void    block(Functor&& condition, int reason = 0);
 long    unblock(int tid);
 /* Wake thread with @reason that was blocked, returns -1 if nothing happened. */
 long    wakeup_one_blocked(int reason);
@@ -216,7 +218,8 @@ inline long join(Thread_ptr& tp)
 	return join(tp.release());
 }
 
-inline void yield_until(const std::function<bool()>& condition)
+template <typename Functor>
+inline void yield_until(Functor&& condition)
 {
 	do {
 		yield();
@@ -255,7 +258,8 @@ inline long block(int reason)
 
 	return a0;
 }
-inline void block(const std::function<bool()>& condition, int reason)
+template <typename Functor>
+inline void block(Functor&& condition, int reason)
 {
 	while (!condition()) {
 		if (block(reason) < 0) break;

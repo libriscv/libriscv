@@ -1,6 +1,7 @@
+#include <cstdint>
+#include <cstdlib>
 #include <heap.hpp>
 #include <include/libc.hpp>
-#include <cstdlib>
 #ifdef USE_NEWLIB
 #include <malloc.h>
 #endif
