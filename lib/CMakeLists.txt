@@ -15,7 +15,6 @@ option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable binary translation" OFF)
-	option(RISCV_FAST_SIMULATOR      "Enable fast simulator mode" ON)
 	option(RISCV_FLAT_MEMORY         "Enable faster flat memory mode" OFF)
 endif()
 
@@ -70,6 +69,8 @@ if (RISCV_DEBUG)
 	list(APPEND SOURCES
 		libriscv/debug.cpp
 	)
+	# Debugging must happen on unmodified instructions
+	set(RISCV_EXPERIMENTAL OFF)
 endif()
 if (RISCV_ICACHE)
 	list(APPEND SOURCES
@@ -115,10 +116,17 @@ if (RISCV_EXT_V)
 endif()
 if (RISCV_ICACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE=1)
+	# The fast simulator is incompatible with RISCV_DEBUG because it
+	# modifies the instruction stream.
+	if (RISCV_DEBUG)
+		message(WARNING "RISCV_FAST_SIMULATOR disabled by RISCV_DEBUG")
+	else()
+		target_compile_definitions(riscv PUBLIC RISCV_FAST_SIMULATOR=1)
+		message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
+		target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
+	endif()
 endif()
 if (RISCV_ICACHE AND RISCV_EXPERIMENTAL)
-	message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
-	target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
 	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
 endif()
 if (RISCV_MULTIPROCESS)
@@ -136,15 +144,6 @@ if (RISCV_BINARY_TRANSLATION)
 endif()
 if (RISCV_FLAT_MEMORY)
 	target_compile_definitions(riscv PUBLIC RISCV_FLAT_MEMORY=1)
-endif()
-if (RISCV_ICACHE AND RISCV_FAST_SIMULATOR)
-	# The fast simulator is incompatible with RISCV_DEBUG because it
-	# modifies the instruction stream.
-	if (RISCV_DEBUG)
-		message(WARNING "RISCV_FAST_SIMULATOR disabled by RISCV_DEBUG")
-	else()
-		target_compile_definitions(riscv PUBLIC RISCV_FAST_SIMULATOR=1)
-	endif()
 endif()
 if (WIN32 OR MINGW_TOOLCHAIN)
 	target_link_libraries(riscv PUBLIC wsock32 ws2_32)
