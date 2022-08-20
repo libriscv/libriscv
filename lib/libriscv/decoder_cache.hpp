@@ -6,7 +6,7 @@
 namespace riscv {
 
 template <int W>
-struct DecoderData {
+struct alignas(16) DecoderData {
 #ifdef RISCV_DEBUG
 	using Handler = Instruction<W>;
 #else

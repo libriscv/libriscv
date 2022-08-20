@@ -2,6 +2,7 @@
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
+#include "rvc.hpp"
 #include "instr_helpers.hpp"
 
 namespace riscv
@@ -95,6 +96,7 @@ namespace riscv
 
 		// NOTE: Every rewritten instruction sets aside
 		// the first 2 bits to preserve the instruction length
+		if (original.length() == 4)
 		switch (original.opcode()) {
 		case RV32I_OP_IMM: {
 			// rd=0 is a no-op in all cases, and we only care about
@@ -368,6 +370,35 @@ namespace riscv
 			} // RV32I_JAL
 			break;
 		} // opcode
+		// Rewritten compressed instructions
+		if (original.length() == 2) {
+			const rv32c_instruction ci{instr};
+			#define CI_CODE(x, y) ((x << 13) | (y))
+			switch (ci.opcode()) {
+			case CI_CODE(0b000, 0b01): // C.ADDI
+				if (ci.CI.rd != 0) {
+					// Preserve the instruction length only - remaining bits are free to rewrite
+					instr.half[0] = (ci.CI.rd << 2) | ((uint16_t)ci.CI.signed_imm() << 8);
+					return rewritten_instruction<W>(
+					[] (auto& cpu, auto instr) RVINSTR_ATTR {
+						const auto reg    = (instr.half[0] >> 2) & 0x1F;
+						const int32_t imm = (int16_t)instr.half[0] >> 8;
+						cpu.reg(reg) += imm;
+					});
+				} break;
+			case CI_CODE(0b010, 0b01): // C.LI
+				if (ci.CI.rd != 0) {
+					// Preserve the instruction length only - remaining bits are free to rewrite
+					instr.half[0] = (ci.CI.rd << 2) | ((uint16_t)ci.CI.signed_imm() << 8);
+					return rewritten_instruction<W>(
+					[] (auto& cpu, auto instr) RVINSTR_ATTR {
+						const auto reg    = (instr.half[0] >> 2) & 0x1F;
+						const int32_t imm = (int16_t)instr.half[0] >> 8;
+						cpu.reg(reg) = imm;
+					});
+				} break;
+			}
+		}
 		return decode(original);
 	}
 
