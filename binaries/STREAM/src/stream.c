@@ -196,10 +196,10 @@ static double	bytes[4] = {
 
 extern double mysecond();
 extern void checkSTREAMresults();
-void tuned_STREAM_Copy();
-void tuned_STREAM_Scale(STREAM_TYPE scalar);
-void tuned_STREAM_Add();
-void tuned_STREAM_Triad(STREAM_TYPE scalar);
+inline void tuned_STREAM_Copy();
+inline void tuned_STREAM_Scale(STREAM_TYPE scalar);
+inline void tuned_STREAM_Add();
+inline void tuned_STREAM_Triad(STREAM_TYPE scalar);
 #ifdef _OPENMP
 extern int omp_get_num_threads();
 #endif
@@ -263,7 +263,6 @@ main()
 #endif
 
     /* Get initial value for system clock. */
-#pragma omp parallel for
     for (j=0; j<STREAM_ARRAY_SIZE; j++) {
 	    a[j] = 1.0;
 	    b[j] = 2.0;
@@ -282,7 +281,6 @@ main()
     }
 
     t = mysecond();
-#pragma omp parallel for
     for (j = 0; j < STREAM_ARRAY_SIZE; j++)
 		a[j] = 2.0E0 * a[j];
     t = 1.0E6 * (mysecond() - t);
@@ -420,9 +418,8 @@ double mysecond()
 {
         struct timeval tp;
         struct timezone tzp;
-        int i;
 
-        i = gettimeofday(&tp,&tzp);
+        (void) gettimeofday(&tp,&tzp);
         return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
 }
 

@@ -5,7 +5,7 @@
 namespace riscv
 {
 	COMPRESSED_INSTR(C0_ADDI4SPN,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		cpu.cireg(ci.CIW.srd) = cpu.reg(REG_SP) + ci.CIW.offset();
 	},
@@ -22,7 +22,7 @@ namespace riscv
 
 	// LW, LD, LQ, FLW, FLD
 	COMPRESSED_INSTR(C0_REG_FLD,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.cireg(ci.CL.srs1) + ci.CSD.offset8();
 		cpu.ciflp(ci.CL.srd).load_u64(
@@ -41,14 +41,14 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C0_REG_LW,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
 		cpu.cireg(ci.CL.srd) = (int32_t) cpu.machine().memory.template read<uint32_t> (address);
 	}, DECODED_COMPR(C0_REG_FLD).printer);
 
 	COMPRESSED_INSTR(C0_REG_LD,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
 		cpu.cireg(ci.CSD.srs2) = (int64_t)
@@ -56,7 +56,7 @@ namespace riscv
 	}, DECODED_COMPR(C0_REG_FLD).printer);
 
 	COMPRESSED_INSTR(C0_REG_FLW,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.cireg(ci.CL.srs1) + ci.CL.offset();
 		cpu.ciflp(ci.CL.srd).load_u32(
@@ -65,7 +65,7 @@ namespace riscv
 
 	// SW, SD, SQ, FSW, FSD
 	COMPRESSED_INSTR(C0_REG_FSD,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
 		const auto value   = cpu.ciflp(ci.CSD.srs2).i64;
@@ -89,7 +89,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C0_REG_SW,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
 		const auto value   = cpu.cireg(ci.CS.srs2);
@@ -97,7 +97,7 @@ namespace riscv
 	}, DECODED_COMPR(C0_REG_FSD).printer);
 
 	COMPRESSED_INSTR(C0_REG_SD,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		const auto address = cpu.cireg(ci.CSD.srs1) + ci.CSD.offset8();
 		const auto value   = cpu.cireg(ci.CSD.srs2);
@@ -105,7 +105,7 @@ namespace riscv
 	}, DECODED_COMPR(C0_REG_FSD).printer);
 
 	COMPRESSED_INSTR(C0_REG_FSW,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		const auto address = cpu.cireg(ci.CS.srs1) + ci.CS.offset4();
 		const auto value   = cpu.ciflp(ci.CS.srs2).i32[0];
@@ -113,7 +113,7 @@ namespace riscv
 	}, DECODED_COMPR(C0_REG_FSD).printer);
 
 	COMPRESSED_INSTR(C1_ADDI,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		// C.ADDI (non-hint, not NOP)
 		cpu.reg(ci.CI.rd) += ci.CI.signed_imm();
@@ -131,7 +131,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_JAL,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		cpu.reg(REG_RA) = cpu.pc() + 2; // return instruction
 		const auto address = cpu.pc() + ci.CJ.signed_imm();
@@ -153,7 +153,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_ADDIW,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		// C.ADDIW rd, imm[5:0]
 		const uint32_t src = cpu.reg(ci.CI.rd);
@@ -167,7 +167,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_LI,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		// C.LI rd, imm[5:0]
 		cpu.reg(ci.CI.rd) = ci.CI.signed_imm();
@@ -180,7 +180,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_ADDI16SP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		// C.ADDI16SP rd, imm[17:12]
 		cpu.reg(REG_SP) += ci.CI16.signed_imm();
@@ -201,14 +201,14 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_LUI,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		// LUI rd, imm[17:12] (sign-extended)
 		cpu.reg(ci.CI.rd) = (int32_t) ci.CI.upper_imm();
 	}, DECODED_COMPR(C1_ADDI16SP).printer);
 
 	COMPRESSED_INSTR(C1_ALU_OPS,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		auto& dst = cpu.cireg(ci.CA.srd);
@@ -292,7 +292,8 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_JUMP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
 		const rv32c_instruction ci { instr };
 		cpu.jump(cpu.pc() + ci.CJ.signed_imm() - 2);
 #ifdef RISCV_DEBUG
@@ -309,7 +310,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_BEQZ,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		// condition: register equals zero
 		if (cpu.cireg(ci.CB.srs1) == 0) {
@@ -331,7 +332,8 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C1_BNEZ,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
 		const rv32c_instruction ci { instr };
 		// condition: register not-equal zero
 		if (cpu.cireg(ci.CB.srs1) != 0) {
@@ -354,7 +356,8 @@ namespace riscv
 
 	// C.SLLI, LWSP, LDSP, LQSP, FLWSP, FLDSP
 	COMPRESSED_INSTR(C2_SLLI,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
 		const rv32c_instruction ci { instr };
 		if constexpr (RVIS64BIT(cpu)) {
 			cpu.reg(ci.CI.rd) <<= ci.CI.shift64_imm();
@@ -386,7 +389,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C2_FLDSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CIFLD.offset();
 		auto& dst = cpu.registers().getfl(ci.CIFLD.rd);
@@ -394,14 +397,14 @@ namespace riscv
 	}, DECODED_COMPR(C2_SLLI).printer);
 
 	COMPRESSED_INSTR(C2_LWSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CI2.offset();
 		cpu.reg(ci.CI2.rd) = (int32_t) cpu.machine().memory.template read <uint32_t> (address);
 	}, DECODED_COMPR(C2_SLLI).printer);
 
 	COMPRESSED_INSTR(C2_LDSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CIFLD.offset();
 		cpu.reg(ci.CIFLD.rd) = (int64_t)
@@ -409,7 +412,7 @@ namespace riscv
 	}, DECODED_COMPR(C2_SLLI).printer);
 
 	COMPRESSED_INSTR(C2_FLWSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto address = cpu.reg(REG_SP) + ci.CI2.offset();
 		auto& dst = cpu.registers().getfl(ci.CI2.rd);
@@ -418,7 +421,7 @@ namespace riscv
 
 	// SWSP, SDSP, SQSP, FSWSP, FSDSP
 	COMPRESSED_INSTR(C2_FSDSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto addr = cpu.reg(REG_SP) + ci.CSFSD.offset();
 		uint64_t value = cpu.registers().getfl(ci.CSFSD.rs2).i64;
@@ -437,7 +440,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C2_SWSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto addr = cpu.reg(REG_SP) + ci.CSS.offset(4);
 		uint32_t value = cpu.reg(ci.CSS.rs2);
@@ -445,7 +448,7 @@ namespace riscv
 	}, DECODED_COMPR(C2_FSDSP).printer);
 
 	COMPRESSED_INSTR(C2_SDSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto addr = cpu.reg(REG_SP) + ci.CSFSD.offset();
 		auto value = cpu.reg(ci.CSFSD.rs2);
@@ -460,7 +463,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C2_FSWSP,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		auto addr = cpu.reg(REG_SP) + ci.CSS.offset(4);
 		uint32_t value = cpu.registers().getfl(ci.CSS.rs2).i32[0];
@@ -469,7 +472,7 @@ namespace riscv
 
 	// C.JR, C.MV, C.JALR, C.ADD
 	COMPRESSED_INSTR(C2_JR,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		cpu.jump(cpu.reg(ci.CR.rd) - 2);
 #ifdef RISCV_DEBUG
@@ -501,7 +504,7 @@ namespace riscv
 	});
 
 	COMPRESSED_INSTR(C2_JALR,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		cpu.reg(REG_RA) = cpu.pc() + 0x2;
 		cpu.jump(cpu.reg(ci.CR.rd) - 2);
@@ -515,13 +518,13 @@ namespace riscv
 	}, DECODED_COMPR(C2_JR).printer);
 
 	COMPRESSED_INSTR(C2_MV,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		cpu.reg(ci.CR.rd) = cpu.reg(ci.CR.rs2);
 	}, DECODED_COMPR(C2_JR).printer);
 
 	COMPRESSED_INSTR(C2_ADD,
-	[] (auto& cpu, rv32i_instruction instr) {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
 		cpu.reg(ci.CR.rd) += cpu.reg(ci.CR.rs2);
 	}, DECODED_COMPR(C2_JR).printer);

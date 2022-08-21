@@ -22,7 +22,7 @@ static void fused_li_ecall(
 		.sysno = (uint16_t) sysno,
 	} };
 	i1.second.whole = fsys.whole;
-	i1.first = [] (auto& cpu, rv32i_instruction instr) {
+	i1.first = [] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& fop = view_as<FusedSyscall> (instr);
 		if constexpr (compressed_enabled)
 			cpu.increment_pc(fop.ilen);
@@ -61,7 +61,7 @@ static void fused_store(
 		.dst  = i1.second.Stype.rs1,
 		.opcode = i1.second.Stype.opcode,
 	}}.whole;
-	i1.first = [] (auto& cpu, rv32i_instruction instr) {
+	i1.first = [] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& fop = view_as<FusedStores> (instr);
 
 		const auto& value1 = cpu.reg(fop.src1);
@@ -121,7 +121,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 			fop.addi2 = i2.second.Itype.imm;
 			fop.reg2  = i2.second.Itype.rd;
 			i1.second.whole = fop.whole;
-			i1.first = [] (auto& cpu, rv32i_instruction instr) {
+			i1.first = [] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 				auto& fop = view_as<FusedAddi> (instr);
 				cpu.reg(fop.reg1) += FusedAddi::signed_imm(fop.addi1);
 				cpu.reg(fop.reg2) += FusedAddi::signed_imm(fop.addi2);
@@ -160,7 +160,7 @@ bool CPU<W>::try_fuse(instr_pair i1, instr_pair i2) const
 				.reg2 = i2.second.Itype.rd
 			} };
 			i1.second.whole = lili.whole;
-			i1.first = [] (auto& cpu, rv32i_instruction instr) {
+			i1.first = [] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 				auto& fop = view_as<FusedLili> (instr);
 				cpu.reg(fop.reg1) = FusedLili::signed_imm(fop.li1);
 				cpu.reg(fop.reg2) = FusedLili::signed_imm(fop.li2);

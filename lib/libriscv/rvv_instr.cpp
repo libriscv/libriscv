@@ -19,7 +19,7 @@ namespace riscv
 		};
 
 	VECTOR_INSTR(VSETVLI,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -33,7 +33,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VSETIVLI,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -47,7 +47,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VSETVL,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -61,7 +61,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VLE32,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		const auto addr = cpu.reg(vi.VLS.rs1);
@@ -81,7 +81,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VSE32,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		const auto addr = cpu.reg(vi.VLS.rs1);
@@ -101,7 +101,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VOPI_VV,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		auto& rvv = cpu.registers().rvv();
@@ -151,7 +151,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VOPF_VV,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		auto& rvv = cpu.registers().rvv();
@@ -193,7 +193,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VOPM_VV,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -207,7 +207,7 @@ namespace riscv
 	});
 
 	VECTOR_INSTR(VOPF_VF,
-	[] (auto& cpu, rv32i_instruction instr)
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
 		auto& rvv = cpu.registers().rvv();
