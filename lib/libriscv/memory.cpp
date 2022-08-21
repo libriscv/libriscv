@@ -17,7 +17,7 @@ namespace riscv
 					MachineOptions<W> options)
 		: m_machine{mach},
 #ifdef RISCV_FLAT_MEMORY
-		  m_memdata {new uint8_t[options.memory_max]},
+		  m_memdata {new (std::align_val_t(32)) uint8_t[options.memory_max]},
 		  m_memsize {options.memory_max},
 #endif
 		  m_original_machine {true},

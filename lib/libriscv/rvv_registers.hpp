@@ -17,6 +17,7 @@ namespace riscv
 		std::array<double, VSIZE / 8> f64;
 	};
 	static_assert(sizeof(VectorLane) == RISCV_EXT_VECTOR, "Vectors are 32 bytes");
+	static_assert(alignof(VectorLane) == RISCV_EXT_VECTOR, "Vectors are 32-byte aligned");
 
 	template <int W>
 	struct alignas(RISCV_EXT_VECTOR) VectorRegisters
