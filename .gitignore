@@ -9,6 +9,6 @@ emulator/*rvlinux
 tests/autotest/emulator/emulator
 fuzz/crash-*
 webapi/tests/binary
-
+.vscode/
 gmon.out
 callgraph.svg
