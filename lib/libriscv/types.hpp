@@ -40,13 +40,8 @@ namespace riscv
 	};
 
 	using instruction_format  = union rv32i_instruction;
-#if defined(__clang__) && __clang_major__ > 12
-	template <int W>
-	using instruction_handler = void __attribute__((no_caller_saved_registers)) (*)(CPU<W> &, instruction_format);
-#else
 	template <int W>
 	using instruction_handler = void (*)(CPU<W> &, instruction_format);
-#endif
 	template <int W>
 	using instruction_printer = int  (*)(char*, size_t, const CPU<W>&, instruction_format);
 	template <int W>
