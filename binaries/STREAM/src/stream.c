@@ -90,8 +90,11 @@
  *          will override the default size of 10M with a new size of 100M elements
  *          per array.
  */
-#ifndef STREAM_ARRAY_SIZE
-#   define STREAM_ARRAY_SIZE	8000000
+#ifdef TUNED
+#define STREAM_TYPE float
+#define STREAM_ARRAY_SIZE 20000000
+#else
+#define STREAM_ARRAY_SIZE 10000000
 #endif
 
 /*  2) STREAM runs each kernel "NTIMES" times and reports the *best* result
@@ -173,7 +176,7 @@
 # endif
 
 #ifndef STREAM_TYPE
-#define STREAM_TYPE float
+#define STREAM_TYPE double
 #endif
 #define ALIGNED_STREAM __attribute__((aligned(32)))
 
