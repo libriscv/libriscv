@@ -1,5 +1,10 @@
 #pragma once
+#ifdef RISCV_MULTIPROCESS
 #include "util/threadpool.h"
+#else
+#include <cstddef>
+#include <cstdint>
+#endif
 
 namespace riscv {
 
