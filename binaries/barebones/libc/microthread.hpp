@@ -89,7 +89,7 @@ struct Thread
 
 	bool has_exited() const;
 
-	~Thread() {}
+	~Thread() noexcept {}
 
 	int tid = 0;
 	union {

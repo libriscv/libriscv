@@ -4,7 +4,7 @@ extern "C" void microthread_set_tp(void*);
 
 namespace microthread
 {
-	Thread main_thread {nullptr};
+	static Thread main_thread {nullptr};
 
 	void trampoline(Thread* thread)
 	{
