@@ -201,10 +201,13 @@ namespace riscv
 			std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
 
 			// This is what the CPU instruction fetcher will use
-			// 0...len: The regular execute segment
+			// RISCV_INBOUND_JUMPS_ONLY requires us to add extra bytes at the beginning
+			// The STOP function mentioned right above this requires us to add 12 bytes at the end
+			// -4...0: Zero bytes that allow jumping to the start of exec before a pending increment
+			// 0...len: The execute segment
 			// len..+ 4: The STOP function
 			auto* exec_offset = this->get_exec_segment(pbase);
-			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr, len + 4);
+			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr-4, len + 8);
 #if defined(RISCV_INSTR_CACHE)
 			// + 8: A jump instruction that prevents crashes if someone
 			// resumes the emulator after a STOP happened. It also helps
