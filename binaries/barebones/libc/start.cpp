@@ -7,10 +7,7 @@ struct _reent* _impure_ptr = &reent;
 
 extern "C" {
 	__attribute__((noreturn))
-	void _exit(int exitval) {
-		syscall(SYSCALL_EXIT, exitval);
-		__builtin_unreachable();
-	}
+	void _exit(int exitval);
 	void __print_putchr(void* file, char c);
 }
 

@@ -281,14 +281,14 @@ int abs(int value)
 	return (value >= 0) ? value : -value;
 }
 
-#else
+#endif
 
 extern "C" __attribute__((noreturn))
 void _exit(int code)
 {
 	register long a0 asm("a0") = code;
 
-	asm volatile("r%=: .insn i SYSTEM, 0, %0, x0, 0x7ff \nj r%=\n" :: "r"(a0));
+	asm volatile("r%=: wfi \nj r%=\n" :: "r"(a0));
 	__builtin_unreachable();
 }
 
@@ -297,5 +297,3 @@ void exit(int code)
 {
 	_exit(code);
 }
-
-#endif

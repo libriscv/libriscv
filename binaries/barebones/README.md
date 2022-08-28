@@ -7,9 +7,9 @@ To run this you will have to use the _rvmicro emulator_. It activates a non-stan
 
 If you want to build the Clang versions, you will need a new version of the compiler. Edit the build32_clang.sh and build64_clang.sh files to match your clang version.
 
-Then, download the latest embedded RISC-V packages from https://github.com/xpack-dev-tools/riscv-none-embed-gcc-xpack/releases/. In my case, it contains GCC 10.2.0, so I will edit my `micro_toolchain.cmake` file to reflect where I extract the toolchain and the compiler version, set in the GCC_VERSION CMake variable.
+Then, download the latest embedded RISC-V packages from https://github.com/xpack-dev-tools/riscv-none-embed-gcc-xpack/releases/. In my case, it contains GCC 12.1.0, so I will edit my `micro_toolchain.cmake` file to reflect where I extract the toolchain and the compiler version, set in the GCC_VERSION CMake variable.
 
-As I was writing this, I had extracted `xpack-riscv-none-embed-gcc-10.2.0-1.2` to my home folder, and it contains embedded RISC-V GCC 10.2.0, so I `set(GCC_VERSION 10.2.0)` in `micro_toolchain.cmake` in the same directory as this README. That allowed me to build the Clang variants.
+As I was writing this, I had extracted `xpack-riscv-none-embed-gcc-12.1.0-2` to my home folder, and it contains embedded RISC-V GCC 12.1.0, so I `set(GCC_VERSION 12.1.0)` in `micro_toolchain.cmake` in the same directory as this README. That allowed me to build the Clang variants.
 
 The newlib variants require the RISC-V GNU toolchain from https://github.com/riscv-collab/riscv-gnu-toolchain. The README on their repository explains all the necessary details. Just make sure to build for Newlib. Preferrably rv64g and rv32g respectively, for performance reasons.
 
