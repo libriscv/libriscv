@@ -277,9 +277,9 @@ namespace riscv
 		mutable printer_func m_printer = m_default_printer;
 		mutable printer_func m_debug_printer = m_default_printer;
 		mutable stdin_func   m_stdin = m_default_stdin;
-		std::unique_ptr<Arena> m_arena;
-		std::unique_ptr<MultiThreading<W>> m_mt;
-		std::unique_ptr<FileDescriptors> m_fds;
+		std::unique_ptr<Arena> m_arena = nullptr;
+		std::unique_ptr<MultiThreading<W>> m_mt = nullptr;
+		std::unique_ptr<FileDescriptors> m_fds = nullptr;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		std::unique_ptr<Signals<W>> m_signals = nullptr;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
