@@ -26,7 +26,7 @@ Multiprocessing<W>::Multiprocessing(size_t workers)
 	: m_threadpool { workers }  {}
 
 template <int W>
-void Multiprocessing<W>::async_work(std::function<void()>&& wrk)
+void Multiprocessing<W>::async_work(std::vector<std::function<void()>>&& wrk)
 {
 	m_threadpool.enqueue(std::move(wrk));
 	this->processing = true;
@@ -53,10 +53,13 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	smp().failures = 0x0;
 
 	// Create worker 1...N
+	std::vector<std::function<void()>> tasks;
+	tasks.reserve(num_cpus);
+
 	for (unsigned id = 1; id <= num_cpus; id++)
 	{
 		// Fork variant
-		smp().async_work(
+		tasks.push_back(
 		[=] {
 			try {
 				// NOTE: minimal_fork causes a ton of contention. Avoid! */
@@ -111,6 +114,8 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 			}
 		});
 	} // foreach CPU
+
+	smp().async_work(std::move(tasks));
 
 	// Immediately wait if we are forking everything
 	// We don't want the main vCPU to trample the stack that the workers

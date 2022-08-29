@@ -43,6 +43,8 @@ namespace riscv {
 class ThreadPool {
 public:
     void enqueue(std::function<void()> task);
+    void enqueue(std::vector<std::function<void()>> work);
+
     void wait_until_empty();
     void wait_until_nothing_in_flight();
     void set_queue_size_limit(std::size_t limit);
@@ -147,6 +149,29 @@ inline void ThreadPool::enqueue(std::function<void()> task)
     condition_consumers.notify_one();
 }
 
+inline void ThreadPool::enqueue(std::vector<std::function<void()>> work)
+{
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    if (work.size() + tasks.size() > max_queue_size)
+        // wait for the queue to empty or be stopped
+        condition_producers.wait(lock,
+            [this]
+            {
+                return tasks.size () < max_queue_size
+                    || stop;
+            });
+
+    // don't allow enqueueing after stopping the pool
+    if (stop)
+        throw ThreadPoolException("enqueue on stopped ThreadPool");
+
+    for (auto& w : work)
+        tasks.emplace(std::move(w));
+    std::atomic_fetch_add_explicit(&in_flight,
+        std::size_t(work.size()),
+        std::memory_order_relaxed);
+    condition_consumers.notify_all();
+}
 
 // the destructor joins all threads
 inline ThreadPool::~ThreadPool()

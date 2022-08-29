@@ -15,7 +15,7 @@ struct Multiprocessing
 
 	Multiprocessing(size_t);
 #ifdef RISCV_MULTIPROCESS
-	void async_work(std::function<void()>&& wrk);
+	void async_work(std::vector<std::function<void()>>&& wrk);
 	failure_bits_t wait();
 	bool is_multiprocessing() const noexcept { return this->processing; }
 	size_t workers() const noexcept { return m_threadpool.get_pool_size(); }
