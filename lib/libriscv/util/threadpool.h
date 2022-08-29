@@ -32,7 +32,6 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include <future>
 #include <atomic>
 #include <functional>
 #include <exception>
@@ -43,15 +42,16 @@ namespace riscv {
 
 class ThreadPool {
 public:
-    explicit ThreadPool(std::size_t threads
-        = (std::max)(2u, std::thread::hardware_concurrency()));
-    template<class F, class... Args>
-    auto enqueue(F&& f, Args&&... args)
-        -> std::future<std::invoke_result_t<F, Args...>>;
+    void enqueue(std::function<void()> task);
     void wait_until_empty();
     void wait_until_nothing_in_flight();
     void set_queue_size_limit(std::size_t limit);
+    // NOTE: Call set_pool_size from same thread as get_pool_size
     void set_pool_size(std::size_t limit);
+    size_t get_pool_size() const noexcept { return pool_size; }
+
+    explicit ThreadPool(std::size_t threads
+        = (std::max)(2u, std::thread::hardware_concurrency()));
     ~ThreadPool();
 
 private:
@@ -63,7 +63,7 @@ private:
     // target pool size
     std::size_t pool_size;
     // the task queue
-    std::queue< std::packaged_task<void()> > tasks;
+    std::queue< std::function<void()> > tasks;
     // queue length limit
     std::size_t max_queue_size = 100000;
     // stop signal
@@ -124,18 +124,8 @@ inline ThreadPool::ThreadPool(std::size_t threads)
 }
 
 // add new work item to the pool
-template<class F, class... Args>
-auto ThreadPool::enqueue(F&& f, Args&&... args)
-    -> std::future<std::invoke_result_t<F, Args...>>
+inline void ThreadPool::enqueue(std::function<void()> task)
 {
-    using return_type = std::invoke_result_t<F, Args...>;
-
-	std::packaged_task<return_type()> task(
-	            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-	        );
-
-    std::future<return_type> res = task.get_future();
-
     std::unique_lock<std::mutex> lock(queue_mutex);
     if (tasks.size () >= max_queue_size)
         // wait for the queue to empty or be stopped
@@ -155,8 +145,6 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
         std::size_t(1),
         std::memory_order_relaxed);
     condition_consumers.notify_one();
-
-    return res;
 }
 
 
@@ -239,7 +227,7 @@ inline void ThreadPool::start_worker(
         {
             for(;;)
             {
-                std::packaged_task<void()> task;
+                std::function<void()> task;
                 bool notify;
 
                 {
