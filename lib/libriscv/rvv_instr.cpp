@@ -156,7 +156,7 @@ namespace riscv
 		const rv32v_instruction vi { instr };
 		auto& rvv = cpu.registers().rvv();
 		switch (vi.OPVV.funct6) {
-		case 0b000000: // VFADD
+		case 0b000000: // VFADD.VV
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] + rvv.f32(vi.OPVV.vs2)[i];
 			}
@@ -169,14 +169,24 @@ namespace riscv
 			}
 			rvv.f32(vi.OPVV.vd)[0] = sum;
 			} break;
-		case 0b000010: // VFSUB
+		case 0b000010: // VFSUB.VV
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] - rvv.f32(vi.OPVV.vs2)[i];
 			}
 			break;
-		case 0b100100: // VFMUL
+		case 0b100100: // VFMUL.VV
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] * rvv.f32(vi.OPVV.vs2)[i];
+			}
+			break;
+		case 0b101000: // VFMADD.VV: Multiply-add (overwrites multiplicand)
+			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+				rvv.f32(vi.OPVV.vd)[i] = (rvv.f32(vi.OPVV.vs1)[i] * rvv.f32(vi.OPVV.vd)[i]) + rvv.f32(vi.OPVV.vs2)[i];
+			}
+			break;
+		case 0b101100: // VFMACC.VV: Multiply-accumulate (overwrites addend)
+			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+				rvv.f32(vi.OPVV.vd)[i] = (rvv.f32(vi.OPVV.vs1)[i] * rvv.f32(vi.OPVV.vs2)[i]) + rvv.f32(vi.OPVV.vd)[i];
 			}
 			break;
 		default:
