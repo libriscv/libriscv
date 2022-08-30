@@ -497,6 +497,7 @@ namespace riscv
 			return;
 		case 0x2: // SLT
 			dst = (RVTOSIGNED(src1) < RVTOSIGNED(src2));
+			return;
 		case 0x3: // SLTU
 			dst = (src1 < src2);
 			return;
