@@ -86,15 +86,22 @@ namespace riscv
 			m_rvv.reset(new VectorRegisters<W> (other.rvv()));
 #endif
 		}
+		enum class Options { Everything, NoVectors };
+
 		Registers& operator =(const Registers& other) {
+			this->copy_from(Options::Everything, other);
+			return *this;
+		}
+		inline void copy_from(Options opts, const Registers& other) {
 			this->pc    = other.pc;
 			this->m_reg = other.m_reg;
 			this->m_fcsr = other.m_fcsr;
 			this->m_regfl = other.m_regfl;
 #ifdef RISCV_EXT_VECTOR
-			m_rvv.reset(new VectorRegisters<W>(other.rvv()));
+			if (opts == Options::Everything) {
+				m_rvv.reset(new VectorRegisters<W>(other.rvv()));
+			}
 #endif
-			return *this;
 		}
 
 		address_t pc = 0;

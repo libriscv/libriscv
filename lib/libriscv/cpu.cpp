@@ -23,8 +23,9 @@ namespace riscv
 		this->m_exec_data  = other.cpu.m_exec_data;
 		this->m_exec_begin = other.cpu.m_exec_begin;
 		this->m_exec_end   = other.cpu.m_exec_end;
-
-		this->registers() = other.cpu.registers();
+		// Copy all registers except vectors
+		// Users can still copy vector registers by assigning to registers().rvv().
+		this->registers().copy_from(Registers<W>::Options::NoVectors, other.cpu.registers());
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = other.cpu.m_atomics;
 #endif
