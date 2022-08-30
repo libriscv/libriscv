@@ -109,6 +109,16 @@ namespace riscv
 			uint32_t funct6 : 6;
 		} OPVV;
 
+		struct {
+			uint32_t opcode : 7;
+			uint32_t vd     : 5;
+			uint32_t funct3 : 3;
+			uint32_t imm    : 5;
+			uint32_t vs2    : 5;
+			uint32_t vm     : 1;
+			uint32_t funct6 : 6;
+		} OPVI;
+
 		rv32v_instruction(const rv32i_instruction& i) : whole(i.whole) {}
 		uint32_t whole;
 	};

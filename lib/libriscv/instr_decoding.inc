@@ -292,6 +292,8 @@
 						DECODER(DECODED_VECTOR(VOPF_VV));
 					case 0x2: // OPM.VV
 						DECODER(DECODED_VECTOR(VOPM_VV));
+					case 0x3: // OPI.VI
+						DECODER(DECODED_VECTOR(VOPI_VI));
 					case 0x5: // OPF.VF
 						DECODER(DECODED_VECTOR(VOPF_VF));
 					case 0x7: // Vector Configuration

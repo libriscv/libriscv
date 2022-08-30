@@ -5,7 +5,7 @@ namespace riscv
 {
 	static const char *VOPNAMES[3][64] = {
 		{"VADD", "???", "VSUB", "VRSUB", "VMINU", "VMIN", "VMAXU", "VMAX", "???", "VAND", "VOR", "VXOR", "VRGATHER", "???", "VSLIDEUP", "VSLIDEDOWN",
-		 "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???"
+		 "VADC", "VMADC", "VSBC", "VMSBC", "???", "???", "???", "VMERGE", "???", "???", "???", "???", "???", "???", "???", "???"
 		 "VSADDU", "VSADD", "VSSUBU", "VSSUB", "???", "VSLL", "???", "VSMUL", "VSRL", "VSRA", "VSSRL", "VSSRA", "VNSLR", "VNSRA", "VNCLIPU", "VNCLIP",
 		 "VWREDSUMU", "VWREDSUM", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???", "???"},
 		{"VREDSUM", "VREDAND", "VREDOR", "VREDXOR", "VREDMINU", "VREDMIN", "VREDMAXU", "VREDMAX", "VAADDU", "VAADD", "VASUBU", "VASUB", "???", "???", "VSLIDE1UP", "VSLIDE1DOWN",
@@ -160,7 +160,7 @@ namespace riscv
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] + rvv.f32(vi.OPVV.vs2)[i];
 			}
-			break;
+			return;
 		case 0b000001:   // VFREDUSUM
 		case 0b000011: { // VFREDOSUM
 			float sum = 0.0f;
@@ -168,30 +168,34 @@ namespace riscv
 				sum += rvv.f32(vi.OPVV.vs1)[i] + rvv.f32(vi.OPVV.vs2)[i];
 			}
 			rvv.f32(vi.OPVV.vd)[0] = sum;
+			} return;
+		case 0b010000: // VWUNARY0.VV
+			if (vi.OPVV.vs1 == 0b00000) { // VFMV.F.S
+				cpu.registers().getfl(vi.OPVV.vd).set_float(rvv.f32(vi.OPVV.vs2)[0]);
+				return;
 			} break;
 		case 0b000010: // VFSUB.VV
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] - rvv.f32(vi.OPVV.vs2)[i];
 			}
-			break;
+			return;
 		case 0b100100: // VFMUL.VV
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] * rvv.f32(vi.OPVV.vs2)[i];
 			}
-			break;
+			return;
 		case 0b101000: // VFMADD.VV: Multiply-add (overwrites multiplicand)
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = (rvv.f32(vi.OPVV.vs1)[i] * rvv.f32(vi.OPVV.vd)[i]) + rvv.f32(vi.OPVV.vs2)[i];
 			}
-			break;
+			return;
 		case 0b101100: // VFMACC.VV: Multiply-accumulate (overwrites addend)
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = (rvv.f32(vi.OPVV.vs1)[i] * rvv.f32(vi.OPVV.vs2)[i]) + rvv.f32(vi.OPVV.vd)[i];
 			}
-			break;
-		default:
-			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+			return;
 		}
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32v_instruction vi { instr };
@@ -216,6 +220,32 @@ namespace riscv
 						RISCV::regname(vi.VLS.rs2));
 	});
 
+	VECTOR_INSTR(VOPI_VI,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
+		const rv32v_instruction vi { instr };
+		auto& rvv = cpu.registers().rvv();
+		const uint32_t scalar = vi.OPVI.imm;
+		switch (vi.OPVV.funct6) {
+		case 0b010111: // VMERGE.VI
+			if (vi.OPVI.vs2 == 0) {
+				for (size_t i = 0; i < rvv.u32(0).size(); i++) {
+					rvv.u32(vi.OPVI.vd)[i] = scalar;
+				}
+				return;
+			}
+		}
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32v_instruction vi { instr };
+		return snprintf(buffer, len, "VOPI.VI %s %s, %s, %s",
+						VOPNAMES[0][vi.OPVI.funct6],
+						RISCV::vecname(vi.VLS.vd),
+						RISCV::regname(vi.VLS.rs1),
+						RISCV::regname(vi.VLS.rs2));
+	});
+
 	VECTOR_INSTR(VOPF_VF,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
@@ -228,7 +258,7 @@ namespace riscv
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] + scalar;
 			}
-			break;
+			return;
 		case 0b000001:   // VFREDUSUM.VF
 		case 0b000011: { // VFREDOSUM.VF
 			float sum = 0.0f;
@@ -236,20 +266,19 @@ namespace riscv
 				sum += rvv.f32(vector)[i] + scalar;
 			}
 			rvv.f32(vi.OPVV.vd)[0] = sum;
-			} break;
+			} return;
 		case 0b000010: // VFSUB.VF
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] - scalar;
 			}
-			break;
+			return;
 		case 0b100100: // VFMUL.VF
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] * scalar;
 			}
-			break;
-		default:
-			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+			return;
 		}
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32v_instruction vi { instr };
