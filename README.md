@@ -267,7 +267,7 @@ It can also be used as a script backend for a game engine, as it's quite a bit f
 
 ## What to use for performance
 
-Use Clang (newer is better) to compile the emulator with. It is faster on most benchmarks.
+Using Clang for libriscv is a little bit faster on some benchmarks. GCC-12 has for the most part catched up.
 
 Use GCC to build the RISC-V binaries, specifically the RISC-V GNU toolchain. Use -O2 or -O3 and use the regular standard extensions: `-march=rv64gc -mabi=lp64d`. Enable the RISCV_EXPERIMENTAL option for the best performance, unless you are adding your own execute pages. Use `-march=rv64g` for the absolute best performance, if you have that choice. Difference is ~5% so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable LTO if you can, both in the guest program and for the emulator.
 
