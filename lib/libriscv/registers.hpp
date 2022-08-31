@@ -102,6 +102,7 @@ namespace riscv
 				m_rvv.reset(new VectorRegisters<W>(other.rvv()));
 			}
 #endif
+			(void)opts;
 		}
 
 		address_t pc = 0;
