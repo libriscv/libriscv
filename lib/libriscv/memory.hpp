@@ -175,7 +175,6 @@ namespace riscv
 				return x1 < end && x2 >= begin;
 			}
 		};
-		inline auto& create_attr(const address_t address);
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);

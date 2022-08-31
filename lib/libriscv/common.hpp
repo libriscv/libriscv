@@ -135,3 +135,7 @@ namespace riscv
 #ifndef COLD_PATH
 #define COLD_PATH() __attribute__((cold))
 #endif
+
+#ifndef RISCV_INTERNAL
+#define RISCV_INTERNAL __attribute__((visibility("internal")))
+#endif

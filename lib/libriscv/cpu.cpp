@@ -66,7 +66,7 @@ namespace riscv
 	}
 
 #ifndef RISCV_INBOUND_JUMPS_ONLY
-	template <int W> __attribute__((noinline))
+	template <int W> __attribute__((noinline)) RISCV_INTERNAL
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
 	{
 		// Fallback: Read directly from page memory

@@ -116,12 +116,11 @@ namespace riscv
 		std::unordered_map<address_t, breakpoint_t> m_breakpoints;
 		bool break_time() const;
 		void register_debug_logging() const;
-		friend struct Machine<W>;
 #endif
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
 #endif
-		void activate_dylib(void*) const;
+		void activate_dylib(void*) const RISCV_INTERNAL;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 	};
 

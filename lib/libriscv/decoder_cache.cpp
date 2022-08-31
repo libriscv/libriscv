@@ -108,7 +108,7 @@ namespace riscv
 namespace riscv
 {
 #ifdef RISCV_INSTR_CACHE
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(const MachineOptions<W>& options,
 		address_t pbase, address_t addr, size_t len)
 	{

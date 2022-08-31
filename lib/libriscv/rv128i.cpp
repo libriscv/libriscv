@@ -20,15 +20,15 @@
 
 namespace riscv
 {
-	template<>
-	const CPU<16>::instruction_t& CPU<16>::decode(const format_t instruction)
+	template <> RISCV_INTERNAL
+	const CPU<16>::instruction_t &CPU<16>::decode(const format_t instruction)
 	{
 #define DECODER(x) return(x)
 #include "instr_decoding.inc"
 #undef DECODER
 	}
 
-	template<>
+	template <> RISCV_INTERNAL
 	void CPU<16>::execute(const format_t instruction)
 	{
 #define DECODER(x) { x.handler(*this, instruction); return; }

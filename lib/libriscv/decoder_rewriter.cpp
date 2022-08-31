@@ -71,23 +71,23 @@ namespace riscv
 	};
 	static_assert(sizeof(FasterJtype) == 4, "is a 4-byte instruction");
 
-	template <int W> RVPRINTR_ATTR
+	template <int W> static RVPRINTR_ATTR
 	int rewritten_instr_printer(char* buffer, size_t len, const CPU<W>&, rv32i_instruction) {
 		return snprintf(buffer, len, "Rewritten instruction");
 	}
 
-	template <typename T>
+	template <typename T> static inline
 	T& view_as(rv32i_instruction& i) {
 		static_assert(sizeof(T) == sizeof(i), "Must be same size as instruction!");
 		return *(T*) &i;
 	}
 
-	template <int W> inline
+	template <int W> static inline
 	Instruction<W> rewritten_instruction(instruction_handler<W> func) {
 		return {func, rewritten_instr_printer};
 	}
 
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	Instruction<W> CPU<W>::decode_rewrite(address_t pc, rv32i_instruction& instr)
 	{
 		using sign_type = typename std::make_signed<address_t>::type;

@@ -99,7 +99,7 @@ namespace riscv
 #endif
 	}
 
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::reset()
 	{
 		// Hard to support because of things like
@@ -113,7 +113,7 @@ namespace riscv
 		this->invalidate_reset_cache();
 	}
 
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::initial_paging()
 	{
 		if (m_pages.find(0) == m_pages.end()) {
@@ -122,7 +122,7 @@ namespace riscv
 		}
 	}
 
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::binary_load_ph(const MachineOptions<W>& options, const Phdr* hdr)
 	{
 		const auto* src = m_binary.data() + hdr->p_offset;
@@ -268,7 +268,7 @@ namespace riscv
 #endif
 	}
 
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	bool Memory<W>::serialize_pages(MemoryArea& area,
 		address_t addr, const char* src, size_t size, PageAttributes attr)
 	{
@@ -327,7 +327,7 @@ namespace riscv
 	}
 
 	// ELF32 and ELF64 loader
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::binary_loader(const MachineOptions<W>& options)
 	{
 		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
@@ -423,7 +423,7 @@ namespace riscv
 		}
 	}
 
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::machine_loader(
 		const Machine<W>& master, const MachineOptions<W>& options)
 	{
@@ -530,7 +530,7 @@ namespace riscv
 		}
 	}
 
-	template <int W>
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::relocate_section(const char* section_name, const char* sym_section)
 	{
 		const auto* rela = section_by_name(section_name);
