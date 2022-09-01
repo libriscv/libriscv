@@ -67,7 +67,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				fork.set_userdata(this->get_userdata<void>());
 				fork.set_printer([] (const auto&, const char*, size_t) {});
-				fork.set_stdin([] (const auto&, char*, size_t) -> long { return 0; });
+				//NOTE: fork.set_stdin(...) unnecessary due to default disallow.
 				fork.cpu.increment_pc(4); // Step over current ECALL
 				fork.cpu.reg(REG_ARG0) = id; // Return value
 
