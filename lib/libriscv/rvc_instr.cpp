@@ -482,7 +482,7 @@ namespace riscv
 		}
 #endif
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
 		const rv32c_instruction ci { instr };
 		const bool topbit = ci.whole & (1 << 12);
@@ -494,7 +494,8 @@ namespace riscv
 			return snprintf(buffer, len, "C.MV %s, %s",
 							RISCV::regname(ci.CR.rd), RISCV::regname(ci.CR.rs2));
 		else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
-			return snprintf(buffer, len, "C.JALR RA, %s", RISCV::regname(ci.CR.rd));
+			return snprintf(buffer, len, "C.JALR RA, %s (0x%lX)",
+							RISCV::regname(ci.CR.rd), (long)cpu.reg(ci.CR.rd));
 		else if (ci.CR.rd != 0)
 			return snprintf(buffer, len, "C.ADD %s, %s + %s", RISCV::regname(ci.CR.rd),
 							RISCV::regname(ci.CR.rd), RISCV::regname(ci.CR.rs2));
