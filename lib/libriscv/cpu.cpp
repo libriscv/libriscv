@@ -75,7 +75,7 @@ namespace riscv
 		auto& entry = this->m_cache;
 		if (entry.pageno != pageno || entry.page == nullptr) {
 			auto e = decltype(m_cache){pageno, &machine().memory.get_exec_pageno(pageno)};
-			if (!e.page->attr.exec) {
+			if (UNLIKELY(!e.page->attr.exec)) {
 				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 			}
 			// delay setting entry until we know it's good!
@@ -398,7 +398,12 @@ namespace riscv
 	template <int W> __attribute__((cold))
 	std::string CPU<W>::current_instruction_to_string() const
 	{
-		const auto instruction = this->read_next_instruction();
+		format_t instruction;
+		try {
+			instruction = this->read_next_instruction();
+		} catch (...) {
+			instruction = format_t {};
+		}
 		return isa_type<W>::to_string(*this, instruction, decode(instruction));
 	}
 
