@@ -157,7 +157,7 @@ static void run_program(
 	if (getenv("SILENT") == nullptr) {
 		printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
 			int64_t(retval), uint64_t(retval));
-		printf("Instructions executed: %" PRIu64 "  Runtime: %.2fms\n",
+		printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms\n",
 			machine.instruction_counter(), runtime.count()*1000.0);
 		printf("Pages in use: %zu (%zu kB memory)\n",
 			machine.memory.pages_active(), machine.memory.pages_active() * 4);
