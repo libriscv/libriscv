@@ -272,6 +272,13 @@ namespace riscv
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] - scalar;
 			}
 			return;
+		case 0b010000: // VRFUNARY0.VF
+			if (vector == 0) { // VFMV.S.F
+				for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+					rvv.f32(vi.OPVV.vd)[i] = scalar;
+				}
+				return;
+			} break;
 		case 0b100100: // VFMUL.VF
 			for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 				rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vector)[i] * scalar;
@@ -287,4 +294,4 @@ namespace riscv
 						RISCV::regname(vi.VLS.rs1),
 						RISCV::regname(vi.VLS.rs2));
 	});
-}
+} // riscv
