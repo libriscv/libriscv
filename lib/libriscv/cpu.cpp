@@ -228,13 +228,30 @@ namespace riscv
 
 #else // RISCV_FAST_SIMULATOR
 
+	// In fastsim mode the instruction counter becomes a register
+	// the function, and we only m_counter in Machine on exit
+	template <int W>
+	struct InstrCounter {
+		InstrCounter(Machine<W>& m) : machine(m), m_counter{m.instruction_counter()} {}
+		~InstrCounter() { machine.set_instruction_counter(m_counter); }
+
+		uint64_t value() const noexcept { return m_counter; }
+		void increment_counter(uint64_t cnt) { m_counter += cnt; }
+		bool overflowed() const noexcept { return m_counter > machine.max_instructions(); }
+	private:
+		Machine<W>& machine;
+		uint64_t m_counter;
+	};
+
 	template<int W> __attribute__((hot))
 	void CPU<W>::simulate(uint64_t imax)
 	{
 		auto* exec_decoder = machine().memory.get_decoder_cache();
 
+		InstrCounter counter{machine()};
+
 		if (imax != UINT64_MAX)
-			machine().set_max_instructions(machine().instruction_counter() + imax);
+			machine().set_max_instructions(counter.value() + imax);
 		else
 			machine().set_max_instructions(UINT64_MAX);
 
@@ -248,7 +265,7 @@ namespace riscv
 			if constexpr (VERBOSE_FASTSIM) {
 				printf("Fastsim at PC=0x%lX count=%zu\n", (long)pc, count);
 			}
-			machine().increment_counter(count);
+			counter.increment_counter(count);
 			auto* decoder_end = &decoder[count];
 			unsigned length = 0;
 			// We want to run 4 instructions at a time, except for
@@ -313,7 +330,7 @@ namespace riscv
 			else
 				pc = registers().pc + 4;
 
-		} while (!machine().stopped());
+		} while (!counter.overflowed());
 		registers().pc = pc;
 	} // CPU::simulate
 #endif // RISCV_FAST_SIMULATOR
