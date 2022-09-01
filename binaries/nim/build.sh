@@ -21,7 +21,7 @@ NIM_LIBS="${NIM_LIBS##*: }"
 NIM_LIBS="${NIM_LIBS/bin*/lib}"
 
 if [[ -z "${DEBUG}" ]]; then
-	nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:useMalloc=true -d:release -c ${NIMFILE}
+	nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --gc:arc -d:release -c ${NIMFILE}
 	jq '.compile[] [0]' $NIMCACHE/*.json > buildfiles.txt
 
 	cmake .. -DGCC_TRIPLE=$GCC_TRIPLE -DNIM_LIBS=$NIM_LIBS -DCMAKE_BUILD_TYPE=Release -DDEBUGGING=OFF

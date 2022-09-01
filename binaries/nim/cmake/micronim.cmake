@@ -37,7 +37,11 @@ function (add_micronim_binary NAME)
 	add_executable(${NAME} ${ARGN}
 		env/stdio.c
 	)
-	target_link_libraries(${NAME} -static -static-libgcc)
+	target_link_libraries(${NAME} -static)
 	target_include_directories(${NAME} PRIVATE "env")
+	# Strip most symbols when not debugging
+	if (NOT DEBUGGING)
+		target_link_libraries(${NAME} -Wl,-S,-x)
+	endif()
 	file(WRITE "${CMAKE_BINARY_DIR}/program.txt" ${NAME})
 endfunction()
