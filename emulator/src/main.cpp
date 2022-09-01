@@ -1,6 +1,7 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/rsp_server.hpp>
 #include <inttypes.h>
+#include <chrono>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 
@@ -96,6 +97,7 @@ static void run_program(
 		}
 	}
 
+	auto t0 = std::chrono::system_clock::now();
 	try {
 		// If you run the emulator with DEBUG=1, you can connect
 		// with gdb-multiarch using target remote localhost:2159.
@@ -146,14 +148,17 @@ static void run_program(
 		run_sighandler(machine);
 #endif
 	}
+	auto t1 = std::chrono::system_clock::now();
+	std::chrono::duration<double> runtime = t1 - t0;
+
 	const auto retval = machine.return_value();
 	// You can silence this output by setting SILENT=1, like so:
 	// SILENT=1 ./rvlinux myprogram
 	if (getenv("SILENT") == nullptr) {
 		printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
 			int64_t(retval), uint64_t(retval));
-		printf("Instructions executed: %" PRIu64 "\n",
-			machine.instruction_counter());
+		printf("Instructions executed: %" PRIu64 "  Runtime: %.2fms\n",
+			machine.instruction_counter(), runtime.count()*1000.0);
 		printf("Pages in use: %zu (%zu kB memory)\n",
 			machine.memory.pages_active(), machine.memory.pages_active() * 4);
 	}
