@@ -10,10 +10,8 @@
 extern "C" {
 #ifdef WIN32
 	int write(int fd, const void *buf, unsigned count);
-	int read(int fd, void *buf, unsigned count);
 #else
 	ssize_t write(int fd, const void *buf, size_t count);
-	ssize_t read(int fd, void *buf, size_t count);
 #endif
 }
 
@@ -22,12 +20,12 @@ namespace riscv
 	template <int W>
 	typename Machine<W>::printer_func Machine<W>::m_default_printer
 		= [] (auto&, const char* buffer, size_t len) {
-			::write(1, buffer, len);
+			::write(1, buffer, len); // Default: Stdout allowed
 		};
 	template <int W>
 	typename Machine<W>::stdin_func Machine<W>::m_default_stdin
-		= [] (auto&, char* buffer, size_t len) -> long {
-			return ::read(0, buffer, len);
+		= [] (auto&, char* /*buffer*/, size_t /*len*/) -> long {
+			return 0; // Default: Stdin *NOT* allowed
 		};
 
 	template <int W>
