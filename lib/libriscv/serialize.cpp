@@ -31,7 +31,7 @@ namespace riscv
 	};
 
 	template <int W>
-	void Machine<W>::serialize_to(std::vector<uint8_t>& vec)
+	void Machine<W>::serialize_to(std::vector<uint8_t>& vec) const
 	{
 		const SerializedMachine<W> header {
 			.magic    = MAGiC_V4LUE,
@@ -58,11 +58,11 @@ namespace riscv
 		this->memory.serialize_to(vec);
 	}
 	template <int W>
-	void CPU<W>::serialize_to(std::vector<uint8_t>& /* vec */)
+	void CPU<W>::serialize_to(std::vector<uint8_t>& /* vec */) const
 	{
 	}
 	template <int W>
-	void Memory<W>::serialize_to(std::vector<uint8_t>& vec)
+	void Memory<W>::serialize_to(std::vector<uint8_t>& vec) const
 	{
 		const size_t est_page_bytes =
 			this->m_pages.size() * (sizeof(SerializedPage) + Page::size());
@@ -137,19 +137,6 @@ namespace riscv
 		// completely reset the paging system as
 		// all pages will be completely replaced
 		this->clear_all_pages();
-
-		if (m_exec_pagedata != nullptr && m_exec_pagedata_size > 0)
-		{
-			// TODO: serialize the executable memory separately?
-			// XXX: this only works if you restore to the same machine
-			// XXX: Does not work with FASTSIM
-#ifndef RISCV_FAST_SIMULATOR
-			this->insert_non_owned_memory(
-				m_exec_pagedata_base, m_exec_pagedata.get(), m_exec_pagedata_size, {
-					.read = true, .write = false, .exec = true
-				});
-#endif
-		}
 
 		size_t off = state.mem_offset;
 		for (size_t p = 0; p < state.n_pages; p++) {

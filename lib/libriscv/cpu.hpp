@@ -71,7 +71,7 @@ namespace riscv
 		std::string current_instruction_to_string() const;
 
 		// Serializes all the machine state + a tiny header to @vec
-		void serialize_to(std::vector<uint8_t>& vec);
+		void serialize_to(std::vector<uint8_t>& vec) const;
 		// Returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 

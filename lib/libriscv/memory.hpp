@@ -77,6 +77,7 @@ namespace riscv
 		void      set_exit_address(address_t new_exit);
 		address_t heap_address() const noexcept { return this->m_heap_address; }
 		address_t mmap_start() const noexcept { return this->m_heap_address + BRK_MAX; }
+		const address_t& mmap_address() const noexcept { return m_mmap_address; }
 		address_t& mmap_address() noexcept { return m_mmap_address; }
 
 		auto& machine() { return this->m_machine; }
@@ -157,7 +158,7 @@ namespace riscv
 #endif
 
 		// serializes all the machine state + a tiny header to @vec
-		void serialize_to(std::vector<uint8_t>& vec);
+		void serialize_to(std::vector<uint8_t>& vec) const;
 		// returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 

@@ -260,7 +260,7 @@ namespace riscv
 		bool is_binary_translated() const { return memory.is_binary_translated(); }
 
 		// Serializes all the machine state + a tiny header to @vec
-		void serialize_to(std::vector<uint8_t>& vec);
+		void serialize_to(std::vector<uint8_t>& vec) const;
 		// Returns the machine to a previously stored state
 		// NOTE: All previous memory traps are lost, syscall handlers,
 		// destructor callbacks are kept. Page fault handler and
