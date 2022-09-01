@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 GCC_TRIPLE="riscv64-linux-gnu"
+# Detect RISC-V compiler
 export CC=$GCC_TRIPLE-gcc-10
+if command -v "$GCC_TRIPLE-gcc-11" &> /dev/null; then
+	export CC="$GCC_TRIPLE-gcc-11"
+fi
 NIMCPU="--cpu=riscv64"
 NIMFILE="$PWD/${1:-hello.nim}"
 
