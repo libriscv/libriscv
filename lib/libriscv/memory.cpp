@@ -335,7 +335,7 @@ namespace riscv
 		}
 		const auto* elf = (Ehdr*) m_binary.data();
 		if (UNLIKELY(!validate_header<Ehdr> (elf))) {
-			throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Mixup between 32- and 64-bit?");
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Mixup between 32- and 64-bit?", elf->e_ident[EI_CLASS]);
 		}
 		if (UNLIKELY(elf->e_type != ET_EXEC)) {
 			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load a dynamic library?");
