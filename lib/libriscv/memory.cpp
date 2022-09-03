@@ -17,11 +17,15 @@ namespace riscv
 					MachineOptions<W> options)
 		: m_machine{mach},
 #ifdef RISCV_FLAT_MEMORY
-		  m_memdata {new (std::align_val_t(32)) uint8_t[options.memory_max]},
+		  // Strategy: Allocate 32-byte aligned memory with 32 bytes
+		  // extra at the end in order to avoid having to check
+		  // address+sizeof(T) < memsize. Instead, it becomes:
+		  // address < memsize, due to the 32 bytes over-allocation.
+		  m_memdata {new (std::align_val_t(32)) uint8_t[options.memory_max + 32]},
 		  m_memsize {options.memory_max},
 #endif
 		  m_original_machine {true},
-		  m_binary{bin}
+		  m_binary {bin}
 	{
 #ifdef RISCV_FLAT_MEMORY
 		if (UNLIKELY(this->m_memsize < bin.size()))

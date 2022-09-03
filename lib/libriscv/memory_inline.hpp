@@ -5,7 +5,7 @@ template <typename T> inline
 T Memory<W>::read(address_t address)
 {
 #ifdef RISCV_FLAT_MEMORY
-	if (address+sizeof(T) < m_memsize)
+	if (address < m_memsize)
 		return *(T *)&m_memdata[address];
 	protection_fault(address);
 #else
@@ -19,7 +19,7 @@ template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
 #ifdef RISCV_FLAT_MEMORY
-	if (address+sizeof(T) < m_memsize)
+	if (address < m_memsize)
 		return *(T *)&m_memdata[address];
 	protection_fault(address);
 #else
@@ -33,7 +33,7 @@ template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
 #ifdef RISCV_FLAT_MEMORY
-	if (address+sizeof(T) < m_memsize) {
+	if (address < m_memsize) {
 		*(T *)&m_memdata[address] = value;
 		return;
 	}
