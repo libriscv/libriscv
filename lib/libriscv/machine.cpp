@@ -20,7 +20,7 @@ namespace riscv
 	template <int W>
 	typename Machine<W>::printer_func Machine<W>::m_default_printer
 		= [] (auto&, const char* buffer, size_t len) {
-			::write(1, buffer, len); // Default: Stdout allowed
+			std::ignore = ::write(1, buffer, len); // Default: Stdout allowed
 		};
 	template <int W>
 	typename Machine<W>::stdin_func Machine<W>::m_default_stdin
