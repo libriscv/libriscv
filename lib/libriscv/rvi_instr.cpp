@@ -519,7 +519,7 @@ namespace riscv
 			return;
 		case 0x11: // MULH (signed x signed)
 			if constexpr (RVIS32BIT(cpu)) {
-				dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
+				dst = uint64_t((int64_t)RVTOSIGNED(src1) * (int64_t)RVTOSIGNED(src2)) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
 				dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
 			} else {
@@ -528,7 +528,7 @@ namespace riscv
 			return;
 		case 0x12: // MULHSU (signed x unsigned)
 			if constexpr (RVIS32BIT(cpu)) {
-				dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
+				dst = uint64_t((int64_t)RVTOSIGNED(src1) * (uint64_t)src2) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
 				dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
 			} else {
@@ -537,7 +537,7 @@ namespace riscv
 			return;
 		case 0x13: // MULHU (unsigned x unsigned)
 			if constexpr (RVIS32BIT(cpu)) {
-				dst = ((int64_t) src1 * (int64_t) src2) >> 32u;
+				dst = uint64_t((uint64_t)src1 * (uint64_t)src2) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
 				dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
 			} else {
