@@ -548,7 +548,69 @@ namespace riscv
 						RISCV::flpname(fi.R4type.rd));
 	});
 
-	FLOAT_INSTR(FMV_X_W, // 1110
+	FLOAT_INSTR(FCLASS, // 1110 f3 = 0x1
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
+		const rv32f_instruction fi { instr };
+		auto& dst = cpu.reg(fi.R4type.rd);
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		switch (fi.R4type.funct2) {
+		case 0x0: // FCLASS.S
+			dst = 0;
+			if (rs1.f32[0] == -std::numeric_limits<float>::infinity())
+				dst |= 1U << 0;
+			if (rs1.f32[0] < 0)
+				dst |= 1U << 1;
+			if (rs1.f32[0] == -std::numeric_limits<float>::denorm_min())
+				dst |= 1U << 2;
+			if (rs1.f32[0] == -0.0)
+				dst |= 1U << 3;
+			if (rs1.f32[0] == +0.0)
+				dst |= 1U << 4;
+			if (rs1.f32[0] == std::numeric_limits<float>::denorm_min())
+				dst |= 1U << 5;
+			if (rs1.f32[0] >= std::numeric_limits<float>::epsilon())
+				dst |= 1U << 6;
+			if (rs1.f32[0] == std::numeric_limits<float>::infinity())
+				dst |= 1U << 7;
+			if (std::isnan(rs1.f32[0]))
+				dst |= 3U << 8;
+			return;
+		case 0x1: // FCLASS.D
+			dst = 0;
+			if (rs1.f64 == -std::numeric_limits<double>::infinity())
+				dst |= 1U << 0;
+			if (rs1.f64 < 0)
+				dst |= 1U << 1;
+			if (rs1.f64 == -std::numeric_limits<double>::denorm_min())
+				dst |= 1U << 2;
+			if (rs1.f64 == -0.0)
+				dst |= 1U << 3;
+			if (rs1.f64 == +0.0)
+				dst |= 1U << 4;
+			if (rs1.f64 == std::numeric_limits<double>::denorm_min())
+				dst |= 1U << 5;
+			if (rs1.f64 >= std::numeric_limits<double>::epsilon())
+				dst |= 1U << 6;
+			if (rs1.f64 == std::numeric_limits<double>::infinity())
+				dst |= 1U << 7;
+			if (std::isnan(rs1.f64))
+				dst |= 3U << 8;
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		static const std::array<const char*, 4> f2 {
+			"FCLASS.S", "FCLASS.D", "???", "FCLASS.Q"
+		};
+		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::regname(fi.R4type.rd));
+	});
+
+	FLOAT_INSTR(FMV_X_W, // 1110 f3 = 0x0
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32f_instruction fi { instr };
@@ -556,6 +618,7 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FMV.X.W
+			// XXX: Extend high-bits on 64-bit
 			dst = rs1.i32[0];
 			return;
 		case 0x1: // FMV.X.D

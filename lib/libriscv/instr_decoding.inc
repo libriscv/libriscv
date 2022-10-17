@@ -275,8 +275,13 @@
 						case 0b11010:
 							DECODER(DECODED_FLOAT(FCVT_SD_W));
 						case 0b11100:
-							if (rv32f_instruction { instruction }.R4type.rd != 0)
-								DECODER(DECODED_FLOAT(FMV_X_W));
+							if (rv32f_instruction { instruction }.R4type.rd != 0) {
+								if (rv32f_instruction { instruction }.R4type.funct3 == 0) {
+									DECODER(DECODED_FLOAT(FMV_X_W));
+								} else {
+									DECODER(DECODED_FLOAT(FCLASS));
+								}
+							}
 							DECODER(DECODED_INSTR(NOP));
 						case 0b11110:
 							DECODER(DECODED_FLOAT(FMV_W_X));
