@@ -567,12 +567,7 @@ static void syscall_gettimeofday(Machine<W>& machine)
 	struct timeval tv;
 	const int res = gettimeofday(&tv, nullptr);
 	if (res >= 0) {
-		if constexpr (W == 4) {
-			int32_t timeval32[2] = { (int) tv.tv_sec, (int) tv.tv_usec };
-			machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
-		} else {
-			machine.copy_to_guest(buffer, &tv, sizeof(tv));
-		}
+		machine.copy_to_guest(buffer, &tv, sizeof(tv));
 	}
 	machine.set_result_or_error(res);
 }
