@@ -447,7 +447,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		// ADDI: Add sign-extended 12-bit immediate
 		cpu.reg(instr.Itype.rd) =
-			(RVSIGNTYPE(cpu)) (cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype));
+			cpu.reg(instr.Itype.rs1) + RVIMM(cpu, instr.Itype);
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP_IMM_LI,
@@ -466,7 +466,7 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// SLLI: Logical left-shift 5/6/7-bit immediate
-		dst = (RVSIGNTYPE(cpu)) (src << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+		dst = src << (instr.Itype.imm & (RVXLEN(cpu)-1));
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP_IMM_SRLI,
@@ -474,14 +474,14 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// SRLI: Shift-right logical 5/6/7-bit immediate
-		dst = (RVSIGNTYPE(cpu)) (src >> (instr.Itype.imm & (RVXLEN(cpu)-1)));
+		dst = src >> (instr.Itype.imm & (RVXLEN(cpu)-1));
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP_IMM_ANDI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Itype.rd);
 		// ANDI: And sign-extended 12-bit immediate
-		dst = (RVSIGNTYPE(cpu)) (cpu.reg(instr.Itype.rs1) & RVIMM(cpu, instr.Itype));
+		dst = cpu.reg(instr.Itype.rs1) & RVIMM(cpu, instr.Itype);
 	}, DECODED_INSTR(OP_IMM).printer);
 
 	INSTRUCTION(OP,
@@ -493,7 +493,7 @@ namespace riscv
 
 		switch (instr.Rtype.jumptable_friendly_op()) {
 		case 0x1: // SLL
-			dst = (RVSIGNTYPE(cpu)) (src1 << (src2 & (RVXLEN(cpu)-1)));
+			dst = src1 << (src2 & (RVXLEN(cpu)-1));
 			return;
 		case 0x2: // SLT
 			dst = (RVTOSIGNED(src1) < RVTOSIGNED(src2));
@@ -505,7 +505,7 @@ namespace riscv
 			dst = src1 ^ src2;
 			return;
 		case 0x5: // SRL
-			dst = (RVSIGNTYPE(cpu)) (src1 >> (src2 & (RVXLEN(cpu)-1)));
+			dst = src1 >> (src2 & (RVXLEN(cpu)-1));
 			return;
 		case 0x6: // OR
 			dst = src1 | src2;
@@ -602,18 +602,7 @@ namespace riscv
 			dst = ~(src1 ^ src2);
 			return;
 		case 0x205: // SRA
-			const auto bit = RVREGTYPE(cpu){1} << (sizeof(src1) * 8 - 1);
-			const bool is_signed = (src1 & bit) != 0;
-			if constexpr (RVIS128BIT(cpu)) {
-				const uint32_t shifts = src2 & 0x7F; // max 127 shifts!
-				dst = RV128I::SRA(is_signed, shifts, src1);
-			} else if constexpr (RVIS64BIT(cpu)) {
-				const uint32_t shifts = src2 & 0x3F; // max 63 shifts!
-				dst = RV64I::SRA(is_signed, shifts, src1);
-			} else {
-				const uint32_t shifts = src2 & 0x1F; // max 31 shifts!
-				dst = RV32I::SRA(is_signed, shifts, src1);
-			}
+			dst = (RVSIGNTYPE(cpu))src1 >> (src2 & (RVXLEN(cpu)-1));
 			return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
