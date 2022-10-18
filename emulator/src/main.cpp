@@ -122,6 +122,7 @@ static void run_program(
 		printf("%s\n", machine.cpu.current_instruction_to_string().c_str());
 		printf(">>> Machine exception %d: %s (data: 0x%" PRIX64 ")\n",
 				me.type(), me.what(), me.data());
+		printf("%s\n", machine.cpu.registers().to_string().c_str());
 		machine.memory.print_backtrace(
 			[] (std::string_view line) {
 				printf("-> %.*s\n", (int)line.size(), line.begin());
