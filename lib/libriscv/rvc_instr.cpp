@@ -221,18 +221,9 @@ namespace riscv
 					dst = dst >> ci.CAB.shift_imm();
 				}
 				return;
-			case 1: { // C.SRAI (preserve sign)
-					const auto bit = RVREGTYPE(cpu){1} << (sizeof(dst) * 8 - 1);
-					const bool is_signed = (dst & bit) != 0;
-					if constexpr (RVIS64BIT(cpu)) {
-						const uint32_t shifts = ci.CAB.shift64_imm();
-						dst = RV64I::SRA(is_signed, shifts, dst);
-					} else {
-						const uint32_t shifts = ci.CAB.shift_imm();
-						dst = RV32I::SRA(is_signed, shifts, dst);
-					}
-					return;
-				}
+			case 1: // C.SRAI (preserve sign)
+				dst = (RVSIGNTYPE(cpu))dst >> (ci.CAB.shift64_imm() & (RVXLEN(cpu)-1));
+				return;
 			case 2: // C.ANDI
 				dst = dst & ci.CAB.signed_imm();
 				return;

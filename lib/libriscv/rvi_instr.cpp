@@ -925,9 +925,7 @@ namespace riscv
 			if (LIKELY(!instr.Itype.is_srai())) {
 				dst = (int64_t) (src >> instr.Itype.shift64_imm());
 			} else { // SRAIW: preserve the sign bit
-				const uint32_t shifts = instr.Itype.shift64_imm();
-				const bool is_signed = (src & 0x80000000) != 0;
-				dst = (int64_t) RV64I::SRA(is_signed, shifts, src);
+				dst = (int64_t)src >> instr.Itype.shift64_imm();
 			}
 			return;
 		}
@@ -989,9 +987,7 @@ namespace riscv
 			dst = (int64_t) (src1 - src2);
 			return;
 		case 0x205: // SRA.D
-			const bool is_signed = (int64_t)src1 < 0;
-			const uint32_t shifts = src2 & 0x3F; // max 63 shifts!
-			dst = (int64_t) (RV64I::SRA(is_signed, shifts, src1));
+			dst = (int64_t)src1 >> (src2 & 63);
 			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
