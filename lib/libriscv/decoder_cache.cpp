@@ -254,7 +254,8 @@ namespace riscv
 		/* We do not support binary translation for RV128I */
 		if constexpr (W != 16) {
 			if (!machine().is_binary_translated()) {
-				machine().cpu.try_translate(options, bintr_filename, addr, ipairs);
+				machine().cpu.try_translate(
+					options, bintr_filename, addr, std::move(ipairs));
 			}
 		} // W != 16
 #endif

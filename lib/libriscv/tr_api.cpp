@@ -10,9 +10,11 @@ R"123(#include <stdint.h>
 #if RISCV_TRANSLATION_DYLIB == 4
 	typedef uint32_t addr_t;
 	typedef int32_t saddr_t;
+#  define XLEN  32
 #else
 	typedef uint64_t addr_t;
 	typedef int64_t saddr_t;
+#  define XLEN  64
 #endif
 
 typedef union {
@@ -69,19 +71,6 @@ static struct CallbackTable {
 	float  (*sqrtf32)(float);
 	double (*sqrtf64)(double);
 } api;
-
-static inline uint32_t SRA32(int is_signed, uint32_t shifts, uint32_t value)
-{
-	const uint32_t sign_bits = -is_signed ^ 0x0;
-	const uint32_t sign_shifted = sign_bits << (32 - shifts);
-	return (value >> shifts) | sign_shifted;
-}
-static inline uint64_t SRA64(int is_signed, uint32_t shifts, uint64_t value)
-{
-	const uint64_t sign_bits = -is_signed ^ 0x0;
-	const uint64_t sign_shifted = sign_bits << (64 - shifts);
-	return (value >> shifts) | sign_shifted;
-}
 
 void* memcpy(void * restrict dst, const void * restrict src, unsigned len)
 {

@@ -82,6 +82,7 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
 {
+	static constexpr unsigned XLEN = W * 8u;
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	std::set<unsigned> labels;
 	code += "extern void " + func + "(CPU* cpu) {\n";
@@ -253,10 +254,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				} break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
-				if constexpr (W == 8)
-					emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift64_imm()));
-				else
-					emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift_imm()));
+				emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1,
+					std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
 				break;
 			case 0x2: // SLTI:
 				// signed less than immediate
@@ -272,24 +271,11 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				break;
 			case 0x5: // SRLI / SRAI:
 				if (LIKELY(!instr.Itype.is_srai())) {
-					if constexpr (W == 8)
-						emit_op(code, " >> ", " >>= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift64_imm()));
-					else
-						emit_op(code, " >> ", " >>= ", tinfo, instr.Itype.rd, instr.Itype.rs1, std::to_string(instr.Itype.shift_imm()));
+					emit_op(code, " >> ", " >>= ", tinfo, instr.Itype.rd, instr.Itype.rs1,
+						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
 				} else { // SRAI: preserve the sign bit
 					add_code(code,
-						"{addr_t bit = 1ul << (sizeof(" + src + ") * 8 - 1);",
-						"int is_signed = (" + src + " & bit) != 0;");
-					if constexpr (W == 8) {
-						add_code(code,
-							"uint32_t shifts = " + std::to_string(instr.Itype.shift64_imm()) + ";",
-							dst + " = SRA64(is_signed, shifts, " + src + ");");
-					} else {
-						add_code(code,
-							"uint32_t shifts = " + std::to_string(instr.Itype.shift_imm()) + ";",
-							dst + " = SRA32(is_signed, shifts, " + src + ");");
-					}
-					code += "}";
+						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
 				}
 				break;
 			case 0x6: // ORI
@@ -306,20 +292,15 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			if (UNLIKELY(instr.Rtype.rd == 0)) break;
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
-			case 0x0: // ADD / SUB
-				if (!instr.Rtype.is_f7())
-					emit_op(code, " + ", " += ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
-				else
-					emit_op(code, " - ", " -= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+			case 0x0: // ADD
+				emit_op(code, " + ", " += ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				break;
+			case 0x200: // SUB
+				emit_op(code, " - ", " -= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			case 0x1: // SLL
-				if constexpr (W == 8) {
-					add_code(code,
-						from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x3F);");
-				} else {
-					add_code(code,
-						from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x1F);");
-				}
+				add_code(code,
+					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x2: // SLT
 				add_code(code,
@@ -332,33 +313,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case 0x4: // XOR
 				emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
-			case 0x5: // SRL / SRA
-				if (!instr.Rtype.is_f7()) { // SRL
-					if constexpr (W == 8) {
-						add_code(code,
-							from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x3F);"); // max 63 shifts!
-					} else {
-						add_code(code,
-							from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & 0x1F);"); // max 31 shifts!
-					}
-				} else { // SRA
-					add_code(code,
-						"{addr_t bit = 1ul << (sizeof(" + from_reg(tinfo, instr.Rtype.rs1) + ") * 8 - 1);",
-						"int is_signed = (" + from_reg(tinfo, instr.Rtype.rs1) + " & bit) != 0;"
-					);
-					if constexpr (W == 8) {
-						add_code(code,
-							"uint32_t shifts = " + from_reg(tinfo, instr.Rtype.rs2) + " & 0x3F;", // max 63 shifts!
-							from_reg(instr.Rtype.rd) + " = SRA64(is_signed, shifts, " + from_reg(tinfo, instr.Rtype.rs1) + ");"
-						);
-					} else {
-						add_code(code,
-							"uint32_t shifts = " + from_reg(tinfo, instr.Rtype.rs2) + " & 0x1F;", // max 31 shifts!
-							from_reg(instr.Rtype.rd) + " = SRA32(is_signed, shifts, " + from_reg(tinfo, instr.Rtype.rs1) + ");"
-						);
-					}
-					add_code(code, "}");
-				}
+			case 0x5: // SRL
+				add_code(code,
+					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+				break;
+			case 0x205: // SRA
+				add_code(code,
+					from_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x6: // OR
 				emit_op(code, " | ", " |= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
@@ -435,6 +396,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " % " + from_reg(tinfo, instr.Rtype.rs2) + ";"
 				);
 				break;
+			default:
+				printf("Unhandled OP: 0x%X\n",
+					instr.Rtype.jumptable_friendly_op());
 			}
 			break;
 		case RV32I_LUI:
@@ -488,9 +452,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					add_code(code, dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
 				} else { // SRAIW: preserve the sign bit
 					add_code(code,
-					"{const uint32_t shifts = " + from_imm(instr.Itype.shift_imm()) + ";",
-					"const int is_signed = (" + src + " & 0x80000000) != 0;",
-					dst + " = " + SIGNEXTW + " SRA32(is_signed, shifts, " + src + ");}");
+						dst + " = (int32_t)" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ";");
 				}
 				break;
 			default:
@@ -505,24 +467,20 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			const auto src2 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs2);
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
-			case 0x0: // ADDW / SUBW
-				if (!instr.Rtype.is_f7())
-					add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " + " + src2 + ");");
-				else
-					add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " - " + src2 + ");");
+			case 0x0: // ADDW
+				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " + " + src2 + ");");
+				break;
+			case 0x200: // SUBW
+				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " - " + src2 + ");");
 				break;
 			case 0x1: // SLLW
 				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " << (" + src2 + " & 0x1F));");
 				break;
-			case 0x5: // SRLW / SRAW
-				if (!instr.Rtype.is_f7()) { // SRL
-					add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
-				} else { // SRAW
-					add_code(code,
-						"{const int is_signed = (" + src1 + " & 0x80000000) != 0;",
-						"const uint32_t shifts = " + src2 + " & 0x1F;",
-						dst + " = " + SIGNEXTW + " (SRA32(is_signed, shifts, " + src1 + ")); }");
-				}
+			case 0x5: // SRLW
+				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
+				break;
+			case 0x205: // SRAW
+				add_code(code, dst + " = (int32_t)" + src1 + " >> (" + src2 + " & 31);");
 				break;
 			// M-extension
 			case 0x10: // MULW

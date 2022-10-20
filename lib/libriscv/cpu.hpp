@@ -80,7 +80,7 @@ namespace riscv
 		bool try_fuse(instr_pair i1, instr_pair i2) const;
 		// Binary translation functions
 		int  load_translation(const MachineOptions<W>&, std::string* filename) const;
-		void try_translate(const MachineOptions<W>&, const std::string&, address_t pc, std::vector<TransInstr<W>>&) const;
+		void try_translate(const MachineOptions<W>&, const std::string&, address_t pc, std::vector<TransInstr<W>>) const;
 
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork

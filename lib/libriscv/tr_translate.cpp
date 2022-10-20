@@ -12,6 +12,7 @@
 
 namespace riscv
 {
+	static constexpr bool VERBOSE_BLOCKS = false;
 	static constexpr int  LOOP_OFFSET_MAX = 160;
 	static constexpr bool SCAN_FOR_GP = true;
 
@@ -32,6 +33,7 @@ static const std::unordered_set<uint32_t> good_insn
 	RV32I_STORE,
 	RV32I_BRANCH,
 	RV32I_JAL,
+	//RV32I_JALR,
 	RV32I_OP_IMM,
 	RV32I_OP,
 	RV32I_LUI,
@@ -141,7 +143,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
-	const std::string& filename, address_t basepc, std::vector<TransInstr<W>>& ipairs) const
+	const std::string& filename, address_t basepc, std::vector<TransInstr<W>> ipairs) const
 {
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = (getenv("VERBOSE") != nullptr);
@@ -196,17 +198,23 @@ if constexpr (SCAN_FOR_GP) {
 			it = loops.back().first;
 			basepc = loops.back().second;
 			loops.pop_back();
+			if constexpr (VERBOSE_BLOCKS) {
+				printf("Restarting at loop location: 0x%lX",
+					(long)basepc);
+			}
 		}
 		if (gucci<W>(*it))
 		{
-			const rv32i_instruction instruction {it->instr};
-			const auto opcode = instruction.opcode();
 			const auto block = it;
 			bool has_branch = false;
-			// measure block length
-			while (++it != ipairs.end()) {
-				// we can include this but not continue after
-				if (opcode == RV32I_JALR ||
+			// Measure length of instructions that belong
+			// together sequentially (a code block).
+			for (; it != ipairs.end(); ++it) {
+				const rv32i_instruction instruction{it->instr};
+				const auto opcode = instruction.opcode();
+				// Any JAL or JALR is a show-stopper
+				if (opcode == RV32I_JALR || opcode == RV32I_JAL ||
+					// Non-ECALL SYSTEM instruction:
 					(opcode == RV32I_SYSTEM && instruction.Itype.funct3 == 0x0 && instruction.Itype.imm != 0))
 				{
 					++it; break;
@@ -228,16 +236,18 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 				// we can accelerate these and continue
 				if (gucci<W>(*it) == false) {
 					// must exit native, ending block
-					break;
+					++it; break;
 				}
-			}
+			} // find block
 			const size_t length = it - block;
 			if (length >= options.block_size_treshold
 				&& icounter + length < options.translate_instr_max
 				&& already_generated.count(basepc) == 0)
 			{
 				already_generated.insert(basepc);
-				//printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
+				if constexpr (VERBOSE_BLOCKS) {
+					printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
+				}
 				blocks.push_back({*block, length, basepc, has_branch});
 				icounter += length;
 				// we can't translate beyond this estimate, otherwise
@@ -285,7 +295,11 @@ const struct Mapping mappings[] = {
 )V0G0N";
 	for (const auto& mapping : dlmappings)
 	{
-		code += "{" + std::to_string(mapping.addr) + ", " + mapping.symbol + "},\n";
+		char buffer[128];
+		snprintf(buffer, sizeof(buffer), 
+			"{0x%lX, %s},\n",
+			(long)mapping.addr, mapping.symbol.c_str());
+		code.append(buffer);
 	}
 	code += "};\n";
 
@@ -443,8 +457,8 @@ void CPU<W>::activate_dylib(void* dylib) const
 #endif
 }
 
-	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, address_t, std::vector<TransInstr<4>>&) const;
-	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, address_t, std::vector<TransInstr<8>>&) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, address_t, std::vector<TransInstr<4>>) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, address_t, std::vector<TransInstr<8>>) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*) const;
 	template void CPU<4>::activate_dylib(void*) const;
