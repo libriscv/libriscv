@@ -70,20 +70,25 @@ namespace riscv
 		std::string flp_to_string() const;
 
 #ifdef RISCV_EXT_VECTOR
-		auto& rvv() { return *m_rvv; }
-		const auto& rvv() const { return *m_rvv; }
+		auto& rvv() {
+			if (m_rvv == nullptr)
+				m_rvv.reset(new VectorRegisters<W>);
+			return *m_rvv;
+		}
+		const auto& rvv() const {
+			if (m_rvv == nullptr)
+				m_rvv.reset(new VectorRegisters<W>);
+			return *m_rvv;
+		}
 #endif
 
-		Registers() {
-#ifdef RISCV_EXT_VECTOR
-			m_rvv.reset(new VectorRegisters<W>);
-#endif
-		}
+		Registers() = default;
 		Registers(const Registers& other)
 			: pc    { other.pc }, m_reg { other.m_reg }, m_fcsr { other.m_fcsr }, m_regfl { other.m_regfl }
 		{
 #ifdef RISCV_EXT_VECTOR
-			m_rvv.reset(new VectorRegisters<W> (other.rvv()));
+			if (other.m_rvv != nullptr)
+				m_rvv.reset(new VectorRegisters<W> (*other.m_rvv));
 #endif
 		}
 		enum class Options { Everything, NoVectors };
@@ -99,7 +104,10 @@ namespace riscv
 			this->m_regfl = other.m_regfl;
 #ifdef RISCV_EXT_VECTOR
 			if (opts == Options::Everything) {
-				m_rvv.reset(new VectorRegisters<W>(other.rvv()));
+				if (other.m_rvv != nullptr)
+					m_rvv.reset(new VectorRegisters<W>(*other.m_rvv));
+				else
+					m_rvv = nullptr;
 			}
 #endif
 			(void)opts;
@@ -114,7 +122,7 @@ namespace riscv
 		// General FP registers
 		std::array<fp64reg, 32> m_regfl {};
 #ifdef RISCV_EXT_VECTOR
-		std::unique_ptr<VectorRegisters<W>> m_rvv = nullptr;
+		mutable std::unique_ptr<VectorRegisters<W>> m_rvv = nullptr;
 #endif
 	};
 
