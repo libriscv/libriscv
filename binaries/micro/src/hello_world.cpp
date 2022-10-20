@@ -9,7 +9,7 @@ struct String {
 
 	constexpr String(const char* str, unsigned l) : data(str), len(l) {}
 
-	constexpr String(char* str) : data(str), len(0) {
+	constexpr String(const char* str) : data(str), len(0) {
 		while(str[len] != 0) len++;
 	}
 };
@@ -22,11 +22,11 @@ inline void print(Args&&... args) {
 	}(), ...);
 }
 
-
-__attribute__((constructor))
-static void test_constructor() {
-	print("Hello, Global Constructor!\n");
-}
+static struct Test {
+	Test() {
+		print("Hello, Global Constructor!\n");
+	}
+} test;
 
 int main(int, char** argv)
 {

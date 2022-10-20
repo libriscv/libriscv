@@ -36,7 +36,7 @@ void libc_start(int argc, char** argv)
 }
 
 // 1. wrangle with argc and argc
-// 2. initialize the global pointer to __global_pointer
+// 2. initialize GP to __global_pointer
 // NOTE: have to disable relaxing first
 asm
 ("   .global _start             \t\n\
@@ -49,5 +49,5 @@ _start:                         \t\n\
 	 1:auipc gp, %pcrel_hi(__global_pointer$) \t\n\
 	 addi  gp, gp, %pcrel_lo(1b) \t\n\
 	.option pop					\t\n\
-	call libc_start				\t\n\
+	j libc_start				\t\n\
 ");
