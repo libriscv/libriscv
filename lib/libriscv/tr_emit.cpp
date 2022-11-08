@@ -704,8 +704,12 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			} // fpfunc
 			} else ILLEGAL_AND_EXIT();
 			} break; // RV32F_FPFUNC
+			case RV32A_ATOMIC: // General handler for atomics
+			case RV32V_OP:	   // General handler for vector instructions
+				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				break;
 		default:
-			throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter");
+			throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter", instr.opcode());
 		}
 	}
 	// If the function ends with an unimplemented instruction,

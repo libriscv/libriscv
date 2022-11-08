@@ -419,6 +419,10 @@ void CPU<W>::activate_dylib(void* dylib) const
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
 			cpu.machine().system(rv32i_instruction{instr});
 		},
+		.execute = [] (CPU<W>& cpu, uint32_t instr) {
+			const rv32i_instruction rvi{instr};
+			cpu.decode(rvi).handler(cpu, rvi);
+		},
 		.trigger_exception = [] (CPU<W>& cpu, int e) {
 			cpu.trigger_exception(e);
 		},

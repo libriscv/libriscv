@@ -1,8 +1,8 @@
 #include <string>
 
 namespace riscv {
-extern const std::string bintr_code =
-R"123(#include <stdint.h>
+	extern const std::string bintr_code =
+		R"123(#include <stdint.h>
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #define ILLEGAL_OPCODE  0
@@ -67,6 +67,7 @@ static struct CallbackTable {
 	void (*stop)(CPU*, uint64_t);
 	void (*ebreak)(CPU*, uint64_t);
 	void (*system)(CPU*, uint32_t);
+	void (*execute)(CPU*, uint32_t);
 	void (*exception)(CPU*, int);
 	float  (*sqrtf32)(float);
 	double (*sqrtf64)(double);
