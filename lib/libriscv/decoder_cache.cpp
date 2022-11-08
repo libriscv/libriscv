@@ -107,6 +107,13 @@ namespace riscv
 
 namespace riscv
 {
+	union UnalignedLoad32 {
+		uint16_t data[2];
+		operator uint32_t() {
+			return data[0] | uint32_t(data[1]) << 16;
+		}
+	};
+
 #ifdef RISCV_INSTR_CACHE
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(const MachineOptions<W>& options,
@@ -130,15 +137,36 @@ namespace riscv
 		auto* exec_decoder = this->m_exec_decoder;
 
 	#ifdef RISCV_BINARY_TRANSLATION
-		std::string bintr_filename;
-		// This can be improved somewhat, by fetching them on demand
-		// instead of building a vector of the whole execute segment.
-		std::vector<TransInstr<W>> ipairs;
-		ipairs.reserve(len / 4);
+		/* We do not support binary translation for RV128I */
+		if constexpr (W != 16) {
+			// Attempt to load binary translation
+			// Also, fill out the binary translation SO filename for later
+			std::string bintr_filename;
+			machine().cpu.load_translation(options, &bintr_filename);
 
-	if constexpr (W != 16) {
-		machine().cpu.load_translation(options, &bintr_filename);
-	} // W != 16
+			if (!machine().is_binary_translated())
+			{
+				// This can be improved somewhat, by fetching them on demand
+				// instead of building a vector of the whole execute segment.
+				std::vector<TransInstr<W>> ipairs;
+				ipairs.reserve(len / 4);
+
+				for (address_t dst = addr; dst < addr + len; dst += 4)
+				{
+					auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
+
+					// Load unaligned instruction from execute segment
+					const rv32i_instruction instruction { *(UnalignedLoad32*) &exec_segment[dst] };
+		#  ifdef RISCV_DEBUG
+					ipairs.push_back({entry.handler.handler, instruction.whole});
+		#  else
+					ipairs.push_back({entry.handler, instruction.whole});
+		#  endif
+				}
+				machine().cpu.try_translate(
+					options, bintr_filename, addr, std::move(ipairs));
+			}
+		} // W != 16
 	#endif
 
 		// When compressed instructions are enabled, many decoder
@@ -154,32 +182,20 @@ namespace riscv
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
 
 			// Load unaligned instruction from execute segment
-			union Align32 {
-				uint16_t data[2];
-				operator uint32_t() {
-					return data[0] | uint32_t(data[1]) << 16;
-				}
-			};
-			const rv32i_instruction instruction { *(Align32*) &exec_segment[dst] };
+			const rv32i_instruction instruction { *(UnalignedLoad32*) &exec_segment[dst] };
 			rv32i_instruction rewritten = instruction;
 
 #ifdef RISCV_BINARY_TRANSLATION
 			if (machine().is_binary_translated()) {
 				if (DecoderCache<W>::isset(entry)) {
+					// With fastsim we pretend the original opcode is JAL,
+					// which breaks the fastsim loop. In all cases, continue.
 					#ifdef RISCV_FAST_SIMULATOR
-					// XXX: With fastsim we could pretend the original opcode
-					// is a JAL here, which would break the fastsim loop
 					entry.original_opcode = RV32I_JAL;
 					#endif
 					dst += 4;
 					continue;
 				}
-			} else if constexpr (W != 16) {
-#  ifdef RISCV_DEBUG
-				ipairs.push_back({entry.handler.handler, instruction.whole});
-#  else
-				ipairs.push_back({entry.handler, instruction.whole});
-#  endif
 			}
 #endif // RISCV_BINARY_TRANSLATION
 
@@ -248,16 +264,6 @@ namespace riscv
 
 #ifdef RISCV_FAST_SIMULATOR
 		realize_fastsim<W>(addr, dst, exec_decoder);
-#endif
-
-#ifdef RISCV_BINARY_TRANSLATION
-		/* We do not support binary translation for RV128I */
-		if constexpr (W != 16) {
-			if (!machine().is_binary_translated()) {
-				machine().cpu.try_translate(
-					options, bintr_filename, addr, std::move(ipairs));
-			}
-		} // W != 16
 #endif
 	}
 #endif // RISCV_INSTR_CACHE
