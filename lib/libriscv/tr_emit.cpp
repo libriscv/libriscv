@@ -396,6 +396,18 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " % " + from_reg(tinfo, instr.Rtype.rs2) + ";"
 				);
 				break;
+			case 0x102: // SH1ADD
+				add_code(code, from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 1);");
+				break;
+			case 0x104: // SH2ADD
+				add_code(code, from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 2);");
+				break;
+			case 0x106: // SH3ADD
+				add_code(code, from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 3);");
+				break;
+			case 0x204: // XNOR
+				add_code(code, from_reg(instr.Rtype.rd) + " = ~(" + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + " << 2);");
+				break;
 			default:
 				printf("Unhandled OP: 0x%X\n",
 					instr.Rtype.jumptable_friendly_op());
@@ -509,6 +521,18 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				"if (LIKELY(" + src2 + " != 0))",
 				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
 				break;
+			case 0x40: // ADDUW
+				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + " + src1 + ";");
+				break;
+			case 0x102: // SH1ADD.UW
+				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + (" + src1 + " << 1);");
+				break;
+			case 0x104: // SH2ADD.UW
+				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + (" + src1 + " << 2);");
+				break;
+			case 0x106: // SH3ADD.UW
+				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + (" + src1 + " << 3);");
+				break;
 			default:
 				ILLEGAL_AND_EXIT();
 			}
@@ -524,7 +548,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", api.mem_ld64(cpu, " + addr + "));\n";
 				break;
 			default:
-				ILLEGAL_AND_EXIT();
+				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				break;
 			}
 			} break;
 		case RV32F_STORE: {
@@ -538,7 +563,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				code += "api.mem_st64(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i64);\n";
 				break;
 			default:
-				ILLEGAL_AND_EXIT();
+				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				break;
 			}
 			} break;
 		case RV32F_FMADD:

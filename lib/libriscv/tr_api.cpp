@@ -45,7 +45,7 @@ static inline void set_fl(fp64reg* reg, float f) {
 #define set_dbl(reg, dv)  (reg)->f64 = (dv)
 
 // Thin variant of CPU for higher compilation speed
-__attribute__((aligned(16)))
+__attribute__((aligned(32)))
 typedef struct {
 	addr_t  pc;
 	addr_t  r[32];
