@@ -49,6 +49,7 @@ __attribute__((aligned(16)))
 typedef struct {
 	addr_t  pc;
 	addr_t  r[32];
+	uint32_t fcsr;
 	fp64reg fr[32];
 } CPU;
 

@@ -514,7 +514,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			}
 			} break;
 		case RV32F_LOAD: {
-			const rv32f_instruction fi { instr };
+			const rv32f_instruction fi{instr};
 			const auto addr = from_reg(tinfo, fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
@@ -528,13 +528,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			}
 			} break;
 		case RV32F_STORE: {
-			const rv32f_instruction fi { instr };
+			const rv32f_instruction fi{instr};
 			const auto addr = from_reg(tinfo, fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
 			switch (fi.Itype.funct3) {
-			case 0x2: // FLW
+			case 0x2: // FSW
 				code += "api.mem_st32(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i32[0]);\n";
 				break;
-			case 0x3: // FLD
+			case 0x3: // FSD
 				code += "api.mem_st64(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i64);\n";
 				break;
 			default:
@@ -545,7 +545,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV32F_FMSUB:
 		case RV32F_FNMADD:
 		case RV32F_FNMSUB: {
-			const rv32f_instruction fi { instr };
+			const rv32f_instruction fi{instr};
 			const auto dst = from_fpreg(fi.R4type.rd);
 			const auto rs1 = from_fpreg(fi.R4type.rs1);
 			const auto rs2 = from_fpreg(fi.R4type.rs2);
@@ -561,7 +561,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			}
 			} break;
 		case RV32F_FPFUNC: {
-			const rv32f_instruction fi { instr };
+			const rv32f_instruction fi{instr};
 			const auto dst = from_fpreg(fi.R4type.rd);
 			const auto rs1 = from_fpreg(fi.R4type.rs1);
 			const auto rs2 = from_fpreg(fi.R4type.rs2);
@@ -694,22 +694,28 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					ILLEGAL_AND_EXIT();
 				} break;
 			case RV32F__FMV_X_W:
-				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
-					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
-				} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
-					code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i64;\n";
-				} else {
-					ILLEGAL_AND_EXIT();
+				if (fi.R4type.funct3 == 0x0) {
+					if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
+						code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
+					} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
+						code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i64;\n";
+					} else {
+						ILLEGAL_AND_EXIT();
+					}
+				} else { // FPCLASSIFY etc.
+					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 				} break;
 			} // fpfunc
 			} else ILLEGAL_AND_EXIT();
 			} break; // RV32F_FPFUNC
 			case RV32A_ATOMIC: // General handler for atomics
+				[[fallthrough]];
 			case RV32V_OP:	   // General handler for vector instructions
 				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 				break;
 		default:
-			throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter", instr.opcode());
+			//throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter", instr.opcode());
+			ILLEGAL_AND_EXIT();
 		}
 	}
 	// If the function ends with an unimplemented instruction,

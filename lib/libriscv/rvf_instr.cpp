@@ -36,7 +36,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32f_instruction fi { instr };
-		auto& src = cpu.registers().getfl(fi.Stype.rs2);
+		const auto& src = cpu.registers().getfl(fi.Stype.rs2);
 		auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
 		cpu.machine().memory.template write<uint32_t> (addr, src.i32[0]);
 	},
@@ -55,7 +55,7 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32f_instruction fi { instr };
-		auto& src = cpu.registers().getfl(fi.Stype.rs2);
+		const auto& src = cpu.registers().getfl(fi.Stype.rs2);
 		auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
 		cpu.machine().memory.template write<uint64_t> (addr, src.i64);
 	}, DECODED_FLOAT(FSW).printer);
