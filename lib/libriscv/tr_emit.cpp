@@ -409,8 +409,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				add_code(code, from_reg(instr.Rtype.rd) + " = ~(" + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + " << 2);");
 				break;
 			default:
-				printf("Unhandled OP: 0x%X\n",
-					instr.Rtype.jumptable_friendly_op());
+				ILLEGAL_AND_EXIT();
+				//fprintf(stderr, "RV32I_OP: Unhandled function 0x%X\n",
+				//		instr.Rtype.jumptable_friendly_op());
 			}
 			break;
 		case RV32I_LUI:

@@ -49,6 +49,9 @@ static const std::unordered_set<uint32_t> good_insn
 	RV32F_FNMADD,
 	RV32F_FNMSUB,
 	RV32F_FPFUNC,
+	RV32A_ATOMIC,
+	// TODO: Needs better integration
+	//RV32V_OP
 };
 
 template <int W>
