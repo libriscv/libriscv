@@ -46,7 +46,8 @@ TEST_CASE("Execute minimal machine", "[Minimal]")
 	"_start:\n"
 	"	li a0, 666\n"
 	"	li a7, 1\n"
-	"	ecall\n");
+	"	ecall\n"
+	"	nop\n");
 	)M", "-static -ffreestanding -nostartfiles");
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	machine.install_syscall_handler(1,
@@ -61,7 +62,8 @@ TEST_CASE("Execution timeout", "[Minimal]")
 	__asm__(".global _start\n"
 	".section .text\n"
 	"_start:\n"
-	"	j _start\n");
+	"	j _start\n"
+	"	nop\n");
 	)M", "-static -ffreestanding -nostartfiles");
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	// Simulate 250k instructions before giving up
