@@ -153,15 +153,9 @@ namespace riscv
 
 				for (address_t dst = addr; dst < addr + len; dst += 4)
 				{
-					auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
-
 					// Load unaligned instruction from execute segment
 					const rv32i_instruction instruction { *(UnalignedLoad32*) &exec_segment[dst] };
-		#  ifdef RISCV_DEBUG
-					ipairs.push_back({entry.handler.handler, instruction.whole});
-		#  else
-					ipairs.push_back({entry.handler, instruction.whole});
-		#  endif
+					ipairs.push_back({instruction.whole});
 				}
 				machine().cpu.try_translate(
 					options, bintr_filename, addr, std::move(ipairs));
@@ -187,7 +181,7 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 			if (machine().is_binary_translated()) {
-				if (DecoderCache<W>::isset(entry)) {
+				if (entry.isset()) {
 					// With fastsim we pretend the original opcode is JAL,
 					// which breaks the fastsim loop. In all cases, continue.
 					#ifdef RISCV_FAST_SIMULATOR
@@ -238,7 +232,7 @@ namespace riscv
 					// TODO: Instruction fusing here
 				}
 			}
-			DecoderCache<W>::convert(decoded, entry);
+			entry.set_handler(decoded);
 
 #ifdef RISCV_FAST_SIMULATOR
 			// Cache the (modified) instruction bits

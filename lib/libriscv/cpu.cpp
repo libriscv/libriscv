@@ -180,12 +180,8 @@ namespace riscv
 				exec_decoder[pc / DecoderCache<W>::DIVISOR];
 		#ifdef RISCV_DEBUG
 			INSTRUCTION_LOGGING(*this);
-			// Execute instruction
-			cache_entry.handler.handler(*this, instruction);
-		#else
-			// Execute instruction
-			cache_entry.handler(*this, instruction);
 		#endif
+			cache_entry.execute(*this, instruction);
 #   ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
 			instruction = read_next_instruction_slowpath();
@@ -275,13 +271,13 @@ namespace riscv
 				while (decoder + 4 < decoder_end)
 				{
 					registers().pc = pc + 0;
-					decoder[0].handler(*this, format_t {decoder[0].instr});
+					decoder[0].execute(*this);
 					registers().pc = pc + 4;
-					decoder[1].handler(*this, format_t {decoder[1].instr});
+					decoder[1].execute(*this);
 					registers().pc = pc + 8;
-					decoder[2].handler(*this, format_t {decoder[2].instr});
+					decoder[2].execute(*this);
 					registers().pc = pc + 12;
-					decoder[3].handler(*this, format_t {decoder[3].instr});
+					decoder[3].execute(*this);
 					pc += 16;
 					decoder += 4;
 				}
@@ -289,13 +285,13 @@ namespace riscv
 				while (decoder + 4 < decoder_end)
 				{
 					registers().pc = pc;
-					decoder->handler(*this, format_t{decoder->instr});
+					decoder->execute(*this);
 
 					pc += decoder->opcode_length;
 					decoder += decoder->opcode_length / 2;
 
 					registers().pc = pc;
-					decoder->handler(*this, format_t{decoder->instr});
+					decoder->execute(*this);
 
 					pc += decoder->opcode_length;
 					decoder += decoder->opcode_length / 2;
@@ -303,16 +299,16 @@ namespace riscv
 			}
 			// There is always one instruction we can run
 			do {
-				const format_t instruction {decoder->instr};
 				// Some instructions use PC offsets
 				registers().pc = pc;
 				// Debugging aid when fast simulator is behaving strangely
 				if constexpr (VERBOSE_FASTSIM) {
+					const format_t instruction{decoder->instr};
 					const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n";
 					machine().print(string.c_str(), string.size());
 				}
 				// Execute instruction using handler and 32-bit wrapper
-				decoder->handler(*this, instruction);
+				decoder->execute(*this);
 				// increment *local* PC
 				if constexpr (compressed_enabled) {
 					length = decoder->opcode_length;

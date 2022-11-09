@@ -64,14 +64,8 @@ inline bool gucci(const TransInstr<W>& ip) {
 }
 
 template <int W>
-inline instruction_handler<W>& instruction_handler_at(const Machine<W>& machine, address_type<W> addr) {
-	auto& cache_entry =
-		machine.memory.get_decoder_cache()[addr / DecoderCache<W>::DIVISOR];
-#ifdef RISCV_DEBUG
-	return cache_entry.handler.handler;
-#else
-	return cache_entry.handler;
-#endif
+inline DecoderData<W>& decoder_entry_at(const Machine<W>& machine, address_type<W> addr) {
+	return machine.memory.get_decoder_cache()[addr / DecoderCache<W>::DIVISOR];
 }
 
 template <int W>
@@ -453,8 +447,8 @@ void CPU<W>::activate_dylib(void* dylib) const
 	const auto nmappings = *no_mappings;
 	for (size_t i = 0; i < nmappings; i++) {
 		if (mappings[i].handler != nullptr) {
-			instruction_handler_at(machine(), mappings[i].addr) =
-				(instruction_handler<W>) mappings[i].handler;
+			auto& entry = decoder_entry_at(machine(), mappings[i].addr);
+			entry.set_insn_handler((instruction_handler<W>) mappings[i].handler);
 		}
 	}
 

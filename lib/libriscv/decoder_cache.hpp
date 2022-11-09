@@ -6,7 +6,7 @@
 namespace riscv {
 
 template <int W>
-struct alignas(16) DecoderData {
+struct DecoderData {
 #ifdef RISCV_DEBUG
 	using Handler = Instruction<W>;
 #else
@@ -21,7 +21,51 @@ struct alignas(16) DecoderData {
 		uint16_t original_opcode;
 		uint16_t opcode_length;
 	};
+
+	void execute(CPU<W>& cpu) {
+		this->handler(cpu, instruction_format{this->instr});
+	}
+#endif // RISCV_FAST_SIMULATOR
+
+	template <typename... Args>
+	void execute(CPU<W>& cpu, Args... args) {
+#ifdef RISCV_DEBUG
+		this->handler.handler(cpu, args...);
+#else
+		this->handler(cpu, args...);
 #endif
+	}
+	bool isset() const noexcept {
+#ifdef RISCV_DEBUG
+		return handler.handler != nullptr;
+#else
+		return handler != nullptr;
+#endif
+	}
+	void set_handler(Instruction<W> insn) noexcept {
+#ifdef RISCV_DEBUG
+		this->handler = insn;
+#else
+		this->handler = insn.handler;
+#endif
+	}
+	void set_insn_handler(instruction_handler<W> ih) noexcept {
+		this->handler = ih;
+	}
+
+private:
+	size_t opcode_for(Handler new_handler) const {
+		for (size_t i = 1; i < handlers.size(); i++) {
+			if (handlers[i] == new_handler)
+				return i;
+			else if (handlers[i] == nullptr) {
+				handlers[i] = new_handler;
+				return i;
+			}
+		}
+		//throw std::runtime_error("Not enough instruction handler space");
+	}
+	static std::array<Handler, 256> handlers;
 };
 
 template <int W>
@@ -35,21 +79,6 @@ struct DecoderCache
 
 	inline auto* get_base() noexcept {
 		return &cache[0];
-	}
-
-	static void convert(const Instruction<W>& insn, DecoderData<W>& entry) {
-#ifdef RISCV_DEBUG
-		entry.handler = insn;
-#else
-		entry.handler = insn.handler;
-#endif
-	}
-	static bool isset(const DecoderData<W>& entry) {
-#ifdef RISCV_DEBUG
-		return entry.handler.handler != nullptr;
-#else
-		return entry.handler != nullptr;
-#endif
 	}
 
 	std::array<DecoderData<W>, PageSize / DIVISOR> cache = {};

@@ -90,7 +90,6 @@ namespace riscv
 
 	template <int W>
 	struct TransInstr {
-		instruction_handler<W>& handler;
 		uint32_t instr;
 	};
 }
