@@ -205,10 +205,12 @@ inline Thread<W>::Thread(
 template <int W>
 inline Thread<W>::Thread(
 	MultiThreading<W>& mt, const Thread& other)
-	: threading(mt), tid(other.tid), stored_regs(other.stored_regs),
+	: threading(mt), tid(other.tid),
 	  stack_base(other.stack_base), stack_size(other.stack_size),
 	  clear_tid(other.clear_tid), block_reason(other.block_reason)
-{}
+{
+	stored_regs.copy_from(Registers<W>::Options::NoVectors, other.stored_regs);
+}
 
 template <int W>
 inline void Thread<W>::activate()
@@ -255,7 +257,7 @@ inline Thread<W>* MultiThreading<W>::create(
 			address_t stack, address_t tls, address_t stkbase, address_t stksize)
 {
 	const int tid = ++this->thread_counter;
-	auto it = m_threads.emplace(tid, Thread{*this, tid, tls, stack, stkbase, stksize});
+	auto it = m_threads.try_emplace(tid, *this, tid, tls, stack, stkbase, stksize);
 	auto* thread = &it.first->second;
 
 	// flag for write child TID
