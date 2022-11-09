@@ -348,24 +348,31 @@ namespace riscv
 			const auto addr = pc + original.Jtype.jump_offset() - 4;
 			const bool is_aligned = addr % PCAL == 0;
 			const bool below30 = addr < (uint64_t(1) << (30 + PCALBITS));
-			FasterJtype rewritten;
-			rewritten.opcode = original.Jtype.opcode;
-			rewritten.imm = addr >> PCALBITS;
-			if (is_aligned && below30 && original.Jtype.rd == 0) {
-				instr.whole = rewritten.whole;
-				return rewritten_instruction<W>(
-					[] (auto& cpu, auto instr) RVINSTR_ATTR {
-						const auto& rop = view_as<FasterJtype> (instr);
-						cpu.aligned_jump(rop.imm << PCALBITS);
-					}); // JAL zero, pc+imm
-			} else if (is_aligned && below30 && original.Jtype.rd == REG_RA) {
-				instr.whole = rewritten.whole;
-				return rewritten_instruction<W>(
-					[] (auto& cpu, auto instr) RVINSTR_ATTR {
-						const auto& rop = view_as<FasterJtype> (instr);
-						cpu.reg(REG_RA) = cpu.pc() + 4;
-						cpu.aligned_jump(rop.imm << PCALBITS);
-					}); // JAL RA, pc+imm
+			// If we can't see that it's executable we leave it
+			// NOTE: is_executable is only needed when inbound jumps only
+			if (is_aligned && below30 && is_executable(addr)) {
+				FasterJtype rewritten;
+				rewritten.opcode = original.Jtype.opcode;
+				rewritten.imm = addr >> PCALBITS;
+				// Handle the common cases x0 and x1
+				if (original.Jtype.rd == 0) {
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterJtype> (instr);
+							//cpu.aligned_jump(rop.imm << PCALBITS);
+							cpu.registers().pc = rop.imm << PCALBITS;
+						}); // JAL zero, pc+imm
+				} else if (original.Jtype.rd == REG_RA) {
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterJtype> (instr);
+							cpu.reg(REG_RA) = cpu.pc() + 4;
+							//cpu.aligned_jump(rop.imm << PCALBITS);
+							cpu.registers().pc = rop.imm << PCALBITS;
+						}); // JAL RA, pc+imm
+				}
 			}
 			} // RV32I_JAL
 			break;

@@ -101,6 +101,7 @@ namespace riscv
 		const uint8_t* m_exec_data = nullptr;
 		address_t m_exec_begin = 0;
 		address_t m_exec_end   = 0;
+		bool is_executable(address_t dst) const noexcept { return dst >= m_exec_begin && dst < m_exec_end; }
 
 #ifndef RISCV_INBOUND_JUMPS_ONLY
 		// Page cache for execution on virtual memory
