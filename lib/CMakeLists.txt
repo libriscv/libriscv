@@ -4,6 +4,7 @@
 
 option(RISCV_DEBUG  "Enable debugging features in the RISC-V machine" OFF)
 option(RISCV_ICACHE "Enable instruction decoder cache" ON)
+option(RISCV_FASTSIM "Enable fast simulation mode" ON)
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
@@ -90,11 +91,10 @@ if (RISCV_EXT_V)
 endif()
 if (RISCV_ICACHE)
 	target_compile_definitions(riscv PUBLIC RISCV_INSTR_CACHE=1)
-	# The fast simulator is incompatible with RISCV_DEBUG because it
-	# modifies the instruction stream.
+	# The fast simulator is incompatible with RISCV_DEBUG (for now)
 	if (RISCV_DEBUG)
 		message(WARNING "RISCV_FAST_SIMULATOR disabled by RISCV_DEBUG")
-	else()
+	elseif (RISCV_FASTSIM)
 		target_compile_definitions(riscv PUBLIC RISCV_FAST_SIMULATOR=1)
 		message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
 		target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
