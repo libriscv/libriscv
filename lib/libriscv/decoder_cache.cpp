@@ -212,24 +212,17 @@ namespace riscv
 				// well as needing more trust in the decoding.
 				decoded = machine().cpu.decode(instruction);
 			} else {
-				bool try_fuse = options.instruction_fusing;
 				// Fast simulator gets confusing instruction logging with instr rewrites
 				if constexpr (decoder_rewriter_enabled) {
 					// Improve many instruction handlers by rewriting instructions
 					decoded = machine().cpu.decode_rewrite(dst, rewritten);
-					// Write the instruction back to execute segment using
-					// the *original* instructions length, if it changed.
-					// But only if we do not need it later, eg. binary translation.
+					// Write the instruction back to execute segment if it changed
 					is_rewritten = rewritten.whole != instruction.whole;
 					if (is_rewritten) {
-						assert(rewritten.length() == instruction.length());
 						std::memcpy((void*)&exec_segment[dst], &rewritten, instruction.length());
 					}
 				} else {
 					decoded = machine().cpu.decode(instruction);
-				}
-				if (!is_rewritten && try_fuse) {
-					// TODO: Instruction fusing here
 				}
 			}
 			entry.set_handler(decoded);

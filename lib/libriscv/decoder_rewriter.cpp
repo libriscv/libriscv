@@ -12,10 +12,9 @@ namespace riscv
 
 	union MoveType {
 		struct {
-			uint8_t opcode;
 			uint8_t rs2;
 			uint8_t rs1;
-			uint8_t unused;
+			uint16_t unused;
 		};
 		uint32_t whole;
 	};
@@ -23,8 +22,7 @@ namespace riscv
 
 	union FasterBtype {
 		struct {
-			uint8_t opcode : 3;
-			uint8_t rs2    : 5;
+			uint8_t rs2;
 			uint8_t rs1;
 			int16_t imm;
 		};
@@ -37,7 +35,6 @@ namespace riscv
 
 	union ZeroBtype {
 		struct {
-			uint8_t opcode;
 			uint8_t rs1;
 			int16_t imm;
 		};
@@ -50,8 +47,7 @@ namespace riscv
 
 	union FasterStype {
 		struct {
-			uint8_t opcode : 3;
-			uint8_t rsy    : 5;
+			uint8_t rsy;
 			uint8_t rsx;
 			int16_t imm;
 		};
@@ -64,8 +60,7 @@ namespace riscv
 
 	union FasterJtype {
 		struct {
-			uint32_t opcode : 2;
-			uint32_t imm    : 30;
+			uint32_t imm;
 		};
 		uint32_t whole;
 	};
@@ -105,7 +100,6 @@ namespace riscv
 			{	// OP_IMM.ADDI
 				if (original.Itype.rs1 == 0) { // LI
 					ZeroBtype rewritten;
-					rewritten.opcode = original.Itype.opcode;
 					rewritten.rs1 = original.Itype.rd;
 					rewritten.imm = original.Itype.signed_imm();
 					instr.whole = rewritten.whole;
@@ -117,7 +111,6 @@ namespace riscv
 						}); // OP_IMM.LI
 				} else if (original.Itype.imm == 0) { // MV
 					MoveType rewritten;
-					rewritten.opcode = original.Itype.opcode;
 					rewritten.rs1 = original.Itype.rd;
 					rewritten.rs2 = original.Itype.rs1;
 					instr.whole = rewritten.whole;
@@ -128,7 +121,6 @@ namespace riscv
 						}); // OP_IMM.MV
 				}
 				FasterBtype rewritten;
-				rewritten.opcode = original.Itype.opcode;
 				rewritten.rs1 = original.Itype.rd;
 				rewritten.rs2 = original.Itype.rs1;
 				rewritten.imm = original.Itype.signed_imm();
@@ -158,12 +150,10 @@ namespace riscv
 
 			if (original.Btype.rs2 == 0) {
 				ZeroBtype rewritten;
-				rewritten.opcode = original.Btype.opcode;
 				rewritten.rs1 = original.Btype.rs1;
 				rewritten.imm = original.Btype.signed_imm() - 4;
 				assert(original.Btype.rs1 == rewritten.rs1);
 				assert(original.Btype.signed_imm()-4 == rewritten.signed_imm());
-				assert(original.length() == rv32i_instruction{rewritten.whole}.length());
 				instr.whole = rewritten.whole;
 				switch (original.Btype.funct3) {
 				case 0x0: // BRANCH_EQ
@@ -204,14 +194,12 @@ namespace riscv
 				} // BRANCH type
 			} // rs2 == 0
 			FasterBtype rewritten;
-			rewritten.opcode = original.Btype.opcode;
 			rewritten.rs2 = original.Btype.rs2;
 			rewritten.rs1 = original.Btype.rs1;
 			rewritten.imm = original.Btype.signed_imm() - 4;
 			assert(original.Btype.signed_imm()-4 == rewritten.signed_imm());
 			assert(original.Btype.rs1 == rewritten.rs1);
 			assert(original.Btype.rs2 == rewritten.rs2);
-			assert(original.length() == rv32i_instruction{rewritten.whole}.length());
 			instr.whole = rewritten.whole;
 
 			switch (original.Btype.funct3) {
@@ -273,7 +261,6 @@ namespace riscv
 			if (original.Stype.rs2 == 0) {
 				// Accelerate store zero
 				FasterStype rewritten;
-				rewritten.opcode = original.Stype.opcode;
 				rewritten.rsx = original.Stype.rs1;
 				rewritten.imm = original.Stype.signed_imm();
 				assert(original.Stype.signed_imm() == rewritten.signed_imm());
@@ -317,7 +304,6 @@ namespace riscv
 			else if (original.Stype.signed_imm() != 0) {
 				// Accelerate store imm
 				FasterStype rewritten;
-				rewritten.opcode = original.Stype.opcode;
 				rewritten.rsx = original.Stype.rs1;
 				rewritten.rsy = original.Stype.rs2;
 				rewritten.imm = original.Stype.signed_imm();
@@ -347,12 +333,11 @@ namespace riscv
 		case RV32I_JAL: {
 			const auto addr = pc + original.Jtype.jump_offset() - 4;
 			const bool is_aligned = addr % PCAL == 0;
-			const bool below30 = addr < (uint64_t(1) << (30 + PCALBITS));
+			const bool below32 = addr < (uint64_t(1) << (32 + PCALBITS));
 			// If we can't see that it's executable we leave it
 			// NOTE: is_executable is only needed when inbound jumps only
-			if (is_aligned && below30 && is_executable(addr)) {
+			if (is_aligned && below32 && is_executable(addr)) {
 				FasterJtype rewritten;
-				rewritten.opcode = original.Jtype.opcode;
 				rewritten.imm = addr >> PCALBITS;
 				// Handle the common cases x0 and x1
 				if (original.Jtype.rd == 0) {
@@ -360,7 +345,6 @@ namespace riscv
 					return rewritten_instruction<W>(
 						[] (auto& cpu, auto instr) RVINSTR_ATTR {
 							const auto& rop = view_as<FasterJtype> (instr);
-							//cpu.aligned_jump(rop.imm << PCALBITS);
 							cpu.registers().pc = rop.imm << PCALBITS;
 						}); // JAL zero, pc+imm
 				} else if (original.Jtype.rd == REG_RA) {
@@ -369,7 +353,6 @@ namespace riscv
 						[] (auto& cpu, auto instr) RVINSTR_ATTR {
 							const auto& rop = view_as<FasterJtype> (instr);
 							cpu.reg(REG_RA) = cpu.pc() + 4;
-							//cpu.aligned_jump(rop.imm << PCALBITS);
 							cpu.registers().pc = rop.imm << PCALBITS;
 						}); // JAL RA, pc+imm
 				}
