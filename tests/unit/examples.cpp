@@ -41,3 +41,41 @@ TEST_CASE("Main example", "[Examples]")
 	REQUIRE(state.code == 666);
 	REQUIRE(machine.return_value() == 666);
 }
+
+#include <libriscv/rv32i_instr.hpp>
+#ifndef RISCV_DECODER_REWRITER
+
+TEST_CASE("One instruction at a time", "[Examples]")
+{
+	const auto binary = build_and_load(R"M(
+	extern void exit(int);
+	int main() {
+		return 0x1234;
+	})M");
+
+	Machine<RISCV64> machine{binary};
+	machine.setup_linux(
+		{"myprogram"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	machine.setup_linux_syscalls();
+
+	machine.set_max_instructions(1'000'000UL);
+
+	while (!machine.stopped()) {
+		auto& cpu = machine.cpu;
+		// Get 32- or 16-bits instruction
+		auto instr = cpu.read_next_instruction();
+		// Print the instruction to terminal
+		printf("%s\n",
+			cpu.current_instruction_to_string().c_str());
+		// Decode instruction to get instruction info
+		auto handlers = cpu.decode(instr);
+		// Execute one instruction, and increment PC
+		handlers.handler(cpu, instr);
+		cpu.increment_pc(instr.length());
+	}
+
+	REQUIRE(machine.return_value() == 0x1234);
+}
+
+#endif

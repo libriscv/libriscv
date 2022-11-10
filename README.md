@@ -196,23 +196,30 @@ You can create your own custom instruction loop if you want to do things manuall
 #include <libriscv/machine.hpp>
 #include <libriscv/rv32i_instr.hpp>
 ...
-auto& cpu = machine.cpu;
+Machine<RISCV64> machine{binary};
+machine.setup_linux(
+	{"myprogram"},
+	{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+machine.setup_linux_syscalls();
+
+// Instruction limit is used to keep running
+machine.set_max_instructions(1'000'000UL);
+
 while (!machine.stopped()) {
+	auto& cpu = machine.cpu;
 	// Get 32- or 16-bits instruction
 	auto instr = cpu.read_next_instruction();
+	// Print the instruction to terminal
+	printf("%s\n",
+		cpu.current_instruction_to_string().c_str());
 	// Decode instruction to get instruction info
 	auto handlers = cpu.decode(instr);
-	if (false) {
-		// Print instruction to terminal
-		auto assembly = cpu.to_string(instr, handlers);
-		printf("%.*s\n", (int)assembly.size(), assembly.c_str());
-	}
 	// Execute one instruction, and increment PC
 	handlers.handler(cpu, instr);
 	cpu.increment_pc(instr.length());
 }
 ```
-NOTE: Make sure to disable RISCV_EXPERIMENTAL when doing this. One of the experimental features enables a mode that only allows a single execute segment, and disallowing you to jump outside of it. It exists purely to improve performance of a standard static RISC-V executable.
+NOTE: Does not work when RISCV_DECODER_REWRITER is enabled, as it modifies (rewrites) instructions. Alternative is to use the already decoded instructions from the decoder cache and the rest will largely be the same.
 
 ## Setting up your own machine environment
 
