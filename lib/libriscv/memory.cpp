@@ -364,9 +364,7 @@ namespace riscv
 		}
 
 		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
-		const auto program_begin = phdr->p_vaddr;
 		this->m_start_address = elf->e_entry;
-		this->m_stack_address = program_begin;
 		this->m_heap_address = 0;
 
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
@@ -409,16 +407,8 @@ namespace riscv
 		// of the address space now, and move it around if necessary.
 		this->m_mmap_address = m_heap_address + BRK_MAX;
 
-		// Flat memory cannot use the top end of the address space
-#ifndef RISCV_FLAT_MEMORY
-		// It's very easy for the stack address to reach the zero page
-		// if we allow it to start this low. Instead, we move it
-		// to the end of the machines address space.
-		if (this->m_stack_address < 0x80000) {
-			// XXX: Closer to the end and the Golang runtime will fail
-			this->m_stack_address = ~(address_t)0 - 0xFFF;
-		}
-#endif
+		// Default stack
+		this->m_stack_address = mmap_allocate(STACK_SIZE) + STACK_SIZE;
 
 		//this->relocate_section(".rela.dyn", ".symtab");
 

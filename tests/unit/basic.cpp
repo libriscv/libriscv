@@ -16,12 +16,8 @@ TEST_CASE("Instantiate machine", "[Instantiate]")
 	})M");
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 
-	// The stack is set to begin under the program area,
-	// and the RISC-V toolchain is weird and starts at 0x10000.
-	// libriscv will counteract this to make sure the stack can be
-	// populated with runtime environment stuff, like program arguments,
-	// and will put the stack at the end of the address space.
-	REQUIRE(machine.memory.stack_initial() == ~(uint64_t)0 - 0xFFF);
+	// The stack is mmap allocated
+	REQUIRE(machine.memory.stack_initial() > machine.memory.mmap_start());
 	// The starting address is somewhere in the program area
 	REQUIRE(machine.memory.start_address() > 0x10000);
 }
