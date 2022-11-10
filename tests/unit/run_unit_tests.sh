@@ -3,7 +3,7 @@ set -e
 export RCC="riscv64-linux-gnu-gcc-10"
 export RCXX="riscv64-linux-gnu-g++-10"
 
-if ! command -v "riscv64-linux-gnu-gcc-10 --version" &> /dev/null
+if command -v "riscv64-linux-gnu-gcc-11" &> /dev/null
 then
     export RCC="riscv64-linux-gnu-gcc-11"
     export RCXX="riscv64-linux-gnu-g++-11"
