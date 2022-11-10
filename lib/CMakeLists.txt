@@ -11,32 +11,10 @@ option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 option(RISCV_MEMORY_TRAPS  "Enable memory page traps" OFF)
 option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
-option(RISCV_USE_RH_HASH "Enable robin-hood hashing for page tables" OFF)
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
 	option(RISCV_FLAT_MEMORY         "Enable exp. faster flat memory mode" OFF)
-endif()
-
-if (RISCV_USE_RH_HASH)
-	include(FetchContent)
-	FetchContent_Declare(
-		robinhood
-		GIT_REPOSITORY https://github.com/martinus/robin-hood-hashing.git
-		CONFIGURE_COMMAND ""
-		BUILD_COMMAND ""
-		GIT_TAG master
-		GIT_SHALLOW TRUE
-		GIT_PROGRESS TRUE)
-
-	FetchContent_GetProperties(robinhood)
-	if (NOT robinhood_POPULATED)
-		FetchContent_Populate(robinhood)
-	endif()
-
-	add_library(robinhood INTERFACE)
-	target_include_directories(robinhood INTERFACE ${robinhood_SOURCE_DIR}/src/include)
-	message(STATUS "robinhood sources: ${robinhood_SOURCE_DIR}")
 endif()
 
 set (SOURCES
@@ -95,10 +73,6 @@ add_library(riscv ${SOURCES})
 target_compile_features(riscv PUBLIC cxx_std_17)
 target_include_directories(riscv PUBLIC .)
 target_compile_options(riscv PRIVATE -Wall -Wextra)
-if (RISCV_USE_RH_HASH)
-	target_link_libraries(riscv PUBLIC robinhood)
-	target_compile_definitions(riscv PUBLIC RISCV_USE_RH_HASH=1)
-endif()
 if (RISCV_DEBUG)
 	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
 endif()
