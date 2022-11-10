@@ -12,13 +12,23 @@ namespace riscv
 
 	union MoveType {
 		struct {
-			uint8_t rs2;
-			uint8_t rs1;
-			uint16_t unused;
+			uint16_t rs2;
+			uint16_t rs1;
 		};
 		uint32_t whole;
 	};
 	static_assert(sizeof(MoveType) == 4, "is a 4-byte instruction");
+
+	union OpType {
+		struct {
+			uint8_t rd;
+			uint8_t rs1;
+			uint8_t rs2;
+			int8_t  imm;
+		};
+		uint32_t whole;
+	};
+	static_assert(sizeof(OpType) == 4, "is a 4-byte instruction");
 
 	union FasterBtype {
 		struct {
@@ -60,7 +70,7 @@ namespace riscv
 
 	union FasterJtype {
 		struct {
-			uint32_t imm;
+			int32_t imm;
 		};
 		uint32_t whole;
 	};
@@ -93,8 +103,28 @@ namespace riscv
 		// the first 2 bits to preserve the instruction length
 		if (original.length() == 4)
 		switch (original.opcode()) {
+		case RV32I_OP: {
+			// Rtype.rd=0 is a no-op in all cases, and we only care about
+			// ADD which is a very common instruction.
+			if (LIKELY(original.Rtype.rd != 0)) {
+				switch (original.Rtype.jumptable_friendly_op()) {
+				case 0x0: { // OP_ADD
+					OpType rewritten;
+					rewritten.rd  = original.Rtype.rd;
+					rewritten.rs1 = original.Rtype.rs1;
+					rewritten.rs2 = original.Rtype.rs2;
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<OpType> (instr);
+							cpu.reg(rop.rd) = cpu.reg(rop.rs1) + cpu.reg(rop.rs2);
+						}); // OP_ADD
+					}
+				}
+			} break;
+		}
 		case RV32I_OP_IMM: {
-			// rd=0 is a no-op in all cases, and we only care about
+			// Itype.rd=0 is a no-op in all cases, and we only care about
 			// ADDI which is the most used instruction of all.
 			if (original.Itype.rd != 0 && original.Itype.funct3 == 0x0)
 			{	// OP_IMM.ADDI
@@ -143,7 +173,7 @@ namespace riscv
 			// We verify if the jump is within the execute segment
 			// and if not, we fallback to the regular branch decoding
 		#ifdef RISCV_INBOUND_JUMPS_ONLY
-			if (UNLIKELY(bdest < m_exec_begin || bdest >= m_exec_end)) {
+			if (UNLIKELY(!is_executable(bdest))) {
 				break;
 			}
 		#endif
