@@ -18,6 +18,7 @@ static constexpr bool verbose_syscalls = false;
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #define SA_ONSTACK	0x08000000
@@ -634,6 +635,30 @@ static void syscall_brk(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_getrandom(Machine<W>& machine)
+{
+	const auto g_addr = machine.sysarg(0);
+	const auto g_len  = machine.sysarg(1);
+
+	char buffer[256];
+	if (g_len > sizeof(buffer)) {
+		machine.set_result(-1);
+		return;
+	}
+	const size_t need = std::min((size_t)g_len, sizeof(buffer));
+	const ssize_t result = getrandom(buffer, need, 0);
+	if (result > 0) {
+		machine.copy_to_guest(g_addr, buffer, result);
+	}
+	machine.set_result(result);
+
+	if constexpr (verbose_syscalls) {
+		printf("SYSCALL getrandom(addr=0x%lX, len=%ld) = %ld\n",
+			(long)g_addr, (long)g_len, (long)machine.return_value());
+	}
+}
+
+template <int W>
 static void add_mman_syscalls()
 {
 	// munmap
@@ -855,6 +880,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 
 	this->install_syscall_handler(160, syscall_uname<W>);
 	this->install_syscall_handler(214, syscall_brk<W>);
+
+	this->install_syscall_handler(278, syscall_getrandom<W>);
 
 	add_mman_syscalls<W>();
 
