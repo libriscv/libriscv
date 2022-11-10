@@ -72,9 +72,13 @@ namespace riscv
 		address_t exit_address() const noexcept;
 		void      set_exit_address(address_t new_exit);
 		address_t heap_address() const noexcept { return this->m_heap_address; }
+		// Simple memory mapping implementation
 		address_t mmap_start() const noexcept { return this->m_heap_address + BRK_MAX; }
 		const address_t& mmap_address() const noexcept { return m_mmap_address; }
 		address_t& mmap_address() noexcept { return m_mmap_address; }
+		address_t mmap_allocate(address_t bytes);
+		bool mmap_relax(address_t addr, address_t size, address_t new_size);
+
 
 		auto& machine() { return this->m_machine; }
 		const auto& machine() const { return this->m_machine; }

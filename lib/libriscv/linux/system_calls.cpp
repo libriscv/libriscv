@@ -646,8 +646,8 @@ static void add_mman_syscalls()
 		auto& nextfree = machine.memory.mmap_address();
 		if (addr + len == nextfree) {
 			nextfree = addr;
-			if (nextfree < machine.memory.heap_address() + Memory<W>::BRK_MAX)
-				nextfree = machine.memory.heap_address() + Memory<W>::BRK_MAX;
+			if (nextfree < machine.memory.mmap_start())
+				nextfree = machine.memory.mmap_start();
 		}
 		machine.set_result(0);
 	});
@@ -666,9 +666,7 @@ static void add_mman_syscalls()
 					(long)addr_g, (size_t)length);
 			return;
 		}
-		if (length % Page::size() == 0) {
-			length = (length + (Page::size()-1)) & ~address_type<W>(Page::size()-1);
-		}
+		length = (length + PageMask) & ~address_type<W>(PageMask);
 		auto& nextfree = machine.memory.mmap_address();
 		if (addr_g == 0 || addr_g == nextfree)
 		{
