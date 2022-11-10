@@ -116,7 +116,8 @@ namespace riscv
 
 #ifdef RISCV_INSTR_CACHE
 	template <int W> RISCV_INTERNAL
-	void Memory<W>::generate_decoder_cache(const MachineOptions<W>& options,
+	void Memory<W>::generate_decoder_cache(
+		[[maybe_unused]] const MachineOptions<W>& options,
 		address_t pbase, address_t addr, size_t len)
 	{
 		constexpr size_t PMASK = Page::size()-1;

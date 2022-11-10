@@ -22,7 +22,6 @@ namespace riscv
 		using page_readf_cb_t = std::function<const Page&(const Memory&, address_t)>;
 		using page_write_cb_t = std::function<void(Memory&, address_t, Page&)>;
 		static constexpr address_t BRK_MAX    = 0x1000000; // Default BRK size
-		static constexpr address_t STACK_SIZE = 0x1000000; // Default stack size
 
 		template <typename T>
 		T read(address_t src);

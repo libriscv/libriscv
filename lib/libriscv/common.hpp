@@ -84,7 +84,8 @@ namespace riscv
 	template <int W>
 	struct MachineOptions
 	{
-		uint64_t memory_max = 16ull << 20; // 16mb
+		uint64_t memory_max = 16ull << 20; // 16MB
+		uint64_t stack_size = 1ul << 20; // 1MB default stack
 		unsigned cpu_id = 0;
 		bool load_program = true;
 		bool protect_segments = true;

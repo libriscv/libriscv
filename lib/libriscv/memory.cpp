@@ -408,7 +408,7 @@ namespace riscv
 		this->m_mmap_address = m_heap_address + BRK_MAX;
 
 		// Default stack
-		this->m_stack_address = mmap_allocate(STACK_SIZE) + STACK_SIZE;
+		this->m_stack_address = mmap_allocate(options.stack_size) + options.stack_size;
 
 		//this->relocate_section(".rela.dyn", ".symtab");
 
