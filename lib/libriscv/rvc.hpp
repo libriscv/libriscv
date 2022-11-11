@@ -239,6 +239,7 @@ namespace riscv
 		} CJ;
 
 		uint16_t whole;
+		uint8_t  bytes[2];
 
 		rv32c_instruction() : whole(0) {}
 		rv32c_instruction(uint16_t another) : whole(another) {}

@@ -129,6 +129,7 @@ namespace riscv
 			uint32_t funct5 : 5;
 		} Atype;
 
+		uint8_t bytes[4];
 		uint16_t half[2];
 		uint32_t whole;
 

@@ -397,23 +397,23 @@ namespace riscv
 			switch (ci.opcode()) {
 			case CI_CODE(0b000, 0b01): // C.ADDI
 				if (ci.CI.rd != 0) {
-					// Preserve the instruction length only - remaining bits are free to rewrite
-					instr.half[0] = (ci.CI.rd << 2) | ((uint16_t)ci.CI.signed_imm() << 8);
+					// Destination register + expanded IMM
+					instr.half[0] = ci.CI.rd | ((uint16_t)ci.CI.signed_imm() << 8);
 					return rewritten_instruction<W>(
 					[] (auto& cpu, auto instr) RVINSTR_ATTR {
-						const auto reg    = (instr.half[0] >> 2) & 0x1F;
-						const int32_t imm = (int16_t)instr.half[0] >> 8;
+						const auto reg    = instr.bytes[0];
+						const int32_t imm = (int8_t)instr.bytes[1];
 						cpu.reg(reg) += imm;
 					});
 				} break;
 			case CI_CODE(0b010, 0b01): // C.LI
 				if (ci.CI.rd != 0) {
-					// Preserve the instruction length only - remaining bits are free to rewrite
-					instr.half[0] = (ci.CI.rd << 2) | ((uint16_t)ci.CI.signed_imm() << 8);
+					// Destination register + expanded IMM
+					instr.half[0] = ci.CI.rd | ((uint16_t)ci.CI.signed_imm() << 8);
 					return rewritten_instruction<W>(
 					[] (auto& cpu, auto instr) RVINSTR_ATTR {
-						const auto reg    = (instr.half[0] >> 2) & 0x1F;
-						const int32_t imm = (int16_t)instr.half[0] >> 8;
+						const auto reg    = instr.bytes[0];
+						const int32_t imm = (int8_t)instr.bytes[1];
 						cpu.reg(reg) = imm;
 					});
 				} break;
