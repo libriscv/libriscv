@@ -839,6 +839,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(101, syscall_stub_zero<W>);
 	// clock_gettime
 	this->install_syscall_handler(113, syscall_clock_gettime<W>);
+	// sched_getaffinity
+	this->install_syscall_handler(123, syscall_stub_nosys<W>);
 	// kill
 	this->install_syscall_handler(130,
 	[] (Machine<W>& machine) {
@@ -864,7 +866,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
 	this->install_syscall_handler(135, syscall_stub_zero<W>);
-
+	// uname
+	this->install_syscall_handler(160, syscall_uname<W>);
 	// gettimeofday
 	this->install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid
@@ -878,7 +881,6 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// getegid
 	this->install_syscall_handler(177, syscall_stub_zero<W>);
 
-	this->install_syscall_handler(160, syscall_uname<W>);
 	this->install_syscall_handler(214, syscall_brk<W>);
 
 	this->install_syscall_handler(278, syscall_getrandom<W>);
