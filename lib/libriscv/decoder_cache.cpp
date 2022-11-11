@@ -33,6 +33,13 @@ namespace riscv
 		}
 	}
 
+	// While we do somewhat care about the precise amount of instructions per block,
+	// there is never really going to be any one block with more than 255 raw instructions.
+	// Still, we do care about making progress towards the instruction limits.
+	inline uint8_t overflow_checked_instr_count(size_t count) {
+		return (count > 255) ? 255 : count;
+	}
+
 	template <int W>
 	static void realize_fastsim(
 		address_type<W> base_pc, address_type<W> last_pc,
@@ -69,12 +76,17 @@ namespace riscv
 							break;
 					}
 				}
-				for (auto* entry : data) {
+				for (size_t i = 0; i < data.size(); i++) {
+					auto* entry = data[i];
 					const auto length = rv32i_instruction{entry->original_opcode}.length();
 					entry->idxend = datalength;
 					// XXX: original_opcode gets overwritten here by opcode_length
 					// which simplifies future simulation by simplifying length.
 					entry->opcode_length = length;
+					// XXX: We have to pack the instruction count by combining it with the cb length
+					// in order to avoid overflows on large code blocks. The code block length
+					// has been sufficiently large to avoid overflows in all executables tested.
+					entry->instr_count = overflow_checked_instr_count(datalength - (data.size() - i));
 					datalength -= length / 2;
 				}
 				data.clear();

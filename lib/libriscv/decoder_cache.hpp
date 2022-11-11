@@ -19,7 +19,10 @@ struct DecoderData {
 	// XXX: Original_opcode is only relevant during decoding.
 	union {
 		uint16_t original_opcode;
-		uint16_t opcode_length;
+		struct {
+			uint8_t opcode_length;
+			uint8_t instr_count;
+		};
 	};
 
 	void execute(CPU<W>& cpu) {

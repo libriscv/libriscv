@@ -261,7 +261,12 @@ namespace riscv
 			if constexpr (VERBOSE_FASTSIM) {
 				printf("Fastsim at PC=0x%lX count=%zu\n", (long)pc, count);
 			}
-			counter.increment_counter(count);
+			size_t instr_count;
+			if constexpr (!compressed_enabled)
+				instr_count = count;
+			else
+				instr_count = decoder->idxend - decoder->instr_count;
+			counter.increment_counter(instr_count);
 			auto* decoder_end = &decoder[count];
 			unsigned length = 0;
 			// We want to run 4 instructions at a time, except for
@@ -284,17 +289,23 @@ namespace riscv
 			} else { // Conservative compressed version
 				while (decoder + 4 < decoder_end)
 				{
+					// Here we try to avoid re-reading decoder memory
+					// after executing instructions, by using locals.
+					auto* decoder0 = decoder;
+					const auto oplen0 = decoder0->opcode_length;
+					auto* decoder1 = decoder0 + oplen0 / 2;
+					const auto oplen1 = decoder1->opcode_length;
+
 					registers().pc = pc;
-					decoder->execute(*this);
+					decoder0->execute(*this);
 
-					pc += decoder->opcode_length;
-					decoder += decoder->opcode_length / 2;
+					pc += oplen0;
 
 					registers().pc = pc;
-					decoder->execute(*this);
+					decoder1->execute(*this);
 
-					pc += decoder->opcode_length;
-					decoder += decoder->opcode_length / 2;
+					pc += oplen1;
+					decoder = decoder1 + oplen1 / 2;
 				}
 			}
 			// There is always one instruction we can run
