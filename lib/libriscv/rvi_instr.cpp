@@ -401,10 +401,11 @@ namespace riscv
 				return snprintf(buffer, len, "NOP");
 			}
 			static std::array<const char*, 8> func3 = {"MV", "SLL", "SLT", "SLT", "XOR", "SRL", "OR", "AND"};
-			return snprintf(buffer, len, "%s %s, %s",
+			return snprintf(buffer, len, "%s %s, %s (= 0x%" PRIx64 ")",
 							func3[instr.Itype.funct3],
 							RISCV::regname(instr.Itype.rd),
-							RISCV::regname(instr.Itype.rs1));
+							RISCV::regname(instr.Itype.rs1),
+							uint64_t(cpu.reg(instr.Itype.rs1)));
 		}
 		else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 1) {
 			const auto shift = (RVIS64BIT(cpu)) ? instr.Itype.shift64_imm() : instr.Itype.shift_imm();
@@ -732,10 +733,11 @@ namespace riscv
 				return snprintf(buffer, len, "NOP");
 			}
 			static std::array<const char*, 8> func3 = {"MV", "SLL", "SLT", "SLT", "XOR", "SRL", "OR", "AND"};
-			return snprintf(buffer, len, "%sW %s, %s",
+			return snprintf(buffer, len, "%sW %s, %s (0x%X)",
 							func3[instr.Itype.funct3],
 							RISCV::regname(instr.Itype.rd),
-							RISCV::regname(instr.Itype.rs1));
+							RISCV::regname(instr.Itype.rs1),
+							int32_t(cpu.reg(instr.Itype.rs1)));
 		}
 		else if (instr.Itype.rs1 != 0 && instr.Itype.funct3 == 1) {
 			return snprintf(buffer, len, "SLLIW %s, %s << %u (0x%" PRIX64 ")",
