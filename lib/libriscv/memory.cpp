@@ -212,7 +212,8 @@ namespace riscv
 
 			// Create a STOP instruction at the end of execute area
 			// It is used by vmcall and preempt to stop after a function call
-			address_t exit_lenalign = address_t(exlen + 0x3) & ~address_t(0x3);
+			const address_t exit_lenalign =
+				address_t(exlen + 0x3) & ~address_t(0x3);
 			this->m_exit_address = vaddr + exit_lenalign;
 			struct {
 				// STOP
@@ -221,6 +222,8 @@ namespace riscv
 				const uint32_t jr4_instr = 0xffdff06f;
 			} instrdata;
 			std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
+			// The execute segment length with added instructions:
+			const size_t exlen_with_stop = exlen + sizeof(instrdata);
 
 			// This is what the CPU instruction fetcher will use
 			// RISCV_INBOUND_JUMPS_ONLY requires us to add extra bytes at the beginning
@@ -229,14 +232,14 @@ namespace riscv
 			// 0...exlen: The execute segment
 			// exlen..+ 4: The STOP function
 			auto* exec_offset = this->get_exec_segment(pbase);
-			machine().cpu.initialize_exec_segs(exec_offset, vaddr-4, exlen + 8);
+			machine().cpu.initialize_exec_segs(exec_offset, vaddr-4, exlen_with_stop);
 #if defined(RISCV_INSTR_CACHE)
 			// + 8: A jump instruction that prevents crashes if someone
 			// resumes the emulator after a STOP happened. It also helps
 			// the debugger by not causing an exception, and will instead
 			// loop back to the STOP instruction.
 			// The instruction must be a part of the decoder cache.
-			this->generate_decoder_cache(options, pbase, vaddr, exlen + 8);
+			this->generate_decoder_cache(options, pbase, vaddr, exlen_with_stop);
 #endif
 			// Nothing more to do here, if execute-only
 			if (!attr.read)
