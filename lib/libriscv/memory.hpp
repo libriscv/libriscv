@@ -209,6 +209,7 @@ namespace riscv
 		// ELF loader
 		void binary_loader(const MachineOptions<W>&);
 		void binary_load_ph(const MachineOptions<W>&, const Phdr*);
+		void serialize_execute_segment(const MachineOptions<W>&, const Phdr*);
 		bool serialize_pages(MemoryArea&, address_t, const char*, size_t, PageAttributes);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
