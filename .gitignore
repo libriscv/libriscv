@@ -6,6 +6,7 @@ riscv32-unknown-elf/
 emulator/*rvmicro
 emulator/*rvnewlib
 emulator/*rvlinux
+nodiverge
 tests/autotest/emulator/emulator
 fuzz/crash-*
 webapi/tests/binary
