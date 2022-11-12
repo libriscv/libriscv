@@ -12,13 +12,6 @@ The emulator has a binary translation mode that has currently only been tested o
 
 ## Benchmarks
 
-| Algorithm | Result |
-|--|--|
-| fib(128000) | instr 1280010000, time 1.773460, 722 mips |
-| CoreMark 1.0 | 3191 / GCC11.1.0 -O2 -static -march=rv64g -mabi=lp64d |
-
-> Machine: Intel(R) Core(TM) i7-8850H CPU @ 2.60GHz
-
 One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation. However, compiled code should in theory be faster.
 
 [STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
@@ -26,8 +19,6 @@ One motivation when writing this emulator was to use it in a game engine, and so
 [Lua 5.4 vs Interpreted RISC-V](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
 
 [LuaJIT vs Interpreted RISC-V](https://gist.github.com/fwsGonzo/d7ee7acb52b11ef5a51982d5b46734ca)
-
-[LuaJIT vs Binary Translated RISC-V](https://gist.github.com/fwsGonzo/c77befe81c5957b87b96726e98466946)
 
 ## Installing a RISC-V GCC compiler
 
@@ -37,7 +28,7 @@ On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC c
 sudo apt install gcc-11-riscv64-linux-gnu g++-11-riscv64-linux-gnu
 ```
 
-Now you have a full C/C++ compiler for RISC-V. It is typically configured to use the C-extension, so make sure you have that enabled. Note that this compiler has been built with the C-extension enabled for compressed instructions (and as a result produces smaller executables), which is not the fastest mode for emulation.
+Depending on your distro you may have access to GCC versions 10, 11 and 12. Now you have a full Linux C/C++ compiler for RISC-V. It is typically configured to use the C-extension, so make sure you have that enabled.
 
 To build smaller and leaner programs you will need a (limited) Linux userspace environment. You sometimes need to build this cross-compiler yourself:
 
@@ -49,7 +40,7 @@ make
 ```
 This will build a newlib cross-compiler with C++ exception support. The ABI is ilp32d, which is for 32-bit and 64-bit floating-point instruction set support. It is much faster than software implementations of binary IEEE floating-point arithmetic.
 
-Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc produces larger binaries but has more features, like threads.
+Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc produces larger binaries but has more features, like sockets and threads.
 
 ```
 git clone https://github.com/riscv/riscv-gnu-toolchain.git
@@ -71,17 +62,16 @@ From one of the binary subfolders:
 ```
 $ ./build.sh
 ```
-Which will produce a `hello_world` binary in the sub-projects build folder.
+Which will produce a RISC-V binary in the sub-projects build folder, depending on the example. Some examples require you to install a compiler for that programming language.
 
 Building the emulator and booting the newlib `hello_world`:
 ```sh
 cd emulator
-mkdir -p build && cd build
-cmake .. && make -j4
-./rvlinux ../../binaries/linux64/build/hello_world
+./build.sh
+./rvlinux ../binaries/linux64/build/hello_world
 ```
 
-The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib. `rvlinux` has all the system calls necessary to run a normal userspace linux binary.
+The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib. `rvlinux` has all the system calls necessary to run a normal userspace linux binary. Each emulator is capable of running both 32- and 64-bit RISC-V programs.
 
 ## Example programs
 
@@ -110,7 +100,7 @@ The F and D-extensions should be 100% supported (32- and 64-bit floating point i
 
 The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emu128 folder.
 
-Note: There is no support for the E- and Q-extensions. Zba is supported. A minimal set of the V-extension is currently being worked on. Binary translation currently only supports RV32G and RV64G.
+Note: There is no support for the E- and Q-extensions. Zba is supported. A minimal set of the V-extension is currently being worked on. Binary translation currently only supports RV32G and RV64G. The fastest build combo is usually: `rv64gv_zba` right now.
 
 ## Example usage when embedded into a project
 
@@ -276,11 +266,9 @@ It can also be used as a script backend for a game engine, as it's quite a bit f
 
 Using Clang for libriscv is a little bit faster on some benchmarks. GCC-12 has for the most part catched up.
 
-Use GCC to build the RISC-V binaries, specifically the RISC-V GNU toolchain. Use -O2 or -O3 and use the regular standard extensions: `-march=rv64gc -mabi=lp64d`. Enable the RISCV_EXPERIMENTAL option for the best performance, unless you are adding your own execute pages. Use `-march=rv64g` for the absolute best performance, if you have that choice. Difference is ~5% so don't go out of your way to build everything yourself. Always enable the instruction decoder cache as it makes decoding much faster at the cost of extra memory. Always enable LTO if you can, both in the guest program and for the emulator.
-
 Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my [rvscript](https://github.com/fwsGonzo/rvscript) repository. It's a complex topic that cannot be explained in one paragraph.
 
-If you have arenas available you can replace the default page fault handler with your own that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the forking constructor option. It will apply copy-on-write to all pages on the newly created machine and share text, rodata and the instruction cache. Also, enable RISCV_EXPERIMENTAL so that the decoder cache will be generated ahead of time.
+If you have arenas available you can replace the default page fault handler with your own that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the Machine forking constructor. It will apply copy-on-write to all pages on the newly created machine and share text, rodata and the instruction cache.
 
 ## Multiprocessing
 
