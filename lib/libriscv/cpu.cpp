@@ -42,7 +42,8 @@ namespace riscv
 			// Validate that the initial PC is executable.
 			// Inbound jumps feature does not allow other execute areas.
 			// When execute-only is active, there is no reachable execute pages.
-			const auto& page = machine().memory.get_page(initial_pc);
+			const auto& page =
+				machine().memory.get_exec_pageno(initial_pc / riscv::Page::size());
 			if (UNLIKELY(!page.attr.exec)) {
 				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
 			}
@@ -123,7 +124,7 @@ namespace riscv
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction() const
 	{
-		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
+		if (LIKELY(this->is_executable(this->pc()))) {
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
 
@@ -157,7 +158,7 @@ namespace riscv
 
 # ifdef RISCV_INSTR_CACHE
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
-		if (LIKELY(this->pc() >= m_exec_begin && this->pc() < m_exec_end)) {
+		if (LIKELY(this->is_executable(this->pc()))) {
 #  endif
 			auto pc = this->pc();
 
@@ -192,14 +193,14 @@ namespace riscv
 			this->execute(instruction);
 		}
 #   endif // RISCV_INBOUND_JUMPS_ONLY
-# else
+# else // RISCV_INSTR_CACHE
 			instruction = this->read_next_instruction();
 	#ifdef RISCV_DEBUG
 			INSTRUCTION_LOGGING(*this);
 	#endif
 			// decode & execute instruction directly
 			this->execute(instruction);
-# endif
+# endif // RISCV_INSTR_CACHE
 
 #ifdef RISCV_DEBUG
 			if (UNLIKELY(machine().verbose_registers)) {
