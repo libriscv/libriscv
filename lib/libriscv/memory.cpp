@@ -166,17 +166,35 @@ namespace riscv
 		if (attr.exec && machine().cpu.exec_seg_data() == nullptr)
 		{
 			constexpr address_t PMASK = Page::size()-1;
-			const address_t pbase = (hdr->p_vaddr - 0x4) & ~PMASK;
-			const size_t prelen  = hdr->p_vaddr - pbase;
+			// The execute segment:
+			address_t vaddr = hdr->p_vaddr;
+			size_t exlen = len;
+			const char* data = src;
+			// Look for a .text section inside this segment:
+			const auto* texthdr = section_by_name(".text");
+			if (texthdr != nullptr
+			// Validate that the .text section is inside this
+			// execute segment.
+				&& texthdr->sh_addr >= vaddr && texthdr->sh_size <= len
+				&& texthdr->sh_addr + texthdr->sh_size <= vaddr + len)
+			{
+				// Now we can use the .text section instead
+				data = m_binary.data() + texthdr->sh_offset;
+				vaddr = texthdr->sh_addr;
+				exlen = texthdr->sh_size;
+			}
+
+			const address_t pbase = (vaddr - 0x4) & ~PMASK;
+			const size_t prelen  = vaddr - pbase;
 			// The first 4 bytes is instruction alignment
 			// The middle 4 bytes is the STOP instruction
 			// The last 8 bytes is a relative jump (JR -4)
-			const size_t midlen  = len + prelen + 12;
+			const size_t midlen  = exlen + prelen + 12;
 			const size_t plen = (midlen + PMASK) & ~PMASK;
 			const size_t postlen = plen - midlen;
 			//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
-			//	hdr->p_vaddr, len, pbase, pbase + plen, prelen, len, postlen, plen);
-			if (UNLIKELY(prelen > plen || prelen + len > plen)) {
+			//	vaddr, exlen, pbase, pbase + plen, prelen, exlen, postlen, plen);
+			if (UNLIKELY(prelen > plen || prelen + exlen > plen)) {
 				throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 			}
 			// An additional wrap-around check because we are adding 12 bytes
@@ -188,14 +206,14 @@ namespace riscv
 			m_exec_pagedata.reset(new uint8_t[plen]);
 			m_exec_pagedata_size = plen;
 			m_exec_pagedata_base = pbase;
-			std::memset(&m_exec_pagedata[0],      0,   prelen);
-			std::memcpy(&m_exec_pagedata[prelen], src, len);
-			std::memset(&m_exec_pagedata[prelen + len], 0,   postlen);
+			std::memset(&m_exec_pagedata[0],      0,    prelen);
+			std::memcpy(&m_exec_pagedata[prelen], data, exlen);
+			std::memset(&m_exec_pagedata[prelen + exlen], 0,   postlen);
 
 			// Create a STOP instruction at the end of execute area
 			// It is used by vmcall and preempt to stop after a function call
-			address_t exit_lenalign = address_t(len + 0x3) & ~address_t(0x3);
-			this->m_exit_address = hdr->p_vaddr + exit_lenalign;
+			address_t exit_lenalign = address_t(exlen + 0x3) & ~address_t(0x3);
+			this->m_exit_address = vaddr + exit_lenalign;
 			struct {
 				// STOP
 				const uint32_t stop_instr = 0x7ff00073;
@@ -208,25 +226,25 @@ namespace riscv
 			// RISCV_INBOUND_JUMPS_ONLY requires us to add extra bytes at the beginning
 			// The STOP function mentioned right above this requires us to add 12 bytes at the end
 			// -4...0: Zero bytes that allow jumping to the start of exec before a pending increment
-			// 0...len: The execute segment
-			// len..+ 4: The STOP function
+			// 0...exlen: The execute segment
+			// exlen..+ 4: The STOP function
 			auto* exec_offset = this->get_exec_segment(pbase);
-			machine().cpu.initialize_exec_segs(exec_offset, hdr->p_vaddr-4, len + 8);
+			machine().cpu.initialize_exec_segs(exec_offset, vaddr-4, exlen + 8);
 #if defined(RISCV_INSTR_CACHE)
 			// + 8: A jump instruction that prevents crashes if someone
 			// resumes the emulator after a STOP happened. It also helps
 			// the debugger by not causing an exception, and will instead
 			// loop back to the STOP instruction.
 			// The instruction must be a part of the decoder cache.
-			this->generate_decoder_cache(options, pbase, hdr->p_vaddr, len + 8);
+			this->generate_decoder_cache(options, pbase, vaddr, exlen + 8);
 #endif
 			// Nothing more to do here, if execute-only
 			if (!attr.read)
 				return;
 		} else if (attr.exec) {
-#ifdef RISCV_INSTR_CACHE
+#ifdef RISCV_INBOUND_JUMPS_ONLY
 			throw MachineException(INVALID_PROGRAM,
-				"Binary can not have more than one executable segment!");
+				"Binary can not have more than one executable segment due to RISCV_INBOUND_JUMPS_ONLY");
 #endif
 		}
 		// We would normally never allow this

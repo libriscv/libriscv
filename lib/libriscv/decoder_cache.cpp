@@ -225,14 +225,11 @@ namespace riscv
 				// Fast simulator gets confusing instruction logging with instr rewrites
 				// Also, the rewriter can rewrite full instructions, so lets
 				// only invoke it when we know we have a full instruction.
-				if (was_full_instruction && decoder_rewriter_enabled) {
+				if (decoder_rewriter_enabled) {
 					// Improve many instruction handlers by rewriting instructions
 					decoded = machine().cpu.decode_rewrite(dst, rewritten);
 					// Write the instruction back to execute segment if it changed
 					is_rewritten = rewritten.whole != instruction.whole;
-					if (is_rewritten) {
-						std::memcpy((void*)&exec_segment[dst], &rewritten, instruction.length());
-					}
 				} else {
 					decoded = machine().cpu.decode(instruction);
 				}

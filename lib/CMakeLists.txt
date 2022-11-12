@@ -100,7 +100,9 @@ if (RISCV_ICACHE)
 		target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
 	endif()
 endif()
-if (RISCV_ICACHE AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
+if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL)
+	# The rewriter changes instruction bytes and is incompatible
+	# with a decoder that reads instructions from execute-memory.
 	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
 endif()
 if (RISCV_MULTIPROCESS)
