@@ -103,10 +103,8 @@ namespace riscv
 		address_t m_exec_end   = 0;
 		bool is_executable(address_t dst) const noexcept { return dst >= m_exec_begin && dst < m_exec_end; }
 
-#ifndef RISCV_INBOUND_JUMPS_ONLY
 		// Page cache for execution on virtual memory
 		mutable CachedPage<W, const Page> m_cache;
-#endif
 
 		const unsigned m_cpuid;
 

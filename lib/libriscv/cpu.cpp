@@ -16,6 +16,15 @@ namespace riscv
 {
 	[[maybe_unused]] static constexpr bool VERBOSE_FASTSIM = false;
 
+	// Instructions may be unaligned with C-extension
+	// On amd64 we take the cost, because it's faster
+	union UnderAlign32 {
+		uint16_t data[2];
+		operator uint32_t() {
+			return data[0] | uint32_t(data[1]) << 16;
+		}
+	};
+
 	template <int W>
 	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
 		: m_machine { machine }, m_cpuid { cpu_id }
@@ -51,10 +60,8 @@ namespace riscv
 			// This function will (at most) validate the execute segment
 			this->jump(initial_pc);
 		}
-#ifndef RISCV_INBOUND_JUMPS_ONLY
 		// reset the page cache
 		this->m_cache = {};
-#endif
 	}
 
 	template <int W>
@@ -66,7 +73,6 @@ namespace riscv
 	#endif
 	}
 
-#ifndef RISCV_INBOUND_JUMPS_ONLY
 	template <int W> __attribute__((noinline)) RISCV_INTERNAL
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
 	{
@@ -86,23 +92,8 @@ namespace riscv
 		const auto offset = this->pc() & (Page::size()-1);
 		format_t instruction;
 
-		// Unfortunately, we have to under-align words for C-extension
-		// If the C-extension if disabled, we can read whole words.
-		union unaligned32 {
-			uint32_t to32() const noexcept {
-#ifdef RISCV_EXT_COMPRESSED
-				return data[0] | (uint32_t)data[1] << 16u;
-			}
-			uint16_t data[2];
-#else
-				return data;
-			}
-			uint32_t data;
-#endif
-		};
-
 		if (LIKELY(offset <= Page::size()-4)) {
-			instruction.whole = ((unaligned32*) (page.data() + offset))->to32();
+			instruction.whole = uint32_t(*(UnderAlign32 *)(page.data() + offset));
 			return instruction;
 		}
 		// It's not possible to jump to a misaligned address,
@@ -119,7 +110,6 @@ namespace riscv
 
 		return instruction;
 	}
-#endif // RISCV_INBOUND_JUMPS_ONLY
 
 	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction() const
@@ -165,13 +155,7 @@ namespace riscv
 			// Instructions may be unaligned with C-extension
 			// On amd64 we take the cost, because it's faster
 #    if defined(RISCV_EXT_COMPRESSED) && !defined(__x86_64__)
-			union Align32 {
-				uint16_t data[2];
-				operator uint32_t() {
-					return data[0] | uint32_t(data[1]) << 16;
-				}
-			};
-			instruction = format_t { *(Align32*) &exec_seg_data[pc] };
+			instruction = format_t { *(UnderAlign32*) &exec_seg_data[pc] };
 #    else  // aligned/unaligned loads
 			instruction = format_t { *(uint32_t*) &exec_seg_data[pc] };
 #    endif // aligned/unaligned loads
@@ -346,13 +330,14 @@ namespace riscv
 	template<int W>
 	void CPU<W>::step_one()
 	{
-		// This will make sure we can do one step while still preserving
-		// the max instructions that we had before. If the machine is stopped
-		// the old count is not preserved.
-		auto old_maxi = machine().max_instructions();
-		this->simulate_precise(1);
-		if (machine().max_instructions() != 0)
-			machine().set_max_instructions(old_maxi);
+		// Read, decode & execute instructions directly
+		auto instruction = this->read_next_instruction();
+		this->execute(instruction);
+
+		if constexpr (compressed_enabled)
+			registers().pc += instruction.length();
+		else
+			registers().pc += 4;
 	}
 
 	template<int W> __attribute__((cold))
