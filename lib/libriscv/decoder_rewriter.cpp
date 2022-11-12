@@ -149,18 +149,20 @@ namespace riscv
 							const auto& rop = view_as<MoveType> (instr);
 							cpu.reg(rop.rs1) = cpu.reg(rop.rs2);
 						}); // OP_IMM.MV
+				} else {
+					FasterBtype rewritten;
+					rewritten.rs1 = original.Itype.rd;
+					rewritten.rs2 = original.Itype.rs1;
+					rewritten.imm = original.Itype.signed_imm();
+
+					instr.whole = rewritten.whole;
+					return rewritten_instruction<W>(
+						[] (auto& cpu, auto instr) RVINSTR_ATTR {
+							const auto& rop = view_as<FasterBtype> (instr);
+							cpu.reg(rop.rs1) =
+								(RVSIGNTYPE(cpu)) (cpu.reg(rop.rs2) + rop.imm);
+						}); // OP_IMM.ADDI
 				}
-				FasterBtype rewritten;
-				rewritten.rs1 = original.Itype.rd;
-				rewritten.rs2 = original.Itype.rs1;
-				rewritten.imm = original.Itype.signed_imm();
-				instr.whole = rewritten.whole;
-				return rewritten_instruction<W>(
-					[] (auto& cpu, auto instr) RVINSTR_ATTR {
-						const auto& rop = view_as<FasterBtype> (instr);
-						cpu.reg(rop.rs1) =
-							(RVSIGNTYPE(cpu)) (cpu.reg(rop.rs2) + rop.imm);
-					}); // OP_IMM.ADDI
 			}
 			break;
 			} // RV32I_OP_IMM
@@ -230,10 +232,10 @@ namespace riscv
 			assert(original.Btype.signed_imm()-4 == rewritten.signed_imm());
 			assert(original.Btype.rs1 == rewritten.rs1);
 			assert(original.Btype.rs2 == rewritten.rs2);
-			instr.whole = rewritten.whole;
 
 			switch (original.Btype.funct3) {
 			case 0x0: // BRANCH_EQ
+				instr.whole = rewritten.whole;
 				return rewritten_instruction<W>(
 					[] (auto& cpu, auto instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
@@ -242,6 +244,7 @@ namespace riscv
 						}
 					}); // BEQ
 			case 0x1: // BRANCH_NE
+				instr.whole = rewritten.whole;
 				return rewritten_instruction<W>(
 					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
@@ -250,6 +253,7 @@ namespace riscv
 						}
 					}); // BNE
 			case 0x4: // BRANCH_LT
+				instr.whole = rewritten.whole;
 				return rewritten_instruction<W>(
 					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
@@ -258,6 +262,7 @@ namespace riscv
 						}
 					}); // BLT
 			case 0x5: // BRANCH_GE
+				instr.whole = rewritten.whole;
 				return rewritten_instruction<W>(
 					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
@@ -266,6 +271,7 @@ namespace riscv
 						}
 					}); // BGE
 			case 0x6: // BRANCH_LTU
+				instr.whole = rewritten.whole;
 				return rewritten_instruction<W>(
 					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
@@ -274,6 +280,7 @@ namespace riscv
 						}
 					}); // BLTU
 			case 0x7: // BRANCH_GEU
+				instr.whole = rewritten.whole;
 				return rewritten_instruction<W>(
 					[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 						const auto& rop = view_as<FasterBtype> (instr);
@@ -281,9 +288,6 @@ namespace riscv
 							cpu.registers().pc += rop.signed_imm();
 						}
 					}); // BGEU
-			default:
-				// Restore original for invalid BRANCH instructions
-				instr = original;
 			} // BRANCH type
 			} // RV32I_BRANCH
 			break;
@@ -294,6 +298,7 @@ namespace riscv
 				rewritten.rsx = original.Stype.rs1;
 				rewritten.imm = original.Stype.signed_imm();
 				assert(original.Stype.signed_imm() == rewritten.signed_imm());
+
 				switch (original.Stype.funct3) {
 				case 0x0: // STORE zero i8
 					instr.whole = rewritten.whole;
@@ -338,6 +343,7 @@ namespace riscv
 				rewritten.rsy = original.Stype.rs2;
 				rewritten.imm = original.Stype.signed_imm();
 				assert(original.Stype.signed_imm() == rewritten.signed_imm());
+
 				switch (original.Stype.funct3) {
 				case 0x2: // STORE rs1+imm, i32
 					instr.whole = rewritten.whole;
@@ -391,7 +397,7 @@ namespace riscv
 			break;
 		} // opcode
 		// Rewritten compressed instructions
-		if (original.length() == 2) {
+		else { // original.length() == 2
 			const rv32c_instruction ci{instr};
 			#define CI_CODE(x, y) ((x << 13) | (y))
 			switch (ci.opcode()) {
