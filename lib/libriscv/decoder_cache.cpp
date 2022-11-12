@@ -216,20 +216,16 @@ namespace riscv
 
 			// Insert decoded instruction into decoder cache
 			Instruction<W> decoded;
-			bool is_rewritten = false;
 			if constexpr (debugging_enabled) {
 				// When debugging we will want to see the original encoding, as
 				// well as needing more trust in the decoding.
 				decoded = machine().cpu.decode(instruction);
 			} else {
-				// Fast simulator gets confusing instruction logging with instr rewrites
-				// Also, the rewriter can rewrite full instructions, so lets
-				// only invoke it when we know we have a full instruction.
+				// The rewriter can rewrite full instructions, so lets only
+				// invoke it when we have a decoder cache with full instructions.
 				if (decoder_rewriter_enabled) {
 					// Improve many instruction handlers by rewriting instructions
 					decoded = machine().cpu.decode_rewrite(dst, rewritten);
-					// Write the instruction back to execute segment if it changed
-					is_rewritten = rewritten.whole != instruction.whole;
 				} else {
 					decoded = machine().cpu.decode(instruction);
 				}
