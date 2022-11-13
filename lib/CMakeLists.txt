@@ -2,14 +2,28 @@
 # C++17 RISC-V emulator library
 #
 
+# DEBUG allows printing, stepping, breaking from
+# a terminal so that you can step through programs.
+# This feature should only be enabled when
+# the terminal is used to debug problems.
 option(RISCV_DEBUG  "Enable debugging features in the RISC-V machine" OFF)
+# FASTSIM analyzes the code in order to interpret it
+# faster than normally possible.
 option(RISCV_FASTSIM "Enable fast simulation mode" ON)
+# Enable and disable various RISC-V instruction
+# set extensions. Not recommended to disable any.
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
 option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
+# EXPERIMENTAL enables some high-performance interpreter
+# features that may be unstable.
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
+# MEMORY_TRAPS allows you to trap writes to uncacheable
+# pages in memory. Cached pages can only be trapped once.
 option(RISCV_MEMORY_TRAPS  "Enable memory page traps" OFF)
+# MULTIPROCESS enables experimental features that allow
+# executing RISC-V guest functions in parallel.
 option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
 
 if (RISCV_EXPERIMENTAL)

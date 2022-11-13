@@ -1,12 +1,12 @@
 # RISC-V userspace emulator library
 
-_libriscv_ is a RISC-V emulator that is highly embeddable and configurable. This project is intended to be included in a CMake build system, and should not be installed anywhere. There are several CMake options that control RISC-V extensions and how the emulator behaves.
+_libriscv_ is a RISC-V userspace emulator that is highly embeddable and configurable. This project is intended to be included in a CMake build system, and should not be installed anywhere. There are several [CMake options](lib/CMakeLists.txt) that control RISC-V extensions and how the emulator behaves.
+
+Userspace emulation means running ELF programs in a sandbox, trapping and emulating system calls. There is built-in support for Linux userspace emulation, however anyone can implement userspace support for other OSes, and even ELF loading is optional.
 
 Instruction counting is used to limit the time spent executing code and can be used to prevent infinite loops. It can also help keep frame budgets for long running background scripting tasks as running out of instructions simply halts execution, and it can be resumed from where it stopped.
 
-While this emulator has a focus on performance, one higher priority is the ability to map any memory anywhere with permissions, custom fault handlers and such things. This allows you to take the memory of one machine and map it into another, and does have a slight performance penalty compared to an emulator that can only have sequential memory.
-
-The emulator has a binary translation mode that has currently only been tested on Linux, but the performance should be good enough with the default build options.
+While this emulator has a focus on performance, one higher priority is the ability to map any memory anywhere with permissions, custom fault handlers and such things. This allows you to take the memory of one machine and map it into another with copy-on-write mechanisms, and does have a slight performance penalty compared to an emulator that can only have sequential memory.
 
 [![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
@@ -71,7 +71,7 @@ cd emulator
 ./rvlinux ../binaries/linux64/build/hello_world
 ```
 
-The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib. `rvlinux` has all the system calls necessary to run a normal userspace linux binary. Each emulator is capable of running both 32- and 64-bit RISC-V programs.
+The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib programs. `rvlinux` has all the system calls necessary to run a normal userspace linux program. Each emulator is capable of running both 32- and 64-bit RISC-V programs.
 
 ## Example programs
 
@@ -100,7 +100,7 @@ The F and D-extensions should be 100% supported (32- and 64-bit floating point i
 
 The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emu128 folder.
 
-Note: There is no support for the E- and Q-extensions. Zba is supported. A minimal set of the V-extension is currently being worked on. Binary translation currently only supports RV32G and RV64G. The fastest build combo is usually: `rv64gv_zba` right now.
+Note: There is no support for the E- and Q-extensions. Zba is supported. A minimal set of the V-extension is currently being worked on. Binary translation currently only supports RV32G and RV64G. The fastest arch combo is `rv64gv_zba` right now.
 
 ## Example usage when embedded into a project
 
@@ -273,6 +273,6 @@ There is multiprocessing support, but it is in its early stages. It is achieved 
 
 ## Binary translation
 
-Instead of JIT, the emulator supports translating binaries to native code using any local C or C++ compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`.
+Instead of JIT, the emulator supports translating binaries to native code using any local C compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`.
 
 The binary translation feature (accessible by enabling the RISCV_EXPERIMENTAL CMake option) can greatly improve performance in some cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is a work in progress.
