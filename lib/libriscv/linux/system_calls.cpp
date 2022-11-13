@@ -21,6 +21,7 @@ static constexpr bool verbose_syscalls = false;
 #include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/uio.h>
 #define SA_ONSTACK	0x08000000
 
 namespace riscv {
@@ -240,7 +241,7 @@ static void syscall_write(Machine<W>& machine)
 template <int W>
 static void syscall_writev(Machine<W>& machine)
 {
-	const int  fd     = machine.template sysarg<int>(0);
+	const int  vfd    = machine.template sysarg<int>(0);
 	const auto iov_g  = machine.sysarg(1);
 	const auto count  = machine.template sysarg<int>(2);
 	if constexpr (verbose_syscalls) {
@@ -251,31 +252,53 @@ static void syscall_writev(Machine<W>& machine)
 		return;
 	}
 	// We only accept standard output pipes, for now :)
-	if (fd == 1 || fd == 2) {
+	int real_fd = -1;
+
+	if (vfd == 1 || vfd == 2) {
+		real_fd = vfd;
+	} else if (machine.has_file_descriptors()) {
+		real_fd = machine.fds().translate(vfd);
+	}
+	if (real_fd < 0) {
+		machine.set_result(-EBADF);
+	} else {
 		const size_t size = sizeof(guest_iovec<W>) * count;
 
-		std::vector<guest_iovec<W>> vec(count);
+		std::array<guest_iovec<W>, 256> vec;
 		machine.memory.memcpy_out(vec.data(), iov_g, size);
 
 		ssize_t res = 0;
-		for (const auto& iov : vec)
+		for (int i = 0; i < count; i++)
 		{
+			auto& iov = vec.at(i);
 			auto src_g = (address_type<W>) iov.iov_base;
 			auto len_g = (size_t) iov.iov_len;
 			/* Zero-copy retrieval of buffers */
-			riscv::vBuffer buffers[4];
+			riscv::vBuffer buffers[16];
 			size_t cnt =
-				machine.memory.gather_buffers_from_range(4, buffers, src_g, len_g);
-			for (size_t i = 0; i < cnt; i++) {
-				machine.print(buffers[i].ptr, buffers[i].len);
+				machine.memory.gather_buffers_from_range(16, buffers, src_g, len_g);
+
+			if (real_fd == 1 || real_fd == 2) {
+				// STDOUT, STDERR
+				for (size_t i = 0; i < cnt; i++) {
+					machine.print(buffers[i].ptr, buffers[i].len);
+				}
+				res += len_g;
+			} else {
+				// General file descriptor
+				ssize_t written =
+					writev(real_fd, (const struct iovec *)buffers, cnt);
+				if (written > 0) {
+					res += written;
+				} else if (written < 0) {
+					res = written;
+					break;
+				} else break; // 0 bytes
 			}
-			res += len_g;
 		}
-		machine.set_result(res);
-		return;
+		machine.set_result_or_error(res);
 	}
-	machine.set_result(-EBADF);
-}
+} // writev
 
 template <int W>
 static void syscall_openat(Machine<W>& machine)
@@ -824,6 +847,7 @@ static void add_mman_syscalls()
 	});
 }
 
+#include "syscalls_poll.cpp"
 #include "syscalls_epoll.cpp"
 
 template <int W>
@@ -870,6 +894,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(57, syscall_close<W>);
 	this->install_syscall_handler(59, syscall_pipe2<W>);
 	this->install_syscall_handler(66, syscall_writev<W>);
+	this->install_syscall_handler(73, syscall_ppoll<W>);
 	this->install_syscall_handler(78, syscall_readlinkat<W>);
 	// 79: fstatat
 	this->install_syscall_handler(79, syscall_fstatat<W>);

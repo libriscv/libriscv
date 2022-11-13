@@ -199,6 +199,112 @@ static void syscall_getpeername(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_sendto(Machine<W>& machine)
+{
+	// ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+	//		   const struct sockaddr *dest_addr, socklen_t addrlen);
+	const auto [vfd, g_buf, buflen, flags, g_dest_addr, dest_addrlen] =
+		machine.template sysargs<int, address_type<W>, address_type<W>, int, address_type<W>, unsigned>();
+
+	if (dest_addrlen > 128) {
+		machine.set_result(-ENOMEM);
+		return;
+	}
+	alignas(16) char dest_addr[128];
+	machine.copy_from_guest(dest_addr, g_dest_addr, dest_addrlen);
+
+	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
+
+		const auto real_fd = machine.fds().translate(vfd);
+
+#ifdef __linux__
+		// Gather up to 1MB of pages we can read into
+		riscv::vBuffer buffers[256];
+		size_t cnt =
+			machine.memory.gather_buffers_from_range(256, buffers, g_buf, buflen);
+
+		struct iovec iov[256];
+		for (size_t i = 0; i < cnt; i++) {
+			iov[i].iov_base = buffers[i].ptr;
+			iov[i].iov_len  = buffers[i].len;
+		}
+
+		const struct msghdr hdr {
+			.msg_name = dest_addr,
+			.msg_namelen = dest_addrlen,
+			.msg_iov = iov,
+			.msg_iovlen = cnt,
+			.msg_control = nullptr,
+			.msg_controllen = 0
+		};
+
+		const ssize_t res = sendmsg(real_fd, &hdr, flags);
+#else
+		// XXX: Write me
+		const ssize_t res = -1;
+#endif
+		machine.set_result_or_error(res);
+	} else {
+		machine.set_result(-EBADF);
+	}
+	SYSPRINT("SYSCALL sendto, fd: %d len: %ld flags: %#x = %ld\n",
+			 vfd, (long)buflen, flags, (long)machine.return_value());
+}
+
+template <int W>
+static void syscall_recvfrom(Machine<W>& machine)
+{
+	// ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
+	// 					struct sockaddr *src_addr, socklen_t *addrlen);
+	const auto [vfd, g_buf, buflen, flags, g_src_addr, g_addrlen] =
+		machine.template sysargs<int, address_type<W>, address_type<W>, int, address_type<W>, address_type<W>>();
+
+	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
+
+		const auto real_fd = machine.fds().translate(vfd);
+
+#ifdef __linux__
+		// Gather up to 1MB of pages we can read into
+		riscv::vBuffer buffers[256];
+		size_t cnt =
+			machine.memory.gather_buffers_from_range(256, buffers, g_buf, buflen);
+
+		struct iovec iov[256];
+		for (size_t i = 0; i < cnt; i++) {
+			iov[i].iov_base = buffers[i].ptr;
+			iov[i].iov_len  = buffers[i].len;
+		}
+
+		alignas(16) char dest_addr[128];
+		struct msghdr hdr {
+			.msg_name = dest_addr,
+			.msg_namelen = sizeof(dest_addr),
+			.msg_iov = iov,
+			.msg_iovlen = cnt,
+			.msg_control = nullptr,
+			.msg_controllen = 0
+		};
+
+		const ssize_t res = recvmsg(real_fd, &hdr, flags);
+		if (res >= 0) {
+			if (g_src_addr != 0x0)
+				machine.copy_to_guest(g_src_addr, hdr.msg_name, hdr.msg_namelen);
+			if (g_addrlen != 0x0)
+				machine.copy_to_guest(g_addrlen, &hdr.msg_namelen, sizeof(hdr.msg_namelen));
+		}
+#else
+		// XXX: Write me
+		const ssize_t res = -1;
+#endif
+		machine.set_result_or_error(res);
+	} else {
+		machine.set_result(-EBADF);
+	}
+	SYSPRINT("SYSCALL recvfrom, fd: %d len: %ld flags: %#x = %ld\n",
+			 vfd, (long)buflen, flags, (long)machine.return_value());
+}
+
+template <int W>
 static void syscall_setsockopt(Machine<W>& machine)
 {
 	const auto [sockfd, level, optname, g_opt, optlen] =
@@ -262,6 +368,8 @@ void add_socket_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(203, syscall_connect<W>);
 	machine.install_syscall_handler(204, syscall_getsockname<W>);
 	machine.install_syscall_handler(205, syscall_getpeername<W>);
+	machine.install_syscall_handler(206, syscall_sendto<W>);
+	machine.install_syscall_handler(207, syscall_recvfrom<W>);
 	machine.install_syscall_handler(208, syscall_setsockopt<W>);
 	machine.install_syscall_handler(209, syscall_getsockopt<W>);
 }
