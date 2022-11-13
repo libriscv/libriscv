@@ -140,11 +140,63 @@ static void syscall_connect(Machine<W>& machine)
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
 		const int res = connect(real_fd, (struct sockaddr *)buffer, addrlen);
-		printf("connect: %d\n", res);
 		machine.set_result_or_error(res);
-		return;
+	} else {
+		machine.set_result(-EBADF);
 	}
-	machine.set_result(-EBADF);
+}
+
+template <int W>
+static void syscall_getsockname(Machine<W>& machine)
+{
+	const auto [sockfd, g_addr, g_addrlen] =
+		machine.template sysargs<int, address_type<W>, address_type<W>> ();
+
+	SYSPRINT("SYSCALL getsockname, sockfd: %d addr: 0x%lX len: 0x%lX\n",
+		sockfd, (long)g_addr, (long)g_addrlen);
+
+	if (machine.has_file_descriptors() && machine.fds().permit_sockets)
+	{
+		const auto real_fd = machine.fds().translate(sockfd);
+
+		struct sockaddr addr {};
+		socklen_t addrlen = 0;
+		int res = getsockname(real_fd, &addr, &addrlen);
+		if (res == 0) {
+			machine.copy_to_guest(g_addr, &addr, addrlen);
+			machine.copy_to_guest(g_addrlen, &addrlen, sizeof(addrlen));
+		}
+		machine.set_result_or_error(res);
+	} else {
+		machine.set_result(-EBADF);
+	}
+}
+
+template <int W>
+static void syscall_getpeername(Machine<W>& machine)
+{
+	const auto [sockfd, g_addr, g_addrlen] =
+		machine.template sysargs<int, address_type<W>, address_type<W>> ();
+
+	SYSPRINT("SYSCALL getpeername, sockfd: %d addr: 0x%lX len: 0x%lX\n",
+		sockfd, (long)g_addr, (long)g_addrlen);
+
+	if (machine.has_file_descriptors() && machine.fds().permit_sockets)
+	{
+		const auto real_fd = machine.fds().translate(sockfd);
+
+		struct sockaddr addr {};
+		socklen_t addrlen = 0;
+		int res = getpeername(real_fd, &addr, &addrlen);
+
+		if (res == 0) {
+			machine.copy_to_guest(g_addr, &addr, addrlen);
+			machine.copy_to_guest(g_addrlen, &addrlen, sizeof(addrlen));
+		}
+		machine.set_result_or_error(res);
+	} else {
+		machine.set_result(-EBADF);
+	}
 }
 
 template <int W>
@@ -156,7 +208,7 @@ static void syscall_setsockopt(Machine<W>& machine)
 	SYSPRINT("SYSCALL setsockopt, sockfd: %d level: %x optname: %#x\n",
 		sockfd, level, optname);
 
-	if (optlen > 64) {
+	if (optlen > 128) {
 		machine.set_result(-ENOMEM);
 		return;
 	}
@@ -164,7 +216,7 @@ static void syscall_setsockopt(Machine<W>& machine)
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
 		const auto real_fd = machine.fds().translate(sockfd);
-		char buffer[optlen];
+		alignas(8) char buffer[128];
 		machine.copy_from_guest(buffer, g_opt, optlen);
 
 		int res = setsockopt(real_fd, level, optname, buffer, optlen);
@@ -183,8 +235,9 @@ void add_socket_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(201, syscall_listen<W>);
 	machine.install_syscall_handler(202, syscall_accept<W>);
 	machine.install_syscall_handler(203, syscall_connect<W>);
+	machine.install_syscall_handler(204, syscall_getsockname<W>);
+	machine.install_syscall_handler(205, syscall_getpeername<W>);
 	machine.install_syscall_handler(208, syscall_setsockopt<W>);
-
 }
 
 template void add_socket_syscalls<4>(Machine<4>&);

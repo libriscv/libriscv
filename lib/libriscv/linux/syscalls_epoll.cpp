@@ -58,18 +58,22 @@ static void syscall_epoll_pwait(Machine<W>& machine)
 
 	std::array<struct epoll_event, 64> events;
 	if (maxevents < 0 || maxevents > (int)events.size()) {
+		fprintf(stderr, "WARNING: Too many epoll events\n");
 		machine.set_result_or_error(-1);
 		return;
 	}
-	machine.copy_from_guest(events.data(), g_events, maxevents * sizeof(events[0]));
 
 	if (machine.has_file_descriptors()) {
 		const int epoll_fd = machine.fds().translate(vepoll_fd);
 		const int res = epoll_pwait(epoll_fd, events.data(), maxevents, timeout, NULL);
-		// Translate vfds to fds in events array
-		for (int i = 0; i < maxevents; i++) {
-			auto& event = events.at(i);
-			event.data.fd = machine.fds().translate(event.data.fd);
+		if (res > 0) {
+			// Translate vfds to fds in events array
+			for (int i = 0; i < res; i++)
+			{
+				auto& event = events.at(i);
+				event.data.fd = machine.fds().translate(event.data.fd);
+			}
+			machine.copy_to_guest(g_events, events.data(), res * sizeof(events[0]));
 		}
 		machine.set_result_or_error(res);
 	} else {
