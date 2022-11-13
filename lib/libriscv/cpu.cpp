@@ -69,9 +69,8 @@ namespace riscv
 	{
 		const auto* data = (const uint8_t *)vdata;
 		this->initialize_exec_segs(data - begin, begin, length);
-	#ifdef RISCV_INSTR_CACHE
+		// Generate decoder cache entries for execute segment
 		machine().memory.generate_decoder_cache({}, begin, begin, length);
-	#endif
 	}
 
 	template <int W> __attribute__((noinline)) RISCV_INTERNAL
@@ -129,10 +128,9 @@ namespace riscv
 	template<int W> __attribute__((hot, no_sanitize("undefined")))
 	void CPU<W>::simulate_precise(uint64_t max)
 	{
-#ifdef RISCV_INSTR_CACHE
 		auto* exec_decoder = machine().memory.get_decoder_cache();
 		auto* exec_seg_data = this->m_exec_data;
-#endif
+
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
 			machine().set_max_instructions(machine().instruction_counter() + max);
@@ -147,7 +145,6 @@ namespace riscv
 			this->break_checks();
 #endif
 
-# ifdef RISCV_INSTR_CACHE
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->is_executable(this->pc()))) {
 #  endif
@@ -178,14 +175,6 @@ namespace riscv
 			this->execute(instruction);
 		}
 #   endif // RISCV_INBOUND_JUMPS_ONLY
-# else // RISCV_INSTR_CACHE
-			instruction = this->read_next_instruction();
-	#ifdef RISCV_DEBUG
-			INSTRUCTION_LOGGING(*this);
-	#endif
-			// decode & execute instruction directly
-			this->execute(instruction);
-# endif // RISCV_INSTR_CACHE
 
 #ifdef RISCV_DEBUG
 			if (UNLIKELY(machine().verbose_registers)) {

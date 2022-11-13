@@ -94,9 +94,7 @@ namespace riscv
 			m_ropages.pages.release();
 		}
 #endif
-#ifdef RISCV_INSTR_CACHE
 		delete[] m_decoder_cache;
-#endif
 #ifdef RISCV_BINARY_TRANSLATION
 		if (m_bintr_dl)
 			dlclose(m_bintr_dl);
@@ -296,9 +294,7 @@ namespace riscv
 		// the debugger by not causing an exception, and will instead
 		// loop back to the STOP instruction.
 		// The instruction must be a part of the decoder cache.
-#if defined(RISCV_INSTR_CACHE)
 		this->generate_decoder_cache(options, pbase, vaddr, exlen_with_stop);
-#endif
 	}
 
 	template <int W> RISCV_INTERNAL
@@ -485,9 +481,7 @@ namespace riscv
 		// base address, size and PC-relative data pointer for instructions
 		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
 		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;
-#ifdef RISCV_INSTR_CACHE
 		this->m_exec_decoder = master.memory.m_exec_decoder;
-#endif
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		this->m_ropages.begin = master.memory.m_ropages.begin;

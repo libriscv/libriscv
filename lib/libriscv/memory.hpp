@@ -142,10 +142,8 @@ namespace riscv
 		// Returns true if the address is inside the executable code segment
 		bool is_executable(address_t addr, size_t = 4) const noexcept;
 
-#ifdef RISCV_INSTR_CACHE
 		void generate_decoder_cache(const MachineOptions<W>&, address_t pbase, address_t va, size_t len);
 		auto* get_decoder_cache() const { return m_exec_decoder; }
-#endif
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
@@ -251,10 +249,8 @@ namespace riscv
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 		size_t    m_exec_pagedata_size = 0;
 		address_t m_exec_pagedata_base = 0;
-#ifdef RISCV_INSTR_CACHE
 		DecoderData<W>* m_exec_decoder = nullptr;
 		DecoderCache<W>* m_decoder_cache = nullptr;
-#endif
 #ifdef RISCV_BINARY_TRANSLATION
 		mutable void* m_bintr_dl = nullptr;
 #endif

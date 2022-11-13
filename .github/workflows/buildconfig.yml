@@ -28,8 +28,8 @@ jobs:
     - name: Emulator debug build
       run: bash ci.sh -DRISCV_DEBUG=ON
 
-    - name: Instruction cache build
-      run: bash ci.sh -DRISCV_ICACHE=ON
+    - name: No fast-sim build
+      run: bash ci.sh -DRISCV_FASTSIM=OFF
 
     - name: No extensions build
       run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
@@ -44,13 +44,13 @@ jobs:
       run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=ON
 
     - name: Experimental build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_ICACHE=OFF
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=OFF
 
-    - name: Experimental icache build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_ICACHE=ON
+    - name: Experimental fastsim build
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON
 
-    - name: Experimental icache debug build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_ICACHE=ON -DRISCV_DEBUG=ON
+    - name: Experimental fastsim debug build
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON -DRISCV_DEBUG=ON
 
     - name: No multiprocessing build
       run: bash ci.sh -DRISCV_MULTIPROCESS=OFF

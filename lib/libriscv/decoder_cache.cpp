@@ -126,7 +126,6 @@ namespace riscv
 		}
 	};
 
-#ifdef RISCV_INSTR_CACHE
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
 		[[maybe_unused]] const MachineOptions<W>& options,
@@ -261,7 +260,6 @@ namespace riscv
 		realize_fastsim<W>(addr, dst, exec_decoder);
 #endif
 	}
-#endif // RISCV_INSTR_CACHE
 
 	template struct Memory<4>;
 	template struct Memory<8>;

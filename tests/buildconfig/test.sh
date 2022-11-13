@@ -23,23 +23,21 @@ set -e
 build_libriscv
 # 2. Debug build
 build_libriscv -DRISCV_DEBUG=ON
-# 3. Icache build
-build_libriscv -DRISCV_ICACHE=ON
-# 4. No extensions build
+# 3. No extensions build
 build_libriscv -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
-# 5. A-extension only build
+# 4. A-extension only build
 build_libriscv -DRISCV_EXT_A=ON -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
-# 6. C-extension only build
+# 5. C-extension only build
 build_libriscv -DRISCV_EXT_A=OFF -DRISCV_EXT_C=ON -DRISCV_EXT_F=OFF
-# 7. F-extension only build
+# 6. F-extension only build
 build_libriscv -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=ON
-# 8. Experimental only build
-build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_ICACHE=OFF
-# 9. Experimental icache build
-build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_ICACHE=ON
-# 10. Experimental icache debug build
-build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_ICACHE=ON -DRISCV_DEBUG=ON
-# 11. Multiprocessing disabled build
+# 7. Experimental only build
+build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=OFF
+# 8. Experimental fastsim build
+build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON
+# 9. Experimental fastsim debug build
+build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON -DRISCV_DEBUG=ON
+# 10. Multiprocessing disabled build
 build_libriscv -DRISCV_MULTIPROCESS=OFF
-# 12. Multiprocessing disabled debug build
+# 11. Multiprocessing disabled debug build
 build_libriscv -DRISCV_MULTIPROCESS=OFF -DRISCV_DEBUG=ON
