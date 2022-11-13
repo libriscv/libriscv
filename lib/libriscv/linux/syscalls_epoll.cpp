@@ -28,12 +28,13 @@ static void syscall_epoll_ctl(Machine<W>& machine)
 	const auto op  = machine.template sysarg<int>(1);
 	const auto vfd = machine.template sysarg<int>(2);
 	const auto g_event = machine.template sysarg(3);
+	int fd = -EBADF;
 
 	if (machine.has_file_descriptors()) {
 		const int epoll_fd = machine.fds().translate(vepoll_fd);
-		const int fd = machine.fds().translate(vfd);
+		fd = machine.fds().translate(vfd);
 
-		struct epoll_event event;
+		struct epoll_event event {};
 		machine.copy_from_guest(&event, g_event, sizeof(event));
 
 		const int res = epoll_ctl(epoll_fd, op, fd, &event);
@@ -41,8 +42,8 @@ static void syscall_epoll_ctl(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 	}
-	SYSPRINT("SYSCALL epoll_ctl, epoll_fd: %d, op: %d, fd: %d = %ld\n",
-		   vepoll_fd, op, vfd, (long)machine.return_value());
+	SYSPRINT("SYSCALL epoll_ctl, epoll_fd: %d  op: %d fd: %d (%d)  event: 0x%lX = %ld\n",
+		   vepoll_fd, op, vfd, fd, (long)g_event, (long)machine.return_value());
 }
 
 template <int W>
@@ -56,23 +57,18 @@ static void syscall_epoll_pwait(Machine<W>& machine)
 	const auto maxevents = machine.template sysarg<int>(2);
 	const auto timeout = machine.template sysarg<int>(3);
 
-	std::array<struct epoll_event, 64> events;
+	std::array<struct epoll_event, 128> events;
 	if (maxevents < 0 || maxevents > (int)events.size()) {
-		fprintf(stderr, "WARNING: Too many epoll events\n");
+		SYSPRINT("WARNING: Too many epoll events for %d\n", vepoll_fd);
 		machine.set_result_or_error(-1);
 		return;
 	}
 
 	if (machine.has_file_descriptors()) {
 		const int epoll_fd = machine.fds().translate(vepoll_fd);
-		const int res = epoll_pwait(epoll_fd, events.data(), maxevents, timeout, NULL);
+
+		const int res = epoll_wait(epoll_fd, events.data(), maxevents, timeout);
 		if (res > 0) {
-			// Translate vfds to fds in events array
-			for (int i = 0; i < res; i++)
-			{
-				auto& event = events.at(i);
-				event.data.fd = machine.fds().translate(event.data.fd);
-			}
 			machine.copy_to_guest(g_events, events.data(), res * sizeof(events[0]));
 		}
 		machine.set_result_or_error(res);
