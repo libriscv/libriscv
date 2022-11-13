@@ -106,7 +106,7 @@ int create_folder(const std::string& folder)
 
 int python_sanitize_compile(const std::string& pbase, const std::string& pdir, const std::string& method)
 {
-	auto cmd = "/usr/bin/python3 ../sanitize.py " + pbase + " " + pdir + " " + method;
+	auto cmd = "/usr/bin/python3 sanitize.py " + pbase + " " + pdir + " " + method;
 	return system(cmd.c_str());
 }
 

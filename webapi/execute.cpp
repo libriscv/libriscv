@@ -41,11 +41,6 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 	machine.setup_linux_syscalls();
 	machine.setup_posix_threads();
 
-	std::string output = "";
-	machine.set_printer([&output] (const char* text, size_t len) {
-		output.append(text, len);
-	});
-
 	struct BenchmarkState {
 		bool benchmark = false;
 		uint64_t begin_ic = 0;
@@ -53,8 +48,16 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		uint64_t bench_ic = 0;
 		uint64_t first = 0;
 		std::vector<uint64_t> samples;
+		std::string output;
 	} state;
 	machine.set_userdata(&state);
+
+	machine.set_printer(
+	[] (auto& machine, const char* text, size_t len) {
+		auto* state = machine.template get_userdata<BenchmarkState>();
+
+		state->output.append(text, len);
+	});
 
 	// Stop (pause) the machine when he hit a trap/break instruction
 	machine.install_syscall_handler(riscv::SYSCALL_EBREAK,
@@ -66,7 +69,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		state->benchmark = true;
 
 		auto pf = machine.get_printer();
-		machine.set_printer([] (const char*, size_t) {});
+		machine.set_printer([] (auto&, const char*, size_t) {});
 		uint64_t ic = machine.instruction_counter();
 
 		asm("" : : : "memory");
@@ -128,7 +131,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 	const size_t active_mem = machine.memory.pages_active() * 4096;
 	res.set_header("X-Memory-Usage", std::to_string(active_mem));
 	res.set_header("X-Memory-Max", std::to_string(MAX_MEMORY));
-	res.set_content(output, "text/plain");
+	res.set_content(state.output, "text/plain");
 
 	// A0 is both a return value and first argument, matching
 	// any calls to exit()

@@ -57,8 +57,8 @@ result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 stdout, stderr = result.communicate()
 returncode = result.returncode
 
-#print(stdout)
-#print(stderr)
+print(stdout)
+print(stderr)
 
 fo = open(python_status, "w")
 fo.write(stderr.decode("utf-8"))
