@@ -141,12 +141,13 @@ void syscall_lseek(Machine<W>& machine)
 template <int W>
 static void syscall_read(Machine<W>& machine)
 {
-	const int  fd      = machine.template sysarg<int>(0);
+	const int  vfd     = machine.template sysarg<int>(0);
 	const auto address = machine.sysarg(1);
 	const size_t len   = machine.sysarg(2);
-	SYSPRINT("SYSCALL read, addr: 0x%lX, len: %zu\n", (long)address, len);
+	SYSPRINT("SYSCALL read, vfd: %d addr: 0x%lX, len: %zu\n",
+		vfd, (long)address, len);
 	// We have special stdin handling
-	if (fd == 0) {
+	if (vfd == 0) {
 		// Arbitrary maximum read length
 		if (len > 1024 * 1024 * 16) {
 			machine.set_result(-ENOMEM);
@@ -161,7 +162,8 @@ static void syscall_read(Machine<W>& machine)
 		machine.set_result(result);
 		return;
 	} else if (machine.has_file_descriptors()) {
-		const int real_fd = machine.fds().get(fd);
+		const int real_fd = machine.fds().translate(vfd);
+
 		// Gather up to 1MB of pages we can read into
 		riscv::vBuffer buffers[256];
 		size_t cnt =
@@ -175,13 +177,18 @@ static void syscall_read(Machine<W>& machine)
 				if ((size_t)res < buffers[i].len) break;
 			} else {
 				machine.set_result_or_error(res);
+				SYSPRINT("SYSCALL read, fd: %d from vfd: %d = %ld (%s)\n",
+						 real_fd, vfd, (long)machine.return_value(), strerror(errno));
 				return;
 			}
 		}
 		machine.set_result(bytes);
-		return;
+		SYSPRINT("SYSCALL read, fd: %d from vfd: %d = %ld\n",
+				real_fd, vfd, (long)machine.return_value());
+	} else {
+		machine.set_result(-EBADF);
+		SYSPRINT("SYSCALL read, vfd: %d = -EBADF\n", vfd);
 	}
-	machine.set_result(-EBADF);
 }
 template <int W>
 static void syscall_write(Machine<W>& machine)
@@ -203,7 +210,7 @@ static void syscall_write(Machine<W>& machine)
 		machine.set_result(len);
 		return;
 	} else if (machine.has_file_descriptors() && machine.fds().permit_write(vfd)) {
-		int real_fd = machine.fds().get(vfd);
+		int real_fd = machine.fds().translate(vfd);
 		// Zero-copy retrieval of buffers (256kb)
 		riscv::vBuffer buffers[64];
 		size_t cnt =
@@ -219,6 +226,8 @@ static void syscall_write(Machine<W>& machine)
 			} else {
 				// Detect write errors
 				machine.set_result_or_error(res);
+				SYSPRINT("SYSCALL write, fd: %d = %ld (%s)\n",
+						 vfd, (long)machine.return_value(), strerror(errno));
 				return;
 			}
 		}
