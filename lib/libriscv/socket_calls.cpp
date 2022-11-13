@@ -24,9 +24,6 @@ static void syscall_socket(Machine<W>& machine)
 	const auto [domain, type, proto] =
 		machine.template sysargs<int, int, int> ();
 
-	SYSPRINT("SYSCALL socket, domain: %x type: %x proto: %x\n",
-		domain, type, proto);
-
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 #ifdef WIN32
         ws2::init();
@@ -39,9 +36,11 @@ static void syscall_socket(Machine<W>& machine)
 			// Translate errno() into kernel API return value
 			machine.set_result(-errno);
 		}
-		return;
+	} else {
+		machine.set_result(-EBADF);
 	}
-	machine.set_result(-EBADF);
+	SYSPRINT("SYSCALL socket, domain: %x type: %x proto: %x = %ld\n",
+			 domain, type, proto, (long)machine.return_value());
 }
 
 template <int W>
@@ -228,6 +227,32 @@ static void syscall_setsockopt(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_getsockopt(Machine<W>& machine)
+{
+	const auto [sockfd, level, optname, g_opt, g_optlen] =
+		machine.template sysargs<int, int, int, address_type<W>, address_type<W>> ();
+	socklen_t optlen = 0;
+
+	if (machine.has_file_descriptors() && machine.fds().permit_sockets)
+	{
+		const auto real_fd = machine.fds().translate(sockfd);
+
+		alignas(8) char buffer[128];
+		int res = getsockopt(real_fd, level, optname, buffer, &optlen);
+		if (res == 0) {
+			machine.copy_to_guest(g_optlen, &optlen, sizeof(optlen));
+			machine.copy_to_guest(g_opt, buffer, optlen);
+		}
+		machine.set_result_or_error(res);
+	} else {
+		machine.set_result(-EBADF);
+	}
+
+	SYSPRINT("SYSCALL getsockopt, sockfd: %d level: %x optname: %#x len: %ld = %ld\n",
+			 sockfd, level, optname, (long)optlen, (long)machine.return_value());
+}
+
+template <int W>
 void add_socket_syscalls(Machine<W>& machine)
 {
 	machine.install_syscall_handler(198, syscall_socket<W>);
@@ -238,6 +263,7 @@ void add_socket_syscalls(Machine<W>& machine)
 	machine.install_syscall_handler(204, syscall_getsockname<W>);
 	machine.install_syscall_handler(205, syscall_getpeername<W>);
 	machine.install_syscall_handler(208, syscall_setsockopt<W>);
+	machine.install_syscall_handler(209, syscall_getsockopt<W>);
 }
 
 template void add_socket_syscalls<4>(Machine<4>&);
