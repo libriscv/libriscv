@@ -341,6 +341,32 @@ static void syscall_dup(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_pipe2(Machine<W>& machine)
+{
+	// int pipe2(int pipefd[2], int flags);
+	const auto vfd_array = machine.template sysarg(0);
+	const auto flags = machine.template sysarg<int>(1);
+
+	if (machine.has_file_descriptors()) {
+		int pipes[2];
+		int res = pipe2(pipes, flags);
+		if (res == 0) {
+			int vpipes[2];
+			vpipes[0] = machine.fds().assign_file(pipes[0]);
+			vpipes[1] = machine.fds().assign_file(pipes[1]);
+			machine.copy_to_guest(vfd_array, vpipes, sizeof(vpipes));
+			machine.set_result(0);
+		} else {
+			machine.set_result_or_error(res);
+		}
+	} else {
+		machine.set_result(-EBADF);
+	}
+	SYSPRINT("SYSCALL pipe2, fd array: 0x%lX flags: %d = %ld\n",
+		(long)vfd_array, flags, (long)machine.return_value());
+}
+
+template <int W>
 static void syscall_fcntl(Machine<W>& machine)
 {
 	const int vfd = machine.template sysarg<int>(0);
@@ -789,6 +815,8 @@ static void add_mman_syscalls()
 	});
 }
 
+#include "syscalls_epoll.cpp"
+
 template <int W>
 void Machine<W>::setup_minimal_syscalls()
 {
@@ -814,6 +842,12 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 {
 	this->setup_minimal_syscalls();
 
+	// epoll_create
+	this->install_syscall_handler(20, syscall_epoll_create<W>);
+	// epoll_ctl
+	this->install_syscall_handler(21, syscall_epoll_ctl<W>);
+	// epoll_pwait
+	this->install_syscall_handler(22, syscall_epoll_pwait<W>);
 	// dup
 	this->install_syscall_handler(23, syscall_dup<W>);
 	// fcntl
@@ -825,6 +859,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 
 	this->install_syscall_handler(56, syscall_openat<W>);
 	this->install_syscall_handler(57, syscall_close<W>);
+	this->install_syscall_handler(59, syscall_pipe2<W>);
 	this->install_syscall_handler(66, syscall_writev<W>);
 	this->install_syscall_handler(78, syscall_readlinkat<W>);
 	// 79: fstatat
