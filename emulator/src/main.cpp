@@ -40,6 +40,7 @@ static void run_program(
 			(void) user;
 			printf("Guest opening: %s\n", path.c_str());
 			if (path == "/etc/hostname"
+				|| path == "/etc/hosts"
 				|| path == "/etc/nsswitch.conf"
 				|| path == "/etc/resolv.conf")
 				return true;
