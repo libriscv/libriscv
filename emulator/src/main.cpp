@@ -38,7 +38,10 @@ static void run_program(
 		// the user-provided pointer set in the RISC-V machine.
 		machine.fds().filter_open = [] (void* user, const std::string& path) {
 			(void) user;
-			if (path == "/etc/hostname")
+			printf("Guest opening: %s\n", path.c_str());
+			if (path == "/etc/hostname"
+				|| path == "/etc/nsswitch.conf"
+				|| path == "/etc/resolv.conf")
 				return true;
 			if (path == "/dev/urandom")
 				return true;
