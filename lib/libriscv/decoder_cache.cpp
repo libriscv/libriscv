@@ -145,7 +145,10 @@ namespace riscv
 		delete[] this->m_decoder_cache;
 		this->m_decoder_cache = &decoder_array[0];
 
-		auto* exec_segment = this->get_exec_segment(pbase);
+		// Avoid using Memory::m_exec_pagedata here.
+		// We choose to use the CPU execute segment,
+		// because it is more authoritative.
+		auto* exec_segment = this->machine().cpu.exec_seg_data();
 		assert(exec_segment != nullptr && "Must have set CPU execute segment");
 		auto* exec_decoder = this->m_exec_decoder;
 

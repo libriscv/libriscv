@@ -65,8 +65,9 @@ namespace riscv
 	}
 
 	template <int W>
-	void CPU<W>::init_execute_area(const uint8_t* data, address_t begin, address_t length)
+	void CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t length)
 	{
+		const auto* data = (const uint8_t *)vdata;
 		this->initialize_exec_segs(data - begin, begin, length);
 	#ifdef RISCV_INSTR_CACHE
 		machine().memory.generate_decoder_cache({}, begin, begin, length);

@@ -51,6 +51,10 @@ namespace riscv
 	template <int W>
 	inline Machine<W>::Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& opts)
 		: Machine(std::string_view{(char*) bin.data(), bin.size()}, opts) {}
+	template <int W>
+
+	inline Machine<W>::Machine(const MachineOptions<W>& opts)
+		: Machine(std::string_view{}, opts){}
 
 	template <int W>
 	Machine<W>::~Machine()

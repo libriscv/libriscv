@@ -43,7 +43,6 @@ TEST_CASE("Main example", "[Examples]")
 }
 
 #include <libriscv/rv32i_instr.hpp>
-#ifndef RISCV_DECODER_REWRITER
 
 TEST_CASE("One instruction at a time", "[Examples]")
 {
@@ -69,13 +68,35 @@ TEST_CASE("One instruction at a time", "[Examples]")
 		printf("%s\n",
 			cpu.current_instruction_to_string().c_str());
 		// Decode instruction to get instruction info
-		auto handlers = cpu.decode(instr);
+		auto decoded = cpu.decode(instr);
 		// Execute one instruction, and increment PC
-		handlers.handler(cpu, instr);
+		decoded.handler(cpu, instr);
 		cpu.increment_pc(instr.length());
 	}
 
 	REQUIRE(machine.return_value() == 0x1234);
 }
 
-#endif
+TEST_CASE("Build machine from empty", "[Examples]")
+{
+	Machine<RISCV32> machine;
+	machine.setup_minimal_syscalls();
+
+	const std::vector<uint32_t> my_program {
+		0x29a00513, //        li      a0,666
+		0x05d00893, //        li      a7,93
+		0x00000073, //        ecall
+	};
+
+	// Set main execute segment (12 instruction bytes)
+	const uint32_t dst = 0x1000;
+	machine.cpu.init_execute_area(my_program.data(), dst, 12);
+
+	// Jump to the start instruction
+	machine.cpu.jump(dst);
+
+	// Geronimo!
+	machine.simulate(1'000ul);
+
+	REQUIRE(machine.return_value() == 666);
+}

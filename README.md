@@ -203,9 +203,9 @@ while (!machine.stopped()) {
 	printf("%s\n",
 		cpu.current_instruction_to_string().c_str());
 	// Decode instruction to get instruction info
-	auto handlers = cpu.decode(instr);
+	auto decoded = cpu.decode(instr);
 	// Execute one instruction, and increment PC
-	handlers.handler(cpu, instr);
+	decoded.handler(cpu, instr);
 	cpu.increment_pc(instr.length());
 }
 ```
@@ -213,30 +213,27 @@ NOTE: Does not work when RISCV_DECODER_REWRITER is enabled, as it modifies (rewr
 
 ## Setting up your own machine environment
 
-You can create a 64kb machine without a binary, and no ELF loader will be invoked. Make sure you disable experimental features, as they may require you to set up execute segments before you can execute code.
+You can create a 64kb machine without a binary, and no ELF loader will be invoked.
 
 ```C++
-	std::string_view empty;
-	riscv::Machine<riscv::RISCV32> machine { empty, { .memory_max = 65536u }};
-```
+	Machine<RISCV32> machine;
+	machine.setup_minimal_syscalls();
 
-Now you can copy your machine code directly into memory:
-```C++
-	std::vector<uint8_t> my_program;
+	const std::vector<uint32_t> my_program {
+		0x29a00513, //        li      a0,666
+		0x05d00893, //        li      a7,93
+		0x00000073, //        ecall
+	};
+
+	// Set main execute segment (12 instruction bytes)
 	const uint32_t dst = 0x1000;
-	machine.copy_to_guest(dst, my_program.data(), my_program.size());
-	// We will be making it execute-only (although you may want to enable read)
-	machine.memory.set_page_attr(dst, my_program.size(),
-		{.read = false, .write = false, .exec = true});
-```
+	machine.cpu.init_execute_area(my_program.data(), dst, 12);
 
-Finally, let's jump to the program entry, and start execution:
-```C++
-	// Example PC start address
-	machine.cpu.jump(0x1068);
+	// Jump to the start instruction
+	machine.cpu.jump(dst);
 
 	// Geronimo!
-	machine.simulate();
+	machine.simulate(1'000ul);
 ```
 
 The fuzzing program does this, so have a look at that.

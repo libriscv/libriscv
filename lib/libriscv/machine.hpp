@@ -37,6 +37,8 @@ namespace riscv
 		// and not moved.
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
 		Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& = {});
+		// Create empty Machine.
+		Machine(const MachineOptions<W>& = {});
 		// The forking constructor creates a new machine based on @main,
 		// and loans all memory using Copy-on-Write mechanisms. Additionally,
 		// all cached structures like execute segment, rodata and the
