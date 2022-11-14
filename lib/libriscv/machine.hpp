@@ -69,7 +69,8 @@ namespace riscv
 		// quickly creating and destroying a machine.
 		void reset();
 
-		// Returns the precise number of instructions executed.
+		// Returns the precise number of instructions executed. Should only
+		// be called after simulation ends.
 		uint64_t instruction_counter() const noexcept { return m_counter; }
 		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
@@ -202,7 +203,7 @@ namespace riscv
 
 		// Execute CSRs
 		void system(union rv32i_instruction);
-
+		// User callback for unhandled CSRs
 		static inline void (*on_unhandled_csr) (Machine&, int, int, int)
 			= [] (Machine<W>&, int, int, int) {};
 
