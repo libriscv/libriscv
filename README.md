@@ -251,13 +251,7 @@ The fuzzing program does this, so have a look at that.
 
 ## Why a RISC-V library
 
-It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely?
-
-See the `webapi` folder for an example web-server that compiles and runs limited C/C++ code in a relatively safe manner. Ping me or create a PR if you notice something is exploitable.
-
-Note that the web API demo uses a docker container to build RISC-V binaries, for security reasons. You can build the container with `docker build -t newlib-rv32gc . -f newlib.Dockerfile` from the docker folder. Alternatively, you could build a more full-fledged Linux environment using `docker build -t linux-rv32gc . -f linux.Dockerfile`. There is a test-script to see that it works called `dbuild.sh` which takes an input code file and output binary as parameters.
-
-It can also be used as a script backend for a game engine, as it's quite a bit faster than Lua, although it requires you to compile the scripts ahead of time as binaries using any computer language which can output RISC-V. Check out the benchmarks section.
+It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely? It can step through RISC-V programs line by line showing registers and memory locations. It also has some extra features that allow you to make function calls into the guest program. I think it's pretty cool stuff.
 
 ## What to use for performance
 
