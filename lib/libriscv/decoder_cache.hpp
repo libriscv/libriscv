@@ -16,7 +16,7 @@ struct DecoderData {
 #ifdef RISCV_FAST_SIMULATOR
 	uint32_t instr;
 	uint16_t idxend;
-	// XXX: Original_opcode is only relevant during decoding.
+	// NOTE: Original_opcode is only relevant during decoding.
 	union {
 		uint16_t original_opcode;
 		struct {

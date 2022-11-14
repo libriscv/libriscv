@@ -236,10 +236,10 @@ namespace riscv
 			if constexpr (VERBOSE_FASTSIM) {
 				printf("Fastsim at PC=0x%lX count=%zu\n", (long)pc, count);
 			}
-			size_t instr_count;
-			if constexpr (!compressed_enabled)
-				instr_count = count;
-			else
+			size_t instr_count = count;
+			// With compressed instructions enabled, we get the instruction
+			// count from the 8-bit instr_count value.
+			if constexpr (compressed_enabled)
 				instr_count = decoder->idxend - decoder->instr_count;
 			counter.increment_counter(instr_count);
 			auto* decoder_end = &decoder[count];
