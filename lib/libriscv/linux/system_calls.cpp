@@ -645,6 +645,29 @@ static void syscall_clock_gettime(Machine<W>& machine)
 	}
 	machine.set_result_or_error(res);
 }
+template <int W>
+static void syscall_nanosleep(Machine<W>& machine)
+{
+	const auto g_req = machine.sysarg(0);
+	const auto g_rem = machine.sysarg(1);
+	SYSPRINT("SYSCALL nanosleep, req: 0x%lX rem: 0x%lX\n",
+		(long)g_req, (long)g_rem);
+
+	struct timespec ts_req;
+	machine.copy_from_guest(&ts_req, g_req, sizeof(ts_req));
+
+	struct timespec ts_rem;
+	if (g_rem)
+		machine.copy_from_guest(&ts_rem, g_rem, sizeof(ts_rem));
+
+	const int res = nanosleep(&ts_req, g_rem != 0x0 ? &ts_rem : nullptr);
+	if (res >= 0) {
+		machine.copy_to_guest(g_req, &ts_req, sizeof(ts_req));
+		if (g_rem)
+			machine.copy_to_guest(g_rem, &ts_rem, sizeof(ts_rem));
+	}
+	machine.set_result_or_error(res);
+}
 
 template <int W>
 static void syscall_uname(Machine<W>& machine)
@@ -905,7 +928,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(94, syscall_exit<W>);
 
 	// nanosleep
-	this->install_syscall_handler(101, syscall_stub_zero<W>);
+	this->install_syscall_handler(101, syscall_nanosleep<W>);
 	// clock_gettime
 	this->install_syscall_handler(113, syscall_clock_gettime<W>);
 	// sched_getaffinity
