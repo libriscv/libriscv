@@ -7,11 +7,7 @@ namespace riscv {
 
 template <int W>
 struct DecoderData {
-#ifdef RISCV_DEBUG
-	using Handler = Instruction<W>;
-#else
 	using Handler = instruction_handler<W>;
-#endif
 	Handler handler;
 #ifdef RISCV_FAST_SIMULATOR
 	uint32_t instr;
@@ -32,25 +28,13 @@ struct DecoderData {
 
 	template <typename... Args>
 	void execute(CPU<W>& cpu, Args... args) {
-#ifdef RISCV_DEBUG
-		this->handler.handler(cpu, args...);
-#else
 		this->handler(cpu, args...);
-#endif
 	}
 	bool isset() const noexcept {
-#ifdef RISCV_DEBUG
-		return handler.handler != nullptr;
-#else
 		return handler != nullptr;
-#endif
 	}
 	void set_handler(Instruction<W> insn) noexcept {
-#ifdef RISCV_DEBUG
-		this->handler = insn;
-#else
 		this->handler = insn.handler;
-#endif
 	}
 	void set_insn_handler(instruction_handler<W> ih) noexcept {
 		this->handler = ih;

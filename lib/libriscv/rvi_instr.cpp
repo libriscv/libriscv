@@ -207,14 +207,10 @@ namespace riscv
 		cpu.machine().memory.template write<__uint128_t>(addr, value);
 	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
-#ifdef RISCV_DEBUG
 #define VERBOSE_BRANCH() \
-	if (UNLIKELY(cpu.machine().verbose_jumps)) { \
+	if constexpr (verbose_branches_enabled) { \
 		printf(">>> BRANCH jump to 0x%" PRIX64 "\n", uint64_t(cpu.pc() + 4)); \
 	}
-#else
-#define VERBOSE_BRANCH() /* */
-#endif
 
 	INSTRUCTION(BRANCH_EQ,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
@@ -308,15 +304,13 @@ namespace riscv
 			cpu.reg(instr.Itype.rd) = cpu.pc() + 4;
 		}
 		cpu.jump(address - 4);
-#ifdef RISCV_DEBUG
-		if (UNLIKELY(cpu.machine().verbose_jumps)) {
+		if constexpr (verbose_branches_enabled) {
 		printf(">>> JMP 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "%+d\n",
 				uint64_t(address),
 				RISCV::regname(instr.Itype.rs1),
 				uint64_t(cpu.reg(instr.Itype.rs1)),
 				instr.Itype.signed_imm());
 		}
-#endif
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
 		// RISC-V's RET instruction: return to register + immediate
@@ -333,14 +327,12 @@ namespace riscv
 		cpu.reg(instr.Jtype.rd) = cpu.pc() + 4;
 		// And jump relative
 		cpu.jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
-#ifdef RISCV_DEBUG
-		if (UNLIKELY(cpu.machine().verbose_jumps)) {
+		if constexpr (verbose_branches_enabled) {
 			printf(">>> CALL 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "\n",
 					uint64_t(cpu.pc()),
 					RISCV::regname(instr.Jtype.rd),
 					uint64_t(cpu.reg(instr.Jtype.rd)));
 		}
-#endif
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
 		if (instr.Jtype.rd != 0) {
@@ -357,14 +349,12 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		// Jump relative
 		cpu.jump(cpu.pc() + instr.Jtype.jump_offset() - 4);
-#ifdef RISCV_DEBUG
-		if (UNLIKELY(cpu.machine().verbose_jumps)) {
+		if constexpr (verbose_branches_enabled) {
 			printf(">>> JMP 0x%" PRIX64 " <-- %s = 0x%" PRIX64 "\n",
 					uint64_t(cpu.pc()),
 					RISCV::regname(instr.Jtype.rd),
 					uint64_t(cpu.reg(instr.Jtype.rd)));
 		}
-#endif
 	}, DECODED_INSTR(JAL).printer);
 
 	INSTRUCTION(OP_IMM,

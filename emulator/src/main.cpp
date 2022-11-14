@@ -1,10 +1,10 @@
 #include <libriscv/machine.hpp>
+#include <libriscv/debug.hpp>
 #include <libriscv/rsp_server.hpp>
 #include <inttypes.h>
 #include <chrono>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
-
 static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 256;
 
 template <int W>
@@ -15,6 +15,8 @@ static void run_program(
 	const std::vector<uint8_t>& binary,
 	const std::vector<std::string>& args)
 {
+	const bool debugging_enabled = getenv("DEBUG") != nullptr;
+
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
 		.verbose_loader = (getenv("VERBOSE") != nullptr)
@@ -69,7 +71,10 @@ static void run_program(
 		exit(1);
 	}
 
-	if constexpr(riscv::debugging_enabled)
+	// A CLI debugger used when DEBUG=1
+	riscv::DebugMachine debug { machine };
+
+	if (debugging_enabled)
 	{
 		// Print all instructions by default
 		const bool vi = true;
@@ -82,30 +87,31 @@ static void run_program(
 
 		auto main_address = machine.address_of("main");
 		if (debug_from_start || main_address == 0x0) {
-			machine.verbose_instructions = vi;
-			machine.verbose_registers = vr;
+			debug.verbose_instructions = vi;
+			debug.verbose_registers = vr;
 			// Without main() this is a custom or stripped program,
 			// so we break immediately.
-			machine.print_and_pause();
+			debug.print_and_pause();
 		} else {
 			// Automatic breakpoint at main() to help debug certain programs
-			machine.cpu.breakpoint(machine.address_of("main"),
-			[vi, vr] (auto& cpu) {
+			debug.breakpoint(main_address,
+			[vi, vr] (auto& debug) {
+				auto& cpu = debug.machine.cpu;
 				// Remove the breakpoint to speed up debugging
-				cpu.erase_breakpoint(cpu.pc());
-				cpu.machine().verbose_instructions = vi;
-				cpu.machine().verbose_registers = vr;
+				debug.erase_breakpoint(cpu.pc());
+				debug.verbose_instructions = vi;
+				debug.verbose_registers = vr;
 				printf("\n*\n* Entered main() @ 0x%" PRIX64 "\n*\n", uint64_t(cpu.pc()));
-				cpu.machine().print_and_pause();
+				debug.print_and_pause();
 			});
 		}
 	}
 
 	auto t0 = std::chrono::system_clock::now();
 	try {
-		// If you run the emulator with DEBUG=1, you can connect
+		// If you run the emulator with GDB=1, you can connect
 		// with gdb-multiarch using target remote localhost:2159.
-		if (getenv("DEBUG")) {
+		if (getenv("GDB")) {
 			printf("GDB server is listening on localhost:2159\n");
 			riscv::RSP<W> server { machine, 2159 };
 			auto client = server.accept();
@@ -118,6 +124,9 @@ static void run_program(
 				// Run remainder of program
 				machine.simulate();
 			}
+		} else if (debugging_enabled) {
+			// CLI debug simulation
+			debug.simulate();
 		} else {
 			// Normal RISC-V simulation
 			machine.simulate();
@@ -136,22 +145,20 @@ static void run_program(
 			printf(">>> A-extension: %d  C-extension: %d  F-extension: %d  V-extension: %d\n",
 				riscv::atomics_enabled, riscv::compressed_enabled, riscv::floating_point_enabled, riscv::vector_extension);
 		}
-#ifdef RISCV_DEBUG
-		machine.print_and_pause();
-#else
-		run_sighandler(machine);
-#endif
+		if (debugging_enabled)
+			debug.print_and_pause();
+		else
+			run_sighandler(machine);
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
 		machine.memory.print_backtrace(
 			[] (std::string_view line) {
 				printf("-> %.*s\n", (int)line.size(), line.begin());
 			});
-#ifdef RISCV_DEBUG
-		machine.print_and_pause();
-#else
-		run_sighandler(machine);
-#endif
+		if (debugging_enabled)
+			debug.print_and_pause();
+		else
+			run_sighandler(machine);
 	}
 	auto t1 = std::chrono::system_clock::now();
 	std::chrono::duration<double> runtime = t1 - t0;
@@ -203,9 +210,10 @@ void run_sighandler(riscv::Machine<W>& machine)
 {
 	constexpr int SIG_SEGV = 11;
 	auto& action = machine.sigaction(SIG_SEGV);
-	auto handler = action.handler;
-	if (handler == 0x0 || handler == (riscv::address_type<W>)-1)
+	if (action.is_unset())
 		return;
+
+	auto handler = action.handler;
 	action.handler = 0x0; // Avoid re-triggering(?)
 
 	machine.stack_push(machine.cpu.reg(riscv::REG_RA));

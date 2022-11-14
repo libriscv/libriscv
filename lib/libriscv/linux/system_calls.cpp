@@ -60,11 +60,7 @@ template <int W>
 static void syscall_ebreak(riscv::Machine<W>& machine)
 {
 	printf("\n>>> EBREAK at %#lX\n", (long) machine.cpu.pc());
-#ifdef RISCV_DEBUG
-	machine.print_and_pause();
-#else
 	throw MachineException(UNHANDLED_SYSCALL, "EBREAK instruction");
-#endif
 }
 
 template <int W>

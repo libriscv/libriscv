@@ -1,5 +1,6 @@
-#include "cpu.hpp"
-#include "machine.hpp"
+#include "debug.hpp"
+
+#include "decoder_cache.hpp"
 #include "rv32i_instr.hpp"
 #include "rv32i.hpp"
 #include "rv64i.hpp"
@@ -76,8 +77,11 @@ static void print_help(CPU<W>& cpu)
 }
 
 template <int W>
-static bool execute_commands(CPU<W>& cpu)
+static bool execute_commands(DebugMachine<W>& debug)
 {
+	auto& machine = debug.machine;
+	auto& cpu = machine.cpu;
+
 	dprintf(cpu, "Enter = cont, help, quit: ");
 	std::string text;
 	while (true)
@@ -95,7 +99,7 @@ static bool execute_commands(CPU<W>& cpu)
 	// continue
 	if (cmd == "c" || cmd == "continue")
 	{
-		cpu.break_on_steps(0);
+		debug.break_on_steps(0);
 		return false;
 	}
 	// stepping
@@ -105,11 +109,11 @@ static bool execute_commands(CPU<W>& cpu)
 	}
 	else if (cmd == "s" || cmd == "step")
 	{
-		cpu.machine().verbose_instructions = true; // ???
+		debug.verbose_instructions = true; // ???
 		int steps = 1;
 		if (params.size() > 1) steps = std::stoi(params[1]);
 		dprintf(cpu, "Pressing Enter will now execute %d steps\n", steps);
-		cpu.break_on_steps(steps);
+		debug.break_on_steps(steps);
 		return false;
 	}
 	// breaking
@@ -120,26 +124,26 @@ static bool execute_commands(CPU<W>& cpu)
 			dprintf(cpu, ">>> Not enough parameters: break [addr]\n");
 			return true;
 		}
-		const auto addr = cpu.machine().address_of(params[1]);
+		const auto addr = machine.address_of(params[1]);
 		if (addr != 0x0) {
 			dprintf(cpu, "Breakpoint on %s with address 0x%lX\n",
 				params[1].c_str(), addr);
-			cpu.breakpoint(addr);
+			debug.breakpoint(addr);
 		} else {
 			unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
 			dprintf(cpu, "Breakpoint on address 0x%lX\n", hex);
-			cpu.breakpoint(hex);
+			debug.breakpoint(hex);
 		}
 		return true;
 	}
 	else if (cmd == "clear")
 	{
-		cpu.breakpoints().clear();
+		debug.breakpoints().clear();
 		return true;
 	}
 	else if (cmd == "bt" || cmd == "backtrace")
 	{
-		cpu.machine().memory.print_backtrace(
+		machine.memory.print_backtrace(
 			[&cpu] (std::string_view line) {
 				dprintf(cpu, "-> %.*s\n", (int)line.size(), line.begin());
 			});
@@ -152,7 +156,7 @@ static bool execute_commands(CPU<W>& cpu)
 			dprintf(cpu, ">>> Not enough parameters: addrof [name]\n");
 			return true;
 		}
-		const auto addr = cpu.machine().address_of(params[1]);
+		const auto addr = machine.address_of(params[1]);
 		dprintf(cpu, "The address of %s is 0x%lX.%s\n",
 			params[1].c_str(), addr, addr == 0x0 ? " (Likely not found)" : "");
 		return true;
@@ -160,41 +164,41 @@ static bool execute_commands(CPU<W>& cpu)
 	// verbose instructions
 	else if (cmd == "v" || cmd == "verbose")
 	{
-		bool& v = cpu.machine().verbose_instructions;
+		bool& v = debug.verbose_instructions;
 		v = !v;
 		dprintf(cpu, "Verbose instructions are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "vr" || cmd == "vregs")
 	{
-		bool& v = cpu.machine().verbose_registers;
+		bool& v = debug.verbose_registers;
 		v = !v;
 		dprintf(cpu, "Verbose registers are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "vf" || cmd == "vfpregs")
 	{
-		bool& v = cpu.machine().verbose_fp_registers;
+		bool& v = debug.verbose_fp_registers;
 		v = !v;
 		dprintf(cpu, "Verbose FP-registers are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "vj" || cmd == "vjumps")
 	{
-		bool& v = cpu.machine().verbose_jumps;
+		bool& v = debug.verbose_jumps;
 		v = !v;
 		dprintf(cpu, "Verbose jumps are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "r" || cmd == "run")
 	{
-		cpu.machine().verbose_instructions = false;
-		cpu.break_on_steps(0);
+		debug.verbose_instructions = false;
+		debug.break_on_steps(0);
 		return false;
 	}
 	else if (cmd == "q" || cmd == "quit" || cmd == "exit")
 	{
-		cpu.machine().stop();
+		machine.stop();
 		return false;
 	}
 	// read 0xAddr size
@@ -206,7 +210,7 @@ static bool execute_commands(CPU<W>& cpu)
 			return true;
 		}
 		unsigned long addr = std::strtoul(params[1].c_str(), 0, 16);
-		auto value = cpu.machine().memory.template read<uint32_t>(addr);
+		auto value = machine.memory.template read<uint32_t>(addr);
 		dprintf(cpu, "0x%lX: 0x%X\n", addr, value);
 		return true;
 	}
@@ -221,7 +225,7 @@ static bool execute_commands(CPU<W>& cpu)
 		unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
 		int value = std::stoi(params[2]) & 0xff;
 		dprintf(cpu, "0x%04lx -> 0x%02x\n", hex, value);
-		cpu.machine().memory.template write<uint32_t>(hex, value);
+		machine.memory.template write<uint32_t>(hex, value);
 		return true;
 	}
 	// print 0xAddr size
@@ -235,13 +239,13 @@ static bool execute_commands(CPU<W>& cpu)
 		uint32_t src = std::strtoul(params[1].c_str(), 0, 16);
 		int bytes = std::stoi(params[2]);
 		std::unique_ptr<char[]> buffer(new char[bytes]);
-		cpu.machine().memory.memcpy_out(buffer.get(), src, bytes);
+		machine.memory.memcpy_out(buffer.get(), src, bytes);
 		dprintf(cpu, "0x%X: %.*s\n", src, bytes, buffer.get());
 		return true;
 	}
 	else if (cmd == "ebreak")
 	{
-		cpu.machine().system_call(SYSCALL_EBREAK);
+		machine.system_call(SYSCALL_EBREAK);
 		return true;
 	}
 	else if (cmd == "syscall")
@@ -249,7 +253,7 @@ static bool execute_commands(CPU<W>& cpu)
 		int num = 0;
 		if (params.size() > 1) num = std::stoi(params[1]);
 		dprintf(cpu, "Triggering system call %d\n", num);
-		cpu.machine().system_call(num);
+		machine.system_call(num);
 		return true;
 	}
 	else if (cmd == "help" || cmd == "?")
@@ -267,8 +271,9 @@ static bool execute_commands(CPU<W>& cpu)
 }
 
 template<int W>
-void Machine<W>::print_and_pause()
+void DebugMachine<W>::print_and_pause()
 {
+	auto& cpu = machine.cpu;
 	try {
 		const auto instruction = cpu.read_next_instruction();
 		const auto& handler = cpu.decode(instruction);
@@ -280,18 +285,18 @@ void Machine<W>::print_and_pause()
 	// CPU registers
 	dprintf(cpu, "%s", cpu.registers().to_string().c_str());
 	// Memory subsystem
-	dprintf(cpu, "[MEM PAGES     %8zu]\n", memory.pages_active());
+	dprintf(cpu, "[MEM PAGES     %8zu]\n", machine.memory.pages_active());
 	// Floating-point registers
 	if (this->verbose_fp_registers) {
 		dprintf(cpu, "%s", cpu.registers().flp_to_string().c_str());
 	}
 
-	while (execute_commands(cpu))
+	while (execute_commands(*this))
 		;
 } // print_and_pause(...)
 
 template<int W>
-bool CPU<W>::break_time() const
+bool DebugMachine<W>::break_time() const
 {
 	if (UNLIKELY(m_break_steps_cnt != 0))
 	{
@@ -306,7 +311,7 @@ bool CPU<W>::break_time() const
 }
 
 template<int W>
-void CPU<W>::break_on_steps(int steps)
+void DebugMachine<W>::break_on_steps(int steps)
 {
 	assert(steps >= 0);
 	this->m_break_steps_cnt = steps;
@@ -314,17 +319,17 @@ void CPU<W>::break_on_steps(int steps)
 }
 
 template<int W>
-void CPU<W>::break_checks()
+void DebugMachine<W>::break_checks()
 {
 	if (UNLIKELY(this->break_time()))
 	{
 		// pause for each instruction
-		machine().print_and_pause();
+		this->print_and_pause();
 	}
 	if (UNLIKELY(!m_breakpoints.empty()))
 	{
 		// look for breakpoints
-		auto it = m_breakpoints.find(registers().pc);
+		auto it = m_breakpoints.find(machine.cpu.pc());
 		if (it != m_breakpoints.end())
 		{
 			auto& callback = it->second;
@@ -334,17 +339,89 @@ void CPU<W>::break_checks()
 }
 
 template<int W>
-void CPU<W>::register_debug_logging() const
+void DebugMachine<W>::register_debug_logging() const
 {
-	auto regs = "\n" + this->registers().to_string() + "\n\n";
-	machine().debug_print(regs.data(), regs.size());
-	if (UNLIKELY(machine().verbose_fp_registers)) {
-		regs = registers().flp_to_string() + "\n";
-		machine().debug_print(regs.data(), regs.size());
+	auto regs = "\n" + machine.cpu.registers().to_string() + "\n\n";
+	machine.debug_print(regs.data(), regs.size());
+	if (UNLIKELY(this->verbose_fp_registers)) {
+		regs = machine.cpu.registers().flp_to_string() + "\n";
+		machine.debug_print(regs.data(), regs.size());
 	}
 }
 
-	template struct CPU<4>;
-	template struct CPU<8>;
-	template struct CPU<16>;
-} // namespace riscv
+// Instructions may be unaligned with C-extension
+// On amd64 we take the cost, because it's faster
+union UnderAlign32
+{
+	uint16_t data[2];
+	operator uint32_t()
+	{
+		return data[0] | uint32_t(data[1]) << 16;
+	}
+};
+
+#define INSTRUCTION_LOGGING()	\
+	if (this->verbose_instructions) { \
+		const auto string = isa_type<W>::to_string(cpu, instruction, cpu.decode(instruction)) + "\n"; \
+		machine.print(string.c_str(), string.size()); \
+	}
+
+template<int W>
+void DebugMachine<W>::simulate(uint64_t max)
+{
+	auto& cpu = machine.cpu;
+	auto* exec_decoder = machine.memory.get_decoder_cache();
+	auto* exec_seg_data = cpu.exec_seg_data();
+
+	// Calculate the instruction limit
+	if (max != UINT64_MAX)
+		machine.set_max_instructions(machine.instruction_counter() + max);
+	else
+		machine.set_max_instructions(UINT64_MAX);
+
+	for (; machine.instruction_counter() < machine.max_instructions();
+		machine.increment_counter(1)) {
+
+		rv32i_instruction instruction;
+		this->break_checks();
+
+		// We can't use decoder cache when rewriter or translator is enabled
+		constexpr bool enable_cache =
+			!decoder_rewriter_enabled && !binary_translation_enabled;
+		if (enable_cache && cpu.is_executable(cpu.pc()))
+		{
+			auto pc = cpu.pc();
+
+			// Instructions may be unaligned with C-extension
+			instruction = rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
+			INSTRUCTION_LOGGING();
+
+			// Retrieve handler directly from the instruction handler cache
+			auto& cache_entry =
+				exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			cache_entry.execute(cpu, instruction);
+		} else {
+			instruction = cpu.read_next_instruction_slowpath();
+			INSTRUCTION_LOGGING();
+			// decode & execute instruction directly
+			cpu.execute(instruction);
+		}
+
+		if (UNLIKELY(this->verbose_registers)) {
+			this->register_debug_logging();
+		}
+
+		// increment PC
+		if constexpr (compressed_enabled)
+			cpu.registers().pc += instruction.length();
+		else
+			cpu.registers().pc += 4;
+	} // while not stopped
+
+} // DebugMachine::simulate
+
+
+	template struct DebugMachine<4>;
+	template struct DebugMachine<8>;
+	template struct DebugMachine<16>;
+} // riscv

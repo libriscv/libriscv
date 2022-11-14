@@ -5,9 +5,6 @@
 #ifdef RISCV_EXT_ATOMICS
 #include "rva.hpp"
 #endif
-#ifdef RISCV_DEBUG
-#include <unordered_map>
-#endif
 #include <vector>
 
 namespace riscv
@@ -55,18 +52,11 @@ namespace riscv
 		__attribute__((noreturn))
 		static void trigger_exception(int, address_t = 0) COLD_PATH();
 
-#ifdef RISCV_DEBUG
-		// debugging
-		void breakpoint(address_t address, breakpoint_t = default_pausepoint);
-		void erase_breakpoint(address_t address) { breakpoint(address, nullptr); }
-		auto& breakpoints() { return this->m_breakpoints; }
-		void break_on_steps(int steps);
-		void break_checks();
-		static void default_pausepoint(CPU&);
-#endif
+		void execute(format_t);
 		format_t read_next_instruction() const;
+		format_t read_next_instruction_slowpath() const COLD_PATH();
 		static const instruction_t& decode(format_t);
-		instruction_t decode_rewrite(address_t pc, format_t&);
+		instruction_t decode_rewrite(address_t pc, format_t &);
 		std::string to_string(format_t format, const instruction_t& instr) const;
 		std::string current_instruction_to_string() const;
 
@@ -75,9 +65,6 @@ namespace riscv
 		// Returns the machine to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
-		// Instruction fusing (icache only)
-		using instr_pair = std::pair<instruction_handler<W>&, format_t&>;
-		bool try_fuse(instr_pair i1, instr_pair i2) const;
 		// Binary translation functions
 		int  load_translation(const MachineOptions<W>&, std::string* filename) const;
 		void try_translate(const MachineOptions<W>&, const std::string&, address_t pc, std::vector<TransInstr<W>>) const;
@@ -89,33 +76,24 @@ namespace riscv
 		address_t exec_begin() const noexcept { return m_exec_begin; }
 		address_t exec_end()   const noexcept { return m_exec_end; }
 		const uint8_t* exec_seg_data() const noexcept { return m_exec_data; }
+		bool is_executable(address_t dst) const noexcept { return dst >= m_exec_begin && dst < m_exec_end; }
+
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
 
-		format_t read_next_instruction_slowpath() const COLD_PATH();
-		void execute(format_t);
 		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
 		const uint8_t* m_exec_data = nullptr;
 		address_t m_exec_begin = 0;
 		address_t m_exec_end   = 0;
-		bool is_executable(address_t dst) const noexcept { return dst >= m_exec_begin && dst < m_exec_end; }
 
 		// Page cache for execution on virtual memory
 		mutable CachedPage<W, const Page> m_cache;
 
 		const unsigned m_cpuid;
 
-#ifdef RISCV_DEBUG
-		// instruction step & breakpoints
-		mutable int32_t m_break_steps = 0;
-		mutable int32_t m_break_steps_cnt = 0;
-		std::unordered_map<address_t, breakpoint_t> m_breakpoints;
-		bool break_time() const;
-		void register_debug_logging() const;
-#endif
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
 #endif

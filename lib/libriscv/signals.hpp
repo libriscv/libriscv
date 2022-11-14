@@ -16,7 +16,7 @@ template <int W>
 struct SignalAction {
 	static constexpr address_type<W> SIG_UNSET = ~(address_type<W>)0x0;
 	bool is_unset() const noexcept {
-		return handler == SIG_UNSET;
+		return handler == 0x0 || handler == SIG_UNSET;
 	}
 	address_type<W> handler = SIG_UNSET;
 	bool altstack = false;

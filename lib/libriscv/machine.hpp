@@ -165,19 +165,6 @@ namespace riscv
 		address_t address_of(const char* name) const;
 		address_t address_of(const std::string& name) const;
 
-#ifdef RISCV_DEBUG
-		// Immediately block execution, print registers and current instruction.
-		void print_and_pause();
-		bool verbose_instructions = false;
-		bool verbose_jumps     = false;
-		bool verbose_registers = false;
-		bool verbose_fp_registers = false;
-#else
-		static constexpr bool verbose_instructions = false;
-		static constexpr bool verbose_jumps     = false;
-		static constexpr bool verbose_registers = false;
-#endif
-
 		// Custom user pointer
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }
 		template <typename T> T* get_userdata() const noexcept { return static_cast<T*> (m_userdata); }
