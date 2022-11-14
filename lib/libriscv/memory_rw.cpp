@@ -15,7 +15,7 @@ namespace riscv
 	Page& Memory<W>::create_writable_pageno(const address_t pageno, bool init)
 	{
 		auto it = m_pages.find(pageno);
-		if (it != m_pages.end()) {
+		if (LIKELY(it != m_pages.end())) {
 			Page& page = it->second;
 			if (LIKELY(page.attr.write)) {
 				return page;
