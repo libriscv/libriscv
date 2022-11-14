@@ -1,31 +1,32 @@
 Debugging with libriscv
 ================
 
-Debugging with *libriscv* can be as complex or simplistic as one wants, depending on what you have to work with. If you don't have any symbols, and you have rich knowledge of RISC-V you can enable the RISCV_DEBUG CMake option, and step through the program instruction by instruction. This was the method used when developing the RISC-V emulator, but it's not very helpful when debugging a normal mostly-working program in a robust emulator.
+Debugging with *libriscv* can be as complex or simplistic as one wants, depending on what you have to work with. If you don't have any symbols, and you have rich knowledge of RISC-V you can step through the program instruction by instruction. This was the method used when developing the RISC-V emulator, but it's not always super helpful when debugging a normal mostly-working program in a robust emulator.
 
-There are three main methods to debugging. One is using the built-in debugging facilities enabled with RISCV_DEBUG. Another is stepping through the program yourself manually, and checking for any conditions you are interested in, using the emulators state. And the third option is connecting with GDB remotely, which is what you are after if you are just debugging a normal program. Importantly, GDB gives you good introspection of the environment when using any modern language with debuginfo support.
+There are three main methods to debugging. One is using the built-in debugging facilities. Another is stepping through the program yourself manually, and checking for any conditions you are interested in, using the emulators state. And the third option is connecting with GDB remotely, which is what you are after if you are just debugging a normal program. Importantly, GDB gives you good introspection of the environment when using any modern language with debuginfo support.
 
 ## Debugging with the emulator itself
 
 This method is platform-independent and works everywhere, but you will want to do it from a terminal so you can type commands. It allows you to step through the program instruction by instruction and trap on execute, reads and writes. Doing that, however, requires you to program this behavior. libriscv is fundamentally a library with a flexible, programmable emulator.
 
-Start by enabling the RISCV_DEBUG CMake option. This will enable several debugging options in the machine, as well as give you access to a debugging CLI.
+You can enable the RISCV_DEBUG CMake option if you want, but it is entirely optional. It will enable extra debugging features in the machine.
 
 ```C++
+	DebugMachine debugger { machine };
 	// Print all instructions one by one
-	machine.verbose_instructions = true;
+	debug.verbose_instructions = true;
 	// Break immediately
-	machine.print_and_pause();
+	debug.print_and_pause();
 
 	try {
-		machine.simulate();
+		debug.simulate();
 	} catch (riscv::MachineException& me) {
 		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
 				me.type(), me.what(), me.data());
-		machine.print_and_pause();
+		debug.print_and_pause();
 	} catch (std::exception& e) {
-		printf(">>> Exception: %s\n", e.what());
-		machine.print_and_pause();
+		printf(">>> General exception: %s\n", e.what());
+		debug.print_and_pause();
 	}
 ```
 An example of how to use the built-in CLI to step through instruction by instruction.

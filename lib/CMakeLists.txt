@@ -2,11 +2,8 @@
 # C++17 RISC-V emulator library
 #
 
-# DEBUG allows printing, stepping, breaking from
-# a terminal so that you can step through programs.
-# This feature should only be enabled when
-# the terminal is used to debug problems.
-option(RISCV_DEBUG  "Enable debugging features in the RISC-V machine" OFF)
+# DEBUG allows memory alignment checks and other things
+option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
 # FASTSIM analyzes the code in order to interpret it
 # faster than normally possible.
 option(RISCV_FASTSIM "Enable fast simulation mode" ON)
@@ -33,6 +30,7 @@ endif()
 
 set (SOURCES
 		libriscv/cpu.cpp
+		libriscv/debug.cpp
 		libriscv/decoder_cache.cpp
 		libriscv/machine.cpp
 		libriscv/memory.cpp
@@ -57,13 +55,6 @@ else()
 	list(APPEND SOURCES
 		libriscv/linux/system_calls.cpp
 	)
-endif()
-if (RISCV_DEBUG)
-	list(APPEND SOURCES
-		libriscv/debug.cpp
-	)
-	# Debugging must happen on unmodified instructions
-	set(RISCV_EXPERIMENTAL OFF)
 endif()
 if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL)
 	list(APPEND SOURCES
@@ -99,16 +90,13 @@ if (RISCV_EXT_V)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_VECTOR=32)
 endif()
 
-# The fast simulator is incompatible with RISCV_DEBUG (for now)
-if (RISCV_DEBUG)
-	message(WARNING "RISCV_FAST_SIMULATOR disabled by RISCV_DEBUG")
-elseif (RISCV_FASTSIM)
+if (RISCV_FASTSIM)
 	target_compile_definitions(riscv PUBLIC RISCV_FAST_SIMULATOR=1)
 	message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
 	target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
 endif()
 
-if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL)
+if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
 	# The rewriter changes instruction bytes and is incompatible
 	# with a decoder that reads instructions from execute-memory.
 	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
@@ -122,13 +110,9 @@ if (RISCV_MEMORY_TRAPS)
 	target_compile_definitions(riscv PUBLIC RISCV_MEMORY_TRAPS=1)
 endif()
 if (RISCV_BINARY_TRANSLATION)
-	if (RISCV_DEBUG)
-		message(WARNING "RISCV_BINARY_TRANSLATION disabled by RISCV_DEBUG")
-	else()
-		target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
-		target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
-		target_link_libraries(riscv PUBLIC dl)
-	endif()
+	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
+	target_compile_definitions(riscv PRIVATE RISCV_TRANSLATION_CACHE=1)
+	target_link_libraries(riscv PUBLIC dl)
 endif()
 if (RISCV_FLAT_MEMORY)
 	target_compile_definitions(riscv PUBLIC RISCV_FLAT_MEMORY=1)

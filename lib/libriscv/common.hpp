@@ -28,15 +28,15 @@ namespace riscv
 
 #ifdef RISCV_MEMORY_TRAPS
 	static constexpr bool memory_traps_enabled = true;
+	static constexpr bool verbose_branches_enabled = true;
 #else
 	static constexpr bool memory_traps_enabled = false;
+	static constexpr bool verbose_branches_enabled = false;
 #endif
 
 #ifdef RISCV_DEBUG
-	static constexpr bool debugging_enabled = true;
 	static constexpr bool memory_alignment_check = true;
 #else
-	static constexpr bool debugging_enabled = false;
 	static constexpr bool memory_alignment_check = false;
 #endif
 
@@ -94,9 +94,6 @@ namespace riscv
 		bool verbose_loader = false;
 		// Minimal fork does not loan any pages from the source Machine
 		bool minimal_fork = false;
-		// Instruction fusing is an experimental optimizing feature
-		// Can only be enabled with the RISCV_EXPERIMENTAL CMake option
-		bool instruction_fusing = false;
 
 		std::function<struct Page&(Memory<W>&, size_t, bool)> page_fault_handler = nullptr;
 

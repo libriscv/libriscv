@@ -6,12 +6,6 @@
 #include "rv64i.hpp"
 #include "rv128i.hpp"
 
-#define INSTRUCTION_LOGGING(cpu)	\
-	if ((cpu).machine().verbose_instructions) { \
-		const auto string = isa_type<W>::to_string(cpu, instruction, decode(instruction)) + "\n"; \
-		(cpu).machine().print(string.c_str(), string.size()); \
-	}
-
 namespace riscv
 {
 	[[maybe_unused]] static constexpr bool VERBOSE_FASTSIM = false;
@@ -141,9 +135,6 @@ namespace riscv
 			machine().increment_counter(1)) {
 
 			format_t instruction;
-#ifdef RISCV_DEBUG
-			this->break_checks();
-#endif
 
 #  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->is_executable(this->pc()))) {
@@ -161,26 +152,15 @@ namespace riscv
 			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
 				exec_decoder[pc / DecoderCache<W>::DIVISOR];
-		#ifdef RISCV_DEBUG
-			INSTRUCTION_LOGGING(*this);
-		#endif
 			cache_entry.execute(*this, instruction);
 #   ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
 			instruction = read_next_instruction_slowpath();
-	#ifdef RISCV_DEBUG
-			INSTRUCTION_LOGGING(*this);
-	#endif
 			// decode & execute instruction directly
 			this->execute(instruction);
 		}
 #   endif // RISCV_INBOUND_JUMPS_ONLY
 
-#ifdef RISCV_DEBUG
-			if (UNLIKELY(machine().verbose_registers)) {
-				this->register_debug_logging();
-			}
-#endif
 			// increment PC
 			if constexpr (compressed_enabled)
 				registers().pc += instruction.length();
