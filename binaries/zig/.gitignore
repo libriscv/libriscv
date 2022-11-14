@@ -1,3 +1,4 @@
 example
+async
 *.o
 **/zig-cache/*
