@@ -195,7 +195,6 @@ static void syscall_write(Machine<W>& machine)
 	const size_t len   = machine.sysarg(2);
 	SYSPRINT("SYSCALL write, fd: %d addr: 0x%lX, len: %zu\n",
 		vfd, (long)address, len);
-	// We only accept standard output pipes, for now :)
 	if (vfd == 1 || vfd == 2) {
 		// Zero-copy retrieval of buffers (64kb)
 		riscv::vBuffer buffers[16];
@@ -235,6 +234,58 @@ static void syscall_write(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_readv(Machine<W>& machine)
+{
+	const int  vfd    = machine.template sysarg<int>(0);
+	const auto iov_g  = machine.sysarg(1);
+	const auto count  = machine.template sysarg<int>(2);
+	if (count < 1 || count > 128) {
+		machine.set_result(-EINVAL);
+		return;
+	}
+	int real_fd = -1;
+
+	if (vfd == 1 || vfd == 2) {
+		real_fd = -1;
+	} else if (machine.has_file_descriptors()) {
+		real_fd = machine.fds().translate(vfd);
+	}
+	if (real_fd < 0) {
+		machine.set_result(-EBADF);
+	} else {
+		const size_t iov_size = sizeof(guest_iovec<W>) * count;
+
+		// Retrieve the guest IO vec
+		std::array<guest_iovec<W>, 128> g_vec;
+		machine.copy_from_guest(g_vec.data(), iov_g, iov_size);
+
+		// Convert each iovec buffer to host buffers
+		std::array<struct iovec, 256> vec;
+		size_t vec_cnt = 0;
+		riscv::vBuffer buffer[64];
+
+		for (int i = 0; i < count; i++) {
+			// The host buffers come directly from guest memory
+			const size_t cnt = machine.memory.gather_buffers_from_range(
+				64, buffer, g_vec[i].iov_base, g_vec[i].iov_len);
+			for (size_t b = 0; b < cnt; b++) {
+				vec.at(vec_cnt++) = {
+					.iov_base = buffer[b].ptr,
+					.iov_len  = buffer[b].len
+				};
+			}
+		}
+
+		const ssize_t res = readv(real_fd, vec.data(), vec_cnt);
+		machine.set_result_or_error(res);
+	}
+	if constexpr (verbose_syscalls) {
+		printf("SYSCALL readv(vfd: %d iov: 0x%lX cnt: %d) = %ld\n",
+			vfd, (long)iov_g, count, (long)machine.return_value());
+	}
+} // readv
+
+template <int W>
 static void syscall_writev(Machine<W>& machine)
 {
 	const int  vfd    = machine.template sysarg<int>(0);
@@ -247,7 +298,6 @@ static void syscall_writev(Machine<W>& machine)
 		machine.set_result(-EINVAL);
 		return;
 	}
-	// We only accept standard output pipes, for now :)
 	int real_fd = -1;
 
 	if (vfd == 1 || vfd == 2) {
@@ -912,6 +962,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(56, syscall_openat<W>);
 	this->install_syscall_handler(57, syscall_close<W>);
 	this->install_syscall_handler(59, syscall_pipe2<W>);
+	this->install_syscall_handler(65, syscall_readv<W>);
 	this->install_syscall_handler(66, syscall_writev<W>);
 	this->install_syscall_handler(73, syscall_ppoll<W>);
 	this->install_syscall_handler(78, syscall_readlinkat<W>);
