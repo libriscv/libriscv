@@ -2,8 +2,7 @@
 #include <array>
 #include "common.hpp"
 #include "types.hpp"
-#define RISCV_DECODER_BASE_FUNC _start
-extern "C" void RISCV_DECODER_BASE_FUNC();
+#define RISCV_DECODER_BASE_FUNC DecoderData::function
 
 namespace riscv {
 
@@ -11,7 +10,7 @@ template <int W>
 struct DecoderData {
 	using Handler = instruction_handler<W>;
 #ifdef RISCV_DECODER_COMPRESS
-	uint32_t m_handler = 0x0;
+	int32_t m_handler = 0x0;
 #else
 	Handler m_handler = nullptr;
 #endif
@@ -74,6 +73,7 @@ private:
 	}
 	static std::array<Handler, 256> handlers;
 #endif
+	static void function() {}
 };
 
 template <int W>
