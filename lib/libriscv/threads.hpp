@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdio>
 #include <unordered_map>
-#include <libriscv/machine.hpp>
+#include "machine.hpp"
 
 namespace riscv {
 

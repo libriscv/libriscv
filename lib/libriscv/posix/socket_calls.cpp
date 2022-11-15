@@ -10,7 +10,7 @@
 #ifndef WIN32
 #include <sys/socket.h>
 #else
-#include "win32/ws2.hpp"
+#include "../win32/ws2.hpp"
 WSADATA riscv::ws2::global_winsock_data;
 bool riscv::ws2::winsock_initialized = false;
 #endif

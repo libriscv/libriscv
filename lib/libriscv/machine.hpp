@@ -2,8 +2,8 @@
 #include "cpu.hpp"
 #include "memory.hpp"
 #include "riscvbase.hpp"
-#include "posix_filedesc.hpp"
-#include "signals.hpp"
+#include "posix/filedesc.hpp"
+#include "posix/signals.hpp"
 #include <array>
 
 namespace riscv

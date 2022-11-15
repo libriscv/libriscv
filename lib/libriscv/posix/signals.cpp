@@ -1,7 +1,7 @@
-#include "machine.hpp"
 #include "signals.hpp"
-#include "threads.hpp"
 
+#include "../machine.hpp"
+#include "../threads.hpp"
 
 namespace riscv {
 

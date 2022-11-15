@@ -1,4 +1,4 @@
-#include "threads.hpp"
+#include "../threads.hpp"
 
 namespace riscv {
 

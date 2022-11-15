@@ -1,8 +1,10 @@
 #pragma once
 #include <map>
 #include <set>
+#include "../types.hpp"
 
 namespace riscv {
+template <int W> struct Machine;
 template <int W> struct Registers;
 
 template <int W>
@@ -48,4 +50,4 @@ private:
 	std::map<int, SignalPerThread<W>> m_per_thread;
 };
 
-}
+} // riscv
