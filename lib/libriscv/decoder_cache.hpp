@@ -2,13 +2,19 @@
 #include <array>
 #include "common.hpp"
 #include "types.hpp"
+#define RISCV_DECODER_BASE_FUNC _start
+extern "C" void RISCV_DECODER_BASE_FUNC();
 
 namespace riscv {
 
 template <int W>
 struct DecoderData {
 	using Handler = instruction_handler<W>;
-	Handler handler;
+#ifdef RISCV_DECODER_COMPRESS
+	uint32_t m_handler = 0x0;
+#else
+	Handler m_handler = nullptr;
+#endif
 #ifdef RISCV_FAST_SIMULATOR
 	uint32_t instr;
 	uint16_t idxend;
@@ -22,23 +28,36 @@ struct DecoderData {
 	};
 
 	void execute(CPU<W>& cpu) {
-		this->handler(cpu, instruction_format{this->instr});
+		get_handler()(cpu, instruction_format{this->instr});
 	}
 #endif // RISCV_FAST_SIMULATOR
 
 	template <typename... Args>
 	void execute(CPU<W>& cpu, Args... args) {
-		this->handler(cpu, args...);
+		get_handler()(cpu, args...);
 	}
 	bool isset() const noexcept {
-		return handler != nullptr;
+		return get_handler() != nullptr;
 	}
 	void set_handler(Instruction<W> insn) noexcept {
-		this->handler = insn.handler;
+		this->set_insn_handler(insn.handler);
+	}
+
+#ifdef RISCV_DECODER_COMPRESS
+	Handler get_handler() const noexcept {
+		return (Handler)((uintptr_t)&RISCV_DECODER_BASE_FUNC + m_handler);
 	}
 	void set_insn_handler(instruction_handler<W> ih) noexcept {
-		this->handler = ih;
+		this->m_handler = (uintptr_t)ih - (uintptr_t)&RISCV_DECODER_BASE_FUNC;
 	}
+#else
+	Handler get_handler() const noexcept {
+		return this->m_handler;
+	}
+	void set_insn_handler(instruction_handler<W> ih) noexcept {
+		this->m_handler = ih;
+	}
+#endif
 
 #if 0 // Work in progress
 private:
