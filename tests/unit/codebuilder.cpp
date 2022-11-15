@@ -64,8 +64,8 @@ std::vector<uint8_t> build_and_load(
 	}
 	// Compile code to binary file
 	char bin_filename[256];
-	const uint32_t code_checksum = crc32(code.c_str(), code.size());
-	const uint32_t final_checksum = crc32(code_checksum, args.c_str(), args.size());
+	const uint32_t code_checksum = crc32((const uint8_t *)code.c_str(), code.size());
+	const uint32_t final_checksum = crc32(code_checksum, (const uint8_t *)args.c_str(), args.size());
 	(void)snprintf(bin_filename, sizeof(bin_filename),
 		"/tmp/binary-%08X", final_checksum);
 
