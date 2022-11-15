@@ -1,4 +1,8 @@
 #pragma once
+// Force-align memory operations to their native alignments
+template <typename T> constexpr inline size_t memory_align_mask() {
+	return size_t(Page::size() - 1) & ~size_t(sizeof(T)-1);
+}
 
 template <int W>
 template <typename T> inline
@@ -10,7 +14,7 @@ T Memory<W>::read(address_t address)
 	protection_fault(address);
 #else
 	const auto& pagedata = cached_readable_page(address, sizeof(T));
-	return pagedata.template aligned_read<T>(address & (Page::size()-1));
+	return pagedata.template aligned_read<T>(address & memory_align_mask<T>());
 #endif
 }
 
@@ -24,7 +28,7 @@ T& Memory<W>::writable_read(address_t address)
 	protection_fault(address);
 #else
 	auto& pagedata = cached_writable_page(address);
-	return pagedata.template aligned_read<T>(address & (Page::size()-1));
+	return pagedata.template aligned_read<T>(address & memory_align_mask<T>());
 #endif
 }
 
@@ -42,7 +46,7 @@ void Memory<W>::write(address_t address, T value)
 	const auto pageno = page_number(address);
 	auto& entry = m_wr_cache;
 	if (entry.pageno == pageno) {
-		entry.page->template aligned_write<T>(address & (Page::size()-1), value);
+		entry.page->template aligned_write<T>(address & memory_align_mask<T>(), value);
 		return;
 	}
 
@@ -51,10 +55,10 @@ void Memory<W>::write(address_t address, T value)
 		entry = {pageno, &page.page()};
 	} else if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
-			page.trap(address & (Page::size()-1), sizeof(T) | TRAP_WRITE, value);
+			page.trap(address & memory_align_mask<T>(), sizeof(T) | TRAP_WRITE, value);
 		}
 	}
-	page.page().template aligned_write<T>(address & (Page::size()-1), value);
+	page.page().template aligned_write<T>(address & memory_align_mask<T>(), value);
 #endif
 }
 
