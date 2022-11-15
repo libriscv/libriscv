@@ -40,6 +40,7 @@ struct DecoderData {
 		this->handler = ih;
 	}
 
+#if 0 // Work in progress
 private:
 	size_t opcode_for(Handler new_handler) const {
 		for (size_t i = 1; i < handlers.size(); i++) {
@@ -53,6 +54,7 @@ private:
 		//throw std::runtime_error("Not enough instruction handler space");
 	}
 	static std::array<Handler, 256> handlers;
+#endif
 };
 
 template <int W>
