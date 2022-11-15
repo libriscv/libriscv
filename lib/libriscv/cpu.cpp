@@ -8,8 +8,6 @@
 
 namespace riscv
 {
-	[[maybe_unused]] static constexpr bool VERBOSE_FASTSIM = false;
-
 	// Instructions may be unaligned with C-extension
 	// On amd64 we take the cost, because it's faster
 	union UnderAlign32 {
@@ -213,30 +211,22 @@ namespace riscv
 			// The number of instructions to run until we can check
 			// if we ran out of instructions or PC changed.
 			size_t count = decoder->idxend;
-			if constexpr (VERBOSE_FASTSIM) {
-				printf("Fastsim at PC=0x%lX count=%zu\n", (long)pc, count);
-			}
-			size_t instr_count = count;
 			// With compressed instructions enabled, we get the instruction
 			// count from the 8-bit instr_count value.
+			size_t instr_count = count;
 			if constexpr (compressed_enabled)
 				instr_count = decoder->idxend - decoder->instr_count;
 			counter.increment_counter(instr_count);
 			auto* decoder_end = &decoder[count];
-			unsigned length = 0;
 			// We want to run 4 instructions at a time, except for
 			// the last one, which we will "always" do next
 			if constexpr (!compressed_enabled)
 			{
 				while (decoder + 4 < decoder_end)
 				{
-					registers().pc = pc + 0;
 					decoder[0].execute(*this);
-					registers().pc = pc + 4;
 					decoder[1].execute(*this);
-					registers().pc = pc + 8;
 					decoder[2].execute(*this);
-					registers().pc = pc + 12;
 					decoder[3].execute(*this);
 					pc += 16;
 					decoder += 4;
@@ -251,44 +241,35 @@ namespace riscv
 					auto* decoder1 = decoder0 + oplen0 / 2;
 					const auto oplen1 = decoder1->opcode_length;
 
-					registers().pc = pc;
 					decoder0->execute(*this);
-
-					pc += oplen0;
-
-					registers().pc = pc;
 					decoder1->execute(*this);
 
-					pc += oplen1;
+					pc += oplen0 + oplen1;
 					decoder = decoder1 + oplen1 / 2;
 				}
 			}
-			// There is always one instruction we can run
-			do {
-				// Some instructions use PC offsets
-				registers().pc = pc;
-				// Debugging aid when fast simulator is behaving strangely
-				if constexpr (VERBOSE_FASTSIM) {
-					const format_t instruction{decoder->instr};
-					const auto string = isa_type<W>::to_string(*this, instruction, decode(instruction)) + "\n";
-					machine().print(string.c_str(), string.size());
-				}
+			constexpr int OFF = compressed_enabled ? 2 : 1;
+			// Execute remainder with no PC-dependency
+			while (decoder+OFF < decoder_end) {
 				// Execute instruction using handler and 32-bit wrapper
 				decoder->execute(*this);
 				// increment *local* PC
 				if constexpr (compressed_enabled) {
-					length = decoder->opcode_length;
+					auto length = decoder->opcode_length;
 					pc += length;
 					decoder += length / 2;
 				} else {
 					pc += 4;
 					decoder++;
 				}
-			} while (decoder < decoder_end);
+			}
+			// Execute last instruction (with updated PC)
+			registers().pc = pc;
+			decoder->execute(*this);
 			// The loop above ended because PC could have changed.
 			// Update to real PC by reading from register memory.
 			if constexpr (compressed_enabled)
-				pc = registers().pc + length;
+				pc = registers().pc + decoder->opcode_length;
 			else
 				pc = registers().pc + 4;
 

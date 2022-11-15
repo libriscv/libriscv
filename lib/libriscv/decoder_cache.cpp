@@ -72,7 +72,8 @@ namespace riscv
 							break;
 					} else {
 						if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
-							|| opcode == RV32I_JAL || opcode == RV32I_JALR)
+							|| opcode == RV32I_JAL || opcode == RV32I_JALR
+							|| opcode == RV32I_AUIPC)
 							break;
 					}
 				}
@@ -103,7 +104,8 @@ namespace riscv
 
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
-					|| opcode == RV32I_JAL || opcode == RV32I_JALR)
+					|| opcode == RV32I_JAL || opcode == RV32I_JALR
+					|| opcode == RV32I_AUIPC)
 					idxend = 0;
 				idxend ++;
 				entry.idxend = idxend;
