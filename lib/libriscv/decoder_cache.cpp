@@ -80,6 +80,7 @@ namespace riscv
 				for (size_t i = 0; i < data.size(); i++) {
 					auto* entry = data[i];
 					const auto length = rv32i_instruction{entry->original_opcode}.length();
+					// Ends at *last instruction*
 					entry->idxend = datalength;
 					// XXX: original_opcode gets overwritten here by opcode_length
 					// which simplifies future simulation by simplifying length.
@@ -107,8 +108,10 @@ namespace riscv
 					|| opcode == RV32I_JAL || opcode == RV32I_JALR
 					|| opcode == RV32I_AUIPC)
 					idxend = 0;
-				idxend ++;
+				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
+				// Increment after, idx becomes block count - 1
+				idxend ++;
 
 				pc -= 4;
 			}

@@ -213,7 +213,7 @@ namespace riscv
 			size_t count = decoder->idxend;
 			// With compressed instructions enabled, we get the instruction
 			// count from the 8-bit instr_count value.
-			size_t instr_count = count;
+			size_t instr_count = count+1;
 			if constexpr (compressed_enabled)
 				instr_count = decoder->idxend - decoder->instr_count;
 			counter.increment_counter(instr_count);
@@ -252,8 +252,8 @@ namespace riscv
 					decoder = decoder1 + oplen1 / 2;
 				}
 			}
-			constexpr int OFF = compressed_enabled ? 2 : 1;
 			// Execute remainder with no PC-dependency
+			constexpr int OFF = compressed_enabled ? 2 : 0;
 			while (decoder+OFF < decoder_end) {
 				// Execute instruction using handler and 32-bit wrapper
 				decoder->execute(*this);
