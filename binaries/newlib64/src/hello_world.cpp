@@ -3,11 +3,8 @@
 #include <regex>
 #include <iostream>
 #include <stdexcept>
-//#include <unistd.h>
-//#include "type_name.hpp"
-extern "C" void _exit(int);
 
-inline uint32_t rdcycle()
+inline uint64_t rdcycle()
 {
 	union {
 		uint64_t whole;
@@ -69,10 +66,7 @@ int main()
 		printf("Caught exception: %s\n", e.what());
 	}
 
-	// if we don't return from main we can continue calling functions in the VM
-	// exit(int) will call destructors, which breaks the C runtime environment
-	// instead, call _exit which is just a shortcut for the EXIT system call.
-	_exit(666);
+	return 666;
 }
 
 static std::vector<int> array;
