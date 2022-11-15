@@ -222,14 +222,18 @@ namespace riscv
 			// the last one, which we will "always" do next
 			if constexpr (!compressed_enabled)
 			{
-				while (decoder + 4 < decoder_end)
+				while (decoder + 8 < decoder_end)
 				{
 					decoder[0].execute(*this);
 					decoder[1].execute(*this);
 					decoder[2].execute(*this);
 					decoder[3].execute(*this);
-					pc += 16;
-					decoder += 4;
+					decoder[4].execute(*this);
+					decoder[5].execute(*this);
+					decoder[6].execute(*this);
+					decoder[7].execute(*this);
+					pc += 32;
+					decoder += 8;
 				}
 			} else { // Conservative compressed version
 				while (decoder + 4 < decoder_end)
