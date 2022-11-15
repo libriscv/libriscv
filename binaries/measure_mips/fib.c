@@ -1,6 +1,6 @@
 static long fib(long n, long acc, long prev)
 {
-    if (n < 1)
+    if (n == 0)
         return acc;
     else
         return fib(n - 1, prev + acc, acc);
