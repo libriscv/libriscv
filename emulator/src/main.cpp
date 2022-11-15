@@ -107,7 +107,7 @@ static void run_program(
 		}
 	}
 
-	auto t0 = std::chrono::system_clock::now();
+	auto t0 = std::chrono::high_resolution_clock::now();
 	try {
 		// If you run the emulator with GDB=1, you can connect
 		// with gdb-multiarch using target remote localhost:2159.
@@ -160,7 +160,7 @@ static void run_program(
 		else
 			run_sighandler(machine);
 	}
-	auto t1 = std::chrono::system_clock::now();
+	auto t1 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> runtime = t1 - t0;
 
 	const auto retval = machine.return_value();
