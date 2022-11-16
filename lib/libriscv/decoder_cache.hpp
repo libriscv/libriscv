@@ -86,7 +86,7 @@ private:
 			"Not enough instruction handler space", instr_handlers.size());
 	}
 	static constexpr size_t OP_MAX =
-		binary_translation_enabled ? 4096 : 64;
+		binary_translation_enabled ? 4096 : 80;
 	static inline std::array<Handler, OP_MAX> instr_handlers;
 #else
 	static void function() {}
