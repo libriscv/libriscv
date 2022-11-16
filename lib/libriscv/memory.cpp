@@ -500,14 +500,32 @@ namespace riscv
 	template <int W>
 	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const char* name) const
 	{
+		const char* endptr = &m_binary[m_binary.size()];
+
+		if (elf_header()->e_shoff > m_binary.size() - sizeof(Shdr))
+			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
 		const auto* shdr = elf_offset<Shdr> (elf_header()->e_shoff);
+
 		const auto& shstrtab = shdr[elf_header()->e_shstrndx];
+		if ((const char *)&shstrtab > endptr - sizeof(shstrtab))
+			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
+
 		const char* strings = elf_offset<char>(shstrtab.sh_offset);
+
+		// Only check if the last section header is outside ELF binary,
+		// as everything else is further in.
+		if ((const char *)&shdr[elf_header()->e_shnum] > endptr)
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF string offset");
 
 		for (auto i = 0; i < elf_header()->e_shnum; i++)
 		{
 			const char* shname = &strings[shdr[i].sh_name];
-			if (strcmp(shname, name) == 0) {
+
+			if (shname >= endptr)
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF string offset");
+			const size_t len = strnlen(shname, endptr - shname);
+
+			if (strncmp(shname, name, len) == 0) {
 				return &shdr[i];
 			}
 		}

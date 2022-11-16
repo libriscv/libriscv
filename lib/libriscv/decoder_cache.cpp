@@ -219,6 +219,7 @@ namespace riscv
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
 #ifdef RISCV_FAST_SIMULATOR
 			entry.instr = 0x0;
+			entry.idxend = 0;
 #endif
 
 			// Load unaligned instruction from execute segment
