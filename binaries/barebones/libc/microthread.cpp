@@ -12,7 +12,9 @@ namespace microthread
 	}
 	void oneshot_exit()
 	{
-		free(self()); // after this point stack unusable
+		auto* thread = self();
+		// after this point stack unusable
+		free((char *)thread + sizeof(Thread) - Thread::STACK_SIZE);
 		syscall(THREAD_SYSCALLS_BASE+1, 0);
 		__builtin_unreachable();
 	}

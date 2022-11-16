@@ -131,13 +131,14 @@ inline auto create(const T& func, Args&&... args)
 
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (stack_bot == nullptr) return Thread_ptr{};
-	char* stack_top = stack_bot + Thread::STACK_SIZE;
+	constexpr size_t ArgSize = sizeof(std::tuple {std::move(args)...});
+	char* stack_top = stack_bot + Thread::STACK_SIZE - sizeof(Thread) - ArgSize;
 	// store arguments on stack
-	char* args_addr = stack_bot + sizeof(Thread);
-	auto* tuple = new (args_addr) std::tuple{std::move(args)...};
+	auto* tuple = new (stack_top) std::tuple{std::move(args)...};
 
-	// store the thread at the beginning of the stack
-	Thread* thread = new (stack_bot) Thread(
+	// store the thread after arguments (at the very top)
+	char* thread_addr = stack_top + ArgSize;
+	Thread* thread = new (thread_addr) Thread(
 		[func, tuple] () -> void
 		{
 			if constexpr (std::is_same_v<void, decltype(func(args...))>)
@@ -167,12 +168,15 @@ inline int oneshot(const T& func, Args&&... args)
 				"Free threads have no return value!");
 	char* stack_bot = (char*) malloc(Thread::STACK_SIZE);
 	if (UNLIKELY(stack_bot == nullptr)) return -12; /* ENOMEM */
-	char* stack_top = stack_bot + Thread::STACK_SIZE;
+
+	constexpr size_t ArgSize = sizeof(std::tuple {std::move(args)...});
+	char* stack_top = stack_bot + Thread::STACK_SIZE - sizeof(Thread) - ArgSize;
 	// store arguments on stack
-	char* args_addr = stack_bot + sizeof(Thread);
-	auto* tuple = new (args_addr) std::tuple{std::move(args)...};
-	// store the thread at the beginning of the stack
-	Thread* thread = new (stack_bot) Thread(
+	auto* tuple = new (stack_top) std::tuple{std::move(args)...};
+
+	// store the thread after arguments (at the very top)
+	char* thread_addr = stack_top + ArgSize;
+	Thread* thread = new (thread_addr) Thread(
 		[func, tuple] {
 			std::apply(func, std::move(*tuple));
 			extern void oneshot_exit();
@@ -210,7 +214,7 @@ inline long join(Thread* thread)
 		asm ("" : : : "memory");
 	}
 	const long rv = thread->return_value;
-	free(thread);
+	free((char *)thread + sizeof(Thread) - Thread::STACK_SIZE);
 	return rv;
 }
 inline long join(Thread_ptr& tp)
