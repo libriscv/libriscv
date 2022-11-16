@@ -94,7 +94,7 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 			machine.set_result(-1);
 			return;
 		}
-		const auto stack = ((tls + STACK_SIZE) & ~0xF);
+		const auto stack = ((tls + STACK_SIZE) & ~0xFLL);
 
 		auto* thread = machine.threads().create(
 			CHILD_SETTID, tls, 0x0, stack, tls, tls, STACK_SIZE);

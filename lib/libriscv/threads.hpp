@@ -124,7 +124,9 @@ inline void Thread<W>::resume()
 	threading.m_current = this;
 	auto& m = threading.machine;
 	// restore registers
-	m.cpu.registers() = this->stored_regs;
+	m.cpu.registers().copy_from(
+		Registers<W>::Options::NoVectors,
+		this->stored_regs);
 	THPRINT(threading.machine,
 		"Returning to tid=%d tls=0x%lX stack=0x%lX\n",
 			this->tid,
@@ -137,7 +139,10 @@ inline void Thread<W>::resume()
 template <int W>
 inline void Thread<W>::suspend()
 {
-	this->stored_regs = threading.machine.cpu.registers();
+	// copy all regs except vector lanes
+	this->stored_regs.copy_from(
+		Registers<W>::Options::NoVectors,
+		threading.machine.cpu.registers());
 	// add to suspended (NB: can throw)
 	threading.m_suspended.push_back(this);
 }
