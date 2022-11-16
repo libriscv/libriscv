@@ -17,6 +17,8 @@ namespace riscv
 	};
 
 #ifdef RISCV_FAST_SIMULATOR
+	static constexpr uint32_t FASTSIM_BLOCK_END = 0xFFFF;
+
 	template <int W>
 	static bool is_regular_compressed(uint16_t instr) {
 		const rv32c_instruction ci { instr };
@@ -83,7 +85,7 @@ namespace riscv
 					} else {
 						if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
 							|| opcode == RV32I_JAL || opcode == RV32I_JALR
-							|| opcode == RV32I_AUIPC)
+							|| opcode == RV32I_AUIPC || entry.instr == FASTSIM_BLOCK_END)
 							break;
 					}
 				}
@@ -94,8 +96,6 @@ namespace riscv
 					auto* entry = data[i];
 					// Ends at *last instruction*
 					entry->idxend = datalength;
-					// XXX: original_opcode gets overwritten here by opcode_length
-					// which simplifies future simulation by simplifying length.
 					entry->opcode_length = length;
 					// XXX: We have to pack the instruction count by combining it with the cb length
 					// in order to avoid overflows on large code blocks. The code block length
@@ -119,7 +119,7 @@ namespace riscv
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
 					|| opcode == RV32I_JAL || opcode == RV32I_JALR
-					|| opcode == RV32I_AUIPC)
+					|| opcode == RV32I_AUIPC || entry.instr == FASTSIM_BLOCK_END)
 					idxend = 0;
 				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
@@ -197,6 +197,9 @@ namespace riscv
 		for (; dst < addr + len;)
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
+#ifdef RISCV_FAST_SIMULATOR
+			entry.instr = 0x0;
+#endif
 
 			// Load unaligned instruction from execute segment
 			const rv32i_instruction instruction { *(UnalignedLoad32*) &exec_segment[dst] };
@@ -208,7 +211,7 @@ namespace riscv
 					// With fastsim we pretend the original opcode is JAL,
 					// which breaks the fastsim loop. In all cases, continue.
 					#ifdef RISCV_FAST_SIMULATOR
-					entry.original_opcode = RV32I_JAL;
+					entry.instr = FASTSIM_BLOCK_END;
 					#endif
 					dst += 4;
 					continue;

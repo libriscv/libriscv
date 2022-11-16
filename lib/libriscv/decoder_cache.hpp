@@ -85,7 +85,9 @@ private:
 		throw MachineException(MAX_INSTRUCTIONS_REACHED,
 			"Not enough instruction handler space", instr_handlers.size());
 	}
-	static inline std::array<Handler, 64> instr_handlers;
+	static constexpr size_t OP_MAX =
+		binary_translation_enabled ? 4096 : 64;
+	static inline std::array<Handler, OP_MAX> instr_handlers;
 #else
 	static void function() {}
 #  endif
