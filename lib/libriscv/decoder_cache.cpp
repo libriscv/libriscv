@@ -4,9 +4,16 @@
 #include "rv32i_instr.hpp"
 #include "rvc.hpp"
 
-#ifdef RISCV_FAST_SIMULATOR
 namespace riscv
 {
+	union UnalignedLoad32 {
+		uint16_t data[2];
+		operator uint32_t() {
+			return data[0] | uint32_t(data[1]) << 16;
+		}
+	};
+
+#ifdef RISCV_FAST_SIMULATOR
 	template <int W>
 	static bool is_regular_compressed(uint16_t instr) {
 		const rv32c_instruction ci { instr };
@@ -43,7 +50,7 @@ namespace riscv
 	template <int W>
 	static void realize_fastsim(
 		address_type<W> base_pc, address_type<W> last_pc,
-		DecoderData<W>* exec_decoder)
+		const uint8_t* exec_segment, DecoderData<W>* exec_decoder)
 	{
 		if constexpr (compressed_enabled)
 		{
@@ -58,17 +65,16 @@ namespace riscv
 					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
 					data.push_back(&entry);
 
-					// Only the first 16 bits are preserved of the original
-					const auto instr16 = entry.original_opcode;
-					const auto opcode = rv32i_instruction{instr16}.opcode();
-					const auto length = rv32i_instruction{instr16}.length();
+					const rv32i_instruction instruction{*(UnalignedLoad32 *)&exec_segment[pc]};
+					const auto opcode = instruction.opcode();
+					const auto length = instruction.length();
 					pc += length;
 					datalength += length / 2;
 
 					// All opcodes that can modify PC
 					if (length == 2)
 					{
-						if (!is_regular_compressed<W>(instr16))
+						if (!is_regular_compressed<W>(instruction.half[0]))
 							break;
 					} else {
 						if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
@@ -100,8 +106,9 @@ namespace riscv
 			address_type<W> pc = last_pc - 4;
 			while (pc >= base_pc)
 			{
+				const rv32i_instruction instruction{*(UnalignedLoad32 *)&exec_segment[pc]};
 				auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
-				const auto opcode = rv32i_instruction{entry.original_opcode}.opcode();
+				const auto opcode = instruction.opcode();
 
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
@@ -117,19 +124,9 @@ namespace riscv
 			}
 		}
 	}
-}
 #else
 #define VERBOSE_FASTSIM  false
 #endif // RISCV_FAST_SIMULATOR
-
-namespace riscv
-{
-	union UnalignedLoad32 {
-		uint16_t data[2];
-		operator uint32_t() {
-			return data[0] | uint32_t(data[1]) << 16;
-		}
-	};
 
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
@@ -257,7 +254,7 @@ namespace riscv
 		}
 
 #ifdef RISCV_FAST_SIMULATOR
-		realize_fastsim<W>(addr, dst, exec_decoder);
+		realize_fastsim<W>(addr, dst, exec_segment, exec_decoder);
 #endif
 	}
 
