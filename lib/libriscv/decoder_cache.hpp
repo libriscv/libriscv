@@ -3,13 +3,14 @@
 #include "common.hpp"
 #include "types.hpp"
 #define RISCV_DECODER_BASE_FUNC DecoderData::function
+//#define RISCV_SUPER_COMPRESSED
 
 namespace riscv {
 
 template <int W>
 struct DecoderData {
 	using Handler = instruction_handler<W>;
-#if defined(RISCV_DECODER_COMPRESS) && defined(RISCV_EXT_COMPRESSED)
+#if defined(RISCV_DECODER_COMPRESS) && !defined(RISCV_SUPER_COMPRESSED)
 	int32_t m_handler = 0x0;
 #elif !defined(RISCV_DECODER_COMPRESS)
 	Handler m_handler = nullptr;
@@ -24,7 +25,7 @@ struct DecoderData {
 			uint8_t opcode_length;
 			uint8_t instr_count;
 		};
-#if defined(RISCV_DECODER_COMPRESS) && !defined(RISCV_EXT_COMPRESSED)
+#if defined(RISCV_DECODER_COMPRESS) && defined(RISCV_SUPER_COMPRESSED)
 		uint16_t m_handler;
 #endif
 	};
@@ -46,14 +47,21 @@ struct DecoderData {
 	}
 
 #ifdef RISCV_DECODER_COMPRESS
+#  ifdef RISCV_SUPER_COMPRESSED
 	Handler get_handler() const noexcept {
 		return instr_handlers[m_handler];
-		//return (Handler)((uintptr_t)&RISCV_DECODER_BASE_FUNC + m_handler);
 	}
 	void set_insn_handler(instruction_handler<W> ih) noexcept {
 		this->m_handler = index_for(ih);
-		//this->m_handler = (uintptr_t)ih - (uintptr_t)&RISCV_DECODER_BASE_FUNC;
 	}
+#  else
+	Handler get_handler() const noexcept {
+		return (Handler)((uintptr_t)&RISCV_DECODER_BASE_FUNC + m_handler);
+	}
+	void set_insn_handler(instruction_handler<W> ih) noexcept {
+		this->m_handler = (uintptr_t)ih - (uintptr_t)&RISCV_DECODER_BASE_FUNC;
+	}
+#endif
 #else
 	Handler get_handler() const noexcept {
 		return this->m_handler;
@@ -63,8 +71,9 @@ struct DecoderData {
 	}
 #endif
 
-#ifdef RISCV_DECODER_COMPRESS
 private:
+#ifdef RISCV_DECODER_COMPRESS
+#  ifdef RISCV_SUPER_COMPRESSED
 	static size_t index_for(Handler new_handler) {
 		for (size_t i = 1; i < instr_handlers.size(); i++) {
 			auto& handler = instr_handlers[i];
@@ -78,8 +87,10 @@ private:
 		throw MachineException(MAX_INSTRUCTIONS_REACHED,
 			"Not enough instruction handler space", instr_handlers.size());
 	}
-	static inline std::array<Handler, 4096> instr_handlers;
+	static inline std::array<Handler, 64> instr_handlers;
+#  else
 	static void function() {}
+#  endif
 #endif
 };
 
