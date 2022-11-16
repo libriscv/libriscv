@@ -219,15 +219,16 @@ You can create a 64kb machine without a binary, and no ELF loader will be invoke
 	Machine<RISCV32> machine;
 	machine.setup_minimal_syscalls();
 
-	const std::vector<uint32_t> my_program {
+	std::vector<uint32_t> my_program {
 		0x29a00513, //        li      a0,666
 		0x05d00893, //        li      a7,93
 		0x00000073, //        ecall
 	};
+	my_program.resize(Page::size() / 4);
 
 	// Set main execute segment (12 instruction bytes)
 	const uint32_t dst = 0x1000;
-	machine.cpu.init_execute_area(my_program.data(), dst, 12);
+	machine.cpu.init_execute_area(my_program.data(), dst, Page::size());
 
 	// Jump to the start instruction
 	machine.cpu.jump(dst);
