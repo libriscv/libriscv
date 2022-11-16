@@ -1,7 +1,7 @@
 #pragma once
 // Force-align memory operations to their native alignments
 template <typename T> constexpr inline size_t memory_align_mask() {
-	return size_t(Page::size() - 1) & ~size_t(sizeof(T)-1);
+	return size_t(Page::size() - 1); // & ~size_t(sizeof(T)-1);
 }
 
 template <int W>
