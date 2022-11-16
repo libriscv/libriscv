@@ -2,6 +2,7 @@
 #include "common.hpp"
 #include "page.hpp"
 #include "registers.hpp"
+#include "supervisor.hpp"
 #ifdef RISCV_EXT_ATOMICS
 #include "rva.hpp"
 #endif
@@ -43,6 +44,15 @@ namespace riscv
 		auto& machine() noexcept { return this->m_machine; }
 		const auto& machine() const noexcept { return this->m_machine; }
 
+#ifdef RISCV_SUPERVISOR_MODE
+		auto& super() {
+			if (m_super == nullptr) m_super.reset(new Supervisor<W>);
+			return *this->m_super; }
+		const auto& super() const {
+			if (m_super == nullptr) m_super.reset(new Supervisor<W>);
+			return *this->m_super; }
+#endif
+
 #ifdef RISCV_EXT_ATOMICS
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
@@ -81,6 +91,10 @@ namespace riscv
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
+
+#ifdef RISCV_SUPERVISOR_MODE
+		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
+#endif
 
 		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
 

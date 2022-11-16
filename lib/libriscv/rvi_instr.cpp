@@ -634,6 +634,8 @@ namespace riscv
 		static std::array<const char*, 2> etype = {"ECALL", "EBREAK"};
 		if (instr.Itype.imm < 2 && instr.Itype.funct3 == 0) {
 			return snprintf(buffer, len, "SYS %s", etype.at(instr.Itype.imm));
+		} else if (instr.Itype.imm == 0x102 && instr.Itype.funct3 == 0) {
+			return snprintf(buffer, len, "SYS SRET");
 		} else if (instr.Itype.imm == 0x105 && instr.Itype.funct3 == 0) {
 			return snprintf(buffer, len, "SYS WFI");
 		} else if (instr.Itype.imm == 0x7FF && instr.Itype.funct3 == 0) {

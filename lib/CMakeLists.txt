@@ -22,6 +22,8 @@ option(RISCV_MEMORY_TRAPS  "Enable memory page traps" OFF)
 # MULTIPROCESS enables experimental features that allow
 # executing RISC-V guest functions in parallel.
 option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
+# SUPERVISOR enables full-system emulation. WIP.
+option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
@@ -109,6 +111,9 @@ if (RISCV_MULTIPROCESS)
 endif()
 if (RISCV_MEMORY_TRAPS)
 	target_compile_definitions(riscv PUBLIC RISCV_MEMORY_TRAPS=1)
+endif()
+if (RISCV_SUPERVISOR)
+	target_compile_definitions(riscv PUBLIC RISCV_SUPERVISOR_MODE=1)
 endif()
 if (RISCV_BINARY_TRANSLATION)
 	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)

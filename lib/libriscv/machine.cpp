@@ -254,10 +254,15 @@ namespace riscv
 			case 0x7FF: // Stop machine
 				this->stop();
 				return;
+#ifdef RISCV_SUPERVISOR_MODE
+			case 0x102: // Supervisor return
+				cpu.super().sret();
+				return;
+#endif
 			}
 			break;
 		case 0x1: // CSRRW
-		case 0x2: // CSRRS
+		case 0x2: { // CSRRS
 			// if destination is x0, then we do not write to rd
 			bool rd = instr.Itype.rd != 0;
 			bool wr = instr.Itype.rs1 != 0;
@@ -275,6 +280,16 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				if (wr) cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1);
 				return;
+#ifdef RISCV_SUPERVISOR_MODE
+			case 0x180: // SATP (supervisor address translation and protection)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.super().satp;
+				if (wr) cpu.super().satp = cpu.reg(instr.Itype.rs1);
+				return;
+			case 0x300: // MSTATUS (machine status)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.super().mstatus;
+				if (wr) cpu.super().mstatus = cpu.reg(instr.Itype.rs1);
+				return;
+#endif
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
 				if (rd) {
@@ -312,7 +327,25 @@ namespace riscv
 				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
 			}
-			break;
+			} break;
+#ifdef RISCV_SUPERVISOR_MODE
+		case 0x5: { // CSRWI
+			bool rd = instr.Itype.rd != 0;
+			const auto imm = instr.Itype.rs1;
+			switch (instr.Itype.imm)
+			{
+			case 0x304: // mie (machine interrupt enable)
+				if (rd) {
+					cpu.super().mie = imm;
+					cpu.reg(instr.Itype.rd) = cpu.super().mie;
+				}
+				return;
+			default:
+				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				return;
+			}
+		} // CSRWI
+#endif
 		}
 		// if we got here, its an illegal operation!
 		cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.funct3);
