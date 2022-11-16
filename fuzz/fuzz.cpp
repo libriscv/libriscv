@@ -9,6 +9,7 @@ static constexpr uint32_t MAX_CYCLES = 5'000;
 static void fuzz_instruction_set(const uint8_t* data, size_t len)
 {
 	static riscv::Machine<W> machine { empty };
+	static std::vector<uint8_t> vec;
 	constexpr uint32_t S = 0x1000;
 	constexpr uint32_t V = 0x2000;
 
@@ -16,14 +17,16 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 		init = true;
 		machine.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
 		machine.on_unhandled_syscall = [] (auto&, int) {};
+		vec.resize(riscv::Page::size());
 		return;
 	}
 
+	memcpy(vec.data(), data, std::min(len, vec.size()));
 	try
 	{
-		machine.cpu.init_execute_area(data, V, len);
+		machine.cpu.init_execute_area(vec.data(), V, vec.size());
 		machine.cpu.reg(riscv::REG_SP) = V;
-		machine.cpu.aligned_jump(V);
+		machine.cpu.jump(V);
 		// Let's avoid loops
 		machine.simulate<false>(MAX_CYCLES);
 	}
