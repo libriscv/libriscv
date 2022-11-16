@@ -373,7 +373,7 @@ namespace riscv
 			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.");
 		}
 
-		// enumerate & load loadable segments
+		// Enumerate & validate loadable segments
 		const auto program_headers = elf->e_phnum;
 		if (UNLIKELY(program_headers <= 0)) {
 			throw MachineException(INVALID_PROGRAM, "ELF with no program-headers");
@@ -388,6 +388,7 @@ namespace riscv
 			throw MachineException(INVALID_PROGRAM, "ELF program-headers are outside the binary");
 		}
 
+		// Load program segments
 		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
 		this->m_start_address = elf->e_entry;
 		this->m_heap_address = 0;
@@ -427,6 +428,10 @@ namespace riscv
 			if (this->m_heap_address < endm)
 				this->m_heap_address = endm;
 		}
+		// Detect (invalid) program with no executable code
+		if (m_exec_decoder == nullptr || m_exec_pagedata_size == 0)
+			throw MachineException(INVALID_PROGRAM, "No execute segment in program");
+
 		// The base mmap address starts at heap start + BRK_MAX
 		// TODO: We should check if the heap starts too close to the end
 		// of the address space now, and move it around if necessary.

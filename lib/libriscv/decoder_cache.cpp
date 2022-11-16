@@ -15,6 +15,18 @@ namespace riscv
 			return data[0] | uint32_t(data[1]) << 16;
 		}
 	};
+	union AlignedLoad16 {
+		uint16_t data;
+		operator uint32_t() { return data; }
+	};
+	static inline rv32i_instruction read_instruction(
+		const uint8_t* exec_segment, uint64_t pc, uint64_t end_pc)
+	{
+		if (pc + 4 <= end_pc)
+			return {*(UnalignedLoad32 *)&exec_segment[pc]};
+		else
+			return {*(AlignedLoad16 *)&exec_segment[pc]};
+	}
 
 #ifdef RISCV_FAST_SIMULATOR
 	static constexpr uint32_t FASTSIM_BLOCK_END = 0xFFFF;
@@ -71,7 +83,8 @@ namespace riscv
 					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
 					data.push_back(&entry);
 
-					const rv32i_instruction instruction{*(UnalignedLoad32 *)&exec_segment[pc]};
+					const auto instruction = read_instruction(
+						exec_segment, pc, last_pc);
 					const auto opcode = instruction.opcode();
 					const auto length = instruction.length();
 					pc += length;
@@ -90,7 +103,8 @@ namespace riscv
 					}
 				}
 				for (size_t i = 0; i < data.size(); i++) {
-					const rv32i_instruction instruction{*(UnalignedLoad32 *)&exec_segment[block_pc]};
+					const auto instruction = read_instruction(
+						exec_segment, block_pc, last_pc);
 					const auto length = instruction.length();
 					block_pc += length;
 					auto* entry = data[i];
@@ -112,7 +126,8 @@ namespace riscv
 			address_type<W> pc = last_pc - 4;
 			while (pc >= base_pc)
 			{
-				const rv32i_instruction instruction{*(UnalignedLoad32 *)&exec_segment[pc]};
+				const auto instruction = read_instruction(
+					exec_segment, pc, last_pc);
 				auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
 				const auto opcode = instruction.opcode();
 
@@ -145,6 +160,10 @@ namespace riscv
 		const size_t plen = (midlen + PMASK) & ~PMASK;
 
 		const size_t n_pages = plen / Page::size();
+		if (n_pages == 0) {
+			throw MachineException(INVALID_PROGRAM,
+				"Program produced empty decoder cache");
+		}
 		auto* decoder_array = new DecoderCache<W> [n_pages];
 		this->m_exec_decoder =
 			decoder_array[0].get_base() - pbase / decoder_array->DIVISOR;
@@ -194,6 +213,7 @@ namespace riscv
 		   Cannot step outside of this area when pregen is enabled,
 		   so it's fine to leave the boundries alone. */
 		address_t dst = addr;
+		const address_t end_addr = addr + len;
 		for (; dst < addr + len;)
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
@@ -202,7 +222,8 @@ namespace riscv
 #endif
 
 			// Load unaligned instruction from execute segment
-			const rv32i_instruction instruction { *(UnalignedLoad32*) &exec_segment[dst] };
+			const auto instruction = read_instruction(
+				exec_segment, dst, end_addr);
 			rv32i_instruction rewritten = instruction;
 
 #ifdef RISCV_BINARY_TRANSLATION

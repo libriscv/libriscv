@@ -59,6 +59,8 @@ namespace riscv
 	template <int W>
 	void CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t length)
 	{
+		if (length < 4 || (length % 4096) != 0)
+			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, begin);
 		const auto* data = (const uint8_t *)vdata;
 		this->initialize_exec_segs(data - begin, begin, length);
 		// Generate decoder cache entries for execute segment
@@ -214,6 +216,8 @@ namespace riscv
 	void CPU<W>::simulate(uint64_t imax)
 	{
 		auto* exec_decoder = machine().memory.get_decoder_cache();
+		if (UNLIKELY(exec_decoder == nullptr))
+			throw MachineException(INVALID_PROGRAM, "Machine not initialized");
 
 		InstrCounter counter{machine()};
 
