@@ -3,6 +3,9 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvc.hpp"
+#if defined(RISCV_DECODER_COMPRESS) && defined(RISCV_SUPER_COMPRESSED)
+static_assert(sizeof(riscv::DecoderData<4>) == 8, "Super compressed decoder is 64-bits");
+#endif
 
 namespace riscv
 {
@@ -61,6 +64,7 @@ namespace riscv
 			address_type<W> pc = base_pc;
 			while (pc < last_pc) {
 				size_t datalength = 0;
+				address_type<W> block_pc = pc;
 				while (pc < last_pc) {
 					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
 					data.push_back(&entry);
@@ -84,8 +88,10 @@ namespace riscv
 					}
 				}
 				for (size_t i = 0; i < data.size(); i++) {
+					const rv32i_instruction instruction{*(UnalignedLoad32 *)&exec_segment[block_pc]};
+					const auto length = instruction.length();
+					block_pc += length;
 					auto* entry = data[i];
-					const auto length = rv32i_instruction{entry->original_opcode}.length();
 					// Ends at *last instruction*
 					entry->idxend = datalength;
 					// XXX: original_opcode gets overwritten here by opcode_length
@@ -209,14 +215,6 @@ namespace riscv
 				}
 			}
 #endif // RISCV_BINARY_TRANSLATION
-
-#ifdef RISCV_FAST_SIMULATOR
-			// Help the fastsim determine the real opcodes
-			// Also, put whole 16-bit instructions there.
-			// NOTE: Gets overwritten for opcode_length later.
-			entry.original_opcode = instruction.half[0];
-			entry.idxend = 0;
-#endif
 
 			// Insert decoded instruction into decoder cache
 			Instruction<W> decoded;

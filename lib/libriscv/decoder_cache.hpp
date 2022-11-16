@@ -3,7 +3,6 @@
 #include "common.hpp"
 #include "types.hpp"
 #define RISCV_DECODER_BASE_FUNC DecoderData::function
-//#define RISCV_SUPER_COMPRESSED
 
 namespace riscv {
 
@@ -18,17 +17,16 @@ struct DecoderData {
 #ifdef RISCV_FAST_SIMULATOR
 	uint32_t instr;
 	uint16_t idxend;
-	// NOTE: Original_opcode is only relevant during decoding.
-	union {
-		uint16_t original_opcode;
-		struct {
-			uint8_t opcode_length;
-			uint8_t instr_count;
-		};
 #if defined(RISCV_DECODER_COMPRESS) && defined(RISCV_SUPER_COMPRESSED)
-		uint16_t m_handler;
-#endif
+	// Only used by super-compressed decoding:
+	uint16_t m_handler;
+#else
+	// Only used by C-extension decoding:
+	struct {
+		uint8_t opcode_length;
+		uint8_t instr_count;
 	};
+#endif
 
 	void execute(CPU<W>& cpu) {
 		get_handler()(cpu, instruction_format{this->instr});
@@ -88,7 +86,7 @@ private:
 			"Not enough instruction handler space", instr_handlers.size());
 	}
 	static inline std::array<Handler, 64> instr_handlers;
-#  else
+#else
 	static void function() {}
 #  endif
 #endif
