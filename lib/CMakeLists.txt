@@ -26,6 +26,7 @@ option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
 option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
 
 if (RISCV_EXPERIMENTAL)
+	option(RISCV_DECODER_COMPRESS    "Enable compressed decoder data" ON)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
 	option(RISCV_FLAT_MEMORY         "Enable exp. faster flat memory mode" OFF)
 endif()
@@ -102,8 +103,15 @@ if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
 	# The rewriter changes instruction bytes and is incompatible
 	# with a decoder that reads instructions from execute-memory.
 	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
-	#target_compile_definitions(riscv PUBLIC RISCV_DECODER_COMPRESS=1)
-	#target_compile_definitions(riscv PUBLIC RISCV_SUPER_COMPRESSED=1)
+	if (RISCV_DECODER_COMPRESS)
+		# Reduce decoder structure to 12 bytes
+		target_compile_definitions(riscv PUBLIC RISCV_DECODER_COMPRESS=1)
+		# Compressed instructions require extra decoding data
+		if (NOT RISCV_EXT_C)
+			# Reduces decoder structure to 8 bytes
+			target_compile_definitions(riscv PUBLIC RISCV_SUPER_COMPRESSED=1)
+		endif()
+	endif()
 endif()
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
