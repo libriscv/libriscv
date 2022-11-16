@@ -165,23 +165,11 @@ static void syscall_read(Machine<W>& machine)
 		riscv::vBuffer buffers[256];
 		size_t cnt =
 			machine.memory.gather_buffers_from_range(256, buffers, address, len);
-		// TODO: Could probably be a readv call
-		size_t bytes = 0;
-		for (size_t i = 0; i < cnt; i++) {
-			ssize_t res = read(real_fd, buffers[i].ptr, buffers[i].len);
-			if (res >= 0) {
-				bytes += res;
-				if ((size_t)res < buffers[i].len) break;
-			} else {
-				machine.set_result_or_error(res);
-				SYSPRINT("SYSCALL read, fd: %d from vfd: %d = %ld (%s)\n",
-						 real_fd, vfd, (long)machine.return_value(), strerror(errno));
-				return;
-			}
-		}
-		machine.set_result(bytes);
+		const ssize_t res =
+			readv(real_fd, (const iovec *)&buffers[0], cnt);
+		machine.set_result(res);
 		SYSPRINT("SYSCALL read, fd: %d from vfd: %d = %ld\n",
-				real_fd, vfd, (long)machine.return_value());
+				 real_fd, vfd, (long)machine.return_value());
 	} else {
 		machine.set_result(-EBADF);
 		SYSPRINT("SYSCALL read, vfd: %d = -EBADF\n", vfd);
@@ -204,33 +192,18 @@ static void syscall_write(Machine<W>& machine)
 			machine.print(buffers[i].ptr, buffers[i].len);
 		}
 		machine.set_result(len);
-		return;
 	} else if (machine.has_file_descriptors() && machine.fds().permit_write(vfd)) {
 		int real_fd = machine.fds().translate(vfd);
 		// Zero-copy retrieval of buffers (256kb)
 		riscv::vBuffer buffers[64];
 		size_t cnt =
 			machine.memory.gather_buffers_from_range(64, buffers, address, len);
-		size_t bytes = 0;
-		// Could probably be a writev call, tbh
-		for (size_t i = 0; i < cnt; i++) {
-			ssize_t res = write(real_fd, buffers[i].ptr, buffers[i].len);
-			if (res >= 0) {
-				bytes += res;
-				// Detect partial writes
-				if ((size_t)res < buffers[i].len) break;
-			} else {
-				// Detect write errors
-				machine.set_result_or_error(res);
-				SYSPRINT("SYSCALL write, fd: %d = %ld (%s)\n",
-						 vfd, (long)machine.return_value(), strerror(errno));
-				return;
-			}
-		}
-		machine.set_result(bytes);
-		return;
+		const ssize_t res =
+			writev(real_fd, (struct iovec *)&buffers[0], cnt);
+		machine.set_result(res);
+	} else {
+		machine.set_result(-EBADF);
 	}
-	machine.set_result(-EBADF);
 }
 
 template <int W>
@@ -243,13 +216,14 @@ static void syscall_readv(Machine<W>& machine)
 		machine.set_result(-EINVAL);
 		return;
 	}
-	int real_fd = -1;
 
+	int real_fd = -1;
 	if (vfd == 1 || vfd == 2) {
 		real_fd = -1;
 	} else if (machine.has_file_descriptors()) {
 		real_fd = machine.fds().translate(vfd);
 	}
+
 	if (real_fd < 0) {
 		machine.set_result(-EBADF);
 	} else {
@@ -298,13 +272,14 @@ static void syscall_writev(Machine<W>& machine)
 		machine.set_result(-EINVAL);
 		return;
 	}
-	int real_fd = -1;
 
+	int real_fd = -1;
 	if (vfd == 1 || vfd == 2) {
 		real_fd = vfd;
 	} else if (machine.has_file_descriptors()) {
 		real_fd = machine.fds().translate(vfd);
 	}
+
 	if (real_fd < 0) {
 		machine.set_result(-EBADF);
 	} else {

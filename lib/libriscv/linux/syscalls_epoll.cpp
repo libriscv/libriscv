@@ -1,4 +1,5 @@
 #include <sys/epoll.h>
+//#define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 
 template <int W>
 static void syscall_epoll_create(Machine<W>& machine)
@@ -16,8 +17,8 @@ static void syscall_epoll_create(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 	}
-	SYSPRINT("SYSCALL epoll_create, flags: %d = %d\n", flags,
-		machine.template return_value<int>());
+	SYSPRINT("SYSCALL epoll_create, flags: %d = %d\n",
+		flags, machine.template return_value<int>());
 }
 
 template <int W>
@@ -42,8 +43,8 @@ static void syscall_epoll_ctl(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 	}
-	SYSPRINT("SYSCALL epoll_ctl, epoll_fd: %d  op: %d fd: %d (%d)  event: 0x%lX = %ld\n",
-		   vepoll_fd, op, vfd, fd, (long)g_event, (long)machine.return_value());
+	SYSPRINT("SYSCALL epoll_ctl, epoll_fd: %d  op: %d vfd: %d (%d)  event: 0x%lX = %ld\n",
+		vepoll_fd, op, vfd, fd, (long)g_event, (long)machine.return_value());
 }
 
 template <int W>

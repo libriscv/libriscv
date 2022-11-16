@@ -46,11 +46,11 @@ static void syscall_socket(Machine<W>& machine)
 template <int W>
 static void syscall_bind(Machine<W>& machine)
 {
-	const auto [sockfd, g_addr, addrlen] =
+	const auto [vfd, g_addr, addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>> ();
 
-	SYSPRINT("SYSCALL bind, sockfd: %d addr: 0x%lX len: 0x%lX\n",
-		sockfd, (long)g_addr, (long)addrlen);
+	SYSPRINT("SYSCALL bind, vfd: %d addr: 0x%lX len: 0x%lX\n",
+		vfd, (long)g_addr, (long)addrlen);
 
 	if (addrlen > 0x1000) {
 		machine.set_result(-ENOMEM);
@@ -59,7 +59,7 @@ static void syscall_bind(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 		alignas(struct sockaddr) char buffer[addrlen];
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
@@ -73,15 +73,15 @@ static void syscall_bind(Machine<W>& machine)
 template <int W>
 static void syscall_listen(Machine<W>& machine)
 {
-	const auto [sockfd, backlog] =
+	const auto [vfd, backlog] =
 		machine.template sysargs<int, int> ();
 
-	SYSPRINT("SYSCALL listen, sockfd: %d backlog: %d\n",
-		sockfd, backlog);
+	SYSPRINT("SYSCALL listen, vfd: %d backlog: %d\n",
+		vfd, backlog);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 
 		int res = listen(real_fd, backlog);
 		machine.set_result_or_error(res);
@@ -93,15 +93,15 @@ static void syscall_listen(Machine<W>& machine)
 template <int W>
 static void syscall_accept(Machine<W>& machine)
 {
-	const auto [sockfd, g_addr, g_addrlen] =
+	const auto [vfd, g_addr, g_addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>> ();
 
-	SYSPRINT("SYSCALL accept, sockfd: %d addr: 0x%lX\n",
-		sockfd, (long)g_addr);
+	SYSPRINT("SYSCALL accept, vfd: %d addr: 0x%lX\n",
+		vfd, (long)g_addr);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 		alignas(16) char buffer[128];
 		socklen_t addrlen = sizeof(buffer);
 
@@ -121,11 +121,11 @@ static void syscall_accept(Machine<W>& machine)
 template <int W>
 static void syscall_connect(Machine<W>& machine)
 {
-	const auto [sockfd, g_addr, addrlen] =
+	const auto [vfd, g_addr, addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>> ();
 
-	SYSPRINT("SYSCALL connect, sockfd: %d addr: 0x%lX len: %zu\n",
-		sockfd, (long)g_addr, (size_t)addrlen);
+	SYSPRINT("SYSCALL connect, vfd: %d addr: 0x%lX len: %zu\n",
+		vfd, (long)g_addr, (size_t)addrlen);
 
 	if (addrlen > 256) {
 		machine.set_result(-ENOMEM);
@@ -134,7 +134,7 @@ static void syscall_connect(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 		alignas(16) char buffer[256];
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
@@ -143,20 +143,20 @@ static void syscall_connect(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 	}
+
+	SYSPRINT("SYSCALL connect, vfd: %d addr: 0x%lX len: %zu = %ld\n",
+		vfd, (long)g_addr, (size_t)addrlen, (long)machine.return_value());
 }
 
 template <int W>
 static void syscall_getsockname(Machine<W>& machine)
 {
-	const auto [sockfd, g_addr, g_addrlen] =
+	const auto [vfd, g_addr, g_addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>> ();
-
-	SYSPRINT("SYSCALL getsockname, sockfd: %d addr: 0x%lX len: 0x%lX\n",
-		sockfd, (long)g_addr, (long)g_addrlen);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets)
 	{
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 
 		struct sockaddr addr {};
 		socklen_t addrlen = 0;
@@ -169,20 +169,20 @@ static void syscall_getsockname(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 	}
+
+	SYSPRINT("SYSCALL getsockname, fd: %d addr: 0x%lX len: 0x%lX = %ld\n",
+		vfd, (long)g_addr, (long)g_addrlen, (long)machine.return_value());
 }
 
 template <int W>
 static void syscall_getpeername(Machine<W>& machine)
 {
-	const auto [sockfd, g_addr, g_addrlen] =
+	const auto [vfd, g_addr, g_addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>> ();
-
-	SYSPRINT("SYSCALL getpeername, sockfd: %d addr: 0x%lX len: 0x%lX\n",
-		sockfd, (long)g_addr, (long)g_addrlen);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets)
 	{
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 
 		struct sockaddr addr {};
 		socklen_t addrlen = 0;
@@ -196,12 +196,15 @@ static void syscall_getpeername(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 	}
+
+	SYSPRINT("SYSCALL getpeername, fd: %d addr: 0x%lX len: 0x%lX = %ld\n",
+		vfd, (long)g_addr, (long)g_addrlen, (long)machine.return_value());
 }
 
 template <int W>
 static void syscall_sendto(Machine<W>& machine)
 {
-	// ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+	// ssize_t sendto(int vfd, const void *buf, size_t len, int flags,
 	//		   const struct sockaddr *dest_addr, socklen_t addrlen);
 	const auto [vfd, g_buf, buflen, flags, g_dest_addr, dest_addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>, int, address_type<W>, unsigned>();
@@ -254,7 +257,7 @@ static void syscall_sendto(Machine<W>& machine)
 template <int W>
 static void syscall_recvfrom(Machine<W>& machine)
 {
-	// ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
+	// ssize_t recvfrom(int vfd, void *buf, size_t len, int flags,
 	// 					struct sockaddr *src_addr, socklen_t *addrlen);
 	const auto [vfd, g_buf, buflen, flags, g_src_addr, g_addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>, int, address_type<W>, address_type<W>>();
@@ -307,11 +310,8 @@ static void syscall_recvfrom(Machine<W>& machine)
 template <int W>
 static void syscall_setsockopt(Machine<W>& machine)
 {
-	const auto [sockfd, level, optname, g_opt, optlen] =
-		machine.template sysargs<int, int, int, address_type<W>, address_type<W>> ();
-
-	SYSPRINT("SYSCALL setsockopt, sockfd: %d level: %x optname: %#x\n",
-		sockfd, level, optname);
+	const auto [vfd, level, optname, g_opt, optlen] =
+		machine.template sysargs<int, int, int, address_type<W>, unsigned> ();
 
 	if (optlen > 128) {
 		machine.set_result(-ENOMEM);
@@ -320,28 +320,29 @@ static void syscall_setsockopt(Machine<W>& machine)
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 		alignas(8) char buffer[128];
 		machine.copy_from_guest(buffer, g_opt, optlen);
 
 		int res = setsockopt(real_fd, level, optname, buffer, optlen);
 		machine.set_result_or_error(res);
-		return;
+	} else {
+		machine.set_result(-EBADF);
 	}
-
-	machine.set_result(-EBADF);
+	SYSPRINT("SYSCALL setsockopt, fd: %d level: %x optname: %#x len: %u = %ld\n",
+		vfd, level, optname, optlen, (long)machine.return_value());
 }
 
 template <int W>
 static void syscall_getsockopt(Machine<W>& machine)
 {
-	const auto [sockfd, level, optname, g_opt, g_optlen] =
+	const auto [vfd, level, optname, g_opt, g_optlen] =
 		machine.template sysargs<int, int, int, address_type<W>, address_type<W>> ();
 	socklen_t optlen = 0;
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets)
 	{
-		const auto real_fd = machine.fds().translate(sockfd);
+		const auto real_fd = machine.fds().translate(vfd);
 
 		alignas(8) char buffer[128];
 		int res = getsockopt(real_fd, level, optname, buffer, &optlen);
@@ -354,8 +355,8 @@ static void syscall_getsockopt(Machine<W>& machine)
 		machine.set_result(-EBADF);
 	}
 
-	SYSPRINT("SYSCALL getsockopt, sockfd: %d level: %x optname: %#x len: %ld = %ld\n",
-			 sockfd, level, optname, (long)optlen, (long)machine.return_value());
+	SYSPRINT("SYSCALL getsockopt, fd: %d level: %x optname: %#x len: %ld = %ld\n",
+			 vfd, level, optname, (long)optlen, (long)machine.return_value());
 }
 
 template <int W>
