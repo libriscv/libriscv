@@ -8,6 +8,7 @@
 #endif
 
 #ifndef WIN32
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #else
 #include "../win32/ws2.hpp"
@@ -39,8 +40,25 @@ static void syscall_socket(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 	}
-	SYSPRINT("SYSCALL socket, domain: %x type: %x proto: %x = %ld\n",
-			 domain, type, proto, (long)machine.return_value());
+#ifdef SOCKETCALL_VERBOSE
+	const char* domname;
+	switch (domain & 0xFF) {
+		case AF_UNIX: domname = "Unix"; break;
+		case AF_INET: domname = "IPv4"; break;
+		case AF_INET6: domname = "IPv6"; break;
+		default: domname = "unknown";
+	}
+	const char* typname;
+	switch (type & 0xFF) {
+		case SOCK_STREAM: typname = "Stream"; break;
+		case SOCK_DGRAM: typname = "Datagram"; break;
+		case SOCK_SEQPACKET: typname = "Seq.packet"; break;
+		case SOCK_RAW: typname = "Raw"; break;
+		default: typname = "unknown";
+	}
+	SYSPRINT("SYSCALL socket, domain: %x (%s) type: %x (%s) proto: %x = %ld\n",
+		domain, domname, type, typname, proto, (long)machine.return_value());
+#endif
 }
 
 template <int W>
@@ -52,7 +70,7 @@ static void syscall_bind(Machine<W>& machine)
 	SYSPRINT("SYSCALL bind, vfd: %d addr: 0x%lX len: 0x%lX\n",
 		vfd, (long)g_addr, (long)addrlen);
 
-	if (addrlen > 0x1000) {
+	if (addrlen > 128) {
 		machine.set_result(-ENOMEM);
 		return;
 	}
@@ -60,14 +78,14 @@ static void syscall_bind(Machine<W>& machine)
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
 		const auto real_fd = machine.fds().translate(vfd);
-		alignas(struct sockaddr) char buffer[addrlen];
+		alignas(16) char buffer[128];
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
 		int res = bind(real_fd, (struct sockaddr *)buffer, addrlen);
 		machine.set_result_or_error(res);
-		return;
+	} else {
+		machine.set_result(-EBADF);
 	}
-	machine.set_result(-EBADF);
 }
 
 template <int W>
@@ -138,7 +156,14 @@ static void syscall_connect(Machine<W>& machine)
 		alignas(16) char buffer[256];
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
-		const int res = connect(real_fd, (struct sockaddr *)buffer, addrlen);
+#if 0
+		char printbuf[INET6_ADDRSTRLEN];
+		auto* sin = (struct sockaddr_in6 *)buffer;
+		inet_ntop(AF_INET6, &sin->sin6_addr, printbuf, sizeof(printbuf));
+		printf("SYSCALL connect address: %s\n", printbuf);
+#endif
+
+		const int res = connect(real_fd, (const struct sockaddr *)buffer, addrlen);
 		machine.set_result_or_error(res);
 	} else {
 		machine.set_result(-EBADF);
