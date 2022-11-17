@@ -87,11 +87,10 @@ TEST_CASE("Build machine from empty", "[Examples]")
 		0x05d00893, //        li      a7,93
 		0x00000073, //        ecall
 	};
-	my_program.resize(Page::size() / 4);
 
 	// Set main execute segment (12 instruction bytes)
 	const uint32_t dst = 0x1000;
-	machine.cpu.init_execute_area(my_program.data(), dst, Page::size());
+	machine.cpu.init_execute_area(my_program.data(), dst, 12);
 
 	// Jump to the start instruction
 	machine.cpu.jump(dst);
