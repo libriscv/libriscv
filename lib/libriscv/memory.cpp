@@ -441,7 +441,7 @@ namespace riscv
 	}
 
 	template <int W>
-	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const char* name) const
+	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const std::string& name) const
 	{
 		const char* endptr = &m_binary[m_binary.size()];
 
@@ -467,8 +467,10 @@ namespace riscv
 			if (shname >= endptr)
 				throw MachineException(INVALID_PROGRAM, "Invalid ELF string offset");
 			const size_t len = strnlen(shname, endptr - shname);
+			if (len != name.size())
+				continue;
 
-			if (strncmp(shname, name, len) == 0) {
+			if (strncmp(shname, name.c_str(), len) == 0) {
 				return &shdr[i];
 			}
 		}
