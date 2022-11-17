@@ -10,7 +10,7 @@ option(STATIC_BUILD "Build a static executable" OFF)
 
 option(RISCV_DEBUG "" ON)
 option(RISCV_EXT_C "" OFF)
-add_subdirectory(../../lib lib)
+add_subdirectory(../lib lib)
 
 set(SOURCES
 	src/main.cpp

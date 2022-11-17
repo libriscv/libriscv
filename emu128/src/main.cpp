@@ -43,12 +43,6 @@ int main(int argc, const char** argv)
 	   machine, an exception happens which stops execution, or the
 	   instruction counter reaches the given limit (1M): */
 	try {
-#ifdef RISCV_DEBUG
-		if (getenv("DEBUG")) {
-			machine.verbose_instructions = true;
-		}
-		//machine.verbose_registers = true;
-#endif
 		machine.simulate(1'000'000);
 	} catch (const std::exception& e) {
 		fprintf(stderr ,"%s\n", machine.cpu.current_instruction_to_string().c_str());
