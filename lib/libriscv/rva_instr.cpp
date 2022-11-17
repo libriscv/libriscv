@@ -27,12 +27,15 @@ namespace riscv
 		// TODO: Make Type unsigned to match other templates, avoiding spam
 		Type& mem = machine().memory.template writable_read<Type> (addr);
 		// 4. apply <op>, writing the value to mem and returning old value
-		Type old_value = op(*this, mem, instr.Atype.rs2);
+		const Type old_value = op(*this, mem, instr.Atype.rs2);
 		// 5. place value into rd
 		// NOTE: we have to do it in this order, because we can
 		// clobber rs2 when writing to rd, if they are the same!
 		if (instr.Atype.rd != 0) {
-			this->reg(instr.Atype.rd) = old_value;
+			// For RV64, 32-bit AMOs always sign-extend the value
+			// placed in rd, and ignore the upper 32 bits of the original
+			// value of rs2.
+			this->reg(instr.Atype.rd) = (RVSIGNTYPE(*this))old_value;
 		}
 	}
 
