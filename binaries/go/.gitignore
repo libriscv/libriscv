@@ -1,5 +1,6 @@
 channel_ops
 example
+fib
 goroutines
 http_client
 timers
