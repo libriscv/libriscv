@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.9)
 project(riscv CXX)
 
-# Instruction cache does not work without ELF loader (for now)
-option(RISCV_ICACHE "" OFF)
+# FastSim has some issues atm.
+option(RISCV_FASTSIM "" OFF)
 add_subdirectory(../lib lib)
 target_compile_options(riscv PUBLIC "-fsanitize=address,undefined")
 target_compile_options(riscv PUBLIC -march=native -ggdb3 -O1)
