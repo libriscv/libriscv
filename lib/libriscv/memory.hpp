@@ -250,7 +250,7 @@ namespace riscv
 		size_t    m_exec_pagedata_size = 0;
 		address_t m_exec_pagedata_base = 0;
 		DecoderData<W>* m_exec_decoder = nullptr;
-		DecoderCache<W>* m_decoder_cache = nullptr;
+		std::unique_ptr<DecoderCache<W>[]> m_decoder_cache = nullptr;
 #ifdef RISCV_BINARY_TRANSLATION
 		mutable void* m_bintr_dl = nullptr;
 #endif

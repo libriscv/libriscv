@@ -164,12 +164,10 @@ namespace riscv
 			throw MachineException(INVALID_PROGRAM,
 				"Program produced empty decoder cache");
 		}
-		auto* decoder_array = new DecoderCache<W> [n_pages];
-		this->m_exec_decoder =
-			decoder_array[0].get_base() - pbase / decoder_array->DIVISOR;
 		// there could be an old cache from a machine reset
-		delete[] this->m_decoder_cache;
-		this->m_decoder_cache = &decoder_array[0];
+		this->m_decoder_cache.reset(new DecoderCache<W> [n_pages]);
+		this->m_exec_decoder =
+			this->m_decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
 
 		// Avoid using Memory::m_exec_pagedata here.
 		// We choose to use the CPU execute segment,

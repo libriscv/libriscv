@@ -94,7 +94,6 @@ namespace riscv
 			m_ropages.pages.release();
 		}
 #endif
-		delete[] m_decoder_cache;
 #ifdef RISCV_BINARY_TRANSLATION
 		if (m_bintr_dl)
 			dlclose(m_bintr_dl);
