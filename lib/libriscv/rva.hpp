@@ -9,7 +9,7 @@ namespace riscv
 	struct AtomicMemory
 	{
 		using address_t = address_type<W>;
-		static constexpr size_t MAX_RESV = 256;
+		static constexpr size_t MAX_RESV = 32;
 
 		void load_reserve(int size, address_t addr) RISCV_INTERNAL
 		{
@@ -26,7 +26,11 @@ namespace riscv
 		bool store_conditional(int size, address_t addr) RISCV_INTERNAL
 		{
 			check_alignment(size, addr);
-			return (m_reservations.erase(addr) != 0);
+			bool result = (m_reservations.count(addr) != 0);
+			// Regardless of success or failure, executing an SC.W
+			// instruction invalidates any reservation held by this hart.
+			m_reservations.clear();
+			return result;
 		}
 
 	private:

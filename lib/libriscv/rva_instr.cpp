@@ -295,18 +295,18 @@ namespace riscv
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		const auto addr = cpu.reg(instr.Atype.rs1);
-		RVREGTYPE(cpu) value;
+		RVSIGNTYPE(cpu) value;
 		// switch on atomic type
 		if (instr.Atype.funct3 == AMOSIZE_W)
 		{
 			cpu.atomics().load_reserve(4, addr);
-			value = (int32_t) cpu.machine().memory.template read<uint32_t> (addr);
+			value = (int32_t)cpu.machine().memory.template read<uint32_t> (addr);
 		}
 		else if (instr.Atype.funct3 == AMOSIZE_D)
 		{
 			if constexpr (RVISGE64BIT(cpu)) {
 				cpu.atomics().load_reserve(8, addr);
-				value = (int64_t) cpu.machine().memory.template read<uint64_t> (addr);
+				value = (int64_t)cpu.machine().memory.template read<uint64_t> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
