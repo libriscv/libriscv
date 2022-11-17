@@ -44,8 +44,6 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 		const MachineOptions<W> options { .allow_write_exec_segment = true };
 		Machine<W> machine { bin, options };
 		machine.on_unhandled_syscall = [] (auto&, int) {};
-		// This crashes when there is an empty
-		// or no execute section:
 		machine.simulate(MAX_CYCLES);
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());

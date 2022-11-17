@@ -9,13 +9,13 @@ static_assert(sizeof(riscv::DecoderData<4>) == 8, "Super compressed decoder is 6
 
 namespace riscv
 {
-	union UnalignedLoad32 {
+	struct UnalignedLoad32 {
 		uint16_t data[2];
 		operator uint32_t() {
 			return data[0] | uint32_t(data[1]) << 16;
 		}
 	};
-	union AlignedLoad16 {
+	struct AlignedLoad16 {
 		uint16_t data;
 		operator uint32_t() { return data; }
 	};
