@@ -9,9 +9,6 @@ void test_rv32c()
 	riscv::Machine<RISCV32> machine { std::string_view{}, {
 		.memory_max = 65536
 	} };
-#ifdef RISCV_DEBUG
-	machine.verbose_instructions = true;
-#endif
 
 	// C.SRLI imm = [0, 31] CI_CODE(0b100, 0b01):
 	for (int i = 0; i < 32; i++)

@@ -19,11 +19,7 @@ void test_rv32i()
 		.memory_max = 65536
 	} };
 	// install instructions
-	m.copy_to_guest(0x1000, instructions.data(), sizeof(instructions));
-	// make the instructions readable & executable
-	m.memory.set_page_attr(0x1000, Page::size(), {
-		 .read = true, .write = false, .exec = true
-	});
+	m.cpu.init_execute_area(instructions.data(), 0x1000, 4 * instructions.size());
 	m.cpu.jump(0x1000);
 
 	// stack frame

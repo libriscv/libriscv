@@ -20,13 +20,14 @@ namespace riscv
 			std::function<bool(CPU<W>&, const testable_insn<W>&)> callback)
 	{
 		static const address_type<W> MEMBASE = 0x1000;
-		// create page, make it executable
-		auto& page = machine.memory.create_writable_pageno(MEMBASE >> Page::SHIFT);
-		page.attr.exec = true;
-		page.attr.read = true; // needed for debugging
-		// jump to beginning of page, write instruction
+
+		const std::array<uint32_t, 1> instr_page = {
+			insn.bits
+		};
+
+		machine.cpu.init_execute_area(&instr_page[0], MEMBASE, sizeof(instr_page));
+		// jump to page containing instruction
 		machine.cpu.jump(MEMBASE);
-		page.page().template aligned_write<uint32_t> (MEMBASE & (Page::size()-1), insn.bits);
 		// execute instruction
 		machine.cpu.reg(insn.reg) = insn.initial_value;
 		machine.cpu.step_one();
