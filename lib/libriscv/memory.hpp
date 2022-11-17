@@ -144,7 +144,7 @@ namespace riscv
 
 		// Custom execute segment, returns page base, final size and execute segment pointer
 		void create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
-		void generate_decoder_cache(const MachineOptions<W> &, address_t pbase, address_t va, size_t len);
+		void generate_decoder_cache(const MachineOptions<W>&, address_t pbase, address_t va, size_t len);
 		auto* get_decoder_cache() const { return m_exec_decoder; }
 
 		const auto& binary() const noexcept { return m_binary; }

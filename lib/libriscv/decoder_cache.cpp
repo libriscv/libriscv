@@ -279,6 +279,70 @@ namespace riscv
 #endif
 	}
 
+	// Moved here to work around a GCC bug
+	template <int W> RISCV_INTERNAL
+	void Memory<W>::create_execute_segment(
+		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen)
+	{
+		constexpr address_t PMASK = Page::size()-1;
+		const address_t pbase = (vaddr - 0x4) & ~PMASK;
+		const size_t prelen  = vaddr - pbase;
+		// The first 4 bytes is instruction alignment
+		// The middle 4 bytes is the STOP instruction
+		// The last 8 bytes is a relative jump (JR -4)
+		const size_t midlen  = exlen + prelen + 12;
+		const size_t plen = (midlen + PMASK) & ~PMASK;
+		const size_t postlen = plen - midlen;
+		//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
+		//	vaddr, exlen, pbase, pbase + plen, prelen, exlen, postlen, plen);
+		if (UNLIKELY(prelen > plen || prelen + exlen > plen)) {
+			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
+		}
+		// An additional wrap-around check because we are adding 12 bytes
+		// as well as additional padding to len.
+		if (UNLIKELY(pbase + plen < pbase)) {
+			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
+		}
+		// Create the whole executable memory range
+		m_exec_pagedata.reset(new uint8_t[plen]);
+		m_exec_pagedata_size = plen;
+		m_exec_pagedata_base = pbase;
+		std::memset(&m_exec_pagedata[0],      0,     prelen);
+		std::memcpy(&m_exec_pagedata[prelen], vdata, exlen);
+		std::memset(&m_exec_pagedata[prelen + exlen], 0,   postlen);
+
+		// Create a STOP instruction at the end of execute area
+		// It is used by vmcall and preempt to stop after a function call
+		const address_t exit_lenalign =
+			address_t(exlen + 0x3) & ~address_t(0x3);
+		this->m_exit_address = vaddr + exit_lenalign;
+		struct {
+			// STOP
+			const uint32_t stop_instr = 0x7ff00073;
+			// JMP -4 (jump back to STOP)
+			const uint32_t jr4_instr = 0xffdff06f;
+		} instrdata;
+		std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
+		// The execute segment length with added instructions:
+		const size_t exlen_with_stop = exlen + sizeof(instrdata);
+
+		// This is what the CPU instruction fetcher will use
+		// RISCV_INBOUND_JUMPS_ONLY requires us to add extra bytes at the beginning
+		// The STOP function mentioned right above this requires us to add 12 bytes at the end
+		// -4...0: Zero bytes that allow jumping to the start of exec before a pending increment
+		// 0...exlen: The execute segment
+		// exlen..+ 4: The STOP function
+		const auto* exec_offset = m_exec_pagedata.get() - pbase;
+		machine().cpu.initialize_exec_segs(exec_offset, vaddr - 4, exlen_with_stop);
+
+		// + 8: A jump instruction that prevents crashes if someone
+		// resumes the emulator after a STOP happened. It also helps
+		// the debugger by not causing an exception, and will instead
+		// loop back to the STOP instruction.
+		// The instruction must be a part of the decoder cache.
+		this->generate_decoder_cache(options, pbase, vaddr, exlen_with_stop);
+	}
+
 	template struct Memory<4>;
 	template struct Memory<8>;
 	template struct Memory<16>;
