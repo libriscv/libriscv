@@ -7,7 +7,7 @@ option(SANITIZE    "Enable sanitizers" OFF)
 option(BOLT        "Enable BOLT" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
 option(LINKER_GC   "Enable linker section garbage collection" OFF)
-option(STATIC_BUILD "Built the emulator statically" ON)
+option(STATIC_BUILD "Built the emulator statically" OFF)
 
 set(SOURCES
 	src/main.cpp
