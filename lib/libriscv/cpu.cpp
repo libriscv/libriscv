@@ -57,14 +57,13 @@ namespace riscv
 	}
 
 	template <int W>
-	void CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t length)
+	void CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t vlength)
 	{
-		if (length < 4 || (length % 4096) != 0)
+		if (vlength < 4)
 			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, begin);
-		const auto* data = (const uint8_t *)vdata;
-		this->initialize_exec_segs(data - begin, begin, length);
-		// Generate decoder cache entries for execute segment
-		machine().memory.generate_decoder_cache({}, begin, begin, length);
+
+		machine().memory.create_execute_segment(
+			{}, vdata, begin, vlength);
 	}
 
 	template <int W> __attribute__((noinline)) RISCV_INTERNAL
@@ -315,6 +314,8 @@ namespace riscv
 			registers().pc += instruction.length();
 		else
 			registers().pc += 4;
+
+		machine().increment_counter(1);
 	}
 
 	template<int W> __attribute__((cold))
