@@ -483,6 +483,8 @@ namespace riscv
 		if (UNLIKELY(sym_hdr == nullptr)) return nullptr;
 		const auto* str_hdr = section_by_name(".strtab");
 		if (UNLIKELY(str_hdr == nullptr)) return nullptr;
+		// ELF with no symbols
+		if (UNLIKELY(sym_hdr->sh_size == 0)) return nullptr;
 
 		const auto* symtab = elf_sym_index(sym_hdr, 0);
 		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);
@@ -571,6 +573,8 @@ namespace riscv
 		if (str_hdr == nullptr) return {};
 		// backtrace can sometimes find null addresses
 		if (address == 0x0) return {};
+		// ELF with no symbols
+		if (UNLIKELY(sym_hdr->sh_size == 0)) return {};
 
 		const auto* symtab = elf_sym_index(sym_hdr, 0);
 		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);

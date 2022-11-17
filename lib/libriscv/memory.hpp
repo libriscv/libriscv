@@ -202,7 +202,8 @@ namespace riscv
 		void relocate_section(const char* section_name, const char* symtab);
 		const typename Elf<W>::Sym* resolve_symbol(const char* name) const;
 		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {
-			assert(symidx < shdr->sh_size / sizeof(typename Elf<W>::Sym));
+			if (symidx >= shdr->sh_size / sizeof(typename Elf<W>::Sym))
+				throw MachineException(INVALID_PROGRAM, "ELF Symtab section index overflow");
 			auto* symtab = elf_offset<typename Elf<W>::Sym>(shdr->sh_offset);
 			return &symtab[symidx];
 		}
