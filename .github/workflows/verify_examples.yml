@@ -20,12 +20,14 @@ jobs:
       env:
         CC: clang-12
         CXX: clang++-12
+        BUILD_TYPE: Release
       run: cmake emulator -B ${{github.workspace}}/build_emu -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Configure linux64
       env:
         CC: riscv64-linux-gnu-gcc-10
         CXX: riscv64-linux-gnu-g++-10
+        BUILD_TYPE: Release
       run: cmake binaries/linux64 -B ${{github.workspace}}/build_linux64 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build the emulator
@@ -43,6 +45,7 @@ jobs:
     - name: Configure STREAM
       env:
         CC: riscv64-linux-gnu-gcc-10
+        BUILD_TYPE: Release
       run: cmake binaries/STREAM -B ${{github.workspace}}/build_STREAM -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build the STREAM benchmark
