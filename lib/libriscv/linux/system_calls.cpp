@@ -156,7 +156,7 @@ static void syscall_read(Machine<W>& machine)
 		if (result > 0) {
 			machine.copy_to_guest(address, buffer.get(), result);
 		}
-		machine.set_result(result);
+		machine.set_result_or_error(result);
 		return;
 	} else if (machine.has_file_descriptors()) {
 		const int real_fd = machine.fds().translate(vfd);
@@ -167,7 +167,7 @@ static void syscall_read(Machine<W>& machine)
 			machine.memory.gather_buffers_from_range(256, buffers, address, len);
 		const ssize_t res =
 			readv(real_fd, (const iovec *)&buffers[0], cnt);
-		machine.set_result(res);
+		machine.set_result_or_error(res);
 		SYSPRINT("SYSCALL read, fd: %d from vfd: %d = %ld\n",
 				 real_fd, vfd, (long)machine.return_value());
 	} else {
@@ -200,7 +200,7 @@ static void syscall_write(Machine<W>& machine)
 			machine.memory.gather_buffers_from_range(64, buffers, address, len);
 		const ssize_t res =
 			writev(real_fd, (struct iovec *)&buffers[0], cnt);
-		machine.set_result(res);
+		machine.set_result_or_error(res);
 	} else {
 		machine.set_result(-EBADF);
 	}
