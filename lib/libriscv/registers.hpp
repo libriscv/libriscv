@@ -80,6 +80,11 @@ namespace riscv
 				m_rvv.reset(new VectorRegisters<W>);
 			return *m_rvv;
 		}
+		bool has_vectors() const noexcept {
+			return m_rvv != nullptr;
+		}
+#else
+		bool has_vectors() const noexcept { return false; }
 #endif
 
 		Registers() = default;

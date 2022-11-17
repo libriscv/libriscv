@@ -97,6 +97,8 @@ namespace riscv
 		Callsite lookup(address_t) const;
 		void print_backtrace(std::function<void(std::string_view)>);
 
+		// Counts all the memory used by execute segments, pages, etc.
+		size_t memory_usage_total() const;
 		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
 		size_t owned_pages_active() const noexcept;
@@ -254,6 +256,7 @@ namespace riscv
 		address_t m_exec_pagedata_base = 0;
 		DecoderData<W>* m_exec_decoder = nullptr;
 		std::unique_ptr<DecoderCache<W>[]> m_decoder_cache = nullptr;
+		size_t m_decoder_cache_size = 0;
 #ifdef RISCV_BINARY_TRANSLATION
 		mutable void* m_bintr_dl = nullptr;
 #endif

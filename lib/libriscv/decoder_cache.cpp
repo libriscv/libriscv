@@ -166,6 +166,7 @@ namespace riscv
 		}
 		// there could be an old cache from a machine reset
 		this->m_decoder_cache.reset(new DecoderCache<W> [n_pages]);
+		this->m_decoder_cache_size = n_pages * sizeof(DecoderCache<W>);
 		this->m_exec_decoder =
 			this->m_decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
 

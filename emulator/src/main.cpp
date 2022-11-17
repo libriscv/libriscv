@@ -172,8 +172,10 @@ static void run_program(
 		printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms  MIPS: %.0fmi/s\n",
 			machine.instruction_counter(), runtime.count()*1000.0,
 			machine.instruction_counter() / (runtime.count() * 1e6));
-		printf("Pages in use: %zu (%zu kB memory)\n",
-			machine.memory.pages_active(), machine.memory.pages_active() * 4);
+		printf("Pages in use: %zu (%zu kB virtual memory, total %zu kB)\n",
+			machine.memory.pages_active(),
+			machine.memory.pages_active() * 4,
+			machine.memory.memory_usage_total() / 1024UL);
 	}
 }
 

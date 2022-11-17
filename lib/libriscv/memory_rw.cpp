@@ -178,6 +178,26 @@ namespace riscv
 		}
 	}
 
+	template <int W>
+	size_t Memory<W>::memory_usage_total() const
+	{
+		size_t total = 0;
+		total += sizeof(Machine<W>);
+	#ifdef RISCV_EXT_VECTOR
+		const bool has_rvv = machine().cpu.registers().has_vectors();
+		total += has_rvv ? sizeof(VectorRegisters<W>) : 0u;
+	#endif
+		for (const auto& it : m_pages) {
+			const auto& page = it.second;
+			if (!page.attr.non_owning && page.has_data())
+				total += Page::size();
+		}
+		total += m_exec_pagedata_size;
+		total += m_decoder_cache_size;
+
+		return total;
+	}
+
 	template struct Memory<4>;
 	template struct Memory<8>;
 	template struct Memory<16>;
