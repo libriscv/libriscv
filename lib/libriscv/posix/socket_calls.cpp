@@ -238,7 +238,8 @@ static void syscall_sendto(Machine<W>& machine)
 			.msg_iov = iov,
 			.msg_iovlen = cnt,
 			.msg_control = nullptr,
-			.msg_controllen = 0
+			.msg_controllen = 0,
+			.msg_flags = 0,
 		};
 
 		const ssize_t res = sendmsg(real_fd, &hdr, flags);
@@ -285,7 +286,8 @@ static void syscall_recvfrom(Machine<W>& machine)
 			.msg_iov = iov,
 			.msg_iovlen = cnt,
 			.msg_control = nullptr,
-			.msg_controllen = 0
+			.msg_controllen = 0,
+			.msg_flags = 0,
 		};
 
 		const ssize_t res = recvmsg(real_fd, &hdr, flags);
