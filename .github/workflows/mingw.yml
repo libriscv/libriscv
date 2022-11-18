@@ -27,7 +27,7 @@ jobs:
       env:
         CXX: ${{ matrix.compiler }}
         BUILD_TYPE: ${{ matrix.buildtype }}
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=mingw_toolchain.cmake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLTO=OFF -DCMAKE_TOOLCHAIN_FILE=mingw_toolchain.cmake
 
     - name: Build emulator
       run: cmake --build ${{github.workspace}}/build
