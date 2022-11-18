@@ -4,7 +4,7 @@ source scripts/find_compiler.sh
 
 mkdir -p $FOLDER
 pushd $FOLDER
-cmake .. -DCMAKE_BUILD_TYPE=Debug
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DRISCV_MEMORY_TRAPS=ON
 make -j4
 ctest --verbose . $@
 popd
