@@ -189,6 +189,7 @@ namespace riscv
 	#endif
 		for (const auto& it : m_pages) {
 			const auto& page = it.second;
+			total += sizeof(page);
 			if (!page.attr.non_owning && page.has_data())
 				total += Page::size();
 		}
