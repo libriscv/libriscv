@@ -123,6 +123,8 @@ namespace riscv
 	{
 		auto* exec_decoder = machine().memory.get_decoder_cache();
 		auto* exec_seg_data = this->m_exec_data;
+		if (UNLIKELY(exec_decoder == nullptr || exec_seg_data == nullptr))
+			throw MachineException(INVALID_PROGRAM, "Machine not initialized");
 
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
