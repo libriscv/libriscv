@@ -258,6 +258,15 @@ namespace riscv
 					pc += 32;
 					decoder += 8;
 				}
+				if (decoder + 4 < decoder_end)
+				{
+					decoder[0].execute(*this);
+					decoder[1].execute(*this);
+					decoder[2].execute(*this);
+					decoder[3].execute(*this);
+					pc += 16;
+					decoder += 4;
+				}
 			} else { // Conservative compressed version
 				while (decoder + 4 < decoder_end)
 				{
