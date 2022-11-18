@@ -237,8 +237,11 @@ namespace riscv
 			// With compressed instructions enabled, we get the instruction
 			// count from the 8-bit instr_count value.
 			size_t instr_count = count+1;
-			if constexpr (compressed_enabled)
+			if constexpr (compressed_enabled) {
 				instr_count = decoder->idxend - decoder->instr_count;
+			} else {
+				pc += count * 4;
+			}
 			counter.increment_counter(instr_count);
 			auto* decoder_end = &decoder[count];
 			// We want to run 4 instructions at a time, except for
@@ -255,7 +258,6 @@ namespace riscv
 					decoder[5].execute(*this);
 					decoder[6].execute(*this);
 					decoder[7].execute(*this);
-					pc += 32;
 					decoder += 8;
 				}
 				if (decoder + 4 < decoder_end)
@@ -264,7 +266,6 @@ namespace riscv
 					decoder[1].execute(*this);
 					decoder[2].execute(*this);
 					decoder[3].execute(*this);
-					pc += 16;
 					decoder += 4;
 				}
 			} else { // Conservative compressed version
@@ -295,7 +296,6 @@ namespace riscv
 					pc += length;
 					decoder += length / 2;
 				} else {
-					pc += 4;
 					decoder++;
 				}
 			}
