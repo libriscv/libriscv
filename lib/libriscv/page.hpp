@@ -15,7 +15,7 @@ struct PageAttributes
 	bool is_cow = false;
 	bool non_owning = false;
 	bool dont_fork = false;
-	bool cacheable = true;
+	mutable bool cacheable = true;
 	uint8_t user_defined = 0; /* Use this for yourself */
 
 	constexpr bool is_cacheable() const noexcept {
@@ -162,13 +162,13 @@ inline void Page::trap(uint32_t offset, int mode, int64_t value) const
 	this->m_trap((Page&) *this, offset, mode, value);
 }
 inline void Page::set_trap(mmio_cb_t newtrap) const {
-#  ifdef RISCV_MEMORY_TRAPS
-	this->attr.cacheable = false;
-	this->m_trap = newtrap;
-#  else
-	(void) newtrap;
-	throw MachineException(FEATURE_DISABLED, "Memory traps have not been enabled");
-#  endif
+	if constexpr (memory_traps_enabled) {
+		this->attr.cacheable = false;
+		this->m_trap = newtrap;
+	} else {
+		(void) newtrap;
+		throw MachineException(FEATURE_DISABLED, "Memory traps have not been enabled");
+	}
 }
 
 inline std::string Page::to_string() const

@@ -18,7 +18,7 @@ option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 # MEMORY_TRAPS allows you to trap writes to uncacheable
 # pages in memory. Cached pages can only be trapped once.
-option(RISCV_MEMORY_TRAPS  "Enable memory page traps" OFF)
+option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
 # MULTIPROCESS enables experimental features that allow
 # executing RISC-V guest functions in parallel.
 option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)

@@ -28,16 +28,16 @@ namespace riscv
 
 #ifdef RISCV_MEMORY_TRAPS
 	static constexpr bool memory_traps_enabled = true;
-	static constexpr bool verbose_branches_enabled = true;
 #else
 	static constexpr bool memory_traps_enabled = false;
-	static constexpr bool verbose_branches_enabled = false;
 #endif
 
 #ifdef RISCV_DEBUG
 	static constexpr bool memory_alignment_check = true;
+	static constexpr bool verbose_branches_enabled = true;
 #else
 	static constexpr bool memory_alignment_check = false;
+	static constexpr bool verbose_branches_enabled = false;
 #endif
 
 #ifdef RISCV_EXT_ATOMICS

@@ -34,7 +34,7 @@ void Memory<W>::write(address_t address, T value)
 	auto& page = create_writable_pageno(pageno);
 	if (LIKELY(page.attr.is_cacheable())) {
 		entry = {pageno, &page.page()};
-	} else if constexpr (memory_traps_enabled) {
+	} else if constexpr (memory_traps_enabled && sizeof(T) <= 16) {
 		if (UNLIKELY(page.has_trap())) {
 			page.trap(address & memory_align_mask<T>(), sizeof(T) | TRAP_WRITE, value);
 		}
