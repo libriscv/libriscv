@@ -16,25 +16,9 @@ namespace riscv
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
 					MachineOptions<W> options)
 		: m_machine{mach},
-#ifdef RISCV_FLAT_MEMORY
-		  // Strategy: Allocate 32-byte aligned memory with 32 bytes
-		  // extra at the end in order to avoid having to check
-		  // address+sizeof(T) < memsize. Instead, it becomes:
-		  // address < memsize, due to the 32 bytes over-allocation.
-		  m_memdata {new (std::align_val_t(32)) uint8_t[options.memory_max + 32]},
-		  m_memsize {options.memory_max},
-#endif
 		  m_original_machine {true},
 		  m_binary {bin}
 	{
-#ifdef RISCV_FLAT_MEMORY
-		if (UNLIKELY(this->m_memsize < bin.size()))
-			throw MachineException(OUT_OF_MEMORY, "Out of memory", this->m_memsize);
-		if (!m_binary.empty()) {
-			// Load ELF binary into flat memory
-			this->binary_loader(options);
-		}
-#else
 		if (options.page_fault_handler != nullptr)
 		{
 			this->m_page_fault_handler = std::move(options.page_fault_handler);
@@ -63,15 +47,10 @@ namespace riscv
 			// load ELF binary into virtual memory
 			this->binary_loader(options);
 		}
-#endif // RISCV_FLAT_MEMORY
 	}
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, const Machine<W>& other, MachineOptions<W> options)
 	  : m_machine{mach},
-#ifdef RISCV_FLAT_MEMORY
-	    m_memdata{other.memory.m_memdata.get()},
-		m_memsize{other.memory.m_memsize},
-#endif
 	    m_original_machine {false},
 		m_binary{other.memory.binary()}
 	{
@@ -82,12 +61,6 @@ namespace riscv
 	Memory<W>::~Memory()
 	{
 		this->clear_all_pages();
-#ifdef RISCV_FLAT_MEMORY
-		// only the original machine owns memdata range
-		if (!this->m_original_machine) {
-			m_memdata.release();
-		}
-#endif
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		// only the original machine owns rodata range
 		if (!this->m_original_machine) {
@@ -185,11 +158,6 @@ namespace riscv
 				throw MachineException(INVALID_PROGRAM, "Execute segment must be execute-only");
 			}
 		}
-#ifdef RISCV_FLAT_MEMORY
-		fault_if_unreadable(hdr->p_vaddr, len);
-		std::memcpy(&m_memdata[hdr->p_vaddr], src, len);
-		return;
-#else
 
 # ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		if (attr.read && !attr.write && m_ropages.end == 0) {
@@ -212,7 +180,6 @@ namespace riscv
 				 .read = true, .write = true, .exec = true
 			});
 		}
-#endif
 	}
 
 	template <int W> RISCV_INTERNAL

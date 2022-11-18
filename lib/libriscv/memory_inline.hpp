@@ -8,41 +8,22 @@ template <int W>
 template <typename T> inline
 T Memory<W>::read(address_t address)
 {
-#ifdef RISCV_FLAT_MEMORY
-	if (address < m_memsize)
-		return *(T *)&m_memdata[address];
-	protection_fault(address);
-#else
 	const auto& pagedata = cached_readable_page(address, sizeof(T));
 	return pagedata.template aligned_read<T>(address & memory_align_mask<T>());
-#endif
 }
 
 template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
-#ifdef RISCV_FLAT_MEMORY
-	if (address < m_memsize)
-		return *(T *)&m_memdata[address];
-	protection_fault(address);
-#else
 	auto& pagedata = cached_writable_page(address);
 	return pagedata.template aligned_read<T>(address & memory_align_mask<T>());
-#endif
 }
 
 template <int W>
 template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
-#ifdef RISCV_FLAT_MEMORY
-	if (address < m_memsize) {
-		*(T *)&m_memdata[address] = value;
-		return;
-	}
-	protection_fault(address);
-#else
 	const auto pageno = page_number(address);
 	auto& entry = m_wr_cache;
 	if (entry.pageno == pageno) {
@@ -59,7 +40,6 @@ void Memory<W>::write(address_t address, T value)
 		}
 	}
 	page.page().template aligned_write<T>(address & memory_align_mask<T>(), value);
-#endif
 }
 
 template <int W>

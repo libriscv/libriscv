@@ -219,16 +219,8 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
-#ifdef RISCV_FLAT_MEMORY
-		std::unique_ptr<uint8_t[]> m_memdata;
-		const size_t m_memsize;
-		void fault_if_readonly(address_t, size_t) const;
-		void fault_if_unreadable(address_t, size_t) const;
-
-#else
 		mutable CachedPage<W, const PageData> m_rd_cache;
 		mutable CachedPage<W, PageData> m_wr_cache;
-#endif // RISCV_FLAT_MEMORY
 
 		std::unordered_map<address_t, Page> m_pages;
 
@@ -262,10 +254,6 @@ namespace riscv
 #endif
 	};
 #include "memory_inline.hpp"
-#ifdef RISCV_FLAT_MEMORY
-#include "memory_helpers_flat.hpp"
-#else
 #include "memory_inline_pages.hpp"
 #include "memory_helpers_paging.hpp"
-#endif
 }

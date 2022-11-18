@@ -32,9 +32,7 @@ namespace riscv
 			// Handler must produce a new page, or throw
 			Page& page = m_page_fault_handler(*this, pageno, init);
 			if (LIKELY(page.attr.write)) {
-#ifndef RISCV_FLAT_MEMORY
 				this->invalidate_cache(pageno, &page);
-#endif
 				return page;
 			}
 		}

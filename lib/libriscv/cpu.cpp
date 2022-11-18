@@ -111,7 +111,7 @@ namespace riscv
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
 
-#if defined(RISCV_FLAT_MEMORY) || defined(RISCV_INBOUND_JUMPS_ONLY)
+#if defined(RISCV_INBOUND_JUMPS_ONLY)
 		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 #else
 		return read_next_instruction_slowpath();
