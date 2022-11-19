@@ -63,8 +63,12 @@ void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<size_t
 template <int W>
 inline void Machine<W>::system_call(size_t sysnum)
 {
-	const auto& handler = Machine::syscall_handlers.at(sysnum);
-	handler(*this);
+	if (LIKELY(sysnum < syscall_handlers.size())) {
+		const auto& handler = Machine::syscall_handlers[sysnum];
+		handler(*this);
+	} else {
+		throw MachineException(SYSTEM_CALL_FAILED, "System call number out of range", sysnum);
+	}
 }
 template <int W>
 inline void Machine<W>::unchecked_system_call(size_t syscall_number)
