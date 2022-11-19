@@ -14,11 +14,6 @@ inline void CPU<W>::reset_stack_pointer() noexcept
 template<int W>
 inline void CPU<W>::jump(const address_t dst)
 {
-#ifdef RISCV_INBOUND_JUMPS_ONLY
-	if (UNLIKELY(dst < m_exec_begin || dst >= m_exec_end)) {
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, dst);
-	}
-#endif
 	// it's possible to jump to a misaligned address
 	if constexpr (!compressed_enabled) {
 		if (UNLIKELY(dst & 0x3)) {
@@ -35,11 +30,6 @@ inline void CPU<W>::jump(const address_t dst)
 template<int W>
 inline void CPU<W>::aligned_jump(const address_t dst)
 {
-#ifdef RISCV_INBOUND_JUMPS_ONLY
-	if (UNLIKELY(dst < m_exec_begin || dst >= m_exec_end)) {
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, dst);
-	}
-#endif
 	this->registers().pc = dst;
 }
 

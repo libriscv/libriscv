@@ -15,9 +15,6 @@ TEST_CASE("Basic page protections", "[Memory]")
 	machine.memory.memset(V, 0, VLEN);
 	machine.memory.set_page_attr(V, VLEN, {.read = false, .write = false, .exec = true});
 
-#ifndef RISCV_INBOUND_JUMPS_ONLY
-	// It is OK to jump to V, unless inbound jumps are
-	// enabled, requiring us to set the execute segments.
 	machine.cpu.jump(V);
 	REQUIRE(machine.cpu.pc() == V);
 	// The data at V is all zeroes, which forms an
@@ -25,7 +22,6 @@ TEST_CASE("Basic page protections", "[Memory]")
 	REQUIRE_THROWS_WITH([&] {
 		machine.simulate(1);
 	}(), Catch::Matchers::ContainsSubstring("Illegal opcode executed"));
-#endif
 
 	// V is not readable anymore
 	REQUIRE_THROWS_WITH([&] {

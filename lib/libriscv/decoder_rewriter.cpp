@@ -172,13 +172,6 @@ namespace riscv
 			// jump unaligned with (mostly) all branch instructions.
 			const auto bdest = pc + original.Btype.signed_imm() - 4;
 			if ((bdest % PCAL) != 0) break;
-			// We verify if the jump is within the execute segment
-			// and if not, we fallback to the regular branch decoding
-		#ifdef RISCV_INBOUND_JUMPS_ONLY
-			if (UNLIKELY(!is_executable(bdest))) {
-				break;
-			}
-		#endif
 
 			if (original.Btype.rs2 == 0) {
 				ZeroBtype rewritten;
@@ -371,8 +364,7 @@ namespace riscv
 			const bool is_aligned = addr % PCAL == 0;
 			const bool below32 = addr < (uint64_t(1) << (32 + PCALBITS));
 			// If we can't see that it's executable we leave it
-			// NOTE: is_executable is only needed when inbound jumps only
-			if (is_aligned && below32 && is_executable(addr)) {
+			if (is_aligned && below32) {
 				FasterJtype rewritten;
 				rewritten.imm = addr >> PCALBITS;
 				// Handle the common cases x0 and x1

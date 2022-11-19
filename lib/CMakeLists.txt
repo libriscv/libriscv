@@ -94,8 +94,6 @@ endif()
 
 if (RISCV_FASTSIM)
 	target_compile_definitions(riscv PUBLIC RISCV_FAST_SIMULATOR=1)
-	message(WARNING "RISCV_INBOUND_JUMPS_ONLY disables virtual execute memory")
-	target_compile_definitions(riscv PUBLIC RISCV_INBOUND_JUMPS_ONLY=1)
 endif()
 
 if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)

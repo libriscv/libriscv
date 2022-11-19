@@ -39,7 +39,6 @@ namespace riscv
 		// We can't jump if there's been no ELF loader
 		if (!machine().memory.binary().empty()) {
 			const auto initial_pc = machine().memory.start_address();
-#ifndef RISCV_INBOUND_JUMPS_ONLY
 			// Validate that the initial PC is executable.
 			// Inbound jumps feature does not allow other execute areas.
 			// When execute-only is active, there is no reachable execute pages.
@@ -48,7 +47,6 @@ namespace riscv
 			if (UNLIKELY(!page.attr.exec)) {
 				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
 			}
-#endif
 			// This function will (at most) validate the execute segment
 			this->jump(initial_pc);
 		}
@@ -111,11 +109,7 @@ namespace riscv
 			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
 		}
 
-#if defined(RISCV_INBOUND_JUMPS_ONLY)
-		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-#else
 		return read_next_instruction_slowpath();
-#endif
 	}
 
 	template<int W> __attribute__((hot, no_sanitize("undefined")))
@@ -123,8 +117,6 @@ namespace riscv
 	{
 		auto* exec_decoder = machine().memory.get_decoder_cache();
 		auto* exec_seg_data = this->m_exec_data;
-		if (UNLIKELY(exec_decoder == nullptr || exec_seg_data == nullptr))
-			throw MachineException(INVALID_PROGRAM, "Machine not initialized");
 
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
@@ -137,9 +129,7 @@ namespace riscv
 
 			format_t instruction;
 
-#  ifndef RISCV_INBOUND_JUMPS_ONLY
 		if (LIKELY(this->is_executable(this->pc()))) {
-#  endif
 			auto pc = this->pc();
 
 			// Instructions may be unaligned with C-extension
@@ -154,13 +144,12 @@ namespace riscv
 			auto& cache_entry =
 				exec_decoder[pc / DecoderCache<W>::DIVISOR];
 			cache_entry.execute(*this, instruction);
-#   ifndef RISCV_INBOUND_JUMPS_ONLY
 		} else {
+			// The slow path reads from execute pages
 			instruction = read_next_instruction_slowpath();
 			// decode & execute instruction directly
 			this->execute(instruction);
 		}
-#   endif // RISCV_INBOUND_JUMPS_ONLY
 
 			// increment PC
 			if constexpr (compressed_enabled)
@@ -216,9 +205,14 @@ namespace riscv
 	template<int W> __attribute__((hot))
 	void CPU<W>::simulate(uint64_t imax)
 	{
+		// In order to continue we need to have a decoder cache
 		auto* exec_decoder = machine().memory.get_decoder_cache();
-		if (UNLIKELY(exec_decoder == nullptr))
-			throw MachineException(INVALID_PROGRAM, "Machine not initialized");
+		// If we start outside of the fixed execute segment,
+		// we can fall back to the precise simulator.
+		if (UNLIKELY(!is_executable(this->pc()) || exec_decoder == nullptr)) {
+			this->simulate_precise(imax);
+			return;
+		}
 
 		InstrCounter counter{machine()};
 
@@ -309,8 +303,22 @@ namespace riscv
 			else
 				pc = registers().pc + 4;
 
+			// If we left the execute segment, we have to
+			// fall back to slower, precise simulation.
+			if (UNLIKELY(!is_executable(pc))) {
+				break;
+			}
+
 		} while (!counter.overflowed());
+
 		registers().pc = pc;
+
+		// If we are here because the program is still running,
+		// but we are outside the decoder cache, use precise simulation
+		if (UNLIKELY(!is_executable(pc) && !counter.overflowed())) {
+			this->simulate_precise(machine().max_instructions());
+		}
+
 	} // CPU::simulate
 #endif // RISCV_FAST_SIMULATOR
 
@@ -334,6 +342,9 @@ namespace riscv
 	{
 		switch (intr)
 		{
+		case INVALID_PROGRAM:
+			throw MachineException(INVALID_PROGRAM,
+				"Machine not initialized", data);
 		case ILLEGAL_OPCODE:
 			throw MachineException(ILLEGAL_OPCODE,
 					"Illegal opcode executed", data);
@@ -359,6 +370,7 @@ namespace riscv
 		case DEADLOCK_REACHED:
 			throw MachineException(DEADLOCK_REACHED,
 					"Atomics deadlock reached", data);
+
 		default:
 			throw MachineException(UNKNOWN_EXCEPTION,
 					"Unknown exception", intr);

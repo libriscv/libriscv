@@ -139,11 +139,6 @@ namespace riscv
 			// Nothing more to do here, if execute-only
 			if (!attr.read)
 				return;
-		} else if (attr.exec) {
-#ifdef RISCV_INBOUND_JUMPS_ONLY
-			throw MachineException(INVALID_PROGRAM,
-				"Binary can not have more than one executable segment due to RISCV_INBOUND_JUMPS_ONLY");
-#endif
 		}
 		// We would normally never allow this
 		if (attr.exec && attr.write) {

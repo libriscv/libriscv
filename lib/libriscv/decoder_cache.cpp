@@ -328,13 +328,12 @@ namespace riscv
 		const size_t exlen_with_stop = exlen + sizeof(instrdata);
 
 		// This is what the CPU instruction fetcher will use
-		// RISCV_INBOUND_JUMPS_ONLY requires us to add extra bytes at the beginning
 		// The STOP function mentioned right above this requires us to add 12 bytes at the end
 		// -4...0: Zero bytes that allow jumping to the start of exec before a pending increment
 		// 0...exlen: The execute segment
 		// exlen..+ 4: The STOP function
 		const auto* exec_offset = m_exec_pagedata.get() - pbase;
-		machine().cpu.initialize_exec_segs(exec_offset, vaddr - 4, exlen_with_stop);
+		machine().cpu.initialize_exec_segs(exec_offset, vaddr, exlen_with_stop);
 
 		// + 8: A jump instruction that prevents crashes if someone
 		// resumes the emulator after a STOP happened. It also helps

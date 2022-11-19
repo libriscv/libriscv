@@ -112,9 +112,7 @@ namespace riscv
 	{
 		// restore CPU registers and counters
 		this->m_regs = state.registers;
-#ifndef RISCV_INBOUND_JUMPS_ONLY
 		this->m_cache = {};
-#endif
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};
 #endif
