@@ -1,0 +1,77 @@
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
+#include <libriscv/machine.hpp>
+extern std::vector<uint8_t> build_and_load(const std::string& code,
+	const std::string& args = "-O2 -static", bool cpp = false);
+static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
+static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
+using namespace riscv;
+
+TEST_CASE("Calculate fib(2560000) on execute page", "[VA]")
+{
+    const auto binary = build_and_load(R"M(
+#define uintptr_t __UINTPTR_TYPE__
+typedef long (*fib_func)(long, long, long);
+
+static long syscall(long n, long arg0);
+static long syscall3(long n, long arg0, long arg1, long arg2);
+
+static void copy(uintptr_t dst, const void *src, unsigned len) {
+	for (unsigned i = 0; i < len; i++)
+		((char *)dst)[i] = ((const char *)src)[i];
+}
+
+static long fib(long n, long acc, long prev)
+{
+	if (n == 0)
+		return acc;
+	else
+		return fib(n - 1, prev + acc, acc);
+}
+static void fib_end() {}
+
+int main()
+{
+	const uintptr_t DST = 0xF0000000;
+	copy(DST, &fib, (char*)&fib_end - (char*)&fib);
+	// mprotect +execute
+	syscall3(226, DST, 0x1000, 0x4);
+
+	const volatile long n = 50;
+	fib_func other_fib = (fib_func)DST;
+	// exit(...)
+	syscall(93, other_fib(n, 0, 1));
+}
+
+long syscall(long n, long arg0) {
+	register long a0 __asm__("a0") = arg0;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+
+	return a0;
+}
+long syscall3(long n, long arg0, long arg1, long arg2) {
+	register long a0 __asm__("a0") = arg0;
+	register long a1 __asm__("a1") = arg1;
+	register long a2 __asm__("a2") = arg2;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0) : "r"(a1), "r"(a2), "r"(syscall_id));
+
+	return a0;
+})M");
+
+    riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// We need to install Linux system calls for maximum gucciness
+	machine.setup_linux_syscalls();
+	// We need to create a Linux environment for runtimes to work well
+	machine.setup_linux(
+		{"va_exec"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	// Run for at most X instructions before giving up
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	REQUIRE(machine.return_value<long>() == 12586269025L);
+}

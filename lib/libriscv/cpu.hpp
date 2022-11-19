@@ -21,7 +21,7 @@ namespace riscv
 		using instruction_t = Instruction<W>;
 
 		void simulate(uint64_t);
-		void simulate_precise(uint64_t); // Never fuses instructions
+		void simulate_precise(uint64_t);
 		void step_one();
 		void reset();
 		void reset_stack_pointer() noexcept;
@@ -96,6 +96,7 @@ namespace riscv
 		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
 #endif
 
+		uint64_t continue_slowpath(uint64_t counter);
 		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment

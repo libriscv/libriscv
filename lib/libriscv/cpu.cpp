@@ -160,6 +160,27 @@ namespace riscv
 
 	} // CPU::simulate_precise
 
+	template<int W> __attribute__((noinline))
+	uint64_t CPU<W>::continue_slowpath(uint64_t counter)
+	{
+		for (; counter < machine().max_instructions();
+			counter++) {
+
+			if (UNLIKELY(this->is_executable(this->pc())))
+				return counter;
+
+			format_t instruction = read_next_instruction_slowpath();
+			this->execute(instruction);
+
+			if constexpr (compressed_enabled)
+				registers().pc += instruction.length();
+			else
+				registers().pc += 4;
+		} // while not stopped
+
+		return counter;
+	} // CPU::simulate_slowpath
+
 #ifndef RISCV_FAST_SIMULATOR
 	template<int W> __attribute__((hot))
 	void CPU<W>::simulate(uint64_t imax)
@@ -185,6 +206,9 @@ namespace riscv
 				return machine.instruction_counter();
 			else
 				return m_counter; }
+		void set_counter(uint64_t value) {
+			m_counter = value;
+		}
 		void increment_counter(uint64_t cnt) {
 			if constexpr (binary_translation_enabled)
 				machine.increment_counter(cnt);
@@ -195,7 +219,7 @@ namespace riscv
 			if constexpr (binary_translation_enabled)
 				return machine.stopped();
 			else
-				return m_counter > machine.max_instructions();
+				return m_counter >= machine.max_instructions();
 		}
 	private:
 		Machine<W>& machine;
@@ -221,6 +245,7 @@ namespace riscv
 		else
 			machine().set_max_instructions(UINT64_MAX);
 
+restart_simulation:
 		auto pc = this->pc();
 		do {
 			// Retrieve handler directly from the instruction handler cache
@@ -316,7 +341,11 @@ namespace riscv
 		// If we are here because the program is still running,
 		// but we are outside the decoder cache, use precise simulation
 		if (UNLIKELY(!is_executable(pc) && !counter.overflowed())) {
-			this->simulate_precise(machine().max_instructions());
+			// The slowpath only returns if the segment is executable
+			// again, or the instruction limit was reached.
+			counter.set_counter(this->continue_slowpath(counter.value()));
+			if (!counter.overflowed())
+				goto restart_simulation;
 		}
 
 	} // CPU::simulate
