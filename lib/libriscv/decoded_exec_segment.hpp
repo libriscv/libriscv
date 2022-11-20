@@ -24,7 +24,8 @@ namespace riscv
 		address_t exec_end() const noexcept { return m_vaddr_end; }
 		address_t pagedata_base() const noexcept { return m_exec_pagedata_base; }
 
-		auto* decoder_cache() { return m_exec_decoder; }
+		auto* decoder_cache() noexcept { return m_exec_decoder; }
+		auto* decoder_cache() const noexcept { return m_exec_decoder; }
 
 		auto* create_decoder_cache(DecoderCache<W>* cache, size_t size) {
 			m_decoder_cache.reset(cache);

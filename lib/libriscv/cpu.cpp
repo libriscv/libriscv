@@ -66,16 +66,45 @@ namespace riscv
 	template<int W> __attribute__((noinline))
 	void CPU<W>::next_execute_segment()
 	{
+		// Find previously decoded execute segment
 		this->m_exec = machine().memory.exec_segment_for(this->pc());
-		if (this->m_exec == nullptr) {
-			const auto base = this->pc() & ~address_t(Page::size()-1);
-			auto& page = machine().memory.get_exec_pageno(base / Page::size());
+		if (this->m_exec != nullptr)
+			return;
+
+		auto base_pageno = this->pc() / Page::size() + 1;
+		auto end_pageno  = base_pageno;
+		// Find the earliest execute page in new segment
+		while (base_pageno > 0) {
+			const auto& page =
+				machine().memory.get_pageno(base_pageno-1);
 			if (page.attr.exec) {
-				this->init_execute_area(page.data(), base, Page::size());
-			} else {
-				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-			}
+				base_pageno -= 1;
+			} else break;
 		}
+		// Check that the first page is executable, otherwise give error.
+		if (base_pageno == end_pageno) {
+			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+		}
+
+		// Find the last execute page in segment
+		while (end_pageno != 0) {
+			const auto& page =
+				machine().memory.get_pageno(end_pageno);
+			if (page.attr.exec) {
+				end_pageno += 1;
+			} else break;
+		}
+
+		const size_t n_pages = end_pageno - base_pageno;
+		std::unique_ptr<uint8_t[]> area (new uint8_t[n_pages * Page::size()]);
+		// Copy from each individual page
+		for (address_t p = base_pageno; p < end_pageno; p++) {
+			auto& page = machine().memory.get_exec_pageno(p);
+			const size_t offset = (p - base_pageno) * Page::size();
+			std::memcpy(area.get() + offset, page.data(), Page::size());
+		}
+		// Decode and store it for later
+		this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size());
 	} // CPU::next_execute_segment
 
 	template <int W> __attribute__((noinline)) RISCV_INTERNAL
@@ -136,14 +165,14 @@ namespace riscv
 	template<int W> __attribute__((hot, no_sanitize("undefined")))
 	void CPU<W>::simulate_precise(uint64_t max)
 	{
-		auto* exec = this->m_exec;
-		DecoderData<W>* exec_decoder = nullptr;
-		const uint8_t* exec_seg_data = nullptr;
-		// XXX: This can be massively improved
-		if (UNLIKELY(m_exec != nullptr)) {
-			exec_decoder = exec->decoder_cache();
-			exec_seg_data = exec->exec_data();
+		// Decoded segments are always faster
+		// So, always have at least the current segment
+		if (m_exec == nullptr) {
+			this->next_execute_segment();
 		}
+		auto* exec = this->m_exec;
+		auto* exec_decoder = exec->decoder_cache();
+		auto* exec_seg_data = exec->exec_data();
 
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
@@ -156,7 +185,7 @@ namespace riscv
 
 			format_t instruction;
 
-		if (LIKELY(this->is_executable(this->pc()))) {
+		if (LIKELY(exec->is_within(this->pc()))) {
 			auto pc = this->pc();
 
 			// Instructions may be unaligned with C-extension
@@ -249,10 +278,10 @@ namespace riscv
 			machine().set_max_instructions(UINT64_MAX);
 
 restart_simulation:
-		auto* current_exec = this->m_exec;
-		auto current_begin = current_exec->exec_begin();
-		auto current_end   = current_exec->exec_end();
-		auto* exec_decoder = current_exec->decoder_cache();
+		const auto* current_exec = this->m_exec;
+		const auto current_begin = current_exec->exec_begin();
+		const auto current_end = current_exec->exec_end();
+		const auto* exec_decoder = current_exec->decoder_cache();
 
 		auto pc = this->pc();
 		do {

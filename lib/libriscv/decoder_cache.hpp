@@ -28,13 +28,13 @@ struct DecoderData {
 	};
 #endif
 
-	void execute(CPU<W>& cpu) {
+	void execute(CPU<W>& cpu) const {
 		get_handler()(cpu, instruction_format{this->instr});
 	}
 #endif // RISCV_FAST_SIMULATOR
 
 	template <typename... Args>
-	void execute(CPU<W>& cpu, Args... args) {
+	void execute(CPU<W>& cpu, Args... args) const {
 		get_handler()(cpu, args...);
 	}
 	bool isset() const noexcept {
