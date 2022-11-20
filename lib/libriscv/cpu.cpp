@@ -21,9 +21,7 @@ namespace riscv
 	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
 		: m_machine { machine }, m_cpuid { cpu_id }
 	{
-		this->m_exec_data  = other.cpu.m_exec_data;
-		this->m_exec_begin = other.cpu.m_exec_begin;
-		this->m_exec_end   = other.cpu.m_exec_end;
+		this->m_exec = other.cpu.m_exec;
 		// Copy all registers except vectors
 		// Users can still copy vector registers by assigning to registers().rvv().
 		this->registers().copy_from(Registers<W>::Options::NoVectors, other.cpu.registers());
@@ -60,8 +58,9 @@ namespace riscv
 		if (vlength < 4)
 			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, begin);
 
-		machine().memory.create_execute_segment(
-			{}, vdata, begin, vlength);
+		this->set_exec_segment(
+			&machine().memory.create_execute_segment(
+				{}, vdata, begin, vlength));
 	}
 
 	template <int W> __attribute__((noinline)) RISCV_INTERNAL
@@ -103,10 +102,17 @@ namespace riscv
 	}
 
 	template <int W>
+	bool CPU<W>::is_executable(address_t addr) const noexcept {
+		if (m_exec) return m_exec->is_within(addr);
+		return false;
+	}
+
+	template <int W>
 	typename CPU<W>::format_t CPU<W>::read_next_instruction() const
 	{
 		if (LIKELY(this->is_executable(this->pc()))) {
-			return format_t { *(uint32_t*) &m_exec_data[this->pc()] };
+			auto* exd = m_exec->exec_data(this->pc());
+			return format_t { *(uint32_t*) exd };
 		}
 
 		return read_next_instruction_slowpath();
@@ -115,8 +121,14 @@ namespace riscv
 	template<int W> __attribute__((hot, no_sanitize("undefined")))
 	void CPU<W>::simulate_precise(uint64_t max)
 	{
-		auto* exec_decoder = machine().memory.get_decoder_cache();
-		auto* exec_seg_data = this->m_exec_data;
+		auto* exec = this->m_exec;
+		DecoderData<W>* exec_decoder = nullptr;
+		const uint8_t* exec_seg_data = nullptr;
+		// XXX: This can be massively improved
+		if (UNLIKELY(m_exec != nullptr)) {
+			exec_decoder = exec->decoder_cache();
+			exec_seg_data = exec->exec_data();
+		}
 
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
@@ -179,7 +191,7 @@ namespace riscv
 		} // while not stopped
 
 		return counter;
-	} // CPU::simulate_slowpath
+	} // CPU::continue_slowpath
 
 #ifndef RISCV_FAST_SIMULATOR
 	template<int W> __attribute__((hot))
@@ -229,11 +241,9 @@ namespace riscv
 	template<int W> __attribute__((hot))
 	void CPU<W>::simulate(uint64_t imax)
 	{
-		// In order to continue we need to have a decoder cache
-		auto* exec_decoder = machine().memory.get_decoder_cache();
 		// If we start outside of the fixed execute segment,
 		// we can fall back to the precise simulator.
-		if (UNLIKELY(!is_executable(this->pc()) || exec_decoder == nullptr)) {
+		if (UNLIKELY(!is_executable(this->pc()))) {
 			this->simulate_precise(imax);
 			return;
 		}
@@ -246,6 +256,9 @@ namespace riscv
 			machine().set_max_instructions(UINT64_MAX);
 
 restart_simulation:
+		auto* current_exec = this->m_exec;
+		auto* exec_decoder = current_exec->decoder_cache();
+
 		auto pc = this->pc();
 		do {
 			// Retrieve handler directly from the instruction handler cache

@@ -191,8 +191,9 @@ namespace riscv
 			if (!page.attr.non_owning && page.has_data())
 				total += Page::size();
 		}
-		total += m_exec_pagedata_size;
-		total += m_decoder_cache_size;
+		for (const auto& exec : m_exec) {
+			total += exec.size_bytes();
+		}
 
 		return total;
 	}

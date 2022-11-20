@@ -88,9 +88,3 @@ inline bool Memory<W>::mmap_relax(address_t addr, address_t size, address_t new_
 	}
 	return false;
 }
-
-template <int W>
-inline bool Memory<W>::is_executable(address_t addr, size_t len) const noexcept
-{
-	return addr >= m_exec_pagedata_base && addr + len < m_exec_pagedata_base + m_exec_pagedata_size;
-}

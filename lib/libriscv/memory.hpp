@@ -3,14 +3,14 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
+#include <deque>
 #include <unordered_map>
+#include "decoded_exec_segment.hpp"
 #include "util/buffer.hpp" // <string>
 
 namespace riscv
 {
 	template<int W> struct Machine;
-	template<int W> struct DecoderCache;
-	template<int W> struct DecoderData;
 	struct vBuffer { char* ptr; size_t len; };
 
 	template<int W>
@@ -141,13 +141,10 @@ namespace riscv
 		void insert_non_owned_memory(
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
-		// Returns true if the address is inside the executable code segment
-		bool is_executable(address_t addr, size_t = 4) const noexcept;
-
 		// Custom execute segment, returns page base, final size and execute segment pointer
-		void create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
-		void generate_decoder_cache(const MachineOptions<W>&, address_t pbase, address_t va, size_t len);
-		auto* get_decoder_cache() const { return m_exec_decoder; }
+		DecodedExecuteSegment<W>* exec_segment_for(address_t vaddr);
+		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
+
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
@@ -214,6 +211,7 @@ namespace riscv
 		void binary_load_ph(const MachineOptions<W>&, const Phdr*);
 		void serialize_execute_segment(const MachineOptions<W>&, const Phdr*);
 		bool serialize_pages(MemoryArea&, address_t, const char*, size_t, PageAttributes);
+		void generate_decoder_cache(const MachineOptions<W>&, DecodedExecuteSegment<W>&);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
 
@@ -241,14 +239,9 @@ namespace riscv
 
 		const std::string_view m_binary;
 
-		// ELF programs linear .text segment
-		auto* get_exec_segment(address_t pbase) { return m_exec_pagedata.get() - pbase; }
-		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
-		size_t    m_exec_pagedata_size = 0;
-		address_t m_exec_pagedata_base = 0;
-		DecoderData<W>* m_exec_decoder = nullptr;
-		std::unique_ptr<DecoderCache<W>[]> m_decoder_cache = nullptr;
-		size_t m_decoder_cache_size = 0;
+		// Execute segment
+		std::deque<DecodedExecuteSegment<W>> m_exec;
+
 #ifdef RISCV_BINARY_TRANSLATION
 		mutable void* m_bintr_dl = nullptr;
 #endif

@@ -370,8 +370,9 @@ template<int W>
 void DebugMachine<W>::simulate(uint64_t max)
 {
 	auto& cpu = machine.cpu;
-	auto* exec_decoder = machine.memory.get_decoder_cache();
-	auto* exec_seg_data = cpu.exec_seg_data();
+	auto* exec = cpu.current_exec_segment();
+	auto* exec_decoder = exec->decoder_cache();
+	auto* exec_seg_data = exec->exec_data();
 
 	// Calculate the instruction limit
 	if (max != UINT64_MAX)

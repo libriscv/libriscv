@@ -133,7 +133,7 @@ namespace riscv
 				attr.read, attr.write, attr.exec);
 		}
 
-		if (attr.exec && machine().cpu.exec_seg_data() == nullptr)
+		if (attr.exec && m_exec.empty())
 		{
 			serialize_execute_segment(options, hdr);
 			// Nothing more to do here, if execute-only
@@ -199,7 +199,10 @@ namespace riscv
 			exlen = texthdr->sh_size;
 		}
 
-		this->create_execute_segment(options, data, vaddr, exlen);
+		auto& exec_segment =
+			this->create_execute_segment(options, data, vaddr, exlen);
+		// Select the first execute segment
+		machine().cpu.set_exec_segment(&exec_segment);
 	}
 
 	template <int W> RISCV_INTERNAL
@@ -334,7 +337,7 @@ namespace riscv
 				this->m_heap_address = endm;
 		}
 		// Detect (invalid) program with no executable code
-		if (m_exec_decoder == nullptr || m_exec_pagedata_size == 0)
+		if (m_exec.empty())
 			throw MachineException(INVALID_PROGRAM, "No execute segment in program");
 
 		// The base mmap address starts at heap start + BRK_MAX
@@ -388,10 +391,7 @@ namespace riscv
 		this->m_heap_address = master.memory.m_heap_address;
 		this->m_mmap_address = master.memory.m_mmap_address;
 
-		// base address, size and PC-relative data pointer for instructions
-		this->m_exec_pagedata_base = master.memory.m_exec_pagedata_base;
-		this->m_exec_pagedata_size = master.memory.m_exec_pagedata_size;
-		this->m_exec_decoder = master.memory.m_exec_decoder;
+		// TODO: Set callback that can loan execute segments from master
 
 #ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		this->m_ropages.begin = master.memory.m_ropages.begin;

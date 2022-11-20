@@ -152,8 +152,13 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
 		[[maybe_unused]] const MachineOptions<W>& options,
-		address_t pbase, address_t addr, size_t len)
+		DecodedExecuteSegment<W>& exec)
+		//address_t pbase, address_t addr, size_t len)
 	{
+		const auto pbase = exec.pagedata_base();
+		const auto addr  = exec.exec_begin();
+		const auto len   = exec.exec_end() - exec.exec_begin();
+
 		constexpr size_t PMASK = Page::size()-1;
 		const size_t prelen  = addr - pbase;
 		const size_t midlen  = len + prelen;
@@ -165,19 +170,19 @@ namespace riscv
 				"Program produced empty decoder cache");
 		}
 		// there could be an old cache from a machine reset
-		this->m_decoder_cache.reset(new DecoderCache<W> [n_pages]);
-		this->m_decoder_cache_size = n_pages * sizeof(DecoderCache<W>);
-		this->m_exec_decoder =
-			this->m_decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
+		auto* decoder_cache = exec.create_decoder_cache(
+			new DecoderCache<W> [n_pages],
+			n_pages * sizeof(DecoderCache<W>));
+		auto* exec_decoder = 
+			decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
+		exec.set_decoder(exec_decoder);
 
 		// Avoid using Memory::m_exec_pagedata here.
 		// We choose to use the CPU execute segment,
 		// because it is more authoritative.
-		auto* exec_segment = this->machine().cpu.exec_seg_data();
-		assert(exec_segment != nullptr && "Must have set CPU execute segment");
-		auto* exec_decoder = this->m_exec_decoder;
+		auto* exec_segment = exec.exec_data();
 
-	#ifdef RISCV_BINARY_TRANSLATION
+#ifdef RISCV_BINARY_TRANSLATION
 		/* We do not support binary translation for RV128I */
 		if constexpr (W != 16) {
 			// Attempt to load binary translation
@@ -282,7 +287,7 @@ namespace riscv
 
 	// Moved here to work around a GCC bug
 	template <int W> RISCV_INTERNAL
-	void Memory<W>::create_execute_segment(
+	DecodedExecuteSegment<W>& Memory<W>::create_execute_segment(
 		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen)
 	{
 		constexpr address_t PMASK = Page::size()-1;
@@ -304,43 +309,55 @@ namespace riscv
 		if (UNLIKELY(pbase + plen < pbase)) {
 			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 		}
-		// Create the whole executable memory range
-		m_exec_pagedata.reset(new uint8_t[plen]);
-		m_exec_pagedata_size = plen;
-		m_exec_pagedata_base = pbase;
-		std::memset(&m_exec_pagedata[0],      0,     prelen);
-		std::memcpy(&m_exec_pagedata[prelen], vdata, exlen);
-		std::memset(&m_exec_pagedata[prelen + exlen], 0,   postlen);
 
 		// Create a STOP instruction at the end of execute area
 		// It is used by vmcall and preempt to stop after a function call
 		const address_t exit_lenalign =
 			address_t(exlen + 0x3) & ~address_t(0x3);
-		this->m_exit_address = vaddr + exit_lenalign;
+		const address_t exit_address = vaddr + exit_lenalign;
 		struct {
 			// STOP
 			const uint32_t stop_instr = 0x7ff00073;
 			// JMP -4 (jump back to STOP)
 			const uint32_t jr4_instr = 0xffdff06f;
 		} instrdata;
-		std::memcpy(&m_exec_pagedata[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
 		// The execute segment length with added instructions:
 		const size_t exlen_with_stop = exlen + sizeof(instrdata);
+
+		// Create the whole executable memory range
+		m_exec.emplace_back(pbase, plen, vaddr, exlen_with_stop, exit_address);
+		auto* current_exec = &m_exec.back();
+		this->m_exit_address = exit_address;
+
+		auto* exec_data = current_exec->exec_data(pbase);
+		std::memset(&exec_data[0],      0,     prelen);
+		std::memcpy(&exec_data[prelen], vdata, exlen);
+		std::memset(&exec_data[prelen + exlen], 0,   postlen);
 
 		// This is what the CPU instruction fetcher will use
 		// The STOP function mentioned right above this requires us to add 12 bytes at the end
 		// -4...0: Zero bytes that allow jumping to the start of exec before a pending increment
 		// 0...exlen: The execute segment
 		// exlen..+ 4: The STOP function
-		const auto* exec_offset = m_exec_pagedata.get() - pbase;
-		machine().cpu.initialize_exec_segs(exec_offset, vaddr, exlen_with_stop);
+		std::memcpy(&exec_data[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
 
 		// + 8: A jump instruction that prevents crashes if someone
 		// resumes the emulator after a STOP happened. It also helps
 		// the debugger by not causing an exception, and will instead
 		// loop back to the STOP instruction.
 		// The instruction must be a part of the decoder cache.
-		this->generate_decoder_cache(options, pbase, vaddr, exlen_with_stop);
+		this->generate_decoder_cache(options, *current_exec);
+
+		return *current_exec;
+	}
+
+	template <int W>
+	DecodedExecuteSegment<W>* Memory<W>::exec_segment_for(address_t vaddr)
+	{
+		for (auto& segment : m_exec) {
+			if (segment.is_within(vaddr)) return &segment;
+		}
+		return nullptr;
 	}
 
 	template struct Memory<4>;

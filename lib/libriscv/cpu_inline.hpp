@@ -38,11 +38,3 @@ inline void CPU<W>::increment_pc(int delta)
 {
 	registers().pc += delta;
 }
-
-template <int W>
-inline void CPU<W>::initialize_exec_segs(const uint8_t* data, address_t begin, address_t length)
-{
-	if (UNLIKELY(begin + length < begin))
-		throw MachineException(INVALID_PROGRAM, "Execute segment overflows");
-	m_exec_data = data; m_exec_begin = begin; m_exec_end = begin + length;
-}

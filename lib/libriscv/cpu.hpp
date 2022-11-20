@@ -11,6 +11,7 @@
 namespace riscv
 {
 	template<int W> struct Machine;
+	template<int W> struct DecodedExecuteSegment;
 
 	template<int W>
 	struct CPU
@@ -82,11 +83,9 @@ namespace riscv
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
 		void init_execute_area(const void* data, address_t begin, address_t length);
-		void initialize_exec_segs(const uint8_t* data, address_t begin, address_t length);
-		address_t exec_begin() const noexcept { return m_exec_begin; }
-		address_t exec_end()   const noexcept { return m_exec_end; }
-		const uint8_t* exec_seg_data() const noexcept { return m_exec_data; }
-		bool is_executable(address_t dst) const noexcept { return dst >= m_exec_begin && dst < m_exec_end; }
+		void set_exec_segment(DecodedExecuteSegment<W>* seg) { m_exec = seg; }
+		auto* current_exec_segment() const noexcept { return m_exec; }
+		bool is_executable(address_t addr) const noexcept;
 
 	private:
 		Registers<W> m_regs;
@@ -100,9 +99,7 @@ namespace riscv
 		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
-		const uint8_t* m_exec_data = nullptr;
-		address_t m_exec_begin = 0;
-		address_t m_exec_end   = 0;
+		DecodedExecuteSegment<W>* m_exec = nullptr;
 
 		// Page cache for execution on virtual memory
 		mutable CachedPage<W, const Page> m_cache;
