@@ -431,14 +431,20 @@ restart_simulation:
 	}
 
 	template <int W> __attribute__((cold))
-	std::string CPU<W>::to_string(format_t format, const instruction_t& instr) const
+	std::string CPU<W>::to_string(format_t bits) const
+	{
+		return to_string(bits, decode(bits));
+	}
+
+	template <int W> __attribute__((cold))
+	std::string CPU<W>::to_string(format_t bits, const instruction_t& handler) const
 	{
 		if constexpr (W == 4)
-			return RV32I::to_string(*this, format, instr);
+			return RV32I::to_string(*this, bits, handler);
 		else if constexpr (W == 8)
-			return RV64I::to_string(*this, format, instr);
+			return RV64I::to_string(*this, bits, handler);
 		else if constexpr (W == 16)
-			return RV128I::to_string(*this, format, instr);
+			return RV128I::to_string(*this, bits, handler);
 		return "Unknown architecture";
 	}
 

@@ -61,18 +61,56 @@ TEST_CASE("One instruction at a time", "[Examples]")
 	machine.set_max_instructions(1'000'000UL);
 
 	while (!machine.stopped()) {
-		auto& cpu = machine.cpu;
-		// Get 32- or 16-bits instruction
-		auto instr = cpu.read_next_instruction();
+		auto &cpu = machine.cpu;
+		// Read next instruction
+		auto instruction = cpu.read_next_instruction();
 		// Print the instruction to terminal
 		printf("%s\n",
-			cpu.current_instruction_to_string().c_str());
-		// Decode instruction to get instruction info
-		auto decoded = cpu.decode(instr);
-		// Execute one instruction, and increment PC
-		decoded.handler(cpu, instr);
-		cpu.increment_pc(instr.length());
+			   cpu.to_string(instruction, cpu.decode(instruction)).c_str());
+		// Execute instruction directly
+		cpu.execute(instruction);
+		// Increment PC to next instruction, and increment instruction counter
+		cpu.increment_pc(instruction.length());
+		machine.increment_counter(1);
 	}
+
+	REQUIRE(machine.return_value() == 0x1234);
+}
+
+TEST_CASE("One instruction at a time with ilimit", "[Examples]")
+{
+	const auto binary = build_and_load(R"M(
+	extern void exit(int);
+	int main() {
+		return 0x1234;
+	})M");
+
+	Machine<RISCV64> machine{binary};
+	machine.setup_linux(
+		{"myprogram"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	machine.setup_linux_syscalls();
+
+	do {
+		// Only execute 1000 instructions at a time
+		machine.reset_instruction_counter();
+		machine.set_max_instructions(1'000);
+
+		while (!machine.stopped())
+		{
+			auto &cpu = machine.cpu;
+			// Read next instruction
+			const auto instruction = cpu.read_next_instruction();
+			// Print the instruction to terminal
+			printf("%s\n", cpu.to_string(instruction).c_str());
+			// Execute instruction directly
+			cpu.execute(instruction);
+			// Increment PC to next instruction, and increment instruction counter
+			cpu.increment_pc(instruction.length());
+			machine.increment_counter(1);
+		}
+
+	} while (machine.instruction_limit_reached());
 
 	REQUIRE(machine.return_value() == 0x1234);
 }

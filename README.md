@@ -140,9 +140,6 @@ int main(int /*argc*/, const char** /*argv*/)
 	Machine<RISCV64>::install_syscall_handler(94, // exit_group
 		Machine<RISCV64>::syscall_handlers.at(93));
 
-	// NOTE: We absolutely don't have to create our own system calls handlers,
-	// but it's fun to take control of the environment inside the machine!
-
 	// This function will run until the exit syscall has stopped the
 	// machine, an exception happens which stops execution, or the
 	// instruction counter reaches the given 1M instruction limit:
@@ -166,17 +163,9 @@ You can limit the amount of (virtual) memory the machine can use like so:
 	const uint32_t memsize = 1024 * 1024 * 64u;
 	riscv::Machine<riscv::RISCV32> machine { binary, { .memory_max = memsize } };
 ```
+You can find the `MachineOptions` structure in [common.hpp](/lib/libriscv/common.hpp).
 
-You can limit the amount of instructions to simulate at a time like so:
-```C++
-	const uint64_t max_instructions = 2500;
-	machine.simulate(max_instructions);
-```
-If the simulator runs out of instructions it will throw an exception. The exception is harmless and is only inteded to inform that the task took too long to complete. It is possible to keep calling `simulate()` until the machine is finished running. It is finished running when the call to simulate does not throw an exception.
-
-When making a function call into the VM you can also add this limit as a template parameter to the `vmcall()` function.
-
-You can find details on the Linux system call ABI online as well as in the `syscalls.hpp`, and `syscalls.cpp` files in the src folder. You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
+You can find details on the Linux system call ABI online as well as in [the docs](/docs/SYSCALLS.md). You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
 
 ## Handling instructions one by one
 
@@ -197,19 +186,44 @@ machine.set_max_instructions(1'000'000UL);
 
 while (!machine.stopped()) {
 	auto& cpu = machine.cpu;
-	// Get 32- or 16-bits instruction
-	auto instr = cpu.read_next_instruction();
+	// Read next instruction
+	const auto instruction = cpu.read_next_instruction();
 	// Print the instruction to terminal
-	printf("%s\n",
-		cpu.current_instruction_to_string().c_str());
-	// Decode instruction to get instruction info
-	auto decoded = cpu.decode(instr);
-	// Execute one instruction, and increment PC
-	decoded.handler(cpu, instr);
-	cpu.increment_pc(instr.length());
+	printf("%s\n", cpu.to_string(instruction).c_str());
+	// Execute instruction directly
+	cpu.execute(instruction);
+	// Increment PC to next instruction, and increment instruction counter
+	cpu.increment_pc(instruction.length());
+	machine.increment_counter(1);
 }
 ```
-NOTE: Does not work when RISCV_DECODER_REWRITER is enabled, as it modifies (rewrites) instructions. Alternative is to use the already decoded instructions from the decoder cache and the rest will largely be the same.
+
+## Executing the program in small increments
+
+If we only want to run for a small amount of time and then leave the simulation, we can use the same example as above with an outer loop to keep it running as long as we want to until the machine stops normally.
+```C++
+	do {
+		// Only execute 1000 instructions at a time
+		machine.reset_instruction_counter();
+		machine.set_max_instructions(1'000);
+
+		while (!machine.stopped())
+		{
+			auto& cpu = machine.cpu;
+			// Read next instruction
+			const auto instruction = cpu.read_next_instruction();
+			// Print the instruction to terminal
+			printf("%s\n", cpu.to_string(instruction).c_str());
+			// Execute instruction directly
+			cpu.execute(instruction);
+			// Increment PC to next instruction, and increment instruction counter
+			cpu.increment_pc(instruction.length());
+			machine.increment_counter(1);
+		}
+
+	} while (machine.instruction_limit_reached());
+```
+The function `machine.instruction_limit_reached()` only returns true when the instruction limit was reached, and not if the machine stops normally. Using that we can keep going until either the machine stops, or an exception is thrown.
 
 ## Setting up your own machine environment
 
