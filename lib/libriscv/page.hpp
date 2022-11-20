@@ -56,6 +56,7 @@ struct alignas(32) PageData {
 
 	PageData() : buffer8{} {}
 	PageData(const PageData& other) : buffer8{other.buffer8} {}
+	PageData(const std::array<uint8_t, PageSize>& data) : buffer8{data} {}
 	enum Initialization { INITIALIZED, UNINITIALIZED };
 	PageData(Initialization i) { if (i == INITIALIZED) buffer8 = {}; }
 };
@@ -111,6 +112,7 @@ struct Page
 
 	static const Page& cow_page() noexcept;
 	static const Page& guard_page() noexcept;
+	static const Page& host_page() noexcept;
 
 	/* Transform a CoW-page to an owned writable page */
 	void make_writable()

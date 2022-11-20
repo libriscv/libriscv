@@ -291,12 +291,9 @@ namespace riscv
 		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen)
 	{
 		constexpr address_t PMASK = Page::size()-1;
-		const address_t pbase = (vaddr - 0x4) & ~PMASK;
+		const address_t pbase = vaddr & ~PMASK;
 		const size_t prelen  = vaddr - pbase;
-		// The first 4 bytes is instruction alignment
-		// The middle 4 bytes is the STOP instruction
-		// The last 8 bytes is a relative jump (JR -4)
-		const size_t midlen  = exlen + prelen + 12;
+		const size_t midlen  = exlen + prelen;
 		const size_t plen = (midlen + PMASK) & ~PMASK;
 		const size_t postlen = plen - midlen;
 		//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
@@ -310,45 +307,18 @@ namespace riscv
 			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 		}
 
-		// Create a STOP instruction at the end of execute area
-		// It is used by vmcall and preempt to stop after a function call
-		const address_t exit_lenalign =
-			address_t(exlen + 0x3) & ~address_t(0x3);
-		const address_t exit_address = vaddr + exit_lenalign;
-		struct {
-			// STOP
-			const uint32_t stop_instr = 0x7ff00073;
-			// JMP -4 (jump back to STOP)
-			const uint32_t jr4_instr = 0xffdff06f;
-		} instrdata;
-		// The execute segment length with added instructions:
-		const size_t exlen_with_stop = exlen + sizeof(instrdata);
-
 		// Create the whole executable memory range
-		m_exec.emplace_back(pbase, plen, vaddr, exlen_with_stop, exit_address);
-		auto* current_exec = &m_exec.back();
-		this->m_exit_address = exit_address;
+		m_exec.emplace_back(pbase, plen, vaddr, exlen);
+		auto& current_exec = m_exec.back();
 
-		auto* exec_data = current_exec->exec_data(pbase);
+		auto* exec_data = current_exec.exec_data(pbase);
 		std::memset(&exec_data[0],      0,     prelen);
 		std::memcpy(&exec_data[prelen], vdata, exlen);
 		std::memset(&exec_data[prelen + exlen], 0,   postlen);
 
-		// This is what the CPU instruction fetcher will use
-		// The STOP function mentioned right above this requires us to add 12 bytes at the end
-		// -4...0: Zero bytes that allow jumping to the start of exec before a pending increment
-		// 0...exlen: The execute segment
-		// exlen..+ 4: The STOP function
-		std::memcpy(&exec_data[prelen + exit_lenalign], &instrdata, sizeof(instrdata));
+		this->generate_decoder_cache(options, current_exec);
 
-		// + 8: A jump instruction that prevents crashes if someone
-		// resumes the emulator after a STOP happened. It also helps
-		// the debugger by not causing an exception, and will instead
-		// loop back to the STOP instruction.
-		// The instruction must be a part of the decoder cache.
-		this->generate_decoder_cache(options, *current_exec);
-
-		return *current_exec;
+		return current_exec;
 	}
 
 	template <int W>

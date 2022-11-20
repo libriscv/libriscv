@@ -61,7 +61,22 @@ namespace riscv
 		this->set_exec_segment(
 			&machine().memory.create_execute_segment(
 				{}, vdata, begin, vlength));
-	}
+	} // CPU::init_execute_area
+
+	template<int W> __attribute__((noinline))
+	void CPU<W>::next_execute_segment()
+	{
+		this->m_exec = machine().memory.exec_segment_for(this->pc());
+		if (this->m_exec == nullptr) {
+			const auto base = this->pc() & ~address_t(Page::size()-1);
+			auto& page = machine().memory.get_exec_pageno(base / Page::size());
+			if (page.attr.exec) {
+				this->init_execute_area(page.data(), base, Page::size());
+			} else {
+				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+			}
+		}
+	} // CPU::next_execute_segment
 
 	template <int W> __attribute__((noinline)) RISCV_INTERNAL
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
@@ -172,27 +187,6 @@ namespace riscv
 
 	} // CPU::simulate_precise
 
-	template<int W> __attribute__((noinline))
-	uint64_t CPU<W>::continue_slowpath(uint64_t counter)
-	{
-		for (; counter < machine().max_instructions();
-			counter++) {
-
-			if (UNLIKELY(this->is_executable(this->pc())))
-				return counter;
-
-			format_t instruction = read_next_instruction_slowpath();
-			this->execute(instruction);
-
-			if constexpr (compressed_enabled)
-				registers().pc += instruction.length();
-			else
-				registers().pc += 4;
-		} // while not stopped
-
-		return counter;
-	} // CPU::continue_slowpath
-
 #ifndef RISCV_FAST_SIMULATOR
 	template<int W> __attribute__((hot))
 	void CPU<W>::simulate(uint64_t imax)
@@ -244,8 +238,7 @@ namespace riscv
 		// If we start outside of the fixed execute segment,
 		// we can fall back to the precise simulator.
 		if (UNLIKELY(!is_executable(this->pc()))) {
-			this->simulate_precise(imax);
-			return;
+			this->next_execute_segment();
 		}
 
 		InstrCounter counter{machine()};
@@ -257,6 +250,8 @@ namespace riscv
 
 restart_simulation:
 		auto* current_exec = this->m_exec;
+		auto current_begin = current_exec->exec_begin();
+		auto current_end   = current_exec->exec_end();
 		auto* exec_decoder = current_exec->decoder_cache();
 
 		auto pc = this->pc();
@@ -343,7 +338,7 @@ restart_simulation:
 
 			// If we left the execute segment, we have to
 			// fall back to slower, precise simulation.
-			if (UNLIKELY(!is_executable(pc))) {
+			if (UNLIKELY(!(pc >= current_begin && pc < current_end))) {
 				break;
 			}
 
@@ -353,12 +348,11 @@ restart_simulation:
 
 		// If we are here because the program is still running,
 		// but we are outside the decoder cache, use precise simulation
-		if (UNLIKELY(!is_executable(pc) && !counter.overflowed())) {
+		if (UNLIKELY(!current_exec->is_within(pc) && !counter.overflowed())) {
 			// The slowpath only returns if the segment is executable
 			// again, or the instruction limit was reached.
-			counter.set_counter(this->continue_slowpath(counter.value()));
-			if (!counter.overflowed())
-				goto restart_simulation;
+			this->next_execute_segment();
+			goto restart_simulation;
 		}
 
 	} // CPU::simulate

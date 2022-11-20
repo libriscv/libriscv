@@ -51,7 +51,7 @@ namespace riscv
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, const Machine<W>& other, MachineOptions<W> options)
 	  : m_machine{mach},
-	    m_original_machine {false},
+		m_original_machine {false},
 		m_binary{other.memory.binary()}
 	{
 		this->machine_loader(other, options);
@@ -336,9 +336,6 @@ namespace riscv
 			if (this->m_heap_address < endm)
 				this->m_heap_address = endm;
 		}
-		// Detect (invalid) program with no executable code
-		if (m_exec.empty())
-			throw MachineException(INVALID_PROGRAM, "No execute segment in program");
 
 		// The base mmap address starts at heap start + BRK_MAX
 		// TODO: We should check if the heap starts too close to the end
@@ -347,6 +344,11 @@ namespace riscv
 
 		// Default stack
 		this->m_stack_address = mmap_allocate(options.stack_size) + options.stack_size;
+
+		// Insert host code page, with exit function, enabling VM calls.
+		auto host_page = this->mmap_allocate(Page::size());
+		this->install_shared_page(page_number(host_page), Page::host_page());
+		this->m_exit_address = host_page;
 
 		//this->relocate_section(".rela.dyn", ".symtab");
 

@@ -38,13 +38,12 @@ namespace riscv
 		}
 		bool empty() const noexcept { return m_exec_pagedata_size == 0; }
 
-		DecodedExecuteSegment(address_t pbase, size_t len, address_t vaddr, size_t exlen, address_t exit_addr);
+		DecodedExecuteSegment(address_t pbase, size_t len, address_t vaddr, size_t exlen);
 
 	private:
 		address_t m_vaddr_begin;
 		address_t m_vaddr_end;
 		DecoderData<W>* m_exec_decoder = nullptr;
-		address_t m_exit_address = 0;
 
 		// The flat execute segment is used to execute
 		// the CPU::simulate_precise function in order to
@@ -62,14 +61,13 @@ namespace riscv
 
 	template <int W>
 	inline DecodedExecuteSegment<W>::DecodedExecuteSegment(
-		address_t pbase, size_t len, address_t exaddr, size_t exlen, address_t exit_addr)
+		address_t pbase, size_t len, address_t exaddr, size_t exlen)
 	{
 		m_vaddr_begin = exaddr;
 		m_vaddr_end   = exaddr + exlen;
 		m_exec_pagedata.reset(new uint8_t[len]);
 		m_exec_pagedata_size = len;
 		m_exec_pagedata_base = pbase;
-		m_exit_address = exit_addr;
 	}
 
 } // riscv

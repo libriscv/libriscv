@@ -95,7 +95,7 @@ namespace riscv
 		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
 #endif
 
-		uint64_t continue_slowpath(uint64_t counter);
+		void next_execute_segment();
 		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
