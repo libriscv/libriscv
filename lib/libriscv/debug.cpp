@@ -370,7 +370,7 @@ template<int W>
 void DebugMachine<W>::simulate(uint64_t max)
 {
 	auto& cpu = machine.cpu;
-	auto* exec = cpu.current_exec_segment();
+	auto* exec = cpu.current_execute_segment();
 	auto* exec_decoder = exec->decoder_cache();
 	auto* exec_seg_data = exec->exec_data();
 

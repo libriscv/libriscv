@@ -144,7 +144,8 @@ namespace riscv
 		// Custom execute segment, returns page base, final size and execute segment pointer
 		DecodedExecuteSegment<W>* exec_segment_for(address_t vaddr);
 		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
-
+		size_t cached_execute_segments() const noexcept { return m_exec.size(); }
+		void evict_execute_segments(size_t remaining_size = 0);
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();

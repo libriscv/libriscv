@@ -20,6 +20,8 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 		vec.resize(riscv::Page::size());
 		return;
 	}
+	machine.memory.evict_execute_segments();
+	assert(machine.memory.cached_execute_segments() == 0);
 
 	memcpy(vec.data(), data, std::min(len, vec.size()));
 	try

@@ -202,7 +202,7 @@ namespace riscv
 		auto& exec_segment =
 			this->create_execute_segment(options, data, vaddr, exlen);
 		// Select the first execute segment
-		machine().cpu.set_exec_segment(&exec_segment);
+		machine().cpu.set_execute_segment(&exec_segment);
 	}
 
 	template <int W> RISCV_INTERNAL

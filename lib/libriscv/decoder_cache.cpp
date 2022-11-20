@@ -330,6 +330,14 @@ namespace riscv
 		return nullptr;
 	}
 
+	template <int W>
+	void Memory<W>::evict_execute_segments(size_t remaining_size)
+	{
+		while (m_exec.size() > remaining_size)
+			m_exec.pop_front();
+		machine().cpu.set_execute_segment(nullptr);
+	}
+
 	template struct Memory<4>;
 	template struct Memory<8>;
 	template struct Memory<16>;
