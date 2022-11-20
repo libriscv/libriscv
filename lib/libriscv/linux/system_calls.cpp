@@ -122,17 +122,17 @@ template <int W>
 void syscall_lseek(Machine<W>& machine)
 {
 	const int fd      = machine.template sysarg<int>(0);
-	const long offset = machine.template sysarg<address_type<W>>(1);
+	const auto offset = machine.template sysarg(1);
 	const int whence  = machine.template sysarg<int>(2);
 	SYSPRINT("SYSCALL lseek, fd: %d, offset: 0x%lX, whence: %d\n",
-		fd, offset, whence);
+		fd, (long)offset, whence);
 
-	const int real_fd = machine.fds().get(fd);
-	long res = lseek(real_fd, offset, whence);
-	if (res >= 0) {
-		machine.set_result((address_type<W>)res);
+	if (machine.has_file_descriptors()) {
+		const int real_fd = machine.fds().get(fd);
+		long res = lseek(real_fd, offset, whence);
+		machine.set_result_or_error(res);
 	} else {
-		machine.set_result(-errno);
+		machine.set_result(-EBADF);
 	}
 }
 template <int W>
