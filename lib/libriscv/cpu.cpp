@@ -304,19 +304,7 @@ restart_simulation:
 			// the last one, which we will "always" do next
 			if constexpr (!compressed_enabled)
 			{
-				while (decoder + 8 < decoder_end)
-				{
-					decoder[0].execute(*this);
-					decoder[1].execute(*this);
-					decoder[2].execute(*this);
-					decoder[3].execute(*this);
-					decoder[4].execute(*this);
-					decoder[5].execute(*this);
-					decoder[6].execute(*this);
-					decoder[7].execute(*this);
-					decoder += 8;
-				}
-				if (decoder + 4 < decoder_end)
+				while (decoder + 4 < decoder_end)
 				{
 					decoder[0].execute(*this);
 					decoder[1].execute(*this);
