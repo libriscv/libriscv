@@ -185,7 +185,6 @@ namespace riscv
 
 		// Call an installed system call handler
 		void system_call(size_t);
-		void unchecked_system_call(size_t);
 		void ebreak();
 		static void install_syscall_handler(size_t, syscall_t);
 		static void install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>>);

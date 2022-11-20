@@ -70,12 +70,6 @@ inline void Machine<W>::system_call(size_t sysnum)
 		throw MachineException(SYSTEM_CALL_FAILED, "System call number out of range", sysnum);
 	}
 }
-template <int W>
-inline void Machine<W>::unchecked_system_call(size_t syscall_number)
-{
-	const auto& handler = Machine::syscall_handlers[syscall_number];
-	handler(*this);
-}
 
 template <int W>
 template <typename T>
