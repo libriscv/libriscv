@@ -67,7 +67,7 @@ inline void Machine<W>::system_call(size_t sysnum)
 		const auto& handler = Machine::syscall_handlers[sysnum];
 		handler(*this);
 	} else {
-		throw MachineException(SYSTEM_CALL_FAILED, "System call number out of range", sysnum);
+		on_unhandled_syscall(*this, sysnum);
 	}
 }
 

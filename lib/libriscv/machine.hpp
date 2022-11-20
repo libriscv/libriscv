@@ -196,7 +196,7 @@ namespace riscv
 		}
 		static inline std::array<syscall_t, RISCV_SYSCALLS_MAX>
 			syscall_handlers = initialize_syscalls();
-		static inline void (*on_unhandled_syscall) (Machine&, int) = [] (Machine<W>& m, int num) {
+		static inline void (*on_unhandled_syscall) (Machine&, size_t) = [] (Machine<W>& m, size_t num) {
 				auto txt = "Unhandled system call: " + std::to_string(num) + "\n"; m.debug_print(txt.c_str(), txt.size());
 			};
 
