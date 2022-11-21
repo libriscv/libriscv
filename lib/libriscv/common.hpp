@@ -35,9 +35,11 @@ namespace riscv
 #ifdef RISCV_DEBUG
 	static constexpr bool memory_alignment_check = true;
 	static constexpr bool verbose_branches_enabled = true;
+	static constexpr bool unaligned_memory_slowpaths = true;
 #else
 	static constexpr bool memory_alignment_check = false;
 	static constexpr bool verbose_branches_enabled = false;
+	static constexpr bool unaligned_memory_slowpaths = false;
 #endif
 
 #ifdef RISCV_EXT_ATOMICS

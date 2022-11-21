@@ -8,8 +8,16 @@ template <int W>
 template <typename T> inline
 T Memory<W>::read(address_t address)
 {
+	const auto offset = address & memory_align_mask<T>();
+	if constexpr (unaligned_memory_slowpaths) {
+		if (UNLIKELY(offset+sizeof(T) > Page::size())) {
+			T value;
+			memcpy_out(&value, address, sizeof(T));
+			return value;
+		}
+	}
 	const auto& pagedata = cached_readable_page(address, sizeof(T));
-	return pagedata.template aligned_read<T>(address & memory_align_mask<T>());
+	return pagedata.template aligned_read<T>(offset);
 }
 
 template <int W>
@@ -24,10 +32,17 @@ template <int W>
 template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
+	const auto offset = address & memory_align_mask<T>();
+	if constexpr (unaligned_memory_slowpaths) {
+		if (UNLIKELY(offset+sizeof(T) > Page::size())) {
+			memcpy(address, &value, sizeof(T));
+			return;
+		}
+	}
 	const auto pageno = page_number(address);
 	auto& entry = m_wr_cache;
 	if (entry.pageno == pageno) {
-		entry.page->template aligned_write<T>(address & memory_align_mask<T>(), value);
+		entry.page->template aligned_write<T>(offset, value);
 		return;
 	}
 
@@ -36,10 +51,10 @@ void Memory<W>::write(address_t address, T value)
 		entry = {pageno, &page.page()};
 	} else if constexpr (memory_traps_enabled && sizeof(T) <= 16) {
 		if (UNLIKELY(page.has_trap())) {
-			page.trap(address & memory_align_mask<T>(), sizeof(T) | TRAP_WRITE, value);
+			page.trap(offset, sizeof(T) | TRAP_WRITE, value);
 		}
 	}
-	page.page().template aligned_write<T>(address & memory_align_mask<T>(), value);
+	page.page().template aligned_write<T>(offset, value);
 }
 
 template <int W>
