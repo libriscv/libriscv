@@ -106,7 +106,7 @@ if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
 		# Compressed instructions require extra decoding data
 		if (NOT RISCV_EXT_C)
 			# Reduces decoder structure to 8 bytes
-			target_compile_definitions(riscv PUBLIC RISCV_SUPER_COMPRESSED=1)
+			#target_compile_definitions(riscv PUBLIC RISCV_SUPER_COMPRESSED=1)
 		endif()
 	endif()
 endif()
