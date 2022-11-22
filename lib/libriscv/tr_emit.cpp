@@ -335,14 +335,14 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case 0x11: // MULH (signed x signed)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (int64_t) " + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					from_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
 					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = ((int64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					from_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
 					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
@@ -418,12 +418,12 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			if (UNLIKELY(instr.Utype.rd == 0))
 				ILLEGAL_AND_EXIT();
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = " + SIGNEXTW + " " + from_imm(instr.Utype.upper_imm()) + ";");
+				from_reg(instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_AUIPC:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				ILLEGAL_AND_EXIT();
-			add_code(code, // XXX: This might not be right: upper_imm is 32-bit sign-extended
+			add_code(code,
 				from_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_FENCE:
