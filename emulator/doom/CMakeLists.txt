@@ -10,7 +10,7 @@ option(STATIC_BUILD "Built the emulator statically" OFF)
 ## D00M SDL2 emulation
 file(DOWNLOAD
 	https://github.com/fwsGonzo/libriscv/releases/download/v0.17/doom-rv32g
-	EXPECTED_MD5 7cb550c782909f0921e9805388b36468
+	EXPECTED_MD5 73b9e61f0c8c73cb6706bf955a6f6301
 	${CMAKE_SOURCE_DIR}/doom-rv32g)
 
 set(SOURCES
