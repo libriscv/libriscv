@@ -581,6 +581,24 @@ static void syscall_fstatat(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_faccessat(Machine<W>& machine)
+{
+	const auto fd = AT_FDCWD;
+	const auto g_path = machine.sysarg(1);
+	const auto mode   = machine.template sysarg<int>(2);
+	const auto flags  = machine.template sysarg<int>(3);
+
+	const auto path = machine.memory.memstring(g_path);
+
+	SYSPRINT("SYSCALL faccessat, fd: %d path: %s)\n",
+			fd, path.c_str());
+
+	const int res =
+		faccessat(fd, path.c_str(), mode, flags);
+	machine.set_result_or_error(res);
+}
+
+template <int W>
 static void syscall_fstat(Machine<W>& machine)
 {
 	const auto vfd = machine.template sysarg<int> (0);
@@ -932,7 +950,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// ioctl
 	this->install_syscall_handler(29, syscall_ioctl<W>);
 	// faccessat
-	this->install_syscall_handler(48, syscall_stub_nosys<W>);
+	this->install_syscall_handler(48, syscall_faccessat<W>);
 
 	this->install_syscall_handler(56, syscall_openat<W>);
 	this->install_syscall_handler(57, syscall_close<W>);
