@@ -12,13 +12,9 @@ The memory subsystem uses pages, which means you can copy code into memory, make
 
 ## Benchmarks
 
-One motivation when writing this emulator was to use it in a game engine, and so it felt natural to compare against Lua, which I was already using. Lua is excellent and easy to embed, and does not require ahead-of-time compilation. However, compiled code should in theory be faster.
-
 [STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
 
-[Lua 5.4 vs Interpreted RISC-V](https://gist.github.com/fwsGonzo/2f4518b66b147ee657d64496811f9edb)
-
-[LuaJIT vs Interpreted RISC-V](https://gist.github.com/fwsGonzo/d7ee7acb52b11ef5a51982d5b46734ca)
+Run [D00M 1 in libriscv](/emulator/doom) and see for yourself. It should use around 15% CPU at 60 fps.
 
 ## Installing a RISC-V GCC compiler
 
