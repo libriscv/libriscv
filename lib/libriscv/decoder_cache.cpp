@@ -177,14 +177,13 @@ namespace riscv
 			decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
 		exec.set_decoder(exec_decoder);
 
-		// Avoid using Memory::m_exec_pagedata here.
-		// We choose to use the CPU execute segment,
-		// because it is more authoritative.
+		// PC-relative pointer to instruction bits
 		auto* exec_segment = exec.exec_data();
 
 #ifdef RISCV_BINARY_TRANSLATION
-		/* We do not support binary translation for RV128I */
-		if constexpr (W != 16) {
+		// We do not support binary translation for RV128I
+		// Also, don't run the translator again (for now)
+		if (W != 16 && !is_binary_translated()) {
 			// Attempt to load binary translation
 			// Also, fill out the binary translation SO filename for later
 			std::string bintr_filename;
@@ -328,6 +327,12 @@ namespace riscv
 			if (segment.is_within(vaddr)) return &segment;
 		}
 		return nullptr;
+	}
+
+	template <int W>
+	const DecodedExecuteSegment<W>* Memory<W>::exec_segment_for(address_t vaddr) const
+	{
+		return const_cast<Memory<W>*>(this)->exec_segment_for(vaddr);
 	}
 
 	template <int W>

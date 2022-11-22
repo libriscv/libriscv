@@ -100,7 +100,7 @@ if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
 	# The rewriter changes instruction bytes and is incompatible
 	# with a decoder that reads instructions from execute-memory.
 	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
-	if (RISCV_DECODER_COMPRESS)
+	if (RISCV_DECODER_COMPRESS AND NOT RISCV_BINARY_TRANSLATION)
 		# Reduce decoder structure to 12 bytes
 		target_compile_definitions(riscv PUBLIC RISCV_DECODER_COMPRESS=1)
 		# Compressed instructions require extra decoding data

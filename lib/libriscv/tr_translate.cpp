@@ -64,8 +64,8 @@ inline bool gucci(const TransInstr<W>& ip) {
 }
 
 template <int W>
-inline DecoderData<W>& decoder_entry_at(const Machine<W>& machine, address_type<W> addr) {
-	return machine.memory.get_decoder_cache()[addr / DecoderCache<W>::DIVISOR];
+inline DecoderData<W>& decoder_entry_at(const DecodedExecuteSegment<W>& exec, address_type<W> addr) {
+	return exec.decoder_cache()[addr / DecoderCache<W>::DIVISOR];
 }
 
 template <int W>
@@ -91,12 +91,15 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		throw MachineException(ILLEGAL_OPERATION, "Machine already reports binary translation");
 	}
 
+	const auto& exec = this->machine().memory.main_execute_segment();
+	auto* exec_data = exec.exec_data(exec.exec_begin());
+
 	// Checksum the execute segment + compiler flags
 	TIME_POINT(t5);
 	extern std::string compile_command(int arch);
 	const auto cc = compile_command(W);
 	const uint32_t checksum =
-		crc32c(&exec_seg_data()[exec_begin()], exec_end() - exec_begin())
+		crc32c(exec_data, exec.exec_end() - exec.exec_begin())
 		^ crc32c(cc.c_str(), cc.size());
 
 	char filebuffer[256];
@@ -444,10 +447,11 @@ void CPU<W>::activate_dylib(void* dylib) const
 	}
 
 	// Apply mappings to decoder cache
+	auto& main_exec = machine().memory.main_execute_segment();
 	const auto nmappings = *no_mappings;
 	for (size_t i = 0; i < nmappings; i++) {
 		if (mappings[i].handler != nullptr) {
-			auto& entry = decoder_entry_at(machine(), mappings[i].addr);
+			auto& entry = decoder_entry_at(main_exec, mappings[i].addr);
 			entry.set_insn_handler((instruction_handler<W>) mappings[i].handler);
 		}
 	}
