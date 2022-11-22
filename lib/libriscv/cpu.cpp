@@ -38,12 +38,11 @@ namespace riscv
 		if (!machine().memory.binary().empty()) {
 			const auto initial_pc = machine().memory.start_address();
 			// Validate that the initial PC is executable.
-			// Inbound jumps feature does not allow other execute areas.
-			// When execute-only is active, there is no reachable execute pages.
-			const auto& page =
-				machine().memory.get_exec_pageno(initial_pc / riscv::Page::size());
-			if (UNLIKELY(!page.attr.exec)) {
-				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
+			if (!this->is_executable(initial_pc)) {
+				const auto& page =
+					machine().memory.get_exec_pageno(initial_pc / riscv::Page::size());
+				if (UNLIKELY(!page.attr.exec))
+					trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
 			}
 			// This function will (at most) validate the execute segment
 			this->jump(initial_pc);
