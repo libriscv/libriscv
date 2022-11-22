@@ -1,2 +1,4 @@
 *.wad
+*.dsg
+.doomrc
 doom-rv32g

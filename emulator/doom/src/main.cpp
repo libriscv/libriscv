@@ -130,18 +130,22 @@ static void do_sdl_events(SDL_Event& event, DoomEvent& doomev, Machine& machine)
 static void doom_system_calls(Machine& machine, size_t num)
 {
 	switch (num) {
-	case 1024: { // open
-		const auto g_path = machine.sysarg(0);
+	case 1024: { // newlib open
+		auto g_path = machine.sysarg(0);
+		auto flags  = machine.sysarg<int>(1);
+		auto mode   = machine.sysarg(2);
 		const auto path = machine.memory.memstring(g_path);
+		// Newlib doesn't think O_CREAT is required for new files :)
+		if (flags & O_WRONLY) flags |= O_CREAT;
 
-		int real_fd = open(path.c_str(), 0x0);
+		int real_fd = open(path.c_str(), flags, mode);
 		if (real_fd > 0)
 		{
 			const int vfd = machine.fds().assign_file(real_fd);
 			machine.set_result(vfd);
-			return;
+		} else {
+			machine.set_result_or_error(real_fd);
 		}
-		machine.set_result_or_error(real_fd);
 		return;
 	}
 	case 2048: { // AV init
@@ -227,6 +231,7 @@ int main(int argc, char *argv[])
 		{"rvdoom"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 	machine.setup_linux_syscalls();
+	machine.fds().permit_file_write = true;
 	// Doom communicates intentions via some system calls
 	machine.on_unhandled_syscall = doom_system_calls;
 
