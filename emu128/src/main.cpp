@@ -1,8 +1,9 @@
 #include <libriscv/machine.hpp>
-using namespace riscv;
 static std::string load_file(const std::string&);
+using Machine = riscv::Machine<riscv::RISCV128>;
+using address_t = riscv::address_type<riscv::RISCV128>;
 
-static void init_program_at(Machine<RISCV128>& machine,
+static void init_program_at(Machine& machine,
 	__uint128_t base_addr, const uint8_t* bin, size_t bin_len)
 {
 	machine.memory.set_page_attr(base_addr, 0xA000, {.read = true, .write = false, .exec = true});
@@ -19,20 +20,20 @@ int main(int argc, const char** argv)
 	}
 
 	auto binary = load_file(argv[1]);
-	Machine<RISCV128> machine { binary };
+	Machine machine { binary };
 
 	/* Install a system call handler that stops the machine. */
-	Machine<RISCV128>::install_syscall_handler(1,
-	 [] (Machine<RISCV128>& machine) {
+	Machine::install_syscall_handler(1,
+	 [] (Machine& machine) {
 		 const auto [code] = machine.sysargs <int> ();
 		 printf(">>> Program exited with code: %d\n", code);
 		 machine.stop();
 	 });
 
 	 /* Install a system call handler that prints something. */
-	 Machine<RISCV128>::install_syscall_handler(2,
- 	 [] (Machine<RISCV128>& machine) {
- 		 const auto [str] = machine.sysargs <address_type<RISCV128>> ();
+	 Machine::install_syscall_handler(2,
+ 	 [] (Machine& machine) {
+ 		 const auto [str] = machine.sysargs <address_t> ();
  		 printf(">>> Program says: %s\n", machine.memory.memstring(str).c_str());
  	 });
 
