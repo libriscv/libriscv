@@ -58,10 +58,6 @@ template <int W>
 inline uint32_t opcode(const TransInstr<W>& ti) {
 	return rv32i_instruction{ti.instr}.opcode();
 }
-template <int W>
-inline bool gucci(const TransInstr<W>& ip) {
-	return good_insn.count(opcode<W>(ip)) > 0;
-}
 
 template <int W>
 inline DecoderData<W>& decoder_entry_at(const DecodedExecuteSegment<W>& exec, address_type<W> addr) {
@@ -203,64 +199,51 @@ if constexpr (SCAN_FOR_GP) {
 					(long)basepc);
 			}
 		}
-		if (gucci<W>(*it))
-		{
-			const auto block = it;
-			bool has_branch = false;
-			// Measure length of instructions that belong
-			// together sequentially (a code block).
-			for (; it != ipairs.end(); ++it) {
-				const rv32i_instruction instruction{it->instr};
-				const auto opcode = instruction.opcode();
-				// Any JAL or JALR is a show-stopper
-				if (opcode == RV32I_JALR || opcode == RV32I_JAL ||
-					// Non-ECALL SYSTEM instruction:
-					(opcode == RV32I_SYSTEM && instruction.Itype.funct3 == 0x0 && instruction.Itype.imm != 0))
-				{
-					++it; break;
-				}
-if constexpr (LOOP_OFFSET_MAX > 0) {
-				// loop detection (negative branch offsets)
-				if (opcode == RV32I_BRANCH && instruction.Btype.sign()) {
-					has_branch = true;
-					// detect jump location
-					const size_t length = it - block;
-					const auto offset = instruction.Btype.signed_imm();
-					const auto dst = basepc + (4 * length) + offset;
-					if (offset > -LOOP_OFFSET_MAX && already_looped.count(dst) == 0) {
-						loops.push_back({it + offset / 4, dst});
-						already_looped.insert(dst);
-					}
-				}
-}
-				// we can accelerate these and continue
-				if (gucci<W>(*it) == false) {
-					// must exit native, ending block
-					++it; break;
-				}
-			} // find block
-			const size_t length = it - block;
-			if (length >= options.block_size_treshold
-				&& icounter + length < options.translate_instr_max
-				&& already_generated.count(basepc) == 0)
+		const auto block = it;
+		bool has_branch = false;
+		// Measure length of instructions that belong
+		// together sequentially (a code block).
+		for (; it != ipairs.end(); ++it) {
+			const rv32i_instruction instruction{it->instr};
+			const auto opcode = instruction.opcode();
+			// Any JAL or JALR is a show-stopper
+			if (opcode == RV32I_JALR || opcode == RV32I_JAL ||
+				// Non-ECALL SYSTEM instruction:
+				(opcode == RV32I_SYSTEM && instruction.Itype.funct3 == 0x0 && instruction.Itype.imm != 0))
 			{
-				already_generated.insert(basepc);
-				if constexpr (VERBOSE_BLOCKS) {
-					printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
-				}
-				blocks.push_back({*block, length, basepc, has_branch});
-				icounter += length;
-				// we can't translate beyond this estimate, otherwise
-				// the compiler will never finish code generation
-				if (blocks.size() >= options.translate_blocks_max)
-					break;
+				++it; break;
 			}
-			basepc += 4 * length;
+if constexpr (LOOP_OFFSET_MAX > 0) {
+			// loop detection (negative branch offsets)
+			if (opcode == RV32I_BRANCH && instruction.Btype.sign()) {
+				has_branch = true;
+				// detect jump location
+				const size_t length = it - block;
+				const auto offset = instruction.Btype.signed_imm();
+				const auto dst = basepc + (4 * length) + offset;
+				if (offset > -LOOP_OFFSET_MAX && already_looped.count(dst) == 0) {
+					loops.push_back({it + offset / 4, dst});
+					already_looped.insert(dst);
+				}
+			}
+}		} // find block
+		const size_t length = it - block;
+		if (length >= options.block_size_treshold
+			&& icounter + length < options.translate_instr_max
+			&& already_generated.count(basepc) == 0)
+		{
+			already_generated.insert(basepc);
+			if constexpr (VERBOSE_BLOCKS) {
+				printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
+			}
+			blocks.push_back({*block, length, basepc, has_branch});
+			icounter += length;
+			// we can't translate beyond this estimate, otherwise
+			// the compiler will never finish code generation
+			if (blocks.size() >= options.translate_blocks_max)
+				break;
 		}
-		else {
-			basepc += 4;
-			++it;
-		}
+		basepc += 4 * length;
 	}
 #ifdef BINTR_TIMING
 	TIME_POINT(t3);
