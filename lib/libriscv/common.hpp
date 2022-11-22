@@ -103,7 +103,6 @@ namespace riscv
 		unsigned block_size_treshold = 6;
 		unsigned translate_blocks_max = 5000;
 		unsigned translate_instr_max = 128'000;
-		bool forward_jumps = true;
 #endif
 	};
 

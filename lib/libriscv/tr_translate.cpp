@@ -13,7 +13,6 @@
 namespace riscv
 {
 	static constexpr bool VERBOSE_BLOCKS = false;
-	static constexpr int  LOOP_OFFSET_MAX = 160;
 	static constexpr bool SCAN_FOR_GP = true;
 
 	inline timespec time_now();
@@ -178,72 +177,68 @@ if constexpr (SCAN_FOR_GP) {
 	size_t icounter = 0;
 	auto it = ipairs.begin();
 	std::vector<std::pair<decltype(it), address_t>> loops;
-	std::unordered_set<address_t> already_generated;
-	std::unordered_set<address_t> already_looped;
 	struct CodeBlock {
 		TransInstr<W>& instr;
 		size_t      length;
 		address_t   addr;
 		bool        has_branch;
+		std::set<address_t> jump_locations;
 	};
 	std::vector<CodeBlock> blocks;
+	std::set<address_t> jump_locations;
 
 	while (it != ipairs.end() && icounter < options.translate_instr_max)
 	{
-		if (!loops.empty()) {
-			it = loops.back().first;
-			basepc = loops.back().second;
-			loops.pop_back();
-			if constexpr (VERBOSE_BLOCKS) {
-				printf("Restarting at loop location: 0x%lX",
-					(long)basepc);
-			}
-		}
 		const auto block = it;
 		bool has_branch = false;
 		// Measure length of instructions that belong
 		// together sequentially (a code block).
+		auto current_pc = basepc;
+
 		for (; it != ipairs.end(); ++it) {
 			const rv32i_instruction instruction{it->instr};
 			const auto opcode = instruction.opcode();
+
 			// Any JAL or JALR is a show-stopper
-			if (opcode == RV32I_JALR || opcode == RV32I_JAL ||
+			if (opcode == RV32I_JALR || 
 				// Non-ECALL SYSTEM instruction:
 				(opcode == RV32I_SYSTEM && instruction.Itype.funct3 == 0x0 && instruction.Itype.imm != 0))
 			{
+				current_pc += instruction.length();
 				++it; break;
 			}
-if constexpr (LOOP_OFFSET_MAX > 0) {
 			// loop detection (negative branch offsets)
-			if (opcode == RV32I_BRANCH && instruction.Btype.sign()) {
+			if (opcode == RV32I_BRANCH) {
 				has_branch = true;
 				// detect jump location
-				const size_t length = it - block;
 				const auto offset = instruction.Btype.signed_imm();
-				const auto dst = basepc + (4 * length) + offset;
-				if (offset > -LOOP_OFFSET_MAX && already_looped.count(dst) == 0) {
-					loops.push_back({it + offset / 4, dst});
-					already_looped.insert(dst);
-				}
+				jump_locations.insert(current_pc + offset);
 			}
-}		} // find block
+			if (opcode == RV32I_JAL) {
+				has_branch = true;
+				const auto offset = instruction.Jtype.jump_offset();
+				jump_locations.insert(current_pc + offset);
+			}
+			current_pc += instruction.length();
+		} // find block
 		const size_t length = it - block;
 		if (length >= options.block_size_treshold
-			&& icounter + length < options.translate_instr_max
-			&& already_generated.count(basepc) == 0)
+			&& icounter + length < options.translate_instr_max)
 		{
-			already_generated.insert(basepc);
 			if constexpr (VERBOSE_BLOCKS) {
 				printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
 			}
-			blocks.push_back({*block, length, basepc, has_branch});
+			blocks.push_back({
+				*block, length, basepc, has_branch,
+				std::move(jump_locations)
+			});
 			icounter += length;
 			// we can't translate beyond this estimate, otherwise
 			// the compiler will never finish code generation
 			if (blocks.size() >= options.translate_blocks_max)
 				break;
 		}
-		basepc += 4 * length;
+		basepc = current_pc;
 	}
 #ifdef BINTR_TIMING
 	TIME_POINT(t3);
@@ -260,9 +255,10 @@ if constexpr (LOOP_OFFSET_MAX > 0) {
 		std::string func =
 			"f" + std::to_string(block.addr);
 		emit(code, func, &block.instr, {
-			block.addr, gp, block.length,
+			block.addr, gp, (int)block.length,
 			block.has_branch,
-			options.forward_jumps
+			true, // forward jumps
+			std::move(block.jump_locations)
 		});
 		dlmappings.push_back({block.addr, std::move(func)});
 	}
@@ -292,8 +288,8 @@ const struct Mapping mappings[] = {
 #endif
 
 	if (verbose) {
-		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX  FWJ=%d\n",
-			icounter, dlmappings.size(), (long) gp, options.forward_jumps);
+		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
+			icounter, dlmappings.size(), (long) gp);
 	}
 	// nothing to compile without mappings
 	if (dlmappings.empty()) {

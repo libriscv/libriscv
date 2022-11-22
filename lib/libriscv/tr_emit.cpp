@@ -52,8 +52,10 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 	else
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (binfo.goto_enabled) {
+		// this is a jump back to the start of the function
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
 		// We can simplify this jump because we know it's safe
+		// This side of the branch exits bintr because of max instructions reached
 		code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n"
 			"return;}\n";
 	} else if (binfo.forw_addr > 0) {
@@ -90,12 +92,19 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	if (tinfo.has_branch) {
 		code += "int c = 0; " + func + "_start:;\n";
 	}
-	for (size_t i = 0; i < tinfo.len; i++) {
+
+	auto current_pc = tinfo.basepc;
+
+	for (int i = 0; i < tinfo.len; i++) {
 		const auto instr = rv32i_instruction {ip[i].instr};
-		// forward branches (empty statement)
-		if (labels.count(i) > 0) {
+
+		// known jump locations
+		if (tinfo.jump_locations.count(current_pc) > 0) {
 			code.append(FUNCLABEL(i) + ":;\n");
-			labels.erase(i);
+		}
+		else if (labels.count(i) > 0)
+		{ // forward branches (empty statement)
+			code.append(FUNCLABEL(i) + ":;\n");
 		}
 		// instruction generation
 		switch (instr.opcode()) {
@@ -182,9 +191,14 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			bool ge = tinfo.has_branch && (offset == -(long) i);
 			// forward label: branch inside code block
 			int fl = 0;
-			if (tinfo.forward_jumps && offset > 0 && i+offset < tinfo.len) {
+			if (offset > 0 && i+offset < tinfo.len) {
 				fl = i+offset;
 				labels.insert(fl);
+			} else if (tinfo.jump_locations.count(PCRELA(offset * 4))) {
+				const int dstidx = i + offset;
+				if (dstidx >= 0 && dstidx < tinfo.len) {
+					fl = i+offset;
+				}
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
@@ -226,20 +240,25 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			}
 			// forward label: jump inside code block
 			const auto offset = instr.Jtype.jump_offset() / 4;
-			if (tinfo.forward_jumps && offset > 0 && i+offset < tinfo.len) {
-				unsigned fl = i+offset;
-				labels.insert(fl);
-				add_code(code, "goto " + FUNCLABEL(fl) + ";");
-			} else if (!tinfo.forward_jumps) {
-				add_code(code,
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
-					"}");
-				return; // Exit when forward jumps are disabled
+			int fl = i+offset;
+			if (fl > 0 && fl < tinfo.len) {
+				// forward labels require creating future labels
+				if (offset > 0)
+					labels.insert(fl);
+				// this is a jump back to the start of the function
+				add_code(code, "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + FUNCLABEL(fl) + ";");
+				// if we run out of instructions, we must exit:
+				// XXX: instruction counting, what a mess
+				add_code(code, "cpu->pc = " + PCRELS(instr.Jtype.jump_offset() - 4) + ";\n"
+					"return;");
+				break;
 			} else {
+				// Because of forward jumps we can't end the function here
 				add_code(code,
 					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
 					"return;");
-			} } break;
+				break;
+			} };
 		case RV32I_OP_IMM: {
 			// NOP
 			if (UNLIKELY(instr.Itype.rd == 0)) break;
@@ -744,6 +763,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			//throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter", instr.opcode());
 			ILLEGAL_AND_EXIT();
 		}
+
+		current_pc += instr.length();
 	}
 	// If the function ends with an unimplemented instruction,
 	// we must gracefully finish, setting new PC and incrementing IC
