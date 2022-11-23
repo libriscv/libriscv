@@ -199,12 +199,10 @@ if constexpr (SCAN_FOR_GP) {
 			const rv32i_instruction instruction{it->instr};
 			const auto opcode = instruction.opcode();
 
-			// Any JAL or JALR is a show-stopper
-			if (opcode == RV32I_JALR || 
-				// Non-ECALL SYSTEM instruction:
-				(opcode == RV32I_SYSTEM && instruction.Itype.funct3 == 0x0 && instruction.Itype.imm != 0))
+			// JALR is a show-stopper / code-blocker
+			if (opcode == RV32I_JALR)
 			{
-				current_pc += instruction.length();
+				current_pc += 4;
 				++it; break;
 			}
 			// loop detection (negative branch offsets)
@@ -219,8 +217,11 @@ if constexpr (SCAN_FOR_GP) {
 				const auto offset = instruction.Jtype.jump_offset();
 				jump_locations.insert(current_pc + offset);
 			}
-			current_pc += instruction.length();
+
+			current_pc += 4;
 		} // find block
+
+		// Process block and add it for emission
 		const size_t length = it - block;
 		if (length >= options.block_size_treshold
 			&& icounter + length < options.translate_instr_max)

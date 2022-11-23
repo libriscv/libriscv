@@ -6,8 +6,8 @@
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
-#define INSTRUCTION_COUNT(i) ((tinfo.has_branch ? "c + " : "") + std::to_string(i))
-#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n}\n"; return; }
+#define INSTRUCTION_COUNT(i) ("c + " + std::to_string(i))
+#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nreturn;\n"; }
 
 namespace riscv {
 static constexpr int LOOP_INSTRUCTIONS_MAX = 4096;
@@ -40,7 +40,7 @@ inline std::string from_imm(int64_t imm) {
 struct BranchInfo {
 	bool sign;
 	bool goto_enabled;
-	int forw_addr;
+	int jump_label;
 };
 #define FUNCLABEL(i)  (func + "_" + std::to_string(i))
 template <int W>
@@ -58,8 +58,8 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 		// This side of the branch exits bintr because of max instructions reached
 		code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n"
 			"return;}\n";
-	} else if (binfo.forw_addr > 0) {
-		code += "goto " + FUNCLABEL(binfo.forw_addr) + ";\n"
+	} else if (binfo.jump_label > 0) {
+		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n"
 				"}\n";
 	} else {
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
@@ -87,22 +87,18 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	static constexpr unsigned XLEN = W * 8u;
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	std::set<unsigned> labels;
-	code += "extern void " + func + "(CPU* cpu) {\n";
-	// branches can jump back, within limits
-	if (tinfo.has_branch) {
-		code += "int c = 0; " + func + "_start:;\n";
-	}
-
-	auto current_pc = tinfo.basepc;
+	code += "extern void " + func + "(CPU* cpu) {\n"
+		"int c = 0; " + func + "_start:;\n";
 
 	for (int i = 0; i < tinfo.len; i++) {
 		const auto instr = rv32i_instruction {ip[i].instr};
+		const auto current_pc = tinfo.basepc + i * 4;
 
 		// known jump locations
-		if (tinfo.jump_locations.count(current_pc) > 0) {
+		if (tinfo.jump_locations.count(current_pc)) {
 			code.append(FUNCLABEL(i) + ":;\n");
 		}
-		else if (labels.count(i) > 0)
+		else if (labels.count(i))
 		{ // forward branches (empty statement)
 			code.append(FUNCLABEL(i) + ":;\n");
 		}
@@ -196,8 +192,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				labels.insert(fl);
 			} else if (tinfo.jump_locations.count(PCRELA(offset * 4))) {
 				const int dstidx = i + offset;
-				if (dstidx >= 0 && dstidx < tinfo.len) {
-					fl = i+offset;
+				if (dstidx > 0 && dstidx < tinfo.len) {
+					fl = dstidx;
 				}
 			}
 			switch (instr.Btype.funct3) {
@@ -210,6 +206,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case 0x2:
 			case 0x3:
 				ILLEGAL_AND_EXIT();
+				break;
 			case 0x4: // LT
 				add_branch<W>(code, { true, ge, fl }, " < ", tinfo, i, instr, func);
 				break;
@@ -243,22 +240,20 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			int fl = i+offset;
 			if (fl > 0 && fl < tinfo.len) {
 				// forward labels require creating future labels
-				if (offset > 0)
+				if (fl > i)
 					labels.insert(fl);
 				// this is a jump back to the start of the function
 				add_code(code, "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + FUNCLABEL(fl) + ";");
 				// if we run out of instructions, we must exit:
-				// XXX: instruction counting, what a mess
-				add_code(code, "cpu->pc = " + PCRELS(instr.Jtype.jump_offset() - 4) + ";\n"
+				add_code(code,
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
 					"return;");
-				break;
 			} else {
 				// Because of forward jumps we can't end the function here
 				add_code(code,
 					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
 					"return;");
-				break;
-			} };
+			} } break;
 		case RV32I_OP_IMM: {
 			// NOP
 			if (UNLIKELY(instr.Itype.rd == 0)) break;
@@ -435,13 +430,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			break;
 		case RV32I_LUI:
 			if (UNLIKELY(instr.Utype.rd == 0))
-				ILLEGAL_AND_EXIT();
+				break;
 			add_code(code,
 				from_reg(instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_AUIPC:
 			if (UNLIKELY(instr.Utype.rd == 0))
-				ILLEGAL_AND_EXIT();
+				break;
 			add_code(code,
 				from_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
 			break;
@@ -454,11 +449,11 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					       "  return;\n";
 					break;
 				} if (instr.Itype.imm == 1) {
-					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
-					return; // !!
+					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\nreturn;\n";
+					break;
 				} if (instr.Itype.imm == 261) {
-					code += "api.stop(cpu, " + INSTRUCTION_COUNT(i) + ");\n}\n";
-					return; // !!
+					code += "api.stop(cpu, " + INSTRUCTION_COUNT(i) + ");\nreturn;\n";
+					break;
 				} else {
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 					break;
@@ -468,7 +463,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			} break;
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
-				ILLEGAL_AND_EXIT();
+				break;
 			const auto dst = from_reg(instr.Itype.rd);
 			const auto src = "(uint32_t)" + from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
@@ -493,7 +488,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			} break;
 		case RV64I_OP32: {
 			if (UNLIKELY(instr.Rtype.rd == 0))
-				ILLEGAL_AND_EXIT();
+				break;
 			const auto dst = from_reg(instr.Rtype.rd);
 			const auto src1 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs1);
 			const auto src2 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs2);
@@ -763,8 +758,6 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			//throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter", instr.opcode());
 			ILLEGAL_AND_EXIT();
 		}
-
-		current_pc += instr.length();
 	}
 	// If the function ends with an unimplemented instruction,
 	// we must gracefully finish, setting new PC and incrementing IC
