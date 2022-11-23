@@ -75,7 +75,7 @@ static void do_rendering(Machine& machine)
 	stats.frames ++;
 
 	const auto now = SDL_GetTicks();
-	if (now >= stats.ts + 2000) {
+	if (now >= stats.ts + 3000) {
 		machine.stop();
 		// Perform stats outside of simulation in
 		// order to get accurate instruction counter.

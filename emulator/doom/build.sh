@@ -7,4 +7,4 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DRISCV_EXT_C=OFF -DRISCV_EXPERIMENTAL=ON
 make -j6
 popd
 
-./build/rvdoom
+VERBOSE=1 ./build/rvdoom
