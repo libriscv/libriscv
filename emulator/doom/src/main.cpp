@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
 	SDL_CreateWindowAndRenderer(
 		GAME_W * 4,
 		GAME_H * 4,
-		0, &window, &renderer);
+		SDL_WINDOW_RESIZABLE, &window, &renderer);
 	SDL_SetWindowTitle(window, "RISC-V D00M");
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 	SDL_SetRelativeMouseMode(SDL_TRUE);
