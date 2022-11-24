@@ -91,6 +91,14 @@ namespace riscv
 		return {func, rewritten_instr_printer};
 	}
 
+	// The decoder rewriter changes the instruction handlers
+	// of common instruction handlers to more efficient ones.
+	// It also changes the instruction bits to simpler layouts.
+	//
+	// For example, for the case of "JAL RA pc+imm", we can
+	// simply fill the instruction bits with "pc+imm", which is
+	// usually a 32-bit address, and then use a handler that
+	// jumps directly to the 32-bit address: PC = instr_bits;
 	template <int W> RISCV_INTERNAL
 	Instruction<W> CPU<W>::decode_rewrite(address_t pc, rv32i_instruction& instr)
 	{
@@ -98,8 +106,6 @@ namespace riscv
 		const auto original = instr;
 		(void) pc;
 
-		// NOTE: Every rewritten instruction sets aside
-		// the first 2 bits to preserve the instruction length
 		if (original.length() == 4)
 		switch (original.opcode()) {
 		case RV32I_OP: {
