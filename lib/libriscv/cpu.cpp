@@ -65,13 +65,44 @@ namespace riscv
 	template<int W> __attribute__((noinline))
 	void CPU<W>::next_execute_segment()
 	{
+		static const int MAX_RESTARTS = 4;
+		int restarts = 0;
+restart_next_execute_segment:
+
+		// Immediately look at the page in order to
+		// verify execute and see if it has a trap handler
+		auto base_pageno = this->pc() / Page::size();
+		auto end_pageno  = base_pageno;
+
+		// Check for +exec
+		const auto& current_page =
+			machine().memory.get_pageno(base_pageno);
+		if (UNLIKELY(!current_page.attr.exec)) {
+			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+		}
+
+		// Check for trap
+		if (UNLIKELY(current_page.has_trap()))
+		{
+			// We pass PC as offset
+			current_page.trap(this->pc() & (Page::size() - 1),
+				TRAP_EXEC, this->pc());
+
+			// If PC changed, we will restart the process
+			if (this->pc() / Page::size() != base_pageno)
+			{
+				if (UNLIKELY(++restarts > MAX_RESTARTS))
+					trigger_exception(EXECUTION_LOOP_DETECTED, this->pc());
+
+				goto restart_next_execute_segment;
+			}
+		}
+
 		// Find previously decoded execute segment
 		this->m_exec = machine().memory.exec_segment_for(this->pc());
 		if (this->m_exec != nullptr)
 			return;
 
-		auto base_pageno = this->pc() / Page::size() + 1;
-		auto end_pageno  = base_pageno;
 		// Find the earliest execute page in new segment
 		while (base_pageno > 0) {
 			const auto& page =
@@ -79,10 +110,6 @@ namespace riscv
 			if (page.attr.exec) {
 				base_pageno -= 1;
 			} else break;
-		}
-		// Check that the first page is executable, otherwise give error.
-		if (base_pageno == end_pageno) {
-			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 		}
 
 		// Find the last execute page in segment
@@ -94,6 +121,7 @@ namespace riscv
 			} else break;
 		}
 
+		// Allocate full execute area
 		const size_t n_pages = end_pageno - base_pageno;
 		std::unique_ptr<uint8_t[]> area (new uint8_t[n_pages * Page::size()]);
 		// Copy from each individual page
@@ -114,11 +142,11 @@ namespace riscv
 		// Page cache
 		auto& entry = this->m_cache;
 		if (entry.pageno != pageno || entry.page == nullptr) {
+			// delay setting entry until we know it's good!
 			auto e = decltype(m_cache){pageno, &machine().memory.get_exec_pageno(pageno)};
 			if (UNLIKELY(!e.page->attr.exec)) {
 				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 			}
-			// delay setting entry until we know it's good!
 			entry = e;
 		}
 		const auto& page = *entry.page;
@@ -407,32 +435,35 @@ restart_simulation:
 		switch (intr)
 		{
 		case INVALID_PROGRAM:
-			throw MachineException(INVALID_PROGRAM,
+			throw MachineException(intr,
 				"Machine not initialized", data);
 		case ILLEGAL_OPCODE:
-			throw MachineException(ILLEGAL_OPCODE,
+			throw MachineException(intr,
 					"Illegal opcode executed", data);
 		case ILLEGAL_OPERATION:
-			throw MachineException(ILLEGAL_OPERATION,
+			throw MachineException(intr,
 					"Illegal operation during instruction decoding", data);
 		case PROTECTION_FAULT:
-			throw MachineException(PROTECTION_FAULT,
+			throw MachineException(intr,
 					"Protection fault", data);
 		case EXECUTION_SPACE_PROTECTION_FAULT:
-			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+			throw MachineException(intr,
 					"Execution space protection fault", data);
+		case EXECUTION_LOOP_DETECTED:
+			throw MachineException(intr,
+					"Execution loop detected", data);
 		case MISALIGNED_INSTRUCTION:
 			// NOTE: only check for this when jumping or branching
-			throw MachineException(MISALIGNED_INSTRUCTION,
+			throw MachineException(intr,
 					"Misaligned instruction executed", data);
 		case INVALID_ALIGNMENT:
-			throw MachineException(INVALID_ALIGNMENT,
+			throw MachineException(intr,
 					"Invalid alignment for address", data);
 		case UNIMPLEMENTED_INSTRUCTION:
-			throw MachineException(UNIMPLEMENTED_INSTRUCTION,
+			throw MachineException(intr,
 					"Unimplemented instruction executed", data);
 		case DEADLOCK_REACHED:
-			throw MachineException(DEADLOCK_REACHED,
+			throw MachineException(intr,
 					"Atomics deadlock reached", data);
 
 		default:
