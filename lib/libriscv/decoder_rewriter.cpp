@@ -186,38 +186,38 @@ namespace riscv
 				assert(original.Btype.signed_imm()-4 == rewritten.signed_imm());
 				instr.whole = rewritten.whole;
 				switch (original.Btype.funct3) {
-				case 0x0: // BRANCH_EQ
+				case 0x0: // BRANCH_EQZ
 					return rewritten_instruction<W>(
 						[] (auto& cpu, auto instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (cpu.reg(rop.rs1) == 0) {
 								cpu.registers().pc += rop.signed_imm();
 							}
-						}); // BEQ
-				case 0x1: // BRANCH_NE
+						}); // BEQZ
+				case 0x1: // BRANCH_NEZ
 					return rewritten_instruction<W>(
 						[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (cpu.reg(rop.rs1) != 0) {
 								cpu.registers().pc += rop.signed_imm();
 							}
-						}); // BNE
-				case 0x4: // BRANCH_LT
+						}); // BNEZ
+				case 0x4: // BRANCH_LTZ
 					return rewritten_instruction<W>(
 						[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (sign_type(cpu.reg(rop.rs1)) < 0) {
 								cpu.registers().pc += rop.signed_imm();
 							}
-						}); // BLT
-				case 0x5: // BRANCH_GE
+						}); // BLTZ
+				case 0x5: // BRANCH_GEZ
 					return rewritten_instruction<W>(
 						[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 							const auto& rop = view_as<ZeroBtype> (instr);
 							if (sign_type(cpu.reg(rop.rs1)) >= 0) {
 								cpu.registers().pc += rop.signed_imm();
 							}
-						}); // BGE
+						}); // BGEZ
 				default:
 					// Restore original for invalid BRANCH instructions
 					instr = original;
