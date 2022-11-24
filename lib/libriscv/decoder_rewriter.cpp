@@ -8,7 +8,6 @@
 namespace riscv
 {
 	static const unsigned PCAL= compressed_enabled ? 2 : 4;
-	static const unsigned PCALBITS = compressed_enabled ? 1 : 2;
 
 	union MoveType {
 		struct {
@@ -70,7 +69,7 @@ namespace riscv
 
 	union FasterJtype {
 		struct {
-			int32_t imm;
+			uint32_t addr;
 		};
 		uint32_t whole;
 	};
@@ -362,18 +361,18 @@ namespace riscv
 		case RV32I_JAL: {
 			const auto addr = pc + original.Jtype.jump_offset() - 4;
 			const bool is_aligned = addr % PCAL == 0;
-			const bool below32 = addr < (uint64_t(1) << (32 + PCALBITS));
+			const bool below32 = addr < UINT32_MAX;
 			// If we can't see that it's executable we leave it
 			if (is_aligned && below32) {
 				FasterJtype rewritten;
-				rewritten.imm = addr >> PCALBITS;
+				rewritten.addr = addr;
 				// Handle the common cases x0 and x1
 				if (original.Jtype.rd == 0) {
 					instr.whole = rewritten.whole;
 					return rewritten_instruction<W>(
 						[] (auto& cpu, auto instr) RVINSTR_ATTR {
 							const auto& rop = view_as<FasterJtype> (instr);
-							cpu.registers().pc = rop.imm << PCALBITS;
+							cpu.registers().pc = rop.addr;
 						}); // JAL zero, pc+imm
 				} else if (original.Jtype.rd == REG_RA) {
 					instr.whole = rewritten.whole;
@@ -381,7 +380,7 @@ namespace riscv
 						[] (auto& cpu, auto instr) RVINSTR_ATTR {
 							const auto& rop = view_as<FasterJtype> (instr);
 							cpu.reg(REG_RA) = cpu.pc() + 4;
-							cpu.registers().pc = rop.imm << PCALBITS;
+							cpu.registers().pc = rop.addr;
 						}); // JAL RA, pc+imm
 				}
 			}
