@@ -1,9 +1,22 @@
 #pragma once
 #include <cstddef>
+#include <cstdarg>
 #include <cstdint>
+#include <cstdio>
 #include <array>
 static constexpr size_t MP_WORKERS = 4;
 static constexpr size_t MP_STACK_SIZE = 512 * 1024u;
+extern "C" long sys_write(const char *);
+
+static void print(const char* format, ...)
+{
+	char buffer[256];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(buffer, 256, format, args);
+	sys_write(buffer);
+	va_end(args);
+}
 
 template <size_t SIZE>
 struct MultiprocessWork {
@@ -49,33 +62,28 @@ static void multiprocessing_function(int cpu, void* vdata)
 	__sync_fetch_and_add(&work.counter, 1);
 }
 
-static void multiprocessing_forever(int, void*)
-{
-	while (1);
-}
-
-using multiprocess_func_t = void(*)(int, void*);
-
-extern "C" long sys_multiprocess(unsigned, void*, size_t, multiprocess_func_t, void*);
-extern "C" long sys_multiprocess_fork(unsigned);
+extern "C" unsigned multiprocess(unsigned int);
 extern "C" long sys_multiprocess_wait();
 
-inline unsigned multiprocess(unsigned cpus, multiprocess_func_t func, void* data)
-{
-	static uint64_t* mp_stacks = nullptr;
-	if (mp_stacks == nullptr)
-		mp_stacks = new uint64_t[MP_STACK_SIZE / sizeof(uint64_t)];
-
-	return sys_multiprocess(cpus, mp_stacks, MP_STACK_SIZE, func, data);
-}
+#if 0
 inline unsigned multiprocess(unsigned cpus)
 {
 	register unsigned a0 asm("a0") = cpus;
 	register int     sid asm("a7") = 1; // multiprocess_fork
 
-	asm volatile ("ecall" : "+r"(a0) : "r"(sid));
+	asm volatile ("ecall" : "+r"(a0) : "r"(sid) : "memory");
 	return a0;
 }
+#else
+asm(".global multiprocess\n"
+	"multiprocess:\n"
+	"	li a1, 0\n"
+	"	li a2, 0\n"
+	"	li a7, 1\n"
+	"   ecall\n"
+	"	ret\n");
+#endif
+
 inline long multiprocess_wait()
 {
 	register unsigned a0 asm("a0");
@@ -84,15 +92,12 @@ inline long multiprocess_wait()
 	asm volatile ("ecall" : "=r"(a0) : "r"(sid) : "memory");
 	return a0;
 }
+inline long sys_write(const char* buf)
+{
+	register const char* a0_in  asm("a0") = buf;
+	register unsigned    a0_out asm("a0");
+	register int         sid    asm("a7") = 10;
 
-asm(".global sys_multiprocess\n"
-"sys_multiprocess:\n"
-"	li a7, 0\n"
-"	ecall\n"
-"   beqz a0, sys_multiprocess_ret\n" // Early return for vCPU 0
-// Otherwise, create a function call
-"   addi a0, a0, -1\n" // Subtract 1 from vCPU ID, making it 0..N-1
-"   mv a1, a4\n"       // Move work data to argument 1
-"   jalr zero, a3\n"   // Direct jump to work function
-"sys_multiprocess_ret:\n"
-"   ret\n");           // Return to caller
+	asm volatile ("ecall" : "=r"(a0_out) : "r"(a0_in), "r"(sid) : "memory");
+	return a0_out;
+}

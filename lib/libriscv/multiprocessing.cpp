@@ -35,6 +35,7 @@ template <int W>
 typename Multiprocessing<W>::failure_bits_t Multiprocessing<W>::wait()
 {
 	if (this->processing) {
+		m_threadpool.wait_until_empty();
 		m_threadpool.wait_until_nothing_in_flight();
 		this->processing = false;
 	}
@@ -87,9 +88,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 					// Retrieve writable page in main VM
 					auto& master_page = this->memory.create_writable_pageno(pageno);
 					// Return back page with memory loaned from master VM
-					page.attr = master_page.attr;
-					page.attr.non_owning = true;
-					page.m_page.reset(master_page.m_page.get());
+					page.loan(master_page);
 				});
 				fork.memory.set_page_readf_handler(
 				[this] (auto&, address_t pageno) -> const Page& {

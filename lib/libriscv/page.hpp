@@ -130,6 +130,15 @@ struct Page
 		attr.non_owning = false;
 	}
 
+	// Loan a page from somewhere else, that will not be
+	// deleted here. There is no ref-counting mechanism, and
+	// the memory is ultimately owned by the master page.
+	void loan(const Page& master_page) {
+		this->attr = master_page.attr;
+		this->attr.non_owning = true;
+		this->m_page.reset(master_page.m_page.get());
+	}
+
 	// this combination has been benchmarked to be faster than
 	// page-aligning the PageData struct and putting it first
 	PageAttributes attr;
@@ -165,7 +174,10 @@ inline void Page::trap(uint32_t offset, int mode, int64_t value) const
 }
 inline void Page::set_trap(mmio_cb_t newtrap) const {
 	if constexpr (memory_traps_enabled) {
-		this->attr.cacheable = false;
+		// Setting a trap makes the page uncacheable and vice versa
+		// This is done so that reads and writes always trigger the
+		// slow-path that allows trapping.
+		this->attr.cacheable = (newtrap == nullptr);
 		this->m_trap = newtrap;
 	} else {
 		(void) newtrap;
