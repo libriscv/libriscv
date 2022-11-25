@@ -49,8 +49,8 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	if (UNLIKELY(is_multiprocessing()))
 		return false;
 
-	const address_t stackpage = Memory<W>::page_number(stack);
-	const address_t stackendpage = Memory<W>::page_number(stack + stksize);
+	const uint64_t stackpage = Memory<W>::page_number(stack);
+	const uint64_t stackendpage = Memory<W>::page_number(stack + stksize);
 	smp().failures = 0x0;
 
 	// Create worker 1...N

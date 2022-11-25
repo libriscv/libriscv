@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include "decoded_exec_segment.hpp"
 #include "util/buffer.hpp" // <string>
+#include "util/function.hpp"
 
 namespace riscv
 {
@@ -18,9 +19,9 @@ namespace riscv
 	{
 		using address_t = address_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
-		using page_fault_cb_t = std::function<Page&(Memory&, address_t, bool)>;
-		using page_readf_cb_t = std::function<const Page&(const Memory&, address_t)>;
-		using page_write_cb_t = std::function<void(Memory&, address_t, Page&)>;
+		using page_fault_cb_t = riscv::Function<Page&(Memory&, address_t, bool)>;
+		using page_readf_cb_t = riscv::Function<const Page&(const Memory&, address_t)>;
+		using page_write_cb_t = riscv::Function<void(Memory&, address_t, Page&)>;
 		static constexpr address_t BRK_MAX    = 0x1000000; // Default BRK size
 
 		template <typename T>
@@ -121,8 +122,15 @@ namespace riscv
 		void  invalidate_cache(address_t pageno, Page*) const;
 		void  invalidate_reset_cache() const;
 		void  free_pages(address_t, size_t len);
+		bool  free_pageno(address_t pageno);
 		// Page fault when writing to unused memory
-		void set_page_fault_handler(page_fault_cb_t h) { this->m_page_fault_handler = h; }
+		// The old handler is returned, so it can be restored later.
+		page_fault_cb_t set_page_fault_handler(page_fault_cb_t h) {
+			auto old_handler = std::move(m_page_fault_handler);
+			this->m_page_fault_handler = h;
+			return old_handler;
+		}
+
 
 		// Page fault when reading unused memory. Primarily used for
 		// pagetable sharing across machines, enabled with RISCV_SHARED_PT.

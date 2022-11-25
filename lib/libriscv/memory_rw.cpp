@@ -40,16 +40,19 @@ namespace riscv
 	}
 
 	template <int W>
+	bool Memory<W>::free_pageno(address_t pageno)
+	{
+		return m_pages.erase(pageno) != 0;
+	}
+
+	template <int W>
 	void Memory<W>::free_pages(address_t dst, size_t len)
 	{
 		address_t pageno = page_number(dst);
 		address_t end = pageno + (len /= Page::size());
 		while (pageno < end)
 		{
-			auto it = m_pages.find(pageno);
-			if (it != m_pages.end()) {
-				m_pages.erase(it);
-			}
+			this->free_pageno(pageno);
 			pageno ++;
 		}
 		// TODO: This can be improved by invalidating matches only

@@ -1,7 +1,8 @@
 #pragma once
 #include <type_traits>
-#include <functional>
 #include <string>
+#include "util/function.hpp"
+#include "types.hpp"
 
 #ifndef RISCV_SYSCALLS_MAX
 #define RISCV_SYSCALLS_MAX   512
@@ -97,7 +98,7 @@ namespace riscv
 		// Minimal fork does not loan any pages from the source Machine
 		bool minimal_fork = false;
 
-		std::function<struct Page&(Memory<W>&, size_t, bool)> page_fault_handler = nullptr;
+		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
 
 #ifdef RISCV_BINARY_TRANSLATION
 		unsigned block_size_treshold = 6;
