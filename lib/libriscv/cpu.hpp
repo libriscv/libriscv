@@ -19,6 +19,7 @@ namespace riscv
 		using address_t = address_type<W>;     // one unsigned memory address
 		using format_t  = instruction_format;  // machine instruction format
 		using breakpoint_t = std::function<void(CPU<W>&)>;
+		using execute_fault_t = void(*)(CPU<W>&, const Page&);
 		using instruction_t = Instruction<W>;
 
 		void simulate(uint64_t);
@@ -88,6 +89,10 @@ namespace riscv
 		auto* current_execute_segment() const noexcept { return m_exec; }
 		bool is_executable(address_t addr) const noexcept;
 
+		// Override the function that gets called when the CPU
+		// throws an execute space protection fault.
+		void set_fault_handler(execute_fault_t func) { m_fault = func; }
+
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
@@ -106,6 +111,10 @@ namespace riscv
 		mutable CachedPage<W, const Page> m_cache;
 
 		const unsigned m_cpuid;
+
+		execute_fault_t m_fault = [] (auto& cpu, auto&) {
+			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, cpu.pc());
+		};
 
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;

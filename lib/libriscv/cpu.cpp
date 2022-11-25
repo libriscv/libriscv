@@ -78,7 +78,8 @@ restart_next_execute_segment:
 		const auto& current_page =
 			machine().memory.get_pageno(base_pageno);
 		if (UNLIKELY(!current_page.attr.exec)) {
-			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+			this->m_fault(*this, current_page);
+			goto restart_next_execute_segment;
 		}
 
 		// Check for trap
