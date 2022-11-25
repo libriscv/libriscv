@@ -134,7 +134,11 @@ namespace riscv
 
 		// Page fault when reading unused memory. Primarily used for
 		// pagetable sharing across machines, enabled with RISCV_SHARED_PT.
-		void set_page_readf_handler(page_readf_cb_t h) { this->m_page_readf_handler = h; }
+		page_readf_cb_t set_page_readf_handler(page_readf_cb_t h) {
+			auto old_handler = std::move(m_page_readf_handler);
+			this->m_page_readf_handler = h;
+			return old_handler;
+		}
 		void reset_page_readf_handler() { this->m_page_readf_handler = default_page_read; }
 
 		// Page write on copy-on-write page
