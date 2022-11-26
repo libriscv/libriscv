@@ -38,6 +38,8 @@ struct Arena
 {
 	static constexpr size_t ALIGNMENT = 8u;
 	using PointerType = ArenaChunk::PointerType;
+	using unknown_free_func_t = std::function<int(PointerType, ArenaChunk *)>;
+
 	Arena(const Arena& other);
 	Arena(PointerType base, PointerType end);
 
@@ -52,6 +54,11 @@ struct Arena
 
 	void transfer(Arena& dest) const;
 
+	void on_unknown_free(unknown_free_func_t func) {
+		m_free_unknown_chunk = std::move(func);
+	}
+
+	/** Internal usage **/
 	inline ArenaChunk& base_chunk() {
 		return m_base_chunk;
 	}
@@ -74,6 +81,10 @@ private:
 	std::deque<ArenaChunk> m_chunks;
 	std::vector<ArenaChunk*> m_free_chunks;
 	ArenaChunk  m_base_chunk;
+
+	unknown_free_func_t m_free_unknown_chunk
+		= [] (auto, auto*) { return -1; };
+
 };
 
 // find exact free chunk that matches ptr
@@ -245,7 +256,7 @@ inline int Arena::free(PointerType ptr)
 {
 	ArenaChunk* ch = base_chunk().find(ptr);
 	if (UNLIKELY(ch == nullptr || ch->free))
-		return -1;
+		return m_free_unknown_chunk(ptr, ch);
 
 	this->internal_free(ch);
 	return 0;
