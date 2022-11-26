@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <cassert>
 #include <deque>
-#include <functional>
+#include "util/function.hpp"
 
 namespace riscv
 {
@@ -38,13 +38,15 @@ struct Arena
 {
 	static constexpr size_t ALIGNMENT = 8u;
 	using PointerType = ArenaChunk::PointerType;
-	using unknown_free_func_t = std::function<int(PointerType, ArenaChunk *)>;
+	using ReallocResult = std::tuple<PointerType, size_t>;
+	using unknown_realloc_func_t = Function<ReallocResult(PointerType, size_t)>;
+	using unknown_free_func_t = Function<int(PointerType, ArenaChunk *)>;
 
 	Arena(const Arena& other);
 	Arena(PointerType base, PointerType end);
 
 	PointerType malloc(size_t size);
-	std::tuple<PointerType, size_t> realloc(PointerType old, size_t size);
+	ReallocResult realloc(PointerType old, size_t size);
 	size_t      size(PointerType src, bool allow_free = false);
 	signed int  free(PointerType);
 
@@ -56,6 +58,9 @@ struct Arena
 
 	void on_unknown_free(unknown_free_func_t func) {
 		m_free_unknown_chunk = std::move(func);
+	}
+	void on_unknown_realloc(unknown_realloc_func_t func) {
+		m_realloc_unknown_chunk = std::move(func);
 	}
 
 	/** Internal usage **/
@@ -76,7 +81,7 @@ struct Arena
 	}
 private:
 	void internal_free(ArenaChunk* ch);
-	void foreach(std::function<void(const ArenaChunk&)>) const;
+	void foreach(Function<void(const ArenaChunk&)>) const;
 
 	std::deque<ArenaChunk> m_chunks;
 	std::vector<ArenaChunk*> m_free_chunks;
@@ -84,7 +89,8 @@ private:
 
 	unknown_free_func_t m_free_unknown_chunk
 		= [] (auto, auto*) { return -1; };
-
+	unknown_realloc_func_t m_realloc_unknown_chunk
+		= [] (auto, auto) { return ReallocResult{0, 0}; };
 };
 
 // find exact free chunk that matches ptr
@@ -211,15 +217,17 @@ inline Arena::PointerType Arena::malloc(size_t size)
 	return 0;
 }
 
-inline std::tuple<Arena::PointerType, size_t>
+inline Arena::ReallocResult
 	Arena::realloc(PointerType ptr, size_t newsize)
 {
 	if (ptr == 0x0) // Regular malloc
 		return {malloc(newsize), 0};
 
 	ArenaChunk* ch = base_chunk().find(ptr);
-	if (UNLIKELY(ch == nullptr || ch->free))
-		return {0, 0}; // Failure
+	if (UNLIKELY(ch == nullptr || ch->free)) {
+		// Realloc failure handler
+		return m_realloc_unknown_chunk(ptr, newsize);
+	}
 
 	newsize = fixup_size(newsize);
 	if (ch->size >= newsize) // Already long enough?
@@ -269,7 +277,7 @@ inline Arena::Arena(PointerType arena_base, PointerType arena_end)
 	m_base_chunk.free = true;
 }
 
-inline void Arena::foreach(std::function<void(const ArenaChunk&)> callback) const
+inline void Arena::foreach(Function<void(const ArenaChunk&)> callback) const
 {
 	const ArenaChunk* ch = &this->m_base_chunk;
     while (ch != nullptr) {
