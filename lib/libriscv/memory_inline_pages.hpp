@@ -50,7 +50,7 @@ inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 	if (LIKELY(it != m_pages.end())) {
 		return it->second;
 	}
-	CPU<W>::trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT);
+	CPU<W>::trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, pageno * Page::size());
 }
 
 template <int W>
