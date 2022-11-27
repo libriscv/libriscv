@@ -338,9 +338,17 @@ namespace riscv
 	template <int W>
 	void Memory<W>::evict_execute_segments(size_t remaining_size)
 	{
-		while (m_exec.size() > remaining_size)
-			m_exec.pop_front();
-		machine().cpu.set_execute_segment(nullptr);
+		if (m_exec.size() <= remaining_size)
+			return;
+
+		while (m_exec.size() > remaining_size) {
+			m_exec.pop_back();
+		}
+		// XXX: Should probably detect if the current execute
+		// segment is already active, but this should also be OK.
+		if (!m_exec.empty()) {
+			machine().cpu.set_execute_segment(&m_exec[0]);
+		}
 	}
 
 	template struct Memory<4>;
