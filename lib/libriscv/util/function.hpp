@@ -165,6 +165,11 @@ public:
         return (*m_func_ptr)(m_storage, std::forward<Args>(args)...);
     }
 
+    inline FunctionPointerType get() const noexcept
+    {
+        return m_func_ptr;
+    }
+
 private:
     template<typename Callable>
     static Ret trampoline (Storage storage, Args ...args)
