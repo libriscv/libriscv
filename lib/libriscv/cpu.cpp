@@ -72,13 +72,17 @@ restart_next_execute_segment:
 		// Immediately look at the page in order to
 		// verify execute and see if it has a trap handler
 		auto base_pageno = this->pc() / Page::size();
-		auto end_pageno  = base_pageno;
+		auto end_pageno  = base_pageno + 1;
 
 		// Check for +exec
 		const auto& current_page =
 			machine().memory.get_pageno(base_pageno);
 		if (UNLIKELY(!current_page.attr.exec)) {
 			this->m_fault(*this, current_page);
+
+			if (UNLIKELY(++restarts == MAX_RESTARTS))
+				trigger_exception(EXECUTION_LOOP_DETECTED, this->pc());
+
 			goto restart_next_execute_segment;
 		}
 
@@ -92,7 +96,7 @@ restart_next_execute_segment:
 			// If PC changed, we will restart the process
 			if (this->pc() / Page::size() != base_pageno)
 			{
-				if (UNLIKELY(++restarts > MAX_RESTARTS))
+				if (UNLIKELY(++restarts == MAX_RESTARTS))
 					trigger_exception(EXECUTION_LOOP_DETECTED, this->pc());
 
 				goto restart_next_execute_segment;
@@ -101,7 +105,13 @@ restart_next_execute_segment:
 
 		// Find previously decoded execute segment
 		this->m_exec = machine().memory.exec_segment_for(this->pc());
-		if (this->m_exec != nullptr)
+		if (LIKELY(this->m_exec != nullptr))
+			return;
+
+		// Find decoded execute segment via override
+		// If it returns nullptr, we build a new execute segment
+		this->m_exec = this->m_override_exec(*this);
+		if (UNLIKELY(this->m_exec != nullptr))
 			return;
 
 		// Find the earliest execute page in new segment
@@ -127,10 +137,13 @@ restart_next_execute_segment:
 		std::unique_ptr<uint8_t[]> area (new uint8_t[n_pages * Page::size()]);
 		// Copy from each individual page
 		for (address_t p = base_pageno; p < end_pageno; p++) {
-			auto& page = machine().memory.get_exec_pageno(p);
+			// Cannot use get_exec_pageno here as we may need
+			// access to read fault handler.
+			auto& page = machine().memory.get_pageno(p);
 			const size_t offset = (p - base_pageno) * Page::size();
 			std::memcpy(area.get() + offset, page.data(), Page::size());
 		}
+
 		// Decode and store it for later
 		this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size());
 	} // CPU::next_execute_segment

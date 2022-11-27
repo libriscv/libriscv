@@ -20,6 +20,7 @@ namespace riscv
 		using format_t  = instruction_format;  // machine instruction format
 		using breakpoint_t = std::function<void(CPU<W>&)>;
 		using execute_fault_t = void(*)(CPU<W>&, const Page&);
+		using override_execute_segment_t = DecodedExecuteSegment<W>*(*)(CPU<W>&);
 		using instruction_t = Instruction<W>;
 
 		void simulate(uint64_t);
@@ -93,6 +94,9 @@ namespace riscv
 		// throws an execute space protection fault.
 		void set_fault_handler(execute_fault_t func) { m_fault = func; }
 
+		// Override how to produce the next active execute segment
+		void set_override_new_execute_segment(override_execute_segment_t func) { m_override_exec = func; }
+
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
@@ -112,8 +116,14 @@ namespace riscv
 
 		const unsigned m_cpuid;
 
+		// The default execute fault simply triggers the exception
 		execute_fault_t m_fault = [] (auto& cpu, auto&) {
 			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, cpu.pc());
+		};
+
+		// The default execute override returns no new execute segment
+		override_execute_segment_t m_override_exec = [] (auto&) {
+			return (DecodedExecuteSegment<W> *)nullptr;
 		};
 
 #ifdef RISCV_EXT_ATOMICS
