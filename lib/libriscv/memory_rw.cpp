@@ -120,7 +120,7 @@ namespace riscv
 		if (!already_there.is_cow_page() && !already_there.attr.non_owning)
 			throw MachineException(ILLEGAL_OPERATION,
 				"There was a page at the specified location already", pageno);
-		if (shared_page.data() == nullptr && (
+		if (shared_page.has_data() == false && (
 			shared_page.attr.write || shared_page.attr.read || shared_page.attr.exec))
 			throw MachineException(ILLEGAL_OPERATION,
 				"There was a RWX page with no allocated data", pageno);

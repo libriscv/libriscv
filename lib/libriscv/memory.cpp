@@ -383,7 +383,7 @@ namespace riscv
 				attr.non_owning = true;
 				m_pages.emplace(std::piecewise_construct,
 					std::forward_as_tuple(it.first),
-					std::forward_as_tuple(attr, (PageData*) page.data())
+					std::forward_as_tuple(attr, page.m_page.get())
 				);
 			}
 		}
