@@ -1,7 +1,8 @@
 #include "rv32i_instr.hpp"
 #include "machine.hpp"
 
-#define INSTRUCTION(x, ...) static constexpr CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }
+#define INSTRUCTION(x, ...) \
+	CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr64i_##x
 #include "rvi_instr.cpp"
 #ifdef RISCV_EXT_ATOMICS

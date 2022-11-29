@@ -49,8 +49,6 @@ include_directories(${SDL2_INCLUDE_DIRS})
 
 add_executable(rvdoom ${SOURCES})
 target_link_libraries(rvdoom riscv ${SDL2_LIBRARIES})
-message(STATUS "ARGN is ${ARGN}")
-target_compile_definitions(rvdoom PRIVATE ${ARGN})
 if (STATIC_BUILD)
 	target_link_libraries(rvdoom -static)
 endif()

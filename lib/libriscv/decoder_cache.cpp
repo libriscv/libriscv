@@ -3,9 +3,6 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvc.hpp"
-#if defined(RISCV_DECODER_COMPRESS) && defined(RISCV_SUPER_COMPRESSED)
-static_assert(sizeof(riscv::DecoderData<4>) == 8, "Super compressed decoder is 64-bits");
-#endif
 
 namespace riscv
 {
@@ -28,7 +25,6 @@ namespace riscv
 			return {*(AlignedLoad16 *)&exec_segment[pc]};
 	}
 
-#ifdef RISCV_FAST_SIMULATOR
 	static constexpr uint32_t FASTSIM_BLOCK_END = 0xFFFF;
 
 	template <int W>
@@ -145,9 +141,6 @@ namespace riscv
 			}
 		}
 	}
-#else
-#define VERBOSE_FASTSIM  false
-#endif // RISCV_FAST_SIMULATOR
 
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
@@ -220,10 +213,8 @@ namespace riscv
 		for (; dst < addr + len;)
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
-#ifdef RISCV_FAST_SIMULATOR
 			entry.instr = 0x0;
 			entry.idxend = 0;
-#endif
 
 			// Load unaligned instruction from execute segment
 			const auto instruction = read_instruction(
@@ -235,9 +226,7 @@ namespace riscv
 				if (entry.isset()) {
 					// With fastsim we pretend the original opcode is JAL,
 					// which breaks the fastsim loop. In all cases, continue.
-					#ifdef RISCV_FAST_SIMULATOR
 					entry.instr = FASTSIM_BLOCK_END;
-					#endif
 					dst += 4;
 					continue;
 				}
@@ -248,8 +237,7 @@ namespace riscv
 			Instruction<W> decoded;
 			// The rewriter can rewrite full instructions, so lets only
 			// invoke it when we have a decoder cache with full instructions.
-			// TODO: Allow disabling at run-time
-			if (decoder_rewriter_enabled) {
+			if (false && decoder_rewriter_enabled) {
 				// Improve many instruction handlers by rewriting instructions
 				decoded = machine().cpu.decode_rewrite(dst, rewritten);
 			} else {
@@ -257,9 +245,11 @@ namespace riscv
 			}
 			entry.set_handler(decoded);
 
-#ifdef RISCV_FAST_SIMULATOR
 			// Cache the (modified) instruction bits
 			entry.instr = rewritten.whole;
+			entry.instr = instruction.whole;
+#ifdef RISCV_THREADED
+			entry.set_bytecode(CPU<W>::computed_index_for(instruction));
 #endif
 
 			// Increment PC after everything
@@ -279,9 +269,23 @@ namespace riscv
 				dst += 4;
 		}
 
-#ifdef RISCV_FAST_SIMULATOR
 		realize_fastsim<W>(addr, dst, exec_segment, exec_decoder);
-#endif
+	}
+
+	template <int W> RISCV_INTERNAL
+	size_t DecoderData<W>::handler_index_for(Handler new_handler)
+	{
+		for (size_t i = 1; i < instr_handlers.size(); i++) {
+			auto& handler = instr_handlers[i];
+			if (handler == new_handler)
+				return i;
+			else if (handler == nullptr) {
+				handler = new_handler;
+				return i;
+			}
+		}
+		throw MachineException(MAX_INSTRUCTIONS_REACHED,
+			"Not enough instruction handler space", instr_handlers.size());
 	}
 
 	// Moved here to work around a GCC bug

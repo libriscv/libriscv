@@ -24,10 +24,19 @@ namespace riscv
 		using instruction_t = Instruction<W>;
 
 		void simulate(uint64_t);
-		void simulate_precise(uint64_t);
 		void step_one();
 		void reset();
 		void reset_stack_pointer() noexcept;
+
+		// Executes one instruction at a time, and can stop at
+		// any instruction.
+		void simulate_precise(uint64_t);
+		// Executes one block at a time, and can only stop when
+		// the block ends or a system call is handled.
+		void simulate_fastsim(uint64_t);
+		// Uses bytecodes to jump around at a faster speed, but is
+		// only supported on GCC and Clang. Behaves like fastsim.
+		void simulate_threaded(uint64_t);
 
 		address_t pc() const noexcept { return registers().pc; }
 		void increment_pc(int delta);
@@ -73,6 +82,8 @@ namespace riscv
 		std::string to_string(format_t format) const;
 		std::string to_string(format_t format, const instruction_t& instr) const;
 		std::string current_instruction_to_string() const;
+		// Decode instruction bits into computed goto index
+		static size_t computed_index_for(format_t bits);
 
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;

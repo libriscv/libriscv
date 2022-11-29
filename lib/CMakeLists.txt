@@ -4,9 +4,9 @@
 
 # DEBUG allows memory alignment checks and other things
 option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
-# FASTSIM analyzes the code in order to interpret it
-# faster than normally possible.
-option(RISCV_FASTSIM "Enable fast simulation mode" ON)
+# Threaded simulation uses computed goto, and is not supported
+# on all compilers/systems.
+option(RISCV_THREADED "Enable fastest simulation mode" OFF)
 # Enable and disable various RISC-V instruction
 # set extensions. Not recommended to disable any.
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
@@ -26,12 +26,12 @@ option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
 option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
 
 if (RISCV_EXPERIMENTAL)
-	option(RISCV_DECODER_COMPRESS    "Enable compressed decoder data" ON)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
 endif()
 
 set (SOURCES
 		libriscv/cpu.cpp
+		libriscv/cpu_fastsim.cpp
 		libriscv/debug.cpp
 		libriscv/decoder_cache.cpp
 		libriscv/machine.cpp
@@ -58,7 +58,12 @@ else()
 		libriscv/linux/system_calls.cpp
 	)
 endif()
-if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL)
+if (RISCV_THREADED)
+	list(APPEND SOURCES
+		libriscv/cpu_dispatch.cpp
+	)
+endif()
+if (NOT RISCV_THREADED AND RISCV_EXPERIMENTAL)
 	list(APPEND SOURCES
 		libriscv/decoder_rewriter.cpp
 	)
@@ -92,23 +97,15 @@ if (RISCV_EXT_V)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_VECTOR=32)
 endif()
 
-if (RISCV_FASTSIM)
-	target_compile_definitions(riscv PUBLIC RISCV_FAST_SIMULATOR=1)
+if (RISCV_THREADED)
+	target_compile_definitions(riscv PUBLIC RISCV_THREADED=1)
 endif()
 
-if (RISCV_FASTSIM AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
+if (NOT RISCV_THREADED AND RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
 	# The rewriter changes instruction bytes and is incompatible
 	# with a decoder that reads instructions from execute-memory.
+	# Also currently incompatible with threaded simulation.
 	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
-	if (RISCV_DECODER_COMPRESS AND NOT RISCV_BINARY_TRANSLATION)
-		# Reduce decoder structure to 12 bytes
-		target_compile_definitions(riscv PUBLIC RISCV_DECODER_COMPRESS=1)
-		# Compressed instructions require extra decoding data
-		if (NOT RISCV_EXT_C)
-			# Reduces decoder structure to 8 bytes
-			#target_compile_definitions(riscv PUBLIC RISCV_SUPER_COMPRESSED=1)
-		endif()
-	endif()
 endif()
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
