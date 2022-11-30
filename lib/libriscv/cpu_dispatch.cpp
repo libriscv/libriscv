@@ -162,44 +162,54 @@ rv32i_addi: {
 	}
 	NEXT_INSTR();
 }
-rv32i_lui: {
-	VIEW_INSTR();
-	this->reg(instr.Utype.rd) = instr.Utype.upper_imm();
-	NEXT_INSTR();
-}
-rv32i_auipc: {
-	VIEW_INSTR();
-	this->reg(instr.Utype.rd) = pc + instr.Utype.upper_imm();
-	NEXT_BLOCK(4);
-}
 rv32i_ldw: {
-	VIEW_INSTR();
-	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	this->reg(instr.Itype.rd) =
-		(int32_t)machine().memory.template read<uint32_t>(addr);
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+		this->reg(fi.rs1) =
+			(int32_t)machine().memory.template read<uint32_t>(addr);
+	} else {
+		VIEW_INSTR();
+		const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		this->reg(instr.Itype.rd) =
+			(int32_t)machine().memory.template read<uint32_t>(addr);
+	}
 	NEXT_INSTR();
 }
 rv32i_sdw: {
-	VIEW_INSTR();
-	const auto addr  = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-	machine().memory.template write<uint32_t>(addr, reg(instr.Stype.rs2));
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		const auto addr  = reg(fi.rs1) + fi.signed_imm();
+		machine().memory.template write<uint32_t>(addr, reg(fi.rs2));
+	} else {
+		VIEW_INSTR();
+		const auto addr  = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		machine().memory.template write<uint32_t>(addr, reg(instr.Stype.rs2));
+	}
 	NEXT_INSTR();
 }
 rv32i_beq: {
-	VIEW_INSTR();
-	if (reg(instr.Btype.rs1) == reg(instr.Btype.rs2)) {
-		PERFORM_BRANCH();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		if (reg(fi.rs1) == reg(fi.rs2)) {
+			PERFORM_FAST_BRANCH();
+		}
+	} else {
+		VIEW_INSTR();
+		if (reg(instr.Btype.rs1) == reg(instr.Btype.rs2)) {
+			PERFORM_BRANCH();
+		}
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bne: {
-	VIEW_INSTR();
 	if constexpr (decoder_rewriter_enabled) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		if (reg(fi.rs1) != reg(fi.rs2)) {
 			PERFORM_FAST_BRANCH();
 		}
 	} else {
+		VIEW_INSTR();
 		if (reg(instr.Btype.rs1) != reg(instr.Btype.rs2)) {
 			PERFORM_BRANCH();
 		}
@@ -307,20 +317,6 @@ rv32i_andi: {
 		reg(instr.Itype.rs1) & instr.Itype.signed_imm();
 	NEXT_INSTR();
 }
-rv32i_syscall: {
-	// Make the current PC visible
-	this->registers().pc = pc;
-	// Make the instruction counter visible
-	counter.apply();
-	// Invoke system call
-	machine().system_call(this->reg(REG_ECALL));
-	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
-	{
-		pc = registers().pc;
-		goto check_jump;
-	}
-	NEXT_BLOCK(4);
-}
 rv32i_jal: {
 	VIEW_INSTR();
 	// Link *next* instruction (rd = PC + 4)
@@ -342,6 +338,16 @@ rv32i_jalr: {
 	}
 	pc = address;
 	goto check_jump;
+}
+rv32i_lui: {
+	VIEW_INSTR();
+	this->reg(instr.Utype.rd) = instr.Utype.upper_imm();
+	NEXT_INSTR();
+}
+rv32i_auipc: {
+	VIEW_INSTR();
+	this->reg(instr.Utype.rd) = pc + instr.Utype.upper_imm();
+	NEXT_BLOCK(4);
 }
 
 rv32i_op_sll: {
@@ -512,6 +518,21 @@ rv32i_op_sh3add: {
 	OPREGS();
 	dst = src2 + (src1 << 3);
 	NEXT_INSTR();
+}
+
+rv32i_syscall: {
+	// Make the current PC visible
+	this->registers().pc = pc;
+	// Make the instruction counter visible
+	counter.apply();
+	// Invoke system call
+	machine().system_call(this->reg(REG_ECALL));
+	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
+	{
+		pc = registers().pc;
+		goto check_jump;
+	}
+	NEXT_BLOCK(4);
 }
 
 rv32i_ldb: {

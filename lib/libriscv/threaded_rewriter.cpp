@@ -22,6 +22,7 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 				}
+			case RV32I_BC_BEQ:
 			case RV32I_BC_BNE: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Btype.rs1;
@@ -40,6 +41,25 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 				}
+			case RV32I_BC_LDW: {
+				FasterItype rewritten;
+				rewritten.rs1 = original.Itype.rd;
+				rewritten.rs2 = original.Itype.rs1;
+				rewritten.imm = original.Itype.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+				}
+			case RV32I_BC_SDW: {
+				FasterItype rewritten;
+				rewritten.rs1 = original.Stype.rs1;
+				rewritten.rs2 = original.Stype.rs2;
+				rewritten.imm = original.Stype.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+				}
+			case RV32I_BC_JAL:
 			default: {
 
 			}
