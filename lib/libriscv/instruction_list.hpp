@@ -40,3 +40,5 @@
 #define RV32F__FMV_W_X    0b11110
 
 #define RV32V_OP        0b1010111
+
+#define FASTSIM_BLOCK_END  0xFFFF

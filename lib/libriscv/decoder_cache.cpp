@@ -25,8 +25,6 @@ namespace riscv
 			return {*(AlignedLoad16 *)&exec_segment[pc]};
 	}
 
-	static constexpr uint32_t FASTSIM_BLOCK_END = 0xFFFF;
-
 	template <int W>
 	static bool is_regular_compressed(uint16_t instr) {
 		const rv32c_instruction ci { instr };
@@ -361,4 +359,7 @@ namespace riscv
 	template struct Memory<4>;
 	template struct Memory<8>;
 	template struct Memory<16>;
+	template struct DecoderData<4>;
+	template struct DecoderData<8>;
+	template struct DecoderData<16>;
 } // riscv

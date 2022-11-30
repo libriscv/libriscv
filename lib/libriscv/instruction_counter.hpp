@@ -18,6 +18,9 @@ namespace riscv
 		void apply() {
 			machine.set_instruction_counter(m_counter);
 		}
+		void retrieve() {
+			m_counter = machine.instruction_counter();
+		}
 		uint64_t value() const noexcept {
 			if constexpr (binary_translation_enabled)
 				return machine.instruction_counter();
