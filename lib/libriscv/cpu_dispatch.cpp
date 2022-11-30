@@ -105,9 +105,10 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32V_BC_OP]      = &&rv32v_op,
 #endif
 		[RV32I_BC_NOP]     = &&rv32i_nop,
-		[RV32A_BC_ATOMIC]  = &&rv32a_atomic,
 		[RV32I_BC_FUNCTION] = &&execute_decoded_function,
+#ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
+#endif
 		[RV32I_BC_INVALID] = &&rv32i_invalid,
 	};
 	static constexpr int OPCODES = sizeof(computed_opcode) / sizeof(computed_opcode[0]);
@@ -774,6 +775,7 @@ execute_decoded_function: {
 	handler(*this, instr);
 	NEXT_INSTR();
 }
+#ifdef RISCV_BINARY_TRANSLATION
 translated_function: {
 	VIEW_INSTR();
 	counter.apply();
@@ -784,12 +786,7 @@ translated_function: {
 	pc = registers().pc;
 	goto check_jump;
 }
-rv32a_atomic: {
-	VIEW_INSTR();
-	auto handler = decoder->get_handler();
-	handler(*this, instr);
-	NEXT_INSTR();
-}
+#endif
 rv32i_invalid:
 	this->trigger_exception(
 		UNIMPLEMENTED_INSTRUCTION, decoder->instr);
@@ -812,8 +809,10 @@ check_jump:
 template <int W>
 size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 {
+#ifdef RISCV_BINARY_TRANSLATION
 	if (instr.whole == FASTSIM_BLOCK_END)
 		return RV32I_BC_TRANSLATOR;
+#endif
 
 	switch (instr.opcode())
 	{
@@ -1023,7 +1022,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			return RV32V_BC_OP;
 #endif
 		case RV32A_ATOMIC:
-			return RV32A_BC_ATOMIC;
+			return RV32I_BC_FUNCTION;
 		default:
 			return RV32I_BC_INVALID;
 	}
