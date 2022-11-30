@@ -3,95 +3,12 @@
 #include "instruction_counter.hpp"
 #include "instruction_list.hpp"
 #include "extern_instructions.hpp"
+#include "threaded_bytecodes.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 
 namespace riscv
 {
-	enum
-	{
-		RV32I_BC_ADDI = 0,
-		RV32I_BC_LI,
-
-		RV32I_BC_SLLI,
-		RV32I_BC_SLTI,
-		RV32I_BC_SLTIU,
-		RV32I_BC_XORI,
-		RV32I_BC_SRLI,
-		RV32I_BC_SRAI,
-		RV32I_BC_ORI,
-		RV32I_BC_ANDI,
-
-		RV32I_BC_LUI,
-		RV32I_BC_AUIPC,
-
-		RV32I_BC_LDW,
-		RV32I_BC_LDD,
-
-		RV32I_BC_LDB,
-		RV32I_BC_LDH,
-		RV32I_BC_LDBU,
-		RV32I_BC_LDHU,
-		RV32I_BC_LDWU,
-
-		RV32I_BC_SDB,
-		RV32I_BC_SDH,
-		RV32I_BC_SDW,
-		RV32I_BC_SDD,
-
-		RV32I_BC_BEQ,
-		RV32I_BC_BNE,
-		RV32I_BC_BLT,
-		RV32I_BC_BGE,
-		RV32I_BC_BLTU,
-		RV32I_BC_BGEU,
-
-		RV32I_BC_JAL,
-		RV32I_BC_JALR,
-
-		RV32I_BC_OP_ADD,
-		RV32I_BC_OP_SUB,
-		RV32I_BC_OP_SLL,
-		RV32I_BC_OP_SLT,
-		RV32I_BC_OP_SLTU,
-		RV32I_BC_OP_XOR,
-		RV32I_BC_OP_SRL,
-		RV32I_BC_OP_OR,
-		RV32I_BC_OP_AND,
-		RV32I_BC_OP_MUL,
-		RV32I_BC_OP_MULH,
-		RV32I_BC_OP_MULHSU,
-		RV32I_BC_OP_MULHU,
-		RV32I_BC_OP_DIV,
-		RV32I_BC_OP_DIVU,
-		RV32I_BC_OP_REM,
-		RV32I_BC_OP_REMU,
-		RV32I_BC_OP_SRA,
-		RV32I_BC_OP_SH1ADD,
-		RV32I_BC_OP_SH2ADD,
-		RV32I_BC_OP_SH3ADD,
-
-		RV32I_BC_SYSCALL,
-		RV32I_BC_NOP,
-
-		RV32F_BC_FLW,
-		RV32F_BC_FLD,
-		RV32F_BC_FSW,
-		RV32F_BC_FSD,
-		RV32F_BC_FPFUNC,
-		RV32F_BC_FMADD,
-		RV32F_BC_FMSUB,
-		RV32F_BC_FNMADD,
-		RV32F_BC_FNMSUB,
-		RV32V_BC_VLE32,
-		RV32V_BC_VSE32,
-		RV32V_BC_OP,
-
-		RV32I_BC_SYSTEM,
-		RV32A_BC_ATOMIC,
-		RV32I_BC_INVALID,
-	};
-
 #define VIEW_INSTR() \
 	auto instr = decoder->view_instr();
 #define VIEW_INSTR_AS(name, x) \
@@ -108,6 +25,9 @@ namespace riscv
 	goto continue_block;
 #define PERFORM_BRANCH() \
 	pc += instr.Btype.signed_imm(); \
+	goto check_jump;
+#define PERFORM_FAST_BRANCH() \
+	pc += fi.signed_imm(); \
 	goto check_jump;
 
 template <int W> __attribute__((hot))
@@ -239,9 +159,15 @@ rv32i_li: {
 	NEXT_INSTR();
 }
 rv32i_addi: {
-	VIEW_INSTR();
-	this->reg(instr.Itype.rd) =
-		this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		this->reg(fi.rs1) =
+			this->reg(fi.rs2) + fi.signed_imm();
+	} else {
+		VIEW_INSTR();
+		this->reg(instr.Itype.rd) =
+			this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	}
 	NEXT_INSTR();
 }
 rv32i_lui: {
@@ -276,8 +202,15 @@ rv32i_beq: {
 }
 rv32i_bne: {
 	VIEW_INSTR();
-	if (reg(instr.Btype.rs1) != reg(instr.Btype.rs2)) {
-		PERFORM_BRANCH();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		if (reg(fi.rs1) != reg(fi.rs2)) {
+			PERFORM_FAST_BRANCH();
+		}
+	} else {
+		if (reg(instr.Btype.rs1) != reg(instr.Btype.rs2)) {
+			PERFORM_BRANCH();
+		}
 	}
 	NEXT_BLOCK(4);
 }
@@ -311,8 +244,13 @@ rv32i_bgeu: {
 }
 rv32i_op_add: {
 	VIEW_INSTR();
-	this->reg(instr.Rtype.rd) =
-		reg(instr.Rtype.rs1) + reg(instr.Rtype.rs2);
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterOpType);
+		this->reg(fi.rd) = reg(fi.rs1) + reg(fi.rs2);
+	} else {
+		this->reg(instr.Rtype.rd) =
+			reg(instr.Rtype.rs1) + reg(instr.Rtype.rs2);
+	}
 	NEXT_INSTR();
 }
 rv32i_op_sub: {
@@ -669,17 +607,52 @@ rv32i_system: {
 }
 rv32f_fpfunc: {
 	VIEW_INSTR();
+	const rv32f_instruction fi{instr};
+	auto& dst = registers().getfl(fi.R4type.rd);
+	auto& rs1 = registers().getfl(fi.R4type.rs1);
+	auto& rs2 = registers().getfl(fi.R4type.rs2);
 	// TODO: Split this up into handlers
 	switch (instr.fpfunc())
 	{
-		case 0b00000:
-			INVOKE_INSTR(FADD);
+		case 0b00000: {
+			if (fi.R4type.funct2 == 0x0)
+			{ // float32
+				dst.set_float(rs1.f32[0] + rs2.f32[0]);
+			}
+			else if (fi.R4type.funct2 == 0x1)
+			{ // float64
+				dst.f64 = rs1.f64 + rs2.f64;
+			}
+			else {
+				trigger_exception(ILLEGAL_OPERATION);
+			}
 			break;
+		}
 		case 0b00001:
-			INVOKE_INSTR(FSUB);
+			if (fi.R4type.funct2 == 0x0)
+			{ // float32
+				dst.set_float(rs1.f32[0] - rs2.f32[0]);
+			}
+			else if (fi.R4type.funct2 == 0x1)
+			{ // float64
+				dst.f64 = rs1.f64 - rs2.f64;
+			}
+			else {
+				trigger_exception(ILLEGAL_OPERATION);
+			}
 			break;
 		case 0b00010:
-			INVOKE_INSTR(FMUL);
+			if (fi.R4type.funct2 == 0x0)
+			{ // float32
+				dst.set_float(rs1.f32[0] * rs2.f32[0]);
+			}
+			else if (fi.R4type.funct2 == 0x1)
+			{ // float64
+				dst.f64 = rs1.f64 * rs2.f64;
+			}
+			else {
+				trigger_exception(ILLEGAL_OPERATION);
+			}
 			break;
 		case 0b00011:
 			INVOKE_INSTR(FDIV);

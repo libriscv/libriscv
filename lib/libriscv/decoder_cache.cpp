@@ -237,20 +237,23 @@ namespace riscv
 			Instruction<W> decoded;
 			// The rewriter can rewrite full instructions, so lets only
 			// invoke it when we have a decoder cache with full instructions.
-			if (false && decoder_rewriter_enabled) {
+			if (!threaded_simulator_enabled && decoder_rewriter_enabled) {
 				// Improve many instruction handlers by rewriting instructions
-				decoded = machine().cpu.decode_rewrite(dst, rewritten);
+				decoded = CPU<W>::decode_rewrite(dst, rewritten);
 			} else {
-				decoded = machine().cpu.decode(instruction);
+				decoded = CPU<W>::decode(instruction);
 			}
 			entry.set_handler(decoded);
 
 			// Cache the (modified) instruction bits
-			entry.instr = rewritten.whole;
-			entry.instr = instruction.whole;
 #ifdef RISCV_THREADED
-			entry.set_bytecode(CPU<W>::computed_index_for(instruction));
+			auto bytecode = CPU<W>::computed_index_for(instruction);
+			if constexpr (decoder_rewriter_enabled) {
+				bytecode = machine().cpu.threaded_rewrite(bytecode, dst, rewritten);
+			}
+			entry.set_bytecode(bytecode);
 #endif
+			entry.instr = rewritten.whole;
 
 			// Increment PC after everything
 			if constexpr (compressed_enabled) {
