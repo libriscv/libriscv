@@ -73,10 +73,10 @@ namespace riscv
 #else
 	static constexpr bool decoder_rewriter_enabled = false;
 #endif
-#ifdef RISCV_FAST_SIMULATOR
-	static constexpr bool fast_simulator_enabled = true;
+#ifdef RISCV_THREADED
+	static constexpr bool threaded_simulator_enabled = true;
 #else
-	static constexpr bool fast_simulator_enabled = false;
+	static constexpr bool threaded_simulator_enabled = false;
 #endif
 }
 

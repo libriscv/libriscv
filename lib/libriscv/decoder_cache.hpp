@@ -9,29 +9,25 @@ namespace riscv {
 template <int W>
 struct DecoderData {
 	using Handler = instruction_handler<W>;
-#if defined(RISCV_DECODER_COMPRESS) && !defined(RISCV_SUPER_COMPRESSED)
-	int32_t m_handler = 0x0;
-#elif !defined(RISCV_DECODER_COMPRESS)
-	Handler m_handler = nullptr;
-#endif
-#ifdef RISCV_FAST_SIMULATOR
+	int16_t m_bytecode = 0x0;
+	uint16_t m_handler = 0x0;
+
 	uint32_t instr;
 	uint16_t idxend;
-#if defined(RISCV_DECODER_COMPRESS) && defined(RISCV_SUPER_COMPRESSED)
-	// Only used by super-compressed decoding:
-	uint16_t m_handler;
-#else
 	// Only used by C-extension decoding:
 	struct {
 		uint8_t opcode_length;
 		uint8_t instr_count;
 	};
-#endif
+
+	template <typename T = rv32i_instruction>
+	inline T view_instr() const noexcept {
+		return T { this->instr };
+	}
 
 	void execute(CPU<W>& cpu) const {
 		get_handler()(cpu, instruction_format{this->instr});
 	}
-#endif // RISCV_FAST_SIMULATOR
 
 	template <typename... Args>
 	void execute(CPU<W>& cpu, Args... args) const {
@@ -44,54 +40,29 @@ struct DecoderData {
 		this->set_insn_handler(insn.handler);
 	}
 
-#ifdef RISCV_DECODER_COMPRESS
-#  ifdef RISCV_SUPER_COMPRESSED
+	// simulate_threaded() uses bytecodes.
+	auto get_bytecode() const noexcept {
+		return this->m_bytecode;
+	}
+	void set_bytecode(uint16_t num) noexcept {
+		this->m_bytecode = num;
+	}
+
+	// Some simulation modes use function pointers
+	// Eg. simulate_precise() and simulate_fastsim().
 	Handler get_handler() const noexcept {
-		return instr_handlers[m_handler];
+		return this->instr_handlers[m_handler];
 	}
 	void set_insn_handler(instruction_handler<W> ih) noexcept {
-		this->m_handler = index_for(ih);
+		this->m_handler = handler_index_for(ih);
 	}
-#  else
-	Handler get_handler() const noexcept {
-		return (Handler)((uintptr_t)&RISCV_DECODER_BASE_FUNC + m_handler);
-	}
-	void set_insn_handler(instruction_handler<W> ih) noexcept {
-		this->m_handler = (uintptr_t)ih - (uintptr_t)&RISCV_DECODER_BASE_FUNC;
-	}
-#endif
-#else
-	Handler get_handler() const noexcept {
-		return this->m_handler;
-	}
-	void set_insn_handler(instruction_handler<W> ih) noexcept {
-		this->m_handler = ih;
-	}
-#endif
 
 private:
-#ifdef RISCV_DECODER_COMPRESS
-#  ifdef RISCV_SUPER_COMPRESSED
-	static size_t index_for(Handler new_handler) {
-		for (size_t i = 1; i < instr_handlers.size(); i++) {
-			auto& handler = instr_handlers[i];
-			if (handler == new_handler)
-				return i;
-			else if (handler == nullptr) {
-				handler = new_handler;
-				return i;
-			}
-		}
-		throw MachineException(MAX_INSTRUCTIONS_REACHED,
-			"Not enough instruction handler space", instr_handlers.size());
-	}
+	static size_t handler_index_for(Handler new_handler);
 	static constexpr size_t OP_MAX =
 		binary_translation_enabled ? 4096 : 128;
 	static inline std::array<Handler, OP_MAX> instr_handlers;
-#else
 	static void function() {}
-#  endif
-#endif
 };
 
 template <int W>
