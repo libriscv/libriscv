@@ -14,10 +14,6 @@ namespace riscv
 #define VIEW_INSTR_AS(name, x) \
 	auto name = decoder->template view_instr<x>();
 #define NEXT_INSTR()            \
-	if constexpr (EXTRA_CHECKS) { \
-		if (decoder->get_bytecode() < 0 || decoder->get_bytecode() >= OPCODES) \
-			throw MachineException(ILLEGAL_OPERATION, "Jumping to illegal opcode"); \
-	}	\
 	goto *computed_opcode[(++decoder)->get_bytecode()];
 #define NEXT_BLOCK(len) \
 	pc += len; \
@@ -33,7 +29,6 @@ namespace riscv
 template <int W> __attribute__((hot))
 void CPU<W>::simulate_threaded(uint64_t imax)
 {
-	static constexpr bool EXTRA_CHECKS = false;
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;
 	using saddr_t = std::make_signed_t<addr_t>;
@@ -111,7 +106,6 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 #endif
 		[RV32I_BC_INVALID] = &&rv32i_invalid,
 	};
-	static constexpr int OPCODES = sizeof(computed_opcode) / sizeof(computed_opcode[0]);
 
 	// Decoded segments are always faster
 	// So, always have at least the current segment
@@ -132,28 +126,23 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 	DecoderData<W>* decoder;
 	address_t current_begin;
 	address_t current_end;
-	address_t pc;
-	unsigned  count;
+	address_t pc = this->pc();
 restart_sim:
 	exec = this->m_exec;
 	exec_decoder = exec->decoder_cache();
 	current_begin = exec->exec_begin();
 	current_end = exec->exec_end();
 
-	pc = this->pc();
-
 continue_segment:
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 
 continue_block:
-	count = decoder->idxend;
-	pc += count * 4;
-	counter.increment_counter(count + 1);
+	{
+		unsigned count = decoder->idxend;
+		pc += count * 4;
+		counter.increment_counter(count + 1);
+	}
 
-if constexpr (EXTRA_CHECKS) {
-	if (decoder->get_bytecode() < 0 || decoder->get_bytecode() >= OPCODES)
-		throw MachineException(ILLEGAL_OPERATION, "Jumping to illegal opcode");
-}
 	goto *computed_opcode[decoder->get_bytecode()];
 
 rv32i_li: {
