@@ -134,6 +134,8 @@ restart_next_execute_segment:
 		}
 
 		// Allocate full execute area
+		if (UNLIKELY(end_pageno <= base_pageno))
+			throw MachineException(INVALID_PROGRAM, "Failed to create execute segment");
 		const size_t n_pages = end_pageno - base_pageno;
 		std::unique_ptr<uint8_t[]> area (new uint8_t[n_pages * Page::size()]);
 		// Copy from each individual page
