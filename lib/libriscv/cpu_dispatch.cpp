@@ -96,6 +96,10 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32F_BC_FSW]     = &&rv32i_fsw,
 		[RV32F_BC_FSD]     = &&rv32i_fsd,
 		[RV32F_BC_FPFUNC]  = &&rv32f_fpfunc,
+		[RV32F_BC_FADD]    = &&rv32f_fadd,
+		[RV32F_BC_FSUB]    = &&rv32f_fsub,
+		[RV32F_BC_FMUL]    = &&rv32f_fmul,
+		[RV32F_BC_FDIV]    = &&rv32f_fdiv,
 		[RV32F_BC_FMADD]   = &&rv32f_fmadd,
 		[RV32F_BC_FMSUB]   = &&rv32f_fmsub,
 		[RV32F_BC_FNMADD]  = &&rv32f_fnmadd,
@@ -652,97 +656,106 @@ rv32i_system: {
 	}
 	NEXT_BLOCK(4);
 }
+rv32f_fadd: {
+	VIEW_INSTR_AS(fi, rv32f_instruction);
+	#define FLREGS() \
+		auto& dst = registers().getfl(fi.R4type.rd); \
+		const auto& rs1 = registers().getfl(fi.R4type.rs1); \
+		const auto& rs2 = registers().getfl(fi.R4type.rs2);
+	FLREGS();
+	if (fi.R4type.funct2 == 0x0)
+	{ // float32
+		dst.set_float(rs1.f32[0] + rs2.f32[0]);
+	}
+	else if (fi.R4type.funct2 == 0x1)
+	{ // float64
+		dst.f64 = rs1.f64 + rs2.f64;
+	}
+	NEXT_INSTR();
+}
+rv32f_fsub: {
+	VIEW_INSTR_AS(fi, rv32f_instruction);
+	FLREGS();
+	if (fi.R4type.funct2 == 0x0)
+	{ // float32
+		dst.set_float(rs1.f32[0] - rs2.f32[0]);
+	}
+	else if (fi.R4type.funct2 == 0x1)
+	{ // float64
+		dst.f64 = rs1.f64 - rs2.f64;
+	}
+	NEXT_INSTR();
+}
+rv32f_fmul: {
+	VIEW_INSTR_AS(fi, rv32f_instruction);
+	FLREGS();
+	if (fi.R4type.funct2 == 0x0)
+	{ // float32
+		dst.set_float(rs1.f32[0] * rs2.f32[0]);
+	}
+	else if (fi.R4type.funct2 == 0x1)
+	{ // float64
+		dst.f64 = rs1.f64 * rs2.f64;
+	}
+	NEXT_INSTR();
+}
+rv32f_fdiv: {
+	VIEW_INSTR_AS(fi, rv32f_instruction);
+	FLREGS();
+	if (fi.R4type.funct2 == 0x0)
+	{ // float32
+		dst.set_float(rs1.f32[0] / rs2.f32[0]);
+	}
+	else if (fi.R4type.funct2 == 0x1)
+	{ // float64
+		dst.f64 = rs1.f64 / rs2.f64;
+	}
+	NEXT_INSTR();
+}
 rv32f_fpfunc: {
 	VIEW_INSTR();
-	const rv32f_instruction fi{instr};
-	auto& dst = registers().getfl(fi.R4type.rd);
-	const auto& rs1 = registers().getfl(fi.R4type.rs1);
-	const auto& rs2 = registers().getfl(fi.R4type.rs2);
 	// TODO: Split this up into handlers
 	switch (instr.fpfunc())
 	{
-		case 0b00000: {
-			if (fi.R4type.funct2 == 0x0)
-			{ // float32
-				dst.set_float(rs1.f32[0] + rs2.f32[0]);
-			}
-			else if (fi.R4type.funct2 == 0x1)
-			{ // float64
-				dst.f64 = rs1.f64 + rs2.f64;
-			}
-			else {
-				trigger_exception(ILLEGAL_OPERATION);
-			}
-			break;
+	case 0b00100:
+		INVOKE_INSTR(FSGNJ_NX);
+		break;
+	case 0b00101:
+		INVOKE_INSTR(FMIN_FMAX);
+		break;
+	case 0b01011:
+		INVOKE_INSTR(FSQRT);
+		break;
+	case 0b10100:
+		if (rv32f_instruction { instr }.R4type.rd != 0) {
+			INVOKE_INSTR(FEQ_FLT_FLE);
 		}
-		case 0b00001:
-			if (fi.R4type.funct2 == 0x0)
-			{ // float32
-				dst.set_float(rs1.f32[0] - rs2.f32[0]);
+		break;
+	case 0b01000:
+		INVOKE_INSTR(FCVT_SD_DS);
+		break;
+	case 0b11000:
+		if (rv32f_instruction { instr }.R4type.rd != 0) {
+			INVOKE_INSTR(FCVT_W_SD);
+		}
+		break;
+	case 0b11010:
+		INVOKE_INSTR(FCVT_SD_W);
+		break;
+	case 0b11100:
+		if (rv32f_instruction { instr }.R4type.rd != 0) {
+			if (rv32f_instruction { instr }.R4type.funct3 == 0) {
+				INVOKE_INSTR(FMV_X_W);
+			} else {
+				INVOKE_INSTR(FCLASS);
 			}
-			else if (fi.R4type.funct2 == 0x1)
-			{ // float64
-				dst.f64 = rs1.f64 - rs2.f64;
-			}
-			else {
-				trigger_exception(ILLEGAL_OPERATION);
-			}
-			break;
-		case 0b00010:
-			if (fi.R4type.funct2 == 0x0)
-			{ // float32
-				dst.set_float(rs1.f32[0] * rs2.f32[0]);
-			}
-			else if (fi.R4type.funct2 == 0x1)
-			{ // float64
-				dst.f64 = rs1.f64 * rs2.f64;
-			}
-			else {
-				trigger_exception(ILLEGAL_OPERATION);
-			}
-			break;
-		case 0b00011:
-			INVOKE_INSTR(FDIV);
-			break;
-		case 0b00100:
-			INVOKE_INSTR(FSGNJ_NX);
-			break;
-		case 0b00101:
-			INVOKE_INSTR(FMIN_FMAX);
-			break;
-		case 0b01011:
-			INVOKE_INSTR(FSQRT);
-			break;
-		case 0b10100:
-			if (rv32f_instruction { instr }.R4type.rd != 0) {
-				INVOKE_INSTR(FEQ_FLT_FLE);
-			}
-			break;
-		case 0b01000:
-			INVOKE_INSTR(FCVT_SD_DS);
-			break;
-		case 0b11000:
-			if (rv32f_instruction { instr }.R4type.rd != 0) {
-				INVOKE_INSTR(FCVT_W_SD);
-			}
-			break;
-		case 0b11010:
-			INVOKE_INSTR(FCVT_SD_W);
-			break;
-		case 0b11100:
-			if (rv32f_instruction { instr }.R4type.rd != 0) {
-				if (rv32f_instruction { instr }.R4type.funct3 == 0) {
-					INVOKE_INSTR(FMV_X_W);
-				} else {
-					INVOKE_INSTR(FCLASS);
-				}
-			}
-			break;
-		case 0b11110:
-			INVOKE_INSTR(FMV_W_X);
-			break;
-		default:
-			this->execute(instr);
+		}
+		break;
+	case 0b11110:
+		INVOKE_INSTR(FMV_W_X);
+		break;
+	default:
+		this->execute(instr);
 	}
 	NEXT_INSTR();
 }
@@ -1077,6 +1090,17 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		case RV32F_FNMSUB:
 			return RV32F_BC_FNMSUB;
 		case RV32F_FPFUNC:
+			switch (instr.fpfunc())
+			{
+				case 0b00000: // FADD
+					return RV32F_BC_FADD;
+				case 0b00001: // FSUB
+					return RV32F_BC_FSUB;
+				case 0b00010: // FMUL
+					return RV32F_BC_FMUL;
+				case 0b00011: // FDIV
+					return RV32F_BC_FDIV;
+			} // fallback:
 			return RV32F_BC_FPFUNC;
 #ifdef RISCV_EXT_VECTOR
 		case RV32V_OP:
