@@ -2,7 +2,7 @@
 #include "machine.hpp"
 
 #define INSTRUCTION(x, ...) \
-	CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
+	static constexpr CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr32i_##x
 #include "rvi_instr.cpp"
 #include "rvf_instr.cpp"

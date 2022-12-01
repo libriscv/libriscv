@@ -5,7 +5,7 @@
 #undef RISCV_EXT_ATOMICS
 
 #define INSTRUCTION(x, ...) \
-	CPU<16>::instruction_t instr128i_##x { __VA_ARGS__ }
+	static constexpr CPU<16>::instruction_t instr128i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr128i_##x
 #include "rvi_instr.cpp"
 #include "rvf_instr.cpp"
