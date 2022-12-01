@@ -2,7 +2,6 @@
 #include "decoder_cache.hpp"
 #include "instruction_counter.hpp"
 #include "instruction_list.hpp"
-#include "extern_instructions.hpp"
 #include "threaded_bytecodes.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
@@ -95,19 +94,13 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32F_BC_FLD]     = &&rv32i_fld,
 		[RV32F_BC_FSW]     = &&rv32i_fsw,
 		[RV32F_BC_FSD]     = &&rv32i_fsd,
-		[RV32F_BC_FPFUNC]  = &&rv32f_fpfunc,
 		[RV32F_BC_FADD]    = &&rv32f_fadd,
 		[RV32F_BC_FSUB]    = &&rv32f_fsub,
 		[RV32F_BC_FMUL]    = &&rv32f_fmul,
 		[RV32F_BC_FDIV]    = &&rv32f_fdiv,
-		[RV32F_BC_FMADD]   = &&rv32f_fmadd,
-		[RV32F_BC_FMSUB]   = &&rv32f_fmsub,
-		[RV32F_BC_FNMADD]  = &&rv32f_fnmadd,
-		[RV32F_BC_FNMSUB]  = &&rv32f_fnmsub,
 #ifdef RISCV_EXT_VECTOR
 		[RV32V_BC_VLE32]   = &&rv32v_vle32,
 		[RV32V_BC_VSE32]   = &&rv32v_vse32,
-		[RV32V_BC_OP]      = &&rv32v_op,
 #endif
 		[RV32I_BC_NOP]     = &&rv32i_nop,
 		[RV32I_BC_FUNCTION] = &&execute_decoded_function,
@@ -647,15 +640,15 @@ check_jump:
 	}
 	goto continue_segment;
 
+/** UNLIKELY INSTRUCTIONS **/
+/** UNLIKELY INSTRUCTIONS **/
+
 execute_decoded_function: {
 	VIEW_INSTR();
 	auto handler = decoder->get_handler();
 	handler(*this, instr);
 	NEXT_INSTR();
 }
-
-/** UNLIKELY INSTRUCTIONS **/
-/** UNLIKELY INSTRUCTIONS **/
 
 rv32i_nop: {
 	NEXT_INSTR();
@@ -743,74 +736,6 @@ rv32i_op_remu: {
 	}
 	NEXT_INSTR();
 }
-rv32f_fmadd: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FMADD);
-	NEXT_INSTR();
-}
-rv32f_fmsub: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FMSUB);
-	NEXT_INSTR();
-}
-rv32f_fnmadd: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FNMADD);
-	NEXT_INSTR();
-}
-rv32f_fnmsub: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FNMSUB);
-	NEXT_INSTR();
-}
-rv32f_fpfunc: {
-	VIEW_INSTR();
-	// TODO: Split this up into handlers
-	switch (instr.fpfunc())
-	{
-	case 0b00100:
-		INVOKE_INSTR(FSGNJ_NX);
-		break;
-	case 0b00101:
-		INVOKE_INSTR(FMIN_FMAX);
-		break;
-	case 0b01011:
-		INVOKE_INSTR(FSQRT);
-		break;
-	case 0b10100:
-		if (rv32f_instruction { instr }.R4type.rd != 0) {
-			INVOKE_INSTR(FEQ_FLT_FLE);
-		}
-		break;
-	case 0b01000:
-		INVOKE_INSTR(FCVT_SD_DS);
-		break;
-	case 0b11000:
-		if (rv32f_instruction { instr }.R4type.rd != 0) {
-			INVOKE_INSTR(FCVT_W_SD);
-		}
-		break;
-	case 0b11010:
-		INVOKE_INSTR(FCVT_SD_W);
-		break;
-	case 0b11100:
-		if (rv32f_instruction { instr }.R4type.rd != 0) {
-			if (rv32f_instruction { instr }.R4type.funct3 == 0) {
-				INVOKE_INSTR(FMV_X_W);
-			} else {
-				INVOKE_INSTR(FCLASS);
-			}
-		}
-		break;
-	case 0b11110:
-		INVOKE_INSTR(FMV_W_X);
-		break;
-	default:
-		this->execute(instr);
-	}
-	NEXT_INSTR();
-}
-
 #ifdef RISCV_EXT_VECTOR
 rv32v_vle32: {
 	VIEW_INSTR_AS(vi, rv32v_instruction);
@@ -824,41 +749,6 @@ rv32v_vse32: {
 	const auto addr = reg(vi.VLS.rs1) & ~address_t(VectorLane::size()-1);
 	auto& dst = registers().rvv().get(vi.VLS.vd);
 	machine().memory.template write<VectorLane> (addr, dst);
-	NEXT_INSTR();
-}
-rv32v_op: {
-	VIEW_INSTR();
-	switch (instr.vwidth()) {
-	case 0x0: // OPI.VV
-		INVOKE_INSTR(VOPI_VV);
-		break;
-	case 0x1: // OPF.VV
-		INVOKE_INSTR(VOPF_VV);
-		break;
-	case 0x2: // OPM.VV
-		INVOKE_INSTR(VOPM_VV);
-		break;
-	case 0x3: // OPI.VI
-		INVOKE_INSTR(VOPI_VI);
-		break;
-	case 0x5: // OPF.VF
-		INVOKE_INSTR(VOPF_VF);
-		break;
-	case 0x7: // Vector Configuration
-		switch (instr.vsetfunc()) {
-		case 0x0:
-		case 0x1:
-			INVOKE_INSTR(VSETVLI);
-			break;
-		case 0x2:
-			INVOKE_INSTR(VSETVL);
-			break;
-		case 0x3:
-			INVOKE_INSTR(VSETIVLI);
-			break;
-		}
-		break;
-	}
 	NEXT_INSTR();
 }
 #endif // RISCV_EXT_VECTOR
@@ -1100,13 +990,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			}
 		}
 		case RV32F_FMADD:
-			return RV32F_BC_FMADD;
 		case RV32F_FMSUB:
-			return RV32F_BC_FMSUB;
 		case RV32F_FNMADD:
-			return RV32F_BC_FNMADD;
 		case RV32F_FNMSUB:
-			return RV32F_BC_FNMSUB;
+			return RV32I_BC_FUNCTION;
 		case RV32F_FPFUNC:
 			switch (instr.fpfunc())
 			{
@@ -1118,14 +1005,17 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 					return RV32F_BC_FMUL;
 				case 0b00011: // FDIV
 					return RV32F_BC_FDIV;
-			} // fallback:
-			return RV32F_BC_FPFUNC;
+				default:
+					return RV32I_BC_FUNCTION;
+				}
 #ifdef RISCV_EXT_VECTOR
 		case RV32V_OP:
-			return RV32V_BC_OP;
+			return RV32I_BC_FUNCTION;
 #endif
+#ifdef RISCV_EXT_ATOMICS
 		case RV32A_ATOMIC:
 			return RV32I_BC_FUNCTION;
+#endif
 		default:
 			return RV32I_BC_INVALID;
 	}

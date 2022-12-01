@@ -4,7 +4,11 @@
 #define FLOAT_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
 #define VECTOR_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
 #define COMPRESSED_INSTR(x, ...) INSTRUCTION(x, __VA_ARGS__)
+#ifndef RISCV_THREADED
 #define RVINSTR_ATTR __attribute__((hot))
+#else
+#define RVINSTR_ATTR /* instructions implemented inline */
+#endif
 #define RVINSTR_COLDATTR __attribute__((cold))
 #define RVPRINTR_ATTR __attribute__((cold))
 
