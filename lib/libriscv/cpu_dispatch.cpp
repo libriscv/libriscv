@@ -109,7 +109,7 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 
 	// Decoded segments are always faster
 	// So, always have at least the current segment
-	if (UNLIKELY(m_exec == nullptr)) {
+	if (UNLIKELY(!is_executable(this->pc()))) {
 		this->next_execute_segment();
 	}
 
@@ -529,7 +529,8 @@ rv32i_syscall: {
 	machine().system_call(this->reg(REG_ECALL));
 	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
 	{
-		pc = registers().pc;
+		// System calls are always full-length instructions
+		pc = registers().pc + 4;
 		goto check_jump;
 	}
 	NEXT_BLOCK(4);
