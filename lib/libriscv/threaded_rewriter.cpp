@@ -14,6 +14,15 @@ namespace riscv
 
 		switch (bytecode)
 		{
+			case RV32I_BC_LI: {
+				FasterItype rewritten;
+				rewritten.rs1 = original.Itype.rd;
+				rewritten.rs2 = 0;
+				rewritten.imm = original.Itype.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+				}
 			case RV32I_BC_ADDI: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;

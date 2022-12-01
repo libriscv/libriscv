@@ -157,9 +157,14 @@ continue_block:
 	goto *computed_opcode[decoder->get_bytecode()];
 
 rv32i_li: {
-	VIEW_INSTR();
-	this->reg(instr.Itype.rd) = instr.Itype.signed_imm();
-	NEXT_INSTR();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		this->reg(fi.rs1) = address_t(0) + fi.signed_imm();
+	} else {
+		VIEW_INSTR();
+		this->reg(instr.Itype.rd) = instr.Itype.signed_imm();
+		NEXT_INSTR();
+	}
 }
 rv32i_addi: {
 	if constexpr (decoder_rewriter_enabled) {
