@@ -46,27 +46,34 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32I_BC_SRAI]    = &&rv32i_srai,
 		[RV32I_BC_ORI]     = &&rv32i_ori,
 		[RV32I_BC_ANDI]    = &&rv32i_andi,
+
 		[RV32I_BC_LUI]     = &&rv32i_lui,
 		[RV32I_BC_AUIPC]   = &&rv32i_auipc,
+
 		[RV32I_BC_LDB]     = &&rv32i_ldb,
 		[RV32I_BC_LDBU]    = &&rv32i_ldbu,
 		[RV32I_BC_LDH]     = &&rv32i_ldh,
 		[RV32I_BC_LDHU]    = &&rv32i_ldhu,
 		[RV32I_BC_LDW]     = &&rv32i_ldw,
+		[RV32I_BC_LDWU]    = &&rv32i_ldwu,
 		[RV32I_BC_LDD]     = &&rv32i_ldd,
+
 		[RV32I_BC_STB]     = &&rv32i_stb,
 		[RV32I_BC_STH]     = &&rv32i_sth,
 		[RV32I_BC_STW]     = &&rv32i_stw,
 		[RV32I_BC_STD]     = &&rv32i_std,
+
 		[RV32I_BC_BEQ]     = &&rv32i_beq,
 		[RV32I_BC_BNE]     = &&rv32i_bne,
 		[RV32I_BC_BLT]     = &&rv32i_blt,
 		[RV32I_BC_BGE]     = &&rv32i_bge,
 		[RV32I_BC_BLTU]    = &&rv32i_bltu,
 		[RV32I_BC_BGEU]    = &&rv32i_bgeu,
+
 		[RV32I_BC_JAL]     = &&rv32i_jal,
 		[RV32I_BC_JALR]    = &&rv32i_jalr,
 		[RV32I_BC_FAST_JAL] = &&rv32i_fast_jal,
+
 		[RV32I_BC_OP_ADD]  = &&rv32i_op_add,
 		[RV32I_BC_OP_SUB]  = &&rv32i_op_sub,
 		[RV32I_BC_OP_SLL]  = &&rv32i_op_sll,
@@ -88,8 +95,11 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32I_BC_OP_SH1ADD] = &&rv32i_op_sh1add,
 		[RV32I_BC_OP_SH2ADD] = &&rv32i_op_sh2add,
 		[RV32I_BC_OP_SH3ADD] = &&rv32i_op_sh3add,
+
 		[RV32I_BC_SYSCALL] = &&rv32i_syscall,
 		[RV32I_BC_SYSTEM]  = &&rv32i_system,
+		[RV32I_BC_NOP]     = &&rv32i_nop,
+
 		[RV32F_BC_FLW]     = &&rv32i_flw,
 		[RV32F_BC_FLD]     = &&rv32i_fld,
 		[RV32F_BC_FSW]     = &&rv32i_fsw,
@@ -102,7 +112,6 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32V_BC_VLE32]   = &&rv32v_vle32,
 		[RV32V_BC_VSE32]   = &&rv32v_vse32,
 #endif
-		[RV32I_BC_NOP]     = &&rv32i_nop,
 		[RV32I_BC_FUNCTION] = &&execute_decoded_function,
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
@@ -178,13 +187,6 @@ rv32i_ldw: {
 	}
 	NEXT_INSTR();
 }
-rv32i_ldd: {
-	VIEW_INSTR();
-	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	this->reg(instr.Itype.rd) =
-		(int64_t)machine().memory.template read<uint64_t>(addr);
-	NEXT_INSTR();
-}
 rv32i_stw: {
 	if constexpr (decoder_rewriter_enabled) {
 		VIEW_INSTR_AS(fi, FasterItype);
@@ -197,11 +199,31 @@ rv32i_stw: {
 	}
 	NEXT_INSTR();
 }
+rv32i_ldwu: {
+	if constexpr (W >= 8) {
+	VIEW_INSTR();
+	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	this->reg(instr.Itype.rd) =
+		machine().memory.template read<uint64_t>(addr);
+	NEXT_INSTR();
+	}
+}
+rv32i_ldd: {
+	if constexpr (W >= 8) {
+	VIEW_INSTR();
+	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	this->reg(instr.Itype.rd) =
+		(int64_t)machine().memory.template read<uint64_t>(addr);
+	NEXT_INSTR();
+	}
+}
 rv32i_std: {
+	if constexpr (W >= 8) {
 	VIEW_INSTR();
 	const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 	machine().memory.template write<uint64_t>(addr, reg(instr.Stype.rs2));
 	NEXT_INSTR();
+	}
 }
 rv32i_beq: {
 	if constexpr (decoder_rewriter_enabled) {
@@ -815,6 +837,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_LDBU;
 			case 0x5: // LD.HU
 				return RV32I_BC_LDHU;
+			case 0x6: // LD.WU
+				return RV32I_BC_LDWU;
 			default:
 				return RV32I_BC_INVALID;
 			}
