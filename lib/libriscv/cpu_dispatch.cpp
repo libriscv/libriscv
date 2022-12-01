@@ -259,30 +259,58 @@ rv32i_bne: {
 	NEXT_BLOCK(4);
 }
 rv32i_blt: {
-	VIEW_INSTR();
-	if ((saddr_t)reg(instr.Btype.rs1) < (saddr_t)reg(instr.Btype.rs2)) {
-		PERFORM_BRANCH();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		if ((saddr_t)reg(fi.rs1) < (saddr_t)reg(fi.rs2)) {
+			PERFORM_FAST_BRANCH();
+		}
+	} else {
+		VIEW_INSTR();
+		if ((saddr_t)reg(instr.Btype.rs1) < (saddr_t)reg(instr.Btype.rs2)) {
+			PERFORM_BRANCH();
+		}
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bge: {
-	VIEW_INSTR();
-	if ((saddr_t)reg(instr.Btype.rs1) >= (saddr_t)reg(instr.Btype.rs2)) {
-		PERFORM_BRANCH();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		if ((saddr_t)reg(fi.rs1) >= (saddr_t)reg(fi.rs2)) {
+			PERFORM_FAST_BRANCH();
+		}
+	} else {
+		VIEW_INSTR();
+		if ((saddr_t)reg(instr.Btype.rs1) >= (saddr_t)reg(instr.Btype.rs2)) {
+			PERFORM_BRANCH();
+		}
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bltu: {
-	VIEW_INSTR();
-	if (reg(instr.Btype.rs1) < reg(instr.Btype.rs2)) {
-		PERFORM_BRANCH();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		if (reg(fi.rs1) < reg(fi.rs2)) {
+			PERFORM_FAST_BRANCH();
+		}
+	} else {
+		VIEW_INSTR();
+		if (reg(instr.Btype.rs1) < reg(instr.Btype.rs2)) {
+			PERFORM_BRANCH();
+		}
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bgeu: {
-	VIEW_INSTR();
-	if (reg(instr.Btype.rs1) >= reg(instr.Btype.rs2)) {
-		PERFORM_BRANCH();
+	if constexpr (decoder_rewriter_enabled) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		if (reg(fi.rs1) >= reg(fi.rs2)) {
+			PERFORM_FAST_BRANCH();
+		}
+	} else {
+		VIEW_INSTR();
+		if (reg(instr.Btype.rs1) >= reg(instr.Btype.rs2)) {
+			PERFORM_BRANCH();
+		}
 	}
 	NEXT_BLOCK(4);
 }

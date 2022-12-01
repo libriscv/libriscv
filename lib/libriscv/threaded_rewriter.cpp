@@ -33,7 +33,11 @@ namespace riscv
 				return bytecode;
 				}
 			case RV32I_BC_BEQ:
-			case RV32I_BC_BNE: {
+			case RV32I_BC_BNE:
+			case RV32I_BC_BLT:
+			case RV32I_BC_BGE:
+			case RV32I_BC_BLTU:
+			case RV32I_BC_BGEU: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Btype.rs1;
 				rewritten.rs2 = original.Btype.rs2;
@@ -41,7 +45,7 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 				return bytecode;
-				}
+			}
 			case RV32I_BC_OP_ADD: {
 				FasterOpType rewritten;
 				rewritten.rd = original.Rtype.rd;
