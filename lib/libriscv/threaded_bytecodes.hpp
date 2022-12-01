@@ -43,6 +43,7 @@ namespace riscv
 
 		RV32I_BC_JAL,
 		RV32I_BC_JALR,
+		RV32I_BC_FAST_JAL,
 
 		RV32I_BC_OP_ADD,
 		RV32I_BC_OP_SUB,
@@ -118,6 +119,17 @@ namespace riscv
 			uint8_t rs1;
 			uint8_t rs2;
 			int8_t imm;
+		};
+	};
+
+	union FasterJtype
+	{
+		uint32_t whole;
+
+		struct
+		{
+			int32_t offset : 24;
+			int32_t rd     : 8;
 		};
 	};
 

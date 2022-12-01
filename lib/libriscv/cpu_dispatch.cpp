@@ -6,6 +6,9 @@
 #include "threaded_bytecodes.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
+#ifdef RISCV_EXT_VECTOR
+#include "rvv.hpp"
+#endif
 
 namespace riscv
 {
@@ -64,6 +67,7 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32I_BC_BGEU]    = &&rv32i_bgeu,
 		[RV32I_BC_JAL]     = &&rv32i_jal,
 		[RV32I_BC_JALR]    = &&rv32i_jalr,
+		[RV32I_BC_FAST_JAL] = &&rv32i_fast_jal,
 		[RV32I_BC_OP_ADD]  = &&rv32i_op_add,
 		[RV32I_BC_OP_SUB]  = &&rv32i_op_sub,
 		[RV32I_BC_OP_SLL]  = &&rv32i_op_sll,
@@ -332,13 +336,26 @@ rv32i_andi: {
 	NEXT_INSTR();
 }
 rv32i_jal: {
-	VIEW_INSTR();
-	// Link *next* instruction (rd = PC + 4)
-	if (instr.Jtype.rd != 0) {
-		reg(instr.Jtype.rd) = pc + 4;
+	if constexpr (decoder_rewriter_enabled)
+	{
+		VIEW_INSTR_AS(fi, FasterJtype);
+		if (fi.rd != 0)
+			reg(fi.rd) = pc + 4;
+		pc += fi.offset;
+	} else {
+		VIEW_INSTR();
+		// Link *next* instruction (rd = PC + 4)
+		if (instr.Jtype.rd != 0) {
+			reg(instr.Jtype.rd) = pc + 4;
+		}
+		// And jump relative
+		pc += instr.Jtype.jump_offset();
 	}
-	// And jump relative
-	pc += instr.Jtype.jump_offset();
+	goto check_jump;
+}
+rv32i_fast_jal: {
+	VIEW_INSTR();
+	pc = instr.whole;
 	goto check_jump;
 }
 rv32i_jalr: {
@@ -751,13 +768,25 @@ rv32f_fnmsub: {
 }
 #ifdef RISCV_EXT_VECTOR
 rv32v_vle32: {
-	VIEW_INSTR();
-	INVOKE_INSTR(VLE32);
+	VIEW_INSTR_AS(vi, rv32v_instruction);
+	const auto addr = reg(vi.VLS.rs1);
+	if (addr % VectorLane::size() == 0) {
+		registers().rvv().get(vi.VLS.vd) =
+			machine().memory.template read<VectorLane> (addr);
+	} else {
+		trigger_exception(INVALID_ALIGNMENT, addr);
+	}
 	NEXT_INSTR();
 }
 rv32v_vse32: {
-	VIEW_INSTR();
-	INVOKE_INSTR(VSE32);
+	VIEW_INSTR_AS(vi, rv32v_instruction);
+	const auto addr = reg(vi.VLS.rs1);
+	if (addr % VectorLane::size() == 0) {
+		auto& dst = registers().rvv().get(vi.VLS.vd);
+		machine().memory.template write<VectorLane> (addr, dst);
+	} else {
+		trigger_exception(INVALID_ALIGNMENT, addr);
+	}
 	NEXT_INSTR();
 }
 rv32v_op: {
