@@ -16,3 +16,6 @@ then
     export RCC="riscv64-linux-gnu-gcc-10"
     export RCXX="riscv64-linux-gnu-g++-10"
 fi
+
+#export RCC="riscv64-unknown-elf-gcc"
+#export RCXX="riscv64-unknown-elf-g++"

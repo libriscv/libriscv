@@ -64,7 +64,7 @@ TEST_CASE("Verify PNG encoding", "[Emulation]")
 
 		auto png = encode(W, H, data);
 		respond(png.data(), png.size());
-	})M", "-static -O2 -march=rv64gc -mabi=lp64d -I" + cwd, true);
+	})M", "-static -O2 -I" + cwd, true);
 
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	// We need to install Linux system calls for maximum gucciness
