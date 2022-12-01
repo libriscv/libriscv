@@ -477,7 +477,6 @@ void RSPClient<W>::handle_readreg()
 
 	if (idx >= 33)
 	{
-#ifdef RISCV_EXT_FLOATS
 		if (idx < 66) {
 			const auto& fl = m_machine->cpu.registers().getfl(idx - 33);
 			vallen = sizeof(fl.i64);
@@ -492,10 +491,6 @@ void RSPClient<W>::handle_readreg()
 			vallen = sizeof(reg);
 			std::memcpy(valdata, &reg, vallen);
 		}
-#else
-		send("E01");
-		return;
-#endif
 	}
 	if (idx == 32)
 	{
@@ -539,7 +534,6 @@ void RSPClient<W>::handle_writereg()
 		m_machine->cpu.jump(value);
 		send("OK");
 	} else if (idx >= 33 && idx <= 68) {
-#ifdef RISCV_EXT_FLOATS
 		switch (idx) {
 		case 66: m_machine->cpu.registers().fcsr().fflags = value; break;
 		case 67: m_machine->cpu.registers().fcsr().frm = value; break;
@@ -549,10 +543,6 @@ void RSPClient<W>::handle_writereg()
 			fl.i64 = value;
 		}
 		send("OK");
-#else
-		send("E01");
-		return;
-#endif
 	} else {
 		send("E01");
 	}

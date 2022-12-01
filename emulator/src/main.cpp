@@ -144,8 +144,8 @@ static void run_program(
 			});
 		if (me.type() == riscv::UNIMPLEMENTED_INSTRUCTION || me.type() == riscv::MISALIGNED_INSTRUCTION) {
 			printf(">>> Is an instruction extension disabled?\n");
-			printf(">>> A-extension: %d  C-extension: %d  F-extension: %d  V-extension: %d\n",
-				riscv::atomics_enabled, riscv::compressed_enabled, riscv::floating_point_enabled, riscv::vector_extension);
+			printf(">>> A-extension: %d  C-extension: %d  V-extension: %d\n",
+				riscv::atomics_enabled, riscv::compressed_enabled, riscv::vector_extension);
 		}
 		if (debugging_enabled)
 			debug.print_and_pause();

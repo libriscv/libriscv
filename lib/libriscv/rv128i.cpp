@@ -8,9 +8,7 @@
 	CPU<16>::instruction_t instr128i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr128i_##x
 #include "rvi_instr.cpp"
-#ifdef RISCV_EXT_FLOATS
 #include "rvf_instr.cpp"
-#endif
 #ifdef RISCV_EXT_ATOMICS
 #include "rva_instr.cpp"
 #endif

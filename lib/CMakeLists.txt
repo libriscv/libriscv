@@ -11,7 +11,6 @@ option(RISCV_THREADED "Enable fastest simulation mode" OFF)
 # set extensions. Not recommended to disable any.
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
-option(RISCV_EXT_F  "Enable RISC-V floating-point instructions" ON)
 option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
 # EXPERIMENTAL enables some high-performance interpreter
 # features that may be unstable.
@@ -90,9 +89,6 @@ if (RISCV_EXT_A)
 endif()
 if (RISCV_EXT_C)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_COMPRESSED=1)
-endif()
-if (RISCV_EXT_F)
-	target_compile_definitions(riscv PUBLIC RISCV_EXT_FLOATS=1)
 endif()
 if (RISCV_EXT_V)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_VECTOR=32)

@@ -205,7 +205,7 @@
 					}
 				case RV32I_FENCE:
 					DECODER(DECODED_INSTR(FENCE));
-#ifdef RISCV_EXT_FLOATS
+
 				// RV32F & RV32D - Floating-point instructions
 				case RV32F_LOAD: {
 					const rv32f_instruction fi { instruction };
@@ -287,7 +287,7 @@
 							DECODER(DECODED_FLOAT(FMV_W_X));
 					}
 					break;
-#endif
+
 #ifdef RISCV_EXT_VECTOR
 				case RV32V_OP:
 					switch (instruction.vwidth()) {
