@@ -106,7 +106,7 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
 #endif
-		[RV32I_BC_INVALID] = &&rv32i_invalid,
+		[RV32I_BC_INVALID] = &&execute_decoded_function,
 	};
 
 	// We need an execute segment matching current PC
@@ -637,8 +637,8 @@ rv32f_fpfunc: {
 	VIEW_INSTR();
 	const rv32f_instruction fi{instr};
 	auto& dst = registers().getfl(fi.R4type.rd);
-	auto& rs1 = registers().getfl(fi.R4type.rs1);
-	auto& rs2 = registers().getfl(fi.R4type.rs2);
+	const auto& rs1 = registers().getfl(fi.R4type.rs1);
+	const auto& rs2 = registers().getfl(fi.R4type.rs2);
 	// TODO: Split this up into handlers
 	switch (instr.fpfunc())
 	{
@@ -812,10 +812,6 @@ translated_function: {
 	goto check_jump;
 }
 #endif
-rv32i_invalid:
-	this->trigger_exception(
-		UNIMPLEMENTED_INSTRUCTION, decoder->instr);
-
 check_jump:
 	if (UNLIKELY(counter.overflowed())) {
 		registers().pc = pc;
