@@ -276,17 +276,14 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	size_t DecoderData<W>::handler_index_for(Handler new_handler)
 	{
-		for (size_t i = 1; i < instr_handlers.size(); i++) {
-			auto& handler = instr_handlers[i];
-			if (handler == new_handler)
-				return i;
-			else if (handler == nullptr) {
-				handler = new_handler;
-				return i;
-			}
-		}
-		throw MachineException(MAX_INSTRUCTIONS_REACHED,
-			"Not enough instruction handler space", instr_handlers.size());
+		auto it = handler_cache.find(new_handler);
+		if (it != handler_cache.end())
+			return it->second;
+
+		instr_handlers.push_back(new_handler);
+		const size_t idx = instr_handlers.size()-1;
+		handler_cache.try_emplace(new_handler, idx);
+		return idx;
 	}
 
 	// Moved here to work around a GCC bug

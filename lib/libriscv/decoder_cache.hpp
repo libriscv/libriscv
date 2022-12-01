@@ -1,8 +1,8 @@
 #pragma once
-#include <array>
 #include "common.hpp"
 #include "types.hpp"
-#define RISCV_DECODER_BASE_FUNC DecoderData::function
+#include <unordered_map>
+#include <vector>
 
 namespace riscv {
 
@@ -59,10 +59,8 @@ struct DecoderData {
 
 private:
 	static size_t handler_index_for(Handler new_handler);
-	static constexpr size_t OP_MAX =
-		binary_translation_enabled ? 4096 : 128;
-	static inline std::array<Handler, OP_MAX> instr_handlers;
-	static void function() {}
+	static inline std::vector<Handler> instr_handlers;
+	static inline std::unordered_map<Handler, size_t> handler_cache;
 };
 
 template <int W>
