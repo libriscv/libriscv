@@ -64,7 +64,7 @@ namespace riscv
 	} // CPU::init_execute_area
 
 	template<int W> __attribute__((noinline))
-	void CPU<W>::next_execute_segment()
+	DecodedExecuteSegment<W>* CPU<W>::next_execute_segment()
 	{
 		static const int MAX_RESTARTS = 4;
 		int restarts = 0;
@@ -107,13 +107,13 @@ restart_next_execute_segment:
 		// Find previously decoded execute segment
 		this->m_exec = machine().memory.exec_segment_for(this->pc());
 		if (LIKELY(this->m_exec != nullptr))
-			return;
+			return this->m_exec;
 
 		// Find decoded execute segment via override
 		// If it returns nullptr, we build a new execute segment
 		this->m_exec = this->m_override_exec(*this);
 		if (UNLIKELY(this->m_exec != nullptr))
-			return;
+			return this->m_exec;
 
 		// Find the earliest execute page in new segment
 		while (base_pageno > 0) {
@@ -147,6 +147,7 @@ restart_next_execute_segment:
 
 		// Decode and store it for later
 		this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size());
+		return this->m_exec;
 	} // CPU::next_execute_segment
 
 	template <int W> __attribute__((noinline)) RISCV_INTERNAL

@@ -51,9 +51,11 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32I_BC_LDH]     = &&rv32i_ldh,
 		[RV32I_BC_LDHU]    = &&rv32i_ldhu,
 		[RV32I_BC_LDW]     = &&rv32i_ldw,
-		[RV32I_BC_SDB]     = &&rv32i_sdb,
-		[RV32I_BC_SDH]     = &&rv32i_sdh,
-		[RV32I_BC_SDW]     = &&rv32i_sdw,
+		[RV32I_BC_LDD]     = &&rv32i_ldd,
+		[RV32I_BC_STB]     = &&rv32i_stb,
+		[RV32I_BC_STH]     = &&rv32i_sth,
+		[RV32I_BC_STW]     = &&rv32i_stw,
+		[RV32I_BC_STD]     = &&rv32i_std,
 		[RV32I_BC_BEQ]     = &&rv32i_beq,
 		[RV32I_BC_BNE]     = &&rv32i_bne,
 		[RV32I_BC_BLT]     = &&rv32i_blt,
@@ -107,9 +109,9 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32I_BC_INVALID] = &&rv32i_invalid,
 	};
 
-	// Decoded segments are always faster
-	// So, always have at least the current segment
-	if (UNLIKELY(!is_executable(this->pc()))) {
+	// We need an execute segment matching current PC
+	if (UNLIKELY(!is_executable(this->pc())))
+	{
 		this->next_execute_segment();
 	}
 
@@ -121,14 +123,13 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 
 	InstrCounter counter{machine()};
 
-	DecodedExecuteSegment<W>* exec;
+	DecodedExecuteSegment<W>* exec = this->m_exec;
 	DecoderData<W>* exec_decoder;
 	DecoderData<W>* decoder;
 	address_t current_begin;
 	address_t current_end;
 	address_t pc = this->pc();
 restart_sim:
-	exec = this->m_exec;
 	exec_decoder = exec->decoder_cache();
 	current_begin = exec->exec_begin();
 	current_end = exec->exec_end();
@@ -176,7 +177,14 @@ rv32i_ldw: {
 	}
 	NEXT_INSTR();
 }
-rv32i_sdw: {
+rv32i_ldd: {
+	VIEW_INSTR();
+	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	this->reg(instr.Itype.rd) =
+		(int64_t)machine().memory.template read<uint64_t>(addr);
+	NEXT_INSTR();
+}
+rv32i_stw: {
 	if constexpr (decoder_rewriter_enabled) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		const auto addr  = reg(fi.rs1) + fi.signed_imm();
@@ -186,6 +194,12 @@ rv32i_sdw: {
 		const auto addr  = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 		machine().memory.template write<uint32_t>(addr, reg(instr.Stype.rs2));
 	}
+	NEXT_INSTR();
+}
+rv32i_std: {
+	VIEW_INSTR();
+	const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+	machine().memory.template write<uint64_t>(addr, reg(instr.Stype.rs2));
 	NEXT_INSTR();
 }
 rv32i_beq: {
@@ -564,13 +578,13 @@ rv32i_ldhu: {
 		saddr_t(machine().memory.template read<uint16_t>(addr));
 	NEXT_INSTR();
 }
-rv32i_sdb: {
+rv32i_stb: {
 	VIEW_INSTR();
 	const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 	machine().memory.template write<uint8_t>(addr, reg(instr.Stype.rs2));
 	NEXT_INSTR();
 }
-rv32i_sdh: {
+rv32i_sth: {
 	VIEW_INSTR();
 	const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
 	machine().memory.template write<uint16_t>(addr, reg(instr.Stype.rs2));
@@ -809,8 +823,14 @@ check_jump:
 	}
 	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
 	{
+		// We have to store and restore PC here as there are
+		// custom callbacks when changing segments that can
+		// jump around.
 		registers().pc = pc;
-		this->next_execute_segment();
+		// Change execute segment
+		exec = this->next_execute_segment();
+		pc = registers().pc;
+		// Restart with new execute boundaries
 		goto restart_sim;
 	}
 	goto continue_segment;
@@ -854,14 +874,14 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			switch (instr.Stype.funct3)
 			{
 			case 0x0: // SD.B
-				return RV32I_BC_SDB;
+				return RV32I_BC_STB;
 			case 0x1: // SD.H
-				return RV32I_BC_SDH;
+				return RV32I_BC_STH;
 			case 0x2: // SD.W
-				return RV32I_BC_SDW;
+				return RV32I_BC_STW;
 			case 0x3:
 				if constexpr (W >= 8) {
-					return RV32I_BC_SDD;
+					return RV32I_BC_STD;
 				}
 				return RV32I_BC_INVALID;
 			default:
@@ -978,6 +998,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			default:
 				return RV32I_BC_INVALID;
 			}
+		case RV64I_OP32:
+		case RV64I_OP_IMM32:
+			return RV32I_BC_FUNCTION;
 		case RV32I_SYSTEM:
 			if (LIKELY(instr.Itype.funct3 == 0))
 			{

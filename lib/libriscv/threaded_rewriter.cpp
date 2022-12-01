@@ -50,7 +50,7 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 				}
-			case RV32I_BC_SDW: {
+			case RV32I_BC_STW: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Stype.rs1;
 				rewritten.rs2 = original.Stype.rs2;
