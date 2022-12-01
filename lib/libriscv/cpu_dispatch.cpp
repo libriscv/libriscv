@@ -204,7 +204,7 @@ rv32i_ldwu: {
 	VIEW_INSTR();
 	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
 	this->reg(instr.Itype.rd) =
-		machine().memory.template read<uint64_t>(addr);
+		machine().memory.template read<uint32_t>(addr);
 	NEXT_INSTR();
 	}
 }
