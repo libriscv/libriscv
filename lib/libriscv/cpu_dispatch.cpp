@@ -346,6 +346,7 @@ rv32i_jal: {
 		if (fi.rd != 0)
 			reg(fi.rd) = pc + 4;
 		pc += fi.offset;
+		goto check_jump;
 	} else {
 		VIEW_INSTR();
 		// Link *next* instruction (rd = PC + 4)
@@ -354,8 +355,8 @@ rv32i_jal: {
 		}
 		// And jump relative
 		pc += instr.Jtype.jump_offset();
+		goto check_unaligned_jump;
 	}
-	goto check_jump;
 }
 rv32i_fast_jal: {
 	VIEW_INSTR();
@@ -372,17 +373,12 @@ rv32i_jalr: {
 		reg(instr.Itype.rd) = pc + 4;
 	}
 	pc = address;
-	goto check_jump;
+	goto check_unaligned_jump;
 }
 rv32i_lui: {
 	VIEW_INSTR();
 	this->reg(instr.Utype.rd) = instr.Utype.upper_imm();
 	NEXT_INSTR();
-}
-rv32i_auipc: {
-	VIEW_INSTR();
-	this->reg(instr.Utype.rd) = pc + instr.Utype.upper_imm();
-	NEXT_BLOCK(4);
 }
 
 rv32i_op_sll: {
@@ -437,42 +433,6 @@ rv32i_op_mul: {
 	dst = saddr_t(src1) * saddr_t(src2);
 	NEXT_INSTR();
 }
-rv32i_op_mulh: {
-	VIEW_INSTR();
-	OPREGS();
-	if constexpr (W == 4) {
-		dst = uint64_t((int64_t)saddr_t(src1) * (int64_t)saddr_t(src2)) >> 32u;
-	} else if constexpr (W == 8) {
-		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
-	} else {
-		dst = 0;
-	}
-	NEXT_INSTR();
-}
-rv32i_op_mulhsu: {
-	VIEW_INSTR();
-	OPREGS();
-	if constexpr (W == 4) {
-		dst = uint64_t((int64_t)saddr_t(src1) * (uint64_t)src2) >> 32u;
-	} else if constexpr (W == 8) {
-		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
-	} else {
-		dst = 0;
-	}
-	NEXT_INSTR();
-}
-rv32i_op_mulhu: {
-	VIEW_INSTR();
-	OPREGS();
-	if constexpr (W == 4) {
-		dst = uint64_t((uint64_t)src1 * (uint64_t)src2) >> 32u;
-	} else if constexpr (W == 8) {
-		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
-	} else {
-		dst = 0;
-	}
-	NEXT_INSTR();
-}
 rv32i_op_div: {
 	VIEW_INSTR();
 	OPREGS();
@@ -492,48 +452,6 @@ rv32i_op_div: {
 	} else {
 		dst = addr_t(-1);
 	}
-	NEXT_INSTR();
-}
-rv32i_op_divu: {
-	VIEW_INSTR();
-	OPREGS();
-	if (LIKELY(src2 != 0)) {
-		dst = src1 / src2;
-	} else {
-		dst = addr_t(-1);
-	}
-	NEXT_INSTR();
-}
-rv32i_op_rem: {
-	VIEW_INSTR();
-	OPREGS();
-	if (LIKELY(src2 != 0)) {
-		if constexpr(W == 4) {
-			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-				dst = saddr_t(src1) % saddr_t(src2);
-		} else if constexpr (W == 8) {
-			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-				dst = saddr_t(src1) % saddr_t(src2);
-		} else {
-			dst = saddr_t(src1) % saddr_t(src2);
-		}
-	}
-	NEXT_INSTR();
-}
-rv32i_op_remu: {
-	VIEW_INSTR();
-	OPREGS();
-	if (LIKELY(src2 != 0)) {
-		dst = src1 % src2;
-	} else {
-		dst = addr_t(-1);
-	}
-	NEXT_INSTR();
-}
-rv32i_op_sra: {
-	VIEW_INSTR();
-	OPREGS();
-	dst = saddr_t(src1) >> (src2 & (XLEN-1));
 	NEXT_INSTR();
 }
 rv32i_op_sh1add: {
@@ -642,9 +560,6 @@ rv32i_fsd: {
 	machine().memory.template write<uint64_t> (addr, src.i64);
 	NEXT_INSTR();
 }
-rv32i_nop: {
-	NEXT_INSTR();
-}
 rv32i_system: {
 	VIEW_INSTR();
 	machine().system(instr);
@@ -712,6 +627,142 @@ rv32f_fdiv: {
 	}
 	NEXT_INSTR();
 }
+
+check_jump:
+	if (UNLIKELY(counter.overflowed())) {
+		registers().pc = pc;
+		return;
+	}
+	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
+	{
+		// We have to store and restore PC here as there are
+		// custom callbacks when changing segments that can
+		// jump around.
+		registers().pc = pc;
+		// Change execute segment
+		exec = this->next_execute_segment();
+		pc = registers().pc;
+		// Restart with new execute boundaries
+		goto restart_sim;
+	}
+	goto continue_segment;
+
+execute_decoded_function: {
+	VIEW_INSTR();
+	auto handler = decoder->get_handler();
+	handler(*this, instr);
+	NEXT_INSTR();
+}
+
+/** UNLIKELY INSTRUCTIONS **/
+/** UNLIKELY INSTRUCTIONS **/
+
+rv32i_nop: {
+	NEXT_INSTR();
+}
+rv32i_auipc: {
+	VIEW_INSTR();
+	this->reg(instr.Utype.rd) = pc + instr.Utype.upper_imm();
+	NEXT_BLOCK(4);
+}
+rv32i_op_sra: {
+	VIEW_INSTR();
+	OPREGS();
+	dst = saddr_t(src1) >> (src2 & (XLEN-1));
+	NEXT_INSTR();
+}
+rv32i_op_mulh: {
+	VIEW_INSTR();
+	OPREGS();
+	if constexpr (W == 4) {
+		dst = uint64_t((int64_t)saddr_t(src1) * (int64_t)saddr_t(src2)) >> 32u;
+	} else if constexpr (W == 8) {
+		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
+	} else {
+		dst = 0;
+	}
+	NEXT_INSTR();
+}
+rv32i_op_mulhsu: {
+	VIEW_INSTR();
+	OPREGS();
+	if constexpr (W == 4) {
+		dst = uint64_t((int64_t)saddr_t(src1) * (uint64_t)src2) >> 32u;
+	} else if constexpr (W == 8) {
+		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
+	} else {
+		dst = 0;
+	}
+	NEXT_INSTR();
+}
+rv32i_op_mulhu: {
+	VIEW_INSTR();
+	OPREGS();
+	if constexpr (W == 4) {
+		dst = uint64_t((uint64_t)src1 * (uint64_t)src2) >> 32u;
+	} else if constexpr (W == 8) {
+		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
+	} else {
+		dst = 0;
+	}
+	NEXT_INSTR();
+}
+rv32i_op_divu: {
+	VIEW_INSTR();
+	OPREGS();
+	if (LIKELY(src2 != 0)) {
+		dst = src1 / src2;
+	} else {
+		dst = addr_t(-1);
+	}
+	NEXT_INSTR();
+}
+rv32i_op_rem: {
+	VIEW_INSTR();
+	OPREGS();
+	if (LIKELY(src2 != 0)) {
+		if constexpr(W == 4) {
+			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
+				dst = saddr_t(src1) % saddr_t(src2);
+		} else if constexpr (W == 8) {
+			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
+				dst = saddr_t(src1) % saddr_t(src2);
+		} else {
+			dst = saddr_t(src1) % saddr_t(src2);
+		}
+	}
+	NEXT_INSTR();
+}
+rv32i_op_remu: {
+	VIEW_INSTR();
+	OPREGS();
+	if (LIKELY(src2 != 0)) {
+		dst = src1 % src2;
+	} else {
+		dst = addr_t(-1);
+	}
+	NEXT_INSTR();
+}
+rv32f_fmadd: {
+	VIEW_INSTR();
+	INVOKE_INSTR(FMADD);
+	NEXT_INSTR();
+}
+rv32f_fmsub: {
+	VIEW_INSTR();
+	INVOKE_INSTR(FMSUB);
+	NEXT_INSTR();
+}
+rv32f_fnmadd: {
+	VIEW_INSTR();
+	INVOKE_INSTR(FNMADD);
+	NEXT_INSTR();
+}
+rv32f_fnmsub: {
+	VIEW_INSTR();
+	INVOKE_INSTR(FNMSUB);
+	NEXT_INSTR();
+}
 rv32f_fpfunc: {
 	VIEW_INSTR();
 	// TODO: Split this up into handlers
@@ -759,47 +810,20 @@ rv32f_fpfunc: {
 	}
 	NEXT_INSTR();
 }
-rv32f_fmadd: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FMADD);
-	NEXT_INSTR();
-}
-rv32f_fmsub: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FMSUB);
-	NEXT_INSTR();
-}
-rv32f_fnmadd: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FNMADD);
-	NEXT_INSTR();
-}
-rv32f_fnmsub: {
-	VIEW_INSTR();
-	INVOKE_INSTR(FNMSUB);
-	NEXT_INSTR();
-}
+
 #ifdef RISCV_EXT_VECTOR
 rv32v_vle32: {
 	VIEW_INSTR_AS(vi, rv32v_instruction);
-	const auto addr = reg(vi.VLS.rs1);
-	if (addr % VectorLane::size() == 0) {
-		registers().rvv().get(vi.VLS.vd) =
-			machine().memory.template read<VectorLane> (addr);
-	} else {
-		trigger_exception(INVALID_ALIGNMENT, addr);
-	}
+	const auto addr = reg(vi.VLS.rs1) & ~address_t(VectorLane::size()-1);
+	registers().rvv().get(vi.VLS.vd) =
+		machine().memory.template read<VectorLane> (addr);
 	NEXT_INSTR();
 }
 rv32v_vse32: {
 	VIEW_INSTR_AS(vi, rv32v_instruction);
-	const auto addr = reg(vi.VLS.rs1);
-	if (addr % VectorLane::size() == 0) {
-		auto& dst = registers().rvv().get(vi.VLS.vd);
-		machine().memory.template write<VectorLane> (addr, dst);
-	} else {
-		trigger_exception(INVALID_ALIGNMENT, addr);
-	}
+	const auto addr = reg(vi.VLS.rs1) & ~address_t(VectorLane::size()-1);
+	auto& dst = registers().rvv().get(vi.VLS.vd);
+	machine().memory.template write<VectorLane> (addr, dst);
 	NEXT_INSTR();
 }
 rv32v_op: {
@@ -838,12 +862,10 @@ rv32v_op: {
 	NEXT_INSTR();
 }
 #endif // RISCV_EXT_VECTOR
-execute_decoded_function: {
-	VIEW_INSTR();
-	auto handler = decoder->get_handler();
-	handler(*this, instr);
-	NEXT_INSTR();
-}
+
+/** UNLIKELY INSTRUCTIONS **/
+/** UNLIKELY INSTRUCTIONS **/
+
 #ifdef RISCV_BINARY_TRANSLATION
 translated_function: {
 	VIEW_INSTR();
@@ -856,24 +878,20 @@ translated_function: {
 	goto check_jump;
 }
 #endif
-check_jump:
-	if (UNLIKELY(counter.overflowed())) {
-		registers().pc = pc;
-		return;
+
+check_unaligned_jump:
+	if constexpr (!compressed_enabled) {
+		if (UNLIKELY(pc & 0x3)) {
+			registers().pc = pc;
+			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
+		}
+	} else {
+		if (UNLIKELY(pc & 0x1)) {
+			registers().pc = pc;
+			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
+		}
 	}
-	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
-	{
-		// We have to store and restore PC here as there are
-		// custom callbacks when changing segments that can
-		// jump around.
-		registers().pc = pc;
-		// Change execute segment
-		exec = this->next_execute_segment();
-		pc = registers().pc;
-		// Restart with new execute boundaries
-		goto restart_sim;
-	}
-	goto continue_segment;
+	goto check_jump;
 
 } // CPU::simulate_computed()
 
