@@ -541,6 +541,8 @@ rv32i_syscall: {
 	counter.apply();
 	// Invoke system call
 	machine().system_call(this->reg(REG_ECALL));
+	// Restore counter
+	counter.retrieve();
 	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
 	{
 		// System calls are always full-length instructions
@@ -628,7 +630,7 @@ rv32i_system: {
 	// Check if machine stopped
 	if (UNLIKELY(counter.overflowed()))
 	{
-		pc = registers().pc;
+		registers().pc = pc + 4;
 		return;
 	}
 	NEXT_BLOCK(4);
