@@ -159,3 +159,32 @@ TEST_CASE("Calculate fib(50)", "[Compute]")
 
 	REQUIRE(machine.return_value<long>() == 12586269025L);
 }
+
+TEST_CASE("Calculate fib(50) slowly", "[Compute]")
+{
+	const auto binary = build_and_load(R"M(
+	#include <stdlib.h>
+	long fib(long n, long acc, long prev)
+	{
+		if (n < 1)
+			return acc;
+		else
+			return fib(n - 1, prev + acc, acc);
+	}
+	long main(int argc, char** argv) {
+		const long n = atoi(argv[1]);
+		return fib(n, 0, 1);
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary };
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"basic", "50"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	do {
+		machine.simulate<false>(100);
+	} while (machine.instruction_limit_reached());
+
+	REQUIRE(machine.return_value<long>() == 12586269025L);
+}
