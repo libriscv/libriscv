@@ -161,6 +161,9 @@ namespace riscv
 		} else { // !compressed_enabled
 			// Count distance to next branching instruction backwards
 			// and fill in idxend for all entries along the way.
+			// This is for uncompressed instructions, which are always
+			// 32-bits in size. We can use the idxend value for
+			// instruction counting.
 			unsigned idxend = 0;
 			address_type<W> pc = last_pc - 4;
 			while (pc >= base_pc)
@@ -185,11 +188,23 @@ namespace riscv
 		}
 	}
 
+	// The decoder cache is a sequential array of DecoderData<W> entries
+	// each of which (currently) serves a dual purpose of enabling
+	// threaded dispatch (m_bytecode) and fallback to callback function
+	// (m_handler). This enables high-speed emulation, precise simulation,
+	// CLI debugging and remote GDB debugging without rebuilding the emulator.
+	//
+	// The decoder cache covers all pages that the execute segment belongs
+	// in, so that all legal jumps (based on page +exec permission) will
+	// result in correct execution (including invalid instructions).
+	//
+	// The goal of the decoder cache is to allow uninterrupted execution
+	// with minimal bounds-checking, while also enabling accurate
+	// instruction counting.
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
 		[[maybe_unused]] const MachineOptions<W>& options,
 		DecodedExecuteSegment<W>& exec)
-		//address_t pbase, address_t addr, size_t len)
 	{
 		const auto pbase = exec.pagedata_base();
 		const auto addr  = exec.exec_begin();
@@ -334,7 +349,13 @@ namespace riscv
 		return idx;
 	}
 
-	// Moved here to work around a GCC bug
+	// An execute segment contains a sequential array of raw instruction bits
+	// belonging to a set of sequential pages with +exec permission.
+	// It also contains a decoder cache that is produced from this instruction data.
+	// It is not strictly necessary to store the raw instruction bits, however, it
+	// enables step by step simulation as well as CLI- and remote debugging without
+	// rebuilding the emulator.
+	// XXX: Moved here to work around a GCC bug
 	template <int W> RISCV_INTERNAL
 	DecodedExecuteSegment<W>& Memory<W>::create_execute_segment(
 		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen)
