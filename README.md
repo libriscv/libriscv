@@ -262,6 +262,7 @@ The fuzzing program does this, so have a look at that.
 
 [Debugging with libriscv](docs/DEBUGGING.md)
 
+[Example programs](/examples)
 
 ## Why a RISC-V library
 
