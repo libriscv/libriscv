@@ -166,7 +166,8 @@ namespace riscv
 			// instruction counting.
 			unsigned idxend = 0;
 			address_type<W> pc = last_pc - 4;
-			while (pc >= base_pc)
+			// NOTE: The last check avoids overflow
+			while (pc >= base_pc && pc < last_pc)
 			{
 				const auto instruction = read_instruction(
 					exec_segment, pc, last_pc);
