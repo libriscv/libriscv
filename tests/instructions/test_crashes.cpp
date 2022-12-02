@@ -1,4 +1,5 @@
 #include <libriscv/machine.hpp>
+#include <libriscv/debug.hpp>
 #include <cassert>
 using namespace riscv;
 
@@ -33,6 +34,11 @@ unsigned char crash_983d2079843182f2cb27e6aeeb47af256c44fcdd[] = {
 };
 unsigned int crash_983d2079843182f2cb27e6aeeb47af256c44fcdd_len = 13;
 
+unsigned char timeout_1a6dbaa717f8837c4bd4332121e92bd73bbec049[] = {
+  0xcf
+};
+unsigned int timeout_1a6dbaa717f8837c4bd4332121e92bd73bbec049_len = 1;
+
 template <int W>
 void execute(uint64_t max_mem, const char* array_name,
 			uint8_t* data, size_t len)
@@ -41,20 +47,34 @@ void execute(uint64_t max_mem, const char* array_name,
 		.memory_max = max_mem
 	} };
 	printf("* Testing %s\n", array_name);
-	// Make available on machine
-	machine.cpu.init_execute_area(data, 0x1000, len);
 
-	// Also, make the instructions readable & executable
-	machine.copy_to_guest(0x1000, data, len);
-	machine.memory.set_page_attr(0x1000, riscv::Page::size(), {
-		 .read = true, .write = false, .exec = true
-	});
-	machine.cpu.jump(0x1000);
-	try {
-		// let's avoid loops
-		machine.simulate(5000);
-	} catch (std::exception& e) {
-		//printf(">>> Exception: %s\n", e.what());
+	for (size_t i = 0; i < 2; i++)
+	{
+		machine.memory.evict_execute_segments(0);
+		assert(machine.memory.cached_execute_segments() == 0);
+		try
+		{
+			// Make available on machine
+			machine.cpu.init_execute_area(data, 0x1000, len);
+			auto* seg = machine.cpu.current_execute_segment();
+
+			// Also, make the instructions readable & executable
+			machine.copy_to_guest(0x1000, data, len);
+			machine.memory.set_page_attr(0x1000, riscv::Page::size(), {
+				.read = true, .write = false, .exec = true
+			});
+			machine.cpu.jump(0x1000);
+			// let's avoid loops
+
+			DebugMachine<W> debug { machine };
+
+			debug.verbose_instructions = true;
+			debug.simulate(5000);
+		}
+		catch (std::exception &e)
+		{
+			//printf(">>> Exception: %s\n", e.what());
+		}
 	}
 }
 
@@ -69,4 +89,7 @@ void test_crashes()
 	TEST_CRASH(8, crash_675b93f2255f0ac4ca4ae13f4e9f8122d74baea8);
 	TEST_CRASH(4, crash_983d2079843182f2cb27e6aeeb47af256c44fcdd);
 	TEST_CRASH(8, crash_983d2079843182f2cb27e6aeeb47af256c44fcdd);
+	// test for timeout
+	TEST_CRASH(4, timeout_1a6dbaa717f8837c4bd4332121e92bd73bbec049);
+	TEST_CRASH(8, timeout_1a6dbaa717f8837c4bd4332121e92bd73bbec049);
 }
