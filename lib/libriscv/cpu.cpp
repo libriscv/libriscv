@@ -207,7 +207,7 @@ restart_next_execute_segment:
 		return read_next_instruction_slowpath();
 	}
 
-	template<int W> __attribute__((hot, no_sanitize("undefined")))
+	template<int W> __attribute__((hot))
 	void CPU<W>::simulate_precise(uint64_t max)
 	{
 		// Decoded segments are always faster
@@ -241,11 +241,23 @@ restart_next_execute_segment:
 			instruction = format_t { *(uint32_t*) &exec_seg_data[pc] };
 #    endif // aligned/unaligned loads
 
-			// Retrieve handler directly from the instruction handler cache
-			auto& cache_entry =
-				exec_decoder[pc / DecoderCache<W>::DIVISOR];
-			cache_entry.execute(*this, instruction);
-		} else {
+			constexpr bool enable_cache =
+				!decoder_rewriter_enabled && !binary_translation_enabled;
+
+			if constexpr (enable_cache)
+			{
+				// Retrieve handler directly from the instruction handler cache
+				auto& cache_entry =
+					exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				cache_entry.execute(*this, instruction);
+			}
+			else // Not the slowest path, since we have the instruction already
+			{
+				this->execute(instruction);
+			}
+		}
+		else
+		{
 			// The slow path reads from execute pages
 			instruction = read_next_instruction_slowpath();
 			// decode & execute instruction directly

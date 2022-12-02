@@ -389,7 +389,7 @@ void DebugMachine<W>::simulate(uint64_t max)
 		// We can't use decoder cache when rewriter or translator is enabled
 		constexpr bool enable_cache =
 			!decoder_rewriter_enabled && !binary_translation_enabled;
-		if (enable_cache && cpu.is_executable(cpu.pc()))
+		if (cpu.is_executable(cpu.pc()))
 		{
 			auto pc = cpu.pc();
 
@@ -397,11 +397,20 @@ void DebugMachine<W>::simulate(uint64_t max)
 			instruction = rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
 			INSTRUCTION_LOGGING();
 
-			// Retrieve handler directly from the instruction handler cache
-			auto& cache_entry =
-				exec_decoder[pc / DecoderCache<W>::DIVISOR];
-			cache_entry.execute(cpu, instruction);
-		} else {
+			if constexpr (enable_cache)
+			{
+				// Retrieve handler directly from the instruction handler cache
+				auto& cache_entry =
+					exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				cache_entry.execute(cpu, instruction);
+			}
+			else // Not the slowest path, since we have the instruction already
+			{
+				cpu.execute(instruction);
+			}
+		}
+		else
+		{
 			instruction = cpu.read_next_instruction_slowpath();
 			INSTRUCTION_LOGGING();
 			// decode & execute instruction directly
