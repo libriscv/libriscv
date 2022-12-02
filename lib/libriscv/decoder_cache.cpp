@@ -361,6 +361,14 @@ namespace riscv
 	DecodedExecuteSegment<W>& Memory<W>::create_execute_segment(
 		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen)
 	{
+		if constexpr (compressed_enabled) {
+			if (UNLIKELY(exlen % 2))
+				throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
+		} else {
+			if (UNLIKELY(exlen % 4))
+				throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
+		}
+
 		constexpr address_t PMASK = Page::size()-1;
 		const address_t pbase = vaddr & ~PMASK;
 		const size_t prelen  = vaddr - pbase;
