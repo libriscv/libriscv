@@ -16,11 +16,11 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 	if (UNLIKELY(len == 0 || init == false)) {
 		init = true;
 		machine.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
-		machine.on_unhandled_syscall = [] (auto&, int) {};
+		machine.on_unhandled_syscall = [] (auto&, size_t) {};
 		vec.resize(riscv::Page::size());
 		return;
 	}
-	machine.memory.evict_execute_segments();
+	machine.memory.evict_execute_segments(0);
 	assert(machine.memory.cached_execute_segments() == 0);
 
 	memcpy(vec.data(), data, std::min(len, vec.size()));
@@ -45,7 +45,7 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 	try {
 		const MachineOptions<W> options { .allow_write_exec_segment = true };
 		Machine<W> machine { bin, options };
-		machine.on_unhandled_syscall = [] (auto&, int) {};
+		machine.on_unhandled_syscall = [] (auto&, size_t) {};
 		machine.simulate(MAX_CYCLES);
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
