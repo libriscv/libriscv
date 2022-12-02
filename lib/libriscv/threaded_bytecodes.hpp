@@ -5,7 +5,8 @@ namespace riscv
 	// Bytecodes for threaded simulation
 	enum
 	{
-		RV32I_BC_ADDI = 0,
+		RV32I_BC_INVALID = 0,
+		RV32I_BC_ADDI,
 		RV32I_BC_LI,
 
 		RV32I_BC_SLLI,
@@ -91,7 +92,6 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		RV32I_BC_TRANSLATOR,
 #endif
-		RV32I_BC_INVALID,
 	};
 
 	union FasterItype

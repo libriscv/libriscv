@@ -65,6 +65,11 @@ namespace riscv
 	{
 		if constexpr (compressed_enabled)
 		{
+			if (UNLIKELY(base_pc >= last_pc))
+				throw MachineException(INVALID_PROGRAM, "The execute segment has an overflow");
+			if (UNLIKELY(base_pc & 0x3))
+				throw MachineException(INVALID_PROGRAM, "The execute segment is misaligned");
+
 			// Go through entire executable segment and measure lengths
 			// Record entries while looking for jumping instruction, then
 			// fill out data and opcode lengths previous instructions.
@@ -74,7 +79,8 @@ namespace riscv
 				size_t datalength = 0;
 				address_type<W> block_pc = pc;
 				[[maybe_unused]] unsigned last_length = 0;
-				while (pc < last_pc) {
+				while (true) {
+					// Record the instruction
 					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
 					data.push_back(&entry);
 
@@ -82,9 +88,18 @@ namespace riscv
 						exec_segment, pc, last_pc);
 					const auto opcode = instruction.opcode();
 					const auto length = instruction.length();
-					pc += length;
+					// Make sure PC does not overflow
+					if (UNLIKELY(__builtin_add_overflow(pc, length, &pc)))
+						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
+					// If ended up crossing last_pc, it's an invalid block
+					if (UNLIKELY(pc > last_pc))
+						throw MachineException(INVALID_PROGRAM, "Encountered invalid block");
+
 					datalength += length / 2;
 					last_length = length;
+				#ifndef RISCV_THREADED
+					entry.opcode_length = length;
+				#endif
 
 					// All opcodes that can modify PC
 					if (length == 2)
@@ -97,25 +112,45 @@ namespace riscv
 							|| opcode == RV32I_AUIPC || entry.instr == FASTSIM_BLOCK_END)
 							break;
 					}
+					// If we reached the end, and the opcode is not "stopping",
+					// then it's an illegal block.
+					if (UNLIKELY(pc >= last_pc)) {
+						entry.m_bytecode = 0;
+						entry.m_handler = 0;
+						break;
+					}
+					// Too large blocks are likely malicious (although could be many empty pages)
+					if (UNLIKELY(datalength > 500)) {
+						break;
+					}
 				}
+
+				if (UNLIKELY(data.size() == 0))
+					throw MachineException(INVALID_PROGRAM, "Encountered empty block after measuring");
+
 				for (size_t i = 0; i < data.size(); i++) {
+					auto* entry = data[i];
+				#ifdef RISCV_THREADED
 					const auto instruction = read_instruction(
 						exec_segment, block_pc, last_pc);
 					const auto length = instruction.length();
 
-					auto* entry = data[i];
-				#ifdef RISCV_THREADED
 					// Ends at instruction *before* last PC
 					entry->idxend = (pc - last_length - block_pc) / 2;
 					entry->instr_count = data.size() - i;
 				#else
+					const auto length = entry->opcode_length;
 					// Ends at *last instruction*
 					entry->idxend = datalength;
-					entry->opcode_length = length;
 					// XXX: We have to pack the instruction count by combining it with the cb length
 					// in order to avoid overflows on large code blocks. The code block length
 					// has been sufficiently large to avoid overflows in all executables tested.
-					entry->instr_count = overflow_checked_instr_count(entry->idxend - (data.size() - i));
+					const int real_instr_count = data.size() - i;
+					entry->instr_count = overflow_checked_instr_count(entry->idxend - real_instr_count);
+					// Verify count
+					const auto decoded_instr_count = entry->idxend - entry->instr_count;
+					if (UNLIKELY(decoded_instr_count != real_instr_count))
+						throw MachineException(INVALID_PROGRAM, "Instruction count mismatch");
 				#endif
 
 					block_pc += length;
@@ -177,6 +212,9 @@ namespace riscv
 		auto* exec_decoder = 
 			decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
 		exec.set_decoder(exec_decoder);
+
+		DecoderData<W> invalid_op;
+		invalid_op.set_handler(this->machine().cpu.decode({0}));
 
 		// PC-relative pointer to instruction bits
 		auto* exec_segment = exec.exec_data();

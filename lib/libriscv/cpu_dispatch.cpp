@@ -49,6 +49,7 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 	using saddr_t = std::make_signed_t<addr_t>;
 
 	static constexpr void *computed_opcode[] = {
+		[RV32I_BC_INVALID] = &&execute_invalid,
 		[RV32I_BC_ADDI]    = &&rv32i_addi,
 		[RV32I_BC_LI]      = &&rv32i_li,
 		[RV32I_BC_SLLI]    = &&rv32i_slli,
@@ -134,7 +135,6 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
 #endif
-		[RV32I_BC_INVALID] = &&execute_decoded_function,
 	};
 
 	// We need an execute segment matching current PC
@@ -875,6 +875,10 @@ check_unaligned_jump:
 		}
 	}
 	goto check_jump;
+
+execute_invalid:
+	this->trigger_exception(ILLEGAL_OPCODE);
+	__builtin_unreachable();
 
 } // CPU::simulate_computed()
 
