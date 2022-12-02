@@ -32,11 +32,11 @@ build_libriscv -DRISCV_EXT_A=OFF -DRISCV_EXT_C=ON -DRISCV_EXT_F=OFF
 # 6. F-extension only build
 build_libriscv -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=ON
 # 7. Experimental only build
-build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=OFF
+build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=OFF
 # 8. Experimental fastsim build
-build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON
+build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON
 # 9. Experimental fastsim debug build
-build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON -DRISCV_DEBUG=ON
+build_libriscv -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON -DRISCV_DEBUG=ON
 # 10. Multiprocessing disabled build
 build_libriscv -DRISCV_MULTIPROCESS=OFF
 # 11. Multiprocessing disabled debug build

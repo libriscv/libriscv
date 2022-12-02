@@ -9,20 +9,25 @@ namespace riscv {
 template <int W>
 struct DecoderData {
 	using Handler = instruction_handler<W>;
-	int16_t m_bytecode = 0x0;
-	uint16_t m_handler = 0x0;
 
-	uint32_t instr;
+	uint8_t  m_bytecode = 0x0;
+#ifndef RISCV_BINARY_TRANSLATION
+	uint8_t  m_handler = 0x0;
+#else
+	uint16_t m_handler = 0x0;
+#endif
 	uint16_t idxend;
 	// Only used by C-extension decoding:
-#ifndef RISCV_THREADED
-	struct {
+#if defined(RISCV_THREADED) && defined(RISCV_EXT_COMPRESSED)
+	uint16_t instr_count;
+#elif !defined(RISCV_THREADED)
+	struct
+	{
 		uint8_t opcode_length;
 		uint8_t instr_count;
 	};
-#else
-	uint16_t instr_count;
 #endif
+	uint32_t instr;
 
 	template <typename T = rv32i_instruction>
 	inline T view_instr() const noexcept {
