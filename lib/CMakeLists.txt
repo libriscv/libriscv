@@ -30,7 +30,6 @@ endif()
 
 set (SOURCES
 		libriscv/cpu.cpp
-		libriscv/cpu_fastsim.cpp
 		libriscv/debug.cpp
 		libriscv/decoder_cache.cpp
 		libriscv/machine.cpp
@@ -60,6 +59,10 @@ endif()
 if (RISCV_THREADED)
 	list(APPEND SOURCES
 		libriscv/cpu_dispatch.cpp
+	)
+else()
+	list(APPEND SOURCES
+		libriscv/cpu_fastsim.cpp
 	)
 endif()
 if (RISCV_EXPERIMENTAL)

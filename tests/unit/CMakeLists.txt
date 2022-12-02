@@ -3,7 +3,6 @@ project(libriscv_unittests CXX)
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -O1 -ggdb3")
 
-option(RISCV_ICACHE "" ON)
 option(RISCV_MULTIPROCESS "" ON)
 add_subdirectory(../../lib lib)
 

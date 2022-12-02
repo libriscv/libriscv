@@ -5,6 +5,9 @@
 #include "threaded_bytecodes.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
+#ifdef RISCV_EXT_COMPRESSED
+#include "rvc.hpp"
+#endif
 #ifdef RISCV_EXT_VECTOR
 #include "rvv.hpp"
 #endif
@@ -15,11 +18,21 @@ namespace riscv
 	auto instr = decoder->view_instr();
 #define VIEW_INSTR_AS(name, x) \
 	auto name = decoder->template view_instr<x>();
-#define NEXT_INSTR()            \
-	goto *computed_opcode[(++decoder)->get_bytecode()];
-#define NEXT_BLOCK(len) \
-	pc += len; \
-	decoder++; \
+#define NEXT_INSTR()                  \
+	if constexpr (compressed_enabled) \
+		decoder += 2;                 \
+	else                              \
+		decoder += 1;                 \
+	goto *computed_opcode[decoder->get_bytecode()];
+#define NEXT_C_INSTR() \
+	decoder += 1;      \
+	goto *computed_opcode[decoder->get_bytecode()];
+#define NEXT_BLOCK(len)               \
+	pc += len;                        \
+	if constexpr (compressed_enabled) \
+		decoder += 2;                 \
+	else                              \
+		decoder += 1;                 \
 	goto continue_block;
 #define PERFORM_BRANCH() \
 	pc += instr.Btype.signed_imm(); \
@@ -96,6 +109,11 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32I_BC_OP_SH2ADD] = &&rv32i_op_sh2add,
 		[RV32I_BC_OP_SH3ADD] = &&rv32i_op_sh3add,
 
+#ifdef RISCV_EXT_COMPRESSED
+		[RV32C_BC_FUNCTION] = &&rv32c_func,
+		[RV32C_BC_JUMPFUNC] = &&rv32c_jfunc,
+#endif
+
 		[RV32I_BC_SYSCALL] = &&rv32i_syscall,
 		[RV32I_BC_SYSTEM]  = &&rv32i_system,
 		[RV32I_BC_NOP]     = &&rv32i_nop,
@@ -148,7 +166,10 @@ continue_segment:
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 
 continue_block:
-	{
+	if constexpr (compressed_enabled) {
+		pc += decoder->idxend * 2;
+		counter.increment_counter(decoder->instr_count);
+	} else {
 		unsigned count = decoder->idxend;
 		pc += count * 4;
 		counter.increment_counter(count + 1);
@@ -428,6 +449,23 @@ rv32i_lui: {
 	this->reg(instr.Utype.rd) = instr.Utype.upper_imm();
 	NEXT_INSTR();
 }
+
+#ifdef RISCV_EXT_COMPRESSED
+rv32c_func: {
+	VIEW_INSTR();
+	auto handler = decoder->get_handler();
+	handler(*this, instr);
+	NEXT_C_INSTR();
+}
+rv32c_jfunc: {
+	VIEW_INSTR();
+	registers().pc = pc;
+	auto handler = decoder->get_handler();
+	handler(*this, instr);
+	pc = registers().pc + 2;
+	goto check_unaligned_jump;
+}
+#endif
 
 rv32i_op_sll: {
 	VIEW_INSTR();
@@ -841,11 +879,55 @@ check_unaligned_jump:
 } // CPU::simulate_computed()
 
 template <int W>
+void CPU<W>::simulate(uint64_t imax)
+{
+	simulate_threaded(imax);
+}
+
+template <int W>
 size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 {
 #ifdef RISCV_BINARY_TRANSLATION
 	if (instr.whole == FASTSIM_BLOCK_END)
 		return RV32I_BC_TRANSLATOR;
+#endif
+
+#ifdef RISCV_EXT_COMPRESSED
+	if (instr.length() == 2)
+	{
+		// RISC-V Compressed Extension
+		const rv32c_instruction ci{instr};
+		#define CI_CODE(x, y) ((x << 13) | (y))
+		switch (ci.opcode())
+		{
+			case CI_CODE(0b001, 0b01): // C.ADDIW / C.JAL
+				if constexpr (W == 8) {
+					return RV32C_BC_FUNCTION;
+				} else {
+					return RV32C_BC_JUMPFUNC;
+				}
+			case CI_CODE(0b101, 0b01): // C.JAL
+				return RV32C_BC_JUMPFUNC;
+			case CI_CODE(0b110, 0b01): // C.BEQZ
+				return RV32C_BC_JUMPFUNC;
+			case CI_CODE(0b111, 0b01): // C.BNEZ
+				return RV32C_BC_JUMPFUNC;
+			case CI_CODE(0b100, 0b10): {
+				const bool topbit = ci.whole & (1 << 12);
+				if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
+				{
+					return RV32C_BC_JUMPFUNC; // C.JR rd
+				}
+				else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
+				{
+					return RV32C_BC_JUMPFUNC; // C.JALR ra, rd+0
+				}
+				return RV32C_BC_FUNCTION;
+			}
+			default:
+				return RV32C_BC_FUNCTION;
+		}
+	}
 #endif
 
 	switch (instr.opcode())

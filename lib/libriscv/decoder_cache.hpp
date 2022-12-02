@@ -15,10 +15,14 @@ struct DecoderData {
 	uint32_t instr;
 	uint16_t idxend;
 	// Only used by C-extension decoding:
+#ifndef RISCV_THREADED
 	struct {
 		uint8_t opcode_length;
 		uint8_t instr_count;
 	};
+#else
+	uint16_t instr_count;
+#endif
 
 	template <typename T = rv32i_instruction>
 	inline T view_instr() const noexcept {

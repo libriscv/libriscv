@@ -73,6 +73,7 @@ namespace riscv
 			while (pc < last_pc) {
 				size_t datalength = 0;
 				address_type<W> block_pc = pc;
+				[[maybe_unused]] unsigned last_length = 0;
 				while (pc < last_pc) {
 					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
 					data.push_back(&entry);
@@ -83,6 +84,7 @@ namespace riscv
 					const auto length = instruction.length();
 					pc += length;
 					datalength += length / 2;
+					last_length = length;
 
 					// All opcodes that can modify PC
 					if (length == 2)
@@ -100,15 +102,23 @@ namespace riscv
 					const auto instruction = read_instruction(
 						exec_segment, block_pc, last_pc);
 					const auto length = instruction.length();
-					block_pc += length;
+
 					auto* entry = data[i];
+				#ifdef RISCV_THREADED
+					// Ends at instruction *before* last PC
+					entry->idxend = (pc - last_length - block_pc) / 2;
+					entry->instr_count = data.size() - i;
+				#else
 					// Ends at *last instruction*
 					entry->idxend = datalength;
 					entry->opcode_length = length;
 					// XXX: We have to pack the instruction count by combining it with the cb length
 					// in order to avoid overflows on large code blocks. The code block length
 					// has been sufficiently large to avoid overflows in all executables tested.
-					entry->instr_count = overflow_checked_instr_count(datalength - (data.size() - i));
+					entry->instr_count = overflow_checked_instr_count(entry->idxend - (data.size() - i));
+				#endif
+
+					block_pc += length;
 					datalength -= length / 2;
 				}
 				data.clear();
