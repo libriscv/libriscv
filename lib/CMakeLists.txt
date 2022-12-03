@@ -104,7 +104,6 @@ endif()
 if (RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
 	# The rewriter changes instruction bytes and is incompatible
 	# with a decoder that reads instructions from execute-memory.
-	# Also currently incompatible with threaded simulation.
 	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
 endif()
 if (RISCV_MULTIPROCESS)

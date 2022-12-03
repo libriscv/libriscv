@@ -10,7 +10,7 @@ using namespace riscv;
 
 TEST_CASE("Calculate fib(2560000) on execute page", "[VA]")
 {
-    const auto binary = build_and_load(R"M(
+	const auto binary = build_and_load(R"M(
 #define uintptr_t __UINTPTR_TYPE__
 typedef long (*fib_func)(long, long, long);
 
@@ -63,15 +63,30 @@ long syscall3(long n, long arg0, long arg1, long arg2) {
 	return a0;
 })M");
 
-    riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
-	// We need to install Linux system calls for maximum gucciness
-	machine.setup_linux_syscalls();
-	// We need to create a Linux environment for runtimes to work well
-	machine.setup_linux(
-		{"va_exec"},
-		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
-	// Run for at most X instructions before giving up
-	machine.simulate(MAX_INSTRUCTIONS);
+	// Normal (fastest) simulation
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		// We need to install Linux system calls for maximum gucciness
+		machine.setup_linux_syscalls();
+		// We need to create a Linux environment for runtimes to work well
+		machine.setup_linux(
+			{"va_exec"},
+			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		// Run for at most X instructions before giving up
+		machine.simulate(MAX_INSTRUCTIONS);
 
-	REQUIRE(machine.return_value<long>() == 12586269025L);
+		REQUIRE(machine.return_value<long>() == 12586269025L);
+	}
+	// Precise (step-by-step) simulation
+	{
+		riscv::Machine<RISCV64> machine{binary, { .memory_max = MAX_MEMORY }};
+		machine.setup_linux_syscalls();
+		machine.setup_linux(
+			{"va_exec"},
+			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		// Verify step-by-step simulation
+		machine.cpu.simulate_precise(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 12586269025L);
+	}
 }

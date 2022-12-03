@@ -215,15 +215,17 @@ restart_next_execute_segment:
 		if (m_exec == nullptr) {
 			this->next_execute_segment();
 		}
-		auto* exec = this->m_exec;
-		auto* exec_decoder = exec->decoder_cache();
-		auto* exec_seg_data = exec->exec_data();
 
 		// Calculate the instruction limit
 		if (max != UINT64_MAX)
 			machine().set_max_instructions(machine().instruction_counter() + max);
 		else
 			machine().set_max_instructions(UINT64_MAX);
+
+restart_precise_sim:
+		auto* exec = this->m_exec;
+		auto* exec_decoder = exec->decoder_cache();
+		auto* exec_seg_data = exec->exec_data();
 
 		for (; machine().instruction_counter() < machine().max_instructions();
 			machine().increment_counter(1)) {
@@ -258,10 +260,10 @@ restart_next_execute_segment:
 		}
 		else
 		{
-			// The slow path reads from execute pages
-			instruction = read_next_instruction_slowpath();
-			// decode & execute instruction directly
-			this->execute(instruction);
+			// This will produce a sequential execute segment for the unknown area
+			// If it is not executable, it will throw an execute space protection fault
+			this->next_execute_segment();
+			goto restart_precise_sim;
 		}
 
 			// increment PC
