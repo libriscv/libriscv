@@ -111,6 +111,9 @@ namespace riscv
 		int32_t signed_imm() const noexcept {
 			return imm;
 		}
+		uint32_t unsigned_imm() const noexcept {
+			return (uint16_t)imm;
+		}
 	};
 
 	union FasterOpType

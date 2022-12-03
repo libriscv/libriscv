@@ -26,7 +26,14 @@ namespace riscv
 				return bytecode;
 			}
 			case RV32I_BC_ADDI:
-			{
+			case RV32I_BC_SLLI:
+			case RV32I_BC_SLTI:
+			case RV32I_BC_SLTIU:
+			case RV32I_BC_XORI:
+			case RV32I_BC_SRLI:
+			case RV32I_BC_SRAI:
+			case RV32I_BC_ORI:
+			case RV32I_BC_ANDI: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
 				rewritten.rs2 = original.Itype.rs1;

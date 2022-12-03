@@ -295,59 +295,52 @@ rv32i_op_sub: {
 	NEXT_INSTR();
 }
 rv32i_slli: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// SLLI: Logical left-shift 5/6/7-bit immediate
-	this->reg(instr.Itype.rd) =
-		reg(instr.Itype.rs1) << (instr.Itype.imm & (XLEN - 1));
+	this->reg(fi.rs1) =
+		this->reg(fi.rs2) << (fi.unsigned_imm() & (XLEN - 1));
 	NEXT_INSTR();
 }
 rv32i_slti: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// SLTI: Set less than immediate
-	this->reg(instr.Itype.rd) =
-		(saddr_t(reg(instr.Itype.rs1)) < instr.Itype.signed_imm());
+	this->reg(fi.rs1) = (saddr_t(reg(fi.rs2)) < fi.signed_imm());
 	NEXT_INSTR();
 }
 rv32i_sltiu: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// SLTIU: Sign-extend, then treat as unsigned
-	this->reg(instr.Itype.rd) =
-		(reg(instr.Itype.rs1) < addr_t(instr.Itype.signed_imm()));
+	this->reg(fi.rs1) = (reg(fi.rs2) < addr_t(fi.signed_imm()));
 	NEXT_INSTR();
 }
 rv32i_xori: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// XORI
-	this->reg(instr.Itype.rd) =
-		reg(instr.Itype.rs1) ^ instr.Itype.signed_imm();
+	this->reg(fi.rs1) = reg(fi.rs2) ^ fi.signed_imm();
 	NEXT_INSTR();
 }
 rv32i_srli: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// SRLI: Shift-right logical 5/6/7-bit immediate
-	this->reg(instr.Itype.rd) =
-		reg(instr.Itype.rs1) >> (instr.Itype.imm & (XLEN - 1));
+	this->reg(fi.rs1) = reg(fi.rs2) >> (fi.unsigned_imm() & (XLEN - 1));
 	NEXT_INSTR();
 }
 rv32i_srai: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// SRAI: Shift-right arithmetical (preserve the sign bit)
-	this->reg(instr.Itype.rd) =
-		saddr_t(reg(instr.Itype.rs1)) >> (instr.Itype.imm & (XLEN - 1));
+	this->reg(fi.rs1) = saddr_t(reg(fi.rs2)) >> (fi.unsigned_imm() & (XLEN - 1));
 	NEXT_INSTR();
 }
 rv32i_ori: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// ORI: Or sign-extended 12-bit immediate
-	this->reg(instr.Itype.rd) =
-		reg(instr.Itype.rs1) | instr.Itype.signed_imm();
+	this->reg(fi.rs1) = reg(fi.rs2) | fi.signed_imm();
 	NEXT_INSTR();
 }
 rv32i_andi: {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// ANDI: And sign-extended 12-bit immediate
-	this->reg(instr.Itype.rd) =
-		reg(instr.Itype.rs1) & instr.Itype.signed_imm();
+	this->reg(fi.rs1) = reg(fi.rs2) & fi.signed_imm();
 	NEXT_INSTR();
 }
 rv32i_jal: {
