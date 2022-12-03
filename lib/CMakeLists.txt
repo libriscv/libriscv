@@ -45,6 +45,7 @@ set (SOURCES
 		libriscv/rv64i.cpp
 		libriscv/rv128i.cpp
 		libriscv/serialize.cpp
+		libriscv/threaded_rewriter.cpp
 		libriscv/util/crc32c.cpp
 	)
 if (WIN32 OR MINGW_TOOLCHAIN)
@@ -68,7 +69,6 @@ endif()
 if (RISCV_EXPERIMENTAL)
 	list(APPEND SOURCES
 		libriscv/decoder_rewriter.cpp
-		libriscv/threaded_rewriter.cpp
 	)
 endif()
 if (RISCV_BINARY_TRANSLATION)

@@ -310,9 +310,8 @@ namespace riscv
 			// Cache the (modified) instruction bits
 #ifdef RISCV_THREADED
 			auto bytecode = CPU<W>::computed_index_for(instruction);
-			if constexpr (decoder_rewriter_enabled) {
-				bytecode = machine().cpu.threaded_rewrite(bytecode, dst, rewritten);
-			}
+			// Threaded rewrites are **always** enabled
+			bytecode = machine().cpu.threaded_rewrite(bytecode, dst, rewritten);
 			entry.set_bytecode(bytecode);
 #endif
 			entry.instr = rewritten.whole;

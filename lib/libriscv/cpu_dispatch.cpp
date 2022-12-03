@@ -111,6 +111,9 @@ void CPU<W>::simulate_threaded(uint64_t imax)
 		[RV32I_BC_OP_SH3ADD] = &&rv32i_op_sh3add,
 
 #ifdef RISCV_EXT_COMPRESSED
+		[RV32C_BC_ADDI]     = &&rv32c_addi,
+		[RV32C_BC_LI]       = &&rv32c_addi,
+		[RV32C_BC_MV]       = &&rv32c_addi,
 		[RV32C_BC_FUNCTION] = &&rv32c_func,
 		[RV32C_BC_JUMPFUNC] = &&rv32c_jfunc,
 #endif
@@ -177,179 +180,113 @@ continue_block:
 
 	goto *computed_opcode[decoder->get_bytecode()];
 
-rv32i_li: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		this->reg(fi.rs1) = address_t(0) + fi.signed_imm();
-	} else {
-		VIEW_INSTR();
-		this->reg(instr.Itype.rd) = instr.Itype.signed_imm();
-		NEXT_INSTR();
-	}
+#ifdef RISCV_EXT_COMPRESSED
+rv32c_addi: {
+	VIEW_INSTR_AS(fi, FasterItype);
+	this->reg(fi.rs1) = reg(fi.rs2) + fi.signed_imm();
+	NEXT_C_INSTR();
 }
+#endif
 rv32i_addi: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		this->reg(fi.rs1) =
-			this->reg(fi.rs2) + fi.signed_imm();
-	} else {
-		VIEW_INSTR();
-		this->reg(instr.Itype.rd) =
-			this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	}
+	VIEW_INSTR_AS(fi, FasterItype);
+	this->reg(fi.rs1) =
+		this->reg(fi.rs2) + fi.signed_imm();
+	NEXT_INSTR();
+}
+rv32i_li: {
+	VIEW_INSTR_AS(fi, FasterItype);
+	this->reg(fi.rs1) = fi.signed_imm();
 	NEXT_INSTR();
 }
 rv32i_ldw: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		const auto addr = this->reg(fi.rs2) + fi.signed_imm();
-		this->reg(fi.rs1) =
-			(int32_t)machine().memory.template read<uint32_t>(addr);
-	} else {
-		VIEW_INSTR();
-		const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		this->reg(instr.Itype.rd) =
-			(int32_t)machine().memory.template read<uint32_t>(addr);
-	}
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+	this->reg(fi.rs1) =
+		(int32_t)machine().memory.template read<uint32_t>(addr);
 	NEXT_INSTR();
 }
 rv32i_stw: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		const auto addr  = reg(fi.rs1) + fi.signed_imm();
-		machine().memory.template write<uint32_t>(addr, reg(fi.rs2));
-	} else {
-		VIEW_INSTR();
-		const auto addr  = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-		machine().memory.template write<uint32_t>(addr, reg(instr.Stype.rs2));
-	}
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr  = reg(fi.rs1) + fi.signed_imm();
+	machine().memory.template write<uint32_t>(addr, reg(fi.rs2));
 	NEXT_INSTR();
 }
 rv32i_ldwu: {
 	if constexpr (W >= 8) {
-	VIEW_INSTR();
-	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	this->reg(instr.Itype.rd) =
-		machine().memory.template read<uint32_t>(addr);
-	NEXT_INSTR();
+		VIEW_INSTR();
+		const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		this->reg(instr.Itype.rd) =
+			machine().memory.template read<uint32_t>(addr);
+		NEXT_INSTR();
 	}
 }
 rv32i_ldd: {
 	if constexpr (W >= 8) {
-	VIEW_INSTR();
-	const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	this->reg(instr.Itype.rd) =
-		(int64_t)machine().memory.template read<uint64_t>(addr);
-	NEXT_INSTR();
+		VIEW_INSTR();
+		const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		this->reg(instr.Itype.rd) =
+			(int64_t)machine().memory.template read<uint64_t>(addr);
+		NEXT_INSTR();
 	}
 }
 rv32i_std: {
 	if constexpr (W >= 8) {
-	VIEW_INSTR();
-	const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-	machine().memory.template write<uint64_t>(addr, reg(instr.Stype.rs2));
-	NEXT_INSTR();
+		VIEW_INSTR();
+		const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
+		machine().memory.template write<uint64_t>(addr, reg(instr.Stype.rs2));
+		NEXT_INSTR();
 	}
 }
 rv32i_beq: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		if (reg(fi.rs1) == reg(fi.rs2)) {
-			PERFORM_FAST_BRANCH();
-		}
-	} else {
-		VIEW_INSTR();
-		if (reg(instr.Btype.rs1) == reg(instr.Btype.rs2)) {
-			PERFORM_BRANCH();
-		}
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (reg(fi.rs1) == reg(fi.rs2)) {
+		PERFORM_FAST_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bne: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		if (reg(fi.rs1) != reg(fi.rs2)) {
-			PERFORM_FAST_BRANCH();
-		}
-	} else {
-		VIEW_INSTR();
-		if (reg(instr.Btype.rs1) != reg(instr.Btype.rs2)) {
-			PERFORM_BRANCH();
-		}
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (reg(fi.rs1) != reg(fi.rs2)) {
+		PERFORM_FAST_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_blt: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		if ((saddr_t)reg(fi.rs1) < (saddr_t)reg(fi.rs2)) {
-			PERFORM_FAST_BRANCH();
-		}
-	} else {
-		VIEW_INSTR();
-		if ((saddr_t)reg(instr.Btype.rs1) < (saddr_t)reg(instr.Btype.rs2)) {
-			PERFORM_BRANCH();
-		}
+	VIEW_INSTR_AS(fi, FasterItype);
+	if ((saddr_t)reg(fi.rs1) < (saddr_t)reg(fi.rs2)) {
+		PERFORM_FAST_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bge: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		if ((saddr_t)reg(fi.rs1) >= (saddr_t)reg(fi.rs2)) {
-			PERFORM_FAST_BRANCH();
-		}
-	} else {
-		VIEW_INSTR();
-		if ((saddr_t)reg(instr.Btype.rs1) >= (saddr_t)reg(instr.Btype.rs2)) {
-			PERFORM_BRANCH();
-		}
+	VIEW_INSTR_AS(fi, FasterItype);
+	if ((saddr_t)reg(fi.rs1) >= (saddr_t)reg(fi.rs2)) {
+		PERFORM_FAST_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bltu: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		if (reg(fi.rs1) < reg(fi.rs2)) {
-			PERFORM_FAST_BRANCH();
-		}
-	} else {
-		VIEW_INSTR();
-		if (reg(instr.Btype.rs1) < reg(instr.Btype.rs2)) {
-			PERFORM_BRANCH();
-		}
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (reg(fi.rs1) < reg(fi.rs2)) {
+		PERFORM_FAST_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_bgeu: {
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		if (reg(fi.rs1) >= reg(fi.rs2)) {
-			PERFORM_FAST_BRANCH();
-		}
-	} else {
-		VIEW_INSTR();
-		if (reg(instr.Btype.rs1) >= reg(instr.Btype.rs2)) {
-			PERFORM_BRANCH();
-		}
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (reg(fi.rs1) >= reg(fi.rs2)) {
+		PERFORM_FAST_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 rv32i_op_add: {
-	VIEW_INSTR();
-	if constexpr (decoder_rewriter_enabled) {
-		VIEW_INSTR_AS(fi, FasterOpType);
-		this->reg(fi.rd) = reg(fi.rs1) + reg(fi.rs2);
-	} else {
-		this->reg(instr.Rtype.rd) =
-			reg(instr.Rtype.rs1) + reg(instr.Rtype.rs2);
-	}
+	VIEW_INSTR_AS(fi, FasterOpType);
+	this->reg(fi.rd) = reg(fi.rs1) + reg(fi.rs2);
 	NEXT_INSTR();
 }
 rv32i_op_sub: {
-	VIEW_INSTR();
-	this->reg(instr.Rtype.rd) =
-		reg(instr.Rtype.rs1) - reg(instr.Rtype.rs2);
+	VIEW_INSTR_AS(fi, FasterOpType);
+	this->reg(fi.rd) = reg(fi.rs1) - reg(fi.rs2);
 	NEXT_INSTR();
 }
 rv32i_slli: {
@@ -409,23 +346,11 @@ rv32i_andi: {
 	NEXT_INSTR();
 }
 rv32i_jal: {
-	if constexpr (decoder_rewriter_enabled)
-	{
-		VIEW_INSTR_AS(fi, FasterJtype);
-		if (fi.rd != 0)
-			reg(fi.rd) = pc + 4;
-		pc += fi.offset;
-		goto check_jump;
-	} else {
-		VIEW_INSTR();
-		// Link *next* instruction (rd = PC + 4)
-		if (instr.Jtype.rd != 0) {
-			reg(instr.Jtype.rd) = pc + 4;
-		}
-		// And jump relative
-		pc += instr.Jtype.jump_offset();
-		goto check_unaligned_jump;
-	}
+	VIEW_INSTR_AS(fi, FasterJtype);
+	if (fi.rd != 0)
+		reg(fi.rd) = pc + 4;
+	pc += fi.offset;
+	goto check_jump;
 }
 rv32i_fast_jal: {
 	VIEW_INSTR();
@@ -904,6 +829,16 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		#define CI_CODE(x, y) ((x << 13) | (y))
 		switch (ci.opcode())
 		{
+			case CI_CODE(0b000, 0b01):
+				if (ci.CI.rd != 0) {
+					return RV32C_BC_ADDI; // C.ADDI
+				}
+				return RV32C_BC_FUNCTION; // C.NOP
+			case CI_CODE(0b010, 0b01):
+				if (ci.CI.rd != 0) {
+					return RV32C_BC_LI; // C.LI
+				}
+				return RV32C_BC_FUNCTION; // C.NOP
 			case CI_CODE(0b001, 0b01): // C.ADDIW / C.JAL
 				if constexpr (W == 8) {
 					return RV32C_BC_FUNCTION;
@@ -926,7 +861,19 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				{
 					return RV32C_BC_JUMPFUNC; // C.JALR ra, rd+0
 				}
-				return RV32C_BC_FUNCTION;
+				else if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 != 0)
+				{	// MV rd, rs2
+					return RV32C_BC_MV; // C.MV
+				}
+				else if (ci.CR.rd != 0)
+				{	// ADD rd, rd + rs2
+					return RV32C_BC_FUNCTION; // C.ADD
+				}
+				else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0)
+				{	// EBREAK
+					return RV32C_BC_FUNCTION; // C.EBREAK
+				}
+				return RV32C_BC_FUNCTION; // C.UNIMP?
 			}
 			default:
 				return RV32C_BC_FUNCTION;

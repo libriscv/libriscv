@@ -1,7 +1,9 @@
 #include "machine.hpp"
+#include "threaded_bytecodes.hpp"
+
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
-#include "threaded_bytecodes.hpp"
+#include "rvc.hpp"
 
 namespace riscv
 {
@@ -46,7 +48,8 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV32I_BC_OP_ADD: {
+			case RV32I_BC_OP_ADD:
+			case RV32I_BC_OP_SUB: {
 				FasterOpType rewritten;
 				rewritten.rd = original.Rtype.rd;
 				rewritten.rs1 = original.Rtype.rs1;
@@ -54,7 +57,7 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 				return bytecode;
-				}
+			}
 			case RV32I_BC_LDW: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
@@ -63,7 +66,7 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 				return bytecode;
-				}
+			}
 			case RV32I_BC_STW: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Stype.rs1;
@@ -72,7 +75,7 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 				return bytecode;
-				}
+			}
 			case RV32I_BC_JAL: {
 				// Here we try to find out if the whole jump
 				// can be expressed as just the instruction bits.
@@ -94,6 +97,42 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			/** Compressed instructions **/
+#ifdef RISCV_EXT_COMPRESSED
+			case RV32C_BC_ADDI: {
+				const rv32c_instruction ci{original};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CI.rd;
+				rewritten.rs2 = ci.CI.rd;
+				rewritten.imm = ci.CI.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return RV32C_BC_ADDI;
+			}
+			case RV32C_BC_LI: {
+				const rv32c_instruction ci{original};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CI.rd;
+				rewritten.rs2 = 0;
+				rewritten.imm = ci.CI.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return RV32C_BC_ADDI;
+			}
+			case RV32C_BC_MV: {
+				const rv32c_instruction ci{original};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CR.rd;
+				rewritten.rs2 = ci.CR.rs2;
+				rewritten.imm = 0;
+
+				instr.whole = rewritten.whole;
+				return RV32C_BC_ADDI;
+			}
+#endif // RISCV_EXT_COMPRESSED
 		}
 
 		return bytecode;
