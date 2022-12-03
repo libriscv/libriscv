@@ -85,7 +85,13 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV32I_BC_LDW: {
+			case RV32I_BC_LDB:
+			case RV32I_BC_LDBU:
+			case RV32I_BC_LDH:
+			case RV32I_BC_LDHU:
+			case RV32I_BC_LDW:
+			case RV32I_BC_LDWU:
+			case RV32I_BC_LDD: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
 				rewritten.rs2 = original.Itype.rs1;
@@ -94,7 +100,10 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV32I_BC_STW: {
+			case RV32I_BC_STB:
+			case RV32I_BC_STH:
+			case RV32I_BC_STW:
+			case RV32I_BC_STD: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Stype.rs1;
 				rewritten.rs2 = original.Stype.rs2;

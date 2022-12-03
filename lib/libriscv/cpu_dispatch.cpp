@@ -213,27 +213,27 @@ rv32i_stw: {
 }
 rv32i_ldwu: {
 	if constexpr (W >= 8) {
-		VIEW_INSTR();
-		const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		this->reg(instr.Itype.rd) =
+		VIEW_INSTR_AS(fi, FasterItype);
+		const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+		this->reg(fi.rs1) =
 			machine().memory.template read<uint32_t>(addr);
 		NEXT_INSTR();
 	}
 }
 rv32i_ldd: {
 	if constexpr (W >= 8) {
-		VIEW_INSTR();
-		const auto addr = this->reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-		this->reg(instr.Itype.rd) =
+		VIEW_INSTR_AS(fi, FasterItype);
+		const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+		this->reg(fi.rs1) =
 			(int64_t)machine().memory.template read<uint64_t>(addr);
 		NEXT_INSTR();
 	}
 }
 rv32i_std: {
 	if constexpr (W >= 8) {
-		VIEW_INSTR();
-		const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-		machine().memory.template write<uint64_t>(addr, reg(instr.Stype.rs2));
+		VIEW_INSTR_AS(fi, FasterItype);
+		const auto addr  = reg(fi.rs1) + fi.signed_imm();
+		machine().memory.template write<uint64_t>(addr, reg(fi.rs2));
 		NEXT_INSTR();
 	}
 }
@@ -485,43 +485,43 @@ rv32i_syscall: {
 }
 
 rv32i_ldb: {
-	VIEW_INSTR();
-	const auto addr = reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	reg(instr.Itype.rd) =
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+	this->reg(fi.rs1) =
 		int8_t(machine().memory.template read<uint8_t>(addr));
 	NEXT_INSTR();
 }
 rv32i_ldbu: {
-	VIEW_INSTR();
-	const auto addr = reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	reg(instr.Itype.rd) =
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+	this->reg(fi.rs1) =
 		saddr_t(machine().memory.template read<uint8_t>(addr));
 	NEXT_INSTR();
 }
 rv32i_ldh: {
-	VIEW_INSTR();
-	const auto addr = reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	reg(instr.Itype.rd) =
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+	this->reg(fi.rs1) =
 		int16_t(machine().memory.template read<uint16_t>(addr));
 	NEXT_INSTR();
 }
 rv32i_ldhu: {
-	VIEW_INSTR();
-	const auto addr = reg(instr.Itype.rs1) + instr.Itype.signed_imm();
-	reg(instr.Itype.rd) =
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = this->reg(fi.rs2) + fi.signed_imm();
+	this->reg(fi.rs1) =
 		saddr_t(machine().memory.template read<uint16_t>(addr));
 	NEXT_INSTR();
 }
 rv32i_stb: {
-	VIEW_INSTR();
-	const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-	machine().memory.template write<uint8_t>(addr, reg(instr.Stype.rs2));
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = reg(fi.rs1) + fi.signed_imm();
+	machine().memory.template write<uint8_t>(addr, reg(fi.rs2));
 	NEXT_INSTR();
 }
 rv32i_sth: {
-	VIEW_INSTR();
-	const auto addr = reg(instr.Stype.rs1) + instr.Stype.signed_imm();
-	machine().memory.template write<uint16_t>(addr, reg(instr.Stype.rs2));
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = reg(fi.rs1) + fi.signed_imm();
+	machine().memory.template write<uint16_t>(addr, reg(fi.rs2));
 	NEXT_INSTR();
 }
 
