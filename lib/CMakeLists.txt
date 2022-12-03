@@ -6,7 +6,7 @@
 option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
 # Threaded simulation uses computed goto, and is not supported
 # on all compilers/systems.
-option(RISCV_THREADED "Enable fastest simulation mode" OFF)
+option(RISCV_THREADED "Enable fastest simulation mode" ON)
 # Enable and disable various RISC-V instruction
 # set extensions. Not recommended to disable any.
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
