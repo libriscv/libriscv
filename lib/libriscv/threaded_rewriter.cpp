@@ -24,8 +24,9 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 				return bytecode;
-				}
-			case RV32I_BC_ADDI: {
+			}
+			case RV32I_BC_ADDI:
+			{
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
 				rewritten.rs2 = original.Itype.rs1;
@@ -33,7 +34,7 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 				return bytecode;
-				}
+			}
 			case RV32I_BC_BEQ:
 			case RV32I_BC_BNE:
 			case RV32I_BC_BLT:
@@ -49,7 +50,26 @@ namespace riscv
 				return bytecode;
 			}
 			case RV32I_BC_OP_ADD:
-			case RV32I_BC_OP_SUB: {
+			case RV32I_BC_OP_SUB:
+			case RV32I_BC_OP_SLL:
+			case RV32I_BC_OP_SLT:
+			case RV32I_BC_OP_SLTU:
+			case RV32I_BC_OP_XOR:
+			case RV32I_BC_OP_SRL:
+			case RV32I_BC_OP_SRA:
+			case RV32I_BC_OP_OR:
+			case RV32I_BC_OP_AND:
+			case RV32I_BC_OP_MUL:
+			case RV32I_BC_OP_MULH:
+			case RV32I_BC_OP_MULHSU:
+			case RV32I_BC_OP_MULHU:
+			case RV32I_BC_OP_DIV:
+			case RV32I_BC_OP_DIVU:
+			case RV32I_BC_OP_REM:
+			case RV32I_BC_OP_REMU:
+			case RV32I_BC_OP_SH1ADD:
+			case RV32I_BC_OP_SH2ADD:
+			case RV32I_BC_OP_SH3ADD: {
 				FasterOpType rewritten;
 				rewritten.rd = original.Rtype.rd;
 				rewritten.rs1 = original.Rtype.rs1;

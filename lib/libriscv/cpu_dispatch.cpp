@@ -280,13 +280,18 @@ rv32i_bgeu: {
 	NEXT_BLOCK(4);
 }
 rv32i_op_add: {
-	VIEW_INSTR_AS(fi, FasterOpType);
-	this->reg(fi.rd) = reg(fi.rs1) + reg(fi.rs2);
+	#define OP_INSTR() \
+		VIEW_INSTR_AS(fi, FasterOpType); \
+		auto& dst = reg(fi.rd); \
+		const auto src1 = reg(fi.rs1); \
+		const auto src2 = reg(fi.rs2);
+	OP_INSTR();
+	dst = src1 + src2;
 	NEXT_INSTR();
 }
 rv32i_op_sub: {
-	VIEW_INSTR_AS(fi, FasterOpType);
-	this->reg(fi.rd) = reg(fi.rs1) - reg(fi.rs2);
+	OP_INSTR();
+	dst = src1 - src2;
 	NEXT_INSTR();
 }
 rv32i_slli: {
@@ -393,60 +398,47 @@ rv32c_jfunc: {
 #endif
 
 rv32i_op_sll: {
-	VIEW_INSTR();
-	#define OPREGS() \
-		auto& dst = reg(instr.Rtype.rd); \
-		const auto src1 = reg(instr.Rtype.rs1); \
-		const auto src2 = reg(instr.Rtype.rs2);
-	OPREGS();
-	dst = src1 << (src2 & (XLEN-1));
+	OP_INSTR();
+	dst = src1 << (src2 & (XLEN - 1));
 	NEXT_INSTR();
 }
 rv32i_op_slt: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = (saddr_t(src1) < saddr_t(src2));
 	NEXT_INSTR();
 }
 rv32i_op_sltu: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = (src1 < src2);
 	NEXT_INSTR();
 }
 rv32i_op_xor: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = src1 ^ src2;
 	NEXT_INSTR();
 }
 rv32i_op_srl: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = src1 >> (src2 & (XLEN - 1));
 	NEXT_INSTR();
 }
 rv32i_op_or: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = src1 | src2;
 	NEXT_INSTR();
 }
 rv32i_op_and: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = src1 & src2;
 	NEXT_INSTR();
 }
 rv32i_op_mul: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = saddr_t(src1) * saddr_t(src2);
 	NEXT_INSTR();
 }
 rv32i_op_div: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	// division by zero is not an exception
 	if (LIKELY(saddr_t(src2) != 0)) {
 		if constexpr (W == 8) {
@@ -466,20 +458,17 @@ rv32i_op_div: {
 	NEXT_INSTR();
 }
 rv32i_op_sh1add: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = src2 + (src1 << 1);
 	NEXT_INSTR();
 }
 rv32i_op_sh2add: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = src2 + (src1 << 2);
 	NEXT_INSTR();
 }
 rv32i_op_sh3add: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = src2 + (src1 << 3);
 	NEXT_INSTR();
 }
@@ -677,14 +666,12 @@ rv32i_auipc: {
 	NEXT_BLOCK(4);
 }
 rv32i_op_sra: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	dst = saddr_t(src1) >> (src2 & (XLEN-1));
 	NEXT_INSTR();
 }
 rv32i_op_mulh: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	if constexpr (W == 4) {
 		dst = uint64_t((int64_t)saddr_t(src1) * (int64_t)saddr_t(src2)) >> 32u;
 	} else if constexpr (W == 8) {
@@ -695,8 +682,7 @@ rv32i_op_mulh: {
 	NEXT_INSTR();
 }
 rv32i_op_mulhsu: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	if constexpr (W == 4) {
 		dst = uint64_t((int64_t)saddr_t(src1) * (uint64_t)src2) >> 32u;
 	} else if constexpr (W == 8) {
@@ -707,8 +693,7 @@ rv32i_op_mulhsu: {
 	NEXT_INSTR();
 }
 rv32i_op_mulhu: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	if constexpr (W == 4) {
 		dst = uint64_t((uint64_t)src1 * (uint64_t)src2) >> 32u;
 	} else if constexpr (W == 8) {
@@ -719,8 +704,7 @@ rv32i_op_mulhu: {
 	NEXT_INSTR();
 }
 rv32i_op_divu: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	if (LIKELY(src2 != 0)) {
 		dst = src1 / src2;
 	} else {
@@ -729,8 +713,7 @@ rv32i_op_divu: {
 	NEXT_INSTR();
 }
 rv32i_op_rem: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	if (LIKELY(src2 != 0)) {
 		if constexpr(W == 4) {
 			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
@@ -745,8 +728,7 @@ rv32i_op_rem: {
 	NEXT_INSTR();
 }
 rv32i_op_remu: {
-	VIEW_INSTR();
-	OPREGS();
+	OP_INSTR();
 	if (LIKELY(src2 != 0)) {
 		dst = src1 % src2;
 	} else {
