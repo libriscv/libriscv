@@ -33,7 +33,7 @@ namespace riscv
 		void simulate_precise(uint64_t);
 		// Executes one block at a time, and can only stop when
 		// the block ends or a system call is handled.
-		void simulate_fastsim(uint64_t);
+		void simulate_bytecode(uint64_t);
 		// Uses bytecodes to jump around at a faster speed, but is
 		// only supported on GCC and Clang. Behaves like fastsim.
 		void simulate_threaded(uint64_t);

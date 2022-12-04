@@ -97,9 +97,6 @@ namespace riscv
 
 					datalength += length / 2;
 					last_length = length;
-				#ifndef RISCV_THREADED
-					entry.opcode_length = length;
-				#endif
 
 					// All opcodes that can modify PC
 					if (length == 2)
@@ -130,7 +127,7 @@ namespace riscv
 
 				for (size_t i = 0; i < data.size(); i++) {
 					auto* entry = data[i];
-				#ifdef RISCV_THREADED
+
 					const auto instruction = read_instruction(
 						exec_segment, block_pc, last_pc);
 					const auto length = instruction.length();
@@ -138,20 +135,6 @@ namespace riscv
 					// Ends at instruction *before* last PC
 					entry->idxend = (pc - last_length - block_pc) / 2;
 					entry->instr_count = data.size() - i;
-				#else
-					const auto length = entry->opcode_length;
-					// Ends at *last instruction*
-					entry->idxend = datalength;
-					// XXX: We have to pack the instruction count by combining it with the cb length
-					// in order to avoid overflows on large code blocks. The code block length
-					// has been sufficiently large to avoid overflows in all executables tested.
-					const int real_instr_count = data.size() - i;
-					entry->instr_count = overflow_checked_instr_count(entry->idxend - real_instr_count);
-					// Verify count
-					const auto decoded_instr_count = entry->idxend - entry->instr_count;
-					if (UNLIKELY(decoded_instr_count != real_instr_count))
-						throw MachineException(INVALID_PROGRAM, "Instruction count mismatch");
-				#endif
 
 					block_pc += length;
 					datalength -= length / 2;
@@ -296,24 +279,14 @@ namespace riscv
 #endif // RISCV_BINARY_TRANSLATION
 
 			// Insert decoded instruction into decoder cache
-			Instruction<W> decoded;
-			// The rewriter can rewrite full instructions, so lets only
-			// invoke it when we have a decoder cache with full instructions.
-			if (!threaded_simulator_enabled && decoder_rewriter_enabled) {
-				// Improve many instruction handlers by rewriting instructions
-				decoded = CPU<W>::decode_rewrite(dst, rewritten);
-			} else {
-				decoded = CPU<W>::decode(instruction);
-			}
+			Instruction<W> decoded = CPU<W>::decode(instruction);
 			entry.set_handler(decoded);
 
 			// Cache the (modified) instruction bits
-#ifdef RISCV_THREADED
 			auto bytecode = CPU<W>::computed_index_for(instruction);
 			// Threaded rewrites are **always** enabled
 			bytecode = machine().cpu.threaded_rewrite(bytecode, dst, rewritten);
 			entry.set_bytecode(bytecode);
-#endif
 			entry.instr = rewritten.whole;
 
 			// Increment PC after everything
