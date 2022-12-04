@@ -270,15 +270,13 @@ It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ co
 
 ## What to use for performance
 
-Using Clang for libriscv is a little bit faster on some benchmarks. GCC-12 has for the most part catched up.
-
 Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my [rvscript](https://github.com/fwsGonzo/rvscript) repository. It's a complex topic that cannot be explained in one paragraph.
 
-If you have arenas available you can replace the default page fault handler with your own that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the Machine forking constructor. It will apply copy-on-write to all pages on the newly created machine and share text, rodata and the instruction cache.
+If you have arenas available you can replace the default page fault handler with your own that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the Machine forking constructor. It will apply copy-on-write to all pages on the newly created machine and share text, rodata and the instruction cache. It's also possible to use fault handlers while foregoing even the copy-on-write process in order to reduce the forking time.
 
 ## Multiprocessing
 
-There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases. With multiprocessing I was able to achieve 3x speedup using 4 CPUs for 8192 dot-product calculations.
+There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
 
 ## Binary translation
 
