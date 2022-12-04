@@ -17,15 +17,9 @@ struct DecoderData {
 	uint16_t m_handler = 0x0;
 #endif
 	uint16_t idxend;
+#if defined(RISCV_EXT_COMPRESSED)
 	// Only used by C-extension decoding:
-#if defined(RISCV_THREADED) && defined(RISCV_EXT_COMPRESSED)
 	uint16_t instr_count;
-#elif !defined(RISCV_THREADED)
-	struct
-	{
-		uint8_t opcode_length;
-		uint8_t instr_count;
-	};
 #endif
 	uint32_t instr;
 

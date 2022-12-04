@@ -51,13 +51,6 @@ namespace riscv
 		}
 	}
 
-	// While we do somewhat care about the precise amount of instructions per block,
-	// there is never really going to be any one block with more than 255 raw instructions.
-	// Still, we do care about making progress towards the instruction limits.
-	inline uint8_t overflow_checked_instr_count(size_t count) {
-		return (count > 255) ? 255 : count;
-	}
-
 	template <int W>
 	static void realize_fastsim(
 		address_type<W> base_pc, address_type<W> last_pc,
@@ -133,6 +126,8 @@ namespace riscv
 					const auto length = instruction.length();
 
 					// Ends at instruction *before* last PC
+					// Subtract block PC in order to get length,
+					// then store half
 					entry->idxend = (pc - last_length - block_pc) / 2;
 					entry->instr_count = data.size() - i;
 
