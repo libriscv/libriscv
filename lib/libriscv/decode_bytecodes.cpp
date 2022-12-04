@@ -279,6 +279,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			}
 		}
 		case RV32F_FMADD:
+			return RV32F_BC_FMADD;
 		case RV32F_FMSUB:
 		case RV32F_FNMADD:
 		case RV32F_FNMSUB:

@@ -151,6 +151,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32F_BC_FSUB]    = &&rv32f_fsub,
 		[RV32F_BC_FMUL]    = &&rv32f_fmul,
 		[RV32F_BC_FDIV]    = &&rv32f_fdiv,
+		[RV32F_BC_FMADD]   = &&rv32f_fmadd,
 #ifdef RISCV_EXT_VECTOR
 		[RV32V_BC_VLE32]   = &&rv32v_vle32,
 		[RV32V_BC_VSE32]   = &&rv32v_vse32,
@@ -651,6 +652,21 @@ INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv): {
 	else if (fi.R4type.funct2 == 0x1)
 	{ // float64
 		dst.f64 = rs1.f64 / rs2.f64;
+	}
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd): {
+	VIEW_INSTR_AS(fi, rv32f_instruction);
+	#define FMAREGS() \
+		auto& dst = registers().getfl(fi.R4type.rd);  \
+		auto& rs1 = registers().getfl(fi.R4type.rs1); \
+		auto& rs2 = registers().getfl(fi.R4type.rs2); \
+		auto& rs3 = registers().getfl(fi.R4type.rs3);
+	FMAREGS();
+	if (fi.R4type.funct2 == 0x0) { // float32
+		dst.set_float(rs1.f32[0] * rs2.f32[0] + rs3.f32[0]);
+	} else if (fi.R4type.funct2 == 0x1) { // float64
+		dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
 	}
 	NEXT_INSTR();
 }
