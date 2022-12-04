@@ -20,7 +20,7 @@ inline void Machine<W>::simulate(uint64_t max_instr)
 	if constexpr (Throw) {
 		// It is a timeout exception if the max counter is non-zero and
 		// the simulation ended. Otherwise, the machine stopped normally.
-		if (UNLIKELY(m_max_counter != 0))
+		if (UNLIKELY(instruction_limit_reached()))
 			timeout_exception(max_instr);
 	}
 }
