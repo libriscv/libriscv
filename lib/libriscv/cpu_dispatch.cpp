@@ -783,12 +783,17 @@ INSTRUCTION(RV32V_BC_VSE32, rv32v_vse32): {
 #ifdef RISCV_BINARY_TRANSLATION
 INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function): {
 	VIEW_INSTR();
+	// Make the current PC visible
+	this->registers().pc = pc;
+	// Make the instruction counter visible
 	counter.apply();
+	// Invoke translated code
 	auto handler = decoder->get_handler();
 	handler(*this, instr);
-	// Restore instruction counter and PC
+	// Restore counter
 	counter.retrieve();
-	pc = registers().pc;
+	// Translations are always full-length instructions (?)
+	pc = registers().pc + 4;
 	goto check_jump;
 }
 #endif

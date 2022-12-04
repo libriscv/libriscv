@@ -209,6 +209,10 @@ namespace riscv
 
 		DecoderData<W> invalid_op;
 		invalid_op.set_handler(this->machine().cpu.decode({0}));
+		if (UNLIKELY(invalid_op.m_handler != 0)) {
+			throw MachineException(INVALID_PROGRAM,
+				"The invalid instruction did not have the index zero", invalid_op.m_handler);
+		}
 
 		// PC-relative pointer to instruction bits
 		auto* exec_segment = exec.exec_data();
@@ -267,6 +271,7 @@ namespace riscv
 					// With fastsim we pretend the original opcode is JAL,
 					// which breaks the fastsim loop. In all cases, continue.
 					entry.instr = FASTSIM_BLOCK_END;
+					entry.set_bytecode(CPU<W>::computed_index_for(entry.instr));
 					dst += 4;
 					continue;
 				}

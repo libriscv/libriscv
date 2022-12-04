@@ -37,7 +37,7 @@ struct DecoderData {
 		get_handler()(cpu, args...);
 	}
 	bool isset() const noexcept {
-		return get_handler() != nullptr;
+		return m_handler != 0x0;
 	}
 	void set_handler(Instruction<W> insn) noexcept {
 		this->set_insn_handler(insn.handler);
