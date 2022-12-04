@@ -244,7 +244,7 @@ restart_precise_sim:
 #    endif // aligned/unaligned loads
 
 			constexpr bool enable_cache =
-				!decoder_rewriter_enabled && !binary_translation_enabled;
+				!binary_translation_enabled;
 
 			if constexpr (enable_cache)
 			{

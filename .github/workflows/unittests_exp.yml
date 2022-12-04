@@ -23,7 +23,7 @@ jobs:
         git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
 
     - name: Configure
-      run: cmake -B ${{github.workspace}}/build -DRISCV_EXPERIMENTAL=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DRISCV_THREADED=ON -DRISCV_EXPERIMENTAL=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build the unittests
       run: cmake --build ${{github.workspace}}/build

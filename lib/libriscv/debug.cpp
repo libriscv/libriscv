@@ -386,9 +386,8 @@ void DebugMachine<W>::simulate(uint64_t max)
 		rv32i_instruction instruction;
 		this->break_checks();
 
-		// We can't use decoder cache when rewriter or translator is enabled
-		constexpr bool enable_cache =
-			!decoder_rewriter_enabled && !binary_translation_enabled;
+		// We can't use decoder cache when translator is enabled
+		constexpr bool enable_cache = !binary_translation_enabled;
 		if (cpu.is_executable(cpu.pc()))
 		{
 			auto pc = cpu.pc();

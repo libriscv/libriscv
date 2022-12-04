@@ -64,11 +64,6 @@ if (RISCV_THREADED)
 		libriscv/threaded_dispatch.cpp
 	)
 endif()
-if (RISCV_EXPERIMENTAL)
-	list(APPEND SOURCES
-		libriscv/decoder_rewriter.cpp
-	)
-endif()
 if (RISCV_BINARY_TRANSLATION)
 	list(APPEND SOURCES
 		libriscv/tr_api.cpp
@@ -99,11 +94,6 @@ if (RISCV_THREADED)
 	target_compile_definitions(riscv PUBLIC RISCV_THREADED=1)
 endif()
 
-if (RISCV_EXPERIMENTAL AND NOT RISCV_DEBUG)
-	# The rewriter changes instruction bytes and is incompatible
-	# with a decoder that reads instructions from execute-memory.
-	target_compile_definitions(riscv PUBLIC RISCV_DECODER_REWRITER=1)
-endif()
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
 	target_link_libraries(riscv PUBLIC Threads::Threads)

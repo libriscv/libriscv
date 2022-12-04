@@ -63,11 +63,6 @@ namespace riscv
 #else
 	static constexpr bool binary_translation_enabled = false;
 #endif
-#ifdef RISCV_DECODER_REWRITER
-	static constexpr bool decoder_rewriter_enabled = true;
-#else
-	static constexpr bool decoder_rewriter_enabled = false;
-#endif
 #ifdef RISCV_THREADED
 	static constexpr bool threaded_simulator_enabled = true;
 #else
