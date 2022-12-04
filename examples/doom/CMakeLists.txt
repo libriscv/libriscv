@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.9.4)
-project(riscv CXX)
+project(sdldoom CXX)
 
 option(LTO         "Enable interprocedural optimizations" ON)
 option(NATIVE      "Enable native instructions" ON)
