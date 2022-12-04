@@ -105,31 +105,23 @@ If there is a lot of data, you could also share the data as pages with the guest
 Without using threads the machine program will simply run until it's completed, an exception occurs, or the machine is stopped from the outside during a trap or system call. It would be nice to have the ability to run the host-side program in-between without preemption. We can do this by making vmcall not execute machine instructions, and instead do it ourselves manually:
 
 ```C++
+auto test_addr = machine.address_of("test");
+
 // Reset the stack pointer from any previous call to its initial value
 machine.cpu.reset_stack_pointer();
 // Function call setup for the guest VM, but don't start execution
-machine.setup_call("test", 555, 666);
+machine.setup_call(test_addr, 555, 666);
 // Run the program for X amount of instructions, then print something, then
 // resume execution again. Do this until stopped.
-for (;;) {
-	try {
-		// Execute 1000 instructions at a time
-		machine.simulate(1000);
-	} catch (riscv::MachineTimeoutException& mte) {
-		// Do some work
-		printf("Instruction count: %zu\n", (size_t) machine.instruction_counter());
-		// Continue running
-		continue;
-	}
-	// Do some work after completion
-	printf("Done\n");
-	break;
-}
+do {
+	// Execute 1000 instructions at a time
+	machine.simulate<false>(1000);
+	// Do some work in between simulation
+	printf("Working ...\n");
+} while (machine.instruction_limit_reached());
 ```
 
-Note that for the sake of this example we have wrapped the call to `simulate()` in a try..catch, and when a CPU timeout happens, it will throw a `riscv::MachineTimeoutException`.
-
-It is also possible and desirable to simulate without timeout exceptions. It is a template parameter to `simulate` that defaults to true. You can compare the max instructions counter to non-zero to see if the machine didn't stop from a call to `machine.stop()`. That is, simply compare `machine.max_instructions()` to zero. System calls that stop the machine normally will set `max_instructions` to zero. If the machine runs out of instructions, the comparison `machine.instruction_counter() >= machine.max_instructions()` will be true. The helper function `machine.instruction_limit_reached()` will tell you if the instruction limit was reached during simulation, but it *will not* tell you if the machine stopped normally. Use `machine.stopped()` for that.
+The helper function `machine.instruction_limit_reached()` will tell you if the instruction limit was reached during simulation, but it *will not* tell you if the machine stopped normally. Use `machine.stopped()` for that. Combining both helpers you can determine the stopping cause.
 
 ## Maximizing success and optimizing calls
 

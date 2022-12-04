@@ -80,7 +80,6 @@ TEST_CASE("One instruction at a time", "[Examples]")
 TEST_CASE("One instruction at a time with ilimit", "[Examples]")
 {
 	const auto binary = build_and_load(R"M(
-	extern void exit(int);
 	int main() {
 		return 0x1234;
 	})M");
@@ -98,7 +97,7 @@ TEST_CASE("One instruction at a time with ilimit", "[Examples]")
 
 		while (!machine.stopped())
 		{
-			auto &cpu = machine.cpu;
+			auto& cpu = machine.cpu;
 			// Read next instruction
 			const auto instruction = cpu.read_next_instruction();
 			// Print the instruction to terminal
@@ -137,4 +136,42 @@ TEST_CASE("Build machine from empty", "[Examples]")
 	machine.simulate(1'000ul);
 
 	REQUIRE(machine.return_value() == 666);
+}
+
+TEST_CASE("Execute while doing other things", "[Examples]")
+{
+	const auto binary = build_and_load(R"M(
+	long test() {
+		for (volatile unsigned i = 0; i < 10000; i++);
+		return 0x5678;
+	}
+	int main() {
+		return 0x1234;
+	})M");
+
+	Machine<RISCV64> machine{binary};
+	machine.setup_linux(
+		{"myprogram"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	machine.setup_linux_syscalls();
+
+	machine.simulate();
+	REQUIRE(machine.return_value() == 0x1234);
+
+	auto test_addr = machine.address_of("test");
+
+	// Reset the stack pointer from any previous call to its initial value
+	machine.cpu.reset_stack_pointer();
+	// Function call setup for the guest VM, but don't start execution
+	machine.setup_call(test_addr, 555, 666);
+	// Run the program for X amount of instructions, then print something, then
+	// resume execution again. Do this until stopped.
+	do {
+		// Execute 1000 instructions at a time
+		machine.simulate<false>(1000);
+		// Do some work in between simulation
+		printf("Working ...\n");
+	} while (machine.instruction_limit_reached());
+
+	REQUIRE(machine.return_value() == 0x5678);
 }
