@@ -23,20 +23,24 @@ namespace riscv
 		using override_execute_segment_t = DecodedExecuteSegment<W>*(*)(CPU<W>&);
 		using instruction_t = Instruction<W>;
 
+		// Executes using the default-selected simulation mode.
+		// See below for the various modes.
 		void simulate(uint64_t);
+		// Step one instruction forward.
 		void step_one();
-		void reset();
-		void reset_stack_pointer() noexcept;
 
 		// Executes one instruction at a time, and can stop at
-		// any instruction.
+		// any instruction. Can be used for debugging.
 		void simulate_precise(uint64_t);
-		// Executes one block at a time, and can only stop when
-		// the block ends or a system call is handled.
+		// Executes one block at a time, and can only stop when the
+		// block ends or a system call is handled. Runs everywhere.
 		void simulate_bytecode(uint64_t);
-		// Uses bytecodes to jump around at a faster speed, but is
-		// only supported on GCC and Clang. Behaves like fastsim.
+		// Uses computed gotos to jump around at a faster speed, but
+		// is only supported on GCC and Clang. Fastest simulation.
 		void simulate_threaded(uint64_t);
+
+		void reset();
+		void reset_stack_pointer() noexcept;
 
 		address_t pc() const noexcept { return registers().pc; }
 		void increment_pc(int delta);
@@ -74,16 +78,21 @@ namespace riscv
 		__attribute__((noreturn))
 		static void trigger_exception(int, address_t = 0) COLD_PATH();
 
+		// Directly execute an instruction (given bits)
 		void execute(format_t);
+		// Read the next instruction bits
 		format_t read_next_instruction() const;
+
+		// Pretty print instructions
+		std::string to_string(format_t format) const;
+		std::string to_string(format_t format, const instruction_t &instr) const;
+		std::string current_instruction_to_string() const;
+
 		format_t read_next_instruction_slowpath() const COLD_PATH();
 		static const instruction_t& decode(format_t);
-		static size_t threaded_rewrite(size_t code, address_t pc, format_t &);
-		std::string to_string(format_t format) const;
-		std::string to_string(format_t format, const instruction_t& instr) const;
-		std::string current_instruction_to_string() const;
-		// Decode instruction bits into computed goto index
+		// Decode instruction bits into bytecode
 		static size_t computed_index_for(format_t bits);
+		static size_t threaded_rewrite(size_t code, address_t pc, format_t &);
 
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;
