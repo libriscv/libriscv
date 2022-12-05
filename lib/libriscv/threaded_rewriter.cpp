@@ -50,9 +50,10 @@ namespace riscv
 			case RV32I_BC_BLTU:
 			case RV32I_BC_BGEU: {
 				const auto addr = pc + original.Btype.signed_imm();
-				if (!this->is_within(addr))
+				if (!this->is_within(addr) || (addr % PCAL) != 0)
 				{
 					// Use slow-path for out-of-bounds branches
+					// or misaligned jumps.
 					return RV32I_BC_FUNCTION;
 				}
 
