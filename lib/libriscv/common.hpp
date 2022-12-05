@@ -100,7 +100,6 @@ namespace riscv
 	template <int W> struct MultiThreading;
 	template <int W> struct Multiprocessing;
 	template <int W> struct SerializedMachine;
-	template <int W> struct QCVec;
 	struct Arena;
 
 	template <class...> constexpr std::false_type always_false {};
