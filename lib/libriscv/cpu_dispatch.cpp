@@ -507,11 +507,11 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall): {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Make the instruction counter(s) visible
-	counter.apply();
+	counter.apply_counter();
 	// Invoke system call
 	machine().system_call(this->reg(REG_ECALL));
-	// Restore counter(s)
-	counter.retrieve();
+	// Restore max counter
+	counter.retrieve_max_counter();
 	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
 	{
 		// System calls are always full-length instructions
@@ -593,6 +593,8 @@ INSTRUCTION(RV32F_BC_FSD, rv32i_fsd): {
 INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system): {
 	VIEW_INSTR();
 	machine().system(instr);
+	// Restore max counter (can be improved?)
+	counter.retrieve_max_counter();
 	// Check if machine stopped
 	if (UNLIKELY(counter.overflowed()))
 	{
@@ -788,7 +790,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function): {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Make the instruction counter visible
-	counter.apply();
+	counter.apply_counter();
 	// Invoke translated code
 	auto handler = decoder->get_handler();
 	handler(*this, instr);

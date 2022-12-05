@@ -16,15 +16,20 @@ namespace riscv
 		{}
 		~InstrCounter() {
 			machine.set_instruction_counter(m_counter);
-			machine.set_max_instructions(m_max);
 		}
 
 		void apply() {
 			machine.set_instruction_counter(m_counter);
 			machine.set_max_instructions(m_max);
 		}
+		void apply_counter() {
+			machine.set_instruction_counter(m_counter);
+		}
 		void retrieve() {
 			m_counter = machine.instruction_counter();
+			m_max     = machine.max_instructions();
+		}
+		void retrieve_max_counter() {
 			m_max     = machine.max_instructions();
 		}
 		uint64_t value() const noexcept {
