@@ -62,6 +62,7 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 	// main VM where value is still 0.
 	const auto binary = build_and_load(R"M(
 	#include <assert.h>
+	#include <string.h>
 	extern long write(int, const void*, unsigned long);
 	static int value = 0;
 
@@ -69,6 +70,30 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 		assert(value == 1);
 		value = 0;
 		write(1, "Hello World!", 12);
+	}
+
+	extern int str(const char *arg) {
+		assert(strcmp(arg, "Hello") == 0);
+		return 1;
+	}
+
+	struct Data {
+		int val1;
+		int val2;
+		float f1;
+	};
+	extern int structs(struct Data *data) {
+		assert(data->val1 == 1);
+		assert(data->val2 == 2);
+		assert(data->f1 == 3.0f);
+		return 2;
+	}
+
+	extern int ints(long i1, long i2, long i3) {
+		assert(i1 == 123);
+		assert(i2 == 456);
+		assert(i3 == 456);
+		return 3;
 	}
 
 	int main() {
@@ -100,5 +125,25 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 
 		// Execute guest function
 		fork.vmcall(hello_address);
+
+		int res1 = fork.vmcall("str", "Hello");
+		REQUIRE(res1 == 1);
+
+		res1 = fork.vmcall("str", std::string("Hello"));
+		REQUIRE(res1 == 1);
+
+		struct {
+			int v1 = 1;
+			int v2 = 2;
+			float f1 = 3.0f;
+		} data;
+		int res2 = fork.vmcall("structs", data);
+		REQUIRE(res2 == 2);
+
+		long intval = 456;
+		long& intref = intval;
+
+		int res3 = fork.vmcall("ints", 123L, intref, (long&&)intref);
+		REQUIRE(res3 == 3);
 	}
 }
