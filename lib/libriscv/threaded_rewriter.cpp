@@ -49,12 +49,18 @@ namespace riscv
 			case RV32I_BC_BGE:
 			case RV32I_BC_BLTU:
 			case RV32I_BC_BGEU: {
-				const auto addr = pc + original.Btype.signed_imm();
-				if (!this->is_within(addr) || (addr % PCAL) != 0)
+				const int32_t imm = original.Btype.signed_imm();
+				const auto addr = pc + imm;
+				// The check for imm == 0x0 prevents jumps that end up
+				// as costing 0 instructions to perform, which can form
+				// an infinite loop that is not stoppable.
+				if (imm == 0x0 || !this->is_within(addr, 4) || (addr % PCAL) != 0)
 				{
-					// Use slow-path for out-of-bounds branches
-					// or misaligned jumps.
-					return RV32I_BC_FUNCTION;
+					// Use invalid instruction for out-of-bounds branches
+					// or misaligned jumps. It is strictly a cheat, but
+					// it should also never happen on (especially) these
+					// instructions. No sandbox harm.
+					return RV32I_BC_INVALID;
 				}
 
 				FasterItype rewritten;

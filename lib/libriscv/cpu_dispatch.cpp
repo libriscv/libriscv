@@ -57,10 +57,7 @@ namespace riscv
 #define PERFORM_BRANCH()                \
 	pc += fi.signed_imm();              \
 	if (UNLIKELY(counter.overflowed())) \
-	{                                   \
-		registers().pc = pc;            \
-		return;                         \
-	}                                   \
+		goto check_jump;                \
 	goto continue_segment;
 
 template <int W> __attribute__((hot))
@@ -264,7 +261,7 @@ INSTRUCTION(RV32I_BC_LDD, rv32i_ldd): {
 		this->reg(fi.rs1) =
 			(int64_t)machine().memory.template read<uint64_t>(addr);
 		NEXT_INSTR();
-	}
+	} else goto execute_invalid;
 }
 INSTRUCTION(RV32I_BC_STD, rv32i_std): {
 	if constexpr (W >= 8) {
@@ -272,7 +269,7 @@ INSTRUCTION(RV32I_BC_STD, rv32i_std): {
 		const auto addr  = reg(fi.rs1) + fi.signed_imm();
 		machine().memory.template write<uint64_t>(addr, reg(fi.rs2));
 		NEXT_INSTR();
-	}
+	} else goto execute_invalid;
 }
 INSTRUCTION(RV32I_BC_BEQ, rv32i_beq): {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -804,16 +801,16 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function): {
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 	default:
-		this->trigger_exception(ILLEGAL_OPCODE);
+		this->trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 		__builtin_unreachable();
 	} // switch case
 } // while loop
 
-#else
-	execute_invalid:
-		this->trigger_exception(ILLEGAL_OPCODE);
-		__builtin_unreachable();
 #endif
+
+execute_invalid:
+	this->trigger_exception(ILLEGAL_OPCODE, decoder->instr);
+	__builtin_unreachable();
 
 check_jump: {
 	if (UNLIKELY(counter.overflowed())) {
