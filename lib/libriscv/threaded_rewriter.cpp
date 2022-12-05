@@ -1,6 +1,7 @@
+#include "decoded_exec_segment.hpp"
+
 #include "machine.hpp"
 #include "threaded_bytecodes.hpp"
-
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvc.hpp"
@@ -8,11 +9,11 @@
 namespace riscv
 {
 	template <int W> RISCV_INTERNAL
-	size_t CPU<W>::threaded_rewrite(size_t bytecode, address_t pc, rv32i_instruction& instr)
+	size_t DecodedExecuteSegment<W>::threaded_rewrite(
+		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr)
 	{
 		static constexpr unsigned PCAL = compressed_enabled ? 2 : 4;
 		const auto original = instr;
-		(void) pc;
 
 		switch (bytecode)
 		{
@@ -48,6 +49,13 @@ namespace riscv
 			case RV32I_BC_BGE:
 			case RV32I_BC_BLTU:
 			case RV32I_BC_BGEU: {
+				const auto addr = pc + original.Btype.signed_imm();
+				if (!this->is_within(addr))
+				{
+					// Use slow-path for out-of-bounds branches
+					return RV32I_BC_FUNCTION;
+				}
+
 				FasterItype rewritten;
 				rewritten.rs1 = original.Btype.rs1;
 				rewritten.rs2 = original.Btype.rs2;
@@ -174,7 +182,4 @@ namespace riscv
 		return bytecode;
 	}
 
-	template struct CPU<4>;
-	template struct CPU<8>;
-	template struct CPU<16>;
 } // riscv

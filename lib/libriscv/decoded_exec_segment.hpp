@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include "types.hpp"
 
 namespace riscv
 {
@@ -40,6 +41,8 @@ namespace riscv
 		bool empty() const noexcept { return m_exec_pagedata_size == 0; }
 
 		DecodedExecuteSegment(address_t pbase, size_t len, address_t vaddr, size_t exlen);
+
+		size_t threaded_rewrite(size_t bytecode, address_t pc, rv32i_instruction& instr);
 
 	private:
 		address_t m_vaddr_begin;

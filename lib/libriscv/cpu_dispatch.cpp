@@ -54,12 +54,14 @@ namespace riscv
 	else                              \
 		decoder += 1;                 \
 	goto continue_block;
-#define PERFORM_BRANCH()            \
-	pc += instr.Btype.signed_imm(); \
-	goto check_jump;
-#define PERFORM_FAST_BRANCH() \
-	pc += fi.signed_imm(); \
-	goto check_jump;
+#define PERFORM_BRANCH()                \
+	pc += fi.signed_imm();              \
+	if (UNLIKELY(counter.overflowed())) \
+	{                                   \
+		registers().pc = pc;            \
+		return;                         \
+	}                                   \
+	goto continue_segment;
 
 template <int W> __attribute__((hot))
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
@@ -275,42 +277,42 @@ INSTRUCTION(RV32I_BC_STD, rv32i_std): {
 INSTRUCTION(RV32I_BC_BEQ, rv32i_beq): {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (reg(fi.rs1) == reg(fi.rs2)) {
-		PERFORM_FAST_BRANCH();
+		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BNE, rv32i_bne): {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (reg(fi.rs1) != reg(fi.rs2)) {
-		PERFORM_FAST_BRANCH();
+		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BLT, rv32i_blt): {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if ((saddr_t)reg(fi.rs1) < (saddr_t)reg(fi.rs2)) {
-		PERFORM_FAST_BRANCH();
+		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BGE, rv32i_bge): {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if ((saddr_t)reg(fi.rs1) >= (saddr_t)reg(fi.rs2)) {
-		PERFORM_FAST_BRANCH();
+		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BLTU, rv32i_bltu): {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (reg(fi.rs1) < reg(fi.rs2)) {
-		PERFORM_FAST_BRANCH();
+		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BGEU, rv32i_bgeu): {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (reg(fi.rs1) >= reg(fi.rs2)) {
-		PERFORM_FAST_BRANCH();
+		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }

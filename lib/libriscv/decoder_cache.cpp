@@ -3,6 +3,7 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvc.hpp"
+#include "threaded_rewriter.cpp"
 
 namespace riscv
 {
@@ -285,7 +286,7 @@ namespace riscv
 			// Cache the (modified) instruction bits
 			auto bytecode = CPU<W>::computed_index_for(instruction);
 			// Threaded rewrites are **always** enabled
-			bytecode = machine().cpu.threaded_rewrite(bytecode, dst, rewritten);
+			bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
 			entry.set_bytecode(bytecode);
 			entry.instr = rewritten.whole;
 

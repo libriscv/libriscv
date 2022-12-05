@@ -92,7 +92,6 @@ namespace riscv
 		static const instruction_t& decode(format_t);
 		// Decode instruction bits into bytecode
 		static size_t computed_index_for(format_t bits);
-		static size_t threaded_rewrite(size_t code, address_t pc, format_t &);
 
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;

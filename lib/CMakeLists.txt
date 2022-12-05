@@ -47,7 +47,6 @@ set (SOURCES
 		libriscv/rv64i.cpp
 		libriscv/rv128i.cpp
 		libriscv/serialize.cpp
-		libriscv/threaded_rewriter.cpp
 		libriscv/util/crc32c.cpp
 	)
 if (WIN32 OR MINGW_TOOLCHAIN)
