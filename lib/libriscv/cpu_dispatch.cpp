@@ -18,6 +18,25 @@ namespace riscv
 	auto instr = decoder->view_instr();
 #define VIEW_INSTR_AS(name, x) \
 	auto name = decoder->template view_instr<x>();
+#define PROCESS_BLOCK()                                  \
+	if constexpr (compressed_enabled)                    \
+	{                                                    \
+		pc += decoder->idxend * 2;                       \
+		counter.increment_counter(decoder->instr_count); \
+	}                                                    \
+	else                                                 \
+	{                                                    \
+		unsigned count = decoder->idxend;                \
+		pc += count * 4;                                 \
+		counter.increment_counter(count + 1);            \
+	}
+
+#define PERFORM_BRANCH()            \
+	pc += instr.Btype.signed_imm(); \
+	goto check_jump;
+#define PERFORM_FAST_BRANCH() \
+	pc += fi.signed_imm();    \
+	goto check_jump;
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 
@@ -30,6 +49,14 @@ namespace riscv
 	break;
 #define NEXT_C_INSTR()                \
 	decoder += 1;                     \
+	break;
+#define NEXT_BLOCK(len)               \
+	pc += len;                        \
+	if constexpr (compressed_enabled) \
+		decoder += 2;                 \
+	else                              \
+		decoder += 1;                 \
+	PROCESS_BLOCK();                  \
 	break;
 
 #else
@@ -44,22 +71,16 @@ namespace riscv
 #define NEXT_C_INSTR() \
 	decoder += 1;      \
 	goto *computed_opcode[decoder->get_bytecode()];
-
-#endif // Dispatch mode
-
 #define NEXT_BLOCK(len)               \
 	pc += len;                        \
 	if constexpr (compressed_enabled) \
 		decoder += 2;                 \
 	else                              \
 		decoder += 1;                 \
-	goto continue_block;
-#define PERFORM_BRANCH()            \
-	pc += instr.Btype.signed_imm(); \
-	goto check_jump;
-#define PERFORM_FAST_BRANCH() \
-	pc += fi.signed_imm(); \
-	goto check_jump;
+	PROCESS_BLOCK();                  \
+	goto *computed_opcode[decoder->get_bytecode()];
+
+#endif // Dispatch mode
 
 template <int W> __attribute__((hot))
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
@@ -191,15 +212,8 @@ restart_sim:
 continue_segment:
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 
-continue_block:
-	if constexpr (compressed_enabled) {
-		pc += decoder->idxend * 2;
-		counter.increment_counter(decoder->instr_count);
-	} else {
-		unsigned count = decoder->idxend;
-		pc += count * 4;
-		counter.increment_counter(count + 1);
-	}
+	// Process the first block and start
+	PROCESS_BLOCK();
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 
@@ -811,6 +825,19 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function): {
 		__builtin_unreachable();
 #endif
 
+check_unaligned_jump:
+	if constexpr (!compressed_enabled) {
+		if (UNLIKELY(pc & 0x3)) {
+			registers().pc = pc;
+			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
+		}
+	} else {
+		if (UNLIKELY(pc & 0x1)) {
+			registers().pc = pc;
+			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
+		}
+	}
+
 check_jump: {
 	if (UNLIKELY(counter.overflowed())) {
 		registers().pc = pc;
@@ -830,20 +857,6 @@ check_jump: {
 	}
 	goto continue_segment;
 }
-check_unaligned_jump:
-	if constexpr (!compressed_enabled) {
-		if (UNLIKELY(pc & 0x3)) {
-			registers().pc = pc;
-			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
-		}
-	} else {
-		if (UNLIKELY(pc & 0x1)) {
-			registers().pc = pc;
-			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
-		}
-	}
-	goto check_jump;
-
 } // CPU::simulate_XXX()
 
 } // riscv
