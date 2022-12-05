@@ -401,6 +401,8 @@ namespace riscv
 		// segment is already active, but this should also be OK.
 		if (!m_exec.empty()) {
 			machine().cpu.set_execute_segment(&m_exec[0]);
+		} else {
+			machine().cpu.set_execute_segment(nullptr);
 		}
 	}
 
