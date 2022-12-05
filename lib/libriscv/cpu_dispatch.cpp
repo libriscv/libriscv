@@ -506,11 +506,11 @@ INSTRUCTION(RV32I_BC_OP_SH3ADD, rv32i_op_sh3add): {
 INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall): {
 	// Make the current PC visible
 	this->registers().pc = pc;
-	// Make the instruction counter visible
+	// Make the instruction counter(s) visible
 	counter.apply();
 	// Invoke system call
 	machine().system_call(this->reg(REG_ECALL));
-	// Restore counter
+	// Restore counter(s)
 	counter.retrieve();
 	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
 	{
