@@ -243,9 +243,7 @@ namespace riscv
 		page_write_cb_t m_page_write_handler = default_page_write;
 		page_readf_cb_t m_page_readf_handler = default_page_read;
 
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		MemoryArea m_ropages;
-#endif
 
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;

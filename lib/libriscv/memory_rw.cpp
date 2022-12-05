@@ -24,11 +24,11 @@ namespace riscv
 				return page;
 			}
 		} else {
-		#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
+
 			if (UNLIKELY(m_ropages.contains(pageno))) {
 				this->protection_fault(pageno * Page::size());
 			}
-		#endif
+
 			// Handler must produce a new page, or throw
 			Page& page = m_page_fault_handler(*this, pageno, init);
 			if (LIKELY(page.attr.write)) {

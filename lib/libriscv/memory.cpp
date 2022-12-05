@@ -61,12 +61,10 @@ namespace riscv
 	Memory<W>::~Memory()
 	{
 		this->clear_all_pages();
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		// only the original machine owns rodata range
 		if (!this->m_original_machine) {
 			m_ropages.pages.release();
 		}
-#endif
 #ifdef RISCV_BINARY_TRANSLATION
 		if (m_bintr_dl)
 			dlclose(m_bintr_dl);
@@ -154,14 +152,12 @@ namespace riscv
 			}
 		}
 
-# ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		if (attr.read && !attr.write && m_ropages.end == 0) {
 			// If the serialization fails, we will fallback to memcpy
 			// with set_page_attr, like normal.
 			if (serialize_pages(m_ropages, hdr->p_vaddr, src, len, attr))
 				return;
 		}
-# endif
 
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
@@ -209,7 +205,6 @@ namespace riscv
 	bool Memory<W>::serialize_pages(MemoryArea& area,
 		address_t addr, const char* src, size_t size, PageAttributes attr)
 	{
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		static constexpr address_t PSIZEMASK = Page::size()-1;
 		// It is not an optimization to store 1-2 pages
 		if (size < 2*Page::size()) {
@@ -259,7 +254,6 @@ namespace riscv
 				area.pages[i].m_page.reset((PageData*) &src[offset]);
 			}
 		}
-#endif
 		return true;
 	}
 
@@ -395,11 +389,10 @@ namespace riscv
 
 		// TODO: Set callback that can loan execute segments from master
 
-#ifdef RISCV_RODATA_SEGMENT_IS_SHARED
 		this->m_ropages.begin = master.memory.m_ropages.begin;
 		this->m_ropages.end   = master.memory.m_ropages.end;
 		this->m_ropages.pages.reset(master.memory.m_ropages.pages.get());
-#endif
+
 		// invalidate all cached pages, because references are invalidated
 		this->invalidate_reset_cache();
 	}
