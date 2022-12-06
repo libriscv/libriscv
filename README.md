@@ -20,6 +20,10 @@ Instruction counting is used to limit the time spent executing code and can be u
 
 The virtual address space is implemented using pages, which means you can copy code into memory, make it executable, and then jump to it. It should Just Work. It also makes it possible to run more complex language runtimes like Go.
 
+## Embedding the emulator in a project
+
+See [example project](/examples/embed)
+
 ## Installing a RISC-V GCC compiler
 
 On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler for running Linux programs with a one-liner:
