@@ -14,6 +14,7 @@
 
 namespace riscv
 {
+	static constexpr bool VERBOSE_JUMPS = false;
 #define VIEW_INSTR() \
 	auto instr = decoder->view_instr();
 #define VIEW_INSTR_AS(name, x) \
@@ -55,6 +56,7 @@ namespace riscv
 		decoder += 1;                 \
 	goto continue_block;
 #define PERFORM_BRANCH()                \
+	if constexpr (VERBOSE_JUMPS) printf("Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
 	pc += fi.signed_imm();              \
 	if (UNLIKELY(counter.overflowed())) \
 		goto check_jump;                \
@@ -193,7 +195,7 @@ continue_segment:
 continue_block:
 	if constexpr (compressed_enabled) {
 		pc += decoder->idxend * 2;
-		counter.increment_counter(decoder->instr_count);
+		counter.increment_counter(decoder->idxend + 1);
 	} else {
 		unsigned count = decoder->idxend;
 		pc += count * 4;
@@ -381,12 +383,18 @@ INSTRUCTION(RV32I_BC_JAL, rv32i_jal): {
 	VIEW_INSTR_AS(fi, FasterJtype);
 	if (fi.rd != 0)
 		reg(fi.rd) = pc + 4;
+	if constexpr (VERBOSE_JUMPS) {
+		printf("JAL PC 0x%lX => 0x%lX\n", pc, pc+fi.offset);
+	}
 	pc += fi.offset;
 	goto check_jump;
 }
 INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal): {
 	VIEW_INSTR();
 	pc = instr.whole;
+	if constexpr (VERBOSE_JUMPS) {
+		printf("FAST_JAL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
+	}
 	goto check_jump;
 }
 INSTRUCTION(RV32I_BC_JALR, rv32i_jalr): {
@@ -397,6 +405,9 @@ INSTRUCTION(RV32I_BC_JALR, rv32i_jalr): {
 	// Link *next* instruction (rd = PC + 4)
 	if (instr.Itype.rd != 0) {
 		reg(instr.Itype.rd) = pc + 4;
+	}
+	if constexpr (VERBOSE_JUMPS) {
+		printf("JALR PC 0x%lX => 0x%lX\n", pc, address);
 	}
 	pc = address;
 	goto check_unaligned_jump;
@@ -419,6 +430,10 @@ INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jfunc): {
 	registers().pc = pc;
 	auto handler = decoder->get_handler();
 	handler(*this, instr);
+	if constexpr (VERBOSE_JUMPS) {
+		printf("Compressed jump from 0x%lX to 0x%lX\n",
+			pc, registers().pc + 2);
+	}
 	pc = registers().pc + 2;
 	goto check_unaligned_jump;
 }

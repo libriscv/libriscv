@@ -17,10 +17,6 @@ struct DecoderData {
 	uint16_t m_handler = 0x0;
 #endif
 	uint16_t idxend;
-#if defined(RISCV_EXT_COMPRESSED)
-	// Only used by C-extension decoding:
-	uint16_t instr_count;
-#endif
 	uint32_t instr;
 
 	template <typename T = rv32i_instruction>

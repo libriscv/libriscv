@@ -130,7 +130,7 @@ namespace riscv
 					// Subtract block PC in order to get length,
 					// then store half
 					entry->idxend = (pc - last_length - block_pc) / 2;
-					entry->instr_count = data.size() - i;
+					//entry->instr_count = data.size() - i;
 
 					block_pc += length;
 					datalength -= length / 2;

@@ -51,10 +51,8 @@ namespace riscv
 			case RV32I_BC_BGEU: {
 				const int32_t imm = original.Btype.signed_imm();
 				const auto addr = pc + imm;
-				// The check for imm == 0x0 prevents jumps that end up
-				// as costing 0 instructions to perform, which can form
-				// an infinite loop that is not stoppable.
-				if (imm == 0x0 || !this->is_within(addr, 4) || (addr % PCAL) != 0)
+
+				if (!this->is_within(addr, 4) || (addr % PCAL) != 0)
 				{
 					// Use invalid instruction for out-of-bounds branches
 					// or misaligned jumps. It is strictly a cheat, but
@@ -69,6 +67,7 @@ namespace riscv
 				rewritten.imm = original.Btype.signed_imm();
 
 				instr.whole = rewritten.whole;
+
 				return bytecode;
 			}
 			case RV32I_BC_OP_ADD:
