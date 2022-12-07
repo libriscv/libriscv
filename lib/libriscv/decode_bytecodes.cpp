@@ -307,7 +307,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			return RV32I_BC_FUNCTION;
 #endif
 		default:
-			return RV32I_BC_INVALID;
+			// Unknown instructions can be custom-handled
+			return RV32I_BC_FUNCTION;
 	}
 } // computed_index_for()
 

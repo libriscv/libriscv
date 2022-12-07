@@ -35,6 +35,12 @@ namespace riscv
 #undef DECODER
 	}
 
+	template <>
+	const Instruction<8>& CPU<8>::get_unimplemented_instruction() noexcept
+	{
+		return DECODED_INSTR(UNIMPLEMENTED);
+	}
+
 	template <> __attribute__((cold))
 	std::string Registers<8>::to_string() const
 	{

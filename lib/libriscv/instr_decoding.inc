@@ -572,4 +572,9 @@
 		if (instruction.whole == 0x0) {
 			DECODER(DECODED_INSTR(ILLEGAL));
 		}
-		DECODER(DECODED_INSTR(UNIMPLEMENTED));
+
+		if (on_unimplemented_instruction != nullptr) {
+			DECODER(CPU::on_unimplemented_instruction(instruction));
+		} else {
+			DECODER(DECODED_COMPR(UNIMPLEMENTED));
+		}

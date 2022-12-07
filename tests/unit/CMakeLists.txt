@@ -25,6 +25,7 @@ endfunction()
 
 add_unit_test(basic    basic.cpp)
 add_unit_test(checksum checksum.cpp)
+add_unit_test(custom   custom.cpp)
 add_unit_test(examples examples.cpp)
 add_unit_test(heap     heaptest.cpp)
 add_unit_test(fptest   fp_testsuite.cpp)

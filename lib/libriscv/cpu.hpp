@@ -116,6 +116,11 @@ namespace riscv
 		// Override how to produce the next active execute segment
 		void set_override_new_execute_segment(override_execute_segment_t func) { m_override_exec = func; }
 
+		// Override how to handle unknown instructions, so that you may implement your own
+		static inline std::function<const instruction_t& (format_t)> on_unimplemented_instruction;
+		// Retrieve default handler for unimplemented instructions (can be returned in on_unimplemented_instruction)
+		static const instruction_t& get_unimplemented_instruction() noexcept;
+
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
