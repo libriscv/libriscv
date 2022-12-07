@@ -190,3 +190,47 @@ TEST_CASE("Calculate fib(50) slowly", "[Compute]")
 
 	REQUIRE(machine.return_value<long>() == 12586269025L);
 }
+
+TEST_CASE("Count using EBREAK", "[Compute]")
+{
+	const auto binary = build_and_load(R"M(
+	#include <stdlib.h>
+	long fib(long n, long acc, long prev)
+	{
+		__asm__("ebreak");
+		if (n < 1)
+			return acc;
+		else
+			return fib(n - 1, prev + acc, acc);
+	}
+	long main(int argc, char** argv) {
+		const long n = atoi(argv[1]);
+		return fib(n, 0, 1);
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary };
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"basic", "50"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	// Count the number of times EBREAK occurs
+	static struct {
+		unsigned value = 0;
+	} counter;
+
+	machine.install_syscall_handler(RISCV_SYSCALL_EBREAK_NR,
+	[] (auto& machine) {
+		counter.value += 1;
+		// EBREAK cannot (currently) stop because it is not
+		// treated like a regular system call. Although we
+		// can still throw an exception in order to end.
+		if (counter.value == 25)
+			machine.stop();
+	});
+
+	machine.simulate();
+
+	REQUIRE(counter.value == 51);
+	REQUIRE(machine.return_value<long>() == 12586269025L);
+}
