@@ -78,6 +78,8 @@ TEST_CASE("Verify program arguments and environment", "[Runtime]")
 			return -1;
 		if (strcmp(argv[1], "this is a test") != 0)
 			return -1;
+		if (strcmp(getenv("USER"), "root") != 0)
+			return -1;
 		return 666;
 	})M");
 
