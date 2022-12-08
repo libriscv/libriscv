@@ -14,6 +14,7 @@ jobs:
 
     - name: Install dependencies
       run: |
+        sudo apt update
         sudo apt install -y gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
 
     - name: Configure emulator
