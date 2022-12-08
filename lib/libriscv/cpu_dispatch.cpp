@@ -61,11 +61,16 @@ namespace riscv
 	if (UNLIKELY(counter.overflowed())) \
 		goto check_jump;                \
 	goto continue_segment;
+#define PERFORM_FORWARD_BRANCH()        \
+	if constexpr (VERBOSE_JUMPS) printf("Fw.Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
+	pc += fi.signed_imm();              \
+	goto continue_segment;
 
 template <int W> __attribute__((hot))
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 {
 	static constexpr uint32_t XLEN = W * 8;
+	static constexpr bool ENABLE_FAST_BRANCH = true;
 	using addr_t  = address_type<W>;
 	using saddr_t = std::make_signed_t<addr_t>;
 
@@ -105,6 +110,8 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32I_BC_BGE]     = &&rv32i_bge,
 		[RV32I_BC_BLTU]    = &&rv32i_bltu,
 		[RV32I_BC_BGEU]    = &&rv32i_bgeu,
+		[RV32I_BC_BEQ_FW]  = &&rv32i_beq_fw,
+		[RV32I_BC_BNE_FW]  = &&rv32i_bne_fw,
 
 		[RV32I_BC_JAL]     = &&rv32i_jal,
 		[RV32I_BC_JALR]    = &&rv32i_jalr,
@@ -193,14 +200,8 @@ continue_segment:
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 
 continue_block:
-	if constexpr (compressed_enabled) {
-		pc += decoder->idxend * 2;
-		counter.increment_counter(decoder->idxend + 1);
-	} else {
-		unsigned count = decoder->idxend;
-		pc += count * 4;
-		counter.increment_counter(count + 1);
-	}
+	pc += decoder->idxend * (compressed_enabled ? 2 : 4);
+	counter.increment_counter(decoder->idxend + 1);
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 
@@ -283,7 +284,40 @@ INSTRUCTION(RV32I_BC_BEQ, rv32i_beq): {
 INSTRUCTION(RV32I_BC_BNE, rv32i_bne): {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (reg(fi.rs1) != reg(fi.rs2)) {
-		PERFORM_BRANCH();
+		if constexpr (ENABLE_FAST_BRANCH) {
+			pc += fi.signed_imm();
+			// XXX: This is a hand-written fast-path
+			// Intentionally put everything after branch
+			// TODO: Macro-ize the compressed_enabled constants
+			if (LIKELY(!counter.overflowed())) {
+				decoder += fi.signed_imm() / (compressed_enabled ? 2 : 4);
+				unsigned count = decoder->idxend;
+				counter.increment_counter(count + 1);
+				pc += count * (compressed_enabled ? 2 : 4);
+#ifdef DISPATCH_MODE_SWITCH_BASED
+				break;
+#else
+				goto *computed_opcode[decoder->get_bytecode()];
+#endif
+			}
+		} else {
+			PERFORM_BRANCH();
+		}
+		goto check_jump;
+	}
+	NEXT_BLOCK(4);
+}
+INSTRUCTION(RV32I_BC_BEQ_FW, rv32i_beq_fw): {
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (reg(fi.rs1) == reg(fi.rs2)) {
+		PERFORM_FORWARD_BRANCH();
+	}
+	NEXT_BLOCK(4);
+}
+INSTRUCTION(RV32I_BC_BNE_FW, rv32i_bne_fw): {
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (reg(fi.rs1) != reg(fi.rs2)) {
+		PERFORM_FORWARD_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }

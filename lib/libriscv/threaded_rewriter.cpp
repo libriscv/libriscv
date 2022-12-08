@@ -68,6 +68,12 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 
+				// Forward branches can skip instr count check
+				if (imm > 0 && bytecode == RV32I_BC_BEQ)
+					return RV32I_BC_BEQ_FW;
+				if (imm > 0 && bytecode == RV32I_BC_BNE)
+					return RV32I_BC_BNE_FW;
+
 				return bytecode;
 			}
 			case RV32I_BC_OP_ADD:
