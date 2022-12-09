@@ -30,7 +30,7 @@ TEST_CASE("Main example", "[Examples]")
 	Machine<RISCV64>::install_syscall_handler(93,
 		[] (Machine<RISCV64>& machine) {
 			auto* state = machine.get_userdata<State> ();
-			state->code = machine.sysarg(0);
+			state->code = machine.sysarg <int> (0);
 			machine.stop();
 		});
 	Machine<RISCV64>::install_syscall_handler(94,
@@ -61,7 +61,7 @@ TEST_CASE("One instruction at a time", "[Examples]")
 	machine.set_max_instructions(1'000'000UL);
 
 	while (!machine.stopped()) {
-		auto &cpu = machine.cpu;
+		auto& cpu = machine.cpu;
 		// Read next instruction
 		auto instruction = cpu.read_next_instruction();
 		// Print the instruction to terminal
