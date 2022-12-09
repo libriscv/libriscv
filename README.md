@@ -135,7 +135,7 @@ int main(int /*argc*/, const char** /*argv*/)
 	// Install our own `exit` system call handler (for all 64-bit machines).
 	Machine<RISCV64>::install_syscall_handler(93, // exit
 		[] (Machine<RISCV64>& machine) {
-			const int code = machine.return_value <int> ();
+			const int code = machine.sysarg <int> (0);
 			printf(">>> Program exited, exit code = %d\n", code);
 			machine.stop();
 		});
@@ -169,7 +169,7 @@ You can limit the amount of (virtual) memory the machine can use like so:
 ```
 You can find the `MachineOptions` structure in [common.hpp](/lib/libriscv/common.hpp).
 
-You can find details on the Linux system call ABI online as well as in [the docs](/docs/SYSCALLS.md). You can use these examples to handle system calls in your RISC-V programs. The system calls is emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
+You can find details on the Linux system call ABI online as well as in [the docs](/docs/SYSCALLS.md). You can use these examples to handle system calls in your RISC-V programs. The system calls emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
 
 ## Handling instructions one by one
 
