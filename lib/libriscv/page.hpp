@@ -149,6 +149,7 @@ struct Page
 	void set_trap(mmio_cb_t newtrap) const;
 	void trap(uint32_t offset, int mode, int64_t value) const;
 	static int trap_mode(int mode) noexcept { return mode & 0xF000; }
+	static int trap_size(int mode) noexcept { return mode & 0x0FFF; }
 
 	mutable mmio_cb_t m_trap = nullptr;
 };

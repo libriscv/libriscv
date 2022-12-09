@@ -52,6 +52,7 @@ void Memory<W>::write(address_t address, T value)
 	} else if constexpr (memory_traps_enabled && sizeof(T) <= 16) {
 		if (UNLIKELY(page.has_trap())) {
 			page.trap(offset, sizeof(T) | TRAP_WRITE, value);
+			return;
 		}
 	}
 	page.page().template aligned_write<T>(offset, value);

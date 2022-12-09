@@ -13,11 +13,11 @@ TEST_CASE("Read and write traps", "[Memory Traps]")
 		bool output_is_hello_world = false;
 	} state;
 	const auto binary = build_and_load(R"M(
-	extern void hello_write() {
-		*(long *)0xF0000000 = 1234;
+	extern void hello_write(long value) {
+		*(long *)0xF0000010 = value;
 	}
 	extern long hello_read() {
-		return *(long *)0xF0000000;
+		return *(long *)0xF0000010;
 	}
 
 	int main() {
@@ -42,19 +42,47 @@ TEST_CASE("Read and write traps", "[Memory Traps]")
 	bool trapped_write = false;
 	bool trapped_read  = false;
 
+	static constexpr uint32_t mmio_offset = 0x10;
+	long mmio_value = 0;
+
 	auto& trap_page =
 		machine.memory.create_writable_pageno(Memory<RISCV64>::page_number(TRAP_PAGE));
 	trap_page.set_trap(
-		[&] (auto&, uint32_t /*offset*/, int mode, int64_t value) {
+		[&] (auto& page, uint32_t offset, int mode, int64_t value)
+		{
+			const size_t size = Page::trap_size(mode);
+
+			// Goal: Store a value written to a special offset.
+			// Then read back the stored value when read.
 			switch (Page::trap_mode(mode))
 			{
 			case TRAP_WRITE:
-				REQUIRE(value == 1234);
-				trapped_write = true;
+				if (offset == mmio_offset)
+				{
+					REQUIRE(value == 1234);
+					REQUIRE(size == 8);
+					trapped_write = true;
+					// Store the value without writing it to the page.
+					mmio_value = value;
+				}
+				// A trapped page cannot automatically be written to
+				// We have to do the write ourselves. Eg.
+				//if (size == 8)
+				//	page.page().template aligned_write<uint64_t>(offset, value);
+				//else if (size == 4)
+				//	page.page().template aligned_write<uint32_t>(offset, value);
 				break;
 			case TRAP_READ:
-				REQUIRE(value == 0);
-				trapped_read = true;
+				if (offset == mmio_offset)
+				{
+					REQUIRE(value == 0);
+					trapped_read = true;
+					// We cannot return the read value here, but we can modify the
+					// page data here, and instead we can control the value indirectly.
+					// This lets us decide what to return dynamically.
+					// Note how we write the 'mmio_value'.
+					page.page().template aligned_write<uint64_t>(offset, mmio_value);
+				}
 				break;
 			}
 		});
@@ -66,13 +94,17 @@ TEST_CASE("Read and write traps", "[Memory Traps]")
 	REQUIRE(trapped_read  == false);
 	REQUIRE(trapped_write == false);
 
-	machine.vmcall("hello_write");
+	// Write 1234 to the trapped page, should cause TRAP_WRITE
+	machine.vmcall("hello_write", 1234);
 	REQUIRE(trapped_write == true);
 	REQUIRE(trapped_read  == false);
+	trapped_write = false;
 
+	// Read from the trapped page, should cause TRAP_READ
 	machine.vmcall("hello_read");
-	REQUIRE(trapped_write == true);
+	REQUIRE(trapped_write == false);
 	REQUIRE(trapped_read  == true);
+	REQUIRE(machine.return_value() == 1234);
 }
 
 TEST_CASE("Execute traps", "[Memory Traps]")
@@ -123,7 +155,6 @@ TEST_CASE("Execute traps", "[Memory Traps]")
 				break;
 			default:
 				throw std::runtime_error("Nope");
-				break;
 			}
 		});
 
