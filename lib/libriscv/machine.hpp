@@ -150,18 +150,6 @@ namespace riscv
 		template<typename... Args> constexpr
 		void setup_call(address_t call_addr, Args&&... args);
 
-		// multiprocess() executes a single function with many machines,
-		// each of which uses memory pages from this machine. Using this
-		// we can partition workloads and work on them concurrently.
-		bool is_multiprocessing() const noexcept;
-		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize,
-			std::function<void(Machine&)> per_machine_setup_cb = nullptr);
-		uint32_t multiprocess_wait();
-
-		// Returns true if this machine is forked from another, and thus
-		// dependent on the original machine to function properly.
-		bool is_forked() const noexcept { return memory.is_forked(); }
-
 		// Returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(const char* name) const;
 		address_t address_of(const std::string& name) const;
@@ -206,6 +194,18 @@ namespace riscv
 		static inline void (*on_unhandled_csr) (Machine&, int, int, int)
 			= [] (Machine<W>&, int, int, int) {};
 
+		// multiprocess() executes a single function with many machines,
+		// each of which uses memory pages from this machine. Using this
+		// we can partition workloads and work on them concurrently.
+		bool is_multiprocessing() const noexcept;
+		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize,
+			std::function<void(Machine&)> per_machine_setup_cb = nullptr);
+		uint32_t multiprocess_wait();
+
+		// Returns true if this machine is forked from another, and thus
+		// dependent on the original machine to function properly.
+		bool is_forked() const noexcept { return memory.is_forked(); }
+
 		// Optional custom native-performance arena
 		const Arena& arena() const;
 		Arena& arena();
@@ -235,10 +235,7 @@ namespace riscv
 		// Multiprocessing structure, lazily created
 		Multiprocessing<W>& smp(unsigned workers = 4);
 		// Signal structure, lazily created
-		Signals<W>& signals() {
-			if (m_signals == nullptr) m_signals.reset(new Signals<W>);
-			return *m_signals;
-		}
+		Signals<W>& signals();
 		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
 
 		// Realign the stack pointer, to make sure that function calls succeed

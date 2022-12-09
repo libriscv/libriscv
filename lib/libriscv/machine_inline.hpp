@@ -151,35 +151,31 @@ inline void Machine<W>::set_result(Args... args) {
 	}(), ...);
 }
 
-template <int W>
-inline void Machine<W>::ebreak()
+template <int W> inline
+void Machine<W>::ebreak()
 {
-#ifdef RISCV_EBREAK_MEANS_STOP
-	this->stop();
-#else
 	// its simpler and more flexible to just call a user-provided function
 	this->system_call(riscv::SYSCALL_EBREAK);
-#endif
 }
 
-template <int W>
+template <int W> inline
 void Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t len)
 {
 	memory.memcpy_unsafe(dst, buf, len);
 }
 
-template <int W>
+template <int W> inline
 void Machine<W>::copy_from_guest(void* dst, address_t buf, size_t len)
 {
 	memory.memcpy_out(dst, buf, len);
 }
 
-template <int W>
-inline address_type<W> Machine<W>::address_of(const char* name) const {
+template <int W> inline
+address_type<W> Machine<W>::address_of(const char* name) const {
 	return memory.resolve_address(name);
 }
-template <int W>
-inline address_type<W> Machine<W>::address_of(const std::string& name) const {
+template <int W> inline
+address_type<W> Machine<W>::address_of(const std::string& name) const {
 	return memory.resolve_address(name.c_str());
 }
 
@@ -191,37 +187,43 @@ address_type<W> Machine<W>::stack_push(const void* data, size_t length)
 	this->copy_to_guest(sp, data, length);
 	return sp;
 }
-template <int W>
+template <int W> inline
 address_type<W> Machine<W>::stack_push(const std::string& string)
 {
 	return stack_push(string.data(), string.size()+1); /* zero */
 }
 template <int W>
-template <typename T>
+template <typename T> inline
 address_type<W> Machine<W>::stack_push(const T& type)
 {
 	static_assert(std::is_standard_layout_v<T>, "Must be a POD type");
 	return stack_push(&type, sizeof(T));
 }
 
-template <int W>
+template <int W> inline
 void Machine<W>::realign_stack()
 {
 	// the RISC-V calling convention mandates a 16-byte alignment
-	cpu.reg(REG_SP) &= ~(address_t) 0xF;
+	cpu.reg(REG_SP) &= ~address_t{0xF};
 }
 
-template <int W>
+template <int W> inline
 const FileDescriptors& Machine<W>::fds() const
 {
 	if (m_fds != nullptr) return *m_fds;
 	throw MachineException(ILLEGAL_OPERATION, "No access to files or sockets", 0);
 }
-template <int W>
+template <int W> inline
 FileDescriptors& Machine<W>::fds()
 {
 	if (m_fds != nullptr) return *m_fds;
 	throw MachineException(ILLEGAL_OPERATION, "No access to files or sockets", 0);
+}
+
+template <int W> inline
+Signals<W>& Machine<W>::signals() {
+	if (m_signals == nullptr) m_signals.reset(new Signals<W>);
+	return *m_signals;
 }
 
 #include "machine_vmcall.hpp"
