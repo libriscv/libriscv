@@ -8,6 +8,7 @@ namespace riscv
 		RV32I_BC_INVALID = 0,
 		RV32I_BC_ADDI,
 		RV32I_BC_LI,
+		RV32I_BC_MV,
 
 		RV32I_BC_SLLI,
 		RV32I_BC_SLTI,
@@ -128,6 +129,31 @@ namespace riscv
 			uint16_t rd;
 			uint8_t  rs1;
 			uint8_t  rs2;
+		};
+	};
+
+	union FasterImmediate
+	{
+		uint32_t whole;
+
+		struct
+		{
+			uint16_t rd;
+			int16_t  imm;
+		};
+		int32_t signed_imm() const noexcept {
+			return imm;
+		}
+	};
+
+	union FasterMove
+	{
+		uint32_t whole;
+
+		struct
+		{
+			uint16_t rd;
+			uint16_t rs1;
 		};
 	};
 

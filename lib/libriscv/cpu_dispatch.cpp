@@ -79,6 +79,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32I_BC_INVALID] = &&execute_invalid,
 		[RV32I_BC_ADDI]    = &&rv32i_addi,
 		[RV32I_BC_LI]      = &&rv32i_li,
+		[RV32I_BC_MV]      = &&rv32i_mv,
 		[RV32I_BC_SLLI]    = &&rv32i_slli,
 		[RV32I_BC_SLTI]    = &&rv32i_slti,
 		[RV32I_BC_SLTIU]   = &&rv32i_sltiu,
@@ -231,8 +232,13 @@ INSTRUCTION(RV32I_BC_ADDI, rv32i_addi): {
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LI, rv32i_li): {
-	VIEW_INSTR_AS(fi, FasterItype);
-	this->reg(fi.rs1) = fi.signed_imm();
+	VIEW_INSTR_AS(fi, FasterImmediate);
+	this->reg(fi.rd) = fi.signed_imm();
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32I_BC_MV, rv32i_mv): {
+	VIEW_INSTR_AS(fi, FasterMove);
+	this->reg(fi.rd) = this->reg(fi.rs1);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDW, rv32i_ldw): {

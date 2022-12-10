@@ -161,6 +161,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x0:
 				if (instr.Itype.rs1 == 0)
 					return RV32I_BC_LI;
+				else if (instr.Itype.signed_imm() == 0)
+					return RV32I_BC_MV;
 				else
 					return RV32I_BC_ADDI;
 			case 0x1: // SLLI
