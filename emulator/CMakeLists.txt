@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.9.4)
 project(riscv CXX)
 
 option(LTO         "Enable interprocedural optimizations" ON)
-option(NATIVE      "Enable native instructions" ON)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(BOLT        "Enable BOLT" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
@@ -15,9 +14,6 @@ set(SOURCES
 
 if (SANITIZE)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined")
-endif()
-if (NATIVE)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 endif()
 if (GPROF)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg -g -fno-inline")
