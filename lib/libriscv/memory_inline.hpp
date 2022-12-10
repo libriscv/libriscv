@@ -59,9 +59,9 @@ void Memory<W>::write(address_t address, T value)
 }
 
 template <int W>
-inline address_type<W> Memory<W>::resolve_address(const std::string& name) const
+inline address_type<W> Memory<W>::resolve_address(std::string_view name) const
 {
-	auto* sym = resolve_symbol(name.c_str());
+	auto* sym = resolve_symbol(name);
 	return (sym) ? sym->st_value : 0x0;
 }
 

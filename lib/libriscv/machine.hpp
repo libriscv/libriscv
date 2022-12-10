@@ -5,6 +5,7 @@
 #include "posix/filedesc.hpp"
 #include "posix/signals.hpp"
 #include <array>
+#include <string_view>
 
 namespace riscv
 {
@@ -151,8 +152,7 @@ namespace riscv
 		void setup_call(address_t call_addr, Args&&... args);
 
 		// Returns the address of a symbol in the ELF symtab, or zero
-		address_t address_of(const char* name) const;
-		address_t address_of(const std::string& name) const;
+		address_t address_of(std::string_view name) const;
 
 		// Custom user pointer
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }

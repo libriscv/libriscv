@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstring>
 #include <deque>
+#include <string_view>
 #include <unordered_map>
 #include "decoded_exec_segment.hpp"
 #include "util/buffer.hpp" // <string>
@@ -86,7 +87,7 @@ namespace riscv
 		bool is_forked() const noexcept { return !this->m_original_machine; }
 
 		// Symbol table functions
-		address_t resolve_address(const std::string& sym) const;
+		address_t resolve_address(std::string_view sym) const;
 		address_t resolve_section(const char* name) const;
 		// Basic backtraces and symbol lookups
 		struct Callsite {
@@ -216,7 +217,7 @@ namespace riscv
 		}
 		const Shdr* section_by_name(const std::string& name) const;
 		void relocate_section(const char* section_name, const char* symtab);
-		const typename Elf<W>::Sym* resolve_symbol(const char* name) const;
+		const typename Elf<W>::Sym* resolve_symbol(std::string_view name) const;
 		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {
 			if (symidx >= shdr->sh_size / sizeof(typename Elf<W>::Sym))
 				throw MachineException(INVALID_PROGRAM, "ELF Symtab section index overflow");

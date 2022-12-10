@@ -171,12 +171,8 @@ void Machine<W>::copy_from_guest(void* dst, address_t buf, size_t len)
 }
 
 template <int W> inline
-address_type<W> Machine<W>::address_of(const char* name) const {
+address_type<W> Machine<W>::address_of(std::string_view name) const {
 	return memory.resolve_address(name);
-}
-template <int W> inline
-address_type<W> Machine<W>::address_of(const std::string& name) const {
-	return memory.resolve_address(name.c_str());
 }
 
 template <int W>

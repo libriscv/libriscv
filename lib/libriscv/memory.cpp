@@ -435,7 +435,7 @@ namespace riscv
 	}
 
 	template <int W>
-	const typename Elf<W>::Sym* Memory<W>::resolve_symbol(const char* name) const
+	const typename Elf<W>::Sym* Memory<W>::resolve_symbol(std::string_view name) const
 	{
 		if (UNLIKELY(m_binary.empty())) return nullptr;
 		const auto* sym_hdr = section_by_name(".symtab");
@@ -452,7 +452,7 @@ namespace riscv
 		for (size_t i = 0; i < symtab_ents; i++)
 		{
 			const char* symname = &strtab[symtab[i].st_name];
-			if (strcmp(symname, name) == 0) {
+			if (name.compare(symname) == 0) {
 				return &symtab[i];
 			}
 		}
