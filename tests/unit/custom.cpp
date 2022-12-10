@@ -3,6 +3,7 @@
 
 #include <libriscv/machine.hpp>
 #include <libriscv/rv32i_instr.hpp>
+#include <any>
 #include "custom.hpp"
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
@@ -11,12 +12,33 @@ static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 static const std::string cwd {SRCDIR};
 using namespace riscv;
 
+struct InstructionState
+{
+	std::array<std::any, 8> args;
+};
+
 /** The new custom instruction **/
-static const Instruction<RISCV64> custom {
-	[] (auto& cpu, rv32i_instruction instr) {
+static const Instruction<RISCV64> custom_instruction_handler
+{
+	[] (CPU<RISCV64>& cpu, rv32i_instruction instr) {
 		printf("Hello custom instruction World!\n");
 		REQUIRE(instr.opcode() == 0b1010111);
-		cpu.reg(riscv::REG_ARG0) = 0xDEADB33F;
+
+		auto* state = cpu.machine().get_userdata<InstructionState> ();
+		// Argument number
+		const unsigned idx = instr.Itype.rd & 7;
+		// Select type and retrieve value from argument registers
+		switch (instr.Itype.funct3)
+		{
+		case 0x0: // Register value (64-bit unsigned)
+			state->args[idx] = cpu.reg(REG_ARG0 + idx);
+			break;
+		case 0x1: // 64-bit floating point
+			state->args[idx] = cpu.registers().getfl(REG_FA0 + idx).f64;
+			break;
+		default:
+			throw "Implement me";
+		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) {
 		return snprintf(buffer, len, "CUSTOM: 4-byte 0x%X (0x%X)",
@@ -26,47 +48,72 @@ static const Instruction<RISCV64> custom {
 
 TEST_CASE("Custom instruction", "[Custom]")
 {
+	// Build a program that uses a custom instruction to
+	// select and identify a system call argument.
 	const auto binary = build_and_load(R"M(
 int main()
 {
-	__asm__(".word 0b1010111");
+	__asm__("li t0, 1234");           // Load integer in T0
+	__asm__("fcvt.d.w fa1, t0");      // Move integer from T0 to FA1 (64-bit fp)
+	__asm__("li a3, 0xDEADB33F");     // Load integer in A3
+	__asm__("li a7, 500");            // System call number 500
+	__asm__(".word 0b1000011010111"); // Indicate F1 contains a 64-bit fp argument
+	__asm__(".word 0b0000111010111"); // Indicate A3 contains a 64-bit unsigned argument
+	__asm__("ecall");                 // Execute system call
 	__asm__("ret");
 }
 )M");
 
+	// Install the handler for unimplemented instructions, allowing us to
+	// select our custom instruction for a reserved opcode.
 	CPU<RISCV64>::on_unimplemented_instruction =
 	[] (rv32i_instruction instr) -> const Instruction<RISCV64>& {
 		if (instr.opcode() == 0b1010111) {
-			return custom;
+			return custom_instruction_handler;
 		}
 		return CPU<RISCV64>::get_unimplemented_instruction();
 	};
 
+	// Install system call number 500 (used by our program above).
+	static bool syscall_was_called = false;
+	Machine<RISCV64>::install_syscall_handler(500,
+	[] (Machine<RISCV64>& machine) {
+		auto* state = machine.get_userdata<InstructionState> ();
+
+		REQUIRE(std::any_cast<double>(state->args[1]) == 1234.0);
+		REQUIRE(std::any_cast<uint64_t>(state->args[3]) == 0xDEADB33F);
+		syscall_was_called = true;
+	});
+
+	InstructionState state;
+
 	// Normal (fastest) simulation
 	{
 		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.set_userdata(&state);
 		// We need to install Linux system calls for maximum gucciness
 		machine.setup_linux_syscalls();
 		// We need to create a Linux environment for runtimes to work well
 		machine.setup_linux(
-			{"va_exec"},
+			{"custom_instruction"},
 			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 		// Run for at most X instructions before giving up
+		syscall_was_called = false;
 		machine.simulate(MAX_INSTRUCTIONS);
-
-		REQUIRE(machine.return_value() == 0xDEADB33F);
+		REQUIRE(syscall_was_called == true);
 	}
 	// Precise (step-by-step) simulation
 	{
 		riscv::Machine<RISCV64> machine{binary, { .memory_max = MAX_MEMORY }};
+		machine.set_userdata(&state);
 		machine.setup_linux_syscalls();
 		machine.setup_linux(
-			{"va_exec"},
+			{"custom_instruction"},
 			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 		// Verify step-by-step simulation
+		syscall_was_called = false;
 		machine.cpu.simulate_precise(MAX_INSTRUCTIONS);
-
-		REQUIRE(machine.return_value() == 0xDEADB33F);
+		REQUIRE(syscall_was_called == true);
 	}
 }
 
