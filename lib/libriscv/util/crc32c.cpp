@@ -8,9 +8,8 @@ inline bool ____is__aligned(const uint8_t* buffer, const int align) noexcept {
 #include <immintrin.h>
 
 __attribute__ ((target ("sse4.2")))
-uint32_t crc32c_sse42(const uint8_t* buffer, size_t len)
+uint32_t crc32c_sse42(uint32_t hash, const uint8_t* buffer, size_t len)
 {
-	uint32_t hash = 0xFFFFFFFF;
 	// 8-bits until 4-byte aligned
 	while (!____is__aligned(buffer, 4) && len > 0) {
 		hash = _mm_crc32_u8(hash, *buffer); buffer++; len--;
@@ -36,20 +35,31 @@ uint32_t crc32c_sse42(const uint8_t* buffer, size_t len)
 	if (len & 1) {
 		hash = _mm_crc32_u8(hash, *buffer);
 	}
-	return hash ^ 0xFFFFFFFF;
+	return hash;
 }
 #endif
 
 namespace riscv
 {
+	uint32_t crc32c(uint32_t crc, const void* data, size_t len)
+	{
+	#ifdef __x86_64__
+		if (__builtin_cpu_supports ("sse4.2"))
+		{
+			return crc32c_sse42(crc, (const uint8_t*)data, len);
+		}
+	#endif
+		return crc32<0x1EDC6F41>(crc, data, len);
+	}
+
 	uint32_t crc32c(const void* data, size_t len)
 	{
 	#ifdef __x86_64__
 		if (__builtin_cpu_supports ("sse4.2"))
 		{
-			return crc32c_sse42((const uint8_t*)data, len);
+			return ~crc32c_sse42(0xFFFFFFFF, (const uint8_t *)data, len);
 		}
 	#endif
-		return crc32<0x1EDC6F41>(data, len);
+		return ~crc32<0x1EDC6F41>(0xFFFFFFFF, data, len);
 	}
 }
