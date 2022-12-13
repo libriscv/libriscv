@@ -38,6 +38,9 @@ namespace riscv
 		uint64_t max() const noexcept {
 			return m_max;
 		}
+		void stop() noexcept {
+			m_max = 0; // This stops the machine
+		}
 		void set_counter(uint64_t value) {
 			m_counter = value;
 		}

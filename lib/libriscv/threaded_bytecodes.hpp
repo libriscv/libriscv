@@ -79,7 +79,6 @@ namespace riscv
 #endif
 
 		RV32I_BC_SYSCALL,
-		RV32I_BC_SYSTEM,
 		RV32I_BC_STOP,
 		RV32I_BC_NOP,
 

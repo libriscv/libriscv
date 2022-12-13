@@ -52,6 +52,16 @@ namespace riscv
 		}
 	}
 
+	static bool is_stopping_system(rv32i_instruction instr) {
+		if (instr.opcode() == RV32I_SYSTEM) {
+			return instr.Itype.funct3 == 0
+				&& (instr.Itype.imm == 0  // System call
+					|| instr.Itype.imm == 0x105   // WFI
+					|| instr.Itype.imm == 0x7ff); // STOP
+		}
+		return false;
+	}
+
 	template <int W>
 	static void realize_fastsim(
 		address_type<W> base_pc, address_type<W> last_pc,
@@ -98,7 +108,7 @@ namespace riscv
 						if (!is_regular_compressed<W>(instruction.half[0]))
 							break;
 					} else {
-						if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
+						if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 							|| opcode == RV32I_JAL || opcode == RV32I_JALR
 							|| opcode == RV32I_AUIPC || entry.instr == FASTSIM_BLOCK_END)
 							break;
@@ -154,7 +164,7 @@ namespace riscv
 				const auto opcode = instruction.opcode();
 
 				// All opcodes that can modify PC and stop the machine
-				if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
+				if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 					|| opcode == RV32I_JAL || opcode == RV32I_JALR
 					|| opcode == RV32I_AUIPC || entry.instr == FASTSIM_BLOCK_END)
 					idxend = 0;

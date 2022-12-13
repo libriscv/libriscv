@@ -149,7 +149,6 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 #endif
 
 		[RV32I_BC_SYSCALL] = &&rv32i_syscall,
-		[RV32I_BC_SYSTEM]  = &&rv32i_system,
 		[RV32I_BC_STOP]    = &&rv32i_stop,
 		[RV32I_BC_NOP]     = &&rv32i_nop,
 
@@ -645,21 +644,8 @@ INSTRUCTION(RV32F_BC_FSD, rv32i_fsd): {
 }
 INSTRUCTION(RV32I_BC_STOP, rv32i_stop): {
 	registers().pc = pc + 4;
-	machine().stop();
+	counter.stop();
 	return;
-}
-INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system): {
-	VIEW_INSTR();
-	machine().system(instr);
-	// Restore max counter (can be improved?)
-	counter.retrieve_max_counter();
-	// Check if machine stopped
-	if (UNLIKELY(counter.overflowed()))
-	{
-		registers().pc = pc + 4;
-		return;
-	}
-	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32F_BC_FADD, rv32f_fadd): {
 	VIEW_INSTR_AS(fi, rv32f_instruction);
