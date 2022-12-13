@@ -150,6 +150,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 
 		[RV32I_BC_SYSCALL] = &&rv32i_syscall,
 		[RV32I_BC_SYSTEM]  = &&rv32i_system,
+		[RV32I_BC_STOP]    = &&rv32i_stop,
 		[RV32I_BC_NOP]     = &&rv32i_nop,
 
 		[RV32F_BC_FLW]     = &&rv32i_flw,
@@ -641,6 +642,11 @@ INSTRUCTION(RV32F_BC_FSD, rv32i_fsd): {
 	auto addr = reg(fi.Stype.rs1) + fi.Stype.signed_imm();
 	machine().memory.template write<uint64_t> (addr, src.i64);
 	NEXT_INSTR();
+}
+INSTRUCTION(RV32I_BC_STOP, rv32i_stop): {
+	registers().pc = pc + 4;
+	machine().stop();
+	return;
 }
 INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system): {
 	VIEW_INSTR();

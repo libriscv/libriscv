@@ -246,6 +246,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				if (instr.Itype.imm == 0) {
 					return RV32I_BC_SYSCALL;
 				}
+				// WFI and STOP
+				if (instr.Itype.imm == 0x105 || instr.Itype.imm == 0x7ff) {
+					return RV32I_BC_STOP;
+				}
 			}
 			return RV32I_BC_SYSTEM;
 		case RV32I_FENCE:
