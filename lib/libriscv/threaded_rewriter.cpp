@@ -33,6 +33,7 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			case RV64I_BC_ADDIW:
 			case RV32I_BC_ADDI:
 			case RV32I_BC_SLLI:
 			case RV32I_BC_SLTI:

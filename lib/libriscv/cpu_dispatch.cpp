@@ -140,6 +140,8 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32I_BC_OP_SH2ADD] = &&rv32i_op_sh2add,
 		[RV32I_BC_OP_SH3ADD] = &&rv32i_op_sh3add,
 
+		[RV64I_BC_ADDIW] = &&rv64i_addiw,
+
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = &&rv32c_addi,
 		[RV32C_BC_LI]       = &&rv32c_addi,
@@ -239,6 +241,12 @@ INSTRUCTION(RV32I_BC_LI, rv32i_li): {
 INSTRUCTION(RV32I_BC_MV, rv32i_mv): {
 	VIEW_INSTR_AS(fi, FasterMove);
 	this->reg(fi.rd) = this->reg(fi.rs1);
+	NEXT_INSTR();
+}
+INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw): {
+	VIEW_INSTR_AS(fi, FasterItype);
+	this->reg(fi.rs1) = (int32_t)
+		((uint32_t)this->reg(fi.rs2) + fi.signed_imm());
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDW, rv32i_ldw): {
@@ -848,8 +856,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function): {
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 	default:
-		this->trigger_exception(ILLEGAL_OPCODE, decoder->instr);
-		__builtin_unreachable();
+		goto execute_invalid;
 	} // switch case
 } // while loop
 

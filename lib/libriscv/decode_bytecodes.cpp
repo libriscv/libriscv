@@ -238,7 +238,15 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_INVALID;
 			}
 		case RV64I_OP32:
+			return RV32I_BC_FUNCTION;
 		case RV64I_OP_IMM32:
+			if (instr.Itype.rd == 0)
+				return RV32I_BC_NOP;
+			switch (instr.Itype.funct3)
+			{
+			case 0x0:
+				return RV64I_BC_ADDIW;
+			}
 			return RV32I_BC_FUNCTION;
 		case RV32I_SYSTEM:
 			if (LIKELY(instr.Itype.funct3 == 0))
