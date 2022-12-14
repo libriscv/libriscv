@@ -115,6 +115,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32I_BC_JAL]     = &&rv32i_jal,
 		[RV32I_BC_JALR]    = &&rv32i_jalr,
 		[RV32I_BC_FAST_JAL] = &&rv32i_fast_jal,
+		[RV32I_BC_FAST_CALL] = &&rv32i_fast_call,
 
 		[RV32I_BC_OP_ADD]  = &&rv32i_op_add,
 		[RV32I_BC_OP_SUB]  = &&rv32i_op_sub,
@@ -430,21 +431,20 @@ INSTRUCTION(RV32I_BC_ANDI, rv32i_andi): {
 	this->reg(fi.rs1) = reg(fi.rs2) & fi.signed_imm();
 	NEXT_INSTR();
 }
-INSTRUCTION(RV32I_BC_JAL, rv32i_jal): {
-	VIEW_INSTR_AS(fi, FasterJtype);
-	if (fi.rd != 0)
-		reg(fi.rd) = pc + 4;
-	if constexpr (VERBOSE_JUMPS) {
-		printf("JAL PC 0x%lX => 0x%lX\n", pc, pc+fi.offset);
-	}
-	pc += fi.offset;
-	goto check_jump;
-}
 INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal): {
 	VIEW_INSTR();
 	pc = instr.whole;
 	if constexpr (VERBOSE_JUMPS) {
 		printf("FAST_JAL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
+	}
+	goto unchecked_jump;
+}
+INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call): {
+	VIEW_INSTR();
+	reg(REG_RA) = pc + 4;
+	pc = instr.whole;
+	if constexpr (VERBOSE_JUMPS) {
+		printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
 	}
 	goto unchecked_jump;
 }
@@ -747,6 +747,16 @@ INSTRUCTION(RV32I_BC_AUIPC, rv32i_auipc): {
 	VIEW_INSTR();
 	this->reg(instr.Utype.rd) = pc + instr.Utype.upper_imm();
 	NEXT_BLOCK(4);
+}
+INSTRUCTION(RV32I_BC_JAL, rv32i_jal): {
+	VIEW_INSTR_AS(fi, FasterJtype);
+	if (fi.rd != 0)
+		reg(fi.rd) = pc + 4;
+	if constexpr (VERBOSE_JUMPS) {
+		printf("JAL PC 0x%lX => 0x%lX\n", pc, pc+fi.offset);
+	}
+	pc += fi.offset;
+	goto check_jump;
 }
 INSTRUCTION(RV32I_BC_OP_SRA, rv32i_op_sra): {
 	OP_INSTR();
