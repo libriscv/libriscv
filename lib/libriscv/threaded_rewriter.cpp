@@ -148,7 +148,9 @@ namespace riscv
 				const bool below32 = addr < UINT32_MAX;
 				const bool store_zero = original.Jtype.rd == 0;
 
-				if (is_aligned && below32 && store_zero)
+				// The destination address also needs to be within
+				// the current execute segment, as an optimization.
+				if (this->is_within(addr, 4) && is_aligned && below32 && store_zero)
 				{
 					instr.whole = addr;
 					return RV32I_BC_FAST_JAL;

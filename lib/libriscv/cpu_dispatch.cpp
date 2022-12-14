@@ -58,9 +58,7 @@ namespace riscv
 #define PERFORM_BRANCH()                \
 	if constexpr (VERBOSE_JUMPS) printf("Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
 	pc += fi.signed_imm();              \
-	if (UNLIKELY(counter.overflowed())) \
-		goto check_jump;                \
-	goto continue_segment;
+	goto unchecked_jump;
 #define PERFORM_FORWARD_BRANCH()        \
 	if constexpr (VERBOSE_JUMPS) printf("Fw.Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
 	pc += fi.signed_imm();              \
@@ -198,6 +196,11 @@ restart_sim:
 	exec_decoder = exec->decoder_cache();
 	current_begin = exec->exec_begin();
 	current_end = exec->exec_end();
+	goto continue_segment;
+
+unchecked_jump:
+	if (UNLIKELY(counter.overflowed()))
+		goto check_jump;
 
 continue_segment:
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
@@ -314,10 +317,10 @@ INSTRUCTION(RV32I_BC_BNE, rv32i_bne): {
 				goto *computed_opcode[decoder->get_bytecode()];
 #endif
 			}
+			goto check_jump;
 		} else {
 			PERFORM_BRANCH();
 		}
-		goto check_jump;
 	}
 	NEXT_BLOCK(4);
 }
@@ -443,7 +446,7 @@ INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal): {
 	if constexpr (VERBOSE_JUMPS) {
 		printf("FAST_JAL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
 	}
-	goto check_jump;
+	goto unchecked_jump;
 }
 INSTRUCTION(RV32I_BC_JALR, rv32i_jalr): {
 	VIEW_INSTR();
