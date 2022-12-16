@@ -84,7 +84,7 @@ namespace riscv
 		// Minimal fork does not loan any pages from the source Machine
 		bool minimal_fork = false;
 		// Allow the use of a linear arena to increase memory locality somewhat
-		bool use_memory_arena = true;
+		bool use_memory_arena = false;
 
 		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
 
