@@ -64,6 +64,11 @@ namespace riscv
 	template <int W>
 	void Memory<W>::serialize_to(std::vector<uint8_t>& vec) const
 	{
+		if (this->m_arena_pages > 0) {
+			throw MachineException(
+				FEATURE_DISABLED, "Serialize is incompatible with arena");
+		}
+
 		const size_t est_page_bytes =
 			this->m_pages.size() * (sizeof(SerializedPage) + Page::size());
 		vec.reserve(vec.size() + est_page_bytes);
@@ -72,7 +77,7 @@ namespace riscv
 		{
 			const auto& page = it.second;
 			assert(!page.attr.is_cow && "Should never have CoW pages stored");
-			// we want to ignore shared/non-owned pages
+			// XXX: Ignore shared/non-owned pages?
 			if (page.attr.non_owning) continue;
 			const SerializedPage spage {
 				.addr = it.first,

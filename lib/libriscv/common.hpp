@@ -64,6 +64,11 @@ namespace riscv
 #else
 	static constexpr bool threaded_simulator_enabled = false;
 #endif
+#ifdef __linux__
+	static constexpr bool memory_arena_is_default = true;
+#else
+	static constexpr bool memory_arena_is_default = false;
+#endif
 }
 
 namespace riscv
@@ -84,7 +89,7 @@ namespace riscv
 		// Minimal fork does not loan any pages from the source Machine
 		bool minimal_fork = false;
 		// Allow the use of a linear arena to increase memory locality somewhat
-		bool use_memory_arena = false;
+		bool use_memory_arena = memory_arena_is_default;
 
 		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
 

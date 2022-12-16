@@ -29,6 +29,11 @@ struct PageAttributes
 		constexpr PageAttributes def {};
 		return this->read == def.read && this->write == def.write && this->exec == def.exec;
 	}
+	void apply_regular_attributes(PageAttributes other) {
+		const auto no = this->non_owning;
+		*this = other;
+		this->non_owning = no;
+	}
 };
 
 struct alignas(32) PageData {

@@ -20,7 +20,10 @@ TEST_CASE("Catch output from write system call", "[Output]")
 		return 666;
 	})M");
 
-	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	riscv::Machine<RISCV64> machine { binary, {
+		.memory_max = MAX_MEMORY,
+		.use_memory_arena = false
+	}};
 	// We need to install Linux system calls for maximum gucciness
 	machine.setup_linux_syscalls();
 	// We need to create a Linux environment for runtimes to work well

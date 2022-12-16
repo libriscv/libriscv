@@ -179,20 +179,22 @@ namespace riscv
 				if (page.is_cow_page()) {
 					// The special zero-CoW page is an internal optimization
 					// We can ignore the page if the default attrs apply.
-					if (!is_default)
-						this->create_writable_pageno(pageno).attr = options;
+					if (!is_default) {
+						// Keep non_owning as-is.
+						this->create_writable_pageno(pageno).
+							attr.apply_regular_attributes(options);
+					}
 				} else {
 					// There is a page there, however, we must
 					// keep non_owning as-is.
-					const auto no = page.attr.non_owning;
-					page.attr = options;
-					page.attr.non_owning = no;
+					page.attr.apply_regular_attributes(options);
 				}
 			} else {
 				// If the page was not found, it was likely (also) the
 				// special zero-CoW page.
 				if (!is_default)
-					this->create_writable_pageno(pageno).attr = options;
+					this->create_writable_pageno(pageno).
+						attr.apply_regular_attributes(options);
 			}
 
 			dst += size;

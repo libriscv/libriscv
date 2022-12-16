@@ -6,6 +6,9 @@
 #ifdef RISCV_BINARY_TRANSLATION
 #include <dlfcn.h> // Linux-only
 #endif
+#ifdef __linux__
+#include <sys/mman.h>
+#endif
 
 extern "C" char *
 __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
@@ -28,10 +31,20 @@ namespace riscv
 			const address_t pages_max = options.memory_max >> Page::SHIFT;
 			assert(pages_max >= 1);
 
-			// Big enough memory size => linear arena (128MB)
-			if (options.use_memory_arena && pages_max >= 32768)
+			if (options.use_memory_arena)
 			{
-				this->m_arena.reset(new PageData[pages_max]);
+#ifdef __linux__
+				const size_t len = pages_max * Page::size();
+				this->m_arena = (PageData *)mmap(NULL, len, PROT_READ | PROT_WRITE,
+					MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+#else
+				this->m_arena = nullptr;
+#endif
+				// Fallback allocation
+				if (this->m_arena == nullptr) {
+					// TODO: XXX: Investigate if this is a time sink
+					this->m_arena = new PageData[pages_max];
+				}
 				this->m_arena_pages = pages_max;
 			}
 
@@ -87,6 +100,13 @@ namespace riscv
 		if (m_bintr_dl)
 			dlclose(m_bintr_dl);
 #endif
+		if (this->m_arena) {
+#ifdef __linux__
+			munmap(this->m_arena, this->m_arena_pages * Page::size());
+#else
+			delete[] this->m_arena;
+#endif
+		}
 	}
 
 	template <int W> RISCV_INTERNAL
