@@ -182,8 +182,11 @@ namespace riscv
 					if (!is_default)
 						this->create_writable_pageno(pageno).attr = options;
 				} else {
-					// There is a page there
+					// There is a page there, however, we must
+					// keep non_owning as-is.
+					const auto no = page.attr.non_owning;
 					page.attr = options;
+					page.attr.non_owning = no;
 				}
 			} else {
 				// If the page was not found, it was likely (also) the
@@ -206,12 +209,18 @@ namespace riscv
 		const bool has_rvv = machine().cpu.registers().has_vectors();
 		total += has_rvv ? sizeof(VectorRegisters<W>) : 0u;
 	#endif
+		// Pages
 		for (const auto& it : m_pages) {
+			const auto page_number = it.first;
 			const auto& page = it.second;
 			total += sizeof(page);
-			if (!page.attr.non_owning && page.has_data())
-				total += Page::size();
+				// Regular owned page
+			if ((!page.attr.non_owning && page.has_data()) ||
+				// Arena page
+				(page.attr.non_owning && page_number < m_arena_pages))
+					total += Page::size();
 		}
+
 		for (const auto& exec : m_exec) {
 			total += exec.size_bytes();
 		}

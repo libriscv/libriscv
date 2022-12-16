@@ -258,6 +258,10 @@ namespace riscv
 		// Execute segment
 		std::deque<DecodedExecuteSegment<W>> m_exec;
 
+		// Linear arena at start of memory
+		std::unique_ptr<PageData[]> m_arena = nullptr;
+		size_t m_arena_pages = 0;
+
 #ifdef RISCV_BINARY_TRANSLATION
 		mutable void* m_bintr_dl = nullptr;
 #endif

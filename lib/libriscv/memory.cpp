@@ -27,12 +27,30 @@ namespace riscv
 		{
 			const address_t pages_max = options.memory_max >> Page::SHIFT;
 			assert(pages_max >= 1);
+
+			// Big enough memory size => linear arena (128MB)
+			if (options.use_memory_arena && pages_max >= 32768)
+			{
+				this->m_arena.reset(new PageData[pages_max]);
+				this->m_arena_pages = pages_max;
+			}
+
 			this->m_page_fault_handler =
 			[pages_max] (auto& mem, const address_t page, bool init) -> Page&
 			{
-				// create page on-demand
 				if (mem.pages_active() < pages_max)
 				{
+					// Within linear arena at the start
+					if (page < mem.m_arena_pages)
+					{
+						const PageAttributes attr {
+							.read  = true,
+							.write = true,
+							.non_owning = true
+						};
+						return mem.allocate_page(page, attr, &mem.m_arena[page]);
+					}
+					// Create page on-demand
 					return mem.allocate_page(page,
 						init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
 				}
