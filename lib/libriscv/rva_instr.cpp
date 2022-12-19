@@ -35,7 +35,8 @@ namespace riscv
 			// For RV64, 32-bit AMOs always sign-extend the value
 			// placed in rd, and ignore the upper 32 bits of the original
 			// value of rs2.
-			this->reg(instr.Atype.rd) = (RVSIGNTYPE(*this))old_value;
+			using signed_t = std::make_signed_t<Type>;
+			this->reg(instr.Atype.rd) = (RVSIGNTYPE(*this))signed_t(old_value);
 		}
 	}
 
