@@ -36,8 +36,11 @@ namespace riscv
 		// block ends or a system call is handled. Runs everywhere.
 		void simulate_bytecode(uint64_t);
 		// Uses computed gotos to jump around at a faster speed, but
-		// is only supported on GCC and Clang. Fastest simulation.
+		// is only supported on GCC and Clang. Faster simulation.
 		void simulate_threaded(uint64_t);
+		// Uses musttail to jump around at the fastest speed, but
+		// is only supported on Clang. Fastest simulation.
+		void simulate_tco(uint64_t);
 
 		void reset();
 		void reset_stack_pointer() noexcept;
@@ -107,6 +110,7 @@ namespace riscv
 		void init_execute_area(const void* data, address_t begin, address_t length);
 		void set_execute_segment(DecodedExecuteSegment<W>* seg) { m_exec = seg; }
 		auto* current_execute_segment() const noexcept { return m_exec; }
+		DecodedExecuteSegment<W> *next_execute_segment();
 		bool is_executable(address_t addr) const noexcept;
 
 		// Override the function that gets called when the CPU
@@ -129,7 +133,6 @@ namespace riscv
 		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
 #endif
 
-		DecodedExecuteSegment<W>* next_execute_segment();
 		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
