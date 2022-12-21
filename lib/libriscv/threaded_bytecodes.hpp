@@ -102,6 +102,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		RV32I_BC_TRANSLATOR,
 #endif
+		BYTECODES_MAX
 	};
 
 	union FasterItype

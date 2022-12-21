@@ -29,7 +29,6 @@ if (RISCV_EXPERIMENTAL)
 endif()
 
 set (SOURCES
-		libriscv/bytecode_dispatch.cpp
 		libriscv/cpu.cpp
 		libriscv/debug.cpp
 		libriscv/decode_bytecodes.cpp
@@ -59,8 +58,21 @@ else()
 	)
 endif()
 if (RISCV_THREADED)
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+	 AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0
+	 AND RISCV_EXPERIMENTAL)
+	 	# Experimental tail-call dispatch
+		list(APPEND SOURCES
+			libriscv/tailcall_dispatch.cpp
+		)
+	else()
+		list(APPEND SOURCES
+			libriscv/threaded_dispatch.cpp
+		)
+	endif()
+else()
 	list(APPEND SOURCES
-		libriscv/threaded_dispatch.cpp
+		libriscv/bytecode_dispatch.cpp
 	)
 endif()
 if (RISCV_BINARY_TRANSLATION)

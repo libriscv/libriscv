@@ -17,6 +17,10 @@ namespace riscv
 		typename std::conditional<(N == 8), uint64_t, __uint128_t>::type>::type;
 
 	template <int N>
+	using signed_address_type = typename std::conditional<(N == 4), int32_t,
+		typename std::conditional<(N == 8), int64_t, __int128_t>::type>::type;
+
+	template <int N>
 	using isa_type = typename std::conditional<(N == 4), RV32I,
 		typename std::conditional<(N == 8), RV64I, RV128I>::type>::type;
 
