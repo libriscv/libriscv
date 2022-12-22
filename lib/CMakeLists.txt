@@ -26,6 +26,7 @@ option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
+	option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
 endif()
 
 set (SOURCES
@@ -60,7 +61,7 @@ endif()
 if (RISCV_THREADED)
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
 	 AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0
-	 AND RISCV_EXPERIMENTAL)
+	 AND RISCV_TAILCALL_DISPATCH)
 	 	# Experimental tail-call dispatch
 		list(APPEND SOURCES
 			libriscv/tailcall_dispatch.cpp
