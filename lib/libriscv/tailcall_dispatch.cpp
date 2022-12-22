@@ -120,9 +120,8 @@ namespace riscv
 
 	INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
 	{
-		VIEW_INSTR();
 		auto handler = d->get_handler();
-		handler(cpu, instr);
+		handler(cpu, {d->instr});
 		NEXT_INSTR();  
 	}
 
@@ -145,21 +144,19 @@ namespace riscv
 
 	INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal)
 	{
-		VIEW_INSTR();
-		pc = instr.whole;
+		pc = d->instr;
 		if constexpr (VERBOSE_JUMPS) {
-			printf("FAST_JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + instr.whole);
+			printf("FAST_JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + d->instr);
 		}
 		OVERFLOW_CHECKED_JUMP();
 	}
 	INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call)
 	{
-		VIEW_INSTR();
 		cpu.reg(REG_RA) = pc + 4;
-		pc = instr.whole;
+		pc = d->instr;
 		if constexpr (VERBOSE_JUMPS)
 		{
-			printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
+			printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + d->instr);
 		}
 		OVERFLOW_CHECKED_JUMP();
 	}

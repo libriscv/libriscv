@@ -111,21 +111,21 @@ namespace riscv
 
 		struct
 		{
+			uint32_t  imm : 16;
 			uint32_t  rs2 : 8;
 			uint32_t  rs1 : 8;
-			uint32_t  imm : 16;
 		};
 
-		unsigned get_rs1() const noexcept {
+		auto get_rs1() const noexcept {
 			return rs1;
 		}
-		unsigned get_rs2() const noexcept {
+		auto get_rs2() const noexcept {
 			return rs2;
 		}
 		int32_t signed_imm() const noexcept {
 			return (int16_t)imm;
 		}
-		uint32_t unsigned_imm() const noexcept {
+		auto unsigned_imm() const noexcept {
 			return (uint16_t)imm;
 		}
 	};
@@ -136,18 +136,18 @@ namespace riscv
 
 		struct
 		{
-			uint32_t rd  : 8;
-			uint32_t rs1 : 8;
+			uint32_t rd  : 16;
 			uint32_t rs2 : 8;
+			uint32_t rs1 : 8;
 		};
 
-		unsigned get_rd() const noexcept {
+		auto get_rd() const noexcept {
 			return rd;
 		}
-		unsigned get_rs1() const noexcept {
+		auto get_rs1() const noexcept {
 			return rs1;
 		}
-		unsigned get_rs2() const noexcept {
+		auto get_rs2() const noexcept {
 			return rs2;
 		}
 	};
@@ -163,7 +163,7 @@ namespace riscv
 			int16_t  imm;
 		};
 
-		unsigned get_rd() const noexcept {
+		auto get_rd() const noexcept {
 			return whole & 0xFF;
 		}
 
@@ -182,10 +182,10 @@ namespace riscv
 			uint32_t rs1 : 16;
 		};
 
-		unsigned get_rd() const noexcept {
+		auto get_rd() const noexcept {
 			return rd;
 		}
-		unsigned get_rs1() const noexcept {
+		auto get_rs1() const noexcept {
 			return rs1;
 		}
 	};
