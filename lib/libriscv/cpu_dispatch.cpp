@@ -19,34 +19,6 @@ namespace riscv
 #define VIEW_INSTR_AS(name, x) \
 	auto name = decoder->template view_instr<x>();
 
-#ifdef DISPATCH_MODE_SWITCH_BASED
-
-	/** Switch-case based dispatch **/
-#define NEXT_INSTR()                  \
-	if constexpr (compressed_enabled) \
-		decoder += 2;                 \
-	else                              \
-		decoder += 1;                 \
-	break;
-#define NEXT_C_INSTR()                \
-	decoder += 1;                     \
-	break;
-
-#else
-
-	/** Threaded dispatch  **/
-#define NEXT_INSTR()                  \
-	if constexpr (compressed_enabled) \
-		decoder += 2;                 \
-	else                              \
-		decoder += 1;                 \
-	goto *computed_opcode[decoder->get_bytecode()];
-#define NEXT_C_INSTR() \
-	decoder += 1;      \
-	goto *computed_opcode[decoder->get_bytecode()];
-
-#endif // Dispatch mode
-
 #define NEXT_BLOCK(len)               \
 	pc += len;                        \
 	if constexpr (compressed_enabled) \
@@ -71,7 +43,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 	using addr_t  = address_type<W>;
 	using saddr_t = signed_address_type<W>;
 
-#ifndef DISPATCH_MODE_SWITCH_BASED
+#ifdef DISPATCH_MODE_THREADED
 	static constexpr void *computed_opcode[] = {
 		[RV32I_BC_INVALID] = &&execute_invalid,
 		[RV32I_BC_ADDI]    = &&rv32i_addi,
