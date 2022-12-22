@@ -15,14 +15,11 @@
 
 namespace riscv
 {
-
-#ifndef RISCV_THREADED
     template <int W>
     void CPU<W>::simulate(uint64_t imax)
     {
         simulate_bytecode(imax);
     }
-#endif
 
     template struct CPU<4>;
     template struct CPU<8>;

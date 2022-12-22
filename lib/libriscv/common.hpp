@@ -59,11 +59,6 @@ namespace riscv
 #else
 	static constexpr bool binary_translation_enabled = false;
 #endif
-#ifdef RISCV_THREADED
-	static constexpr bool threaded_simulator_enabled = true;
-#else
-	static constexpr bool threaded_simulator_enabled = false;
-#endif
 #ifdef __linux__
 	static constexpr bool memory_arena_is_default = true;
 #else

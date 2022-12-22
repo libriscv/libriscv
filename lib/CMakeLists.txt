@@ -102,10 +102,6 @@ if (RISCV_EXT_V)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_VECTOR=32)
 endif()
 
-if (RISCV_THREADED)
-	target_compile_definitions(riscv PUBLIC RISCV_THREADED=1)
-endif()
-
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
 	target_link_libraries(riscv PUBLIC Threads::Threads)
