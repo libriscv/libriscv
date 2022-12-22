@@ -19,11 +19,6 @@ struct DecoderData {
 	uint16_t idxend;
 	uint32_t instr;
 
-	template <typename T = rv32i_instruction>
-	inline T view_instr() const noexcept {
-		return T { this->instr };
-	}
-
 	void execute(CPU<W>& cpu) const {
 		get_handler()(cpu, instruction_format{this->instr});
 	}

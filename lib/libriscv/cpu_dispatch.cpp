@@ -15,9 +15,9 @@ namespace riscv
 {
 	static constexpr bool VERBOSE_JUMPS = false;
 #define VIEW_INSTR() \
-	auto instr = decoder->view_instr();
+	auto instr = *(rv32i_instruction *)&decoder->instr;
 #define VIEW_INSTR_AS(name, x) \
-	auto name = decoder->template view_instr<x>();
+	auto &&name = *(x *)&decoder->instr;
 
 #define NEXT_BLOCK(len)               \
 	pc += len;                        \

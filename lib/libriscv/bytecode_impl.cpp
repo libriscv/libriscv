@@ -4,31 +4,31 @@
 #ifdef RISCV_EXT_COMPRESSED
 INSTRUCTION(RV32C_BC_ADDI, rv32c_addi) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	REG(fi.rs1) = REG(fi.rs2) + fi.signed_imm();
+	REG(fi.get_rs1()) = REG(fi.get_rs2()) + fi.signed_imm();
 	NEXT_C_INSTR();
 }
 #endif
 INSTRUCTION(RV32I_BC_ADDI, rv32i_addi) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	REG(fi.rs1) =
-		REG(fi.rs2) + fi.signed_imm();
+	REG(fi.get_rs1()) =
+		REG(fi.get_rs2()) + fi.signed_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LI, rv32i_li) {
 	VIEW_INSTR_AS(fi, FasterImmediate);
-	REG(fi.rd) = fi.signed_imm();
+	REG(fi.get_rd()) = fi.signed_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_MV, rv32i_mv) {
 	VIEW_INSTR_AS(fi, FasterMove);
-	REG(fi.rd) = REG(fi.rs1);
+	REG(fi.get_rd()) = REG(fi.get_rs1());
 	NEXT_INSTR();
 }
 INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw) {
 	if constexpr (W >= 8) {
         VIEW_INSTR_AS(fi, FasterItype);
-        REG(fi.rs1) = (int32_t)
-            ((uint32_t)REG(fi.rs2) + fi.signed_imm());
+        REG(fi.get_rs1()) = (int32_t)
+            ((uint32_t)REG(fi.get_rs2()) + fi.signed_imm());
         NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -38,50 +38,50 @@ INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw) {
 INSTRUCTION(RV32I_BC_SLLI, rv32i_slli) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SLLI: Logical left-shift 5/6/7-bit immediate
-	REG(fi.rs1) =
-		REG(fi.rs2) << (fi.unsigned_imm() & (XLEN - 1));
+	REG(fi.get_rs1()) =
+		REG(fi.get_rs2()) << (fi.unsigned_imm() & (XLEN - 1));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_SLTI, rv32i_slti) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SLTI: Set less than immediate
-	REG(fi.rs1) = (saddr_t(REG(fi.rs2)) < fi.signed_imm());
+	REG(fi.get_rs1()) = (saddr_t(REG(fi.get_rs2())) < fi.signed_imm());
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_SLTIU, rv32i_sltiu) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SLTIU: Sign-extend, then treat as unsigned
-	REG(fi.rs1) = (REG(fi.rs2) < addr_t(fi.signed_imm()));
+	REG(fi.get_rs1()) = (REG(fi.get_rs2()) < addr_t(fi.signed_imm()));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_XORI, rv32i_xori) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// XORI
-	REG(fi.rs1) = REG(fi.rs2) ^ fi.signed_imm();
+	REG(fi.get_rs1()) = REG(fi.get_rs2()) ^ fi.signed_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_SRLI, rv32i_srli) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SRLI: Shift-right logical 5/6/7-bit immediate
-	REG(fi.rs1) = REG(fi.rs2) >> (fi.unsigned_imm() & (XLEN - 1));
+	REG(fi.get_rs1()) = REG(fi.get_rs2()) >> (fi.unsigned_imm() & (XLEN - 1));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_SRAI, rv32i_srai) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SRAI: Shift-right arithmetical (preserve the sign bit)
-	REG(fi.rs1) = saddr_t(REG(fi.rs2)) >> (fi.unsigned_imm() & (XLEN - 1));
+	REG(fi.get_rs1()) = saddr_t(REG(fi.get_rs2())) >> (fi.unsigned_imm() & (XLEN - 1));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_ORI, rv32i_ori) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// ORI: Or sign-extended 12-bit immediate
-	REG(fi.rs1) = REG(fi.rs2) | fi.signed_imm();
+	REG(fi.get_rs1()) = REG(fi.get_rs2()) | fi.signed_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_ANDI, rv32i_andi) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// ANDI: And sign-extended 12-bit immediate
-	REG(fi.rs1) = REG(fi.rs2) & fi.signed_imm();
+	REG(fi.get_rs1()) = REG(fi.get_rs2()) & fi.signed_imm();
 	NEXT_INSTR();
 }
 
@@ -91,14 +91,14 @@ INSTRUCTION(RV32I_BC_ANDI, rv32i_andi) {
 
 INSTRUCTION(RV32I_BC_BEQ, rv32i_beq) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if (REG(fi.rs1) == REG(fi.rs2)) {
+	if (REG(fi.get_rs1()) == REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BNE, rv32i_bne) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if (REG(fi.rs1) != REG(fi.rs2)) {
+	if (REG(fi.get_rs1()) != REG(fi.get_rs2())) {
 #ifndef DISPATCH_MODE_TAILCALL
 		if constexpr (ENABLE_FAST_BRANCH) {
 			pc += fi.signed_imm();
@@ -128,42 +128,42 @@ INSTRUCTION(RV32I_BC_BNE, rv32i_bne) {
 }
 INSTRUCTION(RV32I_BC_BEQ_FW, rv32i_beq_fw) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if (REG(fi.rs1) == REG(fi.rs2)) {
+	if (REG(fi.get_rs1()) == REG(fi.get_rs2())) {
 		PERFORM_FORWARD_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BNE_FW, rv32i_bne_fw) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if (REG(fi.rs1) != REG(fi.rs2)) {
+	if (REG(fi.get_rs1()) != REG(fi.get_rs2())) {
 		PERFORM_FORWARD_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BLT, rv32i_blt) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if ((saddr_t)REG(fi.rs1) < (saddr_t)REG(fi.rs2)) {
+	if ((saddr_t)REG(fi.get_rs1()) < (saddr_t)REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BGE, rv32i_bge) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if ((saddr_t)REG(fi.rs1) >= (saddr_t)REG(fi.rs2)) {
+	if ((saddr_t)REG(fi.get_rs1()) >= (saddr_t)REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BLTU, rv32i_bltu) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if (REG(fi.rs1) < REG(fi.rs2)) {
+	if (REG(fi.get_rs1()) < REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BGEU, rv32i_bgeu) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	if (REG(fi.rs1) >= REG(fi.rs2)) {
+	if (REG(fi.get_rs1()) >= REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
 	NEXT_BLOCK(4);
@@ -175,22 +175,22 @@ INSTRUCTION(RV32I_BC_BGEU, rv32i_bgeu) {
 
 INSTRUCTION(RV32I_BC_LDW, rv32i_ldw) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr = REG(fi.rs2) + fi.signed_imm();
-	REG(fi.rs1) =
+	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+	REG(fi.get_rs1()) =
 		(int32_t)MACHINE().memory.template read<uint32_t>(addr);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_STW, rv32i_stw) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr  = REG(fi.rs1) + fi.signed_imm();
-	MACHINE().memory.template write<uint32_t>(addr, REG(fi.rs2));
+	const auto addr  = REG(fi.get_rs1()) + fi.signed_imm();
+	MACHINE().memory.template write<uint32_t>(addr, REG(fi.get_rs2()));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDWU, rv32i_ldwu) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
-		const auto addr = REG(fi.rs2) + fi.signed_imm();
-		REG(fi.rs1) =
+		const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+		REG(fi.get_rs1()) =
 			MACHINE().memory.template read<uint32_t>(addr);
 		NEXT_INSTR();
 	}
@@ -201,8 +201,8 @@ INSTRUCTION(RV32I_BC_LDWU, rv32i_ldwu) {
 INSTRUCTION(RV32I_BC_LDD, rv32i_ldd) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
-		const auto addr = REG(fi.rs2) + fi.signed_imm();
-		REG(fi.rs1) =
+		const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+		REG(fi.get_rs1()) =
 			(int64_t)MACHINE().memory.template read<uint64_t>(addr);
 		NEXT_INSTR();
 	}
@@ -213,8 +213,8 @@ INSTRUCTION(RV32I_BC_LDD, rv32i_ldd) {
 INSTRUCTION(RV32I_BC_STD, rv32i_std) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
-		const auto addr  = REG(fi.rs1) + fi.signed_imm();
-		MACHINE().memory.template write<uint64_t>(addr, REG(fi.rs2));
+		const auto addr  = REG(fi.get_rs1()) + fi.signed_imm();
+		MACHINE().memory.template write<uint64_t>(addr, REG(fi.get_rs2()));
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -223,42 +223,42 @@ INSTRUCTION(RV32I_BC_STD, rv32i_std) {
 }
 INSTRUCTION(RV32I_BC_LDB, rv32i_ldb) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr = REG(fi.rs2) + fi.signed_imm();
-	REG(fi.rs1) =
+	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+	REG(fi.get_rs1()) =
 		int8_t(MACHINE().memory.template read<uint8_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDBU, rv32i_ldbu) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr = REG(fi.rs2) + fi.signed_imm();
-	REG(fi.rs1) =
+	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+	REG(fi.get_rs1()) =
 		saddr_t(MACHINE().memory.template read<uint8_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDH, rv32i_ldh) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr = REG(fi.rs2) + fi.signed_imm();
-	REG(fi.rs1) =
+	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+	REG(fi.get_rs1()) =
 		int16_t(MACHINE().memory.template read<uint16_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDHU, rv32i_ldhu) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr = REG(fi.rs2) + fi.signed_imm();
-	REG(fi.rs1) =
+	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+	REG(fi.get_rs1()) =
 		saddr_t(MACHINE().memory.template read<uint16_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_STB, rv32i_stb) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr = REG(fi.rs1) + fi.signed_imm();
-	MACHINE().memory.template write<uint8_t>(addr, REG(fi.rs2));
+	const auto addr = REG(fi.get_rs1()) + fi.signed_imm();
+	MACHINE().memory.template write<uint8_t>(addr, REG(fi.get_rs2()));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_STH, rv32i_sth) {
 	VIEW_INSTR_AS(fi, FasterItype);
-	const auto addr = REG(fi.rs1) + fi.signed_imm();
-	MACHINE().memory.template write<uint16_t>(addr, REG(fi.rs2));
+	const auto addr = REG(fi.get_rs1()) + fi.signed_imm();
+	MACHINE().memory.template write<uint16_t>(addr, REG(fi.get_rs2()));
 	NEXT_INSTR();
 }
 
@@ -298,11 +298,11 @@ INSTRUCTION(RV32I_BC_LUI, rv32i_lui)
 	NEXT_INSTR();
 }
 
-#define OP_INSTR()                   \
-    VIEW_INSTR_AS(fi, FasterOpType); \
-    auto& dst = REG(fi.rd);          \
-    const auto src1 = REG(fi.rs1);   \
-    const auto src2 = REG(fi.rs2);
+#define OP_INSTR()                       \
+	VIEW_INSTR_AS(fi, FasterOpType);     \
+	auto& dst = REG(fi.get_rd());        \
+	const auto src1 = REG(fi.get_rs1()); \
+	const auto src2 = REG(fi.get_rs2());
 
 INSTRUCTION(RV32I_BC_OP_ADD, rv32i_op_add) {
     OP_INSTR();

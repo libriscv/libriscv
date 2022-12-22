@@ -21,9 +21,9 @@
 #define XLEN    (8 * W)
 
 #define VIEW_INSTR() \
-	auto instr = d->view_instr();
+	auto instr = *(rv32i_instruction *)&d->instr;
 #define VIEW_INSTR_AS(name, x) \
-	auto name = d->template view_instr<x>();
+	auto&& name = *(x *)&d->instr;
 #define EXECUTE_INSTR() \
 	computed_opcode<W>[d->get_bytecode()](d, exec, cpu, pc, counter)
 #define EXECUTE_CURRENT()              \
