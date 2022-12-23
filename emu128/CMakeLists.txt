@@ -8,7 +8,6 @@ option(NATIVE      "Enable native instructions" OFF)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(STATIC_BUILD "Build a static executable" OFF)
 
-option(RISCV_DEBUG "" ON)
 option(RISCV_EXT_C "" OFF)
 add_subdirectory(../lib lib)
 
