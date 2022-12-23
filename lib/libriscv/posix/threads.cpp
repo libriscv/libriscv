@@ -205,5 +205,4 @@ template void Machine<4>::setup_posix_threads();
 template void Machine<8>::setup_posix_threads();
 template int Machine<4>::gettid() const;
 template int Machine<8>::gettid() const;
-template int Machine<16>::gettid() const;
 } // riscv
