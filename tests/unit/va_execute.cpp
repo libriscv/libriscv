@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <libriscv/machine.hpp>
+#include <libriscv/debug.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
@@ -86,6 +87,22 @@ long syscall3(long n, long arg0, long arg1, long arg2) {
 			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 		// Verify step-by-step simulation
 		machine.cpu.simulate_precise(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 12586269025L);
+	}
+	// Debug-assisted simulation
+	{
+		riscv::Machine<RISCV64> machine{binary, {.memory_max = MAX_MEMORY}};
+		machine.setup_linux_syscalls();
+		machine.setup_linux(
+			{"va_exec"},
+			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+		riscv::DebugMachine debugger { machine };
+		debugger.verbose_instructions = true;
+
+		// Verify step-by-step simulation
+		debugger.simulate(MAX_INSTRUCTIONS);
 
 		REQUIRE(machine.return_value<long>() == 12586269025L);
 	}

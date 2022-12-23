@@ -380,36 +380,34 @@ void DebugMachine<W>::simulate(uint64_t max)
 	for (; machine.instruction_counter() < machine.max_instructions();
 		machine.increment_counter(1)) {
 
-		rv32i_instruction instruction;
 		this->break_checks();
+		auto pc = cpu.pc();
+
+		if (UNLIKELY(!cpu.is_executable(pc)))
+		{
+			// This will produce a sequential execute segment for the unknown area
+			// If it is not executable, it will throw an execute space protection fault
+			exec = cpu.next_execute_segment();
+			exec_decoder = exec->decoder_cache();
+			exec_seg_data = exec->exec_data();
+		}
+
+		// Instructions may be unaligned with C-extension
+		const rv32i_instruction instruction =
+			rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
+		INSTRUCTION_LOGGING();
 
 		// We can't use decoder cache when translator is enabled
 		constexpr bool enable_cache = !binary_translation_enabled;
-		if (cpu.is_executable(cpu.pc()))
+		if constexpr (enable_cache)
 		{
-			auto pc = cpu.pc();
-
-			// Instructions may be unaligned with C-extension
-			instruction = rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
-			INSTRUCTION_LOGGING();
-
-			if constexpr (enable_cache)
-			{
-				// Retrieve handler directly from the instruction handler cache
-				auto& cache_entry =
-					exec_decoder[pc / DecoderCache<W>::DIVISOR];
-				cache_entry.execute(cpu, instruction);
-			}
-			else // Not the slowest path, since we have the instruction already
-			{
-				cpu.execute(instruction);
-			}
+			// Retrieve handler directly from the instruction handler cache
+			auto& cache_entry =
+				exec_decoder[pc / DecoderCache<W>::DIVISOR];
+			cache_entry.execute(cpu, instruction);
 		}
-		else
+		else // Not the slowest path, since we have the instruction already
 		{
-			instruction = cpu.read_next_instruction_slowpath();
-			INSTRUCTION_LOGGING();
-			// decode & execute instruction directly
 			cpu.execute(instruction);
 		}
 
