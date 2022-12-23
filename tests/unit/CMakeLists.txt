@@ -24,6 +24,7 @@ function(add_unit_test NAME)
 endfunction()
 
 add_unit_test(basic    basic.cpp)
+add_unit_test(basic32  basic32.cpp)
 add_unit_test(checksum checksum.cpp)
 add_unit_test(custom   custom.cpp)
 add_unit_test(examples examples.cpp)

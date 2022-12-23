@@ -20,6 +20,9 @@ TEST_CASE("Instantiate machine", "[Instantiate]")
 	REQUIRE(machine.memory.stack_initial() > machine.memory.mmap_start());
 	// The starting address is somewhere in the program area
 	REQUIRE(machine.memory.start_address() > 0x10000);
+	REQUIRE(machine.memory.start_address() < machine.memory.heap_address());
+	// The start address is within the current executable area
+	REQUIRE(machine.cpu.current_execute_segment()->is_within(machine.memory.start_address()));
 }
 
 TEST_CASE("Instantiate machine using shared ELF", "[Instantiate]")
