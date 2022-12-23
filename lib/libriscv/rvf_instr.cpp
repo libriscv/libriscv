@@ -618,12 +618,15 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FMV.X.W
-			// XXX: Extend high-bits on 64-bit
-			dst = rs1.i32[0];
+// FMV.X.W moves the single-precision value in floating-point register rs1 represented in IEEE 754-
+// 2008 encoding to the lower 32 bits of integer register rd. The bits are not modified in the transfer,
+// and in particular, the payloads of non-canonical NaNs are preserved. For RV64, the higher 32 bits
+// of the destination register are filled with copies of the floating-point number’s sign bit.
+			dst = RVSIGNTYPE(cpu)(rs1.i32[0]);
 			return;
 		case 0x1: // FMV.X.D
 			if constexpr (RVISGE64BIT(cpu)) {
-				dst = rs1.i64;
+				dst = RVSIGNTYPE(cpu)(rs1.i64);
 				return;
 			}
 		}
