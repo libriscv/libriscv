@@ -135,8 +135,6 @@ template <int W>
 void Machine<W>::transfer_arena_from(const Machine& other)
 {
 	m_arena.reset(new Arena(other.arena()));
-	// XXX: We do not install the (same) system call
-	// handlers again. They should are already be installed.
 }
 
 template <int W>
