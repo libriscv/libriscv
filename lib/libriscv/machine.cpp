@@ -4,8 +4,8 @@
 #include "rv32i_instr.hpp"
 #include "threads.hpp"
 #include "util/auxvec.hpp"
-#include <errno.h>
-#include <time.h>
+#include <chrono>  // RDTIME pseudo-insn && AT_RANDOM
+#include <errno.h> // Used by emulated POSIX system calls
 #include <random>
 extern "C" {
 #ifdef WIN32
@@ -13,6 +13,13 @@ extern "C" {
 #else
 	ssize_t write(int fd, const void *buf, size_t count);
 #endif
+}
+
+static inline uint64_t u64_monotonic_time()
+{
+	auto now = std::chrono::steady_clock::now();
+	return std::chrono::duration_cast<std::chrono::seconds>
+		(now.time_since_epoch()).count();
 }
 
 namespace riscv
@@ -155,7 +162,7 @@ namespace riscv
 		auto dst = this->cpu.reg(REG_SP);
 
 		// inception :)
-		auto gen = std::default_random_engine(time(0));
+		auto gen = std::default_random_engine(u64_monotonic_time());
 		std::uniform_int_distribution<int> rand(0,256);
 
 		std::array<uint8_t, 16> canary;
@@ -226,13 +233,6 @@ namespace riscv
 		this->copy_to_guest(dst, argv.data(), argsize);
 		// re-initialize machine stack-pointer
 		this->cpu.reg(REG_SP) = dst;
-	}
-
-	uint64_t u64_monotonic_time()
-	{
-		struct timespec tp;
-		clock_gettime(CLOCK_MONOTONIC, &tp);
-		return tp.tv_sec * 1000000000ull + tp.tv_nsec;
 	}
 
 	template <int W>
