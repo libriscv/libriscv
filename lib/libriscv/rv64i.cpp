@@ -56,21 +56,22 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-	std::string RV64I::to_string(const CPU<8>& cpu, instruction_format format, const instruction_t& instr)
+	template <> __attribute__((cold))
+	std::string CPU<8>::to_string(instruction_format format, const instruction_t& instr) const
 	{
 		char buffer[256];
 		char ibuffer[128];
-		int  ibuflen = instr.printer(ibuffer, sizeof(ibuffer), cpu, format);
+		int  ibuflen = instr.printer(ibuffer, sizeof(ibuffer), *this, format);
 		int  len = 0;
 		if (format.length() == 4) {
 			len = snprintf(buffer, sizeof(buffer),
 					"[0x%" PRIX64 "] %08" PRIx32 " %.*s",
-					cpu.pc(), format.whole, ibuflen, ibuffer);
+					this->pc(), format.whole, ibuflen, ibuffer);
 		}
 		else if (format.length() == 2) {
 			len = snprintf(buffer, sizeof(buffer),
 					"[0x%" PRIX64 "]     %04" PRIx16 " %.*s",
-					cpu.pc(), (uint16_t)format.whole, ibuflen, ibuffer);
+					this->pc(), (uint16_t)format.whole, ibuflen, ibuffer);
 		}
 		else {
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION_LENGTH,

@@ -2,9 +2,6 @@
 
 #include "decoder_cache.hpp"
 #include "rv32i_instr.hpp"
-#include "rv32i.hpp"
-#include "rv64i.hpp"
-#include "rv128i.hpp"
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -277,7 +274,7 @@ void DebugMachine<W>::print_and_pause()
 	try {
 		const auto instruction = cpu.read_next_instruction();
 		const auto& handler = cpu.decode(instruction);
-		const auto string = isa_type<W>::to_string(cpu, instruction, handler);
+		const auto string = cpu.to_string(instruction, handler);
 		dprintf(cpu, "\n>>> Breakpoint \t%s\n\n", string.c_str());
 	} catch (const std::exception& e) {
 		dprintf(cpu, "\n>>> Breakpoint \tError reading instruction: %s\n\n", e.what());
@@ -362,7 +359,7 @@ union UnderAlign32
 
 #define INSTRUCTION_LOGGING()	\
 	if (this->verbose_instructions) { \
-		const auto string = isa_type<W>::to_string(cpu, instruction, cpu.decode(instruction)) + "\n"; \
+		const auto string = cpu.to_string(instruction) + "\n"; \
 		machine.print(string.c_str(), string.size()); \
 	}
 

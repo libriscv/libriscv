@@ -1,5 +1,5 @@
-#include "rv32i.hpp"
 #include "instr_helpers.hpp"
+#include <cstdint>
 #include <inttypes.h>
 static const char atomic_type[] { '?', '?', 'W', 'D', 'Q', '?', '?', '?' };
 static const char* atomic_name2[] {

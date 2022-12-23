@@ -1,5 +1,5 @@
 #pragma once
-#include "rv32i.hpp"
+#include "rv32i_instr.hpp"
 
 namespace riscv
 {

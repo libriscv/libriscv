@@ -1,6 +1,5 @@
 #include "rv32i_instr.hpp"
 #include "machine.hpp"
-#include "rv128i.hpp"
 #undef RISCV_EXT_COMPRESSED
 #undef RISCV_EXT_ATOMICS
 
@@ -41,8 +40,33 @@ namespace riscv
 		return DECODED_INSTR(UNIMPLEMENTED);
 	}
 
-	template <> __attribute__((cold))
-	std::string Registers<16>::to_string() const
+	static size_t to_hex(char *buffer, size_t len, __uint128_t value)
+	{
+		if (len < 32)
+			return 0;
+		len = 8; /* At least print 8 hex digits */
+		static constexpr char lut[] = "0123456789ABCDEF";
+		for (unsigned i = 0; i < 16 - len / 2; i++)
+		{
+			if ((value >> ((15 - i) * 8)) & 0xFF)
+			{
+				len = 32 - i * 2;
+				break;
+			}
+		}
+		const size_t max = len / 2;
+		for (unsigned i = 0; i < max; i++)
+		{
+			buffer[i * 2 + 0] = lut[(value >> ((max - 1 - i) * 8 + 4)) & 0xF];
+			buffer[i * 2 + 1] = lut[(value >> ((max - 1 - i) * 8 + 0)) & 0xF];
+		}
+		return len;
+	}
+
+	template <>
+	__attribute__((cold))
+	std::string
+	Registers<16>::to_string() const
 	{
 		char buffer[1800];
 		int  len = 0;
@@ -50,7 +74,7 @@ namespace riscv
 
 		for (int i = 1; i < 32; i++) {
 			const int reglen =
-				RV128I::to_hex(regbuffer, sizeof(regbuffer), this->get(i));
+				to_hex(regbuffer, sizeof(regbuffer), this->get(i));
 			len += snprintf(buffer+len, sizeof(buffer) - len,
 					"[%s\t%.*s] ", RISCV::regname(i), reglen, regbuffer);
 			if (i % 5 == 4) {
@@ -60,14 +84,15 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-	std::string RV128I::to_string(const CPU<16>& cpu, instruction_format format, const instruction_t& instr)
+	template <> __attribute__((cold))
+	std::string CPU<16>::to_string(instruction_format format, const Instruction<16>& instr) const
 	{
 		char buffer[512];
 		char ibuffer[256];
-		int  ibuflen = instr.printer(ibuffer, sizeof(ibuffer), cpu, format);
+		int  ibuflen = instr.printer(ibuffer, sizeof(ibuffer), *this, format);
 		int  len = 0;
 		char pcbuffer[32];
-		int pclen = RV128I::to_hex(pcbuffer, sizeof(pcbuffer), cpu.pc());
+		int pclen = to_hex(pcbuffer, sizeof(pcbuffer), this->pc());
 		if (format.length() == 4) {
 			len = snprintf(buffer, sizeof(buffer),
 					"[0x%.*s] %08X %.*s",

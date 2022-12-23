@@ -3,9 +3,6 @@
 #include "instruction_counter.hpp"
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
-#include "rv32i.hpp"
-#include "rv64i.hpp"
-#include "rv128i.hpp"
 
 namespace riscv
 {
@@ -340,18 +337,6 @@ restart_precise_sim:
 	}
 
 	template <int W> __attribute__((cold))
-	std::string CPU<W>::to_string(format_t bits, const instruction_t& handler) const
-	{
-		if constexpr (W == 4)
-			return RV32I::to_string(*this, bits, handler);
-		else if constexpr (W == 8)
-			return RV64I::to_string(*this, bits, handler);
-		else if constexpr (W == 16)
-			return RV128I::to_string(*this, bits, handler);
-		return "Unknown architecture";
-	}
-
-	template <int W> __attribute__((cold))
 	std::string CPU<W>::current_instruction_to_string() const
 	{
 		format_t instruction;
@@ -360,7 +345,7 @@ restart_precise_sim:
 		} catch (...) {
 			instruction = format_t {};
 		}
-		return isa_type<W>::to_string(*this, instruction, decode(instruction));
+		return to_string(instruction, decode(instruction));
 	}
 
 	template <int W> __attribute__((cold))
