@@ -909,6 +909,7 @@ static void add_mman_syscalls()
 	});
 }
 
+#include "syscalls_select.cpp"
 #include "syscalls_poll.cpp"
 #include "syscalls_epoll.cpp"
 
@@ -957,6 +958,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	this->install_syscall_handler(59, syscall_pipe2<W>);
 	this->install_syscall_handler(65, syscall_readv<W>);
 	this->install_syscall_handler(66, syscall_writev<W>);
+	this->install_syscall_handler(72, syscall_pselect<W>);
 	this->install_syscall_handler(73, syscall_ppoll<W>);
 	this->install_syscall_handler(78, syscall_readlinkat<W>);
 	// 79: fstatat
