@@ -155,6 +155,10 @@ If in doubt, just use `address_type<W>` for the syscall argument, and it will be
 
 On RISC-V a system call has its own instruction: `ECALL`. A system call can have up to 7 arguments and has 1 return value. The arguments are in registers A0-A6, in that order, and the return value is written into A0 before giving back control to the guest. A7 contains the system call number. These are all integer/pointer registers.
 
+For 32-bit, every 64-bit integer argument will use 2 registers. For example, the system call `uint64_t my_syscall(uint64_t a, uint64_t b, uint64_t c)` would use 6 integer registers for its arguments (A0-A5), and 2 return registers (A0, A1).
+
+Floating-point arguments can be in FA0-FA7, however they are rarely (if ever) used for system calls.
+
 To pass larger data around, the guest should allocate buffers of the appropriate size and pass the address of the buffers as arguments to the system call.
 
 ## Special note on EBREAK
