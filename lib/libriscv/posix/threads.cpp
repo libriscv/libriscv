@@ -15,26 +15,31 @@ static inline void futex_op(Machine<W>& machine,
 
 	if ((futex_op & 0xF) == FUTEX_WAIT)
 	{
-		THPRINT(machine,
-			"FUTEX: Waiting for unlock... uaddr=0x%lX val=%d\n", (long) addr, val);
 		if (machine.memory.template read<address_t> (addr) == (address_t)val) {
-			if (machine.threads().suspend_and_yield()) {
+			THPRINT(machine,
+				"FUTEX: Waiting (blocked)... uaddr=0x%lX val=%d\n", (long)addr, val);
+			if (machine.threads().block(addr)) {
 				return;
 			}
 			throw MachineException(DEADLOCK_REACHED, "FUTEX deadlock", addr);
 		}
-		machine.set_result(0);
+		THPRINT(machine,
+			"FUTEX: Wait condition EAGAIN... uaddr=0x%lX val=%d\n", (long)addr, val);
+		machine.set_result(-EAGAIN);
 		return;
 	} else if ((futex_op & 0xF) == FUTEX_WAKE) {
 		THPRINT(machine,
-			"FUTEX: Waking others on 0x%lX\n", (long)addr);
-		if (machine.threads().suspend_and_yield()) {
-			return;
-		}
-		machine.set_result(0);
+			"FUTEX: Waking %d others on 0x%lX\n", val, (long)addr);
+		// XXX: Guaranteed not to expire early when
+		// timeout != 0x0.
+		unsigned awakened = machine.threads().wakeup_blocked(addr);
+		machine.template set_result<unsigned>(awakened);
+		THPRINT(machine,
+			"FUTEX: Awakened: %u\n", awakened);
 		return;
 	}
-	printf("WARNING: Unhandled futex op: %X\n", futex_op);
+	THPRINT(machine,
+		"WARNING: Unhandled futex op: %X\n", futex_op);
 	machine.set_result(-EINVAL);
 }
 
