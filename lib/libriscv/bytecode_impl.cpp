@@ -277,6 +277,30 @@ INSTRUCTION(RV32F_BC_FLD, rv32i_fld) {
 	NEXT_INSTR();
 }
 
+INSTRUCTION(RV32C_BC_LDD, rv32c_ldd) {
+	if constexpr (W >= 8) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+		REG(fi.get_rs1()) =
+			(int64_t)MACHINE().memory.template read<uint64_t>(addr);
+		NEXT_C_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+    else UNUSED_FUNCTION();
+#endif
+}
+INSTRUCTION(RV32C_BC_STD, rv32c_std) {
+	if constexpr (W >= 8) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		const auto addr = REG(fi.get_rs1()) + fi.signed_imm();
+		MACHINE().memory.template write<uint64_t>(addr, REG(fi.get_rs2()));
+		NEXT_C_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+    else UNUSED_FUNCTION();
+#endif
+}
+
 #endif // LOAD STORE
 
 #ifdef BYTECODES_OP

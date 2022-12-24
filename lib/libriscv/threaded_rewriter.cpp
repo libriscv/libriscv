@@ -178,9 +178,19 @@ namespace riscv
 				const rv32c_instruction ci{original};
 
 				FasterItype rewritten;
-				rewritten.rs1 = ci.CI.rd;
-				rewritten.rs2 = ci.CI.rd;
-				rewritten.imm = ci.CI.signed_imm();
+				if (ci.opcode() == RISCV_CI_CODE(0b000, 0b00))
+				{
+					// C.ADDI4SPN
+					rewritten.rs1 = ci.CIW.srd + 8;
+					rewritten.rs2 = REG_SP;
+					rewritten.imm = ci.CIW.offset();
+				}
+				else
+				{	// C.ADDI
+					rewritten.rs1 = ci.CI.rd;
+					rewritten.rs2 = ci.CI.rd;
+					rewritten.imm = ci.CI.signed_imm();
+				}
 
 				instr.whole = rewritten.whole;
 				return RV32C_BC_ADDI;
@@ -206,6 +216,30 @@ namespace riscv
 
 				instr.whole = rewritten.whole;
 				return RV32C_BC_ADDI;
+			}
+			case RV32C_BC_LDD: {
+				const rv32c_instruction ci{original};
+
+				// TODO: This is only for LDSP right now
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CIFLD.rd;
+				rewritten.rs2 = REG_SP;
+				rewritten.imm = ci.CIFLD.offset();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_STD: {
+				const rv32c_instruction ci{original};
+
+				// TODO: This is only for SDSP right now
+				FasterItype rewritten;
+				rewritten.rs1 = REG_SP;
+				rewritten.rs2 = ci.CSFSD.rs2;
+				rewritten.imm = ci.CSFSD.offset();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
 			}
 #endif // RISCV_EXT_COMPRESSED
 		}

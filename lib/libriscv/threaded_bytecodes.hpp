@@ -77,6 +77,8 @@ namespace riscv
 		RV32C_BC_ADDI,
 		RV32C_BC_LI,
 		RV32C_BC_MV,
+		RV32C_BC_LDD,
+		RV32C_BC_STD,
 		RV32C_BC_FUNCTION,
 		RV32C_BC_JUMPFUNC,
 #endif

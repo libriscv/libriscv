@@ -245,7 +245,9 @@ namespace riscv
 		rv32c_instruction(uint16_t another) : whole(another) {}
 		rv32c_instruction(rv32i_instruction i) : whole(i.half[0]) {}
 
-		uint16_t opcode() const noexcept {
+		#define RISCV_CI_CODE(x, y) ((x << 13) | (y))
+		uint16_t opcode() const noexcept
+		{
 			return whole & 0b1110000000000011;
 		}
 		uint16_t funct3() const noexcept {

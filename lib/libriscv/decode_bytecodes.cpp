@@ -28,6 +28,12 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		#define CI_CODE(x, y) ((x << 13) | (y))
 		switch (ci.opcode())
 		{
+			case CI_CODE(0b000, 0b00):
+				// if all bits are zero, it's an illegal instruction
+				if (ci.whole != 0x0) {
+					return RV32C_BC_ADDI; // C.ADDI4SPN
+				}
+				return RV32I_BC_INVALID;
 			case CI_CODE(0b000, 0b01):
 				if (ci.CI.rd != 0) {
 					return RV32C_BC_ADDI; // C.ADDI
@@ -50,6 +56,32 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32C_BC_JUMPFUNC;
 			case CI_CODE(0b111, 0b01): // C.BNEZ
 				return RV32C_BC_JUMPFUNC;
+			// Quadrant 2
+			case CI_CODE(0b000, 0b10):
+			case CI_CODE(0b001, 0b10):
+			case CI_CODE(0b010, 0b10):
+			case CI_CODE(0b011, 0b10): {
+				if (ci.CI.funct3 == 0x0 && ci.CI.rd != 0) {
+					return RV32C_BC_FUNCTION; // C.SLLI
+				}
+				else if (ci.CI2.funct3 == 0x1) {
+					return RV32C_BC_FUNCTION; // C.FLDSP
+				}
+				else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
+					return RV32C_BC_FUNCTION; // C.LWSP
+				}
+				else if (ci.CI2.funct3 == 0x3) {
+					if constexpr (sizeof(address_t) == 8) {
+						return RV32C_BC_LDD; // C.LDSP
+					} else {
+						return RV32C_BC_FUNCTION; // C.FLWSP
+					}
+				}
+				else if (ci.CI.rd == 0) {
+					return RV32C_BC_FUNCTION; // C.HINT
+				}
+				return RV32C_BC_FUNCTION; // C.UNIMP?
+			}
 			case CI_CODE(0b100, 0b10): {
 				const bool topbit = ci.whole & (1 << 12);
 				if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
@@ -71,6 +103,24 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0)
 				{	// EBREAK
 					return RV32C_BC_FUNCTION; // C.EBREAK
+				}
+				return RV32C_BC_FUNCTION; // C.UNIMP?
+			}
+			case CI_CODE(0b101, 0b10):
+			case CI_CODE(0b110, 0b10):
+			case CI_CODE(0b111, 0b10): {
+				if (ci.CSS.funct3 == 5) {
+					return RV32C_BC_FUNCTION; // FSDSP
+				}
+				else if (ci.CSS.funct3 == 6) {
+					return RV32C_BC_FUNCTION; // SWSP
+				}
+				else if (ci.CSS.funct3 == 7) {
+					if constexpr (W == 8) {
+						return RV32C_BC_STD; // SDSP
+					} else {
+						return RV32C_BC_FUNCTION; // FSWSP
+					}
 				}
 				return RV32C_BC_FUNCTION; // C.UNIMP?
 			}
