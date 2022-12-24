@@ -44,6 +44,14 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 					return RV32C_BC_LI; // C.LI
 				}
 				return RV32C_BC_FUNCTION; // C.NOP
+			case CI_CODE(0b011, 0b01):
+				if (ci.CI.rd == 2) {
+					return RV32C_BC_ADDI; // C.ADDI16SP
+				}
+				else if (ci.CI.rd != 0) {
+					return RV32C_BC_FUNCTION; // C.LUI
+				}
+				return RV32C_BC_FUNCTION; // ILLEGAL
 			case CI_CODE(0b001, 0b01): // C.ADDIW / C.JAL
 				if constexpr (W == 8) {
 					return RV32C_BC_FUNCTION;

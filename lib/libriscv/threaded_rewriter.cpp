@@ -185,6 +185,13 @@ namespace riscv
 					rewritten.rs2 = REG_SP;
 					rewritten.imm = ci.CIW.offset();
 				}
+				else if (ci.opcode() == RISCV_CI_CODE(0b011, 0b01))
+				{
+					// C.ADDI16SP
+					rewritten.rs1 = REG_SP;
+					rewritten.rs2 = REG_SP;
+					rewritten.imm = ci.CI16.signed_imm();
+				}
 				else
 				{	// C.ADDI
 					rewritten.rs1 = ci.CI.rd;
