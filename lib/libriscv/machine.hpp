@@ -227,6 +227,7 @@ namespace riscv
 		// Threads: Access to thread internal structures
 		const MultiThreading<W>& threads() const;
 		MultiThreading<W>& threads();
+		bool has_threads() const noexcept { return this->m_mt != nullptr; }
 		int gettid() const;
 		// FileDescriptors: Access to translation between guest fds
 		// and real system fds. The destructor also closes all opened files.
