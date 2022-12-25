@@ -78,7 +78,6 @@ TEST_CASE("Rust Hello World", "[Verify]")
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	// Install Linux system calls
 	machine.setup_linux_syscalls();
-	machine.setup_posix_threads();
 	// Create a Linux environment for runtimes to work well
 	machine.setup_linux(
 		{"rust-riscv64-hello-world"},
