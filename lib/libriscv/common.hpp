@@ -81,6 +81,8 @@ namespace riscv
 		bool allow_write_exec_segment = false;
 		bool enforce_exec_only = false;
 		bool verbose_loader = false;
+		// Perform experimental minimal dynamic linking (-fPIC)
+		bool dynamic_linking = false;
 		// Minimal fork does not loan any pages from the source Machine
 		bool minimal_fork = false;
 		// Allow the use of a linear arena to increase memory locality somewhat

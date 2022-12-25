@@ -36,6 +36,7 @@ set (SOURCES
 		libriscv/decoder_cache.cpp
 		libriscv/machine.cpp
 		libriscv/memory.cpp
+		libriscv/memory_elf.cpp
 		libriscv/memory_rw.cpp
 		libriscv/multiprocessing.cpp
 		libriscv/native_libc.cpp

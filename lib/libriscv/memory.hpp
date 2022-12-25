@@ -209,6 +209,7 @@ namespace riscv
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
 		using Shdr = typename Elf<W>::Shdr;
+		using ElfRela = typename Elf<W>::Rela;
 		template <typename T> T* elf_offset(intptr_t ofs) const {
 			return (T*) &m_binary.at(ofs);
 		}
@@ -216,6 +217,7 @@ namespace riscv
 			return elf_offset<const Ehdr> (0);
 		}
 		const Shdr* section_by_name(const std::string& name) const;
+		void dynamic_linking();
 		void relocate_section(const char* section_name, const char* symtab);
 		const typename Elf<W>::Sym* resolve_symbol(std::string_view name) const;
 		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {

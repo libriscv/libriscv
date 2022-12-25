@@ -15,6 +15,7 @@ namespace riscv
 		using Phdr = Elf32_Phdr;
 		using Shdr = Elf32_Shdr;
 		using Sym  = Elf32_Sym;
+		using Rela = Elf32_Rela;
 	};
 
 	template <>
@@ -24,6 +25,7 @@ namespace riscv
 		using Phdr = Elf64_Phdr;
 		using Shdr = Elf64_Shdr;
 		using Sym  = Elf64_Sym;
+		using Rela = Elf64_Rela;
 	};
 
 	template <>
@@ -33,6 +35,7 @@ namespace riscv
 		using Phdr = Elf128_Phdr;
 		using Shdr = Elf128_Shdr;
 		using Sym  = Elf128_Sym;
+		using Rela = Elf64_Rela;
 	};
 
 	using Elf32 = Elf<4>;
