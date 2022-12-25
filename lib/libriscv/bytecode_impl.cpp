@@ -277,6 +277,8 @@ INSTRUCTION(RV32F_BC_FLD, rv32i_fld) {
 	NEXT_INSTR();
 }
 
+#ifdef RISCV_EXT_COMPRESSED
+
 INSTRUCTION(RV32C_BC_LDD, rv32c_ldd) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
@@ -300,6 +302,8 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
     else UNUSED_FUNCTION();
 #endif
 }
+
+#endif // RISCV_EXT_COMPRESSED
 
 #endif // LOAD STORE
 
