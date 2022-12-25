@@ -4,9 +4,6 @@
 
 # DEBUG allows memory alignment checks and other things
 option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
-# Threaded simulation uses computed goto, and is not supported
-# on all compilers/systems.
-option(RISCV_THREADED "Enable fastest simulation mode" ON)
 # Enable and disable various RISC-V instruction
 # set extensions. Not recommended to disable any.
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
@@ -23,6 +20,15 @@ option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
 option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
 # SUPERVISOR enables full-system emulation. WIP.
 option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
+
+set(THREADED_IS_DEFAULT OFF)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+	OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	set(THREADED_IS_DEFAULT ON)
+endif()
+# Threaded simulation uses computed goto, and is not supported
+# on all compilers/systems.
+option(RISCV_THREADED "Enable fastest simulation mode" THREADED_IS_DEFAULT)
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
