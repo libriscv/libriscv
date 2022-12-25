@@ -227,11 +227,19 @@ namespace riscv
 			case RV32C_BC_LDD: {
 				const rv32c_instruction ci{original};
 
-				// TODO: This is only for LDSP right now
 				FasterItype rewritten;
-				rewritten.rs1 = ci.CIFLD.rd;
-				rewritten.rs2 = REG_SP;
-				rewritten.imm = ci.CIFLD.offset();
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.LD
+					rewritten.rs1 = ci.CSD.srs1 + 8;
+					rewritten.rs2 = ci.CSD.srs2 + 8;
+					rewritten.imm = ci.CSD.offset8();
+				}
+				else
+				{	// C.LDSP
+					rewritten.rs1 = ci.CIFLD.rd;
+					rewritten.rs2 = REG_SP;
+					rewritten.imm = ci.CIFLD.offset();
+				}
 
 				instr.whole = rewritten.whole;
 				return bytecode;
@@ -239,11 +247,19 @@ namespace riscv
 			case RV32C_BC_STD: {
 				const rv32c_instruction ci{original};
 
-				// TODO: This is only for SDSP right now
 				FasterItype rewritten;
-				rewritten.rs1 = REG_SP;
-				rewritten.rs2 = ci.CSFSD.rs2;
-				rewritten.imm = ci.CSFSD.offset();
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.SD
+					rewritten.rs1 = ci.CSD.srs1 + 8;
+					rewritten.rs2 = ci.CSD.srs2 + 8;
+					rewritten.imm = ci.CSD.offset8();
+				}
+				else
+				{	// C.SDSP
+					rewritten.rs1 = REG_SP;
+					rewritten.rs2 = ci.CSFSD.rs2;
+					rewritten.imm = ci.CSFSD.offset();
+				}
 
 				instr.whole = rewritten.whole;
 				return bytecode;

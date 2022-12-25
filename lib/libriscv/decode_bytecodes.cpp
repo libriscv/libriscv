@@ -34,6 +34,44 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 					return RV32C_BC_ADDI; // C.ADDI4SPN
 				}
 				return RV32I_BC_INVALID;
+			case CI_CODE(0b001, 0b00):
+			case CI_CODE(0b010, 0b00):
+			case CI_CODE(0b011, 0b00): {
+				if (ci.CL.funct3 == 0x1) {
+					return RV32C_BC_FUNCTION; // C.FLD
+				}
+				else if (ci.CL.funct3 == 0x2) {
+					return RV32C_BC_FUNCTION; // C.LW
+				}
+				else if (ci.CL.funct3 == 0x3) {
+					if constexpr (sizeof(address_t) == 8) {
+						return RV32C_BC_FUNCTION; // C.LD
+					} else {
+						return RV32C_BC_FUNCTION; // C.FLW
+					}
+				}
+				return RV32C_BC_FUNCTION; // C.UNIMP
+			}
+			// RESERVED: 0b100, 0b00
+			case CI_CODE(0b101, 0b00):
+			case CI_CODE(0b110, 0b00):
+			case CI_CODE(0b111, 0b00): {
+				switch (ci.CS.funct3) {
+				case 4:
+					return RV32C_BC_FUNCTION; // C.UNIMP
+				case 5:
+					return RV32C_BC_FUNCTION; // C.FSD
+				case 6:
+					return RV32C_BC_FUNCTION; // C.SW
+				case 7: // C.SD / C.FSW
+					if constexpr (sizeof(address_t) == 8) {
+						return RV32C_BC_STD; // C.SD
+					} else {
+						return RV32C_BC_FUNCTION; // C.FSW
+					}
+				}
+				return RV32C_BC_FUNCTION; // C.UNIMP?
+			}
 			case CI_CODE(0b000, 0b01):
 				if (ci.CI.rd != 0) {
 					return RV32C_BC_ADDI; // C.ADDI
@@ -52,11 +90,11 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 					return RV32C_BC_FUNCTION; // C.LUI
 				}
 				return RV32C_BC_FUNCTION; // ILLEGAL
-			case CI_CODE(0b001, 0b01): // C.ADDIW / C.JAL
+			case CI_CODE(0b001, 0b01):
 				if constexpr (W == 8) {
-					return RV32C_BC_FUNCTION;
+					return RV32C_BC_FUNCTION; // C.ADDIW
 				} else {
-					return RV32C_BC_JUMPFUNC;
+					return RV32C_BC_JUMPFUNC; // C.JAL
 				}
 			case CI_CODE(0b101, 0b01): // C.JAL
 				return RV32C_BC_JUMPFUNC;
