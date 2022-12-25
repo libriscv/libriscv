@@ -81,11 +81,13 @@ The emulator is built 3 times for different purposes. `rvmicro` is built for mic
 
 The [binaries folder](/binaries/) has a lot of example programs.
 
-Building and running your own ELF files that can run in freestanding RV32G is quite challenging, so consult the `barebones` example! It's a bit like booting on bare metal, except you can choose your own system functions. The fun part is of course the extremely small binaries and total control over the environment.
+The [newlib](/binaries/newlib) and [newlib64](/binaries/newlib64) example projects have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries. You can run these programs with rvnewlib.
 
-The `newlib` example projects have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries.
+The [linux](/binaries/linux) and [linux64](/binaries/linux64) example projects require a Linux-configured cross compiler. You can run these programs with rvlinux.
 
-The `linux` example projects use the Linux-configured cross compiler and will expect you to implement quite a few system calls just to get into `int main()`. In addition, you will have to setup argv, env and the aux-vector. There are helper methods to do all of this, and you should have a look at the emulator on how to set it up.
+The [Go](/binaries/go) examples only require Go installed. Go produces complex RV64G ELF executables.
+
+There are also examples for [Nim](/binaries/nim), [Zig](/binaries/zig) and [Rust](/binaries/rust).
 
 ## Building for Windows
 
