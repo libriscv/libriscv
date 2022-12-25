@@ -61,12 +61,20 @@ static void run_program(
 		machine.setup_newlib_syscalls();
 		machine.setup_argv(args);
 	}
-	else if constexpr (micro_guest) {
+	else if constexpr (micro_guest)
+	{
+		// This guest has accelerated libc functions, which
+		// are provided as system calls
+		// See: tests/unit/native.cpp and tests/unit/include/native_libc.h
+		constexpr size_t heap_size = 6ULL << 20; // 6MB
+		auto heap = machine.memory.mmap_allocate(heap_size);
+
+		machine.setup_native_heap(470, heap, heap_size);
+		machine.setup_native_memory(475);
+		machine.setup_native_threads(490);
+
+		machine.setup_newlib_syscalls();
 		machine.setup_argv(args);
-		machine.setup_native_heap(1, 0x40000000, 6*1024*1024);
-		machine.setup_native_memory(6);
-		machine.setup_native_threads(30);
-		machine.setup_minimal_syscalls();
 	}
 	else {
 		fprintf(stderr, "Unknown emulation mode! Exiting...\n");
