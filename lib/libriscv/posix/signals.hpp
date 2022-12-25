@@ -22,6 +22,7 @@ struct SignalAction {
 	}
 	address_type<W> handler = SIG_UNSET;
 	bool altstack = false;
+	unsigned mask = 0x0;
 };
 
 template <int W>

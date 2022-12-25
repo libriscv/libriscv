@@ -98,19 +98,22 @@ static void syscall_sigaction(Machine<W>& machine)
 
 	auto& sigact = machine.sigaction(sig);
 
-	struct riscv_sigaction {
+	struct kernel_sigaction {
 		address_type<W> sa_handler;
-		unsigned long sa_flags;
+		address_type<W> sa_flags;
+		address_type<W> sa_mask;
 	} sa {};
 	if (old_action != 0x0) {
-		sa.sa_handler = sigact.handler;
+		sa.sa_handler = sigact.handler & ~address_type<W>(0xF);
 		sa.sa_flags   = (sigact.altstack ? SA_ONSTACK : 0x0);
+		sa.sa_mask    = sigact.mask;
 		machine.copy_to_guest(old_action, &sa, sizeof(sa));
 	}
 	if (action != 0x0) {
 		machine.copy_from_guest(&sa, action, sizeof(sa));
-		sigact.handler = sa.sa_handler;
+		sigact.handler  = sa.sa_handler;
 		sigact.altstack = (sa.sa_flags & SA_ONSTACK) != 0;
+		sigact.mask     = sa.sa_mask;
 		SYSPRINT("<<< sigaction %d handler: 0x%lX altstack: %d\n",
 			sig, (long)sigact.handler, sigact.altstack);
 	}
