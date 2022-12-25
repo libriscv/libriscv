@@ -204,6 +204,21 @@ void Machine<W>::realign_stack()
 }
 
 template <int W> inline
+const MultiThreading<W>& Machine<W>::threads() const
+{
+	if (UNLIKELY(m_mt == nullptr))
+		throw MachineException(FEATURE_DISABLED, "Threads are not initialized");
+	return *m_mt;
+}
+template <int W> inline
+MultiThreading<W>& Machine<W>::threads()
+{
+	if (UNLIKELY(m_mt == nullptr))
+		throw MachineException(FEATURE_DISABLED, "Threads are not initialized");
+	return *m_mt;
+}
+
+template <int W> inline
 const FileDescriptors& Machine<W>::fds() const
 {
 	if (m_fds != nullptr) return *m_fds;

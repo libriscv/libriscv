@@ -225,8 +225,8 @@ namespace riscv
 		void setup_posix_threads();
 		void setup_native_threads(const size_t syscall_base);
 		// Threads: Access to thread internal structures
-		const MultiThreading<W>& threads() const noexcept { return *m_mt; }
-		MultiThreading<W>& threads() noexcept { return *m_mt; }
+		const MultiThreading<W>& threads() const;
+		MultiThreading<W>& threads();
 		int gettid() const;
 		// FileDescriptors: Access to translation between guest fds
 		// and real system fds. The destructor also closes all opened files.
