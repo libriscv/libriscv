@@ -106,8 +106,6 @@ The F and D-extensions should be 100% supported (32- and 64-bit floating point i
 
 The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emu128 folder.
 
-Note: There is no support for the E- and Q-extensions. Zba is supported. A minimal set of the V-extension is currently being worked on. Binary translation currently only supports RV32G and RV64G. The fastest arch combo is `rv64gv_zba` right now.
-
 ## Example usage when embedded into a project
 
 Load a Linux program built for RISC-V and run through main:
@@ -256,7 +254,11 @@ You can create a 64kb machine without a binary, and no ELF loader will be invoke
 	machine.simulate(1'000ul);
 ```
 
-The fuzzing program does this, so have a look at that.
+The fuzzing program does this, so have a look at that. There is also [a unit test](/tests/unit/micro.cpp).
+
+## Adding your own instructions
+
+See [this unit test](/tests/unit/custom.cpp) for an example on how to add your own instructions. They work in all simulation modes.
 
 ## Documentation
 
