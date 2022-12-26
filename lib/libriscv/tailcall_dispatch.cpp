@@ -43,8 +43,8 @@
 	cpu.trigger_exception(ILLEGAL_OPCODE);
 
 #define BEGIN_BLOCK()                               \
-	pc += d->idxend * (compressed_enabled ? 2 : 4); \
-	counter += d->idxend + 1;
+	pc += d->block_bytes(); \
+	counter += d->instruction_count();
 #define NEXT_BLOCK(len)                \
 	pc += len;                         \
 	d += (compressed_enabled ? 2 : 1); \
@@ -133,11 +133,20 @@ namespace riscv
 		cpu.machine().set_instruction_counter(counter);
 		// Invoke system call
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
-		// Restore max counter
+		// Restore max counter and check overflow
 		counter = cpu.machine().instruction_counter();
 		if (UNLIKELY(COUNTER_OVERFLOWED(counter)))
 		{
 			return RETURN_VALUES();
+		}
+		// Clone-like system calls can change PC
+		if (UNLIKELY(pc != cpu.registers().pc))
+		{
+			pc = cpu.registers().pc;
+			if (UNLIKELY(!exec->is_within(pc))) {
+				exec = resolve_execute_segment<W>(cpu, pc);
+			}
+			d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];
 		}
 		NEXT_BLOCK(4);
 	}
@@ -311,6 +320,8 @@ namespace riscv
 		[RV32C_BC_ADDI]     = rv32c_addi,
 		[RV32C_BC_LI]       = rv32c_addi,
 		[RV32C_BC_MV]       = rv32c_addi,
+		[RV32C_BC_LDD]      = rv32c_ldd,
+		[RV32C_BC_STD]      = rv32c_std,
 		[RV32C_BC_FUNCTION] = rv32c_func,
 		[RV32C_BC_JUMPFUNC] = rv32c_jfunc,
 #endif
