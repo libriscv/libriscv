@@ -16,7 +16,13 @@ struct DecoderData {
 #else
 	uint16_t m_handler = 0x0;
 #endif
+#ifdef RISCV_EXT_COMPRESSED
+	uint16_t idxend  : 8;
+	uint16_t icount  : 8;
+#else
 	uint16_t idxend;
+#endif
+
 	uint32_t instr;
 
 	void execute(CPU<W>& cpu) const {
@@ -49,6 +55,17 @@ struct DecoderData {
 	}
 	void set_insn_handler(instruction_handler<W> ih) noexcept {
 		this->m_handler = handler_index_for(ih);
+	}
+
+	auto block_bytes() const noexcept {
+		return idxend * (compressed_enabled ? 2 : 4);
+	}
+	auto instruction_count() const noexcept {
+#ifdef RISCV_EXT_COMPRESSED
+		return idxend + 1 - icount;
+#else
+		return idxend + 1;
+#endif
 	}
 
 private:

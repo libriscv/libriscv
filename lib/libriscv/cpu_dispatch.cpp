@@ -180,8 +180,8 @@ continue_segment:
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 
 continue_block:
-	pc += decoder->idxend * (compressed_enabled ? 2 : 4);
-	counter.increment_counter(decoder->idxend + 1);
+	pc += decoder->block_bytes();
+	counter.increment_counter(decoder->instruction_count());
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 

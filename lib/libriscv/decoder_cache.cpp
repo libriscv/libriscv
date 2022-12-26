@@ -121,7 +121,7 @@ namespace riscv
 						break;
 					}
 					// Too large blocks are likely malicious (although could be many empty pages)
-					if (UNLIKELY(datalength > 500)) {
+					if (UNLIKELY(datalength >= 255)) {
 						break;
 					}
 				}
@@ -139,8 +139,11 @@ namespace riscv
 					// Ends at instruction *before* last PC
 					// Subtract block PC in order to get length,
 					// then store half
-					entry->idxend = (pc - last_length - block_pc) / 2;
-					//entry->instr_count = data.size() - i;
+					auto count = (pc - last_length - block_pc) / 2;
+					if (count > 255)
+						throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
+					entry->idxend = count;
+					entry->icount = count + 1 - (data.size() - i);
 
 					block_pc += length;
 					datalength -= length / 2;

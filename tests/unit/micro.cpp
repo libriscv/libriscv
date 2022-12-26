@@ -48,16 +48,13 @@ TEST_CASE("Run exactly X instructions", "[Micro]")
 	machine.reset_instruction_counter();
 
 	// Normal simulation
-	// XXX: Fast compressed simulation will overestimate
-	// the instruction counting on purpose, in order to
-	// be close in performance compared to uncompressed.
 	machine.simulate<false>(2);
-	REQUIRE(machine.instruction_counter() >= 3);
+	REQUIRE(machine.instruction_counter() == 3);
 	REQUIRE(machine.cpu.reg(REG_ARG7) == 93);
 
 	machine.cpu.reg(REG_ARG7) = 0;
 
 	machine.simulate<false>(2);
-	REQUIRE(machine.instruction_counter() >= 5);
+	REQUIRE(machine.instruction_counter() == 5);
 	REQUIRE(machine.cpu.reg(REG_ARG7) == 93);
 }

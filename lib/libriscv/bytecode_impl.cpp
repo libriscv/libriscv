@@ -107,9 +107,8 @@ INSTRUCTION(RV32I_BC_BNE, rv32i_bne) {
 			// TODO: Macro-ize the compressed_enabled constants
 			if (LIKELY(!counter.overflowed())) {
 				decoder += fi.signed_imm() / (compressed_enabled ? 2 : 4);
-				unsigned count = decoder->idxend;
-				counter.increment_counter(count + 1);
-				pc += count * (compressed_enabled ? 2 : 4);
+				counter.increment_counter(decoder->instruction_count());
+				pc += decoder->block_bytes();
 #ifdef DISPATCH_MODE_SWITCH_BASED
 				break;
 #else
