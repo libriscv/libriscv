@@ -29,9 +29,11 @@
 						case 0x6:
 							DECODER(DECODED_INSTR(LOAD_U32));
 						case 0x7:
+#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 							if constexpr (sizeof(address_t) >= 16) {
 								DECODER(DECODED_INSTR(LOAD_U128));
 							}
+#endif
 							[[fallthrough]];
 						default:
 							DECODER(DECODED_INSTR(ILLEGAL));
@@ -56,9 +58,11 @@
 						}
 						DECODER(DECODED_INSTR(ILLEGAL));
 					case 0x4:
+#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 						if constexpr (sizeof(address_t) >= 16) {
 							DECODER(DECODED_INSTR(STORE_I128_IMM));
 						}
+#endif
 						[[fallthrough]];
 					default:
 						DECODER(DECODED_INSTR(ILLEGAL));
@@ -189,6 +193,7 @@
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
+#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 				case RV128I_OP_IMM64:
 					if (LIKELY(instruction.Itype.rd != 0))
 					{
@@ -203,6 +208,7 @@
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}
+#endif
 				case RV32I_FENCE:
 					DECODER(DECODED_INSTR(FENCE));
 
@@ -377,6 +383,7 @@
 						}
 						break;
 					}
+#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 					case AMOSIZE_Q:
 					if constexpr (sizeof(address_t) == 16) {
 						switch (instruction.Atype.funct5) {
@@ -399,6 +406,7 @@
 						}
 						break;
 					}
+#endif // RISCV_128BIT_ISA_INSTRUCTIONS
 					}
 #endif
 			}

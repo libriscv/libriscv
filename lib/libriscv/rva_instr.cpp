@@ -164,50 +164,6 @@ namespace riscv
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
-	ATOMIC_INSTR(AMOADD_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		cpu.template amo<__int128_t>(instr,
-		[] (auto& cpu, auto& value, auto rs2) {
-			auto old_value = value;
-			value += cpu.reg(rs2);
-			return old_value;
-		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
-
-	ATOMIC_INSTR(AMOXOR_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		cpu.template amo<__int128_t>(instr,
-		[] (auto& cpu, auto& value, auto rs2) {
-			auto old_value = value;
-			value ^= cpu.reg(rs2);
-			return old_value;
-		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
-
-	ATOMIC_INSTR(AMOOR_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		cpu.template amo<__int128_t>(instr,
-		[] (auto& cpu, auto& value, auto rs2) {
-			auto old_value = value;
-			value |= cpu.reg(rs2);
-			return old_value;
-		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
-
-	ATOMIC_INSTR(AMOAND_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		cpu.template amo<__int128_t>(instr,
-		[] (auto& cpu, auto& value, auto rs2) {
-			auto old_value = value;
-			value &= cpu.reg(rs2);
-			return old_value;
-		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
-
 	ATOMIC_INSTR(AMOMAX_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
@@ -281,17 +237,6 @@ namespace riscv
 		});
 	}, DECODED_ATOMIC(AMOSWAP_W).printer);
 
-	ATOMIC_INSTR(AMOSWAP_Q,
-	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
-	{
-		cpu.template amo<__int128_t>(instr,
-		[] (auto& cpu, auto& value, auto rs2) {
-			auto old_value = value;
-			value = cpu.reg(rs2);
-			return old_value;
-		});
-	}, DECODED_ATOMIC(AMOSWAP_W).printer);
-
     ATOMIC_INSTR(LOAD_RESV,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
@@ -311,6 +256,7 @@ namespace riscv
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
+#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 		else if (instr.Atype.funct3 == AMOSIZE_Q)
 		{
 			if constexpr (RVIS128BIT(cpu)) {
@@ -318,7 +264,9 @@ namespace riscv
 				value = cpu.machine().memory.template read<__uint128_t> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
-		} else {
+		}
+#endif
+		else {
 			cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 		if (instr.Atype.rd != 0)
@@ -332,7 +280,7 @@ namespace riscv
 				RISCV::regname(instr.Atype.rd));
 	});
 
-    ATOMIC_INSTR(STORE_COND,
+	ATOMIC_INSTR(STORE_COND,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
 	{
 		const auto addr = cpu.reg(instr.Atype.rs1);
@@ -354,6 +302,7 @@ namespace riscv
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
+#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 		else if (instr.Atype.funct3 == AMOSIZE_Q)
 		{
 			if constexpr (RVIS128BIT(cpu)) {
@@ -363,6 +312,10 @@ namespace riscv
 				}
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
+		}
+#endif
+		else {
+			cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 		// Write non-zero value to RD on failure
 		if (instr.Atype.rd != 0)

@@ -1,15 +1,17 @@
 #include "rv32i_instr.hpp"
 #include "machine.hpp"
 #undef RISCV_EXT_COMPRESSED
-#undef RISCV_EXT_ATOMICS
+#define RISCV_128BIT_ISA_INSTRUCTIONS
 
 #define INSTRUCTION(x, ...) \
 	static constexpr CPU<16>::instruction_t instr128i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr128i_##x
 #include "rvi_instr.cpp"
+#include "rv128i_instr.cpp"
 #include "rvf_instr.cpp"
 #ifdef RISCV_EXT_ATOMICS
 #include "rva_instr.cpp"
+#include "rva128_instr.cpp"
 #endif
 #ifdef RISCV_EXT_VECTOR
 #include "rvv_instr.cpp"
