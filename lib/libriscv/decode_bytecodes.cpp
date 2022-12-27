@@ -101,7 +101,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case CI_CODE(0b110, 0b01): // C.BEQZ
 				return RV32C_BC_JUMPFUNC;
 			case CI_CODE(0b111, 0b01): // C.BNEZ
-				return RV32C_BC_JUMPFUNC;
+				return RV32C_BC_BNEZ;
 			// Quadrant 2
 			case CI_CODE(0b000, 0b10):
 			case CI_CODE(0b001, 0b10):

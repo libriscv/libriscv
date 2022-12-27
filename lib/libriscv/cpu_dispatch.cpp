@@ -31,7 +31,7 @@ namespace riscv
 #define NEXT_BLOCK(len)               \
 	pc += len;                        \
 	if constexpr (compressed_enabled) \
-		decoder += 2;                 \
+		decoder += len / 2;           \
 	else                              \
 		decoder += 1;                 \
 	pc += decoder->block_bytes(); \
@@ -64,7 +64,6 @@ template <int W> __attribute__((hot))
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 {
 	static constexpr uint32_t XLEN = W * 8;
-	static constexpr bool ENABLE_FAST_BRANCH = true;
 	using addr_t  = address_type<W>;
 	using saddr_t = signed_address_type<W>;
 
@@ -140,7 +139,8 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = &&rv32c_addi,
 		[RV32C_BC_LI]       = &&rv32c_addi,
-		[RV32C_BC_MV]       = &&rv32c_addi,
+		[RV32C_BC_MV]       = &&rv32c_mv,
+		[RV32C_BC_BNEZ]     = &&rv32c_bnez,
 		[RV32C_BC_LDD]      = &&rv32c_ldd,
 		[RV32C_BC_STD]      = &&rv32c_std,
 		[RV32C_BC_FUNCTION] = &&rv32c_func,

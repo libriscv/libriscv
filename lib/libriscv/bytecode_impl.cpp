@@ -7,6 +7,11 @@ INSTRUCTION(RV32C_BC_ADDI, rv32c_addi) {
 	REG(fi.get_rs1()) = REG(fi.get_rs2()) + fi.signed_imm();
 	NEXT_C_INSTR();
 }
+INSTRUCTION(RV32C_BC_MV, rv32c_mv) {
+	VIEW_INSTR_AS(fi, FasterMove);
+	REG(fi.get_rd()) = REG(fi.get_rs1());
+	NEXT_C_INSTR();
+}
 #endif
 INSTRUCTION(RV32I_BC_ADDI, rv32i_addi) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -26,13 +31,13 @@ INSTRUCTION(RV32I_BC_MV, rv32i_mv) {
 }
 INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw) {
 	if constexpr (W >= 8) {
-        VIEW_INSTR_AS(fi, FasterItype);
-        REG(fi.get_rs1()) = (int32_t)
-            ((uint32_t)REG(fi.get_rs2()) + fi.signed_imm());
-        NEXT_INSTR();
+		VIEW_INSTR_AS(fi, FasterItype);
+		REG(fi.get_rs1()) = (int32_t)
+			((uint32_t)REG(fi.get_rs2()) + fi.signed_imm());
+		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
-    else UNUSED_FUNCTION();
+	else UNUSED_FUNCTION();
 #endif
 }
 INSTRUCTION(RV32I_BC_SLLI, rv32i_slli) {
@@ -89,6 +94,18 @@ INSTRUCTION(RV32I_BC_ANDI, rv32i_andi) {
 
 #ifdef BYTECODES_BRANCH
 
+#ifdef RISCV_EXT_COMPRESSED
+
+INSTRUCTION(RV32C_BC_BNEZ, rv32c_bnez) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (REG(fi.get_rs1()) != 0) {
+        PERFORM_BRANCH();
+    }
+    NEXT_BLOCK(2);
+}
+
+#endif // RISCV_EXT_COMPRESSED
+
 INSTRUCTION(RV32I_BC_BEQ, rv32i_beq) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) == REG(fi.get_rs2())) {
@@ -99,31 +116,9 @@ INSTRUCTION(RV32I_BC_BEQ, rv32i_beq) {
 INSTRUCTION(RV32I_BC_BNE, rv32i_bne) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) != REG(fi.get_rs2())) {
-#ifndef DISPATCH_MODE_TAILCALL
-		if constexpr (ENABLE_FAST_BRANCH) {
-			pc += fi.signed_imm();
-			// XXX: This is a hand-written fast-path
-			// Intentionally put everything after branch
-			// TODO: Macro-ize the compressed_enabled constants
-			if (LIKELY(!counter.overflowed())) {
-				decoder += fi.signed_imm() / (compressed_enabled ? 2 : 4);
-				counter.increment_counter(decoder->instruction_count());
-				pc += decoder->block_bytes();
-#ifdef DISPATCH_MODE_SWITCH_BASED
-				break;
-#else
-				goto *computed_opcode[decoder->get_bytecode()];
-#endif
-			}
-			goto check_jump;
-		} else {
-            PERFORM_BRANCH();
-        }
-#else
-        PERFORM_BRANCH();
-#endif
-    }
-    NEXT_BLOCK(4);
+		PERFORM_BRANCH();
+	}
+	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_BEQ_FW, rv32i_beq_fw) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -194,7 +189,7 @@ INSTRUCTION(RV32I_BC_LDWU, rv32i_ldwu) {
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
-    else UNUSED_FUNCTION();
+	else UNUSED_FUNCTION();
 #endif
 }
 INSTRUCTION(RV32I_BC_LDD, rv32i_ldd) {
@@ -206,7 +201,7 @@ INSTRUCTION(RV32I_BC_LDD, rv32i_ldd) {
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
-    else UNUSED_FUNCTION();
+	else UNUSED_FUNCTION();
 #endif
 }
 INSTRUCTION(RV32I_BC_STD, rv32i_std) {
@@ -217,7 +212,7 @@ INSTRUCTION(RV32I_BC_STD, rv32i_std) {
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
-    else UNUSED_FUNCTION();
+	else UNUSED_FUNCTION();
 #endif
 }
 INSTRUCTION(RV32I_BC_LDB, rv32i_ldb) {
@@ -287,7 +282,7 @@ INSTRUCTION(RV32C_BC_LDD, rv32c_ldd) {
 		NEXT_C_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
-    else UNUSED_FUNCTION();
+	else UNUSED_FUNCTION();
 #endif
 }
 INSTRUCTION(RV32C_BC_STD, rv32c_std) {
@@ -298,7 +293,7 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 		NEXT_C_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
-    else UNUSED_FUNCTION();
+	else UNUSED_FUNCTION();
 #endif
 }
 
@@ -310,17 +305,17 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 
 INSTRUCTION(RV32I_BC_NOP, rv32i_nop)
 {
-    NEXT_INSTR();
+	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_AUIPC, rv32i_auipc)
 {
-    VIEW_INSTR();
-    REG(instr.Utype.rd) = pc + instr.Utype.upper_imm();
-    NEXT_BLOCK(4);
+	VIEW_INSTR();
+	REG(instr.Utype.rd) = pc + instr.Utype.upper_imm();
+	NEXT_BLOCK(4);
 }
 INSTRUCTION(RV32I_BC_LUI, rv32i_lui)
 {
-    VIEW_INSTR();
+	VIEW_INSTR();
 	REG(instr.Utype.rd) = instr.Utype.upper_imm();
 	NEXT_INSTR();
 }
@@ -332,7 +327,7 @@ INSTRUCTION(RV32I_BC_LUI, rv32i_lui)
 	const auto src2 = REG(fi.get_rs2());
 
 INSTRUCTION(RV32I_BC_OP_ADD, rv32i_op_add) {
-    OP_INSTR();
+	OP_INSTR();
 	dst = src1 + src2;
 	NEXT_INSTR();
 }

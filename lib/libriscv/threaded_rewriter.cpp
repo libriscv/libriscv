@@ -216,13 +216,31 @@ namespace riscv
 			case RV32C_BC_MV: {
 				const rv32c_instruction ci{original};
 
-				FasterItype rewritten;
-				rewritten.rs1 = ci.CR.rd;
-				rewritten.rs2 = ci.CR.rs2;
-				rewritten.imm = 0;
+				FasterMove rewritten;
+				rewritten.rd  = ci.CR.rd;
+				rewritten.rs1 = ci.CR.rs2;
 
 				instr.whole = rewritten.whole;
-				return RV32C_BC_ADDI;
+				return RV32C_BC_MV;
+			}
+			case RV32C_BC_BNEZ: {
+				const rv32c_instruction ci { original };
+
+				const int32_t imm = ci.CB.signed_imm();
+				const auto addr = pc + imm;
+
+				if (!this->is_within(addr, 4) || (addr % PCAL) != 0)
+				{
+					return RV32I_BC_INVALID;
+				}
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CB.srs1 + 8;
+				rewritten.rs2 = 0;
+				rewritten.imm = imm;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
 			}
 			case RV32C_BC_LDD: {
 				const rv32c_instruction ci{original};
