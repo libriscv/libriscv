@@ -594,6 +594,14 @@ INSTRUCTION(RV32V_BC_VSE32, rv32v_vse32) {
 	MACHINE().memory.template write<VectorLane> (addr, dst);
 	NEXT_INSTR();
 }
+INSTRUCTION(RV32V_BC_VFADD_VV, rv32v_vfadd_vv) {
+	VIEW_INSTR_AS(vi, rv32v_instruction);
+	auto& rvv = REGISTERS().rvv();
+	for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+		rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] + rvv.f32(vi.OPVV.vs2)[i];
+	}
+	NEXT_INSTR();
+}
 #endif // RISCV_EXT_VECTOR
 
 #endif // FLP

@@ -102,6 +102,7 @@ namespace riscv
 		extern const DecoderFunc<W> computed_opcode[BYTECODES_MAX];
 	}
 
+#define CPU()       cpu
 #define REG(x)      cpu.reg(x)
 #define REGISTERS() cpu.registers()
 #define MACHINE()   cpu.machine()
@@ -342,6 +343,7 @@ namespace riscv
 #ifdef RISCV_EXT_VECTOR
 		[RV32V_BC_VLE32]   = rv32v_vle32,
 		[RV32V_BC_VSE32]   = rv32v_vse32,
+		[RV32V_BC_VFADD_VV] = rv32v_vfadd_vv,
 #endif
 		[RV32I_BC_FUNCTION] = execute_decoded_function,
 #ifdef RISCV_BINARY_TRANSLATION
