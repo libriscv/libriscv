@@ -41,7 +41,10 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 	using namespace riscv;
 	const std::string_view bin {(const char*) data, len};
 	try {
-		const MachineOptions<W> options { .allow_write_exec_segment = true };
+		const MachineOptions<W> options {
+			.allow_write_exec_segment = true,
+			.use_memory_arena = false
+		};
 		Machine<W> machine { bin, options };
 		machine.on_unhandled_syscall = [] (auto&, size_t) {};
 		machine.simulate(MAX_CYCLES);
