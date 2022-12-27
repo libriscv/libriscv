@@ -1,7 +1,9 @@
 #pragma once
 #include <type_traits>
 #include "util/elf.h"
+#ifdef RISCV_128BIT_ISA
 #include "util/elf128.h"
+#endif
 
 namespace riscv
 {
@@ -56,8 +58,10 @@ namespace riscv
 			return hdr->e_ident[EI_CLASS] == ELFCLASS32;
 		else if constexpr (std::is_same_v<Class, Elf64_Ehdr>)
 			return hdr->e_ident[EI_CLASS] == ELFCLASS64;
+#ifdef RISCV_128BIT_ISA
 		else if constexpr (std::is_same_v<Class, Elf128_Ehdr>)
 			return hdr->e_ident[EI_CLASS] == ELFCLASS128;
+#endif
 		return false;
 	}
 }
