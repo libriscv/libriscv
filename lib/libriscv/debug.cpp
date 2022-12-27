@@ -430,5 +430,5 @@ void DebugMachine<W>::simulate(uint64_t max)
 
 	template struct DebugMachine<4>;
 	template struct DebugMachine<8>;
-	template struct DebugMachine<16>;
+	INSTANTIATE_128_IF_ENABLED(DebugMachine);
 } // riscv

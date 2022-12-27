@@ -28,6 +28,10 @@ namespace riscv
 		using Rela = Elf64_Rela;
 	};
 
+	using Elf32 = Elf<4>;
+	using Elf64 = Elf<8>;
+
+#ifdef RISCV_128BIT_ISA
 	template <>
 	struct Elf<16>
 	{
@@ -37,10 +41,8 @@ namespace riscv
 		using Sym  = Elf128_Sym;
 		using Rela = Elf64_Rela;
 	};
-
-	using Elf32 = Elf<4>;
-	using Elf64 = Elf<8>;
 	using Elf128 = Elf<16>;
+#endif
 
 	template <typename Class>
 	inline bool validate_header(const Class* hdr)

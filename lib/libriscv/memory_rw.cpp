@@ -232,5 +232,5 @@ namespace riscv
 
 	template struct Memory<4>;
 	template struct Memory<8>;
-	template struct Memory<16>;
+	INSTANTIATE_128_IF_ENABLED(Memory);
 }

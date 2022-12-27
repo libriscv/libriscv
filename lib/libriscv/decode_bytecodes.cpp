@@ -424,5 +424,5 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 
 	template struct CPU<4>;
 	template struct CPU<8>;
-	template struct CPU<16>;
+	INSTANTIATE_128_IF_ENABLED(CPU);
 } // riscv

@@ -36,5 +36,5 @@ void Signals<W>::enter(Machine<W>& machine, int sig)
 
 	template struct Signals<4>;
 	template struct Signals<8>;
-	template struct Signals<16>;
+	INSTANTIATE_128_IF_ENABLED(Signals);
 } // riscv

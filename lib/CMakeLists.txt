@@ -9,6 +9,8 @@ option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
+# Enable 128-bit architecture emulation
+option(RISCV_128I   "Enable RV128G" OFF)
 # EXPERIMENTAL enables some high-performance interpreter
 # features that may be unstable.
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
@@ -52,7 +54,6 @@ set (SOURCES
 		libriscv/posix/socket_calls.cpp
 		libriscv/rv32i.cpp
 		libriscv/rv64i.cpp
-		libriscv/rv128i.cpp
 		libriscv/serialize.cpp
 		libriscv/util/crc32c.cpp
 	)
@@ -107,6 +108,13 @@ if (RISCV_EXT_C)
 endif()
 if (RISCV_EXT_V)
 	target_compile_definitions(riscv PUBLIC RISCV_EXT_VECTOR=32)
+endif()
+
+if (RISCV_128I)
+	target_compile_definitions(riscv PUBLIC RISCV_128BIT_ISA=1)
+	target_sources(riscv PUBLIC
+		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv128i.cpp
+	)
 endif()
 
 if (RISCV_MULTIPROCESS)

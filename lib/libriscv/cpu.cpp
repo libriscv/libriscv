@@ -369,6 +369,6 @@ restart_precise_sim:
 	template struct Registers<4>;
 	template struct CPU<8>;
 	template struct Registers<8>;
-	template struct CPU<16>;
-	template struct Registers<16>;
+	INSTANTIATE_128_IF_ENABLED(CPU);
+	INSTANTIATE_128_IF_ENABLED(Registers);
 }

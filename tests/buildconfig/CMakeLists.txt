@@ -5,6 +5,8 @@ set(SOURCES
 	main.cpp
 )
 
+# Always enable 128-bit ISA
+option(RISCV_128I "" ON)
 add_subdirectory(../../lib lib)
 
 add_executable(buildconfig ${SOURCES})

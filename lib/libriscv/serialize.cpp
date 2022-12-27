@@ -6,6 +6,8 @@ namespace riscv
 	template <int W>
 	struct SerializedMachine
 	{
+		using address_t = address_type<W>;
+
 		uint64_t magic;
 		uint32_t n_pages;
 		uint16_t reg_size;
@@ -18,11 +20,11 @@ namespace riscv
 		Registers<W> registers;
 		uint64_t     counter;
 
-		uint64_t start_address = 0;
-		uint64_t stack_address = 0;
-		uint64_t mmap_address  = 0;
-		uint64_t heap_address  = 0;
-		uint64_t exit_address  = 0;
+		address_t start_address = 0;
+		address_t stack_address = 0;
+		address_t mmap_address  = 0;
+		address_t heap_address  = 0;
+		address_t exit_address  = 0;
 	};
 	struct SerializedPage
 	{
@@ -79,8 +81,9 @@ namespace riscv
 			assert(!page.attr.is_cow && "Should never have CoW pages stored");
 			// XXX: Ignore shared/non-owned pages?
 			if (page.attr.non_owning) continue;
+			// XXX: 128-bit addresses not taken into account
 			const SerializedPage spage {
-				.addr = it.first,
+				.addr = static_cast<uint64_t>(it.first),
 				.attr = page.attr
 			};
 			auto* sptr = (const uint8_t*) &spage;
@@ -167,4 +170,7 @@ namespace riscv
 	template struct CPU<8>;
 	template struct Memory<4>;
 	template struct Memory<8>;
+	INSTANTIATE_128_IF_ENABLED(Machine);
+	INSTANTIATE_128_IF_ENABLED(CPU);
+	INSTANTIATE_128_IF_ENABLED(Memory);
 }

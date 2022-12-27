@@ -129,3 +129,9 @@ namespace riscv
 #ifndef RISCV_INTERNAL
 #define RISCV_INTERNAL __attribute__((visibility("internal")))
 #endif
+
+#ifdef RISCV_128BIT_ISA
+#define INSTANTIATE_128_IF_ENABLED(x) template struct x<16>
+#else
+#define INSTANTIATE_128_IF_ENABLED(x) /* */
+#endif
