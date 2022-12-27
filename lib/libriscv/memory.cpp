@@ -36,15 +36,17 @@ namespace riscv
 				const size_t len = pages_max * Page::size();
 				this->m_arena = (PageData *)mmap(NULL, len, PROT_READ | PROT_WRITE,
 					MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-#else
-				this->m_arena = nullptr;
-#endif
-				// Fallback allocation
-				if (this->m_arena == nullptr) {
-					// TODO: XXX: Investigate if this is a time sink
-					this->m_arena = new PageData[pages_max];
-				}
 				this->m_arena_pages = pages_max;
+				// mmap() returns MAP_FAILED (-1) when mapping fails
+				if (UNLIKELY(this->m_arena == MAP_FAILED)) {
+					this->m_arena = nullptr;
+					this->m_arena_pages = 0;
+				}
+#else
+				// TODO: XXX: Investigate if this is a time sink
+				this->m_arena = new PageData[pages_max];
+				this->m_arena_pages = pages_max;
+#endif
 			}
 
 			this->m_page_fault_handler =
@@ -99,7 +101,7 @@ namespace riscv
 		if (m_bintr_dl)
 			dlclose(m_bintr_dl);
 #endif
-		if (this->m_arena) {
+		if (this->m_arena != nullptr) {
 #ifdef __linux__
 			munmap(this->m_arena, this->m_arena_pages * Page::size());
 #else
