@@ -229,7 +229,14 @@ restart_precise_sim:
 
 			format_t instruction;
 
-		if (LIKELY(exec->is_within(this->pc()))) {
+			// TODO: This can me made much faster
+			if (UNLIKELY(!exec->is_within(this->pc()))) {
+				// This will produce a sequential execute segment for the unknown area
+				// If it is not executable, it will throw an execute space protection fault
+				this->next_execute_segment();
+				goto restart_precise_sim;
+			}
+
 			auto pc = this->pc();
 
 			// Instructions may be unaligned with C-extension
@@ -254,14 +261,6 @@ restart_precise_sim:
 			{
 				this->execute(instruction);
 			}
-		}
-		else
-		{
-			// This will produce a sequential execute segment for the unknown area
-			// If it is not executable, it will throw an execute space protection fault
-			this->next_execute_segment();
-			goto restart_precise_sim;
-		}
 
 			// increment PC
 			if constexpr (compressed_enabled)

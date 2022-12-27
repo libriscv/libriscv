@@ -383,9 +383,9 @@ void DebugMachine<W>::simulate(uint64_t max)
 		machine.increment_counter(1)) {
 
 		this->break_checks();
-		auto pc = cpu.pc();
 
-		if (UNLIKELY(!cpu.is_executable(pc)))
+		// NOTE: Break checks can change PC, full read
+		if (UNLIKELY(!exec->is_within(cpu.pc())))
 		{
 			// This will produce a sequential execute segment for the unknown area
 			// If it is not executable, it will throw an execute space protection fault
@@ -394,6 +394,7 @@ void DebugMachine<W>::simulate(uint64_t max)
 			exec_seg_data = exec->exec_data();
 		}
 
+		auto pc = cpu.pc();
 		// Instructions may be unaligned with C-extension
 		const rv32i_instruction instruction =
 			rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
