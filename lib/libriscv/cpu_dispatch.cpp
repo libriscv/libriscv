@@ -18,6 +18,15 @@ namespace riscv
 	auto instr = *(rv32i_instruction *)&decoder->instr;
 #define VIEW_INSTR_AS(name, x) \
 	auto &&name = *(x *)&decoder->instr;
+#define NEXT_INSTR()                  \
+	if constexpr (compressed_enabled) \
+		decoder += 2;                 \
+	else                              \
+		decoder += 1;                 \
+	EXECUTE_INSTR();
+#define NEXT_C_INSTR() \
+	decoder += 1;      \
+	EXECUTE_INSTR();
 
 #define NEXT_BLOCK(len)               \
 	pc += len;                        \
@@ -25,15 +34,31 @@ namespace riscv
 		decoder += 2;                 \
 	else                              \
 		decoder += 1;                 \
-	goto continue_block;
+	pc += decoder->block_bytes(); \
+	counter.increment_counter(decoder->instruction_count()); \
+	EXECUTE_INSTR();
+
+#define NEXT_SEGMENT() \
+	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR]; \
+	pc += decoder->block_bytes(); \
+	counter.increment_counter(decoder->instruction_count()); \
+	EXECUTE_INSTR();
+
 #define PERFORM_BRANCH()                \
 	if constexpr (VERBOSE_JUMPS) printf("Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
 	pc += fi.signed_imm();              \
-	goto unchecked_jump;
+	if (LIKELY(!counter.overflowed())) { \
+		decoder += fi.signed_imm() / (compressed_enabled ? 2 : 4); \
+		counter.increment_counter(decoder->instruction_count()); \
+		pc += decoder->block_bytes(); \
+		EXECUTE_INSTR(); \
+	} \
+	goto check_jump;
+
 #define PERFORM_FORWARD_BRANCH()        \
 	if constexpr (VERBOSE_JUMPS) printf("Fw.Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
 	pc += fi.signed_imm();              \
-	goto continue_segment;
+	NEXT_SEGMENT();
 
 template <int W> __attribute__((hot))
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
@@ -162,25 +187,13 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 	InstrCounter counter{machine()};
 
 	DecodedExecuteSegment<W>* exec = this->m_exec;
-	DecoderData<W>* exec_decoder;
-	DecoderData<W>* decoder;
-	address_t current_begin;
-	address_t current_end;
+	DecoderData<W>* exec_decoder = exec->decoder_cache();
+	address_t current_begin = exec->exec_begin();
+	address_t current_end = exec->exec_end();
 	address_t pc = this->pc();
-restart_sim:
-	exec_decoder = exec->decoder_cache();
-	current_begin = exec->exec_begin();
-	current_end = exec->exec_end();
-	goto continue_segment;
-
-unchecked_jump:
-	if (UNLIKELY(counter.overflowed()))
-		goto check_jump;
 
 continue_segment:
-	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
-
-continue_block:
+	DecoderData<W>* decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 	pc += decoder->block_bytes();
 	counter.increment_counter(decoder->instruction_count());
 
@@ -222,7 +235,9 @@ INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
 	if constexpr (VERBOSE_JUMPS) {
 		printf("FAST_JAL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
 	}
-	goto unchecked_jump;
+	if (UNLIKELY(counter.overflowed()))
+		goto check_jump;
+	NEXT_SEGMENT();
 }
 INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	VIEW_INSTR();
@@ -231,7 +246,9 @@ INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	if constexpr (VERBOSE_JUMPS) {
 		printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
 	}
-	goto unchecked_jump;
+	if (UNLIKELY(counter.overflowed()))
+		goto check_jump;
+	NEXT_SEGMENT();
 }
 INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 	VIEW_INSTR();
@@ -355,25 +372,6 @@ execute_invalid:
 	this->trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 	__builtin_unreachable();
 
-check_jump: {
-	if (UNLIKELY(counter.overflowed())) {
-		registers().pc = pc;
-		return;
-	}
-	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
-	{
-		// We have to store and restore PC here as there are
-		// custom callbacks when changing segments that can
-		// jump around.
-		registers().pc = pc;
-		// Change execute segment
-		exec = this->next_execute_segment();
-		pc = registers().pc;
-		// Restart with new execute boundaries
-		goto restart_sim;
-	}
-	goto continue_segment;
-}
 check_unaligned_jump:
 	if constexpr (!compressed_enabled) {
 		if (UNLIKELY(pc & 0x3)) {
@@ -386,7 +384,26 @@ check_unaligned_jump:
 			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
 		}
 	}
-	goto check_jump;
+check_jump: {
+	if (UNLIKELY(counter.overflowed())) {
+		registers().pc = pc;
+		return;
+	}
+	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
+	{
+		// We have to store and restore PC here as there are
+		// custom callbacks when changing segments that can
+		// jump around.
+		registers().pc = pc;
+		// Change to a new execute segment
+		exec = this->next_execute_segment();
+		exec_decoder = exec->decoder_cache();
+		current_begin = exec->exec_begin();
+		current_end = exec->exec_end();
+		pc = registers().pc;
+	}
+	goto continue_segment;
+}
 
 } // CPU::simulate_XXX()
 

@@ -1,14 +1,7 @@
 #define DISPATCH_MODE_SWITCH_BASED
 #define DISPATCH_FUNC simulate_bytecode
 
-#define NEXT_INSTR()                  \
-	if constexpr (compressed_enabled) \
-		decoder += 2;                 \
-	else                              \
-		decoder += 1;                 \
-	break;
-#define NEXT_C_INSTR() \
-	decoder += 1;      \
+#define EXECUTE_INSTR() \
 	break;
 
 #include "cpu_dispatch.cpp"
