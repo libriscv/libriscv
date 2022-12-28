@@ -115,15 +115,22 @@ namespace riscv
 	struct is_stdstring : public std::is_same<T, std::basic_string<char>> {};
 } // riscv
 
+#ifdef __GNUG__
+
 #ifndef LIKELY
 #define LIKELY(x) __builtin_expect((x), 1)
 #endif
 #ifndef UNLIKELY
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #endif
-
 #ifndef COLD_PATH
 #define COLD_PATH() __attribute__((cold))
+#endif
+
+#else
+#define LIKELY(x)   (x)
+#define UNLIKELY(x) (x)
+#define COLD_PATH() /* */
 #endif
 
 #ifndef RISCV_INTERNAL
