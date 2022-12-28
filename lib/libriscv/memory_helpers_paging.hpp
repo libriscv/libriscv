@@ -147,9 +147,9 @@ inline void Memory<W>::memview_helper(T& mem, address_t addr, size_t len,
 		return;
 	}
 	// slow path
-	uint8_t buffer[len];
-	mem.memcpy_out(buffer, addr, len);
-	callback(mem, buffer, len);
+	std::unique_ptr<uint8_t[]> buffer (new uint8_t[len]);
+	mem.memcpy_out(buffer.get(), addr, len);
+	callback(mem, buffer.get(), len);
 }
 
 template <int W>
