@@ -4,10 +4,6 @@
 
 namespace riscv
 {
-	FileDescriptors::~FileDescriptors()
-	{
-	}
-
 	template <int W>
 	static void syscall_stub_zero(Machine<W>& machine)
 	{
@@ -63,13 +59,37 @@ namespace riscv
 	}
 
 	template <int W>
+	static void syscall_brk(Machine<W>& machine)
+	{
+		auto new_end = machine.sysarg(0);
+		if (new_end > machine.memory.heap_address() + Memory<W>::BRK_MAX) {
+			new_end = machine.memory.heap_address() + Memory<W>::BRK_MAX;
+		} else if (new_end < machine.memory.heap_address()) {
+			new_end = machine.memory.heap_address();
+		}
+
+		SYSPRINT("SYSCALL brk, new_end: 0x%lX\n", (long)new_end);
+		machine.set_result(new_end);
+	}
+
+	template <int W>
 	void Machine<W>::setup_minimal_syscalls()
 	{
 		install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
+		install_syscall_handler(57, syscall_stub_zero<W>);  // close
+		install_syscall_handler(62, syscall_stub_nosys<W>); // lseek
 		install_syscall_handler(64, syscall_write<W>);
+		install_syscall_handler(80, syscall_stub_nosys<W>); // fstat
 		install_syscall_handler(93, syscall_exit<W>);
+		install_syscall_handler(214, syscall_brk<W>);
 	}
 
 	template void Machine<4>::setup_minimal_syscalls();
 	template void Machine<8>::setup_minimal_syscalls();
+
+#if defined(_WIN32) && !defined(__MINGW32__)
+	FileDescriptors::~FileDescriptors()
+	{
+	}
+#endif
 } // riscv

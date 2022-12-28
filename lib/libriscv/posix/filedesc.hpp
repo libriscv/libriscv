@@ -8,10 +8,10 @@ namespace riscv {
 
 struct FileDescriptors
 {
-#ifndef WIN32
-    typedef int real_fd_type;
+#ifdef _WIN32
+    typedef uint64_t real_fd_type; // SOCKET is uint64_t
 #else
-    typedef uint64_t real_fd_type; // Because SOCKET is uint64_t
+    typedef int real_fd_type;
 #endif
 
 	// Insert and manage real FDs, return virtual FD

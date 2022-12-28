@@ -49,6 +49,7 @@ set (SOURCES
 		libriscv/multiprocessing.cpp
 		libriscv/native_libc.cpp
 		libriscv/native_threads.cpp
+		libriscv/posix/minimal.cpp
 		libriscv/posix/signals.cpp
 		libriscv/posix/threads.cpp
 		libriscv/posix/socket_calls.cpp
@@ -63,9 +64,7 @@ if (MINGW_TOOLCHAIN)
 		libriscv/win32/system_calls.cpp
 	)
 elseif(WIN32)
-	list(APPEND SOURCES
-		libriscv/win32/minimal.cpp
-	)
+	# TODO: Port system calls to WIN32
 elseif(UNIX)
 	list(APPEND SOURCES
 		libriscv/linux/system_calls.cpp

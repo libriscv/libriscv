@@ -917,69 +917,65 @@ static void add_mman_syscalls()
 #include "syscalls_epoll.cpp"
 
 template <int W>
-void Machine<W>::setup_minimal_syscalls()
+void Machine<W>::setup_newlib_syscalls()
 {
-	install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
 	install_syscall_handler(57, syscall_stub_zero<W>); // close
 	install_syscall_handler(62, syscall_lseek<W>);
 	install_syscall_handler(63, syscall_read<W>);
 	install_syscall_handler(64, syscall_write<W>);
 	install_syscall_handler(80, syscall_stub_nosys<W>); // fstat
 	install_syscall_handler(93, syscall_exit<W>);
-}
-
-template <int W>
-void Machine<W>::setup_newlib_syscalls()
-{
-	setup_minimal_syscalls();
 	install_syscall_handler(214, syscall_brk<W>);
-	add_mman_syscalls<W>();
 }
 
 template <int W>
 void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 {
-	this->setup_minimal_syscalls();
+	install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
 
 	// epoll_create
-	this->install_syscall_handler(20, syscall_epoll_create<W>);
+	install_syscall_handler(20, syscall_epoll_create<W>);
 	// epoll_ctl
-	this->install_syscall_handler(21, syscall_epoll_ctl<W>);
+	install_syscall_handler(21, syscall_epoll_ctl<W>);
 	// epoll_pwait
-	this->install_syscall_handler(22, syscall_epoll_pwait<W>);
+	install_syscall_handler(22, syscall_epoll_pwait<W>);
 	// dup
-	this->install_syscall_handler(23, syscall_dup<W>);
+	install_syscall_handler(23, syscall_dup<W>);
 	// fcntl
-	this->install_syscall_handler(25, syscall_fcntl<W>);
+	install_syscall_handler(25, syscall_fcntl<W>);
 	// ioctl
-	this->install_syscall_handler(29, syscall_ioctl<W>);
+	install_syscall_handler(29, syscall_ioctl<W>);
 	// faccessat
-	this->install_syscall_handler(48, syscall_faccessat<W>);
+	install_syscall_handler(48, syscall_faccessat<W>);
 
-	this->install_syscall_handler(56, syscall_openat<W>);
-	this->install_syscall_handler(57, syscall_close<W>);
-	this->install_syscall_handler(59, syscall_pipe2<W>);
-	this->install_syscall_handler(65, syscall_readv<W>);
-	this->install_syscall_handler(66, syscall_writev<W>);
-	this->install_syscall_handler(72, syscall_pselect<W>);
-	this->install_syscall_handler(73, syscall_ppoll<W>);
-	this->install_syscall_handler(78, syscall_readlinkat<W>);
+	install_syscall_handler(56, syscall_openat<W>);
+	install_syscall_handler(57, syscall_close<W>);
+	install_syscall_handler(59, syscall_pipe2<W>);
+	install_syscall_handler(62, syscall_lseek<W>);
+	install_syscall_handler(63, syscall_read<W>);
+	install_syscall_handler(64, syscall_write<W>);
+	install_syscall_handler(65, syscall_readv<W>);
+	install_syscall_handler(66, syscall_writev<W>);
+	install_syscall_handler(72, syscall_pselect<W>);
+	install_syscall_handler(73, syscall_ppoll<W>);
+	install_syscall_handler(78, syscall_readlinkat<W>);
 	// 79: fstatat
-	this->install_syscall_handler(79, syscall_fstatat<W>);
+	install_syscall_handler(79, syscall_fstatat<W>);
 	// 80: fstat
-	this->install_syscall_handler(80, syscall_fstat<W>);
+	install_syscall_handler(80, syscall_fstat<W>);
 
+	install_syscall_handler(93, syscall_exit<W>);
 	// 94: exit_group (single-threaded)
-	this->install_syscall_handler(94, syscall_exit<W>);
+	install_syscall_handler(94, syscall_exit<W>);
 
 	// nanosleep
-	this->install_syscall_handler(101, syscall_nanosleep<W>);
+	install_syscall_handler(101, syscall_nanosleep<W>);
 	// clock_gettime
-	this->install_syscall_handler(113, syscall_clock_gettime<W>);
+	install_syscall_handler(113, syscall_clock_gettime<W>);
 	// sched_getaffinity
-	this->install_syscall_handler(123, syscall_stub_nosys<W>);
+	install_syscall_handler(123, syscall_stub_nosys<W>);
 	// kill
-	this->install_syscall_handler(130,
+	install_syscall_handler(130,
 	[] (Machine<W>& machine) {
 		const int pid = machine.template sysarg<int> (1);
 		const int sig = machine.template sysarg<int> (2);
@@ -998,29 +994,29 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 		machine.stop();
 	});
 	// sigaltstack
-	this->install_syscall_handler(132, syscall_sigaltstack<W>);
+	install_syscall_handler(132, syscall_sigaltstack<W>);
 	// rt_sigaction
-	this->install_syscall_handler(134, syscall_sigaction<W>);
+	install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
-	this->install_syscall_handler(135, syscall_stub_zero<W>);
+	install_syscall_handler(135, syscall_stub_zero<W>);
 	// uname
-	this->install_syscall_handler(160, syscall_uname<W>);
+	install_syscall_handler(160, syscall_uname<W>);
 	// gettimeofday
-	this->install_syscall_handler(169, syscall_gettimeofday<W>);
+	install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid
-	this->install_syscall_handler(172, syscall_stub_zero<W>);
+	install_syscall_handler(172, syscall_stub_zero<W>);
 	// getuid
-	this->install_syscall_handler(174, syscall_stub_zero<W>);
+	install_syscall_handler(174, syscall_stub_zero<W>);
 	// geteuid
-	this->install_syscall_handler(175, syscall_stub_zero<W>);
+	install_syscall_handler(175, syscall_stub_zero<W>);
 	// getgid
-	this->install_syscall_handler(176, syscall_stub_zero<W>);
+	install_syscall_handler(176, syscall_stub_zero<W>);
 	// getegid
-	this->install_syscall_handler(177, syscall_stub_zero<W>);
+	install_syscall_handler(177, syscall_stub_zero<W>);
 
-	this->install_syscall_handler(214, syscall_brk<W>);
+	install_syscall_handler(214, syscall_brk<W>);
 
-	this->install_syscall_handler(278, syscall_getrandom<W>);
+	install_syscall_handler(278, syscall_getrandom<W>);
 
 	add_mman_syscalls<W>();
 
@@ -1035,14 +1031,12 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	}
 
 	// statx
-	this->install_syscall_handler(291, syscall_statx<W>);
+	install_syscall_handler(291, syscall_statx<W>);
 }
 
-template void Machine<4>::setup_minimal_syscalls();
 template void Machine<4>::setup_newlib_syscalls();
 template void Machine<4>::setup_linux_syscalls(bool, bool);
 
-template void Machine<8>::setup_minimal_syscalls();
 template void Machine<8>::setup_newlib_syscalls();
 template void Machine<8>::setup_linux_syscalls(bool, bool);
 
