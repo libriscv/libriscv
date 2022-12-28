@@ -4,7 +4,7 @@
 #define RISCV_128BIT_ISA_INSTRUCTIONS
 
 #define INSTRUCTION(x, ...) \
-	static constexpr CPU<16>::instruction_t instr128i_##x { __VA_ARGS__ }
+	static const CPU<16>::instruction_t instr128i_##x { __VA_ARGS__ }
 #define DECODED_INSTR(x) instr128i_##x
 #include "rvi_instr.cpp"
 #include "rv128i_instr.cpp"

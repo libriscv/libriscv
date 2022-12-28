@@ -25,11 +25,3 @@
 #define RVIS64BIT(x)  (sizeof(RVREGTYPE(x)) == 8)
 #define RVIS128BIT(x) (sizeof(RVREGTYPE(x)) == 16)
 #define RVISGE64BIT(x)  (sizeof(RVREGTYPE(x)) >= 8)
-
-#define INVOKE_INSTR(x)                     \
-    if constexpr (W == 4)                   \
-        instr32i_##x.handler(*this, instr); \
-    else if constexpr (W == 8)              \
-        instr64i_##x.handler(*this, instr); \
-    else                                    \
-        instr128i_##x.handler(*this, instr);
