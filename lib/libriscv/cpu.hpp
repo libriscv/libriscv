@@ -78,7 +78,7 @@ namespace riscv
 		template <typename Type>
 		void amo(format_t, Type(*op)(CPU&, Type&, uint32_t));
 #endif
-		__attribute__((noreturn))
+		[[noreturn]]
 		static void trigger_exception(int, address_t = 0) COLD_PATH();
 
 		// Directly execute an instruction (given bits)
