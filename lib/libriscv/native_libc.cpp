@@ -246,7 +246,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		// Print backtrace n+14
 		m.memory.print_backtrace(
 			[&] (std::string_view line) {
-				m.print(line.begin(), line.size());
+				m.print(line.data(), line.size());
 				m.print("\n", 1);
 			});
 		m.set_result(0);
