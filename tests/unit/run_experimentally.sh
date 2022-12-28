@@ -5,6 +5,6 @@ source scripts/find_compiler.sh
 mkdir -p $FOLDER
 pushd $FOLDER
 cmake .. -DCMAKE_BUILD_TYPE=Debug -DRISCV_MEMORY_TRAPS=ON -DRISCV_THREADED=ON -DRISCV_EXPERIMENTAL=ON
-make -j6
-ctest --verbose . $@
+make -j4
+ctest --verbose -j4 . $@
 popd
