@@ -62,6 +62,10 @@ if (MINGW_TOOLCHAIN)
 	list(APPEND SOURCES
 		libriscv/win32/system_calls.cpp
 	)
+elseif(WIN32)
+	list(APPEND SOURCES
+		libriscv/win32/minimal.cpp
+	)
 elseif(LINUX)
 	list(APPEND SOURCES
 		libriscv/linux/system_calls.cpp

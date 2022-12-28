@@ -14,7 +14,7 @@
 #include "../win32/ws2.hpp"
 WSADATA riscv::ws2::global_winsock_data;
 bool riscv::ws2::winsock_initialized = false;
-using ssize_t = int;
+using ssize_t = long long int;
 #endif
 
 namespace riscv {
