@@ -6,11 +6,11 @@
 #include <dlfcn.h> // Linux-only
 #endif
 #ifdef __linux__
+#define DEMANGLE_ENABLED
 #include <sys/mman.h>
-#endif
-
 extern "C" char *
 __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
+#endif
 
 namespace riscv
 {
@@ -479,7 +479,11 @@ namespace riscv
 			[] (const char* strtab, address_t addr, const auto* sym)
 		{
 			const char* symname = &strtab[sym->st_name];
+#ifdef DEMANGLE_ENABLED
 			char* dma = __cxa_demangle(symname, nullptr, nullptr, nullptr);
+#else
+			char* dma = nullptr;
+#endif
 			return Callsite {
 				.name = (dma) ? dma : symname,
 				.address = sym->st_value,
