@@ -1,10 +1,13 @@
 #include "crc32.hpp"
+#if defined(__x86_64__) && !defined(_MSC_VER)
+#define CRC32C_INTRINSICS_ENABLED
+#endif
 
 inline bool ____is__aligned(const uint8_t* buffer, const int align) noexcept {
 	return (((uintptr_t) buffer) & (align-1)) == 0;
 }
 
-#ifdef __x86_64__
+#ifdef CRC32C_INTRINSICS_ENABLED
 #include <immintrin.h>
 
 __attribute__ ((target ("sse4.2")))
@@ -43,7 +46,7 @@ namespace riscv
 {
 	uint32_t crc32c(uint32_t crc, const void* data, size_t len)
 	{
-	#ifdef __x86_64__
+	#ifdef CRC32C_INTRINSICS_ENABLED
 		if (__builtin_cpu_supports ("sse4.2"))
 		{
 			return crc32c_sse42(crc, (const uint8_t*)data, len);
@@ -54,7 +57,7 @@ namespace riscv
 
 	uint32_t crc32c(const void* data, size_t len)
 	{
-	#ifdef __x86_64__
+	#ifdef CRC32C_INTRINSICS_ENABLED
 		if (__builtin_cpu_supports ("sse4.2"))
 		{
 			return ~crc32c_sse42(0xFFFFFFFF, (const uint8_t *)data, len);
