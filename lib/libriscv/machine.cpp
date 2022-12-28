@@ -8,7 +8,7 @@
 #include <errno.h> // Used by emulated POSIX system calls
 #include <random>
 extern "C" {
-#ifdef WIN32
+#ifdef _WIN32
 	int write(int fd, const void *buf, unsigned count);
 #else
 	ssize_t write(int fd, const void *buf, size_t count);

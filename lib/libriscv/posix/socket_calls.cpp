@@ -7,7 +7,7 @@
 #define SYSPRINT(fmt, ...) /* fmt */
 #endif
 
-#ifndef WIN32
+#ifndef _WIN32
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #else
