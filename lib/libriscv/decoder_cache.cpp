@@ -21,9 +21,9 @@ namespace riscv
 		const uint8_t* exec_segment, uint64_t pc, uint64_t end_pc)
 	{
 		if (pc + 4 <= end_pc)
-			return {*(UnalignedLoad32 *)&exec_segment[pc]};
+			return rv32i_instruction{*(UnalignedLoad32 *)&exec_segment[pc]};
 		else
-			return {*(AlignedLoad16 *)&exec_segment[pc]};
+			return rv32i_instruction{*(AlignedLoad16 *)&exec_segment[pc]};
 	}
 
 	template <int W>
