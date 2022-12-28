@@ -126,11 +126,13 @@ namespace riscv
 #ifndef COLD_PATH
 #define COLD_PATH() __attribute__((cold))
 #endif
+#define RISCV_NOINLINE __attribute__((noinline))
 
 #else
 #define LIKELY(x)   (x)
 #define UNLIKELY(x) (x)
 #define COLD_PATH() /* */
+#define RISCV_NOINLINE __declspec(noinline)
 #endif
 
 #ifndef RISCV_INTERNAL

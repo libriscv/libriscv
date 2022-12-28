@@ -60,7 +60,7 @@ namespace riscv
 				{}, vdata, begin, vlength));
 	} // CPU::init_execute_area
 
-	template<int W> __attribute__((noinline))
+	template<int W> RISCV_NOINLINE
 	DecodedExecuteSegment<W>* CPU<W>::next_execute_segment()
 	{
 		static const int MAX_RESTARTS = 4;
@@ -149,7 +149,7 @@ restart_next_execute_segment:
 		return this->m_exec;
 	} // CPU::next_execute_segment
 
-	template <int W> __attribute__((noinline)) RISCV_INTERNAL
+	template <int W> RISCV_NOINLINE RISCV_INTERNAL
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
 	{
 		// Fallback: Read directly from page memory
