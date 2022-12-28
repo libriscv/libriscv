@@ -28,7 +28,7 @@ static void syscall_epoll_ctl(Machine<W>& machine)
 	const auto vepoll_fd = machine.template sysarg<int>(0);
 	const auto op  = machine.template sysarg<int>(1);
 	const auto vfd = machine.template sysarg<int>(2);
-	const auto g_event = machine.template sysarg(3);
+	const auto g_event = machine.sysarg(3);
 	int fd = -EBADF;
 
 	if (machine.has_file_descriptors()) {
@@ -54,7 +54,7 @@ static void syscall_epoll_pwait(Machine<W>& machine)
 	//  				int maxevents, int timeout,
 	//  				const sigset_t *sigmask);
 	const auto vepoll_fd = machine.template sysarg<int>(0);
-	const auto g_events = machine.template sysarg(1);
+	const auto g_events = machine.sysarg(1);
 	const auto maxevents = machine.template sysarg<int>(2);
 	const auto timeout = machine.template sysarg<int>(3);
 

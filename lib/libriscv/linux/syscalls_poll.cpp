@@ -5,9 +5,9 @@
 template <int W>
 static void syscall_ppoll(Machine<W>& machine)
 {
-	const auto g_fds = machine.template sysarg(0);
+	const auto g_fds = machine.sysarg(0);
 	const auto nfds  = machine.template sysarg<unsigned>(1);
-	const auto g_ts = machine.template sysarg(2);
+	const auto g_ts = machine.sysarg(2);
 
 	struct timespec ts;
 	machine.copy_from_guest(&ts, g_ts, sizeof(ts));

@@ -84,8 +84,8 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	// N+8: clone threadcall
 	this->install_syscall_handler(syscall_base+8,
 	[] (Machine<W>& machine) {
-		const auto func  = machine.template sysarg(0);
-		const auto fini  = machine.template sysarg(1);
+		const auto func  = machine.sysarg(0);
+		const auto fini  = machine.sysarg(1);
 
 		const auto tls = machine.arena().malloc(STACK_SIZE);
 		if (UNLIKELY(tls == 0)) {

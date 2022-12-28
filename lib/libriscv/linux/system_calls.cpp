@@ -125,7 +125,7 @@ template <int W>
 void syscall_lseek(Machine<W>& machine)
 {
 	const int fd      = machine.template sysarg<int>(0);
-	const auto offset = machine.template sysarg(1);
+	const auto offset = machine.sysarg(1);
 	const int whence  = machine.template sysarg<int>(2);
 	SYSPRINT("SYSCALL lseek, fd: %d, offset: 0x%lX, whence: %d\n",
 		fd, (long)offset, whence);
@@ -400,7 +400,7 @@ template <int W>
 static void syscall_pipe2(Machine<W>& machine)
 {
 	// int pipe2(int pipefd[2], int flags);
-	const auto vfd_array = machine.template sysarg(0);
+	const auto vfd_array = machine.sysarg(0);
 	const auto flags = machine.template sysarg<int>(1);
 
 	if (machine.has_file_descriptors()) {
