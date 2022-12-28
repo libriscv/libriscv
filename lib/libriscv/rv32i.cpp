@@ -41,7 +41,7 @@ namespace riscv
 		return DECODED_INSTR(UNIMPLEMENTED);
 	}
 
-	template <> __attribute__((cold))
+	template <> COLD_PATH()
 	std::string Registers<4>::to_string() const
 	{
 		char buffer[600];
@@ -56,7 +56,7 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-	template <> __attribute__((cold))
+	template <> COLD_PATH()
 	std::string CPU<4>::to_string(instruction_format format, const instruction_t& instr) const
 	{
 		char buffer[256];

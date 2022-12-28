@@ -65,10 +65,8 @@ namespace riscv
 		return len;
 	}
 
-	template <>
-	__attribute__((cold))
-	std::string
-	Registers<16>::to_string() const
+	template <> COLD_PATH()
+	std::string Registers<16>::to_string() const
 	{
 		char buffer[1800];
 		int  len = 0;
@@ -86,7 +84,7 @@ namespace riscv
 		return std::string(buffer, len);
 	}
 
-	template <> __attribute__((cold))
+	template <> COLD_PATH()
 	std::string CPU<16>::to_string(instruction_format format, const Instruction<16>& instr) const
 	{
 		char buffer[512];
