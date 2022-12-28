@@ -93,8 +93,9 @@ namespace riscv
 					const auto opcode = instruction.opcode();
 					const auto length = instruction.length();
 					// Make sure PC does not overflow
-					if (UNLIKELY(__builtin_add_overflow(pc, length, &pc)))
+					if (pc + length < pc)
 						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
+					pc += length;
 					// If ended up crossing last_pc, it's an invalid block
 					if (UNLIKELY(pc > last_pc))
 						throw MachineException(INVALID_PROGRAM, "Encountered invalid block");
