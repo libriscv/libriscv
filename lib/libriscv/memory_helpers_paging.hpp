@@ -147,7 +147,7 @@ inline void Memory<W>::memview_helper(T& mem, address_t addr, size_t len,
 		return;
 	}
 	// slow path
-	uint8_t* buffer = (uint8_t*) __builtin_alloca(len);
+	uint8_t buffer[len];
 	mem.memcpy_out(buffer, addr, len);
 	callback(mem, buffer, len);
 }
