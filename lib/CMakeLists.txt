@@ -66,7 +66,7 @@ elseif(WIN32)
 	list(APPEND SOURCES
 		libriscv/win32/minimal.cpp
 	)
-elseif(LINUX)
+elseif(UNIX)
 	list(APPEND SOURCES
 		libriscv/linux/system_calls.cpp
 	)
