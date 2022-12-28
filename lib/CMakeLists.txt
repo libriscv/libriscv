@@ -96,7 +96,11 @@ endif()
 add_library(riscv ${SOURCES})
 target_compile_features(riscv PUBLIC cxx_std_17)
 target_include_directories(riscv PUBLIC .)
-target_compile_options(riscv PRIVATE -Wall -Wextra)
+
+if (NOT WIN32 OR MINGW_TOOLCHAIN)
+	target_compile_options(riscv PRIVATE -Wall -Wextra)
+endif()
+
 if (RISCV_DEBUG)
 	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
 endif()
