@@ -153,7 +153,7 @@ restart_next_execute_segment:
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
 	{
 		// Fallback: Read directly from page memory
-		const auto pageno = this->pc() >> Page::SHIFT;
+		const auto pageno = this->pc() / address_t(Page::size());
 		// Page cache
 		auto& entry = this->m_cache;
 		if (entry.pageno != pageno || entry.page == nullptr) {

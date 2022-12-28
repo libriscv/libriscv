@@ -115,7 +115,7 @@ namespace riscv
 		void  set_page_attr(address_t, size_t len, PageAttributes);
 		std::string get_page_info(address_t addr) const;
 		static inline address_t page_number(const address_t address) {
-			return address >> Page::SHIFT;
+			return address / Page::size();
 		}
 		// Page creation & destruction
 		template <typename... Args>

@@ -294,8 +294,8 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 	// NOTE: fast implementation if no pointer crosses page boundary
 	const auto pageno1 = this->page_number(p1);
 	const auto pageno2 = this->page_number(p2);
-	if (pageno1 == ((p1 + len-1) >> Page::SHIFT) &&
-		pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
+	if (pageno1 == ((p1 + len-1) / Page::size()) &&
+		pageno2 == ((p2 + len-1) / Page::size())) {
 		auto& page1 = this->get_readable_pageno(pageno1);
 		auto& page2 = this->get_readable_pageno(pageno2);
 
@@ -329,7 +329,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	const char* s1 = (const char*) ptr1;
 	// NOTE: fast implementation if no pointer crosses page boundary
 	const auto pageno2 = this->page_number(p2);
-	if (pageno2 == ((p2 + len-1) >> Page::SHIFT)) {
+	if (pageno2 == ((p2 + len-1) / Page::size())) {
 		auto& page2 = this->get_readable_pageno(pageno2);
 
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;

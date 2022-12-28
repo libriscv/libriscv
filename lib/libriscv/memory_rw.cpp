@@ -154,7 +154,7 @@ namespace riscv
 
 		for (size_t i = 0; i < size; i += Page::size())
 		{
-			const auto pageno = (dst + i) >> Page::SHIFT;
+			const auto pageno = (dst + i) / Page::size();
 			PageData* pdata = reinterpret_cast<PageData*> ((char*) src + i);
 			m_pages.emplace(std::piecewise_construct,
 				std::forward_as_tuple(pageno),

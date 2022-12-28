@@ -68,9 +68,7 @@ struct alignas(32) PageData {
 
 struct Page
 {
-	static constexpr unsigned SIZE  = PageSize;
-	static constexpr unsigned SHIFT = 31 - __builtin_clz(PageSize);
-	static_assert((1u << SHIFT) == PageSize, "Page shift value must match page size");
+	static constexpr unsigned SIZE = PageSize;
 
 	using mmio_cb_t = std::function<void(Page&, uint32_t, int, int64_t)>;
 

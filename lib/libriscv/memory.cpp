@@ -27,7 +27,7 @@ namespace riscv
 		}
 		else if (options.memory_max != 0)
 		{
-			const address_t pages_max = options.memory_max >> Page::SHIFT;
+			const address_t pages_max = options.memory_max / Page::size();
 			assert(pages_max >= 1);
 
 			if (options.use_memory_arena)

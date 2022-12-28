@@ -127,7 +127,11 @@ namespace riscv
 #endif
 
 #ifndef RISCV_INTERNAL
+#ifdef __GNUG__
 #define RISCV_INTERNAL __attribute__((visibility("internal")))
+#else
+#define RISCV_INTERNAL /* */
+#endif
 #endif
 
 #ifdef RISCV_128BIT_ISA
