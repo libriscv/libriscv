@@ -84,7 +84,7 @@ namespace riscv
 			set_result(-errno);
 	}
 
-	template <int W> __attribute__((cold))
+	template <int W> RISCV_COLD_PATH()
 	void Machine<W>::timeout_exception(uint64_t max_instr)
 	{
 		throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,

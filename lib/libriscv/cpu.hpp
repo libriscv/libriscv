@@ -79,7 +79,7 @@ namespace riscv
 		void amo(format_t, Type(*op)(CPU&, Type&, uint32_t));
 #endif
 		[[noreturn]]
-		static void trigger_exception(int, address_t = 0) COLD_PATH();
+		static void trigger_exception(int, address_t = 0) RISCV_COLD_PATH();
 
 		// Directly execute an instruction (given bits)
 		void execute(format_t);
@@ -91,7 +91,7 @@ namespace riscv
 		std::string to_string(format_t format, const instruction_t &instr) const;
 		std::string current_instruction_to_string() const;
 
-		format_t read_next_instruction_slowpath() const COLD_PATH();
+		format_t read_next_instruction_slowpath() const RISCV_COLD_PATH();
 		static const instruction_t& decode(format_t);
 		// Decode instruction bits into bytecode
 		static size_t computed_index_for(format_t bits);

@@ -60,7 +60,7 @@ namespace riscv
 	pc += fi.signed_imm();              \
 	NEXT_SEGMENT();
 
-template <int W> __attribute__((hot))
+template <int W> RISCV_HOT_PATH()
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 {
 	static constexpr uint32_t XLEN = W * 8;

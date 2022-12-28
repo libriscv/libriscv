@@ -123,15 +123,19 @@ namespace riscv
 #ifndef UNLIKELY
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #endif
-#ifndef COLD_PATH
-#define COLD_PATH() __attribute__((cold))
+#ifndef RISCV_COLD_PATH
+#define RISCV_COLD_PATH() __attribute__((cold))
+#endif
+#ifndef RISCV_HOT_PATH
+#define RISCV_HOT_PATH() __attribute__((hot))
 #endif
 #define RISCV_NOINLINE __attribute__((noinline))
 
 #else
 #define LIKELY(x)   (x)
 #define UNLIKELY(x) (x)
-#define COLD_PATH() /* */
+#define RISCV_COLD_PATH() /* */
+#define RISCV_HOT_PATH()  /* */
 #define RISCV_NOINLINE __declspec(noinline)
 #endif
 

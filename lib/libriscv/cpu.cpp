@@ -204,7 +204,7 @@ restart_next_execute_segment:
 		return read_next_instruction_slowpath();
 	}
 
-	template<int W> __attribute__((hot))
+	template<int W> RISCV_HOT_PATH()
 	void CPU<W>::simulate_precise(uint64_t max)
 	{
 		// Decoded segments are always faster
@@ -286,7 +286,7 @@ restart_precise_sim:
 		machine().increment_counter(1);
 	}
 
-	template<int W> COLD_PATH()
+	template<int W> RISCV_COLD_PATH()
 	void CPU<W>::trigger_exception(int intr, address_t data)
 	{
 		switch (intr)
@@ -329,13 +329,13 @@ restart_precise_sim:
 		}
 	}
 
-	template <int W> COLD_PATH()
+	template <int W> RISCV_COLD_PATH()
 	std::string CPU<W>::to_string(format_t bits) const
 	{
 		return to_string(bits, decode(bits));
 	}
 
-	template <int W> COLD_PATH()
+	template <int W> RISCV_COLD_PATH()
 	std::string CPU<W>::current_instruction_to_string() const
 	{
 		format_t instruction;
@@ -347,7 +347,7 @@ restart_precise_sim:
 		return to_string(instruction, decode(instruction));
 	}
 
-	template <int W> COLD_PATH()
+	template <int W> RISCV_COLD_PATH()
 	std::string Registers<W>::flp_to_string() const
 	{
 		char buffer[800];

@@ -174,6 +174,7 @@ namespace riscv
 		static void install_syscall_handler(size_t, syscall_t);
 		static void install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>>);
 
+		static void unknown_syscall_handler(Machine<W>&);
 		static constexpr auto initialize_syscalls() noexcept {
 			std::array<syscall_t, RISCV_SYSCALLS_MAX> arr;
 			for (auto& h : arr) h = unknown_syscall_handler;
@@ -252,7 +253,6 @@ namespace riscv
 		int deserialize_from(const std::vector<uint8_t>&);
 
 	private:
-		static void unknown_syscall_handler(Machine<W>&);
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
 		static void setup_native_heap_internal(const size_t);

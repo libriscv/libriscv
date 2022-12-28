@@ -352,7 +352,7 @@ namespace riscv
 		};
 	}
 
-	template <int W> inline __attribute__((hot))
+	template <int W> inline RISCV_HOT_PATH()
 	void CPU<W>::simulate_tco(uint64_t imax)
 	{
 		// We need an execute segment matching current PC
