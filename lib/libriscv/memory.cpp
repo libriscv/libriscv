@@ -549,7 +549,6 @@ namespace riscv
 	void Memory<W>::protection_fault(address_t addr)
 	{
 		CPU<W>::trigger_exception(PROTECTION_FAULT, addr);
-		__builtin_unreachable();
 	}
 
 	template struct Memory<4>;

@@ -370,7 +370,6 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 
 execute_invalid:
 	this->trigger_exception(ILLEGAL_OPCODE, decoder->instr);
-	__builtin_unreachable();
 
 check_unaligned_jump:
 	if constexpr (!compressed_enabled) {
