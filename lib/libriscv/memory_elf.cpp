@@ -7,7 +7,8 @@ namespace riscv
 	template <int W>
 	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const std::string& name) const
 	{
-		const char* endptr = &m_binary[m_binary.size()];
+		// NOTE: Cannot take address of string_view end-pointer in debug mode
+		const char* endptr = m_binary.data() + m_binary.size();
 
 		if (elf_header()->e_shoff > m_binary.size() - sizeof(Shdr))
 			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
