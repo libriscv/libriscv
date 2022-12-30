@@ -120,15 +120,19 @@ namespace riscv
 			uint32_t  rs1 : 8;
 		};
 
+		RISCV_ALWAYS_INLINE
 		auto get_rs1() const noexcept {
 			return rs1;
 		}
+		RISCV_ALWAYS_INLINE
 		auto get_rs2() const noexcept {
 			return rs2;
 		}
+		RISCV_ALWAYS_INLINE
 		int32_t signed_imm() const noexcept {
 			return (int16_t)imm;
 		}
+		RISCV_ALWAYS_INLINE
 		auto unsigned_imm() const noexcept {
 			return (uint16_t)imm;
 		}
@@ -145,12 +149,15 @@ namespace riscv
 			uint32_t rs1 : 8;
 		};
 
+		RISCV_ALWAYS_INLINE
 		auto get_rd() const noexcept {
 			return rd;
 		}
+		RISCV_ALWAYS_INLINE
 		auto get_rs1() const noexcept {
 			return rs1;
 		}
+		RISCV_ALWAYS_INLINE
 		auto get_rs2() const noexcept {
 			return rs2;
 		}
@@ -167,10 +174,12 @@ namespace riscv
 			int16_t  imm;
 		};
 
+		RISCV_ALWAYS_INLINE
 		auto get_rd() const noexcept {
 			return whole & 0xFF;
 		}
 
+		RISCV_ALWAYS_INLINE
 		int32_t signed_imm() const noexcept {
 			return imm;
 		}
@@ -186,9 +195,11 @@ namespace riscv
 			uint32_t rs1 : 16;
 		};
 
+		RISCV_ALWAYS_INLINE
 		auto get_rd() const noexcept {
 			return rd;
 		}
+		RISCV_ALWAYS_INLINE
 		auto get_rs1() const noexcept {
 			return rs1;
 		}

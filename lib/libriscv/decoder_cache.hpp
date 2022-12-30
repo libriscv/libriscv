@@ -25,10 +25,6 @@ struct DecoderData {
 
 	uint32_t instr;
 
-	void execute(CPU<W>& cpu) const {
-		get_handler()(cpu, instruction_format{this->instr});
-	}
-
 	template <typename... Args>
 	void execute(CPU<W>& cpu, Args... args) const {
 		get_handler()(cpu, args...);
@@ -40,7 +36,8 @@ struct DecoderData {
 		this->set_insn_handler(insn.handler);
 	}
 
-	// simulate_threaded() uses bytecodes.
+	// Switch-based and threaded simulation uses bytecodes.
+	RISCV_ALWAYS_INLINE
 	auto get_bytecode() const noexcept {
 		return this->m_bytecode;
 	}
@@ -50,6 +47,7 @@ struct DecoderData {
 
 	// Some simulation modes use function pointers
 	// Eg. simulate_precise() and simulate_fastsim().
+	RISCV_ALWAYS_INLINE
 	Handler get_handler() const noexcept {
 		return this->instr_handlers[m_handler];
 	}
@@ -57,9 +55,11 @@ struct DecoderData {
 		this->m_handler = handler_index_for(ih);
 	}
 
+	RISCV_ALWAYS_INLINE
 	auto block_bytes() const noexcept {
 		return idxend * (compressed_enabled ? 2 : 4);
 	}
+	RISCV_ALWAYS_INLINE
 	auto instruction_count() const noexcept {
 #ifdef RISCV_EXT_COMPRESSED
 		return idxend + 1 - icount;
