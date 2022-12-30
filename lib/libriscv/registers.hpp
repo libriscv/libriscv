@@ -47,19 +47,22 @@ namespace riscv
 		using address_t  = address_type<W>;   // one unsigned memory address
 		using register_t = register_type<W>;  // integer register
 		union FCSR {
+			uint32_t whole = 0;
 			struct {
 				uint32_t fflags : 5;
 				uint32_t frm    : 3;
 				uint32_t resv24 : 24;
 			};
-			uint32_t whole = 0;
 		};
 
-		register_t& get(uint32_t idx) { return m_reg[idx]; }
-		const register_t& get(uint32_t idx) const { return m_reg[idx]; }
+		RISCV_ALWAYS_INLINE auto& get() noexcept { return m_reg; }
+		RISCV_ALWAYS_INLINE const auto& get() const noexcept { return m_reg; }
 
-		fp64reg& getfl(uint32_t idx) { return m_regfl[idx]; }
-		const fp64reg& getfl(uint32_t idx) const { return m_regfl[idx]; }
+		RISCV_ALWAYS_INLINE register_t& get(uint32_t idx) noexcept { return m_reg[idx]; }
+		RISCV_ALWAYS_INLINE const register_t& get(uint32_t idx) const noexcept { return m_reg[idx]; }
+
+		RISCV_ALWAYS_INLINE fp64reg& getfl(uint32_t idx) noexcept { return m_regfl[idx]; }
+		RISCV_ALWAYS_INLINE const fp64reg& getfl(uint32_t idx) const noexcept { return m_regfl[idx]; }
 
 		register_t& at(uint32_t idx) { return m_reg.at(idx); }
 		const register_t& at(uint32_t idx) const { return m_reg.at(idx); }

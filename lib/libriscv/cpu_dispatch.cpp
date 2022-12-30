@@ -211,7 +211,7 @@ while (true) {
 #endif
 
 #define CPU()       (*this)
-#define REG(x)      reg(x)
+#define REG(x)      registers().get()[x]
 #define REGISTERS() registers()
 #define MACHINE()   machine()
 

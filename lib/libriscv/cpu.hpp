@@ -50,8 +50,9 @@ namespace riscv
 		void jump(address_t);
 		void aligned_jump(address_t);
 
-		auto& registers() { return this->m_regs; }
-		const auto& registers() const { return this->m_regs; }
+		RISCV_ALWAYS_INLINE auto& registers() { return this->m_regs; }
+		RISCV_ALWAYS_INLINE const auto& registers() const { return this->m_regs; }
+
 		int cpu_id() const noexcept { return m_cpuid; }
 
 		auto& reg(uint32_t idx) { return registers().get(idx); }
