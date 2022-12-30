@@ -59,11 +59,11 @@ struct alignas(32) PageData {
 		*(T*) &buffer8[offset] = value;
 	}
 
-	PageData() : buffer8{} {}
-	PageData(const PageData& other) : buffer8{other.buffer8} {}
-	PageData(const std::array<uint8_t, PageSize>& data) : buffer8{data} {}
+	PageData() noexcept : buffer8{} {}
+	PageData(const PageData& other) noexcept : buffer8{other.buffer8} {}
+	PageData(const std::array<uint8_t, PageSize>& data) noexcept : buffer8{data} {}
 	enum Initialization { INITIALIZED, UNINITIALIZED };
-	PageData(Initialization i) { if (i == INITIALIZED) buffer8 = {}; }
+	PageData(Initialization i) noexcept { if (i == INITIALIZED) buffer8 = {}; }
 };
 
 struct Page
@@ -79,15 +79,15 @@ struct Page
 	// copy another page (or data)
 	Page(const PageAttributes& a, const PageData& d = {})
 		: attr(a), m_page(new PageData{d}) { attr.non_owning = false; }
-	Page(Page&& other)
+	Page(Page&& other) noexcept
 		: attr(other.attr), m_page(std::move(other.m_page)) {}
-	Page& operator= (Page&& other) {
+	Page& operator= (Page&& other) noexcept {
 		attr = other.attr;
 		m_page = std::move(other.m_page);
 		return *this;
 	}
 	// create a page that doesn't own this memory
-	Page(const PageAttributes& a, PageData* data);
+	Page(const PageAttributes& a, PageData* data) noexcept;
 	// don't try to free non-owned page memory
 	~Page() {
 		if (attr.non_owning) m_page.release();
@@ -157,7 +157,7 @@ struct Page
 	mutable mmio_cb_t m_trap = nullptr;
 };
 
-inline Page::Page(const PageAttributes& a, PageData* data)
+inline Page::Page(const PageAttributes& a, PageData* data) noexcept
 	: attr(a)
 {
 	attr.non_owning = true;
