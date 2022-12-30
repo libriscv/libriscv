@@ -20,9 +20,13 @@ Instruction counting is used to limit the time spent executing code and can be u
 
 The virtual address space is implemented using pages, which means you can copy code into memory, make it executable, and then jump to it. It should Just Work. It also makes it possible to run more complex language runtimes like Go.
 
+
 ## Embedding the emulator in a project
 
-See [example project](/examples/embed)
+See [example project](/examples/embed) for embedding on Linux.
+
+On Windows you can use Clang-cl in Visual Studio. See the [example CMake project](/examples/msvc). It requires Clang and Git installed.
+
 
 ## Installing a RISC-V GCC compiler
 
@@ -88,10 +92,6 @@ The [linux](/binaries/linux) and [linux64](/binaries/linux64) example projects r
 The [Go](/binaries/go) examples only require Go installed. Go produces complex RV64G ELF executables.
 
 There are also examples for [Nim](/binaries/nim), [Zig](/binaries/zig) and [Rust](/binaries/rust).
-
-## Building for Windows
-
-There is a `build_mingw.sh` script that can build the emulator for MinGW 64 when cross-compiling on Linux. To be able to build it, install the `g++-mingw-w64-x86-64` package. If you are building inside MinGW 64 on (actual) Windows, then you should not have to do anything special. You will need the common build tools like make, cmake and a C++17-capable compiler.
 
 ## Remote debugging using GDB
 
