@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.9.4)
 project(riscv CXX)
 
-option(NATIVE      "Enable all host CPU features" ON)
+option(NATIVE      "Enable all host CPU features" OFF)
 option(LTO         "Enable interprocedural optimizations" ON)
 option(SANITIZE    "Enable sanitizers" OFF)
 option(BOLT        "Enable BOLT" OFF)
 option(GPROF       "Enable profiling with gprof" OFF)
 option(LINKER_GC   "Enable linker section garbage collection" OFF)
-option(STATIC_BUILD "Built the emulator statically" OFF)
+option(STATIC_BUILD "Build this CLI program statically" OFF)
 
 set(SOURCES
 	src/main.cpp
