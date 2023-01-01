@@ -102,6 +102,9 @@ namespace riscv
 	template <int W> struct SerializedMachine;
 	struct Arena;
 
+	template <typename T>
+	using remove_cvref = std::remove_cv_t<std::remove_reference_t<T>>;
+
 	template <class...> constexpr std::false_type always_false {};
 
 	template<typename T>

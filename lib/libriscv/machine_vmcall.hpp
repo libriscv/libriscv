@@ -7,7 +7,7 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 	[[maybe_unused]] int iarg = REG_ARG0;
 	[[maybe_unused]] int farg = REG_FA0;
 	([&] {
-		if constexpr (std::is_integral_v<std::remove_reference_t<Args>>) {
+		if constexpr (std::is_integral_v<remove_cvref<Args>>) {
 			cpu.reg(iarg++) = args;
 			if constexpr (sizeof(Args) > W) // upper 32-bits for 64-bit integers
 				cpu.reg(iarg++) = args >> 32;
@@ -16,9 +16,9 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 			cpu.reg(iarg++) = stack_push(args.data(), args.size()+1);
 		else if constexpr (is_string<Args>::value)
 			cpu.reg(iarg++) = stack_push(args, strlen(args)+1);
-		else if constexpr (std::is_floating_point_v<std::remove_reference_t<Args>>)
+		else if constexpr (std::is_floating_point_v<remove_cvref<Args>>)
 			cpu.registers().getfl(farg++).set_float(args);
-		else if constexpr (std::is_standard_layout_v<std::remove_reference_t<Args>>)
+		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>>)
 			cpu.reg(iarg++) = stack_push(&args, sizeof(args));
 		else
 			static_assert(always_false<decltype(args)>, "Unknown type");
