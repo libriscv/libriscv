@@ -23,6 +23,7 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 		else
 			static_assert(always_false<decltype(args)>, "Unknown type");
 	}(), ...);
+	cpu.reg(REG_SP) &= ~address_t(0xF);
 	cpu.jump(call_addr);
 }
 
