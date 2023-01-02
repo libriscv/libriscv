@@ -85,10 +85,8 @@ namespace riscv
 		m.cpu.aligned_jump(pc);
 
 		m.cpu.reset_stack_pointer();
-		// Prefetch one cache-line below the stack pointer base
-		auto prefetch = &m.memory.template writable_read<uint32_t>(m.cpu.reg(REG_SP) - 64);
 
-		std::array<address_t, 8> gpr {};
+		std::array<address_t, 8> gpr;
 		unsigned iarg = 0;
 		([&] {
 			if constexpr (std::is_integral_v<remove_cvref<Args>>) {
@@ -145,9 +143,6 @@ namespace riscv
 				else
 					static_assert(always_false<decltype(args)>, "Unknown type");
 			}(), ...);
-
-			// Prefetch stack-stored data
-			__builtin_prefetch(prefetch);
 
 			// Execute vmcall
 			m.simulate(imax);
