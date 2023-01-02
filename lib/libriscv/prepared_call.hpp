@@ -39,9 +39,9 @@ namespace riscv
 	struct PreparedCall
 	{
 		using address_t = address_type<W>;
+		using saddr_t = signed_address_type<W>;
 
-		template <bool Throw = true>
-		signed_address_type<W> vmcall(uint64_t imax = UINT64_MAX);
+		saddr_t vmcall(uint64_t imax = UINT64_MAX);
 
 		template <typename... Args>
 		void prepare(Machine<W>&, const std::string& func, Args&&...);
@@ -50,50 +50,25 @@ namespace riscv
 		void prepare(Machine<W>&, address_t call_addr, Args&&...);
 
 		bool is_prepared() const noexcept {
-			return this->m_machine != nullptr;
+			return this->m_func != nullptr;
 		}
 
 		PreparedCall() = default;
 		~PreparedCall() = default;
-		void reset() { m_machine = nullptr; }
+		void reset() { m_func = nullptr; }
 
 	private:
-		Machine<W>* m_machine = nullptr;
-		address_t   m_call_addr = 0x0;
-		uint16_t    m_iarg = 0;
-		uint16_t    m_farg = 0;
-		const void* m_prefetch;
-		std::array<address_t, 8> gpr {};
-		std::array<fp64reg, 8> fpr {};
+		std::function<saddr_t(uint64_t)> m_func;
 	};
 
 	template <int W>
-	template <bool Throw>
 	inline signed_address_type<W> PreparedCall<W>::vmcall(uint64_t imax)
 	{
 		if (UNLIKELY(!is_prepared()))
 			throw MachineException(ILLEGAL_OPERATION,
-				"The call was not prepared (call address or machine not set)", 0x0);
+				"The call was not prepared", 0x0);
 
-		auto& cpu = m_machine->cpu;
-		auto& regs = cpu.registers();
-
-		// 1. Jump to address
-		cpu.aligned_jump(this->m_call_addr);
-		// 2. Set return address (exit function)
-		cpu.reg(REG_RA) = m_machine->memory.exit_address();
-		// 3. Reset stack pointer to current baseline
-		cpu.reset_stack_pointer();
-		// 4. Copy all integer registers
-		for (unsigned i = 0; i < m_iarg; i++)
-			regs.get(REG_ARG0 + i) = gpr[i];
-		for (unsigned i = 0; i < m_farg; i++)
-			regs.getfl(REG_FA0 + i) = fpr[i];
-
-		__builtin_prefetch(this->m_prefetch);
-		m_machine->template simulate<Throw>(imax);
-
-		return signed_address_type<W>(cpu.reg(REG_RETVAL));
+		return m_func(imax);
 	}
 
 	template <int W>
@@ -111,10 +86,10 @@ namespace riscv
 
 		m.cpu.reset_stack_pointer();
 		// Prefetch one cache-line below the stack pointer base
-		this->m_prefetch = &m.memory.template writable_read<uint32_t>(m.cpu.reg(REG_SP) - 64);
+		auto prefetch = &m.memory.template writable_read<uint32_t>(m.cpu.reg(REG_SP) - 64);
 
+		std::array<address_t, 8> gpr {};
 		unsigned iarg = 0;
-		unsigned farg = 0;
 		([&] {
 			if constexpr (std::is_integral_v<remove_cvref<Args>>) {
 				gpr[iarg++] = args;
@@ -126,7 +101,6 @@ namespace riscv
 			else if constexpr (is_string<Args>::value)
 				gpr[iarg++] = m.stack_push(args, strlen(args)+1);
 			else if constexpr (std::is_floating_point_v<remove_cvref<Args>>) {
-				fpr[farg++].set_float(args);
 			}
 			else if constexpr (std::is_standard_layout_v<remove_cvref<Args>>)
 				gpr[iarg++] = m.stack_push(&args, sizeof(args));
@@ -138,10 +112,48 @@ namespace riscv
 		// Move VMCALL initial stack address to new position
 		m.memory.set_stack_initial(m.cpu.reg(REG_SP));
 
-		this->m_machine = &m;
-		this->m_call_addr = call_addr;
-		this->m_iarg = iarg;
-		this->m_farg = farg;
+		this->m_func =
+		[=] (uint64_t imax) mutable -> saddr_t
+		{
+			auto& cpu = m.cpu;
+			auto& regs = cpu.registers();
+
+			// 1. Jump to address
+			cpu.aligned_jump(call_addr);
+			// 2. Set return address (exit function)
+			cpu.reg(REG_RA) = m.memory.exit_address();
+			// 3. Reset stack pointer to current baseline
+			cpu.reset_stack_pointer();
+			// 4. Re-construct registers from parameter pack
+			// but re-use stack for stack-stored arguments
+			unsigned iarg = 0;
+			unsigned farg = 0;
+			([&] {
+				if constexpr (std::is_integral_v<remove_cvref<Args>>) {
+					regs.get(REG_ARG0 + iarg++) = args;
+					if constexpr (sizeof(Args) > W) // upper 32-bits for 64-bit integers
+						regs.get(REG_ARG0 + iarg++) = args >> 32;
+				}
+				else if constexpr (is_stdstring<Args>::value)
+					regs.get(REG_ARG0 + iarg++) = gpr[iarg];
+				else if constexpr (is_string<Args>::value)
+					regs.get(REG_ARG0 + iarg++) = gpr[iarg];
+				else if constexpr (std::is_floating_point_v<remove_cvref<Args>>)
+					regs.getfl(REG_FA0 + farg++).set_float(args);
+				else if constexpr (std::is_standard_layout_v<remove_cvref<Args>>)
+					regs.get(REG_ARG0 + iarg++) = gpr[iarg];
+				else
+					static_assert(always_false<decltype(args)>, "Unknown type");
+			}(), ...);
+
+			// Prefetch stack-stored data
+			__builtin_prefetch(prefetch);
+
+			// Execute vmcall
+			m.simulate(imax);
+
+			return saddr_t(cpu.reg(REG_RETVAL));
+		};
 	}
 
 	template <int W>
