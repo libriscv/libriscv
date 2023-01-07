@@ -627,6 +627,8 @@ static void syscall_fstat(Machine<W>& machine)
 	}
 	machine.set_result(-ENOSYS);
 }
+
+#ifdef __linux__
 template <int W>
 static void syscall_statx(Machine<W>& machine)
 {
@@ -659,6 +661,7 @@ static void syscall_statx(Machine<W>& machine)
 	}
 	machine.set_result(-ENOSYS);
 }
+#endif // __linux__
 
 template <int W>
 static void syscall_gettimeofday(Machine<W>& machine)
@@ -900,11 +903,13 @@ static void add_mman_syscalls()
 				machine.memory.free_pages(addr, len);
 				machine.set_result(0);
 				return;
+#ifdef __linux__
 			case MADV_REMOVE:
-			//case MADV_FREE:
+			case MADV_FREE:
 				machine.memory.free_pages(addr, len);
 				machine.set_result(0);
 				return;
+#endif
 			default:
 				machine.set_result(-EINVAL);
 				return;
@@ -914,7 +919,9 @@ static void add_mman_syscalls()
 
 #include "syscalls_select.cpp"
 #include "syscalls_poll.cpp"
+#ifdef __linux__
 #include "syscalls_epoll.cpp"
+#endif
 
 template <int W>
 void Machine<W>::setup_newlib_syscalls()
@@ -933,12 +940,14 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 {
 	install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
 
+#ifdef __linux__
 	// epoll_create
 	install_syscall_handler(20, syscall_epoll_create<W>);
 	// epoll_ctl
 	install_syscall_handler(21, syscall_epoll_ctl<W>);
 	// epoll_pwait
 	install_syscall_handler(22, syscall_epoll_pwait<W>);
+#endif
 	// dup
 	install_syscall_handler(23, syscall_dup<W>);
 	// fcntl
@@ -1030,8 +1039,10 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 			add_socket_syscalls(*this);
 	}
 
+#ifdef __linux__
 	// statx
 	install_syscall_handler(291, syscall_statx<W>);
+#endif
 }
 
 template void Machine<4>::setup_newlib_syscalls();
