@@ -18,7 +18,9 @@ static constexpr bool verbose_syscalls = false;
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#if !defined(__OpenBSD__)
 #include <sys/random.h>
+#endif
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -772,7 +774,12 @@ static void syscall_getrandom(Machine<W>& machine)
 		return;
 	}
 	const size_t need = std::min((size_t)g_len, sizeof(buffer));
+#if defined(__OpenBSD__)
+	const ssize_t result = 0; // always success
+	arc4random_buf(buffer, need);
+#else
 	const ssize_t result = getrandom(buffer, need, 0);
+#endif
 	if (result > 0) {
 		machine.copy_to_guest(g_addr, buffer, result);
 	}
