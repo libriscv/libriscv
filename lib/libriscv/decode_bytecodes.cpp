@@ -355,7 +355,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 					return RV32I_BC_STOP;
 				}
 			}
-			return RV32I_BC_FUNCTION;
+			return RV32I_BC_SYSTEM;
 		case RV32I_FENCE:
 			return RV32I_BC_NOP;
 		case RV32F_LOAD: {

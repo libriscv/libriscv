@@ -241,6 +241,19 @@ namespace riscv
 	}
 #endif
 
+	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
+		VIEW_INSTR();
+		// Make the current PC visible
+		cpu.registers().pc = pc;
+		// Make the instruction counter visible
+		cpu.machine().set_instruction_counter(counter);
+		// Invoke SYSTEM
+		cpu.machine().system(instr);
+		// Restore PC in case it changed (supervisor)
+		pc = cpu.registers().pc + 4;
+		CHECKED_JUMP();
+	}
+
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
 	{
 		cpu.trigger_exception(ILLEGAL_OPCODE, d->instr);
@@ -349,6 +362,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = translated_function,
 #endif
+		[RV32I_BC_SYSTEM]  = rv32i_system,
 		};
 	}
 

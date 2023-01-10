@@ -106,6 +106,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		RV32I_BC_TRANSLATOR,
 #endif
+		RV32I_BC_SYSTEM,
 		BYTECODES_MAX
 	};
 

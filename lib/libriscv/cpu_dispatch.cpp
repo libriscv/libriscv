@@ -169,6 +169,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
 #endif
+		[RV32I_BC_SYSTEM]  = &&rv32i_system,
 	};
 #endif
 
@@ -359,6 +360,19 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	goto check_jump;
 }
 #endif
+
+INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
+	VIEW_INSTR();
+	// Make the current PC visible
+	this->registers().pc = pc;
+	// Make the instruction counter visible
+	counter.apply_counter();
+	// Invoke SYSTEM
+	machine().system(instr);
+	// Restore PC in case it changed (supervisor)
+	pc = registers().pc + 4;
+	goto check_jump;
+}
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 	default:

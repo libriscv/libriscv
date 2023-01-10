@@ -54,10 +54,11 @@ namespace riscv
 
 	static bool is_stopping_system(rv32i_instruction instr) {
 		if (instr.opcode() == RV32I_SYSTEM) {
-			return instr.Itype.funct3 == 0
-				&& (instr.Itype.imm == 0  // System call
-					|| instr.Itype.imm == 0x105   // WFI
-					|| instr.Itype.imm == 0x7ff); // STOP
+			return true;
+//			return instr.Itype.funct3 == 0
+//				&& (instr.Itype.imm == 0  // System call
+//					|| instr.Itype.imm == 0x105   // WFI
+//					|| instr.Itype.imm == 0x7ff); // STOP
 		}
 		return false;
 	}
