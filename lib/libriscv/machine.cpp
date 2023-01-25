@@ -18,7 +18,7 @@ extern "C" {
 static inline uint64_t u64_monotonic_time()
 {
 	auto now = std::chrono::steady_clock::now();
-	return std::chrono::duration_cast<std::chrono::seconds>
+	return std::chrono::duration_cast<std::chrono::milliseconds>
 		(now.time_since_epoch()).count();
 }
 
