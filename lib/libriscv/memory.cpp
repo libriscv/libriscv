@@ -257,7 +257,7 @@ namespace riscv
 		const address_t prelen  = addr - prebase;
 		const address_t postbase = (addr + size) & ~PSIZEMASK;
 		const address_t lastpage_len = (addr + size) - postbase;
-		const address_t postlen = Page::size() - lastpage_len;
+		const address_t postlen = (lastpage_len > 0) ? Page::size() - lastpage_len : 0;
 		// The total length should be a page-sized length
 		const address_t total_len = prelen + size + postlen;
 		assert((total_len & ~PSIZEMASK) == total_len);
@@ -340,7 +340,7 @@ namespace riscv
 			for (const auto* ph = phdr; ph < hdr; ph++) {
 				if (hdr->p_type == PT_LOAD && ph->p_type == PT_LOAD)
 				if (ph->p_vaddr < hdr->p_vaddr + hdr->p_filesz &&
-					ph->p_vaddr + ph->p_filesz >= hdr->p_vaddr) {
+					ph->p_vaddr + ph->p_filesz > hdr->p_vaddr) {
 					// Normally we would not care, but no normal ELF
 					// has overlapping segments, so treat as bogus.
 					throw MachineException(INVALID_PROGRAM, "Overlapping ELF segments");
