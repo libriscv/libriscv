@@ -4,8 +4,8 @@
 #include <map>
 #include "../types.hpp"
 
-#ifndef EBADF
-#define	EBADF		 9	/* Bad file number */
+#if defined(__APPLE__) || defined(__LINUX__)
+#include <errno.h>
 #endif
 
 namespace riscv {
