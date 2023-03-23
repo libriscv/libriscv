@@ -4,6 +4,10 @@
 #include <map>
 #include "../types.hpp"
 
+#ifndef EBADF
+#define	EBADF		 9	/* Bad file number */
+#endif
+
 namespace riscv {
 
 struct FileDescriptors
