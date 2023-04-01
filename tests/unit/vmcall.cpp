@@ -132,6 +132,12 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 		res1 = fork.vmcall("str", std::string("Hello"));
 		REQUIRE(res1 == 1);
 
+		std::string hello = "Hello";
+		const std::string& ref = hello;
+
+		res1 = fork.vmcall("str", ref);
+		REQUIRE(res1 == 1);
+
 		struct {
 			int v1 = 1;
 			int v2 = 2;

@@ -18,7 +18,7 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 			cpu.reg(iarg++) = stack_push(args, strlen(args)+1);
 		else if constexpr (std::is_floating_point_v<remove_cvref<Args>>)
 			cpu.registers().getfl(farg++).set_float(args);
-		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>> && std::is_trivial_v<remove_cvref<Args>>)
+		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>>)
 			cpu.reg(iarg++) = stack_push(&args, sizeof(args));
 		else
 			static_assert(always_false<decltype(args)>, "Unknown type");
