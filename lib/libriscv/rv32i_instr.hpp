@@ -49,8 +49,15 @@ namespace riscv
 			uint32_t shift128_imm() const noexcept {
 				return imm & 0x7F;
 			}
+
+			auto high_bits() const noexcept {
+				return imm & 0xE00;
+			}
 			bool is_srai() const noexcept {
-				return imm & 0x400;
+				return (imm & 0xE00) == 0x400;
+			}
+			bool is_rori() const noexcept {
+				return (imm & 0xE00) == 0x600;
 			}
 		} Itype;
 		// store format

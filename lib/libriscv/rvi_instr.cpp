@@ -372,8 +372,14 @@ namespace riscv
 			return;
 		case 0x5: // SRLI / SRAI / ORC.B
 			if (instr.Itype.is_srai()) {
-				// SRAI: preserve the sign bit
+				// SRAI: Preserve the sign bit
 				dst = (RVSIGNTYPE(cpu))src >> (instr.Itype.imm & (RVXLEN(cpu)-1));
+				return;
+			}
+			else if (instr.Itype.is_rori()) {
+				// RORI: Rotate right
+				const auto shift = instr.Itype.imm & (RVXLEN(cpu) - 1);
+				dst = (src >> shift) | (src << (RVXLEN(cpu) - shift));
 				return;
 			}
 			else if (instr.Itype.imm == 0x287) {
@@ -509,9 +515,18 @@ namespace riscv
 				return;
 			}
 			break;
-		case 0x5: // SRL
-			dst = src1 >> (src2 & (RVXLEN(cpu)-1));
-			return;
+		case 0x5: // SRL / ROR
+			if (instr.Itype.high_bits() == 0x0) {
+				// SRL: Logical right shift
+				dst = src1 >> (src2 & (RVXLEN(cpu)-1));
+				return;
+			}
+			else if (instr.Itype.is_rori()) {
+				// ROR: Rotate right
+				const auto shift = src2 & (RVXLEN(cpu) - 1);
+				dst = (src1 >> shift) | (src1 << (RVXLEN(cpu) - shift));
+				return;
+			}
 		case 0x6: // OR
 			dst = src1 | src2;
 			return;
@@ -594,6 +609,18 @@ namespace riscv
 				dst = (RVREGTYPE(cpu)) -1;
 			}
 			return;
+		case 0x54: // MIN
+			dst = (RVSIGNTYPE(cpu)(src1) < RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
+			return;
+		case 0x55: // MINU
+			dst = (src1 < src2) ? src1 : src2;
+			return;
+		case 0x56: // MAX
+			dst = (RVSIGNTYPE(cpu)(src1) > RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
+			return;
+		case 0x57: // MAXU
+			dst = (src1 > src2) ? src1 : src2;
+			return;
 		case 0x102: // SH1ADD
 			dst = src2 + (src1 << 1);
 			return;
@@ -615,20 +642,8 @@ namespace riscv
 		case 0x207: // ANDN
 			dst = src2 & ~src1;
 			return;
-		case 0x504: // MIN
-			dst = (RVSIGNTYPE(cpu)(src1) < RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
-			return;
-		case 0x505: // MINU
-			dst = (src1 < src2) ? src1 : src2;
-			return;
-		case 0x506: // MAX
-			dst = (RVSIGNTYPE(cpu)(src1) > RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
-			return;
-		case 0x507: // MAXU
-			dst = (src1 > src2) ? src1 : src2;
-			return;
 		}
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{

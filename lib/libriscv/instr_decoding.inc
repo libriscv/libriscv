@@ -106,12 +106,12 @@
 							}
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
 						case 0x1: // SLLI
-							if (instruction.Itype.imm < 128) {
+							if (instruction.Itype.imm < 512) {
 								DECODER(DECODED_INSTR(OP_IMM_SLLI));
 							}
 							DECODER(DECODED_INSTR(OP_IMM));
 						case 0x5: // SRLI / SRAI
-							if (instruction.Itype.imm < 128) {
+							if (instruction.Itype.imm < 512) {
 								DECODER(DECODED_INSTR(OP_IMM_SRLI));
 							} else {
 								DECODER(DECODED_INSTR(OP_IMM));
@@ -173,7 +173,7 @@
 								DECODER(DECODED_INSTR(OP_IMM32_SLLI_UW));
 							}
 						case 0x5: // SRLIW / SRAIW
-							if (!instruction.Itype.is_srai()) {
+							if (instruction.Itype.high_bits() == 0x0) {
 								DECODER(DECODED_INSTR(OP_IMM32_SRLIW));
 							} else {
 								DECODER(DECODED_INSTR(OP_IMM32_SRAIW));
