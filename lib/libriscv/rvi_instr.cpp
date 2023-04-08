@@ -637,10 +637,10 @@ namespace riscv
 			dst = (RVSIGNTYPE(cpu))src1 >> (src2 & (RVXLEN(cpu)-1));
 			return;
 		case 0x206: // ORN
-			dst = src2 | ~src1;
+			dst = src1 | ~src2;
 			return;
 		case 0x207: // ANDN
-			dst = src2 & ~src1;
+			dst = src1 & ~src2;
 			return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
