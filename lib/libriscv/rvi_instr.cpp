@@ -351,6 +351,16 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		switch (instr.Itype.funct3) {
+		case 0x1: // *NOT* SLLI, SEXT.B, SEXT.H
+			switch (instr.Itype.imm) {
+			case 0b011000000100: // SEXT.B
+				dst = RVSIGNTYPE(cpu)(int8_t(src));
+				return;
+			case 0b011000000101: // SEXT.H
+				dst = RVSIGNTYPE(cpu)(int16_t(src));
+				return;
+			}
+			break;
 		case 0x2: // SLTI: Set less than immediate
 			dst = (RVTOSIGNED(src) < RVIMM(cpu, instr.Itype));
 			return;
@@ -360,10 +370,20 @@ namespace riscv
 		case 0x4: // XORI:
 			dst = src ^ RVIMM(cpu, instr.Itype);
 			return;
-		case 0x5: // SRLI / SRAI:
-			// SRAI: preserve the sign bit
-			dst = (RVSIGNTYPE(cpu))src >> (instr.Itype.imm & (RVXLEN(cpu)-1));
-			return;
+		case 0x5: // SRLI / SRAI / ORC.B
+			if (instr.Itype.is_srai()) {
+				// SRAI: preserve the sign bit
+				dst = (RVSIGNTYPE(cpu))src >> (instr.Itype.imm & (RVXLEN(cpu)-1));
+				return;
+			}
+			else if (instr.Itype.imm == 0x287) {
+				// ORC.B: Bitwise OR-combine
+				auto* bytes = (uint8_t *)&src;
+				for (size_t i = 0; i < sizeof(src); i++)
+					dst = bytes[i] ? 0xFF : 0x0;
+				return;
+			}
+			break;
 		case 0x6: // ORI: Or sign-extended 12-bit immediate
 			dst = src | RVIMM(cpu, instr.Itype);
 			return;
@@ -481,8 +501,14 @@ namespace riscv
 			dst = (src1 < src2);
 			return;
 		case 0x4: // XOR
-			dst = src1 ^ src2;
-			return;
+			if (instr.Rtype.funct7 == 0x0) {
+				dst = src1 ^ src2;
+				return;
+			} else if (instr.Rtype.funct7 == 0x4) {
+				dst = uint16_t(src1);
+				return;
+			}
+			break;
 		case 0x5: // SRL
 			dst = src1 >> (src2 & (RVXLEN(cpu)-1));
 			return;
@@ -582,6 +608,24 @@ namespace riscv
 			return;
 		case 0x205: // SRA
 			dst = (RVSIGNTYPE(cpu))src1 >> (src2 & (RVXLEN(cpu)-1));
+			return;
+		case 0x206: // ORN
+			dst = src2 | ~src1;
+			return;
+		case 0x207: // ANDN
+			dst = src2 & ~src1;
+			return;
+		case 0x504: // MIN
+			dst = (RVSIGNTYPE(cpu)(src1) < RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
+			return;
+		case 0x505: // MINU
+			dst = (src1 < src2) ? src1 : src2;
+			return;
+		case 0x506: // MAX
+			dst = (RVSIGNTYPE(cpu)(src1) > RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
+			return;
+		case 0x507: // MAXU
+			dst = (src1 > src2) ? src1 : src2;
 			return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
@@ -841,6 +885,9 @@ namespace riscv
 		case 0x40: // ADDUW
 			dst = cpu.reg(instr.Rtype.rs2) + src1;
 			return;
+		case 0x44: // ZEXT.H (imm=0x40):
+			dst = uint16_t(src1);
+			return;
 		case 0x102: // SH1ADD.UW
 			dst = cpu.reg(instr.Rtype.rs2) + (src1 << 1);
 			return;
@@ -857,7 +904,7 @@ namespace riscv
 			dst = (int32_t)src1 >> (src2 & 31);
 			return;
 		}
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		if (!instr.Rtype.is_32M())

@@ -262,7 +262,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				else
 					return RV32I_BC_ADDI;
 			case 0x1: // SLLI
-				return RV32I_BC_SLLI;
+				if (instr.Itype.imm < 128)
+					return RV32I_BC_SLLI;
+				else
+					return RV32I_BC_FUNCTION;
 			case 0x2: // SLTI
 				return RV32I_BC_SLTI;
 			case 0x3: // SLTIU
@@ -279,7 +282,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x7:
 				return RV32I_BC_ANDI;
 			default:
-				return RV32I_BC_INVALID;
+				return RV32I_BC_FUNCTION;
 			}
 		case RV32I_OP:
 			if (instr.Itype.rd == 0)
@@ -326,10 +329,16 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_OP_SH2ADD;
 			case 0x106:
 				return RV32I_BC_OP_SH3ADD;
-			//case 0x204:
-			//	return RV32I_BC_OP_XNOR;
 			case 0x205:
 				return RV32I_BC_OP_SRA;
+			case 0x204: // XNOR
+			case 0x206: // ORN
+			case 0x207: // ANDN
+			case 0x504: // MIN
+			case 0x505: // MINU
+			case 0x506: // MAX
+			case 0x507: // MAXU
+				return RV32I_BC_FUNCTION;
 			default:
 				return RV32I_BC_INVALID;
 			}
