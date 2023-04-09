@@ -22,6 +22,12 @@ inline uint64_t rdtime()
 	asm ("rdtimeh %0\n rdtime %1\n" : "=r"(word[1]), "=r"(word[0]));
 	return whole;
 }
+inline uint64_t rol(uint64_t val, unsigned shift)
+{
+	uint64_t result;
+	asm("rol %0, %1, %2" : "=r"(result) : "r"(val), "r"(shift));
+	return result;
+}
 
 int main()
 {
@@ -66,7 +72,7 @@ int main()
 		printf("Caught exception: %s\n", e.what());
 	}
 
-	return 666;
+	return rol(0xFFFFFFFF00000000L, 32);
 }
 
 static std::vector<int> array;
