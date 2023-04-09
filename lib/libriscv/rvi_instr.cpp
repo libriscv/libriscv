@@ -642,6 +642,10 @@ namespace riscv
 		case 0x207: // ANDN
 			dst = src1 & ~src2;
 			return;
+		case 0x301: { // ROL: Rotate left
+			const auto shift = src2 & (RVXLEN(cpu) - 1);
+			dst = (src1 << shift) | (src1 >> (RVXLEN(cpu) - shift));
+			} return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	},

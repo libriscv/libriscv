@@ -343,6 +343,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x55: // MINU
 			case 0x56: // MAX
 			case 0x57: // MAXU
+			case 0x301: // ROL
 				return RV32I_BC_FUNCTION;
 			default:
 				return RV32I_BC_INVALID;
