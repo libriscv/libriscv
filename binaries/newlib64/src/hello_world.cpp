@@ -72,7 +72,7 @@ int main()
 		printf("Caught exception: %s\n", e.what());
 	}
 
-	return rol(0xFFFFFFFF00000000L, 32);
+	return 666;
 }
 
 static std::vector<int> array;
