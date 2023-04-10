@@ -264,7 +264,7 @@ namespace riscv
 		mutable printer_func m_printer = m_default_printer;
 		mutable printer_func m_debug_printer = m_default_printer;
 		mutable stdin_func   m_stdin = m_default_stdin;
-		std::unique_ptr<Arena> m_arena = nullptr;
+		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt = nullptr;
 		std::unique_ptr<FileDescriptors> m_fds = nullptr;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
