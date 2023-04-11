@@ -64,26 +64,33 @@ The last step is to add your compiler to PATH so that it becomes visible to buil
 export PATH=$PATH:$HOME/riscv/bin
 ```
 
-## Building and running a test program
+## Running a RISC-V program
 
-From one of the binary subfolders:
-```
-$ ./build.sh
-```
-Which will produce a RISC-V binary in the sub-projects build folder, depending on the example. Some examples require you to install a compiler for that programming language.
-
-Building the emulator and booting the newlib `hello_world`:
 ```sh
 cd emulator
 ./build.sh
-./rvlinux ../binaries/linux64/build/hello_world
+./rvlinux <path to RISC-V ELF binary>
 ```
 
-The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib programs. `rvlinux` has all the system calls necessary to run a normal userspace linux program. Each emulator is capable of running both 32- and 64-bit RISC-V programs.
+The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib programs. `rvlinux` has all the system calls necessary to run a normal userspace linux program. Each emulator is capable of running both 32- and 64-bit RISC-V programs. `rvlinux` can be used for most programs.
 
-## Example programs
+You can step through programs instruction by instruction by running the emulator with `DEBUG=1`:
+```sh
+cd emulator
+DEBUG=1 ./rvlinux <path to RISC-V ELF binary>
+```
 
-The [binaries folder](/binaries/) has a lot of example programs.
+You can use GDB remotely by starting the emulator with `GDB=1`:
+```sh
+cd emulator
+GDB=1 ./rvlinux <path to RISC-V ELF binary>
+```
+Connect from `gdb-multiarch` with `target remote localhost:2159` after loading the program with `file <path>`.
+
+
+## Example RISC-V programs
+
+The [binaries folder](/binaries/) contains several example programs.
 
 The [newlib](/binaries/newlib) and [newlib64](/binaries/newlib64) example projects have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries. You can run these programs with rvnewlib.
 
@@ -104,7 +111,9 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 The emulator currently supports RV32GC, RV64GC (IMAFDC) and RV128G.
 The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions). Atomics support is present and has been tested with multiprocessing, but there is no extensive test suite. The Golang runtime uses atomics extensively.
 
-The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the emu128 folder.
+B-extension support is currently being implemented. Zba and Zbb is experimentally supported. In order to test this, build with `-march=rv64g_zba_zbb`. There is an [ELF verification test](/tests/unit/verify_elf.cpp).
+
+The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the [emu128 folder](/emu128/).
 
 ## Example usage when embedded into a project
 
