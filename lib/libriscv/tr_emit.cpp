@@ -10,7 +10,8 @@
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nreturn;\n"; }
 
 namespace riscv {
-static constexpr int LOOP_INSTRUCTIONS_MAX = 4096;
+// We tolerate 1 million insn before exiting hot loops
+static constexpr int LOOP_INSTRUCTIONS_MAX = 1024 * 1024;
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -40,7 +41,7 @@ inline std::string from_imm(int64_t imm) {
 struct BranchInfo {
 	bool sign;
 	bool goto_enabled;
-	int jump_label;
+	int jump_label; // destination index, 0 when unused
 };
 #define FUNCLABEL(i)  (func + "_" + std::to_string(i))
 template <int W>
@@ -54,18 +55,15 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
 		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
-		// We can simplify this jump because we know it's safe
-		// This side of the branch exits bintr because of max instructions reached
-		code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n"
-			"return;}\n";
 	} else if (binfo.jump_label > 0) {
-		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n"
-				"}\n";
-	} else {
+		// forward jump to label (from absolute index)
+		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") ";
+		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n";
+		// else, exit binary translation
+	}
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
 	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", " + (tinfo.has_branch ? "c" : std::to_string(i)) + ");\n"
 		"return;}\n";
-	}
 }
 template <int W>
 inline void emit_op(std::string& code, const std::string& op, const std::string& sop,
@@ -188,9 +186,11 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			// forward label: branch inside code block
 			int fl = 0;
 			if (offset > 0 && i+offset < tinfo.len) {
+				// forward label: future address
 				fl = i+offset;
 				labels.insert(fl);
 			} else if (tinfo.jump_locations.count(PCRELA(offset * 4))) {
+				// forward label: existing jump location
 				const int dstidx = i + offset;
 				if (dstidx > 0 && dstidx < tinfo.len) {
 					fl = dstidx;
