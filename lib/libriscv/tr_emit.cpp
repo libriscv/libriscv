@@ -11,7 +11,7 @@
 
 namespace riscv {
 // We tolerate 1 million insn before exiting hot loops
-static const std::string LOOP_INSTRUCTIONS_MAX = "(*max_insn - *cur_insn)";
+static const std::string LOOP_INSTRUCTIONS_MAX = "local_max_insn";
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -62,7 +62,9 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 		// else, exit binary translation
 	}
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
-	code += "api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ", " + (tinfo.has_branch ? "c" : std::to_string(i)) + ");\n"
+	code += 
+		"*cur_insn = c; "
+		"api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ");\n"
 		"return;}\n";
 }
 template <int W>
@@ -86,7 +88,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	std::set<unsigned> labels;
 	code += "extern void " + func + "(CPU* cpu) {\n"
-		"uint64_t c = 0; " + func + "_start:;\n";
+		"uint64_t c = *cur_insn, local_max_insn = *max_insn; " + func + "_start:;\n";
 
 	for (int i = 0; i < tinfo.len; i++) {
 		const auto instr = rv32i_instruction {ip[i].instr};
@@ -223,12 +225,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV32I_JALR: {
 			// jump to register + immediate
 			// NOTE: We need to remember RS1 because it can be clobbered by RD
-			add_code(code, "addr_t jrs1 = " + from_reg(tinfo, instr.Itype.rs1) + ";");
+			add_code(code, "{addr_t jrs1 = " + from_reg(tinfo, instr.Itype.rs1) + ";");
 			if (instr.Itype.rd != 0) {
 				add_code(code, from_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";");
 			}
-			add_code(code, "api.jump(cpu, jrs1 + "
-				+ from_imm(instr.Itype.signed_imm()) + " - 4, " + INSTRUCTION_COUNT(i) + ");",
+			add_code(code, 
+				"*cur_insn = c + " + std::to_string(i) + ";\n"
+				"api.jump(cpu, jrs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }",
 				"}");
 			} return;
 		case RV32I_JAL: {
@@ -246,12 +249,14 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				add_code(code, "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") goto " + FUNCLABEL(fl) + ";");
 				// if we run out of instructions, we must exit:
 				add_code(code,
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
+					"*cur_insn = c + " + std::to_string(i) + ";\n"
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");",
 					"return;");
 			} else {
 				// Because of forward jumps we can't end the function here
 				add_code(code,
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
+					"*cur_insn = c + " + std::to_string(i) + ";\n"
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");",
 					"return;");
 			} } break;
 		case RV32I_OP_IMM: {
@@ -505,14 +510,21 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV32I_SYSTEM:
 			if (instr.Itype.funct3 == 0x0) {
 				if (instr.Itype.imm == 0) {
-					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(17) + ", " + INSTRUCTION_COUNT(i) + ")))\n"
+					code += "cpu->pc = " + PCRELS(0) + "; "
+							"*cur_insn = c;\n";
+					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(17) + ")))\n"
 					       "  return;\n";
+					code += "local_max_insn = *max_insn;\n";
 					break;
 				} if (instr.Itype.imm == 1) {
-					code += "api.ebreak(cpu, " + INSTRUCTION_COUNT(i) + ");\nreturn;\n";
+					code += "cpu->pc = " + PCRELS(0) + "; "
+							"*cur_insn = c;\n";
+					code += "api.ebreak(cpu);\nreturn;\n";
 					break;
 				} if (instr.Itype.imm == 261) {
-					code += "api.stop(cpu, " + INSTRUCTION_COUNT(i) + ");\nreturn;\n";
+					code += "cpu->pc = " + PCRELS(0) + "; "
+							"*cur_insn = c;\n";
+					code += "api.stop(cpu);\nreturn;\n";
 					break;
 				} else {
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
@@ -809,11 +821,11 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			} // fpfunc
 			} else ILLEGAL_AND_EXIT();
 			} break; // RV32F_FPFUNC
-			case RV32A_ATOMIC: // General handler for atomics
-				[[fallthrough]];
-			case RV32V_OP:	   // General handler for vector instructions
-				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
-				break;
+		case RV32A_ATOMIC: // General handler for atomics
+			[[fallthrough]];
+		case RV32V_OP:	   // General handler for vector instructions
+			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			break;
 		default:
 			//throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter", instr.opcode());
 			ILLEGAL_AND_EXIT();
@@ -821,7 +833,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	}
 	// If the function ends with an unimplemented instruction,
 	// we must gracefully finish, setting new PC and incrementing IC
-	code += "api.finish(cpu, " + std::to_string(tinfo.len-1) + ", " + INSTRUCTION_COUNT(tinfo.len-1) + ");\n}\n";
+	code += "cpu->pc += " + std::to_string((tinfo.len-1) * 4) + ";\n"
+			"*cur_insn = c + " + std::to_string(tinfo.len-1) + ";\n"
+			"}\n";
 }
 
 template void CPU<4>::emit(std::string&, const std::string&, TransInstr<4>*, const TransInfo<4>&) const;

@@ -93,7 +93,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		unsigned block_size_treshold = 6;
 		unsigned translate_blocks_max = 5000;
-		unsigned translate_instr_max = 128'000;
+		unsigned translate_instr_max = 150'000;
 #endif
 	};
 
