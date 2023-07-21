@@ -2,7 +2,7 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
-#include <set>
+#include "tr_types.hpp"
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
@@ -11,7 +11,7 @@
 
 namespace riscv {
 // We tolerate 1 million insn before exiting hot loops
-static constexpr int LOOP_INSTRUCTIONS_MAX = 1024 * 1024;
+static const std::string LOOP_INSTRUCTIONS_MAX = "(*max_insn - *cur_insn)";
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -54,10 +54,10 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
-		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
+		code += "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") goto " + func + "_start;\n";
 	} else if (binfo.jump_label > 0) {
 		// forward jump to label (from absolute index)
-		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") ";
+		code += "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") ";
 		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n";
 		// else, exit binary translation
 	}
@@ -86,7 +86,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	std::set<unsigned> labels;
 	code += "extern void " + func + "(CPU* cpu) {\n"
-		"int c = 0; " + func + "_start:;\n";
+		"uint64_t c = 0; " + func + "_start:;\n";
 
 	for (int i = 0; i < tinfo.len; i++) {
 		const auto instr = rv32i_instruction {ip[i].instr};
@@ -243,7 +243,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (fl > i)
 					labels.insert(fl);
 				// this is a jump back to the start of the function
-				add_code(code, "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + FUNCLABEL(fl) + ";");
+				add_code(code, "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") goto " + FUNCLABEL(fl) + ";");
 				// if we run out of instructions, we must exit:
 				add_code(code,
 					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",
@@ -268,8 +268,19 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				} break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
-				emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1,
-					std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+				switch (instr.Itype.imm) {
+				case 0b011000000100: // SEXT.B
+					add_code(code,
+						dst + " = (saddr_t)(int8_t)" + src + ";");
+					break;
+				case 0b011000000101: // SEXT.H
+					add_code(code,
+						dst + " = (saddr_t)(int16_t)" + src + ";");
+					break;
+				default:
+					emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1,
+						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+				}
 				break;
 			case 0x2: // SLTI:
 				// signed less than immediate
@@ -287,6 +298,12 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (LIKELY(!instr.Itype.is_srai())) {
 					emit_op(code, " >> ", " >>= ", tinfo, instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+				} else if (instr.Itype.is_rori()) {
+					// RORI: Rotate right immediate
+					add_code(code,
+					"{const unsigned shift = " + from_imm(instr.Itype.imm & (XLEN-1)) + ";\n",
+						dst + " = (" + src + " >> shift) | (" + src + " << (XLEN - shift)); }"
+					);
 				} else { // SRAI: preserve the sign bit
 					add_code(code,
 						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
@@ -325,11 +342,26 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					from_reg(instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " < " + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XOR
-				emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				if (instr.Rtype.funct7 == 0x0) {
+					emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				} else if (instr.Rtype.funct7 == 0x4) {
+					// Mask off bits to 16-bit
+					add_code(code,
+						from_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(tinfo, instr.Rtype.rs1) + ");");
+				}
 				break;
-			case 0x5: // SRL
-				add_code(code,
-					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+			case 0x5: // SRL / ROR
+				if (instr.Itype.high_bits() == 0x0) {
+					add_code(code,
+						from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+				}
+				else if (instr.Itype.is_rori()) {
+					// ROR: Rotate right
+					add_code(code,
+					"{const unsigned shift = " + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1);\n",
+						from_reg(instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " >> shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " << (XLEN - shift)); }"
+					);
+				}
 				break;
 			case 0x205: // SRA
 				add_code(code,
@@ -420,7 +452,35 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				add_code(code, from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 3);");
 				break;
 			case 0x204: // XNOR
-				add_code(code, from_reg(instr.Rtype.rd) + " = ~(" + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + " << 2);");
+				add_code(code, from_reg(instr.Rtype.rd) + " = ~(" + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + ");");
+				break;
+			case 0x206: // ORN
+				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " | ~" + from_reg(instr.Rtype.rs2) + ");");
+				break;
+			case 0x207: // ANDN
+				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " & ~" + from_reg(instr.Rtype.rs2) + ");");
+				break;
+			case 0x54: // MIN
+				add_code(code, from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " < (saddr_t)" + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				break;
+			case 0x55: // MINU
+				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " < " + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				break;
+			case 0x56: // MAX
+				add_code(code, from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " > (saddr_t)" + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				break;
+			case 0x57: // MAXU
+				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " > " + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				break;
+			case 0x301: // ROL
+				add_code(code,
+				"{const unsigned shift = " + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1);\n",
+					from_reg(instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " << shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " >> (XLEN - shift)); }"
+				);
 				break;
 			default:
 				ILLEGAL_AND_EXIT();

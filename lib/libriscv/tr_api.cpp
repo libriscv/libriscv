@@ -73,6 +73,8 @@ static struct CallbackTable {
 	float  (*sqrtf32)(float);
 	double (*sqrtf64)(double);
 } api;
+static uint64_t* cur_insn;
+static uint64_t* max_insn;
 
 void* memcpy(void * restrict dst, const void * restrict src, unsigned len)
 {
@@ -107,8 +109,10 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern void init(struct CallbackTable* table) {
+extern void init(struct CallbackTable* table, uint64_t* cur_icount, uint64_t* max_icount) {
 	api = *table;
+	cur_insn = cur_icount;
+	max_insn = max_icount;
 };
 )123";
 }
