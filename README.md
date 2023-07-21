@@ -10,6 +10,8 @@ There is also a CLI that you can use to run RISC-V programs and step through ins
 
 [STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
 
+[CoreMark on a ThinkPad Z13](https://gist.github.com/fwsGonzo/571fde065e6aa73010bc2f948640bdc5) 2847 vs 31791 native.
+
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 15% CPU at 60 fps.
 
 ## What is userspace emulation?
