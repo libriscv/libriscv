@@ -369,35 +369,24 @@ void CPU<W>::activate_dylib(void* dylib) const
 		.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
 			cpu.machine().memory.template write<uint64_t> (addr, val);
 		},
-		.jump = [] (CPU<W>& cpu, address_type<W> addr, uint64_t val) {
+		.jump = [] (CPU<W>& cpu, address_type<W> addr) {
 			cpu.jump(addr);
-			cpu.machine().increment_counter(val);
 		},
-		.finish = [] (CPU<W>& cpu, address_type<W> off, uint64_t val) {
-			cpu.increment_pc(off * 4);
-			cpu.machine().increment_counter(val);
-		},
-		.syscall = [] (CPU<W>& cpu, address_type<W> n, uint64_t val) -> int {
+		.syscall = [] (CPU<W>& cpu, address_type<W> n) -> int {
 			auto old_pc = cpu.pc();
-			cpu.registers().pc += val * 4;
 			cpu.machine().system_call(n);
 			// if the system did not modify PC, return to bintr
-			if (cpu.pc() - val * 4 == old_pc && !cpu.machine().stopped()) {
+			if (cpu.pc() == old_pc && !cpu.machine().stopped()) {
 				cpu.registers().pc = old_pc;
 				return 0;
 			}
 			// otherwise, update instruction counter and exit
-			cpu.machine().increment_counter(val);
 			return 1;
 		},
-		.stop = [] (CPU<W>& cpu, uint64_t val) {
-			cpu.registers().pc += val * 4;
-			cpu.machine().increment_counter(val);
+		.stop = [] (CPU<W>& cpu) {
 			cpu.machine().stop();
 		},
-		.ebreak = [] (CPU<W>& cpu, uint64_t val) {
-			cpu.registers().pc += val * 4;
-			cpu.machine().increment_counter(val);
+		.ebreak = [] (CPU<W>& cpu) {
 			cpu.machine().ebreak();
 		},
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
