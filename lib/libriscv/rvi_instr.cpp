@@ -527,6 +527,7 @@ namespace riscv
 				dst = (src1 >> shift) | (src1 << (RVXLEN(cpu) - shift));
 				return;
 			}
+			break;
 		case 0x6: // OR
 			dst = src1 | src2;
 			return;
