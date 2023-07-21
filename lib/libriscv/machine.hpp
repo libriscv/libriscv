@@ -243,6 +243,7 @@ namespace riscv
 		// Returns true if the Machine has loaded native code
 		// generated from binary translation.
 		bool is_binary_translated() const { return memory.is_binary_translated(); }
+		std::pair<uint64_t&, uint64_t&> get_counters() noexcept { return {m_counter, m_max_counter}; }
 
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;

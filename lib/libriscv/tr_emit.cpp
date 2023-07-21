@@ -2,7 +2,7 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
-#include <set>
+#include "tr_types.hpp"
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
@@ -11,7 +11,7 @@
 
 namespace riscv {
 // We tolerate 1 million insn before exiting hot loops
-static constexpr int LOOP_INSTRUCTIONS_MAX = 1024 * 1024;
+static const std::string LOOP_INSTRUCTIONS_MAX = "(*max_insn - *cur_insn)";
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -54,10 +54,10 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
-		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + func + "_start;\n";
+		code += "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") goto " + func + "_start;\n";
 	} else if (binfo.jump_label > 0) {
 		// forward jump to label (from absolute index)
-		code += "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") ";
+		code += "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") ";
 		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n";
 		// else, exit binary translation
 	}
@@ -86,7 +86,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	std::set<unsigned> labels;
 	code += "extern void " + func + "(CPU* cpu) {\n"
-		"int c = 0; " + func + "_start:;\n";
+		"uint64_t c = 0; " + func + "_start:;\n";
 
 	for (int i = 0; i < tinfo.len; i++) {
 		const auto instr = rv32i_instruction {ip[i].instr};
@@ -243,7 +243,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (fl > i)
 					labels.insert(fl);
 				// this is a jump back to the start of the function
-				add_code(code, "c += " + std::to_string(i) + "; if (c < " + std::to_string(LOOP_INSTRUCTIONS_MAX) + ") goto " + FUNCLABEL(fl) + ";");
+				add_code(code, "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") goto " + FUNCLABEL(fl) + ";");
 				// if we run out of instructions, we must exit:
 				add_code(code,
 					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ", " + INSTRUCTION_COUNT(i) + ");",

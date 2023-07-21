@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <exception>
 #include <type_traits>
-#include <set>
 
 namespace riscv
 {
@@ -87,17 +86,11 @@ namespace riscv
 	};
 
 	template <int W>
-	struct TransInfo {
-		address_type<W> basepc;
-		address_type<W> gp;
-		int len;
-		bool has_branch;
-		bool forward_jumps;
-		std::set<address_type<W>> jump_locations;
-	};
+	struct TransInfo;
 
 	template <int W>
-	struct TransInstr {
+	struct TransInstr
+	{
 		uint32_t instr;
 	};
 }

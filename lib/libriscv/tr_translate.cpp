@@ -6,6 +6,7 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "tr_api.hpp"
+#include "tr_types.hpp"
 #include "util/crc32.hpp"
 #include <unordered_set>
 //#define BINTR_TIMING
@@ -334,12 +335,15 @@ void CPU<W>::activate_dylib(void* dylib) const
 	// map the API callback table
 	auto* ptr = dlsym(dylib, "init");
 	if (ptr == nullptr) {
-		fprintf(stderr, "libriscv: Could not find dylib init function\n");
+		// only warn when translation is not already disabled
+		if (getenv("NO_TRANSLATE") == nullptr) {
+			fprintf(stderr, "libriscv: Could not find dylib init function\n");
+		}
 		dlclose(dylib);
 		return;
 	}
 
-	auto func = (void (*)(const CallbackTable<W>&)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&, uint64_t*, uint64_t*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
 			return cpu.machine().memory.template read<uint8_t> (addr);
@@ -412,7 +416,9 @@ void CPU<W>::activate_dylib(void* dylib) const
 		.sqrtf64 = [] (double d) -> double {
 			return std::sqrt(d);
 		},
-	});
+	},
+	&m_machine.get_counters().first,
+	&m_machine.get_counters().second);
 
 	// Map all the functions to instruction handlers
 	uint32_t* no_mappings = (uint32_t *)dlsym(dylib, "no_mappings");
