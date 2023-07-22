@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <libriscv/common.hpp>
 #include <libriscv/native_heap.hpp>
 #include <vector>
 static const uintptr_t BEGIN = 0x1000000;
@@ -30,7 +31,26 @@ static Allocation alloc_random(riscv::Arena& arena)
 	return a;
 }
 
-static std::tuple<Allocation, size_t> realloc_random(riscv::Arena& arena, uint64_t addr)
+static Allocation alloc_sequential(riscv::Arena& arena)
+{
+	const size_t size	 = randInt(0, 8000);
+	const uintptr_t addr = arena.seq_alloc_aligned(size, 8);
+	REQUIRE(IS_WITHIN(addr));
+	// In order for the memory to be sequential in both the
+	// host and the guest, it must be on the same page (for now).
+	if (size > 0 && size < RISCV_PAGE_SIZE)
+	{
+		const auto page1 = addr & ~(RISCV_PAGE_SIZE - 1);
+		const auto page2 = (addr + size-1) & ~(RISCV_PAGE_SIZE - 1);
+		REQUIRE(page1 == page2);
+	}
+	const Allocation a {.addr = addr, .size = arena.size(addr)};
+	REQUIRE(a.size >= size);
+	return a;
+}
+
+static std::tuple<Allocation, size_t>
+realloc_random(riscv::Arena& arena, uint64_t addr)
 {
 	REQUIRE(IS_WITHIN(addr));
 	const size_t size = randInt(0, 8000);
@@ -49,8 +69,9 @@ TEST_CASE("Basic heap usage", "[Heap]")
 	std::vector<Allocation> allocs;
 
 	// General allocation test
-	for (int i = 0; i < 100; i++) {
+	for (int i = 0; i < 1000; i++) {
 		allocs.push_back(alloc_random(arena));
+		allocs.push_back(alloc_sequential(arena));
 	}
 
 	for (auto entry : allocs) {

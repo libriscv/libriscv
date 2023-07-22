@@ -50,6 +50,8 @@ struct Arena
 	size_t      size(PointerType src, bool allow_free = false);
 	signed int  free(PointerType);
 
+	PointerType seq_alloc_aligned(size_t size, size_t alignment);
+
 	size_t bytes_free() const;
 	size_t bytes_used() const;
 	size_t chunks_used() const noexcept { return m_chunks.size(); }
@@ -213,6 +215,56 @@ inline Arena::PointerType Arena::malloc(size_t size)
 		ch->split_next(*this, length);
 		ch->free = false;
 		return ch->data;
+	}
+	return 0;
+}
+
+// Guarantee that allocation is sequential in memory
+// when accessed outside of emulation. A single page
+// has fully sequential memory within itself, so we can
+// always allocate sequential memory within a single page.
+inline Arena::PointerType Arena::seq_alloc_aligned(size_t size, size_t alignment)
+{
+	assert(alignment != 0x0);
+	(void)alignment;
+
+	// XXX: Alignment is ignored for now,
+	// but 8-byte alignment is guaranteed.
+	const size_t objectsize = fixup_size(size);
+	const size_t oversized = fixup_size(size * 2);
+
+	// Find memory that can always cover the object sequentially
+	ArenaChunk* ch = base_chunk().find_free(oversized);
+
+	if (ch != nullptr) {
+		// XXX: Assume that alignment of data is OK
+		// Check if the allocation crosses a page
+		if ((ch->data & ~(RISCV_PAGE_SIZE-1)) !=
+			((ch->data + size) & ~(RISCV_PAGE_SIZE-1)))
+		{
+			// The second page boundary
+			PointerType boundary = (ch->data + size) & ~(RISCV_PAGE_SIZE-1);
+			// Split at the page boundary
+			ch->split_next(*this, boundary - ch->data);
+
+			// The data after the page boundary is usable,
+			// but it must be split to the object size
+			auto* final_ch = ch->next;
+			final_ch->free = false;
+
+			// Free the data before the boundary
+			this->internal_free(ch);
+
+			// XXX: Always split?
+			final_ch->split_next(*this, objectsize);
+			return final_ch->data;
+		}
+		else
+		{
+			ch->split_next(*this, objectsize);
+			ch->free = false;
+			return ch->data;
+		}
 	}
 	return 0;
 }
