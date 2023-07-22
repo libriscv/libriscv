@@ -7,6 +7,7 @@ option(RISCV_MULTIPROCESS "" ON)
 add_subdirectory(../../lib lib)
 
 add_subdirectory(../Catch2 Catch2)
+target_compile_features(Catch2 PUBLIC cxx_std_17)
 
 enable_testing()
 
@@ -37,6 +38,7 @@ add_unit_test(memtrap  memory_trap.cpp)
 add_unit_test(native   native.cpp)
 add_unit_test(png      png.cpp)
 add_unit_test(protect  protections.cpp)
+add_unit_test(rvbuffer rvbuffer.cpp)
 add_unit_test(serialize serialize.cpp)
 add_unit_test(vmcall   vmcall.cpp)
 add_unit_test(va_exec  va_execute.cpp)
