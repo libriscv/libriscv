@@ -54,15 +54,15 @@ typedef struct {
 } CPU;
 
 static struct CallbackTable {
-	uint8_t  (*mem_ld8)(CPU*, addr_t);
-	uint16_t (*mem_ld16)(CPU*, addr_t);
-	uint32_t (*mem_ld32)(CPU*, addr_t);
-	uint64_t (*mem_ld64)(CPU*, addr_t);
-	void (*mem_st8) (CPU*, addr_t, uint8_t);
-	void (*mem_st16)(CPU*, addr_t, uint16_t);
-	void (*mem_st32)(CPU*, addr_t, uint32_t);
-	void (*mem_st64)(CPU*, addr_t, uint64_t);
-	void (*jump)(CPU*, addr_t);
+	uint8_t  (*mem_ld8)(const CPU*, addr_t);
+	uint16_t (*mem_ld16)(const CPU*, addr_t);
+	uint32_t (*mem_ld32)(const CPU*, addr_t);
+	uint64_t (*mem_ld64)(const CPU*, addr_t);
+	void (*mem_st8) (const CPU*, addr_t, uint8_t);
+	void (*mem_st16)(const CPU*, addr_t, uint16_t);
+	void (*mem_st32)(const CPU*, addr_t, uint32_t);
+	void (*mem_st64)(const CPU*, addr_t, uint64_t);
+	void (*jump)(const CPU*, addr_t);
 	int  (*syscall)(CPU*, addr_t);
 	void (*stop)(CPU*);
 	void (*ebreak)(CPU*);

@@ -10,8 +10,7 @@
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nreturn;\n"; }
 
 namespace riscv {
-// We tolerate 1 million insn before exiting hot loops
-static const std::string LOOP_INSTRUCTIONS_MAX = "local_max_insn";
+static const std::string LOOP_EXPRESSION = "c < local_max_insn";
 
 template <typename ... Args>
 inline void add_code(std::string& code, Args&& ... addendum) {
@@ -54,18 +53,26 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
-		code += "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") goto " + func + "_start;\n";
+		code += "c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
 	} else if (binfo.jump_label > 0) {
 		// forward jump to label (from absolute index)
-		code += "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") ";
+		code += "c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") ";
 		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n";
 		// else, exit binary translation
 	}
-	// The number of instructions to increment depends on if branch-instruction-counting is enabled
-	code += 
-		"*cur_insn = c; "
-		"api.jump(cpu, " + PCRELS(instr.Btype.signed_imm() - 4) + ");\n"
-		"return;}\n";
+	if (PCRELA(instr.Btype.signed_imm()) & 0x3)
+	{
+		code +=
+			"api.exception(cpu, " + std::to_string(MISALIGNED_INSTRUCTION) + ");\n";
+	}
+	else
+	{
+		// The number of instructions to increment depends on if branch-instruction-counting is enabled
+		code += 
+			"*cur_insn = c; "
+			"cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n"
+			"return;}\n";
+	}
 }
 template <int W>
 inline void emit_op(std::string& code, const std::string& op, const std::string& sop,
@@ -246,17 +253,17 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (fl > i)
 					labels.insert(fl);
 				// this is a jump back to the start of the function
-				add_code(code, "c += " + std::to_string(i) + "; if (c < " + LOOP_INSTRUCTIONS_MAX + ") goto " + FUNCLABEL(fl) + ";");
+				add_code(code, "c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(fl) + ";");
 				// if we run out of instructions, we must exit:
 				add_code(code,
-					"*cur_insn = c + " + std::to_string(i) + ";\n"
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");",
+					"*cur_insn = c;\n"
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n"
 					"return;");
 			} else {
 				// Because of forward jumps we can't end the function here
 				add_code(code,
 					"*cur_insn = c + " + std::to_string(i) + ";\n"
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");",
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n"
 					"return;");
 			} } break;
 		case RV32I_OP_IMM: {
