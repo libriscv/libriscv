@@ -409,15 +409,11 @@ namespace riscv
 		if (m_exec.size() <= remaining_size)
 			return;
 
+		// pop_back() might throw, so let's invalidate early
+		machine().cpu.set_execute_segment(nullptr);
+
 		while (m_exec.size() > remaining_size) {
 			m_exec.pop_back();
-		}
-		// XXX: Should probably detect if the current execute
-		// segment is already active, but this should also be OK.
-		if (!m_exec.empty()) {
-			machine().cpu.set_execute_segment(&m_exec[0]);
-		} else {
-			machine().cpu.set_execute_segment(nullptr);
 		}
 	}
 

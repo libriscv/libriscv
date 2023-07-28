@@ -378,18 +378,35 @@ namespace riscv
 		// Default stack
 		this->m_stack_address = mmap_allocate(options.stack_size) + options.stack_size;
 
-		// Insert host code page, with exit function, enabling VM calls.
-		auto host_page = this->mmap_allocate(Page::size());
-		this->install_shared_page(page_number(host_page), Page::host_page());
-		this->m_exit_address = host_page;
+		if (!options.default_exit_function.empty())
+		{
+			// It is slightly faster to set a custom exit function, in order
+			// to avoid changing execute segment (slow-path) to exit.
+			auto potential_exit_addr = this->resolve_address(options.default_exit_function);
+			if (potential_exit_addr != 0x0) {
+				this->m_exit_address = potential_exit_addr;
+				if (UNLIKELY(options.verbose_loader)) {
+					printf("* Using program-provided exit function at %p\n",
+						(void*)uintptr_t(this->exit_address()));
+				}
+			}
+		}
+		// Default fallback: Install our own exit function as a separate execute segment
+		if (this->m_exit_address == 0x0)
+		{
+			// Insert host code page, with exit function, enabling VM calls.
+			auto host_page = this->mmap_allocate(Page::size());
+			this->install_shared_page(page_number(host_page), Page::host_page());
+			this->m_exit_address = host_page;
+		}
 
 		if constexpr (W <= 8) {
-			if (options.dynamic_linking) {
+			if (UNLIKELY(options.dynamic_linking)) {
 				this->dynamic_linking();
 			}
 		}
 
-		if (options.verbose_loader) {
+		if (UNLIKELY(options.verbose_loader)) {
 			printf("* Entry is at %p\n",
 				(void*)uintptr_t(this->start_address()));
 		}

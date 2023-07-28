@@ -3,7 +3,6 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
-#include <deque>
 #include <string_view>
 #include <unordered_map>
 #include "decoded_exec_segment.hpp"
@@ -257,8 +256,8 @@ namespace riscv
 
 		const std::string_view m_binary;
 
-		// Execute segment
-		std::deque<DecodedExecuteSegment<W>> m_exec;
+		// Execute segments
+		std::vector<DecodedExecuteSegment<W>> m_exec;
 
 		// Linear arena at start of memory (mmap-backed)
 		PageData* m_arena = nullptr;

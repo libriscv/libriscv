@@ -209,7 +209,7 @@ restart_next_execute_segment:
 	{
 		// Decoded segments are always faster
 		// So, always have at least the current segment
-		if (m_exec == nullptr) {
+		if (!is_executable(this->pc())) {
 			this->next_execute_segment();
 		}
 
