@@ -30,6 +30,12 @@ namespace riscv
 	static constexpr bool memory_traps_enabled = false;
 #endif
 
+#ifdef RISCV_FORCE_ALIGN_MEMORY
+	static constexpr bool force_align_memory = true;
+#else
+	static constexpr bool force_align_memory = false;
+#endif
+
 #ifdef RISCV_DEBUG
 	static constexpr bool memory_alignment_check = true;
 	static constexpr bool verbose_branches_enabled = true;
