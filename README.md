@@ -14,6 +14,8 @@ There is also a CLI that you can use to run RISC-V programs and step through ins
 
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 15% CPU at 60 fps.
 
+Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da). Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
+
 ## What is userspace emulation?
 
 Userspace emulation means running regular ELF programs in a sandbox, trapping and emulating system calls in order to provide the Linux environment the program expects, but also make sure the program is not doing anything wrong. There is fairly good support for Linux system calls, however anyone can implement support for other OSes, and ultimately even ELF loading is optional.
