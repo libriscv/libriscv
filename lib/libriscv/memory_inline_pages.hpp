@@ -89,9 +89,9 @@ template <int W>
 template <typename... Args> inline
 Page& Memory<W>::allocate_page(const address_t page, Args&&... args)
 {
-	const auto it = m_pages.emplace(std::piecewise_construct,
-		std::forward_as_tuple(page),
-		std::forward_as_tuple(std::forward<Args> (args)...)
+	const auto it = m_pages.try_emplace(
+		page,
+		std::forward<Args> (args)...
 	);
 	// Invalidate only this page
 	this->invalidate_cache(page, &it.first->second);

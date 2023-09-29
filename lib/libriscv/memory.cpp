@@ -436,9 +436,9 @@ namespace riscv
 					attr.is_cow = true;
 				}
 				attr.non_owning = true;
-				m_pages.emplace(std::piecewise_construct,
-					std::forward_as_tuple(it.first),
-					std::forward_as_tuple(attr, page.m_page.get())
+				m_pages.try_emplace(
+					it.first,
+					attr, page.m_page.get()
 				);
 			}
 		}
@@ -576,3 +576,16 @@ namespace riscv
 	template struct Memory<8>;
 	INSTANTIATE_128_IF_ENABLED(Memory);
 }
+
+#ifdef EASTL_ENABLED
+__attribute__((weak))
+void* operator new[](size_t size, const char*, int, unsigned, const char*, int)
+{
+	return ::operator new[] (size);
+}
+__attribute__((weak))
+void* operator new[](size_t size, size_t, size_t, const char*, int, unsigned, const char*, int)
+{
+	return ::operator new[] (size);
+}
+#endif

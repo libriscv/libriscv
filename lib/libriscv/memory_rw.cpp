@@ -129,9 +129,9 @@ namespace riscv
 		attr.non_owning = true;
 		// NOTE: If you insert a const Page, DON'T modify it! The machine
 		// won't, unless system-calls do or manual intervention happens!
-		auto res = m_pages.emplace(std::piecewise_construct,
-			std::forward_as_tuple(pageno),
-			std::forward_as_tuple(attr, const_cast<PageData*> (shared_page.m_page.get()))
+		auto res = m_pages.try_emplace(
+			pageno,
+			attr, const_cast<PageData*> (shared_page.m_page.get())
 		);
 		// TODO: Can be improved by invalidating more intelligently
 		this->invalidate_reset_cache();
@@ -156,9 +156,9 @@ namespace riscv
 		{
 			const auto pageno = (dst + i) / Page::size();
 			PageData* pdata = reinterpret_cast<PageData*> ((char*) src + i);
-			m_pages.emplace(std::piecewise_construct,
-				std::forward_as_tuple(pageno),
-				std::forward_as_tuple(attr, pdata)
+			m_pages.try_emplace(
+				pageno,
+				attr, pdata
 			);
 		}
 		// TODO: Can be improved by invalidating more intelligently
