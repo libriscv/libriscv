@@ -423,7 +423,10 @@ namespace riscv
 		{
 			// Hardly any pages are dont_fork, so we estimate that
 			// all master pages will be loaned.
-			m_pages.reserve(master.memory.pages().size());
+			if constexpr (!eastl_enabled) {
+				// Workaround for buggy EASTL behavior.
+				m_pages.reserve(master.memory.pages().size());
+			}
 			for (const auto& it : master.memory.pages())
 			{
 				const auto& page = it.second;

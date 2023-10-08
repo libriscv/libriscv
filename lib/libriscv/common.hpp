@@ -71,6 +71,11 @@ namespace riscv
 #else
 	static constexpr bool memory_arena_is_default = false;
 #endif
+#ifdef EASTL_ENABLED
+	static constexpr bool eastl_enabled = true;
+#else
+	static constexpr bool eastl_enabled = false;
+#endif
 }
 
 namespace riscv
