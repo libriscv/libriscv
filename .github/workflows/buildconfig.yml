@@ -7,6 +7,18 @@ on:
     branches: [ master ]
 
 jobs:
+  dependencies:
+    name: Install dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y g++ clang
+
   config_matrix:
     name: Build configuration matrix
     defaults:
@@ -15,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        compiler: [g++-10, clang++-12]
+        compiler: [g++, clang++]
     env:
       CXX: ${{ matrix.compiler }}
 
