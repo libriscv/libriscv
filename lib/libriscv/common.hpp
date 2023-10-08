@@ -95,7 +95,7 @@ namespace riscv
 		// Allow the use of a linear arena to increase memory locality somewhat
 		bool use_memory_arena = memory_arena_is_default;
 		// Override exit function with a program-provided function
-		std::string_view default_exit_function;
+		std::string_view default_exit_function {};
 
 		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
 
