@@ -26,13 +26,15 @@ option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
 option(RISCV_EASTL "Enable fast EASTL containers" OFF)
 
 set(THREADED_IS_DEFAULT OFF)
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
-	OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-	set(THREADED_IS_DEFAULT ON)
-endif()
 # Threaded simulation uses computed goto, and is not supported
 # on all compilers/systems.
-option(RISCV_THREADED "Enable fastest simulation mode" THREADED_IS_DEFAULT)
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"
+	OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+	message(STATUS "Threaded dispatch enabled")
+	option(RISCV_THREADED "Enable fastest simulation mode" ON)
+else()
+	option(RISCV_THREADED "Enable fastest simulation mode" OFF)
+endif()
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
