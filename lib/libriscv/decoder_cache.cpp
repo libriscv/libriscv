@@ -242,9 +242,10 @@ namespace riscv
 			// Attempt to load binary translation
 			// Also, fill out the binary translation SO filename for later
 			std::string bintr_filename;
-			machine().cpu.load_translation(options, &bintr_filename, exec);
+			int result = machine().cpu.load_translation(options, &bintr_filename, exec);
+			const bool must_translate = result > 0;
 
-			if (!exec.is_binary_translated())
+			if (!exec.is_binary_translated() && must_translate)
 			{
 				// This can be improved somewhat, by fetching them on demand
 				// instead of building a vector of the whole execute segment.
