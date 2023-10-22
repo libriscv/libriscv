@@ -248,7 +248,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			// forward label: jump inside code block
 			const auto offset = instr.Jtype.jump_offset() / 4;
 			int fl = i+offset;
-			if (fl > 0 && fl < tinfo.len) {
+			if (std::abs(offset * 4) < 128 && fl > 0 && fl < tinfo.len) {
 				// forward labels require creating future labels
 				if (fl > i)
 					labels.insert(fl);

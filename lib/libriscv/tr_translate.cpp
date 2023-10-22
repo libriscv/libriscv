@@ -207,16 +207,22 @@ if constexpr (SCAN_FOR_GP) {
 				current_pc += 4;
 				++it; break;
 			}
+			// detect far JAL, otherwise use as local jump
+			if (opcode == RV32I_JAL) {
+				const auto offset = instruction.Jtype.jump_offset();
+				// Long jumps are considered returnable
+				if (std::abs(offset) >= 128) {
+					current_pc += 4;
+					++it; break;
+				}
+				has_branch = true;
+				jump_locations.insert(current_pc + offset);
+			}
 			// loop detection (negative branch offsets)
 			if (opcode == RV32I_BRANCH) {
 				has_branch = true;
 				// detect jump location
 				const auto offset = instruction.Btype.signed_imm();
-				jump_locations.insert(current_pc + offset);
-			}
-			if (opcode == RV32I_JAL) {
-				has_branch = true;
-				const auto offset = instruction.Jtype.jump_offset();
 				jump_locations.insert(current_pc + offset);
 			}
 
