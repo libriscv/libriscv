@@ -27,15 +27,13 @@ namespace riscv
 			uint32_t rd     : 5;
 			uint32_t funct3 : 3;
 			uint32_t rs1    : 5;
-			uint32_t imm    : 11;
-			uint32_t imms   : 1;
+			uint32_t imm    : 12;
 
 			bool sign() const noexcept {
-				return imms;
+				return imm & 0x800;
 			}
 			int32_t signed_imm() const noexcept {
-				const uint32_t ext = 0xFFFFF800;
-				return (imm) | (sign() ? ext : 0);
+				return int32_t(imm << 20) >> 20;
 			}
 		} Itype;
 		struct {
