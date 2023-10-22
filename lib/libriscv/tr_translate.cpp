@@ -8,7 +8,6 @@
 #include "tr_api.hpp"
 #include "tr_types.hpp"
 #include "util/crc32.hpp"
-#include <unordered_set>
 //#define BINTR_TIMING
 
 namespace riscv
@@ -26,33 +25,6 @@ namespace riscv
 #else
 	#define TIME_POINT(x)  /* */
 #endif
-
-static const std::unordered_set<uint32_t> good_insn
-{
-	RV32I_LOAD,
-	RV32I_STORE,
-	RV32I_BRANCH,
-	RV32I_JAL,
-	//RV32I_JALR,
-	RV32I_OP_IMM,
-	RV32I_OP,
-	RV32I_LUI,
-	RV32I_AUIPC,
-	RV32I_SYSTEM,
-	RV32I_FENCE,
-	RV64I_OP_IMM32,
-	RV64I_OP32,
-	RV32F_LOAD,
-	RV32F_STORE,
-	RV32F_FMADD,
-	RV32F_FMSUB,
-	RV32F_FNMADD,
-	RV32F_FNMSUB,
-	RV32F_FPFUNC,
-	RV32A_ATOMIC,
-	// TODO: Needs better integration
-	//RV32V_OP
-};
 
 template <int W>
 inline uint32_t opcode(const TransInstr<W>& ti) {
@@ -201,8 +173,8 @@ if constexpr (SCAN_FOR_GP) {
 			const rv32i_instruction instruction{it->instr};
 			const auto opcode = instruction.opcode();
 
-			// JALR is a show-stopper / code-blocker
-			if (opcode == RV32I_JALR)
+			// JALR and STOP are show-stoppers / code-block enders
+			if (opcode == RV32I_JALR || instruction.whole == 0x7ff00073)
 			{
 				current_pc += 4;
 				++it; break;
@@ -432,10 +404,12 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	exec.reserve_mappings(nmappings);
 	for (size_t i = 0; i < nmappings; i++) {
 		exec.add_mapping(mappings[i].handler);
+		auto& entry = decoder_entry_at(exec, mappings[i].addr);
 		if (mappings[i].handler != nullptr) {
-			auto& entry = decoder_entry_at(exec, mappings[i].addr);
 			entry.instr = i;
 			entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+		} else {
+			entry.set_bytecode(0x0); /* Invalid opcode */
 		}
 	}
 
