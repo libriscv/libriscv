@@ -166,9 +166,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32V_BC_VFADD_VV] = &&rv32v_vfadd_vv,
 #endif
 		[RV32I_BC_FUNCTION] = &&execute_decoded_function,
-#ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
-#endif
 		[RV32I_BC_SYSTEM]  = &&rv32i_system,
 	};
 #endif
@@ -343,8 +341,8 @@ INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
 /** UNLIKELY INSTRUCTIONS **/
 /** UNLIKELY INSTRUCTIONS **/
 
-#ifdef RISCV_BINARY_TRANSLATION
 INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
+#ifdef RISCV_BINARY_TRANSLATION
 	VIEW_INSTR();
 	// Make the current PC visible
 	this->registers().pc = pc;
@@ -357,8 +355,10 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	// Translations are always full-length instructions (?)
 	pc = registers().pc + 4;
 	goto check_jump;
-}
+#else
+	trigger_exception(FEATURE_DISABLED, this->pc());
 #endif
+}
 
 INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	VIEW_INSTR();
