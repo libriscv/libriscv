@@ -103,8 +103,8 @@ namespace riscv
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
 		// Binary translation functions
-		int  load_translation(const MachineOptions<W>&, std::string* filename) const;
-		void try_translate(const MachineOptions<W>&, const std::string&, address_t pc, std::vector<TransInstr<W>>) const;
+		int  load_translation(const MachineOptions<W>&, std::string* filename, DecodedExecuteSegment<W>&) const;
+		void try_translate(const MachineOptions<W>&, const std::string&, DecodedExecuteSegment<W>&, address_t pc, std::vector<TransInstr<W>>) const;
 
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
@@ -157,7 +157,7 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
 #endif
-		void activate_dylib(void*) const RISCV_INTERNAL;
+		void activate_dylib(DecodedExecuteSegment<W>&, void*) const RISCV_INTERNAL;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 	};
 

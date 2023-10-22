@@ -357,7 +357,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (instr.Rtype.funct7 == 0x0) {
 					emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				} else if (instr.Rtype.funct7 == 0x4) {
-					// Mask off bits to 16-bit
+					// ZEXT.H: Zero-extend 16-bit
 					add_code(code,
 						from_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(tinfo, instr.Rtype.rs1) + ");");
 				}
@@ -495,9 +495,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				);
 				break;
 			default:
-				ILLEGAL_AND_EXIT();
 				//fprintf(stderr, "RV32I_OP: Unhandled function 0x%X\n",
 				//		instr.Rtype.jumptable_friendly_op());
+				ILLEGAL_AND_EXIT();
 			}
 			break;
 		case RV32I_LUI:
@@ -615,7 +615,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				"if (LIKELY(" + src2 + " != 0))",
 				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
 				break;
-			case 0x40: // ADDUW
+			case 0x40: // ADD.UW
 				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + " + src1 + ";");
 				break;
 			case 0x102: // SH1ADD.UW

@@ -2,9 +2,6 @@
 
 #include "decoder_cache.hpp"
 #include <inttypes.h>
-#ifdef RISCV_BINARY_TRANSLATION
-#include <dlfcn.h> // Linux-only
-#endif
 #ifdef __linux__
 #define DEMANGLE_ENABLED
 #include <sys/mman.h>
@@ -97,10 +94,6 @@ namespace riscv
 		if (!this->m_original_machine) {
 			m_ropages.pages.release();
 		}
-#ifdef RISCV_BINARY_TRANSLATION
-		if (m_bintr_dl)
-			dlclose(m_bintr_dl);
-#endif
 		if (this->m_arena != nullptr) {
 #ifdef __linux__
 			munmap(this->m_arena, this->m_arena_pages * Page::size());

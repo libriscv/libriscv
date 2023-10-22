@@ -68,6 +68,8 @@ namespace riscv
 		address_type<W> base_pc, address_type<W> last_pc,
 		const uint8_t* exec_segment, DecoderData<W>* exec_decoder)
 	{
+		const auto translator_op = CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END);
+
 		if constexpr (compressed_enabled)
 		{
 			if (UNLIKELY(base_pc >= last_pc))
@@ -112,7 +114,7 @@ namespace riscv
 					} else {
 						if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 							|| opcode == RV32I_JAL || opcode == RV32I_JALR
-							|| opcode == RV32I_AUIPC || entry.instr == FASTSIM_BLOCK_END)
+							|| opcode == RV32I_AUIPC || entry.get_bytecode() == translator_op)
 							break;
 					}
 					// If we reached the end, and the opcode is not "stopping",
@@ -171,7 +173,7 @@ namespace riscv
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 					|| opcode == RV32I_JAL || opcode == RV32I_JALR
-					|| opcode == RV32I_AUIPC || entry.instr == FASTSIM_BLOCK_END)
+					|| opcode == RV32I_AUIPC || entry.get_bytecode() == translator_op)
 					idxend = 0;
 				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
@@ -236,13 +238,13 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
 		// Also, don't run the translator again (for now)
-		if (W != 16 && !is_binary_translated()) {
+		if (W != 16 && !exec.is_binary_translated()) {
 			// Attempt to load binary translation
 			// Also, fill out the binary translation SO filename for later
 			std::string bintr_filename;
-			machine().cpu.load_translation(options, &bintr_filename);
+			machine().cpu.load_translation(options, &bintr_filename, exec);
 
-			if (!machine().is_binary_translated())
+			if (!exec.is_binary_translated())
 			{
 				// This can be improved somewhat, by fetching them on demand
 				// instead of building a vector of the whole execute segment.
@@ -256,7 +258,7 @@ namespace riscv
 					ipairs.push_back({instruction.whole});
 				}
 				machine().cpu.try_translate(
-					options, bintr_filename, addr, std::move(ipairs));
+					options, bintr_filename, exec, addr, std::move(ipairs));
 			}
 		} // W != 16
 	#endif
@@ -273,7 +275,6 @@ namespace riscv
 		for (; dst < addr + len;)
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
-			entry.instr = 0x0;
 			entry.idxend = 0;
 
 			// Load unaligned instruction from execute segment
@@ -282,12 +283,11 @@ namespace riscv
 			rv32i_instruction rewritten = instruction;
 
 #ifdef RISCV_BINARY_TRANSLATION
-			if (machine().is_binary_translated()) {
+			if (exec.is_binary_translated()) {
 				if (entry.isset()) {
-					// With fastsim we pretend the original opcode is JAL,
-					// which breaks the fastsim loop. In all cases, continue.
-					entry.instr = FASTSIM_BLOCK_END;
-					entry.set_bytecode(CPU<W>::computed_index_for(entry.instr));
+					// With translator ops we pretend the original opcode is JAL,
+					// which breaks the block-finding loop. In all cases, continue.
+					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
 					dst += 4;
 					continue;
 				}

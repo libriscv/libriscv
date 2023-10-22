@@ -15,10 +15,8 @@ namespace riscv {
 template <int W>
 size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 {
-#ifdef RISCV_BINARY_TRANSLATION
-	if (instr.whole == FASTSIM_BLOCK_END)
+	if (instr.whole == RV32_INSTR_BLOCK_END)
 		return RV32I_BC_TRANSLATOR;
-#endif
 
 #ifdef RISCV_EXT_COMPRESSED
 	if (instr.length() == 2)

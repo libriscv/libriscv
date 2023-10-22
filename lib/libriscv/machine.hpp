@@ -240,11 +240,6 @@ namespace riscv
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
-		// Returns true if the Machine has loaded native code
-		// generated from binary translation.
-		bool is_binary_translated() const { return memory.is_binary_translated(); }
-		std::pair<uint64_t&, uint64_t&> get_counters() noexcept { return {m_counter, m_max_counter}; }
-
 		// Serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;
 		// Returns the machine to a previously stored state
@@ -253,6 +248,7 @@ namespace riscv
 		// symbol lookup cache is also kept. Returns 0 on success.
 		int deserialize_from(const std::vector<uint8_t>&);
 
+		std::pair<uint64_t&, uint64_t&> get_counters() noexcept { return {m_counter, m_max_counter}; }
 	private:
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;

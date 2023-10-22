@@ -351,8 +351,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	// Make the instruction counter visible
 	counter.apply_counter();
 	// Invoke translated code
-	auto handler = decoder->get_handler();
-	handler(*this, instr);
+	exec->mapping_at(instr.whole)(*this, instr);
 	// Restore counter
 	counter.retrieve();
 	// Translations are always full-length instructions (?)

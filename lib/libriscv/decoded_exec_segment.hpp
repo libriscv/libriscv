@@ -1,6 +1,9 @@
 #pragma once
 #include <memory>
 #include "types.hpp"
+#ifdef RISCV_BINARY_TRANSLATION
+#include <dlfcn.h> // Linux-only
+#endif
 
 namespace riscv
 {
@@ -41,8 +44,19 @@ namespace riscv
 		bool empty() const noexcept { return m_exec_pagedata_size == 0; }
 
 		DecodedExecuteSegment(address_t pbase, size_t len, address_t vaddr, size_t exlen);
+		DecodedExecuteSegment(DecodedExecuteSegment&&);
+		~DecodedExecuteSegment();
 
 		size_t threaded_rewrite(size_t bytecode, address_t pc, rv32i_instruction& instr);
+
+#ifdef RISCV_BINARY_TRANSLATION
+		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
+		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
+		void add_mapping(instruction_handler<W> handler) { m_translator_mappings.push_back(handler); }
+		instruction_handler<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
+#else
+		bool is_binary_translated() const noexcept { return false; }
+#endif
 
 	private:
 		address_t m_vaddr_begin;
@@ -61,6 +75,11 @@ namespace riscv
 		// high speed, without resorting to JIT
 		size_t          m_decoder_cache_size = 0;
 		std::unique_ptr<DecoderCache<W>[]> m_decoder_cache = nullptr;
+
+#ifdef RISCV_BINARY_TRANSLATION
+		std::vector<instruction_handler<W>> m_translator_mappings;
+		mutable void* m_bintr_dl = nullptr;
+#endif
 	};
 
 	template <int W>
@@ -72,6 +91,37 @@ namespace riscv
 		m_exec_pagedata.reset(new uint8_t[len]);
 		m_exec_pagedata_size = len;
 		m_exec_pagedata_base = pbase;
+	}
+
+	template <int W>
+	inline DecodedExecuteSegment<W>::DecodedExecuteSegment(DecodedExecuteSegment&& other)
+	{
+		m_vaddr_begin = other.m_vaddr_begin;
+		m_vaddr_end   = other.m_vaddr_end;
+		m_exec_decoder = other.m_exec_decoder;
+		other.m_exec_decoder = nullptr;
+
+		m_exec_pagedata_size = other.m_exec_pagedata_size;
+		m_exec_pagedata_base = other.m_exec_pagedata_base;
+		m_exec_pagedata = std::move(other.m_exec_pagedata);
+
+		m_decoder_cache_size = other.m_decoder_cache_size;
+		m_decoder_cache = std::move(other.m_decoder_cache);
+
+#ifdef RISCV_BINARY_TRANSLATION
+		m_translator_mappings = std::move(other.m_translator_mappings);
+		m_bintr_dl = other.m_bintr_dl;
+		other.m_bintr_dl = nullptr;
+#endif
+	}
+
+	template <int W>
+	inline DecodedExecuteSegment<W>::~DecodedExecuteSegment()
+	{
+#ifdef RISCV_BINARY_TRANSLATION
+		if (m_bintr_dl)
+			dlclose(m_bintr_dl);
+#endif
 	}
 
 } // riscv

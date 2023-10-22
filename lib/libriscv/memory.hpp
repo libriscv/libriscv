@@ -171,13 +171,6 @@ namespace riscv
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 
-#ifdef RISCV_BINARY_TRANSLATION
-		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
-		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
-#else
-		bool is_binary_translated() const noexcept { return false; }
-#endif
-
 		// serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;
 		// returns the machine to a previously stored state
@@ -275,10 +268,6 @@ namespace riscv
 		// Linear arena at start of memory (mmap-backed)
 		PageData* m_arena = nullptr;
 		size_t m_arena_pages = 0;
-
-#ifdef RISCV_BINARY_TRANSLATION
-		mutable void* m_bintr_dl = nullptr;
-#endif
 	};
 #include "memory_inline.hpp"
 #include "memory_inline_pages.hpp"

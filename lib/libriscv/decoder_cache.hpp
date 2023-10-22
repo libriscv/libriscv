@@ -11,11 +11,7 @@ struct DecoderData {
 	using Handler = instruction_handler<W>;
 
 	uint8_t  m_bytecode = 0x0;
-#ifndef RISCV_BINARY_TRANSLATION
 	uint8_t  m_handler = 0x0;
-#else
-	uint16_t m_handler = 0x0;
-#endif
 #ifdef RISCV_EXT_COMPRESSED
 	uint16_t idxend  : 8;
 	uint16_t icount  : 8;
