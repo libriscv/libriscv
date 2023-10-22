@@ -46,7 +46,8 @@ static inline void futex_op(Machine<W>& machine,
 template <int W>
 void Machine<W>::setup_posix_threads()
 {
-	this->m_mt.reset(new MultiThreading<W>(*this));
+	if (this->m_mt == nullptr)
+		this->m_mt.reset(new MultiThreading<W>(*this));
 
 	// exit & exit_group
 	this->install_syscall_handler(93,

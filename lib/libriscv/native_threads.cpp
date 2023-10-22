@@ -9,7 +9,8 @@ namespace riscv {
 template <int W>
 void Machine<W>::setup_native_threads(const size_t syscall_base)
 {
-	this->m_mt.reset(new MultiThreading<W>(*this));
+	if (this->m_mt == nullptr)
+		this->m_mt.reset(new MultiThreading<W>(*this));
 
 	// 500: microclone
 	this->install_syscall_handler(syscall_base+0,

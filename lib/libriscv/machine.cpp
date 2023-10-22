@@ -206,20 +206,20 @@ namespace riscv
 		push_aux<W>(argv, {AT_CLKTCK, 100});
 
 		// ELF related
-		push_aux<W>(argv, {AT_PHENT, sizeof(*binary_phdr)});
 		push_aux<W>(argv, {AT_PHDR,  phdr_location});
+		push_aux<W>(argv, {AT_PHENT, sizeof(*binary_phdr)});
 		push_aux<W>(argv, {AT_PHNUM, phdr_count});
 
 		// Misc
-		push_aux<W>(argv, {AT_BASE, 0});
-		push_aux<W>(argv, {AT_FLAGS, 0});
+		push_aux<W>(argv, {AT_BASE, address_type<W>(this->memory.start_address() & ~0xFFFFFFLL)});
 		push_aux<W>(argv, {AT_ENTRY, this->memory.start_address()});
 		push_aux<W>(argv, {AT_HWCAP, 0});
-		push_aux<W>(argv, {AT_UID, 0});
+		push_aux<W>(argv, {AT_HWCAP2, 0});
+		push_aux<W>(argv, {AT_UID, 1000});
 		push_aux<W>(argv, {AT_EUID, 0});
 		push_aux<W>(argv, {AT_GID, 0});
 		push_aux<W>(argv, {AT_EGID, 0});
-		push_aux<W>(argv, {AT_SECURE, 1}); // indeed ;)
+		push_aux<W>(argv, {AT_SECURE, 0});
 
 		push_aux<W>(argv, {AT_PLATFORM, platform_addr});
 
@@ -231,7 +231,7 @@ namespace riscv
 		// install the arg vector
 		const size_t argsize = argv.size() * sizeof(argv[0]);
 		dst -= argsize;
-		dst &= ~0xF; // mandated 16-byte stack alignment
+		dst &= ~0xFLL; // mandated 16-byte stack alignment
 		this->copy_to_guest(dst, argv.data(), argsize);
 		// re-initialize machine stack-pointer
 		this->cpu.reg(REG_SP) = dst;
