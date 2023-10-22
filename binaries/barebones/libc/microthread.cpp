@@ -19,11 +19,14 @@ namespace microthread
 		__builtin_unreachable();
 	}
 
+	/* glibc sets up its own main thread, *required* by C++ exceptions */
+#ifndef __GLIBC__
 	__attribute__((constructor, used))
 	static void init_threads()
 	{
 		microthread_set_tp(&main_thread);
 	}
+#endif
 }
 
 asm(".section .text\n"
