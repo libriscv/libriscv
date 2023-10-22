@@ -7,4 +7,5 @@ cmake .. -DCMAKE_BUILD_TYPE=MinSizeRel -DRISCV_EXT_C=OFF -DRISCV_MEMORY_TRAPS=OF
 make -j6
 popd
 
+#NO_TRANSLATE=1 ./build/rvdoom
 VERBOSE=1 ./build/rvdoom
