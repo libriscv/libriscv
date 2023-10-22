@@ -52,6 +52,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
 		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
+		void reserve_mappings(size_t mappings) { m_translator_mappings.reserve(mappings); }
 		void add_mapping(instruction_handler<W> handler) { m_translator_mappings.push_back(handler); }
 		instruction_handler<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
 #else

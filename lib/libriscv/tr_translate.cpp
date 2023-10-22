@@ -429,12 +429,13 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 
 	// Apply mappings to decoder cache
 	const auto nmappings = *no_mappings;
+	exec.reserve_mappings(nmappings);
 	for (size_t i = 0; i < nmappings; i++) {
 		exec.add_mapping(mappings[i].handler);
 		if (mappings[i].handler != nullptr) {
 			auto& entry = decoder_entry_at(exec, mappings[i].addr);
-			entry.m_handler = 0xFF;
 			entry.instr = i;
+			entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
 		}
 	}
 
