@@ -10,6 +10,10 @@ extern "C" {
 __attribute__((noreturn))
 void panic(const char* reason);
 
+#ifdef __GLIBC__
+#include <stdlib.h>
+#include <string.h>
+#else
 extern void* memset(void* dest, int ch, size_t size);
 extern void* memcpy(void* dest, const void* src, size_t size);
 extern void* memmove(void* dest, const void* src, size_t size);
@@ -22,6 +26,7 @@ extern char*  strcat(char* dest, const char* src);
 extern void* malloc(size_t) _NOTHROW;
 extern void* calloc(size_t, size_t) _NOTHROW;
 extern void  free(void*) _NOTHROW;
+#endif
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1

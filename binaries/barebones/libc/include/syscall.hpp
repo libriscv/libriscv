@@ -26,7 +26,7 @@
 #define SYSCALL_WRITE  64
 #define SYSCALL_EXIT   93
 
-inline long syscall(long n)
+inline long syscall1(long n)
 {
 	register long a0 asm("a0");
 	register long syscall_id asm("a7") = n;

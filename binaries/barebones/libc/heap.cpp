@@ -124,6 +124,8 @@ void* aligned_alloc(size_t alignment, size_t size)
 	return memalign(alignment, size);
 }
 
+#ifndef __GLIBC__
+
 // Re-entrant newlib internal versions
 extern "C" NATIVE_MEM_FUNCATTR
 void* _malloc_r(_reent*, size_t bytes) {
@@ -146,6 +148,8 @@ void* _memalign_r(_reent*, size_t align, size_t bytes) {
 	return memalign(align, bytes);
 }
 
+#endif
+
 // These newlib internal functions are disabled now
 extern "C"
 uintptr_t _sbrk(uintptr_t /*new_end*/)
@@ -154,7 +158,7 @@ uintptr_t _sbrk(uintptr_t /*new_end*/)
 	__builtin_unreachable();
 }
 
-#else
+#elif !defined(__GLIBC__)
 
 static const uintptr_t sbrk_start = 0xF0000000;
 static const uintptr_t sbrk_max   = 0xFF000000;

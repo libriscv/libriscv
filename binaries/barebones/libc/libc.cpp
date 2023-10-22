@@ -293,7 +293,7 @@ void _exit(int code)
 }
 
 extern "C" __attribute__((noreturn))
-void exit(int code)
+void __wrap_exit(int code)
 {
 	_exit(code);
 }
