@@ -618,6 +618,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case 0x40: // ADD.UW
 				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + " + src1 + ";");
 				break;
+			case 0x44: // ZEXT.H (imm=0x40):
+				add_code(code, dst + " = (uint16_t)(" + src1 + ");");
+				break;
 			case 0x102: // SH1ADD.UW
 				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + (" + src1 + " << 1);");
 				break;
