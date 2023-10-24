@@ -9,7 +9,7 @@ namespace riscv
 	struct AtomicMemory
 	{
 		using address_t = address_type<W>;
-		static constexpr size_t MAX_RESV = 32;
+		static constexpr size_t MAX_RESV = 48;
 
 		void load_reserve(int size, address_t addr) RISCV_INTERNAL
 		{
