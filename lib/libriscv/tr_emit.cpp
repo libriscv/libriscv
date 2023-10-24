@@ -26,7 +26,10 @@ inline std::string from_reg(const TransInfo<W>& tinfo, int reg) {
 		return "cpu->r[" + std::to_string(reg) + "]";
 	return "(addr_t)0";
 }
-inline std::string from_reg(int reg) {
+template <int W>
+inline std::string to_reg(const TransInfo<W>& tinfo, int reg) {
+	(void)tinfo;
+
 	if (reg != 0)
 		return "cpu->r[" + std::to_string(reg) + "]";
 	return "(addr_t)0";
@@ -81,11 +84,18 @@ inline void emit_op(std::string& code, const std::string& op, const std::string&
 	if (rd == 0) {
 		/* must be a NOP */
 	} else if (rd == rs1) {
-		add_code(code, from_reg(rd) + sop + rs2 + ";");
+		add_code(code, to_reg(tinfo, rd) + sop + rs2 + ";");
 	} else {
 	add_code(code,
-		from_reg(rd) + " = " + from_reg(tinfo, rs1) + op + rs2 + ";");
+		to_reg(tinfo, rd) + " = " + from_reg(tinfo, rs1) + op + rs2 + ";");
 	}
+}
+
+template <int W>
+inline void emit_page(std::string& code,
+	std::set<address_type<W>>& pagedata, address_type<W> address, bool write)
+{
+
 }
 
 template <int W>
@@ -94,6 +104,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	static constexpr unsigned XLEN = W * 8u;
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 	std::set<unsigned> labels;
+	std::set<address_t> pagedata;
 	code += "extern void " + func + "(CPU* cpu) {\n"
 		"uint64_t c = *cur_insn, local_max_insn = *max_insn; " + func + "_start:;\n";
 
@@ -119,7 +130,8 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					"api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
 					add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddr_t)(int8_t)api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+						to_reg(tinfo, instr.Itype.rd) + " = (saddr_t)(int8_t)api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					);
 				} break;
 			case 0x1: // I16
 				if (instr.Itype.rd == 0) {
@@ -127,7 +139,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					"api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
 					add_code(code,
-					from_reg(instr.Itype.rd) + " = (saddr_t)(int16_t)api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					to_reg(tinfo, instr.Itype.rd) + " = (saddr_t)(int16_t)api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} break;
 			case 0x2: // I32
 				if (instr.Itype.rd == 0) {
@@ -136,10 +148,10 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				} else {
 					if constexpr (W == 4) {
 						add_code(code,
-							from_reg(instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+							to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 					} else {
 						add_code(code,
-							from_reg(instr.Itype.rd) + " = (saddr_t)(int32_t)api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+							to_reg(tinfo, instr.Itype.rd) + " = (saddr_t)(int32_t)api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 					}
 				} break;
 			case 0x3: // I64
@@ -148,20 +160,20 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					"api.mem_ld64(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				} else {
 					add_code(code,
-					from_reg(instr.Itype.rd) + " = api.mem_ld64(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+					to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld64(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				}
 				break;
 			case 0x4: // U8
 				add_code(code,
-				from_reg(instr.Itype.rd) + " = api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			case 0x5: // U16
 				add_code(code,
-				from_reg(instr.Itype.rd) + " = api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			case 0x6: // U32
 				add_code(code,
-				from_reg(instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -234,7 +246,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			// NOTE: We need to remember RS1 because it can be clobbered by RD
 			add_code(code, "{addr_t jrs1 = " + from_reg(tinfo, instr.Itype.rs1) + ";");
 			if (instr.Itype.rd != 0) {
-				add_code(code, from_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";");
+				add_code(code, to_reg(tinfo, instr.Itype.rd) + " = " + PCRELS(4) + ";");
 			}
 			add_code(code, 
 				"*cur_insn = c + " + std::to_string(i) + ";\n"
@@ -243,7 +255,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			} return;
 		case RV32I_JAL: {
 			if (instr.Jtype.rd != 0) {
-				add_code(code, from_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
+				add_code(code, to_reg(tinfo, instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
 			// forward label: jump inside code block
 			const auto offset = instr.Jtype.jump_offset() / 4;
@@ -269,7 +281,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV32I_OP_IMM: {
 			// NOP
 			if (UNLIKELY(instr.Itype.rd == 0)) break;
-			const auto dst = from_reg(instr.Itype.rd);
+			const auto dst = to_reg(tinfo, instr.Itype.rd);
 			const auto src = from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
@@ -336,78 +348,78 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD
-				emit_op(code, " + ", " += ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				emit_op(code, " + ", " += ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(tinfo, instr.Rtype.rs2));
 				break;
 			case 0x200: // SUB
-				emit_op(code, " - ", " -= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				emit_op(code, " - ", " -= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(tinfo, instr.Rtype.rs2));
 				break;
 			case 0x1: // SLL
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+					to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x2: // SLT
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " < (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
+					to_reg(tinfo, instr.Rtype.rd) + " = ((saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " < (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " < " + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
+					to_reg(tinfo, instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " < " + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XOR
 				if (instr.Rtype.funct7 == 0x0) {
-					emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+					emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(tinfo, instr.Rtype.rs2));
 				} else if (instr.Rtype.funct7 == 0x4) {
 					// ZEXT.H: Zero-extend 16-bit
 					add_code(code,
-						from_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(tinfo, instr.Rtype.rs1) + ");");
+						to_reg(tinfo, instr.Rtype.rd) + " = uint16_t(" + from_reg(tinfo, instr.Rtype.rs1) + ");");
 				}
 				break;
 			case 0x5: // SRL / ROR
 				if (instr.Itype.high_bits() == 0x0) {
 					add_code(code,
-						from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+						to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
 				}
 				else if (instr.Itype.is_rori()) {
 					// ROR: Rotate right
 					add_code(code,
 					"{const unsigned shift = " + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1);\n",
-						from_reg(instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " >> shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " << (XLEN - shift)); }"
+						to_reg(tinfo, instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " >> shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " << (XLEN - shift)); }"
 					);
 				}
 				break;
 			case 0x205: // SRA
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+					to_reg(tinfo, instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x6: // OR
-				emit_op(code, " | ", " |= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				emit_op(code, " | ", " |= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, to_reg(tinfo, instr.Rtype.rs2));
 				break;
 			case 0x7: // AND
-				emit_op(code, " & ", " &= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				emit_op(code, " & ", " &= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, to_reg(tinfo, instr.Rtype.rs2));
 				break;
 			// extension RV32M / RV64M
 			case 0x10: // MUL
 				add_code(code,
-					from_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";");
+					to_reg(tinfo, instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";");
 				break;
 			case 0x11: // MULH (signed x signed)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					to_reg(tinfo, instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
 					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					to_reg(tinfo, instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
 					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x13: // MULHU (unsigned x unsigned)
 				add_code(code,
 					(W == 4) ?
-					from_reg(instr.Rtype.rd) + " = ((uint64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
+					to_reg(tinfo, instr.Rtype.rd) + " = ((uint64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
 					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
 				);
 				break;
@@ -430,7 +442,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case 0x15: // DIVU
 				add_code(code,
 					"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0))",
-					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " / " + from_reg(tinfo, instr.Rtype.rs2) + ";"
+					to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " / " + from_reg(tinfo, instr.Rtype.rs2) + ";"
 				);
 				break;
 			case 0x16: // REM
@@ -451,47 +463,47 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case 0x17: // REMU
 				add_code(code,
 				"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0))",
-					from_reg(instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " % " + from_reg(tinfo, instr.Rtype.rs2) + ";"
+					to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " % " + from_reg(tinfo, instr.Rtype.rs2) + ";"
 				);
 				break;
 			case 0x102: // SH1ADD
-				add_code(code, from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 1);");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = " + to_reg(tinfo, instr.Rtype.rs2) + " + (" + to_reg(tinfo, instr.Rtype.rs1) + " << 1);");
 				break;
 			case 0x104: // SH2ADD
-				add_code(code, from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 2);");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = " + to_reg(tinfo, instr.Rtype.rs2) + " + (" + to_reg(tinfo, instr.Rtype.rs1) + " << 2);");
 				break;
 			case 0x106: // SH3ADD
-				add_code(code, from_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 3);");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = " + to_reg(tinfo, instr.Rtype.rs2) + " + (" + to_reg(tinfo, instr.Rtype.rs1) + " << 3);");
 				break;
 			case 0x204: // XNOR
-				add_code(code, from_reg(instr.Rtype.rd) + " = ~(" + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + ");");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = ~(" + to_reg(tinfo, instr.Rtype.rs1) + " ^ " + to_reg(tinfo, instr.Rtype.rs2) + ");");
 				break;
 			case 0x206: // ORN
-				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " | ~" + from_reg(instr.Rtype.rs2) + ");");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " | ~" + to_reg(tinfo, instr.Rtype.rs2) + ");");
 				break;
 			case 0x207: // ANDN
-				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " & ~" + from_reg(instr.Rtype.rs2) + ");");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " & ~" + to_reg(tinfo, instr.Rtype.rs2) + ");");
 				break;
 			case 0x54: // MIN
-				add_code(code, from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " < (saddr_t)" + from_reg(instr.Rtype.rs2) + ") "
-					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = ((saddr_t)" + to_reg(tinfo, instr.Rtype.rs1) + " < (saddr_t)" + to_reg(tinfo, instr.Rtype.rs2) + ") "
+					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
 				break;
 			case 0x55: // MINU
-				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " < " + from_reg(instr.Rtype.rs2) + ") "
-					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " < " + to_reg(tinfo, instr.Rtype.rs2) + ") "
+					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
 				break;
 			case 0x56: // MAX
-				add_code(code, from_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " > (saddr_t)" + from_reg(instr.Rtype.rs2) + ") "
-					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = ((saddr_t)" + to_reg(tinfo, instr.Rtype.rs1) + " > (saddr_t)" + to_reg(tinfo, instr.Rtype.rs2) + ") "
+					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
 				break;
 			case 0x57: // MAXU
-				add_code(code, from_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " > " + from_reg(instr.Rtype.rs2) + ") "
-					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " > " + to_reg(tinfo, instr.Rtype.rs2) + ") "
+					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
 				break;
 			case 0x301: // ROL
 				add_code(code,
 				"{const unsigned shift = " + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1);\n",
-					from_reg(instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " << shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " >> (XLEN - shift)); }"
+					to_reg(tinfo, instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " << shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " >> (XLEN - shift)); }"
 				);
 				break;
 			default:
@@ -504,13 +516,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
+				to_reg(tinfo, instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_AUIPC:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
 			add_code(code,
-				from_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
+				to_reg(tinfo, instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_FENCE:
 			break;
@@ -519,7 +531,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (instr.Itype.imm == 0) {
 					code += "cpu->pc = " + PCRELS(0) + "; "
 							"*cur_insn = c;\n";
-					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(17) + ")))\n"
+					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(tinfo, REG_ECALL) + ")))\n"
 					       "  return;\n";
 					code += "local_max_insn = *max_insn;\n";
 					break;
@@ -543,7 +555,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
 				break;
-			const auto dst = from_reg(instr.Itype.rd);
+			const auto dst = to_reg(tinfo, instr.Itype.rd);
 			const auto src = "(uint32_t)" + from_reg(tinfo, instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0:
@@ -568,7 +580,7 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV64I_OP32: {
 			if (UNLIKELY(instr.Rtype.rd == 0))
 				break;
-			const auto dst = from_reg(instr.Rtype.rd);
+			const auto dst = to_reg(tinfo, instr.Rtype.rd);
 			const auto src1 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs1);
 			const auto src2 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs2);
 
@@ -695,22 +707,22 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					ILLEGAL_AND_EXIT();
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FLE.S
-					code += from_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x1: // FLT.S
-					code += from_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x2: // FEQ.S
-					code += from_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] == " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f32[0] == " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x10: // FLE.D
-					code += from_reg(fi.R4type.rd) + " = (" + rs1 + ".f64 <= " + rs2 + ".f64) ? 1 : 0;\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f64 <= " + rs2 + ".f64) ? 1 : 0;\n";
 					break;
 				case 0x11: // FLT.D
-					code += from_reg(fi.R4type.rd) + " = (" + rs1 + ".f64 < " + rs2 + ".f64) ? 1 : 0;\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f64 < " + rs2 + ".f64) ? 1 : 0;\n";
 					break;
 				case 0x12: // FEQ.D
-					code += from_reg(fi.R4type.rd) + " = (" + rs1 + ".f64 == " + rs2 + ".f64) ? 1 : 0;\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f64 == " + rs2 + ".f64) ? 1 : 0;\n";
 					break;
 				default:
 					ILLEGAL_AND_EXIT();
@@ -801,9 +813,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case RV32F__FCVT_W_SD: {
 				const std::string sign((fi.R4type.rs2 == 0x0) ? "(int32_t)" : "(uint32_t)");
 				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
-					code += from_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
 				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
-					code += from_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f64;\n";
+					code += to_reg(tinfo, fi.R4type.rd) + " = " + sign + rs1 + ".f64;\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
@@ -819,9 +831,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case RV32F__FMV_X_W:
 				if (fi.R4type.funct3 == 0x0) {
 					if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
-						code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
+						code += to_reg(tinfo, fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
 					} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
-						code += from_reg(fi.R4type.rd) + " = " + rs1 + ".i64;\n";
+						code += to_reg(tinfo, fi.R4type.rd) + " = " + rs1 + ".i64;\n";
 					} else {
 						ILLEGAL_AND_EXIT();
 					}
