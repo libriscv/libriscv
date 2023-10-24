@@ -17,6 +17,10 @@
 #define RISCV_PAGE_SIZE  4096UL
 #endif
 
+#ifndef RISCV_FORCE_ALIGN_MEMORY
+#define RISCV_FORCE_ALIGN_MEMORY 1
+#endif
+
 namespace riscv
 {
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
@@ -30,7 +34,7 @@ namespace riscv
 	static constexpr bool memory_traps_enabled = false;
 #endif
 
-#ifdef RISCV_FORCE_ALIGN_MEMORY
+#if RISCV_FORCE_ALIGN_MEMORY
 	static constexpr bool force_align_memory = true;
 #else
 	static constexpr bool force_align_memory = false;
