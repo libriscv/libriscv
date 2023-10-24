@@ -205,6 +205,8 @@ static void syscall_write(Machine<W>& machine)
 			machine.memory.gather_buffers_from_range(64, buffers, address, len);
 		const ssize_t res =
 			writev(real_fd, (struct iovec *)&buffers[0], cnt);
+		SYSPRINT("SYSCALL write(real fd: %d) = %ld\n",
+			real_fd, res);
 		machine.set_result_or_error(res);
 	} else {
 		machine.set_result(-EBADF);
@@ -354,33 +356,34 @@ static void syscall_openat(Machine<W>& machine)
 			// Translate errno() into kernel API return value
 			machine.set_result(-errno);
 		}
+		SYSPRINT("SYSCALL openat(real_fd: %d) => %d\n",
+			real_fd, machine.template return_value<int>());
 		return;
 	}
 
 	machine.set_result(-EBADF);
+	SYSPRINT("SYSCALL openat => %d\n", machine.template return_value<int>());
 }
 
 template <int W>
 static void syscall_close(riscv::Machine<W>& machine)
 {
 	const int vfd = machine.template sysarg<int>(0);
-	if constexpr (verbose_syscalls) {
-		printf("SYSCALL close, fd: %d\n", vfd);
-	}
 
 	if (vfd >= 0 && vfd <= 2) {
 		// TODO: Do we really want to close them?
 		machine.set_result(0);
-		return;
 	} else if (machine.has_file_descriptors()) {
 		const int res = machine.fds().erase(vfd);
 		if (res > 0) {
 			::close(res);
 		}
 		machine.set_result(res >= 0 ? 0 : -EBADF);
-		return;
+	} else {
+		machine.set_result(-EBADF);
 	}
-	machine.set_result(-EBADF);
+	SYSPRINT("SYSCALL close(vfd: %d) => %d\n",
+		vfd, machine.template return_value<int>());
 }
 
 template <int W>
@@ -432,15 +435,17 @@ static void syscall_fcntl(Machine<W>& machine)
 	const auto arg1 = machine.sysarg(2);
 	const auto arg2 = machine.sysarg(3);
 	const auto arg3 = machine.sysarg(4);
-	SYSPRINT("SYSCALL fcntl, fd: %d  cmd: 0x%X\n", vfd, cmd);
+	int real_fd = -EBADFD;
 
 	if (machine.has_file_descriptors()) {
-		int real_fd = machine.fds().translate(vfd);
+		real_fd = machine.fds().translate(vfd);
 		int res = fcntl(real_fd, cmd, arg1, arg2, arg3);
 		machine.set_result_or_error(res);
-		return;
+	} else {
+		machine.set_result(-EBADF);
 	}
-	machine.set_result(-EBADF);
+	SYSPRINT("SYSCALL fcntl, fd: %d (real_fd: %d)  cmd: 0x%X arg1: 0x%lX => %d\n",
+		vfd, real_fd, cmd, (long)arg1, (int)machine.return_value());
 }
 
 template <int W>
@@ -564,9 +569,6 @@ static void syscall_fstatat(Machine<W>& machine)
 
 	const auto path = machine.memory.memstring(g_path);
 
-	SYSPRINT("SYSCALL fstatat, fd: %d path: %s buf: 0x%lX flags: %#x)\n",
-			vfd, path.c_str(), (long)g_buf, flags);
-
 	if (machine.has_file_descriptors()) {
 
 		int real_fd = machine.fds().translate(vfd);
@@ -580,9 +582,11 @@ static void syscall_fstatat(Machine<W>& machine)
 			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
 		}
 		machine.set_result_or_error(res);
-		return;
+	} else {
+		machine.set_result(-ENOSYS);
 	}
-	machine.set_result(-ENOSYS);
+	SYSPRINT("SYSCALL fstatat, fd: %d path: %s buf: 0x%lX flags: %#x) => %d\n",
+			vfd, path.c_str(), (long)g_buf, flags, (int)machine.return_value());
 }
 
 template <int W>

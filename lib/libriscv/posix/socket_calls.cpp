@@ -143,25 +143,27 @@ static void syscall_connect(Machine<W>& machine)
 	const auto [vfd, g_addr, addrlen] =
 		machine.template sysargs<int, address_type<W>, address_type<W>> ();
 
-	SYSPRINT("SYSCALL connect, vfd: %d addr: 0x%lX len: %zu\n",
-		vfd, (long)g_addr, (size_t)addrlen);
-
 	if (addrlen > 256) {
 		machine.set_result(-ENOMEM);
 		return;
 	}
+	int real_fd = -EBADFD;
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
-		const auto real_fd = machine.fds().translate(vfd);
+		real_fd = machine.fds().translate(vfd);
 		alignas(16) char buffer[256];
 		machine.copy_from_guest(buffer, g_addr, addrlen);
 
 #if 0
 		char printbuf[INET6_ADDRSTRLEN];
-		auto* sin = (struct sockaddr_in6 *)buffer;
-		inet_ntop(AF_INET6, &sin->sin6_addr, printbuf, sizeof(printbuf));
-		printf("SYSCALL connect address: %s\n", printbuf);
+		auto* sin6 = (struct sockaddr_in6 *)buffer;
+		inet_ntop(AF_INET6, &sin6->sin6_addr, printbuf, sizeof(printbuf));
+		printf("SYSCALL connect IPv6 address: %s\n", printbuf);
+
+		auto* sin4 = (struct sockaddr_in *)buffer;
+		inet_ntop(AF_INET, &sin4->sin_addr, printbuf, sizeof(printbuf));
+		printf("SYSCALL connect IPv4 address: %s\n", printbuf);
 #endif
 
 		const int res = connect(real_fd, (const struct sockaddr *)buffer, addrlen);
@@ -170,8 +172,8 @@ static void syscall_connect(Machine<W>& machine)
 		machine.set_result(-EBADF);
 	}
 
-	SYSPRINT("SYSCALL connect, vfd: %d addr: 0x%lX len: %zu = %ld\n",
-		vfd, (long)g_addr, (size_t)addrlen, (long)machine.return_value());
+	SYSPRINT("SYSCALL connect, vfd: %d (real_fd: %d) addr: 0x%lX len: %zu = %ld\n",
+		vfd, real_fd, (long)g_addr, (size_t)addrlen, (long)machine.return_value());
 }
 
 template <int W>
@@ -373,6 +375,7 @@ static void syscall_getsockopt(Machine<W>& machine)
 		const auto real_fd = machine.fds().translate(vfd);
 
 		alignas(8) char buffer[128];
+		optlen = std::min(sizeof(buffer), size_t(g_optlen));
 		int res = getsockopt(real_fd, level, optname, buffer, &optlen);
 		if (res == 0) {
 			machine.copy_to_guest(g_optlen, &optlen, sizeof(optlen));
@@ -383,8 +386,8 @@ static void syscall_getsockopt(Machine<W>& machine)
 		machine.set_result(-EBADF);
 	}
 
-	SYSPRINT("SYSCALL getsockopt, fd: %d level: %x optname: %#x len: %ld = %ld\n",
-			 vfd, level, optname, (long)optlen, (long)machine.return_value());
+	SYSPRINT("SYSCALL getsockopt, fd: %d level: %x optname: %#x len: %ld/%ld = %ld\n",
+			 vfd, level, optname, (long)optlen, (long)g_optlen, (long)machine.return_value());
 }
 
 template <int W>
