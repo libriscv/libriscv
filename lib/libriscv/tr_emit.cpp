@@ -164,7 +164,7 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		add_code("const char* " + data + " = VERYALIGNED(api.mem_ld(cpu, PAGENO(" + address + ")));");
+		add_code("const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));");
 		return cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")]";
 	}
 	void memory_store(std::string type, int reg, int32_t imm, std::string value)
@@ -183,7 +183,7 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		add_code("char* " + data + " = VERYALIGNED(api.mem_st(cpu, PAGENO(" + address + ")));");
+		add_code("char* " + data + " = api.mem_st(cpu, PAGENO(" + address + "));");
 		add_code(
 			"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
 		);

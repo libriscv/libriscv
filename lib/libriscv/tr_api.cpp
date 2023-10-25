@@ -58,7 +58,6 @@ typedef struct {
 } CPU;
 
 #define PUREFUNC __attribute__((pure))
-#define VERYALIGNED(x) __builtin_assume_aligned(x, 32)
 #define PAGENO(x) ((addr_t)(x) >> 12)
 #define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
 
