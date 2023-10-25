@@ -23,15 +23,24 @@ static bool verbose()
 {
 	return getenv("VERBOSE") != nullptr;
 }
+static std::string host_arch()
+{
+#ifdef __x86_64__
+	return "HOST_AMD64";
+#else
+	return "HOST_UNKNOWN";
+#endif
+}
 
 namespace riscv
 {
 	std::string compile_command(int arch)
 	{
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
-		" -ffreestanding -fno-builtin -nostdlib -fexceptions "
-		 + "-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
-		 + " -pipe " + cflags();
+		" -fexceptions "
+		"-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
+		 + " -DARCH=" + host_arch() + ""
+		 " -pipe " + cflags();
 	}
 
 	void*

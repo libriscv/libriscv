@@ -17,6 +17,9 @@ namespace riscv {
 #  define XLEN  64
 #endif
 
+#define HOST_UNKNOWN 0
+#define HOST_AMD64   1
+
 typedef union {
 	int32_t i32[2];
 	float   f32[2];
@@ -53,38 +56,26 @@ typedef struct {
 	fp64reg fr[32];
 } CPU;
 
+#define PUREFUNC /*__attribute__((pure))*/
+#define VERYALIGNED(x) __builtin_assume_aligned(x, 64)
+#define PAGENO(x) ((addr_t)(x) >> 12)
+#define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
+
 static struct CallbackTable {
-	uint8_t  (*mem_ld8)(const CPU*, addr_t);
-	uint16_t (*mem_ld16)(const CPU*, addr_t);
-	uint32_t (*mem_ld32)(const CPU*, addr_t);
-	uint64_t (*mem_ld64)(const CPU*, addr_t);
-	void (*mem_st8) (const CPU*, addr_t, uint8_t);
-	void (*mem_st16)(const CPU*, addr_t, uint16_t);
-	void (*mem_st32)(const CPU*, addr_t, uint32_t);
-	void (*mem_st64)(const CPU*, addr_t, uint64_t);
+	const char* (*mem_ld)(const CPU*, addr_t) PUREFUNC;
+	char* (*mem_st) (const CPU*, addr_t) PUREFUNC;
 	void (*jump)(const CPU*, addr_t);
 	int  (*syscall)(CPU*, addr_t);
-	void (*stop)(CPU*);
-	void (*ebreak)(CPU*);
+	void (*stop)(CPU*) PUREFUNC;
+	void (*ebreak)(CPU*) PUREFUNC;
 	void (*system)(CPU*, uint32_t);
 	void (*execute)(CPU*, uint32_t);
 	void (*exception)(CPU*, int);
-	float  (*sqrtf32)(float);
-	double (*sqrtf64)(double);
+	float  (*sqrtf32)(float) PUREFUNC;
+	double (*sqrtf64)(double) PUREFUNC;
 } api;
 static uint64_t* cur_insn;
 static uint64_t* max_insn;
-
-void* memcpy(void * restrict dst, const void * restrict src, unsigned len)
-{
-	char *src8 = (char *)src;
-	char *dst8 = (char *)dst;
-
-	for (unsigned i = 0; i < len; i++)
-		dst8[i] = src8[i];
-
-	return dst;
-}
 
 // https://stackoverflow.com/questions/28868367/getting-the-high-part-of-64-bit-integer-multiplication
 // As written by catid

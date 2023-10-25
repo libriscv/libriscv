@@ -268,6 +268,7 @@ namespace riscv
 		// Linear arena at start of memory (mmap-backed)
 		PageData* m_arena = nullptr;
 		size_t m_arena_pages = 0;
+		friend struct CPU<W>;
 	};
 #include "memory_inline.hpp"
 #include "memory_inline_pages.hpp"

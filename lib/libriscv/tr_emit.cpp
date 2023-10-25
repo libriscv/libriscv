@@ -4,7 +4,7 @@
 #include "rvfd.hpp"
 #include "tr_types.hpp"
 
-#define PCRELA(x) ((address_t) (tinfo.basepc + i * 4 + (x)))
+#define PCRELA(x) ((address_t) (tinfo.basepc + index() * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define INSTRUCTION_COUNT(i) ("c + " + std::to_string(i))
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nreturn;\n"; }
@@ -12,54 +12,195 @@
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "c < local_max_insn";
 
-template <typename ... Args>
-inline void add_code(std::string& code, Args&& ... addendum) {
-	([&] {
-		code += std::string(addendum) + "\n";
-	}(), ...);
-}
-template <int W>
-inline std::string from_reg(const TransInfo<W>& tinfo, int reg) {
-	if (reg == 3 && tinfo.gp != 0)
-		return std::to_string(tinfo.gp);
-	else if (reg != 0)
-		return "cpu->r[" + std::to_string(reg) + "]";
-	return "(addr_t)0";
-}
-template <int W>
-inline std::string to_reg(const TransInfo<W>& tinfo, int reg) {
-	(void)tinfo;
-
-	if (reg != 0)
-		return "cpu->r[" + std::to_string(reg) + "]";
-	return "(addr_t)0";
-}
-inline std::string from_fpreg(int reg) {
-	return "cpu->fr[" + std::to_string(reg) + "]";
-}
-inline std::string from_imm(int64_t imm) {
-	return std::to_string(imm);
-}
 struct BranchInfo {
 	bool sign;
 	bool goto_enabled;
 	int jump_label; // destination index, 0 when unused
 };
+
+template <int W>
+struct Emitter
+{
+	static constexpr bool CACHED_REGISTERS = false;
+	using address_t = address_type<W>;
+
+	Emitter(const std::string& pfunc, const TransInstr<W>* pip, const TransInfo<W>& ptinfo)
+		: func(pfunc), ip(pip), tinfo(ptinfo) {}
+
+	template <typename ... Args>
+	void add_code(Args&& ... addendum) {
+		([&] {
+			this->code += std::string(addendum) + "\n";
+		}(), ...);
+	}
+	const std::string& get_code() const noexcept { return this->code; }
+
+	std::string loaded_regname(int reg) {
+		return "reg" + std::to_string(reg);
+	}
+	void load_register(int reg) {
+		if (UNLIKELY(reg == 0))
+			throw MachineException(INVALID_PROGRAM, "Attempt to cache register x0");
+		if (!gprs[reg]) {
+			gprs[reg] = true;
+			bool exists = gpr_exists[reg];
+			if (exists == false) {
+				gpr_exists[reg] = true;
+			} else {
+				add_code(loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];");
+			}
+		}
+	}
+	void invalidate_register(int reg) {
+		if constexpr (CACHED_REGISTERS) {
+			gpr_exists[reg] = true;
+			gprs[reg] = false;
+		}
+	}
+	void potentially_reload_register(int reg) {
+		if constexpr (CACHED_REGISTERS) {
+			if (gpr_exists[reg]) {
+				add_code(loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];");
+				gprs[reg] = true;
+			}
+		}
+	}
+	void potentially_reload_all_registers() {
+		for (int reg = 1; reg < 32; reg++) {
+			this->potentially_reload_register(reg);
+		}
+	}
+	void realize_registers(int x0, int x1) {
+		for (int reg = x0; reg < x1; reg++) {
+			if (gprs[reg]) {
+				add_code("cpu->r[" + std::to_string(reg) + "] = " + loaded_regname(reg) + ";");
+			}
+		}
+	}
+	void restore_syscall_registers() {
+		if constexpr (CACHED_REGISTERS) {
+			this->realize_registers(10, 18);
+		}
+	}
+	void restore_all_registers() {
+		if constexpr (CACHED_REGISTERS) {
+			this->realize_registers(0, 32);
+		}
+	}
+	void exit_function(bool add_bracket = false)
+	{
+		if constexpr (CACHED_REGISTERS) {
+			this->restore_all_registers();
+		}
+		add_code("return;");
+		if (add_bracket) add_code("}");
+	}
+
+	std::string from_reg(int reg) {
+		if (reg == 3 && tinfo.gp != 0)
+			return std::to_string(tinfo.gp);
+		else if (reg != 0) {
+			if constexpr (CACHED_REGISTERS) {
+				load_register(reg);
+				return loaded_regname(reg);
+			} else {
+				return "cpu->r[" + std::to_string(reg) + "]";
+			}
+		}
+		return "(addr_t)0";
+	}
+	std::string to_reg(int reg) {
+		if (reg != 0) {
+			if constexpr (CACHED_REGISTERS) {
+				load_register(reg);
+				return loaded_regname(reg);
+			} else {
+				return "cpu->r[" + std::to_string(reg) + "]";
+			}
+		}
+		return "(addr_t)0";
+	}
+	std::string from_fpreg(int reg) {
+		return "cpu->fr[" + std::to_string(reg) + "]";
+	}
+	std::string from_imm(int64_t imm) {
+		return std::to_string(imm);
+	}
+	void emit_op(const std::string& op, const std::string& sop,
+		uint32_t rd, uint32_t rs1, const std::string& rs2)
+	{
+		if (rd == 0) {
+			/* must be a NOP */
+		} else if (rd == rs1) {
+			add_code(to_reg(rd) + sop + rs2 + ";");
+		} else {
+		add_code(
+			to_reg(rd) + " = " + from_reg(rs1) + op + rs2 + ";");
+		}
+	}
+
+	void add_branch(const BranchInfo& binfo, const std::string& op);
+
+	bool gpr_exists_at(int reg) const noexcept { return this->gpr_exists.at(reg); }
+	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
+
+	template <typename T>
+	std::string memory_load(std::string type, std::string address)
+	{
+		std::string data = "rpage" + PCRELS(0);
+		add_code("const char* " + data + " = VERYALIGNED(api.mem_ld(cpu, PAGENO(" + address + ")));");
+		std::string cast;
+		if constexpr (std::is_signed_v<T>) {
+			cast = "(saddr_t)";
+		}
+		return cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")]";
+	}
+	void memory_store(std::string type, std::string address, std::string value)
+	{
+		std::string data = "wpage" + PCRELS(0);
+		add_code("char* " + data + " = VERYALIGNED(api.mem_st(cpu, PAGENO(" + address + ")));");
+
+		add_code(
+			"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
+		);
+	}
+
+	size_t index() const noexcept { return this->m_idx; }
+	address_t pc() const noexcept { return this->m_pc; }
+	void emit();
+
+private:
+	std::string code;
+	size_t m_idx = 0;
+	address_t m_pc = 0x0;
+	rv32i_instruction instr;
+
+	std::array<bool, 32> gprs {};
+	std::array<bool, 32> gpr_exists {};
+
+	const std::string& func;
+	const TransInstr<W>* ip;
+	const TransInfo<W>& tinfo;
+
+	std::set<unsigned> labels;
+	std::set<address_t> pagedata;
+};
+
 #define FUNCLABEL(i)  (func + "_" + std::to_string(i))
 template <int W>
-inline void add_branch(std::string& code, const BranchInfo& binfo, const std::string& op, const TransInfo<W>& tinfo, size_t i, rv32i_instruction instr, const std::string& func)
+inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& op)
 {
 	using address_t = address_type<W>;
 	if (binfo.sign == false)
-		code += "if (" + from_reg(tinfo, instr.Btype.rs1) + op + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
+		code += "if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {\n";
 	else
-		code += "if ((saddr_t)" + from_reg(tinfo, instr.Btype.rs1) + op + " (saddr_t)" + from_reg(tinfo, instr.Btype.rs2) + ") {\n";
+		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
-		code += "c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
+		code += "c += " + std::to_string(index()) + "; if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
 	} else if (binfo.jump_label > 0) {
 		// forward jump to label (from absolute index)
-		code += "c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") ";
+		code += "c += " + std::to_string(index()) + "; if (" + LOOP_EXPRESSION + ") ";
 		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n";
 		// else, exit binary translation
 	}
@@ -73,47 +214,25 @@ inline void add_branch(std::string& code, const BranchInfo& binfo, const std::st
 		// The number of instructions to increment depends on if branch-instruction-counting is enabled
 		code += 
 			"*cur_insn = c; "
-			"cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n"
-			"return;}\n";
-	}
-}
-template <int W>
-inline void emit_op(std::string& code, const std::string& op, const std::string& sop,
-	const TransInfo<W>& tinfo, uint32_t rd, uint32_t rs1, const std::string& rs2)
-{
-	if (rd == 0) {
-		/* must be a NOP */
-	} else if (rd == rs1) {
-		add_code(code, to_reg(tinfo, rd) + sop + rs2 + ";");
-	} else {
-	add_code(code,
-		to_reg(tinfo, rd) + " = " + from_reg(tinfo, rs1) + op + rs2 + ";");
+			"cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n";
+		exit_function(true); // Bracket
 	}
 }
 
 template <int W>
-inline void emit_page(std::string& code,
-	std::set<address_type<W>>& pagedata, address_type<W> address, bool write)
-{
-
-}
-
-template <int W>
-void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
+void Emitter<W>::emit()
 {
 	static constexpr unsigned XLEN = W * 8u;
 	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
-	std::set<unsigned> labels;
-	std::set<address_t> pagedata;
-	code += "extern void " + func + "(CPU* cpu) {\n"
-		"uint64_t c = *cur_insn, local_max_insn = *max_insn; " + func + "_start:;\n";
+	add_code(func + "_start:;");
 
 	for (int i = 0; i < tinfo.len; i++) {
-		const auto instr = rv32i_instruction {ip[i].instr};
-		const auto current_pc = tinfo.basepc + i * 4;
+		this->m_idx = i;
+		this->instr = rv32i_instruction {ip[i].instr};
+		this->m_pc = tinfo.basepc + index() * 4;
 
 		// known jump locations
-		if (tinfo.jump_locations.count(current_pc)) {
+		if (tinfo.jump_locations.count(this->pc())) {
 			code.append(FUNCLABEL(i) + ":;\n");
 		}
 		else if (labels.count(i))
@@ -123,78 +242,49 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		// instruction generation
 		switch (instr.opcode()) {
 		case RV32I_LOAD:
+			if (instr.Itype.rd != 0) {
 			switch (instr.Itype.funct3) {
 			case 0x0: // I8
-				if (instr.Itype.rd == 0) {
-					add_code(code,
-					"api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-				} else {
-					add_code(code,
-						to_reg(tinfo, instr.Itype.rd) + " = (saddr_t)(int8_t)api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
-					);
-				} break;
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int8_t>("int8_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				break;
 			case 0x1: // I16
-				if (instr.Itype.rd == 0) {
-					add_code(code,
-					"api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-				} else {
-					add_code(code,
-					to_reg(tinfo, instr.Itype.rd) + " = (saddr_t)(int16_t)api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-				} break;
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int16_t>("int16_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				break;
 			case 0x2: // I32
-				if (instr.Itype.rd == 0) {
-					add_code(code,
-					"api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-				} else {
-					if constexpr (W == 4) {
-						add_code(code,
-							to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-					} else {
-						add_code(code,
-							to_reg(tinfo, instr.Itype.rd) + " = (saddr_t)(int32_t)api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-					}
-				} break;
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int32_t>("int32_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				break;
 			case 0x3: // I64
-				if (instr.Itype.rd == 0) {
-					add_code(code,
-					"api.mem_ld64(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-				} else {
-					add_code(code,
-					to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld64(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
-				}
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int64_t>("int64_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
 				break;
 			case 0x4: // U8
-				add_code(code,
-				to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld8(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint8_t>("uint8_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
 				break;
 			case 0x5: // U16
-				add_code(code,
-				to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld16(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint16_t>("uint16_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
 				break;
 			case 0x6: // U32
-				add_code(code,
-				to_reg(tinfo, instr.Itype.rd) + " = api.mem_ld32(cpu, " + from_reg(tinfo, instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint32_t>("uint32_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
+			}
+			} else {
+				// We don't care about where we are in the page when rd=0
+				add_code("(void)" + this->memory_load<int8_t>("int8_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
 			} break;
 		case RV32I_STORE:
 			switch (instr.Stype.funct3) {
 			case 0x0: // I8
-				add_code(code,
-					"api.mem_st8(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
+				this->memory_store("int8_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
 				break;
 			case 0x1: // I16
-				add_code(code,
-					"api.mem_st16(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
+				this->memory_store("int16_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
 				break;
 			case 0x2: // I32
-				add_code(code,
-					"api.mem_st32(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
+				this->memory_store("int32_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
 				break;
 			case 0x3: // I64
-				add_code(code,
-					"api.mem_st64(cpu, " + from_reg(tinfo, instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()) + ", " + from_reg(tinfo, instr.Stype.rs2) + ");");
+				this->memory_store("int64_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -219,43 +309,43 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch<W>(code, { false, ge, fl }, " == ", tinfo, i, instr, func);
+				add_branch({ false, ge, fl }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch<W>(code, { false, ge, fl }, " != ", tinfo, i, instr, func);
+				add_branch({ false, ge, fl }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
 				ILLEGAL_AND_EXIT();
 				break;
 			case 0x4: // LT
-				add_branch<W>(code, { true, ge, fl }, " < ", tinfo, i, instr, func);
+				add_branch({ true, ge, fl }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch<W>(code, { true, ge, fl }, " >= ", tinfo, i, instr, func);
+				add_branch({ true, ge, fl }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch<W>(code, { false, ge, fl }, " < ", tinfo, i, instr, func);
+				add_branch({ false, ge, fl }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch<W>(code, { false, ge, fl }, " >= ", tinfo, i, instr, func);
+				add_branch({ false, ge, fl }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
 			// jump to register + immediate
 			// NOTE: We need to remember RS1 because it can be clobbered by RD
-			add_code(code, "{addr_t jrs1 = " + from_reg(tinfo, instr.Itype.rs1) + ";");
+			add_code("{addr_t jrs1 = " + from_reg(instr.Itype.rs1) + ";");
 			if (instr.Itype.rd != 0) {
-				add_code(code, to_reg(tinfo, instr.Itype.rd) + " = " + PCRELS(4) + ";");
+				add_code(to_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";");
 			}
-			add_code(code, 
+			add_code(
 				"*cur_insn = c + " + std::to_string(i) + ";\n"
-				"api.jump(cpu, jrs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }",
-				"}");
+				"api.jump(cpu, jrs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }");
+			exit_function(true);
 			} return;
 		case RV32I_JAL: {
 			if (instr.Jtype.rd != 0) {
-				add_code(code, to_reg(tinfo, instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
+				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
 			// forward label: jump inside code block
 			const auto offset = instr.Jtype.jump_offset() / 4;
@@ -265,80 +355,80 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (fl > i)
 					labels.insert(fl);
 				// this is a jump back to the start of the function
-				add_code(code, "c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(fl) + ";");
+				add_code("c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(fl) + ";");
 				// if we run out of instructions, we must exit:
-				add_code(code,
+				add_code(
 					"*cur_insn = c;\n"
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n"
-					"return;");
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
+				exit_function();
 			} else {
 				// Because of forward jumps we can't end the function here
-				add_code(code,
+				add_code(
 					"*cur_insn = c + " + std::to_string(i) + ";\n"
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n"
-					"return;");
+					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
+				exit_function();
 			} } break;
 		case RV32I_OP_IMM: {
 			// NOP
 			if (UNLIKELY(instr.Itype.rd == 0)) break;
-			const auto dst = to_reg(tinfo, instr.Itype.rd);
-			const auto src = from_reg(tinfo, instr.Itype.rs1);
+			const auto dst = to_reg(instr.Itype.rd);
+			const auto src = from_reg(instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
 				if (instr.Itype.signed_imm() == 0) {
-					add_code(code, dst + " = " + src + ";");
+					add_code(dst + " = " + src + ";");
 				} else {
-					emit_op(code, " + ", " += ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
+					emit_op(" + ", " += ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				} break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
 				switch (instr.Itype.imm) {
 				case 0b011000000100: // SEXT.B
-					add_code(code,
+					add_code(
 						dst + " = (saddr_t)(int8_t)" + src + ";");
 					break;
 				case 0b011000000101: // SEXT.H
-					add_code(code,
+					add_code(
 						dst + " = (saddr_t)(int16_t)" + src + ";");
 					break;
 				default:
-					emit_op(code, " << ", " <<= ", tinfo, instr.Itype.rd, instr.Itype.rs1,
+					emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
 				}
 				break;
 			case 0x2: // SLTI:
 				// signed less than immediate
-				add_code(code,
+				add_code(
 					dst + " = ((saddr_t)" + src + " < " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU:
-				add_code(code,
+				add_code(
 					dst + " = (" + src + " < (unsigned) " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XORI:
-				emit_op(code, " ^ ", " ^= ", tinfo, instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
+				emit_op(" ^ ", " ^= ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				break;
 			case 0x5: // SRLI / SRAI:
 				if (LIKELY(!instr.Itype.is_srai())) {
-					emit_op(code, " >> ", " >>= ", tinfo, instr.Itype.rd, instr.Itype.rs1,
+					emit_op(" >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
 				} else if (instr.Itype.is_rori()) {
 					// RORI: Rotate right immediate
-					add_code(code,
+					add_code(
 					"{const unsigned shift = " + from_imm(instr.Itype.imm & (XLEN-1)) + ";\n",
 						dst + " = (" + src + " >> shift) | (" + src + " << (XLEN - shift)); }"
 					);
 				} else { // SRAI: preserve the sign bit
-					add_code(code,
+					add_code(
 						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
 				}
 				break;
 			case 0x6: // ORI
-				add_code(code,
+				add_code(
 					dst + " = " + src + " | " + from_imm(instr.Itype.signed_imm()) + ";");
 				break;
 			case 0x7: // ANDI
-				add_code(code,
+				add_code(
 					dst + " = " + src + " & " + from_imm(instr.Itype.signed_imm()) + ";");
 				break;
 			}
@@ -348,162 +438,162 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD
-				emit_op(code, " + ", " += ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(tinfo, instr.Rtype.rs2));
+				emit_op(" + ", " += ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			case 0x200: // SUB
-				emit_op(code, " - ", " -= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(tinfo, instr.Rtype.rs2));
+				emit_op(" - ", " -= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			case 0x1: // SLL
-				add_code(code,
-					to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " << (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+				add_code(
+					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x2: // SLT
-				add_code(code,
-					to_reg(tinfo, instr.Rtype.rd) + " = ((saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " < (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
+				add_code(
+					to_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " < (saddr_t)" + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x3: // SLTU
-				add_code(code,
-					to_reg(tinfo, instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " < " + from_reg(tinfo, instr.Rtype.rs2) + ") ? 1 : 0;");
+				add_code(
+					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " < " + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XOR
 				if (instr.Rtype.funct7 == 0x0) {
-					emit_op(code, " ^ ", " ^= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, from_reg(tinfo, instr.Rtype.rs2));
+					emit_op(" ^ ", " ^= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				} else if (instr.Rtype.funct7 == 0x4) {
 					// ZEXT.H: Zero-extend 16-bit
-					add_code(code,
-						to_reg(tinfo, instr.Rtype.rd) + " = uint16_t(" + from_reg(tinfo, instr.Rtype.rs1) + ");");
+					add_code(
+						to_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(instr.Rtype.rs1) + ");");
 				}
 				break;
 			case 0x5: // SRL / ROR
 				if (instr.Itype.high_bits() == 0x0) {
-					add_code(code,
-						to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+					add_code(
+						to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1));");
 				}
 				else if (instr.Itype.is_rori()) {
 					// ROR: Rotate right
-					add_code(code,
-					"{const unsigned shift = " + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1);\n",
-						to_reg(tinfo, instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " >> shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " << (XLEN - shift)); }"
+					add_code(
+					"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
+						to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (XLEN - shift)); }"
 					);
 				}
 				break;
 			case 0x205: // SRA
-				add_code(code,
-					to_reg(tinfo, instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " >> (" + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1));");
+				add_code(
+					to_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x6: // OR
-				emit_op(code, " | ", " |= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, to_reg(tinfo, instr.Rtype.rs2));
+				emit_op(" | ", " |= ", instr.Rtype.rd, instr.Rtype.rs1, to_reg(instr.Rtype.rs2));
 				break;
 			case 0x7: // AND
-				emit_op(code, " & ", " &= ", tinfo, instr.Rtype.rd, instr.Rtype.rs1, to_reg(tinfo, instr.Rtype.rs2));
+				emit_op(" & ", " &= ", instr.Rtype.rd, instr.Rtype.rs1, to_reg(instr.Rtype.rs2));
 				break;
 			// extension RV32M / RV64M
 			case 0x10: // MUL
-				add_code(code,
-					to_reg(tinfo, instr.Rtype.rd) + " = (saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";");
+				add_code(
+					to_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(instr.Rtype.rs1) + " * (saddr_t)" + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x11: // MULH (signed x signed)
-				add_code(code,
+				add_code(
 					(W == 4) ?
-					to_reg(tinfo, instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
+					to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
+					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
-				add_code(code,
+				add_code(
 					(W == 4) ?
-					to_reg(tinfo, instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
+					to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
+					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x13: // MULHU (unsigned x unsigned)
-				add_code(code,
+				add_code(
 					(W == 4) ?
-					to_reg(tinfo, instr.Rtype.rd) + " = ((uint64_t) " + from_reg(tinfo, instr.Rtype.rs1) + " * (uint64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(tinfo, instr.Rtype.rd) + ", " + from_reg(tinfo, instr.Rtype.rs1) + ", " + from_reg(tinfo, instr.Rtype.rs2) + ");"
+					to_reg(instr.Rtype.rd) + " = ((uint64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
+					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x14: // DIV
 				// division by zero is not an exception
 				if constexpr (W == 8) {
-					add_code(code,
-						"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
-						"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(tinfo, instr.Rtype.rs2) + " == -1ull)))"
-						"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int64_t)" + from_reg(tinfo, instr.Rtype.rs1) + " / (int64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
+					add_code(
+						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))"
+						"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				} else {
-					add_code(code,
-						"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
-						"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == 2147483648 && " + from_reg(tinfo, instr.Rtype.rs2) + " == 4294967295)))",
-						"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int32_t)" + from_reg(tinfo, instr.Rtype.rs1) + " / (int32_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
+					add_code(
+						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
+						"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				}
 				break;
 			case 0x15: // DIVU
-				add_code(code,
-					"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0))",
-					to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " / " + from_reg(tinfo, instr.Rtype.rs2) + ";"
+				add_code(
+					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
+					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " / " + from_reg(instr.Rtype.rs2) + ";"
 				);
 				break;
 			case 0x16: // REM
 				if constexpr (W == 8) {
-					add_code(code,
-					"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
-					"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(tinfo, instr.Rtype.rs2) + " == -1ull)))",
-					"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int64_t)" + from_reg(tinfo, instr.Rtype.rs1) + " % (int64_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
+					add_code(
+					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))",
+					"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " % (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
 					"}");
 				} else {
-					add_code(code,
-					"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0)) {",
-					"	if (LIKELY(!(" + from_reg(tinfo, instr.Rtype.rs1) + " == 2147483648 && " + from_reg(tinfo, instr.Rtype.rs2) + " == 4294967295)))",
-					"		" + from_reg(tinfo, instr.Rtype.rd) + " = (int32_t)" + from_reg(tinfo, instr.Rtype.rs1) + " % (int32_t)" + from_reg(tinfo, instr.Rtype.rs2) + ";",
+					add_code(
+					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
+					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
+					"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " % (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
 					"}");
 				}
 				break;
 			case 0x17: // REMU
-				add_code(code,
-				"if (LIKELY(" + from_reg(tinfo, instr.Rtype.rs2) + " != 0))",
-					to_reg(tinfo, instr.Rtype.rd) + " = " + from_reg(tinfo, instr.Rtype.rs1) + " % " + from_reg(tinfo, instr.Rtype.rs2) + ";"
+				add_code(
+				"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
+					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " % " + from_reg(instr.Rtype.rs2) + ";"
 				);
 				break;
 			case 0x102: // SH1ADD
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = " + to_reg(tinfo, instr.Rtype.rs2) + " + (" + to_reg(tinfo, instr.Rtype.rs1) + " << 1);");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 1);");
 				break;
 			case 0x104: // SH2ADD
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = " + to_reg(tinfo, instr.Rtype.rs2) + " + (" + to_reg(tinfo, instr.Rtype.rs1) + " << 2);");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 2);");
 				break;
 			case 0x106: // SH3ADD
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = " + to_reg(tinfo, instr.Rtype.rs2) + " + (" + to_reg(tinfo, instr.Rtype.rs1) + " << 3);");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 3);");
 				break;
 			case 0x204: // XNOR
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = ~(" + to_reg(tinfo, instr.Rtype.rs1) + " ^ " + to_reg(tinfo, instr.Rtype.rs2) + ");");
+				add_code(to_reg(instr.Rtype.rd) + " = ~(" + to_reg(instr.Rtype.rs1) + " ^ " + to_reg(instr.Rtype.rs2) + ");");
 				break;
 			case 0x206: // ORN
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " | ~" + to_reg(tinfo, instr.Rtype.rs2) + ");");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " | ~" + to_reg(instr.Rtype.rs2) + ");");
 				break;
 			case 0x207: // ANDN
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " & ~" + to_reg(tinfo, instr.Rtype.rs2) + ");");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " & ~" + to_reg(instr.Rtype.rs2) + ");");
 				break;
 			case 0x54: // MIN
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = ((saddr_t)" + to_reg(tinfo, instr.Rtype.rs1) + " < (saddr_t)" + to_reg(tinfo, instr.Rtype.rs2) + ") "
-					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + to_reg(instr.Rtype.rs1) + " < (saddr_t)" + to_reg(instr.Rtype.rs2) + ") "
+					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x55: // MINU
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " < " + to_reg(tinfo, instr.Rtype.rs2) + ") "
-					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " < " + to_reg(instr.Rtype.rs2) + ") "
+					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x56: // MAX
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = ((saddr_t)" + to_reg(tinfo, instr.Rtype.rs1) + " > (saddr_t)" + to_reg(tinfo, instr.Rtype.rs2) + ") "
-					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + to_reg(instr.Rtype.rs1) + " > (saddr_t)" + to_reg(instr.Rtype.rs2) + ") "
+					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x57: // MAXU
-				add_code(code, to_reg(tinfo, instr.Rtype.rd) + " = (" + to_reg(tinfo, instr.Rtype.rs1) + " > " + to_reg(tinfo, instr.Rtype.rs2) + ") "
-					" ? " + to_reg(tinfo, instr.Rtype.rs1) + " : " + to_reg(tinfo, instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " > " + to_reg(instr.Rtype.rs2) + ") "
+					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x301: // ROL
-				add_code(code,
-				"{const unsigned shift = " + from_reg(tinfo, instr.Rtype.rs2) + " & (XLEN-1);\n",
-					to_reg(tinfo, instr.Rtype.rd) + " = (" + from_reg(tinfo, instr.Rtype.rs1) + " << shift) | (" + from_reg(tinfo, instr.Rtype.rs1) + " >> (XLEN - shift)); }"
+				add_code(
+				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
+					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> (XLEN - shift)); }"
 				);
 				break;
 			default:
@@ -515,14 +605,14 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV32I_LUI:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
-			add_code(code,
-				to_reg(tinfo, instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
+			add_code(
+				to_reg(instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_AUIPC:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
-			add_code(code,
-				to_reg(tinfo, instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
+			add_code(
+				to_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
 			break;
 		case RV32I_FENCE:
 			break;
@@ -531,19 +621,25 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 				if (instr.Itype.imm == 0) {
 					code += "cpu->pc = " + PCRELS(0) + "; "
 							"*cur_insn = c;\n";
-					code += "if (UNLIKELY(api.syscall(cpu, " + from_reg(tinfo, REG_ECALL) + ")))\n"
-					       "  return;\n";
+					const auto syscall_reg = from_reg(REG_ECALL);
+					this->restore_syscall_registers();
+					code += "if (UNLIKELY(api.syscall(cpu, " + syscall_reg + "))) {\nreturn;}\n";
 					code += "local_max_insn = *max_insn;\n";
+					// Restore A0
+					this->invalidate_register(REG_ARG0);
+					this->potentially_reload_register(REG_ARG0);
 					break;
 				} if (instr.Itype.imm == 1) {
 					code += "cpu->pc = " + PCRELS(0) + "; "
 							"*cur_insn = c;\n";
-					code += "api.ebreak(cpu);\nreturn;\n";
+					code += "api.ebreak(cpu);\n";
+					exit_function();
 					break;
 				} if (instr.Itype.imm == 261) {
 					code += "cpu->pc = " + PCRELS(0) + "; "
 							"*cur_insn = c;\n";
-					code += "api.stop(cpu);\nreturn;\n";
+					code += "api.stop(cpu);\n";
+					exit_function();
 					break;
 				} else {
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
@@ -555,21 +651,21 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
 				break;
-			const auto dst = to_reg(tinfo, instr.Itype.rd);
-			const auto src = "(uint32_t)" + from_reg(tinfo, instr.Itype.rs1);
+			const auto dst = to_reg(instr.Itype.rd);
+			const auto src = "(uint32_t)" + from_reg(instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0:
 				// ADDIW: Add sign-extended 12-bit immediate
-				add_code(code, dst + " = " + SIGNEXTW + " (" + src + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				add_code(dst + " = " + SIGNEXTW + " (" + src + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			case 0x1: // SLLIW:
-				add_code(code, dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
+				add_code(dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
 				break;
 			case 0x5: // SRLIW / SRAIW:
 				if (LIKELY(!instr.Itype.is_srai())) {
-					add_code(code, dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
+					add_code(dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
 				} else { // SRAIW: preserve the sign bit
-					add_code(code,
+					add_code(
 						dst + " = (int32_t)" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ";");
 				}
 				break;
@@ -580,67 +676,67 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 		case RV64I_OP32: {
 			if (UNLIKELY(instr.Rtype.rd == 0))
 				break;
-			const auto dst = to_reg(tinfo, instr.Rtype.rd);
-			const auto src1 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs1);
-			const auto src2 = "(uint32_t)" + from_reg(tinfo, instr.Rtype.rs2);
+			const auto dst = to_reg(instr.Rtype.rd);
+			const auto src1 = "(uint32_t)" + from_reg(instr.Rtype.rs1);
+			const auto src2 = "(uint32_t)" + from_reg(instr.Rtype.rs2);
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADDW
-				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " + " + src2 + ");");
+				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " + " + src2 + ");");
 				break;
 			case 0x200: // SUBW
-				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " - " + src2 + ");");
+				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " - " + src2 + ");");
 				break;
 			case 0x1: // SLLW
-				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " << (" + src2 + " & 0x1F));");
+				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " << (" + src2 + " & 0x1F));");
 				break;
 			case 0x5: // SRLW
-				add_code(code, dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
+				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
 				break;
 			case 0x205: // SRAW
-				add_code(code, dst + " = (int32_t)" + src1 + " >> (" + src2 + " & 31);");
+				add_code(dst + " = (int32_t)" + src1 + " >> (" + src2 + " & 31);");
 				break;
 			// M-extension
 			case 0x10: // MULW
-				add_code(code, dst + " = " + SIGNEXTW + "(" + src1 + " * " + src2 + ");");
+				add_code(dst + " = " + SIGNEXTW + "(" + src1 + " * " + src2 + ");");
 				break;
 			case 0x14: // DIVW
 				// division by zero is not an exception
-				add_code(code,
+				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
 				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
 				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " / (int32_t)" + src2 + ");");
 				break;
 			case 0x15: // DIVUW
-				add_code(code,
+				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
 				dst + " = " + SIGNEXTW + " (" + src1 + " / " + src2 + ");");
 				break;
 			case 0x16: // REMW
-				add_code(code,
+				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
 				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
 				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " % (int32_t)" + src2 + ");");
 				break;
 			case 0x17: // REMUW
-				add_code(code,
+				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
 				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
 				break;
 			case 0x40: // ADD.UW
-				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + " + src1 + ";");
+				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + " + src1 + ";");
 				break;
 			case 0x44: // ZEXT.H (imm=0x40):
-				add_code(code, dst + " = (uint16_t)(" + src1 + ");");
+				add_code(dst + " = (uint16_t)(" + src1 + ");");
 				break;
 			case 0x102: // SH1ADD.UW
-				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + (" + src1 + " << 1);");
+				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + (" + src1 + " << 1);");
 				break;
 			case 0x104: // SH2ADD.UW
-				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + (" + src1 + " << 2);");
+				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + (" + src1 + " << 2);");
 				break;
 			case 0x106: // SH3ADD.UW
-				add_code(code, dst + " = " + from_reg(tinfo, instr.Rtype.rs2) + " + (" + src1 + " << 3);");
+				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + (" + src1 + " << 3);");
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -648,13 +744,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			} break;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi{instr};
-			const auto addr = from_reg(tinfo, fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
+			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
-				code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", api.mem_ld32(cpu, " + addr + "));\n";
+				code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint32_t>("uint32_t", addr) + ");\n";
 				break;
 			case 0x3: // FLD
-				code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", api.mem_ld64(cpu, " + addr + "));\n";
+				code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint64_t>("uint64_t", addr) + ");\n";
 				break;
 			default:
 				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
@@ -663,13 +759,13 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			} break;
 		case RV32F_STORE: {
 			const rv32f_instruction fi{instr};
-			const auto addr = from_reg(tinfo, fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
+			const auto addr = from_reg(fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FSW
-				code += "api.mem_st32(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i32[0]);\n";
+				this->memory_store("int32_t", addr, from_fpreg(fi.Stype.rs2) + ".i32[0]");
 				break;
 			case 0x3: // FSD
-				code += "api.mem_st64(cpu, " + addr + ", " + from_fpreg(fi.Stype.rs2) + ".i64);\n";
+				this->memory_store("int64_t", addr, from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
 			default:
 				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
@@ -707,22 +803,22 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 					ILLEGAL_AND_EXIT();
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FLE.S
-					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x1: // FLT.S
-					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x2: // FEQ.S
-					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f32[0] == " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] == " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x10: // FLE.D
-					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f64 <= " + rs2 + ".f64) ? 1 : 0;\n";
+					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f64 <= " + rs2 + ".f64) ? 1 : 0;\n";
 					break;
 				case 0x11: // FLT.D
-					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f64 < " + rs2 + ".f64) ? 1 : 0;\n";
+					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f64 < " + rs2 + ".f64) ? 1 : 0;\n";
 					break;
 				case 0x12: // FEQ.D
-					code += to_reg(tinfo, fi.R4type.rd) + " = (" + rs1 + ".f64 == " + rs2 + ".f64) ? 1 : 0;\n";
+					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f64 == " + rs2 + ".f64) ? 1 : 0;\n";
 					break;
 				default:
 					ILLEGAL_AND_EXIT();
@@ -803,9 +899,9 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case RV32F__FCVT_SD_W: {
 				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddr_t)" : "");
 				if (fi.R4type.funct2 == 0x0) {
-					code += "set_fl(&" + dst + ", " + sign + from_reg(tinfo, fi.R4type.rs1) + ");\n";
+					code += "set_fl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
 				} else if (fi.R4type.funct2 == 0x1) {
-					code += "set_dbl(&" + dst + ", " + sign + from_reg(tinfo, fi.R4type.rs1) + ");\n";
+					code += "set_dbl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
@@ -813,27 +909,27 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 			case RV32F__FCVT_W_SD: {
 				const std::string sign((fi.R4type.rs2 == 0x0) ? "(int32_t)" : "(uint32_t)");
 				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
-					code += to_reg(tinfo, fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
+					code += to_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
 				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
-					code += to_reg(tinfo, fi.R4type.rd) + " = " + sign + rs1 + ".f64;\n";
+					code += to_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f64;\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				}
 				} break;
 			case RV32F__FMV_W_X:
 				if (fi.R4type.funct2 == 0x0) {
-					code += "load_fl(&" + dst + ", " + from_reg(tinfo, fi.R4type.rs1) + ");\n";
+					code += "load_fl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
 				} else if (W == 8 && fi.R4type.funct2 == 0x1) {
-					code += "load_dbl(&" + dst + ", " + from_reg(tinfo, fi.R4type.rs1) + ");\n";
+					code += "load_dbl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
 				} else {
 					ILLEGAL_AND_EXIT();
 				} break;
 			case RV32F__FMV_X_W:
 				if (fi.R4type.funct3 == 0x0) {
 					if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
-						code += to_reg(tinfo, fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
+						code += to_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
 					} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
-						code += to_reg(tinfo, fi.R4type.rd) + " = " + rs1 + ".i64;\n";
+						code += to_reg(fi.R4type.rd) + " = " + rs1 + ".i64;\n";
 					} else {
 						ILLEGAL_AND_EXIT();
 					}
@@ -856,8 +952,29 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 	// If the function ends with an unimplemented instruction,
 	// we must gracefully finish, setting new PC and incrementing IC
 	code += "cpu->pc += " + std::to_string((tinfo.len-1) * 4) + ";\n"
-			"*cur_insn = c + " + std::to_string(tinfo.len-1) + ";\n"
-			"}\n";
+			"*cur_insn = c + " + std::to_string(tinfo.len-1) + ";\n";
+	exit_function(true);
+}
+
+template <int W>
+void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
+{
+	Emitter<W> e(func, ip, tinfo);
+	e.emit();
+
+	// Function header
+	code += "extern void " + func + "(CPU* cpu) {\n"
+		"uint64_t c = *cur_insn, local_max_insn = *max_insn;\n";
+
+	// Function GPRs
+	for (size_t reg = 1; reg < 32; reg++) {
+		if (e.get_gpr_exists()[reg]) {
+			code += "addr_t " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];\n";
+		}
+	}
+
+	// Function code
+	code += e.get_code();
 }
 
 template void CPU<4>::emit(std::string&, const std::string&, TransInstr<4>*, const TransInfo<4>&) const;
