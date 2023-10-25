@@ -6,6 +6,7 @@ namespace riscv {
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #define ILLEGAL_OPCODE  0
+#define MISALIGNED_INSTRUCTION 4
 
 #if RISCV_TRANSLATION_DYLIB == 4
 	typedef uint32_t addr_t;
@@ -56,26 +57,37 @@ typedef struct {
 	fp64reg fr[32];
 } CPU;
 
-#define PUREFUNC /*__attribute__((pure))*/
-#define VERYALIGNED(x) __builtin_assume_aligned(x, 64)
+#define PUREFUNC __attribute__((pure))
+#define VERYALIGNED(x) __builtin_assume_aligned(x, 32)
 #define PAGENO(x) ((addr_t)(x) >> 12)
 #define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
 
+typedef PUREFUNC const char* (*mem_ld_t) (const CPU*, addr_t);
+typedef PUREFUNC char* (*mem_st_t) (const CPU*, addr_t);
+
 static struct CallbackTable {
-	const char* (*mem_ld)(const CPU*, addr_t) PUREFUNC;
-	char* (*mem_st) (const CPU*, addr_t) PUREFUNC;
-	void (*jump)(const CPU*, addr_t);
+	mem_ld_t mem_ld;
+	mem_st_t mem_st;
 	int  (*syscall)(CPU*, addr_t);
-	void (*stop)(CPU*) PUREFUNC;
-	void (*ebreak)(CPU*) PUREFUNC;
+	void (*ebreak)(CPU*);
 	void (*system)(CPU*, uint32_t);
 	void (*execute)(CPU*, uint32_t);
-	void (*exception)(CPU*, int);
-	float  (*sqrtf32)(float) PUREFUNC;
-	double (*sqrtf64)(double) PUREFUNC;
+	void (*exception) (CPU*, int);
+	float  (*sqrtf32)(float);
+	double (*sqrtf64)(double);
 } api;
+static char* arena_base;
 static uint64_t* cur_insn;
 static uint64_t* max_insn;
+
+static inline void jump(CPU* cpu, addr_t addr) {
+	if (__builtin_expect((addr & 0x3) == 0, 1)) {
+		cpu->pc = addr;
+	} else {
+		api.exception(cpu, MISALIGNED_INSTRUCTION);
+		__builtin_unreachable();
+	}
+}
 
 // https://stackoverflow.com/questions/28868367/getting-the-high-part-of-64-bit-integer-multiplication
 // As written by catid
@@ -99,8 +111,10 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern void init(struct CallbackTable* table, uint64_t* cur_icount, uint64_t* max_icount) {
+extern void init(struct CallbackTable* table, char* abase, uint64_t* cur_icount, uint64_t* max_icount)
+{
 	api = *table;
+	arena_base = abase;
 	cur_insn = cur_icount;
 	max_insn = max_icount;
 };

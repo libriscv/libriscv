@@ -7,7 +7,7 @@
 #define PCRELA(x) ((address_t) (tinfo.basepc + index() * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define INSTRUCTION_COUNT(i) ("c + " + std::to_string(i))
-#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nreturn;\n"; }
+#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n__builtin_unreachable();\n"; }
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "c < local_max_insn";
@@ -24,8 +24,8 @@ struct Emitter
 	static constexpr bool CACHED_REGISTERS = false;
 	using address_t = address_type<W>;
 
-	Emitter(const std::string& pfunc, const TransInstr<W>* pip, const TransInfo<W>& ptinfo)
-		: func(pfunc), ip(pip), tinfo(ptinfo) {}
+	Emitter(CPU<W>& c, const std::string& pfunc, const TransInstr<W>* pip, const TransInfo<W>& ptinfo)
+		: cpu(c), func(pfunc), ip(pip), tinfo(ptinfo) {}
 
 	template <typename ... Args>
 	void add_code(Args&& ... addendum) {
@@ -145,21 +145,45 @@ struct Emitter
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
 
 	template <typename T>
-	std::string memory_load(std::string type, std::string address)
+	std::string memory_load(std::string type, int reg, int32_t imm)
 	{
-		std::string data = "rpage" + PCRELS(0);
-		add_code("const char* " + data + " = VERYALIGNED(api.mem_ld(cpu, PAGENO(" + address + ")));");
+		const std::string data = "rpage" + PCRELS(0);
 		std::string cast;
 		if constexpr (std::is_signed_v<T>) {
 			cast = "(saddr_t)";
 		}
+
+		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_memory_arena())
+		{
+			/* XXX: Check page permissions */
+			const address_t absolute_vaddr = tinfo.gp + imm;
+			if (absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
+				add_code("const char* " + data + " = &arena_base[" + std::to_string(absolute_vaddr) + "];");
+			}
+			return cast + "*(" + type + "*)" + data;
+		}
+
+		const auto address = from_reg(reg) + " + " + from_imm(imm);
+		add_code("const char* " + data + " = VERYALIGNED(api.mem_ld(cpu, PAGENO(" + address + ")));");
 		return cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")]";
 	}
-	void memory_store(std::string type, std::string address, std::string value)
+	void memory_store(std::string type, int reg, int32_t imm, std::string value)
 	{
-		std::string data = "wpage" + PCRELS(0);
-		add_code("char* " + data + " = VERYALIGNED(api.mem_st(cpu, PAGENO(" + address + ")));");
+		const std::string data = "wpage" + PCRELS(0);
 
+		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_memory_arena())
+		{
+			/* XXX: Check page permissions */
+			const address_t absolute_vaddr = tinfo.gp + imm;
+			if (absolute_vaddr + 8 <= this->cpu.machine().memory.memory_arena_size()) {
+				add_code("char* " + data + " = &arena_base[" + std::to_string(absolute_vaddr) + "];");
+			}
+			add_code("*(" + type + "*)" + data + " = " + value + ";");
+			return;
+		}
+
+		const auto address = from_reg(reg) + " + " + from_imm(imm);
+		add_code("char* " + data + " = VERYALIGNED(api.mem_st(cpu, PAGENO(" + address + ")));");
 		add_code(
 			"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
 		);
@@ -171,6 +195,7 @@ struct Emitter
 
 private:
 	std::string code;
+	CPU<W>& cpu;
 	size_t m_idx = 0;
 	address_t m_pc = 0x0;
 	rv32i_instruction instr;
@@ -245,46 +270,46 @@ void Emitter<W>::emit()
 			if (instr.Itype.rd != 0) {
 			switch (instr.Itype.funct3) {
 			case 0x0: // I8
-				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int8_t>("int8_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int8_t>("int8_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 				break;
 			case 0x1: // I16
-				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int16_t>("int16_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int16_t>("int16_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 				break;
 			case 0x2: // I32
-				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int32_t>("int32_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int32_t>("int32_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 				break;
 			case 0x3: // I64
-				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int64_t>("int64_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<int64_t>("int64_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 				break;
 			case 0x4: // U8
-				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint8_t>("uint8_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint8_t>("uint8_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 				break;
 			case 0x5: // U16
-				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint16_t>("uint16_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint16_t>("uint16_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 				break;
 			case 0x6: // U32
-				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint32_t>("uint32_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code(from_reg(instr.Itype.rd) + " = " + this->memory_load<uint32_t>("uint32_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
 			}
 			} else {
 				// We don't care about where we are in the page when rd=0
-				add_code("(void)" + this->memory_load<int8_t>("int8_t", from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm())) + ";");
+				add_code("(void)" + this->memory_load<int8_t>("int8_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
 			} break;
 		case RV32I_STORE:
 			switch (instr.Stype.funct3) {
 			case 0x0: // I8
-				this->memory_store("int8_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
+				this->memory_store("int8_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			case 0x1: // I16
-				this->memory_store("int16_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
+				this->memory_store("int16_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			case 0x2: // I32
-				this->memory_store("int32_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
+				this->memory_store("int32_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			case 0x3: // I64
-				this->memory_store("int64_t", from_reg(instr.Stype.rs1) + " + " + from_imm(instr.Stype.signed_imm()), from_reg(instr.Stype.rs2));
+				this->memory_store("int64_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
@@ -340,7 +365,7 @@ void Emitter<W>::emit()
 			}
 			add_code(
 				"*cur_insn = c + " + std::to_string(i) + ";\n"
-				"api.jump(cpu, jrs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }");
+				"jump(cpu, jrs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }");
 			exit_function(true);
 			} return;
 		case RV32I_JAL: {
@@ -359,13 +384,13 @@ void Emitter<W>::emit()
 				// if we run out of instructions, we must exit:
 				add_code(
 					"*cur_insn = c;\n"
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
+					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
 				exit_function();
 			} else {
 				// Because of forward jumps we can't end the function here
 				add_code(
 					"*cur_insn = c + " + std::to_string(i) + ";\n"
-					"api.jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
+					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
 				exit_function();
 			} } break;
 		case RV32I_OP_IMM: {
@@ -638,7 +663,7 @@ void Emitter<W>::emit()
 				} if (instr.Itype.imm == 261) {
 					code += "cpu->pc = " + PCRELS(0) + "; "
 							"*cur_insn = c;\n";
-					code += "api.stop(cpu);\n";
+					code += "*max_insn = 0;\n";
 					exit_function();
 					break;
 				} else {
@@ -744,13 +769,12 @@ void Emitter<W>::emit()
 			} break;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi{instr};
-			const auto addr = from_reg(fi.Itype.rs1) + " + " + from_imm(fi.Itype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
-				code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint32_t>("uint32_t", addr) + ");\n";
+				code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint32_t>("uint32_t", fi.Itype.rs1, fi.Itype.signed_imm()) + ");\n";
 				break;
 			case 0x3: // FLD
-				code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint64_t>("uint64_t", addr) + ");\n";
+				code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint64_t>("uint64_t", fi.Itype.rs1, fi.Itype.signed_imm()) + ");\n";
 				break;
 			default:
 				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
@@ -759,13 +783,12 @@ void Emitter<W>::emit()
 			} break;
 		case RV32F_STORE: {
 			const rv32f_instruction fi{instr};
-			const auto addr = from_reg(fi.Stype.rs1) + " + " + from_imm(fi.Stype.signed_imm());
 			switch (fi.Itype.funct3) {
 			case 0x2: // FSW
-				this->memory_store("int32_t", addr, from_fpreg(fi.Stype.rs2) + ".i32[0]");
+				this->memory_store("int32_t", fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i32[0]");
 				break;
 			case 0x3: // FSD
-				this->memory_store("int64_t", addr, from_fpreg(fi.Stype.rs2) + ".i64");
+				this->memory_store("int64_t", fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
 			default:
 				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
@@ -959,7 +982,7 @@ void Emitter<W>::emit()
 template <int W>
 void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
 {
-	Emitter<W> e(func, ip, tinfo);
+	Emitter<W> e(const_cast<CPU<W>&>(*this), func, ip, tinfo);
 	e.emit();
 
 	// Function header

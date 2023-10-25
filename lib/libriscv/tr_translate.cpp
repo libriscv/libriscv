@@ -321,16 +321,13 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		return;
 	}
 
-	auto func = (void (*)(const CallbackTable<W>&, uint64_t*, uint64_t*)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&, void*, uint64_t*, uint64_t*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
 			return cpu.machine().memory.cached_readable_page(addr << 12, 1).buffer8.data();
 		},
 		.mem_write = [] (CPU<W>& cpu, address_type<W> addr) -> void* {
 			return cpu.machine().memory.cached_writable_page(addr << 12).buffer8.data();
-		},
-		.jump = [] (CPU<W>& cpu, address_type<W> addr) {
-			cpu.jump(addr);
 		},
 		.syscall = [] (CPU<W>& cpu, address_type<W> n) -> int {
 			auto old_pc = cpu.pc();
@@ -342,9 +339,6 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 			}
 			// otherwise, update instruction counter and exit
 			return 1;
-		},
-		.stop = [] (CPU<W>& cpu) {
-			cpu.machine().stop();
 		},
 		.ebreak = [] (CPU<W>& cpu) {
 			cpu.machine().ebreak();
@@ -366,6 +360,7 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 			return std::sqrt(d);
 		},
 	},
+	m_machine.memory.memory_arena_ptr(),
 	&m_machine.get_counters().first,
 	&m_machine.get_counters().second);
 

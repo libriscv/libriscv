@@ -171,6 +171,10 @@ namespace riscv
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 
+		bool uses_memory_arena() const noexcept { return this->m_arena != nullptr; }
+		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena; }
+		address_t memory_arena_size() const noexcept { return this->m_arena_pages * Page::size(); }
+
 		// serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;
 		// returns the machine to a previously stored state
