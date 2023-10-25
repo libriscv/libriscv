@@ -147,7 +147,7 @@ static void syscall_connect(Machine<W>& machine)
 		machine.set_result(-ENOMEM);
 		return;
 	}
-	int real_fd = -EBADFD;
+	int real_fd = -EBADF;
 
 	if (machine.has_file_descriptors() && machine.fds().permit_sockets) {
 
