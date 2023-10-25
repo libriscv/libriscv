@@ -65,7 +65,7 @@ namespace riscv
 	{
 		const rv32v_instruction vi { instr };
 		const auto addr = cpu.reg(vi.VLS.rs1);
-		if (addr % VectorLane::size() == 0) {
+		if (riscv::force_align_memory || addr % VectorLane::size() == 0) {
 			auto& rvv = cpu.registers().rvv();
 			rvv.get(vi.VLS.vd) = cpu.machine().memory.template read<VectorLane> (addr);
 		} else {
@@ -85,7 +85,7 @@ namespace riscv
 	{
 		const rv32v_instruction vi { instr };
 		const auto addr = cpu.reg(vi.VLS.rs1);
-		if (addr % VectorLane::size() == 0) {
+		if (riscv::force_align_memory || addr % VectorLane::size() == 0) {
 			auto& rvv = cpu.registers().rvv();
 			cpu.machine().memory.template write<VectorLane> (addr, rvv.get(vi.VLS.vd));
 		} else {
