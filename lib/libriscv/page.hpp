@@ -132,6 +132,18 @@ struct Page
 		attr.is_cow = false;
 		attr.non_owning = false;
 	}
+	void write_to_another(PageData* other)
+	{
+		if (this->m_page != nullptr)
+		{
+			other->buffer8 = m_page->buffer8;
+			if (attr.non_owning) m_page.release();
+		}
+		m_page.reset(other);
+		attr.write = true;
+		attr.is_cow = false;
+		attr.non_owning = true;
+	}
 
 	// Loan a page from somewhere else, that will not be
 	// deleted here. There is no ref-counting mechanism, and

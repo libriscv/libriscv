@@ -321,13 +321,29 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		return;
 	}
 
-	auto func = (void (*)(const CallbackTable<W>&, void*, uint64_t*, uint64_t*)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&, void*, uint64_t, uint64_t*, uint64_t*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
 			return cpu.machine().memory.cached_readable_page(addr << 12, 1).buffer8.data();
 		},
 		.mem_write = [] (CPU<W>& cpu, address_type<W> addr) -> void* {
 			return cpu.machine().memory.cached_writable_page(addr << 12).buffer8.data();
+		},
+		.vec_load = [] (CPU<W>& cpu, int vd, address_type<W> addr) {
+#ifdef RISCV_EXT_VECTOR
+			auto& rvv = cpu.registers().rvv();
+			rvv.get(vd) = cpu.machine().memory.template read<VectorLane> (addr);
+#else
+			(void)cpu; (void)addr; (void)vd;
+#endif
+		},
+		.vec_store = [] (CPU<W>& cpu, address_type<W> addr, int vd) {
+#ifdef RISCV_EXT_VECTOR
+			auto& rvv = cpu.registers().rvv();
+			cpu.machine().memory.template write<VectorLane> (addr, rvv.get(vd));
+#else
+			(void)cpu; (void)addr; (void)vd;
+#endif
 		},
 		.syscall = [] (CPU<W>& cpu, address_type<W> n) -> int {
 			auto old_pc = cpu.pc();
@@ -361,6 +377,7 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		},
 	},
 	m_machine.memory.memory_arena_ptr(),
+	m_machine.memory.memory_arena_size(),
 	&m_machine.get_counters().first,
 	&m_machine.get_counters().second);
 

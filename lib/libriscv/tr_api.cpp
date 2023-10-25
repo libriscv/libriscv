@@ -57,16 +57,17 @@ typedef struct {
 	fp64reg fr[32];
 } CPU;
 
-#define PUREFUNC __attribute__((pure))
 #define PAGENO(x) ((addr_t)(x) >> 12)
 #define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
 
-typedef PUREFUNC const char* (*mem_ld_t) (const CPU*, addr_t);
-typedef PUREFUNC char* (*mem_st_t) (const CPU*, addr_t);
+typedef const char* (*mem_ld_t) (const CPU*, addr_t);
+typedef char* (*mem_st_t) (const CPU*, addr_t);
 
 static struct CallbackTable {
 	mem_ld_t mem_ld;
 	mem_st_t mem_st;
+	void (*vec_load)(const CPU*, int, addr_t);
+	void (*vec_store)(const CPU*, addr_t, int);
 	int  (*syscall)(CPU*, addr_t);
 	void (*ebreak)(CPU*);
 	void (*system)(CPU*, uint32_t);
@@ -76,6 +77,7 @@ static struct CallbackTable {
 	double (*sqrtf64)(double);
 } api;
 static char* arena_base;
+static addr_t arena_size;
 static uint64_t* cur_insn;
 static uint64_t* max_insn;
 
@@ -110,10 +112,11 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern void init(struct CallbackTable* table, char* abase, uint64_t* cur_icount, uint64_t* max_icount)
+extern void init(struct CallbackTable* table, char* abase, uint64_t asize, uint64_t* cur_icount, uint64_t* max_icount)
 {
 	api = *table;
 	arena_base = abase;
+	arena_size = asize;
 	cur_insn = cur_icount;
 	max_insn = max_icount;
 };

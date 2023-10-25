@@ -184,11 +184,13 @@ namespace riscv
 			}
 		}
 
-		if (attr.read && !attr.write && m_ropages.end == 0) {
-			// If the serialization fails, we will fallback to memcpy
-			// with set_page_attr, like normal.
-			if (serialize_pages(m_ropages, hdr->p_vaddr, src, len, attr))
-				return;
+		if constexpr (!riscv::binary_translation_enabled) {
+			if (attr.read && !attr.write && m_ropages.end == 0) {
+				// If the serialization fails, we will fallback to memcpy
+				// with set_page_attr, like normal.
+				if (serialize_pages(m_ropages, hdr->p_vaddr, src, len, attr))
+					return;
+			}
 		}
 
 		// Load into virtual memory

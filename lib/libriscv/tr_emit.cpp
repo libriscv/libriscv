@@ -3,6 +3,9 @@
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include "tr_types.hpp"
+#ifdef RISCV_EXT_VECTOR
+#include "rvv.hpp"
+#endif
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + index() * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
@@ -164,7 +167,16 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		add_code("const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));");
+		if (cpu.machine().memory.uses_memory_arena()) {
+			add_code(
+				"const char* " + data + ";",
+				"if (" + address + " < arena_size)",
+				data + " = &arena_base[(" + address + ") & ~0xFFFLL];",
+				"else",
+				data + " = api.mem_ld(cpu, PAGENO(" + address + "));");
+		} else {
+			add_code("const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));");
+		}
 		return cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")]";
 	}
 	void memory_store(std::string type, int reg, int32_t imm, std::string value)
@@ -183,7 +195,16 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		add_code("char* " + data + " = api.mem_st(cpu, PAGENO(" + address + "));");
+		if (cpu.machine().memory.uses_memory_arena()) {
+			add_code(
+				"char* " + data + ";",
+				"if (" + address + " < arena_size)",
+				data + " = &arena_base[(" + address + ") & ~0xFFFLL];",
+				"else",
+				data + " = api.mem_st(cpu, PAGENO(" + address + "));");
+		} else {
+			add_code("char* " + data + " = api.mem_st(cpu, PAGENO(" + address + "));");
+		}
 		add_code(
 			"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
 		);
@@ -776,6 +797,13 @@ void Emitter<W>::emit()
 			case 0x3: // FLD
 				code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint64_t>("uint64_t", fi.Itype.rs1, fi.Itype.signed_imm()) + ");\n";
 				break;
+#ifdef RISCV_EXT_VECTOR
+			case 0x6: { // VLE32
+				const rv32v_instruction vi { instr };
+				code += "api.vec_load(cpu, " + std::to_string(vi.VLS.vd) + ", " + from_reg(vi.VLS.rs1) + ");\n";
+				break;
+			}
+#endif
 			default:
 				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 				break;
@@ -790,6 +818,13 @@ void Emitter<W>::emit()
 			case 0x3: // FSD
 				this->memory_store("int64_t", fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
+#ifdef RISCV_EXT_VECTOR
+			case 0x6: { // VSE32
+				const rv32v_instruction vi { instr };
+				code += "api.vec_store(cpu, " + from_reg(vi.VLS.rs1) + ", " + std::to_string(vi.VLS.vd) + ");\n";
+				break;
+			}
+#endif
 			default:
 				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 				break;

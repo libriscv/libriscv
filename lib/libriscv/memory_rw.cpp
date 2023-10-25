@@ -25,8 +25,10 @@ namespace riscv
 			}
 		} else {
 
-			if (UNLIKELY(m_ropages.contains(pageno))) {
-				this->protection_fault(pageno * Page::size());
+			if constexpr (!riscv::binary_translation_enabled) {
+				if (UNLIKELY(m_ropages.contains(pageno))) {
+					this->protection_fault(pageno * Page::size());
+				}
 			}
 
 			// Handler must produce a new page, or throw
@@ -66,8 +68,12 @@ namespace riscv
 	}
 
 	template <int W>
-	const Page& Memory<W>::default_page_read(const Memory<W>&, address_t)
+	const Page& Memory<W>::default_page_read(const Memory<W>& mem, address_t pageno)
 	{
+		// This is a copy-on-write zeroed area, but we must respect the underlying arena
+		if (pageno < mem.m_arena_pages) {
+			return const_cast<Memory<W>&> (mem).create_writable_pageno(pageno);
+		}
 		return Page::cow_page();
 	}
 
