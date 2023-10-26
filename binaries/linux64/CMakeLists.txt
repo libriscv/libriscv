@@ -5,10 +5,9 @@ option(MINIMAL     "Minimal build" OFF)
 option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 
-set(RISCV_ABI "-march=rv64g -mabi=lp64d")
 set(WARNINGS  "-Wall -Wextra")
 set(COMMON    "-O2")
-set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++17 ${COMMON}")
+set(CMAKE_CXX_FLAGS "${WARNINGS} -std=c++17 ${COMMON}")
 
 if (DEBUGGING)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
@@ -26,12 +25,9 @@ set(SOURCES
 	src/test_threads.cpp
 )
 
-set(BUILD_SHARED_LIBS OFF)
-set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "") # remove -rdynamic
-
 add_executable(hello_world ${SOURCES})
-target_link_libraries(hello_world pthread)
-target_link_libraries(hello_world -static -static-libgcc)
+target_link_libraries(hello_world -static pthread)
+
 # place ELF into the top binary folder
 set_target_properties(hello_world
 	PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
