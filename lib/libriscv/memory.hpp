@@ -184,16 +184,6 @@ namespace riscv
 		Memory(Machine<W>&, const Machine<W>&, MachineOptions<W>);
 		~Memory();
 	private:
-		struct MemoryArea {
-			address_t begin = 0;
-			address_t end = 0;
-			std::unique_ptr<Page[]> pages = nullptr;
-			std::unique_ptr<uint8_t[]> data = nullptr;
-			bool contains(address_t pg) const noexcept { return pg >= begin && pg < end; }
-			bool contains(address_t x1, address_t x2) const noexcept {
-				return x1 < end && x2 >= begin;
-			}
-		};
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);
@@ -231,7 +221,6 @@ namespace riscv
 		void binary_loader(const MachineOptions<W>&);
 		void binary_load_ph(const MachineOptions<W>&, const Phdr*);
 		void serialize_execute_segment(const MachineOptions<W>&, const Phdr*);
-		bool serialize_pages(MemoryArea&, address_t, const char*, size_t, PageAttributes);
 		void generate_decoder_cache(const MachineOptions<W>&, DecodedExecuteSegment<W>&);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
@@ -250,8 +239,6 @@ namespace riscv
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
 		page_readf_cb_t m_page_readf_handler = default_page_read;
-
-		MemoryArea m_ropages;
 
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;

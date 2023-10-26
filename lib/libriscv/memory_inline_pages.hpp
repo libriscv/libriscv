@@ -41,12 +41,6 @@ inline const Page& Memory<W>::get_page(const address_t address) const
 template <int W>
 inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 {
-	if constexpr (!riscv::binary_translation_enabled) {
-		if (m_ropages.contains(pageno)) {
-			return m_ropages.pages[pageno - m_ropages.begin];
-		}
-	}
-
 	auto it = m_pages.find(pageno);
 	if (LIKELY(it != m_pages.end())) {
 		return it->second;
@@ -60,12 +54,6 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const
 	auto it = m_pages.find(pageno);
 	if (LIKELY(it != m_pages.end())) {
 		return it->second;
-	}
-
-	if constexpr (!riscv::binary_translation_enabled) {
-		if (m_ropages.contains(pageno)) {
-			return m_ropages.pages[pageno - m_ropages.begin];
-		}
 	}
 
 	return m_page_readf_handler(*this, pageno);

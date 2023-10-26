@@ -3,13 +3,6 @@
 template <int W> inline
 void Memory<W>::memzero(address_t dst, size_t len)
 {
-	// Check if we are trying to memzero the custom RO area
-	const address_t p_begin = page_number(dst);
-	const address_t p_end = page_number(dst + len);
-	if (UNLIKELY(m_ropages.contains(p_begin, p_end))) {
-		this->protection_fault(dst);
-	}
-
 	while (len > 0)
 	{
 		const size_t offset = dst & (Page::size()-1); // offset within page

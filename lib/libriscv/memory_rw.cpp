@@ -24,13 +24,6 @@ namespace riscv
 				return page;
 			}
 		} else {
-
-			if constexpr (!riscv::binary_translation_enabled) {
-				if (UNLIKELY(m_ropages.contains(pageno))) {
-					this->protection_fault(pageno * Page::size());
-				}
-			}
-
 			// Handler must produce a new page, or throw
 			Page& page = m_page_fault_handler(*this, pageno, init);
 			if (LIKELY(page.attr.write)) {
