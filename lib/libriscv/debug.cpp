@@ -366,6 +366,7 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 		exec = cpu.next_execute_segment();
 	auto* exec_decoder = exec->decoder_cache();
 	auto* exec_seg_data = exec->exec_data();
+	std::unordered_map<address_t, std::string> backtrace_lookup;
 
 	// Calculate the instruction limit
 	if (imax != UINT64_MAX)
@@ -398,12 +399,17 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 			rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
 		if (this->verbose_instructions) {
 			auto string = cpu.to_string(instruction) + " ";
-			machine.memory.print_backtrace([&] (auto view) {
-				if (string.size() < 48)
-					string.resize(48, ' ');
-				string.append(view);
-			}, false);
-			string.append("\n");
+			if (string.size() < 48)
+				string.resize(48, ' ');
+
+			std::string bt = backtrace_lookup[pc];
+			if (bt.empty()) {
+				machine.memory.print_backtrace([&] (auto view) {
+					bt = view;
+				}, false);
+			}
+
+			string.append(bt + "\n");
 			machine.print(string.c_str(), string.size());
 		}
 
