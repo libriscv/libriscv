@@ -206,7 +206,6 @@ namespace riscv
 		const auto pbase = exec.pagedata_base();
 		const auto addr  = exec.exec_begin();
 		const auto len   = exec.exec_end() - exec.exec_begin();
-
 		constexpr size_t PMASK = Page::size()-1;
 		const size_t prelen  = addr - pbase;
 		const size_t midlen  = len + prelen;

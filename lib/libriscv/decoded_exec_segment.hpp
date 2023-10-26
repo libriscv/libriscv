@@ -17,7 +17,7 @@ namespace riscv
 		using address_t = address_type<W>;
 
 		bool is_within(address_t addr, size_t len = 2) const noexcept {
-			return addr >= m_vaddr_begin && addr + len <= m_vaddr_end;
+			return addr >= m_vaddr_begin && addr + len <= m_vaddr_end && addr + len > addr;
 		}
 
 		auto* exec_data(address_t pc = 0) const noexcept {
