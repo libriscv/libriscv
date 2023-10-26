@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(libriscv_unittests CXX)
 
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -O1 -ggdb3")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -O1 -ggdb3 -fsanitize=address,undefined")
+
 
 option(RISCV_MULTIPROCESS "" ON)
 add_subdirectory(../../lib lib)
