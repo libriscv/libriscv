@@ -437,6 +437,30 @@ void Emitter<W>::emit()
 					add_code(
 						dst + " = (saddr_t)(int16_t)" + src + ";");
 					break;
+				case 0b011000000000: // CLZ
+					if constexpr (W == 4)
+						add_code(
+							dst + " = " + src + " ? __builtin_clz(" + src + ") : XLEN;");
+					else
+						add_code(
+							dst + " = " + src + " ? __builtin_clzl(" + src + ") : XLEN;");
+					break;
+				case 0b011000000001: // CTZ
+					if constexpr (W == 4)
+						add_code(
+							dst + " = " + src + " ? __builtin_ctz(" + src + ") : XLEN;");
+					else
+						add_code(
+							dst + " = " + src + " ? __builtin_ctzl(" + src + ") : XLEN;");
+					break;
+				case 0b011000000010: // CPOP
+					if constexpr (W == 4)
+						add_code(
+							dst + " = __builtin_popcount(" + src + ");");
+					else
+						add_code(
+							dst + " = __builtin_popcount(" + src + ");");
+					break;
 				default:
 					emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
@@ -454,16 +478,22 @@ void Emitter<W>::emit()
 			case 0x4: // XORI:
 				emit_op(" ^ ", " ^= ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				break;
-			case 0x5: // SRLI / SRAI:
-				if (LIKELY(!instr.Itype.is_srai())) {
-					emit_op(" >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1,
-						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
-				} else if (instr.Itype.is_rori()) {
+			case 0x5: // SRLI / SRAI / ORC.B:
+				if (instr.Itype.is_rori()) {
 					// RORI: Rotate right immediate
 					add_code(
 					"{const unsigned shift = " + from_imm(instr.Itype.imm & (XLEN-1)) + ";\n",
 						dst + " = (" + src + " >> shift) | (" + src + " << (XLEN - shift)); }"
 					);
+				} else if (instr.Itype.imm == 0x287) {
+					// ORC.B: Bitwise OR-combine
+					add_code(
+						"for (unsigned i = 0; i < sizeof(addr_t); i++)",
+						"	((char *)&" + dst + ")[i] = ((char *)&" + src + ")[i] ? 0xFF : 0x0;"
+					);
+				} else if (LIKELY(!instr.Itype.is_srai())) {
+					emit_op(" >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1,
+						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
 				} else { // SRAI: preserve the sign bit
 					add_code(
 						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
@@ -736,8 +766,17 @@ void Emitter<W>::emit()
 			case 0x1: // SLLW
 				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " << (" + src2 + " & 0x1F));");
 				break;
-			case 0x5: // SRLW
-				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
+			case 0x5: // SRLW / RORW
+				if (instr.Itype.high_bits() == 0x0) {
+					add_code(dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
+				}
+				else if (instr.Itype.is_rori()) {
+					// RORW: Rotate right (32-bit)
+					add_code(
+					"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & 31;\n",
+						to_reg(instr.Rtype.rd) + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (32 - shift)); }"
+					);
+				}
 				break;
 			case 0x205: // SRAW
 				add_code(dst + " = (int32_t)" + src1 + " >> (" + src2 + " & 31);");
