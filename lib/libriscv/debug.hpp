@@ -11,6 +11,7 @@ namespace riscv
         using breakpoint_t = std::function<void(DebugMachine<W> &)>;
 
         void simulate(uint64_t max = UINT64_MAX);
+        void simulate(breakpoint_t callback, uint64_t max = UINT64_MAX);
         void print_and_pause();
 
         // Immediately block execution, print registers and current instruction.

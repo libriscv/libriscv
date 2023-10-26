@@ -358,7 +358,7 @@ union UnderAlign32
 };
 
 template<int W>
-void DebugMachine<W>::simulate(uint64_t max)
+void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, uint64_t imax)
 {
 	auto& cpu = machine.cpu;
 	auto* exec = cpu.current_execute_segment();
@@ -368,8 +368,8 @@ void DebugMachine<W>::simulate(uint64_t max)
 	auto* exec_seg_data = exec->exec_data();
 
 	// Calculate the instruction limit
-	if (max != UINT64_MAX)
-		machine.set_max_instructions(machine.instruction_counter() + max);
+	if (imax != UINT64_MAX)
+		machine.set_max_instructions(machine.instruction_counter() + imax);
 	else
 		machine.set_max_instructions(UINT64_MAX);
 
@@ -377,6 +377,10 @@ void DebugMachine<W>::simulate(uint64_t max)
 		machine.increment_counter(1)) {
 
 		this->break_checks();
+
+		// Callback that lets you break on custom conditions
+		if (callback)
+			callback(*this);
 
 		// NOTE: Break checks can change PC, full read
 		if (UNLIKELY(!exec->is_within(cpu.pc())))
@@ -430,6 +434,11 @@ void DebugMachine<W>::simulate(uint64_t max)
 
 } // DebugMachine::simulate
 
+template<int W>
+void DebugMachine<W>::simulate(uint64_t imax)
+{
+	this->simulate(nullptr, imax);
+}
 
 	template struct DebugMachine<4>;
 	template struct DebugMachine<8>;

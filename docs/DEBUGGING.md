@@ -12,7 +12,7 @@ This method is platform-independent and works everywhere, but you will want to d
 You can enable the RISCV_DEBUG CMake option if you want, but it is entirely optional. It will enable extra debugging features in the machine.
 
 ```C++
-	DebugMachine debugger { machine };
+	DebugMachine debug { machine };
 	// Print all instructions one by one
 	debug.verbose_instructions = true;
 	// Break immediately
@@ -36,17 +36,15 @@ An example of how to use the built-in CLI to step through instruction by instruc
 By simulating a single instruction using `CPU::step_one()` we can programmatically apply any conditions we want:
 
 ```C++
-DebugMachine debugger { machine };
+DebugMachine debug { machine };
 
-machine.set_max_instructions(16'000'000);
-while (!machine.stopped()) {
-    machine.cpu.step_one();
-    if (machine.cpu.reg(10) == 0x1234) debug.print_and_pause();
-}
+debug.simulate([] (auto& debug) {
+	if (debug.machine.cpu.reg(10) == 0x1234)
+		debug.print_and_pause();
+});
+
 ```
-This will step through the code until register A0 is 0x1234, then break into the debugging CLI.
-
-Setting the max instructions will prevent the machine from appearing stopped. There is always an instruction limit where the loop will end, however you can greatly increase it if you don't want to exit the loop prematurely. If an exit system call is encountered it typically calls `Machine::stop()`, which will set max instructions to 0, exiting the loop. This is not mandated behavior as the exit function is a syscall callback function, and the loop is controlled by you (the user). In short, there are many ways to stop a machine, but the default method is to just check if `instruction counter >= max instructions`.
+This will step through the code one instruction at a time until register A0 is 0x1234, then break into the debugging CLI and print location and registers.
 
 ## Debugging remotely with GDB
 
