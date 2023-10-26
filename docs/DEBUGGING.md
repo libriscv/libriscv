@@ -1,7 +1,7 @@
 Debugging with libriscv
 ================
 
-Debugging with *libriscv* can be as complex or simplistic as one wants, depending on what you have to work with. If you don't have any symbols, and you have rich knowledge of RISC-V you can step through the program instruction by instruction. This was the method used when developing the RISC-V emulator, but it's not always super helpful when debugging a normal mostly-working program in a robust emulator.
+Debugging with *libriscv* can be as complex or simplistic as one wants, depending on what you have to work with. If you don't have any symbols, and you have advanced knowledge of RISC-V you can step through the program instruction by instruction. This was the method used when developing the RISC-V emulator, but it's not always super helpful when debugging a normal mostly-working program in a robust emulator.
 
 There are three main methods to debugging. One is using the built-in debugging facilities. Another is stepping through the program yourself manually, and checking for any conditions you are interested in, using the emulators state. And the third option is connecting with GDB remotely, which is what you are after if you are just debugging a normal program. Importantly, GDB gives you good introspection of the environment when using any modern language with debuginfo support.
 
@@ -36,13 +36,15 @@ An example of how to use the built-in CLI to step through instruction by instruc
 By simulating a single instruction using `CPU::step_one()` we can programmatically apply any conditions we want:
 
 ```C++
+DebugMachine debugger { machine };
+
 machine.set_max_instructions(16'000'000);
 while (!machine.stopped()) {
     machine.cpu.step_one();
-    if (machine.cpu.reg(10) == 0x1234) machine.print_and_pause();
+    if (machine.cpu.reg(10) == 0x1234) debug.print_and_pause();
 }
 ```
-This will step through the code until register A0 is 0x1234, then break into the debugging CLI (which is enabled with RISCV_DEBUG). You may not want to enable RISCV_DEBUG at all, in which case replace the call to print_and_pause with your own handling.
+This will step through the code until register A0 is 0x1234, then break into the debugging CLI.
 
 Setting the max instructions will prevent the machine from appearing stopped. There is always an instruction limit where the loop will end, however you can greatly increase it if you don't want to exit the loop prematurely. If an exit system call is encountered it typically calls `Machine::stop()`, which will set max instructions to 0, exiting the loop. This is not mandated behavior as the exit function is a syscall callback function, and the loop is controlled by you (the user). In short, there are many ways to stop a machine, but the default method is to just check if `instruction counter >= max instructions`.
 
@@ -90,7 +92,7 @@ The most likely system call candidate for this behavior is for handling EBREAK i
 
 To avoid having to repeat yourself, create a GDB script to automatically connect and enter TUI mode:
 ```
-target remote localhost:2159
+target remote :2159
 layout next
 ```
 Then run `gdb -x myscript.gdb`.
