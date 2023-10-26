@@ -168,6 +168,53 @@ void Machine<W>::setup_posix_threads()
 		thread->activate();
 		machine.set_result(0);
 	});
+	// clone3
+	this->install_syscall_handler(435,
+	[] (Machine<W>& machine) {
+		/* int clone3(struct clone3_args*, size_t len) */
+		struct clone3_args {
+			address_type<W> flags;
+			address_type<W> pidfd;
+			address_type<W> child_tid;
+			address_type<W> parent_tid;
+			address_type<W> exit_signal;
+			address_type<W> stack;
+			address_type<W> stack_size;
+			address_type<W> tls;
+			address_type<W> set_tid_array;
+			address_type<W> set_tid_count;
+			address_type<W> cgroup;
+		};
+		const auto [args, size] = machine.template sysargs<clone3_args, address_type<W>> ();
+		if (size < sizeof(clone3_args)) {
+			machine.set_result(-ENOSPC);
+			return;
+		}
+
+		const int  flags = args.flags;
+		const auto stack = args.stack + args.stack_size;
+		const auto  ptid = args.parent_tid;
+		const auto  ctid = args.child_tid;
+		const auto   tls = args.tls;
+		auto* parent = machine.threads().get_thread();
+		THPRINT(machine,
+			">>> clone3(stack=0x%lX, flags=%x,"
+				" parent=%p, ctid=0x%lX ptid=0x%lX, tls=0x%lX)\n",
+				(long)stack, flags, parent, (long)ctid, (long)ptid, (long)tls);
+		auto* thread = machine.threads().create(flags, ctid, ptid, stack, tls, 0, 0);
+
+		if (args.set_tid_count > 0) {
+			address_type<W> set_tid = 0;
+			machine.copy_from_guest(&set_tid, args.set_tid_array, sizeof(set_tid));
+			thread->clear_tid = set_tid;
+		}
+
+		// store return value for parent: child TID
+		parent->suspend(thread->tid);
+		// activate and return 0 for the child
+		thread->activate();
+		machine.set_result(0);
+	});
 	// prlimit64
 	this->install_syscall_handler(261,
 	[] (Machine<W>& machine) {
@@ -188,6 +235,8 @@ void Machine<W>::setup_posix_threads()
 		} else {
 			machine.set_result(-EINVAL);
 		}
+		THPRINT(machine,
+			">>> prlimit64(...) = %d\n", machine.return_value<int>());
 	});
 }
 
