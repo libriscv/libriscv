@@ -351,13 +351,31 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		switch (instr.Itype.funct3) {
-		case 0x1: // *NOT* SLLI, SEXT.B, SEXT.H
+		case 0x1: // *NOT* SLLI, SEXT.B, SEXT.H, CTZ, CTZW
 			switch (instr.Itype.imm) {
 			case 0b011000000100: // SEXT.B
 				dst = RVSIGNTYPE(cpu)(int8_t(src));
 				return;
 			case 0b011000000101: // SEXT.H
 				dst = RVSIGNTYPE(cpu)(int16_t(src));
+				return;
+			case 0b011000000000: // CLZ
+				if constexpr (RVIS32BIT(cpu))
+					dst = src ? __builtin_clz(src) : RVXLEN(cpu);
+				else
+					dst = src ? __builtin_clzl(src) : RVXLEN(cpu);
+				return;
+			case 0b011000000001: // CTZ
+				if constexpr (RVIS32BIT(cpu))
+					dst = src ? __builtin_ctz(src) : 0;
+				else
+					dst = src ? __builtin_ctzl(src) : 0;
+				return;
+			case 0b011000000010: // CPOP
+				if constexpr (RVIS32BIT(cpu))
+					dst = __builtin_popcount(src);
+				else
+					dst = __builtin_popcountl(src);
 				return;
 			}
 			break;
@@ -384,9 +402,18 @@ namespace riscv
 			}
 			else if (instr.Itype.imm == 0x287) {
 				// ORC.B: Bitwise OR-combine
-				auto* bytes = (uint8_t *)&src;
+				auto* src_bytes = (char *)&src;
+				auto* dst_bytes = (char *)&dst;
 				for (size_t i = 0; i < sizeof(src); i++)
-					dst = bytes[i] ? 0xFF : 0x0;
+					dst_bytes[i] = src_bytes[i] ? 0xFF : 0x0;
+				return;
+			}
+			else if (instr.Itype.is_rev8<RVXLEN(cpu)>()) {
+				// REV8: Byte-reverse register
+				auto* src_bytes = (char *)&src;
+				auto* dst_bytes = (char *)&dst;
+				for (size_t i = 0; i < sizeof(src); i++)
+					dst_bytes[i] = src_bytes[sizeof(src)-1 - i];
 				return;
 			}
 			break;
@@ -862,7 +889,17 @@ namespace riscv
 			dst = (int32_t) ((uint32_t)src1 << (src2 & 31));
 			return;
 		case 0x5: // SRLW
-			dst = (int32_t) ((uint32_t)src1 >> (src2 & 31));
+			if (instr.Itype.high_bits() == 0x0) {
+				// SRLW: Logical right shift 32-bit
+				dst = (int32_t) ((uint32_t)src1 >> (src2 & 31));
+				return;
+			}
+			else if (instr.Itype.is_rori()) {
+				// RORW: Rotate right 32-bit
+				const auto shift = src2 & 31;
+				dst = (int32_t) ((src1 >> shift) | (src1 << (32 - shift)));
+				return;
+			}
 			return;
 		// M-extension
 		case 0x10: // MULW (signed 32-bit multiply, sign-extended)

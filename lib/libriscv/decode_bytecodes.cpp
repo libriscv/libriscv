@@ -271,7 +271,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x4: // XORI
 				return RV32I_BC_XORI;
 			case 0x5:
-				if (instr.Itype.high_bits() == 0x0)
+				if (instr.Itype.imm < 128)
 					return RV32I_BC_SRLI;
 				else if (instr.Itype.is_srai())
 					return RV32I_BC_SRAI;

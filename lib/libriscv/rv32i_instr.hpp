@@ -50,6 +50,13 @@ namespace riscv
 				return imm & 0x7F;
 			}
 
+			template <int W>
+			auto is_rev8() const noexcept {
+				if constexpr (W == 8)
+					return imm == 0b011010111000;
+				else
+					return imm == 0b011010011000;
+			}
 			auto high_bits() const noexcept {
 				return imm & 0xE00;
 			}
