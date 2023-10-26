@@ -298,10 +298,11 @@ namespace riscv
 		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
 			throw MachineException(INVALID_PROGRAM, "ELF program too short");
 		}
-		const auto* elf = (Ehdr*) m_binary.data();
-		if (UNLIKELY(!validate_header<Ehdr> (elf))) {
-			throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Mixup between 32- and 64-bit?", elf->e_ident[EI_CLASS]);
+		if (UNLIKELY(!validate_header<Ehdr> (m_binary))) {
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Mixup between 32- and 64-bit?");
 		}
+
+		const auto* elf = (Ehdr*) m_binary.data();
 		if (UNLIKELY(elf->e_type != ET_EXEC)) {
 			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load a dynamic library?");
 		}
@@ -477,6 +478,9 @@ namespace riscv
 	template <int W>
 	typename Memory<W>::Callsite Memory<W>::lookup(address_t address) const
 	{
+		if (!validate_header<Ehdr>(this->m_binary))
+			return {};
+
 		const auto* sym_hdr = section_by_name(".symtab");
 		if (sym_hdr == nullptr) return {};
 		const auto* str_hdr = section_by_name(".strtab");
@@ -539,6 +543,13 @@ namespace riscv
 			[this, print_function] (const int N, const address_type<W> addr) {
 				// get information about the callsite
 				const auto site = this->lookup(addr);
+				if (site.address == 0 && site.offset == 0 && site.size == 0) {
+					// if there is nothing to print, indicate that this is
+					// an unknown/empty location by "printing" a zero-length string.
+					print_function({});
+					return;
+				}
+
 				// write information directly to stdout
 				char buffer[8192];
 				int len = 0;

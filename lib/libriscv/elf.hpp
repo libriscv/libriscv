@@ -47,8 +47,11 @@ namespace riscv
 #endif
 
 	template <typename Class>
-	inline bool validate_header(const Class* hdr)
+	inline bool validate_header(std::string_view binary)
 	{
+		if (binary.size() < sizeof(Class))
+			return false;
+		auto* hdr = (Class *)binary.data();
 		if (hdr->e_ident[EI_MAG0] != 0x7F ||
 			hdr->e_ident[EI_MAG1] != 'E'  ||
 			hdr->e_ident[EI_MAG2] != 'L'  ||
