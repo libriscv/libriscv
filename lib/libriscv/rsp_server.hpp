@@ -114,7 +114,8 @@ private:
 	bool m_closed  = false;
 	bool m_verbose = false;
 	std::string buffer;
-	riscv::address_type<W> m_bp = 0;
+	std::array<riscv::address_type<W>, 8> m_bp {};
+	size_t m_bp_iterator = 0;
 	StopFunc m_on_stopped = nullptr;
 };
 } // riscv
@@ -275,11 +276,14 @@ template <int W>
 void RSPClient<W>::handle_continue()
 {
 	try {
-		if (m_bp == m_machine->cpu.pc()) {
-			send("S05");
-			return;
+		for (auto bp : m_bp) {
+			if (bp == m_machine->cpu.pc()) {
+				send("S05");
+				return;
+			}
 		}
 		uint64_t n = m_ilimit;
+		bool breakpoint_hit = false;
 
 		while (n > 0) {
 			// When stepping the machine will look stopped
@@ -287,15 +291,18 @@ void RSPClient<W>::handle_continue()
 			// function sets the max instruction counter to 0
 			m_machine->cpu.step_one();
 			// Breakpoint
-			if (m_machine->cpu.pc() == this->m_bp)
-				break;
+			const auto pc = m_machine->cpu.pc();
+			for (auto bp : m_bp) {
+				if (bp == pc)
+					breakpoint_hit = true;
+			}
 			// Stopped (usual way)
-			if (m_machine->max_instructions() == 0)
+			if (m_machine->max_instructions() == 0 || breakpoint_hit)
 				break;
 			n--;
 		}
 		// Break reasons
-		if (n == 0 || m_machine->stopped() || m_machine->cpu.pc() == this->m_bp) {
+		if (n == 0 || m_machine->stopped() || breakpoint_hit) {
 			send("S05");
 			return;
 		}
@@ -338,9 +345,12 @@ void RSPClient<W>::handle_breakpoint()
 	uint64_t addr = 0;
 	sscanf(&buffer[1], "%x,%lx", &type, &addr);
 	if (buffer[0] == 'Z') {
-		this->m_bp = addr;
+		this->m_bp.at(m_bp_iterator) = addr;
+		m_bp_iterator = (m_bp_iterator + 1) % m_bp.size();
 	} else {
-		this->m_bp = 0;
+		for (auto& bp : this->m_bp) {
+			if (bp == addr) bp = 0;
+		}
 	}
 	reply_ok();
 }
