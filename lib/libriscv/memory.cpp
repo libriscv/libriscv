@@ -533,7 +533,7 @@ namespace riscv
 	}
 	template <int W>
 	void Memory<W>::print_backtrace(
-		std::function<void(std::string_view)> print_function)
+		std::function<void(std::string_view)> print_function, bool ra)
 	{
 		auto print_trace =
 			[this, print_function] (const int N, const address_type<W> addr) {
@@ -541,27 +541,35 @@ namespace riscv
 				const auto site = this->lookup(addr);
 				// write information directly to stdout
 				char buffer[8192];
-				int len;
+				int len = 0;
+				if (N >= 0) {
+					len = snprintf(&buffer[len], sizeof(buffer)-len,
+						"[%d] ", N);
+				}
 				if constexpr (W == 4) {
-					len = snprintf(buffer, sizeof(buffer),
-						"[%d] 0x%08" PRIx32 " + 0x%.3" PRIx32 ": %s",
-						N, site.address, site.offset, site.name.c_str());
+					len += snprintf(&buffer[len], sizeof(buffer)-len,
+						"0x%08" PRIx32 " + 0x%.3" PRIx32 ": %s",
+						site.address, site.offset, site.name.c_str());
 				} else if constexpr (W == 8) {
-					len = snprintf(buffer, sizeof(buffer),
-						"[%d] 0x%016" PRIX64 " + 0x%.3" PRIx32 ": %s",
-						N, site.address, site.offset, site.name.c_str());
+					len += snprintf(&buffer[len], sizeof(buffer)-len,
+						"0x%016" PRIX64 " + 0x%.3" PRIx32 ": %s",
+						site.address, site.offset, site.name.c_str());
 				} else if constexpr (W == 16) {
-					len = snprintf(buffer, sizeof(buffer),
-						"[%d] 0x%016" PRIx64 " + 0x%.3" PRIx32 ": %s",
-						N, (uint64_t)site.address, site.offset, site.name.c_str());
+					len += snprintf(&buffer[len], sizeof(buffer)-len,
+						"0x%016" PRIx64 " + 0x%.3" PRIx32 ": %s",
+						(uint64_t)site.address, site.offset, site.name.c_str());
 				}
 				if (len > 0)
 					print_function({buffer, (size_t)len});
 				else
 					print_function("Scuffed frame. Should not happen!");
 			};
-		print_trace(0, this->machine().cpu.pc());
-		print_trace(1, this->machine().cpu.reg(REG_RA));
+		if (ra) {
+			print_trace(0, this->machine().cpu.pc());
+			print_trace(1, this->machine().cpu.reg(REG_RA));
+		} else {
+			print_trace(-1, this->machine().cpu.pc());
+		}
 	}
 
 	template <int W>

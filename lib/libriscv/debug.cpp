@@ -357,12 +357,6 @@ union UnderAlign32
 	}
 };
 
-#define INSTRUCTION_LOGGING()	\
-	if (this->verbose_instructions) { \
-		const auto string = cpu.to_string(instruction) + "\n"; \
-		machine.print(string.c_str(), string.size()); \
-	}
-
 template<int W>
 void DebugMachine<W>::simulate(uint64_t max)
 {
@@ -398,7 +392,16 @@ void DebugMachine<W>::simulate(uint64_t max)
 		// Instructions may be unaligned with C-extension
 		const rv32i_instruction instruction =
 			rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
-		INSTRUCTION_LOGGING();
+		if (this->verbose_instructions) {
+			auto string = cpu.to_string(instruction) + " ";
+			machine.memory.print_backtrace([&] (auto view) {
+				if (string.size() < 48)
+					string.resize(48, ' ');
+				string.append(view);
+			}, false);
+			string.append("\n");
+			machine.print(string.c_str(), string.size());
+		}
 
 		// We can't use decoder cache when translator is enabled
 		constexpr bool enable_cache = !binary_translation_enabled;
