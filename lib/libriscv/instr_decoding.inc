@@ -106,12 +106,12 @@
 							}
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
 						case 0x1: // SLLI
-							if (instruction.Itype.imm < 128) {
+							if (instruction.Itype.imm < 8*sizeof(address_t)) {
 								DECODER(DECODED_INSTR(OP_IMM_SLLI));
 							}
 							DECODER(DECODED_INSTR(OP_IMM));
 						case 0x5: // SRLI / SRAI
-							if (instruction.Itype.imm < 128) {
+							if (instruction.Itype.imm < 8*sizeof(address_t)) {
 								DECODER(DECODED_INSTR(OP_IMM_SRLI));
 							} else {
 								DECODER(DECODED_INSTR(OP_IMM));
