@@ -351,7 +351,7 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		switch (instr.Itype.funct3) {
-		case 0x1: // *NOT* SLLI, SEXT.B, SEXT.H, CTZ, CTZW
+		case 0x1: // *NOT* SLLI, SEXT.B, SEXT.H, CTZ, CLZ, CPOP
 			switch (instr.Itype.imm) {
 			case 0b011000000100: // SEXT.B
 				dst = RVSIGNTYPE(cpu)(int8_t(src));
@@ -410,10 +410,10 @@ namespace riscv
 			}
 			else if (instr.Itype.is_rev8<RVXLEN(cpu)>()) {
 				// REV8: Byte-reverse register
-				auto* src_bytes = (char *)&src;
-				auto* dst_bytes = (char *)&dst;
-				for (size_t i = 0; i < sizeof(src); i++)
-					dst_bytes[i] = src_bytes[sizeof(src)-1 - i];
+				if constexpr (RVIS32BIT(cpu))
+					dst = __builtin_bswap32(src);
+				else
+					dst = __builtin_bswap64(src);
 				return;
 			}
 			break;
@@ -569,7 +569,7 @@ namespace riscv
 			if constexpr (RVIS32BIT(cpu)) {
 				dst = uint64_t((int64_t)RVTOSIGNED(src1) * (int64_t)RVTOSIGNED(src2)) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
-				dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
+				dst = (__int128_t(int64_t(src1)) * __int128_t(int64_t(src2))) >> 64u;
 			} else {
 				dst = 0;
 			}
@@ -578,7 +578,7 @@ namespace riscv
 			if constexpr (RVIS32BIT(cpu)) {
 				dst = uint64_t((int64_t)RVTOSIGNED(src1) * (uint64_t)src2) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
-				dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
+				dst = (__int128_t(int64_t(src1)) * __int128_t(src2)) >> 64u;
 			} else {
 				dst = 0;
 			}
@@ -625,16 +625,20 @@ namespace riscv
 				} else if constexpr (RVIS64BIT(cpu)) {
 					if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
 						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
+					else
+						dst = 0;
 				} else {
 					dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
 				}
+			} else {
+				dst = src1;
 			}
 			return;
 		case 0x17: // REMU
 			if (LIKELY(src2 != 0)) {
 				dst = src1 % src2;
 			} else {
-				dst = (RVREGTYPE(cpu)) -1;
+				dst = src1;
 			}
 			return;
 		case 0x54: // MIN
@@ -929,14 +933,14 @@ namespace riscv
 					dst = (int32_t) ((int32_t)src1 % (int32_t)src2);
 				}
 			} else {
-				dst = (RVREGTYPE(cpu)) -1;
+				dst = int32_t(src1);
 			}
 			return;
 		case 0x17: // REMUW
 			if (LIKELY(src2 != 0)) {
 				dst = (int32_t) (src1 % src2);
 			} else {
-				dst = (RVREGTYPE(cpu)) -1;
+				dst = int32_t(src1);
 			}
 			return;
 		case 0x40: // ADDUW
