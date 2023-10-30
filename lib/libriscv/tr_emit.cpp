@@ -10,7 +10,7 @@
 #define PCRELA(x) ((address_t) (tinfo.basepc + index() * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define INSTRUCTION_COUNT(i) ("c + " + std::to_string(i))
-#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\n__builtin_unreachable();\n"; }
+#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nUNREACHABLE();\n"; }
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "c < local_max_insn";
@@ -440,10 +440,10 @@ void Emitter<W>::emit()
 				case 0b011000000000: // CLZ
 					if constexpr (W == 4)
 						add_code(
-							dst + " = " + src + " ? __builtin_clz(" + src + ") : XLEN;");
+							dst + " = " + src + " ? clz(" + src + ") : XLEN;");
 					else
 						add_code(
-							dst + " = " + src + " ? __builtin_clzl(" + src + ") : XLEN;");
+							dst + " = " + src + " ? clzl(" + src + ") : XLEN;");
 					break;
 				case 0b011000000001: // CTZ
 					if constexpr (W == 4)
@@ -923,16 +923,16 @@ void Emitter<W>::emit()
 			case RV32F__FMIN_MAX:
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FMIN.S
-					code += "set_fl(&" + dst + ", __builtin_fminf(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "set_fl(&" + dst + ", fminf(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x1: // FMAX.S
-					code += "set_fl(&" + dst + ", __builtin_fmaxf(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "set_fl(&" + dst + ", fmaxf(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x10: // FMIN.D
-					code += "set_dbl(&" + dst + ", __builtin_fmin(" + rs1 + ".f64, " + rs2 + ".f64));\n";
+					code += "set_dbl(&" + dst + ", fmin(" + rs1 + ".f64, " + rs2 + ".f64));\n";
 					break;
 				case 0x11: // FMAX.D
-					code += "set_dbl(&" + dst + ", __builtin_fmax(" + rs1 + ".f64, " + rs2 + ".f64));\n";
+					code += "set_dbl(&" + dst + ", fmax(" + rs1 + ".f64, " + rs2 + ".f64));\n";
 					break;
 				default:
 					ILLEGAL_AND_EXIT();

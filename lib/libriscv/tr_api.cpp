@@ -21,6 +21,52 @@ namespace riscv {
 #define HOST_UNKNOWN 0
 #define HOST_AMD64   1
 
+#ifdef __TINYC__
+#define UNREACHABLE() /**/
+static inline int clz(uint32_t x)
+{
+	int n = 32, c = 16;
+	do {
+		uint32_t y = x >> c;
+		if (y) { n -= c; x = y; }
+		c >>= 1;
+	} while (c);
+
+	return n - x;
+}
+static inline long clzl(uint64_t x)
+{
+	long n = 64, c = 32;
+	do {
+		uint64_t y = x >> c;
+		if (y) { n -= c; x = y; }
+		c >>= 1;
+	} while (c);
+
+	return n - x;
+}
+static inline float fminf(float x, float y) {
+	return (x < y) ? x : y;
+}
+static inline float fmin(double x, double y) {
+	return (x < y) ? x : y;
+}
+static inline float fmaxf(float x, float y) {
+	return (x >= y) ? x : y;
+}
+static inline float fmax(double x, double y) {
+	return (x >= y) ? x : y;
+}
+#else
+#define UNREACHABLE() __builtin_unreachable()
+#define clz(x) __builtin_clz(x)
+#define clzl(x) __builtin_clzl(x)
+#define fminf(x, y) __builtin_fminf(x, y)
+#define fmin(x, y) __builtin_fmin(x, y)
+#define fmaxf(x, y) __builtin_fmaxf(x, y)
+#define fmax(x, y) __builtin_fmax(x, y)
+#endif
+
 typedef union {
 	int32_t i32[2];
 	float   f32[2];
@@ -86,7 +132,7 @@ static inline void jump(CPU* cpu, addr_t addr) {
 		cpu->pc = addr;
 	} else {
 		api.exception(cpu, MISALIGNED_INSTRUCTION);
-		__builtin_unreachable();
+		UNREACHABLE();
 	}
 }
 
