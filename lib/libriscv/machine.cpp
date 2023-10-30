@@ -330,24 +330,24 @@ namespace riscv
 				return;
 			}
 			} break;
-#ifdef RISCV_SUPERVISOR_MODE
 		case 0x5: { // CSRWI
-			bool rd = instr.Itype.rd != 0;
-			const auto imm = instr.Itype.rs1;
+			[[maybe_unused]] bool rd = instr.Itype.rd != 0;
+			[[maybe_unused]] const auto imm = instr.Itype.rs1;
 			switch (instr.Itype.imm)
 			{
+#ifdef RISCV_SUPERVISOR_MODE
 			case 0x304: // mie (machine interrupt enable)
 				if (rd) {
 					cpu.super().mie = imm;
 					cpu.reg(instr.Itype.rd) = cpu.super().mie;
 				}
 				return;
+#endif
 			default:
 				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
 			}
 		} // CSRWI
-#endif
 		}
 		// if we got here, its an illegal operation!
 		cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.funct3);

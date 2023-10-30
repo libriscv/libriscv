@@ -70,8 +70,6 @@ void Machine<W>::setup_posix_threads()
 	this->install_syscall_handler(96,
 	[] (Machine<W>& machine) {
 		const int clear_tid = machine.template sysarg<address_type<W>> (0);
-		THPRINT(machine,
-			">>> set_tid_address(0x%X)\n", clear_tid);
 		// Without initialized threads, assume tid = 0
 		if (machine.has_threads()) {
 			machine.threads().get_thread()->clear_tid = clear_tid;
@@ -79,6 +77,8 @@ void Machine<W>::setup_posix_threads()
 		} else {
 			machine.set_result(0);
 		}
+		THPRINT(machine,
+			">>> set_tid_address(0x%X) = %d\n", clear_tid, machine.return_value<int> ());
 	});
 	// set_robust_list
 	this->install_syscall_handler(99,
