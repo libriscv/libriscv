@@ -10,6 +10,3 @@
 [submodule "tests/unit/ext/lodepng"]
 	path = tests/unit/ext/lodepng
 	url = https://github.com/lvandeve/lodepng.git
-[submodule "lib/EASTL"]
-	path = lib/EASTL
-	url = https://github.com/fwsGonzo/EASTL

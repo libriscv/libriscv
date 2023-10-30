@@ -351,10 +351,8 @@ namespace riscv
 		{
 			// Hardly any pages are dont_fork, so we estimate that
 			// all master pages will be loaned.
-			if constexpr (!eastl_enabled) {
-				// Workaround for buggy EASTL behavior.
-				m_pages.reserve(master.memory.pages().size());
-			}
+			m_pages.reserve(master.memory.pages().size());
+
 			for (const auto& it : master.memory.pages())
 			{
 				const auto& page = it.second;
@@ -519,16 +517,3 @@ namespace riscv
 	template struct Memory<8>;
 	INSTANTIATE_128_IF_ENABLED(Memory);
 }
-
-#ifdef EASTL_ENABLED
-__attribute__((weak))
-void* operator new[](size_t size, const char*, int, unsigned, const char*, int)
-{
-	return ::operator new[] (size);
-}
-__attribute__((weak))
-void* operator new[](size_t size, size_t, size_t, const char*, int, unsigned, const char*, int)
-{
-	return ::operator new[] (size);
-}
-#endif

@@ -23,8 +23,6 @@ option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
 # SUPERVISOR enables full-system emulation. WIP.
 option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
 
-option(RISCV_EASTL "Enable fast EASTL containers" OFF)
-
 set(THREADED_IS_DEFAULT OFF)
 # Threaded simulation uses computed goto, and is not supported
 # on all compilers/systems.
@@ -150,21 +148,4 @@ if (RISCV_BINARY_TRANSLATION)
 endif()
 if (WIN32 OR MINGW_TOOLCHAIN)
 	target_link_libraries(riscv PUBLIC wsock32 ws2_32)
-endif()
-
-
-if (RISCV_EASTL)
-	# EASTL submodule
-	find_package(Git REQUIRED)
-
-	if(NOT EXISTS EASTL/CMakeLists.txt)
-	execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --depth 1 -- EASTL
-		WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-		COMMAND_ERROR_IS_FATAL ANY)
-	endif()
-	add_subdirectory(EASTL)
-	target_compile_definitions(EASTL PUBLIC EASTL_EXCEPTIONS_ENABLED=1)
-
-	target_link_libraries(riscv PUBLIC EASTL)
-	target_compile_definitions(riscv PUBLIC EASTL_ENABLED=1)
 endif()

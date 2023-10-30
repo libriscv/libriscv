@@ -8,11 +8,6 @@
 #include "decoded_exec_segment.hpp"
 #include "util/buffer.hpp" // <string>
 #include "util/function.hpp"
-#ifdef EASTL_ENABLED
-#include <stdexcept>
-#include <EASTL/fixed_hash_map.h>
-#include <EASTL/fixed_vector.h>
-#endif
 
 namespace riscv
 {
@@ -230,11 +225,7 @@ namespace riscv
 		mutable CachedPage<W, const PageData> m_rd_cache;
 		mutable CachedPage<W, PageData> m_wr_cache;
 
-#if defined(EASTL_ENABLED)
-		eastl::fixed_hash_map<address_t, Page, 128> m_pages;
-#else
 		std::unordered_map<address_t, Page> m_pages;
-#endif
 
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
@@ -250,11 +241,7 @@ namespace riscv
 		const std::string_view m_binary;
 
 		// Execute segments
-#ifdef EASTL_ENABLED
-		eastl::fixed_vector<DecodedExecuteSegment<W>, 4> m_exec;
-#else
 		std::vector<DecodedExecuteSegment<W>> m_exec;
-#endif
 
 		// Linear arena at start of memory (mmap-backed)
 		PageData* m_arena = nullptr;
