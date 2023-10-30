@@ -19,6 +19,12 @@ T Memory<W>::read(address_t address)
 			return value;
 		}
 	}
+	else if constexpr (flat_readwrite_arena) {
+		if (LIKELY(address < this->memory_arena_size())) {
+			return *(T *)&((const char*)m_arena)[address];
+		}
+	}
+
 	const auto& pagedata = cached_readable_page(address, sizeof(T));
 	return pagedata.template aligned_read<T>(offset);
 }
@@ -27,6 +33,12 @@ template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(address < memory_arena_size())) {
+			return *(T *)&((const char*)m_arena)[address];
+		}
+	}
+
 	auto& pagedata = cached_writable_page(address);
 	return pagedata.template aligned_read<T>(address & memory_align_mask<T>());
 }
@@ -42,6 +54,13 @@ void Memory<W>::write(address_t address, T value)
 			return;
 		}
 	}
+	else if constexpr (flat_readwrite_arena) {
+		if (LIKELY(address < memory_arena_size())) {
+			*(T *)&((const char*)m_arena)[address] = value;
+			return;
+		}
+	}
+
 	const auto pageno = page_number(address);
 	auto& entry = m_wr_cache;
 	if (entry.pageno == pageno) {

@@ -75,6 +75,11 @@ namespace riscv
 #else
 	static constexpr bool memory_arena_is_default = false;
 #endif
+#ifdef RISCV_FLAT_RW_ARENA
+	static constexpr bool flat_readwrite_arena = true;
+#else
+	static constexpr bool flat_readwrite_arena = false;
+#endif
 #ifdef EASTL_ENABLED
 	static constexpr bool eastl_enabled = true;
 #else
