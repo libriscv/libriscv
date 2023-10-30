@@ -55,8 +55,7 @@ static void print_help(CPU<W>& cpu)
 	  s, step [steps=1]     Run [steps] instructions, then break
 	  b, break [addr]       Breakpoint when PC == addr
 	  b, break [name]       Resolve symbol to addr, use as breakpoint
-	  rb [addr]             Breakpoint on reading from [addr]
-	  wb [addr]             Breakpoint on writing to [addr]
+	  watch [addr] (len=XL) Breakpoint on [addr] changing
 	  clear                 Clear all breakpoints
 	  bt, backtrace         Display primitive backtrace
 	  a, addrof [name]      Resolve symbol name to address (or 0x0)
@@ -144,6 +143,25 @@ static bool execute_commands(DebugMachine<W>& debug)
 			[&cpu] (std::string_view line) {
 				dprintf(cpu, "-> %.*s\n", (int)line.size(), line.begin());
 			});
+		return true;
+	}
+	else if (cmd == "watch")
+	{
+		if (params.size() < 1)
+		{
+			dprintf(cpu, ">>> Not enough parameters: watch [addr]\n");
+			return true;
+		}
+		const auto addr = machine.address_of(params[1]);
+		if (addr != 0x0) {
+			dprintf(cpu, "Watchpoint on %s with address 0x%lX\n",
+				params[1].c_str(), addr);
+			debug.watchpoint(addr, W);
+		} else {
+			unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
+			dprintf(cpu, "Watchpoint on address 0x%lX\n", hex);
+			debug.watchpoint(hex, W);
+		}
 		return true;
 	}
 	else if (cmd == "a" || cmd == "addrof")
@@ -331,6 +349,32 @@ void DebugMachine<W>::break_checks()
 		{
 			auto& callback = it->second;
 			callback(*this);
+		}
+	}
+	if (UNLIKELY(!m_watchpoints.empty()))
+	{
+		for (auto& wp : m_watchpoints) {
+			/* TODO: Only run watchpoint on LOAD STORE instructions */
+			address_t new_value;
+			switch (wp.len) {
+			case 1:
+				new_value = machine.memory.template read<uint8_t> (wp.addr);
+				break;
+			case 2:
+				new_value = machine.memory.template read<uint16_t> (wp.addr);
+				break;
+			case 4:
+				new_value = machine.memory.template read<uint32_t> (wp.addr);
+				break;
+			case 8:
+				new_value = machine.memory.template read<uint64_t> (wp.addr);
+				break;
+			}
+			if (wp.last_value != new_value) {
+				wp.callback(*this);
+			}
+			wp.last_value = new_value;
+			//0x11FB3E0
 		}
 	}
 }
