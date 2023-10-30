@@ -91,4 +91,14 @@ namespace riscv
 
 		return dlopen(outfile, RTLD_LAZY);
 	}
+
+	void* dylib_lookup(void* dylib, const char* symbol)
+	{
+		return dlsym(dylib, symbol);
+	}
+
+	void dylib_close(void* dylib)
+	{
+		dlclose(dylib);
+	}
 }

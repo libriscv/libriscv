@@ -25,6 +25,8 @@ namespace riscv
 #else
 	#define TIME_POINT(x)  /* */
 #endif
+	extern void  dylib_close(void* dylib);
+	extern void* dylib_lookup(void* dylib, const char*);
 
 template <int W>
 inline uint32_t opcode(const TransInstr<W>& ti) {
@@ -46,6 +48,10 @@ template <int W>
 int CPU<W>::load_translation(const MachineOptions<W>& options,
 	std::string* filename, DecodedExecuteSegment<W>& exec) const
 {
+	if constexpr (libtcc_enabled) {
+		return 1;
+	}
+
 	// Disable translator with NO_TRANSLATE=1
 	// or by setting max blocks to zero.
 	if (0 == options.translate_blocks_max || getenv("NO_TRANSLATE")) {
@@ -280,13 +286,22 @@ const struct Mapping mappings[] = {
 		return;
 	}
 
+	void* dylib = nullptr;
+
 	TIME_POINT(t9);
-	extern void* compile(const std::string& code, int arch, const char*);
-	void* dylib = compile(code, W, filename.c_str());
+	if constexpr (libtcc_enabled) {
+		extern void* libtcc_compile(const std::string& code, int arch, const std::string&);
+		dylib = libtcc_compile(code, W, options.libtcc1_location);
+
+	} else {
+		extern void* compile(const std::string& code, int arch, const char*);
+		dylib = compile(code, W, filename.c_str());
+	}
 #ifdef BINTR_TIMING
 	TIME_POINT(t10);
 	printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
 #endif
+
 	// Check compilation result
 	if (dylib == nullptr) {
 		return;
@@ -294,11 +309,12 @@ const struct Mapping mappings[] = {
 
 	this->activate_dylib(exec, dylib);
 
-	if (getenv("NO_TR_CACHE") != nullptr) {
-		// Delete the program if the shared ELF is unwanted
-		unlink(filename.c_str());
+	if constexpr (!libtcc_enabled) {
+		if (getenv("NO_TR_CACHE") != nullptr) {
+			// Delete the program if the shared ELF is unwanted
+			unlink(filename.c_str());
+		}
 	}
-
 #ifdef BINTR_TIMING
 	TIME_POINT(t12);
 	printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
@@ -310,13 +326,15 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 {
 	TIME_POINT(t11);
 	// map the API callback table
-	auto* ptr = dlsym(dylib, "init");
+	auto* ptr = dylib_lookup(dylib, "init");
 	if (ptr == nullptr) {
-		// only warn when translation is not already disabled
-		if (getenv("NO_TRANSLATE") == nullptr) {
-			fprintf(stderr, "libriscv: Could not find dylib init function\n");
+		if constexpr (!libtcc_enabled) {
+			// only warn when translation is not already disabled
+			if (getenv("NO_TRANSLATE") == nullptr) {
+				fprintf(stderr, "libriscv: Could not find dylib init function\n");
+			}
 		}
-		dlclose(dylib);
+		dylib_close(dylib);
 		exec.set_binary_translated(nullptr);
 		return;
 	}
@@ -382,12 +400,12 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	&m_machine.get_counters().second);
 
 	// Map all the functions to instruction handlers
-	uint32_t* no_mappings = (uint32_t *)dlsym(dylib, "no_mappings");
+	uint32_t* no_mappings = (uint32_t *)dylib_lookup(dylib, "no_mappings");
 	struct Mapping {
 		address_t addr;
 		instruction_handler<W> handler;
 	};
-	Mapping* mappings = (Mapping *)dlsym(dylib, "mappings");
+	Mapping* mappings = (Mapping *)dylib_lookup(dylib, "mappings");
 
 	if (no_mappings == nullptr || mappings == nullptr) {
 		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");

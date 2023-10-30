@@ -28,7 +28,7 @@ set(THREADED_IS_DEFAULT OFF)
 # on all compilers/systems.
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"
 	OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-	message(STATUS "Threaded dispatch enabled")
+	message(STATUS "libriscv: Threaded dispatch enabled")
 	option(RISCV_THREADED "Enable fastest simulation mode" ON)
 else()
 	option(RISCV_THREADED "Enable fastest simulation mode" OFF)
@@ -36,6 +36,7 @@ endif()
 
 if (RISCV_EXPERIMENTAL)
 	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
+	option(RISCV_LIBTCC              "Enable binary translation with libtcc" OFF)
 	option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" OFF)
 	option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
 endif()
@@ -94,10 +95,14 @@ endif()
 if (RISCV_BINARY_TRANSLATION)
 	list(APPEND SOURCES
 		libriscv/tr_api.cpp
-		libriscv/tr_compiler.cpp
 		libriscv/tr_emit.cpp
 		libriscv/tr_translate.cpp
 	)
+	if (RISCV_LIBTCC)
+		list(APPEND SOURCES libriscv/tr_tcc.cpp)
+	else()
+		list(APPEND SOURCES libriscv/tr_compiler.cpp)
+	endif()
 endif()
 
 add_library(riscv ${SOURCES})
@@ -148,4 +153,19 @@ if (RISCV_BINARY_TRANSLATION)
 endif()
 if (WIN32 OR MINGW_TOOLCHAIN)
 	target_link_libraries(riscv PUBLIC wsock32 ws2_32)
+endif()
+
+
+if (RISCV_LIBTCC)
+	#include(FetchContent)
+	#FetchContent_Declare(
+	#	libtcc
+	#	GIT_REPOSITORY    https://github.com/fwsGonzo/libtcc-cmake
+	#	GIT_TAG           master
+	#)
+	#FetchContent_MakeAvailable(libtcc)
+	#target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
+
+	target_link_libraries(riscv PUBLIC libtcc.a)
+	target_compile_definitions(riscv PUBLIC RISCV_LIBTCC_ENABLED=1)
 endif()

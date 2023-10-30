@@ -80,6 +80,11 @@ namespace riscv
 #else
 	static constexpr bool flat_readwrite_arena = false;
 #endif
+#ifdef RISCV_LIBTCC_ENABLED
+	static constexpr bool libtcc_enabled = true;
+#else
+	static constexpr bool libtcc_enabled = false;
+#endif
 }
 
 namespace riscv
@@ -112,6 +117,9 @@ namespace riscv
 		unsigned block_size_treshold = 5;
 		unsigned translate_blocks_max = 16'000;
 		unsigned translate_instr_max = 150'000;
+#ifdef RISCV_LIBTCC_ENABLED
+		std::string libtcc1_location;
+#endif
 #endif
 	};
 

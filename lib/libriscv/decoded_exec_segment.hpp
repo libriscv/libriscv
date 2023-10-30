@@ -1,9 +1,6 @@
 #pragma once
 #include <memory>
 #include "types.hpp"
-#ifdef RISCV_BINARY_TRANSLATION
-#include <dlfcn.h> // Linux-only
-#endif
 
 namespace riscv
 {
@@ -120,8 +117,9 @@ namespace riscv
 	inline DecodedExecuteSegment<W>::~DecodedExecuteSegment()
 	{
 #ifdef RISCV_BINARY_TRANSLATION
+		extern void  dylib_close(void* dylib);
 		if (m_bintr_dl)
-			dlclose(m_bintr_dl);
+			dylib_close(m_bintr_dl);
 #endif
 	}
 
