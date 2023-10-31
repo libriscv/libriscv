@@ -35,7 +35,7 @@ T& Memory<W>::writable_read(address_t address)
 {
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address < memory_arena_size())) {
-			return *(T *)&((const char*)m_arena)[address];
+			return *(T *)&((char*)m_arena)[address];
 		}
 	}
 
@@ -56,7 +56,7 @@ void Memory<W>::write(address_t address, T value)
 	}
 	else if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address < memory_arena_size())) {
-			*(T *)&((const char*)m_arena)[address] = value;
+			*(T *)&((char*)m_arena)[address] = value;
 			return;
 		}
 	}

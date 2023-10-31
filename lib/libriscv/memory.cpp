@@ -30,7 +30,8 @@ namespace riscv
 			if (options.use_memory_arena)
 			{
 #ifdef __linux__
-				const size_t len = pages_max * Page::size();
+				// Over-allocate by 1 page in order to avoid bounds-checking with size
+				const size_t len = (pages_max + 1) * Page::size();
 				this->m_arena = (PageData *)mmap(NULL, len, PROT_READ | PROT_WRITE,
 					MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
 				this->m_arena_pages = pages_max;
