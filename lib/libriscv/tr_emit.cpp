@@ -197,17 +197,28 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_memory_arena()) {
 			add_code(
-				"char* " + data + ";",
 				"if (" + address + " < arena_size)",
-				data + " = &arena_base[(" + address + ") & ~0xFFFLL];",
-				"else",
-				data + " = api.mem_st(cpu, PAGENO(" + address + "));");
+				"  *(" + type + "*)&arena_base[" + address + "] = " + value + ";",
+				"else {",
+				"  char *" + data + " = api.mem_st(cpu, PAGENO(" + address + "));",
+				"  *(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";",
+				"}");
 		} else {
 			add_code("char* " + data + " = api.mem_st(cpu, PAGENO(" + address + "));");
+			add_code(
+				"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
+			);
 		}
-		add_code(
-			"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
-		);
+	}
+
+	bool no_labels_after_this() const noexcept {
+		for (auto addr : labels)
+			if (addr > this->pc())
+				return false;
+		for (auto addr : tinfo.jump_locations)
+			if (addr > this->pc())
+				return false;
+		return true;
 	}
 
 	size_t index() const noexcept { return this->m_idx; }
@@ -413,6 +424,10 @@ void Emitter<W>::emit()
 					"*cur_insn = c + " + std::to_string(i) + ";\n"
 					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
 				exit_function();
+			}
+			if (no_labels_after_this()) {
+				add_code("}");
+				return;
 			} } break;
 		case RV32I_OP_IMM: {
 			// NOP

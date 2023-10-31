@@ -106,12 +106,9 @@ typedef struct {
 #define PAGENO(x) ((addr_t)(x) >> 12)
 #define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
 
-typedef const char* (*mem_ld_t) (const CPU*, addr_t);
-typedef char* (*mem_st_t) (const CPU*, addr_t);
-
 static struct CallbackTable {
-	mem_ld_t mem_ld;
-	mem_st_t mem_st;
+	const char* (*mem_ld) (const CPU*, addr_t);
+	char* (*mem_st) (const CPU*, addr_t);
 	void (*vec_load)(const CPU*, int, addr_t);
 	void (*vec_store)(const CPU*, addr_t, int);
 	int  (*syscall)(CPU*, addr_t);
