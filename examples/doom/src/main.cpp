@@ -1,5 +1,6 @@
 #include <libriscv/machine.hpp>
 
+#include <chrono>
 #include <fcntl.h>
 #include <unistd.h>
 #include "SDL.h"
@@ -60,9 +61,12 @@ struct DoomEvent {
 
 struct {
 	uint32_t ts = 0;
+	uint32_t last_fps_ts = 0;
 	bool     restarting = false;
 	uint16_t frames;
 	uint64_t last_counter = 0;
+	double   fps = 60.0;
+	int64_t  adjust = 16700000L;
 } stats;
 
 static void do_rendering(Machine& machine)
@@ -74,8 +78,9 @@ static void do_rendering(Machine& machine)
 
 	stats.frames ++;
 
+	// Every 100ms, calculate FPS
 	const auto now = SDL_GetTicks();
-	if (now >= stats.ts + 3000) {
+	if (now >= stats.ts + 100) {
 		machine.stop();
 		// Perform stats outside of simulation in
 		// order to get accurate instruction counter.
@@ -86,7 +91,7 @@ static void do_rendering(Machine& machine)
 	// Lower it if you have less than 60 fps.
 	const struct timespec ts {
 		.tv_sec = 0,
-		.tv_nsec = 14000000L
+		.tv_nsec = stats.adjust
 	};
 	nanosleep(&ts, nullptr);
 }
@@ -264,13 +269,23 @@ int main(int argc, char *argv[])
 				stats.restarting = false;
 				const auto ts_now = SDL_GetTicks();
 				const double secs = (ts_now - stats.ts) / 1000.;
-				const auto mips = (machine.instruction_counter() - stats.last_counter) * 1e-6 / secs;
-				const auto fps  = stats.frames / secs;
-				printf("> Millions in/sec: %.2f  FPS: %.2f\n", mips, fps);
+				stats.fps  = stats.frames / secs;
+
+				if (stats.fps < 59.0)
+					stats.adjust -= 100000L;
+				else if (stats.fps > 61.0)
+					stats.adjust += 100000L;
+
+				if (ts_now >= stats.last_fps_ts + 3000) {
+					const auto mips = (machine.instruction_counter() - stats.last_counter) * 1e-6 / secs;
+					stats.last_counter = machine.instruction_counter();
+
+					stats.last_fps_ts = ts_now;
+					printf("> Millions in/sec: %.2f  FPS: %.2f\n", mips, stats.fps);
+				}
 
 				stats.ts = ts_now;
 				stats.frames = 0;
-				stats.last_counter = machine.instruction_counter();
 				continue;
 			}
 			break;
