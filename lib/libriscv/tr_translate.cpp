@@ -8,23 +8,22 @@
 #include "tr_api.hpp"
 #include "tr_types.hpp"
 #include "util/crc32.hpp"
-//#define BINTR_TIMING
 
 namespace riscv
 {
 	static constexpr bool VERBOSE_BLOCKS = false;
+	static constexpr bool BINTR_TIMING = false;
 	static constexpr bool SCAN_FOR_GP = true;
 
 	inline timespec time_now();
 	inline long nanodiff(timespec, timespec);
-#ifdef BINTR_TIMING
 	#define TIME_POINT(x) \
-		asm("" : : : "memory"); \
-		auto x = time_now();    \
-		asm("" : : : "memory");
-#else
-	#define TIME_POINT(x)  /* */
-#endif
+		[[maybe_unused]] timespec x;  \
+		if constexpr (BINTR_TIMING) { \
+			asm("" : : : "memory");   \
+			x = time_now();           \
+			asm("" : : : "memory");   \
+		}
 	extern void  dylib_close(void* dylib);
 	extern void* dylib_lookup(void* dylib, const char*);
 
@@ -82,19 +81,19 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return -1;
 
 	void* dylib = nullptr;
-#ifdef BINTR_TIMING
-	TIME_POINT(t6);
-	printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
-#endif
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t6);
+		printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
+	}
 
 	// Always check if there is an existing file
 	if (access(filebuffer, R_OK) == 0) {
 		TIME_POINT(t7);
 		dylib = dlopen(filebuffer, RTLD_LAZY);
-	#ifdef BINTR_TIMING
-		TIME_POINT(t8);
-		printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
-	#endif
+		if constexpr (BINTR_TIMING) {
+			TIME_POINT(t8);
+			printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
+		}
 	}
 
 	// We must compile ourselves
@@ -105,10 +104,10 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 	this->activate_dylib(exec, dylib);
 
-#ifdef BINTR_TIMING
-	TIME_POINT(t10);
-	printf(">> Loading binary translation took %ld ns\n", nanodiff(t5, t10));
-#endif
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t10);
+		printf(">> Loading binary translation took %ld ns\n", nanodiff(t5, t10));
+	}
 	return 0;
 }
 
@@ -146,10 +145,10 @@ if constexpr (SCAN_FOR_GP) {
 			}
 		} // opcode
 	} // iterator
-#ifdef BINTR_TIMING
-	TIME_POINT(t1);
-	printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(t0, t1), (long)gp);
-#endif
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t1);
+		printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(t0, t1), (long)gp);
+	}
 } // SCAN_FOR_GP
 
 	// Code block and loop detection
@@ -227,10 +226,11 @@ if constexpr (SCAN_FOR_GP) {
 		}
 		basepc = current_pc;
 	}
-#ifdef BINTR_TIMING
+
 	TIME_POINT(t3);
-	printf(">> Code block detection %ld ns\n", nanodiff(t2, t3));
-#endif
+	if constexpr (BINTR_TIMING) {
+		printf(">> Code block detection %ld ns\n", nanodiff(t2, t3));
+	}
 
 	// Code generation
 	std::vector<NamedIPair<W>> dlmappings;
@@ -269,10 +269,10 @@ const struct Mapping mappings[] = {
 	}
 	code += "};\n";
 
-#ifdef BINTR_TIMING
-	TIME_POINT(t4);
-	printf(">> Code generation took %ld ns\n", nanodiff(t3, t4));
-#endif
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t4);
+		printf(">> Code generation took %ld ns\n", nanodiff(t3, t4));
+	}
 
 	if (verbose) {
 		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
@@ -297,10 +297,10 @@ const struct Mapping mappings[] = {
 		extern void* compile(const std::string& code, int arch, const char*);
 		dylib = compile(code, W, filename.c_str());
 	}
-#ifdef BINTR_TIMING
-	TIME_POINT(t10);
-	printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
-#endif
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t10);
+		printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
+	}
 
 	// Check compilation result
 	if (dylib == nullptr) {
@@ -315,10 +315,10 @@ const struct Mapping mappings[] = {
 			unlink(filename.c_str());
 		}
 	}
-#ifdef BINTR_TIMING
-	TIME_POINT(t12);
-	printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
-#endif
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t12);
+		printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
+	}
 }
 
 template <int W>
@@ -427,10 +427,10 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 
 	exec.set_binary_translated(dylib);
 
-#ifdef BINTR_TIMING
-	TIME_POINT(t12);
-	printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
-#endif
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t12);
+		printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
+	}
 }
 
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, std::vector<TransInstr<4>>) const;
@@ -453,4 +453,4 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	{
 		return (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
 	}
-}
+} // riscv
