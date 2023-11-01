@@ -67,6 +67,12 @@ static inline float fmax(double x, double y) {
 #define fmax(x, y) __builtin_fmax(x, y)
 #endif
 
+#ifdef __HAVE_BUILTIN_SPECULATION_SAFE_VALUE
+#define SPECSAFE(x) __builtin_speculation_safe_value(x)
+#else
+#define SPECSAFE(x) (x)
+#endif
+
 typedef union {
 	int32_t i32[2];
 	float   f32[2];

@@ -148,39 +148,7 @@ struct Emitter
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
 
 	template <typename T>
-	std::string memory_load(std::string type, int reg, int32_t imm)
-	{
-		const std::string data = "rpage" + PCRELS(0);
-		std::string cast;
-		if constexpr (std::is_signed_v<T>) {
-			cast = "(saddr_t)";
-		}
-
-		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_memory_arena())
-		{
-			/* XXX: Check page permissions */
-			const address_t absolute_vaddr = tinfo.gp + imm;
-			if (absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
-				add_code("const char* " + data + " = &arena_base[" + std::to_string(absolute_vaddr) + "];");
-			}
-			return cast + "*(" + type + "*)" + data;
-		}
-
-		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (cpu.machine().memory.uses_memory_arena()) {
-			add_code(
-				"const char* " + data + ";",
-				"if (" + address + " < arena_size)",
-				data + " = &arena_base[(" + address + ") & ~0xFFFLL];",
-				"else",
-				data + " = api.mem_ld(cpu, PAGENO(" + address + "));");
-		} else {
-			add_code("const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));");
-		}
-		return cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")]";
-	}
-	template <typename T>
-	void memory_load_fast(std::string dst, std::string type, int reg, int32_t imm)
+	void memory_load(std::string dst, std::string type, int reg, int32_t imm)
 	{
 		const std::string data = "rpage" + PCRELS(0);
 		std::string cast;
@@ -194,7 +162,7 @@ struct Emitter
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
-					dst + " = " + cast + "*(" + type + "*)&arena_base[" + std::to_string(absolute_vaddr) + "];"
+					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "];"
 				);
 				return;
 			}
@@ -204,7 +172,7 @@ struct Emitter
 		if (cpu.machine().memory.uses_memory_arena()) {
 			add_code(
 				"if (" + address + " < arena_size)",
-					dst + " = " + cast + "*(" + type + "*)&arena_base[" + address + "];",
+					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(address) + "];",
 				"else {",
 					"const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));",
 					dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];",
@@ -225,7 +193,7 @@ struct Emitter
 			/* XXX: Check page permissions */
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr + 8 <= this->cpu.machine().memory.memory_arena_size()) {
-				add_code("*(" + type + "*)&arena_base[" + std::to_string(absolute_vaddr) + "] = " + value + ";");
+				add_code("*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "] = " + value + ";");
 			}
 			return;
 		}
@@ -234,7 +202,7 @@ struct Emitter
 		if (cpu.machine().memory.uses_memory_arena()) {
 			add_code(
 				"if (" + address + " < arena_size)",
-				"  *(" + type + "*)&arena_base[" + address + "] = " + value + ";",
+				"  *(" + type + "*)&arena_base[" + speculation_safe(address) + "] = " + value + ";",
 				"else {",
 				"  char *" + data + " = api.mem_st(cpu, PAGENO(" + address + "));",
 				"  *(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";",
@@ -262,6 +230,13 @@ struct Emitter
 	void emit();
 
 private:
+	static std::string speculation_safe(const std::string& address) {
+		return "SPECSAFE(" + address + ")";
+	}
+	static std::string speculation_safe(const address_t address) {
+		return "SPECSAFE(" + std::to_string(address) + ")";
+	}
+
 	std::string code;
 	CPU<W>& cpu;
 	size_t m_idx = 0;
@@ -338,32 +313,35 @@ void Emitter<W>::emit()
 			if (instr.Itype.rd != 0) {
 			switch (instr.Itype.funct3) {
 			case 0x0: // I8
-				this->memory_load_fast<int8_t>(from_reg(instr.Itype.rd), "int8_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int8_t>(from_reg(instr.Itype.rd), "int8_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x1: // I16
-				this->memory_load_fast<int16_t>(from_reg(instr.Itype.rd), "int16_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int16_t>(from_reg(instr.Itype.rd), "int16_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x2: // I32
-				this->memory_load_fast<int32_t>(from_reg(instr.Itype.rd), "int32_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int32_t>(from_reg(instr.Itype.rd), "int32_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x3: // I64
-				this->memory_load_fast<int64_t>(from_reg(instr.Itype.rd), "int64_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int64_t>(from_reg(instr.Itype.rd), "int64_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x4: // U8
-				this->memory_load_fast<uint8_t>(from_reg(instr.Itype.rd), "uint8_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<uint8_t>(from_reg(instr.Itype.rd), "uint8_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x5: // U16
-				this->memory_load_fast<uint16_t>(from_reg(instr.Itype.rd), "uint16_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<uint16_t>(from_reg(instr.Itype.rd), "uint16_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x6: // U32
-				this->memory_load_fast<uint32_t>(from_reg(instr.Itype.rd), "uint32_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<uint32_t>(from_reg(instr.Itype.rd), "uint32_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			default:
 				ILLEGAL_AND_EXIT();
 			}
 			} else {
 				// We don't care about where we are in the page when rd=0
-				add_code("(void)" + this->memory_load<int8_t>("int8_t", instr.Itype.rs1, instr.Itype.signed_imm()) + ";");
+				const auto temp = "tmp" + PCRELS(0);
+				add_code("uint8_t " + temp + ";");
+				this->memory_load<uint8_t>(temp, "volatile uint8_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				add_code("(void)" + temp + ";");
 			} break;
 		case RV32I_STORE:
 			switch (instr.Stype.funct3) {
@@ -882,12 +860,12 @@ void Emitter<W>::emit()
 			const rv32f_instruction fi{instr};
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
-				this->memory_load_fast<uint32_t>(from_fpreg(fi.Itype.rd) + ".i32[0]", "uint32_t", fi.Itype.rs1, fi.Itype.signed_imm());
+				this->memory_load<uint32_t>(from_fpreg(fi.Itype.rd) + ".i32[0]", "uint32_t", fi.Itype.rs1, fi.Itype.signed_imm());
 				code += from_fpreg(fi.Itype.rd) + ".i32[1] = 0;\n";
 				//code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint32_t>("uint32_t", fi.Itype.rs1, fi.Itype.signed_imm()) + ");\n";
 				break;
 			case 0x3: // FLD
-				this->memory_load_fast<uint64_t>(from_fpreg(fi.Itype.rd) + ".i64", "uint64_t", fi.Itype.rs1, fi.Itype.signed_imm());
+				this->memory_load<uint64_t>(from_fpreg(fi.Itype.rd) + ".i64", "uint64_t", fi.Itype.rs1, fi.Itype.signed_imm());
 				//code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint64_t>("uint64_t", fi.Itype.rs1, fi.Itype.signed_imm()) + ");\n";
 				break;
 #ifdef RISCV_EXT_VECTOR
