@@ -131,6 +131,10 @@ if constexpr (SCAN_FOR_GP) {
 			if (auipc.Utype.rd == 3) { // GP
 				// calculate current PC for AUIPC
 				const address_t pc = basepc + 4 * (it - ipairs.begin());
+				// Malicious input
+				if (UNLIKELY(it+1 == ipairs.end()))
+					return;
+
 				const auto addi = rv32i_instruction {(it+1)->instr};
 				if (addi.opcode() == RV32I_OP_IMM && addi.Itype.funct3 == 0x0) {
 					//printf("Found OP_IMM: ADDI  rd=%d, rs1=%d\n", addi.Itype.rd, addi.Itype.rs1);
@@ -401,8 +405,13 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	Mapping* mappings = (Mapping *)dylib_lookup(dylib, "mappings");
 
 	if (no_mappings == nullptr || mappings == nullptr) {
+		dylib_close(dylib);
+		exec.set_binary_translated(nullptr);
 		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
 	}
+
+	// After this, we should automatically close the dylib on destruction
+	exec.set_binary_translated(dylib);
 
 	// Apply mappings to decoder cache
 	const auto nmappings = *no_mappings;
@@ -417,8 +426,6 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 			entry.set_bytecode(0x0); /* Invalid opcode */
 		}
 	}
-
-	exec.set_binary_translated(dylib);
 
 	if constexpr (BINTR_TIMING) {
 		TIME_POINT(t12);
