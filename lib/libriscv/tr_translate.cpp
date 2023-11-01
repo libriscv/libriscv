@@ -170,24 +170,31 @@ if constexpr (SCAN_FOR_GP) {
 		bool has_branch = false;
 		// Measure length of instructions that belong
 		// together sequentially (a code block).
-		auto current_pc = basepc;
+		for (it = block; it != ipairs.end(); ++it) {
+			const rv32i_instruction instruction{it->instr};
+			const auto opcode = instruction.opcode();
+			// JALR and STOP are show-stoppers / code-block enders
+			if (opcode == RV32I_JALR || instruction.whole == 0x7ff00073) {
+				++it; break;
+			}
+		} // find block
 
-		for (; it != ipairs.end(); ++it) {
+		const auto block_end = it;
+		auto block_end_pc = basepc + (block_end - block) * 4;
+		auto current_pc = basepc;
+		it = block;
+
+		// Find jump locations inside block
+		for (; it != block_end; ++it) {
 			const rv32i_instruction instruction{it->instr};
 			const auto opcode = instruction.opcode();
 
-			// JALR and STOP are show-stoppers / code-block enders
-			if (opcode == RV32I_JALR || instruction.whole == 0x7ff00073)
-			{
-				current_pc += 4;
-				++it; break;
-			}
 			// detect far JAL, otherwise use as local jump
 			if (opcode == RV32I_JAL) {
 				const auto offset = instruction.Jtype.jump_offset();
 				// Long jumps are considered returnable
-				if (std::abs(offset) >= 128) {
-					current_pc += 4;
+				if (current_pc + offset < basepc || current_pc + offset >= block_end_pc) {
+					block_end_pc = current_pc + 4;
 					++it; break;
 				}
 				has_branch = true;
@@ -202,7 +209,7 @@ if constexpr (SCAN_FOR_GP) {
 			}
 
 			current_pc += 4;
-		} // find block
+		} // process block
 
 		// Process block and add it for emission
 		const size_t length = it - block;
@@ -222,7 +229,8 @@ if constexpr (SCAN_FOR_GP) {
 			if (blocks.size() >= options.translate_blocks_max)
 				break;
 		}
-		basepc = current_pc;
+
+		basepc = block_end_pc;
 	}
 
 	TIME_POINT(t3);

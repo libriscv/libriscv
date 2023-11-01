@@ -9,6 +9,7 @@
 
 #define PCRELA(x) ((address_t) (tinfo.basepc + index() * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
+#define FUNCLABEL(i) (func + "_" + std::to_string(i))
 #define INSTRUCTION_COUNT(i) ("c + " + std::to_string(i))
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nUNREACHABLE();\n"; }
 
@@ -19,7 +20,7 @@ static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 struct BranchInfo {
 	bool sign;
 	bool goto_enabled;
-	int jump_label; // destination index, 0 when unused
+	uint64_t jump_pc;
 };
 
 template <int W>
@@ -176,7 +177,7 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_memory_arena()) {
 			add_code(
-				"if (" + address + " < arena_size)",
+				"if (LIKELY(" + address + " < arena_size))",
 					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(address) + "];",
 				"else {",
 					"const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));",
@@ -206,7 +207,7 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_memory_arena()) {
 			add_code(
-				"if (" + address + " < arena_size)",
+				"if (LIKELY(" + address + " < arena_size))",
 				"  *(" + type + "*)&arena_base[" + speculation_safe(address) + "] = " + value + ";",
 				"else {",
 				"  char *" + data + " = api.mem_st(cpu, PAGENO(" + address + "));",
@@ -233,8 +234,20 @@ struct Emitter
 	void add_mapping(address_t addr, std::string symbol) { this->mappings.push_back({addr, std::move(symbol)}); }
 	auto& get_mappings() { return this->mappings; }
 
+	void add_reentry_next() {
+		// Avoid re-entering at the end of the function
+		// WARNING: End-of-function can be empty
+		if (this->pc() + 4 >= end_pc())
+			return;
+		this->mapping_labels.insert(index() + 1);
+		//code.append(FUNCLABEL(this->pc() + 4) + ":;\n");
+	}
+
 	size_t index() const noexcept { return this->m_idx; }
 	address_t pc() const noexcept { return this->m_pc; }
+	address_t begin_pc() const noexcept { return tinfo.basepc; }
+	address_t last_pc() const noexcept { return tinfo.basepc + 4 * (tinfo.len-1); }
+	address_t end_pc() const noexcept { return tinfo.basepc + 4 * tinfo.len; }
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
 
@@ -261,10 +274,10 @@ private:
 
 	std::vector<TransMapping<W>> mappings;
 	std::set<unsigned> labels;
+	std::set<unsigned> mapping_labels;
 	std::set<address_t> pagedata;
 };
 
-#define FUNCLABEL(i)  (func + "_" + std::to_string(i))
 template <int W>
 inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& op)
 {
@@ -276,10 +289,10 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
 		code += "c += " + std::to_string(index()) + "; if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
-	} else if (binfo.jump_label > 0) {
+	} else if (binfo.jump_pc != 0) {
 		// forward jump to label (from absolute index)
 		code += "c += " + std::to_string(index()) + "; if (" + LOOP_EXPRESSION + ") ";
-		code += "goto " + FUNCLABEL(binfo.jump_label) + ";\n";
+		code += "goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
 		// else, exit binary translation
 	}
 	if (PCRELA(instr.Btype.signed_imm()) & 0x3)
@@ -309,12 +322,15 @@ void Emitter<W>::emit()
 		this->m_pc = tinfo.basepc + index() * 4;
 
 		// known jump locations
-		if (tinfo.jump_locations.count(this->pc())) {
-			code.append(FUNCLABEL(i) + ":;\n");
+		if (mapping_labels.count(i)) {
+			// Re-entry through the current function
+			code.append(FUNCLABEL(this->pc()) + ":;\n");
+			this->mappings.push_back({
+				this->pc(), this->func
+			});
 		}
-		else if (labels.count(i))
-		{ // forward branches (empty statement)
-			code.append(FUNCLABEL(i) + ":;\n");
+		else if (tinfo.jump_locations.count(this->pc()) || labels.count(i)) {
+			code.append(FUNCLABEL(this->pc()) + ":;\n");
 		}
 		// instruction generation
 		switch (instr.opcode()) {
@@ -371,44 +387,44 @@ void Emitter<W>::emit()
 			}
 			break;
 		case RV32I_BRANCH: {
+			uint64_t dest_pc = 0;
 			const auto offset = instr.Btype.signed_imm() / 4;
 			// goto branch: restarts function
 			bool ge = tinfo.has_branch && (offset == -(long) i);
 			// forward label: branch inside code block
-			int fl = 0;
 			if (offset > 0 && i+offset < tinfo.len) {
 				// forward label: future address
-				fl = i+offset;
-				labels.insert(fl);
+				labels.insert(dest_pc);
+				dest_pc = this->pc() + instr.Btype.signed_imm();
 			} else if (tinfo.jump_locations.count(PCRELA(offset * 4))) {
 				// forward label: existing jump location
 				const int dstidx = i + offset;
 				if (dstidx > 0 && dstidx < tinfo.len) {
-					fl = dstidx;
+					dest_pc = this->pc() + instr.Btype.signed_imm();
 				}
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch({ false, ge, fl }, " == ");
+				add_branch({ false, ge, dest_pc }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch({ false, ge, fl }, " != ");
+				add_branch({ false, ge, dest_pc }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
 				ILLEGAL_AND_EXIT();
 				break;
 			case 0x4: // LT
-				add_branch({ true, ge, fl }, " < ");
+				add_branch({ true, ge, dest_pc }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch({ true, ge, fl }, " >= ");
+				add_branch({ true, ge, dest_pc }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch({ false, ge, fl }, " < ");
+				add_branch({ false, ge, dest_pc }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch({ false, ge, fl }, " >= ");
+				add_branch({ false, ge, dest_pc }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
@@ -428,25 +444,31 @@ void Emitter<W>::emit()
 				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
 			// forward label: jump inside code block
+			const auto dest_pc = this->pc() + instr.Jtype.jump_offset();
 			const auto offset = instr.Jtype.jump_offset() / 4;
 			int fl = i+offset;
-			if (std::abs(offset * 4) < 128 && fl > 0 && fl < tinfo.len) {
+			if (fl > 0 && fl < tinfo.len) {
 				// forward labels require creating future labels
 				if (fl > i)
-					labels.insert(fl);
+					labels.insert(dest_pc);
 				// this is a jump back to the start of the function
-				add_code("c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(fl) + ";");
+				add_code("c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
 				// if we run out of instructions, we must exit:
 				add_code(
 					"*cur_insn = c;\n"
-					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
+					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
 				exit_function();
+				if (instr.Jtype.rd != 0)
+					this->add_reentry_next();
 			} else {
 				// Because of forward jumps we can't end the function here
 				add_code(
 					"*cur_insn = c + " + std::to_string(i) + ";\n"
-					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");\n");
+					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
 				exit_function();
+				add_code("");
+				if (instr.Jtype.rd != 0)
+					this->add_reentry_next();
 			}
 			if (no_labels_after_this()) {
 				add_code("}");
@@ -1104,6 +1126,20 @@ CPU<W>::emit(std::string& code, TransInstr<W>* ip, const TransInfo<W>& tinfo) co
 	// Function header
 	code += "extern void " + e.get_func() + "(CPU* cpu) {\n"
 		"uint64_t c = *cur_insn, local_max_insn = *max_insn;\n";
+
+	// Extra function entries
+	if (e.get_mappings().size() > 1)
+	{
+		code += "switch (cpu->pc) {\n";
+		code += "case " + std::to_string(tinfo.basepc) + ": goto " + e.get_func() + "_start;\n";
+		for (size_t idx = 1; idx < e.get_mappings().size(); idx++) {
+			auto& entry = e.get_mappings().at(idx);
+			const auto label = e.get_func() + "_" + std::to_string(entry.addr);
+			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
+		}
+		//code += "default: api.exception(cpu, 3);\n";
+		code += "}\n";
+	}
 
 	// Function GPRs
 	for (size_t reg = 1; reg < 32; reg++) {
