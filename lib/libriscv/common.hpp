@@ -173,6 +173,12 @@ namespace riscv
 #define RISCV_NOINLINE      __declspec(noinline)
 #endif
 
+#ifdef __HAVE_BUILTIN_SPECULATION_SAFE_VALUE
+#define RISCV_SPECSAFE(x) __builtin_speculation_safe_value(x)
+#else
+#define RISCV_SPECSAFE(x) (x)
+#endif
+
 #ifndef RISCV_INTERNAL
 #ifdef __GNUG__
 #define RISCV_INTERNAL __attribute__((visibility("internal")))

@@ -73,8 +73,7 @@ template <int W>
 inline void Machine<W>::system_call(size_t sysnum)
 {
 	if (LIKELY(sysnum < syscall_handlers.size())) {
-		const auto& handler = Machine::syscall_handlers[sysnum];
-		handler(*this);
+		Machine::syscall_handlers[RISCV_SPECSAFE(sysnum)](*this);
 	} else {
 		on_unhandled_syscall(*this, sysnum);
 	}
