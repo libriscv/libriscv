@@ -38,12 +38,6 @@ inline DecoderData<W>& decoder_entry_at(const DecodedExecuteSegment<W>& exec, ad
 }
 
 template <int W>
-struct NamedIPair {
-	address_type<W> addr;
-	std::string symbol;
-};
-
-template <int W>
 int CPU<W>::load_translation(const MachineOptions<W>& options,
 	std::string* filename, DecodedExecuteSegment<W>& exec) const
 {
@@ -237,21 +231,21 @@ if constexpr (SCAN_FOR_GP) {
 	}
 
 	// Code generation
-	std::vector<NamedIPair<W>> dlmappings;
+	std::vector<TransMapping<W>> dlmappings;
 	extern const std::string bintr_code;
 	std::string code = bintr_code;
 
 	for (const auto& block : blocks)
 	{
-		std::string func =
-			"f" + std::to_string(block.addr);
-		emit(code, func, &block.instr, {
+		auto result = emit(code, &block.instr, {
 			block.addr, gp, (int)block.length,
 			block.has_branch,
 			true, // forward jumps
 			std::move(block.jump_locations)
 		});
-		dlmappings.push_back({block.addr, std::move(func)});
+		for (auto& mapping : result) {
+			dlmappings.push_back(std::move(mapping));
+		}
 	}
 	// Append all instruction handler -> dl function mappings
 	code += "const uint32_t no_mappings = "

@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <string>
 #include <type_traits>
 
 namespace riscv
@@ -87,6 +88,12 @@ namespace riscv
 
 	template <int W>
 	struct TransInfo;
+
+	template <int W>
+	struct TransMapping {
+		address_type<W> addr;
+		std::string     symbol;
+	};
 
 	template <int W>
 	struct TransInstr

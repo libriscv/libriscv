@@ -14,6 +14,7 @@
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "c < local_max_insn";
+static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 
 struct BranchInfo {
 	bool sign;
@@ -25,10 +26,14 @@ template <int W>
 struct Emitter
 {
 	static constexpr bool CACHED_REGISTERS = false;
+	static constexpr unsigned XLEN = W * 8u;
 	using address_t = address_type<W>;
 
-	Emitter(CPU<W>& c, const std::string& pfunc, const TransInstr<W>* pip, const TransInfo<W>& ptinfo)
-		: cpu(c), func(pfunc), ip(pip), tinfo(ptinfo) {}
+	Emitter(CPU<W>& c, const TransInstr<W>* pip, const TransInfo<W>& ptinfo)
+		: cpu(c), m_pc(ptinfo.basepc), ip(pip), tinfo(ptinfo)
+	{
+		this->func = "f" + std::to_string(this->pc());
+	}
 
 	template <typename ... Args>
 	void add_code(Args&& ... addendum) {
@@ -225,8 +230,12 @@ struct Emitter
 		return true;
 	}
 
+	void add_mapping(address_t addr, std::string symbol) { this->mappings.push_back({addr, std::move(symbol)}); }
+	auto& get_mappings() { return this->mappings; }
+
 	size_t index() const noexcept { return this->m_idx; }
 	address_t pc() const noexcept { return this->m_pc; }
+	const std::string get_func() const noexcept { return this->func; }
 	void emit();
 
 private:
@@ -246,10 +255,11 @@ private:
 	std::array<bool, 32> gprs {};
 	std::array<bool, 32> gpr_exists {};
 
-	const std::string& func;
+	std::string func;
 	const TransInstr<W>* ip;
 	const TransInfo<W>& tinfo;
 
+	std::vector<TransMapping<W>> mappings;
 	std::set<unsigned> labels;
 	std::set<address_t> pagedata;
 };
@@ -290,8 +300,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 template <int W>
 void Emitter<W>::emit()
 {
-	static constexpr unsigned XLEN = W * 8u;
-	static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
+	this->add_mapping(this->pc(), this->func);
 	add_code(func + "_start:;");
 
 	for (int i = 0; i < tinfo.len; i++) {
@@ -1086,13 +1095,14 @@ void Emitter<W>::emit()
 }
 
 template <int W>
-void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
+std::vector<TransMapping<W>>
+CPU<W>::emit(std::string& code, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
 {
-	Emitter<W> e(const_cast<CPU<W>&>(*this), func, ip, tinfo);
+	Emitter<W> e(const_cast<CPU<W>&>(*this), ip, tinfo);
 	e.emit();
 
 	// Function header
-	code += "extern void " + func + "(CPU* cpu) {\n"
+	code += "extern void " + e.get_func() + "(CPU* cpu) {\n"
 		"uint64_t c = *cur_insn, local_max_insn = *max_insn;\n";
 
 	// Function GPRs
@@ -1104,8 +1114,12 @@ void CPU<W>::emit(std::string& code, const std::string& func, TransInstr<W>* ip,
 
 	// Function code
 	code += e.get_code();
+
+	return std::move(e.get_mappings());
 }
 
-template void CPU<4>::emit(std::string&, const std::string&, TransInstr<4>*, const TransInfo<4>&) const;
-template void CPU<8>::emit(std::string&, const std::string&, TransInstr<8>*, const TransInfo<8>&) const;
+template std::vector<TransMapping<4>>
+	CPU<4>::emit(std::string&, TransInstr<4>*, const TransInfo<4>&) const;
+template std::vector<TransMapping<8>>
+	CPU<8>::emit(std::string&, TransInstr<8>*, const TransInfo<8>&) const;
 } // riscv

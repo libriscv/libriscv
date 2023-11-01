@@ -134,7 +134,7 @@ namespace riscv
 		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
 #endif
 
-		void emit(std::string& code, const std::string& symb, TransInstr<W>* blk, const TransInfo<W>&) const;
+		std::vector<TransMapping<W>> emit(std::string& code, TransInstr<W>* blk, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
 		DecodedExecuteSegment<W>* m_exec = nullptr;
