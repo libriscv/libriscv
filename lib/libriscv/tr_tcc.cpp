@@ -1,5 +1,5 @@
+#include "common.hpp"
 #include <libtcc.h>
-#include <string>
 
 namespace riscv
 {
@@ -9,6 +9,8 @@ namespace riscv
 		tcc_set_output_type(state, TCC_OUTPUT_MEMORY);
 
 		tcc_define_symbol(state, "RISCV_TRANSLATION_DYLIB", arch == 4 ? "4" : "8");
+		tcc_define_symbol(state, "RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX).c_str());
+
 		tcc_define_symbol(state, "ARCH", "HOST_UNKNOWN");
 		tcc_set_options(state, "-std=c99 -O2");
 

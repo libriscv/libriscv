@@ -111,13 +111,15 @@ typedef struct {
 
 #define PAGENO(x) ((addr_t)(x) >> 12)
 #define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
+typedef void (*syscall_t) (CPU*);
 
 static struct CallbackTable {
 	const char* (*mem_ld) (const CPU*, addr_t);
 	char* (*mem_st) (const CPU*, addr_t);
 	void (*vec_load)(const CPU*, int, addr_t);
 	void (*vec_store)(const CPU*, addr_t, int);
-	int  (*syscall)(CPU*, addr_t);
+	syscall_t* syscalls;
+	void (*unknown_syscall)(CPU*, addr_t);
 	void (*ebreak)(CPU*);
 	void (*system)(CPU*, uint32_t);
 	void (*execute)(CPU*, uint32_t);
@@ -129,6 +131,17 @@ static char* arena_base;
 static addr_t arena_size;
 static uint64_t* cur_insn;
 static uint64_t* max_insn;
+
+static inline int do_syscall(CPU* cpu, addr_t sysno)
+{
+	addr_t old_pc = cpu->pc;
+	if (LIKELY(sysno < RISCV_MAX_SYSCALLS))
+		api.syscalls[SPECSAFE(sysno)](cpu);
+	else
+		api.unknown_syscall(cpu, sysno);
+	// if the system call did not modify PC, return to bintr
+	return !(cpu->pc == old_pc && *cur_insn < *max_insn);
+}
 
 static inline void jump(CPU* cpu, addr_t addr) {
 	if (__builtin_expect((addr & 0x3) == 0, 1)) {

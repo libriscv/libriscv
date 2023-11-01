@@ -728,7 +728,7 @@ void Emitter<W>::emit()
 							"*cur_insn = c;\n";
 					const auto syscall_reg = from_reg(REG_ECALL);
 					this->restore_syscall_registers();
-					code += "if (UNLIKELY(api.syscall(cpu, " + syscall_reg + "))) {\nreturn;}\n";
+					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + "))) {\nreturn;}\n";
 					code += "local_max_insn = *max_insn;\n";
 					// Restore A0
 					this->invalidate_register(REG_ARG0);

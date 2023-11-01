@@ -363,16 +363,9 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 			(void)cpu; (void)addr; (void)vd;
 #endif
 		},
-		.syscall = [] (CPU<W>& cpu, address_type<W> n) -> int {
-			auto old_pc = cpu.pc();
-			cpu.machine().system_call(n);
-			// if the system did not modify PC, return to bintr
-			if (cpu.pc() == old_pc && !cpu.machine().stopped()) {
-				cpu.registers().pc = old_pc;
-				return 0;
-			}
-			// otherwise, update instruction counter and exit
-			return 1;
+		.syscalls = m_machine.syscall_handlers.data(),
+		.unknown_syscall = [] (CPU<W>& cpu, address_type<W> sysno) {
+			cpu.machine().on_unhandled_syscall(cpu.machine(), sysno);
 		},
 		.ebreak = [] (CPU<W>& cpu) {
 			cpu.machine().ebreak();

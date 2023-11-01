@@ -1,6 +1,7 @@
+#include "common.hpp"
+
 #include <cstring>
 #include <dlfcn.h>
-#include <string>
 #include <unistd.h>
 
 static std::string compiler()
@@ -37,10 +38,11 @@ namespace riscv
 	std::string compile_command(int arch)
 	{
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
-		" -fexceptions "
-		"-DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch)
-		 + " -DARCH=" + host_arch() + ""
-		 " -pipe " + cflags();
+		" -fexceptions"
+		" -DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch) +
+		" -DRISCV_MAX_SYSCALLS=" + std::to_string(RISCV_SYSCALLS_MAX) +
+		" -DARCH=" + host_arch() + ""
+		" -pipe " + cflags();
 	}
 
 	void*

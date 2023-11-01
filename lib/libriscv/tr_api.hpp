@@ -3,12 +3,16 @@
 
 namespace riscv {
 	template <int W>
+	using syscall_t = void(*)(Machine<W>&);
+
+	template <int W>
 	struct CallbackTable {
 		const void* (*mem_read)(CPU<W>&, address_type<W> addr);
 		void* (*mem_write) (CPU<W>&, address_type<W> addr);
 		void (*vec_load)(CPU<W>&, int vd, address_type<W> addr);
 		void (*vec_store) (CPU<W>&, address_type<W> addr, int vd);
-		int  (*syscall)(CPU<W>&, address_type<W>);
+		syscall_t<W>* syscalls;
+		void (*unknown_syscall)(CPU<W>&, address_type<W>);
 		void (*ebreak)(CPU<W>&);
 		void (*system)(CPU<W>&, uint32_t);
 		void (*execute)(CPU<W>&, uint32_t);
