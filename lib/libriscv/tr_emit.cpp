@@ -330,16 +330,16 @@ void Emitter<W>::emit()
 
 		// known jump locations
 		if (mapping_labels.count(i)) {
+			this->increment_counter_so_far();
 			// Re-entry through the current function
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
 			this->mappings.push_back({
 				this->pc(), this->func
 			});
-			this->increment_counter_so_far();
 		}
 		else if (tinfo.jump_locations.count(this->pc()) || labels.count(i)) {
-			code.append(FUNCLABEL(this->pc()) + ":;\n");
 			this->increment_counter_so_far();
+			code.append(FUNCLABEL(this->pc()) + ":;\n");
 		}
 
 		this->m_instr_counter += 1;
