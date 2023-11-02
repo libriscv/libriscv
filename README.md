@@ -287,20 +287,42 @@ See [this unit test](/tests/unit/custom.cpp) for an example on how to add your o
 
 ## Why a RISC-V library
 
-It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely? It can step through RISC-V programs line by line showing registers and memory locations. It also has some extra features that allow you to make function calls into the guest program. I think it's pretty cool stuff.
-
-## What to use for performance
-
-Building the fastest possible RISC-V binaries for libriscv is a hard problem, but I am working on that in my [rvscript](https://github.com/fwsGonzo/rvscript) repository. It's a complex topic that cannot be explained in one paragraph.
-
-If you have arenas available you can replace the default page fault handler with your own that allocates faster than regular heap. If you intend to use many (read hundreds, thousands) of machines in parallel, you absolutely must use the Machine forking constructor. It will apply copy-on-write to all pages on the newly created machine and share text, rodata and the instruction cache. It's also possible to use fault handlers while foregoing even the copy-on-write process in order to reduce the forking time.
+It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely? It can step through RISC-V programs line by line showing registers and memory locations. It also has some extra features that allow you to make function calls into the guest program. I think it's pretty cool stuff.
 
 ## Multiprocessing
 
 There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
 
-## Binary translation
 
-Instead of JIT, the emulator supports translating binaries to native code using any local C compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`.
+## Dispatch modes
 
-The binary translation feature (accessible by enabling the RISCV_EXPERIMENTAL CMake option) can greatly improve performance in some cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is a work in progress.
+### Bytecode simulation modes
+
+- Bytecode simulation using switch case
+- Threaded bytecode simulation
+- Tailcall bytecode simulation (experimental)
+
+### Remote GDB using RSP server
+
+- Step through the code using built-in pretty printers
+
+### Build your own interpreter loop
+
+- Using CPU::step_one(), one can step one instruction
+- Precise simulation with custom conditions
+
+### Using the DebugMachine wrapper
+
+- Simulate one instruction at a time
+- Verbose instruction logging
+- Debugger CLI with commands
+
+### Binary translation
+
+The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLATION` CMake option) can greatly improve performance in some cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is still a work in progress.
+
+Instead of JIT, the emulator supports translating binaries to native code using any local C compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. `NO_TRANSLATE=1` can be used to disable binary translation in order to compare output or performance.
+
+The binary translation has best performance when combined with the experimental CMake option `RISCV_FLAT_RW_ARENA`, which makes everything after the read-only ELF segments always writable as an optimization, effectively turning it into a writable arena (up to the given memory limit). This option can be found by enabling the `RISCV_EXPERIMENTAL` CMake option. Further, I have occasionally seen the tailcall dispatch running faster than threaded dispatch, enabled with the `RISCV_TAILCALL_DISPATCH` CMake option.
+
+An experimental libtcc mode can be unlocked by enabling `RISCV_EXPERIMENTAL`, called `RISCV_LIBTCC`. When enabled, libriscv will invoke libtcc on code generated for each execute segment. It is usually faster than bytecode simulation, but not always.

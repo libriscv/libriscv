@@ -35,7 +35,7 @@ endif()
 if (RISCV_EXPERIMENTAL)
 	# FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
 	# Memory before the heap and outside of the arena behaves like before.
-	option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" OFF)
+	option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
 	# TAILCALL_DISPATCH enables clang-based compilers to use musttail dispatch.
 	option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
 	# MULTIPROCESS enables experimental features that allow
