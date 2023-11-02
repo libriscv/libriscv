@@ -40,8 +40,8 @@ jobs:
     - name: Emulator debug build
       run: bash ci.sh -DRISCV_DEBUG=ON
 
-    - name: No fast-sim build
-      run: bash ci.sh -DRISCV_FASTSIM=OFF
+    - name: No threaded build
+      run: bash ci.sh -DRISCV_THREADED=OFF
 
     - name: No extensions build
       run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
@@ -56,16 +56,22 @@ jobs:
       run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=ON
 
     - name: Experimental build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=OFF
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=OFF
 
-    - name: Experimental fastsim build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON
+    - name: Experimental + threaded build
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON
 
-    - name: Experimental fastsim debug build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_FASTSIM=ON -DRISCV_DEBUG=ON
+    - name: Experimental + threaded debug build
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON -DRISCV_DEBUG=ON
 
     - name: No multiprocessing build
-      run: bash ci.sh -DRISCV_MULTIPROCESS=OFF
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_MULTIPROCESS=OFF
 
     - name: Multiprocessing debug build
-      run: bash ci.sh -DRISCV_MULTIPROCESS=ON -DRISCV_DEBUG=ON
+      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_MULTIPROCESS=ON -DRISCV_DEBUG=ON
+
+    - name: Binary translation build
+      run: bash ci.sh -DRISCV_BINARY_TRANSLATION=ON -DRISCV_DEBUG=OFF -DRISCV_EXT_C=OFF
+
+    - name: Binary translation debug build
+      run: bash ci.sh -DRISCV_BINARY_TRANSLATION=ON -DRISCV_DEBUG=ON -DRISCV_EXT_C=OFF

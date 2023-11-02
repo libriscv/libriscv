@@ -17,11 +17,9 @@ option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 # MEMORY_TRAPS allows you to trap writes to uncacheable
 # pages in memory. Cached pages can only be trapped once.
 option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
-# MULTIPROCESS enables experimental features that allow
-# executing RISC-V guest functions in parallel.
-option(RISCV_MULTIPROCESS  "Enable multiprocessing" OFF)
-# SUPERVISOR enables full-system emulation. WIP.
-option(RISCV_SUPERVISOR  "Enable supervisor mode" OFF)
+# BINARY_TRANSLATION will make libriscv generate portable C-code,
+# and invoke a system compiler to execute a program much faster.
+option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
 
 set(THREADED_IS_DEFAULT OFF)
 # Threaded simulation uses computed goto, and is not supported
@@ -35,10 +33,20 @@ else()
 endif()
 
 if (RISCV_EXPERIMENTAL)
-	option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
-	option(RISCV_LIBTCC              "Enable binary translation with libtcc" OFF)
+	# FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
+	# Memory before the heap and outside of the arena behaves like before.
 	option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" OFF)
+	# TAILCALL_DISPATCH enables clang-based compilers to use musttail dispatch.
 	option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
+	# MULTIPROCESS enables experimental features that allow
+	# executing RISC-V guest functions in parallel using a custom API.
+	option(RISCV_MULTIPROCESS        "Enable multiprocessing" OFF)
+	# SUPERVISOR enables full-system emulation. WIP.
+	option(RISCV_SUPERVISOR          "Enable RISC-V supervisor mode" OFF)
+endif()
+if (RISCV_EXPERIMENTAL AND RISCV_BINARY_TRANSLATION)
+	# LIBTCC will embed the TCC compiler library, using it for binary translation.
+	option(RISCV_LIBTCC              "Enable binary translation with libtcc" OFF)
 endif()
 
 set (SOURCES
