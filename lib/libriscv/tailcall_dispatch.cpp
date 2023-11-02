@@ -269,7 +269,8 @@ namespace riscv
 		pc = cpu.registers().pc + 4;
 		CHECKED_JUMP();
 #else
-		trigger_exception(FEATURE_DISABLED, pc);
+		(void)d;
+		cpu.trigger_exception(FEATURE_DISABLED, pc);
 #endif
 	}
 
@@ -353,6 +354,7 @@ namespace riscv
 		[RV32C_BC_ADDI]     = rv32c_addi,
 		[RV32C_BC_LI]       = rv32c_addi,
 		[RV32C_BC_MV]       = rv32c_addi,
+		[RV32C_BC_BNEZ]     = rv32c_bnez,
 		[RV32C_BC_LDD]      = rv32c_ldd,
 		[RV32C_BC_STD]      = rv32c_std,
 		[RV32C_BC_FUNCTION] = rv32c_func,
@@ -378,9 +380,7 @@ namespace riscv
 		[RV32V_BC_VFADD_VV] = rv32v_vfadd_vv,
 #endif
 		[RV32I_BC_FUNCTION] = execute_decoded_function,
-#ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = translated_function,
-#endif
 		[RV32I_BC_SYSTEM]  = rv32i_system,
 		};
 	}

@@ -1,4 +1,4 @@
-name: Experimental Unit Tests
+name: Threaded Unit Tests
 
 on:
   push:
@@ -12,9 +12,6 @@ jobs:
     defaults:
       run:
         working-directory: ${{github.workspace}}/tests/unit
-    strategy:
-      matrix:
-        compiler: [clang++-15]
 
     steps:
     - uses: actions/checkout@v2
@@ -22,12 +19,12 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y clang-15 gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
+        sudo apt install -y gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
         git submodule update --init ${{github.workspace}}/tests/Catch2
         git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
 
     - name: Configure
-      run: cmake -B ${{github.workspace}}/build -DRISCV_TAILCALL_DISPATCH=ON -DRISCV_EXPERIMENTAL=ON -DRISCV_FLAT_RW_ARENA=OFF -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DRISCV_THREADED=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build the unittests
       run: cmake --build ${{github.workspace}}/build
