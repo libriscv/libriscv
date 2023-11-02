@@ -162,9 +162,9 @@ struct Emitter
 
 		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_memory_arena())
 		{
-			/* XXX: Check page permissions */
+			/* XXX: Check page permissions here? */
 			const address_t absolute_vaddr = tinfo.gp + imm;
-			if (absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
+			if (absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
 					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "];"
 				);
@@ -175,7 +175,7 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_memory_arena()) {
 			add_code(
-				"if (LIKELY(" + address + " < arena_size))",
+				"if (LIKELY(ARENA_READABLE(" + address + ")))",
 					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(address) + "];",
 				"else {",
 					"const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));",
@@ -196,7 +196,7 @@ struct Emitter
 		{
 			/* XXX: Check page permissions */
 			const address_t absolute_vaddr = tinfo.gp + imm;
-			if (absolute_vaddr + 8 <= this->cpu.machine().memory.memory_arena_size()) {
+			if (absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
 				add_code("*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "] = " + value + ";");
 			}
 			return;
@@ -205,7 +205,7 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_memory_arena()) {
 			add_code(
-				"if (LIKELY(" + address + " < arena_size))",
+				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
 				"  *(" + type + "*)&arena_base[" + speculation_safe(address) + "] = " + value + ";",
 				"else {",
 				"  char *" + data + " = api.mem_st(cpu, PAGENO(" + address + "));",

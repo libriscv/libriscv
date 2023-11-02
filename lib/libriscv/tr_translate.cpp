@@ -62,8 +62,8 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 	// Checksum the execute segment + compiler flags
 	TIME_POINT(t5);
-	extern std::string compile_command(int arch);
-	const auto cc = compile_command(W);
+	extern std::string compile_command(int arch, uint64_t arena_size, uint64_t arena_roend);
+	const auto cc = compile_command(W, machine().memory.memory_arena_size(), machine().memory.initial_rodata_end());
 	const uint32_t checksum =
 		crc32c(exec_data, exec.exec_end() - exec.exec_begin())
 		^ crc32c(cc.c_str(), cc.size());
@@ -296,12 +296,12 @@ const struct Mapping mappings[] = {
 
 	TIME_POINT(t9);
 	if constexpr (libtcc_enabled) {
-		extern void* libtcc_compile(const std::string& code, int arch, const std::string&);
-		dylib = libtcc_compile(code, W, options.libtcc1_location);
+		extern void* libtcc_compile(const std::string& code, int arch, uint64_t arena_size, uint64_t arena_roend, const std::string&);
+		dylib = libtcc_compile(code, W, machine().memory.memory_arena_size(), machine().memory.initial_rodata_end(), options.libtcc1_location);
 
 	} else {
-		extern void* compile(const std::string& code, int arch, const char*);
-		dylib = compile(code, W, filename.c_str());
+		extern void* compile(const std::string& code, int arch, uint64_t arena_size, uint64_t arena_roend, const char*);
+		dylib = compile(code, W, machine().memory.memory_arena_size(), machine().memory.initial_rodata_end(), filename.c_str());
 	}
 	if constexpr (BINTR_TIMING) {
 		TIME_POINT(t10);
@@ -345,7 +345,7 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		return;
 	}
 
-	auto func = (void (*)(const CallbackTable<W>&, void*, uint64_t, uint64_t*, uint64_t*)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&, void*, uint64_t*, uint64_t*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
 			return cpu.machine().memory.cached_readable_page(addr << 12, 1).buffer8.data();
@@ -394,7 +394,6 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		},
 	},
 	m_machine.memory.memory_arena_ptr(),
-	m_machine.memory.memory_arena_size(),
 	&m_machine.get_counters().first,
 	&m_machine.get_counters().second);
 

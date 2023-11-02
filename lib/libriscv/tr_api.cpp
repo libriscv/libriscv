@@ -128,9 +128,10 @@ static struct CallbackTable {
 	double (*sqrtf64)(double);
 } api;
 static char* arena_base;
-static addr_t arena_size;
 static uint64_t* cur_insn;
 static uint64_t* max_insn;
+#define ARENA_READABLE(x) ((x) >= 0x1000 && (x) < RISCV_ARENA_END)
+#define ARENA_WRITABLE(x) ((x) >= RISCV_ARENA_ROEND && (x) < RISCV_ARENA_END)
 
 static inline int do_syscall(CPU* cpu, addr_t sysno)
 {
@@ -174,11 +175,13 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern void init(struct CallbackTable* table, char* abase, uint64_t asize, uint64_t* cur_icount, uint64_t* max_icount)
+extern void init(struct CallbackTable* table,
+	char*    abase,
+	uint64_t* cur_icount,
+	uint64_t* max_icount)
 {
 	api = *table;
 	arena_base = abase;
-	arena_size = asize;
 	cur_insn = cur_icount;
 	max_insn = max_icount;
 };

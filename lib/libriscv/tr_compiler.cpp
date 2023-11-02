@@ -35,18 +35,20 @@ static std::string host_arch()
 
 namespace riscv
 {
-	std::string compile_command(int arch)
+	std::string compile_command(int arch, uint64_t arena_size, uint64_t arena_roend)
 	{
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
 		" -fexceptions"
 		" -DRISCV_TRANSLATION_DYLIB=" + std::to_string(arch) +
 		" -DRISCV_MAX_SYSCALLS=" + std::to_string(RISCV_SYSCALLS_MAX) +
+		" -DRISCV_ARENA_END=" + std::to_string(arena_size) +
+		" -DRISCV_ARENA_ROEND=" + std::to_string(arena_roend) +
 		" -DARCH=" + host_arch() + ""
 		" -pipe " + cflags();
 	}
 
 	void*
-	compile(const std::string& code, int arch, const char* outfile)
+	compile(const std::string& code, int arch, uint64_t arena_size, uint64_t arena_roend, const char* outfile)
 	{
 		// create temporary filename
 		char namebuffer[64];
@@ -64,7 +66,7 @@ namespace riscv
 		}
 		// system compiler invocation
 		const std::string command =
-			compile_command(arch) + " "
+			compile_command(arch, arena_size, arena_roend) + " "
 			 + " -o " + std::string(outfile) + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 

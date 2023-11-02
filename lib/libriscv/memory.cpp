@@ -181,6 +181,12 @@ namespace riscv
 				throw MachineException(INVALID_PROGRAM, "Execute segment must be execute-only");
 			}
 		}
+		if (attr.write) {
+			if (this->m_initial_rodata_end == 0)
+				this->m_initial_rodata_end = hdr->p_vaddr;
+			else
+				this->m_initial_rodata_end = std::min(m_initial_rodata_end, hdr->p_vaddr);
+		}
 
 		// Load into virtual memory
 		this->memcpy(hdr->p_vaddr, src, len);
@@ -327,6 +333,10 @@ namespace riscv
 			auto host_page = this->mmap_allocate(Page::size());
 			this->install_shared_page(page_number(host_page), Page::host_page());
 			this->m_exit_address = host_page;
+		}
+		// Zero-segment ELF?
+		if (this->m_initial_rodata_end == 0x0) {
+			this->m_initial_rodata_end = RWREAD_BEGIN;
 		}
 
 		if constexpr (W <= 8) {

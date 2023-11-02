@@ -22,7 +22,8 @@ namespace riscv
 		using page_fault_cb_t = riscv::Function<Page&(Memory&, address_t, bool)>;
 		using page_readf_cb_t = riscv::Function<const Page&(const Memory&, address_t)>;
 		using page_write_cb_t = riscv::Function<void(Memory&, address_t, Page&)>;
-		static constexpr address_t BRK_MAX    = 0x1000000; // Default BRK size
+		static constexpr address_t BRK_MAX      = 0x1000000; // Default BRK size
+		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
 
 		template <typename T>
 		T read(address_t src);
@@ -169,6 +170,7 @@ namespace riscv
 		bool uses_memory_arena() const noexcept { return this->m_arena != nullptr; }
 		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena; }
 		address_t memory_arena_size() const noexcept { return this->m_arena_pages * Page::size(); }
+		address_t initial_rodata_end() const noexcept { return this->m_initial_rodata_end; }
 
 		// serializes all the machine state + a tiny header to @vec
 		void serialize_to(std::vector<uint8_t>& vec) const;
@@ -246,6 +248,7 @@ namespace riscv
 		// Linear arena at start of memory (mmap-backed)
 		PageData* m_arena = nullptr;
 		size_t m_arena_pages = 0;
+		address_t m_initial_rodata_end = 0;
 		friend struct CPU<W>;
 	};
 #include "memory_inline.hpp"
