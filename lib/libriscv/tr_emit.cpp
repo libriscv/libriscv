@@ -10,7 +10,6 @@
 #define PCRELA(x) ((address_t) (tinfo.basepc + index() * 4 + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define FUNCLABEL(i) (func + "_" + std::to_string(i))
-#define INSTRUCTION_COUNT(i) ("c + " + std::to_string(i))
 #define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nUNREACHABLE();\n"; }
 
 namespace riscv {
@@ -101,8 +100,7 @@ struct Emitter
 		if constexpr (CACHED_REGISTERS) {
 			this->restore_all_registers();
 		}
-		add_code("return;");
-		if (add_bracket) add_code("}");
+		add_code("*cur_insn = c;", (add_bracket) ? "return; }" : "return;");
 	}
 
 	std::string from_reg(int reg) {
@@ -243,6 +241,17 @@ struct Emitter
 		//code.append(FUNCLABEL(this->pc() + 4) + ":;\n");
 	}
 
+	uint64_t reset_and_get_icounter() {
+		auto result = this->m_instr_counter;
+		this->m_instr_counter = 0;
+		return result;
+	}
+	void increment_counter_so_far() {
+		auto icount = this->reset_and_get_icounter();
+		if (icount > 0)
+			code.append("c += " + std::to_string(icount) + ";\n");
+	}
+
 	size_t index() const noexcept { return this->m_idx; }
 	address_t pc() const noexcept { return this->m_pc; }
 	address_t begin_pc() const noexcept { return tinfo.basepc; }
@@ -264,6 +273,7 @@ private:
 	size_t m_idx = 0;
 	address_t m_pc = 0x0;
 	rv32i_instruction instr;
+	uint64_t m_instr_counter = 0;
 
 	std::array<bool, 32> gprs {};
 	std::array<bool, 32> gpr_exists {};
@@ -288,11 +298,10 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
-		code += "c += " + std::to_string(index()) + "; if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
+		code += "if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
 	} else if (binfo.jump_pc != 0) {
 		// forward jump to label (from absolute index)
-		code += "c += " + std::to_string(index()) + "; if (" + LOOP_EXPRESSION + ") ";
-		code += "goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
+		code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
 		// else, exit binary translation
 	}
 	if (PCRELA(instr.Btype.signed_imm()) & 0x3)
@@ -303,9 +312,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	else
 	{
 		// The number of instructions to increment depends on if branch-instruction-counting is enabled
-		code += 
-			"*cur_insn = c; "
-			"cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n";
+		code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n";
 		exit_function(true); // Bracket
 	}
 }
@@ -328,10 +335,15 @@ void Emitter<W>::emit()
 			this->mappings.push_back({
 				this->pc(), this->func
 			});
+			this->increment_counter_so_far();
 		}
 		else if (tinfo.jump_locations.count(this->pc()) || labels.count(i)) {
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
+			this->increment_counter_so_far();
 		}
+
+		this->m_instr_counter += 1;
+
 		// instruction generation
 		switch (instr.opcode()) {
 		case RV32I_LOAD:
@@ -387,6 +399,7 @@ void Emitter<W>::emit()
 			}
 			break;
 		case RV32I_BRANCH: {
+			this->increment_counter_so_far();
 			uint64_t dest_pc = 0;
 			const auto offset = instr.Btype.signed_imm() / 4;
 			// goto branch: restarts function
@@ -429,17 +442,23 @@ void Emitter<W>::emit()
 			} } break;
 		case RV32I_JALR: {
 			// jump to register + immediate
-			// NOTE: We need to remember RS1 because it can be clobbered by RD
-			add_code("{addr_t jrs1 = " + from_reg(instr.Itype.rs1) + ";");
+			this->increment_counter_so_far();
 			if (instr.Itype.rd != 0) {
-				add_code(to_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";");
+				// NOTE: We need to remember RS1 because it can be clobbered by RD
+				add_code(
+					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
+					to_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";",
+					"jump(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }"
+				);
+			} else {
+				add_code(
+					"jump(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + " - 4);"
+				);
 			}
-			add_code(
-				"*cur_insn = c + " + std::to_string(i) + ";\n"
-				"jump(cpu, jrs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }");
 			exit_function(true);
 			} return;
 		case RV32I_JAL: {
+			this->increment_counter_so_far();
 			if (instr.Jtype.rd != 0) {
 				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
@@ -452,26 +471,21 @@ void Emitter<W>::emit()
 				if (fl > i)
 					labels.insert(dest_pc);
 				// this is a jump back to the start of the function
-				add_code("c += " + std::to_string(i) + "; if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
+				add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
 				// if we run out of instructions, we must exit:
-				add_code(
-					"*cur_insn = c;\n"
-					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
+				add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
 				exit_function();
 				if (instr.Jtype.rd != 0)
 					this->add_reentry_next();
 			} else {
 				// Because of forward jumps we can't end the function here
-				add_code(
-					"*cur_insn = c + " + std::to_string(i) + ";\n"
-					"jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
+				add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
 				exit_function();
-				add_code("");
 				if (instr.Jtype.rd != 0)
 					this->add_reentry_next();
 			}
 			if (no_labels_after_this()) {
-				add_code("}");
+				add_code("*cur_insn = c;","}");
 				return;
 			} } break;
 		case RV32I_OP_IMM: {
@@ -754,11 +768,12 @@ void Emitter<W>::emit()
 			break;
 		case RV32I_SYSTEM:
 			if (instr.Itype.funct3 == 0x0) {
+				this->increment_counter_so_far();
+				code += "cpu->pc = " + PCRELS(0) + ";\n";
 				if (instr.Itype.imm == 0) {
-					code += "cpu->pc = " + PCRELS(0) + "; "
-							"*cur_insn = c;\n";
 					const auto syscall_reg = from_reg(REG_ECALL);
 					this->restore_syscall_registers();
+					code += "*cur_insn = c;\n";
 					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + "))) {\nreturn;}\n";
 					code += "local_max_insn = *max_insn;\n";
 					// Restore A0
@@ -766,14 +781,10 @@ void Emitter<W>::emit()
 					this->potentially_reload_register(REG_ARG0);
 					break;
 				} if (instr.Itype.imm == 1) {
-					code += "cpu->pc = " + PCRELS(0) + "; "
-							"*cur_insn = c;\n";
 					code += "api.ebreak(cpu);\n";
 					exit_function();
 					break;
 				} if (instr.Itype.imm == 261) {
-					code += "cpu->pc = " + PCRELS(0) + "; "
-							"*cur_insn = c;\n";
 					code += "*max_insn = 0;\n";
 					exit_function();
 					break;
@@ -1105,14 +1116,13 @@ void Emitter<W>::emit()
 			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 			break;
 		default:
-			//throw MachineException(ILLEGAL_OPCODE, "Unhandled instruction in code emitter", instr.opcode());
 			ILLEGAL_AND_EXIT();
 		}
 	}
 	// If the function ends with an unimplemented instruction,
 	// we must gracefully finish, setting new PC and incrementing IC
-	code += "cpu->pc += " + std::to_string((tinfo.len-1) * 4) + ";\n"
-			"*cur_insn = c + " + std::to_string(tinfo.len-1) + ";\n";
+	code += "cpu->pc = " + std::to_string(this->end_pc()) + ";\n";
+	this->increment_counter_so_far();
 	exit_function(true);
 }
 
