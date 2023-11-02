@@ -356,7 +356,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	pc = registers().pc + 4;
 	goto check_jump;
 #else
-	trigger_exception(FEATURE_DISABLED, this->pc());
+	trigger_exception(FEATURE_DISABLED, pc);
 #endif
 }
 

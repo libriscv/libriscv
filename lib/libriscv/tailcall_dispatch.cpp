@@ -254,6 +254,25 @@ namespace riscv
 		CHECKED_JUMP();
 	}
 
+	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
+#ifdef RISCV_BINARY_TRANSLATION
+		VIEW_INSTR();
+		// Make the current PC visible
+		cpu.registers().pc = pc;
+		// Make the instruction counter visible
+		cpu.machine().set_instruction_counter(counter);
+		// Invoke translated code
+		exec->mapping_at(instr.whole)(cpu, instr);
+		// Restore counter
+		counter = cpu.machine().instruction_counter();
+		// Translations are always full-length instructions (?)
+		pc = cpu.registers().pc + 4;
+		CHECKED_JUMP();
+#else
+		trigger_exception(FEATURE_DISABLED, pc);
+#endif
+	}
+
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
 	{
 		cpu.trigger_exception(ILLEGAL_OPCODE, d->instr);
