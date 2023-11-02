@@ -76,7 +76,7 @@
 
 namespace riscv
 {
-	static constexpr bool VERBOSE_JUMPS = false;
+	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
 
 	template <int W>
 	DecodedExecuteSegment<W>* resolve_execute_segment(CPU<W>& cpu, address_type<W>& pc)

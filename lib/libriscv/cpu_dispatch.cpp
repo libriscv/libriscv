@@ -13,7 +13,7 @@
 
 namespace riscv
 {
-	static constexpr bool VERBOSE_JUMPS = false;
+	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
 #define VIEW_INSTR() \
 	auto instr = *(rv32i_instruction *)&decoder->instr;
 #define VIEW_INSTR_AS(name, x) \
@@ -45,7 +45,7 @@ namespace riscv
 	EXECUTE_INSTR();
 
 #define PERFORM_BRANCH()                \
-	if constexpr (VERBOSE_JUMPS) printf("Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
+	if constexpr (VERBOSE_JUMPS) printf("Branch 0x%lX >= 0x%lX\n", long(pc), long(pc + fi.signed_imm())); \
 	pc += fi.signed_imm();              \
 	if (LIKELY(!counter.overflowed())) { \
 		decoder += fi.signed_imm() / (compressed_enabled ? 2 : 4); \
@@ -56,7 +56,7 @@ namespace riscv
 	goto check_jump;
 
 #define PERFORM_FORWARD_BRANCH()        \
-	if constexpr (VERBOSE_JUMPS) printf("Fw.Branch 0x%lX >= 0x%lX\n", pc, pc + fi.signed_imm()); \
+	if constexpr (VERBOSE_JUMPS) printf("Fw.Branch 0x%lX >= 0x%lX\n", long(pc), long(pc + fi.signed_imm())); \
 	pc += fi.signed_imm();              \
 	NEXT_SEGMENT();
 
@@ -232,7 +232,7 @@ INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
 	VIEW_INSTR();
 	pc = instr.whole;
 	if constexpr (VERBOSE_JUMPS) {
-		printf("FAST_JAL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
+		printf("FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
 	if (UNLIKELY(counter.overflowed()))
 		goto check_jump;
@@ -243,7 +243,7 @@ INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	reg(REG_RA) = pc + 4;
 	pc = instr.whole;
 	if constexpr (VERBOSE_JUMPS) {
-		printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + instr.whole);
+		printf("FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
 	if (UNLIKELY(counter.overflowed()))
 		goto check_jump;
@@ -259,7 +259,7 @@ INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 		reg(instr.Itype.rd) = pc + 4;
 	}
 	if constexpr (VERBOSE_JUMPS) {
-		printf("JALR PC 0x%lX => 0x%lX\n", pc, address);
+		printf("JALR PC 0x%lX => 0x%lX\n", long(pc), long(address));
 	}
 	pc = address;
 	goto check_unaligned_jump;
@@ -332,7 +332,7 @@ INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
 	if (fi.rd != 0)
 		reg(fi.rd) = pc + 4;
 	if constexpr (VERBOSE_JUMPS) {
-		printf("JAL PC 0x%lX => 0x%lX\n", pc, pc+fi.offset);
+		printf("JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc+fi.offset));
 	}
 	pc += fi.offset;
 	goto check_jump;
