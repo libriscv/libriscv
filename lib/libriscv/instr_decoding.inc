@@ -519,8 +519,10 @@
 					}
 					else if (ci.CI2.funct3 == 0x3) {
 						if constexpr (sizeof(address_t) == 8) {
-							// C.LDSP
-							DECODER(DECODED_COMPR(C2_LDSP));
+							if (ci.CI2.rd != 0) {
+								// C.LDSP
+								DECODER(DECODED_COMPR(C2_LDSP));
+							}
 						} else {
 							// C.FLWSP
 							DECODER(DECODED_COMPR(C2_FLWSP));

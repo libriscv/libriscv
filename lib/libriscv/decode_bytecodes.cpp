@@ -116,7 +116,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				}
 				else if (ci.CI2.funct3 == 0x3) {
 					if constexpr (sizeof(address_t) == 8) {
-						return RV32C_BC_LDD; // C.LDSP
+						if (ci.CI2.rd != 0) {
+							return RV32C_BC_LDD; // C.LDSP
+						}
 					} else {
 						return RV32C_BC_FUNCTION; // C.FLWSP
 					}
