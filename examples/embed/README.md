@@ -26,6 +26,6 @@ target_link_libraries(example riscv)
 The example program calculates fibonacci numbers. Run the program with the number as argument:
 
 ```
-./build/example fib.rv64.elf 64
+./.build/example fib.rv64.elf 64
 ```
 Will calculate the 64th fibonacci number.
