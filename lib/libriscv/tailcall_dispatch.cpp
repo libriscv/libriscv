@@ -47,7 +47,10 @@
 	counter += d->instruction_count();
 #define NEXT_BLOCK(len)                \
 	pc += len;                         \
-	d += (compressed_enabled ? 2 : 1); \
+	if constexpr (compressed_enabled)  \
+		d += len / 2;                  \
+	else                               \
+		d += 1;                        \
 	BEGIN_BLOCK();                     \
 	EXECUTE_CURRENT()
 
@@ -66,12 +69,20 @@
 		exec = resolve_execute_segment<W>(cpu, pc); \
 	UNCHECKED_JUMP()
 
-#define PERFORM_BRANCH()   \
-	pc += fi.signed_imm(); \
+#define PERFORM_BRANCH()                \
+	if constexpr (VERBOSE_JUMPS) {      \
+		printf("Branch from 0x%lX to 0x%lX\n", \
+			pc, pc + fi.signed_imm());  \
+	}                                   \
+	pc += fi.signed_imm();              \
 	OVERFLOW_CHECKED_JUMP()
 
-#define PERFORM_FORWARD_BRANCH() \
-	pc += fi.signed_imm();       \
+#define PERFORM_FORWARD_BRANCH()        \
+	if constexpr (VERBOSE_JUMPS) {      \
+		printf("Fwd. Branch from 0x%lX to 0x%lX\n", \
+			pc, pc + fi.signed_imm());  \
+	}                                   \
+	pc += fi.signed_imm();              \
 	UNCHECKED_JUMP()
 
 namespace riscv
@@ -135,7 +146,6 @@ namespace riscv
 		// Invoke system call
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
 		// Restore max counter and check overflow
-		counter = cpu.machine().instruction_counter();
 		if (UNLIKELY(COUNTER_OVERFLOWED(counter)))
 		{
 			return RETURN_VALUES();
@@ -200,7 +210,10 @@ namespace riscv
 			printf("JALR PC 0x%lX => 0x%lX\n", pc, address);
 		}
 		// Alignment checks
-		cpu.jump(address);
+		static constexpr auto alignment = compressed_enabled ? 0x1 : 0x3;
+		if (UNLIKELY(address & alignment)) {
+			cpu.trigger_exception(MISALIGNED_INSTRUCTION, address);
+		}
 		pc = address;
 		CHECKED_JUMP();
 	}

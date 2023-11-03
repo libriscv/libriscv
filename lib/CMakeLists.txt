@@ -26,7 +26,6 @@ set(THREADED_IS_DEFAULT OFF)
 # on all compilers/systems.
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang"
 	OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-	message(STATUS "libriscv: Threaded dispatch enabled")
 	option(RISCV_THREADED "Enable fastest simulation mode" ON)
 else()
 	option(RISCV_THREADED "Enable fastest simulation mode" OFF)
@@ -82,20 +81,23 @@ elseif(UNIX)
 		libriscv/linux/system_calls.cpp
 	)
 endif()
-if (RISCV_THREADED)
+if (RISCV_THREADED OR RISCV_TAILCALL_DISPATCH)
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
 	 AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0
 	 AND RISCV_TAILCALL_DISPATCH)
 	 	# Experimental tail-call dispatch
+		message(STATUS "libriscv: Tail-call dispatch enabled")
 		list(APPEND SOURCES
 			libriscv/tailcall_dispatch.cpp
 		)
 	else()
+		message(STATUS "libriscv: Threaded dispatch enabled")
 		list(APPEND SOURCES
 			libriscv/threaded_dispatch.cpp
 		)
 	endif()
 else()
+	message(STATUS "libriscv: Switch-based dispatch enabled")
 	list(APPEND SOURCES
 		libriscv/bytecode_dispatch.cpp
 	)
