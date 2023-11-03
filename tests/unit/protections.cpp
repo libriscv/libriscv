@@ -61,6 +61,10 @@ TEST_CASE("Trigger guard pages", "[Memory]")
 
 TEST_CASE("Caches must be invalidated", "[Memory]")
 {
+	// Test not supported on flat read-write arena
+	if constexpr (riscv::flat_readwrite_arena)
+		return;
+
 	Machine<RISCV32> machine { empty };
 
 	// Force creation of writable pages
