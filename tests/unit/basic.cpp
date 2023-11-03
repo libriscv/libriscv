@@ -234,6 +234,10 @@ TEST_CASE("Count using EBREAK", "[Compute]")
 
 	machine.simulate();
 
-	REQUIRE(counter.value == 51);
-	REQUIRE(machine.return_value<long>() == 12586269025L);
+	// Tail-call can exit immediately, and will return 25 (which is fine)
+	REQUIRE((counter.value == 51 || counter.value == 25));
+	if (counter.value == 51)
+		REQUIRE(machine.return_value<long>() == 12586269025L);
+	else
+		REQUIRE(machine.return_value<long>() == 46368L);
 }

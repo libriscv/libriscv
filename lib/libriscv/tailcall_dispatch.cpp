@@ -366,7 +366,7 @@ namespace riscv
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = rv32c_addi,
 		[RV32C_BC_LI]       = rv32c_addi,
-		[RV32C_BC_MV]       = rv32c_addi,
+		[RV32C_BC_MV]       = rv32c_mv,
 		[RV32C_BC_BNEZ]     = rv32c_bnez,
 		[RV32C_BC_LDD]      = rv32c_ldd,
 		[RV32C_BC_STD]      = rv32c_std,
