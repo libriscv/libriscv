@@ -62,11 +62,14 @@
 	if (UNLIKELY(COUNTER_OVERFLOWED(counter)))      \
 		return RETURN_VALUES();                     \
 	UNCHECKED_JUMP()
+#define QUICK_EXEC_CHECK()                                              \
+	if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end()))) \
+		exec = resolve_execute_segment<W>(cpu, pc);                     \
+
 #define CHECKED_JUMP()                              \
 	if (UNLIKELY(COUNTER_OVERFLOWED(counter)))      \
 		return RETURN_VALUES();                     \
-	else if (UNLIKELY(!exec->is_within(pc)))        \
-		exec = resolve_execute_segment<W>(cpu, pc); \
+	else QUICK_EXEC_CHECK()                         \
 	UNCHECKED_JUMP()
 
 #define PERFORM_BRANCH()                \
@@ -154,9 +157,7 @@ namespace riscv
 		if (UNLIKELY(pc != cpu.registers().pc))
 		{
 			pc = cpu.registers().pc;
-			if (UNLIKELY(!exec->is_within(pc))) {
-				exec = resolve_execute_segment<W>(cpu, pc);
-			}
+			QUICK_EXEC_CHECK();
 			d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];
 		}
 		NEXT_BLOCK(4);
