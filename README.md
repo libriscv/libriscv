@@ -285,6 +285,8 @@ See [this unit test](/tests/unit/custom.cpp) for an example on how to add your o
 
 [Example programs](/examples)
 
+[Unit tests](/tests/unit)
+
 ## Why a RISC-V library
 
 It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely? It can step through RISC-V programs line by line showing registers and memory locations. It also has some extra features that allow you to make function calls into the guest program. I think it's pretty cool stuff.
