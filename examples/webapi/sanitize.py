@@ -39,7 +39,7 @@ dc_shared = "/usr/outside"
 dc_extra = []
 if method == "linux":
 	dc_instance = "linux-rv64gc"
-	dc_gnucpp = "riscv64-linux-gnu-g++-10"
+	dc_gnucpp = "riscv64-linux-gnu-g++-11"
 	dc_extra = ["-pthread"]
 else:
 	dc_instance = "newlib-rv64gc"
@@ -47,8 +47,8 @@ else:
 
 # compile the code
 cmd = [ #"docker", "exec", dc_instance,
-		dc_gnucpp, "-march=rv64gc", "-mabi=lp64d", "-static"] + dc_extra + [
-		"-std=c++17", "-O2", dc_codefile, "-o", dc_binary,
+		dc_gnucpp, "-static"] + dc_extra + [
+		"-std=c++20", "-O2", dc_codefile, "-o", dc_binary,
 		# Fixes a g++ bug where thread::join jumps to 0x0 (missing pthread_join)
 		"-Wl,--undefined=pthread_join"] # DO NOT REMOVE
 print(cmd)

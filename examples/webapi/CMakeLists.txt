@@ -4,7 +4,7 @@ project(webapi CXX)
 option(LTO         "Enable interprocedural optimizations" ON)
 option(NATIVE      "Enable native instructions" ON)
 
-add_subdirectory(../lib lib)
+add_subdirectory(../../lib libriscv)
 
 set(SOURCES
 	server.cpp

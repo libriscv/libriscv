@@ -65,7 +65,7 @@
 	</div>
 </body>
 
-	<script src="https://pagecdn.io/lib/ace/1.4.6/ace.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.31.1/ace.min.js"></script>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js">
 	</script>
 	<script type="text/javascript">
@@ -77,29 +77,20 @@
 #include <cstdio>
 #include <string>
 #include <thread> // C++ threads
-inline void benchmark(void(*callback)()) {
-	register void* a0 asm("a0") = (void*)callback;
-	asm volatile ("ebreak" :: "r"(a0) : "memory");
-}
 
 int main()
 {
-    printf("Test!\\n");
+    printf("Test!\n");
 
-	for (size_t i = 0; i < 100; i++)
-		benchmark([] {
-			auto* cpp_thread = new std::thread(
-				[] (int a, long long b, std::string c) -> void {
-					assert(a == 1);
-					assert(b == 2LL);
-					assert(c == std::string("test"));
-					printf("Hello from a thread!\\n");
-				},
-				1, 2L, std::string("test")
-			);
-			cpp_thread->join();
-			delete cpp_thread;
-		});
+	std::jthread t(
+			[] (int a, long long b, std::string c) -> void {
+				assert(a == 1);
+				assert(b == 2LL);
+				assert(c == std::string("test"));
+				printf("Hello from a thread!\n");
+			},
+			1, 2L, std::string("test")
+	);
 
 	return 666;
 }
