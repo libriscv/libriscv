@@ -286,17 +286,22 @@ static bool execute_commands(DebugMachine<W>& debug)
 }
 
 template<int W>
-void DebugMachine<W>::print_and_pause()
+void DebugMachine<W>::print(const std::string& label, address_t override_pc)
 {
 	auto& cpu = machine.cpu;
+	auto old_pc = cpu.pc();
 	try {
+		if (override_pc != 0x0)
+			cpu.aligned_jump(override_pc);
+
 		const auto instruction = cpu.read_next_instruction();
 		const auto& handler = cpu.decode(instruction);
 		const auto string = cpu.to_string(instruction, handler);
-		dprintf(cpu, "\n>>> Breakpoint \t%s\n\n", string.c_str());
+		dprintf(cpu, "\n>>> %s \t%s\n\n", label.c_str(), string.c_str());
 	} catch (const std::exception& e) {
-		dprintf(cpu, "\n>>> Breakpoint \tError reading instruction: %s\n\n", e.what());
+		dprintf(cpu, "\n>>> %s \tError reading instruction: %s\n\n", label.c_str(), e.what());
 	}
+	cpu.aligned_jump(old_pc);
 	// CPU registers
 	dprintf(cpu, "%s", cpu.registers().to_string().c_str());
 	// Memory subsystem
@@ -305,6 +310,12 @@ void DebugMachine<W>::print_and_pause()
 	if (this->verbose_fp_registers) {
 		dprintf(cpu, "%s", cpu.registers().flp_to_string().c_str());
 	}
+}
+
+template<int W>
+void DebugMachine<W>::print_and_pause()
+{
+	this->print();
 
 	while (execute_commands(*this))
 		;
@@ -347,8 +358,7 @@ void DebugMachine<W>::break_checks()
 		auto it = m_breakpoints.find(machine.cpu.pc());
 		if (it != m_breakpoints.end())
 		{
-			auto& callback = it->second;
-			callback(*this);
+			it->second(*this);
 		}
 	}
 	if (UNLIKELY(!m_watchpoints.empty()))

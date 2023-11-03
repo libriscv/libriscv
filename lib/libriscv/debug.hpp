@@ -18,6 +18,7 @@ namespace riscv
 
 		void simulate(uint64_t max = UINT64_MAX);
 		void simulate(breakpoint_t callback, uint64_t max = UINT64_MAX);
+		void print(const std::string& label = "Breakpoint", address_t pc = 0);
 		void print_and_pause();
 
 		// Immediately block execution, print registers and current instruction.
