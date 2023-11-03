@@ -289,10 +289,6 @@ See [this unit test](/tests/unit/custom.cpp) for an example on how to add your o
 
 It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely? It can step through RISC-V programs line by line showing registers and memory locations. It also has some extra features that allow you to make function calls into the guest program. I think it's pretty cool stuff.
 
-## Multiprocessing
-
-There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
-
 
 ## Dispatch modes
 
@@ -300,7 +296,7 @@ There is multiprocessing support, but it is in its early stages. It is achieved 
 
 - Bytecode simulation using switch case
 - Threaded bytecode simulation
-- Tailcall bytecode simulation (experimental)
+- Tailcall bytecode simulation
 
 ### Remote GDB using RSP server
 
@@ -326,3 +322,18 @@ Instead of JIT, the emulator supports translating binaries to native code using 
 The binary translation has best performance when combined with the experimental CMake option `RISCV_FLAT_RW_ARENA`, which makes everything after the read-only ELF segments always writable as an optimization, effectively turning it into a writable arena (up to the given memory limit). This option can be found by enabling the `RISCV_EXPERIMENTAL` CMake option. Further, I have occasionally seen the tailcall dispatch running faster than threaded dispatch, enabled with the `RISCV_TAILCALL_DISPATCH` CMake option.
 
 An experimental libtcc mode can be unlocked by enabling `RISCV_EXPERIMENTAL`, called `RISCV_LIBTCC`. When enabled, libriscv will invoke libtcc on code generated for each execute segment. It is usually faster than bytecode simulation, but not always.
+
+
+## Experimental features
+
+### Read-write arena
+
+The experimental read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are still needed, allocate pages outside of the arena and apply protections to them.
+
+### Multiprocessing
+
+There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
+
+### Embedded libtcc
+
+When binary translation is enabled, the experimental option `RISCV_LIBTCC` is available. libtcc will be embedded in the RISC-V emulator and used as compiler for binary translation.
