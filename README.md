@@ -8,11 +8,9 @@ There is also a CLI that you can use to run RISC-V programs and step through ins
 
 ## Benchmarks
 
-[STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37)
+[STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 7523](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native.
 
-[CoreMark on a Ryzen 7950X](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) 6851 vs 41382 native.
-
-Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 15% CPU at 60 fps.
+Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
 Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da). Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
 
