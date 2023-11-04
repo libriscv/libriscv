@@ -106,12 +106,12 @@
 							}
 							DECODER(DECODED_INSTR(OP_IMM_ADDI));
 						case 0x1: // SLLI
-							if (instruction.Itype.imm < 8*sizeof(address_t)) {
+							if (instruction.Itype.high_bits() == 0x0) {
 								DECODER(DECODED_INSTR(OP_IMM_SLLI));
 							}
 							DECODER(DECODED_INSTR(OP_IMM));
 						case 0x5: // SRLI / SRAI
-							if (instruction.Itype.imm < 8*sizeof(address_t)) {
+							if (instruction.Itype.high_bits() == 0x0) {
 								DECODER(DECODED_INSTR(OP_IMM_SRLI));
 							} else {
 								DECODER(DECODED_INSTR(OP_IMM));
@@ -167,20 +167,21 @@
 						case 0x0: // ADDIW
 							DECODER(DECODED_INSTR(OP_IMM32_ADDIW));
 						case 0x1: // SLLIW
-							if ((instruction.Itype.imm & 32) == 0x0) {
+							if (instruction.Itype.high_bits() == 0x000) {
 								DECODER(DECODED_INSTR(OP_IMM32_SLLIW));
-							} else {
+							} else if (instruction.Itype.high_bits() == 0x080) {
 								DECODER(DECODED_INSTR(OP_IMM32_SLLI_UW));
 							}
+							break;
 						case 0x5: // SRLIW / SRAIW
-							if (instruction.Itype.high_bits() == 0x0) {
+							if (instruction.Itype.high_bits() == 0x000) {
 								DECODER(DECODED_INSTR(OP_IMM32_SRLIW));
-							} else {
+							} else if (instruction.Itype.high_bits() == 0x400) {
 								DECODER(DECODED_INSTR(OP_IMM32_SRAIW));
 							}
-						default:
-							DECODER(DECODED_INSTR(ILLEGAL));
+							break;
 						}
+						DECODER(DECODED_INSTR(ILLEGAL));
 					} else {
 						DECODER(DECODED_INSTR(NOP));
 					}

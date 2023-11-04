@@ -58,13 +58,13 @@ namespace riscv
 					return imm == 0b011010011000;
 			}
 			auto high_bits() const noexcept {
-				return imm & 0xE00;
+				return imm & 0xFC0;
 			}
 			bool is_srai() const noexcept {
-				return (imm & 0xE00) == 0x400;
+				return (imm & 0xFC0) == 0x400;
 			}
 			bool is_rori() const noexcept {
-				return (imm & 0xE00) == 0x600;
+				return (imm & 0xFC0) == 0x600;
 			}
 		} Itype;
 		// store format

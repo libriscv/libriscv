@@ -522,18 +522,18 @@ void Emitter<W>::emit()
 				case 0b011000000001: // CTZ
 					if constexpr (W == 4)
 						add_code(
-							dst + " = " + src + " ? __builtin_ctz(" + src + ") : XLEN;");
+							dst + " = " + src + " ? ctz(" + src + ") : XLEN;");
 					else
 						add_code(
-							dst + " = " + src + " ? __builtin_ctzl(" + src + ") : XLEN;");
+							dst + " = " + src + " ? ctzl(" + src + ") : XLEN;");
 					break;
 				case 0b011000000010: // CPOP
 					if constexpr (W == 4)
 						add_code(
-							dst + " = __builtin_popcount(" + src + ");");
+							dst + " = popcount(" + src + ");");
 					else
 						add_code(
-							dst + " = __builtin_popcount(" + src + ");");
+							dst + " = popcountl(" + src + ");");
 					break;
 				default:
 					emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
@@ -606,26 +606,11 @@ void Emitter<W>::emit()
 					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " < " + from_reg(instr.Rtype.rs2) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XOR
-				if (instr.Rtype.funct7 == 0x0) {
-					emit_op(" ^ ", " ^= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
-				} else if (instr.Rtype.funct7 == 0x4) {
-					// ZEXT.H: Zero-extend 16-bit
-					add_code(
-						to_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(instr.Rtype.rs1) + ");");
-				}
+				emit_op(" ^ ", " ^= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
-			case 0x5: // SRL / ROR
-				if (instr.Itype.high_bits() == 0x0) {
-					add_code(
-						to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1));");
-				}
-				else if (instr.Itype.is_rori()) {
-					// ROR: Rotate right
-					add_code(
-					"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
-						to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (XLEN - shift)); }"
-					);
-				}
+			case 0x5: // SRL
+				add_code(
+					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x205: // SRA
 				add_code(
@@ -706,6 +691,9 @@ void Emitter<W>::emit()
 					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " % " + from_reg(instr.Rtype.rs2) + ";"
 				);
 				break;
+			case 0x44: // ZEXT.H: Zero-extend 16-bit
+				add_code(to_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(instr.Rtype.rs1) + ");");
+				break;
 			case 0x102: // SH1ADD
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 1);");
 				break;
@@ -740,10 +728,16 @@ void Emitter<W>::emit()
 				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " > " + to_reg(instr.Rtype.rs2) + ") "
 					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
 				break;
-			case 0x301: // ROL
+			case 0x301: // ROL: Rotate left
 				add_code(
 				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
 					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> (XLEN - shift)); }"
+				);
+				break;
+			case 0x305: // ROR: Rotate right
+				add_code(
+				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
+					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (XLEN - shift)); }"
 				);
 				break;
 			default:
@@ -805,8 +799,13 @@ void Emitter<W>::emit()
 				// ADDIW: Add sign-extended 12-bit immediate
 				add_code(dst + " = " + SIGNEXTW + " (" + src + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
-			case 0x1: // SLLIW:
-				add_code(dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
+			case 0x1: // SLLI.W / SLLI.UW:
+				if (instr.Itype.high_bits() == 0x000) {
+					add_code(dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
+				} else if (instr.Itype.high_bits() == 0x080) {
+					// SLLI.UW
+					add_code(dst + " = ((addr_t)" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
+				}
 				break;
 			case 0x5: // SRLIW / SRAIW:
 				if (LIKELY(!instr.Itype.is_srai())) {
@@ -837,17 +836,8 @@ void Emitter<W>::emit()
 			case 0x1: // SLLW
 				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " << (" + src2 + " & 0x1F));");
 				break;
-			case 0x5: // SRLW / RORW
-				if (instr.Itype.high_bits() == 0x0) {
-					add_code(dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
-				}
-				else if (instr.Itype.is_rori()) {
-					// RORW: Rotate right (32-bit)
-					add_code(
-					"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & 31;\n",
-						to_reg(instr.Rtype.rd) + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (32 - shift)); }"
-					);
-				}
+			case 0x5: // SRLW
+				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " >> (" + src2 + " & 0x1F));");
 				break;
 			case 0x205: // SRAW
 				add_code(dst + " = (int32_t)" + src1 + " >> (" + src2 + " & 31);");
@@ -886,13 +876,25 @@ void Emitter<W>::emit()
 				add_code(dst + " = (uint16_t)(" + src1 + ");");
 				break;
 			case 0x102: // SH1ADD.UW
-				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + (" + src1 + " << 1);");
+				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + ((addr_t)" + src1 + " << 1);");
 				break;
 			case 0x104: // SH2ADD.UW
-				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + (" + src1 + " << 2);");
+				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + ((addr_t)" + src1 + " << 2);");
 				break;
 			case 0x106: // SH3ADD.UW
-				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + (" + src1 + " << 3);");
+				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + ((addr_t)" + src1 + " << 3);");
+				break;
+			case 0x301: // ROLW: Rotate left 32-bit
+				add_code(
+				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & 31;\n",
+					to_reg(instr.Rtype.rd) + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> (32 - shift)); }"
+				);
+				break;
+			case 0x305: // RORW: Rotate right (32-bit)
+				add_code(
+				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & 31;\n",
+					to_reg(instr.Rtype.rd) + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (32 - shift)); }"
+				);
 				break;
 			default:
 				ILLEGAL_AND_EXIT();

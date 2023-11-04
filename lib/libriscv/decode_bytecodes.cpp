@@ -262,7 +262,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				else
 					return RV32I_BC_ADDI;
 			case 0x1: // SLLI
-				if (instr.Itype.imm < 8*sizeof(address_t))
+				if (instr.Itype.high_bits() == 0x0)
 					return RV32I_BC_SLLI;
 				else
 					return RV32I_BC_FUNCTION;
@@ -273,7 +273,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x4: // XORI
 				return RV32I_BC_XORI;
 			case 0x5:
-				if (instr.Itype.imm < 8*sizeof(address_t))
+				if (instr.Itype.high_bits() == 0x0)
 					return RV32I_BC_SRLI;
 				else if (instr.Itype.is_srai())
 					return RV32I_BC_SRAI;
@@ -304,10 +304,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x4:
 				return RV32I_BC_OP_XOR;
 			case 0x5:
-				if (instr.Itype.high_bits() == 0x0)
-					return RV32I_BC_OP_SRL;
-				else
-					return RV32I_BC_FUNCTION;
+				return RV32I_BC_OP_SRL;
 			case 0x6:
 				return RV32I_BC_OP_OR;
 			case 0x7:
@@ -336,14 +333,17 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_OP_SH3ADD;
 			case 0x205:
 				return RV32I_BC_OP_SRA;
+			case 0x141: // BSET
 			case 0x204: // XNOR
 			case 0x206: // ORN
 			case 0x207: // ANDN
+			case 0x245: // BEXT
 			case 0x54: // MIN
 			case 0x55: // MINU
 			case 0x56: // MAX
 			case 0x57: // MAXU
 			case 0x301: // ROL
+			case 0x305: // ROR
 				return RV32I_BC_FUNCTION;
 			default:
 				return RV32I_BC_INVALID;

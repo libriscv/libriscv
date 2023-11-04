@@ -57,10 +57,18 @@ static inline float fmaxf(float x, float y) {
 static inline float fmax(double x, double y) {
 	return (x >= y) ? x : y;
 }
+#define ctz(x) ~0UL
+#define ctzl(x) ~0UL
+#define popcount(x) ~0UL
+#define popcountl(x) ~0UL
 #else
 #define UNREACHABLE() __builtin_unreachable()
 #define clz(x) __builtin_clz(x)
 #define clzl(x) __builtin_clzl(x)
+#define ctz(x) __builtin_ctz(x)
+#define ctzl(x) __builtin_ctzl(x)
+#define popcount(x) __builtin_popcount(x)
+#define popcountl(x) __builtin_popcountl(x)
 #define fminf(x, y) __builtin_fminf(x, y)
 #define fmin(x, y) __builtin_fmin(x, y)
 #define fmaxf(x, y) __builtin_fmaxf(x, y)

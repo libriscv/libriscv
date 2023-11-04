@@ -377,6 +377,22 @@ namespace riscv
 				else
 					dst = __builtin_popcountl(src);
 				return;
+			default:
+				if (instr.Itype.high_bits() == 0x280) {
+					// BSETI: Bit-set immediate
+					dst = src | (1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+					return;
+				}
+				else if (instr.Itype.high_bits() == 0x480) {
+					// BCLRI: Bit-clear immediate
+					dst = src & ~(1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+					return;
+				}
+				else if (instr.Itype.high_bits() == 0x680) {
+					// BINVI: Bit-invert immediate
+					dst = src ^ ~(1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+					return;
+				}
 			}
 			break;
 		case 0x2: // SLTI: Set less than immediate
@@ -388,7 +404,7 @@ namespace riscv
 		case 0x4: // XORI:
 			dst = src ^ RVIMM(cpu, instr.Itype);
 			return;
-		case 0x5: // SRLI / SRAI / ORC.B
+		case 0x5: // SRLI / SRAI / RORI / ORC.B
 			if (instr.Itype.is_srai()) {
 				// SRAI: Preserve the sign bit
 				dst = (RVSIGNTYPE(cpu))src >> (instr.Itype.imm & (RVXLEN(cpu)-1));
@@ -398,6 +414,11 @@ namespace riscv
 				// RORI: Rotate right
 				const auto shift = instr.Itype.imm & (RVXLEN(cpu) - 1);
 				dst = (src >> shift) | (src << (RVXLEN(cpu) - shift));
+				return;
+			}
+			else if (instr.Itype.high_bits() == 0x810) {
+				// BEXTI: Single-bit Extract
+				dst = (src >> (instr.Itype.imm & (RVXLEN(cpu)-1))) & 1;
 				return;
 			}
 			else if (instr.Itype.imm == 0x287) {
@@ -421,7 +442,7 @@ namespace riscv
 			dst = src | RVIMM(cpu, instr.Itype);
 			return;
 		}
-		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
@@ -534,27 +555,11 @@ namespace riscv
 			dst = (src1 < src2);
 			return;
 		case 0x4: // XOR
-			if (instr.Rtype.funct7 == 0x0) {
-				dst = src1 ^ src2;
-				return;
-			} else if (instr.Rtype.funct7 == 0x4) {
-				dst = uint16_t(src1);
-				return;
-			}
-			break;
-		case 0x5: // SRL / ROR
-			if (instr.Itype.high_bits() == 0x0) {
-				// SRL: Logical right shift
-				dst = src1 >> (src2 & (RVXLEN(cpu)-1));
-				return;
-			}
-			else if (instr.Itype.is_rori()) {
-				// ROR: Rotate right
-				const auto shift = src2 & (RVXLEN(cpu) - 1);
-				dst = (src1 >> shift) | (src1 << (RVXLEN(cpu) - shift));
-				return;
-			}
-			break;
+			dst = src1 ^ src2;
+			return;
+		case 0x5: // SRL: Logical right shift
+			dst = src1 >> (src2 & (RVXLEN(cpu)-1));
+			return;
 		case 0x6: // OR
 			dst = src1 | src2;
 			return;
@@ -641,6 +646,9 @@ namespace riscv
 				dst = src1;
 			}
 			return;
+		case 0x44: // ZEXT.H
+			dst = uint16_t(src1);
+			return;
 		case 0x54: // MIN
 			dst = (RVSIGNTYPE(cpu)(src1) < RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
 			return;
@@ -662,6 +670,9 @@ namespace riscv
 		case 0x106: // SH3ADD
 			dst = src2 + (src1 << 3);
 			return;
+		case 0x141: // BSET
+			dst = src1 | (1UL << (src2 & (RVXLEN(cpu)-1)));
+			return;
 		case 0x204: // XNOR
 			dst = ~(src1 ^ src2);
 			return;
@@ -674,38 +685,65 @@ namespace riscv
 		case 0x207: // ANDN
 			dst = src1 & ~src2;
 			return;
+		case 0x245: // BEXT
+			dst = (src1 >> (src2 & (RVXLEN(cpu)-1))) & 1;
+			return;
 		case 0x301: { // ROL: Rotate left
 			const auto shift = src2 & (RVXLEN(cpu) - 1);
 			dst = (src1 << shift) | (src1 >> (RVXLEN(cpu) - shift));
+			} return;
+		case 0x305: { // ROR: Rotate right
+			const auto shift = src2 & (RVXLEN(cpu) - 1);
+			dst = (src1 >> shift) | (src1 << (RVXLEN(cpu) - shift));
 			} return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR
 	{
-		if (!instr.Rtype.is_32M())
-		{
-			static std::array<const char*, 8*2> func3 = {
-				"ADD", "SLL", "SLT", "SLTU", "XOR", "SRL", "OR", "AND",
-				"SUB", "SLL", "SLT", "SLTU", "XOR", "SRA", "OR", "AND"};
-			const int EX = instr.Rtype.is_f7() ? 8 : 0;
-			return snprintf(buffer, len, "%s %s %s, %s (0x%" PRIX64 ")",
-							RISCV::regname(instr.Rtype.rs1),
-							func3[instr.Rtype.funct3 + EX],
-							RISCV::regname(instr.Rtype.rs2),
-							RISCV::regname(instr.Rtype.rd),
-							uint64_t(cpu.reg(instr.Rtype.rd)));
+		const char* strop = "";
+		switch (instr.Rtype.jumptable_friendly_op()) {
+			case 0x0: strop = "ADD"; break;
+			case 0x1: strop = "SLL"; break;
+			case 0x2: strop = "SLT"; break;
+			case 0x3: strop = "SLTU"; break;
+			case 0x4: strop = "XOR"; break;
+			case 0x5: strop = "SRL"; break;
+			case 0x6: strop = "OR"; break;
+			case 0x7: strop = "AND"; break;
+			case 0x10: strop = "MUL"; break;
+			case 0x11: strop = "MULH"; break;
+			case 0x12: strop = "MULHSU"; break;
+			case 0x13: strop = "MULHU"; break;
+			case 0x14: strop = "DIV"; break;
+			case 0x15: strop = "DIVU"; break;
+			case 0x16: strop = "REM"; break;
+			case 0x17: strop = "REMU"; break;
+			case 0x44: strop = "ZEXT.H"; break;
+			case 0x54: strop = "MIN"; break;
+			case 0x55: strop = "MINU"; break;
+			case 0x56: strop = "MAX"; break;
+			case 0x57: strop = "MAXU"; break;
+			case 0x102: strop = "SH1ADD"; break;
+			case 0x104: strop = "SH2ADD"; break;
+			case 0x106: strop = "SH3ADD"; break;
+			case 0x141: strop = "BSET"; break;
+			case 0x200: strop = "SUB"; break;
+			case 0x204: strop = "XNOR"; break;
+			case 0x205: strop = "SRA"; break;
+			case 0x206: strop = "ORN"; break;
+			case 0x207: strop = "ANDN"; break;
+			case 0x245: strop = "BEXT"; break;
+			case 0x301: strop = "ROL"; break;
+			case 0x305: strop = "ROR"; break;
+			default: strop = "OP.UNKNOWN"; break;
 		}
-		else {
-			static std::array<const char*, 8> func3 = {
-				"MUL", "MULH", "MULHSU", "MULHU", "DIV", "DIVU", "REM", "REMU"};
-			return snprintf(buffer, len, "%s %s %s, %s (0x%" PRIX64 ")",
-							RISCV::regname(instr.Rtype.rs1),
-							func3[instr.Rtype.funct3],
-							RISCV::regname(instr.Rtype.rs2),
-							RISCV::regname(instr.Rtype.rd),
-							uint64_t(cpu.reg(instr.Rtype.rd)));
-		}
+		return snprintf(buffer, len, "%s %s <- %s, %s (= 0x%" PRIX64 ")",
+						strop,
+						RISCV::regname(instr.Rtype.rd),
+						RISCV::regname(instr.Rtype.rs1),
+						RISCV::regname(instr.Rtype.rs2),
+						uint64_t(cpu.reg(instr.Rtype.rd)));
 	});
 
 	INSTRUCTION(SYSTEM,
@@ -879,7 +917,7 @@ namespace riscv
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const uint32_t src = cpu.reg(instr.Itype.rs1);
 		// SLLI.UW: Shift-left Unsigned Word (Immediate)
-		dst = src << instr.Itype.shift_imm();
+		dst = RVREGTYPE(cpu)(src) << instr.Itype.shift_imm();
 	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
 	INSTRUCTION(OP32,
@@ -892,18 +930,8 @@ namespace riscv
 		case 0x1: // SLLW
 			dst = (int32_t) ((uint32_t)src1 << (src2 & 31));
 			return;
-		case 0x5: // SRLW
-			if (instr.Itype.high_bits() == 0x0) {
-				// SRLW: Logical right shift 32-bit
-				dst = (int32_t) ((uint32_t)src1 >> (src2 & 31));
-				return;
-			}
-			else if (instr.Itype.is_rori()) {
-				// RORW: Rotate right 32-bit
-				const auto shift = src2 & 31;
-				dst = (int32_t) ((src1 >> shift) | (src1 << (32 - shift)));
-				return;
-			}
+		case 0x5: // SRLW: Logical right shift 32-bit
+			dst = (int32_t) ((uint32_t)src1 >> (src2 & 31));
 			return;
 		// M-extension
 		case 0x10: // MULW (signed 32-bit multiply, sign-extended)
@@ -943,20 +971,20 @@ namespace riscv
 				dst = int32_t(src1);
 			}
 			return;
-		case 0x40: // ADDUW
-			dst = cpu.reg(instr.Rtype.rs2) + src1;
+		case 0x40: // ADD.UW
+			dst = cpu.reg(instr.Rtype.rs2) + RVREGTYPE(cpu)(src1);
 			return;
 		case 0x44: // ZEXT.H (imm=0x40):
 			dst = uint16_t(src1);
 			return;
 		case 0x102: // SH1ADD.UW
-			dst = cpu.reg(instr.Rtype.rs2) + (src1 << 1);
+			dst = cpu.reg(instr.Rtype.rs2) + (RVREGTYPE(cpu)(src1) << 1);
 			return;
 		case 0x104: // SH2ADD.UW
-			dst = cpu.reg(instr.Rtype.rs2) + (src1 << 2);
+			dst = cpu.reg(instr.Rtype.rs2) + (RVREGTYPE(cpu)(src1) << 2);
 			return;
 		case 0x106: // SH3ADD.UW
-			dst = cpu.reg(instr.Rtype.rs2) + (src1 << 3);
+			dst = cpu.reg(instr.Rtype.rs2) + (RVREGTYPE(cpu)(src1) << 3);
 			return;
 		case 0x200: // SUBW
 			dst = (int32_t) (src1 - src2);
@@ -964,31 +992,50 @@ namespace riscv
 		case 0x205: // SRAW
 			dst = (int32_t)src1 >> (src2 & 31);
 			return;
+		case 0x301: {
+			// ROLW: Rotate left 32-bit
+			const auto shift = src2 & 31;
+			dst = (int32_t) ((src1 << shift) | (src1 >> (32 - shift)));
+			} return;
+		case 0x305: {
+			// RORW: Rotate right 32-bit
+			const auto shift = src2 & 31;
+			dst = (int32_t) ((src1 >> shift) | (src1 << (32 - shift)));
+			} return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		if (!instr.Rtype.is_32M())
-		{
-			static std::array<const char*, 8*2> func3 = {
-				"ADD", "SLL", "SLT", "SLTU", "XOR", "SRL", "OR", "AND",
-				"SUB", "SLL", "SLT", "SLTU", "XOR", "SRA", "OR", "AND"};
-			const int EX = instr.Rtype.is_f7() ? 8 : 0;
-			return snprintf(buffer, len, "%s %sW %s, %s",
-							RISCV::regname(instr.Rtype.rs1),
-							func3[instr.Rtype.funct3 + EX],
-							RISCV::regname(instr.Rtype.rs2),
-							RISCV::regname(instr.Rtype.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		const char* strop = "";
+		switch (instr.Rtype.jumptable_friendly_op()) {
+			case 0x0: strop = "ADD.W"; break;
+			case 0x1: strop = "SLL.W"; break;
+			case 0x5: strop = "SRL.W"; break;
+			case 0x10: strop = "MUL.W"; break;
+			case 0x14: strop = "DIV.W"; break;
+			case 0x15: strop = "DIVU.W"; break;
+			case 0x16: strop = "REM.W"; break;
+			case 0x17: strop = "REMU.W"; break;
+			case 0x40:
+				if (instr.Rtype.rs2 == 0) strop = "ZEXT.W";
+				else                      strop = "ADD.UW";
+				break;
+			case 0x44: strop = "ZEXT.H"; break;
+			case 0x102: strop = "SH1ADD.UW"; break;
+			case 0x104: strop = "SH2ADD.UW"; break;
+			case 0x106: strop = "SH3ADD.UW"; break;
+			case 0x200: strop = "SUB.W"; break;
+			case 0x205: strop = "SRA.W"; break;
+			case 0x301: strop = "ROL.W"; break;
+			case 0x305: strop = "ROR.W"; break;
+			default: strop = "OP.UNKNOWN.W"; break;
 		}
-		else {
-			static std::array<const char*, 8> func3 = {
-				"MUL", "MULH", "MULHSU", "MULHU", "DIV", "DIVU", "REM", "REMU"};
-			return snprintf(buffer, len, "%s %sW %s, %s",
-							RISCV::regname(instr.Rtype.rs1),
-							func3[instr.Rtype.funct3],
-							RISCV::regname(instr.Rtype.rs2),
-							RISCV::regname(instr.Rtype.rd));
-		}
+		return snprintf(buffer, len, "%s %s <- %s, %s (= 0x%" PRIX64 ")",
+						strop,
+						RISCV::regname(instr.Rtype.rd),
+						RISCV::regname(instr.Rtype.rs1),
+						RISCV::regname(instr.Rtype.rs2),
+						uint64_t(cpu.reg(instr.Rtype.rd)));
 	});
 
 	INSTRUCTION(OP32_ADDW,
