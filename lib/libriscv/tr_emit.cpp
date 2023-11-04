@@ -703,6 +703,15 @@ void Emitter<W>::emit()
 			case 0x106: // SH3ADD
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 3);");
 				break;
+			case 0x141: // BSET
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " | (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				return;
+			case 0x142: // BCLR
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " & ~(1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				return;
+			case 0x143: // BINV
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " ^ (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				return;
 			case 0x204: // XNOR
 				add_code(to_reg(instr.Rtype.rd) + " = ~(" + to_reg(instr.Rtype.rs1) + " ^ " + to_reg(instr.Rtype.rs2) + ");");
 				break;
@@ -712,6 +721,9 @@ void Emitter<W>::emit()
 			case 0x207: // ANDN
 				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " & ~" + to_reg(instr.Rtype.rs2) + ");");
 				break;
+			case 0x245: // BEXT
+				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " >> (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1))) & 1;");
+				return;
 			case 0x54: // MIN
 				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + to_reg(instr.Rtype.rs1) + " < (saddr_t)" + to_reg(instr.Rtype.rs2) + ") "
 					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");

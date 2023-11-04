@@ -673,6 +673,12 @@ namespace riscv
 		case 0x141: // BSET
 			dst = src1 | (1UL << (src2 & (RVXLEN(cpu)-1)));
 			return;
+		case 0x142: // BCLR
+			dst = src1 & ~(1UL << (src2 & (RVXLEN(cpu)-1)));
+			return;
+		case 0x143: // BINV
+			dst = src1 ^ (1UL << (src2 & (RVXLEN(cpu)-1)));
+			return;
 		case 0x204: // XNOR
 			dst = ~(src1 ^ src2);
 			return;
@@ -728,6 +734,8 @@ namespace riscv
 			case 0x104: strop = "SH2ADD"; break;
 			case 0x106: strop = "SH3ADD"; break;
 			case 0x141: strop = "BSET"; break;
+			case 0x142: strop = "BCLR"; break;
+			case 0x143: strop = "BINV"; break;
 			case 0x200: strop = "SUB"; break;
 			case 0x204: strop = "XNOR"; break;
 			case 0x205: strop = "SRA"; break;
