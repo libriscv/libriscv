@@ -392,6 +392,24 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		.sqrtf64 = [] (double d) -> double {
 			return std::sqrt(d);
 		},
+		.clz = [] (uint32_t x) -> int {
+			return __builtin_clz(x);
+		},
+		.clzl = [] (uint64_t x) -> int {
+			return __builtin_clzl(x);
+		},
+		.ctz = [] (uint32_t x) -> int {
+			return __builtin_ctz(x);
+		},
+		.ctzl = [] (uint64_t x) -> int {
+			return __builtin_ctzl(x);
+		},
+		.cpop = [] (uint32_t x) -> int {
+			return __builtin_popcount(x);
+		},
+		.cpopl = [] (uint64_t x) -> int {
+			return __builtin_popcountl(x);
+		},
 	},
 	m_machine.memory.memory_arena_ptr(),
 	&m_machine.get_counters().first,

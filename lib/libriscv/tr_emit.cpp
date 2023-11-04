@@ -514,26 +514,26 @@ void Emitter<W>::emit()
 				case 0b011000000000: // CLZ
 					if constexpr (W == 4)
 						add_code(
-							dst + " = " + src + " ? clz(" + src + ") : XLEN;");
+							dst + " = " + src + " ? do_clz(" + src + ") : XLEN;");
 					else
 						add_code(
-							dst + " = " + src + " ? clzl(" + src + ") : XLEN;");
+							dst + " = " + src + " ? do_clzl(" + src + ") : XLEN;");
 					break;
 				case 0b011000000001: // CTZ
 					if constexpr (W == 4)
 						add_code(
-							dst + " = " + src + " ? ctz(" + src + ") : XLEN;");
+							dst + " = " + src + " ? do_ctz(" + src + ") : XLEN;");
 					else
 						add_code(
-							dst + " = " + src + " ? ctzl(" + src + ") : XLEN;");
+							dst + " = " + src + " ? do_ctzl(" + src + ") : XLEN;");
 					break;
 				case 0b011000000010: // CPOP
 					if constexpr (W == 4)
 						add_code(
-							dst + " = popcount(" + src + ");");
+							dst + " = do_cpop(" + src + ");");
 					else
 						add_code(
-							dst + " = popcountl(" + src + ");");
+							dst + " = do_cpopl(" + src + ");");
 					break;
 				default:
 					emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,

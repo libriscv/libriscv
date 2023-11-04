@@ -23,28 +23,6 @@ namespace riscv {
 
 #ifdef __TINYC__
 #define UNREACHABLE() /**/
-static inline int clz(uint32_t x)
-{
-	int n = 32, c = 16;
-	do {
-		uint32_t y = x >> c;
-		if (y) { n -= c; x = y; }
-		c >>= 1;
-	} while (c);
-
-	return n - x;
-}
-static inline long clzl(uint64_t x)
-{
-	long n = 64, c = 32;
-	do {
-		uint64_t y = x >> c;
-		if (y) { n -= c; x = y; }
-		c >>= 1;
-	} while (c);
-
-	return n - x;
-}
 static inline float fminf(float x, float y) {
 	return (x < y) ? x : y;
 }
@@ -57,18 +35,20 @@ static inline float fmaxf(float x, float y) {
 static inline float fmax(double x, double y) {
 	return (x >= y) ? x : y;
 }
-#define ctz(x) ~0UL
-#define ctzl(x) ~0UL
-#define popcount(x) ~0UL
-#define popcountl(x) ~0UL
+#define do_clz(x) api.clz(x)
+#define do_clzl(x) api.clzl(x)
+#define do_ctz(x) api.ctz(x)
+#define do_ctzl(x) api.ctzl(x)
+#define do_cpop(x) api.cpop(x)
+#define do_cpopl(x) api.cpopl(x)
 #else
 #define UNREACHABLE() __builtin_unreachable()
-#define clz(x) __builtin_clz(x)
-#define clzl(x) __builtin_clzl(x)
-#define ctz(x) __builtin_ctz(x)
-#define ctzl(x) __builtin_ctzl(x)
-#define popcount(x) __builtin_popcount(x)
-#define popcountl(x) __builtin_popcountl(x)
+#define do_clz(x) __builtin_clz(x)
+#define do_clzl(x) __builtin_clzl(x)
+#define do_ctz(x) __builtin_ctz(x)
+#define do_ctzl(x) __builtin_ctzl(x)
+#define do_cpop(x) __builtin_popcount(x)
+#define do_cpopl(x) __builtin_popcountl(x)
 #define fminf(x, y) __builtin_fminf(x, y)
 #define fmin(x, y) __builtin_fmin(x, y)
 #define fmaxf(x, y) __builtin_fmaxf(x, y)
@@ -134,6 +114,12 @@ static struct CallbackTable {
 	void (*exception) (CPU*, int);
 	float  (*sqrtf32)(float);
 	double (*sqrtf64)(double);
+	int (*clz) (uint32_t);
+	int (*clzl) (uint64_t);
+	int (*ctz) (uint32_t);
+	int (*ctzl) (uint64_t);
+	int (*cpop) (uint32_t);
+	int (*cpopl) (uint64_t);
 } api;
 static char* arena_base;
 static uint64_t* cur_insn;
