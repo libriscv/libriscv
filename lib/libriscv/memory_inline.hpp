@@ -23,6 +23,7 @@ T Memory<W>::read(address_t address)
 		if (LIKELY(address >= RWREAD_BEGIN && address < this->memory_arena_size())) {
 			return *(T *)&((const char*)m_arena)[RISCV_SPECSAFE(address)];
 		}
+		[[unlikely]];
 	}
 
 	const auto& pagedata = cached_readable_page(address, sizeof(T));
@@ -37,6 +38,7 @@ T& Memory<W>::writable_read(address_t address)
 		if (LIKELY(address >= initial_rodata_end() && address < memory_arena_size())) {
 			return *(T *)&((char*)m_arena)[RISCV_SPECSAFE(address)];
 		}
+		[[unlikely]];
 	}
 
 	auto& pagedata = cached_writable_page(address);
