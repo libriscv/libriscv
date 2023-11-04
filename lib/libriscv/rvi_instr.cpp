@@ -920,6 +920,28 @@ namespace riscv
 		dst = RVREGTYPE(cpu)(src) << instr.Itype.shift_imm();
 	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
+	INSTRUCTION(OP_IMM32,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		auto& dst = cpu.reg(instr.Itype.rd);
+		const uint32_t src = cpu.reg(instr.Itype.rs1);
+
+		switch (instr.Itype.funct3) {
+		case 0x1:
+			switch (instr.Itype.imm) {
+			case 0b011000000000: // CLZ.W
+				dst = src ? __builtin_clz(src) : RVXLEN(cpu);
+				return;
+			case 0b011000000001: // CTZ.W
+				dst = src ? __builtin_ctz(src) : 0;
+				return;
+			case 0b011000000010: // CPOP.W
+				dst = __builtin_popcount(src);
+				return;
+			}
+		}
+		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
+	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
+
 	INSTRUCTION(OP32,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		auto& dst = cpu.reg(instr.Rtype.rd);

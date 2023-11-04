@@ -171,8 +171,9 @@
 								DECODER(DECODED_INSTR(OP_IMM32_SLLIW));
 							} else if (instruction.Itype.high_bits() == 0x080) {
 								DECODER(DECODED_INSTR(OP_IMM32_SLLI_UW));
+							} else {
+								DECODER(DECODED_INSTR(OP_IMM32));
 							}
-							break;
 						case 0x5: // SRLIW / SRAIW
 							if (instruction.Itype.high_bits() == 0x000) {
 								DECODER(DECODED_INSTR(OP_IMM32_SRLIW));

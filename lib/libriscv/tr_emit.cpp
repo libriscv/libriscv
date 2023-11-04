@@ -806,6 +806,17 @@ void Emitter<W>::emit()
 					// SLLI.UW
 					add_code(dst + " = ((addr_t)" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
 				}
+				switch (instr.Itype.imm) {
+				case 0b011000000000: // CLZ.W
+					add_code(dst + " = " + src + " ? do_clz(" + src + ") : XLEN;");
+					break;
+				case 0b011000000001: // CTZ.W
+					add_code(dst + " = " + src + " ? do_ctz(" + src + ") : XLEN;");
+					break;
+				case 0b011000000010: // CPOP.W
+					add_code(dst + " = do_cpop(" + src + ");");
+					break;
+				}
 				break;
 			case 0x5: // SRLIW / SRAIW:
 				if (LIKELY(!instr.Itype.is_srai())) {
