@@ -707,6 +707,30 @@ void Emitter<W>::emit()
 			case 0x44: // ZEXT.H: Zero-extend 16-bit
 				add_code(to_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(instr.Rtype.rs1) + ");");
 				break;
+			case 0x51: // CLMUL
+				add_code(
+					"{ addr_t result = 0;",
+					"for (unsigned i = 0; i < XLEN; i++)",
+					"  if ((" + from_reg(instr.Rtype.rs2) + " >> i) & 1)",
+					"    result ^= (" + from_reg(instr.Rtype.rs1) + " << i);",
+					to_reg(instr.Rtype.rd) + " = result; }");
+				break;
+			case 0x52: // CLMULR
+				add_code(
+					"{ addr_t result = 0;",
+					"for (unsigned i = 0; i < XLEN-1; i++)",
+					"  if ((" + from_reg(instr.Rtype.rs2) + " >> i) & 1)",
+					"    result ^= (" + from_reg(instr.Rtype.rs1) + " >> (XLEN - i - 1));",
+					to_reg(instr.Rtype.rd) + " = result; }");
+				break;
+			case 0x53: // CLMULH
+				add_code(
+					"{ addr_t result = 0;",
+					"for (unsigned i = 1; i < XLEN; i++)",
+					"  if ((" + from_reg(instr.Rtype.rs2) + " >> i) & 1)",
+					"    result ^= (" + from_reg(instr.Rtype.rs1) + " >> (XLEN - i));",
+					to_reg(instr.Rtype.rd) + " = result; }");
+				break;
 			case 0x102: // SH1ADD
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 1);");
 				break;
