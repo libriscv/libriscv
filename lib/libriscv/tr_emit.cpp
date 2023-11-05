@@ -536,8 +536,21 @@ void Emitter<W>::emit()
 							dst + " = do_cpopl(" + src + ");");
 					break;
 				default:
-					emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
-						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+					if (instr.Itype.high_bits() == 0x280) {
+						// BSETI: Bit-set immediate
+						add_code(dst + " = " + src + " | (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+					}
+					else if (instr.Itype.high_bits() == 0x480) {
+						// BCLRI: Bit-clear immediate
+						add_code(dst + " = " + src + " & ~(1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+					}
+					else if (instr.Itype.high_bits() == 0x680) {
+						// BINVI: Bit-invert immediate
+						add_code(dst + " = " + src + " ^ (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+					} else { // SLLI
+						emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
+							std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+					}
 				}
 				break;
 			case 0x2: // SLTI:
@@ -705,13 +718,13 @@ void Emitter<W>::emit()
 				break;
 			case 0x141: // BSET
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " | (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
-				return;
+				break;
 			case 0x142: // BCLR
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " & ~(1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
-				return;
+				break;
 			case 0x143: // BINV
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " ^ (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
-				return;
+				break;
 			case 0x204: // XNOR
 				add_code(to_reg(instr.Rtype.rd) + " = ~(" + to_reg(instr.Rtype.rs1) + " ^ " + to_reg(instr.Rtype.rs2) + ");");
 				break;
@@ -723,7 +736,7 @@ void Emitter<W>::emit()
 				break;
 			case 0x245: // BEXT
 				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " >> (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1))) & 1;");
-				return;
+				break;
 			case 0x54: // MIN
 				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + to_reg(instr.Rtype.rs1) + " < (saddr_t)" + to_reg(instr.Rtype.rs2) + ") "
 					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");

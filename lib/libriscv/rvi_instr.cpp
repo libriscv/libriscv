@@ -390,7 +390,7 @@ namespace riscv
 				}
 				else if (instr.Itype.high_bits() == 0x680) {
 					// BINVI: Bit-invert immediate
-					dst = src ^ ~(1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+					dst = src ^ (1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
 					return;
 				}
 			}
