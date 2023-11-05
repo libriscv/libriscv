@@ -416,7 +416,7 @@ namespace riscv
 				dst = (src >> shift) | (src << (RVXLEN(cpu) - shift));
 				return;
 			}
-			else if (instr.Itype.high_bits() == 0x810) {
+			else if (instr.Itype.high_bits() == 0x480) {
 				// BEXTI: Single-bit Extract
 				dst = (src >> (instr.Itype.imm & (RVXLEN(cpu)-1))) & 1;
 				return;
@@ -429,7 +429,7 @@ namespace riscv
 					dst_bytes[i] = src_bytes[i] ? 0xFF : 0x0;
 				return;
 			}
-			else if (instr.Itype.is_rev8<RVXLEN(cpu)>()) {
+			else if (instr.Itype.is_rev8<sizeof(dst)>()) {
 				// REV8: Byte-reverse register
 				if constexpr (RVIS32BIT(cpu))
 					dst = __builtin_bswap32(src);
@@ -649,6 +649,27 @@ namespace riscv
 		case 0x44: // ZEXT.H
 			dst = uint16_t(src1);
 			return;
+		case 0x51: { // CLMUL
+			auto result = 0;
+			for (unsigned i = 0; i < RVXLEN(cpu); i++)
+				if ((src2 >> i) & 1)
+					result ^= (src1 << i);
+			dst = result;
+			} return;
+		case 0x52: { // CLMULR
+			auto result = 0;
+			for (unsigned i = 0; i < RVXLEN(cpu)-1; i++)
+				if ((src2 >> i) & 1)
+					result ^= (src1 >> (RVXLEN(cpu) - i - 1));
+			dst = result;
+			} return;
+		case 0x53: { // CLMULH
+			auto result = 0;
+			for (unsigned i = 1; i < RVXLEN(cpu); i++)
+				if ((src2 >> i) & 1)
+					result ^= (src1 >> (RVXLEN(cpu) - i));
+			dst = result;
+			} return;
 		case 0x54: // MIN
 			dst = (RVSIGNTYPE(cpu)(src1) < RVSIGNTYPE(cpu)(src2)) ? src1 : src2;
 			return;

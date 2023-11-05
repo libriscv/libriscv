@@ -8,6 +8,7 @@ emulator/*rvnewlib
 emulator/*rvlinux
 nodiverge
 tests/autotest/emulator/emulator
+binaries/crc32/clmul
 fuzz/crash-*
 webapi/tests/binary
 .vscode/

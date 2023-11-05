@@ -334,6 +334,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x205:
 				return RV32I_BC_OP_SRA;
 			case 0x141: // BSET
+			case 0x142: // BCLR
+			case 0x143: // BINV
 			case 0x204: // XNOR
 			case 0x206: // ORN
 			case 0x207: // ANDN
@@ -344,9 +346,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case 0x57: // MAXU
 			case 0x301: // ROL
 			case 0x305: // ROR
-				return RV32I_BC_FUNCTION;
 			default:
-				return RV32I_BC_INVALID;
+				return RV32I_BC_FUNCTION;
 			}
 		case RV64I_OP32:
 			return RV32I_BC_FUNCTION;
