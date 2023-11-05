@@ -181,7 +181,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		case RV32I_LOAD:
 			// XXX: Support dummy loads
 			if (instr.Itype.rd == 0)
-				return RV32I_BC_NOP;
+				return RV32I_BC_NOP; // TODO: BC_FUNCTION
 			switch (instr.Itype.funct3) {
 			case 0x0: // LD.B
 				return RV32I_BC_LDB;

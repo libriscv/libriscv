@@ -58,9 +58,10 @@ namespace riscv
 			case RV32I_BC_BLTU:
 			case RV32I_BC_BGEU: {
 				const int32_t imm = original.Btype.signed_imm();
-				const auto addr = pc + imm;
+				address_t addr = 0;
+				const bool overflow = __builtin_add_overflow(pc, imm, &addr);
 
-				if (!this->is_within(addr, 4) || (addr % PCAL) != 0)
+				if (!this->is_within(addr, 4) || (addr % PCAL) != 0 || overflow)
 				{
 					// Use invalid instruction for out-of-bounds branches
 					// or misaligned jumps. It is strictly a cheat, but
@@ -240,7 +241,7 @@ namespace riscv
 				rewritten.imm = imm;
 
 				instr.whole = rewritten.whole;
-				return bytecode;
+				return RV32C_BC_BNEZ;
 			}
 			case RV32C_BC_LDD: {
 				const rv32c_instruction ci{original};
