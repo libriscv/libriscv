@@ -62,6 +62,9 @@ namespace riscv
 		}
 		return false;
 	}
+	static bool is_stopping_auipc(rv32i_instruction instr) {
+		return (instr.opcode() == RV32I_AUIPC && instr.Utype.rd != 0);
+	}
 
 	template <int W>
 	static void realize_fastsim(
@@ -114,7 +117,7 @@ namespace riscv
 					} else {
 						if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 							|| opcode == RV32I_JAL || opcode == RV32I_JALR
-							|| opcode == RV32I_AUIPC || entry.get_bytecode() == translator_op)
+							|| is_stopping_auipc(instruction) || entry.get_bytecode() == translator_op)
 							break;
 					}
 					// If we reached the end, and the opcode is not "stopping",
@@ -173,7 +176,7 @@ namespace riscv
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 					|| opcode == RV32I_JAL || opcode == RV32I_JALR
-					|| opcode == RV32I_AUIPC || entry.get_bytecode() == translator_op)
+					|| is_stopping_auipc(instruction) || entry.get_bytecode() == translator_op)
 					idxend = 0;
 				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
