@@ -1,0 +1,145 @@
+#include "libriscv.h"
+
+#include <libriscv/machine.hpp>
+
+using namespace riscv;
+#define RISCV_ARCH  RISCV64
+#define MACHINE(x) ((Machine<RISCV_ARCH> *)x)
+#define ERROR_CALLBACK(m, type, msg, data) \
+	if (auto *usr = m->get_userdata<UserData> (); usr->error != nullptr) \
+		usr->error(usr->opaque, type, msg, data);
+
+static std::vector<std::string> fill(int count, const char* const* args) {
+	std::vector<std::string> v;
+	for (int i = 0; i < count; i++)
+		v.push_back(args[i]);
+	return v;
+}
+
+struct UserData {
+	riscv_error_func_t error = nullptr;
+	riscv_stdout_func_t stdout = nullptr;
+	void *opaque = nullptr;
+};
+
+extern "C"
+void libriscv_set_defaults(RISCVOptions *options)
+{
+	MachineOptions<RISCV_ARCH> mo;
+
+	options->max_memory = mo.memory_max;
+	options->stack_size = mo.stack_size;
+	options->argc = 0;
+}
+
+extern "C"
+RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_length, RISCVOptions *options)
+{
+	MachineOptions<RISCV_ARCH> mo {
+		.memory_max = options->max_memory,
+		.stack_size = options->stack_size,
+	};
+	UserData *u = nullptr;
+	try {
+		auto view = std::string_view{(const char *)elf_prog, size_t(elf_length)};
+
+		auto* m = new Machine<RISCV_ARCH> { view, mo };
+		u = new UserData {
+			.error = options->error, .stdout = options->stdout, .opaque = options->opaque
+		};
+		m->set_userdata(u);
+		m->set_printer([] (auto& m, const char* data, size_t size) {
+			auto& userdata = (*m.template get_userdata<UserData> ());
+			if (userdata.stdout)
+				userdata.stdout(userdata.opaque, data, size);
+			else
+				printf("%.*s", (int)size, data);
+		});
+
+		if (options->argc > 0) {
+			std::vector<std::string> args = fill(options->argc, options->argv);
+			std::vector<std::string> env = {"LC_CTYPE=C", "LC_ALL=C", "USER=groot"};
+
+			m->setup_linux_syscalls();
+			m->setup_posix_threads();
+			m->setup_linux(args, env);
+			m->fds().permit_filesystem = true;
+			m->fds().permit_sockets = true;
+			// TODO: File permissions
+		}
+
+		return (RISCVMachine *)m;
+	}
+	catch (const std::exception& e)
+	{
+		if (options->error)
+			options->error(options->opaque, RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
+		delete u;
+		return NULL;
+	}
+}
+
+extern "C"
+int libriscv_delete(RISCVMachine *m)
+{
+	try {
+		delete MACHINE(m)->get_userdata<UserData> ();
+		delete MACHINE(m);
+		return 0;
+	}
+	catch (...)
+	{
+		return -1;
+	}
+}
+
+extern "C"
+int libriscv_run(RISCVMachine *m, uint64_t instruction_limit)
+{
+	try {
+		MACHINE(m)->simulate(instruction_limit);
+		return 0;
+	} catch (const MachineTimeoutException& tmo) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_TIMEOUT, tmo.what(), tmo.data());
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
+	}
+	return -1;
+}
+
+extern "C"
+int64_t libriscv_return_value(RISCVMachine *m)
+{
+	return MACHINE(m)->return_value();
+}
+
+extern "C"
+uint64_t libriscv_instruction_counter(RISCVMachine *m)
+{
+	return MACHINE(m)->instruction_counter();
+}
+
+extern "C"
+int libriscv_instruction_limit_reached(RISCVMachine *m)
+{
+	return MACHINE(m)->instruction_limit_reached();
+}
+
+extern "C"
+long libriscv_address_of(RISCVMachine *m, const char *name)
+{
+	try {
+		return ((Machine<RISCV_ARCH> *)m)->address_of(name);
+	}
+	catch (...) {
+		return 0;
+	}
+}
+
+extern "C"
+void * libriscv_opaque(RISCVMachine *m)
+{
+	return MACHINE(m)->get_userdata<UserData> ()->opaque;
+}
