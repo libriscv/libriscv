@@ -45,13 +45,12 @@
 #define BEGIN_BLOCK()                               \
 	pc += d->block_bytes(); \
 	counter += d->instruction_count();
-#define NEXT_BLOCK(len)                \
-	pc += len;                         \
-	if constexpr (compressed_enabled)  \
-		d += len / 2;                  \
-	else                               \
-		d += 1;                        \
-	BEGIN_BLOCK();                     \
+#define NEXT_BLOCK(len)                  \
+	pc += len;                           \
+	d += len / DecoderCache<W>::DIVISOR; \
+	if constexpr (FUZZING) /* Give OOB-aid to ASAN */           \
+	d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];  \
+	BEGIN_BLOCK();                       \
 	EXECUTE_CURRENT()
 
 #define UNCHECKED_JUMP()                                       \
@@ -91,6 +90,11 @@
 namespace riscv
 {
 	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+	static constexpr bool FUZZING = true;
+#else
+	static constexpr bool FUZZING = false;
+#endif
 
 	template <int W>
 	DecodedExecuteSegment<W>* resolve_execute_segment(CPU<W>& cpu, address_type<W>& pc)

@@ -14,6 +14,12 @@
 namespace riscv
 {
 	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+	static constexpr bool FUZZING = true;
+#else
+	static constexpr bool FUZZING = false;
+#endif
+
 #define VIEW_INSTR() \
 	auto instr = *(rv32i_instruction *)&decoder->instr;
 #define VIEW_INSTR_AS(name, x) \
@@ -30,35 +36,30 @@ namespace riscv
 
 #define NEXT_BLOCK(len)               \
 	pc += len;                        \
-	if constexpr (compressed_enabled) \
-		decoder += len / 2;           \
-	else                              \
-		decoder += 1;                 \
-	pc += decoder->block_bytes(); \
+	decoder += len / DecoderCache<W>::DIVISOR;               \
+	if constexpr (FUZZING) /* Give OOB-aid to ASAN */        \
+	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];  \
+	pc += decoder->block_bytes();                            \
 	counter.increment_counter(decoder->instruction_count()); \
 	EXECUTE_INSTR();
 
-#define NEXT_SEGMENT() \
-	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR]; \
-	pc += decoder->block_bytes(); \
+#define NEXT_SEGMENT()                                       \
+	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];  \
+	pc += decoder->block_bytes();                            \
 	counter.increment_counter(decoder->instruction_count()); \
 	EXECUTE_INSTR();
 
-#define PERFORM_BRANCH()                \
-	if constexpr (VERBOSE_JUMPS) printf("Branch 0x%lX >= 0x%lX\n", long(pc), long(pc + fi.signed_imm())); \
-	pc += fi.signed_imm();              \
+#define PERFORM_BRANCH()                 \
+	if constexpr (VERBOSE_JUMPS) fprintf(stderr, "Branch 0x%lX >= 0x%lX (decoder=%p)\n", long(pc), long(pc + fi.signed_imm()), decoder); \
 	if (LIKELY(!counter.overflowed())) { \
-		decoder += fi.signed_imm() / (compressed_enabled ? 2 : 4); \
-		counter.increment_counter(decoder->instruction_count()); \
-		pc += decoder->block_bytes(); \
-		EXECUTE_INSTR(); \
-	} \
+		NEXT_BLOCK(fi.signed_imm());     \
+	}                                    \
+	pc += fi.signed_imm();               \
 	goto check_jump;
 
-#define PERFORM_FORWARD_BRANCH()        \
-	if constexpr (VERBOSE_JUMPS) printf("Fw.Branch 0x%lX >= 0x%lX\n", long(pc), long(pc + fi.signed_imm())); \
-	pc += fi.signed_imm();              \
-	NEXT_SEGMENT();
+#define PERFORM_FORWARD_BRANCH()         \
+	if constexpr (VERBOSE_JUMPS) fprintf(stderr, "Fw.Branch 0x%lX >= 0x%lX\n", long(pc), long(pc + fi.signed_imm())); \
+	NEXT_BLOCK(fi.signed_imm());
 
 template <int W> DISPATCH_ATTR
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
@@ -232,7 +233,7 @@ INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
 	VIEW_INSTR();
 	pc = instr.whole;
 	if constexpr (VERBOSE_JUMPS) {
-		printf("FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
+		fprintf(stderr, "FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
 	if (UNLIKELY(counter.overflowed()))
 		goto check_jump;
@@ -243,7 +244,7 @@ INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	reg(REG_RA) = pc + 4;
 	pc = instr.whole;
 	if constexpr (VERBOSE_JUMPS) {
-		printf("FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
+		fprintf(stderr, "FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
 	if (UNLIKELY(counter.overflowed()))
 		goto check_jump;
@@ -259,7 +260,7 @@ INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 		reg(instr.Itype.rd) = pc + 4;
 	}
 	if constexpr (VERBOSE_JUMPS) {
-		printf("JALR PC 0x%lX => 0x%lX\n", long(pc), long(address));
+		fprintf(stderr, "JALR PC 0x%lX => 0x%lX\n", long(pc), long(address));
 	}
 	pc = address;
 	goto check_unaligned_jump;
@@ -278,7 +279,7 @@ INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jfunc) {
 	auto handler = decoder->get_handler();
 	handler(*this, instr);
 	if constexpr (VERBOSE_JUMPS) {
-		printf("Compressed jump from 0x%lX to 0x%lX\n",
+		fprintf(stderr, "Compressed jump from 0x%lX to 0x%lX\n",
 			pc, registers().pc + 2);
 	}
 	pc = registers().pc + 2;
@@ -332,7 +333,7 @@ INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
 	if (fi.rd != 0)
 		reg(fi.rd) = pc + 4;
 	if constexpr (VERBOSE_JUMPS) {
-		printf("JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc+fi.offset));
+		fprintf(stderr, "JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc+fi.offset));
 	}
 	pc += fi.offset;
 	goto check_jump;
