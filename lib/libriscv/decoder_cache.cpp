@@ -7,6 +7,8 @@
 
 namespace riscv
 {
+	static constexpr bool VERBOSE_DECODER = false;
+
 	struct UnalignedLoad32 {
 		uint16_t data[2];
 		operator uint32_t() {
@@ -132,6 +134,9 @@ namespace riscv
 						break;
 					}
 				}
+				if constexpr (VERBOSE_DECODER) {
+					fprintf(stderr, "Block 0x%lX to 0x%lX\n", block_pc, pc);
+				}
 
 				if (UNLIKELY(data.size() == 0))
 					throw MachineException(INVALID_PROGRAM, "Encountered empty block after measuring");
@@ -151,6 +156,10 @@ namespace riscv
 						throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
 					entry->idxend = count;
 					entry->icount = count + 1 - (data.size() - i);
+
+					if constexpr (VERBOSE_DECODER) {
+						fprintf(stderr, "Block 0x%lX has %u instructions\n", block_pc, count);
+					}
 
 					block_pc += length;
 					datalength -= length / 2;
@@ -296,16 +305,24 @@ namespace riscv
 			}
 #endif // RISCV_BINARY_TRANSLATION
 
-			// Insert decoded instruction into decoder cache
-			Instruction<W> decoded = CPU<W>::decode(instruction);
-			entry.set_handler(decoded);
+			if (was_full_instruction) {
+				// Insert decoded instruction into decoder cache
+				Instruction<W> decoded = CPU<W>::decode(instruction);
+				entry.set_handler(decoded);
 
-			// Cache the (modified) instruction bits
-			auto bytecode = CPU<W>::computed_index_for(instruction);
-			// Threaded rewrites are **always** enabled
-			bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
-			entry.set_bytecode(bytecode);
-			entry.instr = rewritten.whole;
+				// Cache the (modified) instruction bits
+				auto bytecode = CPU<W>::computed_index_for(instruction);
+				// Threaded rewrites are **always** enabled
+				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
+				entry.set_bytecode(bytecode);
+				entry.instr = rewritten.whole;
+			} else {
+				// WARNING: If we don't ignore this instruction,
+				// it will get *wrong* idxend values, and cause *invalid jumps*
+				entry.m_handler = 0;
+				entry.set_bytecode(0);
+				// ^ Must be made invalid, even if technically possible to jump to!
+			}
 
 			// Increment PC after everything
 			if constexpr (compressed_enabled) {
