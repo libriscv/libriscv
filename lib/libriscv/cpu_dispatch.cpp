@@ -231,21 +231,21 @@ while (true) {
 
 INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
 	VIEW_INSTR();
-	pc = instr.whole;
 	if constexpr (VERBOSE_JUMPS) {
 		fprintf(stderr, "FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
+	pc = instr.whole;
 	if (UNLIKELY(counter.overflowed()))
 		goto check_jump;
 	NEXT_SEGMENT();
 }
 INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	VIEW_INSTR();
-	reg(REG_RA) = pc + 4;
-	pc = instr.whole;
 	if constexpr (VERBOSE_JUMPS) {
 		fprintf(stderr, "FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
+	reg(REG_RA) = pc + 4;
+	pc = instr.whole;
 	if (UNLIKELY(counter.overflowed()))
 		goto check_jump;
 	NEXT_SEGMENT();

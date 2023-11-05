@@ -169,20 +169,20 @@ namespace riscv
 
 	INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal)
 	{
-		pc = d->instr;
 		if constexpr (VERBOSE_JUMPS) {
 			printf("FAST_JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + d->instr);
 		}
+		pc = d->instr;
 		OVERFLOW_CHECKED_JUMP();
 	}
 	INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call)
 	{
-		cpu.reg(REG_RA) = pc + 4;
-		pc = d->instr;
 		if constexpr (VERBOSE_JUMPS)
 		{
 			printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + d->instr);
 		}
+		cpu.reg(REG_RA) = pc + 4;
+		pc = d->instr;
 		OVERFLOW_CHECKED_JUMP();
 	}
 	INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
