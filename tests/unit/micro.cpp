@@ -5,6 +5,8 @@
 #include <libriscv/debug.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
+static constexpr uint32_t MAX_CYCLES = 5'000;
+static const std::vector<uint8_t> empty;
 using namespace riscv;
 
 TEST_CASE("Run exactly X instructions", "[Micro]")
@@ -59,7 +61,7 @@ TEST_CASE("Run exactly X instructions", "[Micro]")
 	REQUIRE(machine.cpu.reg(REG_ARG7) == 93);
 }
 
-TEST_CASE("Crashing payload", "[Micro]")
+TEST_CASE("Crashing payload #1", "[Micro]")
 {
 	static constexpr uint32_t MAX_CYCLES = 5'000;
 
@@ -78,4 +80,70 @@ TEST_CASE("Crashing payload", "[Micro]")
 	} catch (const std::exception& e) {
 		//printf(">>> Exception: %s\n", e.what());
 	}
+}
+
+TEST_CASE("Crashing payload #2", "[Micro]")
+{
+	static const uint8_t crash[] = {
+		0x80, 0xbf, 0x25, 0x00, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x25,
+		0x10, 0x25, 0x00, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x35, 0x30,
+		0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x63, 0x01,
+		0x41, 0x00, 0xf4, 0x1a, 0x00, 0xcb, 0xcb, 0xcb, 0xda, 0xda, 0xda, 0xda,
+		0xda, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d,
+		0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d,
+		0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x1d, 0x35, 0x35, 0x35,
+		0x34, 0x3f, 0x35, 0x35, 0x55, 0xf5
+	};
+
+	constexpr uint32_t S = 0x1000;
+	constexpr uint32_t V = 0x2000;
+
+	riscv::Machine<RISCV64> machine { empty };
+	bool exception_thrown = false;
+	try
+	{
+		machine.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
+		machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+		machine.on_unhandled_syscall = [] (auto&, size_t) {};
+		machine.cpu.init_execute_area(crash, V, sizeof(crash));
+
+		machine.cpu.jump(V);
+
+		machine.simulate(MAX_CYCLES);
+	} catch (const std::exception& e) {
+		fprintf(stderr, ">>> Exception: %s\n", e.what());
+		exception_thrown = true;
+	}
+
+	REQUIRE(exception_thrown);
+}
+
+TEST_CASE("Crashing payload #3", "[Micro]")
+{
+	static const uint8_t crash[] = {
+		0x17, 0x00, 0x17, 0x60, 0x60, 0x60, 0x60, 0xff, 0x60, 0x60, 0x60, 0x60,
+		0x60, 0x60, 0x1c, 0xff, 0xe3, 0xff, 0xff, 0xff
+	};
+
+	constexpr uint32_t S = 0x1000;
+	constexpr uint32_t V = 0x2000;
+
+	riscv::Machine<RISCV64> machine { empty };
+	bool exception_thrown = false;
+	try
+	{
+		machine.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
+		machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+		machine.on_unhandled_syscall = [] (auto&, size_t) {};
+		machine.cpu.init_execute_area(crash, V, sizeof(crash));
+
+		machine.cpu.jump(V);
+
+		machine.simulate(MAX_CYCLES);
+	} catch (const std::exception& e) {
+		fprintf(stderr, ">>> Exception: %s\n", e.what());
+		exception_thrown = true;
+	}
+
+	REQUIRE(exception_thrown);
 }
