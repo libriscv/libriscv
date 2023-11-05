@@ -6,11 +6,10 @@ option(DEBUGGING   "Debugging build" OFF)
 option(GCSECTIONS  "Garbage collect empty sections" ON)
 set(VERSION_FILE   "symbols.map" CACHE STRING "Retained symbols file")
 
-set(RISCV_ABI "-march=rv32g -mabi=ilp32d")
 set(WARNINGS  "-Wall -Wextra")
 set(COMMON    "-O2 -fstack-protector")
-set(CMAKE_C_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c11 ${COMMON}")
-set(CMAKE_CXX_FLAGS "${WARNINGS} ${RISCV_ABI} -std=c++2a ${COMMON}")
+set(CMAKE_C_FLAGS "${WARNINGS} -std=c11 ${COMMON}")
+set(CMAKE_CXX_FLAGS "${WARNINGS} -std=c++2a ${COMMON}")
 
 if (DEBUGGING)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g")

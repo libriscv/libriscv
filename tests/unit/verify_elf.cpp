@@ -99,16 +99,16 @@ TEST_CASE("Rust Hello World", "[Verify]")
 	REQUIRE(state.text == "Hello World!\n");
 }
 
-TEST_CASE("RV64 Newlib with B-ext Hello World", "[Verify]")
+TEST_CASE("RV32 Newlib with B-ext Hello World", "[Verify]")
 {
-	const auto binary = load_file(cwd + "/elf/newlib-rv64g_zba_zbb-hello-world");
+	const auto binary = load_file(cwd + "/elf/newlib-rv32gb-hello-world");
 
-	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	riscv::Machine<RISCV32> machine { binary, { .memory_max = MAX_MEMORY } };
 	// Install Linux system calls
 	machine.setup_linux_syscalls();
 	// Create a Linux environment for runtimes to work well
 	machine.setup_linux(
-		{"newlib-rv64g_zba_zbb-hello-world"},
+		{"newlib-rv32gb-hello-world"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 
 	struct State {
@@ -125,7 +125,42 @@ TEST_CASE("RV64 Newlib with B-ext Hello World", "[Verify]")
 
 	// Sadly, main() returns int which gets sign-extended to all bits set
 	// which kind of defeats the purpose of testing ROL... oh well.
-	REQUIRE(machine.return_value() == ~uint64_t(0));
+	REQUIRE(machine.return_value() == 666);
+	REQUIRE(state.text.find("[confronted]") != std::string::npos);
+	REQUIRE(state.text.find("[problem]") != std::string::npos);
+	REQUIRE(state.text.find("[regular]") != std::string::npos);
+	REQUIRE(state.text.find("[expressions]") != std::string::npos);
+	REQUIRE(state.text.find("[problems]") != std::string::npos);
+	REQUIRE(state.text.find("Caught exception: Hello Exceptions!") != std::string::npos);
+}
+
+TEST_CASE("RV64 Newlib with B-ext Hello World", "[Verify]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// Install Linux system calls
+	machine.setup_linux_syscalls();
+	// Create a Linux environment for runtimes to work well
+	machine.setup_linux(
+		{"newlib-rv64gb-hello-world"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	struct State {
+		std::string text;
+	} state;
+	machine.set_userdata(&state);
+	machine.set_printer([] (const auto& m, const char* data, size_t size) {
+		auto* state = m.template get_userdata<State> ();
+		state->text.append(data, data + size);
+	});
+
+	// Run for at most X instructions before giving up
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	// Sadly, main() returns int which gets sign-extended to all bits set
+	// which kind of defeats the purpose of testing ROL... oh well.
+	REQUIRE(machine.return_value() == 666);
 	REQUIRE(state.text.find("[confronted]") != std::string::npos);
 	REQUIRE(state.text.find("[problem]") != std::string::npos);
 	REQUIRE(state.text.find("[regular]") != std::string::npos);
