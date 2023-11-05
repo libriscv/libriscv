@@ -110,10 +110,8 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 
 ## Instruction set support
 
-The emulator currently supports RV32GC, RV64GC (IMAFDC) and RV128G.
-The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions). Atomics support is present and has been tested with multiprocessing, but there is no extensive test suite. The Golang runtime uses atomics extensively.
-
-B-extension support is currently being implemented. Zba and Zbb is experimentally supported. In order to test this, build with `-march=rv64g_zba_zbb`. There is an [ELF verification test](/tests/unit/verify_elf.cpp).
+The emulator currently supports RV32GCB, RV64GCB (IMAFDC) and RV128G.
+The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions). Atomics support is present and has been tested with multiprocessing, but there is no extensive test suite. The Golang runtime uses atomics extensively. V-extension is undergoing work.
 
 The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the [emu128 folder](/emu128/).
 
