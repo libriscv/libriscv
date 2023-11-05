@@ -705,7 +705,7 @@ void Emitter<W>::emit()
 				);
 				break;
 			case 0x44: // ZEXT.H: Zero-extend 16-bit
-				add_code(to_reg(instr.Rtype.rd) + " = uint16_t(" + from_reg(instr.Rtype.rs1) + ");");
+				add_code(to_reg(instr.Rtype.rd) + " = (uint16_t)" + from_reg(instr.Rtype.rs1) + ";");
 				break;
 			case 0x51: // CLMUL
 				add_code(
