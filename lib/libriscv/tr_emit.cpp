@@ -578,6 +578,12 @@ void Emitter<W>::emit()
 						"for (unsigned i = 0; i < sizeof(addr_t); i++)",
 						"	((char *)&" + dst + ")[i] = ((char *)&" + src + ")[i] ? 0xFF : 0x0;"
 					);
+				} else if (instr.Itype.is_rev8<sizeof(dst)>()) {
+					// REV8: Byte-reverse register
+					if constexpr (W == 4)
+						add_code(dst + " = do_bswap32(" + src + ");");
+					else
+						add_code(dst + " = do_bswap64(" + src + ");");
 				} else if (LIKELY(!instr.Itype.is_srai())) {
 					emit_op(" >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));

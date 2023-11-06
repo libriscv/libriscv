@@ -35,6 +35,12 @@ static inline float fmaxf(float x, float y) {
 static inline float fmax(double x, double y) {
 	return (x >= y) ? x : y;
 }
+#define do_bswap32(x) \
+	((((x) & 0xff000000) >> 24)| \
+	(((x) & 0x00ff0000) >>  8) | \
+	(((x) & 0x0000ff00) <<  8) | \
+	(((x) & 0x000000ff) << 24))
+#define do_bswap64(x) (do_bswap32(x) | ((uint64_t)do_bswap32((x) >> 32) << 32))
 #define do_clz(x) api.clz(x)
 #define do_clzl(x) api.clzl(x)
 #define do_ctz(x) api.ctz(x)
@@ -43,6 +49,8 @@ static inline float fmax(double x, double y) {
 #define do_cpopl(x) api.cpopl(x)
 #else
 #define UNREACHABLE() __builtin_unreachable()
+#define do_bswap32(x) __builtin_bswap32(x)
+#define do_bswap64(x) __builtin_bswap64(x)
 #define do_clz(x) __builtin_clz(x)
 #define do_clzl(x) __builtin_clzl(x)
 #define do_ctz(x) __builtin_ctz(x)
