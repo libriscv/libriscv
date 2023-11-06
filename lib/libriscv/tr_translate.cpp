@@ -105,6 +105,11 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	return 0;
 }
 
+static bool is_stopping_instruction(rv32i_instruction instr) {
+	return instr.opcode() == RV32I_JALR || instr.whole == RV32_INSTR_STOP
+		|| (instr.opcode() == RV32I_SYSTEM && instr.Itype.funct3 == 0 && instr.Itype.imm == 261); // WFI
+}
+
 template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
 	const std::string& filename,
@@ -172,9 +177,8 @@ if constexpr (SCAN_FOR_GP) {
 		// together sequentially (a code block).
 		for (it = block; it != ipairs.end(); ++it) {
 			const rv32i_instruction instruction{it->instr};
-			const auto opcode = instruction.opcode();
 			// JALR and STOP are show-stoppers / code-block enders
-			if (opcode == RV32I_JALR || instruction.whole == 0x7ff00073) {
+			if (is_stopping_instruction(instruction)) {
 				++it; break;
 			}
 		} // find block
@@ -205,7 +209,10 @@ if constexpr (SCAN_FOR_GP) {
 				has_branch = true;
 				// detect jump location
 				const auto offset = instruction.Btype.signed_imm();
-				jump_locations.insert(current_pc + offset);
+				const auto location = current_pc + offset;
+				// only accept branches relative to current block
+				if (location >= basepc && location < block_end_pc)
+					jump_locations.insert(location);
 			}
 
 			current_pc += 4;
@@ -219,6 +226,7 @@ if constexpr (SCAN_FOR_GP) {
 			if constexpr (VERBOSE_BLOCKS) {
 				printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
 			}
+
 			blocks.push_back({
 				*block, length, basepc, has_branch,
 				std::move(jump_locations)
@@ -423,7 +431,7 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	};
 	Mapping* mappings = (Mapping *)dylib_lookup(dylib, "mappings");
 
-	if (no_mappings == nullptr || mappings == nullptr) {
+	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
 		dylib_close(dylib);
 		exec.set_binary_translated(nullptr);
 		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
@@ -437,12 +445,17 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	exec.reserve_mappings(nmappings);
 	for (size_t i = 0; i < nmappings; i++) {
 		exec.add_mapping(mappings[i].handler);
-		auto& entry = decoder_entry_at(exec, mappings[i].addr);
-		if (mappings[i].handler != nullptr) {
-			entry.instr = i;
-			entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+		const auto addr = mappings[i].addr;
+		if (exec.is_within(addr)) {
+			auto& entry = decoder_entry_at(exec, addr);
+			if (mappings[i].handler != nullptr) {
+				entry.instr = i;
+				entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+			} else {
+				entry.set_bytecode(0x0); /* Invalid opcode */
+			}
 		} else {
-			entry.set_bytecode(0x0); /* Invalid opcode */
+			throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
 		}
 	}
 

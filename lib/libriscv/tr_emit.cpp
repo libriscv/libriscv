@@ -7,10 +7,10 @@
 #include "rvv.hpp"
 #endif
 
-#define PCRELA(x) ((address_t) (tinfo.basepc + index() * 4 + (x)))
+#define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define FUNCLABEL(i) (func + "_" + std::to_string(i))
-#define ILLEGAL_AND_EXIT() { code += "api.exception(cpu, ILLEGAL_OPCODE);\nUNREACHABLE();\n"; }
+#define UNKNOWN_INSTRUCTION() { code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "c < local_max_insn";
@@ -296,6 +296,14 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		code += "if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {\n";
 	else
 		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
+
+	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & 0x3)) {
+		code +=
+			"api.exception(cpu, MISALIGNED_INSTRUCTION); return;\n"
+			"}\n";
+		return;
+	}
+
 	if (binfo.goto_enabled) {
 		// this is a jump back to the start of the function
 		code += "if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
@@ -304,17 +312,9 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
 		// else, exit binary translation
 	}
-	if (PCRELA(instr.Btype.signed_imm()) & 0x3)
-	{
-		code +=
-			"api.exception(cpu, " + std::to_string(MISALIGNED_INSTRUCTION) + ");\n";
-	}
-	else
-	{
-		// The number of instructions to increment depends on if branch-instruction-counting is enabled
-		code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n";
-		exit_function(true); // Bracket
-	}
+	// The number of instructions to increment depends on if branch-instruction-counting is enabled
+	code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n";
+	exit_function(true); // Bracket (NOTE: not actually ending the function)
 }
 
 template <int W>
@@ -371,7 +371,7 @@ void Emitter<W>::emit()
 				this->memory_load<uint32_t>(from_reg(instr.Itype.rd), "uint32_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			default:
-				ILLEGAL_AND_EXIT();
+				UNKNOWN_INSTRUCTION();
 			}
 			} else {
 				// We don't care about where we are in the page when rd=0
@@ -395,49 +395,49 @@ void Emitter<W>::emit()
 				this->memory_store("int64_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			default:
-				ILLEGAL_AND_EXIT();
+				UNKNOWN_INSTRUCTION();
 			}
 			break;
 		case RV32I_BRANCH: {
 			this->increment_counter_so_far();
-			uint64_t dest_pc = 0;
-			const auto offset = instr.Btype.signed_imm() / 4;
+			const auto offset = instr.Btype.signed_imm();
+			uint64_t dest_pc = this->pc() + offset;
+			uint64_t jump_pc = 0;
 			// goto branch: restarts function
-			bool ge = tinfo.has_branch && (offset == -(long) i);
+			bool ge = tinfo.has_branch && (dest_pc == this->begin_pc());
 			// forward label: branch inside code block
-			if (offset > 0 && i+offset < tinfo.len) {
+			if (offset > 0 && dest_pc < this->end_pc()) {
 				// forward label: future address
 				labels.insert(dest_pc);
-				dest_pc = this->pc() + instr.Btype.signed_imm();
-			} else if (tinfo.jump_locations.count(PCRELA(offset * 4))) {
-				// forward label: existing jump location
-				const int dstidx = i + offset;
-				if (dstidx > 0 && dstidx < tinfo.len) {
-					dest_pc = this->pc() + instr.Btype.signed_imm();
+				jump_pc = dest_pc;
+			} else if (tinfo.jump_locations.count(dest_pc)) {
+				// existing jump location
+				if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
+					jump_pc = dest_pc;
 				}
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch({ false, ge, dest_pc }, " == ");
+				add_branch({ false, ge, jump_pc }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch({ false, ge, dest_pc }, " != ");
+				add_branch({ false, ge, jump_pc }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
-				ILLEGAL_AND_EXIT();
+				UNKNOWN_INSTRUCTION();
 				break;
 			case 0x4: // LT
-				add_branch({ true, ge, dest_pc }, " < ");
+				add_branch({ true, ge, jump_pc }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch({ true, ge, dest_pc }, " >= ");
+				add_branch({ true, ge, jump_pc }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch({ false, ge, dest_pc }, " < ");
+				add_branch({ false, ge, jump_pc }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch({ false, ge, dest_pc }, " >= ");
+				add_branch({ false, ge, jump_pc }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
@@ -792,7 +792,7 @@ void Emitter<W>::emit()
 			default:
 				//fprintf(stderr, "RV32I_OP: Unhandled function 0x%X\n",
 				//		instr.Rtype.jumptable_friendly_op());
-				ILLEGAL_AND_EXIT();
+				UNKNOWN_INSTRUCTION();
 			}
 			break;
 		case RV32I_LUI:
@@ -827,10 +827,10 @@ void Emitter<W>::emit()
 					code += "api.ebreak(cpu);\n";
 					exit_function();
 					break;
-				} if (instr.Itype.imm == 261) {
+				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "*max_insn = 0;\n";
-					exit_function();
-					break;
+					exit_function(true);
+					return;
 				} else {
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 					break;
@@ -854,17 +854,18 @@ void Emitter<W>::emit()
 				} else if (instr.Itype.high_bits() == 0x080) {
 					// SLLI.UW
 					add_code(dst + " = ((addr_t)" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
-				}
-				switch (instr.Itype.imm) {
-				case 0b011000000000: // CLZ.W
-					add_code(dst + " = " + src + " ? do_clz(" + src + ") : XLEN;");
-					break;
-				case 0b011000000001: // CTZ.W
-					add_code(dst + " = " + src + " ? do_ctz(" + src + ") : XLEN;");
-					break;
-				case 0b011000000010: // CPOP.W
-					add_code(dst + " = do_cpop(" + src + ");");
-					break;
+				} else {
+					switch (instr.Itype.imm) {
+					case 0b011000000000: // CLZ.W
+						add_code(dst + " = " + src + " ? do_clz(" + src + ") : XLEN;");
+						break;
+					case 0b011000000001: // CTZ.W
+						add_code(dst + " = " + src + " ? do_ctz(" + src + ") : XLEN;");
+						break;
+					case 0b011000000010: // CPOP.W
+						add_code(dst + " = do_cpop(" + src + ");");
+						break;
+					}
 				}
 				break;
 			case 0x5: // SRLIW / SRAIW:
@@ -876,7 +877,7 @@ void Emitter<W>::emit()
 				}
 				break;
 			default:
-				ILLEGAL_AND_EXIT();
+				UNKNOWN_INSTRUCTION();
 			}
 			} break;
 		case RV64I_OP32: {
@@ -957,7 +958,7 @@ void Emitter<W>::emit()
 				);
 				break;
 			default:
-				ILLEGAL_AND_EXIT();
+				UNKNOWN_INSTRUCTION();
 			}
 			} break;
 		case RV32F_LOAD: {
@@ -1021,7 +1022,7 @@ void Emitter<W>::emit()
 			} else if (fi.R4type.funct2 == 0x1) { // float64
 				code += "set_dbl(&" + dst + ", " + sign + "(" + rs1 + ".f64 * " + rs2 + ".f64" + add + rs3 + ".f64));\n";
 			} else {
-				ILLEGAL_AND_EXIT();
+				UNKNOWN_INSTRUCTION();
 			}
 			} break;
 		case RV32F_FPFUNC: {
@@ -1032,8 +1033,10 @@ void Emitter<W>::emit()
 			if (fi.R4type.funct2 < 0x2) { // fp32 / fp64
 			switch (instr.fpfunc()) {
 			case RV32F__FEQ_LT_LE:
-				if (UNLIKELY(fi.R4type.rd == 0))
-					ILLEGAL_AND_EXIT();
+				if (UNLIKELY(fi.R4type.rd == 0)) {
+					UNKNOWN_INSTRUCTION();
+					break;
+				}
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FLE.S
 					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
@@ -1054,7 +1057,7 @@ void Emitter<W>::emit()
 					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f64 == " + rs2 + ".f64) ? 1 : 0;\n";
 					break;
 				default:
-					ILLEGAL_AND_EXIT();
+					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FMIN_MAX:
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
@@ -1071,7 +1074,7 @@ void Emitter<W>::emit()
 					code += "set_dbl(&" + dst + ", fmax(" + rs1 + ".f64, " + rs2 + ".f64));\n";
 					break;
 				default:
-					ILLEGAL_AND_EXIT();
+					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FADD:
 			case RV32F__FSUB:
@@ -1119,7 +1122,7 @@ void Emitter<W>::emit()
 						code += "load_dbl(&" + dst + ", ((uint64_t)(" + rs1 + ".usign.sign ^ " + rs2 + ".usign.sign) << 63) | " + rs1 + ".usign.bits);\n";
 					} break;
 				default:
-					ILLEGAL_AND_EXIT();
+					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FCVT_SD_DS:
 				if (fi.R4type.funct2 == 0x0) {
@@ -1127,7 +1130,7 @@ void Emitter<W>::emit()
 				} else if (fi.R4type.funct2 == 0x1) {
 					code += "set_dbl(&" + dst + ", " + rs1 + ".f32[0]);\n";
 				} else {
-					ILLEGAL_AND_EXIT();
+					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FCVT_SD_W: {
 				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddr_t)" : "");
@@ -1136,7 +1139,7 @@ void Emitter<W>::emit()
 				} else if (fi.R4type.funct2 == 0x1) {
 					code += "set_dbl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
 				} else {
-					ILLEGAL_AND_EXIT();
+					UNKNOWN_INSTRUCTION();
 				}
 				} break;
 			case RV32F__FCVT_W_SD: {
@@ -1146,7 +1149,7 @@ void Emitter<W>::emit()
 				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
 					code += to_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f64;\n";
 				} else {
-					ILLEGAL_AND_EXIT();
+					UNKNOWN_INSTRUCTION();
 				}
 				} break;
 			case RV32F__FMV_W_X:
@@ -1155,7 +1158,7 @@ void Emitter<W>::emit()
 				} else if (W == 8 && fi.R4type.funct2 == 0x1) {
 					code += "load_dbl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
 				} else {
-					ILLEGAL_AND_EXIT();
+					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FMV_X_W:
 				if (fi.R4type.funct3 == 0x0) {
@@ -1164,13 +1167,13 @@ void Emitter<W>::emit()
 					} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
 						code += to_reg(fi.R4type.rd) + " = " + rs1 + ".i64;\n";
 					} else {
-						ILLEGAL_AND_EXIT();
+						UNKNOWN_INSTRUCTION();
 					}
 				} else { // FPCLASSIFY etc.
 					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 				} break;
 			} // fpfunc
-			} else ILLEGAL_AND_EXIT();
+			} else UNKNOWN_INSTRUCTION();
 			} break; // RV32F_FPFUNC
 		case RV32A_ATOMIC: // General handler for atomics
 			[[fallthrough]];
@@ -1178,7 +1181,7 @@ void Emitter<W>::emit()
 			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 			break;
 		default:
-			ILLEGAL_AND_EXIT();
+			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 		}
 	}
 	// If the function ends with an unimplemented instruction,
