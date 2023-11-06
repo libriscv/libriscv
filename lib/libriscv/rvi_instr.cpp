@@ -967,6 +967,13 @@ namespace riscv
 				dst = __builtin_popcount(src);
 				return;
 			}
+		case 0x5:
+			if (instr.Itype.high_bits() == 0x600) // RORIW
+			{
+				const auto shift = instr.Itype.imm & 31;
+				dst = (int32_t) ((src >> shift) | (src << (32 - shift)));
+				return;
+			}
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
