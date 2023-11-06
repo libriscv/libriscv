@@ -55,9 +55,8 @@ namespace riscv
 		if (vlength < 4)
 			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, begin);
 
-		this->set_execute_segment(
-			&machine().memory.create_execute_segment(
-				{}, vdata, begin, vlength));
+		this->m_exec = &machine().memory.create_execute_segment(
+			{}, vdata, begin, vlength);
 	} // CPU::init_execute_area
 
 	template<int W> RISCV_NOINLINE

@@ -160,7 +160,7 @@ namespace riscv
 		const DecodedExecuteSegment<W>* exec_segment_for(address_t vaddr) const;
 		const DecodedExecuteSegment<W>& main_execute_segment() const { return m_exec.at(0); }
 		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
-		size_t cached_execute_segments() const noexcept { return m_exec.size(); }
+		size_t cached_execute_segments() const noexcept { return m_exec_segs; }
 		// Evict newest execute segments until only remaining left
 		// Default: Leave only the main execute segment left.
 		void evict_execute_segments(size_t remaining_size = 1);

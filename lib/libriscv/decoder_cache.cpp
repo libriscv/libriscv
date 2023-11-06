@@ -410,9 +410,12 @@ namespace riscv
 	template <int W>
 	DecodedExecuteSegment<W>& Memory<W>::next_execute_segment()
 	{
-		auto& result = this->m_exec.at(m_exec_segs);
-		m_exec_segs ++;
-		return result;
+		if (LIKELY(m_exec_segs < MAX_EXECUTE_SEGS)) {
+			auto& result = this->m_exec.at(m_exec_segs);
+			m_exec_segs ++;
+			return result;
+		}
+		throw MachineException(INVALID_PROGRAM, "Max execute segments reached");
 	}
 
 	template <int W>

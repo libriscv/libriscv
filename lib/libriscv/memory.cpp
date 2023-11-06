@@ -161,7 +161,7 @@ namespace riscv
 				attr.read, attr.write, attr.exec);
 		}
 
-		if (attr.exec && m_exec.empty())
+		if (attr.exec && this->cached_execute_segments() == 0)
 		{
 			serialize_execute_segment(options, hdr);
 			// Nothing more to do here, if execute-only
