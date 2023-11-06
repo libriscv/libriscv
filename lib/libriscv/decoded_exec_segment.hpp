@@ -43,6 +43,7 @@ namespace riscv
 		}
 		bool empty() const noexcept { return m_exec_pagedata_size == 0; }
 
+		DecodedExecuteSegment() = default;
 		DecodedExecuteSegment(address_t pbase, size_t len, address_t vaddr, size_t exlen);
 		DecodedExecuteSegment(DecodedExecuteSegment&&);
 		~DecodedExecuteSegment();
@@ -60,8 +61,8 @@ namespace riscv
 #endif
 
 	private:
-		address_t m_vaddr_begin;
-		address_t m_vaddr_end;
+		address_t m_vaddr_begin = 0;
+		address_t m_vaddr_end   = 0;
 		DecoderData<W>* m_exec_decoder = nullptr;
 
 		// The flat execute segment is used to execute

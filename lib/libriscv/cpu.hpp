@@ -110,6 +110,7 @@ namespace riscv
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
 		void init_execute_area(const void* data, address_t begin, address_t length);
 		void set_execute_segment(DecodedExecuteSegment<W>* seg) { m_exec = seg; }
+		auto* current_execute_segment() noexcept { return m_exec; }
 		auto* current_execute_segment() const noexcept { return m_exec; }
 		DecodedExecuteSegment<W> *next_execute_segment();
 		bool is_executable(address_t addr) const noexcept;

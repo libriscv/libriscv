@@ -394,8 +394,8 @@ namespace riscv
 		}
 
 		// Create the whole executable memory range
-		m_exec.emplace_back(pbase, plen, vaddr, exlen);
-		auto& current_exec = m_exec.back();
+		auto& current_exec = this->next_execute_segment();
+		new (&current_exec) DecodedExecuteSegment<W>(pbase, plen, vaddr, exlen);
 
 		auto* exec_data = current_exec.exec_data(pbase);
 		std::memset(&exec_data[0],      0,     prelen);
@@ -408,9 +408,18 @@ namespace riscv
 	}
 
 	template <int W>
+	DecodedExecuteSegment<W>& Memory<W>::next_execute_segment()
+	{
+		auto& result = this->m_exec.at(m_exec_segs);
+		m_exec_segs ++;
+		return result;
+	}
+
+	template <int W>
 	DecodedExecuteSegment<W>* Memory<W>::exec_segment_for(address_t vaddr)
 	{
-		for (auto& segment : m_exec) {
+		for (size_t i = 0; i < m_exec_segs; i++) {
+			auto& segment = m_exec[i];
 			if (segment.is_within(vaddr)) return &segment;
 		}
 		return nullptr;
@@ -425,14 +434,15 @@ namespace riscv
 	template <int W>
 	void Memory<W>::evict_execute_segments(size_t remaining_size)
 	{
-		if (m_exec.size() <= remaining_size)
+		if (m_exec_segs <= remaining_size)
 			return;
 
-		// pop_back() might throw, so let's invalidate early
+		// destructor could throw, so let's invalidate early
 		machine().cpu.set_execute_segment(nullptr);
 
-		while (m_exec.size() > remaining_size) {
-			m_exec.pop_back();
+		while (m_exec_segs > remaining_size) {
+			m_exec_segs--;
+			m_exec.at(m_exec_segs).~DecodedExecuteSegment<W>();
 		}
 	}
 

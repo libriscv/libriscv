@@ -24,6 +24,7 @@ namespace riscv
 		using page_write_cb_t = riscv::Function<void(Memory&, address_t, Page&)>;
 		static constexpr address_t BRK_MAX      = 0x1000000; // Default BRK size
 		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
+		static constexpr size_t    MAX_EXECUTE_SEGS = 8;
 
 		template <typename T>
 		T read(address_t src);
@@ -243,7 +244,9 @@ namespace riscv
 		const std::string_view m_binary;
 
 		// Execute segments
-		std::vector<DecodedExecuteSegment<W>> m_exec;
+		std::array<DecodedExecuteSegment<W>, MAX_EXECUTE_SEGS> m_exec;
+		size_t m_exec_segs = 0;
+		DecodedExecuteSegment<W>& next_execute_segment();
 
 		// Linear arena at start of memory (mmap-backed)
 		PageData* m_arena = nullptr;
