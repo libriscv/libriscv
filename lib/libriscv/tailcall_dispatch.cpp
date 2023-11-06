@@ -50,17 +50,16 @@
 	d += len / DecoderCache<W>::DIVISOR; \
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */           \
 	d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];  \
-	BEGIN_BLOCK();                       \
+	BEGIN_BLOCK()                        \
 	EXECUTE_CURRENT()
 
 #define UNCHECKED_JUMP()                                       \
 	d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR]; \
-	BEGIN_BLOCK();                                             \
-	EXECUTE_CURRENT();
-#define OVERFLOW_CHECKED_JUMP()                     \
+	BEGIN_BLOCK()                                              \
+	EXECUTE_CURRENT()
+#define OVERFLOW_CHECK()                            \
 	if (UNLIKELY(COUNTER_OVERFLOWED(counter)))      \
-		return RETURN_VALUES();                     \
-	UNCHECKED_JUMP()
+		return RETURN_VALUES();
 #define QUICK_EXEC_CHECK()                                              \
 	if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end()))) \
 		exec = resolve_execute_segment<W>(cpu, pc);                     \
@@ -77,15 +76,17 @@
 			pc, pc + fi.signed_imm());  \
 	}                                   \
 	pc += fi.signed_imm();              \
-	OVERFLOW_CHECKED_JUMP()
+	d += fi.signed_imm() / DecoderCache<W>::DIVISOR; \
+	OVERFLOW_CHECK()                    \
+	BEGIN_BLOCK()                       \
+	EXECUTE_CURRENT()
 
 #define PERFORM_FORWARD_BRANCH()        \
 	if constexpr (VERBOSE_JUMPS) {      \
 		printf("Fwd. Branch from 0x%lX to 0x%lX\n", \
 			pc, pc + fi.signed_imm());  \
 	}                                   \
-	pc += fi.signed_imm();              \
-	UNCHECKED_JUMP()
+	NEXT_BLOCK(fi.signed_imm())
 
 namespace riscv
 {
@@ -173,7 +174,8 @@ namespace riscv
 			printf("FAST_JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + d->instr);
 		}
 		pc = d->instr;
-		OVERFLOW_CHECKED_JUMP();
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 	}
 	INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call)
 	{
@@ -183,7 +185,8 @@ namespace riscv
 		}
 		cpu.reg(REG_RA) = pc + 4;
 		pc = d->instr;
-		OVERFLOW_CHECKED_JUMP();
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 	}
 	INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
 	{
