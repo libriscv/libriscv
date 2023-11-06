@@ -536,7 +536,10 @@ void Emitter<W>::emit()
 							dst + " = do_cpopl(" + src + ");");
 					break;
 				default:
-					if (instr.Itype.high_bits() == 0x280) {
+					if (instr.Itype.high_bits() == 0) { // SLLI
+						emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
+							std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+					} else if (instr.Itype.high_bits() == 0x280) {
 						// BSETI: Bit-set immediate
 						add_code(dst + " = " + src + " | (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					}
@@ -547,9 +550,8 @@ void Emitter<W>::emit()
 					else if (instr.Itype.high_bits() == 0x680) {
 						// BINVI: Bit-invert immediate
 						add_code(dst + " = " + src + " ^ (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
-					} else { // SLLI
-						emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
-							std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+					} else {
+						UNKNOWN_INSTRUCTION();
 					}
 				}
 				break;
@@ -584,12 +586,14 @@ void Emitter<W>::emit()
 						add_code(dst + " = do_bswap32(" + src + ");");
 					else
 						add_code(dst + " = do_bswap64(" + src + ");");
-				} else if (LIKELY(!instr.Itype.is_srai())) {
+				} else if (instr.Itype.high_bits() == 0x0) { // SRLI
 					emit_op(" >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
-				} else { // SRAI: preserve the sign bit
+				} else if (instr.Itype.high_bits() == 0x400) { // SRAI: preserve the sign bit
 					add_code(
 						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
+				} else {
+					UNKNOWN_INSTRUCTION();
 				}
 				break;
 			case 0x6: // ORI
@@ -600,6 +604,8 @@ void Emitter<W>::emit()
 				add_code(
 					dst + " = " + src + " & " + from_imm(instr.Itype.signed_imm()) + ";");
 				break;
+			default:
+				UNKNOWN_INSTRUCTION();
 			}
 			} break;
 		case RV32I_OP:
@@ -875,11 +881,18 @@ void Emitter<W>::emit()
 				}
 				break;
 			case 0x5: // SRLIW / SRAIW:
-				if (LIKELY(!instr.Itype.is_srai())) {
+				if (instr.Itype.high_bits() == 0x0) { // SRLIW
 					add_code(dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
-				} else { // SRAIW: preserve the sign bit
+				} else if (instr.Itype.high_bits() == 0x400) { // SRAIW: preserve the sign bit
 					add_code(
 						dst + " = (int32_t)" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ";");
+				} else if (instr.Itype.high_bits() == 0x600) { // RORIW
+					add_code(
+					"{const unsigned shift = " + from_imm(instr.Itype.imm) + " & 31;\n",
+						dst + " = (int32_t)(" + src + " >> shift) | (" + src + " << (32 - shift)); }"
+					);
+				} else {
+					UNKNOWN_INSTRUCTION();
 				}
 				break;
 			default:
@@ -973,11 +986,9 @@ void Emitter<W>::emit()
 			case 0x2: // FLW
 				this->memory_load<uint32_t>(from_fpreg(fi.Itype.rd) + ".i32[0]", "uint32_t", fi.Itype.rs1, fi.Itype.signed_imm());
 				code += from_fpreg(fi.Itype.rd) + ".i32[1] = 0;\n";
-				//code += "load_fl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint32_t>("uint32_t", fi.Itype.rs1, fi.Itype.signed_imm()) + ");\n";
 				break;
 			case 0x3: // FLD
 				this->memory_load<uint64_t>(from_fpreg(fi.Itype.rd) + ".i64", "uint64_t", fi.Itype.rs1, fi.Itype.signed_imm());
-				//code += "load_dbl(&" + from_fpreg(fi.Itype.rd) + ", " + this->memory_load<uint64_t>("uint64_t", fi.Itype.rs1, fi.Itype.signed_imm()) + ");\n";
 				break;
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VLE32
