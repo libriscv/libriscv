@@ -108,6 +108,11 @@ int libriscv_run(RISCVMachine *m, uint64_t instruction_limit)
 	}
 	return -1;
 }
+extern "C"
+void libriscv_stop(RISCVMachine *m)
+{
+	MACHINE(m)->stop();
+}
 
 extern "C"
 int64_t libriscv_return_value(RISCVMachine *m)
@@ -142,4 +147,67 @@ extern "C"
 void * libriscv_opaque(RISCVMachine *m)
 {
 	return MACHINE(m)->get_userdata<UserData> ()->opaque;
+}
+
+extern "C"
+int libriscv_set_syscall_handler(unsigned idx, riscv_syscall_handler_t handler)
+{
+	try {
+		Machine<RISCV_ARCH>::syscall_handlers.at(idx) = Machine<RISCV_ARCH>::syscall_t(handler);
+		return 0;
+	}
+	catch (...) {
+		return -1;
+	}
+}
+
+extern "C"
+void libriscv_set_result_register(RISCVMachine *m, int64_t value)
+{
+	MACHINE(m)->set_result(value);
+}
+extern "C"
+RISCVRegisters * libriscv_get_registers(RISCVMachine *m)
+{
+	return (RISCVRegisters *)&MACHINE(m)->cpu.registers();
+}
+extern "C"
+int libriscv_jump(RISCVMachine *m, uint64_t address)
+{
+	try {
+		MACHINE(m)->cpu.jump(address);
+		return 0;
+	}
+	catch (...) {
+		return -1;
+	}
+}
+
+extern "C"
+int libriscv_copy_to_guest(RISCVMachine *m, uint64_t dst, const void *src, unsigned len)
+{
+	try {
+		MACHINE(m)->copy_to_guest(dst, src, len);
+		return 0;
+	}
+	catch (...) {
+		return -1;
+	}
+}
+extern "C"
+int libriscv_copy_from_guest(RISCVMachine *m, void* dst, uint64_t src, unsigned len)
+{
+	try {
+		MACHINE(m)->copy_from_guest(dst, src, len);
+		return 0;
+	}
+	catch (...) {
+		return -1;
+	}
+}
+
+extern "C"
+void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data)
+{
+	MACHINE(m)->cpu.trigger_exception(exception, data);
 }

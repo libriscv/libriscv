@@ -19,6 +19,15 @@ static void stdout_callback(void *opaque, const char *msg, unsigned len)
 	printf("[libriscv] stdout: %.*s", (int)len, msg);
 }
 
+static void my_exit(RISCVMachine *m)
+{
+	RISCVRegisters *regs = libriscv_get_registers(m);
+	#define REG_A0   10
+
+	printf("Exit called! Status=%ld\n", regs->r[REG_A0]);
+	libriscv_stop(m);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc < 2) {
@@ -43,6 +52,11 @@ int main(int argc, char **argv)
 	if (!m) {
 		fprintf(stderr, "Failed to initialize the RISC-V machine!\n");
 		exit(1);
+	}
+
+	/* A custom exit system call handler. WARNING: POSIX threads will not work right! */
+	if (0) {
+		libriscv_set_syscall_handler(93, my_exit);
 	}
 
 	struct timespec start_time = time_now();
