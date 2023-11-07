@@ -4,6 +4,7 @@
 #include <cstdint>
 static struct _reent reent;
 struct _reent* _impure_ptr = &reent;
+__FILE __sf[3];
 
 extern "C" {
 	__attribute__((noreturn))
