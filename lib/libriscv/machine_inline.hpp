@@ -98,6 +98,9 @@ inline T Machine<W>::sysarg(int idx) const
 	else if constexpr (std::is_same_v<T, riscv::Buffer>)
 		return memory.rvbuffer(
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
+	else if constexpr (std::is_same_v<T, std::basic_string_view<char>>)
+		return memory.rvbuffer(
+			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1)).strview();
 	else if constexpr (is_stdstring<T>::value)
 		return memory.memstring(cpu.reg(REG_ARG0 + idx));
 	else if constexpr (std::is_pod_v<remove_cvref<T>>) {
@@ -124,6 +127,9 @@ inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
 			std::get<Indices>(retval) = sysarg<Args>(f++);
 		else if constexpr (std::is_same_v<Args, riscv::Buffer>) {
 			std::get<Indices>(retval) = std::move(sysarg<Args>(i)); i += 2; // ptr, len
+		}
+		else if constexpr (std::is_same_v<Args, std::basic_string_view<char>>) {
+			std::get<Indices>(retval) = sysarg<Args>(i); i+= 2;
 		}
 		else if constexpr (is_stdstring<Args>::value)
 			std::get<Indices>(retval) = sysarg<Args>(i++);
