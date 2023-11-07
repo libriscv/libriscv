@@ -236,6 +236,16 @@ template <int W>
 riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	const size_t datalen, const size_t maxlen) const
 {
+	riscv::Buffer result;
+
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(addr + datalen < memory_arena_size() && addr + datalen > addr)) {
+			auto* begin = &((char *)memory_arena_ptr())[RISCV_SPECSAFE(addr)];
+			result.append_page(begin, datalen);
+			return result;
+		}
+	}
+
 	if (UNLIKELY(datalen + 1 >= maxlen))
 		protection_fault(addr);
 
@@ -246,7 +256,6 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	auto* start = (const char*) &page.data()[offset];
 	const size_t max_bytes = std::min(Page::size() - offset, datalen);
 
-	riscv::Buffer result;
 	result.append_page(start, max_bytes);
 	// slow-path: cross page-boundary
 	while (result.size() < datalen)
