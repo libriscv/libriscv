@@ -132,8 +132,10 @@ static struct CallbackTable {
 static char* arena_base;
 static uint64_t* cur_insn;
 static uint64_t* max_insn;
-#define ARENA_READABLE(x) ((x) >= 0x1000 && (x) < RISCV_ARENA_END)
-#define ARENA_WRITABLE(x) ((x) >= RISCV_ARENA_ROEND && (x) < RISCV_ARENA_END)
+static const addr_t ARENA_READ_BOUNDARY  = RISCV_ARENA_END - 0x1000;
+static const addr_t ARENA_WRITE_BOUNDARY = RISCV_ARENA_END - RISCV_ARENA_ROEND;
+#define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
+#define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
 
 static inline int do_syscall(CPU* cpu, addr_t sysno)
 {

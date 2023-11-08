@@ -386,35 +386,30 @@ execute_invalid:
 	this->trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 
 check_unaligned_jump:
-	if constexpr (!compressed_enabled) {
-		if (UNLIKELY(pc & 0x3)) {
-			registers().pc = pc;
-			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
-		}
-	} else {
-		if (UNLIKELY(pc & 0x1)) {
-			registers().pc = pc;
-			trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
-		}
+	static constexpr unsigned ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
+	if (UNLIKELY(pc & ALIGN_MASK)) {
+		registers().pc = pc;
+		trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
 	}
 check_jump: {
 	if (UNLIKELY(counter.overflowed())) {
 		registers().pc = pc;
 		return;
 	}
-	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
-	{
-		// We have to store and restore PC here as there are
-		// custom callbacks when changing segments that can
-		// jump around.
-		registers().pc = pc;
-		// Change to a new execute segment
-		exec = this->next_execute_segment();
-		exec_decoder = exec->decoder_cache();
-		current_begin = exec->exec_begin();
-		current_end = exec->exec_end();
-		pc = registers().pc;
-	}
+	if (LIKELY(pc - current_begin < current_end - current_begin))
+		goto continue_segment;
+
+	//if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
+	// We have to store and restore PC here as there are
+	// custom callbacks when changing segments that can
+	// jump around.
+	registers().pc = pc;
+	// Change to a new execute segment
+	exec = this->next_execute_segment();
+	exec_decoder = exec->decoder_cache();
+	current_begin = exec->exec_begin();
+	current_end = exec->exec_end();
+	pc = registers().pc;
 	goto continue_segment;
 }
 

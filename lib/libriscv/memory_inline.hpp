@@ -20,7 +20,7 @@ T Memory<W>::read(address_t address)
 		}
 	}
 	else if constexpr (flat_readwrite_arena) {
-		if (LIKELY(address >= RWREAD_BEGIN && address < this->memory_arena_size())) {
+		if (LIKELY(address - RWREAD_BEGIN < memory_arena_read_boundary())) {
 			return *(T *)&((const char*)m_arena)[RISCV_SPECSAFE(address)];
 		}
 		[[unlikely]];
@@ -35,7 +35,7 @@ template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(address >= initial_rodata_end() && address < memory_arena_size())) {
+		if (LIKELY(address - initial_rodata_end() < memory_arena_write_boundary())) {
 			return *(T *)&((char*)m_arena)[RISCV_SPECSAFE(address)];
 		}
 		[[unlikely]];
@@ -57,7 +57,7 @@ void Memory<W>::write(address_t address, T value)
 		}
 	}
 	else if constexpr (flat_readwrite_arena) {
-		if (LIKELY(address >= initial_rodata_end() && address < memory_arena_size())) {
+		if (LIKELY(address - initial_rodata_end() < memory_arena_write_boundary())) {
 			*(T *)&((char*)m_arena)[RISCV_SPECSAFE(address)] = value;
 			return;
 		}

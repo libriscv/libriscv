@@ -338,6 +338,8 @@ namespace riscv
 		if (this->m_initial_rodata_end == 0x0) {
 			this->m_initial_rodata_end = RWREAD_BEGIN;
 		}
+		this->m_arena_read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
+		this->m_arena_write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_initial_rodata_end);
 
 		if constexpr (W <= 8) {
 			if (UNLIKELY(options.dynamic_linking)) {

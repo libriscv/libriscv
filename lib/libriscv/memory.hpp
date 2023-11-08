@@ -171,6 +171,8 @@ namespace riscv
 		bool uses_memory_arena() const noexcept { return this->m_arena != nullptr; }
 		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena; }
 		address_t memory_arena_size() const noexcept { return this->m_arena_pages * Page::size(); }
+		address_t memory_arena_read_boundary() const noexcept { return this->m_arena_read_boundary; }
+		address_t memory_arena_write_boundary() const noexcept { return this->m_arena_write_boundary; }
 		address_t initial_rodata_end() const noexcept { return this->m_initial_rodata_end; }
 
 		// serializes all the machine state + a tiny header to @vec
@@ -250,8 +252,11 @@ namespace riscv
 
 		// Linear arena at start of memory (mmap-backed)
 		PageData* m_arena = nullptr;
+		address_t m_arena_read_boundary = 0;
+		address_t m_arena_write_boundary = 0;
+		address_t m_initial_rodata_end = 0x1000;
 		size_t m_arena_pages = 0;
-		address_t m_initial_rodata_end = 0;
+
 		friend struct CPU<W>;
 	};
 #include "memory_inline.hpp"
