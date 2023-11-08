@@ -103,7 +103,7 @@ inline T Machine<W>::sysarg(int idx) const
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1)).strview();
 	else if constexpr (is_stdstring<T>::value)
 		return memory.memstring(cpu.reg(REG_ARG0 + idx));
-	else if constexpr (std::is_pod_v<remove_cvref<T>>) {
+	else if constexpr (std::is_standard_layout_v<remove_cvref<T>> && std::is_trivial_v<remove_cvref<T>>) {
 		T value;
 		memory.memcpy_out(&value, cpu.reg(REG_ARG0 + idx), sizeof(T));
 		return value;
@@ -133,7 +133,7 @@ inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
 		}
 		else if constexpr (is_stdstring<Args>::value)
 			std::get<Indices>(retval) = sysarg<Args>(i++);
-		else if constexpr (std::is_pod_v<remove_cvref<Args>>)
+		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>> && std::is_trivial_v<remove_cvref<Args>>)
 			std::get<Indices>(retval) = sysarg<Args>(i++);
 		else
 			static_assert(always_false<Args>, "Unknown type");
