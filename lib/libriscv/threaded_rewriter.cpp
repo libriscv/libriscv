@@ -6,6 +6,7 @@
 #include "rv32i_instr.hpp"
 #include "rvc.hpp"
 #include "rvfd.hpp"
+#include "rvv.hpp"
 
 namespace riscv
 {
@@ -196,6 +197,20 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			/** Vector instructions **/
+#ifdef RISCV_EXT_VECTOR
+			case RV32V_BC_VLE32:
+			case RV32V_BC_VSE32: {
+				const rv32v_instruction vi{instr};
+				FasterItype rewritten;
+				rewritten.rs1 = vi.VLS.vd;
+				rewritten.rs2 = vi.VLS.rs1;
+				rewritten.imm = 0;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+#endif
 			/** Compressed instructions **/
 #ifdef RISCV_EXT_COMPRESSED
 			case RV32C_BC_ADDI: {

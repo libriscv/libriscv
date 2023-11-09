@@ -576,22 +576,22 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 
 #ifdef RISCV_EXT_VECTOR
 INSTRUCTION(RV32V_BC_VLE32, rv32v_vle32) {
-	VIEW_INSTR_AS(vi, rv32v_instruction);
-	const auto addr = REG(vi.VLS.rs1) & ~addr_t(VectorLane::size()-1);
-	REGISTERS().rvv().get(vi.VLS.vd) =
+	VIEW_INSTR_AS(vi, FasterItype);
+	const auto addr = REG(vi.rs2);
+	VECTORS().get(vi.rs1) =
 		MACHINE().memory.template read<VectorLane> (addr);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32V_BC_VSE32, rv32v_vse32) {
-	VIEW_INSTR_AS(vi, rv32v_instruction);
-	const auto addr = REG(vi.VLS.rs1) & ~addr_t(VectorLane::size()-1);
-	auto& dst = REGISTERS().rvv().get(vi.VLS.vd);
-	MACHINE().memory.template write<VectorLane> (addr, dst);
+	VIEW_INSTR_AS(vi, FasterItype);
+	const auto addr = REG(vi.rs2);
+	auto& value = VECTORS().get(vi.rs1);
+	MACHINE().memory.template write<VectorLane> (addr, value);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32V_BC_VFADD_VV, rv32v_vfadd_vv) {
 	VIEW_INSTR_AS(vi, rv32v_instruction);
-	auto& rvv = REGISTERS().rvv();
+	auto& rvv = VECTORS();
 	for (size_t i = 0; i < rvv.f32(0).size(); i++) {
 		rvv.f32(vi.OPVV.vd)[i] = rvv.f32(vi.OPVV.vs1)[i] + rvv.f32(vi.OPVV.vs2)[i];
 	}

@@ -185,6 +185,9 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		machine().set_max_instructions(UINT64_MAX);
 
 	InstrCounter counter{machine()};
+#ifdef RISCV_EXT_VECTOR
+	auto& vector_lanes = registers().rvv();
+#endif
 
 	DecodedExecuteSegment<W>* exec = this->m_exec;
 	DecoderData<W>* exec_decoder = exec->decoder_cache();
@@ -213,6 +216,7 @@ while (true) {
 #define CPU()       (*this)
 #define REG(x)      registers().get()[x]
 #define REGISTERS() registers()
+#define VECTORS()   vector_lanes
 #define MACHINE()   machine()
 
 	/** Instruction handlers **/

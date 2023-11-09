@@ -124,6 +124,7 @@ namespace riscv
 #define CPU()       cpu
 #define REG(x)      cpu.reg(x)
 #define REGISTERS() cpu.registers()
+#define VECTORS()   cpu.registers().rvv()
 #define MACHINE()   cpu.machine()
 
 #define BYTECODES_OP_IMM
