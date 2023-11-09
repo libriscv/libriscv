@@ -49,9 +49,8 @@ namespace riscv
 				return imm11;
 			}
 			int32_t signed_imm() const noexcept {
-				const uint32_t ext = 0xFFFFF800;
-				const int32_t val = imm04 | (imm510 << 5);
-				return val | (sign() ? ext : 0);
+				const int32_t imm = imm04 | (imm510 << 5) | (imm11 << 11);
+				return (imm << 20) >> 20;
 			}
 		} Stype;
 

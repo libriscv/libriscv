@@ -80,8 +80,8 @@ namespace riscv
 				return imm2 & 0x40;
 			}
 			int32_t signed_imm() const noexcept {
-				constexpr uint32_t ext = 0xFFFFF000;
-				return imm1 | (imm2 << 5) | (sign() ? ext : 0);
+				const int32_t imm = imm1 | (imm2 << 5);
+				return (imm << 20) >> 20;
 			}
 		} Stype;
 		// upper immediate format
