@@ -257,16 +257,16 @@ INSTRUCTION(RV32I_BC_STH, rv32i_sth) {
 }
 
 INSTRUCTION(RV32F_BC_FLW, rv32i_flw) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
-	auto addr = REG(fi.Itype.rs1) + fi.Itype.signed_imm();
-	auto& dst = REGISTERS().getfl(fi.Itype.rd);
+	VIEW_INSTR_AS(fi, FasterItype);
+	auto addr = REG(fi.rs2) + fi.signed_imm();
+	auto& dst = REGISTERS().getfl(fi.rs1);
 	dst.load_u32(MACHINE().memory.template read<uint32_t> (addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FLD, rv32i_fld) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
-	auto addr = REG(fi.Itype.rs1) + fi.Itype.signed_imm();
-	auto& dst = REGISTERS().getfl(fi.Itype.rd);
+	VIEW_INSTR_AS(fi, FasterItype);
+	auto addr = REG(fi.rs2) + fi.signed_imm();
+	auto& dst = REGISTERS().getfl(fi.rs1);
 	dst.load_u64(MACHINE().memory.template read<uint64_t> (addr));
 	NEXT_INSTR();
 }
@@ -489,16 +489,16 @@ INSTRUCTION(RV32I_BC_OP_REMU, rv32i_op_remu) {
 #ifdef BYTECODES_FLP
 
 INSTRUCTION(RV32F_BC_FSW, rv32i_fsw) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
-	const auto& src = REGISTERS().getfl(fi.Stype.rs2);
-	auto addr = REG(fi.Stype.rs1) + fi.Stype.signed_imm();
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto& src = REGISTERS().getfl(fi.rs2);
+	auto addr = REG(fi.rs1) + fi.signed_imm();
 	MACHINE().memory.template write<uint32_t> (addr, src.i32[0]);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FSD, rv32i_fsd) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
-	const auto& src = REGISTERS().getfl(fi.Stype.rs2);
-	auto addr = REG(fi.Stype.rs1) + fi.Stype.signed_imm();
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto& src = REGISTERS().getfl(fi.rs2);
+	auto addr = REG(fi.rs1) + fi.signed_imm();
 	MACHINE().memory.template write<uint64_t> (addr, src.i64);
 	NEXT_INSTR();
 }

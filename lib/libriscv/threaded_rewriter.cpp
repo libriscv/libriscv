@@ -5,6 +5,7 @@
 #include "instruction_list.hpp"
 #include "rv32i_instr.hpp"
 #include "rvc.hpp"
+#include "rvfd.hpp"
 
 namespace riscv
 {
@@ -137,6 +138,28 @@ namespace riscv
 				rewritten.rs1 = original.Stype.rs1;
 				rewritten.rs2 = original.Stype.rs2;
 				rewritten.imm = original.Stype.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32F_BC_FLW:
+			case RV32F_BC_FLD: {
+				const rv32f_instruction fi{original};
+				FasterItype rewritten;
+				rewritten.rs1 = fi.Itype.rd;
+				rewritten.rs2 = fi.Itype.rs1;
+				rewritten.imm = fi.Itype.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32F_BC_FSW:
+			case RV32F_BC_FSD: {
+				const rv32f_instruction fi{original};
+				FasterItype rewritten;
+				rewritten.rs1 = fi.Stype.rs1;
+				rewritten.rs2 = fi.Stype.rs2;
+				rewritten.imm = fi.Stype.signed_imm();
 
 				instr.whole = rewritten.whole;
 				return bytecode;
