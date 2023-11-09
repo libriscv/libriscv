@@ -411,6 +411,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		case RV32F_FNMSUB:
 			return RV32I_BC_FUNCTION;
 		case RV32F_FPFUNC:
+			if (rv32f_instruction{instr}.R4type.funct2 >= 2)
+				return RV32I_BC_FUNCTION;
 			switch (instr.fpfunc())
 			{
 				case 0b00000: // FADD

@@ -513,7 +513,7 @@ INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 	{ // float32
 		dst.set_float(rs1.f32[0] + rs2.f32[0]);
 	}
-	else if (fi.R4type.funct2 == 0x1)
+	else
 	{ // float64
 		dst.f64 = rs1.f64 + rs2.f64;
 	}
@@ -526,7 +526,7 @@ INSTRUCTION(RV32F_BC_FSUB, rv32f_fsub) {
 	{ // float32
 		dst.set_float(rs1.f32[0] - rs2.f32[0]);
 	}
-	else if (fi.R4type.funct2 == 0x1)
+	else
 	{ // float64
 		dst.f64 = rs1.f64 - rs2.f64;
 	}
@@ -539,7 +539,7 @@ INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
 	{ // float32
 		dst.set_float(rs1.f32[0] * rs2.f32[0]);
 	}
-	else if (fi.R4type.funct2 == 0x1)
+	else
 	{ // float64
 		dst.f64 = rs1.f64 * rs2.f64;
 	}
@@ -552,7 +552,7 @@ INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv) {
 	{ // float32
 		dst.set_float(rs1.f32[0] / rs2.f32[0]);
 	}
-	else if (fi.R4type.funct2 == 0x1)
+	else
 	{ // float64
 		dst.f64 = rs1.f64 / rs2.f64;
 	}
