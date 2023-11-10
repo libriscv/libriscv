@@ -92,7 +92,7 @@ namespace riscv
 	{
 		this->clear_all_pages();
 		// only the original machine owns arena
-		if (this->m_arena != nullptr) {
+		if (this->m_arena != nullptr && !is_forked()) {
 #ifdef __linux__
 			munmap(this->m_arena, this->m_arena_pages * Page::size());
 #else
@@ -389,6 +389,14 @@ namespace riscv
 		this->m_exit_address = master.memory.m_exit_address;
 		this->m_heap_address = master.memory.m_heap_address;
 		this->m_mmap_address = master.memory.m_mmap_address;
+
+		if (options.use_memory_arena) {
+			this->m_arena = master.memory.m_arena;
+			this->m_arena_pages = master.memory.m_arena_pages;
+			this->m_arena_read_boundary = master.memory.m_arena_read_boundary;
+			this->m_arena_write_boundary = master.memory.m_arena_write_boundary;
+			this->m_initial_rodata_end = master.memory.m_initial_rodata_end;
+		}
 
 		// invalidate all cached pages, because references are invalidated
 		this->invalidate_reset_cache();

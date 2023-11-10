@@ -18,7 +18,7 @@ TEST_CASE("VM function call", "[VMCall]")
 	extern void hello() {
 		write(1, "Hello World!", 12);
 	}
-	
+
 	int main() {
 		return 666;
 	})M");
@@ -113,7 +113,9 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 	// Test many forks
 	for (size_t i = 0; i < 10; i++)
 	{
-		riscv::Machine<RISCV64> fork { machine };
+		riscv::Machine<RISCV64> fork { machine, {
+			.use_memory_arena = false
+		} };
 
 		fork.set_printer([] (const auto&, const char* data, size_t size) {
 			std::string text{data, data + size};
