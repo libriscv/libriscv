@@ -180,6 +180,10 @@ You can find the `MachineOptions` structure in [common.hpp](/lib/libriscv/common
 
 You can find details on the Linux system call ABI online as well as in [the docs](/docs/SYSCALLS.md). You can use these examples to handle system calls in your RISC-V programs. The system calls emulate normal Linux system calls, and is compatible with a normal Linux RISC-V compiler.
 
+## Example C API usage
+
+Check out the [C API](/c/libriscv.h) and the [test project](/c/test/test.c).
+
 ## Handling instructions one by one
 
 You can create your own custom instruction loop if you want to do things manually by yourself:

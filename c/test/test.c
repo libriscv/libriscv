@@ -41,6 +41,7 @@ int main(int argc, char **argv)
 	/* RISC-V machine options */
 	RISCVOptions options;
 	libriscv_set_defaults(&options);
+	options.max_memory = 4ULL << 30; // 4 GiB
 	options.argc = argc - 1; /* Forward all arguments after 1st. */
 	options.argv = &argv[1];
 	options.error = error_callback;
