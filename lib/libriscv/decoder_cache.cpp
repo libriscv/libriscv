@@ -131,6 +131,12 @@ namespace riscv
 					}
 					// Too large blocks are likely malicious (although could be many empty pages)
 					if (UNLIKELY(datalength >= 255)) {
+						// NOTE: Reinsert original instruction, as long sequences will lead to
+						// PC becoming desynched, as it doesn't get increased.
+						// We use a new block-ending fallback function handler instead.
+						entry.set_bytecode(RV32I_BC_FUNCBLOCK);
+						entry.set_handler(CPU<W>::decode(instruction));
+						entry.instr = instruction.whole;
 						break;
 					}
 				}
@@ -322,6 +328,14 @@ namespace riscv
 				entry.m_handler = 0;
 				entry.set_bytecode(0);
 				// ^ Must be made invalid, even if technically possible to jump to!
+			}
+			if constexpr (VERBOSE_DECODER) {
+				if (entry.get_bytecode() >= RV32I_BC_BEQ && entry.get_bytecode() <= RV32I_BC_BGEU) {
+					fprintf(stderr, "Detected branch bytecode at 0x%lX\n", dst);
+				}
+				if (entry.get_bytecode() == RV32I_BC_BEQ_FW || entry.get_bytecode() == RV32I_BC_BNE_FW) {
+					fprintf(stderr, "Detected forward branch bytecode at 0x%lX\n", dst);
+				}
 			}
 
 			// Increment PC after everything

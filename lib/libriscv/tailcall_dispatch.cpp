@@ -263,6 +263,13 @@ namespace riscv
 	}
 #endif
 
+	INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
+		VIEW_INSTR();
+		auto handler = d->get_handler();
+		handler(CPU(), instr);
+		NEXT_BLOCK(instr.length());
+	}
+
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 		VIEW_INSTR();
 		// Make the current PC visible
@@ -402,6 +409,7 @@ namespace riscv
 		[RV32V_BC_VFADD_VV] = rv32v_vfadd_vv,
 #endif
 		[RV32I_BC_FUNCTION] = execute_decoded_function,
+		[RV32I_BC_FUNCBLOCK] = execute_function_block,
 		[RV32I_BC_TRANSLATOR] = translated_function,
 		[RV32I_BC_SYSTEM]  = rv32i_system,
 		};

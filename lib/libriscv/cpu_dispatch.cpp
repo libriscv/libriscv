@@ -167,6 +167,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32V_BC_VFADD_VV] = &&rv32v_vfadd_vv,
 #endif
 		[RV32I_BC_FUNCTION] = &&execute_decoded_function,
+		[RV32I_BC_FUNCBLOCK] = &&execute_function_block,
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
 		[RV32I_BC_SYSTEM]  = &&rv32i_system,
 	};
@@ -284,7 +285,7 @@ INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jfunc) {
 	handler(*this, instr);
 	if constexpr (VERBOSE_JUMPS) {
 		fprintf(stderr, "Compressed jump from 0x%lX to 0x%lX\n",
-			pc, registers().pc + 2);
+			long(pc), long(registers().pc + 2));
 	}
 	pc = registers().pc + 2;
 	goto check_unaligned_jump;
@@ -307,6 +308,11 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
 	{
 		// System calls are always full-length instructions
+		if constexpr (VERBOSE_JUMPS) {
+			if (pc != this->registers().pc)
+			fprintf(stderr, "SYSCALL jump from 0x%lX to 0x%lX\n",
+				long(pc), long(registers().pc + 4));
+		}
 		pc = registers().pc + 4;
 		goto check_jump;
 	}
@@ -378,6 +384,13 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	goto check_jump;
 }
 
+INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
+	VIEW_INSTR();
+	auto handler = decoder->get_handler();
+	handler(*this, instr);
+	NEXT_BLOCK(instr.length());
+}
+
 #ifdef DISPATCH_MODE_SWITCH_BASED
 	default:
 		goto execute_invalid;
@@ -400,8 +413,10 @@ check_jump: {
 		registers().pc = pc;
 		return;
 	}
-	if (LIKELY(pc - current_begin < current_end - current_begin))
+
+	if (LIKELY(pc - current_begin < current_end - current_begin)) {
 		goto continue_segment;
+	}
 
 	//if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
 	// We have to store and restore PC here as there are

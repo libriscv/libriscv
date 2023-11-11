@@ -2,7 +2,11 @@
 #define DISPATCH_ATTR RISCV_HOT_PATH()
 #define DISPATCH_FUNC simulate_threaded
 
-#define EXECUTE_INSTR() \
+#define EXECUTE_INSTR()      \
+	if constexpr (FUZZING) { \
+		if (UNLIKELY(decoder->get_bytecode() >= BYTECODES_MAX)) \
+			abort();         \
+	}                        \
 	goto *computed_opcode[decoder->get_bytecode()];
 
 #include "cpu_dispatch.cpp"
