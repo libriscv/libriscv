@@ -170,22 +170,26 @@ namespace riscv
 				// can be expressed as just the instruction bits.
 				const auto addr = pc + original.Jtype.jump_offset();
 				const bool is_aligned = addr % PCAL == 0;
-				const bool below32 = addr < UINT32_MAX;
 				const bool store_zero = original.Jtype.rd == 0;
 				const bool store_ra = original.Jtype.rd == REG_RA;
 
 				// The destination address also needs to be within
 				// the current execute segment, as an optimization.
-				if (this->is_within(addr, 4) && is_aligned && below32)
+				if (this->is_within(addr, 4) && is_aligned)
 				{
-					if (store_zero)
+					const int32_t diff = addr - pc;
+					if (!this->is_within(pc + diff, 4))
 					{
-						instr.whole = addr;
+						return RV32I_BC_INVALID;
+					}
+					else if (store_zero)
+					{
+						instr.whole = diff;
 						return RV32I_BC_FAST_JAL;
 					}
 					else if (store_ra)
 					{
-						instr.whole = addr;
+						instr.whole = diff;
 						return RV32I_BC_FAST_CALL;
 					}
 				}
