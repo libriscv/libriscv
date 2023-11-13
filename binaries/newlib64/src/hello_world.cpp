@@ -6,20 +6,14 @@
 
 inline uint64_t rdcycle()
 {
-	union {
-		uint64_t whole;
-		uint32_t word[2];
-	};
-	asm ("rdcycleh %0\n rdcycle %1\n" : "=r"(word[1]), "=r"(word[0]));
+	uint64_t whole;
+	asm ("rdcycle %0\n" : "=r"(whole));
 	return whole;
 }
 inline uint64_t rdtime()
 {
-	union {
-		uint64_t whole;
-		uint32_t word[2];
-	};
-	asm ("rdtimeh %0\n rdtime %1\n" : "=r"(word[1]), "=r"(word[0]));
+	uint64_t whole;
+	asm ("rdtime %0\n" : "=r"(whole));
 	return whole;
 }
 inline uint64_t rol(uint64_t val, unsigned shift)
@@ -64,6 +58,7 @@ int main()
 	std::string new_s = std::regex_replace(s, long_word_regex, "[$&]");
 	printf("%s\n", new_s.c_str());
 
+	const auto cycle0 = rdcycle();
 	try {
 		printf("Testing exception\n");
 		throw std::runtime_error("Hello Exceptions!");
@@ -71,6 +66,8 @@ int main()
 	catch (const std::exception& e) {
 		printf("Caught exception: %s\n", e.what());
 	}
+	const auto cycle1 = rdcycle();
+	printf("It took %lu instructions to throw, catch and print the exception\n", cycle1-cycle0);
 
 	return 666;
 }
