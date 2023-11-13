@@ -20,6 +20,7 @@ struct BranchInfo {
 	bool sign;
 	bool goto_enabled;
 	uint64_t jump_pc;
+	uint64_t call_pc;
 };
 
 template <int W>
@@ -252,6 +253,21 @@ struct Emitter
 			code.append("c += " + std::to_string(icount) + ";\n");
 	}
 
+	bool block_exists(address_t pc) const noexcept {
+		for (auto& blk : *tinfo.blocks) {
+			if (blk.basepc == pc) return true;
+		}
+		return false;
+	}
+	void jump_to_function(address_t dest_pc) {
+		// TODO: exit_function()?
+		this->add_code(
+			"{ *cur_insn = c;",
+			" void f" + std::to_string(dest_pc) + "(CPU*);",
+			" f" + std::to_string(dest_pc) + "(cpu);",
+			" return; }");
+	}
+
 	size_t index() const noexcept { return this->m_idx; }
 	address_t pc() const noexcept { return this->m_pc; }
 	address_t begin_pc() const noexcept { return tinfo.basepc; }
@@ -308,8 +324,12 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	} else if (binfo.jump_pc != 0) {
 		// forward jump to label (from absolute index)
 		code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
-		// else, exit binary translation
+	} else if (binfo.call_pc != 0) {
+		// direct function call
+		code += "if (" + LOOP_EXPRESSION + ")\n";
+		this->jump_to_function(binfo.call_pc);
 	}
+	// else, exit binary translation
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
 	code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n";
 	exit_function(true); // Bracket (NOTE: not actually ending the function)
@@ -401,6 +421,7 @@ void Emitter<W>::emit()
 			const auto offset = instr.Btype.signed_imm();
 			uint64_t dest_pc = this->pc() + offset;
 			uint64_t jump_pc = 0;
+			uint64_t call_pc = 0;
 			// goto branch: restarts function
 			bool ge = dest_pc == this->begin_pc();
 			// forward label: branch inside code block
@@ -413,29 +434,31 @@ void Emitter<W>::emit()
 				if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
 					jump_pc = dest_pc;
 				}
+			} else if (this->block_exists(dest_pc)) {
+				call_pc = dest_pc;
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch({ false, ge, jump_pc }, " == ");
+				add_branch({ false, ge, jump_pc, call_pc }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch({ false, ge, jump_pc }, " != ");
+				add_branch({ false, ge, jump_pc, call_pc }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
 				UNKNOWN_INSTRUCTION();
 				break;
 			case 0x4: // LT
-				add_branch({ true, ge, jump_pc }, " < ");
+				add_branch({ true, ge, jump_pc, call_pc }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch({ true, ge, jump_pc }, " >= ");
+				add_branch({ true, ge, jump_pc, call_pc }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch({ false, ge, jump_pc }, " < ");
+				add_branch({ false, ge, jump_pc, call_pc }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch({ false, ge, jump_pc }, " >= ");
+				add_branch({ false, ge, jump_pc, call_pc }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
@@ -476,9 +499,14 @@ void Emitter<W>::emit()
 				if (instr.Jtype.rd != 0)
 					this->add_reentry_next();
 			} else {
-				// Because of forward jumps we can't end the function here
-				add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
-				exit_function();
+				// Jump to function address
+				if (this->block_exists(dest_pc)) {
+					this->jump_to_function(dest_pc);
+				} else {
+					// Because of forward jumps we can't end the function here
+					add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
+					exit_function();
+				}
 				if (instr.Jtype.rd != 0)
 					this->add_reentry_next();
 			}

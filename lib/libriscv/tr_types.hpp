@@ -17,5 +17,7 @@ namespace riscv
 		int len;
 		bool forward_jumps;
 		std::set<address_type<W>> jump_locations;
+		// Pointer to all the other blocks (including current)
+		std::vector<TransInfo<W>>* blocks = nullptr;
 	};
 }

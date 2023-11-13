@@ -190,7 +190,8 @@ if constexpr (SCAN_FOR_GP) {
 					block_end = pc;
 					break;
 				}
-				jump_locations.insert(location);
+				if (location >= block && location < block_end)
+					jump_locations.insert(location);
 			}
 			// loop detection (negative branch offsets)
 			if (opcode == RV32I_BRANCH) {
@@ -218,7 +219,8 @@ if constexpr (SCAN_FOR_GP) {
 			blocks.push_back({
 				ip, block, block_end, gp, (int)length,
 				true,
-				std::move(jump_locations)
+				std::move(jump_locations),
+				nullptr // blocks
 			});
 			icounter += length;
 			// we can't translate beyond this estimate, otherwise
@@ -240,8 +242,9 @@ if constexpr (SCAN_FOR_GP) {
 	extern const std::string bintr_code;
 	std::string code = bintr_code;
 
-	for (const auto& block : blocks)
+	for (auto& block : blocks)
 	{
+		block.blocks = &blocks;
 		auto result = emit(code, block);
 
 		for (auto& mapping : result) {
