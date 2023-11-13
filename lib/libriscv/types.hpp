@@ -94,10 +94,4 @@ namespace riscv
 		address_type<W> addr;
 		std::string     symbol;
 	};
-
-	template <int W>
-	struct TransInstr
-	{
-		uint32_t instr;
-	};
 }

@@ -1,32 +1,13 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
-#include "rv32i_instr.hpp"
 #include "rvc.hpp"
+#include "safe_instr_loader.hpp"
 #include "threaded_rewriter.cpp"
 
 namespace riscv
 {
 	static constexpr bool VERBOSE_DECODER = false;
-
-	struct UnalignedLoad32 {
-		uint16_t data[2];
-		operator uint32_t() {
-			return data[0] | uint32_t(data[1]) << 16;
-		}
-	};
-	struct AlignedLoad16 {
-		uint16_t data;
-		operator uint32_t() { return data; }
-	};
-	static inline rv32i_instruction read_instruction(
-		const uint8_t* exec_segment, uint64_t pc, uint64_t end_pc)
-	{
-		if (pc + 4 <= end_pc)
-			return rv32i_instruction{*(UnalignedLoad32 *)&exec_segment[pc]};
-		else
-			return rv32i_instruction{*(AlignedLoad16 *)&exec_segment[pc]};
-	}
 
 	template <int W>
 	static bool is_regular_compressed(uint16_t instr) {
@@ -264,19 +245,8 @@ namespace riscv
 
 			if (!exec.is_binary_translated() && must_translate)
 			{
-				// This can be improved somewhat, by fetching them on demand
-				// instead of building a vector of the whole execute segment.
-				std::vector<TransInstr<W>> ipairs;
-				ipairs.reserve(len / 4);
-
-				for (address_t dst = addr; dst < addr + len; dst += 4)
-				{
-					// Load unaligned instruction from execute segment
-					const rv32i_instruction instruction { *(UnalignedLoad32*) &exec_segment[dst] };
-					ipairs.push_back({instruction.whole});
-				}
 				machine().cpu.try_translate(
-					options, bintr_filename, exec, addr, std::move(ipairs));
+					options, bintr_filename, exec, addr, addr + len, exec_segment);
 			}
 		} // W != 16
 	#endif

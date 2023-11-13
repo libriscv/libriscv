@@ -104,7 +104,7 @@ namespace riscv
 
 		// Binary translation functions
 		int  load_translation(const MachineOptions<W>&, std::string* filename, DecodedExecuteSegment<W>&) const;
-		void try_translate(const MachineOptions<W>&, const std::string&, DecodedExecuteSegment<W>&, address_t pc, std::vector<TransInstr<W>>) const;
+		void try_translate(const MachineOptions<W>&, const std::string&, DecodedExecuteSegment<W>&, address_t pc, address_t endpc, const uint8_t *instructions) const;
 
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
@@ -135,7 +135,7 @@ namespace riscv
 		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
 #endif
 
-		std::vector<TransMapping<W>> emit(std::string& code, TransInstr<W>* blk, const TransInfo<W>&) const;
+		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
 
 		// ELF programs linear .text segment
 		DecodedExecuteSegment<W>* m_exec = nullptr;

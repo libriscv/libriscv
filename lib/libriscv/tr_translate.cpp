@@ -4,7 +4,7 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
-#include "rv32i_instr.hpp"
+#include "safe_instr_loader.hpp"
 #include "tr_api.hpp"
 #include "tr_types.hpp"
 #include "util/crc32.hpp"
@@ -113,7 +113,8 @@ static bool is_stopping_instruction(rv32i_instruction instr) {
 template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
 	const std::string& filename,
-	DecodedExecuteSegment<W>& exec, address_t basepc, std::vector<TransInstr<W>> ipairs) const
+	DecodedExecuteSegment<W>& exec, address_t basepc, address_t endbasepc,
+	const uint8_t* raw_instructions) const
 {
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = (getenv("VERBOSE") != nullptr);
@@ -123,18 +124,14 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 if constexpr (SCAN_FOR_GP) {
 	// We assume that GP is initialized with AUIPC,
 	// followed by OP_IMM (and maybe OP_IMM32)
-	for (auto it = ipairs.begin(); it != ipairs.end(); ++it) {
-		const rv32i_instruction instruction {it->instr};
+	for (address_t pc = basepc; pc < endbasepc; pc += 4) {
+		const rv32i_instruction instruction
+			= read_instruction(raw_instructions, pc, endbasepc);
 		if (instruction.opcode() == RV32I_AUIPC) {
 			const auto auipc = instruction;
 			if (auipc.Utype.rd == 3) { // GP
-				// calculate current PC for AUIPC
-				const address_t pc = basepc + 4 * (it - ipairs.begin());
-				// Malicious input
-				if (UNLIKELY(it+1 == ipairs.end()))
-					return;
-
-				const auto addi = rv32i_instruction {(it+1)->instr};
+				const rv32i_instruction addi
+					= read_instruction(raw_instructions, pc + 4, endbasepc);
 				if (addi.opcode() == RV32I_OP_IMM && addi.Itype.funct3 == 0x0) {
 					//printf("Found OP_IMM: ADDI  rd=%d, rs1=%d\n", addi.Itype.rd, addi.Itype.rs1);
 					if (addi.Itype.rd == 3 && addi.Itype.rs1 == 3) { // GP
@@ -157,78 +154,70 @@ if constexpr (SCAN_FOR_GP) {
 	// Code block and loop detection
 	TIME_POINT(t2);
 	size_t icounter = 0;
-	auto it = ipairs.begin();
-	std::vector<std::pair<decltype(it), address_t>> loops;
-	struct CodeBlock {
-		TransInstr<W>& instr;
-		size_t      length;
-		address_t   addr;
-		bool        has_branch;
-		std::set<address_t> jump_locations;
-	};
-	std::vector<CodeBlock> blocks;
-	std::set<address_t> jump_locations;
+	std::vector<TransInfo<W>> blocks;
 
-	while (it != ipairs.end() && icounter < options.translate_instr_max)
+	for (address_t pc = basepc; pc < endbasepc && icounter < options.translate_instr_max; )
 	{
-		const auto block = it;
-		bool has_branch = false;
-		// Measure length of instructions that belong
-		// together sequentially (a code block).
-		for (it = block; it != ipairs.end(); ++it) {
-			const rv32i_instruction instruction{it->instr};
+		const auto block = pc;
+
+		for (; pc < endbasepc; pc += 4) {
+			const rv32i_instruction instruction
+				= read_instruction(raw_instructions, pc, endbasepc);
+
 			// JALR and STOP are show-stoppers / code-block enders
 			if (is_stopping_instruction(instruction)) {
-				++it; break;
+				pc += 4;
+				break;
 			}
-		} // find block
+		}
 
-		const auto block_end = it;
-		auto block_end_pc = basepc + (block_end - block) * 4;
-		auto current_pc = basepc;
-		it = block;
+		auto block_end = pc;
+		std::set<address_t> jump_locations;
 
 		// Find jump locations inside block
-		for (; it != block_end; ++it) {
-			const rv32i_instruction instruction{it->instr};
+		for (pc = block; pc < block_end; pc += 4) {
+			const rv32i_instruction instruction
+				= read_instruction(raw_instructions, pc, endbasepc);
 			const auto opcode = instruction.opcode();
 
 			// detect far JAL, otherwise use as local jump
 			if (opcode == RV32I_JAL) {
 				const auto offset = instruction.Jtype.jump_offset();
+				const auto location = pc + offset;
 				// Long jumps are considered returnable
-				if (current_pc + offset < basepc || current_pc + offset >= block_end_pc) {
-					block_end_pc = current_pc + 4;
-					++it; break;
+				if (location < block || location >= block_end) {
+					pc += 4;
+					block_end = pc;
+					break;
 				}
-				has_branch = true;
-				jump_locations.insert(current_pc + offset);
+				jump_locations.insert(location);
 			}
 			// loop detection (negative branch offsets)
 			if (opcode == RV32I_BRANCH) {
-				has_branch = true;
 				// detect jump location
 				const auto offset = instruction.Btype.signed_imm();
-				const auto location = current_pc + offset;
+				const auto location = pc + offset;
 				// only accept branches relative to current block
-				if (location >= basepc && location < block_end_pc)
+				if (location >= block && location < block_end)
 					jump_locations.insert(location);
 			}
-
-			current_pc += 4;
 		} // process block
 
 		// Process block and add it for emission
-		const size_t length = it - block;
+		const size_t length = (block_end - block) / 4; // XXX: ASSUMPTION
 		if (length >= options.block_size_treshold
 			&& icounter + length < options.translate_instr_max)
 		{
 			if constexpr (VERBOSE_BLOCKS) {
-				printf("Block found at %#lX. Length: %zu\n", (long) basepc, length);
+				printf("Block found at %#lX -> %#lX. Length: %zu\n", long(block), long(block_end), length);
+				for (auto loc : jump_locations)
+					printf("-> Jump to %#lX\n", long(loc));
 			}
 
+			rv32i_instruction* ip = (rv32i_instruction *)&raw_instructions[block];
 			blocks.push_back({
-				*block, length, basepc, has_branch,
+				ip, block, block_end, gp, (int)length,
+				true,
 				std::move(jump_locations)
 			});
 			icounter += length;
@@ -238,7 +227,7 @@ if constexpr (SCAN_FOR_GP) {
 				break;
 		}
 
-		basepc = block_end_pc;
+		pc = block_end;
 	}
 
 	TIME_POINT(t3);
@@ -253,12 +242,8 @@ if constexpr (SCAN_FOR_GP) {
 
 	for (const auto& block : blocks)
 	{
-		auto result = emit(code, &block.instr, {
-			block.addr, gp, (int)block.length,
-			block.has_branch,
-			true, // forward jumps
-			std::move(block.jump_locations)
-		});
+		auto result = emit(code, block);
+
 		for (auto& mapping : result) {
 			dlmappings.push_back(std::move(mapping));
 		}
@@ -465,8 +450,8 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	}
 }
 
-	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, std::vector<TransInstr<4>>) const;
-	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, std::vector<TransInstr<8>>) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t, const uint8_t *) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t, const uint8_t *) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template void CPU<4>::activate_dylib(DecodedExecuteSegment<4>&, void*) const;

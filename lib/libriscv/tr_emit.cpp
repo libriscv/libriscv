@@ -29,8 +29,8 @@ struct Emitter
 	static constexpr unsigned XLEN = W * 8u;
 	using address_t = address_type<W>;
 
-	Emitter(CPU<W>& c, const TransInstr<W>* pip, const TransInfo<W>& ptinfo)
-		: cpu(c), m_pc(ptinfo.basepc), ip(pip), tinfo(ptinfo)
+	Emitter(CPU<W>& c, const TransInfo<W>& ptinfo)
+		: cpu(c), m_pc(ptinfo.basepc), tinfo(ptinfo)
 	{
 		this->func = "f" + std::to_string(this->pc());
 	}
@@ -255,8 +255,7 @@ struct Emitter
 	size_t index() const noexcept { return this->m_idx; }
 	address_t pc() const noexcept { return this->m_pc; }
 	address_t begin_pc() const noexcept { return tinfo.basepc; }
-	address_t last_pc() const noexcept { return tinfo.basepc + 4 * (tinfo.len-1); }
-	address_t end_pc() const noexcept { return tinfo.basepc + 4 * tinfo.len; }
+	address_t end_pc() const noexcept { return tinfo.endpc; }
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
 
@@ -279,7 +278,6 @@ private:
 	std::array<bool, 32> gpr_exists {};
 
 	std::string func;
-	const TransInstr<W>* ip;
 	const TransInfo<W>& tinfo;
 
 	std::vector<TransMapping<W>> mappings;
@@ -325,8 +323,8 @@ void Emitter<W>::emit()
 
 	for (int i = 0; i < tinfo.len; i++) {
 		this->m_idx = i;
-		this->instr = rv32i_instruction {ip[i].instr};
-		this->m_pc = tinfo.basepc + index() * 4;
+		this->instr = tinfo.instr[i];
+		this->m_pc = tinfo.basepc + i * 4;
 
 		// known jump locations
 		if (mapping_labels.count(i)) {
@@ -404,7 +402,7 @@ void Emitter<W>::emit()
 			uint64_t dest_pc = this->pc() + offset;
 			uint64_t jump_pc = 0;
 			// goto branch: restarts function
-			bool ge = tinfo.has_branch && (dest_pc == this->begin_pc());
+			bool ge = dest_pc == this->begin_pc();
 			// forward label: branch inside code block
 			if (offset > 0 && dest_pc < this->end_pc()) {
 				// forward label: future address
@@ -1210,9 +1208,9 @@ void Emitter<W>::emit()
 
 template <int W>
 std::vector<TransMapping<W>>
-CPU<W>::emit(std::string& code, TransInstr<W>* ip, const TransInfo<W>& tinfo) const
+CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 {
-	Emitter<W> e(const_cast<CPU<W>&>(*this), ip, tinfo);
+	Emitter<W> e(const_cast<CPU<W>&>(*this), tinfo);
 	e.emit();
 
 	// Function header
@@ -1246,8 +1244,6 @@ CPU<W>::emit(std::string& code, TransInstr<W>* ip, const TransInfo<W>& tinfo) co
 	return std::move(e.get_mappings());
 }
 
-template std::vector<TransMapping<4>>
-	CPU<4>::emit(std::string&, TransInstr<4>*, const TransInfo<4>&) const;
-template std::vector<TransMapping<8>>
-	CPU<8>::emit(std::string&, TransInstr<8>*, const TransInfo<8>&) const;
+template std::vector<TransMapping<4>> CPU<4>::emit(std::string&, const TransInfo<4>&) const;
+template std::vector<TransMapping<8>> CPU<8>::emit(std::string&, const TransInfo<8>&) const;
 } // riscv
