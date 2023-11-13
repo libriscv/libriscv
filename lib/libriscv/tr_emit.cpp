@@ -331,7 +331,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	}
 	// else, exit binary translation
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
-	code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm() - 4) + ";\n";
+	code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm()) + ";\n";
 	exit_function(true); // Bracket (NOTE: not actually ending the function)
 }
 
@@ -469,11 +469,11 @@ void Emitter<W>::emit()
 				add_code(
 					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
 					to_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";",
-					"jump(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + " - 4); }"
+					"jump(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
 				);
 			} else {
 				add_code(
-					"jump(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + " - 4);"
+					"jump(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			exit_function(true);
@@ -494,7 +494,7 @@ void Emitter<W>::emit()
 				// this is a jump back to the start of the function
 				add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
 				// if we run out of instructions, we must exit:
-				add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
+				add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset()) + ");");
 				exit_function();
 				if (instr.Jtype.rd != 0)
 					this->add_reentry_next();
@@ -504,7 +504,7 @@ void Emitter<W>::emit()
 					this->jump_to_function(dest_pc);
 				} else {
 					// Because of forward jumps we can't end the function here
-					add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset() - 4) + ");");
+					add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset()) + ");");
 					exit_function();
 				}
 				if (instr.Jtype.rd != 0)
@@ -855,7 +855,8 @@ void Emitter<W>::emit()
 					const auto syscall_reg = from_reg(REG_ECALL);
 					this->restore_syscall_registers();
 					code += "*cur_insn = c;\n";
-					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + "))) {\nreturn;}\n";
+					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + "))) {\n"
+						"  cpu->pc += 4; return;}\n"; // Correct for +4 expectation outside of bintr
 					code += "local_max_insn = *max_insn;\n";
 					// Restore A0
 					this->invalidate_register(REG_ARG0);

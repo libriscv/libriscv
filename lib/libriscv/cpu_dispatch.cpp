@@ -362,7 +362,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	// Restore counter
 	counter.retrieve();
 	// Translations are always full-length instructions (?)
-	pc = registers().pc + 4;
+	pc = registers().pc;
 	goto check_jump;
 #else
 	trigger_exception(FEATURE_DISABLED, pc);
