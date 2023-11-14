@@ -387,17 +387,17 @@ namespace riscv
 			default:
 				if (instr.Itype.high_bits() == 0x280) {
 					// BSETI: Bit-set immediate
-					dst = src | (1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+					dst = src | (RVREGTYPE(cpu)(1) << (instr.Itype.imm & (RVXLEN(cpu)-1)));
 					return;
 				}
 				else if (instr.Itype.high_bits() == 0x480) {
 					// BCLRI: Bit-clear immediate
-					dst = src & ~(1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+					dst = src & ~(RVREGTYPE(cpu)(1) << (instr.Itype.imm & (RVXLEN(cpu)-1)));
 					return;
 				}
 				else if (instr.Itype.high_bits() == 0x680) {
 					// BINVI: Bit-invert immediate
-					dst = src ^ (1UL << (instr.Itype.imm & (RVXLEN(cpu)-1)));
+					dst = src ^ (RVREGTYPE(cpu)(1) << (instr.Itype.imm & (RVXLEN(cpu)-1)));
 					return;
 				}
 			}
@@ -699,13 +699,13 @@ namespace riscv
 			dst = src2 + (src1 << 3);
 			return;
 		case 0x141: // BSET
-			dst = src1 | (1UL << (src2 & (RVXLEN(cpu)-1)));
+			dst = src1 | (RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
 			return;
 		case 0x142: // BCLR
-			dst = src1 & ~(1UL << (src2 & (RVXLEN(cpu)-1)));
+			dst = src1 & ~(RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
 			return;
 		case 0x143: // BINV
-			dst = src1 ^ (1UL << (src2 & (RVXLEN(cpu)-1)));
+			dst = src1 ^ (RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
 			return;
 		case 0x204: // XNOR
 			dst = ~(src1 ^ src2);
