@@ -36,6 +36,7 @@ namespace riscv
 				return bytecode;
 			}
 			case RV64I_BC_ADDIW:
+			case RV64I_BC_SRLIW:
 			case RV32I_BC_ADDI:
 			case RV32I_BC_SLLI:
 			case RV32I_BC_SLTI:
@@ -61,7 +62,12 @@ namespace riscv
 			case RV32I_BC_BGEU: {
 				const int32_t imm = original.Btype.signed_imm();
 				address_t addr = 0;
+#ifdef _MSC_VER
+				addr = pc + imm;
+				const bool overflow = false;
+#else
 				const bool overflow = __builtin_add_overflow(pc, imm, &addr);
+#endif
 
 				if (!this->is_within(addr, 4) || (addr % PCAL) != 0 || overflow)
 				{
@@ -98,13 +104,11 @@ namespace riscv
 			case RV32I_BC_OP_OR:
 			case RV32I_BC_OP_AND:
 			case RV32I_BC_OP_MUL:
-			case RV32I_BC_OP_MULH:
-			case RV32I_BC_OP_MULHSU:
-			case RV32I_BC_OP_MULHU:
 			case RV32I_BC_OP_DIV:
 			case RV32I_BC_OP_DIVU:
 			case RV32I_BC_OP_REM:
 			case RV32I_BC_OP_REMU:
+			case RV32I_BC_OP_ZEXT_H:
 			case RV32I_BC_OP_SH1ADD:
 			case RV32I_BC_OP_SH2ADD:
 			case RV32I_BC_OP_SH3ADD: {

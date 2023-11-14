@@ -78,6 +78,13 @@ namespace riscv
 	}
 
 	template <int W>
+	void Machine<W>::default_unknown_syscall_no(Machine<W>& machine, size_t num)
+	{
+		auto txt = "Unhandled system call: " + std::to_string(num) + "\n";
+		machine.debug_print(txt.c_str(), txt.size());
+	}
+
+	template <int W>
 	void Machine<W>::set_result_or_error(int result)
 	{
 		if (result >= 0)

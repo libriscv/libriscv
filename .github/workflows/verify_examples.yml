@@ -15,7 +15,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu gcc g++
+        sudo apt install -y gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu gcc g++
 
     - name: Configure emulator
       env:
@@ -26,8 +26,8 @@ jobs:
 
     - name: Configure linux64
       env:
-        CC: riscv64-linux-gnu-gcc-10
-        CXX: riscv64-linux-gnu-g++-10
+        CC: riscv64-linux-gnu-gcc-12
+        CXX: riscv64-linux-gnu-g++-12
         BUILD_TYPE: Release
       run: cmake binaries/linux64 -B ${{github.workspace}}/build_linux64 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
@@ -45,7 +45,7 @@ jobs:
 
     - name: Configure STREAM
       env:
-        CC: riscv64-linux-gnu-gcc-10
+        CC: riscv64-linux-gnu-gcc-12
         BUILD_TYPE: Release
       run: cmake binaries/STREAM -B ${{github.workspace}}/build_STREAM -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 

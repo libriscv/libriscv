@@ -123,19 +123,19 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32I_BC_OP_OR]   = &&rv32i_op_or,
 		[RV32I_BC_OP_AND]  = &&rv32i_op_and,
 		[RV32I_BC_OP_MUL]  = &&rv32i_op_mul,
-		[RV32I_BC_OP_MULH] = &&rv32i_op_mulh,
-		[RV32I_BC_OP_MULHSU] = &&rv32i_op_mulhsu,
-		[RV32I_BC_OP_MULHU]= &&rv32i_op_mulhu,
 		[RV32I_BC_OP_DIV]  = &&rv32i_op_div,
 		[RV32I_BC_OP_DIVU] = &&rv32i_op_divu,
 		[RV32I_BC_OP_REM]  = &&rv32i_op_rem,
 		[RV32I_BC_OP_REMU] = &&rv32i_op_remu,
 		[RV32I_BC_OP_SRA]  = &&rv32i_op_sra,
+		[RV32I_BC_OP_ADD_UW] = &&rv32i_op_add_uw,
+		[RV32I_BC_OP_ZEXT_H] = &&rv32i_op_zext_h,
 		[RV32I_BC_OP_SH1ADD] = &&rv32i_op_sh1add,
 		[RV32I_BC_OP_SH2ADD] = &&rv32i_op_sh2add,
 		[RV32I_BC_OP_SH3ADD] = &&rv32i_op_sh3add,
 
 		[RV64I_BC_ADDIW] = &&rv64i_addiw,
+		[RV64I_BC_SRLIW] = &&rv64i_srliw,
 
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = &&rv32c_addi,
