@@ -90,6 +90,18 @@ INSTRUCTION(RV32I_BC_ANDI, rv32i_andi) {
 	NEXT_INSTR();
 }
 
+INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
+	if constexpr (W >= 8) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		REG(fi.get_rs1()) = (int32_t)
+			((uint32_t)REG(fi.get_rs2()) >> (fi.imm & 31));
+		NEXT_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
+}
+
 #endif // OP_IMM
 
 #ifdef BYTECODES_BRANCH
@@ -417,37 +429,15 @@ INSTRUCTION(RV32I_BC_OP_SRA, rv32i_op_sra) {
 	dst = saddr_t(src1) >> (src2 & (XLEN-1));
 	NEXT_INSTR();
 }
-INSTRUCTION(RV32I_BC_OP_MULH, rv32i_op_mulh) {
-	OP_INSTR();
-	if constexpr (W == 4) {
-		dst = uint64_t((int64_t)saddr_t(src1) * (int64_t)saddr_t(src2)) >> 32u;
-	} else if constexpr (W == 8) {
-		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
-	} else {
-		dst = 0;
-	}
+INSTRUCTION(RV32I_BC_OP_ADD_UW, rv32i_op_add_uw) {
+	VIEW_INSTR();
+	REG(instr.Rtype.rd) = REG(instr.Rtype.rs2) + uint32_t(REG(instr.Rtype.rs1));
 	NEXT_INSTR();
 }
-INSTRUCTION(RV32I_BC_OP_MULHSU, rv32i_op_mulhsu) {
+INSTRUCTION(RV32I_BC_OP_ZEXT_H, rv32i_op_zext_h) {
 	OP_INSTR();
-	if constexpr (W == 4) {
-		dst = uint64_t((int64_t)saddr_t(src1) * (uint64_t)src2) >> 32u;
-	} else if constexpr (W == 8) {
-		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
-	} else {
-		dst = 0;
-	}
-	NEXT_INSTR();
-}
-INSTRUCTION(RV32I_BC_OP_MULHU, rv32i_op_mulhu) {
-	OP_INSTR();
-	if constexpr (W == 4) {
-		dst = uint64_t((uint64_t)src1 * (uint64_t)src2) >> 32u;
-	} else if constexpr (W == 8) {
-		dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
-	} else {
-		dst = 0;
-	}
+	dst = uint16_t(src1);
+	(void)src2;
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_OP_DIVU, rv32i_op_divu) {

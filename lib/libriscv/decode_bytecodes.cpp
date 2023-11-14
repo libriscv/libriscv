@@ -311,12 +311,6 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_OP_AND;
 			case 0x10:
 				return RV32I_BC_OP_MUL;
-			case 0x11:
-				return RV32I_BC_OP_MULH;
-			case 0x12:
-				return RV32I_BC_OP_MULHSU;
-			case 0x13:
-				return RV32I_BC_OP_MULHU;
 			case 0x14:
 				return RV32I_BC_OP_DIV;
 			case 0x15:
@@ -325,6 +319,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_OP_REM;
 			case 0x17:
 				return RV32I_BC_OP_REMU;
+			case 0x44: // ZEXT.H
+				return RV32I_BC_OP_ZEXT_H;
 			case 0x102:
 				return RV32I_BC_OP_SH1ADD;
 			case 0x104:
@@ -350,7 +346,15 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_FUNCTION;
 			}
 		case RV64I_OP32:
-			return RV32I_BC_FUNCTION;
+			switch (instr.Rtype.jumptable_friendly_op())
+			{
+			case 0x40: // ADD.UW
+				return RV32I_BC_OP_ADD_UW;
+			case 0x44: // ZEXT.H
+				return RV32I_BC_OP_ZEXT_H;
+			default:
+				return RV32I_BC_FUNCTION;
+			}
 		case RV64I_OP_IMM32:
 			if (instr.Itype.rd == 0)
 				return RV32I_BC_NOP;
@@ -358,6 +362,11 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			{
 			case 0x0:
 				return RV64I_BC_ADDIW;
+			case 0x5: // SRLIW / SRAIW
+				if (instr.Itype.high_bits() == 0x000) {
+					return RV64I_BC_SRLIW;
+				}
+				return RV32I_BC_FUNCTION;
 			}
 			return RV32I_BC_FUNCTION;
 		case RV32I_SYSTEM:
