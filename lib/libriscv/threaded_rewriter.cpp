@@ -62,7 +62,12 @@ namespace riscv
 			case RV32I_BC_BGEU: {
 				const int32_t imm = original.Btype.signed_imm();
 				address_t addr = 0;
+#ifdef _MSC_VER
+				addr = pc + imm;
+				const bool overflow = addr < pc;
+#else
 				const bool overflow = __builtin_add_overflow(pc, imm, &addr);
+#endif
 
 				if (!this->is_within(addr, 4) || (addr % PCAL) != 0 || overflow)
 				{

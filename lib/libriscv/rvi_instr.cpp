@@ -1,21 +1,28 @@
 #include "instr_helpers.hpp"
 #include "rvc.hpp"
 #include <atomic>
+#include <bit>
 #include <inttypes.h>
-
 #ifdef _MSC_VER
 #include <intrin.h>
+#endif
+
+namespace riscv
+{
+#ifdef _MSC_VER
+#define bswap32(x)   _byteswap_ulong(x)
+#define bswap64(x)   _byteswap_uint64(x)
 #define mulhi64(a, b)  __mulh(a, b)
 #define mulhu64(a, b)  __umulh(a, b)
 #define mulhsu64(a, b) __umulh(a, b)
 #else
+#define bswap32(x)   __builtin_bswap32(x)
+#define bswap64(x)   __builtin_bswap64(x)
 #define mulhi64(a, b)  (__int128_t(int64_t(a)) * __int128_t(int64_t(b))) >> 64u;
 #define mulhu64(a, b)  (__int128_t(a) * __int128_t(b)) >> 64u;
 #define mulhsu64(a, b) (__int128_t(int64_t(a)) * __int128_t(b)) >> 64u;
 #endif
 
-namespace riscv
-{
 	INSTRUCTION(NOP,
 	[] (auto& /* cpu */, rv32i_instruction /* instr */) RVINSTR_COLDATTR {
 	},
@@ -369,22 +376,13 @@ namespace riscv
 				dst = RVSIGNTYPE(cpu)(int16_t(src));
 				return;
 			case 0b011000000000: // CLZ
-				if constexpr (RVIS32BIT(cpu))
-					dst = src ? __builtin_clz(src) : RVXLEN(cpu);
-				else
-					dst = src ? __builtin_clzl(src) : RVXLEN(cpu);
+				dst = std::countl_zero(src);
 				return;
 			case 0b011000000001: // CTZ
-				if constexpr (RVIS32BIT(cpu))
-					dst = src ? __builtin_ctz(src) : 0;
-				else
-					dst = src ? __builtin_ctzl(src) : 0;
+				dst = std::countr_zero(src);
 				return;
 			case 0b011000000010: // CPOP
-				if constexpr (RVIS32BIT(cpu))
-					dst = __builtin_popcount(src);
-				else
-					dst = __builtin_popcountl(src);
+				dst = std::popcount(src);
 				return;
 			default:
 				if (instr.Itype.high_bits() == 0x280) {
@@ -441,9 +439,9 @@ namespace riscv
 			else if (instr.Itype.is_rev8<sizeof(dst)>()) {
 				// REV8: Byte-reverse register
 				if constexpr (RVIS32BIT(cpu))
-					dst = __builtin_bswap32(src);
+					dst = bswap32(src);
 				else
-					dst = __builtin_bswap64(src);
+					dst = bswap64(src);
 				return;
 			}
 			break;
@@ -967,13 +965,13 @@ namespace riscv
 		case 0x1:
 			switch (instr.Itype.imm) {
 			case 0b011000000000: // CLZ.W
-				dst = src ? __builtin_clz(src) : RVXLEN(cpu);
+				dst = std::countl_zero(src);
 				return;
 			case 0b011000000001: // CTZ.W
-				dst = src ? __builtin_ctz(src) : 0;
+				dst = std::countr_zero(src);
 				return;
 			case 0b011000000010: // CPOP.W
-				dst = __builtin_popcount(src);
+				dst = std::popcount(src);
 				return;
 			}
 		case 0x5:

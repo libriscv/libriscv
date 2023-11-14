@@ -1,3 +1,5 @@
+#include "cpu.hpp"
+
 #include "instr_helpers.hpp"
 #include <atomic>
 #include <cstdint>
@@ -257,16 +259,14 @@ namespace riscv
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
-#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 		else if (instr.Atype.funct3 == AMOSIZE_Q)
 		{
 			if constexpr (RVIS128BIT(cpu)) {
 				cpu.atomics().load_reserve(16, addr);
-				value = cpu.machine().memory.template read<__uint128_t> (addr);
+				value = cpu.machine().memory.template read<RVREGTYPE(cpu)> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
-#endif
 		else {
 			cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
@@ -303,18 +303,16 @@ namespace riscv
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
-#ifdef RISCV_128BIT_ISA_INSTRUCTIONS
 		else if (instr.Atype.funct3 == AMOSIZE_Q)
 		{
 			if constexpr (RVIS128BIT(cpu)) {
 				resv = cpu.atomics().store_conditional(16, addr);
 				if (resv) {
-					cpu.machine().memory.template write<__uint128_t> (addr, cpu.reg(instr.Atype.rs2));
+					cpu.machine().memory.template write<RVREGTYPE(cpu)> (addr, cpu.reg(instr.Atype.rs2));
 				}
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
-#endif
 		else {
 			cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
