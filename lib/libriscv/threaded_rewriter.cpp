@@ -64,7 +64,7 @@ namespace riscv
 				address_t addr = 0;
 #ifdef _MSC_VER
 				addr = pc + imm;
-				const bool overflow = addr < pc;
+				const bool overflow = false;
 #else
 				const bool overflow = __builtin_add_overflow(pc, imm, &addr);
 #endif
