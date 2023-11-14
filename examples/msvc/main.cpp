@@ -1,24 +1,40 @@
 #include <libriscv/machine.hpp>
 #include <chrono>
+#include <fstream>
+#include <iterator>
 #define TIME_POINT(t) \
 	asm("" ::: "memory"); \
 	auto t = std::chrono::high_resolution_clock::now(); \
 	asm("" ::: "memory");
 namespace {
-	extern const std::vector<unsigned char> binary;
+	extern const std::vector<unsigned char> fib;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-	riscv::Machine<riscv::RISCV32> machine{ binary };
+	// Default: fib(256000000)
+	std::string_view binview{(const char *)fib.data(), fib.size() };
+	std::vector<char> binary;
+
+	// Program argument: Read and execute the provided file
+	if (argc > 1) {
+		const char* filename = argv[1];
+
+		std::ifstream fs(filename, std::ios::binary);
+		if (!fs) {
+			fprintf(stderr, "Not able to access %s!\n", filename);
+		}
+		binary.assign(std::istreambuf_iterator<char>(fs), std::istreambuf_iterator<char>());
+
+		binview = { binary.data(), binary.size() };
+	}
+
+	// Setup a machine
+	riscv::Machine<riscv::RISCV32> machine{ binview };
 	machine.setup_minimal_syscalls();
 	machine.setup_argv({
-			"fib32", "256000000"
+			"libriscv", "Hello", "World"
 		});
-
-	// Warmup w/100k instructions
-	riscv::Machine<riscv::RISCV32> fork{ machine };
-	fork.simulate<false>(100'000);
 
 	TIME_POINT(t0);
 	machine.simulate();
@@ -56,7 +72,7 @@ _start():
    100c4:	01010113          	addi	sp,sp,16
    100c8:	00008067          	ret
 	**/
-	static const std::vector<unsigned char> binary {
+	static const std::vector<unsigned char> fib {
 		0x7f, 0x45, 0x4c, 0x46, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0xf3, 0x00, 0x01, 0x00, 0x00, 0x00,
 		0x74, 0x00, 0x01, 0x00, 0x34, 0x00, 0x00, 0x00, 0xe0, 0x02, 0x00, 0x00,
