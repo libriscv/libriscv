@@ -117,7 +117,7 @@ if (RISCV_BINARY_TRANSLATION)
 endif()
 
 add_library(riscv ${SOURCES})
-target_compile_features(riscv PUBLIC cxx_std_17)
+target_compile_features(riscv PUBLIC cxx_std_20)
 target_include_directories(riscv PUBLIC .)
 
 if (NOT WIN32 OR MINGW_TOOLCHAIN)

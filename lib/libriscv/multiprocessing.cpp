@@ -61,7 +61,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 	{
 		// Fork variant
 		tasks.push_back(
-		[=] {
+		[=, this] {
 			try {
 				// NOTE: minimal_fork causes a ton of contention. Avoid!
 				// NOTE: cannot use arena as it can fail to read the origin stack
@@ -75,7 +75,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 
 				// For most workloads, we will only need a copy-on-write handler
 				fork.memory.set_page_write_handler(
-				[=] (auto&, address_t pageno, Page& page)
+				[=, this] (auto&, address_t pageno, Page& page)
 				{
 					if (pageno >= stackpage && pageno < stackendpage) {
 						page.make_writable();
@@ -97,7 +97,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 					return this->memory.get_pageno(pageno);
 				});
 				fork.memory.set_page_fault_handler(
-				[=] (auto& mem, const address_t pageno, bool init) -> Page& {
+				[=, this] (auto& mem, const address_t pageno, bool init) -> Page& {
 					if (pageno >= stackpage && pageno < stackendpage) {
 						return mem.create_writable_pageno(pageno, init);
 					}
