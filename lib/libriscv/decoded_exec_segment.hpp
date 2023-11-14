@@ -15,8 +15,13 @@ namespace riscv
 
 		bool is_within(address_t addr, size_t len = 2) const noexcept {
 			address_t addr_end;
+#ifdef _MSC_VER
+			addr_end = addr + len;
+			return addr >= m_vaddr_begin && addr_end <= m_vaddr_end && (addr_end > addr);
+#else
 			if (!__builtin_add_overflow(addr, len, &addr_end))
 				return addr >= m_vaddr_begin && addr_end <= m_vaddr_end;
+#endif
 			return false;
 		}
 

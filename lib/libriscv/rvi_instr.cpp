@@ -3,6 +3,17 @@
 #include <atomic>
 #include <inttypes.h>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#define mulhi64(a, b)  __mulh(a, b)
+#define mulhu64(a, b)  __umulh(a, b)
+#define mulhsu64(a, b) __umulh(a, b)
+#else
+#define mulhi64(a, b)  (__int128_t(int64_t(a)) * __int128_t(int64_t(b))) >> 64u;
+#define mulhu64(a, b)  (__int128_t(a) * __int128_t(b)) >> 64u;
+#define mulhsu64(a, b) (__int128_t(int64_t(a)) * __int128_t(b)) >> 64u;
+#endif
+
 namespace riscv
 {
 	INSTRUCTION(NOP,
@@ -128,13 +139,11 @@ namespace riscv
 			}
 			cpu.trigger_exception(ILLEGAL_OPCODE);
 		case 0x7:
-#ifdef RISCV_128BIT_ISA
 			if constexpr (RVIS128BIT(cpu)) {
-				addr &= ~(__uint128_t)0xF;
-				cpu.machine().memory.template read<__uint128_t>(addr);
+				addr &= ~RVREGTYPE(cpu)(0xF);
+				cpu.machine().memory.template read<RVREGTYPE(cpu)>(addr);
 				return;
 			}
-#endif
 			cpu.trigger_exception(ILLEGAL_OPCODE);
 		}
 	}, DECODED_INSTR(LOAD_I8).printer);
@@ -191,8 +200,8 @@ namespace riscv
 	{
 		const auto& value = cpu.reg(instr.Stype.rs2);
 		auto addr = cpu.reg(instr.Stype.rs1) + RVIMM(cpu, instr.Stype);
-		addr &= ~(__uint128_t)0xF;
-		cpu.machine().memory.template write<__uint128_t>(addr, value);
+		addr &= ~RVREGTYPE(cpu)(0xF);
+		cpu.machine().memory.template write<RVREGTYPE(cpu)>(addr, value);
 	}, DECODED_INSTR(STORE_I8_IMM).printer);
 
 #define VERBOSE_BRANCH() \
@@ -574,7 +583,7 @@ namespace riscv
 			if constexpr (RVIS32BIT(cpu)) {
 				dst = uint64_t((int64_t)RVTOSIGNED(src1) * (int64_t)RVTOSIGNED(src2)) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
-				dst = (__int128_t(int64_t(src1)) * __int128_t(int64_t(src2))) >> 64u;
+				dst = mulhi64(src1, src2);
 			} else {
 				dst = 0;
 			}
@@ -583,7 +592,7 @@ namespace riscv
 			if constexpr (RVIS32BIT(cpu)) {
 				dst = uint64_t((int64_t)RVTOSIGNED(src1) * (uint64_t)src2) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
-				dst = (__int128_t(int64_t(src1)) * __int128_t(src2)) >> 64u;
+				dst = mulhsu64(src1, src2);
 			} else {
 				dst = 0;
 			}
@@ -592,7 +601,7 @@ namespace riscv
 			if constexpr (RVIS32BIT(cpu)) {
 				dst = uint64_t((uint64_t)src1 * (uint64_t)src2) >> 32u;
 			} else if constexpr (RVIS64BIT(cpu)) {
-				dst = ((__int128_t) src1 * (__int128_t) src2) >> 64u;
+				dst = mulhu64(src1, src2);
 			} else {
 				dst = 0;
 			}

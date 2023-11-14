@@ -15,6 +15,8 @@
 WSADATA riscv::ws2::global_winsock_data;
 bool riscv::ws2::winsock_initialized = false;
 using ssize_t = long long int;
+#undef min
+#undef max
 #endif
 
 namespace riscv {

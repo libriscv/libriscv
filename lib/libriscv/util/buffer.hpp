@@ -73,7 +73,7 @@ namespace riscv
 			m_len = len;
 			return;
 		}
-		else if (m_data.end() == buffer)
+		else if (&*m_data.end() == buffer)
 		{
 			// In some cases we can continue the last entry
 			m_len  += len;
