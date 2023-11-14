@@ -1,4 +1,5 @@
 #include "instr_helpers.hpp"
+#include <atomic>
 #include <cstdint>
 #include <inttypes.h>
 static const char atomic_type[] { '?', '?', 'W', 'D', 'Q', '?', '?', '?' };
@@ -45,7 +46,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_add(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_add(cpu.reg(rs2));
 		});
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
@@ -62,7 +63,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_xor(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_xor(cpu.reg(rs2));
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
@@ -71,7 +72,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_or(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_or(cpu.reg(rs2));
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
@@ -80,7 +81,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_and(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_and(cpu.reg(rs2));
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
@@ -133,7 +134,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_add(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_add(cpu.reg(rs2));
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
@@ -142,7 +143,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_xor(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_xor(cpu.reg(rs2));
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
@@ -151,7 +152,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_or(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_or(cpu.reg(rs2));
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
@@ -160,7 +161,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-			return __sync_fetch_and_and(&value, cpu.reg(rs2));
+			return std::atomic_ref(value).fetch_and(cpu.reg(rs2));
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
 
@@ -170,7 +171,7 @@ namespace riscv
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
 			auto old_val = value;
-			value = std::max(value, (int64_t)cpu.reg(rs2));
+			value = std::max(value, int64_t(cpu.reg(rs2)));
 			return old_val;
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
@@ -181,7 +182,7 @@ namespace riscv
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
 			auto old_val = value;
-			value = std::min(value, (int64_t)cpu.reg(rs2));
+			value = std::min(value, int64_t(cpu.reg(rs2)));
 			return old_val;
 		});
 	}, DECODED_ATOMIC(AMOADD_W).printer);
