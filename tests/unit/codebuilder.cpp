@@ -5,8 +5,8 @@
 #include <unistd.h>
 #include "crc32.hpp"
 static constexpr bool VERBOSE_COMPILER = true;
-static const std::string DEFAULT_C_COMPILER = "riscv64-linux-gnu-gcc-10";
-static const std::string DEFAULT_CXX_COMPILER = "riscv64-linux-gnu-g++-10";
+static const std::string DEFAULT_C_COMPILER = "riscv64-linux-gnu-gcc-12";
+static const std::string DEFAULT_CXX_COMPILER = "riscv64-linux-gnu-g++-12";
 
 std::string c_compile_command(const std::string& cc,
 	const std::string& args, const std::string& outfile)

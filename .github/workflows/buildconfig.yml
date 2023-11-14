@@ -7,18 +7,6 @@ on:
     branches: [ master ]
 
 jobs:
-  dependencies:
-    name: Install dependencies
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y g++ clang
-
   config_matrix:
     name: Build configuration matrix
     defaults:
@@ -27,12 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        compiler: [g++, clang++]
+        compiler: [g++, clang++-17]
     env:
       CXX: ${{ matrix.compiler }}
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y g++
+
+    - name: Install newer Clang
+      run: |
+       wget https://apt.llvm.org/llvm.sh
+       chmod +x ./llvm.sh
+       sudo ./llvm.sh 17
 
     - name: Default build
       run: bash ci.sh

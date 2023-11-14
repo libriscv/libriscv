@@ -1,5 +1,5 @@
 #
-# C++17 RISC-V emulator library
+# C++20 RISC-V emulator library
 #
 
 # DEBUG allows memory alignment checks and other things

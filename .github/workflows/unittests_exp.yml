@@ -22,9 +22,15 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y clang-15 gcc-10-riscv64-linux-gnu g++-10-riscv64-linux-gnu
+        sudo apt install -y gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu
         git submodule update --init ${{github.workspace}}/tests/Catch2
         git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
+
+    - name: Install newer Clang
+      run: |
+       wget https://apt.llvm.org/llvm.sh
+       chmod +x ./llvm.sh
+       sudo ./llvm.sh 17
 
     - name: Configure
       env:

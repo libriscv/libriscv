@@ -19,15 +19,21 @@ jobs:
 
     strategy:
       matrix:
-        c_compiler: [gcc, clang]
-        cxx_compiler: [g++, clang++]
+        c_compiler: [gcc, clang-17]
+        cxx_compiler: [g++, clang++-17]
     steps:
     - uses: actions/checkout@v2
 
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y g++ clang
+        sudo apt install -y g++
+
+    - name: Install newer Clang
+      run: |
+       wget https://apt.llvm.org/llvm.sh
+       chmod +x ./llvm.sh
+       sudo ./llvm.sh 17
 
     - name: CMake configuration
       working-directory: ${{github.workspace}}/c/test
