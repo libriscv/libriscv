@@ -30,10 +30,10 @@ f28-31 FP temporaries
 
 PC     Program counter
 
-## Alignments
+## Alignments and trivia
 
 All instructions 4-byte aligned, except for C-extension where instructions are 2-byte aligned. It is even allowed to have a 2-byte aligned 4-byte instruction cross a page boundary, unfortunately.
 
-GP must be initialized to some symbol (`__global_pointer`) in the middle of the data section.
+The stack pointer must be 16-byte aligned.
 
-The stack pointer can start at the beginning of the ELF virtual address space and must be 16-byte aligned.
+GP must be initialized to some symbol (`__global_pointer`) in the middle of the data section. This happens right after _start in most run-times. Golang does not use GP this way.
