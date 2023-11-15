@@ -974,6 +974,7 @@ namespace riscv
 				dst = std::popcount(src);
 				return;
 			}
+			break;
 		case 0x5:
 			if (instr.Itype.high_bits() == 0x600) // RORIW
 			{
@@ -981,6 +982,7 @@ namespace riscv
 				dst = (int32_t) ((src >> shift) | (src << (32 - shift)));
 				return;
 			}
+			break;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
