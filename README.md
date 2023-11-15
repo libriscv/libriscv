@@ -110,8 +110,8 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 
 ## Instruction set support
 
-The emulator currently supports RV32GCB, RV64GCB (IMAFDC) and RV128G.
-The F and D-extensions should be 100% supported (32- and 64-bit floating point instructions). Atomics support is present and has been tested with multiprocessing, but there is no extensive test suite. The Golang runtime uses atomics extensively. V-extension is undergoing work.
+The emulator currently supports RV32GCB, RV64GCB (imafdc_zicsr_zifence_zba_zbb_zbc_zbs) and RV128G.
+The A-, F-, D-, C- and B-extensions should be 100% supported on 32- and 64-bit. V-extension is undergoing work.
 
 The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the [emu128 folder](/emu128/).
 
@@ -267,7 +267,7 @@ You can create a 64kb machine without a binary, and no ELF loader will be invoke
 	machine.simulate(1'000ul);
 ```
 
-The fuzzing program does this, so have a look at that. There is also [a unit test](/tests/unit/micro.cpp).
+The fuzzing program does this, so have a look at that. There are also [unit tests](/tests/unit/micro.cpp).
 
 ## Adding your own instructions
 
@@ -300,16 +300,22 @@ It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ cod
 - Threaded bytecode simulation
 - Tailcall bytecode simulation
 
+This can be controlled with CMake options.
+
 ### Remote GDB using RSP server
 
-- Step through the code using built-in pretty printers
+Using an [RSP server](/lib/libriscv/rsp_server.hpp):
+
+- Step through the code using GDB and your programs embedded pretty printers
 
 ### Build your own interpreter loop
 
-- Using CPU::step_one(), one can step one instruction
+- Using [CPU::step_one()](/lib/libriscv/cpu.hpp), one can step one instruction
 - Precise simulation with custom conditions
 
 ### Using the DebugMachine wrapper
+
+Using the [debugging wrapper](/lib/libriscv/debug.hpp):
 
 - Simulate one instruction at a time
 - Verbose instruction logging
