@@ -108,7 +108,7 @@ inline long syscall(long n, long arg0)
 	register long a0 asm("a0") = arg0;
 	register long syscall_id asm("a7") = n;
 
-	asm volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+	asm volatile ("ecall" : "+r"(a0) : "r"(syscall_id));
 
 	return a0;
 }
@@ -118,9 +118,13 @@ All integer and pointer arguments are in the a0 to a6 registers, which adds up t
 
 If you have done all this you should now have the absolute minimum C and C++ freestanding environment up and running. Have fun!
 
-## Main arguments
+## Putting it all together
 
-On Linux, main() takes several arguments:
+Have a look at [start.cpp](/binaries/micro/src/start.cpp) for the micro example project.
+
+# Main arguments
+
+On Linux, main() can take several arguments:
 
 ```
 int main(int argc, char** argc, char** envp);
