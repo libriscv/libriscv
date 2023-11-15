@@ -1,4 +1,4 @@
-**/.build/
+**/.build*/
 **/build/
 **/build_*/
 riscv64-unknown-elf/

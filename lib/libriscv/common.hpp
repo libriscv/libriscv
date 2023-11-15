@@ -180,7 +180,7 @@ namespace riscv
 #endif
 
 #ifndef RISCV_INTERNAL
-#ifdef __GNUG__
+#if defined(__GNUG__) && !defined(_WIN32)
 #define RISCV_INTERNAL __attribute__((visibility("internal")))
 #else
 #define RISCV_INTERNAL /* */
