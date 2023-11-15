@@ -1,6 +1,6 @@
 # RISC-V userspace emulator library
 
-_libriscv_ is a simple and slim RISC-V userspace emulator library that is highly embeddable and configurable. There are several [CMake options](lib/CMakeLists.txt) that control RISC-V extensions and how the emulator behaves.
+_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. There are several [CMake options](lib/CMakeLists.txt) that control RISC-V extensions and how the emulator behaves.
 
 There is also a CLI that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or connect with GDB.
 
@@ -16,7 +16,7 @@ Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.c
 
 ## What is userspace emulation?
 
-Userspace emulation means running regular ELF programs in a sandbox, trapping and emulating system calls in order to provide the Linux environment the program expects, but also make sure the program is not doing anything wrong. There is fairly good support for Linux system calls, however anyone can implement support for other OSes, and ultimately even ELF loading is optional.
+Userspace emulation means running regular programs in a sandbox, trapping and emulating system calls in order to provide the Linux environment the program expects, but also make sure the program is not doing anything wrong. There is fairly good support for Linux system calls, however anyone can implement support for other OSes, and ultimately even ELF loading is optional.
 
 Instruction counting is used to limit the time spent executing code and can be used to prevent infinite loops. It can also help keep frame budgets for long running background scripting tasks as running out of instructions simply halts execution, and it can be resumed from where it stopped.
 
@@ -244,7 +244,7 @@ The function `machine.instruction_limit_reached()` only returns true when the in
 
 ## Setting up your own machine environment
 
-You can create a 64kb machine without a binary, and no ELF loader will be invoked.
+You can create a machine without a binary, with no ELF loader invoked:
 
 ```C++
 	Machine<RISCV32> machine;
