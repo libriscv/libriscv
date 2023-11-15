@@ -1,5 +1,14 @@
 #include <libriscv/machine.hpp>
+
 #include <libriscv/threads.hpp>
+#include <chrono>
+#include <cstdint>
+#include <io.h>
+
+typedef std::make_signed_t<size_t> ssize_t;
+#ifndef PATH_MAX
+static constexpr size_t PATH_MAX = 512;
+#endif
 
 //#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
@@ -13,7 +22,6 @@ static constexpr bool verbose_syscalls = false;
 #endif
 
 #include <winsock2.h>
-#include <sys/time.h>
 #include <sys/stat.h>
 
 #define SA_ONSTACK	0x08000000
@@ -42,10 +50,7 @@ static void syscall_stub_nosys(Machine<W> &machine) {
 
 template<int W>
 static void syscall_exit(Machine<W> &machine) {
-    // Stop sets the max instruction counter to zero, allowing most
-    // instruction loops to end. It is, however, not the only way
-    // to exit a program. Tighter integrations with the library should
-    // provide their own methods.
+    // Stop sets the max instruction counter to zero, making the instruction loop end.
     machine.stop();
 }
 
@@ -83,28 +88,33 @@ static void syscall_sigaltstack(Machine<W> &machine) {
 
 template<int W>
 static void syscall_sigaction(Machine<W> &machine) {
-    const int signal = machine.sysarg(0);
+    const int sig = machine.sysarg(0);
     const auto action = machine.sysarg(1);
     const auto old_action = machine.sysarg(2);
     SYSPRINT("SYSCALL sigaction, signal: %d, action: 0x%lX old_action: 0x%lX\n",
-             signal, (long) action, (long) old_action);
-    auto &sigact = machine.sigaction(signal);
+             sig, (long) action, (long) old_action);
+    if (sig == 0) return;
 
-    struct riscv_sigaction {
+    auto& sigact = machine.sigaction(sig);
+
+    struct kernel_sigaction {
         address_type<W> sa_handler;
-        unsigned long sa_flags;
+        address_type<W> sa_flags;
+        address_type<W> sa_mask;
     } sa{};
     if (old_action != 0x0) {
-        sa.sa_handler = sigact.handler;
+        sa.sa_handler = sigact.handler & ~address_type<W>(0xF);
         sa.sa_flags = (sigact.altstack ? SA_ONSTACK : 0x0);
+        sa.sa_mask = sigact.mask;
         machine.copy_to_guest(old_action, &sa, sizeof(sa));
     }
     if (action != 0x0) {
         machine.copy_from_guest(&sa, action, sizeof(sa));
         sigact.handler = sa.sa_handler;
         sigact.altstack = (sa.sa_flags & SA_ONSTACK) != 0;
+        sigact.mask = sa.sa_mask;
         SYSPRINT("<<< sigaction %d handler: 0x%lX altstack: %d\n",
-                 signal, (long) sigact.handler, sigact.altstack);
+            sig, (long)sigact.handler, sigact.altstack);
     }
 
     machine.set_result(0);
@@ -122,7 +132,7 @@ void syscall_lseek(Machine<W> &machine) {
     if (machine.fds().is_socket(fd)) {
         machine.set_result(-ESPIPE);
     } else {
-        int64_t res = lseek(real_fd, offset, whence);
+        int64_t res = _lseek(real_fd, offset, whence);
         if (res >= 0) {
             machine.set_result(res);
         } else {
@@ -164,7 +174,7 @@ static void syscall_read(Machine<W> &machine) {
             if (machine.fds().is_socket(fd))
                 res = recv(real_fd, buffers[i].ptr, buffers[i].len, 0);
             else
-                res = read(real_fd, buffers[i].ptr, buffers[i].len);
+                res = _read(real_fd, buffers[i].ptr, buffers[i].len);
             if (res >= 0) {
                 bytes += res;
                 if ((size_t) res < buffers[i].len) break;
@@ -188,7 +198,7 @@ static void syscall_write(Machine<W> &machine) {
              vfd, (long) address, len);
     // We only accept standard output pipes, for now :)
     if (vfd == 1 || vfd == 2) {
-        // Zero-copy retrieval of buffers (64kb)
+        // Zero-copy retrieval of buffers (16 fragments)
         riscv::vBuffer buffers[16];
         size_t cnt =
                 machine.memory.gather_buffers_from_range(16, buffers, address, len);
@@ -199,7 +209,7 @@ static void syscall_write(Machine<W> &machine) {
         return;
     } else if (machine.has_file_descriptors() && machine.fds().permit_write(vfd)) {
         auto real_fd = machine.fds().get(vfd);
-        // Zero-copy retrieval of buffers (256kb)
+        // Zero-copy retrieval of buffers (64 fragments)
         riscv::vBuffer buffers[64];
         size_t cnt =
                 machine.memory.gather_buffers_from_range(64, buffers, address, len);
@@ -210,7 +220,7 @@ static void syscall_write(Machine<W> &machine) {
             if (machine.fds().is_socket(vfd))
                 res = send(real_fd, buffers[i].ptr, buffers[i].len, 0);
             else
-                res = write(real_fd, buffers[i].ptr, buffers[i].len);
+                res = _write(real_fd, buffers[i].ptr, buffers[i].len);
             if (res >= 0) {
                 bytes += res;
                 // Detect partial writes
@@ -294,6 +304,8 @@ static void syscall_openat(Machine<W> &machine) {
             // Translate errno() into kernel API return value
             machine.set_result(-errno);
         }*/
+        (void)dir_fd;
+        (void)flags;
         machine.set_result(-EPERM);
         return;
     }
@@ -318,7 +330,7 @@ static void syscall_close(riscv::Machine<W> &machine) {
             if (machine.fds().is_socket(vfd)) {
                 closesocket(res);
             } else {
-                close(res);
+                _close(res);
             }
         }
         machine.set_result(res >= 0 ? 0 : -EBADF);
@@ -331,18 +343,8 @@ template<int W>
 static void syscall_dup(Machine<W> &machine) {
     const int vfd = machine.template sysarg<int>(0);
     SYSPRINT("SYSCALL dup, fd: %d\n", vfd);
+    (void)vfd;
 
-    if (machine.has_file_descriptors()) {
-        auto real_fd = machine.fds().translate(vfd);
-        FileDescriptors::real_fd_type res;
-        if (machine.fds().is_socket(vfd)) {
-            machine.set_result(-EBADF); // Not implemented for now
-        } else {
-            res = dup(real_fd);
-        }
-        machine.set_result_or_error(res);
-        return;
-    }
     machine.set_result(-EBADF);
 }
 
@@ -359,6 +361,11 @@ static void syscall_fcntl(Machine<W> &machine) {
         /*int real_fd = machine.fds().translate(vfd);
         int res = fcntl(real_fd, cmd, arg1, arg2, arg3);
         machine.set_result_or_error(res);*/
+        (void)vfd;
+        (void)cmd;
+        (void)arg1;
+        (void)arg2;
+        (void)arg3;
         machine.set_result(-EPERM);
         return;
     }
@@ -386,6 +393,12 @@ static void syscall_ioctl(Machine<W> &machine) {
         /*int real_fd = machine.fds().translate(vfd);
         int res = ioctl(real_fd, req, arg1, arg2, arg3, arg4);
         machine.set_result_or_error(res);*/
+        (void)vfd;
+        (void)req;
+        (void)arg1;
+        (void)arg2;
+        (void)arg3;
+        (void)arg4;
         machine.set_result(-EPERM);
         return;
     }
@@ -429,6 +442,9 @@ void syscall_readlinkat(Machine<W> &machine) {
         }
 
         machine.set_result_or_error(res);*/
+        (void)real_fd;
+        (void)g_buf;
+        (void)bufsize;
         machine.set_result(-ENOSYS);
         return;
     }
@@ -496,8 +512,8 @@ static void syscall_fstatat(Machine<W> &machine) {
 
         auto real_fd = machine.fds().translate(vfd);
 
-        struct stat st;
-        /*const int res = ::fstatat(real_fd, path, &st, flags);
+        /*struct stat st;
+        const int res = ::fstatat(real_fd, path, &st, flags);
         if (res == 0) {
             // Convert to RISC-V structure
             struct riscv_stat rst;
@@ -505,6 +521,9 @@ static void syscall_fstatat(Machine<W> &machine) {
             machine.copy_to_guest(g_buf, &rst, sizeof(rst));
         }
         machine.set_result_or_error(res);*/
+        (void)real_fd;
+        (void)g_buf;
+        (void)flags;
         machine.set_result(-ENOSYS);
         return;
     }
@@ -566,6 +585,10 @@ static void syscall_statx(Machine<W> &machine) {
             machine.copy_to_guest(buffer, &st, sizeof(struct statx));
         }
         machine.set_result_or_error(res);*/
+        (void)dir_fd;
+        (void)flags;
+        (void)mask;
+        (void)buffer;
         machine.set_result(-ENOSYS);
         return;
     }
@@ -576,17 +599,19 @@ template<int W>
 static void syscall_gettimeofday(Machine<W> &machine) {
     const auto buffer = machine.sysarg(0);
     SYSPRINT("SYSCALL gettimeofday, buffer: 0x%lX\n", (long) buffer);
-    struct timeval tv;
-    const int res = gettimeofday(&tv, nullptr);
-    if (res >= 0) {
-        if constexpr (W == 4) {
-            int32_t timeval32[2] = {(int) tv.tv_sec, (int) tv.tv_usec};
-            machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
-        } else {
-            machine.copy_to_guest(buffer, &tv, sizeof(tv));
-        }
+    auto tp = std::chrono::system_clock::now();
+    auto secs = std::chrono::time_point_cast<std::chrono::seconds>(tp);
+    auto us = std::chrono::time_point_cast<std::chrono::microseconds>(tp) -
+        time_point_cast<std::chrono::microseconds>(secs);
+    struct timeval tv =
+        timeval{ long(secs.time_since_epoch().count()), long(us.count()) };
+    if constexpr (W == 4) {
+        int32_t timeval32[2] = {(int) tv.tv_sec, (int) tv.tv_usec};
+        machine.copy_to_guest(buffer, timeval32, sizeof(timeval32));
+    } else {
+        machine.copy_to_guest(buffer, &tv, sizeof(tv));
     }
-    machine.set_result_or_error(res);
+    machine.set_result_or_error(0);
 }
 
 template<int W>
@@ -596,12 +621,16 @@ static void syscall_clock_gettime(Machine<W> &machine) {
     SYSPRINT("SYSCALL clock_gettime, clkid: %x buffer: 0x%lX\n",
              clkid, (long) buffer);
 
-    struct timespec ts;
-    const int res = clock_gettime(clkid, &ts);
-    if (res >= 0) {
-        machine.copy_to_guest(buffer, &ts, sizeof(ts));
-    }
-    machine.set_result_or_error(res);
+    auto tp = std::chrono::system_clock::now();
+    auto secs = std::chrono::time_point_cast<std::chrono::seconds>(tp);
+    auto ns = std::chrono::time_point_cast<std::chrono::nanoseconds>(tp) -
+        time_point_cast<std::chrono::nanoseconds>(secs);
+    struct timespec ts =
+        timespec{ secs.time_since_epoch().count(), long(ns.count()) };
+    (void)clkid;
+
+    machine.copy_to_guest(buffer, &ts, sizeof(ts));
+    machine.set_result_or_error(0);
 }
 
 template<int W>
@@ -617,17 +646,17 @@ static void syscall_uname(Machine<W> &machine) {
         char machine[UTSLEN];
         char domain[UTSLEN];
     } uts;
-    strcpy(uts.sysname, "RISC-V C++ Emulator");
-    strcpy(uts.nodename, "libriscv");
-    strcpy(uts.release, "5.0.0");
-    strcpy(uts.version, "");
+    strcpy_s(uts.sysname, UTSLEN, "RISC-V C++ Emulator");
+    strcpy_s(uts.nodename, UTSLEN, "libriscv");
+    strcpy_s(uts.release, UTSLEN, "5.0.0");
+    strcpy_s(uts.version, UTSLEN, "");
     if constexpr (W == 4)
-        strcpy(uts.machine, "rv32imafdc");
+        strcpy_s(uts.machine, UTSLEN, "rv32imafdc");
     else if constexpr (W == 8)
-        strcpy(uts.machine, "rv64imafdc");
+        strcpy_s(uts.machine, UTSLEN, "rv64imafdc");
     else
-        strcpy(uts.machine, "rv128imafd");
-    strcpy(uts.domain, "(none)");
+        strcpy_s(uts.machine, UTSLEN, "rv128imafd");
+    strcpy_s(uts.domain, UTSLEN, "(none)");
 
     machine.copy_to_guest(buffer, &uts, sizeof(uts));
     machine.set_result(0);
@@ -748,7 +777,7 @@ FileDescriptors::~FileDescriptors() {
         if (is_socket(it.first)) {
             closesocket(it.second);
         } else {
-            close(it.second);
+            _close(it.second);
         }
     }
 }
