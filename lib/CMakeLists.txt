@@ -20,6 +20,9 @@ option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
 # BINARY_TRANSLATION will make libriscv generate portable C-code,
 # and invoke a system compiler to execute a program much faster.
 option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
+# FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
+# Memory before the heap and outside of the arena behaves like before.
+option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
 
 set(THREADED_IS_DEFAULT OFF)
 # Threaded simulation uses computed goto, and is not supported
@@ -35,9 +38,6 @@ endif()
 option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
 
 if (RISCV_EXPERIMENTAL)
-	# FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
-	# Memory before the heap and outside of the arena behaves like before.
-	option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
 	# MULTIPROCESS enables experimental features that allow
 	# executing RISC-V guest functions in parallel using a custom API.
 	option(RISCV_MULTIPROCESS        "Enable multiprocessing" OFF)
