@@ -5,7 +5,6 @@ if (NOT hasParent)
 	project (libriscv VERSION 0.3.0 LANGUAGES CXX)
 
 	set(CPACK_PACKAGE_NAME libriscv-dev)
-	set(CPACK_GENERATOR DEB)
 	set(CPACK_DEBIAN_PACKAGE_MAINTAINER "fwsgonzo")
 	set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "RISC-V userspace emulator library")
 

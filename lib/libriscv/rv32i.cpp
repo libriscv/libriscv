@@ -1,5 +1,5 @@
-#include "rv32i_instr.hpp"
 #include "machine.hpp"
+#include "rv32i_instr.hpp"
 
 #define INSTRUCTION(x, ...) \
 	static const CPU<4>::instruction_t instr32i_##x { __VA_ARGS__ }
@@ -20,7 +20,7 @@
 namespace riscv
 {
 	template <> RISCV_INTERNAL
-	const CPU<4>::instruction_t &CPU<4>::decode(const format_t instruction)
+	const CPU<4>::instruction_t& CPU<4>::decode(const format_t instruction)
 	{
 #define DECODER(x) return(x)
 #include "instr_decoding.inc"

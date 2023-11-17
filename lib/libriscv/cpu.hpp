@@ -64,7 +64,7 @@ namespace riscv
 		auto& machine() noexcept { return this->m_machine; }
 		const auto& machine() const noexcept { return this->m_machine; }
 
-#ifdef RISCV_SUPERVISOR_MODE
+#ifdef RISCV_SUPERVISOR
 		auto& super() {
 			if (m_super == nullptr) m_super.reset(new Supervisor<W>);
 			return *this->m_super; }
@@ -131,7 +131,7 @@ namespace riscv
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
 
-#ifdef RISCV_SUPERVISOR_MODE
+#ifdef RISCV_SUPERVISOR
 		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
 #endif
 

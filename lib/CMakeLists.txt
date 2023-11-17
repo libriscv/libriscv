@@ -116,25 +116,15 @@ if (RISCV_BINARY_TRANSLATION)
 	endif()
 endif()
 
+configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
+
 add_library(riscv ${SOURCES})
 target_compile_features(riscv PUBLIC cxx_std_20)
 target_include_directories(riscv PUBLIC .)
+target_include_directories(riscv PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 if (NOT WIN32 OR MINGW_TOOLCHAIN)
 	target_compile_options(riscv PRIVATE -Wall -Wextra)
-endif()
-
-if (RISCV_DEBUG)
-	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
-endif()
-if (RISCV_EXT_A)
-	target_compile_definitions(riscv PUBLIC RISCV_EXT_ATOMICS=1)
-endif()
-if (RISCV_EXT_C)
-	target_compile_definitions(riscv PUBLIC RISCV_EXT_COMPRESSED=1)
-endif()
-if (RISCV_EXT_V)
-	target_compile_definitions(riscv PUBLIC RISCV_EXT_VECTOR=32)
 endif()
 
 if (RISCV_128I)
@@ -147,19 +137,8 @@ endif()
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
 	target_link_libraries(riscv PUBLIC Threads::Threads)
-	target_compile_definitions(riscv PUBLIC RISCV_MULTIPROCESS=1)
-endif()
-if (RISCV_MEMORY_TRAPS)
-	target_compile_definitions(riscv PUBLIC RISCV_MEMORY_TRAPS=1)
-endif()
-if (RISCV_SUPERVISOR)
-	target_compile_definitions(riscv PUBLIC RISCV_SUPERVISOR_MODE=1)
-endif()
-if (RISCV_FLAT_RW_ARENA)
-	target_compile_definitions(riscv PUBLIC RISCV_FLAT_RW_ARENA=1)
 endif()
 if (RISCV_BINARY_TRANSLATION)
-	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_link_libraries(riscv PUBLIC dl)
 endif()
 if (WIN32 OR MINGW_TOOLCHAIN)
@@ -178,11 +157,15 @@ if (RISCV_LIBTCC)
 	#target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
 
 	target_link_libraries(riscv PUBLIC libtcc.a)
-	target_compile_definitions(riscv PUBLIC RISCV_LIBTCC_ENABLED=1)
+	target_compile_definitions(riscv PUBLIC RISCV_LIBTCC=1)
 endif()
 
 if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 	install(TARGETS riscv)
+	install(FILES
+		${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h
+		DESTINATION include/${PROJECT_NAME}
+	)
 	install(FILES
 		libriscv/cached_address.hpp
 		libriscv/common.hpp

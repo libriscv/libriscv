@@ -1,3 +1,4 @@
+#include "common.hpp"
 #define DISPATCH_MODE_THREADED
 #define DISPATCH_ATTR RISCV_HOT_PATH()
 #define DISPATCH_FUNC simulate_threaded

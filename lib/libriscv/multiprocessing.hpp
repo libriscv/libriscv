@@ -1,4 +1,6 @@
 #pragma once
+#include "common.hpp"
+
 #ifdef RISCV_MULTIPROCESS
 #include "util/threadpool.h"
 #else

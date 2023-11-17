@@ -263,7 +263,7 @@ namespace riscv
 			case 0x7FF: // Stop machine
 				this->stop();
 				return;
-#ifdef RISCV_SUPERVISOR_MODE
+#ifdef RISCV_SUPERVISOR
 			case 0x102: // Supervisor return
 				cpu.super().sret();
 				return;
@@ -289,7 +289,7 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				if (wr) cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1);
 				return;
-#ifdef RISCV_SUPERVISOR_MODE
+#ifdef RISCV_SUPERVISOR
 			case 0x180: // SATP (supervisor address translation and protection)
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.super().satp;
 				if (wr) cpu.super().satp = cpu.reg(instr.Itype.rs1);
@@ -342,7 +342,7 @@ namespace riscv
 			[[maybe_unused]] const auto imm = instr.Itype.rs1;
 			switch (instr.Itype.imm)
 			{
-#ifdef RISCV_SUPERVISOR_MODE
+#ifdef RISCV_SUPERVISOR
 			case 0x304: // mie (machine interrupt enable)
 				if (rd) {
 					cpu.super().mie = imm;
