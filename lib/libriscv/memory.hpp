@@ -254,7 +254,7 @@ namespace riscv
 		PageData* m_arena = nullptr;
 		address_t m_arena_read_boundary = 0;
 		address_t m_arena_write_boundary = 0;
-		address_t m_initial_rodata_end = 0x1000;
+		address_t m_initial_rodata_end = RWREAD_BEGIN;
 		size_t m_arena_pages = 0;
 
 		friend struct CPU<W>;

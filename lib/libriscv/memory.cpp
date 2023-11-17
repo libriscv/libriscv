@@ -182,7 +182,7 @@ namespace riscv
 			}
 		}
 		if (attr.write) {
-			if (this->m_initial_rodata_end == 0)
+			if (this->m_initial_rodata_end == RWREAD_BEGIN)
 				this->m_initial_rodata_end = hdr->p_vaddr;
 			else
 				this->m_initial_rodata_end = std::min(m_initial_rodata_end, hdr->p_vaddr);
@@ -333,10 +333,6 @@ namespace riscv
 			auto host_page = this->mmap_allocate(Page::size());
 			this->install_shared_page(page_number(host_page), Page::host_page());
 			this->m_exit_address = host_page;
-		}
-		// Zero-segment ELF?
-		if (this->m_initial_rodata_end == 0x0) {
-			this->m_initial_rodata_end = RWREAD_BEGIN;
 		}
 		this->m_arena_read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
 		this->m_arena_write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_initial_rodata_end);
