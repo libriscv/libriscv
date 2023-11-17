@@ -2,6 +2,8 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <libriscv/machine.hpp>
+extern std::vector<uint8_t> build_and_load(const std::string& code,
+	const std::string& args = "-O2 -static", bool cpp = false);
 using namespace riscv;
 static const std::vector<uint8_t> empty;
 static constexpr uint32_t V = 0x1000;
@@ -84,4 +86,33 @@ TEST_CASE("Caches must be invalidated", "[Memory]")
 	REQUIRE_THROWS_WITH([&] {
 		machine.memory.read<uint32_t> (V);
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+}
+
+
+TEST_CASE("Writes to read-only segment", "[Memory]")
+{
+	static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
+	static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
+
+	const auto binary = build_and_load(R"M(
+	static const int array[4] = {1, 2, 3, 4};
+	int main() {
+		*(volatile int *)array = 1234;
+		return 666;
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// We need to install Linux system calls for maximum gucciness
+	machine.setup_linux_syscalls();
+	// We need to create a Linux environment for runtimes to work well
+	machine.setup_linux(
+		{"rodata"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	// Guard pages are not writable
+	REQUIRE_THROWS_WITH([&] {
+		machine.simulate(MAX_INSTRUCTIONS);
+	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+
+	REQUIRE(machine.return_value<int>() != 666);
 }
