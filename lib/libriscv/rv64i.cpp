@@ -1,5 +1,5 @@
-#include "rv32i_instr.hpp"
 #include "machine.hpp"
+#include "rv32i_instr.hpp"
 
 #define INSTRUCTION(x, ...) \
 	static const CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }

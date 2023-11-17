@@ -1,4 +1,6 @@
 #pragma once
+#include "libriscv_settings.h" // Build system generated
+
 #include <type_traits>
 #include <string>
 #include <string_view>
@@ -50,20 +52,29 @@ namespace riscv
 	static constexpr bool unaligned_memory_slowpaths = false;
 #endif
 
-#ifdef RISCV_EXT_ATOMICS
+#ifdef RISCV_EXT_A
+#define RISCV_EXT_ATOMICS
 	static constexpr bool atomics_enabled = true;
 #else
 	static constexpr bool atomics_enabled = false;
 #endif
-#ifdef RISCV_EXT_COMPRESSED
+#ifdef RISCV_EXT_C
+#define RISCV_EXT_COMPRESSED
 	static constexpr bool compressed_enabled = true;
 #else
 	static constexpr bool compressed_enabled = false;
 #endif
-#ifdef RISCV_EXT_VECTOR
+#ifdef RISCV_EXT_V
+#define RISCV_EXT_VECTOR 32
 	static constexpr unsigned vector_extension = RISCV_EXT_VECTOR;
 #else
 	static constexpr unsigned vector_extension = 0;
+#endif
+#ifdef RISCV_128I
+#define RISCV_128BIT_ISA
+	static constexpr bool rv128i_enabled = true;
+#else
+	static constexpr bool rv128i_enabled = false;
 #endif
 #ifdef RISCV_BINARY_TRANSLATION
 	static constexpr bool binary_translation_enabled = true;
@@ -80,7 +91,7 @@ namespace riscv
 #else
 	static constexpr bool flat_readwrite_arena = false;
 #endif
-#ifdef RISCV_LIBTCC_ENABLED
+#ifdef RISCV_LIBTCC
 	static constexpr bool libtcc_enabled = true;
 #else
 	static constexpr bool libtcc_enabled = false;
@@ -117,7 +128,7 @@ namespace riscv
 		unsigned block_size_treshold = 5;
 		unsigned translate_blocks_max = 16'000;
 		unsigned translate_instr_max = 150'000;
-#ifdef RISCV_LIBTCC_ENABLED
+#ifdef RISCV_LIBTCC
 		std::string libtcc1_location;
 #endif
 #endif

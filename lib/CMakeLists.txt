@@ -20,6 +20,9 @@ option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
 # BINARY_TRANSLATION will make libriscv generate portable C-code,
 # and invoke a system compiler to execute a program much faster.
 option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
+# FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
+# Memory before the heap and outside of the arena behaves like before.
+option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
 
 set(THREADED_IS_DEFAULT OFF)
 # Threaded simulation uses computed goto, and is not supported
@@ -35,9 +38,6 @@ endif()
 option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
 
 if (RISCV_EXPERIMENTAL)
-	# FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
-	# Memory before the heap and outside of the arena behaves like before.
-	option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
 	# MULTIPROCESS enables experimental features that allow
 	# executing RISC-V guest functions in parallel using a custom API.
 	option(RISCV_MULTIPROCESS        "Enable multiprocessing" OFF)
@@ -116,25 +116,15 @@ if (RISCV_BINARY_TRANSLATION)
 	endif()
 endif()
 
+configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
+
 add_library(riscv ${SOURCES})
 target_compile_features(riscv PUBLIC cxx_std_20)
 target_include_directories(riscv PUBLIC .)
+target_include_directories(riscv PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 if (NOT WIN32 OR MINGW_TOOLCHAIN)
 	target_compile_options(riscv PRIVATE -Wall -Wextra)
-endif()
-
-if (RISCV_DEBUG)
-	target_compile_definitions(riscv PUBLIC RISCV_DEBUG=1)
-endif()
-if (RISCV_EXT_A)
-	target_compile_definitions(riscv PUBLIC RISCV_EXT_ATOMICS=1)
-endif()
-if (RISCV_EXT_C)
-	target_compile_definitions(riscv PUBLIC RISCV_EXT_COMPRESSED=1)
-endif()
-if (RISCV_EXT_V)
-	target_compile_definitions(riscv PUBLIC RISCV_EXT_VECTOR=32)
 endif()
 
 if (RISCV_128I)
@@ -147,19 +137,8 @@ endif()
 if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
 	target_link_libraries(riscv PUBLIC Threads::Threads)
-	target_compile_definitions(riscv PUBLIC RISCV_MULTIPROCESS=1)
-endif()
-if (RISCV_MEMORY_TRAPS)
-	target_compile_definitions(riscv PUBLIC RISCV_MEMORY_TRAPS=1)
-endif()
-if (RISCV_SUPERVISOR)
-	target_compile_definitions(riscv PUBLIC RISCV_SUPERVISOR_MODE=1)
-endif()
-if (RISCV_FLAT_RW_ARENA)
-	target_compile_definitions(riscv PUBLIC RISCV_FLAT_RW_ARENA=1)
 endif()
 if (RISCV_BINARY_TRANSLATION)
-	target_compile_definitions(riscv PUBLIC RISCV_BINARY_TRANSLATION=1)
 	target_link_libraries(riscv PUBLIC dl)
 endif()
 if (WIN32 OR MINGW_TOOLCHAIN)
@@ -178,5 +157,66 @@ if (RISCV_LIBTCC)
 	#target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
 
 	target_link_libraries(riscv PUBLIC libtcc.a)
-	target_compile_definitions(riscv PUBLIC RISCV_LIBTCC_ENABLED=1)
+	target_compile_definitions(riscv PUBLIC RISCV_LIBTCC=1)
+endif()
+
+if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
+	install(TARGETS riscv)
+	install(FILES
+		${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h
+		DESTINATION include/${PROJECT_NAME}
+	)
+	install(FILES
+		libriscv/cached_address.hpp
+		libriscv/common.hpp
+		libriscv/cpu.hpp
+		libriscv/cpu_inline.hpp
+		libriscv/debug.hpp
+		libriscv/decoded_exec_segment.hpp
+		libriscv/decoder_cache.hpp
+		libriscv/elf.hpp
+		libriscv/instr_helpers.hpp
+		libriscv/instruction_counter.hpp
+		libriscv/instruction_list.hpp
+		libriscv/machine.hpp
+		libriscv/machine_inline.hpp
+		libriscv/memory.hpp
+		libriscv/memory_helpers_paging.hpp
+		libriscv/memory_inline.hpp
+		libriscv/memory_inline_pages.hpp
+		libriscv/machine_vmcall.hpp
+		libriscv/native_heap.hpp
+		libriscv/page.hpp
+		libriscv/prepared_call.hpp
+		libriscv/registers.hpp
+		libriscv/riscvbase.hpp
+		libriscv/rv32i_instr.hpp
+		libriscv/rva.hpp
+		libriscv/rvc.hpp
+		libriscv/rvfd.hpp
+		libriscv/rsp_server.hpp
+		libriscv/supervisor.hpp
+		libriscv/threads.hpp
+		libriscv/types.hpp
+
+		DESTINATION include/${PROJECT_NAME}
+	)
+	install(FILES
+		libriscv/linux/rsp_server.hpp
+
+		DESTINATION include/${PROJECT_NAME}/linux
+	)
+	install(FILES
+		libriscv/posix/filedesc.hpp
+		libriscv/posix/signals.hpp
+
+		DESTINATION include/${PROJECT_NAME}/posix
+	)
+	install(FILES
+		libriscv/util/buffer.hpp
+		libriscv/util/elf.h
+		libriscv/util/function.hpp
+
+		DESTINATION include/${PROJECT_NAME}/util
+	)
 endif()
