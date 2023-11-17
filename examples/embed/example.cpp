@@ -27,7 +27,7 @@ int main(int argc, char** argv)
 		arguments.push_back(argv[i]);
 
 	// Create a new 64-bit RISC-V machine
-	Machine<RISCV64> machine{binary};
+	Machine<RISCV64> machine{binary, {.memory_max = 256UL << 20}};
 
 	// Use string vector as arguments to the RISC-V program
 	machine.setup_linux(
