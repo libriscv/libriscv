@@ -180,3 +180,60 @@ if (RISCV_LIBTCC)
 	target_link_libraries(riscv PUBLIC libtcc.a)
 	target_compile_definitions(riscv PUBLIC RISCV_LIBTCC_ENABLED=1)
 endif()
+
+if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
+	install(TARGETS riscv)
+	install(FILES
+		libriscv/cached_address.hpp
+		libriscv/common.hpp
+		libriscv/cpu.hpp
+		libriscv/cpu_inline.hpp
+		libriscv/debug.hpp
+		libriscv/decoded_exec_segment.hpp
+		libriscv/decoder_cache.hpp
+		libriscv/elf.hpp
+		libriscv/instr_helpers.hpp
+		libriscv/instruction_counter.hpp
+		libriscv/instruction_list.hpp
+		libriscv/machine.hpp
+		libriscv/machine_inline.hpp
+		libriscv/memory.hpp
+		libriscv/memory_helpers_paging.hpp
+		libriscv/memory_inline.hpp
+		libriscv/memory_inline_pages.hpp
+		libriscv/machine_vmcall.hpp
+		libriscv/native_heap.hpp
+		libriscv/page.hpp
+		libriscv/prepared_call.hpp
+		libriscv/registers.hpp
+		libriscv/riscvbase.hpp
+		libriscv/rv32i_instr.hpp
+		libriscv/rva.hpp
+		libriscv/rvc.hpp
+		libriscv/rvfd.hpp
+		libriscv/rsp_server.hpp
+		libriscv/supervisor.hpp
+		libriscv/threads.hpp
+		libriscv/types.hpp
+
+		DESTINATION include/${PROJECT_NAME}
+	)
+	install(FILES
+		libriscv/linux/rsp_server.hpp
+
+		DESTINATION include/${PROJECT_NAME}/linux
+	)
+	install(FILES
+		libriscv/posix/filedesc.hpp
+		libriscv/posix/signals.hpp
+
+		DESTINATION include/${PROJECT_NAME}/posix
+	)
+	install(FILES
+		libriscv/util/buffer.hpp
+		libriscv/util/elf.h
+		libriscv/util/function.hpp
+
+		DESTINATION include/${PROJECT_NAME}/util
+	)
+endif()
