@@ -4,15 +4,8 @@ _libriscv_ is a simple, slim and complete RISC-V userspace emulator library that
 
 There is also a CLI that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or connect with GDB.
 
-[![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
+[![Debian Packaging](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml) [![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
-## Benchmarks
-
-[STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 7523](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native.
-
-Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
-
-Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da). Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
 
 ## What is userspace emulation?
 
@@ -28,6 +21,15 @@ The virtual address space is implemented using pages, which means you can copy c
 See [example project](/examples/embed) for embedding on Linux.
 
 On Windows you can use Clang-cl in Visual Studio. See the [example CMake project](/examples/msvc). It requires Clang and Git installed.
+
+
+## Benchmarks
+
+[STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 7523](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native.
+
+Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
+
+Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da). Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
 
 
 ## Installing a RISC-V GCC compiler
