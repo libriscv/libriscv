@@ -97,9 +97,9 @@ namespace riscv
 		// Decode instruction bits into bytecode
 		static size_t computed_index_for(format_t bits);
 
-		// Serializes all the machine state + a tiny header to @vec
+		// Serializes the current CPU state to a vector
 		void serialize_to(std::vector<uint8_t>& vec) const;
-		// Returns the machine to a previously stored state
+		// Returns the CPU to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
 		// Binary translation functions

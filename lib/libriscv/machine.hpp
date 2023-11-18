@@ -246,8 +246,8 @@ namespace riscv
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
-		// Serializes all the machine state + a tiny header to @vec
-		void serialize_to(std::vector<uint8_t>& vec) const;
+		// Serializes the current machine state to @vec
+		size_t serialize_to(std::vector<uint8_t>& vec) const;
 		// Returns the machine to a previously stored state
 		// NOTE: All previous memory traps are lost, syscall handlers,
 		// destructor callbacks are kept. Page fault handler and

@@ -69,17 +69,23 @@ namespace riscv
 		std::string memstring(address_t addr, size_t maxlen = 1024) const;
 		size_t strlen(address_t addr, size_t maxlen = 4096) const;
 
+		// Returns the ELF entry/start address (the first instruction)
 		address_t start_address() const noexcept { return this->m_start_address; }
+		// Returns the current initial stack pointer (unrelated to SP register)
 		address_t stack_initial() const noexcept { return this->m_stack_address; }
 		void set_stack_initial(address_t addr) { this->m_stack_address = addr; }
+		// Returns the address used for exiting (returning from) a vmcall()
 		address_t exit_address() const noexcept;
 		void      set_exit_address(address_t new_exit);
+		// The initial heap address (*not* the current heap maximum)
 		address_t heap_address() const noexcept { return this->m_heap_address; }
 		// Simple memory mapping implementation
 		address_t mmap_start() const noexcept { return this->m_heap_address + BRK_MAX; }
 		const address_t& mmap_address() const noexcept { return m_mmap_address; }
 		address_t& mmap_address() noexcept { return m_mmap_address; }
+		// Allocate at least writable bytes through mmap(), and return the page-aligned address
 		address_t mmap_allocate(address_t bytes);
+		// Attempts to relax a previous call to mmap_allocate(), freeing space at the end
 		bool mmap_relax(address_t addr, address_t size, address_t new_size);
 
 
@@ -87,7 +93,7 @@ namespace riscv
 		const auto& machine() const { return this->m_machine; }
 		bool is_forked() const noexcept { return !this->m_original_machine; }
 
-		// Symbol table functions
+		// Symbol table and section lookup functions
 		address_t resolve_address(std::string_view sym) const;
 		address_t resolve_section(const char* name) const;
 		// Basic backtraces and symbol lookups
@@ -100,7 +106,7 @@ namespace riscv
 		Callsite lookup(address_t) const;
 		void print_backtrace(std::function<void(std::string_view)>, bool ra = true);
 
-		// Counts all the memory used by execute segments, pages, etc.
+		// Counts all the memory used by the machine, execute segments, pages, etc.
 		size_t memory_usage_total() const;
 		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
@@ -125,7 +131,8 @@ namespace riscv
 		void  invalidate_reset_cache() const;
 		void  free_pages(address_t, size_t len);
 		bool  free_pageno(address_t pageno);
-		// Page fault when writing to unused memory
+
+		// Event for writing to unused/unknown memory
 		// The old handler is returned, so it can be restored later.
 		page_fault_cb_t set_page_fault_handler(page_fault_cb_t h) {
 			auto old_handler = std::move(m_page_fault_handler);
@@ -133,9 +140,8 @@ namespace riscv
 			return old_handler;
 		}
 
-
-		// Page fault when reading unused memory. Primarily used for
-		// pagetable sharing across machines, enabled with RISCV_SHARED_PT.
+		// Event for reading unused/unknown memory
+		// The old handler is returned, so it can be restored later.
 		page_readf_cb_t set_page_readf_handler(page_readf_cb_t h) {
 			auto old_handler = std::move(m_page_readf_handler);
 			this->m_page_readf_handler = h;
@@ -143,7 +149,7 @@ namespace riscv
 		}
 		void reset_page_readf_handler() { this->m_page_readf_handler = default_page_read; }
 
-		// Page write on copy-on-write page
+		// Event for writes on copy-on-write pages
 		void set_page_write_handler(page_write_cb_t h) { this->m_page_write_handler = h; }
 		static void default_page_write(Memory&, address_t, Page& page);
 		static const Page& default_page_read(const Memory&, address_t);
@@ -175,9 +181,10 @@ namespace riscv
 		address_t memory_arena_write_boundary() const noexcept { return this->m_arena_write_boundary; }
 		address_t initial_rodata_end() const noexcept { return this->m_initial_rodata_end; }
 
-		// serializes all the machine state + a tiny header to @vec
-		void serialize_to(std::vector<uint8_t>& vec) const;
-		// returns the machine to a previously stored state
+		// Serializes the current memory state to an existing vector
+		// Returns the final size of the serialized state
+		size_t serialize_to(std::vector<uint8_t>& vec) const;
+		// Returns memory to a previously stored state
 		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
 
 		Memory(Machine<W>&, std::string_view, MachineOptions<W>);

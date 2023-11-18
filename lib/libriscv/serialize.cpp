@@ -1,4 +1,9 @@
 #include <libriscv/machine.hpp>
+#ifdef __GNUG__
+#define RISCV_PACKED __attribute__((packed))
+#else
+#define RISCV_PACKED /**/
+#endif
 
 namespace riscv
 {
@@ -13,6 +18,7 @@ namespace riscv
 		uint16_t reg_size;
 		uint16_t page_size;
 		uint16_t attr_size;
+		uint16_t serp_size;
 		uint16_t reserved;
 		uint16_t cpu_offset;
 		uint16_t mem_offset;
@@ -30,20 +36,25 @@ namespace riscv
 	{
 		uint64_t addr;
 		PageAttributes attr;
-	};
+		bool has_data = true;
+		uint8_t padding[3] {0};
+	} RISCV_PACKED;
 
 	template <int W>
-	void Machine<W>::serialize_to(std::vector<uint8_t>& vec) const
+	size_t Machine<W>::serialize_to(std::vector<uint8_t>& vec) const
 	{
+		const size_t before = vec.size();
+
 		const SerializedMachine<W> header {
 			.magic    = MAGiC_V4LUE,
 			.n_pages  = (unsigned) memory.owned_pages_active(),
 			.reg_size = sizeof(Registers<W>),
 			.page_size = Page::size(),
 			.attr_size = sizeof(PageAttributes),
+			.serp_size = sizeof(SerializedPage),
 			.reserved = 0,
 			.cpu_offset = sizeof(SerializedMachine<W>),
-			.mem_offset = sizeof(SerializedMachine<W>),
+			.mem_offset = sizeof(SerializedMachine<W>) + 0x0,
 
 			.registers = cpu.registers(),
 			.counter   = this->instruction_counter(),
@@ -58,14 +69,18 @@ namespace riscv
 		vec.insert(vec.end(), hptr, hptr + sizeof(header));
 		this->cpu.serialize_to(vec);
 		this->memory.serialize_to(vec);
+
+		const size_t after = vec.size();
+		return after - before;
 	}
 	template <int W>
 	void CPU<W>::serialize_to(std::vector<uint8_t>& /* vec */) const
 	{
 	}
 	template <int W>
-	void Memory<W>::serialize_to(std::vector<uint8_t>& vec) const
+	size_t Memory<W>::serialize_to(std::vector<uint8_t>& vec) const
 	{
+		const size_t before = vec.size();
 		if (this->m_arena_pages > 0) {
 			throw MachineException(
 				FEATURE_DISABLED, "Serialize is incompatible with arena");
@@ -78,20 +93,32 @@ namespace riscv
 		for (const auto& it : this->m_pages)
 		{
 			const auto& page = it.second;
-			assert(!page.attr.is_cow && "Should never have CoW pages stored");
-			// XXX: Ignore shared/non-owned pages?
-			if (page.attr.non_owning) continue;
+
 			// XXX: 128-bit addresses not taken into account
-			const SerializedPage spage {
+			SerializedPage spage {
 				.addr = static_cast<uint64_t>(it.first),
-				.attr = page.attr
+				.attr = page.attr,
+				.has_data = page.has_data(),
 			};
+			// Make all pages owned from now on
+			spage.attr.is_cow = false;
+			spage.attr.non_owning = false;
+
+			// Serialize page attributes
 			auto* sptr = (const uint8_t*) &spage;
 			vec.insert(vec.end(), sptr, sptr + sizeof(SerializedPage));
-			// page data
+
+			// The zero-page (and other guard pages) may not have data
+			if (!page.has_data())
+				continue;
+
+			// Serialize page data
 			auto* pptr = page.data();
 			vec.insert(vec.end(), pptr, pptr + Page::size());
 		}
+
+		const size_t after = vec.size();
+		return after - before;
 	}
 
 	template <int W>
@@ -109,6 +136,8 @@ namespace riscv
 			return -3;
 		if (header.attr_size != sizeof(PageAttributes))
 			return -4;
+		if (header.serp_size != sizeof(SerializedPage))
+			return -5;
 		this->m_counter = header.counter;
 		cpu.deserialize_from(vec, header);
 		memory.deserialize_from(vec, header);
@@ -124,7 +153,6 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};
 #endif
-		this->aligned_jump(this->pc());
 	}
 	template <int W>
 	void Memory<W>::deserialize_from(const std::vector<uint8_t>& vec,
@@ -138,27 +166,41 @@ namespace riscv
 
 		[[maybe_unused]]
 		const size_t page_bytes =
-			state.n_pages * (sizeof(SerializedPage) + Page::size());
-		assert(vec.size() >= state.mem_offset + page_bytes);
+			state.n_pages * (sizeof(SerializedPage) + sizeof(PageData));
+		if (vec.size() < state.mem_offset + page_bytes) {
+			throw MachineException(INVALID_PROGRAM, "Serialized machine state was invalid");
+		}
 		// completely reset the paging system as
 		// all pages will be completely replaced
 		this->clear_all_pages();
+		this->evict_execute_segments(0);
 
 		size_t off = state.mem_offset;
-		for (size_t p = 0; p < state.n_pages; p++) {
-			const auto& page = *(SerializedPage*) &vec[off];
+		for (size_t p = 0; p < state.n_pages; p++)
+		{
+			const SerializedPage page = *(SerializedPage*) &vec[off];
 			off += sizeof(SerializedPage);
-			const auto& data = *(PageData*) &vec[off];
-			// when we serialized non-owning pages, we lost the connection
-			// so now we own the page data
-			PageAttributes new_attr = page.attr;
-			new_attr.non_owning = false;
-			m_pages.try_emplace(
-				page.addr,
-				new_attr, data
-			);
 
-			off += Page::size();
+			PageAttributes new_attr = page.attr;
+			// Pages with data
+			if (page.has_data) {
+				// Create new uninitialized page
+				auto result = m_pages.try_emplace(
+					page.addr,
+					new_attr, PageData::UNINITIALIZED
+				);
+				// Copy unaligned data into new uninitialized PageData
+				auto& new_page = result.first->second;
+				const auto* data = &vec[off];
+				std::copy(data, data + sizeof(PageData), new_page.data());
+				off += sizeof(PageData);
+			} else {
+				// Pages without data
+				m_pages.try_emplace(
+					page.addr,
+					new_attr, nullptr
+				);
+			}
 		}
 		// page tables have been changed
 		this->invalidate_reset_cache();

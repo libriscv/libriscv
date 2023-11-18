@@ -85,9 +85,14 @@ namespace riscv
 					if (pc + length < pc)
 						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
 					pc += length;
-					// If ended up crossing last_pc, it's an invalid block
-					if (UNLIKELY(pc > last_pc))
-						throw MachineException(INVALID_PROGRAM, "Encountered invalid block");
+
+					// If ending up crossing last_pc, it's an invalid block although
+					// it could just be garbage, so let's force-end with an invalid instruction.
+					if (UNLIKELY(pc > last_pc)) {
+						entry.m_bytecode = 0; // Invalid instruction
+						entry.m_handler = 0;
+						break;
+					}
 
 					datalength += length / 2;
 					last_length = length;
@@ -103,13 +108,15 @@ namespace riscv
 							|| is_stopping_auipc(instruction) || entry.get_bytecode() == translator_op)
 							break;
 					}
-					// If we reached the end, and the opcode is not "stopping",
-					// then it's an illegal block.
+
+					// A last test for the last instruction, which should have been a block-ending
+					// instruction. Since it wasn't we must force-end the block here.
 					if (UNLIKELY(pc >= last_pc)) {
-						entry.m_bytecode = 0;
+						entry.m_bytecode = 0; // Invalid instruction
 						entry.m_handler = 0;
 						break;
 					}
+
 					// Too large blocks are likely malicious (although could be many empty pages)
 					if (UNLIKELY(datalength >= 255)) {
 						// NOTE: Reinsert original instruction, as long sequences will lead to
@@ -209,13 +216,15 @@ namespace riscv
 		const size_t prelen  = addr - pbase;
 		const size_t midlen  = len + prelen;
 		const size_t plen = (midlen + PMASK) & ~PMASK;
+		//printf("generate_decoder_cache: Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu TOTAL %zu\n",
+		//	addr, len, pbase, pbase + plen, prelen, midlen, plen);
 
 		const size_t n_pages = plen / Page::size();
 		if (n_pages == 0) {
 			throw MachineException(INVALID_PROGRAM,
 				"Program produced empty decoder cache");
 		}
-		// there could be an old cache from a machine reset
+		// Here we allocate the decoder cache which is page-sized
 		auto* decoder_cache = exec.create_decoder_cache(
 			new DecoderCache<W> [n_pages],
 			n_pages * sizeof(DecoderCache<W>));
