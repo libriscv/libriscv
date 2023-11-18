@@ -158,15 +158,15 @@ namespace riscv
 		// Stdout, stderr (for when the guest wants to write)
 		void print(const char*, size_t) const;
 		auto& get_printer() const noexcept { return m_printer; }
-		void set_printer(printer_func pf = m_default_printer) const { m_printer = pf; }
+		void set_printer(printer_func pf = default_printer) const { m_printer = pf; }
 		// Stdin (for when the guest wants to read)
 		long stdin_read(char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
-		void set_stdin(stdin_func sin = m_default_stdin) const { m_stdin = sin; }
+		void set_stdin(stdin_func sin = default_stdin) const { m_stdin = sin; }
 		// Debug printer (for when the machine wants to inform)
 		void debug_print(const char*, size_t) const;
 		auto& get_debug_printer() const noexcept { return m_debug_printer; }
-		void set_debug_printer(printer_func pf = m_default_printer) const { m_debug_printer = pf; }
+		void set_debug_printer(printer_func pf = default_printer) const { m_debug_printer = pf; }
 
 		// Call an installed system call handler
 		void system_call(size_t);
@@ -259,17 +259,17 @@ namespace riscv
 		uint64_t     m_counter = 0;
 		uint64_t     m_max_counter = 0;
 		mutable void*        m_userdata = nullptr;
-		mutable printer_func m_printer = m_default_printer;
-		mutable printer_func m_debug_printer = m_default_printer;
-		mutable stdin_func   m_stdin = m_default_stdin;
+		mutable printer_func m_printer = default_printer;
+		mutable printer_func m_debug_printer = default_printer;
+		mutable stdin_func   m_stdin = default_stdin;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt = nullptr;
 		std::unique_ptr<FileDescriptors> m_fds = nullptr;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		std::unique_ptr<Signals<W>> m_signals = nullptr;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
-		static printer_func m_default_printer;
-		static stdin_func   m_default_stdin;
+		static void default_printer(const Machine&, const char*, size_t);
+		static long default_stdin(const Machine&, char*, size_t);
 	};
 
 #include "machine_inline.hpp"

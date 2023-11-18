@@ -25,15 +25,13 @@ static inline uint64_t u64_monotonic_time()
 namespace riscv
 {
 	template <int W>
-	typename Machine<W>::printer_func Machine<W>::m_default_printer
-		= [] (auto&, const char* buffer, size_t len) {
-			std::ignore = ::write(1, buffer, len); // Default: Stdout allowed
-		};
+	void Machine<W>::default_printer(const Machine<W>&, const char* buffer, size_t len) {
+		std::ignore = ::write(1, buffer, len); // Default: Stdout allowed
+	}
 	template <int W>
-	typename Machine<W>::stdin_func Machine<W>::m_default_stdin
-		= [] (auto&, char* /*buffer*/, size_t /*len*/) -> long {
-			return 0; // Default: Stdin *NOT* allowed
-		};
+	long Machine<W>::default_stdin(const Machine<W>&, char* /*buffer*/, size_t /*len*/) {
+		return 0; // Default: Stdin *NOT* allowed
+	}
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
