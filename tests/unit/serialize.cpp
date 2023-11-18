@@ -9,6 +9,11 @@ static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 static const std::vector<uint8_t> empty;
 using namespace riscv;
 
+static const MachineOptions<RISCV64> restored_options {
+	.memory_max = MAX_MEMORY,
+	.use_memory_arena = !flat_readwrite_arena,
+};
+
 TEST_CASE("Catch output from write system call", "[Serialize]")
 {
 	struct State {
@@ -23,7 +28,7 @@ TEST_CASE("Catch output from write system call", "[Serialize]")
 
 	riscv::Machine<RISCV64> machine { binary, {
 		.memory_max = MAX_MEMORY,
-		.use_memory_arena = false
+		.use_memory_arena = !flat_readwrite_arena,
 	}};
 	// We need to install Linux system calls for maximum gucciness
 	machine.setup_linux_syscalls();
@@ -43,8 +48,9 @@ TEST_CASE("Catch output from write system call", "[Serialize]")
 
 	REQUIRE(machine.return_value<int>() == 666);
 
-	riscv::Machine<RISCV64> restored_machine { binary, { .memory_max = MAX_MEMORY } };
-	restored_machine.deserialize_from(state.data);
+	riscv::Machine<RISCV64> restored_machine { binary, restored_options };
+	const auto result = restored_machine.deserialize_from(state.data);
+	REQUIRE(result == 0);
 
 	// Verify some known registers
 	REQUIRE(restored_machine.sysarg(0) == 1); // STDOUT_FILENO
@@ -71,7 +77,7 @@ TEST_CASE("Serialized state goes out of scope", "[Serialize]")
 
 	riscv::Machine<RISCV64> machine { binary, {
 		.memory_max = MAX_MEMORY,
-		.use_memory_arena = false
+		.use_memory_arena = !flat_readwrite_arena,
 	}};
 	// We need to install Linux system calls for maximum gucciness
 	machine.setup_linux_syscalls();
@@ -82,7 +88,7 @@ TEST_CASE("Serialized state goes out of scope", "[Serialize]")
 
 	// 1. We are creating a completely empty machine, with no binary
 	// 2. We are going to let the state go out of scope
-	riscv::Machine<RISCV64> restored_machine { empty, { .memory_max = MAX_MEMORY, .use_memory_arena = false } };
+	riscv::Machine<RISCV64> restored_machine { empty, restored_options };
 	{
 		struct State {
 			std::vector<uint8_t> data;
@@ -122,7 +128,7 @@ TEST_CASE("Serialized state from another place", "[Serialize]")
 {
 	// 1. We are creating a completely empty machine, with no binary
 	// 2. We are going to deserialize state from another test and verify it
-	riscv::Machine<RISCV64> restored_machine { empty, { .memory_max = MAX_MEMORY, .use_memory_arena = false } };
+	riscv::Machine<RISCV64> restored_machine { empty, restored_options };
 
 	restored_machine.deserialize_from(serialized_from_another_place);
 

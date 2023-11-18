@@ -15,13 +15,14 @@ namespace riscv
 
 		uint64_t magic;
 		uint32_t n_pages;
+		uint32_t n_datapages;
 		uint16_t reg_size;
 		uint16_t page_size;
 		uint16_t attr_size;
 		uint16_t serp_size;
 		uint16_t reserved;
 		uint16_t cpu_offset;
-		uint16_t mem_offset;
+		uint32_t mem_offset;
 
 		Registers<W> registers;
 		uint64_t     counter;
@@ -45,9 +46,15 @@ namespace riscv
 	{
 		const size_t before = vec.size();
 
+		unsigned datapage_count = 0;
+		for (const auto& it : memory.pages()) {
+			if (it.second.has_data()) datapage_count++;
+		}
+
 		const SerializedMachine<W> header {
 			.magic    = MAGiC_V4LUE,
-			.n_pages  = (unsigned) memory.owned_pages_active(),
+			.n_pages  = (unsigned) memory.pages().size(),
+			.n_datapages = datapage_count,
 			.reg_size = sizeof(Registers<W>),
 			.page_size = Page::size(),
 			.attr_size = sizeof(PageAttributes),
@@ -81,13 +88,13 @@ namespace riscv
 	size_t Memory<W>::serialize_to(std::vector<uint8_t>& vec) const
 	{
 		const size_t before = vec.size();
-		if (this->m_arena_pages > 0) {
+		if (this->m_arena_pages > 0 && riscv::flat_readwrite_arena) {
 			throw MachineException(
-				FEATURE_DISABLED, "Serialize is incompatible with arena");
+				FEATURE_DISABLED, "Serialize is incompatible with flat read-write arena");
 		}
 
 		const size_t est_page_bytes =
-			this->m_pages.size() * (sizeof(SerializedPage) + Page::size());
+			this->m_pages.size() * (sizeof(SerializedPage) + sizeof(PageData));
 		vec.reserve(vec.size() + est_page_bytes);
 
 		for (const auto& it : this->m_pages)
@@ -113,8 +120,7 @@ namespace riscv
 				continue;
 
 			// Serialize page data
-			auto* pptr = page.data();
-			vec.insert(vec.end(), pptr, pptr + Page::size());
+			vec.insert(vec.end(), page.data(), page.data() + sizeof(PageData));
 		}
 
 		const size_t after = vec.size();
@@ -139,6 +145,7 @@ namespace riscv
 		if (header.serp_size != sizeof(SerializedPage))
 			return -5;
 		this->m_counter = header.counter;
+		this->m_max_counter = 0;
 		cpu.deserialize_from(vec, header);
 		memory.deserialize_from(vec, header);
 		return 0;
@@ -164,12 +171,13 @@ namespace riscv
 		this->m_heap_address  = state.heap_address;
 		this->m_exit_address  = state.exit_address;
 
-		[[maybe_unused]]
 		const size_t page_bytes =
-			state.n_pages * (sizeof(SerializedPage) + sizeof(PageData));
+			  state.n_pages * sizeof(SerializedPage)
+			+ state.n_datapages * sizeof(PageData);
 		if (vec.size() < state.mem_offset + page_bytes) {
 			throw MachineException(INVALID_PROGRAM, "Serialized machine state was invalid");
 		}
+
 		// completely reset the paging system as
 		// all pages will be completely replaced
 		this->clear_all_pages();
@@ -184,15 +192,29 @@ namespace riscv
 			PageAttributes new_attr = page.attr;
 			// Pages with data
 			if (page.has_data) {
-				// Create new uninitialized page
-				auto result = m_pages.try_emplace(
-					page.addr,
-					new_attr, PageData::UNINITIALIZED
-				);
-				// Copy unaligned data into new uninitialized PageData
-				auto& new_page = result.first->second;
+				Page* new_page = nullptr;
+				if (page.addr < this->m_arena_pages)
+				{
+					// Create new non-owning arena page
+					new_attr.non_owning = true;
+					auto result = m_pages.try_emplace(
+						page.addr,
+						new_attr, &this->m_arena[page.addr]
+					);
+					new_page = &result.first->second;
+				}
+				else
+				{
+					// Create new uninitialized page
+					auto result = m_pages.try_emplace(
+						page.addr,
+						new_attr, PageData::UNINITIALIZED
+					);
+					new_page = &result.first->second;
+				}
+				// Copy unaligned data into new PageData
 				const auto* data = &vec[off];
-				std::copy(data, data + sizeof(PageData), new_page.data());
+				std::copy(data, data + sizeof(PageData), new_page->data());
 				off += sizeof(PageData);
 			} else {
 				// Pages without data
