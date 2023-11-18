@@ -65,6 +65,7 @@ namespace riscv
 			this->m_watchpoints.push_back(Watchpoint{
 				.addr = addr,
 				.len  = len,
+				.last_value = 0,
 				.callback = func,
 			});
 		} else {
