@@ -9,9 +9,9 @@
 
 namespace riscv
 {
-	static constexpr int RISCV32  = 4;
-	static constexpr int RISCV64  = 8;
-	static constexpr int RISCV128 = 16;
+	static constexpr int RISCV32  = 4; /* 32-bits CPU */
+	static constexpr int RISCV64  = 8; /* 64-bits CPU */
+	static constexpr int RISCV128 = 16; /* 128-bits CPU */
 
 	// Machine is a RISC-V emulator. The W template parameter is
 	// used to determine the bit-architecture, like so:
@@ -31,6 +31,7 @@ namespace riscv
 		using address_t = address_type<W>; // one unsigned memory address
 		using printer_func = void(*)(const Machine&, const char*, size_t);
 		using stdin_func = long(*)(const Machine&, char*, size_t);
+		using rdtime_func = uint64_t(*)(const Machine&);
 
 		// See common.hpp for MachineOptions
 		// The machine takes the binary as a const reference and does not
@@ -167,6 +168,10 @@ namespace riscv
 		void debug_print(const char*, size_t) const;
 		auto& get_debug_printer() const noexcept { return m_debug_printer; }
 		void set_debug_printer(printer_func pf = default_printer) const { m_debug_printer = pf; }
+		// Monotonic time function (used by RDTIME and RDTIMEH)
+		uint64_t rdtime() const { return m_rdtime(*this); }
+		auto& get_rdtime() const noexcept { return m_rdtime; }
+		void set_rdtime(rdtime_func tf = default_rdtime) const { m_rdtime = tf; }
 
 		// Call an installed system call handler
 		void system_call(size_t);
@@ -262,6 +267,7 @@ namespace riscv
 		mutable printer_func m_printer = default_printer;
 		mutable printer_func m_debug_printer = default_printer;
 		mutable stdin_func   m_stdin = default_stdin;
+		mutable rdtime_func  m_rdtime = default_rdtime;
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt = nullptr;
 		std::unique_ptr<FileDescriptors> m_fds = nullptr;
@@ -270,6 +276,7 @@ namespace riscv
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static void default_printer(const Machine&, const char*, size_t);
 		static long default_stdin(const Machine&, char*, size_t);
+		static uint64_t default_rdtime(const Machine&);
 	};
 
 #include "machine_inline.hpp"

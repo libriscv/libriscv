@@ -4,35 +4,14 @@
 #include "rv32i_instr.hpp"
 #include "threads.hpp"
 #include "util/auxvec.hpp"
-#include <chrono>  // RDTIME pseudo-insn && AT_RANDOM
 #include <errno.h> // Used by emulated POSIX system calls
 #include <random>
-extern "C" {
-#ifdef _WIN32
-	int write(int fd, const void *buf, unsigned count);
-#else
-	ssize_t write(int fd, const void *buf, size_t count);
+#ifdef __GNUG__ /* Workaround for GCC bug */
+#include "machine_defaults.cpp"
 #endif
-}
-
-static inline uint64_t u64_monotonic_time()
-{
-	auto now = std::chrono::steady_clock::now();
-	return std::chrono::duration_cast<std::chrono::milliseconds>
-		(now.time_since_epoch()).count();
-}
 
 namespace riscv
 {
-	template <int W>
-	void Machine<W>::default_printer(const Machine<W>&, const char* buffer, size_t len) {
-		std::ignore = ::write(1, buffer, len); // Default: Stdout allowed
-	}
-	template <int W>
-	long Machine<W>::default_stdin(const Machine<W>&, char* /*buffer*/, size_t /*len*/) {
-		return 0; // Default: Stdin *NOT* allowed
-	}
-
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
 		: cpu(*this, options.cpu_id),
@@ -169,7 +148,7 @@ namespace riscv
 		auto dst = this->cpu.reg(REG_SP);
 
 		// inception :)
-		auto gen = std::default_random_engine(u64_monotonic_time());
+		auto gen = std::default_random_engine(std::random_device{}());
 		std::uniform_int_distribution<int> rand(0,256);
 
 		std::array<uint8_t, 16> canary;
@@ -313,10 +292,10 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter() >> 32u;
 				return;
 			case 0xC01: // CSR RDTIME (lower)
-				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time();
+				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this);
 				return;
 			case 0xC81: // CSR RDTIME (upper)
-				if (rd) cpu.reg(instr.Itype.rd) = u64_monotonic_time() >> 32u;
+				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this) >> 32u;
 				return;
 			case 0xF11: // CSR marchid
 				if (rd) cpu.reg(instr.Itype.rd) = 0;

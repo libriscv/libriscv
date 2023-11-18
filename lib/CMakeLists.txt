@@ -55,6 +55,7 @@ set (SOURCES
 		libriscv/decode_bytecodes.cpp
 		libriscv/decoder_cache.cpp
 		libriscv/machine.cpp
+		libriscv/machine_defaults.cpp
 		libriscv/memory.cpp
 		libriscv/memory_elf.cpp
 		libriscv/memory_rw.cpp
