@@ -71,13 +71,10 @@ set (SOURCES
 		libriscv/serialize.cpp
 		libriscv/util/crc32c.cpp
 	)
-if (MINGW_TOOLCHAIN OR MINGW)
-	# TODO: Port this to MSVC/Clang-cl
+if (MINGW_TOOLCHAIN OR MINGW OR WIN32)
 	list(APPEND SOURCES
 		libriscv/win32/system_calls.cpp
 	)
-elseif(WIN32)
-	# TODO: Port system calls to WIN32
 elseif(UNIX)
 	list(APPEND SOURCES
 		libriscv/linux/system_calls.cpp
