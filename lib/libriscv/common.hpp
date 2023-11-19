@@ -76,6 +76,11 @@ namespace riscv
 #else
 	static constexpr bool rv128i_enabled = false;
 #endif
+#ifdef RISCV_FCSR
+	static constexpr bool fcsr_emulation = true;
+#else
+	static constexpr bool fcsr_emulation = false;
+#endif
 #ifdef RISCV_BINARY_TRANSLATION
 	static constexpr bool binary_translation_enabled = true;
 #else

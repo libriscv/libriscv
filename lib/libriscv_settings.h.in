@@ -9,6 +9,7 @@
 #cmakedefine RISCV_EXT_C
 #cmakedefine RISCV_EXT_V
 #cmakedefine RISCV_128I
+#cmakedefine RISCV_FCSR
 #cmakedefine RISCV_EXPERIMENTAL
 #cmakedefine RISCV_MEMORY_TRAPS
 #cmakedefine RISCV_MULTIPROCESS

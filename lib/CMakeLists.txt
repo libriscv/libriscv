@@ -11,6 +11,8 @@ option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
 # Enable 128-bit architecture emulation
 option(RISCV_128I   "Enable RV128G" OFF)
+# Enable Floating-point Control and Status Register emulation
+option(RISCV_FCSR   "Enable FCSR emulation" OFF)
 # EXPERIMENTAL enables some high-performance interpreter
 # features that may be unstable.
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
