@@ -482,16 +482,24 @@ namespace riscv
 				dst = (int32_t) rs1.f32[0];
 			else
 				dst = (uint32_t) rs1.f32[0];
-			break;
+			return;
 		case 0x1: // from float64
-			if (fi.R4type.rs2 == 0x0)
+			switch (fi.R4type.rs2) {
+			case 0x0: // FCVT.W.D
 				dst = (int32_t) rs1.f64;
-			else
+				return;
+			case 0x1: // FCVT.WU.D
 				dst = (uint32_t) rs1.f64;
-			break;
-		default:
-			cpu.trigger_exception(ILLEGAL_OPERATION);
+				return;
+			case 0x2: // FCVT.L.D
+				dst = (int64_t) rs1.f64;
+				return;
+			case 0x3: // FCVT.LU.D
+				dst = (uint64_t) rs1.f64;
+				return;
+			}
 		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32f_instruction fi { instr };
@@ -515,16 +523,24 @@ namespace riscv
 				dst.set_float((RVSIGNTYPE(cpu)) rs1);
 			else
 				dst.set_float(rs1);
-			break;
+			return;
 		case 0x1: // to float64
-			if (fi.R4type.rs2 == 0x0) {
-				dst.f64 = (RVSIGNTYPE(cpu)) rs1;
-			} else
-				dst.f64 = rs1;
-			break;
-		default:
-			cpu.trigger_exception(ILLEGAL_OPERATION);
+			switch (fi.R4type.rs2) {
+			case 0x0: // FCVT.D.W
+				dst.f64 = (int32_t)rs1;
+				return;
+			case 0x1: // FCVT.D.WU
+				dst.f64 = (uint32_t)rs1;
+				return;
+			case 0x2: // FCVT.D.L
+				dst.f64 = (int64_t)rs1;
+				return;
+			case 0x3: // FCVT.D.LU
+				dst.f64 = (uint64_t)rs1;
+				return;
+			}
 		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32f_instruction fi { instr };
