@@ -64,6 +64,7 @@ static void print_help(CPU<W>& cpu)
 	  print [addr] [length] Print [addr] as a string of [length] bytes
 	  ebreak                Trigger the ebreak handler
 	  syscall [num]         Trigger specific system call handler
+	  f                     Print FP-registers
 	  v, verbose            Toggle verbose instruction output
 	  vr, vregs             Toggle verbose register output
 	  vf, vfpregs           Toggle verbose fp-register output
@@ -174,6 +175,12 @@ static bool execute_commands(DebugMachine<W>& debug)
 		const auto addr = machine.address_of(params[1]);
 		dprintf(cpu, "The address of %s is 0x%lX.%s\n",
 			params[1].c_str(), addr, addr == 0x0 ? " (Likely not found)" : "");
+		return true;
+	}
+	// print registers
+	else if (cmd == "f")
+	{
+		dprintf(cpu, "%s\n", cpu.registers().flp_to_string().c_str());
 		return true;
 	}
 	// verbose instructions

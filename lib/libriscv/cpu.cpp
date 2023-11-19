@@ -353,14 +353,16 @@ restart_precise_sim:
 		int  len = 0;
 		for (int i = 0; i < 32; i++) {
 			auto& src = this->getfl(i);
-			const char T = (src.i32[1] == -1) ? 'S' : 'D';
-			double val = (src.i32[1] == -1) ? src.f32[0] : src.f64;
+			const char T = (src.i32[1] == 0) ? 'S' : 'D';
+			double val = (src.i32[1] == 0) ? src.f32[0] : src.f64;
 			len += snprintf(buffer+len, sizeof(buffer) - len,
 					"[%s\t%c%+.2f] ", RISCV::flpname(i), T, val);
 			if (i % 5 == 4) {
 				len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
 			}
 		}
+		len += snprintf(buffer+len, sizeof(buffer) - len,
+				"[FFLAGS\t0x%X] ", m_fcsr.fflags);
 		return std::string(buffer, len);
 	}
 
