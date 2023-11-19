@@ -6,5 +6,8 @@ set(SOURCES
 )
 add_executable(elfverify ${SOURCES})
 
+# Enable FCSR emulation
+option(RISCV_FCSR "" ON)
+
 add_subdirectory(../../lib libriscv)
 target_link_libraries(elfverify PRIVATE riscv)

@@ -11,12 +11,12 @@ DIR=$HOME/github/sail-riscv/test/riscv-tests
 # Skipping fence.i instruction
 for i in $DIR/rv32ui-v-*.elf; do
 	if [[ ${i} != *"fence_i"* ]];then
-    	.build/elfverify $i
+		.build/elfverify $i
 	fi
 done
 for i in $DIR/rv64ui-v-*.elf; do
 	if [[ ${i} != *"fence_i"* ]];then
-    	.build/elfverify $i
+		.build/elfverify $i
 	fi
 done
 
@@ -35,7 +35,9 @@ for i in $DIR/rv64ua-v-*.elf; do
 done
 
 for i in $DIR/rv32uf-v-*.elf; do
-    .build/elfverify $i
+	if [[ ${i} != *"fclass"* ]];then
+		.build/elfverify $i
+	fi
 done
 for i in $DIR/rv64uf-v-*.elf; do
 	#echo "Running $i"

@@ -20,6 +20,7 @@ static long run_program(
 		.memory_max = MAX_MEMORY,
 		.allow_write_exec_segment = true,
 		.verbose_loader = (getenv("VERBOSE") != nullptr),
+		.use_memory_arena = false,
 	}};
 	machine.set_userdata(&state);
 
@@ -41,6 +42,9 @@ static long run_program(
 
 	// A CLI debugger
 	riscv::DebugMachine debug { machine };
+	//debug.verbose_instructions = true;
+	//debug.verbose_fp_registers = true;
+	//debug.verbose_registers = true;
 
 	auto addr = machine.address_of("userstart");
 	if (addr) machine.cpu.jump(addr);
