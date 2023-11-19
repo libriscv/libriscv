@@ -354,9 +354,21 @@ restart_precise_sim:
 		for (int i = 0; i < 32; i++) {
 			auto& src = this->getfl(i);
 			const char T = (src.i32[1] == 0) ? 'S' : 'D';
-			double val = (src.i32[1] == 0) ? src.f32[0] : src.f64;
-			len += snprintf(buffer+len, sizeof(buffer) - len,
-					"[%s\t%c%+.2f] ", RISCV::flpname(i), T, val);
+			if constexpr (true) {
+				double val = (src.i32[1] == 0) ? src.f32[0] : src.f64;
+				len += snprintf(buffer+len, sizeof(buffer) - len,
+						"[%s\t%c%+.2f] ", RISCV::flpname(i), T, val);
+			} else {
+				if (src.i32[1] == 0) {
+					double val = src.f64;
+					len += snprintf(buffer+len, sizeof(buffer) - len,
+							"[%s\t%c0x%lX] ", RISCV::flpname(i), T, *(int64_t *)&val);
+				} else {
+					float val = src.f32[0];
+					len += snprintf(buffer+len, sizeof(buffer) - len,
+							"[%s\t%c0x%X] ", RISCV::flpname(i), T, *(int32_t *)&val);
+				}
+			}
 			if (i % 5 == 4) {
 				len += snprintf(buffer+len, sizeof(buffer)-len, "\n");
 			}

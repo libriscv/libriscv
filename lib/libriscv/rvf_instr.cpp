@@ -4,6 +4,50 @@
 
 namespace riscv
 {
+	template <typename T>
+	static bool is_signaling_nan(T t) {
+		if constexpr (sizeof(T) == 4)
+			return (*(int32_t*)&t & 0x7fa00000) == 0x7f800000;
+		else
+			return (*(int64_t*)&t & 0x7fa0000000000000) == 0x7f80000000000000;
+	}
+
+	template <int W, typename T>
+	static void fsflags(CPU<W>& cpu, long double exact, T& inexact) {
+		if constexpr (fcsr_emulation) {
+			auto& fcsr = cpu.registers().fcsr();
+			fcsr.fflags = 0;
+			if (std::isnan(exact) || std::isnan(inexact)) {
+				fcsr.fflags |= 16;
+				// Canonical NaN
+				if constexpr (sizeof(T) == 4)
+					*(int32_t *)&inexact = 0x7fc00000;
+				else
+					*(int64_t *)&inexact = 0x7fc0000000000000;
+			} else {
+				if (exact != inexact) fcsr.fflags |= 1;
+			}
+		}
+	}
+	template <bool Signaling, int W, typename T, typename R>
+	static void feqflags(CPU<W>& cpu, T a, T b, R& dst) {
+		if constexpr (fcsr_emulation) {
+			auto& fcsr = cpu.registers().fcsr();
+			fcsr.fflags = 0;
+			if (std::isnan(a) || std::isnan(b)) {
+				// All operations return 0 when either operand is NaN
+				dst = 0;
+			}
+			if constexpr (Signaling) {
+				if (std::isnan(a) || std::isnan(b))
+					fcsr.fflags |= 16;
+			} else { // Quiet
+				if (is_signaling_nan(a) || is_signaling_nan(b))
+					fcsr.fflags |= 16;
+			}
+		}
+	}
+
 	FLOAT_INSTR(FLW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
@@ -181,8 +225,10 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] + rs2.f32[0]);
+			fsflags(cpu, (long double)(rs1.f32[0]) + (long double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 + rs2.f64;
+			fsflags(cpu, (long double)(rs1.f64) + (long double)(rs2.f64), dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -207,8 +253,10 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] - rs2.f32[0]);
+			fsflags(cpu, (long double)(rs1.f32[0]) - (long double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 - rs2.f64;
+			fsflags(cpu, (long double)(rs1.f64) - (long double)(rs2.f64), dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -233,8 +281,10 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] * rs2.f32[0]);
+			fsflags(cpu, (long double)(rs1.f32[0]) * (long double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64;
+			fsflags(cpu, (long double)(rs1.f64) * (long double)(rs2.f64), dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -354,21 +404,27 @@ namespace riscv
 		{
 		case 0x0: // FLE.S
 			dst = (rs1.f32[0] <= rs2.f32[0]) ? 1 : 0;
+			feqflags<true>(cpu, rs1.f32[0], rs2.f32[0], dst);
 			break;
 		case 0x1: // FLT.S
 			dst = (rs1.f32[0] < rs2.f32[0]) ? 1 : 0;
+			feqflags<true>(cpu, rs1.f32[0], rs2.f32[0], dst);
 			break;
 		case 0x2: // FEQ.S
 			dst = (rs1.f32[0] == rs2.f32[0]) ? 1 : 0;
+			feqflags<false>(cpu, rs1.f32[0], rs2.f32[0], dst);
 			break;
 		case 0x10: // FLE.D
 			dst = (rs1.f64 <= rs2.f64) ? 1 : 0;
+			feqflags<true>(cpu, rs1.f64, rs2.f64, dst);
 			break;
 		case 0x11: // FLT.D
 			dst = (rs1.f64 < rs2.f64) ? 1 : 0;
+			feqflags<true>(cpu, rs1.f64, rs2.f64, dst);
 			break;
 		case 0x12: // FEQ.D
 			dst = (rs1.f64 == rs2.f64) ? 1 : 0;
+			feqflags<false>(cpu, rs1.f64, rs2.f64, dst);
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);
