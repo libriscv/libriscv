@@ -205,13 +205,13 @@ namespace riscv
 
 	INSTRUCTION(RV32I_BC_JALR, rv32i_jalr)
 	{
-		VIEW_INSTR();
+		VIEW_INSTR_AS(fi, FasterItype);
 		// jump to register + immediate
 		// NOTE: if rs1 == rd, avoid clobber by storing address first
-		const auto address = cpu.reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+		const auto address = cpu.reg(fi.rs2) + fi.signed_imm();
 		// Link *next* instruction (rd = PC + 4)
-		if (instr.Itype.rd != 0) {
-			cpu.reg(instr.Itype.rd) = pc + 4;
+		if (fi.rs1 != 0) {
+			cpu.reg(fi.rs1) = pc + 4;
 		}
 		if constexpr (VERBOSE_JUMPS) {
 			printf("JALR PC 0x%lX => 0x%lX\n", pc, address);

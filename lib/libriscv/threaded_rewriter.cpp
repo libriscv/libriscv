@@ -205,6 +205,15 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			case RV32I_BC_JALR: {
+				FasterItype rewritten;
+				rewritten.imm = original.Itype.signed_imm();
+				rewritten.rs1 = original.Itype.rd;
+				rewritten.rs2 = original.Itype.rs1;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
 			/** Vector instructions **/
 #ifdef RISCV_EXT_VECTOR
 			case RV32V_BC_VLE32:

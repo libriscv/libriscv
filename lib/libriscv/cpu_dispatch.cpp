@@ -254,16 +254,17 @@ INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	NEXT_BLOCK((int32_t)instr.whole);
 }
 INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterItype);
 	// jump to register + immediate
 	// NOTE: if rs1 == rd, avoid clobber by storing address first
-	const auto address = reg(instr.Itype.rs1) + instr.Itype.signed_imm();
+	const auto address = reg(fi.rs2) + fi.signed_imm();
 	// Link *next* instruction (rd = PC + 4)
-	if (instr.Itype.rd != 0) {
-		reg(instr.Itype.rd) = pc + 4;
+	if (fi.rs1 != 0) {
+		reg(fi.rs1) = pc + 4;
 	}
 	if constexpr (VERBOSE_JUMPS) {
-		fprintf(stderr, "JALR PC 0x%lX => 0x%lX\n", long(pc), long(address));
+		fprintf(stderr, "JALR x%d + %d => rd=%d   PC 0x%lX => 0x%lX\n",
+			fi.rs2, fi.signed_imm(), fi.rs1, long(pc), long(address));
 	}
 	pc = address;
 	goto check_unaligned_jump;
