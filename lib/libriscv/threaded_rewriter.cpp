@@ -279,6 +279,22 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return RV32C_BC_MV;
 			}
+			case RV32C_BC_SLLI: {
+				const rv32c_instruction ci{original};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CI.rd;
+				rewritten.rs2 = 0;
+				if constexpr (W >= 8) {
+					rewritten.imm = ci.CI.shift64_imm();
+				} else {
+					rewritten.imm = ci.CI.shift_imm();
+				}
+
+				instr.whole = rewritten.whole;
+				return RV32C_BC_SLLI;
+			}
+			case RV32C_BC_BEQZ:
 			case RV32C_BC_BNEZ: {
 				const rv32c_instruction ci { original };
 
@@ -296,7 +312,26 @@ namespace riscv
 				rewritten.imm = imm;
 
 				instr.whole = rewritten.whole;
-				return RV32C_BC_BNEZ;
+				return bytecode;
+			}
+			case RV32C_BC_JR: {
+				const rv32c_instruction ci { original };
+
+				const int32_t imm = ci.CJ.signed_imm();
+				const auto addr = pc + imm;
+
+				if (!this->is_within(addr, 4) || (addr % PCAL) != 0)
+				{
+					return RV32I_BC_INVALID;
+				}
+
+				FasterItype rewritten;
+				rewritten.rs1 = 0;
+				rewritten.rs2 = 0;
+				rewritten.imm = imm;
+
+				instr.whole = imm;
+				return bytecode;
 			}
 			case RV32C_BC_LDD: {
 				const rv32c_instruction ci{original};

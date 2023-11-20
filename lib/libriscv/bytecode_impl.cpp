@@ -12,6 +12,11 @@ INSTRUCTION(RV32C_BC_MV, rv32c_mv) {
 	REG(fi.get_rd()) = REG(fi.get_rs1());
 	NEXT_C_INSTR();
 }
+INSTRUCTION(RV32C_BC_SLLI, rv32c_slli) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) <<= fi.imm;
+	NEXT_C_INSTR();
+}
 #endif
 INSTRUCTION(RV32I_BC_ADDI, rv32i_addi) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -111,9 +116,20 @@ INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 INSTRUCTION(RV32C_BC_BNEZ, rv32c_bnez) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) != 0) {
-        PERFORM_BRANCH();
-    }
-    NEXT_BLOCK(2);
+		PERFORM_BRANCH();
+	}
+	NEXT_BLOCK(2);
+}
+INSTRUCTION(RV32C_BC_BEQZ, rv32c_beqz) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	if (REG(fi.get_rs1()) == 0) {
+		PERFORM_BRANCH();
+	}
+	NEXT_BLOCK(2);
+}
+INSTRUCTION(RV32C_BC_JR, rv32c_jr) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	PERFORM_BRANCH();
 }
 
 #endif // RISCV_EXT_COMPRESSED

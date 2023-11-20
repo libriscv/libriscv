@@ -94,10 +94,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				} else {
 					return RV32C_BC_JUMPFUNC; // C.JAL
 				}
-			case CI_CODE(0b101, 0b01): // C.JAL
-				return RV32C_BC_JUMPFUNC;
+			case CI_CODE(0b101, 0b01): // C.JR
+				return RV32C_BC_JR;
 			case CI_CODE(0b110, 0b01): // C.BEQZ
-				return RV32C_BC_JUMPFUNC;
+				return RV32C_BC_BEQZ;
 			case CI_CODE(0b111, 0b01): // C.BNEZ
 				return RV32C_BC_BNEZ;
 			// Quadrant 2
@@ -106,7 +106,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			case CI_CODE(0b010, 0b10):
 			case CI_CODE(0b011, 0b10): {
 				if (ci.CI.funct3 == 0x0 && ci.CI.rd != 0) {
-					return RV32C_BC_FUNCTION; // C.SLLI
+					return RV32C_BC_SLLI; // C.SLLI
 				}
 				else if (ci.CI2.funct3 == 0x1) {
 					return RV32C_BC_FUNCTION; // C.FLDSP
