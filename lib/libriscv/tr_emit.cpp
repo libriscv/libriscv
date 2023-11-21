@@ -851,8 +851,9 @@ void Emitter<W>::emit()
 			if (instr.Itype.funct3 == 0x0) {
 				this->increment_counter_so_far();
 				code += "cpu->pc = " + PCRELS(0) + ";\n";
-				if (instr.Itype.imm == 0) {
-					const auto syscall_reg = from_reg(REG_ECALL);
+				if (instr.Itype.imm < 2) {
+					const auto syscall_reg =
+						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
 					this->restore_syscall_registers();
 					code += "*cur_insn = c;\n";
 					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + "))) {\n"
@@ -862,20 +863,18 @@ void Emitter<W>::emit()
 					this->invalidate_register(REG_ARG0);
 					this->potentially_reload_register(REG_ARG0);
 					break;
-				} if (instr.Itype.imm == 1) {
-					code += "api.ebreak(cpu);\n";
-					exit_function();
-					break;
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "*max_insn = 0;\n";
 					exit_function(true);
 					return;
 				} else {
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+					exit_function();
 					break;
 				}
 			} else {
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+				exit_function();
 			} break;
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
