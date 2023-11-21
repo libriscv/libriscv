@@ -185,7 +185,7 @@ namespace riscv
 			if (this->m_initial_rodata_end == RWREAD_BEGIN)
 				this->m_initial_rodata_end = hdr->p_vaddr;
 			else
-				this->m_initial_rodata_end = std::min(m_initial_rodata_end, hdr->p_vaddr);
+				this->m_initial_rodata_end = std::min(m_initial_rodata_end, static_cast<address_t>(hdr->p_vaddr));
 		}
 
 		// Load into virtual memory
@@ -446,7 +446,7 @@ namespace riscv
 #endif
 			return Callsite {
 				.name = (dma) ? dma : symname,
-				.address = sym->st_value,
+				.address = static_cast<address_t>(sym->st_value),
 				.offset = (uint32_t) (addr - sym->st_value),
 				.size   = sym->st_size
 			};
