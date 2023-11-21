@@ -287,7 +287,7 @@ namespace riscv
 		// Make the current PC visible
 		cpu.registers().pc = pc;
 		// Make the instruction counter visible
-		cpu.machine().set_instruction_counter(counter);
+		cpu.machine().set_instruction_counter(counter-1);
 		// Invoke translated code
 		exec->mapping_at(instr.whole)(cpu, instr);
 		// Restore counter

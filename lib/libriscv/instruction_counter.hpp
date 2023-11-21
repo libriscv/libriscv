@@ -25,6 +25,11 @@ namespace riscv
 		void apply_counter() {
 			machine.set_instruction_counter(m_counter);
 		}
+		// Used by binary translator to compensate for its own function already being counted
+		// TODO: Account for this inside the binary translator instead. Very minor impact.
+		void apply_counter_minus_1() {
+			machine.set_instruction_counter(m_counter-1);
+		}
 		void retrieve() {
 			m_counter = machine.instruction_counter();
 			m_max     = machine.max_instructions();

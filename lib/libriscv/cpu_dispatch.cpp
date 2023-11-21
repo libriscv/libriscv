@@ -360,7 +360,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Make the instruction counter visible
-	counter.apply_counter();
+	counter.apply_counter_minus_1();
 	// Invoke translated code
 	exec->mapping_at(instr.whole)(*this, instr);
 	// Restore counter
