@@ -219,10 +219,19 @@ namespace riscv
 			case RV32V_BC_VLE32:
 			case RV32V_BC_VSE32: {
 				const rv32v_instruction vi{instr};
-				FasterItype rewritten;
-				rewritten.rs1 = vi.VLS.vd;
-				rewritten.rs2 = vi.VLS.rs1;
-				rewritten.imm = 0;
+				FasterMove rewritten;
+				rewritten.rd  = vi.VLS.vd;
+				rewritten.rs1 = vi.VLS.rs1;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32V_BC_VFADD_VV: {
+				const rv32v_instruction vi{instr};
+				FasterOpType rewritten;
+				rewritten.rd  = vi.OPVV.vd;
+				rewritten.rs1 = vi.OPVV.vs1;
+				rewritten.rs2 = vi.OPVV.vs2;
 
 				instr.whole = rewritten.whole;
 				return bytecode;
