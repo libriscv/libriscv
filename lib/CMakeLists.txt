@@ -128,7 +128,6 @@ if (NOT WIN32 OR MINGW_TOOLCHAIN)
 endif()
 
 if (RISCV_128I)
-	target_compile_definitions(riscv PUBLIC RISCV_128BIT_ISA=1)
 	target_sources(riscv PUBLIC
 		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv128i.cpp
 	)
