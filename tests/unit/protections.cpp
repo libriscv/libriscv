@@ -109,6 +109,10 @@ TEST_CASE("Writes to read-only segment", "[Memory]")
 		{"rodata"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 
+	REQUIRE_THROWS_WITH([&] {
+		machine.memory.write<uint8_t>(machine.cpu.pc(), 0);
+	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+
 	// Guard pages are not writable
 	REQUIRE_THROWS_WITH([&] {
 		machine.simulate(MAX_INSTRUCTIONS);

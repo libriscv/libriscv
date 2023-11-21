@@ -129,6 +129,8 @@ static void add_system_functions()
 	sf_handlers["AddTwoFloats"].handler =
 		[] (Machine<RISCV64>&, const SystemFunctionArgs& args) -> SystemArg {
 			// TODO: Check arguments
+			printf("AddTwoFloats: %f + %f = %f\n",
+				args.arg[0].f32, args.arg[1].f32, args.arg[0].f32 + args.arg[1].f32);
 			return {
 				.f32 = args.arg[0].f32 + args.arg[1].f32,
 				.type = FLOAT_32,
@@ -158,6 +160,7 @@ static SystemArg perform_system_function(Machine<RISCV64>& machine,
 	auto it = sf_handlers.find(name);
 	if (it == sf_handlers.end())
 	{
+		fprintf(stderr, "Error: No such system function: %s\n", name.c_str());
 		return {
 			.u32 = ERROR_NO_SUCH_FUNCTION,
 			.type = ERROR,
@@ -167,6 +170,7 @@ static SystemArg perform_system_function(Machine<RISCV64>& machine,
 
 	if (argc < handler.arguments)
 	{
+		fprintf(stderr, "Error: Missing arguments to system function: %s\n", name.c_str());
 		return {
 			.u32 = ERROR_MISSING_ARGUMENTS,
 			.type = ERROR
@@ -185,28 +189,26 @@ static SystemArg perform_system_function(Machine<RISCV64>& machine,
 TEST_CASE("Take custom system arguments", "[Custom]")
 {
 	const auto binary = build_and_load(R"M(
-		#include "custom.hpp"
-		#include <stdio.h>
-		#include <string.h>
-static long syscall(long n, long arg0, long arg1, long arg2, long arg3)
-{
-	register long a0 __asm__("a0") = arg0;
-	register long a1 __asm__("a1") = arg1;
-	register long a2 __asm__("a2") = arg2;
-	register long a3 __asm__("a3") = arg3;
-	register long syscall_id __asm__("a7") = n;
-
-	__asm__ volatile ("scall" : "+r"(a0) : "r"(a1), "r"(a2), "r"(a3), "r"(syscall_id));
-	return a0;
-}
+	#include "custom.hpp"
+	#include <stdio.h>
+	#include <string.h>
 
 	static void system_function(
 		const char *name,
 		size_t n, struct SystemFunctionArgs *args,
 		struct SystemArg *result)
 	{
-		__asm__("" ::: "memory");
-		syscall(500, (long)name, n, (long)args, (long)result);
+		register const char                *a0 __asm__("a0") = name;
+		register size_t                     a1 __asm__("a1") = n;
+		register struct SystemFunctionArgs *a2 __asm__("a2") = args;
+		register struct SystemArg          *a3 __asm__("a3") = result;
+		register long               syscall_id __asm__("a7") = 500;
+		register long                   a0_out __asm__("a0");
+
+		__asm__ volatile ("scall"
+			: "=r"(a0_out), "+m"(*a3)
+			: "r"(a0), "m"(*a0), "r"(a1), "r"(a2), "m"(*a2), "r"(a3), "r"(syscall_id));
+		(void)a0_out;
 	}
 
 	static void print_arg(struct SystemArg *arg)

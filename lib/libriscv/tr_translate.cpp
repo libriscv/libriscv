@@ -107,7 +107,8 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 static bool is_stopping_instruction(rv32i_instruction instr) {
 	return instr.opcode() == RV32I_JALR || instr.whole == RV32_INSTR_STOP
-		|| (instr.opcode() == RV32I_SYSTEM && instr.Itype.funct3 == 0 && instr.Itype.imm == 261); // WFI
+		|| (instr.opcode() == RV32I_SYSTEM && instr.Itype.funct3 == 0 && instr.Itype.imm == 261) // WFI
+		;
 }
 
 template <int W>

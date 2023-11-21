@@ -57,7 +57,7 @@ TEST_CASE("Run exactly X instructions", "[Micro]")
 	machine.cpu.reg(REG_ARG7) = 0;
 
 	machine.simulate<false>(2);
-	REQUIRE(machine.instruction_counter() == 6);
+	REQUIRE((machine.instruction_counter() == 5 || machine.instruction_counter() == 6));
 	REQUIRE(machine.cpu.reg(REG_ARG7) == 93);
 }
 

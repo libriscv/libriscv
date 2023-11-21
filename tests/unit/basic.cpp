@@ -76,13 +76,13 @@ TEST_CASE("Verify program arguments and environment", "[Runtime]")
 {
 	const auto binary = build_and_load(R"M(
 	#include <string.h>
-	extern char* getenv(char*);
+	extern char* getenv(const char *);
 	int main(int argc, char** argv) {
 		if (strcmp(argv[0], "program") != 0)
 			return -1;
 		if (strcmp(argv[1], "this is a test") != 0)
 			return -1;
-		if (strcmp(getenv("USER"), "root") != 0)
+		if (strcmp(getenv("SOMETHING"), "something") != 0)
 			return -1;
 		return 666;
 	})M");
@@ -93,7 +93,7 @@ TEST_CASE("Verify program arguments and environment", "[Runtime]")
 	// We need to create a Linux environment for runtimes to work well
 	machine.setup_linux(
 		{"program", "this is a test"},
-		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		{"LC_TYPE=C", "LC_ALL=C", "SOMETHING=something"});
 
 	// Run for at most X instructions before giving up
 	machine.simulate(MAX_INSTRUCTIONS);

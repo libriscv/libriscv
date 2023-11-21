@@ -27,7 +27,8 @@ TEST_CASE("Validate custom 32-bit ELF", "[Instantiate]")
 	"	li a0, 0xDEADBEEF\n"
 	"	li a7, 1\n"
 	"	ecall\n"
-	"	nop\n");
+	"	nop\n"
+	"   wfi\n");
 	)M", "-static -march=rv32g -mabi=ilp32d -nostdlib");
 
 	riscv::Machine<RISCV32> machine { binary };
@@ -61,7 +62,8 @@ TEST_CASE("Validate 32-bit fib()", "[Compute]")
 	"	li a4, 1\n"
 	"	call fib\n"
 	"	li a7, 1\n"
-	"	ecall\n");
+	"	ecall\n"
+	"   wfi\n");
 	)M", "-static -march=rv32g -mabi=ilp32d -nostdlib");
 
     riscv::Machine<RISCV32> machine { binary };

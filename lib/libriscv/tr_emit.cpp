@@ -493,29 +493,22 @@ void Emitter<W>::emit()
 					labels.insert(dest_pc);
 				// this is a jump back to the start of the function
 				add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
-				// if we run out of instructions, we must exit:
-				add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset()) + ");");
-				exit_function();
-				if (instr.Jtype.rd != 0)
-					this->add_reentry_next();
-			} else {
-				// Jump to function address
-				if (this->block_exists(dest_pc)) {
-					this->jump_to_function(dest_pc);
-				} else {
-					// Because of forward jumps we can't end the function here
-					add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset()) + ");");
-					exit_function();
-				}
-				if (instr.Jtype.rd != 0)
-					this->add_reentry_next();
+				// .. if we run out of instructions, we must jump manually and exit:
 			}
+			// Because of forward jumps we can't end the function here
+			add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset()) + ");");
+			exit_function();
+			// Some blocks end with unconditional jumps
 			if (no_labels_after_this()) {
-				add_code("*cur_insn = c;","}");
+				add_code("}");
 				return;
-			} } break;
+			}
+			if (instr.Jtype.rd != 0)
+				this->add_reentry_next();
+			} break;
+
 		case RV32I_OP_IMM: {
-			// NOP
+			// NOP: Instruction without side-effect
 			if (UNLIKELY(instr.Itype.rd == 0)) break;
 			const auto dst = to_reg(instr.Itype.rd);
 			const auto src = from_reg(instr.Itype.rs1);
@@ -851,6 +844,7 @@ void Emitter<W>::emit()
 			if (instr.Itype.funct3 == 0x0) {
 				this->increment_counter_so_far();
 				code += "cpu->pc = " + PCRELS(0) + ";\n";
+				// System calls and EBREAK
 				if (instr.Itype.imm < 2) {
 					const auto syscall_reg =
 						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
@@ -868,13 +862,13 @@ void Emitter<W>::emit()
 					exit_function(true);
 					return;
 				} else {
+					// Zero funct3, unknown imm: Don't exit
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
-					exit_function();
 					break;
 				}
 			} else {
+				// Non-zero funct3: Don't exit (?)
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
-				exit_function();
 			} break;
 		case RV64I_OP_IMM32: {
 			if (UNLIKELY(instr.Itype.rd == 0))
