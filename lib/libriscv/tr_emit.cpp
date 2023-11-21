@@ -161,7 +161,7 @@ struct Emitter
 			cast = "(saddr_t)";
 		}
 
-		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_memory_arena())
+		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_flat_memory_arena())
 		{
 			/* XXX: Check page permissions here? */
 			const address_t absolute_vaddr = tinfo.gp + imm;
@@ -174,7 +174,7 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (cpu.machine().memory.uses_memory_arena()) {
+		if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
 					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(address) + "];",
@@ -193,7 +193,7 @@ struct Emitter
 	{
 		const std::string data = "wpage" + PCRELS(0);
 
-		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_memory_arena())
+		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_flat_memory_arena())
 		{
 			/* XXX: Check page permissions */
 			const address_t absolute_vaddr = tinfo.gp + imm;
@@ -204,7 +204,7 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (cpu.machine().memory.uses_memory_arena()) {
+		if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
 				"  *(" + type + "*)&arena_base[" + speculation_safe(address) + "] = " + value + ";",

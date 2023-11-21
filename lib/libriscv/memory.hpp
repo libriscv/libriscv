@@ -174,7 +174,7 @@ namespace riscv
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 
-		bool uses_memory_arena() const noexcept { return this->m_arena != nullptr; }
+		bool uses_flat_memory_arena() const noexcept { return riscv::flat_readwrite_arena && this->m_arena != nullptr; }
 		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena; }
 		address_t memory_arena_size() const noexcept { return this->m_arena_pages * Page::size(); }
 		address_t memory_arena_read_boundary() const noexcept { return this->m_arena_read_boundary; }
