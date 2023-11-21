@@ -70,6 +70,9 @@ namespace riscv
 		RV32I_BC_OP_SH2ADD,
 		RV32I_BC_OP_SH3ADD,
 
+		RV32I_BC_SEXT_B,
+		RV32I_BC_SEXT_H,
+
 		RV64I_BC_ADDIW,
 		RV64I_BC_SRLIW,
 
@@ -111,6 +114,7 @@ namespace riscv
 		RV32I_BC_SYSTEM,
 		BYTECODES_MAX
 	};
+	static_assert(BYTECODES_MAX <= 256, "A bytecode must fit in a byte");
 
 	union FasterItype
 	{

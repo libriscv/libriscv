@@ -490,7 +490,18 @@ INSTRUCTION(RV32I_BC_OP_REMU, rv32i_op_remu) {
 	NEXT_INSTR();
 }
 
-#endif // OP
+INSTRUCTION(RV32I_BC_SEXT_B, rv32i_sext_b) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) = saddr_t(int8_t(REG(fi.get_rs2())));
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32I_BC_SEXT_H, rv32i_sext_h) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) = saddr_t(int16_t(REG(fi.get_rs2())));
+	NEXT_INSTR();
+}
+
+#endif // OP & low-priority OP_IMM
 
 #ifdef BYTECODES_FLP
 

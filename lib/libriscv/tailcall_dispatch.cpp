@@ -374,8 +374,11 @@ namespace riscv
 		[RV32I_BC_OP_SH2ADD] = rv32i_op_sh2add,
 		[RV32I_BC_OP_SH3ADD] = rv32i_op_sh3add,
 
-		[RV64I_BC_ADDIW] = rv64i_addiw,
-		[RV64I_BC_SRLIW] = rv64i_srliw,
+		[RV32I_BC_SEXT_B] = rv32i_sext_b,
+		[RV32I_BC_SEXT_H] = rv32i_sext_h,
+
+		[RV64I_BC_ADDIW]  = rv64i_addiw,
+		[RV64I_BC_SRLIW]  = rv64i_srliw,
 
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = rv32c_addi,

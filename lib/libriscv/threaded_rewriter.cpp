@@ -37,6 +37,8 @@ namespace riscv
 			}
 			case RV64I_BC_ADDIW:
 			case RV64I_BC_SRLIW:
+			case RV32I_BC_SEXT_B:
+			case RV32I_BC_SEXT_H:
 			case RV32I_BC_ADDI:
 			case RV32I_BC_SLLI:
 			case RV32I_BC_SLTI:
