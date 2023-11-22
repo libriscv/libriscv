@@ -47,27 +47,42 @@ namespace riscv
 #endif
 			}
 
-			this->m_page_fault_handler =
-			[pages_max] (auto& mem, const address_t page, bool init) -> Page&
+			if (this->m_arena_pages > 0)
 			{
-				if (mem.pages_active() < pages_max)
+				this->m_page_fault_handler =
+				[pages_max] (auto& mem, const address_t page, bool init) -> Page&
 				{
-					// Within linear arena at the start
-					if (page < mem.m_arena_pages)
+					if (mem.pages_active() < pages_max)
 					{
-						const PageAttributes attr {
-							.read  = true,
-							.write = true,
-							.non_owning = true
-						};
-						return mem.allocate_page(page, attr, &mem.m_arena[page]);
+						// Within linear arena at the start
+						if (page < mem.m_arena_pages)
+						{
+							const PageAttributes attr {
+								.read  = true,
+								.write = true,
+								.non_owning = true
+							};
+							return mem.allocate_page(page, attr, &mem.m_arena[page]);
+						}
+						// Create page on-demand
+						return mem.allocate_page(page,
+							init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
 					}
-					// Create page on-demand
-					return mem.allocate_page(page,
-						init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
-				}
-				throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
-			};
+					throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
+				};
+			} else {
+				this->m_page_fault_handler =
+					[pages_max](auto &mem, const address_t page, bool init) -> Page &
+				{
+					if (mem.pages_active() < pages_max)
+					{
+						// Create page on-demand
+						return mem.allocate_page(page,
+							init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
+					}
+					throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
+				};
+			}
 		} else {
 			throw MachineException(OUT_OF_MEMORY, "Max memory was zero", 0);
 		}
@@ -161,7 +176,7 @@ namespace riscv
 				attr.read, attr.write, attr.exec);
 		}
 
-		if (attr.read && !attr.write) {
+		if (attr.read && !attr.write && uses_flat_memory_arena()) {
 			this->m_initial_rodata_end =
 				std::max(m_initial_rodata_end, static_cast<address_t>(hdr->p_vaddr + len));
 		}
@@ -332,8 +347,12 @@ namespace riscv
 			this->install_shared_page(page_number(host_page), Page::host_page());
 			this->m_exit_address = host_page;
 		}
-		this->m_arena_read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
-		this->m_arena_write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_initial_rodata_end);
+		if (this->uses_flat_memory_arena()) {
+			this->m_arena_read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
+			this->m_arena_write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_initial_rodata_end);
+		} else {
+			this->m_initial_rodata_end = 0;
+		}
 
 		if constexpr (W <= 8) {
 			if (UNLIKELY(options.dynamic_linking)) {
