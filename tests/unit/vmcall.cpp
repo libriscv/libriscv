@@ -116,6 +116,7 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 		riscv::Machine<RISCV64> fork { machine, {
 			.use_memory_arena = false
 		} };
+		REQUIRE(fork.memory.uses_flat_memory_arena() == false);
 
 		fork.set_printer([] (const auto&, const char* data, size_t size) {
 			std::string text{data, data + size};
@@ -153,5 +154,10 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 
 		int res3 = fork.vmcall("ints", 123L, intref, (long&&)intref);
 		REQUIRE(res3 == 3);
+
+		// XXX: Binary translation currently "remembers" that arena
+		// was enabled, and will not disable it for the fork.
+		if constexpr (riscv::flat_readwrite_arena && riscv::binary_translation_enabled)
+			return;
 	}
 }
