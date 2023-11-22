@@ -180,18 +180,14 @@ namespace riscv
 			this->m_initial_rodata_end =
 				std::max(m_initial_rodata_end, static_cast<address_t>(hdr->p_vaddr + len));
 		}
-		if (attr.exec && this->cached_execute_segments() == 0)
-		{
-			serialize_execute_segment(options, hdr);
-			// Nothing more to do here, if execute-only
-			if (!attr.read)
-				return;
-		}
+		// Nothing more to do here, if execute-only
+		if (attr.exec && !attr.read)
+			return;
 		// We would normally never allow this
 		if (attr.exec && attr.write) {
 			if (!options.allow_write_exec_segment) {
 				throw MachineException(INVALID_PROGRAM,
-					"Insecure ELF has writable executable code");
+					"Insecure ELF has writable executable code (Disable check in MachineOptions)");
 			}
 		}
 		// In some cases we want to enforce execute-only
@@ -240,7 +236,8 @@ namespace riscv
 		auto& exec_segment =
 			this->create_execute_segment(options, data, vaddr, exlen);
 		// Select the first execute segment
-		machine().cpu.set_execute_segment(&exec_segment);
+		if (machine().cpu.current_execute_segment() == nullptr)
+			machine().cpu.set_execute_segment(&exec_segment);
 	}
 
 	// ELF32 and ELF64 loader
@@ -281,6 +278,7 @@ namespace riscv
 		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
 		this->m_start_address = elf->e_entry;
 		this->m_heap_address = 0;
+		std::vector<const Phdr*> execute_segments;
 
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
 		{
@@ -301,6 +299,9 @@ namespace riscv
 					// loadable program segments
 					if (options.load_program) {
 						binary_load_ph(options, hdr);
+						if (hdr->p_flags & PF_X) {
+							execute_segments.push_back(hdr);
+						}
 					}
 					break;
 				case PT_GNU_STACK:
@@ -352,6 +353,14 @@ namespace riscv
 			this->m_arena_write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_initial_rodata_end);
 		} else {
 			this->m_initial_rodata_end = 0;
+		}
+
+		// Now that we know the boundries of the program, generate
+		// efficient execute segments (if loadable).
+		if (options.load_program) {
+			for (auto* hdr : execute_segments) {
+				serialize_execute_segment(options, hdr);
+			}
 		}
 
 		if constexpr (W <= 8) {
