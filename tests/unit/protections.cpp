@@ -99,6 +99,12 @@ TEST_CASE("Writes to read-only segment", "[Memory]")
 	int main() {
 		*(volatile int *)array = 1234;
 		return 666;
+	}
+	void write_to(char* dst) {
+		*dst = 1;
+	}
+	int read_from(char* dst) {
+		return *dst;
 	})M");
 
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
@@ -119,4 +125,22 @@ TEST_CASE("Writes to read-only segment", "[Memory]")
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 
 	REQUIRE(machine.return_value<int>() != 666);
+
+	const auto write_addr = machine.address_of("write_to");
+	REQUIRE(write_addr != 0x0);
+	const auto read_addr = machine.address_of("read_from");
+	REQUIRE(read_addr != 0x0);
+
+	// Reads amd writes to invalid locations
+	REQUIRE_THROWS_WITH([&] {
+		machine.vmcall<MAX_INSTRUCTIONS>(read_addr, 0);
+	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+
+	machine.vmcall<MAX_INSTRUCTIONS>(read_addr, 0x1000);
+
+	for (uint64_t addr = machine.memory.start_address(); addr < machine.memory.initial_rodata_end(); addr += 0x1000) {
+		REQUIRE_THROWS_WITH([&] {
+			machine.vmcall<MAX_INSTRUCTIONS>(write_addr, addr);
+		}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+	}
 }

@@ -161,6 +161,10 @@ namespace riscv
 				attr.read, attr.write, attr.exec);
 		}
 
+		if (attr.read && !attr.write) {
+			this->m_initial_rodata_end =
+				std::max(m_initial_rodata_end, static_cast<address_t>(hdr->p_vaddr + len));
+		}
 		if (attr.exec && this->cached_execute_segments() == 0)
 		{
 			serialize_execute_segment(options, hdr);
@@ -180,12 +184,6 @@ namespace riscv
 			if (options.enforce_exec_only) {
 				throw MachineException(INVALID_PROGRAM, "Execute segment must be execute-only");
 			}
-		}
-		if (attr.write) {
-			if (this->m_initial_rodata_end == RWREAD_BEGIN)
-				this->m_initial_rodata_end = hdr->p_vaddr;
-			else
-				this->m_initial_rodata_end = std::min(m_initial_rodata_end, static_cast<address_t>(hdr->p_vaddr));
 		}
 
 		// Load into virtual memory
