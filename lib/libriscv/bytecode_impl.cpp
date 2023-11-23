@@ -435,11 +435,6 @@ INSTRUCTION(RV32I_BC_OP_SRA, rv32i_op_sra) {
 	dst = saddr_t(src1) >> (src2 & (XLEN-1));
 	NEXT_INSTR();
 }
-INSTRUCTION(RV32I_BC_OP_ADD_UW, rv32i_op_add_uw) {
-	VIEW_INSTR();
-	REG(instr.Rtype.rd) = REG(instr.Rtype.rs2) + uint32_t(REG(instr.Rtype.rs1));
-	NEXT_INSTR();
-}
 INSTRUCTION(RV32I_BC_OP_ZEXT_H, rv32i_op_zext_h) {
 	OP_INSTR();
 	dst = uint16_t(src1);
@@ -448,9 +443,24 @@ INSTRUCTION(RV32I_BC_OP_ZEXT_H, rv32i_op_zext_h) {
 }
 
 INSTRUCTION(RV64I_BC_OP_ADDW, rv64i_op_addw) {
-	OP_INSTR();
-	dst = int32_t(uint32_t(src1) + uint32_t(src2));
-	NEXT_INSTR();
+	if constexpr (W >= 8) {
+		OP_INSTR();
+		dst = int32_t(uint32_t(src1) + uint32_t(src2));
+		NEXT_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
+}
+INSTRUCTION(RV32I_BC_OP_ADD_UW, rv32i_op_add_uw) {
+	if constexpr (W >= 8) {
+		VIEW_INSTR();
+		REG(instr.Rtype.rd) = REG(instr.Rtype.rs2) + uint32_t(REG(instr.Rtype.rs1));
+		NEXT_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
 }
 
 INSTRUCTION(RV32I_BC_SEXT_B, rv32i_sext_b) {
@@ -571,14 +581,24 @@ INSTRUCTION(RV64I_BC_SRAIW, rv64i_sraiw) {
 #endif
 }
 INSTRUCTION(RV64I_BC_OP_SH1ADD_UW, rv64i_op_sh1add_uw) {
-	OP_INSTR();
-	dst = src2 + (addr_t(uint32_t(src1)) << 1);
-	NEXT_INSTR();
+	if constexpr (W >= 8) {
+		OP_INSTR();
+		dst = src2 + (addr_t(uint32_t(src1)) << 1);
+		NEXT_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
 }
 INSTRUCTION(RV64I_BC_OP_SH2ADD_UW, rv64i_op_sh2add_uw) {
-	OP_INSTR();
-	dst = src2 + (addr_t(uint32_t(src1)) << 2);
-	NEXT_INSTR();
+	if constexpr (W >= 8) {
+		OP_INSTR();
+		dst = src2 + (addr_t(uint32_t(src1)) << 2);
+		NEXT_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
 }
 
 INSTRUCTION(RV32I_BC_OP_DIV, rv32i_op_div) {
