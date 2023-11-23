@@ -139,6 +139,8 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 
 		[RV64I_BC_ADDIW]  = &&rv64i_addiw,
 		[RV64I_BC_SRLIW]  = &&rv64i_srliw,
+		[RV64I_BC_SRAIW]  = &&rv64i_sraiw,
+		[RV64I_BC_OP_ADDW] = &&rv64i_op_addw,
 
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = &&rv32c_addi,

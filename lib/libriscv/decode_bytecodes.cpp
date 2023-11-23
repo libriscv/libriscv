@@ -352,6 +352,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		case RV64I_OP32:
 			switch (instr.Rtype.jumptable_friendly_op())
 			{
+			case 0x0: // ADD.W
+				return RV64I_BC_OP_ADDW;
 			case 0x40: // ADD.UW
 				return RV32I_BC_OP_ADD_UW;
 			case 0x44: // ZEXT.H

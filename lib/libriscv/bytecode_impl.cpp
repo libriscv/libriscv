@@ -49,7 +49,7 @@ INSTRUCTION(RV32I_BC_SLLI, rv32i_slli) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SLLI: Logical left-shift 5/6/7-bit immediate
 	REG(fi.get_rs1()) =
-		REG(fi.get_rs2()) << (fi.unsigned_imm() & (XLEN - 1));
+		REG(fi.get_rs2()) << fi.unsigned_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_SLTI, rv32i_slti) {
@@ -73,13 +73,13 @@ INSTRUCTION(RV32I_BC_XORI, rv32i_xori) {
 INSTRUCTION(RV32I_BC_SRLI, rv32i_srli) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SRLI: Shift-right logical 5/6/7-bit immediate
-	REG(fi.get_rs1()) = REG(fi.get_rs2()) >> (fi.unsigned_imm() & (XLEN - 1));
+	REG(fi.get_rs1()) = REG(fi.get_rs2()) >> fi.unsigned_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_SRAI, rv32i_srai) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SRAI: Shift-right arithmetical (preserve the sign bit)
-	REG(fi.get_rs1()) = saddr_t(REG(fi.get_rs2())) >> (fi.unsigned_imm() & (XLEN - 1));
+	REG(fi.get_rs1()) = saddr_t(REG(fi.get_rs2())) >> fi.unsigned_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_ORI, rv32i_ori) {
@@ -99,7 +99,19 @@ INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		REG(fi.get_rs1()) = (int32_t)
-			((uint32_t)REG(fi.get_rs2()) >> (fi.imm & 31));
+			((uint32_t)REG(fi.get_rs2()) >> fi.imm);
+		NEXT_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
+}
+INSTRUCTION(RV64I_BC_SRAIW, rv64i_sraiw) {
+	if constexpr (W >= 8) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		//dst = (int32_t)src >> instr.Itype.shift_imm();
+		REG(fi.get_rs1()) =
+			(int32_t)REG(fi.get_rs2()) >> fi.imm;
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -487,6 +499,12 @@ INSTRUCTION(RV32I_BC_OP_REMU, rv32i_op_remu) {
 	} else {
 		dst = addr_t(-1);
 	}
+	NEXT_INSTR();
+}
+
+INSTRUCTION(RV64I_BC_OP_ADDW, rv64i_op_addw) {
+	OP_INSTR();
+	dst = int32_t(uint32_t(src1) + uint32_t(src2));
 	NEXT_INSTR();
 }
 

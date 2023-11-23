@@ -15,6 +15,7 @@ namespace riscv
 		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr)
 	{
 		static constexpr unsigned PCAL = compressed_enabled ? 2 : 4;
+		static constexpr unsigned XLEN = 8 * W;
 		const auto original = instr;
 
 		switch (bytecode)
@@ -35,17 +36,34 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV64I_BC_ADDIW:
 			case RV64I_BC_SRLIW:
+			case RV64I_BC_SRAIW: {
+				FasterItype rewritten;
+				rewritten.rs1 = original.Itype.rd;
+				rewritten.rs2 = original.Itype.rs1;
+				rewritten.imm = original.Itype.imm & 31;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32I_BC_SLLI:
+			case RV32I_BC_SRLI:
+			case RV32I_BC_SRAI: {
+				FasterItype rewritten;
+				rewritten.rs1 = original.Itype.rd;
+				rewritten.rs2 = original.Itype.rs1;
+				rewritten.imm = original.Itype.imm & (XLEN-1);
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV64I_BC_ADDIW:
 			case RV32I_BC_SEXT_B:
 			case RV32I_BC_SEXT_H:
 			case RV32I_BC_ADDI:
-			case RV32I_BC_SLLI:
 			case RV32I_BC_SLTI:
 			case RV32I_BC_SLTIU:
 			case RV32I_BC_XORI:
-			case RV32I_BC_SRLI:
-			case RV32I_BC_SRAI:
 			case RV32I_BC_ORI:
 			case RV32I_BC_ANDI: {
 				FasterItype rewritten;
@@ -110,6 +128,7 @@ namespace riscv
 			case RV32I_BC_OP_DIVU:
 			case RV32I_BC_OP_REM:
 			case RV32I_BC_OP_REMU:
+			case RV64I_BC_OP_ADDW:
 			case RV32I_BC_OP_ZEXT_H:
 			case RV32I_BC_OP_SH1ADD:
 			case RV32I_BC_OP_SH2ADD:
