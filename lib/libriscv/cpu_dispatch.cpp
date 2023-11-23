@@ -136,11 +136,15 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 
 		[RV32I_BC_SEXT_B] = &&rv32i_sext_b,
 		[RV32I_BC_SEXT_H] = &&rv32i_sext_h,
+		[RV32I_BC_BSETI]  = &&rv32i_bseti,
+		[RV32I_BC_BEXTI]  = &&rv32i_bexti,
 
 		[RV64I_BC_ADDIW]  = &&rv64i_addiw,
 		[RV64I_BC_SRLIW]  = &&rv64i_srliw,
 		[RV64I_BC_SRAIW]  = &&rv64i_sraiw,
 		[RV64I_BC_OP_ADDW] = &&rv64i_op_addw,
+		[RV64I_BC_OP_SH1ADD_UW] = &&rv64i_op_sh1add_uw,
+		[RV64I_BC_OP_SH2ADD_UW] = &&rv64i_op_sh2add_uw,
 
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = &&rv32c_addi,
@@ -335,6 +339,7 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 
 INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function) {
 	VIEW_INSTR();
+	//printf("Slowpath: 0x%lX\n", pc);
 	auto handler = decoder->get_handler();
 	handler(*this, instr);
 	NEXT_INSTR();
@@ -397,6 +402,10 @@ INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 	handler(*this, instr);
 	NEXT_BLOCK(instr.length());
 }
+
+#define BYTECODES_RARELY_USED
+#  include "bytecode_impl.cpp"
+#undef BYTECODES_RARELY_USED
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 	default:

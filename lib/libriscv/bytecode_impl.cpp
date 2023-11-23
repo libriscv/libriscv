@@ -94,24 +94,26 @@ INSTRUCTION(RV32I_BC_ANDI, rv32i_andi) {
 	REG(fi.get_rs1()) = REG(fi.get_rs2()) & fi.signed_imm();
 	NEXT_INSTR();
 }
+INSTRUCTION(RV32I_BC_BSETI, rv32i_bseti) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	// BSETI: Bit-set immediate
+	REG(fi.get_rs1()) =
+		REG(fi.get_rs2()) | (addr_t(1) << fi.unsigned_imm());
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32I_BC_BEXTI, rv32i_bexti) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	// BEXTI: Single-bit Extract
+	REG(fi.get_rs1()) =
+		(REG(fi.get_rs2()) >> fi.unsigned_imm()) & 1;
+	NEXT_INSTR();
+}
 
 INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		REG(fi.get_rs1()) = (int32_t)
 			((uint32_t)REG(fi.get_rs2()) >> fi.imm);
-		NEXT_INSTR();
-	}
-#ifdef DISPATCH_MODE_TAILCALL
-	else UNUSED_FUNCTION();
-#endif
-}
-INSTRUCTION(RV64I_BC_SRAIW, rv64i_sraiw) {
-	if constexpr (W >= 8) {
-		VIEW_INSTR_AS(fi, FasterItype);
-		//dst = (int32_t)src >> instr.Itype.shift_imm();
-		REG(fi.get_rs1()) =
-			(int32_t)REG(fi.get_rs2()) >> fi.imm;
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -343,10 +345,6 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 
 #ifdef BYTECODES_OP
 
-INSTRUCTION(RV32I_BC_NOP, rv32i_nop)
-{
-	NEXT_INSTR();
-}
 INSTRUCTION(RV32I_BC_AUIPC, rv32i_auipc)
 {
 	VIEW_INSTR();
@@ -417,26 +415,6 @@ INSTRUCTION(RV32I_BC_OP_MUL, rv32i_op_mul) {
 	dst = saddr_t(src1) * saddr_t(src2);
 	NEXT_INSTR();
 }
-INSTRUCTION(RV32I_BC_OP_DIV, rv32i_op_div) {
-	OP_INSTR();
-	// division by zero is not an exception
-	if (LIKELY(saddr_t(src2) != 0)) {
-		if constexpr (W == 8) {
-			// vi_instr.cpp:444:2: runtime error:
-			// division of -9223372036854775808 by -1 cannot be represented in type 'long'
-			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-				dst = saddr_t(src1) / saddr_t(src2);
-		} else {
-			// rv32i_instr.cpp:301:2: runtime error:
-			// division of -2147483648 by -1 cannot be represented in type 'int'
-			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-				dst = saddr_t(src1) / saddr_t(src2);
-		}
-	} else {
-		dst = addr_t(-1);
-	}
-	NEXT_INSTR();
-}
 INSTRUCTION(RV32I_BC_OP_SH1ADD, rv32i_op_sh1add) {
 	OP_INSTR();
 	dst = src2 + (src1 << 1);
@@ -466,39 +444,6 @@ INSTRUCTION(RV32I_BC_OP_ZEXT_H, rv32i_op_zext_h) {
 	OP_INSTR();
 	dst = uint16_t(src1);
 	(void)src2;
-	NEXT_INSTR();
-}
-INSTRUCTION(RV32I_BC_OP_DIVU, rv32i_op_divu) {
-	OP_INSTR();
-	if (LIKELY(src2 != 0)) {
-		dst = src1 / src2;
-	} else {
-		dst = addr_t(-1);
-	}
-	NEXT_INSTR();
-}
-INSTRUCTION(RV32I_BC_OP_REM, rv32i_op_rem) {
-	OP_INSTR();
-	if (LIKELY(src2 != 0)) {
-		if constexpr(W == 4) {
-			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-				dst = saddr_t(src1) % saddr_t(src2);
-		} else if constexpr (W == 8) {
-			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-				dst = saddr_t(src1) % saddr_t(src2);
-		} else {
-			dst = saddr_t(src1) % saddr_t(src2);
-		}
-	}
-	NEXT_INSTR();
-}
-INSTRUCTION(RV32I_BC_OP_REMU, rv32i_op_remu) {
-	OP_INSTR();
-	if (LIKELY(src2 != 0)) {
-		dst = src1 % src2;
-	} else {
-		dst = addr_t(-1);
-	}
 	NEXT_INSTR();
 }
 
@@ -609,6 +554,92 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 	NEXT_INSTR();
 }
 
+#endif // FLP
+
+#ifdef BYTECODES_RARELY_USED
+
+INSTRUCTION(RV64I_BC_SRAIW, rv64i_sraiw) {
+	if constexpr (W >= 8) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		//dst = (int32_t)src >> instr.Itype.shift_imm();
+		REG(fi.get_rs1()) =
+			(int32_t)REG(fi.get_rs2()) >> fi.imm;
+		NEXT_INSTR();
+	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
+}
+INSTRUCTION(RV64I_BC_OP_SH1ADD_UW, rv64i_op_sh1add_uw) {
+	OP_INSTR();
+	dst = src2 + (addr_t(uint32_t(src1)) << 1);
+	NEXT_INSTR();
+}
+INSTRUCTION(RV64I_BC_OP_SH2ADD_UW, rv64i_op_sh2add_uw) {
+	OP_INSTR();
+	dst = src2 + (addr_t(uint32_t(src1)) << 2);
+	NEXT_INSTR();
+}
+
+INSTRUCTION(RV32I_BC_OP_DIV, rv32i_op_div) {
+	OP_INSTR();
+	// division by zero is not an exception
+	if (LIKELY(saddr_t(src2) != 0)) {
+		if constexpr (W == 8) {
+			// vi_instr.cpp:444:2: runtime error:
+			// division of -9223372036854775808 by -1 cannot be represented in type 'long'
+			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
+				dst = saddr_t(src1) / saddr_t(src2);
+		} else {
+			// rv32i_instr.cpp:301:2: runtime error:
+			// division of -2147483648 by -1 cannot be represented in type 'int'
+			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
+				dst = saddr_t(src1) / saddr_t(src2);
+		}
+	} else {
+		dst = addr_t(-1);
+	}
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32I_BC_OP_DIVU, rv32i_op_divu) {
+	OP_INSTR();
+	if (LIKELY(src2 != 0)) {
+		dst = src1 / src2;
+	} else {
+		dst = addr_t(-1);
+	}
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32I_BC_OP_REM, rv32i_op_rem) {
+	OP_INSTR();
+	if (LIKELY(src2 != 0)) {
+		if constexpr(W == 4) {
+			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
+				dst = saddr_t(src1) % saddr_t(src2);
+		} else if constexpr (W == 8) {
+			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
+				dst = saddr_t(src1) % saddr_t(src2);
+		} else {
+			dst = saddr_t(src1) % saddr_t(src2);
+		}
+	}
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32I_BC_OP_REMU, rv32i_op_remu) {
+	OP_INSTR();
+	if (LIKELY(src2 != 0)) {
+		dst = src1 % src2;
+	} else {
+		dst = addr_t(-1);
+	}
+	NEXT_INSTR();
+}
+
+INSTRUCTION(RV32I_BC_NOP, rv32i_nop)
+{
+	NEXT_INSTR();
+}
+
 #ifdef RISCV_EXT_VECTOR
 INSTRUCTION(RV32V_BC_VLE32, rv32v_vle32) {
 	VIEW_INSTR_AS(vi, FasterMove);
@@ -634,4 +665,4 @@ INSTRUCTION(RV32V_BC_VFADD_VV, rv32v_vfadd_vv) {
 }
 #endif // RISCV_EXT_VECTOR
 
-#endif // FLP
+#endif // BYTECODES_RARELY_USED

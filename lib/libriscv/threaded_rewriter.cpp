@@ -48,7 +48,9 @@ namespace riscv
 			}
 			case RV32I_BC_SLLI:
 			case RV32I_BC_SRLI:
-			case RV32I_BC_SRAI: {
+			case RV32I_BC_SRAI:
+			case RV32I_BC_BSETI:
+			case RV32I_BC_BEXTI: {
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
 				rewritten.rs2 = original.Itype.rs1;
@@ -129,6 +131,8 @@ namespace riscv
 			case RV32I_BC_OP_REM:
 			case RV32I_BC_OP_REMU:
 			case RV64I_BC_OP_ADDW:
+			case RV64I_BC_OP_SH1ADD_UW:
+			case RV64I_BC_OP_SH2ADD_UW:
 			case RV32I_BC_OP_ZEXT_H:
 			case RV32I_BC_OP_SH1ADD:
 			case RV32I_BC_OP_SH2ADD:
