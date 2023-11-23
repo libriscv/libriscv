@@ -9,6 +9,9 @@ option(GPROF       "Enable profiling with gprof" OFF)
 option(LINKER_GC   "Enable linker section garbage collection" OFF)
 option(STATIC_BUILD "Build this CLI program statically" OFF)
 
+option(NEWLIB_EMULATOR "Build the Newlib variant (fewer system calls)" OFF)
+option(MICRO_EMULATOR  "Build the special micro emulator (custom system calls)" OFF)
+
 set(SOURCES
 	src/main.cpp
 )
@@ -70,5 +73,9 @@ function (add_emulator NAME)
 endfunction()
 
 add_emulator(rvlinux  EMULATOR_MODE_LINUX=1)
-add_emulator(rvnewlib EMULATOR_MODE_NEWLIB=1)
-add_emulator(rvmicro  EMULATOR_MODE_MICRO=1)
+if (NEWLIB_EMULATOR)
+	add_emulator(rvnewlib EMULATOR_MODE_NEWLIB=1)
+endif()
+if (MICRO_EMULATOR)
+	add_emulator(rvmicro  EMULATOR_MODE_MICRO=1)
+endif()

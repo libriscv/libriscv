@@ -25,7 +25,7 @@ On Windows you can use Clang-cl in Visual Studio. See the [example CMake project
 
 ## Benchmarks
 
-[STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 7523](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native.
+[STREAM memory benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 7841](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native.
 
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
@@ -40,33 +40,9 @@ On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC c
 sudo apt install gcc-11-riscv64-linux-gnu g++-11-riscv64-linux-gnu
 ```
 
-Depending on your distro you may have access to GCC versions 10, 11 and 12. Now you have a full Linux C/C++ compiler for RISC-V. It is typically configured to use the C-extension, so make sure you have that enabled.
+Depending on your distro you may have access to GCC versions 10, 11 and 12. Now you have a full Linux C/C++ compiler for RISC-V.
 
-To build smaller and leaner programs you will need a (limited) Linux userspace environment. You sometimes need to build this cross-compiler yourself:
-
-```
-git clone https://github.com/riscv/riscv-gnu-toolchain.git
-cd riscv-gnu-toolchain
-./configure --prefix=$HOME/riscv --with-arch=rv32g --with-abi=ilp32d
-make
-```
-This will build a newlib cross-compiler with C++ exception support. The ABI is ilp32d, which is for 32-bit and 64-bit floating-point instruction set support. It is much faster than software implementations of binary IEEE floating-point arithmetic.
-
-Note that if you want a full glibc cross-compiler instead, simply appending `linux` to the make command will suffice, like so: `make linux`. Glibc produces larger binaries but has more features, like sockets and threads.
-
-```
-git clone https://github.com/riscv/riscv-gnu-toolchain.git
-cd riscv-gnu-toolchain
-./configure --prefix=$HOME/riscv --with-arch=rv64g --with-abi=lp64d
-make
-```
-The incantation for 64-bit RISC-V. Not enabling the C-extension for compressed instructions results in faster emulation.
-
-The last step is to add your compiler to PATH so that it becomes visible to build systems. So, add this at the bottom of your `.bashrc` file in the home (~) directory:
-
-```
-export PATH=$PATH:$HOME/riscv/bin
-```
+To build smaller and leaner programs you will want a (limited) Linux userspace environment. Check out the guide on how to [build a Newlib compiler](/docs/NEWLIB.md).
 
 ## Running a RISC-V program
 
@@ -75,8 +51,6 @@ cd emulator
 ./build.sh
 ./rvlinux <path to RISC-V ELF binary>
 ```
-
-The emulator is built 3 times for different purposes. `rvmicro` is built for micro-environments with custom heap and threads. `rvnewlib` has hooked up enough system calls to run newlib programs. `rvlinux` has all the system calls necessary to run a normal userspace linux program. Each emulator is capable of running both 32- and 64-bit RISC-V programs. `rvlinux` can be used for most programs.
 
 You can step through programs instruction by instruction by running the emulator with `DEBUG=1`:
 ```sh
@@ -115,7 +89,7 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 The emulator currently supports RV32GCB, RV64GCB (imafdc_zicsr_zifence_zba_zbb_zbc_zbs) and RV128G.
 The A-, F-, D-, C- and B-extensions should be 100% supported on 32- and 64-bit. V-extension is undergoing work.
 
-The 128-bit ISA support is experimental, and the specification is not yet complete. There is neither toolchain support, nor is there an ELF format for 128-bit machines. There is an emulator that specifically runs a custom crafted 128-bit program in the [emu128 folder](/emu128/).
+The 128-bit ISA support is experimental, and the specification is not yet complete.
 
 ## Example usage when embedded into a project
 
