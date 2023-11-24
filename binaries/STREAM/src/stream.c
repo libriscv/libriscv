@@ -547,8 +547,8 @@ void checkSTREAMresults ()
 #endif
 }
 
-#define VLOAD(elem, vec) asm("vle32.v "#vec", %1" : : "r"(elem), "m"(elem))
-#define VSTORE(elem, vec) asm("vse32.v "#vec", %1" : "=m"(elem) : "m"(elem))
+#define VLOAD(elem, vec) asm("vle32.v "#vec", %1" : : "r"(&elem), "m"(elem))
+#define VSTORE(elem, vec) asm("vse32.v "#vec", (%1)" : "=m"(elem) : "r"(&elem))
 #define FLOAD(reg, scalar) asm("fmv.s.x "#reg", %0" : : "r"(scalar) : #reg)
 #ifdef TUNED
 
@@ -556,15 +556,18 @@ void tuned_STREAM_Copy()
 {
 	ssize_t j;
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
-		VLOAD(a[j +  0], v1);
-		VLOAD(a[j +  8], v2);
-		VLOAD(a[j + 16], v3);
-		VLOAD(a[j + 24], v4);
+		float* ap = &a[j];
+		float* cp = &c[j];
 
-		VSTORE(c[j +  0], v1);
-		VSTORE(c[j +  8], v2);
-		VSTORE(c[j + 16], v3);
-		VSTORE(c[j + 24], v4);
+		VLOAD(ap[ 0], v1);
+		VLOAD(ap[ 8], v2);
+		VLOAD(ap[16], v3);
+		VLOAD(ap[24], v4);
+
+		VSTORE(cp[ 0], v1);
+		VSTORE(cp[ 8], v2);
+		VSTORE(cp[16], v3);
+		VSTORE(cp[24], v4);
 	}
 }
 
@@ -575,20 +578,22 @@ void tuned_STREAM_Scale(STREAM_TYPE scalar)
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
 	    //b[j] = scalar*c[j];
 
-		VLOAD(c[j +  0], v1);
-		VLOAD(c[j +  8], v2);
-		VLOAD(c[j + 16], v3);
-		VLOAD(c[j + 24], v4);
+		float* cp = &c[j];
+		VLOAD(cp[ 0], v1);
+		VLOAD(cp[ 8], v2);
+		VLOAD(cp[16], v3);
+		VLOAD(cp[24], v4);
 
 		asm("vfmul.vf v1, v1, fa0");
 		asm("vfmul.vf v2, v2, fa0");
 		asm("vfmul.vf v3, v3, fa0");
 		asm("vfmul.vf v4, v4, fa0");
 
-		VSTORE(b[j +  0], v1);
-		VSTORE(b[j +  8], v2);
-		VSTORE(b[j + 16], v3);
-		VSTORE(b[j + 24], v4);
+		float* bp = &b[j];
+		VSTORE(bp[ 0], v1);
+		VSTORE(bp[ 8], v2);
+		VSTORE(bp[16], v3);
+		VSTORE(bp[24], v4);
 	}
 }
 
@@ -596,48 +601,52 @@ void tuned_STREAM_Add()
 {
 	ssize_t j;
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
+		float* ap = &a[j];
+		float* bp = &b[j];
+
 		asm("vle32.v v1, %1"
 			:
-			: "r"(a[j + 0]), "m"(a[j + 0]));
+			: "r"(&ap[0]), "m"(ap[0]));
 		asm("vle32.v v2, %1"
 			:
-			: "r"(a[j + 8]), "m"(a[j + 8]));
+			: "r"(&ap[8]), "m"(ap[8]));
 		asm("vle32.v v3, %1"
 			:
-			: "r"(a[j + 16]), "m"(a[j + 16]));
+			: "r"(&ap[16]), "m"(ap[16]));
 		asm("vle32.v v4, %1"
 			:
-			: "r"(a[j + 24]), "m"(a[j + 24]));
+			: "r"(&ap[24]), "m"(ap[24]));
 		asm("vle32.v v5, %1"
 			:
-			: "r"(b[j + 0]), "m"(b[j + 0]));
+			: "r"(&bp[0]), "m"(bp[0]));
 		asm("vle32.v v6, %1"
 			:
-			: "r"(b[j + 8]), "m"(b[j + 8]));
+			: "r"(&bp[8]), "m"(bp[8]));
 		asm("vle32.v v7, %1"
 			:
-			: "r"(b[j + 16]), "m"(b[j + 16]));
+			: "r"(&bp[16]), "m"(bp[16]));
 		asm("vle32.v v8, %1"
 			:
-			: "r"(b[j + 24]), "m"(b[j + 24]));
+			: "r"(&bp[24]), "m"(bp[24]));
 
 		asm("vfadd.vv v1, v1, v5");
 		asm("vfadd.vv v2, v2, v6");
 		asm("vfadd.vv v3, v3, v7");
 		asm("vfadd.vv v4, v4, v8");
 
-		asm("vse32.v v1, %1"
-			: "=m"(c[j + 0])
-			: "m"(c[j + 0]));
-		asm("vse32.v v2, %1"
-			: "=m"(c[j + 8])
-			: "m"(c[j + 8]));
-		asm("vse32.v v3, %1"
-			: "=m"(c[j + 16])
-			: "m"(c[j + 16]));
-		asm("vse32.v v4, %1"
-			: "=m"(c[j + 24])
-			: "m"(c[j + 24]));
+		float* cp = &c[j];
+		asm("vse32.v v1, (%1)"
+			: "=m"(cp[0])
+			: "r"(&cp[0]));
+		asm("vse32.v v2, (%1)"
+			: "=m"(cp[8])
+			: "r"(&cp[8]));
+		asm("vse32.v v3, (%1)"
+			: "=m"(cp[16])
+			: "r"(&cp[16]));
+		asm("vse32.v v4, (%1)"
+			: "=m"(cp[24])
+			: "r"(&cp[24]));
 	}
 }
 
@@ -646,31 +655,35 @@ void tuned_STREAM_Triad(STREAM_TYPE scalar)
 	FLOAD(fa0, scalar);
 	ssize_t j;
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
-		VLOAD(b[j +  0], v1);
-		VLOAD(b[j +  8], v2);
-		VLOAD(b[j + 16], v3);
-		VLOAD(b[j + 24], v4);
+		float* bp = &b[j];
+		float* cp = &c[j];
 
-		VLOAD(c[j +  0], v5);
-		VLOAD(c[j +  8], v6);
-		VLOAD(c[j + 16], v7);
-		VLOAD(c[j + 24], v8);
+		VLOAD(cp[ 0], v5);
+		VLOAD(cp[ 8], v6);
+		VLOAD(cp[16], v7);
+		VLOAD(cp[24], v8);
+
+		VLOAD(bp[ 0], v1);
+		VLOAD(bp[ 8], v2);
+		VLOAD(bp[16], v3);
+		VLOAD(bp[24], v4);
 
 	    // a[j] = b[j]+scalar*c[j];
-		asm("vfmul.vf v5, v5, fa0");
-		asm("vfmul.vf v6, v6, fa0");
-		asm("vfmul.vf v7, v7, fa0");
-		asm("vfmul.vf v8, v8, fa0");
+		asm("vfmul.vf v5, v5, fa0\n"
+			"vfmul.vf v6, v6, fa0\n"
+			"vfmul.vf v7, v7, fa0\n"
+			"vfmul.vf v8, v8, fa0\n"
 
-		asm("vfadd.vv v1, v1, v5");
-		asm("vfadd.vv v2, v2, v6");
-		asm("vfadd.vv v3, v3, v7");
-		asm("vfadd.vv v4, v4, v8");
+			"vfadd.vv v1, v1, v5\n"
+			"vfadd.vv v2, v2, v6\n"
+			"vfadd.vv v3, v3, v7\n"
+			"vfadd.vv v4, v4, v8\n");
 
-		VSTORE(a[j +  0], v1);
-		VSTORE(a[j +  8], v2);
-		VSTORE(a[j + 16], v3);
-		VSTORE(a[j + 24], v4);
+		float* ap = &a[j];
+		VSTORE(ap[ 0], v1);
+		VSTORE(ap[ 8], v2);
+		VSTORE(ap[16], v3);
+		VSTORE(ap[24], v4);
 	}
 }
 
