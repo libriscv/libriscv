@@ -12,6 +12,7 @@ namespace riscv
 			return (*(int64_t*)&t & 0x7fa0000000000000) == 0x7f80000000000000;
 	}
 
+#ifdef RISCV_FCSR
 	template <int W, typename T>
 	static void fsflags(CPU<W>& cpu, long double exact, T& inexact) {
 		if constexpr (fcsr_emulation) {
@@ -29,6 +30,9 @@ namespace riscv
 			}
 		}
 	}
+#else
+#define fsflags(c, e, i) /**/
+#endif
 	template <bool Signaling, int W, typename T, typename R>
 	static void feqflags(CPU<W>& cpu, T a, T b, R& dst) {
 		if constexpr (fcsr_emulation) {
@@ -114,6 +118,7 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] * rs2.f32[0] + rs3.f32[0]);
+			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
 		} else {
@@ -142,6 +147,7 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] * rs2.f32[0] - rs3.f32[0]);
+			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 - rs3.f64;
 		} else {
@@ -170,6 +176,7 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(-(rs1.f32[0] * rs2.f32[0]) - rs3.f32[0]);
+			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) - rs3.f64;
 		} else {
@@ -197,8 +204,10 @@ namespace riscv
 		auto& rs3 = cpu.registers().getfl(fi.R4type.rs3);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(-(rs1.f32[0] * rs2.f32[0]) + rs3.f32[0]);
+			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) + rs3.f64;
+			fsflags(cpu, (long double)-rs1.f32[0] * (long double)rs2.f32[0] + (long double)rs3.f32[0], dst.f32[0]);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -225,7 +234,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] + rs2.f32[0]);
-			fsflags(cpu, (long double)(rs1.f32[0]) + (long double)(rs2.f32[0]), dst.f32[0]);
+			fsflags(cpu, (double)(rs1.f32[0]) + (double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 + rs2.f64;
 			fsflags(cpu, (long double)(rs1.f64) + (long double)(rs2.f64), dst.f64);
@@ -253,7 +262,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] - rs2.f32[0]);
-			fsflags(cpu, (long double)(rs1.f32[0]) - (long double)(rs2.f32[0]), dst.f32[0]);
+			fsflags(cpu, (double)(rs1.f32[0]) - (double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 - rs2.f64;
 			fsflags(cpu, (long double)(rs1.f64) - (long double)(rs2.f64), dst.f64);
@@ -281,7 +290,7 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
 			dst.set_float(rs1.f32[0] * rs2.f32[0]);
-			fsflags(cpu, (long double)(rs1.f32[0]) * (long double)(rs2.f32[0]), dst.f32[0]);
+			fsflags(cpu, (double)(rs1.f32[0]) * (double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64;
 			fsflags(cpu, (long double)(rs1.f64) * (long double)(rs2.f64), dst.f64);
@@ -309,8 +318,10 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // fp32
 			dst.set_float(rs1.f32[0] / rs2.f32[0]);
+			fsflags(cpu, (double)(rs1.f32[0]) / (double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // fp64
 			dst.f64 = rs1.f64 / rs2.f64;
+			fsflags(cpu, (long double)(rs1.f64) / (long double)(rs2.f64), dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -335,9 +346,11 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 		case 0x0: // FSQRT.S
 			dst.set_float(sqrtf(rs1.f32[0]));
+			fsflags(cpu, std::sqrt((double)(rs1.f32[0])), dst.f32[0]);
 			break;
 		case 0x1: // FSQRT.D
 			dst.f64 = sqrt(rs1.f64);
+			fsflags(cpu, std::sqrt((long double)(rs1.f64)), dst.f64);
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -364,19 +377,39 @@ namespace riscv
 		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
 		{
 		case 0x0: // FMIN.S
-			dst.set_float(std::min(rs1.f32[0], rs2.f32[0]));
+			if constexpr (fcsr_emulation) {
+				if (std::isnan(rs1.f32[0]) && std::isnan(rs2.f32[0]))
+					dst.load_u32(0x7fc00000);
+				else
+					dst.set_float(std::fmin(rs1.f32[0], rs2.f32[0]));
+			} else {
+				dst.set_float(std::fmin(rs1.f32[0], rs2.f32[0]));
+			}
 			break;
 		case 0x1: // FMAX.S
-			dst.set_float(std::max(rs1.f32[0], rs2.f32[0]));
+			if constexpr (fcsr_emulation) {
+				if (std::isnan(rs1.f32[0]) && std::isnan(rs2.f32[0]))
+					dst.load_u32(0x7fc00000);
+				else
+					dst.set_float(std::fmax(rs1.f32[0], rs2.f32[0]));
+			} else {
+				dst.set_float(std::fmax(rs1.f32[0], rs2.f32[0]));
+			}
 			break;
 		case 0x10: // FMIN.D
-			dst.f64 = std::min(rs1.f64, rs2.f64);
+			dst.f64 = std::fmin(rs1.f64, rs2.f64);
 			break;
 		case 0x11: // FMAX.D
-			dst.f64 = std::max(rs1.f64, rs2.f64);
+			dst.f64 = std::fmax(rs1.f64, rs2.f64);
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);
+		}
+		if constexpr (fcsr_emulation) {
+			if (is_signaling_nan(rs1.f32[0]) || is_signaling_nan(rs2.f32[0]))
+				cpu.registers().fcsr().fflags = 16;
+			else
+				cpu.registers().fcsr().fflags = 0;
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
