@@ -9,7 +9,7 @@ option(TUNED       "Tuned vectorized version" OFF)
 
 if (GCC_TRIPLE STREQUAL "riscv32-unknown-elf")
 	if (TUNED)
-		set(RISCV_ABI "-march=rv32gv_zba -mabi=ilp32d")
+		set(RISCV_ABI "-march=rv32gv_zba_zbb_zbc_zbs -mabi=ilp32d")
 	else()
 		set(RISCV_ABI "")
 	endif()
