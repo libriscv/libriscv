@@ -4,12 +4,16 @@
 
 namespace riscv
 {
+	// RISC-V Canonical NaNs
+	static constexpr uint32_t CANONICAL_NAN_F32 = 0x7fc00000;
+	static constexpr uint64_t CANONICAL_NAN_F64 = 0x7ff8000000000000;
+
 	template <typename T>
 	static bool is_signaling_nan(T t) {
 		if constexpr (sizeof(T) == 4)
-			return (*(int32_t*)&t & 0x7fa00000) == 0x7f800000;
+			return (*(uint32_t*)&t & 0x7fa00000) == 0x7f800000;
 		else
-			return (*(int64_t*)&t & 0x7fa0000000000000) == 0x7f80000000000000;
+			return (*(uint64_t*)&t & 0x7ffe000000000000) == 0x7ff0000000000000;
 	}
 
 #ifdef RISCV_FCSR
@@ -22,9 +26,9 @@ namespace riscv
 				fcsr.fflags |= 16;
 				// Canonical NaN
 				if constexpr (sizeof(T) == 4)
-					*(int32_t *)&inexact = 0x7fc00000;
+					*(int32_t *)&inexact = CANONICAL_NAN_F32;
 				else
-					*(int64_t *)&inexact = 0x7fc0000000000000;
+					*(int64_t *)&inexact = CANONICAL_NAN_F64;
 			} else {
 				if (exact != inexact) fcsr.fflags |= 1;
 			}
@@ -121,6 +125,7 @@ namespace riscv
 			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
+			fsflags(cpu, (long double)rs1.f64 * (long double)rs2.f64 + (long double)rs3.f64, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -150,6 +155,7 @@ namespace riscv
 			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64 - rs3.f64;
+			fsflags(cpu, (long double)rs1.f64 * (long double)rs2.f64 - (long double)rs3.f64, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -179,6 +185,7 @@ namespace riscv
 			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) - rs3.f64;
+			fsflags(cpu, (long double)-rs1.f64 * (long double)rs2.f64 - (long double)rs3.f64, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -207,7 +214,7 @@ namespace riscv
 			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = -(rs1.f64 * rs2.f64) + rs3.f64;
-			fsflags(cpu, (long double)-rs1.f32[0] * (long double)rs2.f32[0] + (long double)rs3.f32[0], dst.f32[0]);
+			fsflags(cpu, (long double)-rs1.f64 * (long double)rs2.f64 + (long double)rs3.f64, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -379,7 +386,7 @@ namespace riscv
 		case 0x0: // FMIN.S
 			if constexpr (fcsr_emulation) {
 				if (std::isnan(rs1.f32[0]) && std::isnan(rs2.f32[0]))
-					dst.load_u32(0x7fc00000);
+					dst.load_u32(CANONICAL_NAN_F32);
 				else
 					dst.set_float(std::fmin(rs1.f32[0], rs2.f32[0]));
 			} else {
@@ -389,7 +396,7 @@ namespace riscv
 		case 0x1: // FMAX.S
 			if constexpr (fcsr_emulation) {
 				if (std::isnan(rs1.f32[0]) && std::isnan(rs2.f32[0]))
-					dst.load_u32(0x7fc00000);
+					dst.load_u32(CANONICAL_NAN_F32);
 				else
 					dst.set_float(std::fmax(rs1.f32[0], rs2.f32[0]));
 			} else {
@@ -397,10 +404,24 @@ namespace riscv
 			}
 			break;
 		case 0x10: // FMIN.D
-			dst.f64 = std::fmin(rs1.f64, rs2.f64);
+			if constexpr (fcsr_emulation) {
+				if (std::isnan(rs1.f64) && std::isnan(rs2.f64))
+					dst.load_u64(CANONICAL_NAN_F64);
+				else
+					dst.f64 = std::fmin(rs1.f64, rs2.f64);
+			} else {
+				dst.f64 = std::fmin(rs1.f64, rs2.f64);
+			}
 			break;
 		case 0x11: // FMAX.D
-			dst.f64 = std::fmax(rs1.f64, rs2.f64);
+			if constexpr (fcsr_emulation) {
+				if (std::isnan(rs1.f64) && std::isnan(rs2.f64))
+					dst.load_u64(CANONICAL_NAN_F64);
+				else
+					dst.f64 = std::fmax(rs1.f64, rs2.f64);
+			} else {
+				dst.f64 = std::fmax(rs1.f64, rs2.f64);
+			}
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);

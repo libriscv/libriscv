@@ -331,6 +331,25 @@ namespace riscv
 				return;
 			}
 			} break;
+		case 0x3: { // CSRRC: Atomically read and clear CSR
+			const bool rd = instr.Itype.rd != 0;
+			switch (instr.Itype.imm)
+			{
+			case 0x001: // fflags: accrued exceptions
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				cpu.registers().fcsr().fflags &= ~cpu.reg(instr.Itype.rs1);
+				return;
+			case 0x002: // frm: rounding-mode
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				cpu.registers().fcsr().frm &= ~cpu.reg(instr.Itype.rs1);
+				return;
+			case 0x003: // fcsr: control and status register
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				cpu.registers().fcsr().whole &= ~(cpu.reg(instr.Itype.rs1) & 0xFF);
+				return;
+			}
+			break;
+		}
 		case 0x5: { // CSRWI: CSRW from uimm[4:0] in RS1
 			const bool rd = instr.Itype.rd != 0;
 			const uint32_t imm = instr.Itype.rs1;
@@ -361,6 +380,26 @@ namespace riscv
 				return;
 			}
 		} // CSRWI
+		case 0x7: { // CSRRCI: Atomically read and clear CSR using immediate
+			const bool rd = instr.Itype.rd != 0;
+			const uint32_t imm = instr.Itype.rs1;
+			switch (instr.Itype.imm)
+			{
+			case 0x001: // fflags: accrued exceptions
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				cpu.registers().fcsr().fflags &= ~imm;
+				return;
+			case 0x002: // frm: rounding-mode
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				cpu.registers().fcsr().frm &= ~imm;
+				return;
+			case 0x003: // fcsr: control and status register
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				cpu.registers().fcsr().whole &= ~(imm & 0xFF);
+				return;
+			}
+			break;
+		} // CSRRCI
 		}
 		// if we got here, its an illegal operation!
 		cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.funct3);
