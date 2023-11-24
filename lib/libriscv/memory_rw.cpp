@@ -206,10 +206,6 @@ namespace riscv
 	{
 		size_t total = 0;
 		total += sizeof(Machine<W>);
-	#ifdef RISCV_EXT_VECTOR
-		const bool has_rvv = machine().cpu.registers().has_vectors();
-		total += has_rvv ? sizeof(VectorRegisters<W>) : 0u;
-	#endif
 		// Pages
 		for (const auto& it : m_pages) {
 			const auto page_number = it.first;
