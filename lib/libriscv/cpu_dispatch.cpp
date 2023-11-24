@@ -416,20 +416,13 @@ INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 
 #endif
 
-execute_invalid:
-	this->trigger_exception(ILLEGAL_OPCODE, decoder->instr);
-
 check_unaligned_jump:
 	static constexpr unsigned ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
-	if (UNLIKELY(pc & ALIGN_MASK)) {
-		registers().pc = pc;
-		trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
-	}
-check_jump: {
-	if (UNLIKELY(counter.overflowed())) {
-		registers().pc = pc;
-		return;
-	}
+	if (UNLIKELY(pc & ALIGN_MASK))
+		goto misaligned_jump;
+check_jump:
+	if (UNLIKELY(counter.overflowed()))
+		goto counter_overflow;
 
 	if (LIKELY(pc - current_begin < current_end - current_begin)) {
 		goto continue_segment;
@@ -447,7 +440,16 @@ check_jump: {
 	current_end = exec->exec_end();
 	pc = registers().pc;
 	goto continue_segment;
-}
+
+execute_invalid:
+	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
+misaligned_jump:
+	registers().pc = pc; // OK to set illegal PC?
+	trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
+
+counter_overflow:
+	registers().pc = pc;
+	return;
 
 } // CPU::simulate_XXX()
 
