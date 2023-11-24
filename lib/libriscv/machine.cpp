@@ -247,33 +247,50 @@ namespace riscv
 #endif
 			}
 			break;
-		case 0x1: // CSRRW
-		case 0x2: { // CSRRS
+		case 0x1: { // CSRRW: Atomically swap CSR and integer register
+			const bool rd = instr.Itype.rd != 0;
+			switch (instr.Itype.imm)
+			{
+			case 0x001: // fflags: accrued exceptions
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				cpu.registers().fcsr().fflags = cpu.reg(instr.Itype.rs1);
+				return;
+			case 0x002: // frm: rounding-mode
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				cpu.registers().fcsr().frm = cpu.reg(instr.Itype.rs1);
+				return;
+			case 0x003: // fcsr: control and status register
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1) & 0xFF;
+				return;
+			}
+			[[fallthrough]];
+		}
+		case 0x2: { // CSRRS: Atomically read and set bit mask
 			// if destination is x0, then we do not write to rd
-			bool rd = instr.Itype.rd != 0;
-			bool wr = instr.Itype.rs1 != 0;
+			const bool rd = instr.Itype.rd != 0;
 			switch (instr.Itype.imm)
 			{
 			case 0x001: // fflags (accrued exceptions)
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
-				if (wr) cpu.registers().fcsr().fflags = cpu.reg(instr.Itype.rs1);
+				cpu.registers().fcsr().fflags |= cpu.reg(instr.Itype.rs1);
 				return;
 			case 0x002: // frm (rounding-mode)
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
-				if (wr) cpu.registers().fcsr().frm = cpu.reg(instr.Itype.rs1);
+				cpu.registers().fcsr().frm |= cpu.reg(instr.Itype.rs1);
 				return;
 			case 0x003: // fcsr (control and status register)
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
-				if (wr) cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1);
+				cpu.registers().fcsr().whole |= cpu.reg(instr.Itype.rs1) & 0xFF;
 				return;
 #ifdef RISCV_SUPERVISOR
 			case 0x180: // SATP (supervisor address translation and protection)
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.super().satp;
-				if (wr) cpu.super().satp = cpu.reg(instr.Itype.rs1);
+				cpu.super().satp = cpu.reg(instr.Itype.rs1);
 				return;
 			case 0x300: // MSTATUS (machine status)
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.super().mstatus;
-				if (wr) cpu.super().mstatus = cpu.reg(instr.Itype.rs1);
+				cpu.super().mstatus = cpu.reg(instr.Itype.rs1);
 				return;
 #endif
 			case 0xC00: // CSR RDCYCLE (lower)
@@ -314,11 +331,23 @@ namespace riscv
 				return;
 			}
 			} break;
-		case 0x5: { // CSRWI
-			[[maybe_unused]] bool rd = instr.Itype.rd != 0;
-			[[maybe_unused]] const auto imm = instr.Itype.rs1;
+		case 0x5: { // CSRWI: CSRW from uimm[4:0] in RS1
+			const bool rd = instr.Itype.rd != 0;
+			const uint32_t imm = instr.Itype.rs1;
 			switch (instr.Itype.imm)
 			{
+			case 0x001: // fflags: accrued exceptions
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				cpu.registers().fcsr().fflags = imm;
+				return;
+			case 0x002: // frm: rounding-mode
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				cpu.registers().fcsr().frm = imm;
+				return;
+			case 0x003: // fcsr: control and status register
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				cpu.registers().fcsr().whole = imm & 0xFF;
+				return;
 #ifdef RISCV_SUPERVISOR
 			case 0x304: // mie (machine interrupt enable)
 				if (rd) {
