@@ -60,7 +60,7 @@ struct MultiThreading
 	int       get_tid() const { return m_current->tid; }
 	thread_t* get_thread();
 	thread_t* get_thread(int tid); /* or nullptr */
-	bool      suspend_and_yield();
+	bool      suspend_and_yield(long result = 0);
 	bool      yield_to(int tid, bool store_retval = true);
 	void      erase_thread(int tid);
 	void      wakeup_next();
@@ -283,17 +283,17 @@ inline Thread<W>* MultiThreading<W>::create(
 }
 
 template <int W>
-inline bool MultiThreading<W>::suspend_and_yield()
+inline bool MultiThreading<W>::suspend_and_yield(long result)
 {
 	auto* thread = get_thread();
 	// don't go through the ardous yielding process when alone
 	if (m_suspended.empty()) {
 		// set the return value for sched_yield
-		machine.cpu.reg(REG_ARG0) = 0;
+		machine.cpu.reg(REG_ARG0) = result;
 		return false;
 	}
 	// suspend current thread, and return 0 when resumed
-	thread->suspend(0);
+	thread->suspend(result);
 	// resume some other thread
 	this->wakeup_next();
 	return true;
