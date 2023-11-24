@@ -156,7 +156,6 @@ if (RISCV_LIBTCC)
 	#target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
 
 	target_link_libraries(riscv PUBLIC libtcc.a)
-	target_compile_definitions(riscv PUBLIC RISCV_LIBTCC=1)
 endif()
 
 if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
