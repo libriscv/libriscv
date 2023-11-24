@@ -446,21 +446,27 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 					return RV32I_BC_FUNCTION;
 				}
 #ifdef RISCV_EXT_VECTOR
-		case RV32V_OP:
+		case RV32V_OP: {
+			const rv32v_instruction vi{instr};
 			switch (instr.vwidth())
 			{
-			case 0x1: {
-				const rv32v_instruction vi{instr};
+			case 0x1: // OPF.VV
 				switch (vi.OPVV.funct6)
 				{
-					case 0b000000: // VFADD.VV
-						return RV32V_BC_VFADD_VV;
+				case 0b000000: // VFADD.VV
+					return RV32V_BC_VFADD_VV;
 				}
-				[[fallthrough]];
+				break;
+			case 0x5: // OPF.VF
+				switch (vi.OPVV.funct6)
+				{
+				case 0b100100: // VFMUL.VF
+					return RV32V_BC_VFMUL_VF;
+				}
+				break;
 			}
-			default:
-				return RV32I_BC_FUNCTION;
-			}
+			return RV32I_BC_FUNCTION;
+		}
 #endif
 #ifdef RISCV_EXT_ATOMICS
 		case RV32A_ATOMIC:

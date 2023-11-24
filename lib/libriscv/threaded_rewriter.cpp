@@ -251,7 +251,8 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV32V_BC_VFADD_VV: {
+			case RV32V_BC_VFADD_VV:
+			case RV32V_BC_VFMUL_VF: {
 				const rv32v_instruction vi{instr};
 				FasterOpType rewritten;
 				rewritten.rd  = vi.OPVV.vd;

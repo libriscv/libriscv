@@ -421,6 +421,7 @@ namespace riscv
 		[RV32V_BC_VLE32]   = rv32v_vle32,
 		[RV32V_BC_VSE32]   = rv32v_vse32,
 		[RV32V_BC_VFADD_VV] = rv32v_vfadd_vv,
+		[RV32V_BC_VFMUL_VF] = rv32v_vfmul_vf,
 #endif
 		[RV32I_BC_FUNCTION] = execute_decoded_function,
 		[RV32I_BC_FUNCBLOCK] = execute_function_block,

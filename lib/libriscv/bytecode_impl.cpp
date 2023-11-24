@@ -683,6 +683,14 @@ INSTRUCTION(RV32V_BC_VFADD_VV, rv32v_vfadd_vv) {
 	}
 	NEXT_INSTR();
 }
+INSTRUCTION(RV32V_BC_VFMUL_VF, rv32v_vfmul_vf) {
+	VIEW_INSTR_AS(vi, FasterOpType);
+	auto& rvv = VECTORS();
+	for (size_t i = 0; i < rvv.f32(0).size(); i++) {
+		rvv.f32(vi.rd)[i] = rvv.f32(vi.rs2)[i] * REGISTERS().getfl(vi.rs1).f32[0];
+	}
+	NEXT_INSTR();
+}
 #endif // RISCV_EXT_VECTOR
 
 #endif // BYTECODES_RARELY_USED
