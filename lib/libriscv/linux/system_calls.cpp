@@ -692,6 +692,26 @@ static void syscall_clock_gettime(Machine<W>& machine)
 	struct timespec ts;
 	const int res = clock_gettime(clkid, &ts);
 	if (res >= 0) {
+		if constexpr (W == 4) {
+			int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
+			machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
+		} else {
+			machine.copy_to_guest(buffer, &ts, sizeof(ts));
+		}
+	}
+	machine.set_result_or_error(res);
+}
+template <int W>
+static void syscall_clock_gettime64(Machine<W>& machine)
+{
+	const auto clkid = machine.template sysarg<int>(0);
+	const auto buffer = machine.sysarg(1);
+	SYSPRINT("SYSCALL clock_gettime64, clkid: %x buffer: 0x%lX\n",
+		clkid, (long)buffer);
+
+	struct timespec ts;
+	const int res = clock_gettime(clkid, &ts);
+	if (res >= 0) {
 		machine.copy_to_guest(buffer, &ts, sizeof(ts));
 	}
 	machine.set_result_or_error(res);
@@ -861,6 +881,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(101, syscall_nanosleep<W>);
 	// clock_gettime
 	install_syscall_handler(113, syscall_clock_gettime<W>);
+	install_syscall_handler(403, syscall_clock_gettime64<W>);
 	// sched_getaffinity
 	install_syscall_handler(123, syscall_stub_nosys<W>);
 	// kill

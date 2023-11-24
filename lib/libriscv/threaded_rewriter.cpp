@@ -360,11 +360,6 @@ namespace riscv
 					return RV32I_BC_INVALID;
 				}
 
-				FasterItype rewritten;
-				rewritten.rs1 = 0;
-				rewritten.rs2 = 0;
-				rewritten.imm = imm;
-
 				instr.whole = imm;
 				return bytecode;
 			}
