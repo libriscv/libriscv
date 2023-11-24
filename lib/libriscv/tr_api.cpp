@@ -69,6 +69,17 @@ static inline float fmax(double x, double y) {
 #define SPECSAFE(x) (x)
 #endif
 
+#ifdef RISCV_EXT_VECTOR
+typedef union {
+	float  f32[RISCV_EXT_VECTOR / 4];
+	double f64[RISCV_EXT_VECTOR / 8];
+} VectorLane __attribute__ ((aligned (RISCV_EXT_VECTOR)));
+
+typedef struct {
+	VectorLane  lane[32];
+} RVV __attribute__ ((aligned (RISCV_EXT_VECTOR)));
+#endif
+
 typedef union {
 	int32_t i32[2];
 	float   f32[2];
@@ -103,6 +114,9 @@ typedef struct {
 	addr_t  r[32];
 	uint32_t fcsr;
 	fp64reg fr[32];
+#ifdef RISCV_EXT_VECTOR
+	RVV rvv;
+#endif
 } CPU;
 
 #define PAGENO(x) ((addr_t)(x) >> 12)

@@ -131,6 +131,11 @@ struct Emitter
 	std::string from_fpreg(int reg) {
 		return "cpu->fr[" + std::to_string(reg) + "]";
 	}
+#ifdef RISCV_EXT_VECTOR
+	std::string from_rvvreg(int reg) {
+		return "cpu->rvv.lane[" + std::to_string(reg) + "]";
+	}
+#endif
 	std::string from_imm(int64_t imm) {
 		return std::to_string(imm);
 	}
@@ -1013,7 +1018,7 @@ void Emitter<W>::emit()
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VLE32
 				const rv32v_instruction vi { instr };
-				code += "api.vec_load(cpu, " + std::to_string(vi.VLS.vd) + ", " + from_reg(vi.VLS.rs1) + ");\n";
+				this->memory_load<VectorLane>(from_rvvreg(vi.VLS.vd), "VectorLane", vi.VLS.rs1, 0);
 				break;
 			}
 #endif
@@ -1034,7 +1039,7 @@ void Emitter<W>::emit()
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VSE32
 				const rv32v_instruction vi { instr };
-				code += "api.vec_store(cpu, " + from_reg(vi.VLS.rs1) + ", " + std::to_string(vi.VLS.vd) + ");\n";
+				this->memory_store("VectorLane", vi.VLS.rs1, 0, from_rvvreg(vi.VLS.vd));
 				break;
 			}
 #endif
@@ -1213,10 +1218,63 @@ void Emitter<W>::emit()
 			} else UNKNOWN_INSTRUCTION();
 			} break; // RV32F_FPFUNC
 		case RV32A_ATOMIC: // General handler for atomics
-			[[fallthrough]];
-		case RV32V_OP:	   // General handler for vector instructions
 			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 			break;
+		case RV32V_OP: {   // General handler for vector instructions
+#ifdef RISCV_EXT_VECTOR
+			const rv32v_instruction vi{instr};
+			switch (instr.vwidth()) {
+			case 0x1: // OPF.VV
+				switch (vi.OPVV.funct6)
+				{
+				case 0b000000: // VFADD.VV
+					code +=
+						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
+						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs1) + ".f32[i] + " + from_rvvreg(vi.OPVV.vs2) + ".f32[i];\n"
+						"}\n";
+					break;
+				case 0b100100: // VFMUL.VV
+					code +=
+						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
+						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs1) + ".f32[i] * " + from_rvvreg(vi.OPVV.vs2) + ".f32[i];\n"
+						"}\n";
+					break;
+				default:
+					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				}
+				break;
+			case 0x5: { // OPF.VF
+				const std::string scalar = "scalar" + PCRELS(0);
+				switch (vi.OPVV.funct6)
+				{
+				case 0b000000: // VFADD.VF
+					code +=
+						"const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n"
+						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
+						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs2) + ".f32[i] + " + scalar + ";\n"
+						"}\n";
+					break;
+				case 0b100100: // VFMUL.VF
+					code +=
+						"const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n"
+						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
+						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs2) + ".f32[i] * " + scalar + ";\n"
+						"}\n";
+					break;
+				default:
+					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				}
+				break;
+			}
+			default:
+				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			}
+			break;
+#else
+			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			break;
+#endif
+		}
 		default:
 			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
 		}

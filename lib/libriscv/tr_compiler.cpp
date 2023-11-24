@@ -43,6 +43,9 @@ namespace riscv
 		" -DRISCV_MAX_SYSCALLS=" + std::to_string(RISCV_SYSCALLS_MAX) +
 		" -DRISCV_ARENA_END=" + std::to_string(arena_size) +
 		" -DRISCV_ARENA_ROEND=" + std::to_string(arena_roend) +
+#ifdef RISCV_EXT_VECTOR
+		" -march=native -DRISCV_EXT_VECTOR=" + std::to_string(RISCV_EXT_VECTOR) +
+#endif
 		" -DARCH=" + host_arch() + ""
 		" -pipe " + cflags();
 	}

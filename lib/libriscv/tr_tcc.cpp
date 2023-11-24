@@ -13,6 +13,9 @@ namespace riscv
 		tcc_define_symbol(state, "RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX).c_str());
 		tcc_define_symbol(state, "RISCV_ARENA_END",    std::to_string(arena_size).c_str());
 		tcc_define_symbol(state, "RISCV_ARENA_ROEND",  std::to_string(arena_roend).c_str());
+#ifdef RISCV_EXT_VECTOR
+		tcc_define_symbol(state, "RISCV_EXT_VECTOR",  std::to_string(RISCV_EXT_VECTOR).c_str());
+#endif
 
 		tcc_define_symbol(state, "ARCH", "HOST_UNKNOWN");
 		tcc_set_options(state, "-std=c99 -O2");
