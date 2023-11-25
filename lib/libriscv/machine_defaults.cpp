@@ -32,7 +32,7 @@ namespace riscv
 	template <int W>
 	uint64_t Machine<W>::default_rdtime(const Machine<W>&) {
 		auto now = std::chrono::steady_clock::now();
-		return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+		return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 	}
 
 #ifndef __GNUG__ /* Workaround for GCC bug */
