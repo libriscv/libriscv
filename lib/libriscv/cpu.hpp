@@ -2,7 +2,9 @@
 #include "common.hpp"
 #include "page.hpp"
 #include "registers.hpp"
-#include "supervisor.hpp"
+#ifdef RISCV_SUPERVISOR
+#include "supervisor/supervisor.hpp"
+#endif
 #ifdef RISCV_EXT_ATOMICS
 #include "rva.hpp"
 #endif

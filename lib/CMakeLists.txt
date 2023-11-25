@@ -115,8 +115,14 @@ if (RISCV_BINARY_TRANSLATION)
 		list(APPEND SOURCES libriscv/tr_compiler.cpp)
 	endif()
 endif()
+if (RISCV_SUPERVISOR)
+	list(APPEND SOURCES
+		libriscv/supervisor/supervisor.cpp
+	)
+endif()
 
 configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
+configure_file(libriscv.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
 
 add_library(riscv ${SOURCES})
 target_compile_features(riscv PUBLIC cxx_std_20)
@@ -193,11 +199,15 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/rvc.hpp
 		libriscv/rvfd.hpp
 		libriscv/rsp_server.hpp
-		libriscv/supervisor.hpp
 		libriscv/threads.hpp
 		libriscv/types.hpp
 
 		DESTINATION include/${PROJECT_NAME}
+	)
+	install(FILES
+		libriscv/supervisor/supervisor.hpp
+
+		DESTINATION include/${PROJECT_NAME}/supervisor
 	)
 	install(FILES
 		libriscv/linux/rsp_server.hpp
@@ -216,5 +226,9 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/util/function.hpp
 
 		DESTINATION include/${PROJECT_NAME}/util
+	)
+	install(
+		FILES ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc
+		DESTINATION lib/pkgconfig
 	)
 endif()

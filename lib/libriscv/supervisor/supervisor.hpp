@@ -1,5 +1,5 @@
 #pragma once
-#include "types.hpp"
+#include "../types.hpp"
 
 namespace riscv
 {
@@ -7,7 +7,10 @@ namespace riscv
     struct Supervisor {
         using address_t = address_type<W>;
 
-        void sret() {}
+        void sret();
+        void mret();
+        bool is_privilege_machine() const noexcept;
+        bool is_privilege_supervisor() const noexcept;
 
         address_t satp = 0x0;
         address_t mie;
