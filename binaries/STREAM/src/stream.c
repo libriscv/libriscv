@@ -420,9 +420,10 @@ static inline int clock_gettime64(int clk_id, struct timespec *tp)
 {
     register long a0 asm("a0") = clk_id;
     register struct timespec * a1 asm("a1") = tp;
-    register long syscall_id asm("a7") = 403;
+	register long syscall_id asm("a7") =
+		(sizeof(size_t) == 4) ? 403 : 113;
 
-    asm("ecall"  : "+r"(a0), "=m"(*a1)
+	asm("ecall"  : "+r"(a0), "=m"(*a1)
                  : "r"(a1), "r"(syscall_id));
 
     return a0;
@@ -430,10 +431,13 @@ static inline int clock_gettime64(int clk_id, struct timespec *tp)
 
 double mysecond()
 {
-        struct timespec ts;
+	struct timespec ts;
+	(void) clock_gettime64(1, &ts);
 
-        (void) clock_gettime64(1, &ts);
-        return ( (double) ts.tv_sec + (double) ts.tv_nsec * 1.e-9 );
+	if (sizeof(size_t) == 4)
+		return ((double)ts.tv_sec + (double)ts.tv_nsec * 1.e-3);
+	else
+		return ((double)ts.tv_sec + (double)ts.tv_nsec * 1.e-9);
 }
 
 #ifndef abs
