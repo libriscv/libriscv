@@ -647,10 +647,10 @@ static void syscall_clock_gettime64(Machine<W>& machine) {
 
 	auto tp = std::chrono::system_clock::now();
 	auto secs = std::chrono::time_point_cast<std::chrono::seconds>(tp);
-	auto ns = std::chrono::time_point_cast<std::chrono::nanoseconds>(tp) -
-		time_point_cast<std::chrono::nanoseconds>(secs);
+	auto ms = std::chrono::time_point_cast<std::chrono::milliseconds>(tp) -
+		time_point_cast<std::chrono::milliseconds>(secs);
 	struct timespec ts =
-		timespec{ secs.time_since_epoch().count(), long(ns.count()) };
+		timespec{ secs.time_since_epoch().count(), long(ms.count()) };
 	(void)clkid;
 
 	machine.copy_to_guest(buffer, &ts, sizeof(ts));

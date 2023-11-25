@@ -188,21 +188,20 @@ static void syscall_write(Machine<W>& machine)
 	const size_t len   = machine.sysarg(2);
 	SYSPRINT("SYSCALL write, fd: %d addr: 0x%lX, len: %zu\n",
 		vfd, (long)address, len);
+	// Zero-copy retrieval of buffers
+	std::array<riscv::vBuffer, 64> buffers;
+
 	if (vfd == 1 || vfd == 2) {
-		// Zero-copy retrieval of buffers (64kb)
-		riscv::vBuffer buffers[16];
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(16, buffers, address, len);
+			machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), address, len);
 		for (size_t i = 0; i < cnt; i++) {
 			machine.print(buffers[i].ptr, buffers[i].len);
 		}
 		machine.set_result(len);
 	} else if (machine.has_file_descriptors() && machine.fds().permit_write(vfd)) {
 		int real_fd = machine.fds().translate(vfd);
-		// Zero-copy retrieval of buffers (256kb)
-		riscv::vBuffer buffers[64];
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(64, buffers, address, len);
+			machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), address, len);
 		const ssize_t res =
 			writev(real_fd, (struct iovec *)&buffers[0], cnt);
 		SYSPRINT("SYSCALL write(real fd: %d) = %ld\n",
@@ -260,10 +259,8 @@ static void syscall_readv(Machine<W>& machine)
 		const ssize_t res = readv(real_fd, vec.data(), vec_cnt);
 		machine.set_result_or_error(res);
 	}
-	if constexpr (verbose_syscalls) {
-		printf("SYSCALL readv(vfd: %d iov: 0x%lX cnt: %d) = %ld\n",
-			vfd, (long)iov_g, count, (long)machine.return_value());
-	}
+	SYSPRINT("SYSCALL readv(vfd: %d iov: 0x%lX cnt: %d) = %ld\n",
+		vfd, (long)iov_g, count, (long)machine.return_value());
 } // readv
 
 template <int W>
@@ -712,7 +709,13 @@ static void syscall_clock_gettime64(Machine<W>& machine)
 	struct timespec ts;
 	const int res = clock_gettime(clkid, &ts);
 	if (res >= 0) {
-		machine.copy_to_guest(buffer, &ts, sizeof(ts));
+		struct {
+			int64_t tv_sec;
+			int64_t tv_msec;
+		} kernel_ts;
+		kernel_ts.tv_sec  = ts.tv_sec;
+		kernel_ts.tv_msec = ts.tv_nsec / 1000000UL;
+		machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
 	}
 	machine.set_result_or_error(res);
 }
@@ -738,6 +741,27 @@ static void syscall_nanosleep(Machine<W>& machine)
 			machine.copy_to_guest(g_rem, &ts_rem, sizeof(ts_rem));
 	}
 	machine.set_result_or_error(res);
+}
+template <int W>
+static void syscall_clock_nanosleep(Machine<W>& machine)
+{
+	const auto clkid = machine.template sysarg<int>(0);
+	const auto flags = machine.template sysarg<int>(1);
+	const auto g_request = machine.sysarg(2);
+	const auto g_remain = machine.sysarg(3);
+
+	struct timespec ts_req;
+	struct timespec ts_rem;
+	machine.copy_from_guest(&ts_req, g_request, sizeof(ts_req));
+
+	const int res = clock_nanosleep(clkid, flags, &ts_req, &ts_rem);
+	if (res >= 0 && g_remain != 0x0) {
+		machine.copy_to_guest(g_remain, &ts_rem, sizeof(ts_rem));
+	}
+	machine.set_result_or_error(res);
+
+	SYSPRINT("SYSCALL clock_nanosleep, clkid: %x req: 0x%lX rem: 0x%lX = %ld\n",
+		clkid, (long)g_request, (long)g_remain, (long)machine.return_value());
 }
 
 template <int W>
@@ -874,7 +898,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(80, syscall_fstat<W>);
 
 	install_syscall_handler(93, syscall_exit<W>);
-	// 94: exit_group (single-threaded)
+	// 94: exit_group (exit process)
 	install_syscall_handler(94, syscall_exit<W>);
 
 	// nanosleep
@@ -882,6 +906,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// clock_gettime
 	install_syscall_handler(113, syscall_clock_gettime<W>);
 	install_syscall_handler(403, syscall_clock_gettime64<W>);
+	// clock_nanosleep
+	install_syscall_handler(115, syscall_clock_nanosleep<W>);
 	// sched_getaffinity
 	install_syscall_handler(123, syscall_stub_nosys<W>);
 	// kill
