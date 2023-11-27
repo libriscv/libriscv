@@ -338,7 +338,7 @@ namespace riscv
 
 				if (!this->is_within(addr, 4) || (addr % PCAL) != 0)
 				{
-					return RV32I_BC_INVALID;
+					return RV32C_BC_JUMPFUNC;
 				}
 
 				FasterItype rewritten;
