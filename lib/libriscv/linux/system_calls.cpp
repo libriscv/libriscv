@@ -167,9 +167,9 @@ static void syscall_read(Machine<W>& machine)
 		const int real_fd = machine.fds().translate(vfd);
 
 		// Gather up to 1MB of pages we can read into
-		riscv::vBuffer buffers[256];
+		std::array<riscv::vBuffer, 256> buffers;
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(256, buffers, address, len);
+			machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), address, len);
 		const ssize_t res =
 			readv(real_fd, (const iovec *)&buffers[0], cnt);
 		machine.set_result_or_error(res);
@@ -204,8 +204,8 @@ static void syscall_write(Machine<W>& machine)
 			machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), address, len);
 		const ssize_t res =
 			writev(real_fd, (struct iovec *)&buffers[0], cnt);
-		SYSPRINT("SYSCALL write(real fd: %d) = %ld\n",
-			real_fd, res);
+		SYSPRINT("SYSCALL write(real fd: %d iovec: %zu) = %ld\n",
+			real_fd, cnt, res);
 		machine.set_result_or_error(res);
 	} else {
 		machine.set_result(-EBADF);
@@ -242,17 +242,16 @@ static void syscall_readv(Machine<W>& machine)
 		// Convert each iovec buffer to host buffers
 		std::array<struct iovec, 256> vec;
 		size_t vec_cnt = 0;
-		riscv::vBuffer buffer[64];
+		std::array<riscv::vBuffer, 64> buffers;
 
 		for (int i = 0; i < count; i++) {
 			// The host buffers come directly from guest memory
 			const size_t cnt = machine.memory.gather_buffers_from_range(
-				64, buffer, g_vec[i].iov_base, g_vec[i].iov_len);
+				buffers.size(), buffers.data(), g_vec[i].iov_base, g_vec[i].iov_len);
 			for (size_t b = 0; b < cnt; b++) {
 				vec.at(vec_cnt++) = {
-					.iov_base = buffer[b].ptr,
-					.iov_len  = buffer[b].len
-				};
+					.iov_base = buffers[b].ptr,
+					.iov_len = buffers[b].len};
 			}
 		}
 
@@ -299,9 +298,9 @@ static void syscall_writev(Machine<W>& machine)
 			auto src_g = (address_type<W>) iov.iov_base;
 			auto len_g = (size_t) iov.iov_len;
 			/* Zero-copy retrieval of buffers */
-			riscv::vBuffer buffers[16];
+			std::array<riscv::vBuffer, 64> buffers;
 			size_t cnt =
-				machine.memory.gather_buffers_from_range(16, buffers, src_g, len_g);
+				machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), src_g, len_g);
 
 			if (real_fd == 1 || real_fd == 2) {
 				// STDOUT, STDERR
@@ -312,7 +311,7 @@ static void syscall_writev(Machine<W>& machine)
 			} else {
 				// General file descriptor
 				ssize_t written =
-					writev(real_fd, (const struct iovec *)buffers, cnt);
+					writev(real_fd, (const struct iovec *)buffers.data(), cnt);
 				if (written > 0) {
 					res += written;
 				} else if (written < 0) {
@@ -322,6 +321,10 @@ static void syscall_writev(Machine<W>& machine)
 			}
 		}
 		machine.set_result_or_error(res);
+	}
+	if constexpr (verbose_syscalls) {
+		printf("SYSCALL writev, vfd: %d real_fd: %d -> %ld\n",
+			vfd, real_fd, long(machine.return_value()));
 	}
 } // writev
 
@@ -951,6 +954,9 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(177, syscall_stub_zero<W>);
 
 	install_syscall_handler(214, syscall_brk<W>);
+
+	// msync
+	install_syscall_handler(227, syscall_stub_zero<W>);
 
 	install_syscall_handler(278, syscall_getrandom<W>);
 
