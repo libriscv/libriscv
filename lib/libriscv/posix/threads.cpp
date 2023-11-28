@@ -7,13 +7,15 @@ static inline void futex_op(Machine<W>& machine,
 	address_type<W> addr, int futex_op, int val)
 {
 	using address_t = address_type<W>;
-	#define FUTEX_WAIT 0
-	#define FUTEX_WAKE 1
+	#define FUTEX_WAIT           0
+	#define FUTEX_WAKE           1
+	#define FUTEX_WAIT_BITSET	 9
+	#define FUTEX_WAKE_BITSET	10
 
 	THPRINT(machine, ">>> futex(0x%lX, op=%d, val=%d)\n",
 		(long)addr, futex_op, val);
 
-	if ((futex_op & 0xF) == FUTEX_WAIT)
+	if ((futex_op & 0xF) == FUTEX_WAIT || (futex_op & 0xF) == FUTEX_WAIT_BITSET)
 	{
 		if (machine.memory.template read<address_t> (addr) == (address_t)val) {
 			THPRINT(machine,
@@ -27,7 +29,7 @@ static inline void futex_op(Machine<W>& machine,
 			"FUTEX: Wait condition EAGAIN... uaddr=0x%lX val=%d\n", (long)addr, val);
 		machine.set_result(-EAGAIN);
 		return;
-	} else if ((futex_op & 0xF) == FUTEX_WAKE) {
+	} else if ((futex_op & 0xF) == FUTEX_WAKE || (futex_op & 0xF) == FUTEX_WAKE_BITSET) {
 		THPRINT(machine,
 			"FUTEX: Waking %d others on 0x%lX\n", val, (long)addr);
 		// XXX: Guaranteed not to expire early when
