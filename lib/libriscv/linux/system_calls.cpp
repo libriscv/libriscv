@@ -323,7 +323,7 @@ static void syscall_openat(Machine<W>& machine)
 	const auto g_path = machine.sysarg(1);
 	const int flags  = machine.template sysarg<int>(2);
 	// We do it this way to prevent accessing memory out of bounds
-	const auto path = machine.memory.memstring(g_path);
+	std::string path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X\n",
 		dir_fd, path.c_str(), flags);
@@ -331,6 +331,7 @@ static void syscall_openat(Machine<W>& machine)
 	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
 
 		if (machine.fds().filter_open != nullptr) {
+			// filter_open() can modify the path
 			if (!machine.fds().filter_open(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
 				return;
@@ -471,12 +472,12 @@ void syscall_readlinkat(Machine<W>& machine)
 	const auto g_buf = machine.sysarg(2);
 	const auto bufsize = machine.sysarg(3);
 
-	const auto path = machine.memory.memstring(g_path);
+	const std::string original_path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
-		vfd, path.c_str(), (long)g_buf, (size_t)bufsize);
+		vfd, original_path.c_str(), (long)g_buf, (size_t)bufsize);
 
-	char buffer[16384];
+	char buffer[512];
 	if (bufsize > sizeof(buffer)) {
 		machine.set_result(-ENOMEM);
 		return;
@@ -484,15 +485,20 @@ void syscall_readlinkat(Machine<W>& machine)
 
 	if (machine.has_file_descriptors()) {
 
-		if (machine.fds().filter_open != nullptr) {
-			if (!machine.fds().filter_open(machine.template get_userdata<void>(), path)) {
+		if (machine.fds().filter_readlink != nullptr) {
+			std::string path = original_path;
+			if (!machine.fds().filter_readlink(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
 				return;
 			}
+			// Readlink always rewrites the answer
+			machine.copy_to_guest(g_buf, path.c_str(), path.size());
+			machine.set_result(path.size());
+			return;
 		}
 		const int real_fd = machine.fds().translate(vfd);
 
-		const int res = readlinkat(real_fd, path.c_str(), buffer, bufsize);
+		const int res = readlinkat(real_fd, original_path.c_str(), buffer, bufsize);
 		if (res > 0) {
 			// TODO: Only necessary if g_buf is not sequential.
 			machine.copy_to_guest(g_buf, buffer, res);
@@ -555,14 +561,25 @@ static void syscall_fstatat(Machine<W>& machine)
 	const auto g_buf = machine.sysarg(2);
 	const auto flags = machine.template sysarg<int> (3);
 
-	const auto path = machine.memory.memstring(g_path);
+	std::string path = machine.memory.memstring(g_path);
 
 	if (machine.has_file_descriptors()) {
 
 		int real_fd = machine.fds().translate(vfd);
 
+		if (machine.fds().filter_stat != nullptr && !path.empty()) {
+			if (!machine.fds().filter_stat(machine.template get_userdata<void>(), path)) {
+				machine.set_result(-EPERM);
+				return;
+			}
+		}
+
 		struct stat st;
-		const int res = ::fstatat(real_fd, path.c_str(), &st, flags);
+		int res = -1;
+		if (!path.empty())
+			res = ::fstatat(real_fd, path.c_str(), &st, flags);
+		else
+			res = ::fstat(real_fd, &st);
 		if (res == 0) {
 			// Convert to RISC-V structure
 			struct riscv_stat rst;
@@ -626,6 +643,9 @@ static void syscall_fstat(Machine<W>& machine)
 template <int W>
 static void syscall_statx(Machine<W>& machine)
 {
+	machine.set_result(-ENOSYS);
+	return;
+
 	const int   dir_fd = machine.template sysarg<int> (0);
 	const auto  g_path = machine.sysarg(1);
 	const int    flags = machine.template sysarg<int> (2);

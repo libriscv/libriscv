@@ -48,7 +48,8 @@ struct FileDescriptors
 	bool permit_file_write = false;
 	bool permit_sockets = false;
 
-	std::function<bool(void*, const std::string&)> filter_open = nullptr;
+	std::function<bool(void*, std::string&)> filter_open = nullptr; /* NOTE: Can modify path */
+	std::function<bool(void*, std::string&)> filter_readlink = nullptr; /* NOTE: Can modify path */
 	std::function<bool(void*, const std::string&)> filter_stat = nullptr;
 	std::function<bool(void*, uint64_t)> filter_ioctl = nullptr;
 };

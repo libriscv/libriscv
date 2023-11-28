@@ -25,30 +25,41 @@ static void run_program(
 	if constexpr (full_linux_guest)
 	{
 		std::vector<std::string> env = {
-			"LC_CTYPE=C", "LC_ALL=C", "USER=groot"
+			"LC_CTYPE=C", "LC_ALL=C", "RUST_BACKTRACE=full"
 		};
 		machine.setup_linux(args, env);
 		// Linux system to open files and access internet
 		machine.setup_linux_syscalls();
 		machine.fds().permit_filesystem = true;
 		machine.fds().permit_sockets = true;
+		// Rewrite certain links to masquerade and simplify some interactions (eg. /proc/self/exe)
+		machine.fds().filter_readlink = [=] (void* user, std::string& path) {
+			if (path == "/proc/self/exe") {
+				path = "/program";
+				return true;
+			}
+			fprintf(stderr, "Guest wanted to readlink: %s (denied)\n", path.c_str());
+			return false;
+		};
 		// Only allow opening certain file paths. The void* argument is
 		// the user-provided pointer set in the RISC-V machine.
-		machine.fds().filter_open = [] (void* user, const std::string& path) {
+		machine.fds().filter_open = [=] (void* user, std::string& path) {
 			(void) user;
 			if (path == "/etc/hostname"
 				|| path == "/etc/hosts"
 		//		|| path == "/etc/nsswitch.conf"
+				|| path == "/etc/host.conf"
 				|| path == "/etc/resolv.conf")
 				return true;
 			if (path == "/dev/urandom")
 				return true;
+			if (path == "/program") { // Fake program path
+				path = args.at(0); // Sneakily open the real program instead
+				return true;
+			}
 			if (path == "/etc/ssl/certs/ca-certificates.crt")
 				return true;
-			if (true)
-			{
-				fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
-			}
+			fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
 			return false;
 		};
 		// multi-threading

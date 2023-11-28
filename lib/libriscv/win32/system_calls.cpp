@@ -280,12 +280,11 @@ static void syscall_openat(Machine<W> &machine) {
 	const int dir_fd = machine.template sysarg<int>(0);
 	const auto g_path = machine.sysarg(1);
 	const int flags = machine.template sysarg<int>(2);
-	char path[PATH_MAX];
-	machine.copy_from_guest(path, g_path, sizeof(path) - 1);
-	path[sizeof(path) - 1] = 0;
+
+	std::string path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X\n",
-			 dir_fd, path, flags);
+			 dir_fd, path.c_str(), flags);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
 
@@ -412,12 +411,10 @@ void syscall_readlinkat(Machine<W> &machine) {
 	const auto g_buf = machine.sysarg(2);
 	const auto bufsize = machine.sysarg(3);
 
-	char path[PATH_MAX];
-	machine.copy_from_guest(path, g_path, sizeof(path) - 1);
-	path[sizeof(path) - 1] = 0;
+	const std::string original_path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
-			 vfd, path, (long) g_buf, (size_t) bufsize);
+			 vfd, original_path.c_str(), (long) g_buf, (size_t) bufsize);
 
 	char buffer[16384];
 	if (bufsize > sizeof(buffer)) {
@@ -427,15 +424,20 @@ void syscall_readlinkat(Machine<W> &machine) {
 
 	if (machine.has_file_descriptors()) {
 
-		if (machine.fds().filter_open != nullptr) {
-			if (!machine.fds().filter_open(machine.template get_userdata<void>(), path)) {
+		if (machine.fds().filter_readlink != nullptr) {
+			std::string path = original_path;
+			if (!machine.fds().filter_readlink(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
 				return;
 			}
+			// Readlink always rewrites the answer
+			machine.copy_to_guest(g_buf, path.c_str(), path.size());
+			machine.set_result(path.size());
+			return;
 		}
 		const auto real_fd = machine.fds().translate(vfd);
 
-		/*const int res = readlinkat(real_fd, path, buffer, bufsize);
+		/*const int res = readlinkat(real_fd, original_path.c_str(), buffer, bufsize);
 		if (res > 0) {
 			// TODO: Only necessary if g_buf is not sequential.
 			machine.copy_to_guest(g_buf, buffer, res);
