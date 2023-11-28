@@ -240,22 +240,16 @@ static void syscall_readv(Machine<W>& machine)
 		machine.copy_from_guest(g_vec.data(), iov_g, iov_size);
 
 		// Convert each iovec buffer to host buffers
-		std::array<struct iovec, 256> vec;
-		size_t vec_cnt = 0;
 		std::array<riscv::vBuffer, 64> buffers;
+		size_t vec_cnt = 0;
 
 		for (int i = 0; i < count; i++) {
 			// The host buffers come directly from guest memory
-			const size_t cnt = machine.memory.gather_buffers_from_range(
-				buffers.size(), buffers.data(), g_vec[i].iov_base, g_vec[i].iov_len);
-			for (size_t b = 0; b < cnt; b++) {
-				vec.at(vec_cnt++) = {
-					.iov_base = buffers[b].ptr,
-					.iov_len = buffers[b].len};
-			}
+			vec_cnt += machine.memory.gather_buffers_from_range(
+				buffers.size() - vec_cnt, &buffers[vec_cnt], g_vec[i].iov_base, g_vec[i].iov_len);
 		}
 
-		const ssize_t res = readv(real_fd, vec.data(), vec_cnt);
+		const ssize_t res = readv(real_fd, (struct iovec *)&buffers[0], vec_cnt);
 		machine.set_result_or_error(res);
 	}
 	SYSPRINT("SYSCALL readv(vfd: %d iov: 0x%lX cnt: %d) = %ld\n",
@@ -286,39 +280,33 @@ static void syscall_writev(Machine<W>& machine)
 	if (real_fd < 0) {
 		machine.set_result(-EBADF);
 	} else {
-		const size_t size = sizeof(guest_iovec<W>) * count;
-
 		std::array<guest_iovec<W>, 256> vec;
-		machine.memory.memcpy_out(vec.data(), iov_g, size);
+		machine.memory.memcpy_out(vec.data(), iov_g, sizeof(guest_iovec<W>) * count);
 
-		ssize_t res = 0;
+		/* Zero-copy retrieval of buffers */
+		std::array<riscv::vBuffer, 64> buffers;
+		size_t vec_cnt = 0;
+
 		for (int i = 0; i < count; i++)
 		{
 			auto& iov = vec.at(i);
 			auto src_g = (address_type<W>) iov.iov_base;
 			auto len_g = (size_t) iov.iov_len;
-			/* Zero-copy retrieval of buffers */
-			std::array<riscv::vBuffer, 64> buffers;
-			size_t cnt =
-				machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), src_g, len_g);
 
-			if (real_fd == 1 || real_fd == 2) {
-				// STDOUT, STDERR
-				for (size_t i = 0; i < cnt; i++) {
-					machine.print(buffers[i].ptr, buffers[i].len);
-				}
-				res += len_g;
-			} else {
-				// General file descriptor
-				ssize_t written =
-					writev(real_fd, (const struct iovec *)buffers.data(), cnt);
-				if (written > 0) {
-					res += written;
-				} else if (written < 0) {
-					res = written;
-					break;
-				} else break; // 0 bytes
+			vec_cnt +=
+				machine.memory.gather_buffers_from_range(buffers.size() - vec_cnt, &buffers[vec_cnt], src_g, len_g);
+		}
+
+		ssize_t res = 0;
+		if (real_fd == 1 || real_fd == 2) {
+			// STDOUT, STDERR
+			for (size_t i = 0; i < vec_cnt; i++) {
+				machine.print(buffers[i].ptr, buffers[i].len);
+				res += buffers[i].len;
 			}
+		} else {
+			// General file descriptor
+			res = writev(real_fd, (const struct iovec *)buffers.data(), vec_cnt);
 		}
 		machine.set_result_or_error(res);
 	}
@@ -868,6 +856,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
 
 #ifdef __linux__
+	// eventfd2
+	install_syscall_handler(19, syscall_eventfd2<W>);
 	// epoll_create
 	install_syscall_handler(20, syscall_epoll_create<W>);
 	// epoll_ctl
