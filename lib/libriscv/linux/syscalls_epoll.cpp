@@ -1,5 +1,28 @@
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 //#define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+
+template <int W>
+static void syscall_eventfd2(Machine<W>& machine)
+{
+	const auto initval = machine.template sysarg<int>(0);
+	const auto flags = machine.template sysarg<int>(1);
+	int real_fd = -EBADFD;
+
+	if (machine.has_file_descriptors()) {
+		real_fd = eventfd(initval, flags);
+		if (real_fd > 0) {
+			const int vfd = machine.fds().assign_file(real_fd);
+			machine.set_result(vfd);
+		} else {
+			machine.set_result_or_error(real_fd);
+		}
+	} else {
+		machine.set_result(-EBADF);
+	}
+	SYSPRINT("SYSCALL eventfd2(initval: %X flags: %#x real_fd: %d) = %d\n",
+		initval, flags, real_fd, machine.template return_value<int>());
+}
 
 template <int W>
 static void syscall_epoll_create(Machine<W>& machine)
@@ -57,9 +80,10 @@ static void syscall_epoll_pwait(Machine<W>& machine)
 	const auto vepoll_fd = machine.template sysarg<int>(0);
 	const auto g_events = machine.sysarg(1);
 	auto maxevents = machine.template sysarg<int>(2);
-	const auto timeout = machine.template sysarg<int>(3);
+	auto timeout = machine.template sysarg<int>(3);
+	if (timeout < 0 || timeout > 100) timeout = 100;
 
-	std::array<struct epoll_event, 128> events;
+	std::array<struct epoll_event, 4096> events;
 	if (maxevents < 0 || maxevents > (int)events.size()) {
 		SYSPRINT("WARNING: Too many epoll events for %d\n", vepoll_fd);
 		maxevents = events.size();
@@ -76,7 +100,13 @@ static void syscall_epoll_pwait(Machine<W>& machine)
 		} else if (res < 0 || timeout == 0) {
 			machine.set_result_or_error(res);
 		} else {
+			// Finish up: Set -EINTR
 			machine.set_result(-EINTR);
+			// Check other threads
+			if (machine.threads().preempt()) {
+				SYSPRINT("SYSCALL epoll_pwait yielded...\n");
+				return;
+			}
 		}
 	} else {
 		machine.set_result(-EBADF);

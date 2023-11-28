@@ -60,6 +60,7 @@ struct MultiThreading
 	int       get_tid() const { return m_current->tid; }
 	thread_t* get_thread();
 	thread_t* get_thread(int tid); /* or nullptr */
+	bool      preempt();
 	bool      suspend_and_yield(long result = 0);
 	bool      yield_to(int tid, bool store_retval = true);
 	void      erase_thread(int tid);
@@ -280,6 +281,18 @@ inline Thread<W>* MultiThreading<W>::create(
 	}
 
 	return thread;
+}
+
+template <int W>
+inline bool MultiThreading<W>::preempt()
+{
+	auto* thread = get_thread();
+	if (m_suspended.empty()) {
+		return false;
+	}
+	thread->suspend();
+	this->wakeup_next();
+	return true;
 }
 
 template <int W>
