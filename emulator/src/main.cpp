@@ -36,9 +36,6 @@ static void run_program(
 		// the user-provided pointer set in the RISC-V machine.
 		machine.fds().filter_open = [] (void* user, const std::string& path) {
 			(void) user;
-			if (false) {
-				printf("Guest wants to open: %s\n", path.c_str());
-			}
 			if (path == "/etc/hostname"
 				|| path == "/etc/hosts"
 		//		|| path == "/etc/nsswitch.conf"
@@ -46,6 +43,12 @@ static void run_program(
 				return true;
 			if (path == "/dev/urandom")
 				return true;
+			if (path == "/etc/ssl/certs/ca-certificates.crt")
+				return true;
+			if (true)
+			{
+				fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
+			}
 			return false;
 		};
 		// multi-threading
