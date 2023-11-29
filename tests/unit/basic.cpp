@@ -190,11 +190,15 @@ TEST_CASE("Calculate fib(50) slowly", "[Compute]")
 		{"basic", "50"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 
-	do {
-		machine.simulate<false>(100);
-	} while (machine.instruction_limit_reached());
-
-	REQUIRE(machine.return_value<long>() == 12586269025L);
+	// No matter how many (or few) instructions we execute before exiting
+	// simulation, we should be able to resume and complete the program normally.
+	for (int step = 5; step < 105; step++) {
+		riscv::Machine<RISCV64> fork { machine, { .use_memory_arena = false } };
+		do {
+			fork.simulate<false>(step);
+		} while (fork.instruction_limit_reached());
+		REQUIRE(fork.return_value<long>() == 12586269025L);
+	}
 }
 
 TEST_CASE("Count using EBREAK", "[Compute]")
