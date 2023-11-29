@@ -45,7 +45,7 @@
 # include <math.h>
 # include <float.h>
 # include <limits.h>
-# include <sys/time.h>
+# include <stdint.h>
 
 /*-----------------------------------------------------------------------
  * INSTRUCTIONS:
@@ -415,29 +415,25 @@ checktick()
 /* A gettimeofday routine to give access to the wall
    clock timer on most UNIX-like systems.  */
 
-#include <time.h>
-static inline int clock_gettime64(int clk_id, struct timespec *tp)
+inline uint64_t rdtime()
 {
-    register long a0 asm("a0") = clk_id;
-    register struct timespec * a1 asm("a1") = tp;
-	register long syscall_id asm("a7") =
-		(sizeof(size_t) == 4) ? 403 : 113;
-
-	asm("ecall"  : "+r"(a0), "=m"(*a1)
-                 : "r"(a1), "r"(syscall_id));
-
-    return a0;
+#if __SIZEOF_POINTER__ == 4
+	union {
+		uint64_t whole;
+		uint32_t word[2];
+	} u;
+	__asm__ volatile ("rdtimeh %0\n rdtime %1\n" : "=r"(u.word[1]), "=r"(u.word[0]));
+	return u.whole;
+#else
+	uint64_t whole;
+	__asm__ volatile ("rdtime %0\n" : "=r"(whole));
+	return whole;
+#endif
 }
 
 double mysecond()
 {
-	struct timespec ts;
-	(void) clock_gettime64(1, &ts);
-
-	if (sizeof(size_t) == 4)
-		return ((double)ts.tv_sec + (double)ts.tv_nsec * 1.e-3);
-	else
-		return ((double)ts.tv_sec + (double)ts.tv_nsec * 1.e-9);
+	return rdtime() * 1.e-6;
 }
 
 #ifndef abs
