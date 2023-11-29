@@ -34,9 +34,13 @@ namespace riscv
 	decoder += 1;      \
 	EXECUTE_INSTR();
 
-#define NEXT_BLOCK(len)               \
-	pc += len;                        \
+#define NEXT_BLOCK(len, OF)               \
+	pc += len;                            \
 	decoder += len / DecoderCache<W>::DIVISOR;               \
+	if constexpr (OF) {						\
+		if (UNLIKELY(counter.overflowed())) \
+			goto check_jump;				\
+	}										\
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */        \
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];  \
 	pc += decoder->block_bytes();                            \
@@ -52,14 +56,14 @@ namespace riscv
 #define PERFORM_BRANCH()                 \
 	if constexpr (VERBOSE_JUMPS) fprintf(stderr, "Branch 0x%lX >= 0x%lX (decoder=%p)\n", long(pc), long(pc + fi.signed_imm()), decoder); \
 	if (LIKELY(!counter.overflowed())) { \
-		NEXT_BLOCK(fi.signed_imm());     \
+		NEXT_BLOCK(fi.signed_imm(), false);     \
 	}                                    \
 	pc += fi.signed_imm();               \
 	goto check_jump;
 
 #define PERFORM_FORWARD_BRANCH()         \
 	if constexpr (VERBOSE_JUMPS) fprintf(stderr, "Fw.Branch 0x%lX >= 0x%lX\n", long(pc), long(pc + fi.signed_imm())); \
-	NEXT_BLOCK(fi.signed_imm());
+	NEXT_BLOCK(fi.signed_imm(), false);
 
 template <int W> DISPATCH_ATTR
 void CPU<W>::DISPATCH_FUNC(uint64_t imax)
@@ -252,9 +256,7 @@ INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
 	if constexpr (VERBOSE_JUMPS) {
 		fprintf(stderr, "FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
-	if (UNLIKELY(counter.overflowed()))
-		goto check_jump;
-	NEXT_BLOCK((int32_t)instr.whole);
+	NEXT_BLOCK((int32_t)instr.whole, true);
 }
 INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	VIEW_INSTR();
@@ -262,9 +264,7 @@ INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 		fprintf(stderr, "FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
 	reg(REG_RA) = pc + 4;
-	if (UNLIKELY(counter.overflowed()))
-		goto check_jump;
-	NEXT_BLOCK((int32_t)instr.whole);
+	NEXT_BLOCK((int32_t)instr.whole, true);
 }
 INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -328,7 +328,7 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 		pc = registers().pc + 4;
 		goto check_jump;
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 
 #define BYTECODES_FLP
@@ -401,7 +401,7 @@ INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 	VIEW_INSTR();
 	auto handler = decoder->get_handler();
 	handler(*this, instr);
-	NEXT_BLOCK(instr.length());
+	NEXT_BLOCK(instr.length(), true);
 }
 
 #define BYTECODES_RARELY_USED

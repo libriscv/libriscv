@@ -45,30 +45,29 @@
 #define BEGIN_BLOCK()                               \
 	pc += d->block_bytes(); \
 	counter += d->instruction_count();
-#define NEXT_BLOCK(len)                  \
+#define NEXT_BLOCK(len, OF)              \
 	pc += len;                           \
 	d += len / DecoderCache<W>::DIVISOR; \
+	if constexpr (OF) {                  \
+		OVERFLOW_CHECK();                \
+	}									 \
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */           \
 	d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];  \
 	BEGIN_BLOCK()                        \
 	EXECUTE_CURRENT()
 
+#define QUICK_EXEC_CHECK()                                              \
+	if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end()))) \
+		exec = resolve_execute_segment<W>(cpu, pc);
+
 #define UNCHECKED_JUMP()                                       \
+	QUICK_EXEC_CHECK()                                         \
 	d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR]; \
 	BEGIN_BLOCK()                                              \
 	EXECUTE_CURRENT()
 #define OVERFLOW_CHECK()                            \
 	if (UNLIKELY(COUNTER_OVERFLOWED(counter)))      \
 		return RETURN_VALUES();
-#define QUICK_EXEC_CHECK()                                              \
-	if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end()))) \
-		exec = resolve_execute_segment<W>(cpu, pc);                     \
-
-#define CHECKED_JUMP()                              \
-	if (UNLIKELY(COUNTER_OVERFLOWED(counter)))      \
-		return RETURN_VALUES();                     \
-	else QUICK_EXEC_CHECK()                         \
-	UNCHECKED_JUMP()
 
 #define PERFORM_BRANCH()                \
 	if constexpr (VERBOSE_JUMPS) {      \
@@ -86,7 +85,7 @@
 		printf("Fwd. Branch from 0x%lX to 0x%lX\n", \
 			pc, pc + fi.signed_imm());  \
 	}                                   \
-	NEXT_BLOCK(fi.signed_imm())
+	NEXT_BLOCK(fi.signed_imm(), false)
 
 namespace riscv
 {
@@ -154,11 +153,6 @@ namespace riscv
 		cpu.machine().set_instruction_counter(counter);
 		// Invoke system call
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
-		// Restore max counter and check overflow
-		if (UNLIKELY(COUNTER_OVERFLOWED(counter)))
-		{
-			return RETURN_VALUES();
-		}
 		// Clone-like system calls can change PC
 		if (UNLIKELY(pc != cpu.registers().pc))
 		{
@@ -166,7 +160,7 @@ namespace riscv
 			QUICK_EXEC_CHECK();
 			d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];
 		}
-		NEXT_BLOCK(4);
+		NEXT_BLOCK(4, true);
 	}
 
 	INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal)
@@ -174,8 +168,7 @@ namespace riscv
 		if constexpr (VERBOSE_JUMPS) {
 			printf("FAST_JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + d->instr);
 		}
-		OVERFLOW_CHECK();
-		NEXT_BLOCK((int32_t)d->instr);
+		NEXT_BLOCK((int32_t)d->instr, true);
 	}
 	INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call)
 	{
@@ -184,19 +177,19 @@ namespace riscv
 			printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + d->instr);
 		}
 		cpu.reg(REG_RA) = pc + 4;
-		OVERFLOW_CHECK();
-		NEXT_BLOCK((int32_t)d->instr);
+		NEXT_BLOCK((int32_t)d->instr, true);
 	}
 	INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
 	{
 		VIEW_INSTR_AS(fi, FasterJtype);
-		if (fi.rd != 0)
-			cpu.reg(fi.rd) = pc + 4;
 		if constexpr (VERBOSE_JUMPS) {
 			printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.offset);
 		}
+		if (fi.rd != 0)
+			cpu.reg(fi.rd) = pc + 4;
 		pc += fi.offset;
-		CHECKED_JUMP();
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 	}
 
 #define BYTECODES_OP
@@ -206,13 +199,9 @@ namespace riscv
 	INSTRUCTION(RV32I_BC_JALR, rv32i_jalr)
 	{
 		VIEW_INSTR_AS(fi, FasterItype);
-		// jump to register + immediate
 		// NOTE: if rs1 == rd, avoid clobber by storing address first
 		const auto address = cpu.reg(fi.rs2) + fi.signed_imm();
-		// Link *next* instruction (rd = PC + 4)
-		if (fi.rs1 != 0) {
-			cpu.reg(fi.rs1) = pc + 4;
-		}
+		// jump to register + immediate
 		if constexpr (VERBOSE_JUMPS) {
 			printf("JALR PC 0x%lX => 0x%lX\n", pc, address);
 		}
@@ -221,8 +210,13 @@ namespace riscv
 		if (UNLIKELY(address & alignment)) {
 			cpu.trigger_exception(MISALIGNED_INSTRUCTION, address);
 		}
+		// Link *next* instruction (rd = PC + 4)
+		if (fi.rs1 != 0) {
+			cpu.reg(fi.rs1) = pc + 4;
+		}
 		pc = address;
-		CHECKED_JUMP();
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 	}
 
 	INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
@@ -257,7 +251,8 @@ namespace riscv
 				   pc, cpu.registers().pc + 2);
 		}
 		pc = cpu.registers().pc + 2;
-		CHECKED_JUMP();
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 	}
 #endif
 
@@ -265,7 +260,7 @@ namespace riscv
 		VIEW_INSTR();
 		auto handler = d->get_handler();
 		handler(CPU(), instr);
-		NEXT_BLOCK(instr.length());
+		NEXT_BLOCK(instr.length(), true);
 	}
 
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
@@ -278,7 +273,7 @@ namespace riscv
 		cpu.machine().system(instr);
 		// Restore PC in case it changed (supervisor)
 		pc = cpu.registers().pc + 4;
-		CHECKED_JUMP();
+		UNCHECKED_JUMP();
 	}
 
 	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
@@ -294,7 +289,8 @@ namespace riscv
 		counter = cpu.machine().instruction_counter();
 		// Translations are always full-length instructions (?)
 		pc = cpu.registers().pc + 4;
-		CHECKED_JUMP();
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 #else
 		(void)d;
 		cpu.trigger_exception(FEATURE_DISABLED, pc);

@@ -132,14 +132,14 @@ INSTRUCTION(RV32C_BC_BNEZ, rv32c_bnez) {
 	if (REG(fi.get_rs1()) != 0) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(2);
+	NEXT_BLOCK(2, false);
 }
 INSTRUCTION(RV32C_BC_BEQZ, rv32c_beqz) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) == 0) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(2);
+	NEXT_BLOCK(2, false);
 }
 INSTRUCTION(RV32C_BC_JR, rv32c_jr) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -153,56 +153,56 @@ INSTRUCTION(RV32I_BC_BEQ, rv32i_beq) {
 	if (REG(fi.get_rs1()) == REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_BNE, rv32i_bne) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) != REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_BEQ_FW, rv32i_beq_fw) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) == REG(fi.get_rs2())) {
 		PERFORM_FORWARD_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_BNE_FW, rv32i_bne_fw) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) != REG(fi.get_rs2())) {
 		PERFORM_FORWARD_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_BLT, rv32i_blt) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if ((saddr_t)REG(fi.get_rs1()) < (saddr_t)REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_BGE, rv32i_bge) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if ((saddr_t)REG(fi.get_rs1()) >= (saddr_t)REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_BLTU, rv32i_bltu) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) < REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_BGEU, rv32i_bgeu) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) >= REG(fi.get_rs2())) {
 		PERFORM_BRANCH();
 	}
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 
 #endif // BRANCH
@@ -349,7 +349,7 @@ INSTRUCTION(RV32I_BC_AUIPC, rv32i_auipc)
 {
 	VIEW_INSTR();
 	REG(instr.Utype.rd) = pc + instr.Utype.upper_imm();
-	NEXT_BLOCK(4);
+	NEXT_BLOCK(4, false);
 }
 INSTRUCTION(RV32I_BC_LUI, rv32i_lui)
 {
