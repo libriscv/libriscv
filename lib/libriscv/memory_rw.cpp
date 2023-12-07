@@ -165,9 +165,9 @@ namespace riscv
 	}
 
 	template <int W> void
-	Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes options)
+	Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes attr)
 	{
-		const bool is_default = options.is_default();
+		const bool is_default = attr.is_default();
 		while (len > 0)
 		{
 			const size_t size = std::min(Page::size(), len);
@@ -181,19 +181,19 @@ namespace riscv
 					if (!is_default) {
 						// Keep non_owning as-is.
 						this->create_writable_pageno(pageno).
-							attr.apply_regular_attributes(options);
+							attr.apply_regular_attributes(attr);
 					}
 				} else {
 					// There is a page there, however, we must
 					// keep non_owning as-is.
-					page.attr.apply_regular_attributes(options);
+					page.attr.apply_regular_attributes(attr);
 				}
 			} else {
 				// If the page was not found, it was likely (also) the
 				// special zero-CoW page.
 				if (!is_default)
 					this->create_writable_pageno(pageno).
-						attr.apply_regular_attributes(options);
+						attr.apply_regular_attributes(attr);
 			}
 
 			dst += size;

@@ -169,7 +169,7 @@ static void syscall_read(Machine<W>& machine)
 		// Gather up to 1MB of pages we can read into
 		std::array<riscv::vBuffer, 256> buffers;
 		size_t cnt =
-			machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), address, len);
+			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), address, len);
 		const ssize_t res =
 			readv(real_fd, (const iovec *)&buffers[0], cnt);
 		machine.set_result_or_error(res);
@@ -245,7 +245,7 @@ static void syscall_readv(Machine<W>& machine)
 
 		for (int i = 0; i < count; i++) {
 			// The host buffers come directly from guest memory
-			vec_cnt += machine.memory.gather_buffers_from_range(
+			vec_cnt += machine.memory.gather_writable_buffers_from_range(
 				buffers.size() - vec_cnt, &buffers[vec_cnt], g_vec[i].iov_base, g_vec[i].iov_len);
 		}
 
@@ -623,10 +623,10 @@ static void syscall_fstat(Machine<W>& machine)
 
 	if (machine.has_file_descriptors()) {
 
-		int real_fd = machine.fds().translate(vfd);
+		const int real_fd = machine.fds().translate(vfd);
 
 		struct stat st;
-		int res = ::fstat(real_fd, &st);
+		const int res = ::fstat(real_fd, &st);
 		if (res == 0) {
 			// Convert to RISC-V structure
 			struct riscv_stat rst;

@@ -75,6 +75,10 @@ static void add_mman_syscalls()
 				machine.set_result(dst);
 				return;
 			}
+			else
+			{
+				throw MachineException(FEATURE_DISABLED, "mmap() with fd, but file descriptors disabled");
+			}
 #endif
 		}
 		else if (addr_g == 0 || addr_g == nextfree)
@@ -103,6 +107,7 @@ static void add_mman_syscalls()
 			{
 				// do nothing?
 			}
+			machine.memory.set_page_attr(addr_g, length, attr);
 			machine.set_result(addr_g);
 			return;
 		}

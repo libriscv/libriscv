@@ -47,7 +47,7 @@ static void run_program(
 			(void) user;
 			if (path == "/etc/hostname"
 				|| path == "/etc/hosts"
-		//		|| path == "/etc/nsswitch.conf"
+				|| path == "/etc/nsswitch.conf"
 				|| path == "/etc/host.conf"
 				|| path == "/etc/resolv.conf")
 				return true;
@@ -69,7 +69,7 @@ static void run_program(
 				path = "/usr/riscv64-linux-gnu/lib/libc.so.6";
 				return true;
 			}
-			// libcresolv
+			// libresolv
 			if (path == "/lib/riscv64-linux-gnu/libresolv.so.2") {
 				path = "/usr/riscv64-linux-gnu/lib/libresolv.so.2";
 				return true;

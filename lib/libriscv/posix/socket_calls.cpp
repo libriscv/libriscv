@@ -351,7 +351,7 @@ static void syscall_recvfrom(Machine<W>& machine)
 		// Gather up to 1MB of pages we can read into
 		std::array<riscv::vBuffer, 256> buffers;
 		const size_t buffer_cnt =
-			machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), g_buf, buflen);
+			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), g_buf, buflen);
 
 		alignas(16) char dest_addr[128];
 		struct msghdr hdr {
@@ -416,7 +416,7 @@ static void syscall_recvmsg(Machine<W>& machine)
 			const address_type<W> g_buf = g_iov[i].iov_base;
 			const address_type<W> g_len = g_iov[i].iov_len;
 			vec_cnt +=
-				machine.memory.gather_buffers_from_range(buffers.size() - vec_cnt, &buffers[vec_cnt], g_buf, g_len);
+				machine.memory.gather_writable_buffers_from_range(buffers.size() - vec_cnt, &buffers[vec_cnt], g_buf, g_len);
 			total += g_len;
 		}
 	#if 0

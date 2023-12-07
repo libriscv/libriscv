@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <libriscv/machine.hpp>
 extern std::vector<uint8_t> load_file(const std::string& filename);
-static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
+static const uint64_t MAX_MEMORY = 680ul << 20; /* 680MB */
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 static const std::string cwd {SRCDIR};
 using namespace riscv;
