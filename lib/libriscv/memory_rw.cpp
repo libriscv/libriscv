@@ -35,6 +35,40 @@ namespace riscv
 	}
 
 	template <int W>
+	void Memory<W>::set_pageno_attr(const address_t pageno, PageAttributes attr)
+	{
+		auto it = pages().find(pageno);
+		if (it != pages().end()) {
+			auto& page = it->second;
+			// Keep non-owning and is_cow attributes
+			const bool is_cow = page.attr.is_cow;
+			page.attr.apply_regular_attributes(attr);
+			if (is_cow) {
+				page.attr.is_cow = true;
+				page.attr.write = false;
+			}
+			return;
+		}
+
+		// Don't create any pages if the defaults apply
+		const bool is_default = attr.is_default();
+		if (is_default)
+			return;
+
+		// Create arena-page
+		if (flat_readwrite_arena && pageno < this->m_arena_pages)
+		{
+			auto& page = this->create_writable_pageno(pageno);
+			page.attr.apply_regular_attributes(attr);
+			return;
+		}
+		// Create a default copy-on-write zero-page
+		attr.is_cow = true;
+		attr.write = false;
+		m_pages.try_emplace(pageno, attr, Page::cow_page().m_page.get());
+	}
+
+	template <int W>
 	bool Memory<W>::free_pageno(address_t pageno)
 	{
 		return m_pages.erase(pageno) != 0;
@@ -167,34 +201,11 @@ namespace riscv
 	template <int W> void
 	Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes attr)
 	{
-		const bool is_default = attr.is_default();
 		while (len > 0)
 		{
 			const size_t size = std::min(Page::size(), len);
 			const address_t pageno = page_number(dst);
-			auto it = pages().find(pageno);
-			if (it != pages().end()) {
-				auto& page = it->second;
-				if (page.is_cow_page()) {
-					// The special zero-CoW page is an internal optimization
-					// We can ignore the page if the default attrs apply.
-					if (!is_default) {
-						// Keep non_owning as-is.
-						this->create_writable_pageno(pageno).
-							attr.apply_regular_attributes(attr);
-					}
-				} else {
-					// There is a page there, however, we must
-					// keep non_owning as-is.
-					page.attr.apply_regular_attributes(attr);
-				}
-			} else {
-				// If the page was not found, it was likely (also) the
-				// special zero-CoW page.
-				if (!is_default)
-					this->create_writable_pageno(pageno).
-						attr.apply_regular_attributes(attr);
-			}
+			this->set_pageno_attr(pageno, attr);
 
 			dst += size;
 			len -= size;

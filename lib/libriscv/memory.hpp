@@ -121,6 +121,7 @@ namespace riscv
 		const Page& get_readable_pageno(address_t npage) const;
 		Page& create_writable_pageno(address_t npage, bool initialize = true);
 		void  set_page_attr(address_t, size_t len, PageAttributes);
+		void set_pageno_attr(address_t pageno, PageAttributes);
 		std::string get_page_info(address_t addr) const;
 		static inline address_t page_number(const address_t address) {
 			return address / Page::size();

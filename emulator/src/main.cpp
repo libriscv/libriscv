@@ -5,7 +5,7 @@
 #include <chrono>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
-static constexpr uint64_t MAX_MEMORY = 1024 * 1024 * 256;
+static constexpr uint64_t MAX_MEMORY = 1024ULL << 20;
 
 template <int W>
 static void run_sighandler(riscv::Machine<W>&);
