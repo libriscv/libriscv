@@ -417,3 +417,33 @@ size_t Memory<W>::gather_buffers_from_range(
 	}
 	return index;
 }
+
+template <int W>
+size_t Memory<W>::gather_writable_buffers_from_range(
+	size_t cnt, vBuffer buffers[], address_t addr, size_t len)
+{
+	size_t index = 0;
+	vBuffer* last = nullptr;
+	while (len != 0 && index < cnt)
+	{
+		const size_t offset = addr & (Page::SIZE-1);
+		const size_t size = std::min(Page::SIZE - offset, len);
+		auto& page = create_writable_pageno(page_number(addr));
+
+		auto* ptr = (char*) &page.data()[offset];
+		if (last && ptr == last->ptr + last->len) {
+			last->len += size;
+		} else {
+			last = &buffers[index];
+			last->ptr = ptr;
+			last->len = size;
+			index ++;
+		}
+		addr += size;
+		len -= size;
+	}
+	if (UNLIKELY(len != 0)) {
+		throw MachineException(OUT_OF_MEMORY, "Out of buffers", index);
+	}
+	return index;
+}
