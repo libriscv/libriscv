@@ -27,23 +27,65 @@ static void add_mman_syscalls()
 		auto length = machine.sysarg(1);
 		const auto prot   = machine.template sysarg<int>(2);
 		const auto flags  = machine.template sysarg<int>(3);
-		SYSPRINT(">>> mmap(addr 0x%lX, len %zu, prot %#x, flags %#X)\n",
-				(long)addr_g, (size_t)length, prot, flags);
+		const auto vfd    = machine.template sysarg<int>(4);
+		const auto voff   = machine.sysarg(5);
+		PageAttributes attr{
+			.read  = (prot & 1) != 0,
+			.write = (prot & 2) != 0,
+			.exec  = (prot & 4) != 0,
+		};
+		SYSPRINT(">>> mmap(addr 0x%lX, len %zu, prot %#x, flags %#X, vfd=%d voff=%zu)\n",
+				(long)addr_g, (size_t)length, prot, flags, vfd, size_t(voff));
+
 		if (addr_g % Page::size() != 0) {
 			machine.set_result(-1); // = MAP_FAILED;
 			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = MAP_FAILED\n",
 					(long)addr_g, (size_t)length);
 			return;
 		}
+
 		length = (length + PageMask) & ~address_type<W>(PageMask);
+
 		auto& nextfree = machine.memory.mmap_address();
-		if (addr_g == 0 || addr_g == nextfree)
+
+		if (vfd != -1)
+		{
+#ifdef __linux__
+			if (machine.has_file_descriptors())
+			{
+				const int real_fd = machine.fds().translate(vfd);
+
+				address_type<W> dst = 0x0;
+				if (addr_g == 0x0) {
+					dst = nextfree;
+					nextfree += length;
+				} else {
+					dst = addr_g;
+				}
+				lseek(real_fd, voff, SEEK_SET);
+				// Make the area read-write
+				machine.memory.set_page_attr(dst, length, PageAttributes{});
+				// Readv into the area
+				std::array<riscv::vBuffer, 256> buffers;
+				const size_t cnt =
+					machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), dst, length);
+				(void)readv(real_fd, (const iovec *)&buffers[0], cnt);
+				// Set new page protections on area
+				machine.memory.set_page_attr(dst, length, attr);
+				machine.set_result(dst);
+				return;
+			}
+#endif
+		}
+		else if (addr_g == 0 || addr_g == nextfree)
 		{
 			// anon pages need to be zeroed
 			if (flags & MAP_ANONYMOUS) {
 				// ... but they are already CoW
+				// XXX: Check if page is dirty
 				//machine.memory.memset(nextfree, 0, length);
 			}
+			machine.memory.set_page_attr(nextfree, length, attr);
 			machine.set_result(nextfree);
 			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX\n",
 					(long)addr_g, (size_t)length, (long)nextfree);
@@ -52,6 +94,7 @@ static void add_mman_syscalls()
 		} else if (addr_g < nextfree) {
 			//printf("Invalid mapping attempted\n");
 			//machine.set_result(-1); // = MAP_FAILED;
+			machine.memory.set_page_attr(addr_g, length, attr);
 			machine.set_result(addr_g);
 			return;
 		} else { // addr_g != 0x0
@@ -96,9 +139,9 @@ static void add_mman_syscalls()
 		SYSPRINT(">>> mprotect(0x%lX, len=%zu, prot=%x)\n",
 			(long)addr, (size_t)len, prot);
 		machine.memory.set_page_attr(addr, len, {
-			.read  = bool(prot & 1),
-			.write = bool(prot & 2),
-			.exec  = bool(prot & 4)
+			.read  = (prot & 1) != 0,
+			.write = (prot & 2) != 0,
+			.exec  = (prot & 4) != 0
 		});
 		machine.set_result(0);
 	});

@@ -59,6 +59,30 @@ static void run_program(
 			}
 			if (path == "/etc/ssl/certs/ca-certificates.crt")
 				return true;
+			// ld-linux
+			if (path == "/lib/riscv64-linux-gnu/ld-linux-riscv64-lp64d.so.1") {
+				path = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
+				return true;
+			}
+			// libc6
+			if (path == "/lib/riscv64-linux-gnu/libc.so.6") {
+				path = "/usr/riscv64-linux-gnu/lib/libc.so.6";
+				return true;
+			}
+			// libcresolv
+			if (path == "/lib/riscv64-linux-gnu/libresolv.so.2") {
+				path = "/usr/riscv64-linux-gnu/lib/libresolv.so.2";
+				return true;
+			}
+			// libnss_dns && libnss_files
+			if (path == "/lib/riscv64-linux-gnu/libnss_dns.so.2") {
+				path = "/usr/riscv64-linux-gnu/lib/libnss_dns.so.2";
+				return true;
+			}
+			if (path == "/lib/riscv64-linux-gnu/libnss_files.so.2") {
+				path = "/usr/riscv64-linux-gnu/lib/libnss_files.so.2";
+				return true;
+			}
 			fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
 			return false;
 		};
