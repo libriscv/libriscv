@@ -18,6 +18,10 @@ struct PageAttributes
 	mutable bool cacheable = true;
 	uint8_t user_defined = 0; /* Use this for yourself */
 
+	int to_prot() const noexcept {
+		return this->read | (this->write << 1) | (this->exec << 2);
+	}
+
 	constexpr bool is_cacheable() const noexcept {
 		// Cacheable only makes sense when memory traps are enabled
 		if constexpr (memory_traps_enabled)
@@ -111,7 +115,7 @@ struct Page
 		return SIZE;
 	}
 
-	bool is_cow_page() const noexcept { return this == &cow_page(); }
+	bool is_cow_page() const noexcept { return this->data() == cow_page().data(); }
 
 	static const Page& cow_page() noexcept;
 	static const Page& guard_page() noexcept;

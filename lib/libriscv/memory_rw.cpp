@@ -43,7 +43,8 @@ namespace riscv
 			// Keep non-owning and is_cow attributes
 			const bool is_cow = page.attr.is_cow;
 			page.attr.apply_regular_attributes(attr);
-			if (is_cow) {
+			if (is_cow || (attr.write && page.is_cow_page())) {
+				// If the page becomes writable and holds the CoW-page data, it's also copy-on-write
 				page.attr.is_cow = true;
 				page.attr.write = false;
 			}
@@ -62,9 +63,11 @@ namespace riscv
 			page.attr.apply_regular_attributes(attr);
 			return;
 		}
-		// Create a default copy-on-write zero-page
-		attr.is_cow = true;
+		// Writable: Create a non-owning copy-on-write zero-page
+		// Read-only: Create a non-owning zero-page
+		attr.is_cow = attr.write;
 		attr.write = false;
+		attr.non_owning = true;
 		m_pages.try_emplace(pageno, attr, Page::cow_page().m_page.get());
 	}
 
@@ -201,6 +204,7 @@ namespace riscv
 	template <int W> void
 	Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes attr)
 	{
+		//printf("set_page_attr(0x%lX, %zu, prot=%X)\n", long(dst), len, attr.to_prot());
 		while (len > 0)
 		{
 			const size_t size = std::min(Page::size(), len);
