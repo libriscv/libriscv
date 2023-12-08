@@ -94,8 +94,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				} else {
 					return RV32C_BC_JUMPFUNC; // C.JAL
 				}
-			case CI_CODE(0b101, 0b01): // C.JR
-				return RV32C_BC_JR;
+			case CI_CODE(0b101, 0b01): // C.JMP
+				return RV32C_BC_JMP;
 			case CI_CODE(0b110, 0b01): // C.BEQZ
 				return RV32C_BC_BEQZ;
 			case CI_CODE(0b111, 0b01): // C.BNEZ

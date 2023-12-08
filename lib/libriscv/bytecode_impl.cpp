@@ -141,7 +141,7 @@ INSTRUCTION(RV32C_BC_BEQZ, rv32c_beqz) {
 	}
 	NEXT_BLOCK(2, false);
 }
-INSTRUCTION(RV32C_BC_JR, rv32c_jr) {
+INSTRUCTION(RV32C_BC_JMP, rv32c_jmp) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	PERFORM_BRANCH();
 }

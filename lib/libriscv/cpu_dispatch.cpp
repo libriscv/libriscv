@@ -164,7 +164,7 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 		[RV32C_BC_SLLI]     = &&rv32c_slli,
 		[RV32C_BC_BEQZ]     = &&rv32c_beqz,
 		[RV32C_BC_BNEZ]     = &&rv32c_bnez,
-		[RV32C_BC_JR]       = &&rv32c_jr,
+		[RV32C_BC_JMP]      = &&rv32c_jmp,
 		[RV32C_BC_LDD]      = &&rv32c_ldd,
 		[RV32C_BC_STD]      = &&rv32c_std,
 		[RV32C_BC_FUNCTION] = &&rv32c_func,

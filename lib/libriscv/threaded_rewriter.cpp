@@ -349,7 +349,7 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV32C_BC_JR: {
+			case RV32C_BC_JMP: {
 				const rv32c_instruction ci { original };
 
 				const int32_t imm = ci.CJ.signed_imm();
