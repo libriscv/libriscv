@@ -21,6 +21,9 @@ namespace riscv
 				return page;
 			} else if (page.attr.is_cow) {
 				m_page_write_handler(*this, pageno, page);
+				// The page may be read-cached at this time
+				// and the page data has likely changed now.
+				this->invalidate_cache(pageno, &page);
 				return page;
 			}
 		} else {
