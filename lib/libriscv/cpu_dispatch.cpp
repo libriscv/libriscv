@@ -11,6 +11,13 @@
 #include "rvv.hpp"
 #endif
 
+/**
+ * This file is included by threaded_dispatch.cpp and bytecode_dispatch.cpp
+ * It implements the logic for switch-based and threaded dispatch.
+ * 
+ * All dispatch modes share bytecode_impl.cpp
+**/
+
 namespace riscv
 {
 	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
@@ -376,7 +383,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	exec->mapping_at(instr.whole)(*this, instr);
 	// Restore counter
 	counter.retrieve();
-	// Translations are always full-length instructions (?)
+	// Translations always execute at least a block
 	pc = registers().pc;
 	goto check_jump;
 #else
