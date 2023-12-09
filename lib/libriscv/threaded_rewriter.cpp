@@ -349,8 +349,20 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV32C_BC_JMP: {
+			case RV32C_BC_JMP:
+			case RV32C_BC_JAL_ADDIW: {
 				const rv32c_instruction ci { original };
+
+				if (W >= 8 && bytecode == RV32C_BC_JAL_ADDIW) {
+					// C.ADDIW instead
+					FasterItype rewritten;
+					rewritten.rs1 = ci.CI.rd;
+					rewritten.rs2 = ci.CI.rd;
+					rewritten.imm = ci.CI.signed_imm();
+
+					instr.whole = rewritten.whole;
+					return bytecode;
+				}
 
 				const int32_t imm = ci.CJ.signed_imm();
 				const auto addr = pc + imm;
@@ -361,6 +373,16 @@ namespace riscv
 				}
 
 				instr.whole = imm;
+				return bytecode;
+			}
+			case RV32C_BC_JALR: {
+				const rv32c_instruction ci { original };
+				instr.whole = ci.CR.rd;
+				return bytecode;
+			}
+			case RV32C_BC_JR: {
+				const rv32c_instruction ci { original };
+				instr.whole = ci.CR.rd;
 				return bytecode;
 			}
 			case RV32C_BC_LDD: {

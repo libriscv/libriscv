@@ -145,6 +145,49 @@ INSTRUCTION(RV32C_BC_JMP, rv32c_jmp) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	PERFORM_BRANCH();
 }
+INSTRUCTION(RV32C_BC_JAL_ADDIW, rv32c_jal_addiw) {
+	if constexpr (W >= 8) { // C.ADDIW
+		VIEW_INSTR_AS(fi, FasterItype);
+		REG(fi.get_rs1()) = (int32_t)
+			((uint32_t)REG(fi.get_rs1()) + fi.signed_imm());
+		NEXT_C_INSTR();
+	} else { // C.JAL
+		VIEW_INSTR_AS(fi, FasterItype);
+		REG(REG_RA) = pc + 2;
+		PERFORM_BRANCH();
+	}
+}
+INSTRUCTION(RV32C_BC_JR, rv32c_jr) {
+	VIEW_INSTR();
+	if constexpr (VERBOSE_JUMPS) {
+		fprintf(stderr, "C.JR from 0x%lX to 0x%lX\n",
+			long(pc), long(REG(instr.whole)));
+	}
+	pc = REG(instr.whole);
+	OVERFLOW_CHECKED_JUMP();
+}
+INSTRUCTION(RV32C_BC_JALR, rv32c_jalr) {
+	VIEW_INSTR();
+	if constexpr (VERBOSE_JUMPS) {
+		fprintf(stderr, "C.JALR from 0x%lX to 0x%lX\n",
+			long(pc), long(REG(instr.whole)));
+	}
+	REG(REG_RA) = pc + 2;
+	pc = REG(instr.whole);
+	OVERFLOW_CHECKED_JUMP();
+}
+INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jumpfunc) {
+	VIEW_INSTR();
+	REGISTERS().pc = pc;
+	auto handler = DECODER().get_handler();
+	handler(CPU(), instr);
+	if constexpr (VERBOSE_JUMPS) {
+		fprintf(stderr, "Compressed jump from 0x%lX to 0x%lX\n",
+			long(pc), long(REGISTERS().pc + 2));
+	}
+	pc = REGISTERS().pc + 2;
+	OVERFLOW_CHECKED_JUMP();
+}
 
 #endif // RISCV_EXT_COMPRESSED
 
@@ -337,6 +380,13 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 #ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
 #endif
+}
+
+INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func) {
+	VIEW_INSTR();
+	auto handler = DECODER().get_handler();
+	handler(CPU(), instr);
+	NEXT_C_INSTR();
 }
 
 #endif // RISCV_EXT_COMPRESSED

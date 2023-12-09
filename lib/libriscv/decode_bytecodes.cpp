@@ -89,10 +89,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				}
 				return RV32C_BC_FUNCTION; // ILLEGAL
 			case CI_CODE(0b001, 0b01):
-				if constexpr (W == 8) {
-					return RV32C_BC_FUNCTION; // C.ADDIW
+				if constexpr (W >= 8) {
+					return RV32C_BC_JAL_ADDIW; // C.ADDIW
 				} else {
-					return RV32C_BC_JUMPFUNC; // C.JAL
+					return RV32C_BC_JAL_ADDIW; // C.JAL
 				}
 			case CI_CODE(0b101, 0b01): // C.JMP
 				return RV32C_BC_JMP;
@@ -132,11 +132,11 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				const bool topbit = ci.whole & (1 << 12);
 				if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
 				{
-					return RV32C_BC_JUMPFUNC; // C.JR rd
+					return RV32C_BC_JR; // C.JR rd
 				}
 				else if (topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
 				{
-					return RV32C_BC_JUMPFUNC; // C.JALR ra, rd+0
+					return RV32C_BC_JALR; // C.JALR ra, rd+0
 				}
 				else if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 != 0)
 				{	// MV rd, rs2
