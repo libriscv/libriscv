@@ -87,6 +87,11 @@
 	}                                   \
 	NEXT_BLOCK(fi.signed_imm(), false)
 
+#define OVERFLOW_CHECKED_JUMP() \
+	OVERFLOW_CHECK(); \
+	UNCHECKED_JUMP();
+
+
 namespace riscv
 {
 	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
@@ -120,6 +125,7 @@ namespace riscv
 		extern const DecoderFunc<W> computed_opcode[BYTECODES_MAX];
 	}
 
+#define DECODER()   (*d)
 #define CPU()       cpu
 #define REG(x)      cpu.reg(x)
 #define REGISTERS() cpu.registers()
@@ -230,31 +236,6 @@ namespace riscv
 #define BYTECODES_FLP
 #  include "bytecode_impl.cpp"
 #undef BYTECODES_FLP
-
-#ifdef RISCV_EXT_COMPRESSED
-	INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func)
-	{
-		VIEW_INSTR();
-		auto handler = d->get_handler();
-		handler(cpu, instr);
-		NEXT_C_INSTR();
-	}
-	INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jfunc)
-	{
-		VIEW_INSTR();
-		cpu.registers().pc = pc;
-		auto handler = d->get_handler();
-		handler(cpu, instr);
-		if constexpr (VERBOSE_JUMPS)
-		{
-			printf("Compressed jump from 0x%lX to 0x%lX\n",
-				   pc, cpu.registers().pc + 2);
-		}
-		pc = cpu.registers().pc + 2;
-		OVERFLOW_CHECK();
-		UNCHECKED_JUMP();
-	}
-#endif
 
 	INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 		VIEW_INSTR();
@@ -394,10 +375,13 @@ namespace riscv
 		[RV32C_BC_BEQZ]     = rv32c_beqz,
 		[RV32C_BC_BNEZ]     = rv32c_bnez,
 		[RV32C_BC_JMP]      = rv32c_jmp,
+		[RV32C_BC_JR]       = rv32c_jr,
+		[RV32C_BC_JAL_ADDIW]= rv32c_jal_addiw,
+		[RV32C_BC_JALR]     = rv32c_jalr,
 		[RV32C_BC_LDD]      = rv32c_ldd,
 		[RV32C_BC_STD]      = rv32c_std,
 		[RV32C_BC_FUNCTION] = rv32c_func,
-		[RV32C_BC_JUMPFUNC] = rv32c_jfunc,
+		[RV32C_BC_JUMPFUNC] = rv32c_jumpfunc,
 #endif
 
 		[RV32I_BC_SYSCALL] = rv32i_syscall,
