@@ -219,9 +219,9 @@ namespace riscv
 	}
 
 	template <int W>
-	size_t Memory<W>::memory_usage_total() const
+	uint64_t Memory<W>::memory_usage_total() const
 	{
-		size_t total = 0;
+		uint64_t total = 0;
 		total += sizeof(Machine<W>);
 		// Pages
 		for (const auto& it : m_pages) {

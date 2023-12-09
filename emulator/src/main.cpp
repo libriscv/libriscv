@@ -216,10 +216,10 @@ static void run_program(
 		printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms  Insn/s: %.0fmi/s\n",
 			machine.instruction_counter(), runtime.count()*1000.0,
 			machine.instruction_counter() / (runtime.count() * 1e6));
-		printf("Pages in use: %zu (%zu kB virtual memory, total %zu kB)\n",
+		printf("Pages in use: %zu (%" PRIu64 " kB virtual memory, total %" PRIu64 " kB)\n",
 			machine.memory.pages_active(),
-			machine.memory.pages_active() * 4,
-			machine.memory.memory_usage_total() / 1024UL);
+			machine.memory.pages_active() * riscv::Page::size() / uint64_t(1024),
+			machine.memory.memory_usage_total() / uint64_t(1024));
 	}
 }
 

@@ -108,7 +108,7 @@ namespace riscv
 		void print_backtrace(std::function<void(std::string_view)>, bool ra = true);
 
 		// Counts all the memory used by the machine, execute segments, pages, etc.
-		size_t memory_usage_total() const;
+		uint64_t memory_usage_total() const;
 		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
 		size_t owned_pages_active() const noexcept;
