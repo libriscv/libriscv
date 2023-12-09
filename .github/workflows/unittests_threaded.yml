@@ -27,7 +27,7 @@ jobs:
       run: cmake -B ${{github.workspace}}/build -DRISCV_THREADED=ON -DRISCV_FLAT_RW_ARENA=OFF -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build the unittests
-      run: cmake --build ${{github.workspace}}/build
+      run: cmake --build ${{github.workspace}}/build --parallel 4
 
     - name: Run tests
       working-directory: ${{github.workspace}}/build
