@@ -99,7 +99,7 @@ inline MultiThreading<W>::MultiThreading(Machine<W>& mach)
 
 template <int W>
 inline MultiThreading<W>::MultiThreading(Machine<W>& mach, const MultiThreading<W>& other)
-	: machine(mach)
+	: machine(mach), thread_counter(other.thread_counter)
 {
 	for (const auto& it : other.m_threads) {
 		const int tid = it.first;
@@ -117,6 +117,8 @@ inline MultiThreading<W>::MultiThreading(Machine<W>& mach, const MultiThreading<
 	}
 	/* Copy current thread */
 	m_current = get_thread(other.m_current->tid);
+	if (UNLIKELY(m_current == nullptr))
+		throw MachineException(INVALID_PROGRAM, "Other machine had invalid multi-threading state");
 }
 
 template <int W>

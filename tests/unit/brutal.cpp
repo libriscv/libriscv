@@ -5,6 +5,7 @@
 #include <libriscv/debug.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
+static const std::string cwd {SRCDIR};
 using namespace riscv;
 
 /**
@@ -46,4 +47,34 @@ TEST_CASE("Calculate fib(50) slowly", "[Compute]")
 		}
 		machine.simulate<false>(100);
 	} while (machine.instruction_limit_reached());
+}
+
+TEST_CASE("Threads test-suite slowly", "[Compute]")
+{
+	const auto binary = build_and_load(R"M(
+	#include "threads/test_threads.cpp"
+	)M", "-O1 -static -I" + cwd, true);
+
+	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
+	machine.setup_linux_syscalls();
+	machine.setup_posix_threads();
+	machine.setup_linux(
+		{"brutal", "123"},
+		{"LC_TYPE=C", "LC_ALL=C"});
+
+	do {
+		// No matter how many (or few) instructions we execute before exiting
+		// simulation, we should be able to resume and complete the program normally.
+		const int step = 5;
+		riscv::Machine<RISCV64> fork { machine };
+		fork.set_printer([] (const auto&, const char*, size_t) {});
+
+		do {
+			fork.simulate<false>(step);
+		} while (fork.instruction_limit_reached());
+		REQUIRE(fork.return_value<long>() == 123666123L);
+
+		machine.simulate<false>(100000UL);
+	} while (machine.instruction_limit_reached());
+	REQUIRE(machine.return_value<long>() == 123666123L);
 }
