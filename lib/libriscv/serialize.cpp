@@ -37,7 +37,7 @@ namespace riscv
 	{
 		uint64_t addr;
 		PageAttributes attr;
-		bool has_data = true;
+		bool is_cow_page = false;
 		uint8_t padding[3] {0};
 	} RISCV_PACKED;
 
@@ -48,7 +48,7 @@ namespace riscv
 
 		unsigned datapage_count = 0;
 		for (const auto& it : memory.pages()) {
-			if (it.second.has_data()) datapage_count++;
+			if (!it.second.is_cow_page()) datapage_count++;
 		}
 
 		const SerializedMachine<W> header {
@@ -105,7 +105,7 @@ namespace riscv
 			SerializedPage spage {
 				.addr = static_cast<uint64_t>(it.first),
 				.attr = page.attr,
-				.has_data = page.has_data(),
+				.is_cow_page = page.is_cow_page(),
 			};
 			// Make all pages owned from now on
 			spage.attr.is_cow = false;
@@ -116,7 +116,7 @@ namespace riscv
 			vec.insert(vec.end(), sptr, sptr + sizeof(SerializedPage));
 
 			// The zero-page (and other guard pages) may not have data
-			if (!page.has_data())
+			if (page.is_cow_page())
 				continue;
 
 			// Serialize page data
@@ -191,7 +191,7 @@ namespace riscv
 
 			PageAttributes new_attr = page.attr;
 			// Pages with data
-			if (page.has_data) {
+			if (!page.is_cow_page) {
 				Page* new_page = nullptr;
 				if (page.addr < this->m_arena_pages)
 				{
@@ -220,7 +220,7 @@ namespace riscv
 				// Pages without data
 				m_pages.try_emplace(
 					page.addr,
-					new_attr, nullptr
+					new_attr, Page::cow_page().m_page.get()
 				);
 			}
 		}

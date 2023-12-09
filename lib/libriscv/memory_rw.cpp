@@ -46,8 +46,8 @@ namespace riscv
 			// Keep non-owning and is_cow attributes
 			const bool is_cow = page.attr.is_cow;
 			page.attr.apply_regular_attributes(attr);
+			// If the page becomes writable and holds the CoW-page data, it's also copy-on-write
 			if (is_cow || (attr.write && page.is_cow_page())) {
-				// If the page becomes writable and holds the CoW-page data, it's also copy-on-write
 				page.attr.is_cow = true;
 				page.attr.write = false;
 			}
@@ -66,8 +66,10 @@ namespace riscv
 			page.attr.apply_regular_attributes(attr);
 			return;
 		}
+
 		// Writable: Create a non-owning copy-on-write zero-page
 		// Read-only: Create a non-owning zero-page
+		// Unmapped: Create hidden non-owning zero-page, which can become copy-on-write
 		attr.is_cow = attr.write;
 		attr.write = false;
 		attr.non_owning = true;
@@ -110,6 +112,7 @@ namespace riscv
 		return Page::cow_page();
 	}
 
+	// The zero-page and guarded page share backing
 	static const Page zeroed_page {
 		PageAttributes {
 			.read   = true,
@@ -125,7 +128,7 @@ namespace riscv
 			.exec   = false,
 			.is_cow = false,
 			.non_owning = true
-		}, nullptr
+		}, zeroed_page.m_page.get()
 	};
 	static const Page host_codepage {
 		PageAttributes {
@@ -159,10 +162,6 @@ namespace riscv
 		if (!already_there.is_cow_page() && !already_there.attr.non_owning)
 			throw MachineException(ILLEGAL_OPERATION,
 				"There was a page at the specified location already", pageno);
-		if (shared_page.has_data() == false && (
-			shared_page.attr.write || shared_page.attr.read || shared_page.attr.exec))
-			throw MachineException(ILLEGAL_OPERATION,
-				"There was a RWX page with no allocated data", pageno);
 
 		auto attr = shared_page.attr;
 		attr.non_owning = true;
@@ -229,8 +228,8 @@ namespace riscv
 			const auto page_number = it.first;
 			const auto& page = it.second;
 			total += sizeof(page);
-				// Regular owned page
-			if ((!page.attr.non_owning && page.has_data()) ||
+			// Regular owned page (that is not the shared zero-page)
+			if ((!page.attr.non_owning && !page.is_cow_page()) ||
 				// Arena page
 				(page.attr.non_owning && page_number < m_arena_pages))
 					total += Page::size();

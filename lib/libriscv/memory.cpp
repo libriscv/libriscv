@@ -52,7 +52,7 @@ namespace riscv
 				this->m_page_fault_handler =
 				[pages_max] (auto& mem, const address_t page, bool init) -> Page&
 				{
-					if (mem.pages_active() < pages_max)
+					if (mem.pages_active() < pages_max || mem.owned_pages_active() < pages_max)
 					{
 						// Within linear arena at the start
 						if (page < mem.m_arena_pages)
@@ -74,7 +74,7 @@ namespace riscv
 				this->m_page_fault_handler =
 					[pages_max](auto &mem, const address_t page, bool init) -> Page &
 				{
-					if (mem.pages_active() < pages_max)
+					if (mem.pages_active() < pages_max || mem.owned_pages_active() < pages_max)
 					{
 						// Create page on-demand
 						return mem.allocate_page(page,

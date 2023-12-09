@@ -91,13 +91,12 @@ struct Page
 		return *this;
 	}
 	// create a page that doesn't own this memory
-	Page(const PageAttributes& a, PageData* data) noexcept;
+	Page(const PageAttributes& a, PageData* data);
 	// don't try to free non-owned page memory
 	~Page() {
 		if (attr.non_owning) m_page.release();
 	}
 
-	bool has_data() const noexcept { return m_page != nullptr; }
 	auto& page() noexcept { return *m_page; }
 	const auto& page() const noexcept { return *m_page; }
 
@@ -173,9 +172,11 @@ struct Page
 	mutable mmio_cb_t m_trap = nullptr;
 };
 
-inline Page::Page(const PageAttributes& a, PageData* data) noexcept
+inline Page::Page(const PageAttributes& a, PageData* data)
 	: attr(a)
 {
+	if (UNLIKELY(data == nullptr))
+		throw MachineException(ILLEGAL_OPERATION, "Tried to create a page with no page data");
 	attr.non_owning = true;
 	m_page.reset(data);
 }

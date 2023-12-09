@@ -102,11 +102,6 @@ static void add_mman_syscalls()
 			machine.set_result(addr_g);
 			return;
 		} else { // addr_g != 0x0
-			address_type<W> addr_end = addr_g + length;
-			for (address_type<W> addr = addr_g; addr < addr_end; addr += Page::size())
-			{
-				// do nothing?
-			}
 			machine.memory.set_page_attr(addr_g, length, attr);
 			machine.set_result(addr_g);
 			return;
