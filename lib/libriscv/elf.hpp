@@ -1,4 +1,5 @@
 #pragma once
+#include <string_view>
 #include <type_traits>
 #include "util/elf.h"
 #ifdef RISCV_128BIT_ISA

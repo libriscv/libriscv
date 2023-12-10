@@ -420,6 +420,7 @@ namespace riscv
 		this->m_exit_address = master.memory.m_exit_address;
 		this->m_heap_address = master.memory.m_heap_address;
 		this->m_mmap_address = master.memory.m_mmap_address;
+		this->m_mmap_cache   = master.memory.m_mmap_cache;
 
 		if (options.use_memory_arena) {
 			this->m_arena = master.memory.m_arena;

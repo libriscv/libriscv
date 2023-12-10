@@ -60,6 +60,7 @@ set (SOURCES
 		libriscv/machine_defaults.cpp
 		libriscv/memory.cpp
 		libriscv/memory_elf.cpp
+		libriscv/memory_mmap.cpp
 		libriscv/memory_rw.cpp
 		libriscv/multiprocessing.cpp
 		libriscv/native_libc.cpp
@@ -184,11 +185,12 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/instruction_list.hpp
 		libriscv/machine.hpp
 		libriscv/machine_inline.hpp
+		libriscv/machine_vmcall.hpp
 		libriscv/memory.hpp
 		libriscv/memory_helpers_paging.hpp
 		libriscv/memory_inline.hpp
 		libriscv/memory_inline_pages.hpp
-		libriscv/machine_vmcall.hpp
+		libriscv/mmap_cache.hpp
 		libriscv/native_heap.hpp
 		libriscv/page.hpp
 		libriscv/prepared_call.hpp

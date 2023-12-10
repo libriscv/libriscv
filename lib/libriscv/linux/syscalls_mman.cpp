@@ -11,12 +11,11 @@ static void add_mman_syscalls()
 		const auto addr = machine.sysarg(0);
 		const auto len  = machine.sysarg(1);
 		SYSPRINT(">>> munmap(0x%lX, len=%zu)\n", (long)addr, (size_t)len);
+		if (addr + len < addr)
+			throw MachineException(SYSTEM_CALL_FAILED, "munmap() arguments overflow");
 		machine.memory.free_pages(addr, len);
-		auto& nextfree = machine.memory.mmap_address();
-		if (addr + len == nextfree) {
-			nextfree = addr;
-			if (nextfree < machine.memory.mmap_start())
-				nextfree = machine.memory.mmap_start();
+		if (addr >= machine.memory.mmap_start() && addr + len <= machine.memory.mmap_address()) {
+			machine.memory.mmap_unmap(addr, len);
 		}
 		machine.set_result(0);
 	});
@@ -44,9 +43,9 @@ static void add_mman_syscalls()
 			return;
 		}
 
-		length = (length + PageMask) & ~address_type<W>(PageMask);
-
 		auto& nextfree = machine.memory.mmap_address();
+		length = (length + PageMask) & ~address_type<W>(PageMask);
+		address_type<W> result = address_type<W>(-1);
 
 		if (vfd != -1)
 		{
@@ -81,33 +80,41 @@ static void add_mman_syscalls()
 			}
 #endif
 		}
-		else if (addr_g == 0 || addr_g == nextfree)
+		else if (addr_g == 0)
 		{
-			// anon pages need to be zeroed
-			if (flags & MAP_ANONYMOUS) {
-				machine.memory.memdiscard(nextfree, length, true);
+			auto range = machine.memory.mmap_cache().find(length);
+			// Not found in cache, increment MM base address
+			if (range.empty()) {
+				result = nextfree;
+				nextfree += length;
 			}
-
-			machine.memory.set_page_attr(nextfree, length, attr);
-			machine.set_result(nextfree);
-			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX\n",
-					(long)addr_g, (size_t)length, (long)nextfree);
+			else
+			{
+				result = range.addr;
+			}
+		} else if (addr_g >= machine.memory.mmap_start() && addr_g + length <= nextfree) {
+			// Fixed mapping inside mmap arena
+			result = addr_g;
+		} else if (addr_g == nextfree) {
+			// Fixed mapping at current end of mmap arena
+			result = addr_g;
 			nextfree += length;
-			return;
-		} else if (addr_g < nextfree) {
-			//printf("Invalid mapping attempted\n");
-			//machine.set_result(-1); // = MAP_FAILED;
-			machine.memory.set_page_attr(addr_g, length, attr);
-			machine.set_result(addr_g);
-			return;
-		} else { // addr_g != 0x0
-			machine.memory.set_page_attr(addr_g, length, attr);
-			machine.set_result(addr_g);
+		} else {
+			machine.set_result(address_type<W>(-1)); // = MAP_FAILED;
+			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX (MAP_FAILED)\n",
+					(long)addr_g, (size_t)length, -1L);
 			return;
 		}
-		(void) flags;
-		(void) prot;
-		machine.set_result(-1); // = MAP_FAILED;
+
+		// anon pages need to be zeroed
+		if (flags & MAP_ANONYMOUS) {
+			machine.memory.memdiscard(result, length, true);
+		}
+
+		machine.memory.set_page_attr(result, length, attr);
+		machine.set_result(result);
+		SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX\n",
+				(long)addr_g, (size_t)length, (long)result);
 	});
 	// mremap
 	Machine<W>::install_syscall_handler(163,
@@ -127,7 +134,7 @@ static void add_mman_syscalls()
 			return;
 		}
 		(void) flags;
-		machine.set_result(-1);
+		machine.set_result(address_type<W>(-1));
 	});
 	// mprotect
 	Machine<W>::install_syscall_handler(226,

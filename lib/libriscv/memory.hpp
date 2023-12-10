@@ -6,6 +6,7 @@
 #include <string_view>
 #include <unordered_map>
 #include "decoded_exec_segment.hpp"
+#include "mmap_cache.hpp"
 #include "util/buffer.hpp" // <string>
 #include "util/function.hpp"
 
@@ -81,6 +82,7 @@ namespace riscv
 		// The initial heap address (*not* the current heap maximum)
 		address_t heap_address() const noexcept { return this->m_heap_address; }
 		// Simple memory mapping implementation
+		auto& mmap_cache() noexcept { return m_mmap_cache; }
 		address_t mmap_start() const noexcept { return this->m_heap_address + BRK_MAX; }
 		const address_t& mmap_address() const noexcept { return m_mmap_address; }
 		address_t& mmap_address() noexcept { return m_mmap_address; }
@@ -88,6 +90,8 @@ namespace riscv
 		address_t mmap_allocate(address_t bytes);
 		// Attempts to relax a previous call to mmap_allocate(), freeing space at the end
 		bool mmap_relax(address_t addr, address_t size, address_t new_size);
+		// Unmap a memory range
+		bool mmap_unmap(address_t addr, address_t size);
 
 
 		auto& machine() { return this->m_machine; }
@@ -253,6 +257,9 @@ namespace riscv
 		const bool m_original_machine;
 
 		const std::string_view m_binary;
+
+		// Memory map cache
+		MMapCache<W> m_mmap_cache;
 
 		// Execute segments
 		std::array<DecodedExecuteSegment<W>, MAX_EXECUTE_SEGS> m_exec;
