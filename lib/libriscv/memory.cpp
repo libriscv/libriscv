@@ -244,6 +244,9 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::binary_loader(const MachineOptions<W>& options)
 	{
+		static constexpr uint32_t ELFHDR_FLAGS_RVC = 0x1;
+		static constexpr uint32_t ELFHDR_FLAGS_RVE = 0x8;
+
 		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
 			throw MachineException(INVALID_PROGRAM, "ELF program too short");
 		}
@@ -257,6 +260,12 @@ namespace riscv
 		}
 		if (UNLIKELY(elf->e_machine != EM_RISCV)) {
 			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.");
+		}
+		if (UNLIKELY((elf->e_flags & ELFHDR_FLAGS_RVC) != 0 && !compressed_enabled)) {
+			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVC executable, however C-extension is not enabled.");
+		}
+		if (UNLIKELY((elf->e_flags & ELFHDR_FLAGS_RVE) != 0)) {
+			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVE executable, however E-extension is not supported.");
 		}
 
 		// Enumerate & validate loadable segments
