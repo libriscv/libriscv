@@ -923,20 +923,20 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(115, syscall_clock_nanosleep<W>);
 	// sched_getaffinity
 	install_syscall_handler(123, syscall_stub_nosys<W>);
-	// kill
+	// tkill
 	install_syscall_handler(130,
 	[] (Machine<W>& machine) {
-		const int pid = machine.template sysarg<int> (1);
-		const int sig = machine.template sysarg<int> (2);
-		SYSPRINT(">>> kill on pid=%d signal=%d\n", pid, sig);
-		(void) pid;
+		const int tid = machine.template sysarg<int> (0);
+		const int sig = machine.template sysarg<int> (1);
+		SYSPRINT(">>> tkill on tid=%d signal=%d\n", tid, sig);
+		(void) tid;
 		// If the signal zero or unset, ignore it
 		if (sig == 0 || machine.sigaction(sig).is_unset()) {
 			return;
 		} else {
 			// Jump to signal handler and change to altstack, if set
 			machine.signals().enter(machine, sig);
-			SYSPRINT("<<< tgkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
+			SYSPRINT("<<< tkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
 				sig, (long)machine.cpu.pc(), (long)machine.cpu.reg(REG_SP));
 			return;
 		}

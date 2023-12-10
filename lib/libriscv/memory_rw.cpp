@@ -1,4 +1,11 @@
 #include "machine.hpp"
+#ifdef __linux__
+#include <sys/mman.h>
+static constexpr bool MADVISE_ENABLED = true;
+#else
+extern "C" int madvise(void*, size_t, int);
+static constexpr bool MADVISE_ENABLED = false;
+#endif
 
 namespace riscv
 {
@@ -54,11 +61,6 @@ namespace riscv
 			return;
 		}
 
-		// Don't create any pages if the defaults apply
-		const bool is_default = attr.is_default();
-		if (is_default)
-			return;
-
 		// Create arena-page
 		if (flat_readwrite_arena && pageno < this->m_arena_pages)
 		{
@@ -67,6 +69,11 @@ namespace riscv
 			return;
 		}
 
+		// Don't create any pages if the defaults apply
+		const bool is_default = attr.is_default();
+		if (is_default)
+			return;
+
 		// Writable: Create a non-owning copy-on-write zero-page
 		// Read-only: Create a non-owning zero-page
 		// Unmapped: Create hidden non-owning zero-page, which can become copy-on-write
@@ -74,6 +81,86 @@ namespace riscv
 		attr.write = false;
 		attr.non_owning = true;
 		m_pages.try_emplace(pageno, attr, Page::cow_page().m_page.get());
+	}
+
+	template <int W>
+	void Memory<W>::memdiscard(address_t dst, size_t len, bool ignore_protections)
+	{
+		while (len > 0)
+		{
+			const size_t offset = dst & (Page::size()-1); // offset within page
+			const size_t size = std::min(Page::size() - offset, len);
+			const address_t pageno = page_number(dst);
+
+			// We only use the page table now because we have previously
+			// checked special regions.
+			auto it = m_pages.find(pageno);
+			// If we don't find a page, we can treat it as a CoW zero page
+			if (it != m_pages.end()) {
+				Page& page = it->second;
+				if (page.is_cow_page()) {
+					// This is the zero-page
+				} else {
+					if (page.attr.is_cow) {
+						m_page_write_handler(*this, pageno, page);
+					}
+					if (page.attr.write) {
+
+						if constexpr (MADVISE_ENABLED) {
+							// madvise "fast-path" (XXX: doesn't scale on busy server)
+							if (offset == 0 && size == Page::size()) {
+								madvise(page.data(), size, 0x4); // MADV_DONTNEED
+							} else {
+								std::memset(page.data() + offset, 0, size);
+							}
+						} else {
+							// Zero the existing writable page
+							std::memset(page.data() + offset, 0, size);
+						}
+
+					} else if (!ignore_protections) {
+						this->protection_fault(dst);
+					}
+				}
+			} else {
+				// Create arena-page
+				if (flat_readwrite_arena && pageno < this->m_arena_pages)
+				{
+					// Fast-path using madvise
+					if constexpr (MADVISE_ENABLED) {
+						// XXX: doesn't scale on busy server
+						if (offset == 0 && size == Page::size()) {
+							address_t new_dst = dst + (len & ~address_t(Page::size()-1));
+							new_dst = std::min(new_dst, memory_arena_size());
+							const size_t new_size = new_dst - dst;
+
+							auto* baseptr = &((char *)m_arena)[dst];
+							const int res = madvise(baseptr, new_size, 0x4); // MADV_DONTNEED
+							if (UNLIKELY(res < 0))
+								throw MachineException(UNKNOWN_EXCEPTION, "memzero: madvise() failed");
+							dst += new_size;
+							len -= new_size;
+							continue;
+						}
+					}
+
+					auto& page = this->create_writable_pageno(pageno);
+					// Unfortunately we don't know if this page is untouched,
+					// but we can use MADV_DONTNEED
+					if (page.attr.write) {
+						std::memset(page.data() + offset, 0, size);
+					} else if (!ignore_protections) {
+						this->protection_fault(dst);
+					}
+				}
+				else {
+					// Assume this page is lazily created (zero-page)
+				}
+			}
+
+			dst += size;
+			len -= size;
+		}
 	}
 
 	template <int W>

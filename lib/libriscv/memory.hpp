@@ -35,7 +35,7 @@ namespace riscv
 		template <typename T>
 		void write(address_t dst, T value);
 
-		void memzero(address_t dst, size_t len);
+		void memdiscard(address_t dst, size_t len, bool ignore_protections);
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy_unsafe(address_t dst, const void* src, size_t);

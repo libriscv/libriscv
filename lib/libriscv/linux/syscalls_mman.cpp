@@ -85,10 +85,9 @@ static void add_mman_syscalls()
 		{
 			// anon pages need to be zeroed
 			if (flags & MAP_ANONYMOUS) {
-				// ... but they are already CoW
-				// XXX: Check if page is dirty
-				//machine.memory.memset(nextfree, 0, length);
+				machine.memory.memdiscard(nextfree, length, true);
 			}
+
 			machine.memory.set_page_attr(nextfree, length, attr);
 			machine.set_result(nextfree);
 			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX\n",
@@ -151,17 +150,19 @@ static void add_mman_syscalls()
 		const auto addr  = machine.sysarg(0);
 		const auto len   = machine.sysarg(1);
 		const int advice = machine.template sysarg<int> (2);
-		SYSPRINT(">>> madvise(0x%lX, len=%zu, prot=%x)\n",
+		SYSPRINT(">>> madvise(0x%lX, len=%zu, advice=%x)\n",
 			(uint64_t)addr, (size_t)len, advice);
 		switch (advice) {
 			case 0: // MADV_NORMAL
 			case 1: // MADV_RANDOM
 			case 2: // MADV_SEQUENTIAL
 			case 3: // MADV_WILLNEED:
+			case 15: // MADV_NOHUGEPAGE
+			case 18: // MADV_WIPEONFORK
 				machine.set_result(0);
 				return;
 			case 4: // MADV_DONTNEED
-				machine.memory.free_pages(addr, len);
+				machine.memory.memdiscard(addr, len, true);
 				machine.set_result(0);
 				return;
 			case 8: // MADV_FREE
@@ -169,9 +170,12 @@ static void add_mman_syscalls()
 				machine.memory.free_pages(addr, len);
 				machine.set_result(0);
 				return;
-			default:
+			case -1: // Work-around for Zig behavior
 				machine.set_result(-EINVAL);
 				return;
+			default:
+				throw MachineException(SYSTEM_CALL_FAILED,
+					"Unimplemented madvise() advice", advice);
 		}
 	});
 }
