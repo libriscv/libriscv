@@ -60,7 +60,7 @@ namespace riscv
 		{
 			if (UNLIKELY(base_pc >= last_pc))
 				throw MachineException(INVALID_PROGRAM, "The execute segment has an overflow");
-			if (UNLIKELY(base_pc & 0x3))
+			if (UNLIKELY(base_pc & 0x1))
 				throw MachineException(INVALID_PROGRAM, "The execute segment is misaligned");
 
 			// Go through entire executable segment and measure lengths
