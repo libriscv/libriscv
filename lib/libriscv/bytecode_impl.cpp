@@ -543,13 +543,13 @@ INSTRUCTION(RV32F_BC_FSD, rv32i_fsd) {
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
+	VIEW_INSTR_AS(fi, FasterFloatType);
 	#define FLREGS() \
-		auto& dst = REGISTERS().getfl(fi.R4type.rd); \
-		const auto& rs1 = REGISTERS().getfl(fi.R4type.rs1); \
-		const auto& rs2 = REGISTERS().getfl(fi.R4type.rs2);
+		auto& dst = REGISTERS().getfl(fi.get_rd()); \
+		const auto& rs1 = REGISTERS().getfl(fi.get_rs1()); \
+		const auto& rs2 = REGISTERS().getfl(fi.get_rs2());
 	FLREGS();
-	if (fi.R4type.funct2 == 0x0)
+	if (fi.func == 0x0)
 	{ // float32
 		dst.set_float(rs1.f32[0] + rs2.f32[0]);
 	}
@@ -560,9 +560,9 @@ INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FSUB, rv32f_fsub) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
+	VIEW_INSTR_AS(fi, FasterFloatType);
 	FLREGS();
-	if (fi.R4type.funct2 == 0x0)
+	if (fi.func == 0x0)
 	{ // float32
 		dst.set_float(rs1.f32[0] - rs2.f32[0]);
 	}
@@ -573,9 +573,9 @@ INSTRUCTION(RV32F_BC_FSUB, rv32f_fsub) {
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
+	VIEW_INSTR_AS(fi, FasterFloatType);
 	FLREGS();
-	if (fi.R4type.funct2 == 0x0)
+	if (fi.func == 0x0)
 	{ // float32
 		dst.set_float(rs1.f32[0] * rs2.f32[0]);
 	}
@@ -586,9 +586,9 @@ INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv) {
-	VIEW_INSTR_AS(fi, rv32f_instruction);
+	VIEW_INSTR_AS(fi, FasterFloatType);
 	FLREGS();
-	if (fi.R4type.funct2 == 0x0)
+	if (fi.func == 0x0)
 	{ // float32
 		dst.set_float(rs1.f32[0] / rs2.f32[0]);
 	}

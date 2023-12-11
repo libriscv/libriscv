@@ -233,4 +233,30 @@ namespace riscv
 		};
 	};
 
+	union FasterFloatType
+	{
+		uint32_t whole;
+
+		struct
+		{
+			uint32_t func : 8;
+			uint32_t rd  : 8;
+			uint32_t rs2 : 8;
+			uint32_t rs1 : 8;
+		};
+
+		RISCV_ALWAYS_INLINE
+		auto get_rd() const noexcept {
+			return rd;
+		}
+		RISCV_ALWAYS_INLINE
+		auto get_rs1() const noexcept {
+			return rs1;
+		}
+		RISCV_ALWAYS_INLINE
+		auto get_rs2() const noexcept {
+			return rs2;
+		}
+	};
+
 } // riscv

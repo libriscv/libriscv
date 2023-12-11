@@ -239,6 +239,22 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			/** FP 32- and 64-bit instructions **/
+			case RV32F_BC_FADD:
+			case RV32F_BC_FSUB:
+			case RV32F_BC_FMUL:
+			case RV32F_BC_FDIV: {
+				const rv32f_instruction fi{instr};
+
+				FasterFloatType rewritten;
+				rewritten.rd  = fi.R4type.rd;
+				rewritten.rs1 = fi.R4type.rs1;
+				rewritten.rs2 = fi.R4type.rs2;
+				rewritten.func = fi.R4type.funct2;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
 			/** Vector instructions **/
 #ifdef RISCV_EXT_VECTOR
 			case RV32V_BC_VLE32:
