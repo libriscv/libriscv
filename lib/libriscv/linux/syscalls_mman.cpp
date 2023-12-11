@@ -92,13 +92,17 @@ static void add_mman_syscalls()
 			{
 				result = range.addr;
 			}
-		} else if (addr_g >= machine.memory.mmap_start() && addr_g + length <= nextfree) {
-			// Fixed mapping inside mmap arena
-			result = addr_g;
 		} else if (addr_g == nextfree) {
 			// Fixed mapping at current end of mmap arena
 			result = addr_g;
 			nextfree += length;
+		} else if (addr_g >= machine.memory.mmap_start() && addr_g + length <= nextfree) {
+			// Fixed mapping inside mmap arena
+			result = addr_g;
+		} else if (addr_g > nextfree) {
+			// Fixed mapping after current end of mmap arena
+			// TODO: Evaluate if relaxation is counter-productive with the new cache
+			result = addr_g;
 		} else {
 			machine.set_result(address_type<W>(-1)); // = MAP_FAILED;
 			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX (MAP_FAILED)\n",
