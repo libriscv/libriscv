@@ -53,7 +53,7 @@ TEST_CASE("Threads test-suite slowly", "[Compute]")
 {
 	const auto binary = build_and_load(R"M(
 	#include "threads/test_threads.cpp"
-	)M", "-O1 -static -I" + cwd, true);
+	)M", "-O1 -static -pthread -I" + cwd, true);
 
 	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
 	machine.setup_linux_syscalls();
