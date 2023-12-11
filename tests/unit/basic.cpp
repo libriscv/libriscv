@@ -91,7 +91,7 @@ TEST_CASE("Verify program arguments and environment", "[Runtime]")
 
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	// We need to install Linux system calls for maximum gucciness
-	machine.setup_linux_syscalls();
+	machine.setup_linux_syscalls(true, true);
 	// We need to create a Linux environment for runtimes to work well
 	machine.setup_linux(
 		{"program", "this is a test"},
@@ -117,7 +117,7 @@ TEST_CASE("Catch output from write system call", "[Output]")
 
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	// We need to install Linux system calls for maximum gucciness
-	machine.setup_linux_syscalls();
+	machine.setup_linux_syscalls(false, false);
 	// We need to create a Linux environment for runtimes to work well
 	machine.setup_linux(
 		{"basic"},
@@ -157,7 +157,7 @@ TEST_CASE("Calculate fib(50)", "[Compute]")
 
 	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
 	// We need to install Linux system calls for maximum gucciness
-	machine.setup_linux_syscalls();
+	machine.setup_linux_syscalls(false, false);
 	// We need to create a Linux environment for runtimes to work well
 	machine.setup_linux(
 		{"basic", "50"},
@@ -186,7 +186,7 @@ TEST_CASE("Count using EBREAK", "[Compute]")
 	})M");
 
 	riscv::Machine<RISCV64> machine { binary };
-	machine.setup_linux_syscalls();
+	machine.setup_linux_syscalls(false, false);
 	machine.setup_linux(
 		{"basic", "50"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});

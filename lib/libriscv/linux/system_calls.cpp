@@ -914,6 +914,38 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// 94: exit_group (exit process)
 	install_syscall_handler(94, syscall_exit<W>);
 
+	// If no multi-threading has been initialized, we should install
+	// stub syscall handlers for some multi-threading functionality
+	if (!this->has_threads())
+	{
+		// set_tid_address
+		install_syscall_handler(96, syscall_stub_zero<W>);
+		// set_robust_list
+		install_syscall_handler(99, syscall_stub_zero<W>);
+		// prlimit64
+		this->install_syscall_handler(261,
+		[] (Machine<W>& machine) {
+			const int resource = machine.template sysarg<int> (1);
+			const auto old_addr = machine.template sysarg<address_type<W>> (3);
+			struct {
+				address_type<W> cur = 0;
+				address_type<W> max = 0;
+			} lim;
+			constexpr int RISCV_RLIMIT_STACK = 3;
+			if (old_addr != 0) {
+				if (resource == RISCV_RLIMIT_STACK) {
+					lim.cur = 0x200000;
+					lim.max = 0x200000;
+				}
+				machine.copy_to_guest(old_addr, &lim, sizeof(lim));
+				machine.set_result(0);
+			} else {
+				machine.set_result(-EINVAL);
+			}
+			SYSPRINT("SYSCALL prlimit64(...) = %d\n", machine.return_value<int>());
+		});
+	}
+
 	// nanosleep
 	install_syscall_handler(101, syscall_nanosleep<W>);
 	// clock_gettime
