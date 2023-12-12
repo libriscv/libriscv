@@ -5,6 +5,18 @@
 namespace riscv
 {
 	template <int W>
+	address_type<W> Memory<W>::elf_base_address(address_t offset) const {
+		if (this->m_is_dynamic) {
+			const address_t vaddr_base = DYLINK_BASE;
+			if (UNLIKELY(vaddr_base + offset < vaddr_base))
+				throw MachineException(INVALID_PROGRAM, "Bogus virtual address + offset");
+			return vaddr_base + offset;
+		} else {
+			return offset;
+		}
+	}
+
+	template <int W>
 	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const std::string& name) const
 	{
 		// NOTE: Cannot take address of string_view end-pointer in debug mode
@@ -85,6 +97,8 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::relocate_section(const char* section_name, const char* sym_section)
 	{
+		using ElfRela = typename Elf<W>::Rela;
+
 		const auto* rela = section_by_name(section_name);
 		if (rela == nullptr) return;
 		const auto* dyn_hdr = section_by_name(sym_section);
@@ -110,14 +124,15 @@ namespace riscv
 							i, (long)symidx, (long)rela_addr[i].r_offset, (long)sym->st_value);
 					elf_print_sym<typename Elf<W>::Sym>(sym);
 				}
-				this->write<address_t>(rela_addr[i].r_offset, sym->st_value);
+				this->write<address_t>(elf_base_address(rela_addr[i].r_offset), sym->st_value);
 			}
 		}
 	}
 
 	template <int W> RISCV_INTERNAL
-	void Memory<W>::dynamic_linking()
+	void Memory<W>::dynamic_linking(const Ehdr& hdr)
 	{
+		(void)hdr;
 		this->relocate_section(".rela.dyn", ".dynsym");
 		this->relocate_section(".rela.plt", ".dynsym");
 	}

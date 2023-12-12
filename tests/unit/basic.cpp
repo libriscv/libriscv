@@ -26,18 +26,6 @@ TEST_CASE("Instantiate machine", "[Instantiate]")
 	REQUIRE(machine.cpu.current_execute_segment()->is_within(machine.memory.start_address()));
 }
 
-TEST_CASE("Instantiate machine using shared ELF", "[Instantiate]")
-{
-	REQUIRE_THROWS([] {
-		const auto binary = build_and_load(R"M(
-		int main() {
-			return 666;
-		})M", "-shared");
-		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
-		machine.simulate(MAX_INSTRUCTIONS);
-	}());
-}
-
 TEST_CASE("Execute minimal machine", "[Minimal]")
 {
 	const auto binary = build_and_load(R"M(

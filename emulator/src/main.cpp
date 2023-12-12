@@ -6,6 +6,7 @@
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = 2000ULL << 20;
+static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
 
 template <int W>
 static void run_sighandler(riscv::Machine<W>&);
@@ -16,10 +17,11 @@ static void run_program(
 	const std::vector<std::string>& args)
 {
 	const bool debugging_enabled = getenv("DEBUG") != nullptr;
+	const bool verbose_enabled = getenv("VERBOSE") != nullptr;
 
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
-		.verbose_loader = (getenv("VERBOSE") != nullptr)
+		.verbose_loader = verbose_enabled
 	}};
 
 	if constexpr (full_linux_guest)
@@ -61,7 +63,7 @@ static void run_program(
 				return true;
 			// ld-linux
 			if (path == "/lib/riscv64-linux-gnu/ld-linux-riscv64-lp64d.so.1") {
-				path = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
+				path = DYNAMIC_LINKER;
 				return true;
 			}
 			// libc6
@@ -83,7 +85,14 @@ static void run_program(
 				path = "/usr/riscv64-linux-gnu/lib/libnss_files.so.2";
 				return true;
 			}
-			fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
+			// If the emulator is invoked using the systems RISC-V dynamic linker
+			// then we will allow argument 1 to be directly opened.
+			if (args[0] == DYNAMIC_LINKER && args.size() > 1 && path == args.at(1)) {
+				return true;
+			}
+			if (verbose_enabled) {
+				fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
+			}
 			return false;
 		};
 		// multi-threading
