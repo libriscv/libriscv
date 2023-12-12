@@ -14,6 +14,7 @@ static void run_sighandler(riscv::Machine<W>&);
 template <int W>
 static void run_program(
 	const std::vector<uint8_t>& binary,
+	const bool is_dynamic,
 	const std::vector<std::string>& args)
 {
 	const bool debugging_enabled = getenv("DEBUG") != nullptr;
@@ -85,9 +86,7 @@ static void run_program(
 				path = "/usr/riscv64-linux-gnu/lib/libnss_files.so.2";
 				return true;
 			}
-			// If the emulator is invoked using the systems RISC-V dynamic linker
-			// then we will allow argument 1 to be directly opened.
-			if (args[0] == DYNAMIC_LINKER && args.size() > 1 && path == args.at(1)) {
+			if (is_dynamic && args.size() > 1 && path == args.at(1)) {
 				return true;
 			}
 			if (verbose_enabled) {
@@ -245,14 +244,28 @@ int main(int argc, const char** argv)
 	}
 	const std::string& filename = args.front();
 
-	const auto binary = load_file(filename);
-	assert(binary.size() >= 64);
+	auto binary = load_file(filename);
+	if (binary.size() < sizeof(Elf64_Ehdr)) {
+		fprintf(stderr, "ELF binary was too small to be usable!\n");
+		exit(1);
+	}
+
+	const bool is_dynamic = ((Elf32_Ehdr *)binary.data())->e_type == ET_DYN;
+
+	if (binary[4] == ELFCLASS64 && is_dynamic) {
+		// Load the dynamic linker shared object
+		binary = load_file(DYNAMIC_LINKER);
+		// Insert program name as argv[1]
+		args.insert(args.begin() + 1, args.at(0));
+		// Set dynamic linker to argv[0]
+		args.at(0) = DYNAMIC_LINKER;
+	}
 
 	try {
 		if (binary[4] == ELFCLASS64)
-			run_program<riscv::RISCV64> (binary, args);
+			run_program<riscv::RISCV64> (binary, is_dynamic, args);
 		else
-			run_program<riscv::RISCV32> (binary, args);
+			run_program<riscv::RISCV32> (binary, is_dynamic, args);
 	} catch (const std::exception& e) {
 		printf("Exception: %s\n", e.what());
 	}
