@@ -12,6 +12,13 @@
 
 namespace riscv
 {
+#ifdef __linux__
+	static std::random_device rd("/dev/urandom");
+#else
+	static std::random_device rd{};
+#endif
+	static std::mt19937_64 prng{};
+
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
 		: cpu(*this, options.cpu_id),
@@ -148,11 +155,10 @@ namespace riscv
 		auto dst = this->cpu.reg(REG_SP);
 
 		// inception :)
-		auto gen = std::default_random_engine(std::random_device{}());
 		std::uniform_int_distribution<int> rand(0,256);
 
 		std::array<uint8_t, 16> canary;
-		std::generate(canary.begin(), canary.end(), [&] { return rand(gen); });
+		std::generate(canary.begin(), canary.end(), [&] { return rand(rd); });
 		push_down(*this, dst, canary.data(), canary.size());
 		const auto canary_addr = dst;
 
