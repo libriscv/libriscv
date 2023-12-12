@@ -6,6 +6,7 @@
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = 2000ULL << 20;
+static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
 
 template <int W>
 static void run_sighandler(riscv::Machine<W>&);
@@ -13,13 +14,15 @@ static void run_sighandler(riscv::Machine<W>&);
 template <int W>
 static void run_program(
 	const std::vector<uint8_t>& binary,
+	const bool is_dynamic,
 	const std::vector<std::string>& args)
 {
 	const bool debugging_enabled = getenv("DEBUG") != nullptr;
+	const bool verbose_enabled = getenv("VERBOSE") != nullptr;
 
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
-		.verbose_loader = (getenv("VERBOSE") != nullptr)
+		.verbose_loader = verbose_enabled
 	}};
 
 	if constexpr (full_linux_guest)
@@ -61,7 +64,7 @@ static void run_program(
 				return true;
 			// ld-linux
 			if (path == "/lib/riscv64-linux-gnu/ld-linux-riscv64-lp64d.so.1") {
-				path = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
+				path = DYNAMIC_LINKER;
 				return true;
 			}
 			// libc6
@@ -83,7 +86,12 @@ static void run_program(
 				path = "/usr/riscv64-linux-gnu/lib/libnss_files.so.2";
 				return true;
 			}
-			fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
+			if (is_dynamic && args.size() > 1 && path == args.at(1)) {
+				return true;
+			}
+			if (verbose_enabled) {
+				fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
+			}
 			return false;
 		};
 		// multi-threading
@@ -236,14 +244,28 @@ int main(int argc, const char** argv)
 	}
 	const std::string& filename = args.front();
 
-	const auto binary = load_file(filename);
-	assert(binary.size() >= 64);
+	auto binary = load_file(filename);
+	if (binary.size() < sizeof(Elf64_Ehdr)) {
+		fprintf(stderr, "ELF binary was too small to be usable!\n");
+		exit(1);
+	}
+
+	const bool is_dynamic = ((Elf32_Ehdr *)binary.data())->e_type == ET_DYN;
+
+	if (binary[4] == ELFCLASS64 && is_dynamic) {
+		// Load the dynamic linker shared object
+		binary = load_file(DYNAMIC_LINKER);
+		// Insert program name as argv[1]
+		args.insert(args.begin() + 1, args.at(0));
+		// Set dynamic linker to argv[0]
+		args.at(0) = DYNAMIC_LINKER;
+	}
 
 	try {
 		if (binary[4] == ELFCLASS64)
-			run_program<riscv::RISCV64> (binary, args);
+			run_program<riscv::RISCV64> (binary, is_dynamic, args);
 		else
-			run_program<riscv::RISCV32> (binary, args);
+			run_program<riscv::RISCV32> (binary, is_dynamic, args);
 	} catch (const std::exception& e) {
 		printf("Exception: %s\n", e.what());
 	}

@@ -140,7 +140,8 @@ namespace riscv
 	}
 
 	template <int W> RISCV_INTERNAL
-	void Memory<W>::binary_load_ph(const MachineOptions<W>& options, const Phdr* hdr)
+	void Memory<W>::binary_load_ph(const MachineOptions<W>& options,
+		const Phdr* hdr, const address_t vaddr)
 	{
 		const auto* src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
@@ -152,13 +153,13 @@ namespace riscv
 		if (m_binary.size() < hdr->p_offset + len) {
 			throw MachineException(INVALID_PROGRAM, "Not enough room for ELF program segment");
 		}
-		if (hdr->p_vaddr + len < hdr->p_vaddr) {
+		if (vaddr + len < vaddr) {
 			throw MachineException(INVALID_PROGRAM, "Bogus ELF segment virtual base");
 		}
 
 		if (options.verbose_loader) {
 		printf("* Loading program of size %zu from %p to virtual %p\n",
-				len, src, (void*) (uintptr_t) hdr->p_vaddr);
+				len, src, (void*)uintptr_t(vaddr));
 		}
 		// Serialize pages cannot be called with len == 0,
 		// and there is nothing further to do.
@@ -178,7 +179,7 @@ namespace riscv
 
 		if (attr.read && !attr.write && uses_flat_memory_arena()) {
 			this->m_initial_rodata_end =
-				std::max(m_initial_rodata_end, static_cast<address_t>(hdr->p_vaddr + len));
+				std::max(m_initial_rodata_end, static_cast<address_t>(vaddr + len));
 		}
 		// Nothing more to do here, if execute-only
 		if (attr.exec && !attr.read)
@@ -198,14 +199,14 @@ namespace riscv
 		}
 
 		// Load into virtual memory
-		this->memcpy(hdr->p_vaddr, src, len);
+		this->memcpy(vaddr, src, len);
 
 		if (options.protect_segments) {
-			this->set_page_attr(hdr->p_vaddr, len, attr);
+			this->set_page_attr(vaddr, len, attr);
 		}
 		else {
 			// this might help execute simplistic barebones programs
-			this->set_page_attr(hdr->p_vaddr, len, {
+			this->set_page_attr(vaddr, len, {
 				 .read = true, .write = true, .exec = true
 			});
 		}
@@ -213,10 +214,9 @@ namespace riscv
 
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::serialize_execute_segment(
-		const MachineOptions<W>& options, const Phdr* hdr)
+		const MachineOptions<W>& options, const Phdr* hdr, address_t vaddr)
 	{
 		// The execute segment:
-		address_t vaddr = hdr->p_vaddr;
 		size_t exlen = hdr->p_filesz;
 		const char* data = m_binary.data() + hdr->p_offset;
 		// Look for a .text section inside this segment:
@@ -229,7 +229,7 @@ namespace riscv
 		{
 			// Now we can use the .text section instead
 			data = m_binary.data() + texthdr->sh_offset;
-			vaddr = texthdr->sh_addr;
+			vaddr = this->elf_base_address(texthdr->sh_addr);
 			exlen = texthdr->sh_size;
 		}
 
@@ -255,8 +255,10 @@ namespace riscv
 		}
 
 		const auto* elf = (Ehdr*) m_binary.data();
-		if (UNLIKELY(elf->e_type != ET_EXEC)) {
-			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load a dynamic library?");
+		const bool is_static = elf->e_type == ET_EXEC;
+		this->m_is_dynamic   = elf->e_type == ET_DYN;
+		if (UNLIKELY(!is_static && !m_is_dynamic)) {
+			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load an object file?");
 		}
 		if (UNLIKELY(elf->e_machine != EM_RISCV)) {
 			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.");
@@ -285,17 +287,23 @@ namespace riscv
 
 		// Load program segments
 		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
-		this->m_start_address = elf->e_entry;
-		this->m_heap_address = 0;
 		std::vector<const Phdr*> execute_segments;
+
+		// is_dynamic() is used to determine the ELF base address
+		this->m_start_address = this->elf_base_address(elf->e_entry);
+		this->m_heap_address = 0;
 
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
 		{
+			const address_t vaddr = this->elf_base_address(hdr->p_vaddr);
+
 			// Detect overlapping segments
 			for (const auto* ph = phdr; ph < hdr; ph++) {
+				const address_t ph_vaddr = this->elf_base_address(ph->p_vaddr);
+
 				if (hdr->p_type == PT_LOAD && ph->p_type == PT_LOAD)
-				if (ph->p_vaddr < hdr->p_vaddr + hdr->p_filesz &&
-					ph->p_vaddr + ph->p_filesz > hdr->p_vaddr) {
+				if (ph_vaddr < vaddr + hdr->p_filesz &&
+					ph_vaddr + ph->p_filesz > vaddr) {
 					// Normally we would not care, but no normal ELF
 					// has overlapping segments, so treat as bogus.
 					throw MachineException(INVALID_PROGRAM, "Overlapping ELF segments");
@@ -307,7 +315,7 @@ namespace riscv
 				case PT_LOAD:
 					// loadable program segments
 					if (options.load_program) {
-						binary_load_ph(options, hdr);
+						binary_load_ph(options, hdr, vaddr);
 						if (hdr->p_flags & PF_X) {
 							execute_segments.push_back(hdr);
 						}
@@ -317,12 +325,15 @@ namespace riscv
 					// This seems to be a mark for executable stack. Big NO!
 					break;
 				case PT_GNU_RELRO:
-					//throw std::runtime_error(
-					//	"Dynamically linked ELF binaries are not supported");
+					/*this->set_page_attr(vaddr, hdr->p_memsz, {
+						.read  = (hdr->p_flags & PF_R) != 0,
+						.write = (hdr->p_flags & PF_W) != 0,
+						.exec  = (hdr->p_flags & PF_X) != 0,
+					});*/
 					break;
 			}
 
-			address_t endm = hdr->p_vaddr + hdr->p_memsz;
+			address_t endm = vaddr + hdr->p_memsz;
 			endm += Page::size()-1; endm &= ~address_t(Page::size()-1);
 			if (this->m_heap_address < endm)
 				this->m_heap_address = endm;
@@ -368,13 +379,14 @@ namespace riscv
 		// efficient execute segments (if loadable).
 		if (options.load_program) {
 			for (auto* hdr : execute_segments) {
-				serialize_execute_segment(options, hdr);
-			}
-		}
+				const address_t vaddr = this->elf_base_address(hdr->p_vaddr);
 
-		if constexpr (W <= 8) {
-			if (UNLIKELY(options.dynamic_linking)) {
-				this->dynamic_linking();
+				serialize_execute_segment(options, hdr, vaddr);
+			}
+			if constexpr (W <= 8) {
+				if (this->m_is_dynamic) {
+					this->dynamic_linking(*elf);
+				}
 			}
 		}
 
@@ -466,6 +478,9 @@ namespace riscv
 		if (address == 0x0) return {};
 		// ELF with no symbols
 		if (UNLIKELY(sym_hdr->sh_size == 0)) return {};
+
+		// Add the correct offset to address for dynamically loaded programs
+		address = this->elf_base_address(address);
 
 		const auto* symtab = elf_sym_index(sym_hdr, 0);
 		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);

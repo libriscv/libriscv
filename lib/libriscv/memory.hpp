@@ -24,6 +24,7 @@ namespace riscv
 		using page_readf_cb_t = riscv::Function<const Page&(const Memory&, address_t)>;
 		using page_write_cb_t = riscv::Function<void(Memory&, address_t, Page&)>;
 		static constexpr address_t BRK_MAX      = 0x1000000; // Default BRK size
+		static constexpr address_t DYLINK_BASE  = 0x40000; // Dynamic link base address
 		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
 		static constexpr size_t    MAX_EXECUTE_SEGS = 8;
 
@@ -179,6 +180,7 @@ namespace riscv
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
+		bool is_dynamic_executable() const noexcept { return this->m_is_dynamic; }
 
 		bool uses_flat_memory_arena() const noexcept { return riscv::flat_readwrite_arena && this->m_arena != nullptr; }
 		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena; }
@@ -213,7 +215,6 @@ namespace riscv
 		using Ehdr = typename Elf<W>::Ehdr;
 		using Phdr = typename Elf<W>::Phdr;
 		using Shdr = typename Elf<W>::Shdr;
-		using ElfRela = typename Elf<W>::Rela;
 		template <typename T> T* elf_offset(intptr_t ofs) const {
 			return (T*) &m_binary.at(ofs);
 		}
@@ -221,7 +222,7 @@ namespace riscv
 			return elf_offset<const Ehdr> (0);
 		}
 		const Shdr* section_by_name(const std::string& name) const;
-		void dynamic_linking();
+		void dynamic_linking(const Ehdr&);
 		void relocate_section(const char* section_name, const char* symtab);
 		const typename Elf<W>::Sym* resolve_symbol(std::string_view name) const;
 		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {
@@ -232,8 +233,8 @@ namespace riscv
 		}
 		// ELF loader
 		void binary_loader(const MachineOptions<W>&);
-		void binary_load_ph(const MachineOptions<W>&, const Phdr*);
-		void serialize_execute_segment(const MachineOptions<W>&, const Phdr*);
+		void binary_load_ph(const MachineOptions<W>&, const Phdr*, address_t vaddr);
+		void serialize_execute_segment(const MachineOptions<W>&, const Phdr*, address_t vaddr);
 		void generate_decoder_cache(const MachineOptions<W>&, DecodedExecuteSegment<W>&);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
@@ -255,6 +256,8 @@ namespace riscv
 		address_t m_mmap_address  = 0;
 		address_t m_heap_address  = 0;
 		const bool m_original_machine;
+		bool m_is_dynamic = false;
+		address_t elf_base_address(address_t offset) const;
 
 		const std::string_view m_binary;
 
