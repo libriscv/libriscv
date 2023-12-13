@@ -49,7 +49,7 @@ template <uint64_t MAXI, bool Throw, typename... Args> constexpr
 inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
-	return vmcall<MAXI>(call_addr, std::forward<Args>(args)...);
+	return vmcall<MAXI, Throw>(call_addr, std::forward<Args>(args)...);
 }
 
 template <int W>
