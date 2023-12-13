@@ -23,7 +23,7 @@ static void add_mman_syscalls()
 	Machine<W>::install_syscall_handler(222,
 	[] (Machine<W>& machine) {
 		const auto addr_g = machine.sysarg(0);
-		auto length = machine.sysarg(1);
+		auto length       = machine.sysarg(1);
 		const auto prot   = machine.template sysarg<int>(2);
 		const auto flags  = machine.template sysarg<int>(3);
 		const auto vfd    = machine.template sysarg<int>(4);
@@ -35,13 +35,14 @@ static void add_mman_syscalls()
 		};
 		SYSPRINT(">>> mmap(addr 0x%lX, len %zu, prot %#x, flags %#X, vfd=%d voff=%zu)\n",
 				(long)addr_g, (size_t)length, prot, flags, vfd, size_t(voff));
-
-		if (addr_g % Page::size() != 0) {
-			machine.set_result(-1); // = MAP_FAILED;
-			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = MAP_FAILED\n",
-					(long)addr_g, (size_t)length);
-			return;
+		#define MMAP_HAS_FAILED() { \
+			machine.set_result(address_type<W>(-1)); \
+			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = MAP_FAILED\n", (long)addr_g, (size_t)length); \
+			return; \
 		}
+
+		if (addr_g % Page::size() != 0)
+			MMAP_HAS_FAILED();
 
 		auto& nextfree = machine.memory.mmap_address();
 		length = (length + PageMask) & ~address_type<W>(PageMask);
@@ -49,7 +50,6 @@ static void add_mman_syscalls()
 
 		if (vfd != -1)
 		{
-#ifdef __linux__
 			if (machine.has_file_descriptors())
 			{
 				const int real_fd = machine.fds().translate(vfd);
@@ -61,14 +61,26 @@ static void add_mman_syscalls()
 				} else {
 					dst = addr_g;
 				}
-				lseek(real_fd, voff, SEEK_SET);
 				// Make the area read-write
 				machine.memory.set_page_attr(dst, length, PageAttributes{});
 				// Readv into the area
 				std::array<riscv::vBuffer, 256> buffers;
 				const size_t cnt =
 					machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), dst, length);
-				(void)readv(real_fd, (const iovec *)&buffers[0], cnt);
+				// Seek to the given offset in the file and read the contents into guest memory
+#ifdef _WIN32
+				if (_lseek(real_fd, voff, SEEK_SET) == -1L)
+					MMAP_HAS_FAILED();
+				for (size_t i = 0; i < cnt; i++) {
+					if (_read(real_fd, buffers.at(i).ptr, buffers.at(i).len) < 0)
+						MMAP_HAS_FAILED();
+				}
+#else
+				if (lseek(real_fd, voff, SEEK_SET) == (off_t)-1)
+					MMAP_HAS_FAILED();
+				if (readv(real_fd, (const iovec*)&buffers[0], cnt) < 0)
+					MMAP_HAS_FAILED();
+#endif
 				// Set new page protections on area
 				machine.memory.set_page_attr(dst, length, attr);
 				machine.set_result(dst);
@@ -78,7 +90,6 @@ static void add_mman_syscalls()
 			{
 				throw MachineException(FEATURE_DISABLED, "mmap() with fd, but file descriptors disabled");
 			}
-#endif
 		}
 		else if (addr_g == 0)
 		{
@@ -104,10 +115,7 @@ static void add_mman_syscalls()
 			// TODO: Evaluate if relaxation is counter-productive with the new cache
 			result = addr_g;
 		} else {
-			machine.set_result(address_type<W>(-1)); // = MAP_FAILED;
-			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX (MAP_FAILED)\n",
-					(long)addr_g, (size_t)length, -1L);
-			return;
+			MMAP_HAS_FAILED();
 		}
 
 		// anon pages need to be zeroed
