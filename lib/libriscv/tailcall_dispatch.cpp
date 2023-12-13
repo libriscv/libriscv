@@ -411,19 +411,13 @@ namespace riscv
 	}
 
 	template <int W> inline RISCV_HOT_PATH()
-	void CPU<W>::simulate_tco(uint64_t imax)
+	void CPU<W>::simulate_tco()
 	{
 		// We need an execute segment matching current PC
 		if (UNLIKELY(!is_executable(this->pc())))
 		{
 			this->next_execute_segment();
 		}
-
-		// Calculate the instruction limit
-		if (imax != UINT64_MAX)
-			machine().set_max_instructions(machine().instruction_counter() + imax);
-		else
-			machine().set_max_instructions(UINT64_MAX);
 
 		uint64_t pc = this->pc();
 		uint64_t counter = machine().instruction_counter();
@@ -442,9 +436,9 @@ namespace riscv
 	} // CPU::simulate_tco()
 
 	template <int W>
-	void CPU<W>::simulate(uint64_t imax)
+	void CPU<W>::simulate()
 	{
-		simulate_tco(imax);
+		simulate_tco();
 	}
 
 	template struct CPU<4>;

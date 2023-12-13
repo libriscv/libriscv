@@ -134,7 +134,7 @@ int main(int /*argc*/, const char** /*argv*/)
 	// machine, an exception happens which stops execution, or the
 	// instruction counter reaches the given 1M instruction limit:
 	try {
-		machine.simulate(1'000'000UL);
+		machine.simulate(1'000'000ull);
 	} catch (const std::exception& e) {
 		fprintf(stderr, ">>> Runtime exception: %s\n", e.what());
 	}
@@ -144,7 +144,7 @@ int main(int /*argc*/, const char** /*argv*/)
 In order to have the machine not throw an exception when the instruction limit is reached, you can call simulate with the template argument false, instead:
 
 ```C++
-machine.simulate<false>(1'000'000UL);
+machine.simulate<false>(1'000'000ull);
 ```
 If the machine runs out of instructions, it will simply stop running. Use `machine.instruction_limit_reached()` to check if the machine stopped running because it hit the instruction limit.
 
@@ -176,7 +176,7 @@ machine.setup_linux(
 machine.setup_linux_syscalls();
 
 // Instruction limit is used to keep running
-machine.set_max_instructions(1'000'000UL);
+machine.set_max_instructions(50'000'000ull);
 
 while (!machine.stopped()) {
 	auto& cpu = machine.cpu;
@@ -192,7 +192,7 @@ while (!machine.stopped()) {
 }
 ```
 
-## Executing the program in small increments
+## Executing a program in small increments
 
 If we only want to run for a small amount of time and then leave the simulation, we can use the same example as above with an outer loop to keep it running as long as we want to until the machine stops normally.
 ```C++
@@ -241,7 +241,7 @@ You can create a machine without a binary, with no ELF loader invoked:
 	machine.cpu.jump(dst);
 
 	// Geronimo!
-	machine.simulate(1'000ul);
+	machine.simulate(1'000ull);
 ```
 
 The fuzzing program does this, so have a look at that. There are also [unit tests](/tests/unit/micro.cpp).

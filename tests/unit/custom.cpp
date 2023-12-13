@@ -112,7 +112,8 @@ int main()
 			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 		// Verify step-by-step simulation
 		syscall_was_called = false;
-		machine.cpu.simulate_precise(MAX_INSTRUCTIONS);
+		machine.set_max_instructions(MAX_INSTRUCTIONS);
+		machine.cpu.simulate_precise();
 		REQUIRE(syscall_was_called == true);
 	}
 }

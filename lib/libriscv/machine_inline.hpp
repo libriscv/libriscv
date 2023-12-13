@@ -25,7 +25,13 @@ template <int W>
 template <bool Throw>
 inline void Machine<W>::simulate(uint64_t max_instr)
 {
-	cpu.simulate(max_instr);
+	// Calculate the instruction limit
+	if (max_instr != UINT64_MAX)
+		this->set_max_instructions(this->instruction_counter() + max_instr);
+	else
+		this->set_max_instructions(UINT64_MAX);
+
+	cpu.simulate();
 	if constexpr (Throw) {
 		// It is a timeout exception if the max counter is non-zero and
 		// the simulation ended. Otherwise, the machine stopped normally.

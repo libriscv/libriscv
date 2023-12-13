@@ -204,19 +204,13 @@ restart_next_execute_segment:
 	}
 
 	template<int W> RISCV_HOT_PATH()
-	void CPU<W>::simulate_precise(uint64_t max)
+	void CPU<W>::simulate_precise()
 	{
 		// Decoded segments are always faster
 		// So, always have at least the current segment
 		if (!is_executable(this->pc())) {
 			this->next_execute_segment();
 		}
-
-		// Calculate the instruction limit
-		if (max != UINT64_MAX)
-			machine().set_max_instructions(machine().instruction_counter() + max);
-		else
-			machine().set_max_instructions(UINT64_MAX);
 
 restart_precise_sim:
 		auto* exec = this->m_exec;

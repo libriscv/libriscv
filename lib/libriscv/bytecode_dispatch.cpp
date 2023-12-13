@@ -11,9 +11,9 @@
 namespace riscv
 {
 	template <int W>
-	void CPU<W>::simulate(uint64_t imax)
+	void CPU<W>::simulate()
 	{
-		simulate_bytecode(imax);
+		simulate_bytecode();
 	}
 
 	template struct CPU<4>;

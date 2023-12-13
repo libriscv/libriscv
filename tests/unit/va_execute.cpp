@@ -86,7 +86,8 @@ long syscall3(long n, long arg0, long arg1, long arg2) {
 			{"va_exec"},
 			{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 		// Verify step-by-step simulation
-		machine.cpu.simulate_precise(MAX_INSTRUCTIONS);
+		machine.set_max_instructions(MAX_INSTRUCTIONS);
+		machine.cpu.simulate_precise();
 
 		REQUIRE(machine.return_value<long>() == 12586269025L);
 	}

@@ -27,22 +27,29 @@ namespace riscv
 
 		// Executes using the default-selected simulation mode.
 		// See below for the various modes.
-		void simulate(uint64_t);
+		void simulate();
 		// Step one instruction forward.
 		void step_one();
 
+		// NOTE: All functions below *can only reduce* max instructions.
+		// Make sure to call machine.set_max_instructions(...) before
+		// calling a simulate_*() function. The simulate functions will
+		// execute until either max instructions is set to zero (0),
+		// which is the same as the machine stopping normally, or by
+		// reaching the instruction limit, running out of instructions.
+
 		// Executes one instruction at a time, and can stop at
 		// any instruction. Can be used for debugging.
-		void simulate_precise(uint64_t);
+		void simulate_precise();
 		// Executes one block at a time, and can only stop when the
 		// block ends or a system call is handled. Runs everywhere.
-		void simulate_bytecode(uint64_t);
+		void simulate_bytecode();
 		// Uses computed gotos to jump around at a faster speed, but
 		// is only supported on GCC and Clang. Faster simulation.
-		void simulate_threaded(uint64_t);
+		void simulate_threaded();
 		// Uses musttail to jump around at the fastest speed, but
 		// is only supported on Clang. Fastest simulation.
-		void simulate_tco(uint64_t);
+		void simulate_tco();
 
 		void reset();
 		void reset_stack_pointer() noexcept;

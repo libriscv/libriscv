@@ -77,7 +77,7 @@ namespace riscv
 
 
 template <int W> DISPATCH_ATTR
-void CPU<W>::DISPATCH_FUNC(uint64_t imax)
+void CPU<W>::DISPATCH_FUNC()
 {
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;
@@ -209,12 +209,6 @@ void CPU<W>::DISPATCH_FUNC(uint64_t imax)
 	{
 		this->next_execute_segment();
 	}
-
-	// Calculate the instruction limit
-	if (imax != UINT64_MAX)
-		machine().set_max_instructions(machine().instruction_counter() + imax);
-	else
-		machine().set_max_instructions(UINT64_MAX);
 
 	InstrCounter counter{machine()};
 #ifdef RISCV_EXT_VECTOR
