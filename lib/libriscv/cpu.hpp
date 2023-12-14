@@ -22,7 +22,7 @@ namespace riscv
 		using format_t  = instruction_format;  // machine instruction format
 		using breakpoint_t = std::function<void(CPU<W>&)>;
 		using execute_fault_t = void(*)(CPU<W>&, const Page&);
-		using override_execute_segment_t = DecodedExecuteSegment<W>*(*)(CPU<W>&);
+		using override_execute_segment_t = DecodedExecuteSegment<W>&(*)(CPU<W>&);
 		using instruction_t = Instruction<W>;
 
 		// simulate():
@@ -159,8 +159,8 @@ namespace riscv
 		};
 
 		// The default execute override returns no new execute segment
-		override_execute_segment_t m_override_exec = [] (auto&) {
-			return (DecodedExecuteSegment<W> *)nullptr;
+		override_execute_segment_t m_override_exec = [] (auto&) -> DecodedExecuteSegment<W>& {
+			return empty_execute_segment();
 		};
 
 #ifdef RISCV_EXT_ATOMICS

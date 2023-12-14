@@ -117,10 +117,10 @@ restart_next_execute_segment:
 
 		// Find decoded execute segment via override
 		// If it returns nullptr, we build a new execute segment
-		auto* next = this->m_override_exec(*this);
-		if (LIKELY(next != nullptr)) {
-			this->m_exec = next;
-			return *next;
+		auto& next = this->m_override_exec(*this);
+		if (LIKELY(!next.empty())) {
+			this->m_exec = &next;
+			return next;
 		}
 
 		// Find the earliest execute page in new segment
