@@ -422,9 +422,7 @@ template<int W>
 void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, uint64_t imax)
 {
 	auto& cpu = machine.cpu;
-	auto* exec = cpu.current_execute_segment();
-	if (UNLIKELY(exec == nullptr))
-		exec = cpu.next_execute_segment();
+	auto* exec = &cpu.next_execute_segment();
 	auto* exec_decoder = exec->decoder_cache();
 	auto* exec_seg_data = exec->exec_data();
 	std::unordered_map<address_t, std::string> backtrace_lookup;
@@ -449,7 +447,7 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 		{
 			// This will produce a sequential execute segment for the unknown area
 			// If it is not executable, it will throw an execute space protection fault
-			exec = cpu.next_execute_segment();
+			exec = &cpu.next_execute_segment();
 			exec_decoder = exec->decoder_cache();
 			exec_seg_data = exec->exec_data();
 		}

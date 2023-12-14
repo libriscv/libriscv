@@ -77,7 +77,7 @@ namespace riscv
 
 
 template <int W> DISPATCH_ATTR
-void CPU<W>::DISPATCH_FUNC()
+void CPU<W>::simulate()
 {
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;
@@ -204,25 +204,22 @@ void CPU<W>::DISPATCH_FUNC()
 	};
 #endif
 
-	// We need an execute segment matching current PC
-	if (UNLIKELY(!is_executable(this->pc())))
-	{
-		this->next_execute_segment();
-	}
-
-	InstrCounter counter{machine()};
-#ifdef RISCV_EXT_VECTOR
-	auto& vector_lanes = registers().rvv();
-#endif
-
 	DecodedExecuteSegment<W>* exec = this->m_exec;
-	DecoderData<W>* exec_decoder = exec->decoder_cache();
 	address_t current_begin = exec->exec_begin();
 	address_t current_end = exec->exec_end();
 	address_t pc = this->pc();
 
+	InstrCounter counter{machine()};
+
+	DecoderData<W>* exec_decoder = exec->decoder_cache();
+	DecoderData<W>* decoder;
+
+	// We need an execute segment matching current PC
+	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
+		goto new_execute_segment;
+
 continue_segment:
-	DecoderData<W>* decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 	pc += decoder->block_bytes();
 	counter.increment_counter(decoder->instruction_count());
 
@@ -243,7 +240,7 @@ while (true) {
 #define CPU()       (*this)
 #define REG(x)      registers().get()[x]
 #define REGISTERS() registers()
-#define VECTORS()   vector_lanes
+#define VECTORS()   registers().rvv()
 #define MACHINE()   machine()
 
 	/** Instruction handlers **/
@@ -421,8 +418,10 @@ check_jump:
 	// custom callbacks when changing segments that can
 	// jump around.
 	registers().pc = pc;
+
+new_execute_segment:
 	// Change to a new execute segment
-	exec = this->next_execute_segment();
+	exec = &this->next_execute_segment();
 	exec_decoder = exec->decoder_cache();
 	current_begin = exec->exec_begin();
 	current_end = exec->exec_end();

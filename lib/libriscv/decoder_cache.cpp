@@ -412,17 +412,17 @@ namespace riscv
 	}
 
 	template <int W>
-	DecodedExecuteSegment<W>* Memory<W>::exec_segment_for(address_t vaddr)
+	DecodedExecuteSegment<W>& Memory<W>::exec_segment_for(address_t vaddr)
 	{
 		for (size_t i = 0; i < m_exec_segs; i++) {
 			auto& segment = m_exec[i];
-			if (segment.is_within(vaddr)) return &segment;
+			if (segment.is_within(vaddr)) return segment;
 		}
-		return nullptr;
+		return CPU<W>::empty_execute_segment();
 	}
 
 	template <int W>
-	const DecodedExecuteSegment<W>* Memory<W>::exec_segment_for(address_t vaddr) const
+	const DecodedExecuteSegment<W>& Memory<W>::exec_segment_for(address_t vaddr) const
 	{
 		return const_cast<Memory<W>*>(this)->exec_segment_for(vaddr);
 	}
@@ -434,7 +434,7 @@ namespace riscv
 			return;
 
 		// destructor could throw, so let's invalidate early
-		machine().cpu.set_execute_segment(nullptr);
+		machine().cpu.set_execute_segment(CPU<W>::empty_execute_segment());
 
 		while (m_exec_segs > remaining_size) {
 			m_exec_segs--;

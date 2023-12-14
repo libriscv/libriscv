@@ -26,8 +26,8 @@ TEST_CASE("Instantiate machine", "[Dynamic]")
 	REQUIRE(machine.memory.start_address() > Memory<RISCV64>::DYLINK_BASE);
 	REQUIRE(machine.memory.start_address() < machine.memory.heap_address());
 	// The start address is within the current executable area
-	REQUIRE(machine.cpu.current_execute_segment() != nullptr);
-	REQUIRE(machine.cpu.current_execute_segment()->is_within(machine.memory.start_address()));
+	REQUIRE(!machine.cpu.current_execute_segment().empty());
+	REQUIRE(machine.cpu.current_execute_segment().is_within(machine.memory.start_address()));
 }
 
 TEST_CASE("Instantiate machine using shared ELF", "[Dynamic]")

@@ -109,7 +109,7 @@ namespace riscv
 		// jump around.
 		cpu.registers().pc = pc;
 		// Change execute segment
-		auto* exec = cpu.next_execute_segment();
+		auto* exec = &cpu.next_execute_segment();
 		// Restore PC
 		pc = cpu.registers().pc;
 		return exec;
@@ -411,7 +411,7 @@ namespace riscv
 	}
 
 	template <int W> inline RISCV_HOT_PATH()
-	void CPU<W>::simulate_tco()
+	void CPU<W>::simulate()
 	{
 		// We need an execute segment matching current PC
 		if (UNLIKELY(!is_executable(this->pc())))
@@ -419,7 +419,7 @@ namespace riscv
 			this->next_execute_segment();
 		}
 
-		uint64_t pc = this->pc();
+		address_type<W> pc = this->pc();
 		uint64_t counter = machine().instruction_counter();
 
 		DecodedExecuteSegment<W>* exec = this->m_exec;
@@ -434,12 +434,6 @@ namespace riscv
 		cpu.registers().pc = new_pc;
 		machine().set_instruction_counter(new_counter);
 	} // CPU::simulate_tco()
-
-	template <int W>
-	void CPU<W>::simulate()
-	{
-		simulate_tco();
-	}
 
 	template struct CPU<4>;
 	template struct CPU<8>;

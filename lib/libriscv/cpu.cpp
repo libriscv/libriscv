@@ -6,6 +6,15 @@
 
 namespace riscv
 {
+	// A default empty execute segment used to enforce that the
+	// current CPU execute segment is never null.
+	template <int W>
+	static DecodedExecuteSegment<W> empty(0, 0, 0, 0);
+	template <int W>
+	DecodedExecuteSegment<W>& CPU<W>::empty_execute_segment() {
+		return empty<W>;
+	}
+
 	// Instructions may be unaligned with C-extension
 	// On amd64 we take the cost, because it's faster
 	union UnderAlign32 {
@@ -17,9 +26,8 @@ namespace riscv
 
 	template <int W>
 	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
-		: m_machine { machine }, m_cpuid { cpu_id }
+		: m_machine { machine }, m_exec(other.cpu.m_exec), m_cpuid { cpu_id }
 	{
-		this->m_exec = other.cpu.m_exec;
 		// Copy all registers except vectors
 		// Users can still copy vector registers by assigning to registers().rvv().
 		this->registers().copy_from(Registers<W>::Options::NoVectors, other.cpu.registers());
@@ -33,7 +41,7 @@ namespace riscv
 		this->m_regs = {};
 		this->reset_stack_pointer();
 		// We can't jump if there's been no ELF loader
-		if (!machine().memory.binary().empty()) {
+		if (!current_execute_segment().empty()) {
 			const auto initial_pc = machine().memory.start_address();
 			// Validate that the initial PC is executable.
 			if (!this->is_executable(initial_pc)) {
@@ -50,17 +58,18 @@ namespace riscv
 	}
 
 	template <int W>
-	void CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t vlength)
+	DecodedExecuteSegment<W>& CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t vlength)
 	{
 		if (vlength < 4)
 			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, begin);
 
 		this->m_exec = &machine().memory.create_execute_segment(
 			{}, vdata, begin, vlength);
+		return *this->m_exec;
 	} // CPU::init_execute_area
 
 	template<int W> RISCV_NOINLINE
-	DecodedExecuteSegment<W>* CPU<W>::next_execute_segment()
+	DecodedExecuteSegment<W>& CPU<W>::next_execute_segment()
 	{
 		static const int MAX_RESTARTS = 4;
 		int restarts = 0;
@@ -101,15 +110,18 @@ restart_next_execute_segment:
 		}
 
 		// Find previously decoded execute segment
-		this->m_exec = machine().memory.exec_segment_for(this->pc());
-		if (LIKELY(this->m_exec != nullptr))
-			return this->m_exec;
+		this->m_exec = &machine().memory.exec_segment_for(this->pc());
+		if (LIKELY(!this->m_exec->empty())) {
+			return *this->m_exec;
+		}
 
 		// Find decoded execute segment via override
 		// If it returns nullptr, we build a new execute segment
-		this->m_exec = this->m_override_exec(*this);
-		if (UNLIKELY(this->m_exec != nullptr))
-			return this->m_exec;
+		auto* next = this->m_override_exec(*this);
+		if (LIKELY(next != nullptr)) {
+			this->m_exec = next;
+			return *next;
+		}
 
 		// Find the earliest execute page in new segment
 		while (base_pageno > 0) {
@@ -144,8 +156,7 @@ restart_next_execute_segment:
 		}
 
 		// Decode and store it for later
-		this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size());
-		return this->m_exec;
+		return this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size());
 	} // CPU::next_execute_segment
 
 	template <int W> RISCV_NOINLINE RISCV_INTERNAL
@@ -188,8 +199,7 @@ restart_next_execute_segment:
 
 	template <int W>
 	bool CPU<W>::is_executable(address_t addr) const noexcept {
-		if (m_exec) return m_exec->is_within(addr);
-		return false;
+		return m_exec->is_within(addr);
 	}
 
 	template <int W>

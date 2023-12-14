@@ -25,31 +25,28 @@ namespace riscv
 		using override_execute_segment_t = DecodedExecuteSegment<W>*(*)(CPU<W>&);
 		using instruction_t = Instruction<W>;
 
-		// Executes using the default-selected simulation mode.
-		// See below for the various modes.
-		void simulate();
-		// Step one instruction forward.
-		void step_one();
-
-		// NOTE: All functions below *can only reduce* max instructions.
+		// simulate():
 		// Make sure to call machine.set_max_instructions(...) before
-		// calling a simulate_*() function. The simulate functions will
+		// calling simulate(). The simulate function will
 		// execute until either max instructions is set to zero (0),
 		// which is the same as the machine stopping normally, or by
 		// reaching the instruction limit, running out of instructions.
+		//
+		// 1. Bytecode: Executes one block at a time, and can only stop when the
+		// block ends or a system call is handled. Works and runs everywhere.
+		// 2. Threaded: Uses computed gotos to jump around at a faster speed, but
+		// is only supported on GCC and Clang. Very fast simulation.
+		// 3. TCO: Uses musttail to jump around at the fastest speed, but
+		// is only supported on Clang. Fastest simulation.
+		// Executes using the default-selected simulation mode.
+		void simulate();
+
+		// Step precisely one instruction forward.
+		void step_one();
 
 		// Executes one instruction at a time, and can stop at
 		// any instruction. Can be used for debugging.
 		void simulate_precise();
-		// Executes one block at a time, and can only stop when the
-		// block ends or a system call is handled. Runs everywhere.
-		void simulate_bytecode();
-		// Uses computed gotos to jump around at a faster speed, but
-		// is only supported on GCC and Clang. Faster simulation.
-		void simulate_threaded();
-		// Uses musttail to jump around at the fastest speed, but
-		// is only supported on Clang. Fastest simulation.
-		void simulate_tco();
 
 		void reset();
 		void reset_stack_pointer() noexcept;
@@ -117,11 +114,13 @@ namespace riscv
 
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
-		void init_execute_area(const void* data, address_t begin, address_t length);
-		void set_execute_segment(DecodedExecuteSegment<W>* seg) { m_exec = seg; }
-		auto* current_execute_segment() noexcept { return m_exec; }
-		auto* current_execute_segment() const noexcept { return m_exec; }
-		DecodedExecuteSegment<W> *next_execute_segment();
+
+		DecodedExecuteSegment<W>& init_execute_area(const void* data, address_t begin, address_t length);
+		void set_execute_segment(DecodedExecuteSegment<W>& seg) { m_exec = &seg; }
+		auto& current_execute_segment() noexcept { return *m_exec; }
+		auto& current_execute_segment() const noexcept { return *m_exec; }
+		DecodedExecuteSegment<W>& next_execute_segment();
+		static DecodedExecuteSegment<W>& empty_execute_segment();
 		bool is_executable(address_t addr) const noexcept;
 
 		// Override the function that gets called when the CPU
@@ -146,8 +145,8 @@ namespace riscv
 
 		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
 
-		// ELF programs linear .text segment
-		DecodedExecuteSegment<W>* m_exec = nullptr;
+		// ELF programs linear .text segment (initialized as empty segment)
+		DecodedExecuteSegment<W>* m_exec;
 
 		// Page cache for execution on virtual memory
 		mutable CachedPage<W, const Page> m_cache;

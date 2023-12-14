@@ -14,12 +14,6 @@
 
 namespace riscv
 {
-	template <int W>
-	void CPU<W>::simulate()
-	{
-		simulate_threaded();
-	}
-
 	template struct CPU<4>;
 	template struct CPU<8>;
 	INSTANTIATE_128_IF_ENABLED(CPU);

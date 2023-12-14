@@ -169,8 +169,8 @@ namespace riscv
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
 		// Custom execute segment, returns page base, final size and execute segment pointer
-		DecodedExecuteSegment<W>* exec_segment_for(address_t vaddr);
-		const DecodedExecuteSegment<W>* exec_segment_for(address_t vaddr) const;
+		DecodedExecuteSegment<W>& exec_segment_for(address_t vaddr);
+		const DecodedExecuteSegment<W>& exec_segment_for(address_t vaddr) const;
 		const DecodedExecuteSegment<W>& main_execute_segment() const { return m_exec.at(0); }
 		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
 		size_t cached_execute_segments() const noexcept { return m_exec_segs; }

@@ -236,8 +236,8 @@ namespace riscv
 		auto& exec_segment =
 			this->create_execute_segment(options, data, vaddr, exlen);
 		// Select the first execute segment
-		if (machine().cpu.current_execute_segment() == nullptr)
-			machine().cpu.set_execute_segment(&exec_segment);
+		if (machine().cpu.current_execute_segment().empty())
+			machine().cpu.set_execute_segment(exec_segment);
 	}
 
 	// ELF32 and ELF64 loader

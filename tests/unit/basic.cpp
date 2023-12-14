@@ -22,8 +22,8 @@ TEST_CASE("Instantiate machine", "[Instantiate]")
 	REQUIRE(machine.memory.start_address() > 0x10000);
 	REQUIRE(machine.memory.start_address() < machine.memory.heap_address());
 	// The start address is within the current executable area
-	REQUIRE(machine.cpu.current_execute_segment() != nullptr);
-	REQUIRE(machine.cpu.current_execute_segment()->is_within(machine.memory.start_address()));
+	REQUIRE(!machine.cpu.current_execute_segment().empty());
+	REQUIRE(machine.cpu.current_execute_segment().is_within(machine.memory.start_address()));
 }
 
 TEST_CASE("Execute minimal machine", "[Minimal]")

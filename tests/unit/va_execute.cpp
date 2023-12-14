@@ -64,6 +64,8 @@ long syscall3(long n, long arg0, long arg1, long arg2) {
 	return a0;
 })M");
 
+	static constexpr uint32_t VA_FUNC = 0xF0000000;
+
 	// Normal (fastest) simulation
 	{
 		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
@@ -77,6 +79,9 @@ long syscall3(long n, long arg0, long arg1, long arg2) {
 		machine.simulate(MAX_INSTRUCTIONS);
 
 		REQUIRE(machine.return_value<long>() == 12586269025L);
+
+		// VM call into new execute segment
+		REQUIRE(machine.vmcall(VA_FUNC, 50, 0, 1) == 12586269025L);
 	}
 	// Precise (step-by-step) simulation
 	{
@@ -90,6 +95,9 @@ long syscall3(long n, long arg0, long arg1, long arg2) {
 		machine.cpu.simulate_precise();
 
 		REQUIRE(machine.return_value<long>() == 12586269025L);
+
+		// VM call into new execute segment
+		REQUIRE(machine.vmcall(VA_FUNC, 50, 0, 1) == 12586269025L);
 	}
 	// Debug-assisted simulation
 	{
@@ -106,5 +114,8 @@ long syscall3(long n, long arg0, long arg1, long arg2) {
 		debugger.simulate(MAX_INSTRUCTIONS);
 
 		REQUIRE(machine.return_value<long>() == 12586269025L);
+
+		// VM call into new execute segment
+		REQUIRE(machine.vmcall(VA_FUNC, 50, 0, 1) == 12586269025L);
 	}
 }
