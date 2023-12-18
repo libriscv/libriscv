@@ -19,6 +19,4 @@
 #cmakedefine RISCV_TAILCALL_DISPATCH
 #cmakedefine RISCV_LIBTCC
 
-#cmakedefine RISCV_SUPERVISOR
-
 #endif /* LIBRISCV_SETTINGS_H */

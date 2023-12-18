@@ -43,8 +43,6 @@ if (RISCV_EXPERIMENTAL)
 	# MULTIPROCESS enables experimental features that allow
 	# executing RISC-V guest functions in parallel using a custom API.
 	option(RISCV_MULTIPROCESS        "Enable multiprocessing" OFF)
-	# SUPERVISOR enables full-system emulation. WIP.
-	option(RISCV_SUPERVISOR          "Enable RISC-V supervisor mode" OFF)
 endif()
 if (RISCV_EXPERIMENTAL AND RISCV_BINARY_TRANSLATION)
 	# LIBTCC will embed the TCC compiler library, using it for binary translation.
@@ -115,11 +113,6 @@ if (RISCV_BINARY_TRANSLATION)
 	else()
 		list(APPEND SOURCES libriscv/tr_compiler.cpp)
 	endif()
-endif()
-if (RISCV_SUPERVISOR)
-	list(APPEND SOURCES
-		libriscv/supervisor/supervisor.cpp
-	)
 endif()
 
 configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
@@ -205,11 +198,6 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/types.hpp
 
 		DESTINATION include/${PROJECT_NAME}
-	)
-	install(FILES
-		libriscv/supervisor/supervisor.hpp
-
-		DESTINATION include/${PROJECT_NAME}/supervisor
 	)
 	install(FILES
 		libriscv/linux/rsp_server.hpp

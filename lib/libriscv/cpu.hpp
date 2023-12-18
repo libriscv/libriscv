@@ -2,9 +2,6 @@
 #include "common.hpp"
 #include "page.hpp"
 #include "registers.hpp"
-#ifdef RISCV_SUPERVISOR
-#include "supervisor/supervisor.hpp"
-#endif
 #ifdef RISCV_EXT_ATOMICS
 #include "rva.hpp"
 #endif
@@ -70,15 +67,6 @@ namespace riscv
 		auto& machine() noexcept { return this->m_machine; }
 		const auto& machine() const noexcept { return this->m_machine; }
 
-#ifdef RISCV_SUPERVISOR
-		auto& super() {
-			if (m_super == nullptr) m_super.reset(new Supervisor<W>);
-			return *this->m_super; }
-		const auto& super() const {
-			if (m_super == nullptr) m_super.reset(new Supervisor<W>);
-			return *this->m_super; }
-#endif
-
 #ifdef RISCV_EXT_ATOMICS
 		auto& atomics() noexcept { return this->m_atomics; }
 		const auto& atomics() const noexcept { return this->m_atomics; }
@@ -139,12 +127,6 @@ namespace riscv
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
 
-#ifdef RISCV_SUPERVISOR
-		mutable std::unique_ptr<Supervisor<W>> m_super = nullptr;
-#endif
-
-		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
-
 		// ELF programs linear .text segment (initialized as empty segment)
 		DecodedExecuteSegment<W>* m_exec;
 
@@ -165,6 +147,9 @@ namespace riscv
 
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
+#endif
+#ifdef RISCV_BINARY_TRANSLATION
+		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
 #endif
 		void activate_dylib(DecodedExecuteSegment<W>&, void*) const RISCV_INTERNAL;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");

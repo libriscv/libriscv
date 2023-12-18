@@ -246,11 +246,6 @@ namespace riscv
 			case 0x7FF: // Stop machine
 				this->stop();
 				return;
-#ifdef RISCV_SUPERVISOR
-			case 0x102: // Supervisor return
-				cpu.super().sret();
-				return;
-#endif
 			}
 			break;
 		case 0x1: { // CSRRW: Atomically swap CSR and integer register
@@ -289,16 +284,6 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole |= cpu.reg(instr.Itype.rs1) & 0xFF;
 				return;
-#ifdef RISCV_SUPERVISOR
-			case 0x180: // SATP (supervisor address translation and protection)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.super().satp;
-				cpu.super().satp = cpu.reg(instr.Itype.rs1);
-				return;
-			case 0x300: // MSTATUS (machine status)
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.super().mstatus;
-				cpu.super().mstatus = cpu.reg(instr.Itype.rs1);
-				return;
-#endif
 			case 0xC00: // CSR RDCYCLE (lower)
 			case 0xC02: // RDINSTRET (lower)
 				if (rd) {
@@ -373,14 +358,6 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole = imm & 0xFF;
 				return;
-#ifdef RISCV_SUPERVISOR
-			case 0x304: // mie (machine interrupt enable)
-				if (rd) {
-					cpu.super().mie = imm;
-					cpu.reg(instr.Itype.rd) = cpu.super().mie;
-				}
-				return;
-#endif
 			default:
 				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
