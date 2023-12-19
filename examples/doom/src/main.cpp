@@ -262,7 +262,11 @@ int main(int argc, char *argv[])
 
 	try {
 		do {
-			machine.simulate();
+			// Resume simulation:
+			// Keep the instruction counter value without resetting it,
+			// by instead setting the max counter relative to the
+			// current instruction counter.
+			machine.resume(50'000'000ull);
 
 			// Statistics performed outside of simulation
 			if (stats.restarting) {

@@ -19,10 +19,12 @@ namespace riscv
 	// 128-bit: Machine<RISCV128>
 	//
 	// It is instantiated with an ELF binary that contains the
-	// *statically* built RISC-V program to run:
+	// loaded RISC-V program to run:
 	//
 	//  std::vector<uint8_t> mybinary = load_file("riscv_program.elf");
 	//  Machine<RISCV64> machine { mybinary };
+	//  machine.setup_linux_syscalls();
+	//  machine.setup_linux({"program", "arg0"}, {"LC_ALL=C"});
 	//
 	template <int W>
 	struct Machine
@@ -36,27 +38,33 @@ namespace riscv
 		// See common.hpp for MachineOptions
 		// The machine takes the binary as a const reference and does not
 		// own it, instead the binary data must be kept alive with the machine
-		// and not moved.
+		// and not moved or reallocated.
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
 		Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& = {});
 		// Create empty Machine.
 		Machine(const MachineOptions<W>& = {});
 		// The forking constructor creates a new machine based on @main,
 		// and loans all memory using Copy-on-Write mechanisms. Additionally,
-		// all cached structures like execute segment, rodata and the
-		// instruction cache is also loaned. The main machine must not be
-		// destroyed or (in most cases) modified while the fork is running.
+		// all cached structures like execute segment, and the instruction cache
+		// is also loaned. The main machine must not be destroyed or (in most cases)
+		// modified while the fork is running. Forks consume very little resources.
 		Machine(const Machine& main, const MachineOptions<W>& = {});
 		~Machine();
 
-		// Simulate a RISC-V machine until @max_instructions have been
-		// executed, or the machine has been stopped. If Throw == true,
+		// Simulate RISC-V starting from the current address, and stopping when
+		// at most @max_instructions have been executed. If Throw == true,
 		// the machine will throw a MachineTimeoutException if it hits the
-		// given instruction limit.
+		// given instruction limit, but not if stopped normally.
 		template <bool Throw = true>
 		void simulate(uint64_t max_instructions = UINT64_MAX, uint64_t counter = 0u);
 
-		// Sets the machines max instructions counter to zero, which effectively
+		// Resume simulation by extending the max instructions counter by
+		// the given amount, and the simulating RISC-V as if calling
+		// simulate(). The instruction counter will not be reset.
+		template <bool Throw = true>
+		void resume(uint64_t max_instructions);
+
+		// Sets the max instructions counter to zero, which effectively
 		// causes the machine to stop. instruction_limit_reached() will return
 		// false indicating that the machine did not stop because an instruction
 		// limit was reached, and instead stopped naturally.
@@ -64,15 +72,13 @@ namespace riscv
 		// Returns true if the machine is stopped, including when the
 		// instruction limit was reached.
 		bool stopped() const noexcept;
-		// Resets the machine to the initial state. It is, however, not a
-		// reliable way to reset complex machines with all kinds of features
-		// attached to it, and should almost never be used. It is recommended
-		// to create a new machine instead, or rely on forking to facilitate
-		// quickly creating and destroying a machine.
-		void reset();
+		// This function returns true only when a simulation ended caused by
+		// reaching the instruction limit. It will not be true if the machine
+		// stopped normally. See: machine.stopped() for that.
+		bool instruction_limit_reached() const noexcept;
 
 		// Returns the precise number of instructions executed. Should only
-		// be called after simulation ends.
+		// be called after simulation ends, or inside a system call handler.
 		uint64_t instruction_counter() const noexcept { return m_counter; }
 		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
@@ -80,10 +86,6 @@ namespace riscv
 		void     penalize(uint64_t val) noexcept;
 		uint64_t max_instructions() const noexcept { return m_max_counter; }
 		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
-		// This function returns true only when a simulation ended caused by
-		// reaching the instruction limit. It will not be true if the machine
-		// stopped normally. Use machine.stopped() for that.
-		bool     instruction_limit_reached() const noexcept;
 
 		CPU<W>    cpu;
 		Memory<W> memory;
@@ -92,11 +94,6 @@ namespace riscv
 		void copy_to_guest(address_t dst, const void* buf, size_t len);
 		// Copy data from the guests memory (*with* page protections).
 		void copy_from_guest(void* dst, address_t buf, size_t len);
-		// Push something onto the stack, moving the current stack pointer.
-		address_t stack_push(const void* data, size_t length);
-		address_t stack_push(const std::string& string);
-		template <typename T>
-		address_t stack_push(const T& pod_type);
 
 		// Push all strings on stack and then create a mini-argv on SP.
 		void setup_argv(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
@@ -123,7 +120,7 @@ namespace riscv
 		// will be passed on to the guest on failure.
 		void set_result_or_error(int);
 
-		// A shortcut to getting a return or exit value
+		// A shortcut to getting a return or exit value by interpreting A0
 		template <typename T = address_t>
 		inline T return_value() const { return sysarg<T> (0); }
 
@@ -137,11 +134,12 @@ namespace riscv
 		address_t vmcall(address_t func_addr, Args&&... args);
 
 		// Saves and restores registers while calling given function
-		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, bool StoreRegs = true, typename... Args>
-		address_t preempt(const char* func_name, Args&&... args);
+		// Uses resume() to execute the other function, continuing instruction counting.
+		template<bool Throw = true, bool StoreRegs = true, typename... Args>
+		address_t preempt(uint64_t max_instr, const char* func_name, Args&&... args);
 
-		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, bool StoreRegs = true, typename... Args>
-		address_t preempt(address_t func_addr, Args&&... args);
+		template<bool Throw = true, bool StoreRegs = true, typename... Args>
+		address_t preempt(uint64_t max_instr, address_t func_addr, Args&&... args);
 
 		// Sets up a function call only, executes no instructions.
 		// Supports integers, floating-point values and strings.
@@ -173,8 +171,17 @@ namespace riscv
 		auto& get_rdtime() const noexcept { return m_rdtime; }
 		void set_rdtime(rdtime_func tf = default_rdtime) const { m_rdtime = tf; }
 
-		// Call an installed system call handler
+		// Push something onto the stack, moving the current stack pointer.
+		address_t stack_push(const void* data, size_t length);
+		address_t stack_push(const std::string& string);
+		template <typename T>
+		address_t stack_push(const T& pod_type);
+		// Realign the stack pointer, to make sure that function calls succeed
+		void realign_stack();
+
+		// Invoke an installed system call handler at the given index (system call number).
 		void system_call(size_t);
+		// Invoke the EBREAK system function
 		void ebreak();
 		static void install_syscall_handler(size_t, syscall_t);
 		static void install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>>);
@@ -243,8 +250,12 @@ namespace riscv
 		Signals<W>& signals();
 		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
 
-		// Realign the stack pointer, to make sure that function calls succeed
-		void realign_stack();
+		// Resets the machine to the initial state. It is, however, not a
+		// reliable way to reset complex machines with all kinds of features
+		// attached to it, and should almost never be used. It is recommended
+		// to create a new machine instead, or rely on forking to facilitate
+		// quickly creating and destroying a machine.
+		void reset();
 
 		// Serializes the current machine state to @vec
 		size_t serialize_to(std::vector<uint8_t>& vec) const;

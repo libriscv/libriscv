@@ -38,6 +38,13 @@ inline void Machine<W>::simulate(uint64_t max_instr, uint64_t counter)
 }
 
 template <int W>
+template <bool Throw>
+inline void Machine<W>::resume(uint64_t max_instr)
+{
+	this->simulate(this->instruction_counter() + max_instr, this->instruction_counter());
+}
+
+template <int W>
 inline void Machine<W>::reset()
 {
 	cpu.reset();
