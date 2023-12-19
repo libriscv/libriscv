@@ -1,5 +1,6 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
+#include "instruction_counter.hpp"
 #include "threaded_bytecodes.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
@@ -15,7 +16,7 @@
 #define DISPATCH_MODE_TAILCALL
 #define INSTRUCTION(bytecode, name) \
 	template <int W>                \
-	static TcoRet<W> name(DecoderData<W>* d, MUNUSED DecodedExecuteSegment<W>* exec, MUNUSED CPU<W>& cpu, MUNUSED address_type<W> pc, MUNUSED uint64_t counter)
+	static TcoRet<W> name(DecoderData<W>* d, MUNUSED DecodedExecuteSegment<W>* exec, MUNUSED CPU<W>& cpu, MUNUSED address_type<W> pc, MUNUSED InstrCounter<W>& counter)
 #define addr_t  address_type<W>
 #define saddr_t signed_address_type<W>
 #define XLEN    (8 * W)
@@ -36,15 +37,15 @@
 	EXECUTE_CURRENT()
 
 #define COUNTER_OVERFLOWED(counter) \
-	(counter >= cpu.machine().max_instructions())
+	counter.overflowed()
 #define RETURN_VALUES() \
-	{pc, counter}
+	{pc}
 #define UNUSED_FUNCTION() \
 	cpu.trigger_exception(ILLEGAL_OPCODE);
 
 #define BEGIN_BLOCK()                               \
 	pc += d->block_bytes(); \
-	counter += d->instruction_count();
+	counter.increment_counter(d->instruction_count());
 #define NEXT_BLOCK(len, OF)              \
 	pc += len;                           \
 	d += len / DecoderCache<W>::DIVISOR; \
@@ -116,10 +117,10 @@ namespace riscv
 	}
 
 	template <int W>
-	using TcoRet = std::tuple<address_type<W>, uint64_t>;
+	using TcoRet = std::tuple<address_type<W>>;
 
 	template <int W>
-	using DecoderFunc = TcoRet<W>(*)(DecoderData<W>*, DecodedExecuteSegment<W>*, CPU<W> &, address_type<W> pc, uint64_t counter);
+	using DecoderFunc = TcoRet<W>(*)(DecoderData<W>*, DecodedExecuteSegment<W>*, CPU<W> &, address_type<W> pc, InstrCounter<W>& counter);
 	namespace {
 		template <int W>
 		extern const DecoderFunc<W> computed_opcode[BYTECODES_MAX];
@@ -156,9 +157,11 @@ namespace riscv
 		// Make the current PC visible
 		cpu.registers().pc = pc;
 		// Make the instruction counter(s) visible
-		cpu.machine().set_instruction_counter(counter);
+		counter.apply();
 		// Invoke system call
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
+		// Restore max counter
+		counter.retrieve_max_counter();
 		// Clone-like system calls can change PC
 		if (UNLIKELY(pc != cpu.registers().pc))
 		{
@@ -249,7 +252,7 @@ namespace riscv
 		// Make the current PC visible
 		cpu.registers().pc = pc;
 		// Make the instruction counter visible
-		cpu.machine().set_instruction_counter(counter);
+		counter.apply();
 		// Invoke SYSTEM
 		cpu.machine().system(instr);
 		// Restore PC in case it changed (supervisor)
@@ -263,11 +266,11 @@ namespace riscv
 		// Make the current PC visible
 		cpu.registers().pc = pc;
 		// Make the instruction counter visible
-		cpu.machine().set_instruction_counter(counter-1);
+		counter.apply_counter_minus_1();
 		// Invoke translated code
 		exec->mapping_at(instr.whole)(cpu, instr);
 		// Restore counter
-		counter = cpu.machine().instruction_counter();
+		counter.retrieve();
 		// Translations are always full-length instructions (?)
 		pc = cpu.registers().pc + 4;
 		OVERFLOW_CHECK();
@@ -411,7 +414,7 @@ namespace riscv
 	}
 
 	template <int W> inline RISCV_HOT_PATH()
-	void CPU<W>::simulate()
+	void CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
 	{
 		// We need an execute segment matching current PC
 		if (UNLIKELY(!is_executable(this->pc())))
@@ -419,8 +422,9 @@ namespace riscv
 			this->next_execute_segment();
 		}
 
+		InstrCounter<W> counter{machine(), inscounter, maxcounter};
+
 		address_type<W> pc = this->pc();
-		uint64_t counter = machine().instruction_counter();
 
 		DecodedExecuteSegment<W>* exec = this->m_exec;
 		DecoderData<W>* exec_decoder = exec->decoder_cache();
@@ -429,10 +433,10 @@ namespace riscv
 
 		BEGIN_BLOCK();
 
-		auto [new_pc, new_counter] = EXECUTE_INSTR();
+		auto [new_pc] = EXECUTE_INSTR();
 
 		cpu.registers().pc = new_pc;
-		machine().set_instruction_counter(new_counter);
+
 	} // CPU::simulate_tco()
 
 	template struct CPU<4>;

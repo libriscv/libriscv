@@ -54,7 +54,7 @@ namespace riscv
 		// the machine will throw a MachineTimeoutException if it hits the
 		// given instruction limit.
 		template <bool Throw = true>
-		void simulate(uint64_t max_instructions = UINT64_MAX);
+		void simulate(uint64_t max_instructions = UINT64_MAX, uint64_t counter = 0u);
 
 		// Sets the machines max instructions counter to zero, which effectively
 		// causes the machine to stop. instruction_limit_reached() will return

@@ -47,17 +47,16 @@ TEST_CASE("Run exactly X instructions", "[Micro]")
 	// Reset CPU registers and counter
 	machine.cpu.registers() = {};
 	machine.cpu.jump(dst);
-	machine.reset_instruction_counter();
 
 	// Normal simulation
-	machine.simulate<false>(2);
+	machine.simulate<false>(2, 0u);
 	REQUIRE(machine.instruction_counter() == 3);
 	REQUIRE(machine.cpu.reg(REG_ARG7) == 93);
 
 	machine.cpu.reg(REG_ARG7) = 0;
 
-	machine.simulate<false>(2);
-	REQUIRE((machine.instruction_counter() == 5 || machine.instruction_counter() == 6));
+	machine.simulate<false>(2, machine.instruction_counter());
+	REQUIRE(machine.instruction_counter() == 5);
 	REQUIRE(machine.cpu.reg(REG_ARG7) == 93);
 }
 

@@ -9,10 +9,10 @@ namespace riscv
 	// When binary translation is enabled we cannot do this optimization.
 	template <int W>
 	struct InstrCounter {
-		InstrCounter(Machine<W>& m)
+		InstrCounter(Machine<W>& m, uint64_t icounter, uint64_t maxcounter)
 		  : machine(m),
-		    m_counter(m.instruction_counter()),
-			m_max(m.max_instructions())
+		    m_counter(icounter),
+			m_max(maxcounter)
 		{}
 		~InstrCounter() {
 			machine.set_instruction_counter(m_counter);
