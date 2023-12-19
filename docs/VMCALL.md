@@ -127,13 +127,15 @@ auto test_addr = machine.address_of("test");
 
 // Reset the stack pointer from any previous call to its initial value
 machine.cpu.reset_stack_pointer();
+// Reset the instruction counter, as the resume() function will only increment it
+machine.reset_instruction_counter();
 // Function call setup for the guest VM, but don't start execution
 machine.setup_call(test_addr, 555, 666);
 // Run the program for X amount of instructions, then print something, then
 // resume execution again. Do this until stopped.
 do {
-	// Execute 1000 instructions at a time
-	machine.simulate<false>(1000);
+	// Execute 1000 instructions at a time without resetting the counter
+	machine.resume<false>(1000);
 	// Do some work in between simulation
 	printf("Working ...\n");
 } while (machine.instruction_limit_reached());

@@ -77,7 +77,7 @@ namespace riscv
 
 
 template <int W> DISPATCH_ATTR
-void CPU<W>::simulate()
+void CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
 {
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;
@@ -204,12 +204,12 @@ void CPU<W>::simulate()
 	};
 #endif
 
+	InstrCounter counter{machine(), inscounter, maxcounter};
+
 	DecodedExecuteSegment<W>* exec = this->m_exec;
 	address_t current_begin = exec->exec_begin();
 	address_t current_end = exec->exec_end();
 	address_t pc = this->pc();
-
-	InstrCounter counter{machine()};
 
 	DecoderData<W>* exec_decoder = exec->decoder_cache();
 	DecoderData<W>* decoder;
@@ -297,7 +297,7 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Make the instruction counter(s) visible
-	counter.apply_counter();
+	counter.apply();
 	// Invoke system call
 	machine().system_call(this->reg(REG_ECALL));
 	// Restore max counter
@@ -374,7 +374,7 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Make the instruction counter visible
-	counter.apply_counter();
+	counter.apply();
 	// Invoke SYSTEM
 	machine().system(instr);
 	// Restore PC in case it changed (supervisor)

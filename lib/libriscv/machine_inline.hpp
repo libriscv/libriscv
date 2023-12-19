@@ -23,21 +23,25 @@ void Machine<W>::penalize(uint64_t val) noexcept
 
 template <int W>
 template <bool Throw>
-inline void Machine<W>::simulate(uint64_t max_instr)
+inline void Machine<W>::simulate(uint64_t max_instr, uint64_t counter)
 {
-	// Calculate the instruction limit
-	if (max_instr != UINT64_MAX)
-		this->set_max_instructions(this->instruction_counter() + max_instr);
-	else
-		this->set_max_instructions(UINT64_MAX);
+	this->set_max_instructions(max_instr);
 
-	cpu.simulate();
+	cpu.simulate(counter, max_instr);
+
 	if constexpr (Throw) {
 		// It is a timeout exception if the max counter is non-zero and
 		// the simulation ended. Otherwise, the machine stopped normally.
 		if (UNLIKELY(instruction_limit_reached()))
 			timeout_exception(max_instr);
 	}
+}
+
+template <int W>
+template <bool Throw>
+inline void Machine<W>::resume(uint64_t max_instr)
+{
+	this->simulate(this->instruction_counter() + max_instr, this->instruction_counter());
 }
 
 template <int W>

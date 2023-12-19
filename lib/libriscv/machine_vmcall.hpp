@@ -35,11 +35,8 @@ inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
 	this->cpu.reset_stack_pointer();
 	// setup calling convention
 	this->setup_call(call_addr, std::forward<Args>(args)...);
-	// execute function
-	if (MAXI != 0)
-		this->simulate<Throw>(MAXI);
-	else
-		this->simulate<Throw>(max_instructions());
+	// execute guest function
+	this->simulate<Throw>(MAXI);
 	// address-sized integer return value
 	return cpu.reg(REG_ARG0);
 }
@@ -53,27 +50,22 @@ inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 }
 
 template <int W>
-template <uint64_t MAXI, bool Throw, bool StoreRegs, typename... Args> inline
-address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
+template <bool Throw, bool StoreRegs, typename... Args> inline
+address_type<W> Machine<W>::preempt(uint64_t max_instr, address_t call_addr, Args&&... args)
 {
 	Registers<W> regs;
 	if constexpr (StoreRegs) {
 		regs = cpu.registers();
 	}
-	const uint64_t max_counter = this->max_instructions();
 	// we need to make some stack room
 	this->cpu.reg(REG_SP) -= 16u;
 	// setup calling convention
 	this->setup_call(call_addr, std::forward<Args>(args)...);
 	this->realign_stack();
-	// execute function
+	// execute by extending the max instruction counter (resuming)
 	try {
-		if (MAXI != 0)
-			this->simulate<Throw>(MAXI);
-		else
-			this->simulate<Throw>(max_instructions());
+		this->resume<Throw>(max_instr);
 	} catch (...) {
-		this->m_max_counter = max_counter;
 		if constexpr (StoreRegs) {
 			cpu.registers() = regs;
 			cpu.aligned_jump(cpu.pc());
@@ -81,7 +73,6 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 		throw;
 	}
 	// restore registers and return value
-	this->m_max_counter = max_counter;
 	const auto retval = cpu.reg(REG_ARG0);
 	if constexpr (StoreRegs) {
 		cpu.registers() = regs;
@@ -91,9 +82,9 @@ address_type<W> Machine<W>::preempt(address_t call_addr, Args&&... args)
 }
 
 template <int W>
-template <uint64_t MAXI, bool Throw, bool StoreRegs, typename... Args> inline
-address_type<W> Machine<W>::preempt(const char* funcname, Args&&... args)
+template <bool Throw, bool StoreRegs, typename... Args> inline
+address_type<W> Machine<W>::preempt(uint64_t max_instr, const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
-	return preempt<MAXI, Throw, StoreRegs>(call_addr, std::forward<Args>(args)...);
+	return preempt<Throw, StoreRegs>(max_instr, call_addr, std::forward<Args>(args)...);
 }
