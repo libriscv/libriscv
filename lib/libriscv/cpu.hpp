@@ -36,7 +36,7 @@ namespace riscv
 		// 3. TCO: Uses musttail to jump around at the fastest speed, but
 		// is only supported on Clang. Fastest simulation.
 		// Executes using the default-selected simulation mode.
-		void simulate(uint64_t icounter, uint64_t maxcounter);
+		bool simulate(uint64_t icounter, uint64_t maxcounter);
 
 		// Step precisely one instruction forward.
 		void step_one();

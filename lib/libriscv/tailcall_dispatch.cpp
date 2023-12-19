@@ -232,7 +232,7 @@ namespace riscv
 	{
 		(void) d;
 		pc += 4; // Complete STOP instruction
-		cpu.machine().stop();
+		counter.stop();
 		return RETURN_VALUES();
 	}
 
@@ -414,7 +414,7 @@ namespace riscv
 	}
 
 	template <int W> inline RISCV_HOT_PATH()
-	void CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
+	bool CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
 	{
 		// We need an execute segment matching current PC
 		if (UNLIKELY(!is_executable(this->pc())))
@@ -436,6 +436,9 @@ namespace riscv
 		auto [new_pc] = EXECUTE_INSTR();
 
 		cpu.registers().pc = new_pc;
+
+		// Machine stopped normally?
+		return counter.max() == 0;
 
 	} // CPU::simulate_tco()
 

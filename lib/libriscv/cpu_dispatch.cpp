@@ -77,7 +77,7 @@ namespace riscv
 
 
 template <int W> DISPATCH_ATTR
-void CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
+bool CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
 {
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;
@@ -333,7 +333,7 @@ INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function) {
 INSTRUCTION(RV32I_BC_STOP, rv32i_stop) {
 	REGISTERS().pc = pc + 4;
 	counter.stop();
-	return;
+	return true;
 }
 
 INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
@@ -436,7 +436,9 @@ misaligned_jump:
 
 counter_overflow:
 	registers().pc = pc;
-	return;
+
+	// Machine stopped normally?
+	return counter.max() == 0;
 
 } // CPU::simulate_XXX()
 
