@@ -725,7 +725,7 @@ static void syscall_clock_gettime64(Machine<W>& machine)
 			int64_t tv_msec;
 		} kernel_ts;
 		kernel_ts.tv_sec  = ts.tv_sec;
-		kernel_ts.tv_msec = ts.tv_nsec / 1000000UL;
+		kernel_ts.tv_msec = ts.tv_nsec;
 		machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
 	}
 	machine.set_result_or_error(res);
