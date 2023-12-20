@@ -118,7 +118,7 @@ namespace riscv
 	}
 	template <int W>
 	inline const auto* elf_header(riscv::Machine<W>& machine) {
-		return elf_offset<W, typename riscv::Elf<W>::Ehdr> (machine, 0);
+		return elf_offset<W, typename riscv::Elf<W>::Header> (machine, 0);
 	}
 
 
@@ -168,12 +168,12 @@ namespace riscv
 
 		// Program headers
 		const auto* binary_ehdr = elf_header<W> (*this);
-		const auto* binary_phdr = elf_offset<W, typename riscv::Elf<W>::Phdr> (*this, binary_ehdr->e_phoff);
+		const auto* binary_phdr = elf_offset<W, typename Elf<W>::ProgramHeader> (*this, binary_ehdr->e_phoff);
 		const unsigned phdr_count = binary_ehdr->e_phnum;
 		for (unsigned i = 0; i < phdr_count; i++)
 		{
 			const auto* phd = &binary_phdr[i];
-			push_down(*this, dst, phd, sizeof(typename riscv::Elf<W>::Phdr));
+			push_down(*this, dst, phd, sizeof(typename Elf<W>::ProgramHeader));
 		}
 		const auto phdr_location = dst;
 

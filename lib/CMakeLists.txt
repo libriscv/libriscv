@@ -212,7 +212,6 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 	)
 	install(FILES
 		libriscv/util/buffer.hpp
-		libriscv/util/elf.h
 		libriscv/util/function.hpp
 
 		DESTINATION include/${PROJECT_NAME}/util
