@@ -17,14 +17,14 @@ namespace riscv
 	}
 
 	template <int W>
-	const typename Memory<W>::Shdr* Memory<W>::section_by_name(const std::string& name) const
+	const typename Elf<W>::SectionHeader* Memory<W>::section_by_name(const std::string& name) const
 	{
 		// NOTE: Cannot take address of string_view end-pointer in debug mode
 		const char* endptr = m_binary.data() + m_binary.size();
 
-		if (elf_header()->e_shoff > m_binary.size() - sizeof(Shdr))
+		if (elf_header()->e_shoff > m_binary.size() - sizeof(typename Elf::SectionHeader))
 			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
-		const auto* shdr = elf_offset<Shdr> (elf_header()->e_shoff);
+		const auto* shdr = elf_offset<typename Elf::SectionHeader> (elf_header()->e_shoff);
 
 		const auto& shstrtab = shdr[elf_header()->e_shstrndx];
 		if ((const char *)&shstrtab > endptr - sizeof(shstrtab))
@@ -66,7 +66,7 @@ namespace riscv
 		if (UNLIKELY(sym_hdr->sh_size == 0)) return nullptr;
 
 		const auto* symtab = elf_sym_index(sym_hdr, 0);
-		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);
+		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf::Sym);
 		const char* strtab = elf_offset<char>(str_hdr->sh_offset);
 
 		for (size_t i = 0; i < symtab_ents; i++)
@@ -80,24 +80,24 @@ namespace riscv
 	}
 
 
-	template <typename Sym>
-	static void elf_print_sym(const Sym* sym)
+	template <int W>
+	static void elf_print_sym(const typename Elf<W>::Sym* sym)
 	{
-		if constexpr (sizeof(Sym::st_value) == 4) {
+		if constexpr (W == 4) {
 			printf("-> Sym is at 0x%" PRIX32 " with size %" PRIu32 ", type %u name %u\n",
 				sym->st_value, sym->st_size,
-				ELF32_ST_TYPE(sym->st_info), sym->st_name);
+				typename Elf<W>::SymbolType(sym->st_info), sym->st_name);
 		} else {
 			printf("-> Sym is at 0x%" PRIX64 " with size %" PRIu64 ", type %u name %u\n",
 				(uint64_t)sym->st_value, sym->st_size,
-				ELF64_ST_TYPE(sym->st_info), sym->st_name);
+				typename Elf<W>::SymbolType(sym->st_info), sym->st_name);
 		}
 	}
 
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::relocate_section(const char* section_name, const char* sym_section)
 	{
-		using ElfRela = typename Elf<W>::Rela;
+		using ElfRela = typename Elf::Rela;
 
 		const auto* rela = section_by_name(section_name);
 		if (rela == nullptr) return;
@@ -110,19 +110,19 @@ namespace riscv
 		{
 			size_t symidx;
 			if constexpr (W == 4)
-				symidx = ELF32_R_SYM(rela_addr[i].r_info);
+				symidx = Elf::RelaSym(rela_addr[i].r_info);
 			else
-				symidx = ELF64_R_SYM(rela_addr[i].r_info);
+				symidx = Elf::RelaSym(rela_addr[i].r_info);
 			auto* sym = elf_sym_index(dyn_hdr, symidx);
 
-			const uint8_t type = ELF64_ST_TYPE(sym->st_info);
-			if (type == STT_FUNC || type == STT_OBJECT)
+			const uint8_t type = Elf::SymbolType(sym->st_info);
+			if (type == Elf::STT_FUNC || type == Elf::STT_OBJECT)
 			{
 				if constexpr (false)
 				{
 					printf("Relocating rela %zu with sym idx %ld where 0x%lX -> 0x%lX\n",
 							i, (long)symidx, (long)rela_addr[i].r_offset, (long)sym->st_value);
-					elf_print_sym<typename Elf<W>::Sym>(sym);
+					elf_print_sym<W>(sym);
 				}
 				this->write<address_t>(elf_base_address(rela_addr[i].r_offset), sym->st_value);
 			}
@@ -130,7 +130,7 @@ namespace riscv
 	}
 
 	template <int W> RISCV_INTERNAL
-	void Memory<W>::dynamic_linking(const Ehdr& hdr)
+	void Memory<W>::dynamic_linking(const typename Elf::Header& hdr)
 	{
 		(void)hdr;
 		this->relocate_section(".rela.dyn", ".dynsym");

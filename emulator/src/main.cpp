@@ -244,15 +244,17 @@ int main(int argc, const char** argv)
 	}
 	const std::string& filename = args.front();
 
+	using ElfHeader = typename riscv::Elf<4>::Header;
+
 	auto binary = load_file(filename);
-	if (binary.size() < sizeof(Elf64_Ehdr)) {
+	if (binary.size() < sizeof(ElfHeader)) {
 		fprintf(stderr, "ELF binary was too small to be usable!\n");
 		exit(1);
 	}
 
-	const bool is_dynamic = ((Elf32_Ehdr *)binary.data())->e_type == ET_DYN;
+	const bool is_dynamic = ((ElfHeader *)binary.data())->e_type == ElfHeader::ET_DYN;
 
-	if (binary[4] == ELFCLASS64 && is_dynamic) {
+	if (binary[4] == riscv::ELFCLASS64 && is_dynamic) {
 		// Load the dynamic linker shared object
 		binary = load_file(DYNAMIC_LINKER);
 		// Insert program name as argv[1]
@@ -262,7 +264,7 @@ int main(int argc, const char** argv)
 	}
 
 	try {
-		if (binary[4] == ELFCLASS64)
+		if (binary[4] == riscv::ELFCLASS64)
 			run_program<riscv::RISCV64> (binary, is_dynamic, args);
 		else
 			run_program<riscv::RISCV32> (binary, is_dynamic, args);

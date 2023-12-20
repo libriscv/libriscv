@@ -212,29 +212,27 @@ namespace riscv
 		static void memview_helper(T& mem, address_t addr, size_t len,
 			std::function<void(T&, const uint8_t*, size_t)> callback);
 		// ELF stuff
-		using Ehdr = typename Elf<W>::Ehdr;
-		using Phdr = typename Elf<W>::Phdr;
-		using Shdr = typename Elf<W>::Shdr;
+		using Elf = typename riscv::Elf<W>;
 		template <typename T> T* elf_offset(intptr_t ofs) const {
 			return (T*) &m_binary.at(ofs);
 		}
 		inline const auto* elf_header() const noexcept {
-			return elf_offset<const Ehdr> (0);
+			return elf_offset<const typename Elf::Header> (0);
 		}
-		const Shdr* section_by_name(const std::string& name) const;
-		void dynamic_linking(const Ehdr&);
+		const typename Elf::SectionHeader* section_by_name(const std::string& name) const;
+		void dynamic_linking(const typename Elf::Header&);
 		void relocate_section(const char* section_name, const char* symtab);
-		const typename Elf<W>::Sym* resolve_symbol(std::string_view name) const;
-		const auto* elf_sym_index(const Shdr* shdr, uint32_t symidx) const {
-			if (symidx >= shdr->sh_size / sizeof(typename Elf<W>::Sym))
+		const typename Elf::Sym* resolve_symbol(std::string_view name) const;
+		const auto* elf_sym_index(const typename Elf::SectionHeader* shdr, uint32_t symidx) const {
+			if (symidx >= shdr->sh_size / sizeof(typename Elf::Sym))
 				throw MachineException(INVALID_PROGRAM, "ELF Symtab section index overflow");
-			auto* symtab = elf_offset<typename Elf<W>::Sym>(shdr->sh_offset);
+			auto* symtab = elf_offset<typename Elf::Sym>(shdr->sh_offset);
 			return &symtab[symidx];
 		}
 		// ELF loader
 		void binary_loader(const MachineOptions<W>&);
-		void binary_load_ph(const MachineOptions<W>&, const Phdr*, address_t vaddr);
-		void serialize_execute_segment(const MachineOptions<W>&, const Phdr*, address_t vaddr);
+		void binary_load_ph(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
+		void serialize_execute_segment(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
 		void generate_decoder_cache(const MachineOptions<W>&, DecodedExecuteSegment<W>&);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);

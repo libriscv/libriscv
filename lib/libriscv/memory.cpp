@@ -141,7 +141,7 @@ namespace riscv
 
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::binary_load_ph(const MachineOptions<W>& options,
-		const Phdr* hdr, const address_t vaddr)
+		const typename Elf::ProgramHeader* hdr, const address_t vaddr)
 	{
 		const auto* src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
@@ -168,9 +168,9 @@ namespace riscv
 
 		// segment permissions
 		const PageAttributes attr {
-			 .read  = (hdr->p_flags & PF_R) != 0,
-			 .write = (hdr->p_flags & PF_W) != 0,
-			 .exec  = (hdr->p_flags & PF_X) != 0
+			 .read  = (hdr->p_flags & Elf::PF_R) != 0,
+			 .write = (hdr->p_flags & Elf::PF_W) != 0,
+			 .exec  = (hdr->p_flags & Elf::PF_X) != 0
 		};
 		if (options.verbose_loader) {
 		printf("* Program segment readable: %d writable: %d  executable: %d\n",
@@ -214,7 +214,7 @@ namespace riscv
 
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::serialize_execute_segment(
-		const MachineOptions<W>& options, const Phdr* hdr, address_t vaddr)
+		const MachineOptions<W>& options, const typename Elf::ProgramHeader* hdr, address_t vaddr)
 	{
 		// The execute segment:
 		size_t exlen = hdr->p_filesz;
@@ -247,20 +247,20 @@ namespace riscv
 		static constexpr uint32_t ELFHDR_FLAGS_RVC = 0x1;
 		static constexpr uint32_t ELFHDR_FLAGS_RVE = 0x8;
 
-		if (UNLIKELY(m_binary.size() < sizeof(Ehdr))) {
+		if (UNLIKELY(m_binary.size() < sizeof(typename Elf::Header))) {
 			throw MachineException(INVALID_PROGRAM, "ELF program too short");
 		}
-		if (UNLIKELY(!validate_header<Ehdr> (m_binary))) {
+		if (UNLIKELY(!Elf::validate(m_binary))) {
 			throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Mixup between 32- and 64-bit?");
 		}
 
-		const auto* elf = (Ehdr*) m_binary.data();
-		const bool is_static = elf->e_type == ET_EXEC;
-		this->m_is_dynamic   = elf->e_type == ET_DYN;
+		const auto* elf = (typename Elf::Header*) m_binary.data();
+		const bool is_static = elf->e_type == Elf::Header::ET_EXEC;
+		this->m_is_dynamic   = elf->e_type == Elf::Header::ET_DYN;
 		if (UNLIKELY(!is_static && !m_is_dynamic)) {
 			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load an object file?");
 		}
-		if (UNLIKELY(elf->e_machine != EM_RISCV)) {
+		if (UNLIKELY(elf->e_machine != Elf::Header::EM_RISCV)) {
 			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.");
 		}
 		if (UNLIKELY((elf->e_flags & ELFHDR_FLAGS_RVC) != 0 && !compressed_enabled)) {
@@ -281,13 +281,13 @@ namespace riscv
 		if (UNLIKELY(elf->e_phoff > 0x4000)) {
 			throw MachineException(INVALID_PROGRAM, "ELF program-headers have bogus offset");
 		}
-		if (UNLIKELY(elf->e_phoff + program_headers * sizeof(Phdr) > m_binary.size())) {
+		if (UNLIKELY(elf->e_phoff + program_headers * sizeof(typename Elf::ProgramHeader) > m_binary.size())) {
 			throw MachineException(INVALID_PROGRAM, "ELF program-headers are outside the binary");
 		}
 
 		// Load program segments
-		const auto* phdr = (Phdr*) (m_binary.data() + elf->e_phoff);
-		std::vector<const Phdr*> execute_segments;
+		const auto* phdr = (typename Elf::ProgramHeader*) (m_binary.data() + elf->e_phoff);
+		std::vector<const typename Elf::ProgramHeader*> execute_segments;
 
 		// is_dynamic() is used to determine the ELF base address
 		this->m_start_address = this->elf_base_address(elf->e_entry);
@@ -301,7 +301,7 @@ namespace riscv
 			for (const auto* ph = phdr; ph < hdr; ph++) {
 				const address_t ph_vaddr = this->elf_base_address(ph->p_vaddr);
 
-				if (hdr->p_type == PT_LOAD && ph->p_type == PT_LOAD)
+				if (hdr->p_type == Elf::PT_LOAD && ph->p_type == Elf::PT_LOAD)
 				if (ph_vaddr < vaddr + hdr->p_filesz &&
 					ph_vaddr + ph->p_filesz > vaddr) {
 					// Normally we would not care, but no normal ELF
@@ -312,19 +312,19 @@ namespace riscv
 
 			switch (hdr->p_type)
 			{
-				case PT_LOAD:
+				case Elf::PT_LOAD:
 					// loadable program segments
 					if (options.load_program) {
 						binary_load_ph(options, hdr, vaddr);
-						if (hdr->p_flags & PF_X) {
+						if (hdr->p_flags & Elf::PF_X) {
 							execute_segments.push_back(hdr);
 						}
 					}
 					break;
-				case PT_GNU_STACK:
+				case Elf::PT_GNU_STACK:
 					// This seems to be a mark for executable stack. Big NO!
 					break;
-				case PT_GNU_RELRO:
+				case Elf::PT_GNU_RELRO:
 					/*this->set_page_attr(vaddr, hdr->p_memsz, {
 						.read  = (hdr->p_flags & PF_R) != 0,
 						.write = (hdr->p_flags & PF_W) != 0,
@@ -467,7 +467,7 @@ namespace riscv
 	template <int W>
 	typename Memory<W>::Callsite Memory<W>::lookup(address_t address) const
 	{
-		if (!validate_header<Ehdr>(this->m_binary))
+		if (!Elf::validate(this->m_binary))
 			return {};
 
 		const auto* sym_hdr = section_by_name(".symtab");
@@ -483,7 +483,7 @@ namespace riscv
 		address = this->elf_base_address(address);
 
 		const auto* symtab = elf_sym_index(sym_hdr, 0);
-		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf<W>::Sym);
+		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf::Sym);
 		const char* strtab = elf_offset<char>(str_hdr->sh_offset);
 
 		const auto result =
@@ -503,10 +503,10 @@ namespace riscv
 			};
 		};
 
-		const typename Elf<W>::Sym* best = nullptr;
+		const typename Elf::Sym* best = nullptr;
 		for (size_t i = 0; i < symtab_ents; i++)
 		{
-			if (ELF32_ST_TYPE(symtab[i].st_info) != STT_FUNC) continue;
+			if (Elf::SymbolType(symtab[i].st_info) != Elf::STT_FUNC) continue;
 			/*printf("Testing %#X vs  %#X to %#X = %s\n",
 					address, symtab[i].st_value,
 					symtab[i].st_value + symtab[i].st_size, symname);*/
