@@ -8,20 +8,18 @@ There is also a CLI that you can use to run RISC-V programs and step through ins
 
 ![render1702368897099](https://github.com/fwsGonzo/libriscv/assets/3758947/89d6c128-c410-4fe5-bf03-eff0279f8933)
 
-## What is userspace emulation?
 
-Userspace emulation means running regular programs in a sandbox, trapping and emulating system calls in order to provide the Linux environment the program expects, but also make sure the program is not doing anything wrong. There is fairly good support for Linux system calls, however anyone can implement support for other OSes, and ultimately even ELF loading is optional.
+## Ultra-Low latency emulation
 
-Instruction counting is used to limit the time spent executing code and can be used to prevent infinite loops. It can also help keep frame budgets for long running background scripting tasks as running out of instructions simply halts execution, and it can be resumed from where it stopped.
+libriscv is a [low latency emulator](https://medium.com/@fwsgonzo/using-c-as-a-scripting-language-part-10-ad7dd7e4325d), designed specifically to have very low overheads when interacting with certain programs.
 
-The virtual address space is implemented using pages, which means you can copy code into memory, make it executable, and then jump to it. It should Just Work. It also makes it possible to run more complex language runtimes like Go.
+Goals:
+- No overhead when used for game engine scripting or request-based workloads (eg. high performance caching)
+- Secure sandbox
 
-
-## Embedding the emulator in a project
-
-See [example project](/examples/embed) for embedding on Linux.
-
-On Windows you can use Clang-cl in Visual Studio. See the [example CMake project](/examples/msvc). It requires Clang and Git installed.
+Non goals:
+- Highest performance, just-in-time compilation
+- Wide support for Linux system calls
 
 
 ## Benchmarks
@@ -31,6 +29,23 @@ On Windows you can use Clang-cl in Visual Studio. See the [example CMake project
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
 Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da). Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
+
+<details>
+  <summary>Register vs stack machines (interpreted)</summary>
+  
+  ### Benchmarks against wasm3
+  RISC-V is a register machine architecture, which makes it very easy to reach good interpreter performance without needing a register allocator.
+
+  ![STREAM memory wasm3 vs  libriscv (no SIMD)](https://github.com/fwsGonzo/libriscv/assets/3758947/0a259f83-0a60-4f0d-88e8-901333ca1c7d)
+  ![CoreMark 1 0 Interpreted wasm3 vs  interpreted libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/b0f26ae5-e9c2-47ab-a0a8-c6ecb999150d)
+
+</details>
+
+## Embedding the emulator in a project
+
+See [example project](/examples/embed) for embedding on Linux.
+
+On Windows you can use Clang-cl in Visual Studio. See the [example CMake project](/examples/msvc). It requires Clang and Git installed.
 
 
 ## Installing a RISC-V GCC compiler
