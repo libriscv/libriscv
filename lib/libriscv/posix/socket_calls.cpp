@@ -324,6 +324,7 @@ static void syscall_sendto(Machine<W>& machine)
 		const ssize_t res = sendmsg(real_fd, &hdr, flags);
 #else
 		// XXX: Write me
+		(void)real_fd;
 		const ssize_t res = -1;
 #endif
 		machine.set_result_or_error(res);
@@ -376,6 +377,7 @@ static void syscall_recvfrom(Machine<W>& machine)
 		}
 #else
 		// XXX: Write me
+		(void)real_fd;
 		const ssize_t res = -1;
 #endif
 		machine.set_result_or_error(res);
@@ -443,6 +445,7 @@ static void syscall_recvmsg(Machine<W>& machine)
 		}
 #else
 		// XXX: Write me
+		(void)real_fd;
 		const ssize_t res = -1;
 #endif
 		machine.set_result_or_error(res);
@@ -527,6 +530,7 @@ static void syscall_sendmmsg(Machine<W>& machine)
 		}
 #else
 		// XXX: Write me
+		(void)real_fd;
 		const ssize_t finalcnt = 0;
 #endif
 		machine.set_result_or_error(finalcnt);
