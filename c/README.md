@@ -1,7 +1,133 @@
 ## libriscv C API
 
-### Example usage
+The API is fairly new and currently only executes 64-bit RISC-V programs.
 
-There is a [demo program](/c/test/test.c) showing how to use the C API.
+There is a [demo program](/c/test/test.c) showing how the C API can be used.
 
-The API is fairly new and designed to do basic 64-bit Linux emulation.
+[![C API test project](https://github.com/fwsGonzo/libriscv/actions/workflows/capi.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/capi.yml)
+
+### Example code
+
+```c
+RISCVOptions options;
+libriscv_set_defaults(&options);
+options.max_memory = 4ULL << 30; /* 4 GiB */
+options.strict_sandbox = 1; /* Disable files and sockets. */
+
+/* Guest program arguments. */
+const char * guest_args[2] = {"my_program", "1234"};
+options.argc = 2;
+options.argv = guest_args;
+
+/* Create a new RISC-V machine. The program must out-live the machine. */
+RISCVMachine *m = libriscv_new(buffer, size, &options);
+if (!m) {
+	fprintf(stderr, "Failed to initialize the RISC-V machine!\n");
+	exit(1);
+}
+
+/* Execute the RISC-V program now, but time out execution at 5B instructions. */
+const int res = libriscv_run(m, 5000000000ull);
+if (res < 0) {
+	fprintf(stderr, "Error during execution: %s\n", libriscv_strerror(res));
+	exit(1);
+}
+
+/* Free the program. */
+libriscv_delete(m);
+```
+
+### API header
+
+The current [C API header](/c/libriscv.h) is a work in progress. It covers many basic operations, but can only load 64-bit RISC-V programs for now.
+
+```c
+#define RISCV_ERROR_TYPE_GENERAL_EXCEPTION  -1
+#define RISCV_ERROR_TYPE_MACHINE_EXCEPTION  -2
+#define RISCV_ERROR_TYPE_MACHINE_TIMEOUT    -3
+typedef void (*riscv_error_func_t)(void *opaque, int type, const char *msg, long data);
+
+typedef void (*riscv_stdout_func_t)(void *opaque, const char *msg, unsigned size);
+
+typedef struct {
+	uint64_t max_memory;
+	uint64_t stack_size;
+	int      strict_sandbox;  /* No file or socket permissions */
+	unsigned     argc;        /* Program arguments */
+	const char **argv;
+	riscv_error_func_t error; /* Error callback */
+	riscv_stdout_func_t stdout; /* Stdout callback */
+	void *opaque;             /* User-provided pointer */
+} RISCVOptions;
+
+/* Fill out default values. */
+void libriscv_set_defaults(RISCVOptions *options);
+
+/* Create a new 64-bit RISC-V machine from an ELF binary. The binary must out-live the machine. */
+RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_size, RISCVOptions *o);
+
+/* Free a RISC-V machine created using libriscv_new. */
+int libriscv_delete(RISCVMachine *m);
+
+
+/* Start execution at current PC, with the given instruction limit. 0 on success.
+   When an error occurs, the negative value is one of the RISCV_ERROR_ enum values. */
+int libriscv_run(RISCVMachine *m, uint64_t instruction_limit);
+
+/* Returns a string describing a negative return value. */
+const char * libriscv_strerror(int return_value);
+
+/* Return current value of the return value register A0. */
+int64_t libriscv_return_value(RISCVMachine *m);
+
+/* Return current instruction counter value. */
+uint64_t libriscv_instruction_counter(RISCVMachine *m);
+
+/* Return symbol address or NULL if not found. */
+long libriscv_address_of(RISCVMachine *m, const char *name);
+
+/* Return the opaque value provided during machine creation. */
+void * libriscv_opaque(RISCVMachine *m);
+
+/*** Modifying the RISC-V emulation ***/
+typedef union {
+	float   f32[2];
+	double  f64;
+} RISCVFloat;
+
+typedef struct {
+	uint64_t  pc;
+	uint64_t  r[32];
+	uint32_t  fcsr;
+	RISCVFloat fr[32];
+} RISCVRegisters;
+
+/* Retrieve the internal registers of the RISC-V machine. Changing PC is dangerous. */
+RISCVRegisters * libriscv_get_registers(RISCVMachine *m);
+
+/* Change the PC register safely. PC can be changed before running and during system calls. */
+int libriscv_jump(RISCVMachine *m, uint64_t address);
+
+/* Copy memory in and out of the RISC-V machine. */
+int libriscv_copy_to_guest(RISCVMachine *m, uint64_t dst, const void *src, unsigned len);
+int libriscv_copy_from_guest(RISCVMachine *m, void *dst, uint64_t src, unsigned len);
+
+/* Read a zero-terminated string from memory into a heap-allocated string of at most maxlen length.
+   On success, set *length and return a pointer to the new string. Otherwise, return null. */
+char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned maxlen, unsigned *length);
+
+/* View a slice of readable memory from src to src + length.
+   On success, return a pointer to the memory. Otherwise, return null. */
+const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length);
+
+/* Triggers a CPU exception. Only safe to call from a system call. Will end execution. */
+void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data);
+
+/* Stops execution. */
+void libriscv_stop(RISCVMachine *m);
+
+typedef void (*riscv_syscall_handler_t)(RISCVMachine *m);
+
+/* Install a custom system call handler. */
+int libriscv_set_syscall_handler(unsigned num, riscv_syscall_handler_t);
+```

@@ -9,9 +9,10 @@ using namespace riscv;
 	if (auto *usr = m->get_userdata<UserData> (); usr->error != nullptr) \
 		usr->error(usr->opaque, type, msg, data);
 
-static std::vector<std::string> fill(int count, const char* const* args) {
+static std::vector<std::string> fill(unsigned count, const char* const* args) {
 	std::vector<std::string> v;
-	for (int i = 0; i < count; i++)
+	v.reserve(count);
+	for (unsigned i = 0; i < count; i++)
 		v.push_back(args[i]);
 	return v;
 }
@@ -29,6 +30,7 @@ void libriscv_set_defaults(RISCVOptions *options)
 
 	options->max_memory = mo.memory_max;
 	options->stack_size = mo.stack_size;
+	options->strict_sandbox = true;
 	options->argc = 0;
 }
 
@@ -63,8 +65,8 @@ RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_length, RISCVOptio
 			m->setup_linux_syscalls();
 			m->setup_posix_threads();
 			m->setup_linux(args, env);
-			m->fds().permit_filesystem = true;
-			m->fds().permit_sockets = true;
+			m->fds().permit_filesystem = !options->strict_sandbox;
+			m->fds().permit_sockets = !options->strict_sandbox;
 			// TODO: File permissions
 		}
 
@@ -97,16 +99,33 @@ extern "C"
 int libriscv_run(RISCVMachine *m, uint64_t instruction_limit)
 {
 	try {
-		MACHINE(m)->simulate(instruction_limit);
-		return 0;
+		return MACHINE(m)->simulate<false>(instruction_limit) ? 0 : -RISCV_ERROR_TYPE_MACHINE_TIMEOUT;
 	} catch (const MachineTimeoutException& tmo) {
 		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_TIMEOUT, tmo.what(), tmo.data());
+		return RISCV_ERROR_TYPE_MACHINE_TIMEOUT;
 	} catch (const MachineException& me) {
 		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+		return RISCV_ERROR_TYPE_MACHINE_EXCEPTION;
 	} catch (const std::exception& e) {
 		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
+		return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
 	}
-	return -1;
+}
+extern "C"
+const char * libriscv_strerror(int return_value)
+{
+	switch (return_value) {
+	case 0:
+		return "No error";
+	case RISCV_ERROR_TYPE_MACHINE_TIMEOUT:
+		return "Timed out";
+	case RISCV_ERROR_TYPE_MACHINE_EXCEPTION:
+		return "Machine exception";
+	case RISCV_ERROR_TYPE_GENERAL_EXCEPTION:
+		return "General exception";
+	default:
+		return "Unknown error";
+	}
 }
 extern "C"
 void libriscv_stop(RISCVMachine *m)
@@ -139,7 +158,7 @@ long libriscv_address_of(RISCVMachine *m, const char *name)
 		return ((Machine<RISCV_ARCH> *)m)->address_of(name);
 	}
 	catch (...) {
-		return 0;
+		return 0x0;
 	}
 }
 
@@ -157,7 +176,7 @@ int libriscv_set_syscall_handler(unsigned idx, riscv_syscall_handler_t handler)
 		return 0;
 	}
 	catch (...) {
-		return -1;
+		return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
 	}
 }
 
@@ -177,10 +196,13 @@ int libriscv_jump(RISCVMachine *m, uint64_t address)
 	try {
 		MACHINE(m)->cpu.jump(address);
 		return 0;
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+		return RISCV_ERROR_TYPE_MACHINE_EXCEPTION;
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
 	}
-	catch (...) {
-		return -1;
-	}
+	return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
 }
 
 extern "C"
@@ -189,10 +211,13 @@ int libriscv_copy_to_guest(RISCVMachine *m, uint64_t dst, const void *src, unsig
 	try {
 		MACHINE(m)->copy_to_guest(dst, src, len);
 		return 0;
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+		return RISCV_ERROR_TYPE_MACHINE_EXCEPTION;
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
 	}
-	catch (...) {
-		return -1;
-	}
+	return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
 }
 extern "C"
 int libriscv_copy_from_guest(RISCVMachine *m, void* dst, uint64_t src, unsigned len)
@@ -200,10 +225,56 @@ int libriscv_copy_from_guest(RISCVMachine *m, void* dst, uint64_t src, unsigned 
 	try {
 		MACHINE(m)->copy_from_guest(dst, src, len);
 		return 0;
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+		return RISCV_ERROR_TYPE_MACHINE_EXCEPTION;
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
 	}
-	catch (...) {
-		return -1;
+	return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
+}
+
+extern "C"
+char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned maxlen, unsigned* length)
+{
+	if (length == nullptr)
+		return nullptr;
+	char *result = nullptr;
+
+	try {
+		const unsigned len = MACHINE(m)->memory.strlen(src, maxlen);
+		result = (char *)std::malloc(len);
+		if (result != nullptr) {
+			MACHINE(m)->copy_from_guest(result, src, len);
+			*length = len;
+		}
+		return result;
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
 	}
+
+	if (result)
+		std::free(result);
+	*length = 0;
+	return nullptr;
+}
+
+extern "C"
+const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length)
+{
+	try {
+		auto buffer = MACHINE(m)->memory.rvbuffer(src, length);
+		if (buffer.is_sequential()) {
+			return buffer.data();
+		}
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
+	}
+	return nullptr;
 }
 
 extern "C"
