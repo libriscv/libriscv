@@ -270,7 +270,7 @@ namespace riscv
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
 		static void setup_native_heap_internal(const size_t);
-		void timeout_exception(uint64_t);
+		[[noreturn]] void timeout_exception(uint64_t);
 
 		uint64_t     m_counter = 0;
 		uint64_t     m_max_counter = 0;

@@ -29,6 +29,10 @@ namespace riscv
 		// which is the same as the machine stopping normally, or by
 		// reaching the instruction limit, running out of instructions.
 		//
+		// The function returns the current maximum limit after simulation ended.
+		// If the limit is 0, then the machine was stopped normally, otherwise
+		// the instruction count limit was reached.
+		//
 		// 1. Bytecode: Executes one block at a time, and can only stop when the
 		// block ends or a system call is handled. Works and runs everywhere.
 		// 2. Threaded: Uses computed gotos to jump around at a faster speed, but
@@ -36,7 +40,7 @@ namespace riscv
 		// 3. TCO: Uses musttail to jump around at the fastest speed, but
 		// is only supported on Clang. Fastest simulation.
 		// Executes using the default-selected simulation mode.
-		bool simulate(uint64_t icounter, uint64_t maxcounter);
+		uint64_t simulate(uint64_t icounter, uint64_t maxcounter);
 
 		// Step precisely one instruction forward.
 		void step_one();

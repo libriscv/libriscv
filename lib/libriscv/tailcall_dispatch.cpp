@@ -414,7 +414,7 @@ namespace riscv
 	}
 
 	template <int W> inline RISCV_HOT_PATH()
-	bool CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
+	uint64_t CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
 	{
 		// We need an execute segment matching current PC
 		if (UNLIKELY(!is_executable(this->pc())))
@@ -438,7 +438,7 @@ namespace riscv
 		cpu.registers().pc = new_pc;
 
 		// Machine stopped normally?
-		return counter.max() == 0;
+		return counter.max();
 
 	} // CPU::simulate_tco()
 

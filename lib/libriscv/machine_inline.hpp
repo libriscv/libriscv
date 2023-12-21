@@ -25,15 +25,18 @@ template <int W>
 template <bool Throw>
 inline bool Machine<W>::simulate(uint64_t max_instr, uint64_t counter)
 {
-	this->set_max_instructions(max_instr);
-
-	const bool stopped = cpu.simulate(counter, max_instr);
+	const auto new_max = cpu.simulate(counter, max_instr);
 	if constexpr (Throw) {
-		if (!stopped)
+		// The simulation ends normally (new_max == 0), or it throws an exception
+		// Storing to m_max_counter is not helpful here.
+		if (UNLIKELY(new_max))
 			timeout_exception(max_instr);
+		return false;
+	} else {
+		// Here m_max_counter is useful for instruction_limit_reached() and stopped().
+		this->m_max_counter = new_max;
+		return new_max == 0;
 	}
-
-	return stopped;
 }
 
 template <int W>
