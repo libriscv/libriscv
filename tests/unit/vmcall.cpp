@@ -161,3 +161,80 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 			return;
 	}
 }
+
+TEST_CASE("VM call and preemption", "[VMCall]")
+{
+	struct State {
+		bool output_is_hello_world = false;
+	} state;
+	const auto binary = build_and_load(R"M(
+	extern long write(int, const void*, unsigned long);
+	long syscall1(long n, long arg0) {
+		register long a0 __asm__("a0") = arg0;
+		register long syscall_id __asm__("a7") = n;
+
+		__asm__ volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+
+		return a0;
+	}
+
+	extern long start() {
+		syscall1(500, 1234567);
+		return 1;
+	}
+	extern void preempt(int arg) {
+		write(1, "Hello World!", arg);
+	}
+
+	int main() {
+		syscall1(500, 1234567);
+		return 666;
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"vmcall"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	machine.set_userdata(&state);
+	machine.set_printer([] (const auto& m, const char* data, size_t size) {
+		auto* state = m.template get_userdata<State> ();
+		std::string text{data, data + size};
+		state->output_is_hello_world = (text == "Hello World!");
+	});
+
+	machine.install_syscall_handler(500,
+	[] (auto& machine) {
+		auto [arg0] = machine.template sysargs <int> ();
+		REQUIRE(arg0 == 1234567);
+
+		const auto func = machine.address_of("preempt");
+		REQUIRE(func != 0x0);
+
+		machine.preempt(15'000ull, func, strlen("Hello World!"));
+		printf("Current max: %lu\n", machine.max_instructions());
+	});
+
+	REQUIRE(!state.output_is_hello_world);
+
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	REQUIRE(state.output_is_hello_world);
+	REQUIRE(machine.return_value<int>() == 666);
+
+	for (int i = 0; i < 10; i++)
+	{
+		state.output_is_hello_world = false;
+
+		const auto func = machine.address_of("start");
+		REQUIRE(func != 0x0);
+
+		// Execute guest function
+		machine.vmcall<15'000ull>(func);
+		REQUIRE(machine.return_value<int>() == 1);
+
+		// Now hello world should have been printed
+		REQUIRE(state.output_is_hello_world);
+	}
+}

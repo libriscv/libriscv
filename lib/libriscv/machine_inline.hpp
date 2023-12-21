@@ -40,7 +40,7 @@ template <int W>
 template <bool Throw>
 inline bool Machine<W>::resume(uint64_t max_instr)
 {
-	return this->simulate(this->instruction_counter() + max_instr, this->instruction_counter());
+	return this->simulate<Throw>(this->instruction_counter() + max_instr, this->instruction_counter());
 }
 
 template <int W>
