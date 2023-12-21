@@ -255,7 +255,7 @@ namespace riscv
 			if (!exec.is_binary_translated() && must_translate)
 			{
 				machine().cpu.try_translate(
-					options, bintr_filename, exec, addr, addr + len, exec_segment);
+					options, bintr_filename, exec, addr, addr + len);
 			}
 		} // W != 16
 	#endif

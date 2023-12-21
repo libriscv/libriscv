@@ -41,6 +41,7 @@ template <int W>
 int CPU<W>::load_translation(const MachineOptions<W>& options,
 	std::string* filename, DecodedExecuteSegment<W>& exec) const
 {
+	// Binary translation using libtcc doesn't use files
 	if constexpr (libtcc_enabled) {
 		return 1;
 	}
@@ -114,8 +115,7 @@ static bool is_stopping_instruction(rv32i_instruction instr) {
 template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
 	const std::string& filename,
-	DecodedExecuteSegment<W>& exec, address_t basepc, address_t endbasepc,
-	const uint8_t* raw_instructions) const
+	DecodedExecuteSegment<W>& exec, address_t basepc, address_t endbasepc) const
 {
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = (getenv("VERBOSE") != nullptr);
@@ -127,12 +127,12 @@ if constexpr (SCAN_FOR_GP) {
 	// followed by OP_IMM (and maybe OP_IMM32)
 	for (address_t pc = basepc; pc < endbasepc; pc += 4) {
 		const rv32i_instruction instruction
-			= read_instruction(raw_instructions, pc, endbasepc);
+			= read_instruction(exec.exec_data(), pc, endbasepc);
 		if (instruction.opcode() == RV32I_AUIPC) {
 			const auto auipc = instruction;
 			if (auipc.Utype.rd == 3) { // GP
 				const rv32i_instruction addi
-					= read_instruction(raw_instructions, pc + 4, endbasepc);
+					= read_instruction(exec.exec_data(), pc + 4, endbasepc);
 				if (addi.opcode() == RV32I_OP_IMM && addi.Itype.funct3 == 0x0) {
 					//printf("Found OP_IMM: ADDI  rd=%d, rs1=%d\n", addi.Itype.rd, addi.Itype.rs1);
 					if (addi.Itype.rd == 3 && addi.Itype.rs1 == 3) { // GP
@@ -163,7 +163,7 @@ if constexpr (SCAN_FOR_GP) {
 
 		for (; pc < endbasepc; pc += 4) {
 			const rv32i_instruction instruction
-				= read_instruction(raw_instructions, pc, endbasepc);
+				= read_instruction(exec.exec_data(), pc, endbasepc);
 
 			// JALR and STOP are show-stoppers / code-block enders
 			if (is_stopping_instruction(instruction)) {
@@ -178,7 +178,7 @@ if constexpr (SCAN_FOR_GP) {
 		// Find jump locations inside block
 		for (pc = block; pc < block_end; pc += 4) {
 			const rv32i_instruction instruction
-				= read_instruction(raw_instructions, pc, endbasepc);
+				= read_instruction(exec.exec_data(), pc, endbasepc);
 			const auto opcode = instruction.opcode();
 
 			// detect far JAL, otherwise use as local jump
@@ -216,7 +216,7 @@ if constexpr (SCAN_FOR_GP) {
 					printf("-> Jump to %#lX\n", long(loc));
 			}
 
-			rv32i_instruction* ip = (rv32i_instruction *)&raw_instructions[block];
+			rv32i_instruction* ip = (rv32i_instruction *)exec.exec_data(block);
 			blocks.push_back({
 				ip, block, block_end, gp, (int)length,
 				true,
@@ -370,9 +370,6 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		.unknown_syscall = [] (CPU<W>& cpu, address_type<W> sysno) {
 			cpu.machine().on_unhandled_syscall(cpu.machine(), sysno);
 		},
-		.ebreak = [] (CPU<W>& cpu) {
-			cpu.machine().ebreak();
-		},
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
 			cpu.machine().system(rv32i_instruction{instr});
 		},
@@ -454,8 +451,8 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	}
 }
 
-	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t, const uint8_t *) const;
-	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t, const uint8_t *) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template void CPU<4>::activate_dylib(DecodedExecuteSegment<4>&, void*) const;

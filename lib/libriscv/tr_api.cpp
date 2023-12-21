@@ -130,7 +130,6 @@ static struct CallbackTable {
 	void (*vec_store)(const CPU*, addr_t, int);
 	syscall_t* syscalls;
 	void (*unknown_syscall)(CPU*, addr_t);
-	void (*ebreak)(CPU*);
 	void (*system)(CPU*, uint32_t);
 	void (*execute)(CPU*, uint32_t);
 	void (*exception) (CPU*, int);
