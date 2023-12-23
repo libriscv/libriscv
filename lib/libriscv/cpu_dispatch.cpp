@@ -332,7 +332,6 @@ INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function) {
 }
 INSTRUCTION(RV32I_BC_STOP, rv32i_stop) {
 	REGISTERS().pc = pc + 4;
-	counter.stop();
 	return true;
 }
 
