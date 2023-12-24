@@ -355,9 +355,9 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Invoke translated code
-	auto new_counters = 
+	auto bintr_results = 
 		exec->mapping_at(instr.whole)(*this, counter.value()-1, counter.max());
-	counter.set_counters(new_counters.counter, new_counters.max_counter);
+	counter.set_counters(bintr_results.counter, bintr_results.max_counter);
 	// Translations always execute at least a block
 	pc = registers().pc;
 	goto check_jump;

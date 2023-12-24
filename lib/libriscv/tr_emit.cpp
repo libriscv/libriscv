@@ -477,20 +477,24 @@ void Emitter<W>::emit()
 			if (instr.Jtype.rd != 0) {
 				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
+			// XXX: mask off unaligned jumps - is this OK?
+			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(0x3);
 			// forward label: jump inside code block
-			const auto dest_pc = this->pc() + instr.Jtype.jump_offset();
 			const auto offset = instr.Jtype.jump_offset() / 4;
 			int fl = i+offset;
 			if (fl > 0 && fl < tinfo.len) {
 				// forward labels require creating future labels
-				if (fl > i)
+				if (fl > i) {
 					labels.insert(dest_pc);
-				// this is a jump back to the start of the function
-				add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
+					add_code("goto " + FUNCLABEL(dest_pc) + ";");
+				} else {
+					// jump backwards: use counters
+					add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
+				}
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
 			// Because of forward jumps we can't end the function here
-			add_code("jump(cpu, " + PCRELS(instr.Jtype.jump_offset()) + ");");
+			add_code("cpu->pc = " + std::to_string(dest_pc) + ";");
 			exit_function();
 			// Some blocks end with unconditional jumps
 			if (no_labels_after_this()) {
@@ -843,7 +847,7 @@ void Emitter<W>::emit()
 						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
 					this->restore_syscall_registers();
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
-					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + ", counter, max_counter))) {\n"
+					code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
 						"  cpu->pc += 4; return (ReturnValues){counter, *max_insn};}\n"; // Correct for +4 expectation outside of bintr
 					code += "max_counter = *max_insn;\n"; // Restore max counter
 					// Restore A0
