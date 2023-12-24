@@ -320,8 +320,12 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		// this is a jump back to the start of the function
 		code += "if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
 	} else if (binfo.jump_pc != 0) {
-		// forward jump to label (from absolute index)
-		code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
+		if (binfo.jump_pc > this->pc())
+			// forward jump
+			code += "goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
+		else
+			// backward jump
+			code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
 	}
 	// else, exit binary translation
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled

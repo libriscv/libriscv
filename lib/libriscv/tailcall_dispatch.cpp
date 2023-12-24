@@ -264,12 +264,12 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		VIEW_INSTR();
 		// Make the current PC visible
-		cpu.registers().pc = pc;
+		REGISTERS().pc = pc;
 		auto new_counters = 
-			exec->mapping_at(instr.whole)(*this, counter.value()-1, counter.max());
+			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max());
 		counter.set_counters(new_counters.counter, new_counters.max_counter);
 		// Translations are always full-length instructions (?)
-		pc = cpu.registers().pc;
+		pc = REGISTERS().pc;
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
 #else

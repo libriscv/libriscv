@@ -159,8 +159,8 @@ static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, a
 		api.syscalls[SPECSAFE(sysno)](cpu);
 	else
 		api.unknown_syscall(cpu, sysno);
-	// if the system call did not modify PC, return to bintr
-	return !(cpu->pc == old_pc && counter < *max_insn);
+	// Resume if the system call did not modify PC, or hit a limit
+	return (cpu->pc != old_pc || counter >= *max_insn);
 }
 
 static inline void jump(CPU* cpu, addr_t addr) {
