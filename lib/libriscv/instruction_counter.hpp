@@ -47,8 +47,9 @@ namespace riscv
 		void stop() noexcept {
 			m_max = 0; // This stops the machine
 		}
-		void set_counter(uint64_t value) {
+		void set_counters(uint64_t value, uint64_t max) {
 			m_counter = value;
+			m_max     = max;
 		}
 		void increment_counter(uint64_t cnt) {
 			m_counter += cnt;

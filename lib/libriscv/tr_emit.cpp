@@ -13,7 +13,7 @@
 #define UNKNOWN_INSTRUCTION() { code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
 
 namespace riscv {
-static const std::string LOOP_EXPRESSION = "c < local_max_insn";
+static const std::string LOOP_EXPRESSION = "counter < max_counter";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 
 struct BranchInfo {
@@ -101,7 +101,7 @@ struct Emitter
 		if constexpr (CACHED_REGISTERS) {
 			this->restore_all_registers();
 		}
-		add_code("*cur_insn = c;", (add_bracket) ? "return; }" : "return;");
+		add_code("return (ReturnValues){counter, max_counter};", (add_bracket) ? " }" : "");
 	}
 
 	std::string from_reg(int reg) {
@@ -255,7 +255,7 @@ struct Emitter
 	void increment_counter_so_far() {
 		auto icount = this->reset_and_get_icounter();
 		if (icount > 0)
-			code.append("c += " + std::to_string(icount) + ";\n");
+			code.append("counter += " + std::to_string(icount) + ";\n");
 	}
 
 	bool block_exists(address_t pc) const noexcept {
@@ -263,14 +263,6 @@ struct Emitter
 			if (blk.basepc == pc) return true;
 		}
 		return false;
-	}
-	void jump_to_function(address_t dest_pc) {
-		// TODO: exit_function()?
-		this->add_code(
-			"{ *cur_insn = c;",
-			" void f" + std::to_string(dest_pc) + "(CPU*);",
-			" f" + std::to_string(dest_pc) + "(cpu);",
-			" return; }");
 	}
 
 	size_t index() const noexcept { return this->m_idx; }
@@ -317,8 +309,9 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
 
 	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & 0x3)) {
+		// TODO: Make exception a helper function, as return values are implementation detail
 		code +=
-			"api.exception(cpu, MISALIGNED_INSTRUCTION); return;\n"
+			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
 			"}\n";
 		return;
 	}
@@ -329,10 +322,6 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	} else if (binfo.jump_pc != 0) {
 		// forward jump to label (from absolute index)
 		code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
-	} else if (binfo.call_pc != 0) {
-		// direct function call
-		code += "if (" + LOOP_EXPRESSION + ")\n";
-		this->jump_to_function(binfo.call_pc);
 	}
 	// else, exit binary translation
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
@@ -848,31 +837,33 @@ void Emitter<W>::emit()
 		case RV32I_SYSTEM:
 			if (instr.Itype.funct3 == 0x0) {
 				this->increment_counter_so_far();
-				code += "cpu->pc = " + PCRELS(0) + ";\n";
 				// System calls and EBREAK
 				if (instr.Itype.imm < 2) {
 					const auto syscall_reg =
 						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
 					this->restore_syscall_registers();
-					code += "*cur_insn = c;\n";
-					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + "))) {\n"
-						"  cpu->pc += 4; return;}\n"; // Correct for +4 expectation outside of bintr
-					code += "local_max_insn = *max_insn;\n";
+					code += "cpu->pc = " + PCRELS(0) + ";\n";
+					code += "if (UNLIKELY(do_syscall(cpu, " + syscall_reg + ", counter, max_counter))) {\n"
+						"  cpu->pc += 4; return (ReturnValues){counter, *max_insn};}\n"; // Correct for +4 expectation outside of bintr
+					code += "max_counter = *max_insn;\n"; // Restore max counter
 					// Restore A0
 					this->invalidate_register(REG_ARG0);
 					this->potentially_reload_register(REG_ARG0);
 					break;
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
-					code += "*max_insn = 0;\n";
+					code += "max_counter = 0;\n"; // Immediate stop PC + 4
+					code += "cpu->pc = " + PCRELS(4) + ";\n";
 					exit_function(true);
 					return;
 				} else {
 					// Zero funct3, unknown imm: Don't exit
+					code += "cpu->pc = " + PCRELS(0) + ";\n";
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 					break;
 				}
 			} else {
 				// Non-zero funct3: Don't exit (?)
+				code += "*cur_insn = counter;\n"; // Reveal instruction counter
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 			} break;
 		case RV64I_OP_IMM32: {
@@ -1294,8 +1285,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	e.emit();
 
 	// Function header
-	code += "extern void " + e.get_func() + "(CPU* cpu) {\n"
-		"uint64_t c = *cur_insn, local_max_insn = *max_insn;\n";
+	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter) {\n";
 
 	// Extra function entries
 	if (e.get_mappings().size() > 1)

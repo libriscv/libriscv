@@ -265,14 +265,11 @@ namespace riscv
 		VIEW_INSTR();
 		// Make the current PC visible
 		cpu.registers().pc = pc;
-		// Make the instruction counter visible
-		counter.apply_counter_minus_1();
-		// Invoke translated code
-		exec->mapping_at(instr.whole)(cpu, instr);
-		// Restore counter
-		counter.retrieve();
+		auto new_counters = 
+			exec->mapping_at(instr.whole)(*this, counter.value()-1, counter.max());
+		counter.set_counters(new_counters.counter, new_counters.max_counter);
 		// Translations are always full-length instructions (?)
-		pc = cpu.registers().pc + 4;
+		pc = cpu.registers().pc;
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
 #else
