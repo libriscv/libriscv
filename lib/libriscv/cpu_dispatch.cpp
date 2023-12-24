@@ -354,11 +354,11 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	VIEW_INSTR();
 	// Make the current PC visible
 	this->registers().pc = pc;
-	// Make the instruction counter visible
+	// Make the instruction counters visible
 	counter.apply_counter_minus_1();
 	// Invoke translated code
 	exec->mapping_at(instr.whole)(*this, instr);
-	// Restore counter
+	// Restore all counters
 	counter.retrieve();
 	// Translations always execute at least a block
 	pc = registers().pc;

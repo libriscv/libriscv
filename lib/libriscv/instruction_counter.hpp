@@ -29,6 +29,7 @@ namespace riscv
 		// TODO: Account for this inside the binary translator instead. Very minor impact.
 		void apply_counter_minus_1() {
 			machine.set_instruction_counter(m_counter-1);
+			machine.set_max_instructions(m_max);
 		}
 		void retrieve() {
 			m_counter = machine.instruction_counter();
