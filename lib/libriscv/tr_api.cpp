@@ -150,15 +150,17 @@ static const addr_t ARENA_WRITE_BOUNDARY = RISCV_ARENA_END - RISCV_ARENA_ROEND;
 #define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
 #define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
 
-static inline int do_syscall(CPU* cpu, addr_t sysno)
+static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {
+	*cur_insn = counter; // Reveal instruction counters
+	*max_insn = max_counter;
 	addr_t old_pc = cpu->pc;
 	if (LIKELY(sysno < RISCV_MAX_SYSCALLS))
 		api.syscalls[SPECSAFE(sysno)](cpu);
 	else
 		api.unknown_syscall(cpu, sysno);
-	// if the system call did not modify PC, return to bintr
-	return !(cpu->pc == old_pc && *cur_insn < *max_insn);
+	// Resume if the system call did not modify PC, or hit a limit
+	return (cpu->pc != old_pc || counter >= *max_insn);
 }
 
 static inline void jump(CPU* cpu, addr_t addr) {
@@ -202,5 +204,10 @@ extern void init(struct CallbackTable* table,
 	cur_insn = cur_icount;
 	max_insn = max_icount;
 };
+
+typedef struct {
+	uint64_t counter;
+	uint64_t max_counter;
+} ReturnValues;
 )123";
 }

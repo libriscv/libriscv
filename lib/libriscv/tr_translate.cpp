@@ -258,7 +258,7 @@ if constexpr (SCAN_FOR_GP) {
 	code += R"V0G0N(
 struct Mapping {
 	addr_t addr;
-	void (*handler)();
+	ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
 };
 const struct Mapping mappings[] = {
 )V0G0N";
@@ -413,7 +413,7 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	uint32_t* no_mappings = (uint32_t *)dylib_lookup(dylib, "no_mappings");
 	struct Mapping {
 		address_t addr;
-		instruction_handler<W> handler;
+		bintr_block_func<W> handler;
 	};
 	Mapping* mappings = (Mapping *)dylib_lookup(dylib, "mappings");
 

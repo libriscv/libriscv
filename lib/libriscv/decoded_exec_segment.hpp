@@ -59,8 +59,9 @@ namespace riscv
 		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
 		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
 		void reserve_mappings(size_t mappings) { m_translator_mappings.reserve(mappings); }
-		void add_mapping(instruction_handler<W> handler) { m_translator_mappings.push_back(handler); }
-		instruction_handler<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
+		void add_mapping(bintr_block_func<W> handler) { m_translator_mappings.push_back(handler); }
+		bintr_block_func<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
+		bintr_block_func<W> unchecked_mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
 #else
 		bool is_binary_translated() const noexcept { return false; }
 #endif
@@ -84,7 +85,7 @@ namespace riscv
 		std::unique_ptr<DecoderCache<W>[]> m_decoder_cache = nullptr;
 
 #ifdef RISCV_BINARY_TRANSLATION
-		std::vector<instruction_handler<W>> m_translator_mappings;
+		std::vector<bintr_block_func<W>> m_translator_mappings;
 		mutable void* m_bintr_dl = nullptr;
 #endif
 	};
