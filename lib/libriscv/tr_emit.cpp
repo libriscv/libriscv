@@ -1293,12 +1293,12 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	e.emit();
 
 	// Function header
-	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter) {\n";
+	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc) {\n";
 
 	// Extra function entries
 	if (e.get_mappings().size() > 1)
 	{
-		code += "switch (cpu->pc) {\n";
+		code += "switch (pc) {\n";
 		code += "case " + std::to_string(tinfo.basepc) + ": goto " + e.get_func() + "_start;\n";
 		for (size_t idx = 1; idx < e.get_mappings().size(); idx++) {
 			auto& entry = e.get_mappings().at(idx);

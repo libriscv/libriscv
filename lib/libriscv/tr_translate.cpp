@@ -258,7 +258,7 @@ if constexpr (SCAN_FOR_GP) {
 	code += R"V0G0N(
 struct Mapping {
 	addr_t addr;
-	ReturnValues (*handler)(CPU*, uint64_t, uint64_t);
+	ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
 };
 const struct Mapping mappings[] = {
 )V0G0N";

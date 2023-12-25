@@ -352,11 +352,9 @@ INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
 INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 #ifdef RISCV_BINARY_TRANSLATION
 	VIEW_INSTR();
-	// Make the current PC visible
-	this->registers().pc = pc;
 	// Invoke translated code
 	auto bintr_results = 
-		exec->mapping_at(instr.whole)(*this, counter.value()-1, counter.max());
+		exec->unchecked_mapping_at(instr.whole)(*this, counter.value()-1, counter.max(), pc);
 	counter.set_counters(bintr_results.counter, bintr_results.max_counter);
 	// Translations always execute at least a block
 	pc = registers().pc;

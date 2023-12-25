@@ -102,6 +102,6 @@ namespace riscv
 		uint64_t max_counter;
 	};
 	template <int W>
-	using bintr_block_func = bintr_block_returns (*)(CPU<W>&, uint64_t, uint64_t);
+	using bintr_block_func = bintr_block_returns (*)(CPU<W>&, uint64_t, uint64_t, address_type<W>);
 #endif
 }
