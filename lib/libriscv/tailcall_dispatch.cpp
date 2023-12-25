@@ -205,29 +205,6 @@ namespace riscv
 #  include "bytecode_impl.cpp"
 #undef BYTECODES_OP
 
-	INSTRUCTION(RV32I_BC_JALR, rv32i_jalr)
-	{
-		VIEW_INSTR_AS(fi, FasterItype);
-		// NOTE: if rs1 == rd, avoid clobber by storing address first
-		const auto address = cpu.reg(fi.rs2) + fi.signed_imm();
-		// jump to register + immediate
-		if constexpr (VERBOSE_JUMPS) {
-			printf("JALR PC 0x%lX => 0x%lX\n", pc, address);
-		}
-		// Alignment checks
-		static constexpr auto alignment = compressed_enabled ? 0x1 : 0x3;
-		if (UNLIKELY(address & alignment)) {
-			cpu.trigger_exception(MISALIGNED_INSTRUCTION, address);
-		}
-		// Link *next* instruction (rd = PC + 4)
-		if (fi.rs1 != 0) {
-			cpu.reg(fi.rs1) = pc + 4;
-		}
-		pc = address;
-		OVERFLOW_CHECK();
-		UNCHECKED_JUMP();
-	}
-
 	INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 	{
 		(void) d;

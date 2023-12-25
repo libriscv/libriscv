@@ -618,6 +618,24 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 
 #ifdef BYTECODES_RARELY_USED
 
+INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	// jump to register + immediate
+	// NOTE: if rs1 == rd, avoid clobber by storing address first
+	const auto address = REG(fi.rs2) + fi.signed_imm();
+	// Link *next* instruction (rd = PC + 4)
+	if (fi.rs1 != 0) {
+		REG(fi.rs1) = pc + 4;
+	}
+	if constexpr (VERBOSE_JUMPS) {
+		fprintf(stderr, "JALR x%d + %d => rd=%d   PC 0x%lX => 0x%lX\n",
+			fi.rs2, fi.signed_imm(), fi.rs1, long(pc), long(address));
+	}
+	static constexpr addr_t ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
+	pc = address & ~ALIGN_MASK;
+	OVERFLOW_CHECKED_JUMP();
+}
+
 INSTRUCTION(RV64I_BC_SRAIW, rv64i_sraiw) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);

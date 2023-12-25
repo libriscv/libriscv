@@ -73,7 +73,7 @@ namespace riscv
 	NEXT_BLOCK(fi.signed_imm(), false);
 
 #define OVERFLOW_CHECKED_JUMP() \
-	goto check_unaligned_jump
+	goto check_jump
 
 
 template <int W> DISPATCH_ATTR
@@ -272,22 +272,6 @@ INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
 	reg(REG_RA) = pc + 4;
 	NEXT_BLOCK((int32_t)instr.whole, true);
 }
-INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
-	VIEW_INSTR_AS(fi, FasterItype);
-	// jump to register + immediate
-	// NOTE: if rs1 == rd, avoid clobber by storing address first
-	const auto address = reg(fi.rs2) + fi.signed_imm();
-	// Link *next* instruction (rd = PC + 4)
-	if (fi.rs1 != 0) {
-		reg(fi.rs1) = pc + 4;
-	}
-	if constexpr (VERBOSE_JUMPS) {
-		fprintf(stderr, "JALR x%d + %d => rd=%d   PC 0x%lX => 0x%lX\n",
-			fi.rs2, fi.signed_imm(), fi.rs1, long(pc), long(address));
-	}
-	pc = address;
-	goto check_unaligned_jump;
-}
 
 #define BYTECODES_OP
 #  include "bytecode_impl.cpp"
@@ -396,10 +380,6 @@ INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 
 #endif
 
-check_unaligned_jump:
-	static constexpr unsigned ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
-	if (UNLIKELY(pc & ALIGN_MASK))
-		goto misaligned_jump;
 check_jump:
 	if (UNLIKELY(counter.overflowed()))
 		goto counter_overflow;
@@ -425,9 +405,6 @@ new_execute_segment:
 
 execute_invalid:
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
-misaligned_jump:
-	registers().pc = pc; // OK to set illegal PC?
-	trigger_exception(MISALIGNED_INSTRUCTION, this->pc());
 
 counter_overflow:
 	registers().pc = pc;
