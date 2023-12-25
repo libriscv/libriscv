@@ -1,4 +1,17 @@
 
+// Use a trick to access the Machine directly on g++/clang, Linux-only for now
+#if (defined(__GNUG__) || defined(__clang__)) && defined(__linux__)
+template <int W>
+Machine<W>& CPU<W>::machine() noexcept { return *reinterpret_cast<Machine<W>*> (this); }
+template <int W>
+const Machine<W>& CPU<W>::machine() const noexcept { return *reinterpret_cast<const Machine<W>*> (this); }
+#else
+template <int W>
+Machine<W>& CPU<W>::machine() noexcept { return this->m_machine; }
+template <int W>
+const Machine<W>& CPU<W>::machine() const noexcept { return this->m_machine; }
+#endif
+
 template <int W>
 inline CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id)
 	: m_machine { machine }, m_exec(&empty_execute_segment()), m_cpuid { cpu_id }

@@ -64,8 +64,8 @@ namespace riscv
 		const auto& cireg(uint16_t idx) const { return registers().get(idx + 0x8); }
 		auto& ciflp(uint16_t idx) { return registers().getfl(idx + 0x8); }
 
-		auto& machine() noexcept { return this->m_machine; }
-		const auto& machine() const noexcept { return this->m_machine; }
+		Machine<W>& machine() noexcept;
+		const Machine<W>& machine() const noexcept;
 
 #ifdef RISCV_EXT_ATOMICS
 		auto& atomics() noexcept { return this->m_atomics; }

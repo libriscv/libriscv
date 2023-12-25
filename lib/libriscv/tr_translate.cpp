@@ -366,7 +366,7 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 			(void)cpu; (void)addr; (void)vd;
 #endif
 		},
-		.syscalls = m_machine.syscall_handlers.data(),
+		.syscalls = machine().syscall_handlers.data(),
 		.unknown_syscall = [] (CPU<W>& cpu, address_type<W> sysno) {
 			cpu.machine().on_unhandled_syscall(cpu.machine(), sysno);
 		},
