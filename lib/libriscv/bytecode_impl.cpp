@@ -163,7 +163,7 @@ INSTRUCTION(RV32C_BC_JR, rv32c_jr) {
 		fprintf(stderr, "C.JR from 0x%lX to 0x%lX\n",
 			long(pc), long(REG(instr.whole)));
 	}
-	pc = REG(instr.whole);
+	pc = REG(instr.whole) & ~addr_t(1);
 	OVERFLOW_CHECKED_JUMP();
 }
 INSTRUCTION(RV32C_BC_JALR, rv32c_jalr) {
@@ -173,7 +173,7 @@ INSTRUCTION(RV32C_BC_JALR, rv32c_jalr) {
 			long(pc), long(REG(instr.whole)));
 	}
 	REG(REG_RA) = pc + 2;
-	pc = REG(instr.whole);
+	pc = REG(instr.whole) & ~addr_t(1);
 	OVERFLOW_CHECKED_JUMP();
 }
 INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jumpfunc) {
