@@ -8,6 +8,8 @@
 #cmakedefine RISCV_EXT_A
 #cmakedefine RISCV_EXT_C
 #cmakedefine RISCV_EXT_V
+#cmakedefine RISCV_32I
+#cmakedefine RISCV_64I
 #cmakedefine RISCV_128I
 #cmakedefine RISCV_FCSR
 #cmakedefine RISCV_EXPERIMENTAL

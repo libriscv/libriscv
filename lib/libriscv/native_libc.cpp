@@ -254,6 +254,6 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 	}}});
 }
 
-template struct Machine<4>;
-template struct Machine<8>;
+INSTANTIATE_32_IF_ENABLED(Machine);
+INSTANTIATE_64_IF_ENABLED(Machine);
 } // riscv

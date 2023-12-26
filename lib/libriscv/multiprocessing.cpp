@@ -144,10 +144,10 @@ uint32_t Machine<W>::multiprocess_wait() { return -1; }
 
 #endif // RISCV_MULTIPROCESS
 
-template struct Machine<4>;
-template struct Machine<8>;
-template struct Multiprocessing<4>;
-template struct Multiprocessing<8>;
+INSTANTIATE_32_IF_ENABLED(Machine);
+INSTANTIATE_32_IF_ENABLED(Multiprocessing);
+INSTANTIATE_64_IF_ENABLED(Machine);
+INSTANTIATE_64_IF_ENABLED(Multiprocessing);
 INSTANTIATE_128_IF_ENABLED(Machine);
 INSTANTIATE_128_IF_ENABLED(Multiprocessing);
 } // riscv

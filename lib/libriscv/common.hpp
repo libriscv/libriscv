@@ -201,7 +201,19 @@ namespace riscv
 #endif
 #endif
 
-#ifdef RISCV_128BIT_ISA
+#ifdef RISCV_32I
+#define INSTANTIATE_32_IF_ENABLED(x) template struct x<4>
+#else
+#define INSTANTIATE_32_IF_ENABLED(x) /* */
+#endif
+
+#ifdef RISCV_64I
+#define INSTANTIATE_64_IF_ENABLED(x) template struct x<8>
+#else
+#define INSTANTIATE_64_IF_ENABLED(x) /* */
+#endif
+
+#ifdef RISCV_128I
 #define INSTANTIATE_128_IF_ENABLED(x) template struct x<16>
 #else
 #define INSTANTIATE_128_IF_ENABLED(x) /* */

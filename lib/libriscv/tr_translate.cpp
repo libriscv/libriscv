@@ -451,13 +451,16 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	}
 }
 
+#ifdef RISCV_32I
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
-	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
-	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template void CPU<4>::activate_dylib(DecodedExecuteSegment<4>&, void*) const;
+#endif
+#ifdef RISCV_64I
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
+	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template void CPU<8>::activate_dylib(DecodedExecuteSegment<8>&, void*) const;
-
+#endif
 	static_assert(!compressed_enabled,
 		"C-extension incompatible with binary translation");
 

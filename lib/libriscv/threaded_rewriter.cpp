@@ -36,6 +36,7 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+#ifdef RISCV_64I
 			case RV64I_BC_SRLIW:
 			case RV64I_BC_SRAIW: {
 				FasterItype rewritten;
@@ -46,6 +47,7 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+#endif
 			case RV32I_BC_SLLI:
 			case RV32I_BC_SRLI:
 			case RV32I_BC_SRAI:
@@ -59,7 +61,9 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+#ifdef RISCV_64I
 			case RV64I_BC_ADDIW:
+#endif
 			case RV32I_BC_SEXT_B:
 			case RV32I_BC_SEXT_H:
 			case RV32I_BC_ADDI:
@@ -130,9 +134,11 @@ namespace riscv
 			case RV32I_BC_OP_DIVU:
 			case RV32I_BC_OP_REM:
 			case RV32I_BC_OP_REMU:
+#ifdef RISCV_64I
 			case RV64I_BC_OP_ADDW:
 			case RV64I_BC_OP_SH1ADD_UW:
 			case RV64I_BC_OP_SH2ADD_UW:
+#endif
 			case RV32I_BC_OP_ZEXT_H:
 			case RV32I_BC_OP_SH1ADD:
 			case RV32I_BC_OP_SH2ADD:

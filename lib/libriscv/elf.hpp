@@ -139,10 +139,8 @@ namespace riscv
 			return hdr.e_ident[Header::EI_CLASS] == ELFCLASS32;
 		else if constexpr (W == 8)
 			return hdr.e_ident[Header::EI_CLASS] == ELFCLASS64;
-#ifdef RISCV_128BIT_ISA
 		else if constexpr (W == 16)
 			return hdr.e_ident[Header::EI_CLASS] == ELFCLASS128;
-#endif
 		return false;
 	}
 }

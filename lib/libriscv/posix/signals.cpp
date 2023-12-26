@@ -34,7 +34,7 @@ void Signals<W>::enter(Machine<W>& machine, int sig)
 	machine.cpu.jump(sigact.handler - 4);
 }
 
-	template struct Signals<4>;
-	template struct Signals<8>;
+	INSTANTIATE_32_IF_ENABLED(Signals);
+	INSTANTIATE_64_IF_ENABLED(Signals);
 	INSTANTIATE_128_IF_ENABLED(Signals);
 } // riscv

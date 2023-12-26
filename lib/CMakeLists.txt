@@ -9,8 +9,10 @@ option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
 option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
-# Enable 128-bit architecture emulation
-option(RISCV_128I   "Enable RV128G" OFF)
+# Enable 32-, 64- and 128-bit architecture emulation
+option(RISCV_32I    "Enable 32-bit RISC-V" ON)
+option(RISCV_64I    "Enable 64-bit RISC-V" ON)
+option(RISCV_128I   "Enable 128-bit RISC-V" OFF)
 # Enable Floating-point Control and Status Register emulation
 option(RISCV_FCSR   "Enable FCSR emulation" OFF)
 # EXPERIMENTAL enables some high-performance interpreter
@@ -67,11 +69,10 @@ set (SOURCES
 		libriscv/posix/signals.cpp
 		libriscv/posix/threads.cpp
 		libriscv/posix/socket_calls.cpp
-		libriscv/rv32i.cpp
-		libriscv/rv64i.cpp
 		libriscv/serialize.cpp
 		libriscv/util/crc32c.cpp
 	)
+
 if (MINGW_TOOLCHAIN OR MINGW OR WIN32)
 	list(APPEND SOURCES
 		libriscv/win32/system_calls.cpp
@@ -127,6 +128,16 @@ if (NOT WIN32 OR MINGW_TOOLCHAIN)
 	target_compile_options(riscv PRIVATE -Wall -Wextra)
 endif()
 
+if (RISCV_32I)
+	target_sources(riscv PUBLIC
+		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv32i.cpp
+	)
+endif()
+if (RISCV_64I)
+	target_sources(riscv PUBLIC
+		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv64i.cpp
+	)
+endif()
 if (RISCV_128I)
 	target_sources(riscv PUBLIC
 		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv128i.cpp

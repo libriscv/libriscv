@@ -40,7 +40,7 @@ namespace riscv
 		return relaxed;
 	}
 
-	template struct Memory<4>;
-	template struct Memory<8>;
+	INSTANTIATE_32_IF_ENABLED(Memory);
+	INSTANTIATE_64_IF_ENABLED(Memory);
 	INSTANTIATE_128_IF_ENABLED(Memory);
 } // riscv

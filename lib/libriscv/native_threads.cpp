@@ -123,6 +123,10 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	});
 }
 
+#ifdef RISCV_32I
 template void Machine<4>::setup_native_threads(const size_t);
+#endif
+#ifdef RISCV_64I
 template void Machine<8>::setup_native_threads(const size_t);
+#endif
 } // riscv

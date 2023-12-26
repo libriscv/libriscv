@@ -36,8 +36,8 @@ namespace riscv
 	}
 
 #ifndef __GNUG__ /* Workaround for GCC bug */
-	template struct Machine<4>;
-	template struct Machine<8>;
+	INSTANTIATE_32_IF_ENABLED(Machine);
+	INSTANTIATE_64_IF_ENABLED(Machine);
 	INSTANTIATE_128_IF_ENABLED(Machine);
 #endif
 }

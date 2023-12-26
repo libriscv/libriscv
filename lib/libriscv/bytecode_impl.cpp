@@ -34,6 +34,7 @@ INSTRUCTION(RV32I_BC_MV, rv32i_mv) {
 	REG(fi.get_rd()) = REG(fi.get_rs1());
 	NEXT_INSTR();
 }
+#ifdef RISCV_64I
 INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
@@ -45,6 +46,7 @@ INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw) {
 	else UNUSED_FUNCTION();
 #endif
 }
+#endif // RISCV_64I
 INSTRUCTION(RV32I_BC_SLLI, rv32i_slli) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	// SLLI: Logical left-shift 5/6/7-bit immediate
@@ -109,6 +111,7 @@ INSTRUCTION(RV32I_BC_BEXTI, rv32i_bexti) {
 	NEXT_INSTR();
 }
 
+#ifdef RISCV_64I
 INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
@@ -120,6 +123,7 @@ INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 	else UNUSED_FUNCTION();
 #endif
 }
+#endif // RISCV_64I
 
 #endif // OP_IMM
 
@@ -492,6 +496,7 @@ INSTRUCTION(RV32I_BC_OP_ZEXT_H, rv32i_op_zext_h) {
 	NEXT_INSTR();
 }
 
+#ifdef RISCV_64I
 INSTRUCTION(RV64I_BC_OP_ADDW, rv64i_op_addw) {
 	if constexpr (W >= 8) {
 		OP_INSTR();
@@ -502,6 +507,8 @@ INSTRUCTION(RV64I_BC_OP_ADDW, rv64i_op_addw) {
 	else UNUSED_FUNCTION();
 #endif
 }
+#endif // RISCV_64I
+
 INSTRUCTION(RV32I_BC_OP_ADD_UW, rv32i_op_add_uw) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR();
@@ -636,6 +643,7 @@ INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 	OVERFLOW_CHECKED_JUMP();
 }
 
+#ifdef RISCV_64I
 INSTRUCTION(RV64I_BC_SRAIW, rv64i_sraiw) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
@@ -668,6 +676,7 @@ INSTRUCTION(RV64I_BC_OP_SH2ADD_UW, rv64i_op_sh2add_uw) {
 	else UNUSED_FUNCTION();
 #endif
 }
+#endif // RISCV_64I
 
 INSTRUCTION(RV32I_BC_OP_DIV, rv32i_op_div) {
 	OP_INSTR();
