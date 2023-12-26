@@ -353,6 +353,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			default:
 				return RV32I_BC_FUNCTION;
 			}
+#ifdef RISCV_64I
 		case RV64I_OP32:
 			switch (instr.Rtype.jumptable_friendly_op())
 			{
@@ -379,6 +380,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_FUNCTION;
 			}
 			return RV32I_BC_FUNCTION;
+#endif
 		case RV32I_SYSTEM:
 			if (LIKELY(instr.Itype.funct3 == 0))
 			{
@@ -478,7 +480,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 	}
 } // computed_index_for()
 
-	template struct CPU<4>;
-	template struct CPU<8>;
+	INSTANTIATE_32_IF_ENABLED(CPU);
+	INSTANTIATE_64_IF_ENABLED(CPU);
 	INSTANTIATE_128_IF_ENABLED(CPU);
 } // riscv

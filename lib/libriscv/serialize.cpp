@@ -228,13 +228,15 @@ namespace riscv
 		this->invalidate_reset_cache();
 	}
 
-	template struct Machine<4>;
-	template struct Machine<8>;
-	template struct CPU<4>;
-	template struct CPU<8>;
-	template struct Memory<4>;
-	template struct Memory<8>;
+	INSTANTIATE_32_IF_ENABLED(Machine);
+	INSTANTIATE_64_IF_ENABLED(Machine);
 	INSTANTIATE_128_IF_ENABLED(Machine);
+
+	INSTANTIATE_32_IF_ENABLED(CPU);
+	INSTANTIATE_64_IF_ENABLED(CPU);
 	INSTANTIATE_128_IF_ENABLED(CPU);
+
+	INSTANTIATE_32_IF_ENABLED(Memory);
+	INSTANTIATE_64_IF_ENABLED(Memory);
 	INSTANTIATE_128_IF_ENABLED(Memory);
 }

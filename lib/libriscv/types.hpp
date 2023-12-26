@@ -10,7 +10,7 @@ namespace riscv
 {
 	template <int W> struct CPU;
 
-#ifndef RISCV_128BIT_ISA
+#ifndef RISCV_128I
 	template <int N>
 	using address_type = typename std::conditional<(N == 4), uint32_t, uint64_t>::type;
 

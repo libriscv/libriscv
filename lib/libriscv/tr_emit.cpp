@@ -1322,6 +1322,10 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	return std::move(e.get_mappings());
 }
 
+#ifdef RISCV_32I
 template std::vector<TransMapping<4>> CPU<4>::emit(std::string&, const TransInfo<4>&) const;
+#endif
+#ifdef RISCV_64I
 template std::vector<TransMapping<8>> CPU<8>::emit(std::string&, const TransInfo<8>&) const;
+#endif
 } // riscv

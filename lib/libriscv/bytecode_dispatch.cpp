@@ -10,7 +10,7 @@
 
 namespace riscv
 {
-	template struct CPU<4>;
-	template struct CPU<8>;
+	INSTANTIATE_32_IF_ENABLED(CPU);
+	INSTANTIATE_64_IF_ENABLED(CPU);
 	INSTANTIATE_128_IF_ENABLED(CPU);
 } // riscv

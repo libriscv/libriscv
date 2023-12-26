@@ -335,12 +335,14 @@ namespace riscv
 		[RV32I_BC_BSETI]  = rv32i_bseti,
 		[RV32I_BC_BEXTI]  = rv32i_bexti,
 
+#ifdef RISCV_64I
 		[RV64I_BC_ADDIW]  = rv64i_addiw,
 		[RV64I_BC_SRLIW]  = rv64i_srliw,
 		[RV64I_BC_SRAIW]  = rv64i_sraiw,
 		[RV64I_BC_OP_ADDW] = rv64i_op_addw,
 		[RV64I_BC_OP_SH1ADD_UW] = rv64i_op_sh1add_uw,
 		[RV64I_BC_OP_SH2ADD_UW] = rv64i_op_sh2add_uw,
+#endif // RISCV_64I
 
 #ifdef RISCV_EXT_COMPRESSED
 		[RV32C_BC_ADDI]     = rv32c_addi,
@@ -414,7 +416,7 @@ namespace riscv
 
 	} // CPU::simulate_tco()
 
-	template struct CPU<4>;
-	template struct CPU<8>;
+	INSTANTIATE_32_IF_ENABLED(CPU);
+	INSTANTIATE_64_IF_ENABLED(CPU);
 	INSTANTIATE_128_IF_ENABLED(CPU);
 } // riscv
