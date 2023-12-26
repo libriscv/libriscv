@@ -249,8 +249,12 @@ int Machine<W>::gettid() const
 	return 0;
 }
 
+#ifdef RISCV_32I
 template void Machine<4>::setup_posix_threads();
-template void Machine<8>::setup_posix_threads();
 template int Machine<4>::gettid() const;
+#endif
+#ifdef RISCV_64I
+template void Machine<8>::setup_posix_threads();
 template int Machine<8>::gettid() const;
+#endif
 } // riscv

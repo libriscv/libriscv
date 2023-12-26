@@ -237,8 +237,8 @@ namespace riscv
 		UNCHECKED_JUMP();
 	}
 
-	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 #ifdef RISCV_BINARY_TRANSLATION
+	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 		VIEW_INSTR();
 		auto new_counters = 
 			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max());
@@ -247,11 +247,8 @@ namespace riscv
 		pc = REGISTERS().pc;
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
-#else
-		(void)d;
-		cpu.trigger_exception(FEATURE_DISABLED, pc);
-#endif
 	}
+#endif
 
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
 	{
@@ -382,7 +379,9 @@ namespace riscv
 #endif
 		[RV32I_BC_FUNCTION] = execute_decoded_function,
 		[RV32I_BC_FUNCBLOCK] = execute_function_block,
+#ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = translated_function,
+#endif
 		[RV32I_BC_SYSTEM]  = rv32i_system,
 		};
 	}

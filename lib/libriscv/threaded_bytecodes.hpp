@@ -1,4 +1,5 @@
 #pragma once
+#include "libriscv_settings.h"
 
 namespace riscv
 {
@@ -122,7 +123,9 @@ namespace riscv
 #endif
 		RV32I_BC_FUNCTION,
 		RV32I_BC_FUNCBLOCK,
+#ifdef RISCV_BINARY_TRANSLATION
 		RV32I_BC_TRANSLATOR,
+#endif
 		RV32I_BC_SYSTEM,
 		BYTECODES_MAX
 	};

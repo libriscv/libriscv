@@ -201,7 +201,9 @@ bool CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
 #endif
 		[RV32I_BC_FUNCTION] = &&execute_decoded_function,
 		[RV32I_BC_FUNCBLOCK] = &&execute_function_block,
+#ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
+#endif
 		[RV32I_BC_SYSTEM]  = &&rv32i_system,
 	};
 #endif
@@ -335,8 +337,8 @@ INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
 /** UNLIKELY INSTRUCTIONS **/
 /** UNLIKELY INSTRUCTIONS **/
 
-INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 #ifdef RISCV_BINARY_TRANSLATION
+INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	VIEW_INSTR();
 	// Invoke translated code
 	auto bintr_results = 
@@ -345,10 +347,8 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	// Translations always execute at least a block
 	pc = registers().pc;
 	goto check_jump;
-#else
-	trigger_exception(FEATURE_DISABLED, pc);
-#endif
 }
+#endif // RISCV_BINARY_TRANSLATION
 
 INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	VIEW_INSTR();

@@ -1020,11 +1020,14 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 #endif
 }
 
+#ifdef RISCV_32I
 template void Machine<4>::setup_newlib_syscalls();
 template void Machine<4>::setup_linux_syscalls(bool, bool);
-
+#endif
+#ifdef RISCV_64I
 template void Machine<8>::setup_newlib_syscalls();
 template void Machine<8>::setup_linux_syscalls(bool, bool);
+#endif
 
 FileDescriptors::~FileDescriptors() {
 	// Close all the real FDs
