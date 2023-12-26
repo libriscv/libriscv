@@ -84,8 +84,12 @@ namespace riscv
 		install_syscall_handler(214, syscall_brk<W>);
 	}
 
+#ifdef RISCV_32I
 	template void Machine<4>::setup_minimal_syscalls();
+#endif
+#ifdef RISCV_64I
 	template void Machine<8>::setup_minimal_syscalls();
+#endif
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 	FileDescriptors::~FileDescriptors()
