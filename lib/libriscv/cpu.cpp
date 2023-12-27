@@ -69,7 +69,7 @@ namespace riscv
 	} // CPU::init_execute_area
 
 	template<int W> RISCV_NOINLINE
-	DecodedExecuteSegment<W>& CPU<W>::next_execute_segment()
+	typename CPU<W>::NextExecuteReturn CPU<W>::next_execute_segment(address_t pc)
 	{
 		static const int MAX_RESTARTS = 4;
 		int restarts = 0;
@@ -77,17 +77,19 @@ restart_next_execute_segment:
 
 		// Immediately look at the page in order to
 		// verify execute and see if it has a trap handler
-		auto base_pageno = this->pc() / Page::size();
+		auto base_pageno = pc / Page::size();
 		auto end_pageno  = base_pageno + 1;
 
 		// Check for +exec
 		const auto& current_page =
 			machine().memory.get_pageno(base_pageno);
 		if (UNLIKELY(!current_page.attr.exec)) {
+			this->registers().pc = pc;
 			this->m_fault(*this, current_page);
+			pc = this->pc();
 
 			if (UNLIKELY(++restarts == MAX_RESTARTS))
-				trigger_exception(EXECUTION_LOOP_DETECTED, this->pc());
+				trigger_exception(EXECUTION_LOOP_DETECTED, pc);
 
 			goto restart_next_execute_segment;
 		}
@@ -96,23 +98,23 @@ restart_next_execute_segment:
 		if (UNLIKELY(current_page.has_trap()))
 		{
 			// We pass PC as offset
-			current_page.trap(this->pc() & (Page::size() - 1),
-				TRAP_EXEC, this->pc());
+			current_page.trap(pc & (Page::size() - 1), TRAP_EXEC, pc);
+			pc = this->pc();
 
 			// If PC changed, we will restart the process
-			if (this->pc() / Page::size() != base_pageno)
+			if (pc / Page::size() != base_pageno)
 			{
 				if (UNLIKELY(++restarts == MAX_RESTARTS))
-					trigger_exception(EXECUTION_LOOP_DETECTED, this->pc());
+					trigger_exception(EXECUTION_LOOP_DETECTED, pc);
 
 				goto restart_next_execute_segment;
 			}
 		}
 
 		// Find previously decoded execute segment
-		this->m_exec = &machine().memory.exec_segment_for(this->pc());
+		this->m_exec = &machine().memory.exec_segment_for(pc);
 		if (LIKELY(!this->m_exec->empty())) {
-			return *this->m_exec;
+			return {this->m_exec, pc};
 		}
 
 		// Find decoded execute segment via override
@@ -120,7 +122,7 @@ restart_next_execute_segment:
 		auto& next = this->m_override_exec(*this);
 		if (LIKELY(!next.empty())) {
 			this->m_exec = &next;
-			return next;
+			return {this->m_exec, pc};
 		}
 
 		// Find the earliest execute page in new segment
@@ -156,7 +158,7 @@ restart_next_execute_segment:
 		}
 
 		// Decode and store it for later
-		return this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size());
+		return {&this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size()), pc};
 	} // CPU::next_execute_segment
 
 	template <int W> RISCV_NOINLINE RISCV_INTERNAL
@@ -219,11 +221,11 @@ restart_next_execute_segment:
 		// Decoded segments are always faster
 		// So, always have at least the current segment
 		if (!is_executable(this->pc())) {
-			this->next_execute_segment();
+			this->next_execute_segment(this->pc());
 		}
 
-restart_precise_sim:
 		auto* exec = this->m_exec;
+restart_precise_sim:
 		auto* exec_decoder = exec->decoder_cache();
 		auto* exec_seg_data = exec->exec_data();
 
@@ -231,16 +233,17 @@ restart_precise_sim:
 			machine().increment_counter(1)) {
 
 			format_t instruction;
+			auto pc = this->pc();
 
 			// TODO: This can me made much faster
-			if (UNLIKELY(!exec->is_within(this->pc()))) {
+			if (UNLIKELY(!exec->is_within(pc))) {
 				// This will produce a sequential execute segment for the unknown area
 				// If it is not executable, it will throw an execute space protection fault
-				this->next_execute_segment();
+				auto new_values = this->next_execute_segment(pc);
+				exec = new_values.exec;
+				pc   = new_values.pc;
 				goto restart_precise_sim;
 			}
-
-			auto pc = this->pc();
 
 			// Instructions may be unaligned with C-extension
 			// On amd64 we take the cost, because it's faster

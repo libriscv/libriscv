@@ -30,9 +30,9 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 		parent->suspend(thread->tid);
 		// activate and setup a function call
 		thread->activate();
-		// the cast is a work-around for a compiler bug
 		// NOTE: have to start at DST-4 here!!!
-		machine.setup_call(func-4, (const address_type<W>) tls);
+		machine.setup_call(tls);
+		machine.cpu.jump(func-4);
 	});
 	// exit
 	this->install_syscall_handler(syscall_base+1,

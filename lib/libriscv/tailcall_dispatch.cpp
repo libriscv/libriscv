@@ -102,18 +102,14 @@ namespace riscv
 	static constexpr bool FUZZING = false;
 #endif
 
-	template <int W>
+	template <int W> static inline
 	DecodedExecuteSegment<W>* resolve_execute_segment(CPU<W>& cpu, address_type<W>& pc)
 	{
-		// We have to store and restore PC here as there are
-		// custom callbacks when changing segments that can
-		// jump around.
-		cpu.registers().pc = pc;
 		// Change execute segment
-		auto* exec = &cpu.next_execute_segment();
+		auto results = cpu.next_execute_segment(pc);
 		// Restore PC
-		pc = cpu.registers().pc;
-		return exec;
+		pc = results.pc;
+		return results.exec;
 	}
 
 	template <int W>
@@ -387,19 +383,20 @@ namespace riscv
 	}
 
 	template <int W> inline RISCV_HOT_PATH()
-	bool CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
+	bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 	{
-		// We need an execute segment matching current PC
-		if (UNLIKELY(!is_executable(this->pc())))
-		{
-			this->next_execute_segment();
-		}
-
 		InstrCounter<W> counter{machine(), inscounter, maxcounter};
 
-		address_type<W> pc = this->pc();
+		auto* exec = this->m_exec;
 
-		DecodedExecuteSegment<W>* exec = this->m_exec;
+		// We need an execute segment matching current PC
+		if (UNLIKELY(!exec->is_within(pc)))
+		{
+			auto results = this->next_execute_segment(pc);
+			exec = results.exec;
+			pc   = results.pc;
+		}
+
 		DecoderData<W>* exec_decoder = exec->decoder_cache();
 		auto* d = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 		auto& cpu = *this;

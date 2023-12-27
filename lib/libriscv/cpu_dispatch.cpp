@@ -77,7 +77,7 @@ namespace riscv
 
 
 template <int W> DISPATCH_ATTR
-bool CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
+bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 {
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;
@@ -208,15 +208,14 @@ bool CPU<W>::simulate(uint64_t inscounter, uint64_t maxcounter)
 	};
 #endif
 
-	InstrCounter counter{machine(), inscounter, maxcounter};
-
 	DecodedExecuteSegment<W>* exec = this->m_exec;
 	address_t current_begin = exec->exec_begin();
-	address_t current_end = exec->exec_end();
-	address_t pc = this->pc();
+	address_t current_end   = exec->exec_end();
 
 	DecoderData<W>* exec_decoder = exec->decoder_cache();
 	DecoderData<W>* decoder;
+
+	InstrCounter counter{machine(), inscounter, maxcounter};
 
 	// We need an execute segment matching current PC
 	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
@@ -390,29 +389,25 @@ check_jump:
 		goto continue_segment;
 	}
 
-	//if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
-	// We have to store and restore PC here as there are
-	// custom callbacks when changing segments that can
-	// jump around.
-	registers().pc = pc;
-
-new_execute_segment:
 	// Change to a new execute segment
-	exec = &this->next_execute_segment();
-	exec_decoder = exec->decoder_cache();
-	current_begin = exec->exec_begin();
-	current_end = exec->exec_end();
-	pc = registers().pc;
+new_execute_segment: {
+		auto new_values = this->next_execute_segment(pc);
+		exec = new_values.exec;
+		pc   = new_values.pc;
+		current_begin = exec->exec_begin();
+		current_end   = exec->exec_end();
+		exec_decoder  = exec->decoder_cache();
+	}
 	goto continue_segment;
-
-execute_invalid:
-	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 
 counter_overflow:
 	registers().pc = pc;
 
 	// Machine stopped normally?
 	return counter.max() == 0;
+
+execute_invalid:
+	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 
 } // CPU::simulate_XXX()
 

@@ -145,7 +145,7 @@ namespace riscv
 		// Supports integers, floating-point values and strings.
 		// Strings will be put on stack, which is not restored automatically.
 		template<typename... Args> constexpr
-		void setup_call(address_t call_addr, Args&&... args);
+		void setup_call(Args&&... args);
 
 		// Returns the address of a symbol in the ELF symtab, or zero
 		address_t address_of(std::string_view name) const;
@@ -266,6 +266,8 @@ namespace riscv
 		int deserialize_from(const std::vector<uint8_t>&);
 
 		std::pair<uint64_t&, uint64_t&> get_counters() noexcept { return {m_counter, m_max_counter}; }
+		template <bool Throw = true>
+		bool simulate_with(uint64_t max_instructions, uint64_t counter, address_t pc);
 	private:
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;

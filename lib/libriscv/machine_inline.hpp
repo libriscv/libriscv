@@ -23,9 +23,9 @@ void Machine<W>::penalize(uint64_t val) noexcept
 
 template <int W>
 template <bool Throw>
-inline bool Machine<W>::simulate(uint64_t max_instr, uint64_t counter)
+inline bool Machine<W>::simulate_with(uint64_t max_instr, uint64_t counter, address_t pc)
 {
-	const bool stopped_normally = cpu.simulate(counter, max_instr);
+	const bool stopped_normally = cpu.simulate(pc, counter, max_instr);
 	if constexpr (Throw) {
 		// The simulation either ends normally, or it throws an exception
 		if (UNLIKELY(!stopped_normally))
@@ -36,6 +36,13 @@ inline bool Machine<W>::simulate(uint64_t max_instr, uint64_t counter)
 		this->m_max_counter = stopped_normally ? 0 : max_instr;
 		return stopped_normally;
 	}
+}
+
+template <int W>
+template <bool Throw>
+inline bool Machine<W>::simulate(uint64_t max_instr, uint64_t counter)
+{
+	return this->simulate_with<Throw>(max_instr, counter, cpu.pc());
 }
 
 template <int W>

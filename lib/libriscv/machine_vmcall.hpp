@@ -1,7 +1,7 @@
 
 template <int W>
 template <typename... Args> constexpr
-inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
+inline void Machine<W>::setup_call(Args&&... args)
 {
 	cpu.reg(REG_RA) = memory.exit_address();
 	[[maybe_unused]] int iarg = REG_ARG0;
@@ -24,19 +24,19 @@ inline void Machine<W>::setup_call(address_t call_addr, Args&&... args)
 			static_assert(always_false<decltype(args)>, "Unknown type");
 	}(), ...);
 	cpu.reg(REG_SP) &= ~address_t(0xF);
-	cpu.jump(call_addr);
 }
 
 template <int W>
 template <uint64_t MAXI, bool Throw, typename... Args> constexpr
-inline address_type<W> Machine<W>::vmcall(address_t call_addr, Args&&... args)
+inline address_type<W> Machine<W>::vmcall(address_t pc, Args&&... args)
 {
 	// reset the stack pointer to an initial location (deliberately)
 	this->cpu.reset_stack_pointer();
 	// setup calling convention
-	this->setup_call(call_addr, std::forward<Args>(args)...);
+	this->setup_call(std::forward<Args>(args)...);
 	// execute guest function
-	this->simulate<Throw>(MAXI);
+	this->simulate_with<Throw>(MAXI, 0u, pc);
+
 	// address-sized integer return value
 	return cpu.reg(REG_ARG0);
 }
@@ -61,9 +61,10 @@ address_type<W> Machine<W>::preempt(uint64_t max_instr, address_t call_addr, Arg
 	// we need to make some stack room
 	this->cpu.reg(REG_SP) -= 16u;
 	// setup calling convention
-	this->setup_call(call_addr, std::forward<Args>(args)...);
+	this->setup_call(std::forward<Args>(args)...);
 	// execute by extending the max instruction counter (resuming)
 	try {
+		this->cpu.jump(call_addr);
 		this->resume<Throw>(max_instr);
 	} catch (...) {
 		this->set_max_instructions(prev_max);

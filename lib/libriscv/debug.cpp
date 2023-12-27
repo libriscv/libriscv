@@ -422,7 +422,11 @@ template<int W>
 void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, uint64_t imax)
 {
 	auto& cpu = machine.cpu;
-	auto* exec = &cpu.next_execute_segment();
+	address_t pc = cpu.pc();
+	DecodedExecuteSegment<W>* exec;
+	auto new_values = cpu.next_execute_segment(pc);
+	exec = new_values.exec;
+	pc   = new_values.pc;
 	auto* exec_decoder = exec->decoder_cache();
 	auto* exec_seg_data = exec->exec_data();
 	std::unordered_map<address_t, std::string> backtrace_lookup;
@@ -442,17 +446,20 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 		if (callback)
 			callback(*this);
 
+		pc = cpu.pc();
+
 		// NOTE: Break checks can change PC, full read
-		if (UNLIKELY(!exec->is_within(cpu.pc())))
+		if (UNLIKELY(!exec->is_within(pc)))
 		{
 			// This will produce a sequential execute segment for the unknown area
 			// If it is not executable, it will throw an execute space protection fault
-			exec = &cpu.next_execute_segment();
+			auto new_values = cpu.next_execute_segment(pc);
+			exec = new_values.exec;
+			pc   = new_values.pc;
 			exec_decoder = exec->decoder_cache();
 			exec_seg_data = exec->exec_data();
 		}
 
-		auto pc = cpu.pc();
 		// Instructions may be unaligned with C-extension
 		const rv32i_instruction instruction =
 			rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
