@@ -97,11 +97,13 @@ namespace riscv
 		std::string     symbol;
 	};
 
+	template <int W>
 	struct bintr_block_returns {
+		address_type<W> pc;
 		uint64_t counter;
 		uint64_t max_counter;
 	};
 	template <int W>
-	using bintr_block_func = bintr_block_returns (*)(CPU<W>&, uint64_t, uint64_t, address_type<W>);
+	using bintr_block_func = bintr_block_returns<W> (*)(CPU<W>&, uint64_t, uint64_t, address_type<W>);
 #endif
 }

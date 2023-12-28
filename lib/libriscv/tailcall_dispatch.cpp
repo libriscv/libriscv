@@ -236,11 +236,10 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 		VIEW_INSTR();
-		auto new_counters = 
-			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max());
-		counter.set_counters(new_counters.counter, new_counters.max_counter);
-		// Translations are always full-length instructions (?)
-		pc = REGISTERS().pc;
+		auto new_values = 
+			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max(), pc);
+		counter.set_counters(new_values.counter, new_values.max_counter);
+		pc = new_values.pc;
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
 	}

@@ -96,12 +96,12 @@ struct Emitter
 			this->realize_registers(0, 32);
 		}
 	}
-	void exit_function(bool add_bracket = false)
+	void exit_function(const std::string& new_pc, bool add_bracket = false)
 	{
 		if constexpr (CACHED_REGISTERS) {
 			this->restore_all_registers();
 		}
-		add_code("return (ReturnValues){counter, max_counter};", (add_bracket) ? " }" : "");
+		add_code("return (ReturnValues){" + new_pc + ", counter, max_counter};", (add_bracket) ? " }" : "");
 	}
 
 	std::string from_reg(int reg) {
@@ -311,7 +311,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & 0x3)) {
 		// TODO: Make exception a helper function, as return values are implementation detail
 		code +=
-			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
+			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){" + PCRELS(0) + ", 0, 0};\n"
 			"}\n";
 		return;
 	}
@@ -329,8 +329,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	}
 	// else, exit binary translation
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
-	code += "cpu->pc = " + PCRELS(instr.Btype.signed_imm()) + ";\n";
-	exit_function(true); // Bracket (NOTE: not actually ending the function)
+	exit_function(PCRELS(instr.Btype.signed_imm()), true); // Bracket (NOTE: not actually ending the function)
 }
 
 template <int W>
@@ -474,7 +473,7 @@ void Emitter<W>::emit()
 					"jump(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
-			exit_function(true);
+			exit_function("cpu->pc", true);
 			} return;
 		case RV32I_JAL: {
 			this->increment_counter_so_far();
@@ -498,8 +497,7 @@ void Emitter<W>::emit()
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
 			// Because of forward jumps we can't end the function here
-			add_code("cpu->pc = " + std::to_string(dest_pc) + ";");
-			exit_function();
+			exit_function(std::to_string(dest_pc));
 			// Some blocks end with unconditional jumps
 			if (no_labels_after_this()) {
 				add_code("}");
@@ -852,7 +850,7 @@ void Emitter<W>::emit()
 					this->restore_syscall_registers();
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
 					code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
-						"  cpu->pc += 4; return (ReturnValues){counter, *max_insn};}\n"; // Correct for +4 expectation outside of bintr
+						"  return (ReturnValues){cpu->pc + 4, counter, *max_insn};}\n"; // Correct for +4 expectation outside of bintr
 					code += "max_counter = *max_insn;\n"; // Restore max counter
 					// Restore A0
 					this->invalidate_register(REG_ARG0);
@@ -860,8 +858,7 @@ void Emitter<W>::emit()
 					break;
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_counter = 0;\n"; // Immediate stop PC + 4
-					code += "cpu->pc = " + PCRELS(4) + ";\n";
-					exit_function(true);
+					exit_function(PCRELS(4), true);
 					return;
 				} else {
 					// Zero funct3, unknown imm: Don't exit
@@ -1280,9 +1277,8 @@ void Emitter<W>::emit()
 	}
 	// If the function ends with an unimplemented instruction,
 	// we must gracefully finish, setting new PC and incrementing IC
-	code += "cpu->pc = " + std::to_string(this->end_pc()) + ";\n";
 	this->increment_counter_so_far();
-	exit_function(true);
+	exit_function(std::to_string(this->end_pc()), true);
 }
 
 template <int W>
