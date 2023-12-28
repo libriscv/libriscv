@@ -140,6 +140,7 @@ namespace riscv
 				else
 					static_assert(always_false<decltype(args)>, "Unknown type");
 			}(), ...);
+			cpu.reg(REG_SP) &= ~address_t(0xF);
 
 			// Execute vmcall
 			m.simulate_with(imax, 0, call_addr);
@@ -156,17 +157,17 @@ namespace riscv
 	}
 
 	/**
-	 * A prepared vmcall prepares for a given type of call
+	 * A prepared vmcall makes preparations for a given type of call
+	 * by recording the PC, max instructions, and enforcing a function type
 	 * 
 	**/
 	template <int W, typename F>
 	struct PreparedCall
 	{
 		using address_t = address_type<W>;
-		using saddr_t = signed_address_type<W>;
 
 		template <typename... Args>
-		saddr_t vmcall(Args&&... args) const
+		address_t vmcall(Args&&... args) const
 		{
 			static_assert(std::is_invocable_v<F, Args...>);
 			if (UNLIKELY(m_machine == nullptr))

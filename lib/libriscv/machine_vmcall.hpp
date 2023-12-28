@@ -62,10 +62,10 @@ address_type<W> Machine<W>::preempt(uint64_t max_instr, address_t call_addr, Arg
 	this->cpu.reg(REG_SP) -= 16u;
 	// setup calling convention
 	this->setup_call(std::forward<Args>(args)...);
-	// execute by extending the max instruction counter (resuming)
 	try {
-		this->cpu.jump(call_addr);
-		this->resume<Throw>(max_instr);
+		// execute by extending the max instruction counter (resuming)
+		this->simulate_with(
+			this->instruction_counter() + max_instr, this->instruction_counter(), call_addr);
 	} catch (...) {
 		this->set_max_instructions(prev_max);
 		if constexpr (StoreRegs) {
