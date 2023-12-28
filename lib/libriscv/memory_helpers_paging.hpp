@@ -104,32 +104,32 @@ inline void Memory<W>::memview_helper(T& mem, address_t addr, size_t len,
 	callback(mem, buffer.get(), len);
 }
 
-template <int W>
+template <int W> inline
 void Memory<W>::foreach(address_t addr, size_t len,
 	std::function<void(const Memory<W>&, address_t, const uint8_t*, size_t)> callback) const
 {
 	foreach_helper(*this, addr, len, std::move(callback));
 }
-template <int W>
+template <int W> inline
 void Memory<W>::foreach(address_t addr, size_t len,
 	std::function<void(Memory<W>&, address_t, const uint8_t*, size_t)> callback)
 {
 	foreach_helper(*this, addr, len, std::move(callback));
 }
-template <int W>
+template <int W> inline
 void Memory<W>::memview(address_t addr, size_t len,
 	std::function<void(const Memory<W>&, const uint8_t*, size_t)> callback) const
 {
 	memview_helper(*this, addr, len, std::move(callback));
 }
-template <int W>
+template <int W> inline
 void Memory<W>::memview(address_t addr, size_t len,
 	std::function<void(Memory<W>&, const uint8_t*, size_t)> callback)
 {
 	memview_helper(*this, addr, len, std::move(callback));
 }
 template <int W>
-template <typename T>
+template <typename T> inline
 void Memory<W>::memview(address_t addr,
 	std::function<void(const T&)> callback) const
 {
@@ -152,7 +152,7 @@ void Memory<W>::memview(address_t addr,
 	callback(object);
 }
 
-template <int W>
+template <int W> inline
 std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 {
 	std::string result;
@@ -191,7 +191,7 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 	return result;
 }
 
-template <int W>
+template <int W> inline
 riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	const size_t datalen, const size_t maxlen) const
 {
@@ -205,7 +205,7 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 		}
 	}
 
-	if (UNLIKELY(datalen + 1 >= maxlen))
+	if (UNLIKELY(datalen > maxlen))
 		protection_fault(addr);
 
 	address_t pageno = page_number(addr);
@@ -228,7 +228,22 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 	return result;
 }
 
-template <int W>
+template <int W> inline
+std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) const
+{
+	if (UNLIKELY(len > maxlen))
+		protection_fault(addr);
+
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(addr + len < memory_arena_size() && addr + len > addr)) {
+			auto* begin = &((char *)memory_arena_ptr())[RISCV_SPECSAFE(addr)];
+			return {begin, len};
+		}
+	}
+	this->protection_fault(addr);
+}
+
+template <int W> inline
 size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 {
 	size_t len = 0;
@@ -249,7 +264,7 @@ size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 	return (len <= maxlen) ? len : maxlen;
 }
 
-template <int W>
+template <int W> inline
 int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 {
 	// NOTE: fast implementation if no pointer crosses page boundary
@@ -262,7 +277,7 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 
 		const uint8_t* s1 = page1.data() + p1 % Page::SIZE;
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
-		return __builtin_memcmp(s1, s2, len);
+		return std::memcmp(s1, s2, len);
 	}
 	else // slow path (optimizable)
 	{
@@ -284,7 +299,7 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 		return len == 0 ? 0 : (v1 - v2);
 	}
 }
-template <int W>
+template <int W> inline
 int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 {
 	const char* s1 = (const char*) ptr1;
@@ -294,7 +309,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 		auto& page2 = this->get_readable_pageno(pageno2);
 
 		const uint8_t* s2 = page2.data() + p2 % Page::SIZE;
-		return __builtin_memcmp(s1, s2, len);
+		return std::memcmp(s1, s2, len);
 	}
 	else // slow path (optimizable)
 	{
@@ -313,7 +328,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	}
 }
 
-template <int W>
+template <int W> inline
 void Memory<W>::memcpy(
 	address_t dst, Machine<W>& srcm, address_t src, address_t len)
 {
@@ -347,7 +362,7 @@ void Memory<W>::memcpy(
 	}
 }
 
-template <int W>
+template <int W> inline
 size_t Memory<W>::gather_buffers_from_range(
 	size_t cnt, vBuffer buffers[], address_t addr, size_t len)
 {
@@ -377,7 +392,7 @@ size_t Memory<W>::gather_buffers_from_range(
 	return index;
 }
 
-template <int W>
+template <int W> inline
 size_t Memory<W>::gather_writable_buffers_from_range(
 	size_t cnt, vBuffer buffers[], address_t addr, size_t len)
 {

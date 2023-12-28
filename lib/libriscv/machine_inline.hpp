@@ -117,8 +117,8 @@ inline T Machine<W>::sysarg(int idx) const
 		return memory.rvbuffer(
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 	else if constexpr (std::is_same_v<T, std::basic_string_view<char>>)
-		return memory.rvbuffer(
-			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1)).strview();
+		return memory.rvview(
+			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 	else if constexpr (is_stdstring<T>::value)
 		return memory.memstring(cpu.reg(REG_ARG0 + idx));
 	else if constexpr (std::is_standard_layout_v<remove_cvref<T>> && std::is_trivial_v<remove_cvref<T>>) {
