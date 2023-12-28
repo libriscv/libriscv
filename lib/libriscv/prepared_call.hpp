@@ -3,21 +3,21 @@
 namespace riscv
 {
 	/**
-	 * A prepared vmcall stores string and struct arguments on the
+	 * A stored vmcall stores string and struct arguments on the
 	 * machine stack, and then moves the stack pointer. This leaves
 	 * the data written on the stack stuck permanently, unless the
 	 * stack pointer is manually restored.
 	 * 
 	 * 1. Initialization:
-	 * riscv::PreparedCall<RISCV32> prepper;
-	 * prepper.prepare(machine, "my_function",
+	 * riscv::StoredCall<RISCV32> prepper;
+	 * prepper.store(machine, "my_function",
 	 * 		"This is a string", test,
 	 * 		333, 444, 555, 666, 777, 888);
 	 * 
 	 * 2. Make call:
 	 * prepper.vmcall();
 	 * 
-	 * A prepared call can drastically reduce the call overhead, when
+	 * A stored call can drastically reduce the call overhead, when
 	 * needed, at the cost of stack space taken by the arguments up-front.
 	 * Prepared calls make use of prefetching in order to load content
 	 * pushed to the stack just before it is needed by the guest function.
@@ -28,15 +28,11 @@ namespace riscv
 	 * all instances and move the pointer back.
 	 * We could also experiment with using a custom arena, but this simpler
 	 * solution is easier to grasp and manage. There should be relatively few
-	 * prepared calls in general, and they should not hog a lot of stack space.
-	 * 
-	 * libriscv: many arguments 	median 13ns		lowest: 12ns    highest: 17ns
-	 * libriscv: prepared arguments	median 3ns 		lowest: 3ns     highest: 3ns
-	 * luajit: many arguments		median 184ns  	lowest: 181ns   highest: 194ns
+	 * stored calls in general, and they should not hog a lot of stack space.
 	 * 
 	**/
 	template <int W>
-	struct PreparedCall
+	struct StoredCall
 	{
 		using address_t = address_type<W>;
 		using saddr_t = signed_address_type<W>;
@@ -44,17 +40,20 @@ namespace riscv
 		saddr_t vmcall(uint64_t imax = UINT64_MAX);
 
 		template <typename... Args>
-		void prepare(Machine<W>&, const std::string& func, Args&&...);
+		void store(Machine<W>&, const std::string& func, Args&&...);
 
 		template <typename... Args>
-		void prepare(Machine<W>&, address_t call_addr, Args&&...);
+		void store(Machine<W>&, address_t call_addr, Args&&...);
 
-		bool is_prepared() const noexcept {
+		bool is_stored() const noexcept {
 			return this->m_func != nullptr;
 		}
+		operator bool() const noexcept {
+			return this->is_stored();
+		}
 
-		PreparedCall() = default;
-		~PreparedCall() = default;
+		StoredCall() = default;
+		~StoredCall() = default;
 		void reset() { m_func = nullptr; }
 
 	private:
@@ -62,9 +61,9 @@ namespace riscv
 	};
 
 	template <int W>
-	inline signed_address_type<W> PreparedCall<W>::vmcall(uint64_t imax)
+	inline signed_address_type<W> StoredCall<W>::vmcall(uint64_t imax)
 	{
-		if (UNLIKELY(!is_prepared()))
+		if (UNLIKELY(!is_stored()))
 			throw MachineException(ILLEGAL_OPERATION,
 				"The call was not prepared", 0x0);
 
@@ -73,7 +72,7 @@ namespace riscv
 
 	template <int W>
 	template <typename... Args>
-	void PreparedCall<W>::prepare(Machine<W>& m, address_t call_addr, Args&&... args)
+	void StoredCall<W>::store(Machine<W>& m, address_t call_addr, Args&&... args)
 	{
 		if (UNLIKELY(call_addr == 0x0))
 			throw MachineException(ILLEGAL_OPERATION,
@@ -116,8 +115,6 @@ namespace riscv
 			auto& cpu = m.cpu;
 			auto& regs = cpu.registers();
 
-			// 1. Jump to address
-			cpu.aligned_jump(call_addr);
 			// 2. Set return address (exit function)
 			cpu.reg(REG_RA) = m.memory.exit_address();
 			// 3. Reset stack pointer to current baseline
@@ -145,17 +142,80 @@ namespace riscv
 			}(), ...);
 
 			// Execute vmcall
-			m.simulate(imax);
+			m.simulate_with(imax, 0, call_addr);
 
-			return saddr_t(cpu.reg(REG_RETVAL));
+			return cpu.reg(REG_RETVAL);
 		};
 	}
 
 	template <int W>
 	template <typename... Args>
-	void PreparedCall<W>::prepare(Machine<W>& m, const std::string& func, Args&&... args)
+	void StoredCall<W>::store(Machine<W>& m, const std::string& func, Args&&... args)
 	{
-		this->prepare(m, m.address_of(func), std::forward<Args>(args)...);
+		this->store(m, m.address_of(func), std::forward<Args>(args)...);
 	}
+
+	/**
+	 * A prepared vmcall prepares for a given type of call
+	 * 
+	**/
+	template <int W, typename F>
+	struct PreparedCall
+	{
+		using address_t = address_type<W>;
+		using saddr_t = signed_address_type<W>;
+
+		template <typename... Args>
+		saddr_t vmcall(Args&&... args) const
+		{
+			static_assert(std::is_invocable_v<F, Args...>);
+			if (UNLIKELY(m_machine == nullptr))
+				throw riscv::MachineException(
+					riscv::INVALID_PROGRAM, "PreparedCall: must call prepare() first");
+
+			auto& m = *m_machine;
+			auto  pc   = m_pc;
+			auto  max  = m_max_instr;
+
+			// reset the stack pointer to an initial location (deliberately)
+			m.cpu.reset_stack_pointer();
+
+			m.setup_call(std::forward<Args> (args)...);
+
+			m.template simulate_with<true>(max, 0u, pc);
+
+			return m.cpu.reg(REG_RETVAL);
+		}
+
+		void prepare(Machine<W>& m, address_t call_addr, uint64_t imax = UINT64_MAX)
+		{
+			if (call_addr == 0x0)
+				throw riscv::MachineException(
+					riscv::EXECUTION_SPACE_PROTECTION_FAULT, "Invalid function address for PreparedCall", call_addr);
+			this->m_machine = &m;
+
+			// Check if the jump is OK
+			auto old_pc = m.cpu.pc();
+			m.cpu.jump(call_addr);
+
+			this->m_pc = call_addr;
+			this->m_max_instr = imax;
+
+			m.cpu.aligned_jump(old_pc);
+		}
+
+		void prepare(Machine<W>& m, const std::string& func, uint64_t imax = UINT64_MAX)
+		{
+			this->prepare(m, m.address_of(func), imax);
+		}
+
+		PreparedCall() = default;
+		~PreparedCall() = default;
+
+	private:
+		Machine<W>* m_machine = nullptr;
+		address_t m_pc = 0;
+		uint64_t  m_max_instr = 0;
+	};
 
 } // riscv

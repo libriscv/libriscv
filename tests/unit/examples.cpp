@@ -163,7 +163,8 @@ TEST_CASE("Execute while doing other things", "[Examples]")
 	// Reset the stack pointer from any previous call to its initial value
 	machine.cpu.reset_stack_pointer();
 	// Function call setup for the guest VM, but don't start execution
-	machine.setup_call(test_addr, 555, 666);
+	machine.setup_call(555, 666);
+	machine.cpu.jump(test_addr);
 	// Run the program for X amount of instructions, then print something, then
 	// resume execution again. Do this until stopped.
 	do {

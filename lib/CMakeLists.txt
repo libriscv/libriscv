@@ -72,6 +72,21 @@ set (SOURCES
 		libriscv/serialize.cpp
 		libriscv/util/crc32c.cpp
 	)
+if (RISCV_32I)
+	list(APPEND SOURCES
+		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv32i.cpp
+	)
+endif()
+if (RISCV_64I)
+	list(APPEND SOURCES
+		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv64i.cpp
+	)
+endif()
+if (RISCV_128I)
+	list(APPEND SOURCES
+		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv128i.cpp
+	)
+endif()
 
 if (MINGW_TOOLCHAIN OR MINGW OR WIN32)
 	list(APPEND SOURCES
@@ -126,22 +141,6 @@ target_include_directories(riscv PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 if (NOT WIN32 OR MINGW_TOOLCHAIN)
 	target_compile_options(riscv PRIVATE -Wall -Wextra)
-endif()
-
-if (RISCV_32I)
-	target_sources(riscv PUBLIC
-		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv32i.cpp
-	)
-endif()
-if (RISCV_64I)
-	target_sources(riscv PUBLIC
-		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv64i.cpp
-	)
-endif()
-if (RISCV_128I)
-	target_sources(riscv PUBLIC
-		${CMAKE_CURRENT_LIST_DIR}/libriscv/rv128i.cpp
-	)
 endif()
 
 if (RISCV_MULTIPROCESS)

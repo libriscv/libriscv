@@ -36,7 +36,7 @@ namespace riscv
 		// 3. TCO: Uses musttail to jump around at the fastest speed, but
 		// is only supported on Clang. Fastest simulation.
 		// Executes using the default-selected simulation mode.
-		bool simulate(uint64_t icounter, uint64_t maxcounter);
+		bool simulate(address_t pc, uint64_t icounter, uint64_t maxcounter);
 
 		// Step precisely one instruction forward.
 		void step_one();
@@ -107,7 +107,11 @@ namespace riscv
 		void set_execute_segment(DecodedExecuteSegment<W>& seg) { m_exec = &seg; }
 		auto& current_execute_segment() noexcept { return *m_exec; }
 		auto& current_execute_segment() const noexcept { return *m_exec; }
-		DecodedExecuteSegment<W>& next_execute_segment();
+		struct NextExecuteReturn {
+			DecodedExecuteSegment<W>* exec;
+			address_t pc;
+		};
+		NextExecuteReturn next_execute_segment(address_t pc);
 		static DecodedExecuteSegment<W>& empty_execute_segment();
 		bool is_executable(address_t addr) const noexcept;
 
