@@ -10,13 +10,13 @@ template <int W>
 struct DecoderData {
 	using Handler = instruction_handler<W>;
 
-	uint8_t  m_bytecode = 0x0;
-	uint8_t  m_handler = 0x0;
+	uint32_t  m_bytecode : 8;
+	uint32_t  m_handler  : 8;
 #ifdef RISCV_EXT_COMPRESSED
-	uint16_t idxend  : 8;
-	uint16_t icount  : 8;
+	uint32_t idxend  : 8;
+	uint32_t icount  : 8;
 #else
-	uint16_t idxend;
+	uint32_t idxend  : 16;
 #endif
 
 	uint32_t instr;
