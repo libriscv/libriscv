@@ -27,16 +27,17 @@ TEST_CASE("Main example", "[Examples]")
 	machine.set_userdata(&state);
 
 	// exit and exit_group
-	Machine<RISCV64>::install_syscall_handler(93,
+	Machine<RISCV64>::install_syscall_handler(94,
 		[] (Machine<RISCV64>& machine) {
-			auto* state = machine.get_userdata<State> ();
-			state->code = machine.sysarg <int> (0);
+			const auto [code] = machine.sysargs <int> ();
+
+			auto& state = *machine.get_userdata<State> ();
+			state.code = code;
+
 			machine.stop();
 		});
-	Machine<RISCV64>::install_syscall_handler(94,
-		Machine<RISCV64>::syscall_handlers.at(93));
 
-	machine.simulate(1'000'000UL);
+	machine.simulate(5'000'000UL);
 
 	REQUIRE(state.code == 666);
 	REQUIRE(machine.return_value() == 666);

@@ -15,12 +15,12 @@ libriscv is a [low latency emulator](https://medium.com/@fwsgonzo/using-c-as-a-s
 
 Goals:
 - No overhead when used for game engine scripting or request-based workloads (eg. high performance caching)
-- Secure sandbox
+- Type-safe VM call and system call interfaces
+- Secure speculation-safe sandbox
 
 Non goals:
 - Highest performance, just-in-time compilation
 - Wide support for Linux system calls
-
 
 ## Benchmarks
 
@@ -28,7 +28,7 @@ Non goals:
 
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
-Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da). Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
+Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da), and also [interpreted libriscv vs LuaJIT](https://gist.github.com/fwsGonzo/1af5b2a9b4f38c1f3d3074d78acdf609). Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
 
 <details>
   <summary>Register vs stack machines (interpreted)</summary>
@@ -43,7 +43,7 @@ Benchmark between [libriscv binary translation and LuaJIT](https://gist.github.c
 
 ## Embedding the emulator in a project
 
-See [example project](/examples/embed) for embedding on Linux.
+See the [example project](/examples/embed) for directly embedding libriscv using CMake. You can also use libriscv as a packaged artifact, through the [package example](/examples/package), although will you need to install [the package](/.github/workflows/packaging.yml) first.
 
 On Windows you can use Clang-cl in Visual Studio. See the [example CMake project](/examples/msvc). It requires Clang and Git installed.
 
@@ -56,7 +56,7 @@ On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC c
 sudo apt install gcc-11-riscv64-linux-gnu g++-11-riscv64-linux-gnu
 ```
 
-Depending on your distro you may have access to GCC versions 10, 11 and 12. Now you have a full Linux C/C++ compiler for RISC-V.
+Depending on your distro you may have access to GCC versions 10, 11 and 12. Now you have a full Linux C/C++ compiler for 64-bit RISC-V.
 
 To build smaller and leaner programs you will want a (limited) Linux userspace environment. Check out the guide on how to [build a Newlib compiler](/docs/NEWLIB.md).
 
@@ -127,29 +127,25 @@ int main(int /*argc*/, const char** /*argv*/)
 	// environment variables.
 	machine.setup_linux(
 		{"myprogram", "1st argument!", "2nd argument!"},
-		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		{"LC_TYPE=C", "LC_ALL=C", "USER=groot"});
 
 	// Add all the basic Linux system calls.
 	// This includes `exit` and `exit_group` which we will override below.
 	machine.setup_linux_syscalls();
 
-	// Install our own `exit` system call handler (for all 64-bit machines).
-	Machine<RISCV64>::install_syscall_handler(93, // exit
+	// Install our own `exit_group` system call handler (for all 64-bit machines).
+	Machine<RISCV64>::install_syscall_handler(94, // exit_group
 		[] (Machine<RISCV64>& machine) {
-			const int code = machine.sysarg <int> (0);
+			const auto [code] = machine.sysarg <int> (0);
 			printf(">>> Program exited, exit code = %d\n", code);
 			machine.stop();
 		});
-	// We also use the same system call handler again for `exit_group`,
-	// which is another way that C libraries will use to end the process.
-	Machine<RISCV64>::install_syscall_handler(94, // exit_group
-		Machine<RISCV64>::syscall_handlers.at(93));
 
 	// This function will run until the exit syscall has stopped the
 	// machine, an exception happens which stops execution, or the
-	// instruction counter reaches the given 1M instruction limit:
+	// instruction counter reaches the given 5M instruction limit:
 	try {
-		machine.simulate(1'000'000ull);
+		machine.simulate(5'000'000ull);
 	} catch (const std::exception& e) {
 		fprintf(stderr, ">>> Runtime exception: %s\n", e.what());
 	}
@@ -159,7 +155,7 @@ int main(int /*argc*/, const char** /*argv*/)
 In order to have the machine not throw an exception when the instruction limit is reached, you can call simulate with the template argument false, instead:
 
 ```C++
-machine.simulate<false>(1'000'000ull);
+machine.simulate<false>(5'000'000ull);
 ```
 If the machine runs out of instructions, it will simply stop running. Use `machine.instruction_limit_reached()` to check if the machine stopped running because it hit the instruction limit.
 
