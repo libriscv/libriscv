@@ -57,29 +57,12 @@ address_type<W> Machine<W>::preempt(uint64_t max_instr, address_t call_addr, Arg
 	if constexpr (StoreRegs) {
 		regs = cpu.registers();
 	}
-	const auto prev_max = this->max_instructions();
 	// we need to make some stack room
 	this->cpu.reg(REG_SP) -= 16u;
 	// setup calling convention
 	this->setup_call(std::forward<Args>(args)...);
-	try {
-		// execute by extending the max instruction counter (resuming)
-		this->simulate_with(
-			this->instruction_counter() + max_instr, this->instruction_counter(), call_addr);
-	} catch (...) {
-		this->set_max_instructions(prev_max);
-		if constexpr (StoreRegs) {
-			cpu.registers() = regs;
-		}
-		throw;
-	}
-	// restore registers and return value
-	this->set_max_instructions(prev_max);
-	const auto retval = cpu.reg(REG_ARG0);
-	if constexpr (StoreRegs) {
-		cpu.registers() = regs;
-	}
-	return retval;
+	// execute!
+	return this->cpu.preempt_internal(regs, StoreRegs, call_addr, max_instr);
 }
 
 template <int W>

@@ -292,6 +292,34 @@ restart_precise_sim:
 		machine().increment_counter(1);
 	}
 
+	template<int W>
+	address_type<W> CPU<W>::preempt_internal(Registers<W>& old_regs, bool store_regs, address_t pc, uint64_t max_instr)
+	{
+		auto& m = machine();
+		const auto prev_max = m.max_instructions();
+		try {
+			// execute by extending the max instruction counter (resuming)
+			// WARNING: Do not change this, as resumption is required in
+			// order for sandbox integrity. Repeatedly invoking preemption
+			// should lead to timeouts on either preempt() *or* the caller.
+			m.simulate_with(
+				m.instruction_counter() + max_instr, m.instruction_counter(), pc);
+		} catch (...) {
+			m.set_max_instructions(prev_max);
+			if (store_regs) {
+				this->registers() = old_regs;
+			}
+			throw;
+		}
+		// restore registers and return value
+		m.set_max_instructions(prev_max);
+		const auto retval = this->reg(REG_ARG0);
+		if (store_regs) {
+			this->registers() = old_regs;
+		}
+		return retval;
+	}
+
 	template<int W> RISCV_COLD_PATH()
 	void CPU<W>::trigger_exception(int intr, address_t data)
 	{
