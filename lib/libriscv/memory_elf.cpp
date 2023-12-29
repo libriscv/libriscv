@@ -19,30 +19,30 @@ namespace riscv
 	template <int W>
 	const typename Elf<W>::SectionHeader* Memory<W>::section_by_name(const std::string& name) const
 	{
-		// NOTE: Cannot take address of string_view end-pointer in debug mode
+		auto& elf = *elf_header();
+		const auto sh_end_offset = elf.e_shoff + elf.e_shnum * sizeof(typename Elf::SectionHeader);
+
+		if (elf.e_shoff > m_binary.size())
+			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
+		if (sh_end_offset < elf.e_shoff || sh_end_offset > m_binary.size())
+			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
+		const auto* shdr = elf_offset<typename Elf::SectionHeader> (elf.e_shoff);
+
+		if (elf.e_shstrndx >= elf.e_shnum)
+			throw MachineException(INVALID_PROGRAM, "Invalid section header strtab index");
+
+		const auto& shstrtab = shdr[elf.e_shstrndx];
+		const char* strings = elf_offset<char>(shstrtab.sh_offset);
 		const char* endptr = m_binary.data() + m_binary.size();
 
-		if (elf_header()->e_shoff > m_binary.size() - sizeof(typename Elf::SectionHeader))
-			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
-		const auto* shdr = elf_offset<typename Elf::SectionHeader> (elf_header()->e_shoff);
-
-		const auto& shstrtab = shdr[elf_header()->e_shstrndx];
-		if ((const char *)&shstrtab > endptr - sizeof(shstrtab))
-			throw MachineException(INVALID_PROGRAM, "Invalid section header offset");
-
-		const char* strings = elf_offset<char>(shstrtab.sh_offset);
-
-		// Only check if the last section header is outside ELF binary,
-		// as everything else is further in.
-		if ((const char *)&shdr[elf_header()->e_shnum] > endptr)
-			throw MachineException(INVALID_PROGRAM, "Invalid ELF string offset");
-
-		for (auto i = 0; i < elf_header()->e_shnum; i++)
+		for (auto i = 0; i < elf.e_shnum; i++)
 		{
-			const char* shname = &strings[shdr[i].sh_name];
-
-			if (shname >= endptr)
+			// Bounds-check and overflow-check on sh_name from strtab sh_offset
+			const auto name_offset = shstrtab.sh_offset + shdr[i].sh_name;
+			if (name_offset < shstrtab.sh_offset || name_offset >= m_binary.size())
 				throw MachineException(INVALID_PROGRAM, "Invalid ELF string offset");
+
+			const char* shname = &strings[shdr[i].sh_name];
 			const size_t len = strnlen(shname, endptr - shname);
 			if (len != name.size())
 				continue;
