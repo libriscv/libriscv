@@ -260,20 +260,25 @@ while (true) {
 #  include "bytecode_impl.cpp"
 #undef BYTECODES_BRANCH
 
+INSTRUCTION(RV32I_BC_STOP, rv32i_stop) {
+	REGISTERS().pc = pc + 4;
+	return true;
+}
+
 INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
-	VIEW_INSTR();
 	if constexpr (VERBOSE_JUMPS) {
+		VIEW_INSTR();
 		fprintf(stderr, "FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
-	NEXT_BLOCK((int32_t)instr.whole, true);
+	NEXT_BLOCK(int32_t(decoder->instr), true);
 }
 INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
-	VIEW_INSTR();
 	if constexpr (VERBOSE_JUMPS) {
+		VIEW_INSTR();
 		fprintf(stderr, "FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
 	}
 	reg(REG_RA) = pc + 4;
-	NEXT_BLOCK((int32_t)instr.whole, true);
+	NEXT_BLOCK(int32_t(decoder->instr), true);
 }
 
 #define BYTECODES_OP
@@ -317,20 +322,14 @@ INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function) {
 	handler(*this, instr);
 	NEXT_INSTR();
 }
-INSTRUCTION(RV32I_BC_STOP, rv32i_stop) {
-	REGISTERS().pc = pc + 4;
-	return true;
-}
 
 INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
 	VIEW_INSTR_AS(fi, FasterJtype);
-	if (fi.rd != 0)
-		reg(fi.rd) = pc + 4;
-	if constexpr (VERBOSE_JUMPS) {
+	reg(fi.rd) = pc + 4;
+	if constexpr (false) {
 		fprintf(stderr, "JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc+fi.offset));
 	}
-	pc += fi.offset;
-	goto check_jump;
+	NEXT_BLOCK(fi.offset, true);
 }
 
 /** UNLIKELY INSTRUCTIONS **/
@@ -383,8 +382,12 @@ INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 #endif
 
 check_jump:
-	if (UNLIKELY(counter.overflowed()))
-		goto counter_overflow;
+	if (UNLIKELY(counter.overflowed())) {
+		registers().pc = pc;
+
+		// Machine stopped normally?
+		return counter.max() == 0;
+	}
 
 	if (LIKELY(pc - current_begin < current_end - current_begin)) {
 		goto continue_segment;
@@ -400,12 +403,6 @@ new_execute_segment: {
 		exec_decoder  = exec->decoder_cache();
 	}
 	goto continue_segment;
-
-counter_overflow:
-	registers().pc = pc;
-
-	// Machine stopped normally?
-	return counter.max() == 0;
 
 execute_invalid:
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);

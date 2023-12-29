@@ -190,11 +190,8 @@ namespace riscv
 		if constexpr (VERBOSE_JUMPS) {
 			printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.offset);
 		}
-		if (fi.rd != 0)
-			cpu.reg(fi.rd) = pc + 4;
-		pc += fi.offset;
-		OVERFLOW_CHECK();
-		UNCHECKED_JUMP();
+		cpu.reg(fi.rd) = pc + 4;
+		NEXT_BLOCK(fi.offset, true);
 	}
 
 #define BYTECODES_OP

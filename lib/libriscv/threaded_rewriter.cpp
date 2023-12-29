@@ -224,17 +224,20 @@ namespace riscv
 					}
 					else if (store_ra)
 					{
+						// TODO: Optimize forward JALs instead
 						instr.whole = diff;
 						return RV32I_BC_FAST_CALL;
 					}
+
+					FasterJtype rewritten;
+					rewritten.offset = original.Jtype.jump_offset();
+					rewritten.rd     = original.Jtype.rd;
+
+					instr.whole = rewritten.whole;
+					return bytecode;
 				}
 
-				FasterJtype rewritten;
-				rewritten.offset = original.Jtype.jump_offset();
-				rewritten.rd     = original.Jtype.rd;
-
-				instr.whole = rewritten.whole;
-				return bytecode;
+				return RV32I_BC_INVALID;
 			}
 			case RV32I_BC_JALR: {
 				FasterItype rewritten;
