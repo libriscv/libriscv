@@ -215,7 +215,7 @@ bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 	DecoderData<W>* exec_decoder = exec->decoder_cache();
 	DecoderData<W>* decoder;
 
-	InstrCounter counter{machine(), inscounter, maxcounter};
+	InstrCounter counter{inscounter, maxcounter};
 
 	// We need an execute segment matching current PC
 	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
@@ -262,6 +262,7 @@ while (true) {
 
 INSTRUCTION(RV32I_BC_STOP, rv32i_stop) {
 	REGISTERS().pc = pc + 4;
+	MACHINE().set_instruction_counter(counter.value());
 	return true;
 }
 
@@ -289,11 +290,11 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Make the instruction counter(s) visible
-	counter.apply();
+	counter.apply(MACHINE());
 	// Invoke system call
 	machine().system_call(this->reg(REG_ECALL));
 	// Restore max counter
-	counter.retrieve_max_counter();
+	counter.retrieve_max_counter(MACHINE());
 	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
 	{
 		// System calls are always full-length instructions
@@ -354,7 +355,7 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	// Make the current PC visible
 	this->registers().pc = pc;
 	// Make the instruction counters visible
-	counter.apply();
+	counter.apply(MACHINE());
 	// Invoke SYSTEM
 	machine().system(instr);
 	// Restore PC in case it changed (supervisor)
@@ -384,6 +385,7 @@ INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 check_jump:
 	if (UNLIKELY(counter.overflowed())) {
 		registers().pc = pc;
+		MACHINE().set_instruction_counter(counter.value());
 
 		// Machine stopped normally?
 		return counter.max() == 0;
@@ -405,6 +407,7 @@ new_execute_segment: {
 	goto continue_segment;
 
 execute_invalid:
+	MACHINE().set_instruction_counter(counter.value());
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 
 } // CPU::simulate_XXX()

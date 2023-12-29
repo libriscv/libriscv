@@ -7,37 +7,35 @@ namespace riscv
 	// In fastsim mode the instruction counter becomes a register
 	// the function, and we only update m_counter in Machine on exit
 	// When binary translation is enabled we cannot do this optimization.
-	template <int W>
-	struct InstrCounter {
-		InstrCounter(Machine<W>& m, uint64_t icounter, uint64_t maxcounter)
-		  : machine(m),
-		    m_counter(icounter),
+	struct InstrCounter
+	{
+		InstrCounter(uint64_t icounter, uint64_t maxcounter)
+		  : m_counter(icounter),
 			m_max(maxcounter)
 		{}
-		~InstrCounter() {
-			machine.set_instruction_counter(m_counter);
-		}
+		~InstrCounter() = default;
 
-		void apply() {
+		template <int W>
+		void apply(Machine<W>& machine) {
 			machine.set_instruction_counter(m_counter);
 			machine.set_max_instructions(m_max);
 		}
-		void apply_counter() {
+		template <int W>
+		void apply_counter(Machine<W>& machine) {
 			machine.set_instruction_counter(m_counter);
 		}
 		// Used by binary translator to compensate for its own function already being counted
 		// TODO: Account for this inside the binary translator instead. Very minor impact.
-		void apply_counter_minus_1() {
+		template <int W>
+		void apply_counter_minus_1(Machine<W>& machine) {
 			machine.set_instruction_counter(m_counter-1);
 			machine.set_max_instructions(m_max);
 		}
-		void retrieve() {
-			m_counter = machine.instruction_counter();
+		template <int W>
+		void retrieve_max_counter(Machine<W>& machine) {
 			m_max     = machine.max_instructions();
 		}
-		void retrieve_max_counter() {
-			m_max     = machine.max_instructions();
-		}
+
 		uint64_t value() const noexcept {
 			return m_counter;
 		}
@@ -58,7 +56,6 @@ namespace riscv
 			return m_counter >= m_max;
 		}
 	private:
-		Machine<W>& machine;
 		uint64_t m_counter;
 		uint64_t m_max;
 	};

@@ -16,7 +16,7 @@
 #define DISPATCH_MODE_TAILCALL
 #define INSTRUCTION(bytecode, name) \
 	template <int W>                \
-	static TcoRet<W> name(DecoderData<W>* d, MUNUSED DecodedExecuteSegment<W>* exec, MUNUSED CPU<W>& cpu, MUNUSED address_type<W> pc, MUNUSED InstrCounter<W>& counter)
+	static TcoRet<W> name(DecoderData<W>* d, MUNUSED DecodedExecuteSegment<W>* exec, MUNUSED CPU<W>& cpu, MUNUSED address_type<W> pc, MUNUSED InstrCounter& counter)
 #define addr_t  address_type<W>
 #define saddr_t signed_address_type<W>
 #define XLEN    (8 * W)
@@ -116,7 +116,7 @@ namespace riscv
 	using TcoRet = std::tuple<address_type<W>>;
 
 	template <int W>
-	using DecoderFunc = TcoRet<W>(*)(DecoderData<W>*, DecodedExecuteSegment<W>*, CPU<W> &, address_type<W> pc, InstrCounter<W>& counter);
+	using DecoderFunc = TcoRet<W>(*)(DecoderData<W>*, DecodedExecuteSegment<W>*, CPU<W> &, address_type<W> pc, InstrCounter& counter);
 	namespace {
 		template <int W>
 		extern const DecoderFunc<W> computed_opcode[BYTECODES_MAX];
@@ -153,11 +153,11 @@ namespace riscv
 		// Make the current PC visible
 		cpu.registers().pc = pc;
 		// Make the instruction counter(s) visible
-		counter.apply();
+		counter.apply(MACHINE());
 		// Invoke system call
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
 		// Restore max counter
-		counter.retrieve_max_counter();
+		counter.retrieve_max_counter(MACHINE());
 		// Clone-like system calls can change PC
 		if (UNLIKELY(pc != cpu.registers().pc))
 		{
@@ -222,7 +222,7 @@ namespace riscv
 		// Make the current PC visible
 		cpu.registers().pc = pc;
 		// Make the instruction counter visible
-		counter.apply();
+		counter.apply(MACHINE());
 		// Invoke SYSTEM
 		cpu.machine().system(instr);
 		// Restore PC in case it changed (supervisor)
@@ -381,7 +381,7 @@ namespace riscv
 	template <int W> inline RISCV_HOT_PATH()
 	bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 	{
-		InstrCounter<W> counter{machine(), inscounter, maxcounter};
+		InstrCounter counter{inscounter, maxcounter};
 
 		auto* exec = this->m_exec;
 
@@ -402,6 +402,7 @@ namespace riscv
 		auto [new_pc] = EXECUTE_INSTR();
 
 		cpu.registers().pc = new_pc;
+		MACHINE().set_instruction_counter(counter.value());
 
 		// Machine stopped normally?
 		return counter.max() == 0;
