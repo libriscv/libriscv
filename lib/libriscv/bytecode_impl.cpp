@@ -498,27 +498,26 @@ INSTRUCTION(RV32I_BC_OP_ZEXT_H, rv32i_op_zext_h) {
 
 #ifdef RISCV_64I
 INSTRUCTION(RV64I_BC_OP_ADDW, rv64i_op_addw) {
-	if constexpr (W >= 8) {
-		OP_INSTR();
-		dst = int32_t(uint32_t(src1) + uint32_t(src2));
-		NEXT_INSTR();
-	}
-#ifdef DISPATCH_MODE_TAILCALL
-	else UNUSED_FUNCTION();
-#endif
+	OP_INSTR();
+	dst = int32_t(uint32_t(src1) + uint32_t(src2));
+	NEXT_INSTR();
+}
+INSTRUCTION(RV64I_BC_OP_SUBW, rv64i_op_subw) {
+	OP_INSTR();
+	dst = int32_t(uint32_t(src1) - uint32_t(src2));
+	NEXT_INSTR();
+}
+INSTRUCTION(RV64I_BC_OP_MULW, rv64i_op_mulw) {
+	OP_INSTR();
+	dst = int32_t(int32_t(src1) * int32_t(src2));
+	NEXT_INSTR();
+}
+INSTRUCTION(RV64I_BC_OP_ADD_UW, rv64i_op_add_uw) {
+	VIEW_INSTR();
+	REG(instr.Rtype.rd) = REG(instr.Rtype.rs2) + uint32_t(REG(instr.Rtype.rs1));
+	NEXT_INSTR();
 }
 #endif // RISCV_64I
-
-INSTRUCTION(RV32I_BC_OP_ADD_UW, rv32i_op_add_uw) {
-	if constexpr (W >= 8) {
-		VIEW_INSTR();
-		REG(instr.Rtype.rd) = REG(instr.Rtype.rs2) + uint32_t(REG(instr.Rtype.rs1));
-		NEXT_INSTR();
-	}
-#ifdef DISPATCH_MODE_TAILCALL
-	else UNUSED_FUNCTION();
-#endif
-}
 
 INSTRUCTION(RV32I_BC_SEXT_B, rv32i_sext_b) {
 	VIEW_INSTR_AS(fi, FasterItype);

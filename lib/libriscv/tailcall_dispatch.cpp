@@ -313,7 +313,6 @@ namespace riscv
 		[RV32I_BC_OP_REM]  = rv32i_op_rem,
 		[RV32I_BC_OP_REMU] = rv32i_op_remu,
 		[RV32I_BC_OP_SRA]  = rv32i_op_sra,
-		[RV32I_BC_OP_ADD_UW] = rv32i_op_add_uw,
 		[RV32I_BC_OP_ZEXT_H] = rv32i_op_zext_h,
 		[RV32I_BC_OP_SH1ADD] = rv32i_op_sh1add,
 		[RV32I_BC_OP_SH2ADD] = rv32i_op_sh2add,
@@ -329,6 +328,9 @@ namespace riscv
 		[RV64I_BC_SRLIW]  = rv64i_srliw,
 		[RV64I_BC_SRAIW]  = rv64i_sraiw,
 		[RV64I_BC_OP_ADDW] = rv64i_op_addw,
+		[RV64I_BC_OP_SUBW] = rv64i_op_subw,
+		[RV64I_BC_OP_MULW] = rv64i_op_mulw,
+		[RV64I_BC_OP_ADD_UW] = rv64i_op_add_uw,
 		[RV64I_BC_OP_SH1ADD_UW] = rv64i_op_sh1add_uw,
 		[RV64I_BC_OP_SH2ADD_UW] = rv64i_op_sh2add_uw,
 #endif // RISCV_64I

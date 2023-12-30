@@ -364,8 +364,12 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			{
 			case 0x0: // ADD.W
 				return RV64I_BC_OP_ADDW;
+			case 0x200: // SUB.W
+				return RV64I_BC_OP_SUBW;
+			case 0x10: // MUL.W
+				return RV64I_BC_OP_MULW;
 			case 0x40: // ADD.UW
-				return RV32I_BC_OP_ADD_UW;
+				return RV64I_BC_OP_ADD_UW;
 			case 0x44: // ZEXT.H
 				return RV32I_BC_OP_ZEXT_H;
 			default:

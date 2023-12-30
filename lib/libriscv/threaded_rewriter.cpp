@@ -136,6 +136,8 @@ namespace riscv
 			case RV32I_BC_OP_REMU:
 #ifdef RISCV_64I
 			case RV64I_BC_OP_ADDW:
+			case RV64I_BC_OP_SUBW:
+			case RV64I_BC_OP_MULW:
 			case RV64I_BC_OP_SH1ADD_UW:
 			case RV64I_BC_OP_SH2ADD_UW:
 #endif
