@@ -265,9 +265,19 @@ int main(int argc, const char** argv)
 
 	try {
 		if (binary[4] == riscv::ELFCLASS64)
+#ifdef RISCV_64I
 			run_program<riscv::RISCV64> (binary, is_dynamic, args);
-		else
+#else
+			throw riscv::MachineException(riscv::FEATURE_DISABLED, "32-bit not currently enabled");
+#endif
+		else if (binary[4] == riscv::ELFCLASS32)
+#ifdef RISCV_32I
 			run_program<riscv::RISCV32> (binary, is_dynamic, args);
+#else
+			throw riscv::MachineException(riscv::FEATURE_DISABLED, "32-bit not currently enabled");
+#endif
+		else
+			throw riscv::MachineException(riscv::INVALID_PROGRAM, "Unknown ELF class", binary[4]);
 	} catch (const std::exception& e) {
 		printf("Exception: %s\n", e.what());
 	}
