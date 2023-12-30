@@ -385,17 +385,20 @@ INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 #endif
 
 check_jump:
-	if (UNLIKELY(counter.overflowed())) {
-		registers().pc = pc;
-		MACHINE().set_instruction_counter(counter.value());
+	if (UNLIKELY(counter.overflowed()))
+		goto counter_overflow;
 
-		// Machine stopped normally?
-		return counter.max() == 0;
-	}
-
-	if (LIKELY(pc - current_begin < current_end - current_begin)) {
+	if (LIKELY(pc - current_begin < current_end - current_begin))
 		goto continue_segment;
-	}
+	else
+		goto new_execute_segment;
+
+counter_overflow:
+	registers().pc = pc;
+	MACHINE().set_instruction_counter(counter.value());
+
+	// Machine stopped normally?
+	return counter.max() == 0;
 
 	// Change to a new execute segment
 new_execute_segment: {
