@@ -311,20 +311,18 @@ Using the [debugging wrapper](/lib/libriscv/debug.hpp):
 
 ### Binary translation
 
-The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLATION` CMake option) can greatly improve performance in some cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is still a work in progress.
+The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLATION` CMake option) can greatly improve performance in some cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is stable, but still undergoing work.
 
 Instead of JIT, the emulator supports translating binaries to native code using any local C compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. `NO_TRANSLATE=1` can be used to disable binary translation in order to compare output or performance.
-
-The binary translation has best performance when combined with the experimental CMake option `RISCV_FLAT_RW_ARENA`, which makes everything after the read-only ELF segments always writable as an optimization, effectively turning it into a writable arena (up to the given memory limit). This option can be found by enabling the `RISCV_EXPERIMENTAL` CMake option. Further, I have occasionally seen the tailcall dispatch running faster than threaded dispatch, enabled with the `RISCV_TAILCALL_DISPATCH` CMake option.
 
 An experimental libtcc mode can be unlocked by enabling `RISCV_EXPERIMENTAL`, called `RISCV_LIBTCC`. When enabled, libriscv will invoke libtcc on code generated for each execute segment. It is usually faster than bytecode simulation, but not always.
 
 
-## Experimental features
+## Experimental and special features
 
 ### Read-write arena
 
-The experimental read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are still needed, allocate pages outside of the arena and apply protections to them.
+The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, allocate pages outside of the arena memory area and apply protections to them.
 
 ### Multiprocessing
 
