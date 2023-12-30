@@ -139,9 +139,9 @@ namespace riscv
 
 		struct
 		{
-			uint32_t  imm : 16;
-			uint32_t  rs2 : 8;
-			uint32_t  rs1 : 8;
+			uint16_t imm;
+			uint8_t  rs2;
+			uint8_t  rs1;
 		};
 
 		RISCV_ALWAYS_INLINE
@@ -168,9 +168,9 @@ namespace riscv
 
 		struct
 		{
-			uint32_t rd  : 16;
-			uint32_t rs2 : 8;
-			uint32_t rs1 : 8;
+			uint16_t rd;
+			uint8_t rs2;
+			uint8_t rs1;
 		};
 
 		RISCV_ALWAYS_INLINE
@@ -215,8 +215,8 @@ namespace riscv
 
 		struct
 		{
-			uint32_t rd  : 16;
-			uint32_t rs1 : 16;
+			uint16_t rd;
+			uint16_t rs1;
 		};
 
 		RISCV_ALWAYS_INLINE
@@ -246,10 +246,10 @@ namespace riscv
 
 		struct
 		{
-			uint32_t func : 8;
-			uint32_t rd  : 8;
-			uint32_t rs2 : 8;
-			uint32_t rs1 : 8;
+			uint8_t func;
+			uint8_t rd;
+			uint8_t rs2;
+			uint8_t rs1;
 		};
 
 		RISCV_ALWAYS_INLINE
