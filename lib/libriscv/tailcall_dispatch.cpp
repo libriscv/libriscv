@@ -191,7 +191,7 @@ namespace riscv
 			printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.offset);
 		}
 		cpu.reg(fi.rd) = pc + 4;
-		NEXT_BLOCK(fi.offset, true);
+		NEXT_BLOCK((int32_t)fi.offset, true);
 	}
 
 #define BYTECODES_OP

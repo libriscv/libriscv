@@ -235,8 +235,8 @@ namespace riscv
 
 		struct
 		{
-			int32_t offset : 24;
-			int32_t rd     : 8;
+			uint32_t offset : 24;
+			uint32_t rd     : 8;
 		};
 	};
 
