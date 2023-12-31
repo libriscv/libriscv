@@ -97,7 +97,7 @@ void syscall_write(Machine<W>& machine)
 		machine.template sysargs <int, address_type<W>, address_type<W>> ();
 	// We only accept standard output pipes, for now :)
 	if (fd == 1 || fd == 2) {
-		// Zero-copy retrieval of page-sized buffers (64kb)
+		// Zero-copy buffers pointing into guest memory
 		riscv::vBuffer buffers[16];
 		size_t cnt =
 			machine.memory.gather_buffers_from_range(16, buffers, address, len);
@@ -112,6 +112,79 @@ void syscall_write(Machine<W>& machine)
 }
 ```
 `gather_buffers_from_range` will fill an iovec-like array of structs up until the given number of buffers. We can then use that array to print or forward the data without copying anything.
+
+`gather_buffers_from_range` will concatenate sequential parts of guest memory, and very often even just 16 gather-buffers are enough to cover ~99% of cases. This is especially the case if the read-write arena is enabled. One should not think of a single buffer as page-sized, but rather sequential memory up until the next buffer.
+
+## Memory helper methods
+
+A fictive system call that has a single string as system call argument can be implemented in a variety of ways:
+
+```C++
+template <int W>
+void syscall_string(Machine<W>& machine)
+{
+	// 1. Read the guests virtual address and length
+	const auto [address, len] =
+		machine.template sysargs <address_type<W>, address_type<W>> ();
+
+	// Create a buffer and copy into it. Page protections apply.
+	std::vector<uint8_t> buffer(len);
+	machine.memory.copy_from_guest(buffer.data(), address, len);
+
+	// 2. Read-only iovec buffers for readv/writev etc. Page protections apply.
+	riscv::vBuffer buffers[16];
+	size_t cnt =
+		machine.memory.gather_buffers_from_range(16, buffers, address, len);
+	const ssize_t res =
+		writev(1, (struct iovec *)&buffers[0], cnt);
+
+	// 2. Directly read a zero-terminated string. Page protections apply.
+	const auto string = machine.memory.memstring(address);
+
+	// Shortcut:
+	const auto [string] =
+		machine.template sysargs <std::string> (); // Consumes 1 register
+
+	// 3. Get a string view directly (fastest option, read-write arena only)
+	// Page protections do not apply inside the read-write arena. It is always
+	// read-write, but also always sequential.
+	const auto strview = machine.memory.rvview(address, len);
+
+	// Shortcut:
+	const auto [string] =
+		machine.template sysargs <std::string_view> (); // Consumes 2 registers
+
+	// 4. Get a zero-copy buffer. Page protections apply.
+	const auto rvbuffer = machine.memory.rvbuffer(address, len);
+
+	std::string str = rvbuffer.to_string();
+
+	std::vector<uint8_t> buf;
+	rvbuffer.copy_to(buf);
+
+	if (buffer.is_sequential()) {
+		consumer(buffer.data(), buffer.size());
+	}
+
+	// Shortcut:
+	const auto [string] =
+		machine.template sysargs <riscv::Buffer> (); // Consumes 2 registers
+}
+```
+
+These are various ways that you can safely look at the guests memory provided by system call arguments. Most of these have a third argument setting a maximum length that puts a limit on the size of the buffers length. For example the maxlen argument in `memory.memstring(addr, len, maxlen)`.
+
+One last function that needs to be mentioned is how to get writable buffers into the guest for writing eg. from a iovec-like reader in the host:
+
+```C++
+	riscv::vBuffer buffers[16];
+	size_t cnt =
+		machine.memory.gather_writable_buffers_from_range(16, buffers, address, len);
+	const ssize_t res =
+		readv(1, (struct iovec *)&buffers[0], cnt);
+```
+
+Using `gather_writable_buffers_from_range` we can let the Linux kernel block and read into the guests memory until completion.
 
 ## Communicating the other way
 

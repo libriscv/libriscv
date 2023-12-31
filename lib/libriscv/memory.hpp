@@ -71,8 +71,8 @@ namespace riscv
 		// View known-sequential virtual memory (or throw exception)
 		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 1ul << 24) const;
 		// Read a zero-terminated string directly from guests memory
-		std::string memstring(address_t addr, size_t maxlen = 1024) const;
-		size_t strlen(address_t addr, size_t maxlen = 4096) const;
+		std::string memstring(address_t addr, size_t maxlen = 16384) const;
+		size_t strlen(address_t addr, size_t maxlen = 16384) const;
 
 		// Returns the ELF entry/start address (the first instruction)
 		address_t start_address() const noexcept { return this->m_start_address; }
