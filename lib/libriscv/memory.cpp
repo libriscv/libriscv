@@ -368,7 +368,8 @@ namespace riscv
 			this->install_shared_page(page_number(host_page), Page::host_page());
 			this->m_exit_address = host_page;
 		}
-		if (this->uses_flat_memory_arena()) {
+
+		if (this->uses_flat_memory_arena() && this->memory_arena_size() >= m_initial_rodata_end) {
 			this->m_arena_read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
 			this->m_arena_write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_initial_rodata_end);
 		} else {
