@@ -22,7 +22,7 @@ You can enable the RISCV_DEBUG CMake option if you want, but it is entirely opti
 		debug.simulate();
 	} catch (riscv::MachineException& me) {
 		printf(">>> Machine exception %d: %s (data: 0x%lX)\n",
-				me.type(), me.what(), me.data());
+				me.type(), me.what(), long(me.data()));
 		debug.print_and_pause();
 	} catch (std::exception& e) {
 		printf(">>> General exception: %s\n", e.what());
@@ -54,7 +54,7 @@ To get a GDB capable of debugging RISC-V you will need to install your distros e
 sudo apt install gdb-multiarch
 ```
 
-Once you have a RISC-V aware GDB you can start it with `gdb-multiarch my.elf`. Once inside GDB execute `target remote localhost:2159` to connect when the emulator is waiting for a debugger.
+Once you have a RISC-V aware GDB you can start it with `gdb-multiarch my.elf`. Once inside GDB execute `target remote :2159` to connect when the emulator is waiting for a debugger.
 
 ```C++
 #include <libriscv/rsp_server.hpp>
@@ -62,6 +62,7 @@ Once you have a RISC-V aware GDB you can start it with `gdb-multiarch my.elf`. O
 template <int W>
 void gdb_listen(uint16_t port, Machine<W>& machine)
 {
+	printf("GDB server is listening on localhost:%u\n", port);
 	riscv::RSP<W> server { machine, port };
 	auto client = server.accept();
 	if (client != nullptr) {
@@ -76,9 +77,7 @@ void gdb_listen(uint16_t port, Machine<W>& machine)
 
 Remember to build your RISC-V program with `-ggdb3 -O0`, otherwise you will not get complete information during the debugging session.
 
-You don't have to rebuild the emulator to enable this kind of debugging. But you may want to have an environment variable that disables binary translation if you are using that, because it compacts a block of code into "a single instruction," which can cause you to skip over lots of code, and the emulator won't be able to pause in the middle of that, because it's all become one unit of code. So remember to disable binary translation when debugging. Binary translation can be enabled and disabled using a run-time parameter: Setting `MachineOptions::translate_blocks_max` to 0 will disable it.
-
-The RSP client will automatically feed new instruction limits to the machine when you type continue in GDB. This is to prevent you from being unable to continue running the code. Additionally, instruction counting may not be reliable if you debug a program and then try to use it for other purposes after. One can jump around in the code with GDB, which will continually increase the counter. A solution can be to store the counter values before debugging and then restoring the values after.
+The RSP client will automatically feed new instruction limits to the machine when you type continue in GDB. The limit is still in place in order for you to not lose interactivity with GDB, in case there are infinite loops.
 
 ## Debugging remotely using program breakpoints
 
