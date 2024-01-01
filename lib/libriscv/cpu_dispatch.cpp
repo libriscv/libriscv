@@ -330,9 +330,9 @@ INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
 	VIEW_INSTR_AS(fi, FasterJtype);
 	reg(fi.rd) = pc + 4;
 	if constexpr (false) {
-		fprintf(stderr, "JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc+fi.offset));
+		fprintf(stderr, "JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc+fi.signed_imm()));
 	}
-	NEXT_BLOCK((int32_t)fi.offset, true);
+	NEXT_BLOCK(fi.signed_imm(), true);
 }
 
 /** UNLIKELY INSTRUCTIONS **/

@@ -187,11 +187,11 @@ namespace riscv
 	INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
 	{
 		VIEW_INSTR_AS(fi, FasterJtype);
-		if constexpr (VERBOSE_JUMPS) {
-			printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.offset);
+		if constexpr (false) {
+			printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.signed_imm());
 		}
 		cpu.reg(fi.rd) = pc + 4;
-		NEXT_BLOCK((int32_t)fi.offset, true);
+		NEXT_BLOCK(fi.signed_imm(), true);
 	}
 
 #define BYTECODES_OP

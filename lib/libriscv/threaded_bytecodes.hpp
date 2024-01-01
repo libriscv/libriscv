@@ -238,6 +238,10 @@ namespace riscv
 			uint32_t offset : 24;
 			uint32_t rd     : 8;
 		};
+
+		int32_t signed_imm() const noexcept {
+			return int32_t(offset << (32 - 24)) >> (32 - 24);
+		}
 	};
 
 	union FasterFloatType
