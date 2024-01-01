@@ -235,12 +235,17 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 		protection_fault(addr);
 
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(addr + len < memory_arena_size() && addr + len > addr)) {
-			auto* begin = &((char *)memory_arena_ptr())[RISCV_SPECSAFE(addr)];
+		if (LIKELY(addr + len - RWREAD_BEGIN < memory_arena_read_boundary() && addr < addr + len)) {
+			auto* begin = &((const char *)m_arena)[RISCV_SPECSAFE(addr)];
 			return {begin, len};
 		}
 	}
-	this->protection_fault(addr);
+
+	std::array<vBuffer, 1> buffers;
+	if (gather_buffers_from_range(1, buffers.data(), addr, len) == 1)
+		return {(const char *)buffers[0].ptr, buffers[0].len};
+
+	return std::string_view{};
 }
 
 template <int W> inline
@@ -364,7 +369,7 @@ void Memory<W>::memcpy(
 
 template <int W> inline
 size_t Memory<W>::gather_buffers_from_range(
-	size_t cnt, vBuffer buffers[], address_t addr, size_t len)
+	size_t cnt, vBuffer buffers[], address_t addr, size_t len) const
 {
 	size_t index = 0;
 	vBuffer* last = nullptr;
