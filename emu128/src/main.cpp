@@ -22,7 +22,10 @@ int main(int argc, const char** argv)
 	}
 
 	auto binary = load_file(argv[1]);
-	Machine machine { binary };
+
+	Machine machine { binary, {
+		.verbose_loader = getenv("VERBOSE") != nullptr
+	}};
 
 	/* Install a system call handler that stops the machine. */
 	Machine::install_syscall_handler(1,
@@ -31,7 +34,7 @@ int main(int argc, const char** argv)
 	 });
 
 	 /* Install a system call handler that prints something. */
-	 Machine::install_syscall_handler(2,
+	Machine::install_syscall_handler(2,
  	 [] (Machine& machine) {
  		 const auto [str] = machine.sysargs <std::string> ();
  		 printf(">>> Program says: %s\n", str.c_str());
