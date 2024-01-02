@@ -20,5 +20,6 @@
 #cmakedefine RISCV_THREADED
 #cmakedefine RISCV_TAILCALL_DISPATCH
 #cmakedefine RISCV_LIBTCC
+#cmakedefine RISCV_USER_BYTECODE
 
 #endif /* LIBRISCV_SETTINGS_H */

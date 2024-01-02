@@ -129,6 +129,11 @@ namespace riscv
 		// Retrieve default handler for unimplemented instructions (can be returned in on_unimplemented_instruction)
 		static const instruction_t& get_unimplemented_instruction() noexcept;
 
+#ifdef RISCV_USER_BYTECODE
+		using user_defined_t = void(*)(void*, uint32_t);
+		void invoke_user_defined(uint32_t instr) { this->m_user_defined(machine().template get_userdata<void>(), instr); }
+		static void set_user_defined(user_defined_t func) { m_user_defined = func; }
+#endif
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
@@ -159,6 +164,9 @@ namespace riscv
 #endif
 		void activate_dylib(DecodedExecuteSegment<W>&, void*) const RISCV_INTERNAL;
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
+#ifdef RISCV_USER_BYTECODE
+		static inline user_defined_t m_user_defined = [] (auto*, uint32_t) {};
+#endif
 	};
 
 #include "cpu_inline.hpp"

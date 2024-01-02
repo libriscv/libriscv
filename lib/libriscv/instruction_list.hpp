@@ -44,3 +44,5 @@
 #define RV32_INSTR_BLOCK_END  0xFFFF
 
 #define RV32_INSTR_STOP       0x7ff00073
+
+#define RV32_USER_DEFINED     0b1011011

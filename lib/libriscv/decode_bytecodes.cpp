@@ -483,6 +483,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		case RV32A_ATOMIC:
 			return RV32I_BC_FUNCTION;
 #endif
+#ifdef RISCV_USER_BYTECODE
+		case RV32_USER_DEFINED:
+			return RV32I_BC_USER_DEFINED;
+#endif
 		default:
 			// Unknown instructions can be custom-handled
 			return RV32I_BC_FUNCTION;

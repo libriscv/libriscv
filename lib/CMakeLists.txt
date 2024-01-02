@@ -45,6 +45,8 @@ if (RISCV_EXPERIMENTAL)
 	# MULTIPROCESS enables experimental features that allow
 	# executing RISC-V guest functions in parallel using a custom API.
 	option(RISCV_MULTIPROCESS        "Enable multiprocessing" OFF)
+	# Add a custom bytecode that executes a user-provided function
+	option(RISCV_USER_BYTECODE       "Enable user-defined bytecode" OFF)
 endif()
 if (RISCV_EXPERIMENTAL AND RISCV_BINARY_TRANSLATION)
 	# LIBTCC will embed the TCC compiler library, using it for binary translation.

@@ -206,6 +206,9 @@ bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = &&translated_function,
 #endif
+#ifdef RISCV_USER_BYTECODE
+		[RV32I_BC_USER_DEFINED] = &&user_defined,
+#endif
 		[RV32I_BC_SYSTEM]  = &&rv32i_system,
 	};
 #endif
@@ -351,6 +354,13 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	goto check_jump;
 }
 #endif // RISCV_BINARY_TRANSLATION
+
+#ifdef RISCV_USER_BYTECODE
+INSTRUCTION(RV32I_BC_USER_DEFINED, user_defined) {
+	CPU().invoke_user_defined(decoder->instr);
+	NEXT_INSTR();
+}
+#endif
 
 INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	VIEW_INSTR();
