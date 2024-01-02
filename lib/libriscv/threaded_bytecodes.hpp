@@ -215,8 +215,8 @@ namespace riscv
 
 		struct
 		{
-			uint16_t rd;
-			uint16_t rs1;
+			uint8_t rd;
+			uint8_t rs1;
 		};
 
 		RISCV_ALWAYS_INLINE
