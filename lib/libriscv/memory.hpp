@@ -97,8 +97,8 @@ namespace riscv
 		bool mmap_unmap(address_t addr, address_t size);
 
 
-		auto& machine() { return this->m_machine; }
-		const auto& machine() const { return this->m_machine; }
+		Machine<W>& machine() noexcept { return this->m_machine; }
+		const Machine<W>& machine() const noexcept { return this->m_machine; }
 		bool is_forked() const noexcept { return !this->m_original_machine; }
 
 		// Symbol table and section lookup functions

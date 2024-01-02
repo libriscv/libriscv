@@ -256,29 +256,29 @@ namespace riscv
 		}
 		if (UNLIKELY(!Elf::validate(m_binary))) {
 			if constexpr (W == 4)
-				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 32-bit RISC-V ELF binary", 8*W);
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 32-bit RISC-V ELF binary");
 			else if constexpr (W == 8)
-				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 64-bit RISC-V ELF binary", 8*W);
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 64-bit RISC-V ELF binary");
 			else if constexpr (W == 16)
-				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 128-bit RISC-V ELF binary", 8*W);
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 128-bit RISC-V ELF binary");
 			else
-				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a RISC-V ELF binary", 8*W);
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a RISC-V ELF binary");
 		}
 
 		const auto* elf = (typename Elf::Header*) m_binary.data();
 		const bool is_static = elf->e_type == Elf::Header::ET_EXEC;
 		this->m_is_dynamic   = elf->e_type == Elf::Header::ET_DYN;
 		if (UNLIKELY(!is_static && !m_is_dynamic)) {
-			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load an object file?", elf->e_type);
+			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load an object file?");
 		}
 		if (UNLIKELY(elf->e_machine != Elf::Header::EM_RISCV)) {
-			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.", elf->e_machine);
+			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.");
 		}
 		if (UNLIKELY((elf->e_flags & ELFHDR_FLAGS_RVC) != 0 && !compressed_enabled)) {
-			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVC executable, however C-extension is not enabled.", elf->e_flags);
+			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVC executable, however C-extension is not enabled.");
 		}
 		if (UNLIKELY((elf->e_flags & ELFHDR_FLAGS_RVE) != 0)) {
-			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVE executable, however E-extension is not supported.", elf->e_flags);
+			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVE executable, however E-extension is not supported.");
 		}
 
 		// Enumerate & validate loadable segments
