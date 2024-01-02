@@ -219,18 +219,22 @@ namespace riscv
 		// The execute segment:
 		size_t exlen = hdr->p_filesz;
 		const char* data = m_binary.data() + hdr->p_offset;
-		// Look for a .text section inside this segment:
-		const auto* texthdr = section_by_name(".text");
-		if (texthdr != nullptr
-			// Validate that the .text section is inside this
-			// execute segment.
-			&& texthdr->sh_addr >= vaddr && texthdr->sh_size <= exlen
-			&& texthdr->sh_addr + texthdr->sh_size <= vaddr + exlen)
+
+		if constexpr (W <= 8)
 		{
-			// Now we can use the .text section instead
-			data = m_binary.data() + texthdr->sh_offset;
-			vaddr = this->elf_base_address(texthdr->sh_addr);
-			exlen = texthdr->sh_size;
+			// Look for a .text section inside this segment:
+			const auto* texthdr = section_by_name(".text");
+			if (texthdr != nullptr
+				// Validate that the .text section is inside this
+				// execute segment.
+				&& texthdr->sh_addr >= vaddr && texthdr->sh_size <= exlen
+				&& texthdr->sh_addr + texthdr->sh_size <= vaddr + exlen)
+			{
+				// Now we can use the .text section instead
+				data = m_binary.data() + texthdr->sh_offset;
+				vaddr = this->elf_base_address(texthdr->sh_addr);
+				exlen = texthdr->sh_size;
+			}
 		}
 
 		auto& exec_segment =
@@ -251,23 +255,30 @@ namespace riscv
 			throw MachineException(INVALID_PROGRAM, "ELF program too short");
 		}
 		if (UNLIKELY(!Elf::validate(m_binary))) {
-			throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Mixup between 32- and 64-bit?");
+			if constexpr (W == 4)
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 32-bit RISC-V ELF binary", 8*W);
+			else if constexpr (W == 8)
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 64-bit RISC-V ELF binary", 8*W);
+			else if constexpr (W == 16)
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a 128-bit RISC-V ELF binary", 8*W);
+			else
+				throw MachineException(INVALID_PROGRAM, "Invalid ELF header! Expected a RISC-V ELF binary", 8*W);
 		}
 
 		const auto* elf = (typename Elf::Header*) m_binary.data();
 		const bool is_static = elf->e_type == Elf::Header::ET_EXEC;
 		this->m_is_dynamic   = elf->e_type == Elf::Header::ET_DYN;
 		if (UNLIKELY(!is_static && !m_is_dynamic)) {
-			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load an object file?");
+			throw MachineException(INVALID_PROGRAM, "ELF program is not an executable type. Trying to load an object file?", elf->e_type);
 		}
 		if (UNLIKELY(elf->e_machine != Elf::Header::EM_RISCV)) {
-			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.");
+			throw MachineException(INVALID_PROGRAM, "ELF program is not a RISC-V executable. Wrong architecture.", elf->e_machine);
 		}
 		if (UNLIKELY((elf->e_flags & ELFHDR_FLAGS_RVC) != 0 && !compressed_enabled)) {
-			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVC executable, however C-extension is not enabled.");
+			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVC executable, however C-extension is not enabled.", elf->e_flags);
 		}
 		if (UNLIKELY((elf->e_flags & ELFHDR_FLAGS_RVE) != 0)) {
-			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVE executable, however E-extension is not supported.");
+			throw MachineException(INVALID_PROGRAM, "ELF is a RISC-V RVE executable, however E-extension is not supported.", elf->e_flags);
 		}
 
 		// Enumerate & validate loadable segments

@@ -83,7 +83,21 @@ namespace riscv
 			uint64_t	p_memsz;
 			uint64_t	p_align;
 		};
+#ifdef RISCV_128I
+		struct Phdr128 {
+			uint32_t	p_type;
+			uint32_t	p_flags;
+			addr_t		p_offset;
+			addr_t		p_vaddr;
+			addr_t		p_paddr;
+			addr_t		p_filesz;
+			addr_t		p_memsz;
+			addr_t		p_align;
+		};
+		using ProgramHeader = typename std::conditional<W == 4, Phdr32, typename std::conditional<W == 8, Phdr64, Phdr128>::type>::type;
+#else
 		using ProgramHeader = typename std::conditional<W == 4, Phdr32, Phdr64>::type;
+#endif
 
 		struct Sym32 {
 			uint32_t	st_name;
