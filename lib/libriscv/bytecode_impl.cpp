@@ -1,5 +1,6 @@
-
-#ifdef BYTECODES_OP_IMM
+/**
+ * Popular instructions
+*/
 
 #ifdef RISCV_EXT_COMPRESSED
 INSTRUCTION(RV32C_BC_ADDI, rv32c_addi) {
@@ -125,12 +126,7 @@ INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 }
 #endif // RISCV_64I
 
-#endif // OP_IMM
-
-#ifdef BYTECODES_BRANCH
-
 #ifdef RISCV_EXT_COMPRESSED
-
 INSTRUCTION(RV32C_BC_BNEZ, rv32c_bnez) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) != 0) {
@@ -195,6 +191,32 @@ INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jumpfunc) {
 
 #endif // RISCV_EXT_COMPRESSED
 
+INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
+	if constexpr (VERBOSE_JUMPS) {
+		VIEW_INSTR();
+		fprintf(stderr, "FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + int32_t(instr.whole)));
+	}
+	NEXT_BLOCK(int32_t(DECODER().instr), true);
+}
+INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
+	if constexpr (VERBOSE_JUMPS) {
+		VIEW_INSTR();
+		fprintf(stderr, "FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + int32_t(instr.whole)));
+	}
+	REG(REG_RA) = pc + 4;
+	NEXT_BLOCK(int32_t(DECODER().instr), true);
+}
+
+INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
+{
+	VIEW_INSTR_AS(fi, FasterJtype);
+	if constexpr (false) {
+		printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.signed_imm());
+	}
+	REG(fi.rd) = pc + 4;
+	NEXT_BLOCK(fi.signed_imm(), true);
+}
+
 INSTRUCTION(RV32I_BC_BEQ, rv32i_beq) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	if (REG(fi.get_rs1()) == REG(fi.get_rs2())) {
@@ -252,9 +274,6 @@ INSTRUCTION(RV32I_BC_BGEU, rv32i_bgeu) {
 	NEXT_BLOCK(4, false);
 }
 
-#endif // BRANCH
-
-#ifdef BYTECODES_LOAD_STORE
 
 INSTRUCTION(RV32I_BC_LDW, rv32i_ldw) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -395,9 +414,6 @@ INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func) {
 
 #endif // RISCV_EXT_COMPRESSED
 
-#endif // LOAD STORE
-
-#ifdef BYTECODES_OP
 
 INSTRUCTION(RV32I_BC_AUIPC, rv32i_auipc)
 {
@@ -530,9 +546,6 @@ INSTRUCTION(RV32I_BC_SEXT_H, rv32i_sext_h) {
 	NEXT_INSTR();
 }
 
-#endif // OP & low-priority OP_IMM
-
-#ifdef BYTECODES_FLP
 
 INSTRUCTION(RV32F_BC_FSW, rv32i_fsw) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -620,9 +633,22 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 	NEXT_INSTR();
 }
 
-#endif // FLP
 
-#ifdef BYTECODES_RARELY_USED
+INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
+{
+	auto handler = DECODER().get_handler();
+	//printf("Slowpath: 0x%lX\n", pc);
+	handler(CPU(), {DECODER().instr});
+	NEXT_INSTR();
+}
+
+INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
+	VIEW_INSTR();
+	auto handler = DECODER().get_handler();
+	handler(CPU(), instr);
+	NEXT_BLOCK(instr.length(), true);
+}
+
 
 INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -768,5 +794,3 @@ INSTRUCTION(RV32V_BC_VFMUL_VF, rv32v_vfmul_vf) {
 	NEXT_INSTR();
 }
 #endif // RISCV_EXT_VECTOR
-
-#endif // BYTECODES_RARELY_USED

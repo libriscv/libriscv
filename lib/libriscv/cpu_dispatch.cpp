@@ -250,54 +250,24 @@ while (true) {
 
 	/** Instruction handlers **/
 
-#define BYTECODES_OP_IMM
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_OP_IMM
-
-#define BYTECODES_LOAD_STORE
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_LOAD_STORE
-
-#define BYTECODES_BRANCH
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_BRANCH
-
 INSTRUCTION(RV32I_BC_STOP, rv32i_stop) {
 	REGISTERS().pc = pc + 4;
 	MACHINE().set_instruction_counter(counter.value());
 	return true;
 }
 
-INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal) {
-	if constexpr (VERBOSE_JUMPS) {
-		VIEW_INSTR();
-		fprintf(stderr, "FAST_JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
-	}
-	NEXT_BLOCK(int32_t(decoder->instr), true);
-}
-INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call) {
-	if constexpr (VERBOSE_JUMPS) {
-		VIEW_INSTR();
-		fprintf(stderr, "FAST_CALL PC 0x%lX => 0x%lX\n", long(pc), long(pc + instr.whole));
-	}
-	reg(REG_RA) = pc + 4;
-	NEXT_BLOCK(int32_t(decoder->instr), true);
-}
-
-#define BYTECODES_OP
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_OP
+#include "bytecode_impl.cpp"
 
 INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	// Make the current PC visible
-	this->registers().pc = pc;
+	REGISTERS().pc = pc;
 	// Make the instruction counter(s) visible
 	counter.apply(MACHINE());
 	// Invoke system call
-	machine().system_call(this->reg(REG_ECALL));
+	MACHINE().system_call(REG(REG_ECALL));
 	// Restore max counter
 	counter.retrieve_max_counter(MACHINE());
-	if (UNLIKELY(counter.overflowed() || pc != this->registers().pc))
+	if (UNLIKELY(counter.overflowed() || pc != REGISTERS().pc))
 	{
 		// System calls are always full-length instructions
 		if constexpr (VERBOSE_JUMPS) {
@@ -310,33 +280,6 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	}
 	NEXT_BLOCK(4, false);
 }
-
-#define BYTECODES_FLP
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_FLP
-
-/** UNLIKELY INSTRUCTIONS **/
-/** UNLIKELY INSTRUCTIONS **/
-
-INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function) {
-	VIEW_INSTR();
-	//printf("Slowpath: 0x%lX\n", pc);
-	auto handler = decoder->get_handler();
-	handler(*this, instr);
-	NEXT_INSTR();
-}
-
-INSTRUCTION(RV32I_BC_JAL, rv32i_jal) {
-	VIEW_INSTR_AS(fi, FasterJtype);
-	reg(fi.rd) = pc + 4;
-	if constexpr (false) {
-		fprintf(stderr, "JAL PC 0x%lX => 0x%lX\n", long(pc), long(pc+fi.signed_imm()));
-	}
-	NEXT_BLOCK(fi.signed_imm(), true);
-}
-
-/** UNLIKELY INSTRUCTIONS **/
-/** UNLIKELY INSTRUCTIONS **/
 
 #ifdef RISCV_BINARY_TRANSLATION
 INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
@@ -364,17 +307,6 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	pc = registers().pc + 4;
 	goto check_jump;
 }
-
-INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
-	VIEW_INSTR();
-	auto handler = decoder->get_handler();
-	handler(*this, instr);
-	NEXT_BLOCK(instr.length(), true);
-}
-
-#define BYTECODES_RARELY_USED
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_RARELY_USED
 
 #ifdef DISPATCH_MODE_SWITCH_BASED
 	default:

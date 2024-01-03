@@ -129,24 +129,8 @@ namespace riscv
 #define VECTORS()   cpu.registers().rvv()
 #define MACHINE()   cpu.machine()
 
-#define BYTECODES_OP_IMM
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_OP_IMM
 
-#define BYTECODES_LOAD_STORE
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_LOAD_STORE
-
-#define BYTECODES_BRANCH
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_BRANCH
-
-	INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
-	{
-		auto handler = d->get_handler();
-		handler(cpu, {d->instr});
-		NEXT_INSTR();  
-	}
+#include "bytecode_impl.cpp"
 
 	INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
 	{
@@ -168,53 +152,12 @@ namespace riscv
 		NEXT_BLOCK(4, true);
 	}
 
-	INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal)
-	{
-		if constexpr (VERBOSE_JUMPS) {
-			printf("FAST_JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + d->instr);
-		}
-		NEXT_BLOCK((int32_t)d->instr, true);
-	}
-	INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call)
-	{
-		if constexpr (VERBOSE_JUMPS)
-		{
-			printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + d->instr);
-		}
-		cpu.reg(REG_RA) = pc + 4;
-		NEXT_BLOCK((int32_t)d->instr, true);
-	}
-	INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
-	{
-		VIEW_INSTR_AS(fi, FasterJtype);
-		if constexpr (false) {
-			printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.signed_imm());
-		}
-		cpu.reg(fi.rd) = pc + 4;
-		NEXT_BLOCK(fi.signed_imm(), true);
-	}
-
-#define BYTECODES_OP
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_OP
-
 	INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 	{
 		(void) d;
 		pc += 4; // Complete STOP instruction
 		counter.stop();
 		return RETURN_VALUES();
-	}
-
-#define BYTECODES_FLP
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_FLP
-
-	INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
-		VIEW_INSTR();
-		auto handler = d->get_handler();
-		handler(CPU(), instr);
-		NEXT_BLOCK(instr.length(), true);
 	}
 
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
@@ -246,10 +189,6 @@ namespace riscv
 	{
 		cpu.trigger_exception(ILLEGAL_OPCODE, d->instr);
 	}
-
-#define BYTECODES_RARELY_USED
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_RARELY_USED
 
 	namespace
 	{
