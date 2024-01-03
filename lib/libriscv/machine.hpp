@@ -13,19 +13,21 @@ namespace riscv
 	static constexpr int RISCV64  = 8; /* 64-bits CPU */
 	static constexpr int RISCV128 = 16; /* 128-bits CPU */
 
-	// Machine is a RISC-V emulator. The W template parameter is
-	// used to determine the bit-architecture, like so:
-	// 32-bit:  Machine<RISCV32>, 64-bit:  Machine<RISCV64>
-	// 128-bit: Machine<RISCV128>
-	//
-	// It is instantiated with an ELF binary that contains the
-	// loaded RISC-V program to run:
-	//
-	//  std::vector<uint8_t> mybinary = load_file("riscv_program.elf");
-	//  Machine<RISCV64> machine { mybinary };
-	//  machine.setup_linux_syscalls();
-	//  machine.setup_linux({"program", "arg0"}, {"LC_ALL=C"});
-	//
+	/// Machine is a RISC-V emulator. The W template parameter is
+	/// used to determine the bit-architecture, like so:
+	/// 32-bit:  Machine<RISCV32>, 64-bit:  Machine<RISCV64>
+	/// 128-bit: Machine<RISCV128>
+	///
+	/// It is instantiated with an ELF binary that contains the
+	/// loaded RISC-V program to run:
+	///
+	///  std::vector<uint8_t> mybinary = load_file("riscv_program.elf");
+	///  Machine<RISCV64> machine { mybinary };
+	///  machine.setup_linux_syscalls();
+	///  machine.setup_linux({"program", "arg0"}, {"LC_ALL=C"});
+	///
+	/// @brief A RISC-V emulator
+	/// @tparam W The machine architecture
 	template <int W>
 	struct Machine
 	{
@@ -35,20 +37,32 @@ namespace riscv
 		using stdin_func = long(*)(const Machine&, char*, size_t);
 		using rdtime_func = uint64_t(*)(const Machine&);
 
-		// See common.hpp for MachineOptions
-		// The machine takes the binary as a const reference and does not
-		// own it, instead the binary data must be kept alive with the machine
-		// and not moved or reallocated.
+		/// The machine takes the binary as a const reference and does not
+		/// own it, instead the binary data must be kept alive with the machine
+		/// and not moved or reallocated.
+		///
+		/// @brief Construct a machine with string_view pointing to a RISC-V binary
+		/// @param binary The RISC-V binary that must outlive the machine
+		/// See common.hpp for MachineOptions
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
-		Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& = {});
-		// Create empty Machine.
-		Machine(const MachineOptions<W>& = {});
-		// The forking constructor creates a new machine based on @main,
-		// and loans all memory using Copy-on-Write mechanisms. Additionally,
-		// all cached structures like execute segment, and the instruction cache
-		// is also loaned. The main machine must not be destroyed or (in most cases)
-		// modified while the fork is running. Forks consume very little resources.
-		Machine(const Machine& main, const MachineOptions<W>& = {});
+		Machine(const std::vector<uint8_t>& binary, const MachineOptions<W>& = {});
+
+		/// @brief Create an empty RISC-V machine
+		/// @param opts Machine options
+		Machine(const MachineOptions<W>& opts = {});
+
+		/// @brief Create a thin fork from another Machine.
+		/// The main machine that forks are based on must outlive its forks.
+		/// @param main The machine to fork from
+		/// @param opts Machine options
+		///
+		/// The forking constructor creates a new machine based on another,
+		/// and loans all memory using Copy-on-Write mechanisms. Additionally,
+		/// all cached structures like execute segment, and the instruction cache
+		/// is also loaned. The main machine must not be destroyed or (in most cases)
+		/// modified while the fork is running. Forks consume very little resources.
+		Machine(const Machine& main, const MachineOptions<W>& opts = {});
+
 		~Machine();
 
 		// Simulate RISC-V starting from the current address, and stopping when
@@ -257,13 +271,18 @@ namespace riscv
 		// quickly creating and destroying a machine.
 		void reset();
 
-		// Serializes the current machine state to @vec
+		/// @brief Serializes the current machine state into a vector
+		/// @param vec The vector to serialize into (append)
+		/// @return Returns the total number of serialized bytes
 		size_t serialize_to(std::vector<uint8_t>& vec) const;
-		// Returns the machine to a previously stored state
-		// NOTE: All previous memory traps are lost, syscall handlers,
-		// destructor callbacks are kept. Page fault handler and
-		// symbol lookup cache is also kept. Returns 0 on success.
-		int deserialize_from(const std::vector<uint8_t>&);
+
+		/// @brief Returns the machine to a previously stored state
+		/// NOTE: All previous memory traps are lost, syscall handlers,
+		/// destructor callbacks are kept. Page fault handler and
+		/// symbol lookup cache is also kept. Returns 0 on success.
+		/// @param vec The vector to deserialize from
+		/// @return Returns 0 on success, otherwise a non-zero integer
+		int deserialize_from(const std::vector<uint8_t>& vec);
 
 		std::pair<uint64_t&, uint64_t&> get_counters() noexcept { return {m_counter, m_max_counter}; }
 		template <bool Throw = true>

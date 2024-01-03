@@ -22,38 +22,38 @@ namespace riscv
 		using override_execute_segment_t = DecodedExecuteSegment<W>&(*)(CPU<W>&);
 		using instruction_t = Instruction<W>;
 
-		// simulate():
-		// Make sure to call machine.set_max_instructions(...) before
-		// calling simulate(). The simulate function will
-		// execute until either max instructions is set to zero (0),
-		// which is the same as the machine stopping normally, or by
-		// reaching the instruction limit, running out of instructions.
-		//
-		// 1. Bytecode: Executes one block at a time, and can only stop when the
-		// block ends or a system call is handled. Works and runs everywhere.
+		// Dispatch modes (determined at configure-time):
+		// 1. Switch-case: Uses a big switch-case for bytecodes. Works and runs everywhere.
 		// 2. Threaded: Uses computed gotos to jump around at a faster speed, but
-		// is only supported on GCC and Clang. Very fast simulation.
+		//    is only supported on GCC and Clang. Very fast dispatch.
 		// 3. TCO: Uses musttail to jump around at the fastest speed, but
-		// is only supported on Clang. Fastest simulation.
-		// Executes using the default-selected simulation mode.
+		//    is only supported on Clang. Very fast dispatch.
+		/// Executes RISC-V code using the configure-time dispatch mode.
+		/// @param pc The starting address
+		/// @param icounter The instruction counter start value (usually 0)
+		/// @param maxcounter The instruction limit value (usually several millions)
+		/// @return Returns true if the machine stopped normally, otherwise an execution timeout happened.
 		bool simulate(address_t pc, uint64_t icounter, uint64_t maxcounter);
 
-		// Step precisely one instruction forward.
+		// Step precisely one instruction forward from current PC.
 		void step_one();
 
 		// Executes one instruction at a time, and can stop at
 		// any instruction. Can be used for debugging.
 		void simulate_precise();
 
-		void reset();
-		void reset_stack_pointer() noexcept;
-
+		/// @brief  Get the current PC
+		/// @return The current PC address
 		address_t pc() const noexcept { return registers().pc; }
 		void increment_pc(int delta);
 		void jump(address_t);
 		void aligned_jump(address_t);
 
+		/// @brief Retrieve current register state
+		/// @return Current register state
 		RISCV_ALWAYS_INLINE auto& registers() { return this->m_regs; }
+		/// @brief Retrieve current register state
+		/// @return Current register state
 		RISCV_ALWAYS_INLINE const auto& registers() const { return this->m_regs; }
 
 		int cpu_id() const noexcept { return m_cpuid; }
@@ -73,8 +73,9 @@ namespace riscv
 		template <typename Type>
 		void amo(format_t, Type(*op)(CPU&, Type&, uint32_t));
 #endif
+
 		[[noreturn]]
-		static void trigger_exception(int, address_t = 0) RISCV_COLD_PATH();
+		static void trigger_exception(int which, address_t = 0) RISCV_COLD_PATH();
 
 		// Directly execute an instruction (given bits)
 		void execute(format_t);
@@ -86,21 +87,31 @@ namespace riscv
 		// Pretty print instructions
 		std::string to_string(format_t format) const;
 		std::string to_string(format_t format, const instruction_t &instr) const;
+
+		/// @brief Pretty-print the current instruction
+		/// @return Returns a formatted string of the current instruction
 		std::string current_instruction_to_string() const;
 
 		format_t read_next_instruction_slowpath() const RISCV_COLD_PATH();
 		static const instruction_t& decode(format_t);
-		// Decode instruction bits into bytecode
+		// Convert a RISC-V instruction into a fast bytecode
 		static size_t computed_index_for(format_t bits);
 
-		// Serializes the current CPU state to a vector
+		/// @brief Serializes the current CPU state to a vector
+		/// @param vec The vector to serialize into
 		void serialize_to(std::vector<uint8_t>& vec) const;
-		// Returns the CPU to a previously stored state
-		void deserialize_from(const std::vector<uint8_t>&, const SerializedMachine<W>&);
+
+		/// @brief Returns the CPU to a previously stored state. Used by Machine::deserialize_from.
+		/// @param vec The vector to deserialize from
+		/// @param sm The serialized machine header to get metadata from
+		void deserialize_from(const std::vector<uint8_t>& vec, const SerializedMachine<W>& sm);
 
 		// Binary translation functions
 		int  load_translation(const MachineOptions<W>&, std::string* filename, DecodedExecuteSegment<W>&) const;
 		void try_translate(const MachineOptions<W>&, const std::string&, DecodedExecuteSegment<W>&, address_t pc, address_t endpc) const;
+
+		void reset();
+		void reset_stack_pointer() noexcept;
 
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
