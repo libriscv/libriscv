@@ -88,7 +88,7 @@ namespace riscv
 	size_t Memory<W>::serialize_to(std::vector<uint8_t>& vec) const
 	{
 		const size_t before = vec.size();
-		if (this->m_arena_pages > 0 && riscv::flat_readwrite_arena) {
+		if (this->m_arena.pages > 0 && riscv::flat_readwrite_arena) {
 			throw MachineException(
 				FEATURE_DISABLED, "Serialize is incompatible with flat read-write arena");
 		}
@@ -157,9 +157,6 @@ namespace riscv
 		// restore CPU registers and counters
 		this->m_regs = state.registers;
 		this->m_cache = {};
-#ifdef RISCV_EXT_ATOMICS
-		this->m_atomics = {};
-#endif
 	}
 	template <int W>
 	void Memory<W>::deserialize_from(const std::vector<uint8_t>& vec,
@@ -170,6 +167,10 @@ namespace riscv
 		this->m_mmap_address  = state.mmap_address;
 		this->m_heap_address  = state.heap_address;
 		this->m_exit_address  = state.exit_address;
+
+#ifdef RISCV_EXT_ATOMICS
+		this->m_atomics = {};
+#endif
 
 		const size_t page_bytes =
 			  state.n_pages * sizeof(SerializedPage)
@@ -193,13 +194,13 @@ namespace riscv
 			// Pages with data
 			if (!page.is_cow_page) {
 				Page* new_page = nullptr;
-				if (page.addr < this->m_arena_pages)
+				if (page.addr < this->m_arena.pages)
 				{
 					// Create new non-owning arena page
 					new_attr.non_owning = true;
 					auto result = m_pages.try_emplace(
 						page.addr,
-						new_attr, &this->m_arena[page.addr]
+						new_attr, &this->m_arena.data[page.addr]
 					);
 					new_page = &result.first->second;
 				}

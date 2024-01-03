@@ -43,19 +43,19 @@ namespace riscv
 
 #define NEXT_BLOCK(len, OF)               \
 	pc += len;                            \
-	decoder += len / DecoderCache<W>::DIVISOR;               \
+	decoder += len >> DecoderCache<W>::SHIFT;               \
 	if constexpr (OF) {						\
 		if (UNLIKELY(counter.overflowed())) \
 			goto check_jump;				\
 	}										\
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */        \
-	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];  \
+	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];  \
 	pc += decoder->block_bytes();                            \
 	counter.increment_counter(decoder->instruction_count()); \
 	EXECUTE_INSTR();
 
 #define NEXT_SEGMENT()                                       \
-	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];  \
+	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];  \
 	pc += decoder->block_bytes();                            \
 	counter.increment_counter(decoder->instruction_count()); \
 	EXECUTE_INSTR();
@@ -227,7 +227,7 @@ bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 		goto new_execute_segment;
 
 continue_segment:
-	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
 	pc += decoder->block_bytes();
 	counter.increment_counter(decoder->instruction_count());
 

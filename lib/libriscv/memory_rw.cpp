@@ -62,7 +62,7 @@ namespace riscv
 		}
 
 		// Create arena-page
-		if (flat_readwrite_arena && pageno < this->m_arena_pages)
+		if (flat_readwrite_arena && pageno < this->m_arena.pages)
 		{
 			auto& page = this->create_writable_pageno(pageno);
 			page.attr.apply_regular_attributes(attr);
@@ -124,7 +124,7 @@ namespace riscv
 				}
 			} else {
 				// Create arena-page
-				if (flat_readwrite_arena && pageno < this->m_arena_pages)
+				if (flat_readwrite_arena && pageno < this->m_arena.pages)
 				{
 					// Fast-path using madvise
 					if constexpr (MADVISE_ENABLED) {
@@ -134,7 +134,7 @@ namespace riscv
 							new_dst = std::min(new_dst, memory_arena_size());
 							const size_t new_size = new_dst - dst;
 
-							auto* baseptr = &((char *)m_arena)[dst];
+							auto* baseptr = &((char *)m_arena.data)[dst];
 							const int res = madvise(baseptr, new_size, 0x4); // MADV_DONTNEED
 							if (UNLIKELY(res < 0))
 								throw MachineException(UNKNOWN_EXCEPTION, "memzero: madvise() failed");
@@ -193,7 +193,7 @@ namespace riscv
 	const Page& Memory<W>::default_page_read(const Memory<W>& mem, address_t pageno)
 	{
 		// This is a copy-on-write zeroed area, but we must respect the underlying arena
-		if (flat_readwrite_arena && pageno < mem.m_arena_pages) {
+		if (flat_readwrite_arena && pageno < mem.m_arena.pages) {
 			return const_cast<Memory<W>&> (mem).create_writable_pageno(pageno);
 		}
 		return Page::cow_page();
@@ -318,7 +318,7 @@ namespace riscv
 			// Regular owned page (that is not the shared zero-page)
 			if ((!page.attr.non_owning && !page.is_cow_page()) ||
 				// Arena page
-				(page.attr.non_owning && page_number < m_arena_pages))
+				(page.attr.non_owning && page_number < m_arena.pages))
 					total += Page::size();
 		}
 

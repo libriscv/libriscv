@@ -236,7 +236,7 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(addr + len - RWREAD_BEGIN < memory_arena_read_boundary() && addr < addr + len)) {
-			auto* begin = &((const char *)m_arena)[RISCV_SPECSAFE(addr)];
+			auto* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
 			return {begin, len};
 		}
 	}

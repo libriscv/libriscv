@@ -239,13 +239,13 @@ INSTRUCTION(RV32I_BC_LDW, rv32i_ldw) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 	REG(fi.get_rs1()) =
-		(int32_t)MACHINE().memory.template read<uint32_t>(addr);
+		(int32_t)CPU().memory().template read<uint32_t>(addr);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_STW, rv32i_stw) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr  = REG(fi.get_rs1()) + fi.signed_imm();
-	MACHINE().memory.template write<uint32_t>(addr, REG(fi.get_rs2()));
+	CPU().memory().template write<uint32_t>(addr, REG(fi.get_rs2()));
 	NEXT_INSTR();
 }
 #ifdef RISCV_64I
@@ -254,7 +254,7 @@ INSTRUCTION(RV32I_BC_LDD, rv32i_ldd) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 		REG(fi.get_rs1()) =
-			(int64_t)MACHINE().memory.template read<uint64_t>(addr);
+			(int64_t)CPU().memory().template read<uint64_t>(addr);
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -265,7 +265,7 @@ INSTRUCTION(RV32I_BC_STD, rv32i_std) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		const auto addr  = REG(fi.get_rs1()) + fi.signed_imm();
-		MACHINE().memory.template write<uint64_t>(addr, REG(fi.get_rs2()));
+		CPU().memory().template write<uint64_t>(addr, REG(fi.get_rs2()));
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -278,14 +278,14 @@ INSTRUCTION(RV32F_BC_FLW, rv32i_flw) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	auto addr = REG(fi.rs2) + fi.signed_imm();
 	auto& dst = REGISTERS().getfl(fi.rs1);
-	dst.load_u32(MACHINE().memory.template read<uint32_t> (addr));
+	dst.load_u32(CPU().memory().template read<uint32_t> (addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FLD, rv32i_fld) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	auto addr = REG(fi.rs2) + fi.signed_imm();
 	auto& dst = REGISTERS().getfl(fi.rs1);
-	dst.load_u64(MACHINE().memory.template read<uint64_t> (addr));
+	dst.load_u64(CPU().memory().template read<uint64_t> (addr));
 	NEXT_INSTR();
 }
 
@@ -295,7 +295,7 @@ INSTRUCTION(RV32C_BC_LDD, rv32c_ldd) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 		REG(fi.get_rs1()) =
-			(int64_t)MACHINE().memory.template read<uint64_t>(addr);
+			(int64_t)CPU().memory().template read<uint64_t>(addr);
 		NEXT_C_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -306,7 +306,7 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 	if constexpr (W >= 8) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		const auto addr = REG(fi.get_rs1()) + fi.signed_imm();
-		MACHINE().memory.template write<uint64_t>(addr, REG(fi.get_rs2()));
+		CPU().memory().template write<uint64_t>(addr, REG(fi.get_rs2()));
 		NEXT_C_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -420,6 +420,9 @@ INSTRUCTION(RV64I_BC_OP_ADDW, rv64i_op_addw) {
 		dst = int32_t(uint32_t(src1) + uint32_t(src2));
 		NEXT_INSTR();
 	}
+#ifdef DISPATCH_MODE_TAILCALL
+	else UNUSED_FUNCTION();
+#endif
 }
 INSTRUCTION(RV64I_BC_OP_SUBW, rv64i_op_subw) {
 	if constexpr (W >= 8) {
@@ -504,14 +507,14 @@ INSTRUCTION(RV32F_BC_FSW, rv32i_fsw) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto& src = REGISTERS().getfl(fi.rs2);
 	auto addr = REG(fi.rs1) + fi.signed_imm();
-	MACHINE().memory.template write<uint32_t> (addr, src.i32[0]);
+	CPU().memory().template write<uint32_t> (addr, src.i32[0]);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FSD, rv32i_fsd) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto& src = REGISTERS().getfl(fi.rs2);
 	auto addr = REG(fi.rs1) + fi.signed_imm();
-	MACHINE().memory.template write<uint64_t> (addr, src.i64);
+	CPU().memory().template write<uint64_t> (addr, src.i64);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
@@ -714,40 +717,40 @@ INSTRUCTION(RV32I_BC_LDB, rv32i_ldb) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 	REG(fi.get_rs1()) =
-		int8_t(MACHINE().memory.template read<uint8_t>(addr));
+		int8_t(CPU().memory().template read<uint8_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDBU, rv32i_ldbu) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 	REG(fi.get_rs1()) =
-		saddr_t(MACHINE().memory.template read<uint8_t>(addr));
+		saddr_t(CPU().memory().template read<uint8_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDH, rv32i_ldh) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 	REG(fi.get_rs1()) =
-		int16_t(MACHINE().memory.template read<uint16_t>(addr));
+		int16_t(CPU().memory().template read<uint16_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LDHU, rv32i_ldhu) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 	REG(fi.get_rs1()) =
-		saddr_t(MACHINE().memory.template read<uint16_t>(addr));
+		saddr_t(CPU().memory().template read<uint16_t>(addr));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_STB, rv32i_stb) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr = REG(fi.get_rs1()) + fi.signed_imm();
-	MACHINE().memory.template write<uint8_t>(addr, REG(fi.get_rs2()));
+	CPU().memory().template write<uint8_t>(addr, REG(fi.get_rs2()));
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_STH, rv32i_sth) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	const auto addr = REG(fi.get_rs1()) + fi.signed_imm();
-	MACHINE().memory.template write<uint16_t>(addr, REG(fi.get_rs2()));
+	CPU().memory().template write<uint16_t>(addr, REG(fi.get_rs2()));
 	NEXT_INSTR();
 }
 #ifdef RISCV_64I
@@ -756,7 +759,7 @@ INSTRUCTION(RV32I_BC_LDWU, rv32i_ldwu) {
 		VIEW_INSTR_AS(fi, FasterItype);
 		const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
 		REG(fi.get_rs1()) =
-			MACHINE().memory.template read<uint32_t>(addr);
+			CPU().memory().template read<uint32_t>(addr);
 		NEXT_INSTR();
 	}
 #ifdef DISPATCH_MODE_TAILCALL
@@ -796,14 +799,14 @@ INSTRUCTION(RV32V_BC_VLE32, rv32v_vle32) {
 	VIEW_INSTR_AS(vi, FasterMove);
 	const auto& addr = REG(vi.rs1);
 	VECTORS().get(vi.rd) =
-		MACHINE().memory.template read<VectorLane> (addr);
+		CPU().memory().template read<VectorLane> (addr);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32V_BC_VSE32, rv32v_vse32) {
 	VIEW_INSTR_AS(vi, FasterMove);
 	const auto& addr = REG(vi.rs1);
 	auto& value = VECTORS().get(vi.rd);
-	MACHINE().memory.template write<VectorLane> (addr, value);
+	CPU().memory().template write<VectorLane> (addr, value);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32V_BC_VFADD_VV, rv32v_vfadd_vv) {

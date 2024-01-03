@@ -24,11 +24,11 @@ T Memory<W>::read(address_t address)
 #ifdef RISCV_EXT_VECTOR
 			if constexpr (sizeof(T) >= 32) {
 				// Reads and writes using vectors might have alignment requirements
-				auto* arena = (VectorLane *)m_arena;
+				auto* arena = (VectorLane *)m_arena.data;
 				return arena[RISCV_SPECSAFE(address / sizeof(VectorLane))];
 			}
 #endif
-			return *(T *)&((const char*)m_arena)[RISCV_SPECSAFE(address)];
+			return *(T *)&((const char*)m_arena.data)[RISCV_SPECSAFE(address)];
 		}
 		[[unlikely]];
 	}
@@ -43,7 +43,7 @@ T& Memory<W>::writable_read(address_t address)
 {
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address - initial_rodata_end() < memory_arena_write_boundary())) {
-			return *(T *)&((char*)m_arena)[RISCV_SPECSAFE(address)];
+			return *(T *)&((char*)m_arena.data)[RISCV_SPECSAFE(address)];
 		}
 		[[unlikely]];
 	}
@@ -68,11 +68,11 @@ void Memory<W>::write(address_t address, T value)
 #ifdef RISCV_EXT_VECTOR
 			if constexpr (sizeof(T) >= 32) {
 				// Reads and writes using vectors might have alignment requirements
-				auto* arena = (VectorLane *)m_arena;
+				auto* arena = (VectorLane *)m_arena.data;
 				arena[RISCV_SPECSAFE(address / sizeof(VectorLane))] = value;
 			} else
 #endif
-				*(T *)&((char*)m_arena)[RISCV_SPECSAFE(address)] = value;
+				*(T *)&((char*)m_arena.data)[RISCV_SPECSAFE(address)] = value;
 			return;
 		}
 	}

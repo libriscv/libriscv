@@ -16,7 +16,7 @@ namespace riscv
 	struct vBuffer { char* ptr; size_t len; };
 
 	template<int W>
-	struct Memory
+	struct alignas(32) Memory
 	{
 		using address_t = address_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;
@@ -101,6 +101,11 @@ namespace riscv
 		const Machine<W>& machine() const noexcept { return this->m_machine; }
 		bool is_forked() const noexcept { return !this->m_original_machine; }
 
+#ifdef RISCV_EXT_ATOMICS
+		auto& atomics() noexcept { return this->m_atomics; }
+		const auto& atomics() const noexcept { return this->m_atomics; }
+#endif // RISCV_EXT_ATOMICS
+
 		// Symbol table and section lookup functions
 		address_t resolve_address(std::string_view sym) const;
 		address_t resolve_section(const char* name) const;
@@ -184,12 +189,12 @@ namespace riscv
 		void reset();
 		bool is_dynamic_executable() const noexcept { return this->m_is_dynamic; }
 
-		bool uses_flat_memory_arena() const noexcept { return riscv::flat_readwrite_arena && this->m_arena != nullptr; }
-		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena; }
-		address_t memory_arena_size() const noexcept { return this->m_arena_pages * Page::size(); }
-		address_t memory_arena_read_boundary() const noexcept { return this->m_arena_read_boundary; }
-		address_t memory_arena_write_boundary() const noexcept { return this->m_arena_write_boundary; }
-		address_t initial_rodata_end() const noexcept { return this->m_initial_rodata_end; }
+		bool uses_flat_memory_arena() const noexcept { return riscv::flat_readwrite_arena && this->m_arena.data != nullptr; }
+		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena.data; }
+		address_t memory_arena_size() const noexcept { return this->m_arena.pages * Page::size(); }
+		address_t memory_arena_read_boundary() const noexcept { return this->m_arena.read_boundary; }
+		address_t memory_arena_write_boundary() const noexcept { return this->m_arena.write_boundary; }
+		address_t initial_rodata_end() const noexcept { return this->m_arena.initial_rodata_end; }
 
 		// Serializes the current memory state to an existing vector
 		// Returns the final size of the serialized state
@@ -239,6 +244,12 @@ namespace riscv
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
 
+		address_t m_start_address = 0;
+		address_t m_stack_address = 0;
+		address_t m_exit_address  = 0;
+		address_t m_mmap_address  = 0;
+		address_t m_heap_address  = 0;
+
 		Machine<W>& m_machine;
 
 		mutable CachedPage<W, const PageData> m_rd_cache;
@@ -246,15 +257,6 @@ namespace riscv
 
 		std::unordered_map<address_t, Page> m_pages;
 
-		page_fault_cb_t m_page_fault_handler = nullptr;
-		page_write_cb_t m_page_write_handler = default_page_write;
-		page_readf_cb_t m_page_readf_handler = default_page_read;
-
-		address_t m_start_address = 0;
-		address_t m_stack_address = 0;
-		address_t m_exit_address  = 0;
-		address_t m_mmap_address  = 0;
-		address_t m_heap_address  = 0;
 		const bool m_original_machine;
 		bool m_is_dynamic = false;
 		address_t elf_base_address(address_t offset) const;
@@ -264,17 +266,27 @@ namespace riscv
 		// Memory map cache
 		MMapCache<W> m_mmap_cache;
 
+		page_fault_cb_t m_page_fault_handler = nullptr;
+		page_write_cb_t m_page_write_handler = default_page_write;
+		page_readf_cb_t m_page_readf_handler = default_page_read;
+
+#ifdef RISCV_EXT_ATOMICS
+		AtomicMemory<W> m_atomics;
+#endif
+
 		// Execute segments
 		std::array<DecodedExecuteSegment<W>, MAX_EXECUTE_SEGS> m_exec;
 		size_t m_exec_segs = 0;
 		DecodedExecuteSegment<W>& next_execute_segment();
 
 		// Linear arena at start of memory (mmap-backed)
-		PageData* m_arena = nullptr;
-		address_t m_arena_read_boundary = 0;
-		address_t m_arena_write_boundary = 0;
-		address_t m_initial_rodata_end = RWREAD_BEGIN;
-		size_t m_arena_pages = 0;
+		struct alignas(16) {
+			PageData* data = nullptr;
+			address_t read_boundary = 0;
+			address_t write_boundary = 0;
+			address_t initial_rodata_end = RWREAD_BEGIN;
+			size_t    pages = 0;
+		} m_arena;
 
 		friend struct CPU<W>;
 	};

@@ -1,16 +1,21 @@
 
 // Use a trick to access the Machine directly on g++/clang, Linux-only for now
 #if (defined(__GNUG__) || defined(__clang__)) && defined(__linux__)
-template <int W>
+template <int W> RISCV_ALWAYS_INLINE inline
 Machine<W>& CPU<W>::machine() noexcept { return *reinterpret_cast<Machine<W>*> (this); }
-template <int W>
+template <int W> RISCV_ALWAYS_INLINE inline
 const Machine<W>& CPU<W>::machine() const noexcept { return *reinterpret_cast<const Machine<W>*> (this); }
 #else
-template <int W>
+template <int W> RISCV_ALWAYS_INLINE inline
 Machine<W>& CPU<W>::machine() noexcept { return this->m_machine; }
-template <int W>
+template <int W> RISCV_ALWAYS_INLINE inline
 const Machine<W>& CPU<W>::machine() const noexcept { return this->m_machine; }
 #endif
+
+template <int W> RISCV_ALWAYS_INLINE inline
+Memory<W>& CPU<W>::memory() noexcept { return machine().memory; }
+template <int W> RISCV_ALWAYS_INLINE inline
+const Memory<W>& CPU<W>::memory() const noexcept { return machine().memory; }
 
 template <int W>
 inline CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id)
