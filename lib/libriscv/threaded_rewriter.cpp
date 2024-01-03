@@ -37,6 +37,7 @@ namespace riscv
 				return bytecode;
 			}
 #ifdef RISCV_64I
+			case RV64I_BC_SLLIW:
 			case RV64I_BC_SRLIW:
 			case RV64I_BC_SRAIW: {
 				FasterItype rewritten;
@@ -158,8 +159,11 @@ namespace riscv
 			case RV32I_BC_LDH:
 			case RV32I_BC_LDHU:
 			case RV32I_BC_LDW:
+#ifdef RISCV_64I
 			case RV32I_BC_LDWU:
-			case RV32I_BC_LDD: {
+			case RV32I_BC_LDD:
+#endif
+			{
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
 				rewritten.rs2 = original.Itype.rs1;
@@ -171,7 +175,10 @@ namespace riscv
 			case RV32I_BC_STB:
 			case RV32I_BC_STH:
 			case RV32I_BC_STW:
-			case RV32I_BC_STD: {
+#ifdef RISCV_64I
+			case RV32I_BC_STD:
+#endif
+			{
 				FasterItype rewritten;
 				rewritten.rs1 = original.Stype.rs1;
 				rewritten.rs2 = original.Stype.rs2;

@@ -194,17 +194,24 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_LDH;
 			case 0x2: // LD.W
 				return RV32I_BC_LDW;
+#ifdef RISCV_64I
 			case 0x3:
 				if constexpr (W >= 8) {
 					return RV32I_BC_LDD;
 				}
 				return RV32I_BC_INVALID;
+#endif
 			case 0x4: // LD.BU
 				return RV32I_BC_LDBU;
 			case 0x5: // LD.HU
 				return RV32I_BC_LDHU;
+#ifdef RISCV_64I
 			case 0x6: // LD.WU
-				return RV32I_BC_LDWU;
+				if constexpr (W >= 8) {
+					return RV32I_BC_LDWU;
+				}
+				return RV32I_BC_INVALID;
+#endif
 			default:
 				return RV32I_BC_INVALID;
 			}
@@ -217,11 +224,13 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_STH;
 			case 0x2: // SD.W
 				return RV32I_BC_STW;
+#ifdef RISCV_64I
 			case 0x3:
 				if constexpr (W >= 8) {
 					return RV32I_BC_STD;
 				}
 				return RV32I_BC_INVALID;
+#endif
 			default:
 				return RV32I_BC_INVALID;
 			}
@@ -382,6 +391,11 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			{
 			case 0x0:
 				return RV64I_BC_ADDIW;
+			case 0x1: // SLLIW
+				if (instr.Itype.high_bits() == 0x000) {
+					return RV64I_BC_SLLIW;
+				}
+				return RV32I_BC_FUNCTION;
 			case 0x5: // SRLIW / SRAIW
 				if (instr.Itype.high_bits() == 0x000) {
 					return RV64I_BC_SRLIW;

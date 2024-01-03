@@ -132,6 +132,14 @@ namespace riscv
 
 #include "bytecode_impl.cpp"
 
+	INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
+	{
+		(void) d;
+		pc += 4; // Complete STOP instruction
+		counter.stop();
+		return RETURN_VALUES();
+	}
+
 	INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
 	{
 		// Make the current PC visible
@@ -152,13 +160,17 @@ namespace riscv
 		NEXT_BLOCK(4, true);
 	}
 
-	INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
-	{
-		(void) d;
-		pc += 4; // Complete STOP instruction
-		counter.stop();
-		return RETURN_VALUES();
+#ifdef RISCV_BINARY_TRANSLATION
+	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
+		VIEW_INSTR();
+		auto new_values = 
+			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max(), pc);
+		counter.set_counters(new_values.counter, new_values.max_counter);
+		pc = new_values.pc;
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 	}
+#endif
 
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 		VIEW_INSTR();
@@ -172,18 +184,6 @@ namespace riscv
 		pc = cpu.registers().pc + 4;
 		UNCHECKED_JUMP();
 	}
-
-#ifdef RISCV_BINARY_TRANSLATION
-	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
-		VIEW_INSTR();
-		auto new_values = 
-			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max(), pc);
-		counter.set_counters(new_values.counter, new_values.max_counter);
-		pc = new_values.pc;
-		OVERFLOW_CHECK();
-		UNCHECKED_JUMP();
-	}
-#endif
 
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
 	{
@@ -215,13 +215,16 @@ namespace riscv
 		[RV32I_BC_LDH]     = rv32i_ldh,
 		[RV32I_BC_LDHU]    = rv32i_ldhu,
 		[RV32I_BC_LDW]     = rv32i_ldw,
-		[RV32I_BC_LDWU]    = rv32i_ldwu,
-		[RV32I_BC_LDD]     = rv32i_ldd,
 
 		[RV32I_BC_STB]     = rv32i_stb,
 		[RV32I_BC_STH]     = rv32i_sth,
 		[RV32I_BC_STW]     = rv32i_stw,
+
+#ifdef RISCV_64I
+		[RV32I_BC_LDWU]    = rv32i_ldwu,
+		[RV32I_BC_LDD]     = rv32i_ldd,
 		[RV32I_BC_STD]     = rv32i_std,
+#endif
 
 		[RV32I_BC_BEQ]     = rv32i_beq,
 		[RV32I_BC_BNE]     = rv32i_bne,
@@ -264,6 +267,7 @@ namespace riscv
 
 #ifdef RISCV_64I
 		[RV64I_BC_ADDIW]  = rv64i_addiw,
+		[RV64I_BC_SLLIW]  = rv64i_slliw,
 		[RV64I_BC_SRLIW]  = rv64i_srliw,
 		[RV64I_BC_SRAIW]  = rv64i_sraiw,
 		[RV64I_BC_OP_ADDW] = rv64i_op_addw,
