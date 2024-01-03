@@ -129,23 +129,15 @@ namespace riscv
 #define VECTORS()   cpu.registers().rvv()
 #define MACHINE()   cpu.machine()
 
-#define BYTECODES_OP_IMM
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_OP_IMM
 
-#define BYTECODES_LOAD_STORE
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_LOAD_STORE
+#include "bytecode_impl.cpp"
 
-#define BYTECODES_BRANCH
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_BRANCH
-
-	INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
+	INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 	{
-		auto handler = d->get_handler();
-		handler(cpu, {d->instr});
-		NEXT_INSTR();  
+		(void) d;
+		pc += 4; // Complete STOP instruction
+		counter.stop();
+		return RETURN_VALUES();
 	}
 
 	INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
@@ -168,54 +160,17 @@ namespace riscv
 		NEXT_BLOCK(4, true);
 	}
 
-	INSTRUCTION(RV32I_BC_FAST_JAL, rv32i_fast_jal)
-	{
-		if constexpr (VERBOSE_JUMPS) {
-			printf("FAST_JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + d->instr);
-		}
-		NEXT_BLOCK((int32_t)d->instr, true);
-	}
-	INSTRUCTION(RV32I_BC_FAST_CALL, rv32i_fast_call)
-	{
-		if constexpr (VERBOSE_JUMPS)
-		{
-			printf("FAST_CALL PC 0x%lX => 0x%lX\n", pc, pc + d->instr);
-		}
-		cpu.reg(REG_RA) = pc + 4;
-		NEXT_BLOCK((int32_t)d->instr, true);
-	}
-	INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
-	{
-		VIEW_INSTR_AS(fi, FasterJtype);
-		if constexpr (false) {
-			printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.signed_imm());
-		}
-		cpu.reg(fi.rd) = pc + 4;
-		NEXT_BLOCK(fi.signed_imm(), true);
-	}
-
-#define BYTECODES_OP
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_OP
-
-	INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
-	{
-		(void) d;
-		pc += 4; // Complete STOP instruction
-		counter.stop();
-		return RETURN_VALUES();
-	}
-
-#define BYTECODES_FLP
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_FLP
-
-	INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
+#ifdef RISCV_BINARY_TRANSLATION
+	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 		VIEW_INSTR();
-		auto handler = d->get_handler();
-		handler(CPU(), instr);
-		NEXT_BLOCK(instr.length(), true);
+		auto new_values = 
+			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max(), pc);
+		counter.set_counters(new_values.counter, new_values.max_counter);
+		pc = new_values.pc;
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
 	}
+#endif
 
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 		VIEW_INSTR();
@@ -230,26 +185,10 @@ namespace riscv
 		UNCHECKED_JUMP();
 	}
 
-#ifdef RISCV_BINARY_TRANSLATION
-	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
-		VIEW_INSTR();
-		auto new_values = 
-			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max(), pc);
-		counter.set_counters(new_values.counter, new_values.max_counter);
-		pc = new_values.pc;
-		OVERFLOW_CHECK();
-		UNCHECKED_JUMP();
-	}
-#endif
-
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
 	{
 		cpu.trigger_exception(ILLEGAL_OPCODE, d->instr);
 	}
-
-#define BYTECODES_RARELY_USED
-#  include "bytecode_impl.cpp"
-#undef BYTECODES_RARELY_USED
 
 	namespace
 	{
@@ -276,13 +215,16 @@ namespace riscv
 		[RV32I_BC_LDH]     = rv32i_ldh,
 		[RV32I_BC_LDHU]    = rv32i_ldhu,
 		[RV32I_BC_LDW]     = rv32i_ldw,
-		[RV32I_BC_LDWU]    = rv32i_ldwu,
-		[RV32I_BC_LDD]     = rv32i_ldd,
 
 		[RV32I_BC_STB]     = rv32i_stb,
 		[RV32I_BC_STH]     = rv32i_sth,
 		[RV32I_BC_STW]     = rv32i_stw,
+
+#ifdef RISCV_64I
+		[RV32I_BC_LDWU]    = rv32i_ldwu,
+		[RV32I_BC_LDD]     = rv32i_ldd,
 		[RV32I_BC_STD]     = rv32i_std,
+#endif
 
 		[RV32I_BC_BEQ]     = rv32i_beq,
 		[RV32I_BC_BNE]     = rv32i_bne,
@@ -325,6 +267,7 @@ namespace riscv
 
 #ifdef RISCV_64I
 		[RV64I_BC_ADDIW]  = rv64i_addiw,
+		[RV64I_BC_SLLIW]  = rv64i_slliw,
 		[RV64I_BC_SRLIW]  = rv64i_srliw,
 		[RV64I_BC_SRAIW]  = rv64i_sraiw,
 		[RV64I_BC_OP_ADDW] = rv64i_op_addw,
