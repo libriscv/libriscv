@@ -74,6 +74,7 @@ template <int W>
 struct alignas(64) DecoderCache
 {
 	static constexpr size_t DIVISOR = (compressed_enabled) ? 2 : 4;
+	static constexpr unsigned SHIFT = (compressed_enabled) ? 1 : 2;
 
 	inline auto& get(size_t idx) noexcept {
 		return cache[idx];

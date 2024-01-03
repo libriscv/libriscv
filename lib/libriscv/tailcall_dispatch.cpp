@@ -48,12 +48,12 @@
 	counter.increment_counter(d->instruction_count());
 #define NEXT_BLOCK(len, OF)              \
 	pc += len;                           \
-	d += len / DecoderCache<W>::DIVISOR; \
+	d += len >> DecoderCache<W>::SHIFT; \
 	if constexpr (OF) {                  \
 		OVERFLOW_CHECK();                \
 	}									 \
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */           \
-	d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];  \
+	d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];  \
 	BEGIN_BLOCK()                        \
 	EXECUTE_CURRENT()
 
@@ -63,7 +63,7 @@
 
 #define UNCHECKED_JUMP()                                       \
 	QUICK_EXEC_CHECK()                                         \
-	d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR]; \
+	d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT]; \
 	BEGIN_BLOCK()                                              \
 	EXECUTE_CURRENT()
 #define OVERFLOW_CHECK()                            \
@@ -76,7 +76,7 @@
 			pc, pc + fi.signed_imm());  \
 	}                                   \
 	pc += fi.signed_imm();              \
-	d += fi.signed_imm() / DecoderCache<W>::DIVISOR; \
+	d += fi.signed_imm() >> DecoderCache<W>::SHIFT; \
 	OVERFLOW_CHECK()                    \
 	BEGIN_BLOCK()                       \
 	EXECUTE_CURRENT()
@@ -155,7 +155,7 @@ namespace riscv
 		{
 			pc = cpu.registers().pc;
 			QUICK_EXEC_CHECK();
-			d = &exec->decoder_cache()[pc / DecoderCache<W>::DIVISOR];
+			d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
 		}
 		NEXT_BLOCK(4, true);
 	}
@@ -339,7 +339,7 @@ namespace riscv
 		}
 
 		DecoderData<W>* exec_decoder = exec->decoder_cache();
-		auto* d = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+		auto* d = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
 		auto& cpu = *this;
 
 		BEGIN_BLOCK();
