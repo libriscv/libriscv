@@ -23,7 +23,7 @@ typedef void (*riscv_stdout_func_t)(void *opaque, const char *msg, unsigned size
 
 typedef struct {
 	uint64_t max_memory;
-	uint64_t stack_size;
+	uint32_t stack_size;
 	int      strict_sandbox;  /* No file or socket permissions */
 	unsigned     argc;        /* Program arguments */
 	const char **argv;

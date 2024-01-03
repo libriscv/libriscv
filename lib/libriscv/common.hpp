@@ -1,5 +1,5 @@
 #pragma once
-#include "libriscv_settings.h" // Build system generated
+#include "libriscv_settings.h" // Build-system generated
 
 #include <type_traits>
 #include <string>
@@ -25,6 +25,69 @@
 
 namespace riscv
 {
+	template <int W> struct Memory;
+
+	/// @brief Options passed to Machine constructor
+	/// @tparam W The RISC-V architecture
+	template <int W>
+	struct MachineOptions
+	{
+		/// @brief Maximum memory used by the machine, rounded down to
+		/// the current page size (4kb).
+		uint64_t memory_max = 64ull << 20; // 64MB
+
+		/// @brief Virtual memory allocated for the main stack at construction.
+		uint32_t stack_size = 1ul << 20; // 1MB default stack
+
+		/// @brief The CPU id to assign to a constructed machine.
+		unsigned cpu_id = 0;
+
+		/// @brief Setting this option will load the binary at construction as if it
+		/// was a RISC-V ELF binary. When disabled, no loading occurs.
+		bool load_program = true;
+
+		/// @brief Setting this option will apply page protections based on ELF segments
+		/// from the program loaded at construction.
+		bool protect_segments = true;
+
+		/// @brief Enabling this will allow unsafe RWX segments (read-write-execute).
+		bool allow_write_exec_segment = false;
+
+		/// @brief Enabling this will enforce execute-only segments (X ^ R).
+		bool enforce_exec_only = false;
+
+		/// @brief Print some verbose loader information to stdout.
+		bool verbose_loader = false;
+
+		/// @brief Enabling this will skip assignment of copy-on-write pages
+		/// to forked machines from the main machine, making fork operations faster,
+		/// but requires the forks to fault in pages instead (slower).
+		bool minimal_fork = false;
+
+		/// @brief Create a linear memory arena for main memory, increasing memory
+		/// locality and also enables read-write arena if the CMake option is ON.
+		bool use_memory_arena = true;
+
+		/// @brief Override a default-injected exit function with another function
+		/// that is found by looking up the provided symbol name in the current program.
+		/// Eg. if default_exit_function is "fast_exit", then the ELF binary must have
+		/// that symbol visible in its .symbtab ELF section.
+		std::string_view default_exit_function {};
+
+		/// @brief Provide a custom page-fault handler at construction.
+		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
+
+#ifdef RISCV_BINARY_TRANSLATION
+		unsigned block_size_treshold = 5;
+		unsigned translate_blocks_max = 16'000;
+		unsigned translate_instr_max = 150'000;
+#ifdef RISCV_LIBTCC
+		std::string libtcc1_location;
+#endif
+#endif
+	};
+
+
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
 
 	static constexpr size_t PageSize = RISCV_PAGE_SIZE;
@@ -86,11 +149,6 @@ namespace riscv
 #else
 	static constexpr bool binary_translation_enabled = false;
 #endif
-#ifdef __linux__
-	static constexpr bool memory_arena_is_default = true;
-#else
-	static constexpr bool memory_arena_is_default = false;
-#endif
 #ifdef RISCV_FLAT_RW_ARENA
 	static constexpr bool flat_readwrite_arena = true;
 #else
@@ -101,41 +159,7 @@ namespace riscv
 #else
 	static constexpr bool libtcc_enabled = false;
 #endif
-}
 
-namespace riscv
-{
-	template <int W> struct Memory;
-
-	template <int W>
-	struct MachineOptions
-	{
-		uint64_t memory_max = 64ull << 20; // 64MB
-		uint64_t stack_size = 1ul << 20; // 1MB default stack
-		unsigned cpu_id = 0;
-		bool load_program = true;
-		bool protect_segments = true;
-		bool allow_write_exec_segment = false;
-		bool enforce_exec_only = false;
-		bool verbose_loader = false;
-		// Minimal fork does not loan any pages from the source Machine
-		bool minimal_fork = false;
-		// Allow the use of a linear arena to increase memory locality somewhat
-		bool use_memory_arena = memory_arena_is_default;
-		// Override exit function with a program-provided function
-		std::string_view default_exit_function {};
-
-		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
-
-#ifdef RISCV_BINARY_TRANSLATION
-		unsigned block_size_treshold = 5;
-		unsigned translate_blocks_max = 16'000;
-		unsigned translate_instr_max = 150'000;
-#ifdef RISCV_LIBTCC
-		std::string libtcc1_location;
-#endif
-#endif
-	};
 
 	template <int W> struct MultiThreading;
 	template <int W> struct Multiprocessing;
