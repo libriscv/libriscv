@@ -71,7 +71,7 @@ private:
 };
 
 template <int W>
-struct DecoderCache
+struct alignas(64) DecoderCache
 {
 	static constexpr size_t DIVISOR = (compressed_enabled) ? 2 : 4;
 

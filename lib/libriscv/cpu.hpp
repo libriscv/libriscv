@@ -13,7 +13,7 @@ namespace riscv
 	template<int W> struct DecodedExecuteSegment;
 
 	template<int W>
-	struct CPU
+	struct alignas(64) CPU
 	{
 		using address_t = address_type<W>;     // one unsigned memory address
 		using format_t  = instruction_format;  // machine instruction format
@@ -67,9 +67,12 @@ namespace riscv
 		Machine<W>& machine() noexcept;
 		const Machine<W>& machine() const noexcept;
 
+		Memory<W>& memory() noexcept;
+		const Memory<W>& memory() const noexcept;
+
 #ifdef RISCV_EXT_ATOMICS
-		auto& atomics() noexcept { return this->m_atomics; }
-		const auto& atomics() const noexcept { return this->m_atomics; }
+		auto& atomics() noexcept { return memory().atomics(); }
+		const auto& atomics() const noexcept { return memory().atomics(); }
 		template <typename Type>
 		void amo(format_t, Type(*op)(CPU&, Type&, uint32_t));
 #endif
@@ -162,9 +165,6 @@ namespace riscv
 			return empty_execute_segment();
 		};
 
-#ifdef RISCV_EXT_ATOMICS
-		AtomicMemory<W> m_atomics;
-#endif
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
 #endif

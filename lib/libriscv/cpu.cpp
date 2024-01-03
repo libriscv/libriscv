@@ -31,9 +31,6 @@ namespace riscv
 		// Copy all registers except vectors
 		// Users can still copy vector registers by assigning to registers().rvv().
 		this->registers().copy_from(Registers<W>::Options::NoVectors, other.cpu.registers());
-#ifdef RISCV_EXT_ATOMICS
-		this->m_atomics = other.cpu.m_atomics;
-#endif
 	}
 	template <int W>
 	void CPU<W>::reset()

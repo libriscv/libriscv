@@ -372,7 +372,7 @@ void DebugMachine<W>::break_checks()
 	{
 		for (auto& wp : m_watchpoints) {
 			/* TODO: Only run watchpoint on LOAD STORE instructions */
-			address_t new_value;
+			address_t new_value = 0;
 			switch (wp.len) {
 			case 1:
 				new_value = machine.memory.template read<uint8_t> (wp.addr);
@@ -391,7 +391,6 @@ void DebugMachine<W>::break_checks()
 				wp.callback(*this);
 			}
 			wp.last_value = new_value;
-			//0x11FB3E0
 		}
 	}
 }

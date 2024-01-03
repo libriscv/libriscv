@@ -32,22 +32,22 @@ namespace riscv
 #ifdef __linux__
 				// Over-allocate by 1 page in order to avoid bounds-checking with size
 				const size_t len = (pages_max + 1) * Page::size();
-				this->m_arena = (PageData *)mmap(NULL, len, PROT_READ | PROT_WRITE,
+				this->m_arena.data = (PageData *)mmap(NULL, len, PROT_READ | PROT_WRITE,
 					MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-				this->m_arena_pages = pages_max;
+				this->m_arena.pages = pages_max;
 				// mmap() returns MAP_FAILED (-1) when mapping fails
-				if (UNLIKELY(this->m_arena == MAP_FAILED)) {
-					this->m_arena = nullptr;
-					this->m_arena_pages = 0;
+				if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
+					this->m_arena.data = nullptr;
+					this->m_arena.pages = 0;
 				}
 #else
 				// TODO: XXX: Investigate if this is a time sink
-				this->m_arena = new PageData[pages_max];
-				this->m_arena_pages = pages_max;
+				this->m_arena.data = new PageData[pages_max];
+				this->m_arena.pages = pages_max;
 #endif
 			}
 
-			if (this->m_arena_pages > 0)
+			if (this->m_arena.pages > 0)
 			{
 				this->m_page_fault_handler =
 				[pages_max] (auto& mem, const address_t page, bool init) -> Page&
@@ -55,14 +55,14 @@ namespace riscv
 					if (mem.pages_active() < pages_max || mem.owned_pages_active() < pages_max)
 					{
 						// Within linear arena at the start
-						if (page < mem.m_arena_pages)
+						if (page < mem.m_arena.pages)
 						{
 							const PageAttributes attr {
 								.read  = true,
 								.write = true,
 								.non_owning = true
 							};
-							return mem.allocate_page(page, attr, &mem.m_arena[page]);
+							return mem.allocate_page(page, attr, &mem.m_arena.data[page]);
 						}
 						// Create page on-demand
 						return mem.allocate_page(page,
@@ -99,6 +99,9 @@ namespace riscv
 		m_original_machine {false},
 		m_binary{other.memory.binary()}
 	{
+#ifdef RISCV_EXT_ATOMICS
+		this->m_atomics = other.memory.m_atomics;
+#endif
 		this->machine_loader(other, options);
 	}
 
@@ -107,11 +110,11 @@ namespace riscv
 	{
 		this->clear_all_pages();
 		// only the original machine owns arena
-		if (this->m_arena != nullptr && !is_forked()) {
+		if (this->m_arena.data != nullptr && !is_forked()) {
 #ifdef __linux__
-			munmap(this->m_arena, this->m_arena_pages * Page::size());
+			munmap(this->m_arena.data, this->m_arena.pages * Page::size());
 #else
-			delete[] this->m_arena;
+			delete[] this->m_arena.data;
 #endif
 		}
 	}
@@ -178,8 +181,8 @@ namespace riscv
 		}
 
 		if (attr.read && !attr.write && uses_flat_memory_arena()) {
-			this->m_initial_rodata_end =
-				std::max(m_initial_rodata_end, static_cast<address_t>(vaddr + len));
+			this->m_arena.initial_rodata_end =
+				std::max(m_arena.initial_rodata_end, static_cast<address_t>(vaddr + len));
 		}
 		// Nothing more to do here, if execute-only
 		if (attr.exec && !attr.read)
@@ -380,11 +383,11 @@ namespace riscv
 			this->m_exit_address = host_page;
 		}
 
-		if (this->uses_flat_memory_arena() && this->memory_arena_size() >= m_initial_rodata_end) {
-			this->m_arena_read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
-			this->m_arena_write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_initial_rodata_end);
+		if (this->uses_flat_memory_arena() && this->memory_arena_size() >= m_arena.initial_rodata_end) {
+			this->m_arena.read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
+			this->m_arena.write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_arena.initial_rodata_end);
 		} else {
-			this->m_initial_rodata_end = 0;
+			this->m_arena.initial_rodata_end = 0;
 		}
 
 		// Now that we know the boundries of the program, generate
@@ -447,11 +450,11 @@ namespace riscv
 		this->m_mmap_cache   = master.memory.m_mmap_cache;
 
 		if (options.use_memory_arena) {
-			this->m_arena = master.memory.m_arena;
-			this->m_arena_pages = master.memory.m_arena_pages;
-			this->m_arena_read_boundary = master.memory.m_arena_read_boundary;
-			this->m_arena_write_boundary = master.memory.m_arena_write_boundary;
-			this->m_initial_rodata_end = master.memory.m_initial_rodata_end;
+			this->m_arena.data = master.memory.m_arena.data;
+			this->m_arena.pages = master.memory.m_arena.pages;
+			this->m_arena.read_boundary = master.memory.m_arena.read_boundary;
+			this->m_arena.write_boundary = master.memory.m_arena.write_boundary;
+			this->m_arena.initial_rodata_end = master.memory.m_arena.initial_rodata_end;
 		}
 
 		// invalidate all cached pages, because references are invalidated
