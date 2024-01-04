@@ -170,7 +170,7 @@ INSTRUCTION(RV32C_BC_JALR, rv32c_jalr) {
 INSTRUCTION(RV32I_BC_JAL, rv32i_jal)
 {
 	VIEW_INSTR_AS(fi, FasterJtype);
-	if constexpr (false) {
+	if constexpr (VERBOSE_JUMPS) {
 		printf("JAL PC 0x%lX => 0x%lX\n", (long)pc, (long)pc + fi.signed_imm());
 	}
 	REG(fi.rd) = pc + 4;

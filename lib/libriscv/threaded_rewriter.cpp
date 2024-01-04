@@ -210,8 +210,6 @@ namespace riscv
 				return bytecode;
 			}
 			case RV32I_BC_JAL: {
-				// Here we try to find out if the whole jump
-				// can be expressed as just the instruction bits.
 				const auto addr = pc + original.Jtype.jump_offset();
 				const bool is_aligned = addr % PCAL == 0;
 				const bool store_zero = original.Jtype.rd == 0;
