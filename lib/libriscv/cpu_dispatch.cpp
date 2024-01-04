@@ -263,9 +263,10 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	counter.apply(MACHINE());
 	// Invoke SYSTEM
 	MACHINE().system(instr);
-	// Restore PC in case it changed (supervisor)
-	pc = REGISTERS().pc + 4;
-	goto check_jump;
+	// Restore counters
+	counter.retrieve_max_counter(MACHINE());
+	// Overflow-check, next block
+	NEXT_BLOCK(4, true);
 }
 
 #ifdef RISCV_BINARY_TRANSLATION

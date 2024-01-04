@@ -180,9 +180,10 @@ namespace riscv
 		counter.apply(MACHINE());
 		// Invoke SYSTEM
 		cpu.machine().system(instr);
-		// Restore PC in case it changed (supervisor)
-		pc = cpu.registers().pc + 4;
-		UNCHECKED_JUMP();
+		// Restore counters
+		counter.retrieve_max_counter(MACHINE());
+		// Overflow-check, next block
+		NEXT_BLOCK(4, true);
 	}
 
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
