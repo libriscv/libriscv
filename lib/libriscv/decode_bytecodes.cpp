@@ -369,6 +369,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 			}
 #ifdef RISCV_64I
 		case RV64I_OP32:
+			if constexpr (W < 8)
+				return RV32I_BC_INVALID;
+
 			switch (instr.Rtype.jumptable_friendly_op())
 			{
 			case 0x0: // ADD.W
@@ -385,6 +388,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 				return RV32I_BC_FUNCTION;
 			}
 		case RV64I_OP_IMM32:
+			if constexpr (W < 8)
+				return RV32I_BC_INVALID;
+
 			if (instr.Itype.rd == 0)
 				return RV32I_BC_NOP;
 			switch (instr.Itype.funct3)
@@ -497,10 +503,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr)
 		case RV32A_ATOMIC:
 			return RV32I_BC_FUNCTION;
 #endif
-		default:
-			// Unknown instructions can be custom-handled
-			return RV32I_BC_FUNCTION;
 	}
+	// Unknown instructions can be custom-handled
+	return RV32I_BC_FUNCTION;
 } // computed_index_for()
 
 	INSTANTIATE_32_IF_ENABLED(CPU);

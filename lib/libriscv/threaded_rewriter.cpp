@@ -40,6 +40,9 @@ namespace riscv
 			case RV64I_BC_SLLIW:
 			case RV64I_BC_SRLIW:
 			case RV64I_BC_SRAIW: {
+				if (W == 4)
+					return RV32I_BC_INVALID;
+
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
 				rewritten.rs2 = original.Itype.rs1;
@@ -64,6 +67,9 @@ namespace riscv
 			}
 #ifdef RISCV_64I
 			case RV64I_BC_ADDIW:
+				if (W == 4)
+					return RV32I_BC_INVALID;
+				[[fallthrough]];
 #endif
 			case RV32I_BC_SEXT_B:
 			case RV32I_BC_SEXT_H:
@@ -120,6 +126,16 @@ namespace riscv
 
 				return bytecode;
 			}
+#ifdef RISCV_64I
+			case RV64I_BC_OP_ADDW:
+			case RV64I_BC_OP_SUBW:
+			case RV64I_BC_OP_MULW:
+			case RV64I_BC_OP_SH1ADD_UW:
+			case RV64I_BC_OP_SH2ADD_UW:
+				if (W == 4)
+					return RV32I_BC_INVALID;
+				[[fallthrough]];
+#endif
 			case RV32I_BC_OP_ADD:
 			case RV32I_BC_OP_SUB:
 			case RV32I_BC_OP_SLL:
@@ -135,13 +151,6 @@ namespace riscv
 			case RV32I_BC_OP_DIVU:
 			case RV32I_BC_OP_REM:
 			case RV32I_BC_OP_REMU:
-#ifdef RISCV_64I
-			case RV64I_BC_OP_ADDW:
-			case RV64I_BC_OP_SUBW:
-			case RV64I_BC_OP_MULW:
-			case RV64I_BC_OP_SH1ADD_UW:
-			case RV64I_BC_OP_SH2ADD_UW:
-#endif
 			case RV32I_BC_OP_ZEXT_H:
 			case RV32I_BC_OP_SH1ADD:
 			case RV32I_BC_OP_SH2ADD:
@@ -154,15 +163,18 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+#ifdef RISCV_64I
+			case RV32I_BC_LDWU:
+			case RV32I_BC_LDD:
+				if (W == 4)
+					return RV32I_BC_INVALID;
+				[[fallthrough]];
+#endif
 			case RV32I_BC_LDB:
 			case RV32I_BC_LDBU:
 			case RV32I_BC_LDH:
 			case RV32I_BC_LDHU:
 			case RV32I_BC_LDW:
-#ifdef RISCV_64I
-			case RV32I_BC_LDWU:
-			case RV32I_BC_LDD:
-#endif
 			{
 				FasterItype rewritten;
 				rewritten.rs1 = original.Itype.rd;
@@ -172,12 +184,15 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+#ifdef RISCV_64I
+			case RV32I_BC_STD:
+				if (W == 4)
+					return RV32I_BC_INVALID;
+				[[fallthrough]];
+#endif
 			case RV32I_BC_STB:
 			case RV32I_BC_STH:
 			case RV32I_BC_STW:
-#ifdef RISCV_64I
-			case RV32I_BC_STD:
-#endif
 			{
 				FasterItype rewritten;
 				rewritten.rs1 = original.Stype.rs1;

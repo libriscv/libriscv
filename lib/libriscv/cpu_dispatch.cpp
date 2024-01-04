@@ -41,15 +41,15 @@ namespace riscv
 	decoder += 1;      \
 	EXECUTE_INSTR();
 
-#define NEXT_BLOCK(len, OF)               \
-	pc += len;                            \
-	decoder += len >> DecoderCache<W>::SHIFT;               \
+#define NEXT_BLOCK(len, OF)                 \
+	pc += len;                              \
+	decoder += len >> DecoderCache<W>::SHIFT;              \
+	if constexpr (FUZZING) /* Give OOB-aid to ASAN */      \
+	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT]; \
 	if constexpr (OF) {						\
 		if (UNLIKELY(counter.overflowed())) \
 			goto check_jump;				\
 	}										\
-	if constexpr (FUZZING) /* Give OOB-aid to ASAN */        \
-	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];  \
 	pc += decoder->block_bytes();                            \
 	counter.increment_counter(decoder->instruction_count()); \
 	EXECUTE_INSTR();
