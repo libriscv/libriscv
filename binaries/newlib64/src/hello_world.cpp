@@ -3,6 +3,7 @@
 #include <regex>
 #include <iostream>
 #include <stdexcept>
+#include <unistd.h>
 
 inline uint64_t rdcycle()
 {
@@ -69,19 +70,20 @@ int main()
 	const auto cycle1 = rdcycle();
 	printf("It took %lu instructions to throw, catch and print the exception\n", cycle1-cycle0);
 
-	return 666;
+	_exit(666);
 }
 
 static std::vector<int> array;
 
-extern "C"
-int test(int arg1)
+extern "C" __attribute__((used, retain))
+int test(int arg1, const char *arg2)
 {
-	printf("Test called with argument %d\n", arg1);
+	printf("Test called with argument %d and string argument '%s'\n", arg1, arg2);
 	array.push_back(arg1);
 	for (const int val : array) {
 		printf("Array: %d\n", val);
 	}
 	printf("Returning 777\n");
+	fflush(stdout); /* stdout is buffered. */
 	return 777;
 }

@@ -55,13 +55,17 @@ LIBRISCVAPI int64_t libriscv_return_value(RISCVMachine *m);
 /* Return current instruction counter value. */
 LIBRISCVAPI uint64_t libriscv_instruction_counter(RISCVMachine *m);
 
+/* Return a *pointer* to the instruction max counter. */
+LIBRISCVAPI uint64_t * libriscv_max_counter_pointer(RISCVMachine *m);
+
 /* Return symbol address or NULL if not found. */
-LIBRISCVAPI long libriscv_address_of(RISCVMachine *m, const char *name);
+LIBRISCVAPI uint64_t libriscv_address_of(RISCVMachine *m, const char *name);
 
 /* Return the opaque value provided during machine creation. */
 LIBRISCVAPI void * libriscv_opaque(RISCVMachine *m);
 
 /*** Modifying the RISC-V emulation ***/
+
 typedef union {
 	float   f32[2];
 	double  f64;
@@ -95,13 +99,32 @@ LIBRISCVAPI const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigne
 /* Triggers a CPU exception. Only safe to call from a system call. Will end execution. */
 LIBRISCVAPI void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data);
 
-/* Stops execution. */
+/* Stops execution normally. Only possible from a system call. */
 LIBRISCVAPI void libriscv_stop(RISCVMachine *m);
 
 typedef void (*riscv_syscall_handler_t)(RISCVMachine *m);
 
 /* Install a custom system call handler. */
 LIBRISCVAPI int libriscv_set_syscall_handler(unsigned num, riscv_syscall_handler_t);
+
+/*** RISC-V VM function calls ***/
+
+/* Make preparations for a VM function call. Returns 0 on success. */
+LIBRISCVAPI int libriscv_setup_vmcall(RISCVMachine *m, uint64_t address);
+
+/* Stack realignment helper. */
+#define LIBRISCV_REALIGN_STACK(regs)  ((regs)->r[2] & ~0xFLL)
+
+/* Register function or system call argument helper. */
+#define LIBRISCV_ARG_REGISTER(regs, n)  (regs)->r[10 + (n)]
+
+/* Put data on the current stack, with maintained 16-byte alignment. */
+static inline uint64_t libriscv_stack_push(RISCVMachine *m, RISCVRegisters *regs, const char *data, unsigned len) {
+	regs->r[2] -= len;
+	LIBRISCV_REALIGN_STACK(regs);
+	libriscv_copy_to_guest(m, regs->r[2], data, len);
+	return regs->r[2];
+}
 
 #ifdef __cplusplus
 }

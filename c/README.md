@@ -51,7 +51,7 @@ typedef void (*riscv_stdout_func_t)(void *opaque, const char *msg, unsigned size
 
 typedef struct {
 	uint64_t max_memory;
-	uint64_t stack_size;
+	uint32_t stack_size;
 	int      strict_sandbox;  /* No file or socket permissions */
 	unsigned     argc;        /* Program arguments */
 	const char **argv;
@@ -83,13 +83,17 @@ int64_t libriscv_return_value(RISCVMachine *m);
 /* Return current instruction counter value. */
 uint64_t libriscv_instruction_counter(RISCVMachine *m);
 
+/* Return a *pointer* to the instruction max counter. */
+uint64_t * libriscv_instruction_max_counter(RISCVMachine *m);
+
 /* Return symbol address or NULL if not found. */
 long libriscv_address_of(RISCVMachine *m, const char *name);
 
 /* Return the opaque value provided during machine creation. */
 void * libriscv_opaque(RISCVMachine *m);
 
-/*** Modifying the RISC-V emulation ***/
+/*** Modifying the RISC-V machine ***/
+
 typedef union {
 	float   f32[2];
 	double  f64;
@@ -130,4 +134,52 @@ typedef void (*riscv_syscall_handler_t)(RISCVMachine *m);
 
 /* Install a custom system call handler. */
 int libriscv_set_syscall_handler(unsigned num, riscv_syscall_handler_t);
+
+/*** RISC-V VM function calls ***/
+
+/* Make preparations for a VM function call. Returns 0 on success. */
+int libriscv_setup_vmcall(RISCVMachine *m, uint64_t address);
+
+/* Stack realignment helper. */
+#define LIBRISCV_REALIGN_STACK(regs)  ((regs)->r[2] & ~0xFLL)
+
+/* Register function or system call argument helper. */
+#define LIBRISCV_ARG_REGISTER(regs, n)  (regs)->r[10 + (n)]
+
+/* Put data on the current stack, with maintained 16-byte alignment. */
+uint64_t libriscv_stack_push(RISCVMachine *m, RISCVRegisters *regs, const char *data, unsigned len);
+
+```
+
+### VM function calls
+
+See [the C API test program](/c/test/test.c) for an example of a VM function call. It requires the symbol 'test' to be visible in the ELF program. The [64-bit newlib example](/binaries/newlib64/src/hello_world.cpp) will have a 'test' function.
+
+The current API is fairly open in order to be low latency. It should be possible to macroize the function calls, or at least make them more dynamic, so that they appear more like a function call API-wise. For now, tools not policies.
+
+### VM preemption
+
+In order to preempt, store all registers and the max instruction counter, then VM call the preemption address. Once back from the call, restore registers and pass the old max instruction counter to `libriscv_run()`:
+
+```c
+void my_system_call(RISCVMachine *m)
+{
+	RISCVRegisters *regs = libriscv_get_registers(m);
+	uint64_t *max_ptr = libriscv_max_counter_pointer(m);
+
+	/* Store registers and max counter */
+	RISCVRegisters temp_regs = *regs;
+	uint64_t  temp_max = *max_ptr;
+
+	/* Make a VM function call somewhere else */
+	my_vmcall(m, other_function_address);
+
+	/* Restore registers and max counter */
+	*regs = temp;
+	*max_ptr = temp_max;
+
+	/* Set system call return register a0 */
+	LIBRISCV_ARG_REGISTER(regs, 0) = 0;
+}
+
 ```
