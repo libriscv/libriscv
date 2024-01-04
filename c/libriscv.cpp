@@ -144,6 +144,11 @@ uint64_t libriscv_instruction_counter(RISCVMachine *m)
 {
 	return MACHINE(m)->instruction_counter();
 }
+extern "C"
+uint64_t * libriscv_max_counter_pointer(RISCVMachine *m)
+{
+	return &MACHINE(m)->get_counters().second;
+}
 
 extern "C"
 int libriscv_instruction_limit_reached(RISCVMachine *m)
@@ -152,7 +157,7 @@ int libriscv_instruction_limit_reached(RISCVMachine *m)
 }
 
 extern "C"
-long libriscv_address_of(RISCVMachine *m, const char *name)
+uint64_t libriscv_address_of(RISCVMachine *m, const char *name)
 {
 	try {
 		return ((Machine<RISCV_ARCH> *)m)->address_of(name);
@@ -195,6 +200,23 @@ int libriscv_jump(RISCVMachine *m, uint64_t address)
 {
 	try {
 		MACHINE(m)->cpu.jump(address);
+		return 0;
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+		return RISCV_ERROR_TYPE_MACHINE_EXCEPTION;
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
+	}
+	return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
+}
+extern "C"
+int libriscv_setup_vmcall(RISCVMachine *m, uint64_t address)
+{
+	try {
+		auto* machine = MACHINE(m);
+		machine->cpu.reset_stack_pointer();
+		machine->setup_call();
+		machine->cpu.jump(address);
 		return 0;
 	} catch (const MachineException& me) {
 		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());

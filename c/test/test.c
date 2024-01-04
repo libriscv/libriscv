@@ -28,6 +28,8 @@ static void my_exit(RISCVMachine *m)
 	libriscv_stop(m);
 }
 
+static void make_vm_function_call(RISCVMachine *m, const char *function);
+
 int main(int argc, char **argv)
 {
 	if (argc < 2) {
@@ -80,13 +82,61 @@ int main(int argc, char **argv)
 	const uint64_t icount = libriscv_instruction_counter(m);
 	const int64_t nanos = nanodiff(start_time, end_time);
 
-	libriscv_delete(m);
-
 	printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
 		retval, (uint64_t)retval);
 	printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms  Insn/s: %.0fmi/s\n",
 		icount, nanos/1e6,
 		icount / (nanos * 1e-3));
+
+
+	make_vm_function_call(m, "test");
+	make_vm_function_call(m, "test");
+	make_vm_function_call(m, "test");
+
+	libriscv_delete(m);
+}
+
+/**
+ * Make a VM function call into the program, step by step!
+ **/
+void make_vm_function_call(RISCVMachine *m, const char *function)
+{
+	/* Find the address of a function from the ELF symbol table */
+	const uint64_t vaddr = libriscv_address_of(m, function);
+	/* Only make the function call if "test" is a visible symbol */
+	if (vaddr == 0x0)
+		return;
+
+	/* Begin a VM function call */
+	printf("\n*** Starting a VM function call to %s at 0x%lX\n",
+		function, (long)vaddr);
+
+	if (libriscv_setup_vmcall(m, vaddr) == 0) {
+		/**
+		 * Put some arguments in machine registers:
+		 * 1. An integer in arg0
+		 * 2. A string in arg1
+		 * In order for the program to read the string, it needs to be
+		 * copied into the programs virtual memory. The easiest way to
+		 * do that is to push it on the stack.
+		**/
+		RISCVRegisters *regs = libriscv_get_registers(m);
+		/* Place an integer in the first argument (a0) register */
+		LIBRISCV_ARG_REGISTER(regs, 0) = 123;
+		/* Put a string (with terminating zero, due to sizeof) on the stack */
+		static const char hello[] = "Hello VM-call World!";
+		uint64_t strva = libriscv_stack_push(m, regs, hello, sizeof(hello));
+		/* Place the _strings address_ in the second argument (a1) register */
+		LIBRISCV_ARG_REGISTER(regs, 1) = strva;
+		/* Begin execution, with max 1bn instruction count. */
+		libriscv_run(m, 1000000000ull);
+
+		printf("*** VM function call return value: %ld\n",
+			libriscv_return_value(m));
+	} else {
+		fprintf(stderr,
+			"Could not jump to function at 0x%lX\n", (long)vaddr);
+	}
 }
 
 struct timespec time_now()
