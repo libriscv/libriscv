@@ -220,10 +220,12 @@ namespace riscv
 			std::function<void(T&, const uint8_t*, size_t)> callback);
 		// ELF stuff
 		using Elf = typename riscv::Elf<W>;
-		template <typename T> T* elf_offset(intptr_t ofs) const {
-			return (T*) &m_binary.at(ofs);
+		template <typename T> T* elf_offset(size_t ofs) const {
+			if (ofs + sizeof(T) >= ofs && ofs + sizeof(T) < m_binary.size())
+				return (T*) &m_binary[ofs];
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF offset", ofs);
 		}
-		inline const auto* elf_header() const noexcept {
+		const auto* elf_header() const {
 			return elf_offset<const typename Elf::Header> (0);
 		}
 		const typename Elf::SectionHeader* section_by_name(const std::string& name) const;

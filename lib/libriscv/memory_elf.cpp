@@ -105,6 +105,10 @@ namespace riscv
 		if (dyn_hdr == nullptr) return;
 		const size_t rela_ents = rela->sh_size / sizeof(ElfRela);
 
+		const auto rela_ents_offset = rela->sh_offset + rela_ents * sizeof(ElfRela);
+		if (rela_ents_offset < rela->sh_offset || m_binary.size() < rela_ents_offset)
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF relocations");
+
 		auto* rela_addr = elf_offset<ElfRela>(rela->sh_offset);
 		for (size_t i = 0; i < rela_ents; i++)
 		{
