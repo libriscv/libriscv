@@ -15,10 +15,7 @@ inline bool Machine<W>::instruction_limit_reached() const noexcept {
 template <int W>
 void Machine<W>::penalize(uint64_t val) noexcept
 {
-	if (m_max_counter - val > m_max_counter)
-		m_max_counter = 0;
-	else
-		m_max_counter -= val;
+	m_max_counter = (val >= m_max_counter) ? 0u : m_max_counter - val;
 }
 
 template <int W>
