@@ -48,21 +48,6 @@ namespace riscv
 		   Returns the number of buffers filled, or an exception if not enough. */
 		size_t gather_buffers_from_range(size_t cnt, vBuffer[], address_t addr, size_t len) const;
 		size_t gather_writable_buffers_from_range(size_t cnt, vBuffer[], address_t addr, size_t len);
-		// Gives a chunk-wise view of the data at address, with a callback
-		// invocation at each page boundary. @offs is the current byte offset.
-		void foreach(address_t addr, size_t len,
-			std::function<void(Memory&, address_t offs, const uint8_t*, size_t)> callback);
-		void foreach(address_t addr, size_t len,
-			std::function<void(const Memory&, address_t offs, const uint8_t*, size_t)>) const;
-		// Gives a sequential view of the data at address, with the possibility
-		// of optimizing away a copy if the data crosses no page-boundaries.
-		void memview(address_t addr, size_t len,
-			std::function<void(Memory&, const uint8_t*, size_t)> callback);
-		void memview(address_t addr, size_t len,
-			std::function<void(const Memory&, const uint8_t*, size_t)> callback) const;
-		// Gives const-ref access to pod-type T viewed as sequential memory. (See above)
-		template <typename T>
-		void memview(address_t addr, std::function<void(const T&)> callback) const;
 		// Compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
