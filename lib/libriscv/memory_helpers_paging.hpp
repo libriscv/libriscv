@@ -104,6 +104,9 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 {
 	riscv::Buffer result;
 
+	if (UNLIKELY(datalen > maxlen))
+		protection_fault(addr);
+
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(addr + datalen < memory_arena_size() && addr + datalen > addr)) {
 			auto* begin = &((char *)memory_arena_ptr())[RISCV_SPECSAFE(addr)];
@@ -111,9 +114,6 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 			return result;
 		}
 	}
-
-	if (UNLIKELY(datalen > maxlen))
-		protection_fault(addr);
 
 	address_t pageno = page_number(addr);
 	const Page& page = this->get_readable_pageno(pageno);

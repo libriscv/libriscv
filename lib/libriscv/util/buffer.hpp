@@ -66,7 +66,6 @@ namespace riscv
 
 	inline void Buffer::append_page(const char* buffer, size_t len)
 	{
-		assert(len <= Page::size());
 		if (m_data.empty())
 		{
 			m_data = {buffer, len};

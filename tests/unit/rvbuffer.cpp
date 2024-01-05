@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <libriscv/machine.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
@@ -37,6 +38,11 @@ TEST_CASE("Sequential buffer", "[Buffer]")
 		REQUIRE(buf.strview() == "hello world!");
 		REQUIRE(buf.to_string() == "hello world!");
 	}
+
+	// maxlen works
+	REQUIRE_THROWS_WITH([&] {
+		machine.memory.rvbuffer(origin, 128, 127);
+	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 }
 
 TEST_CASE("Boundary buffer", "[Buffer]")
