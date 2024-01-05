@@ -65,7 +65,7 @@ namespace riscv
 	template<int W> RISCV_NOINLINE
 	typename CPU<W>::NextExecuteReturn CPU<W>::next_execute_segment(address_t pc)
 	{
-		static const int MAX_RESTARTS = 4;
+		static constexpr int MAX_RESTARTS = 4;
 		int restarts = 0;
 restart_next_execute_segment:
 
@@ -73,12 +73,14 @@ restart_next_execute_segment:
 		// verify execute and see if it has a trap handler
 		auto base_pageno = pc / Page::size();
 		auto end_pageno  = base_pageno + 1;
+		// We absolutely need to write PC here because even read-fault handlers
+		// like get_pageno() slowpaths could be reading PC.
+		this->registers().pc = pc;
 
 		// Check for +exec
 		const auto& current_page =
 			machine().memory.get_pageno(base_pageno);
 		if (UNLIKELY(!current_page.attr.exec)) {
-			this->registers().pc = pc;
 			this->m_fault(*this, current_page);
 			pc = this->pc();
 
@@ -112,11 +114,11 @@ restart_next_execute_segment:
 		}
 
 		// Find decoded execute segment via override
-		// If it returns nullptr, we build a new execute segment
+		// If it returns empty, we build a new execute segment
 		auto& next = this->m_override_exec(*this);
 		if (LIKELY(!next.empty())) {
 			this->m_exec = &next;
-			return {this->m_exec, pc};
+			return {this->m_exec, this->registers().pc};
 		}
 
 		// Find the earliest execute page in new segment
