@@ -25,3 +25,21 @@ The last step is to add your compiler to PATH so that it becomes visible to buil
 ```
 export PATH=$PATH:$HOME/riscv/bin
 ```
+
+After reopening your terminal you should now be able to tab-complete either `riscv32-` or `riscv64-`.
+
+# Maximum performance
+
+The highest performance 32-bit arch for libriscv right now is this:
+
+```sh
+./configure --prefix=$HOME/riscv --with-arch=rv32g_zba_zbb_zbc_zbs --with-abi=ilp32d
+```
+
+And for 64-bit:
+
+```sh
+./configure --prefix=$HOME/riscv --with-arch=rv64g_zba_zbb_zbc_zbs --with-abi=ilp32d
+```
+
+This will enable all instructions from the bit manipulation extension.
