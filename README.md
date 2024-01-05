@@ -17,10 +17,13 @@ Goals:
 - No overhead when used for game engine scripting or request-based workloads (eg. high performance caching)
 - Type-safe VM call and system call interfaces
 - Secure speculation-safe sandbox
+- Low attack surface
+- Platform-independent and easy to embed
 
 Non goals:
-- Highest performance, just-in-time compilation
+- Just-in-time compilation
 - Wide support for Linux system calls
+- Other attack surface inflators
 
 ## Benchmarks
 
@@ -263,6 +266,8 @@ See [this unit test](/tests/unit/custom.cpp) for an example on how to add your o
 
 ## Documentation
 
+[Fast custom RISC-V compiler](docs/NEWLIB.md)
+
 [System calls](docs/SYSCALLS.md)
 
 [Freestanding environments](docs/FREESTANDING.md)
@@ -275,10 +280,6 @@ See [this unit test](/tests/unit/custom.cpp) for an example on how to add your o
 
 [Unit tests](/tests/unit)
 
-## Why a RISC-V library
-
-It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ code on a website, safely? It can step through RISC-V programs line by line showing registers and memory locations. It also has some extra features that allow you to make function calls into the guest program. I think it's pretty cool stuff.
-
 
 ## Dispatch modes
 
@@ -288,7 +289,7 @@ It's a drop-in sandbox. Perhaps you want someone to be able to execute C/C++ cod
 - Threaded bytecode simulation
 - Tailcall bytecode simulation
 
-This can be controlled with CMake options.
+This can be controlled with CMake options, however the default is usually fastest.
 
 ### Remote GDB using RSP server
 
@@ -322,7 +323,7 @@ An experimental libtcc mode can be unlocked by enabling `RISCV_EXPERIMENTAL`, ca
 
 ### Read-write arena
 
-The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, allocate pages outside of the arena memory area and apply protections to them.
+The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, pages can still be allocated outside of the arena memory area, and there page protections will apply as normal.
 
 ### Multiprocessing
 
