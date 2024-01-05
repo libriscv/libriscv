@@ -27,14 +27,20 @@ TEST_CASE("Basic page protections", "[Memory]")
 
 	// V is not readable anymore
 	REQUIRE_THROWS_WITH([&] {
-		machine.memory.memview(V, VLEN,
-			[] (const auto&, const uint8_t*, size_t) {
-			});
+		machine.memory.rvbuffer(V, VLEN);
+	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+
+	REQUIRE_THROWS_WITH([&] {
+		machine.memory.memstring(V);
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 
 	// V is not writable anymore
 	REQUIRE_THROWS_WITH([&] {
 		machine.memory.memset(V, 0, VLEN);
+	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+
+	REQUIRE_THROWS_WITH([&] {
+		machine.memory.memcpy(V, "1234", 4);
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 }
 

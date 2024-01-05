@@ -13,6 +13,7 @@
 namespace riscv {
 	// An arbitrary maximum length just to stop *somewhere*
 	static constexpr uint64_t MEMCPY_MAX = 1024ull * 1024u * 512u; // 512M
+	static constexpr size_t   MEMCPY_BUFFERS = 256u; /* 1MB of maximally fragmented memory */
 	static constexpr uint32_t STRLEN_MAX = 64'000u;
 	static constexpr uint64_t COMPLEX_CALL_PENALTY = 2'000u;
 
@@ -146,12 +147,14 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		auto [dst, src, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcpy(%#lX, %#lX, %zu)\n", (long)dst, (long)src, (size_t)len);
-		if (UNLIKELY(len > MEMCPY_MAX))
-			throw MachineException(SYSTEM_CALL_FAILED, "memcpy length too large", len);
-		m.memory.foreach(src, len,
-			[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
-				m.memcpy(dst + off, data, len);
-			});
+
+		std::array<riscv::vBuffer, MEMCPY_BUFFERS> buffers;
+		const size_t cnt =
+			m.memory.gather_buffers_from_range(buffers.size(), buffers.data(), src, len);
+		for (size_t i = 0; i < cnt; i++) {
+			m.memory.memcpy(dst, buffers[i].ptr, buffers[i].len);
+			dst += buffers[i].len;
+		}
 		m.penalize(2 * len);
 	}}, {syscall_base+1, [] (Machine<W>& m) {
 		// Memset n+1
@@ -168,17 +171,20 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memmove(%#lX, %#lX, %zu)\n",
 			(long) dst, (long) src, (size_t)len);
-		if (UNLIKELY(len > MEMCPY_MAX))
-			throw MachineException(SYSTEM_CALL_FAILED, "memmove length too large", len);
 		// If the buffers don't overlap, we can use memcpy which copies forwards
 		if (dst < src) {
-			m.memory.foreach(src, len,
-				[dst = dst] (Memory<W>& m, address_type<W> off, const uint8_t* data, size_t len) {
-					m.memcpy(dst + off, data, len);
-				});
+			std::array<riscv::vBuffer, MEMCPY_BUFFERS> buffers;
+			const size_t cnt =
+				m.memory.gather_buffers_from_range(buffers.size(), buffers.data(), src, len);
+			for (size_t i = 0; i < cnt; i++) {
+				m.memory.memcpy(dst, buffers[i].ptr, buffers[i].len);
+				dst += buffers[i].len;
+			}
 		}
 		else if (len > 0)
 		{
+			if (UNLIKELY(len > MEMCPY_MAX))
+				throw MachineException(SYSTEM_CALL_FAILED, "memmove length too large", len);
 			constexpr size_t wordsize = sizeof(address_type<W>);
 			if (dst % wordsize == 0 && src % wordsize == 0 && len % wordsize == 0)
 			{
