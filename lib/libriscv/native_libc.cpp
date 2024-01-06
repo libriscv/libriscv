@@ -240,14 +240,9 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		m.penalize(2 + 2 * len);
 		m.set_result(0);
 	}}, {syscall_base+13, [] (Machine<W>& m) {
-		// Describe value n+13
-		auto [desc, value] =
-			m.sysargs<std::string, address_type<W>> ();
-		char buffer[256];
-		const int len =
-			snprintf(buffer, sizeof(buffer),
-			"SYSCALL describe %s: 0x%lX (%ld)\n", desc.c_str(), (long)value, (long)value);
-		m.debug_print(buffer, len);
+		// Reserved system call n+13
+		// Space for one more accelerated libc function
+		m.set_result(-1);
 	}}, {syscall_base+14, [] (Machine<W>& m) {
 		// Print backtrace n+14
 		m.memory.print_backtrace(
