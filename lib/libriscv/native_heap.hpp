@@ -56,6 +56,8 @@ struct Arena
 	size_t bytes_used() const;
 	size_t chunks_used() const noexcept { return m_chunks.size(); }
 
+	void set_max_chunks(unsigned new_max) { this->m_max_chunks = new_max; }
+
 	void transfer(Arena& dest) const;
 
 	void on_unknown_free(unknown_free_func_t func) {
@@ -88,6 +90,7 @@ private:
 	std::deque<ArenaChunk> m_chunks;
 	std::vector<ArenaChunk*> m_free_chunks;
 	ArenaChunk  m_base_chunk;
+	unsigned    m_max_chunks = 4'000u;
 
 	unknown_free_func_t m_free_unknown_chunk
 		= [] (auto, auto*) { return -1; };
@@ -173,6 +176,9 @@ template <typename... Args>
 inline ArenaChunk* Arena::new_chunk(Args&&... args)
 {
 	if (UNLIKELY(m_free_chunks.empty())) {
+		if (m_chunks.size() >= this->m_max_chunks)
+			throw MachineException(INVALID_PROGRAM, "Too many arena chunks", this->m_max_chunks);
+
 		m_chunks.emplace_back(std::forward<Args>(args)...);
 		return &m_chunks.back();
 	}

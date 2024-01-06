@@ -79,7 +79,8 @@ struct MultiThreading
 	std::vector<thread_t*> m_blocked;
 	std::vector<thread_t*> m_suspended;
 	std::unordered_map<int, thread_t> m_threads;
-	int        thread_counter = 0;
+	unsigned   m_thread_counter = 0;
+	unsigned   m_max_threads = 250;
 	thread_t*  m_current = nullptr;
 };
 
@@ -99,7 +100,7 @@ inline MultiThreading<W>::MultiThreading(Machine<W>& mach)
 
 template <int W>
 inline MultiThreading<W>::MultiThreading(Machine<W>& mach, const MultiThreading<W>& other)
-	: machine(mach), thread_counter(other.thread_counter)
+	: machine(mach), m_thread_counter(other.m_thread_counter), m_max_threads(other.m_max_threads)
 {
 	for (const auto& it : other.m_threads) {
 		const int tid = it.first;
@@ -267,7 +268,10 @@ inline Thread<W>* MultiThreading<W>::create(
 			int flags, address_t ctid, address_t ptid,
 			address_t stack, address_t tls, address_t stkbase, address_t stksize)
 {
-	const int tid = ++this->thread_counter;
+	if (this->m_thread_counter >= this->m_max_threads)
+		throw MachineException(INVALID_PROGRAM, "Too many threads", this->m_max_threads);
+
+	const int tid = ++this->m_thread_counter;
 	auto it = m_threads.try_emplace(tid, *this, tid, tls, stack, stkbase, stksize);
 	auto* thread = &it.first->second;
 

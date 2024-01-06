@@ -136,3 +136,18 @@ TEST_CASE("Basic heap usage", "[Heap]")
 	REQUIRE(arena.bytes_free() == END - BEGIN);
 	allocs.clear();
 }
+
+TEST_CASE("Allocate too many chunks", "[Heap]")
+{
+	REQUIRE_THROWS([] {
+		riscv::Arena arena {BEGIN, END};
+		while (true)
+			arena.malloc(4);
+	}());
+
+	REQUIRE_THROWS([] {
+		riscv::Arena arena {BEGIN, END};
+		arena.set_max_chunks(0);
+		arena.malloc(4);
+	}());
+}
