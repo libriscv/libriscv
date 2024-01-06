@@ -209,12 +209,18 @@ namespace riscv
 		[[maybe_unused]] const MachineOptions<W>& options,
 		DecodedExecuteSegment<W>& exec)
 	{
+		if (exec.exec_end() < exec.exec_begin())
+			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
+
 		const auto pbase = exec.pagedata_base();
 		const auto addr  = exec.exec_begin();
 		const auto len   = exec.exec_end() - exec.exec_begin();
 		constexpr size_t PMASK = Page::size()-1;
+		// We need to allocate room for at least one more decoder cache entry.
+		// This is because jump and branch instructions don't check PC after
+		// not branching. The last entry is an invalid instruction.
 		const size_t prelen  = addr - pbase;
-		const size_t midlen  = len + prelen;
+		const size_t midlen  = len + prelen + 4; // Extra entry
 		const size_t plen = (midlen + PMASK) & ~PMASK;
 		//printf("generate_decoder_cache: Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu TOTAL %zu\n",
 		//	addr, len, pbase, pbase + plen, prelen, midlen, plen);
@@ -333,6 +339,12 @@ namespace riscv
 			} else
 				dst += 4;
 		}
+		// Make sure the last entry is an invalid instruction
+		// This simplifies many other sub-systems
+		auto& entry = exec_decoder[(addr + len) / DecoderCache<W>::DIVISOR];
+		entry.set_bytecode(0);
+		entry.m_handler = 0;
+		entry.idxend = 0;
 
 		realize_fastsim<W>(addr, dst, exec_segment, exec_decoder);
 	}
@@ -356,24 +368,24 @@ namespace riscv
 	// It is not strictly necessary to store the raw instruction bits, however, it
 	// enables step by step simulation as well as CLI- and remote debugging without
 	// rebuilding the emulator.
-	// XXX: Moved here to work around a GCC bug
+	// Crucially, because of page alignments and 4 extra bytes, the necessary checks
+	// when reading from the execute segment is reduced. You can always read 4 bytes
+	// no matter where you are in the segment, a whole instruction unchecked.
 	template <int W> RISCV_INTERNAL
 	DecodedExecuteSegment<W>& Memory<W>::create_execute_segment(
 		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen)
 	{
-		if constexpr (compressed_enabled) {
-			if (UNLIKELY(exlen % 2))
-				throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
-		} else {
-			if (UNLIKELY(exlen % 4))
-				throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
-		}
+		if (UNLIKELY(exlen % (compressed_enabled ? 2 : 4)))
+			throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
 
 		constexpr address_t PMASK = Page::size()-1;
 		const address_t pbase = vaddr & ~PMASK;
 		const size_t prelen  = vaddr - pbase;
-		const size_t midlen  = exlen + prelen;
+		// Make 4 bytes of extra room to avoid having to validate 4-byte reads
+		// when reading at 2 bytes before the end of the execute segment.
+		const size_t midlen  = exlen + prelen + 2; // Extra room for reads
 		const size_t plen = (midlen + PMASK) & ~PMASK;
+		// Because postlen uses midlen, we end up zeroing the extra 4 bytes in the end
 		const size_t postlen = plen - midlen;
 		//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
 		//	vaddr, exlen, pbase, pbase + plen, prelen, exlen, postlen, plen);
@@ -391,8 +403,11 @@ namespace riscv
 		new (&current_exec) DecodedExecuteSegment<W>(pbase, plen, vaddr, exlen);
 
 		auto* exec_data = current_exec.exec_data(pbase);
+		// This is a zeroed prologue in order to be able to use whole pages
 		std::memset(&exec_data[0],      0,     prelen);
+		// This is the actual instruction bytes
 		std::memcpy(&exec_data[prelen], vdata, exlen);
+		// This memset() operation will end up zeroing the extra 4 bytes
 		std::memset(&exec_data[prelen + exlen], 0,   postlen);
 
 		this->generate_decoder_cache(options, current_exec);
