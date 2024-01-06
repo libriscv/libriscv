@@ -251,7 +251,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 				m.print("\n", 1);
 			});
 		m.set_result(0);
-		m.penalize(COMPLEX_CALL_PENALTY);
+		m.penalize(100 * COMPLEX_CALL_PENALTY);
 	}}});
 }
 
