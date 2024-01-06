@@ -80,7 +80,7 @@ struct MultiThreading
 	std::vector<thread_t*> m_suspended;
 	std::unordered_map<int, thread_t> m_threads;
 	unsigned   m_thread_counter = 0;
-	unsigned   m_max_threads = 250;
+	unsigned   m_max_threads = 50;
 	thread_t*  m_current = nullptr;
 };
 
@@ -268,7 +268,7 @@ inline Thread<W>* MultiThreading<W>::create(
 			int flags, address_t ctid, address_t ptid,
 			address_t stack, address_t tls, address_t stkbase, address_t stksize)
 {
-	if (this->m_thread_counter >= this->m_max_threads)
+	if (this->m_threads.size() >= this->m_max_threads)
 		throw MachineException(INVALID_PROGRAM, "Too many threads", this->m_max_threads);
 
 	const int tid = ++this->m_thread_counter;
