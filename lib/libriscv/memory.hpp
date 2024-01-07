@@ -51,10 +51,11 @@ namespace riscv
 		// Compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
-		// Gather fragmented virtual memory into an array of buffers
-		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 1ul << 24) const;
+		// Gather fragmented virtual memory into a buffer abstraction that can output
+		// to a vector, a string and check sequentiality.
+		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
 		// View known-sequential virtual memory (or throw exception)
-		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 1ul << 24) const;
+		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
 		// Read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t maxlen = 16384) const;
 		size_t strlen(address_t addr, size_t maxlen = 16384) const;

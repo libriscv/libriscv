@@ -174,6 +174,11 @@ size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 template <int W> inline
 int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 {
+	if (UNLIKELY(p1 + len < p1))
+		protection_fault(p1);
+	if (UNLIKELY(p2 + len < p2))
+		protection_fault(p2);
+
 	// NOTE: fast implementation if no pointer crosses page boundary
 	const auto pageno1 = this->page_number(p1);
 	const auto pageno2 = this->page_number(p2);
@@ -209,6 +214,9 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 template <int W> inline
 int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 {
+	if (UNLIKELY(p2 + len < p2))
+		protection_fault(p2);
+
 	const char* s1 = (const char*) ptr1;
 	// NOTE: fast implementation if no pointer crosses page boundary
 	const auto pageno2 = this->page_number(p2);
