@@ -39,7 +39,6 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 		//machine.cpu.reg(riscv::REG_SP) = 0x1;
 		machine.cpu.jump(V);
 		// Let's avoid loops
-		machine.reset_instruction_counter();
 		machine.simulate(MAX_CYCLES);
 	}
 	catch (const std::exception &e)
@@ -86,6 +85,131 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 	}
 }
 
+/**
+ * This mode attempts to fuzz the native system calls that ship
+ * with libriscv. These syscalls drastically improve certain
+ * common libc functions. Guests are free to use them, or simply
+ * ignore them.
+**/
+static void fuzz_native_syscalls(const uint8_t* data, size_t len)
+{
+	static constexpr uint32_t S = 0x1000;
+	static constexpr uint32_t V = 0x2000;
+	static constexpr uint64_t MAX_CYCLES = 10'000ull;
+
+	if (len < 1)
+		return;
+
+	// Create empty machine
+	const riscv::MachineOptions<W> options {
+		.allow_write_exec_segment = true,
+		.use_memory_arena = false
+	};
+	riscv::Machine<W> machine { empty, options };
+	machine.on_unhandled_syscall = [] (auto&, size_t) {};
+	// The fuzzer occasionally tries to invoke write/writev
+	machine.set_printer([] (auto&, const char *, size_t) {});
+
+	const uint8_t syscall_id = data[0];
+	try {
+		// Allocate a custom guest heap
+		const auto heap = machine.memory.mmap_allocate(2ull << 20);
+		machine.setup_native_memory(100);
+		machine.setup_native_heap(200, heap, 2ull << 20);
+		machine.setup_native_threads(300);
+		machine.setup_argv({"program"}, {"LC_ALL=C"});
+
+		machine.cpu.init_execute_area(&data[1], V, len - 1);
+		machine.cpu.jump(V);
+
+		machine.simulate(MAX_CYCLES);
+	} catch (const std::exception&) {
+		//printf(">>> Exception: %s\n", e.what());
+	}
+	// Accelerate syscall fuzzing
+	try {
+		machine.system_call(syscall_id);
+	} catch (...) {
+	}
+}
+
+/**
+ * This mode attempts to fuzz the system call helpers that
+ * are designed to make it easy and safe to implement host-side
+ * system calls in libriscv.
+**/
+static void fuzz_syscall_helpers(const uint8_t* data, size_t len)
+{
+	static constexpr uint32_t S = 0x1000;
+	static constexpr uint32_t V = 0x2000;
+	static constexpr uint64_t MAX_CYCLES = 10'000ull;
+
+	// Create empty machine
+	const riscv::MachineOptions<W> options {
+		.allow_write_exec_segment = true,
+		.use_memory_arena = false
+	};
+	riscv::Machine<W> machine { empty, options };
+	machine.on_unhandled_syscall = [] (auto&, size_t) {};
+	// The fuzzer occasionally tries to invoke write/writev
+	machine.set_printer([] (auto&, const char *, size_t) {});
+
+	const uint8_t syscall_id = data[0];
+	try {
+		// Allocate a custom guest heap
+		const auto heap = machine.memory.mmap_allocate(2ull << 20);
+
+		machine.install_syscall_handler(1,
+			[] (riscv::Machine<W>& m) {
+				try {
+					const auto [str] = m.sysargs <std::string> ();
+				} catch (...) {}
+				try {
+					const auto [view] = m.sysargs <std::string_view> ();
+				} catch (...) {}
+				const auto a0 = m.sysarg(0);
+				const auto a1 = m.sysarg(1);
+				const auto a2 = m.sysarg(1);
+
+				try {
+					std::array<riscv::vBuffer, 128> buffers;
+					const auto result =
+						m.memory.gather_buffers_from_range(buffers.size(), buffers.data(), a0, a1);
+					if (result > buffers.size())
+						abort();
+				} catch (...) {}
+				try {
+					const auto buffer = m.memory.rvbuffer(a0, a1);
+				} catch (...) {}
+				try {
+					m.memory.strlen(a0);
+				} catch (...) {}
+				try {
+					if (a2 < 65536)
+						m.memory.memcmp(a0, a1, a2);
+				} catch (...) {}
+				try {
+					if (a2 < 65536)
+						m.memory.memcpy(a0, m, a1, a2);
+				} catch (...) {}
+			});
+
+		machine.setup_argv({"program"}, {"LC_ALL=C"});
+
+		machine.cpu.init_execute_area(data, V, len);
+		machine.cpu.jump(V);
+
+		machine.simulate(MAX_CYCLES);
+	} catch (const std::exception&) {
+		//printf(">>> Exception: %s\n", e.what());
+	}
+	// Accelerate syscall fuzzing
+	try {
+		machine.system_call(1);
+	} catch (...) {
+	}
+}
+
 extern "C"
 void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
 {
@@ -93,6 +217,10 @@ void LLVMFuzzerTestOneInput(const uint8_t* data, size_t len)
 	fuzz_elf_loader(data, len);
 #elif defined(FUZZ_VM)
 	fuzz_instruction_set(data, len);
+#elif defined(FUZZ_NAT)
+	fuzz_native_syscalls(data, len);
+#elif defined(FUZZ_SYSH)
+	fuzz_syscall_helpers(data, len);
 #else
 	#error "Unknown fuzzing mode"
 #endif

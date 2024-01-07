@@ -35,3 +35,9 @@ add_fuzzer(vmfuzzer128 16  FUZZ_VM)
 add_fuzzer(elffuzzer32  4   FUZZ_ELF)
 add_fuzzer(elffuzzer64  8   FUZZ_ELF)
 add_fuzzer(elffuzzer128 16  FUZZ_ELF)
+
+add_fuzzer(natsysfuzzer32  4   FUZZ_NAT)
+add_fuzzer(natsysfuzzer64  8   FUZZ_NAT)
+
+add_fuzzer(syshelperfuzzer32  4   FUZZ_SYSH)
+add_fuzzer(syshelperfuzzer64  8   FUZZ_SYSH)
