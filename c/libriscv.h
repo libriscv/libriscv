@@ -52,19 +52,13 @@ LIBRISCVAPI const char * libriscv_strerror(int return_value);
 /* Return current value of the return value register A0. */
 LIBRISCVAPI int64_t libriscv_return_value(RISCVMachine *m);
 
-/* Return current instruction counter value. */
-LIBRISCVAPI uint64_t libriscv_instruction_counter(RISCVMachine *m);
-
-/* Return a *pointer* to the instruction max counter. */
-LIBRISCVAPI uint64_t * libriscv_max_counter_pointer(RISCVMachine *m);
-
 /* Return symbol address or NULL if not found. */
 LIBRISCVAPI uint64_t libriscv_address_of(RISCVMachine *m, const char *name);
 
 /* Return the opaque value provided during machine creation. */
 LIBRISCVAPI void * libriscv_opaque(RISCVMachine *m);
 
-/*** Modifying the RISC-V emulation ***/
+/*** View and modify the RISC-V emulator state ***/
 
 typedef union {
 	float   f32[2];
@@ -96,16 +90,24 @@ LIBRISCVAPI char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned ma
    On success, return a pointer to the memory. Otherwise, return null. */
 LIBRISCVAPI const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length);
 
-/* Triggers a CPU exception. Only safe to call from a system call. Will end execution. */
-LIBRISCVAPI void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data);
-
-/* Stops execution normally. Only possible from a system call. */
+/* Stops execution normally. Only possible from a system call and EBREAK. */
 LIBRISCVAPI void libriscv_stop(RISCVMachine *m);
+
+/* Return current instruction counter value. */
+LIBRISCVAPI uint64_t libriscv_instruction_counter(RISCVMachine *m);
+
+/* Return a *pointer* to the instruction max counter. */
+LIBRISCVAPI uint64_t * libriscv_max_counter_pointer(RISCVMachine *m);
+
+/*** RISC-V system call handling ***/
 
 typedef void (*riscv_syscall_handler_t)(RISCVMachine *m);
 
 /* Install a custom system call handler. */
 LIBRISCVAPI int libriscv_set_syscall_handler(unsigned num, riscv_syscall_handler_t);
+
+/* Triggers a CPU exception. Only safe to call from a system call. Will end execution. */
+LIBRISCVAPI void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data);
 
 /*** RISC-V VM function calls ***/
 

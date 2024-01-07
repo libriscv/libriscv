@@ -72,27 +72,21 @@ int libriscv_delete(RISCVMachine *m);
 
 /* Start execution at current PC, with the given instruction limit. 0 on success.
    When an error occurs, the negative value is one of the RISCV_ERROR_ enum values. */
-int libriscv_run(RISCVMachine *m, uint64_t instruction_limit);
+LIBRISCVAPI int libriscv_run(RISCVMachine *m, uint64_t instruction_limit);
 
 /* Returns a string describing a negative return value. */
-const char * libriscv_strerror(int return_value);
+LIBRISCVAPI const char * libriscv_strerror(int return_value);
 
 /* Return current value of the return value register A0. */
-int64_t libriscv_return_value(RISCVMachine *m);
-
-/* Return current instruction counter value. */
-uint64_t libriscv_instruction_counter(RISCVMachine *m);
-
-/* Return a *pointer* to the instruction max counter. */
-uint64_t * libriscv_instruction_max_counter(RISCVMachine *m);
+LIBRISCVAPI int64_t libriscv_return_value(RISCVMachine *m);
 
 /* Return symbol address or NULL if not found. */
-long libriscv_address_of(RISCVMachine *m, const char *name);
+LIBRISCVAPI uint64_t libriscv_address_of(RISCVMachine *m, const char *name);
 
 /* Return the opaque value provided during machine creation. */
-void * libriscv_opaque(RISCVMachine *m);
+LIBRISCVAPI void * libriscv_opaque(RISCVMachine *m);
 
-/*** Modifying the RISC-V machine ***/
+/*** View and modify the RISC-V emulator state ***/
 
 typedef union {
 	float   f32[2];
@@ -107,38 +101,46 @@ typedef struct {
 } RISCVRegisters;
 
 /* Retrieve the internal registers of the RISC-V machine. Changing PC is dangerous. */
-RISCVRegisters * libriscv_get_registers(RISCVMachine *m);
+LIBRISCVAPI RISCVRegisters * libriscv_get_registers(RISCVMachine *m);
 
 /* Change the PC register safely. PC can be changed before running and during system calls. */
-int libriscv_jump(RISCVMachine *m, uint64_t address);
+LIBRISCVAPI int libriscv_jump(RISCVMachine *m, uint64_t address);
 
 /* Copy memory in and out of the RISC-V machine. */
-int libriscv_copy_to_guest(RISCVMachine *m, uint64_t dst, const void *src, unsigned len);
-int libriscv_copy_from_guest(RISCVMachine *m, void *dst, uint64_t src, unsigned len);
+LIBRISCVAPI int libriscv_copy_to_guest(RISCVMachine *m, uint64_t dst, const void *src, unsigned len);
+LIBRISCVAPI int libriscv_copy_from_guest(RISCVMachine *m, void *dst, uint64_t src, unsigned len);
 
 /* Read a zero-terminated string from memory into a heap-allocated string of at most maxlen length.
    On success, set *length and return a pointer to the new string. Otherwise, return null. */
-char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned maxlen, unsigned *length);
+LIBRISCVAPI char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned maxlen, unsigned *length);
 
 /* View a slice of readable memory from src to src + length.
    On success, return a pointer to the memory. Otherwise, return null. */
-const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length);
+LIBRISCVAPI const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length);
 
-/* Triggers a CPU exception. Only safe to call from a system call. Will end execution. */
-void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data);
+/* Stops execution normally. Only possible from a system call and EBREAK. */
+LIBRISCVAPI void libriscv_stop(RISCVMachine *m);
 
-/* Stops execution. */
-void libriscv_stop(RISCVMachine *m);
+/* Return current instruction counter value. */
+LIBRISCVAPI uint64_t libriscv_instruction_counter(RISCVMachine *m);
+
+/* Return a *pointer* to the instruction max counter. */
+LIBRISCVAPI uint64_t * libriscv_max_counter_pointer(RISCVMachine *m);
+
+/*** RISC-V system call handling ***/
 
 typedef void (*riscv_syscall_handler_t)(RISCVMachine *m);
 
 /* Install a custom system call handler. */
-int libriscv_set_syscall_handler(unsigned num, riscv_syscall_handler_t);
+LIBRISCVAPI int libriscv_set_syscall_handler(unsigned num, riscv_syscall_handler_t);
+
+/* Triggers a CPU exception. Only safe to call from a system call. Will end execution. */
+LIBRISCVAPI void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data);
 
 /*** RISC-V VM function calls ***/
 
 /* Make preparations for a VM function call. Returns 0 on success. */
-int libriscv_setup_vmcall(RISCVMachine *m, uint64_t address);
+LIBRISCVAPI int libriscv_setup_vmcall(RISCVMachine *m, uint64_t address);
 
 /* Stack realignment helper. */
 #define LIBRISCV_REALIGN_STACK(regs)  ((regs)->r[2] & ~0xFLL)
