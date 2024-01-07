@@ -11,12 +11,12 @@ There is also a CLI that you can use to run RISC-V programs and step through ins
 
 ## Ultra-Low latency emulation
 
-libriscv is a [low latency emulator](https://medium.com/@fwsgonzo/using-c-as-a-scripting-language-part-10-ad7dd7e4325d), designed specifically to have very low overheads when interacting with certain programs.
+libriscv is a [low latency emulator](https://medium.com/@fwsgonzo/using-c-as-a-scripting-language-part-10-ad7dd7e4325d), designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
 
 Goals:
-- No overhead when used for game engine scripting or request-based workloads (eg. high performance caching)
+- No overhead when used for game engine scripting or request-based workloads
 - Type-safe VM call and system call interfaces
-- Secure speculation-safe sandbox
+- [Secure speculation-safe sandbox](SECURITY.md)
 - Low attack surface
 - Platform-independent and easy to embed
 
@@ -46,7 +46,7 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
 
 ## Embedding the emulator in a project
 
-See the [example project](/examples/embed) for directly embedding libriscv using CMake. You can also use libriscv as a packaged artifact, through the [package example](/examples/package), although will you need to install [the package](/.github/workflows/packaging.yml) first.
+See the [example project](/examples/embed) for directly embedding libriscv using CMake. You can also use libriscv as a packaged artifact, through the [package example](/examples/package), although you will need to install [the package](/.github/workflows/packaging.yml) first.
 
 On Windows you can use Clang-cl in Visual Studio. See the [example CMake project](/examples/msvc). It requires Clang and Git installed.
 
@@ -82,7 +82,7 @@ You can use GDB remotely by starting the emulator with `GDB=1`:
 cd emulator
 GDB=1 ./rvlinux <path to RISC-V ELF binary>
 ```
-Connect from `gdb-multiarch` with `target remote localhost:2159` after loading the program with `file <path>`.
+Connect from `gdb-multiarch` with `target remote :2159` after loading the program with `file <path>`.
 
 
 ## Example RISC-V programs
@@ -95,11 +95,11 @@ The [linux](/binaries/linux) and [linux64](/binaries/linux64) example projects r
 
 The [Go](/binaries/go) examples only require Go installed. Go produces complex RV64G ELF executables.
 
-There are also examples for [Nim](/binaries/nim), [Zig](/binaries/zig) and [Rust](/binaries/rust).
+There are also examples for [Nim](/binaries/nim), [Zig](/binaries/zig), [Rust](/binaries/rust) and [Nelua](/binaries/nelua).
 
 ## Remote debugging using GDB
 
-If you have built the emulator, you can use `GDB=1 ./rvlinux /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote localhost:2159`. Now you can step through the code.
+If you have built the emulator, you can use `GDB=1 ./rvlinux /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote :2159`. Now you can step through the code.
 
 Most modern languages embed their own pretty printers for debuginfo which enables you to go line by line in your favorite language.
 
@@ -146,9 +146,9 @@ int main(int /*argc*/, const char** /*argv*/)
 
 	// This function will run until the exit syscall has stopped the
 	// machine, an exception happens which stops execution, or the
-	// instruction counter reaches the given 5M instruction limit:
+	// instruction counter reaches the given 5bn instruction limit:
 	try {
-		machine.simulate(5'000'000ull);
+		machine.simulate(5'000'000'000ull);
 	} catch (const std::exception& e) {
 		fprintf(stderr, ">>> Runtime exception: %s\n", e.what());
 	}
