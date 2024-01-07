@@ -33,11 +33,6 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 		len -= size;
 	}
 }
-template <int W> inline
-void Memory<W>::memcpy_unsafe(address_t dst, const void* vsrc, size_t len)
-{
-	return this->memcpy(dst, vsrc, len);
-}
 
 template <int W> inline
 void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const

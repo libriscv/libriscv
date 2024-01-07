@@ -190,7 +190,7 @@ void Machine<W>::ebreak()
 template <int W> inline
 void Machine<W>::copy_to_guest(address_t dst, const void* buf, size_t len)
 {
-	memory.memcpy_unsafe(dst, buf, len);
+	memory.memcpy(dst, buf, len);
 }
 
 template <int W> inline

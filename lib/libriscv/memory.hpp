@@ -37,12 +37,12 @@ namespace riscv
 		template <typename T>
 		void write(address_t dst, T value);
 
-		void memdiscard(address_t dst, size_t len, bool ignore_protections);
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
-		void memcpy_unsafe(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
 		void memcpy_out(void* dst, address_t src, size_t) const;
+		// Perform the equivalent of MADV_DONTNEED on memory region
+		void memdiscard(address_t dst, size_t len, bool ignore_protections);
 		/* Fill an array of buffers pointing to complete guest virtual [addr, len].
 		   Throws an exception if there was a protection violation.
 		   Returns the number of buffers filled, or an exception if not enough. */
