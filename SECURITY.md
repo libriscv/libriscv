@@ -29,15 +29,15 @@ Example configuration:
 	m_machine.reset(new machine_t(m_binary, options));
 	machine().setup_argv({"my_program"});
 
-	// MAX_INSTRUCTIONS should be suitably low
-	machine().simulate(MAX_INSTRUCTIONS);
-
 	machine().set_printer([](const machine_t&, const char* p, size_t len) {
 		// do nothing
 	});
 	machine().on_unhandled_syscall = [](machine_t& machine, size_t num) {
 		// do nothing
 	}
+
+	// MAX_INSTRUCTIONS should be suitably low
+	machine().simulate(MAX_INSTRUCTIONS);
 ```
 
 After this setup, one can start adding system calls, but only as needed.
