@@ -343,8 +343,8 @@ void Emitter<W>::emit()
 		this->instr = tinfo.instr[i];
 		this->m_pc = tinfo.basepc + i * 4;
 
-		// known jump locations
-		if (mapping_labels.count(i)) {
+		// If the address is a return address or a global JAL target
+		if (i > 0 && (mapping_labels.count(i) || tinfo.global_jump_locations.count(this->pc()))) {
 			this->increment_counter_so_far();
 			// Re-entry through the current function
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
@@ -352,6 +352,7 @@ void Emitter<W>::emit()
 				this->pc(), this->func
 			});
 		}
+		// known jump locations
 		else if (tinfo.jump_locations.count(this->pc()) || labels.count(i)) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
