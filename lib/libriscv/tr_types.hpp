@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "rv32i_instr.hpp"
-#include <set>
+#include <unordered_set>
 
 namespace riscv
 {
@@ -16,8 +16,10 @@ namespace riscv
 		address_type<W> gp;
 		int len;
 		bool forward_jumps;
-		std::set<address_type<W>> jump_locations;
+		std::unordered_set<address_type<W>> jump_locations;
 		// Pointer to all the other blocks (including current)
 		std::vector<TransInfo<W>>* blocks = nullptr;
+
+		std::unordered_set<address_type<W>>& global_jump_locations;
 	};
 }

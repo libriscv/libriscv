@@ -155,6 +155,7 @@ if constexpr (SCAN_FOR_GP) {
 	// Code block and loop detection
 	TIME_POINT(t2);
 	size_t icounter = 0;
+	std::unordered_set<address_type<W>> global_jump_locations;
 	std::vector<TransInfo<W>> blocks;
 
 	for (address_t pc = basepc; pc < endbasepc && icounter < options.translate_instr_max; )
@@ -173,7 +174,7 @@ if constexpr (SCAN_FOR_GP) {
 		}
 
 		auto block_end = pc;
-		std::set<address_t> jump_locations;
+		std::unordered_set<address_t> jump_locations;
 
 		// Find jump locations inside block
 		for (pc = block; pc < block_end; pc += 4) {
@@ -193,6 +194,9 @@ if constexpr (SCAN_FOR_GP) {
 				}
 				if (location >= block && location < block_end)
 					jump_locations.insert(location);
+				// All JAL target addresses need to be recorded in order
+				// to detect function calls
+				global_jump_locations.insert(location);
 			}
 			// loop detection (negative branch offsets)
 			if (opcode == RV32I_BRANCH) {
@@ -221,7 +225,8 @@ if constexpr (SCAN_FOR_GP) {
 				ip, block, block_end, gp, (int)length,
 				true,
 				std::move(jump_locations),
-				nullptr // blocks
+				nullptr, // blocks
+				global_jump_locations
 			});
 			icounter += length;
 			// we can't translate beyond this estimate, otherwise
