@@ -272,7 +272,7 @@ namespace riscv
 			PageData* data = nullptr;
 			address_t read_boundary = 0;
 			address_t write_boundary = 0;
-			address_t initial_rodata_end = RWREAD_BEGIN;
+			address_t initial_rodata_end = 0;
 			size_t    pages = 0;
 		} m_arena;
 
