@@ -9,6 +9,7 @@
 
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
+#define STRADDR(x) (std::to_string(x) + "UL")
 #define FUNCLABEL(i) (func + "_" + std::to_string(i))
 #define UNKNOWN_INSTRUCTION() { code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
 
@@ -367,25 +368,25 @@ void Emitter<W>::emit()
 			if (instr.Itype.rd != 0) {
 			switch (instr.Itype.funct3) {
 			case 0x0: // I8
-				this->memory_load<int8_t>(from_reg(instr.Itype.rd), "int8_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int8_t>(to_reg(instr.Itype.rd), "int8_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x1: // I16
-				this->memory_load<int16_t>(from_reg(instr.Itype.rd), "int16_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int16_t>(to_reg(instr.Itype.rd), "int16_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x2: // I32
-				this->memory_load<int32_t>(from_reg(instr.Itype.rd), "int32_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int32_t>(to_reg(instr.Itype.rd), "int32_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x3: // I64
-				this->memory_load<int64_t>(from_reg(instr.Itype.rd), "int64_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<int64_t>(to_reg(instr.Itype.rd), "int64_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x4: // U8
-				this->memory_load<uint8_t>(from_reg(instr.Itype.rd), "uint8_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<uint8_t>(to_reg(instr.Itype.rd), "uint8_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x5: // U16
-				this->memory_load<uint16_t>(from_reg(instr.Itype.rd), "uint16_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<uint16_t>(to_reg(instr.Itype.rd), "uint16_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			case 0x6: // U32
-				this->memory_load<uint32_t>(from_reg(instr.Itype.rd), "uint32_t", instr.Itype.rs1, instr.Itype.signed_imm());
+				this->memory_load<uint32_t>(to_reg(instr.Itype.rd), "uint32_t", instr.Itype.rs1, instr.Itype.signed_imm());
 				break;
 			default:
 				UNKNOWN_INSTRUCTION();
@@ -499,7 +500,7 @@ void Emitter<W>::emit()
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
 			// Because of forward jumps we can't end the function here
-			exit_function(std::to_string(dest_pc));
+			exit_function(STRADDR(dest_pc));
 			// Some blocks end with unconditional jumps
 			if (no_labels_after_this()) {
 				add_code("}");
@@ -1293,7 +1294,7 @@ void Emitter<W>::emit()
 	// If the function ends with an unimplemented instruction,
 	// we must gracefully finish, setting new PC and incrementing IC
 	this->increment_counter_so_far();
-	exit_function(std::to_string(this->end_pc()), true);
+	exit_function(STRADDR(this->end_pc()), true);
 }
 
 template <int W>
