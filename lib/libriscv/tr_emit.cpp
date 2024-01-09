@@ -512,6 +512,7 @@ void Emitter<W>::emit()
 		case RV32I_OP_IMM: {
 			// NOP: Instruction without side-effect
 			if (UNLIKELY(instr.Itype.rd == 0)) break;
+
 			const auto dst = to_reg(instr.Itype.rd);
 			const auto src = from_reg(instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
@@ -876,6 +877,10 @@ void Emitter<W>::emit()
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 			} break;
 		case RV64I_OP_IMM32: {
+			if constexpr (W < 8) {
+				UNKNOWN_INSTRUCTION();
+				break;
+			}
 			if (UNLIKELY(instr.Itype.rd == 0))
 				break;
 			const auto dst = to_reg(instr.Itype.rd);
@@ -894,14 +899,16 @@ void Emitter<W>::emit()
 				} else {
 					switch (instr.Itype.imm) {
 					case 0b011000000000: // CLZ.W
-						add_code(dst + " = " + src + " ? do_clz(" + src + ") : XLEN;");
+						add_code(dst + " = " + src + " ? do_clz(" + src + ") : 32;");
 						break;
 					case 0b011000000001: // CTZ.W
-						add_code(dst + " = " + src + " ? do_ctz(" + src + ") : XLEN;");
+						add_code(dst + " = " + src + " ? do_ctz(" + src + ") : 32;");
 						break;
 					case 0b011000000010: // CPOP.W
 						add_code(dst + " = do_cpop(" + src + ");");
 						break;
+					default:
+						UNKNOWN_INSTRUCTION();
 					}
 				}
 				break;
@@ -925,6 +932,10 @@ void Emitter<W>::emit()
 			}
 			} break;
 		case RV64I_OP32: {
+			if constexpr (W < 8) {
+				UNKNOWN_INSTRUCTION();
+				break;
+			}
 			if (UNLIKELY(instr.Rtype.rd == 0))
 				break;
 			const auto dst = to_reg(instr.Rtype.rd);
