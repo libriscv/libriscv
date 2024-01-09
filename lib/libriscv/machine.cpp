@@ -17,7 +17,6 @@ namespace riscv
 #else
 	static std::random_device rd{};
 #endif
-	static std::mt19937_64 prng{};
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)

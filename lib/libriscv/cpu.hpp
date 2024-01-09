@@ -167,8 +167,9 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
-#endif
 		void activate_dylib(DecodedExecuteSegment<W>&, void*) const RISCV_INTERNAL;
+		bool initialize_translated_segment(DecodedExecuteSegment<W>&, void*) const RISCV_INTERNAL;
+#endif
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 	};
 

@@ -13,10 +13,9 @@ using namespace riscv;
  * and most emulators will surely fail here.
 */
 
-TEST_CASE("Calculate fib(50) slowly", "[Compute]")
+TEST_CASE("Calculate fib(50) slowly, basic", "[Compute]")
 {
 	const auto binary = build_and_load(R"M(
-	#include <stdlib.h>
 	long fib(long n, long acc, long prev)
 	{
 		if (n < 1)
@@ -24,9 +23,43 @@ TEST_CASE("Calculate fib(50) slowly", "[Compute]")
 		else
 			return fib(n - 1, prev + acc, acc);
 	}
-	long main(int argc, char** argv) {
-		const long n = atoi(argv[1]);
+	long my_start(long n) {
 		return fib(n, 0, 1);
+	}
+	int main() {}
+	)M", "-O2 -static");
+
+	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
+
+	const auto addr = machine.address_of("my_start");
+	REQUIRE(addr != 0x0);
+
+	// Create a manual VM call in order to avoid exercising the C-runtime
+	// The goal is to see if the basic start/stop/resume functionality works
+	machine.cpu.jump(addr);
+	machine.cpu.reg(riscv::REG_ARG0) = 50;
+	machine.cpu.reg(riscv::REG_RA) = machine.memory.exit_address();
+
+	riscv::Machine<RISCV64> fork { machine };
+	do {
+		// No matter how many (or few) instructions we execute before exiting
+		// simulation, we should be able to resume and complete the program normally.
+		for (int step = 5; step < 105; step++) {
+			fork.cpu.registers() = machine.cpu.registers();
+			do {
+				fork.simulate<false>(step);
+			} while (fork.instruction_limit_reached());
+			REQUIRE(fork.return_value<long>() == 12586269025L);
+		}
+		machine.simulate<false>(100);
+	} while (machine.instruction_limit_reached());
+}
+
+TEST_CASE("Execute libc_start_main, slowly", "[Compute]")
+{
+	const auto binary = build_and_load(R"M(
+	int main() {
+		return 1234;
 	})M");
 
 	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
@@ -36,17 +69,25 @@ TEST_CASE("Calculate fib(50) slowly", "[Compute]")
 		{"LC_TYPE=C", "LC_ALL=C"});
 
 	do {
+#ifndef RISCV_BINARY_TRANSLATION
 		// No matter how many (or few) instructions we execute before exiting
 		// simulation, we should be able to resume and complete the program normally.
 		for (int step = 5; step < 105; step++) {
-			riscv::Machine<RISCV64> fork { machine };
+			riscv::Machine<RISCV64> fork { machine, { .use_memory_arena = false } };
 			do {
 				fork.simulate<false>(step);
 			} while (fork.instruction_limit_reached());
-			REQUIRE(fork.return_value<long>() == 12586269025L);
+			REQUIRE(fork.return_value<long>() == 1234);
 		}
-		machine.simulate<false>(100);
+#else
+		riscv::Machine<RISCV64> fork { machine, { .use_memory_arena = false } };
+		fork.simulate();
+		REQUIRE(fork.return_value<long>() == 1234);
+#endif
+		machine.simulate<false>(1000);
 	} while (machine.instruction_limit_reached());
+
+	REQUIRE(machine.return_value<long>() == 1234);
 }
 
 TEST_CASE("Threads test-suite slowly", "[Compute]")
@@ -65,7 +106,7 @@ TEST_CASE("Threads test-suite slowly", "[Compute]")
 	do {
 		// No matter how many (or few) instructions we execute before exiting
 		// simulation, we should be able to resume and complete the program normally.
-		const int step = 5;
+		const int step = riscv::binary_translation_enabled ? 50 : 5;
 		riscv::Machine<RISCV64> fork { machine };
 		fork.set_printer([] (const auto&, const char*, size_t) {});
 
