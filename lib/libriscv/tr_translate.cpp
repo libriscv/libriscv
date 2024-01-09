@@ -1,3 +1,4 @@
+#include <bit>
 #include <cmath>
 #include <dlfcn.h>
 #include <unistd.h>
@@ -392,22 +393,22 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 			return std::sqrt(d);
 		},
 		.clz = [] (uint32_t x) -> int {
-			return __builtin_clz(x);
+			return std::countl_zero(x);
 		},
 		.clzl = [] (uint64_t x) -> int {
-			return __builtin_clzl(x);
+			return std::countl_zero(x);
 		},
 		.ctz = [] (uint32_t x) -> int {
-			return __builtin_ctz(x);
+			return std::countr_zero(x);
 		},
 		.ctzl = [] (uint64_t x) -> int {
-			return __builtin_ctzl(x);
+			return std::countr_zero(x);
 		},
 		.cpop = [] (uint32_t x) -> int {
-			return __builtin_popcount(x);
+			return std::popcount(x);
 		},
 		.cpopl = [] (uint64_t x) -> int {
-			return __builtin_popcountl(x);
+			return std::popcount(x);
 		},
 	},
 	m_machine.memory.memory_arena_ptr(),
