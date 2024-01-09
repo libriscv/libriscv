@@ -334,9 +334,9 @@ template <int W>
 void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 {
 	TIME_POINT(t11);
-	// map the API callback table
-	auto* ptr = dylib_lookup(dylib, "init");
-	if (ptr == nullptr) {
+
+	if (!initialize_translated_segment(exec, dylib))
+	{
 		if constexpr (!libtcc_enabled) {
 			// only warn when translation is not already disabled
 			if (getenv("NO_TRANSLATE") == nullptr) {
@@ -348,6 +348,60 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		return;
 	}
 
+	// Map all the functions to instruction handlers
+	uint32_t* no_mappings = (uint32_t *)dylib_lookup(dylib, "no_mappings");
+	struct Mapping {
+		address_t addr;
+		bintr_block_func<W> handler;
+	};
+	Mapping* mappings = (Mapping *)dylib_lookup(dylib, "mappings");
+
+	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
+		dylib_close(dylib);
+		exec.set_binary_translated(nullptr);
+		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
+	}
+
+	// After this, we should automatically close the dylib on destruction
+	exec.set_binary_translated(dylib);
+
+	// Apply mappings to decoder cache
+	const auto nmappings = *no_mappings;
+	exec.reserve_mappings(nmappings);
+	for (size_t i = 0; i < nmappings; i++) {
+		exec.add_mapping(mappings[i].handler);
+		const auto addr = mappings[i].addr;
+		if (exec.is_within(addr)) {
+			auto& entry = decoder_entry_at(exec, addr);
+			if (mappings[i].handler != nullptr) {
+				entry.instr = i;
+				entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+			} else {
+				entry.set_bytecode(0x0); /* Invalid opcode */
+			}
+		} else {
+			throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
+		}
+	}
+
+	if constexpr (BINTR_TIMING) {
+		TIME_POINT(t12);
+		printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
+	}
+}
+
+template <int W>
+bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dylib) const
+{
+	// NOTE: At some point this must be able to duplicate the dylib
+	// in order to be able to share execute segments across machines.
+
+	auto* ptr = dylib_lookup(dylib, "init"); // init() function
+	if (ptr == nullptr) {
+		return false;
+	}
+
+	// Map the API callback table
 	auto func = (void (*)(const CallbackTable<W>&, void*, uint64_t*, uint64_t*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
@@ -415,56 +469,19 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 	&m_machine.get_counters().first,
 	&m_machine.get_counters().second);
 
-	// Map all the functions to instruction handlers
-	uint32_t* no_mappings = (uint32_t *)dylib_lookup(dylib, "no_mappings");
-	struct Mapping {
-		address_t addr;
-		bintr_block_func<W> handler;
-	};
-	Mapping* mappings = (Mapping *)dylib_lookup(dylib, "mappings");
-
-	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
-		dylib_close(dylib);
-		exec.set_binary_translated(nullptr);
-		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
-	}
-
-	// After this, we should automatically close the dylib on destruction
-	exec.set_binary_translated(dylib);
-
-	// Apply mappings to decoder cache
-	const auto nmappings = *no_mappings;
-	exec.reserve_mappings(nmappings);
-	for (size_t i = 0; i < nmappings; i++) {
-		exec.add_mapping(mappings[i].handler);
-		const auto addr = mappings[i].addr;
-		if (exec.is_within(addr)) {
-			auto& entry = decoder_entry_at(exec, addr);
-			if (mappings[i].handler != nullptr) {
-				entry.instr = i;
-				entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
-			} else {
-				entry.set_bytecode(0x0); /* Invalid opcode */
-			}
-		} else {
-			throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
-		}
-	}
-
-	if constexpr (BINTR_TIMING) {
-		TIME_POINT(t12);
-		printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
-	}
+	return true;
 }
 
 #ifdef RISCV_32I
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
+	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib) const;
 	template void CPU<4>::activate_dylib(DecodedExecuteSegment<4>&, void*) const;
 #endif
 #ifdef RISCV_64I
 	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
+	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib) const;
 	template void CPU<8>::activate_dylib(DecodedExecuteSegment<8>&, void*) const;
 #endif
 	static_assert(!compressed_enabled,
