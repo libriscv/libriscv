@@ -167,9 +167,11 @@ namespace riscv
 		using address_t = address_type<W>;
 
 		template <typename... Args>
-		address_t vmcall(Args&&... args) const
+		auto vmcall(Args&&... args) const
 		{
 			static_assert(std::is_invocable_v<F, Args...>);
+			using Ret = decltype((F*){}(args...));
+
 			if (UNLIKELY(m_machine == nullptr))
 				throw riscv::MachineException(
 					riscv::INVALID_PROGRAM, "PreparedCall: must call prepare() first");
@@ -185,7 +187,10 @@ namespace riscv
 
 			m.template simulate_with<true>(max, 0u, pc);
 
-			return m.cpu.reg(REG_RETVAL);
+			if constexpr (std::is_same_v<void, Ret>)
+				return;
+			else
+				return Ret(m.cpu.reg(REG_RETVAL));
 		}
 
 		void prepare(Machine<W>& m, address_t call_addr, uint64_t imax = UINT64_MAX)
