@@ -102,7 +102,9 @@ struct Emitter
 		if constexpr (CACHED_REGISTERS) {
 			this->restore_all_registers();
 		}
-		add_code("return (ReturnValues){" + new_pc + ", counter, max_counter};", (add_bracket) ? " }" : "");
+		add_code(
+			"cpu->pc = " + new_pc + ";",
+			"return (ReturnValues){counter, max_counter};", (add_bracket) ? " }" : "");
 	}
 
 	std::string from_reg(int reg) {
@@ -312,7 +314,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & 0x3)) {
 		// TODO: Make exception a helper function, as return values are implementation detail
 		code +=
-			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){" + PCRELS(0) + ", 0, 0};\n"
+			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
 			"}\n";
 		return;
 	}
@@ -854,7 +856,7 @@ void Emitter<W>::emit()
 					this->restore_syscall_registers();
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
 					code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
-						"  return (ReturnValues){cpu->pc + 4, counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+						"  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
 					code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
 					// Restore A0
 					this->invalidate_register(REG_ARG0);

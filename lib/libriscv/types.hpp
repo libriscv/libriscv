@@ -99,7 +99,6 @@ namespace riscv
 
 	template <int W>
 	struct bintr_block_returns {
-		address_type<W> pc;
 		uint64_t counter;
 		uint64_t max_counter;
 	};

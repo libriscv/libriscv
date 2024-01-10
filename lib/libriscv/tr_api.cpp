@@ -202,7 +202,6 @@ extern void init(struct CallbackTable* table,
 };
 
 typedef struct {
-	addr_t   pc;
 	uint64_t counter;
 	uint64_t max_counter;
 } ReturnValues;

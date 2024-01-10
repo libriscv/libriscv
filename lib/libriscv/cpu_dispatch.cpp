@@ -275,7 +275,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 	// Invoke translated code
 	auto bintr_results = 
 		exec->unchecked_mapping_at(instr.whole)(*this, counter.value()-1, counter.max(), pc);
-	pc = bintr_results.pc;
+	pc = REGISTERS().pc;
 	counter.set_counters(bintr_results.counter, bintr_results.max_counter);
 	if (LIKELY(!counter.overflowed() && (pc - current_begin < current_end - current_begin)))
 		goto continue_segment;

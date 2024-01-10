@@ -166,7 +166,7 @@ namespace riscv
 		auto new_values = 
 			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max(), pc);
 		counter.set_counters(new_values.counter, new_values.max_counter);
-		pc = new_values.pc;
+		pc = REGISTERS().pc;
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
 	}
