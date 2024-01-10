@@ -4,7 +4,7 @@
 namespace riscv
 {
 	void* libtcc_compile(const std::string& code,
-		int arch, const std::unordered_map<std::string, std::string>& cflags, const std::string& libtcc1)
+		int, const std::unordered_map<std::string, std::string>& cflags, const std::string& libtcc1)
 	{
 		TCCState* state = tcc_new();
 		tcc_set_output_type(state, TCC_OUTPUT_MEMORY);
