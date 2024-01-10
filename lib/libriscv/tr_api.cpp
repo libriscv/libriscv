@@ -143,8 +143,8 @@ static struct CallbackTable {
 	int (*cpopl) (uint64_t);
 } api;
 static char* arena_base;
-static uint64_t* cur_insn;
-static uint64_t* max_insn;
+#define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_INS_COUNTER_OFF))
+#define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_MAX_COUNTER_OFF))
 static const addr_t ARENA_READ_BOUNDARY  = RISCV_ARENA_END - 0x1000;
 static const addr_t ARENA_WRITE_BOUNDARY = RISCV_ARENA_END - RISCV_ARENA_ROEND;
 #define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
@@ -152,15 +152,15 @@ static const addr_t ARENA_WRITE_BOUNDARY = RISCV_ARENA_END - RISCV_ARENA_ROEND;
 
 static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {
-	*cur_insn = counter; // Reveal instruction counters
-	*max_insn = max_counter;
+	INS_COUNTER(cpu) = counter; // Reveal instruction counters
+	MAX_COUNTER(cpu) = max_counter;
 	addr_t old_pc = cpu->pc;
 	if (LIKELY(sysno < RISCV_MAX_SYSCALLS))
 		api.syscalls[SPECSAFE(sysno)](cpu);
 	else
 		api.unknown_syscall(cpu, sysno);
 	// Resume if the system call did not modify PC, or hit a limit
-	return (cpu->pc != old_pc || counter >= *max_insn);
+	return (cpu->pc != old_pc || counter >= MAX_COUNTER(cpu));
 }
 
 static inline void jump(CPU* cpu, addr_t addr) {
@@ -195,14 +195,10 @@ static inline uint64_t MUL128(
 }
 
 extern void init(struct CallbackTable* table,
-	char*    abase,
-	uint64_t* cur_icount,
-	uint64_t* max_icount)
+	char*    abase)
 {
 	api = *table;
 	arena_base = abase;
-	cur_insn = cur_icount;
-	max_insn = max_icount;
 };
 
 typedef struct {

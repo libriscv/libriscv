@@ -31,12 +31,6 @@ namespace riscv
 		// Copy all registers except vectors
 		// Users can still copy vector registers by assigning to registers().rvv().
 		this->registers().copy_from(Registers<W>::Options::NoVectors, other.cpu.registers());
-
-		if constexpr (binary_translation_enabled) {
-			// XXX: GIGA HACK. Evict execute segment
-			// Binary translation forks need separate dylibs
-			m_exec = &empty_execute_segment();
-		}
 	}
 	template <int W>
 	void CPU<W>::reset()

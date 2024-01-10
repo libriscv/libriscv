@@ -69,7 +69,6 @@ TEST_CASE("Execute libc_start_main, slowly", "[Compute]")
 		{"LC_TYPE=C", "LC_ALL=C"});
 
 	do {
-#ifndef RISCV_BINARY_TRANSLATION
 		// No matter how many (or few) instructions we execute before exiting
 		// simulation, we should be able to resume and complete the program normally.
 		for (int step = 5; step < 105; step++) {
@@ -79,11 +78,6 @@ TEST_CASE("Execute libc_start_main, slowly", "[Compute]")
 			} while (fork.instruction_limit_reached());
 			REQUIRE(fork.return_value<long>() == 1234);
 		}
-#else
-		riscv::Machine<RISCV64> fork { machine, { .use_memory_arena = false } };
-		fork.simulate();
-		REQUIRE(fork.return_value<long>() == 1234);
-#endif
 		machine.simulate<false>(1000);
 	} while (machine.instruction_limit_reached());
 
@@ -106,7 +100,7 @@ TEST_CASE("Threads test-suite slowly", "[Compute]")
 	do {
 		// No matter how many (or few) instructions we execute before exiting
 		// simulation, we should be able to resume and complete the program normally.
-		const int step = riscv::binary_translation_enabled ? 50 : 5;
+		const int step = 5;
 		riscv::Machine<RISCV64> fork { machine };
 		fork.set_printer([] (const auto&, const char*, size_t) {});
 

@@ -4,18 +4,14 @@
 namespace riscv
 {
 	void* libtcc_compile(const std::string& code,
-		int arch, uint64_t arena_size, uint64_t arena_roend, const std::string& libtcc1)
+		int arch, const std::unordered_map<std::string, std::string>& cflags, const std::string& libtcc1)
 	{
 		TCCState* state = tcc_new();
 		tcc_set_output_type(state, TCC_OUTPUT_MEMORY);
 
-		tcc_define_symbol(state, "RISCV_TRANSLATION_DYLIB", arch == 4 ? "4" : "8");
-		tcc_define_symbol(state, "RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX).c_str());
-		tcc_define_symbol(state, "RISCV_ARENA_END",    std::to_string(arena_size).c_str());
-		tcc_define_symbol(state, "RISCV_ARENA_ROEND",  std::to_string(arena_roend).c_str());
-#ifdef RISCV_EXT_VECTOR
-		tcc_define_symbol(state, "RISCV_EXT_VECTOR",  std::to_string(RISCV_EXT_VECTOR).c_str());
-#endif
+		for (auto pair : cflags) {
+			tcc_define_symbol(state, pair.first.c_str(), pair.second.c_str());
+		}
 
 		tcc_define_symbol(state, "ARCH", "HOST_UNKNOWN");
 		tcc_set_options(state, "-std=c99 -O2");

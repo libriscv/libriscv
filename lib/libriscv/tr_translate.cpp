@@ -39,6 +39,27 @@ inline DecoderData<W>& decoder_entry_at(const DecodedExecuteSegment<W>& exec, ad
 }
 
 template <int W>
+static std::unordered_map<std::string, std::string> create_cflags_from(const Machine<W>& machine)
+{
+	// Calculate offset from Machine to each counter
+	auto counters = const_cast<Machine<W>&> (machine).get_counters();
+	const auto ins_counter_offset = uintptr_t(&counters.first) - uintptr_t(&machine);
+	const auto max_counter_offset = uintptr_t(&counters.second) - uintptr_t(&machine);
+
+	std::unordered_map<std::string, std::string> cflags;
+	cflags.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
+	cflags.emplace("RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX));
+	cflags.emplace("RISCV_ARENA_END", std::to_string(machine.memory.memory_arena_size()));
+	cflags.emplace("RISCV_ARENA_ROEND", std::to_string(machine.memory.initial_rodata_end()));
+	cflags.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
+	cflags.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
+#ifdef RISCV_EXT_VECTOR
+	cflags.emplace("RISCV_EXT_VECTOR", std::to_string(RISCV_EXT_VECTOR));
+#endif
+	return cflags;
+}
+
+template <int W>
 int CPU<W>::load_translation(const MachineOptions<W>& options,
 	std::string* filename, DecodedExecuteSegment<W>& exec) const
 {
@@ -64,8 +85,8 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 	// Checksum the execute segment + compiler flags
 	TIME_POINT(t5);
-	extern std::string compile_command(int arch, uint64_t arena_size, uint64_t arena_roend);
-	const auto cc = compile_command(W, machine().memory.memory_arena_size(), machine().memory.initial_rodata_end());
+	extern std::string compile_command(int arch, const std::unordered_map<std::string, std::string>& cflags);
+	const auto cc = compile_command(W, create_cflags_from(machine()));
 	const uint32_t checksum =
 		crc32c(exec_data, exec.exec_end() - exec.exec_begin())
 		^ crc32c(cc.c_str(), cc.size());
@@ -295,16 +316,17 @@ const struct Mapping mappings[] = {
 		return;
 	}
 
+	const auto cflags = create_cflags_from(machine());
 	void* dylib = nullptr;
 
 	TIME_POINT(t9);
 	if constexpr (libtcc_enabled) {
-		extern void* libtcc_compile(const std::string& code, int arch, uint64_t arena_size, uint64_t arena_roend, const std::string&);
-		dylib = libtcc_compile(code, W, machine().memory.memory_arena_size(), machine().memory.initial_rodata_end(), options.libtcc1_location);
+		extern void* libtcc_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& cflags, const std::string&);
+		dylib = libtcc_compile(code, W, cflags, options.libtcc1_location);
 
 	} else {
-		extern void* compile(const std::string& code, int arch, uint64_t arena_size, uint64_t arena_roend, const char*);
-		dylib = compile(code, W, machine().memory.memory_arena_size(), machine().memory.initial_rodata_end(), filename.c_str());
+		extern void* compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& cflags, const char*);
+		dylib = compile(code, W, cflags, filename.c_str());
 	}
 	if constexpr (BINTR_TIMING) {
 		TIME_POINT(t10);
@@ -402,7 +424,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	}
 
 	// Map the API callback table
-	auto func = (void (*)(const CallbackTable<W>&, void*, uint64_t*, uint64_t*)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&, void*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
 			return cpu.machine().memory.cached_readable_page(addr << 12, 1).buffer8.data();
@@ -465,9 +487,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			return std::popcount(x);
 		},
 	},
-	m_machine.memory.memory_arena_ptr(),
-	&m_machine.get_counters().first,
-	&m_machine.get_counters().second);
+	m_machine.memory.memory_arena_ptr());
 
 	return true;
 }

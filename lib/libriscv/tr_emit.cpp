@@ -854,8 +854,8 @@ void Emitter<W>::emit()
 					this->restore_syscall_registers();
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
 					code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
-						"  return (ReturnValues){cpu->pc + 4, counter, *max_insn};}\n"; // Correct for +4 expectation outside of bintr
-					code += "max_counter = *max_insn;\n"; // Restore max counter
+						"  return (ReturnValues){cpu->pc + 4, counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+					code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
 					// Restore A0
 					this->invalidate_register(REG_ARG0);
 					this->potentially_reload_register(REG_ARG0);
@@ -873,8 +873,8 @@ void Emitter<W>::emit()
 			} else {
 				// Non-zero funct3: CSR and other system functions
 				code += "cpu->pc = " + PCRELS(0) + ";\n";
-				code += "*cur_insn = counter;\n"; // Reveal instruction counters
-				code += "*max_insn = max_counter;\n";
+				code += "INS_COUNTER(cpu) = counter;\n"; // Reveal instruction counters
+				code += "MAX_COUNTER(cpu) = max_counter;\n";
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 			} break;
 		case RV64I_OP_IMM32: {
