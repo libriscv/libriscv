@@ -39,7 +39,7 @@ The highest performance 32-bit arch for libriscv right now is this:
 And for 64-bit:
 
 ```sh
-./configure --prefix=$HOME/riscv --with-arch=rv64g_zba_zbb_zbc_zbs --with-abi=ilp32d
+./configure --prefix=$HOME/riscv --with-arch=rv64g_zba_zbb_zbc_zbs --with-abi=lp64d
 ```
 
-This will enable all instructions from the bit manipulation extension.
+This will enable all instructions from the bit manipulation extension. Whether or not you use `make linux` to get a full Linux compiler or just `make` to get a Newlib compiler is really up to what you need. It doesn't affect performance.
