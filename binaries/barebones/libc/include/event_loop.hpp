@@ -1,17 +1,20 @@
 #include "function.hpp"
 #include "ringbuffer.hpp"
 
+template <size_t Capacity = 16>
 struct Events {
 	using Work = Function<void()>;
 
 	FixedRingBuffer<8, Work> ring;
 	bool in_use = false;
 
-	void handle();
-	bool delegate(const Work&);
+	void consume_work();
+	bool add(const Work&);
+	void halt();
 };
 
-inline void Events::handle()
+template <size_t Capacity>
+inline void Events<Capacity>::consume_work()
 {
 	this->in_use = true;
 	while (const auto* wrk = ring.read()) {
@@ -19,11 +22,17 @@ inline void Events::handle()
 	}
 	this->in_use = false;
 }
-inline bool Events::delegate(const Work& work) {
+
+template <size_t Capacity>
+inline bool Events<Capacity>::add(const Work& work) {
 	if (in_use == false) {
 		return ring.write(work);
 	}
 	return false;
 }
 
-extern void halt();
+template <size_t Capacity>
+inline void Events<Capacity>::halt()
+{
+	asm volatile (".insn i SYSTEM, 0, x0, x0, 0x7ff");
+}
