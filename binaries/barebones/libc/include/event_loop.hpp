@@ -10,7 +10,6 @@ struct Events {
 
 	void consume_work();
 	bool add(const Work&);
-	void halt();
 };
 
 template <size_t Capacity>
@@ -29,10 +28,4 @@ inline bool Events<Capacity>::add(const Work& work) {
 		return ring.write(work);
 	}
 	return false;
-}
-
-template <size_t Capacity>
-inline void Events<Capacity>::halt()
-{
-	asm volatile (".insn i SYSTEM, 0, x0, x0, 0x7ff");
 }
