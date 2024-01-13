@@ -331,4 +331,9 @@ There is multiprocessing support, but it is in its early stages. It is achieved 
 
 ### Embedded libtcc
 
-When binary translation is enabled, the experimental option `RISCV_LIBTCC` is available. libtcc will be embedded in the RISC-V emulator and used as compiler for binary translation.
+When binary translation is enabled, the experimental option `RISCV_LIBTCC` is available. libtcc will be embedded in the RISC-V emulator and used as compiler for binary translation. `libtcc-dev` package will be required for building.
+
+
+## Game development example
+
+Have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example framework and automatically builds fully functional C++ programs for low latency scripting.
