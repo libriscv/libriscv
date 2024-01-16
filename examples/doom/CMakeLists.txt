@@ -9,9 +9,9 @@ option(STATIC_BUILD "Built the emulator statically" OFF)
 
 ## D00M SDL2 emulation
 file(DOWNLOAD
-	https://github.com/fwsGonzo/libriscv/releases/download/v0.18/doom-rv32g
-	EXPECTED_MD5 3fc7673f46cc5fb26b63377528fbf585
-	${CMAKE_SOURCE_DIR}/doom-rv32g)
+	https://github.com/fwsGonzo/libriscv/releases/download/v1.1/doom-rv32g_b
+	EXPECTED_MD5 3a8f0d1866134549a03e1d2e858701ee
+	${CMAKE_SOURCE_DIR}/doom-rv32g_b)
 
 set(SOURCES
 	src/main.cpp
@@ -42,7 +42,10 @@ if (LTO)
 	endif()
 endif()
 
-add_subdirectory(../../lib lib)
+option(RISCV_64I   "" OFF)
+option(RISCV_EXT_C "" OFF)
+option(RISCV_MEMORY_TRAPS "" OFF)
+add_subdirectory(../../lib libriscv)
 
 find_package(SDL2 REQUIRED)
 include_directories(${SDL2_INCLUDE_DIRS})

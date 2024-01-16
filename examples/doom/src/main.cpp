@@ -136,10 +136,18 @@ static void doom_system_calls(Machine& machine, size_t num)
 {
 	switch (num) {
 	case 1024: { // newlib open
-		auto g_path = machine.sysarg(0);
-		auto flags  = machine.sysarg<int>(1);
-		auto mode   = machine.sysarg(2);
-		const auto path = machine.memory.memstring(g_path);
+		auto [path, flags, mode] = machine.sysargs <std::string, int, int> ();
+		if ((flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
+			// We only accept direct filenames, and savegame extension
+			if (path.find("/") != std::string::npos) {
+				machine.set_result_or_error(-1);
+				return;
+			}
+			if (path.find(".dsg") == std::string::npos) {
+				machine.set_result_or_error(-1);
+				return;
+			}
+		}
 		// Newlib doesn't think O_CREAT is required for new files :)
 		if (flags & O_WRONLY) flags |= O_CREAT;
 
@@ -229,7 +237,7 @@ static void doom_system_calls(Machine& machine, size_t num)
 
 int main(int argc, char *argv[])
 {
-	const auto binary = load_file("doom-rv32g");
+	const auto binary = load_file("doom-rv32g_b");
 	Machine machine { binary };
 
 	machine.setup_linux(
@@ -305,6 +313,10 @@ int main(int argc, char *argv[])
 			[] (std::string_view line) {
 				printf("-> %.*s\n", (int)line.size(), line.begin());
 			});
+	}
+	catch (const std::exception& e)
+	{
+		printf("Program exception: %s\n", e.what());
 	}
 
 	SDL_DestroyWindow(window);
