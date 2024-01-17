@@ -63,37 +63,64 @@ namespace riscv
 		/// modified while the fork is running. Forks consume very little resources.
 		Machine(const Machine& main, const MachineOptions<W>& opts = {});
 
+		/// @brief Tears down the machine, freeing all owned memory and pages.
 		~Machine();
 
-		// Simulate RISC-V starting from the current address, and stopping when
-		// at most @max_instructions have been executed. If Throw == true,
-		// the machine will throw a MachineTimeoutException if it hits the
-		// given instruction limit, but not if stopped normally.
+		/// @brief Simulate RISC-V starting from the PC register, and
+		/// stopping when at most @max_instructions have been executed.
+		/// If Throw == true, the machine will throw a
+		/// MachineTimeoutException if it hits the provided instruction
+		/// limit, and do nothing if stopped normally.
+		/// @tparam Throw Throw a MachineTimeoutException if the instruction
+		/// limit is reached.
+		/// @param max_instructions The maximum number of instructions to
+		/// execute before stopping.
+		/// @param counter Set the initial instruction count.
+		/// Resuming execution is equivalent to starting simulate() with
+		/// the current instruction counter (this->instruction_counter()).
+		/// @return Returns true if the machine stopped normally, otherwise
+		/// it will return false, but only when Throw == false.
 		template <bool Throw = true>
 		bool simulate(uint64_t max_instructions = UINT64_MAX, uint64_t counter = 0u);
 
-		// Resume simulation by extending the max instructions counter by
-		// the given amount, and the simulating RISC-V as if calling
-		// simulate(). The instruction counter will not be reset.
+		/// @brief Resume execution, by continuing from previous PC address,
+		/// with the same instruction counter, preserving its value. The only
+		/// new value is the max instruction counter.
+		/// @tparam Throw Throw a MachineTimeoutException if the instruction
+		/// limit is reached.
+		/// @param max_instructions The maximum number of instructions to
+		/// execute before stopping.
+		/// @return
 		template <bool Throw = true>
 		bool resume(uint64_t max_instructions);
 
-		// Sets the max instructions counter to zero, which effectively
-		// causes the machine to stop. instruction_limit_reached() will return
-		// false indicating that the machine did not stop because an instruction
-		// limit was reached, and instead stopped naturally.
+		/// @brief Sets the max instructions counter to zero, which effectively
+		/// causes the machine to stop. instruction_limit_reached() will return
+		/// false indicating that the machine did not stop because an instruction
+		/// limit was reached, and instead stopped naturally.
 		void stop() noexcept;
-		// Returns true if the machine is stopped, including when the
-		// instruction limit was reached.
+
+		/// @brief Check if the machine is stopped, or in the process of stopping.
+		/// This includes both when the instruction limit is reached and normal stop.
+		/// This function is only relevant during execution, in for example a
+		/// system call handler.
+		/// @return True if the machine is stopped.
 		bool stopped() const noexcept;
-		// This function returns true only when a simulation ended caused by
-		// reaching the instruction limit. It will not be true if the machine
-		// stopped normally. See: machine.stopped() for that.
+
+		/// @brief This function returns true only when simulate() ended caused
+		/// by reaching the instruction limit. It will not be true if the machine
+		/// stopped normally. See: machine.stopped() for that. In other words,
+		/// it only returns true when execution timed out. Execution timeout is a
+		/// recoverable error, and it can be used to run the emulator just a
+		/// little bit now and then, making slow but sure progress.
+		/// @return True if execution timed out.
 		bool instruction_limit_reached() const noexcept;
 
-		// Returns the precise number of instructions executed. Should only
-		// be called after simulation ends, or inside a system call handler.
+		/// @brief Returns the precise number of instructions executed so far.
+		/// Can be called after simulate() ends, or inside a system call handler.
+		/// @return The exact number of instructions executed so far.
 		uint64_t instruction_counter() const noexcept { return m_counter; }
+
 		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
@@ -104,68 +131,161 @@ namespace riscv
 		CPU<W>    cpu;
 		Memory<W> memory;
 
-		// Copy data into the guests memory (*with* page protections).
+		/// @brief Copy data into the programs virtual memory, from the host.
+		/// Page protections apply. Use memory.set_page_attr() to remove page
+		/// protections if needed.
+		/// @param dst The destination virtual address.
+		/// @param buf A local buffer.
+		/// @param len The size of the local buffer.
 		void copy_to_guest(address_t dst, const void* buf, size_t len);
-		// Copy data from the guests memory (*with* page protections).
+
+		/// @brief Copy data from the programs virtual memory, into host memory.
+		/// Page protections apply. Use memory.set_page_attr() to remove page
+		/// protections if needed.
+		/// @param dst The destination host buffer.
+		/// @param buf The virtual address to the programs buffer.
+		/// @param len The size of the programs buffer.
 		void copy_from_guest(void* dst, address_t buf, size_t len);
 
-		// Push all strings on stack and then create a mini-argv on SP.
+		/// @brief Create a startup stack for a Newlib or equivalent program.
+		/// Program arguments and environment variables are pushed on the stack.
+		/// Note that Newlib cannot read env variables this way.
+		/// @param args An array of program main() arguments.
+		/// @param env An array of program environment variables.
 		void setup_argv(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
-		// Full Linux-compatible stack with program headers.
+
+		/// @brief Create a startup stack for a Linux-compatible program.
+		/// Program arguments and environment variables are pushed on the stack.
+		/// @param args An array of program main() arguments.
+		/// @param env An array of program environment variables.
 		void setup_linux(const std::vector<std::string>& args, const std::vector<std::string>& env = {});
 
-		// Retrieve arguments during a system call
-		// Example: auto arg0 = machine.sysarg <int> (0);
+		/// @brief Retrieve a single argument by its index for a system call.
+		/// Examples: const int arg0 = machine.sysarg <int> (0);
+		/// const std::string arg1 = machine.sysarg <std::string> (1);
+		/// @tparam T The type of argument.
+		/// @param idx The arguments index.
+		/// @return The argument.
 		template <typename T = address_t>
-		inline T sysarg(int arg) const;
-		// Retrieve all arguments by given types during a system call
-		// Example: auto [a, b] = machine.sysargs <int, address_type<W>> ();
+		inline T sysarg(int idx) const;
+
+		/// @brief Retrieve a tuple of arguments based on the given types.
+		/// Example: auto [str, i, f] machine.sysargs<std::string, int, float> ();
+		/// Example: auto [addr, len] machine.sysargs<address_type<W>, unsigned> ();
+		/// Note: String views and riscv::Buffer consume 2 registers each.
+		/// The registers consumed are the address and the length, consequtively:
+		/// Example: auto [buffer] machine.sysargs<riscv::Buffer> ();
+		/// Example: auto [view] machine.sysargs<std::string_view> ();
+		/// @tparam ...Args A list of argument types.
+		/// @return The resolved arguments in a tuple.
 		template <typename... Args>
 		inline auto sysargs() const;
 
-		// Set the result of a system or function call
-		// Only supports primitive types like integers and floats
-		// Example: machine.set_result <int, int, float> (123, 456, 789.0f);
+		/// @brief Set the result of a system or function call.
+		/// Only supports primitive types like integers and floats
+		/// Example: machine.set_result <int, float> (123, 456.0f);
+		/// NOTE: The RISC-V ABI only supports returning 2 results,
+		/// using registers A0 and A1.
+		/// @tparam ...Args The types of results to return.
+		/// @param ...args The results to return.
 		template <typename... Args>
 		inline void set_result(Args... args);
 
-		// Forward the result of a C library function call that
-		// returns 0 or positive on success, and -1 on failure. errno
-		// will be passed on to the guest on failure.
-		void set_result_or_error(int);
+		/// @brief Convert the result of a C library function call that
+		/// returns 0 or positive on success, and -1 on failure. errno
+		/// will be returned on to the guest for negative results.
+		/// @param result The result to convert to a system call return value.
+		void set_result_or_error(int result);
 
-		// A shortcut to getting a return or exit value by interpreting A0
+		/// @brief A simple wrapper for getting a return value from a
+		/// function call. Does not support 2-register value returns,
+		/// such as 16-byte structs on 64-bit. Also does not support
+		/// floating point return values. Integral results only, for now.
+		/// By default, the return value is register-sized.
+		/// @tparam T The integral type to convert the return value to.
+		/// @return The integral result.
 		template <typename T = address_t>
 		inline T return_value() const { return sysarg<T> (0); }
 
-		// Calls into the virtual machine, returning the value returned from
-		// @function_name, which must be visible in the ELF symbol tables.
-		// The function must use the C ABI calling convention.
-		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args> constexpr
-		address_t vmcall(const char* func_name, Args&&... args);
+		/// @brief Calls a RISC-V C ABI function in the program, with the
+		/// provided arguments. Returns the function result.
+		/// The string function name is lookup up the symbol table, which
+		/// is a potentially costly and time-consuming search. It is
+		/// recommended to cache the result of a function lookup using
+		/// address_of(function) and instead use vmcall() with the virtual
+		/// function address instead.
+		/// @tparam ...Args 
+		/// @tparam MAXI The instruction limit.
+		/// @tparam Throw Throw exception on execution timeout.
+		/// @param func_name The function to call. A symbol table lookup is performed.
+		/// @param ...args The arguments to the function.
+		/// @return The result of the function call.
+		template <uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args>
+		constexpr address_t vmcall(const char* func_name, Args&&... args);
 
-		template<uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args> constexpr
-		address_t vmcall(address_t func_addr, Args&&... args);
+		/// @brief Calls a RISC-V C ABI function in the program, with the
+		/// provided arguments. Returns the function result.
+		/// This variant is extremely low-latency.
+		/// @tparam ...Args
+		/// @tparam MAXI The instruction limit.
+		/// @tparam Throw Throw exception on execution timeout.
+		/// @param func_addr The address of the function to call.
+		/// @param ...args The arguments to the function.
+		/// @return The result of the function call.
+		template <uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args>
+		constexpr address_t vmcall(address_t func_addr, Args&&... args);
 
-		// Saves and restores registers while calling given function
-		// Uses resume() to execute the other function, continuing instruction counting.
+		/// @brief Preempt is like vmcall() except it also stores and
+		/// restores the current registers and counters before and after
+		/// the interrupting function call is completed. It allows calling
+		/// a function as if it was an interrupt handler. The original
+		/// task can be resumed again later.
+		/// @tparam ...Args
+		/// @tparam Throw Throw exception on execution timeout.
+		/// @tparam StoreRegs Store and restore registers.
+		/// @param max_instr The instruction limit, when an execution timeout happens.
+		/// @param func_name The name of the function to interrupt the current task with.
+		/// @param ...args
+		/// @return Returns the return register from the function call.
 		template<bool Throw = true, bool StoreRegs = true, typename... Args>
 		address_t preempt(uint64_t max_instr, const char* func_name, Args&&... args);
 
+		/// @brief Preempt is like vmcall() except it also stores and
+		/// restores the current registers and counters before and after
+		/// the interrupting function call is completed. It allows calling
+		/// a function as if it was an interrupt handler. The original
+		/// task can be resumed again later.
+		/// @tparam ...Args 
+		/// @tparam Throw Throw exception on execution timeout.
+		/// @tparam StoreRegs Store and restore registers.
+		/// @param max_instr The instruction limit, when an execution timeout happens.
+		/// @param func_addr The address of the function to interrupt the current task with.
+		/// @param ...args 
+		/// @return Returns the return register from the function call.
 		template<bool Throw = true, bool StoreRegs = true, typename... Args>
 		address_t preempt(uint64_t max_instr, address_t func_addr, Args&&... args);
 
-		// Sets up a function call only, executes no instructions.
-		// Supports integers, floating-point values and strings.
-		// Strings will be put on stack, which is not restored automatically.
-		template<typename... Args> constexpr
-		void setup_call(Args&&... args);
-
-		// Returns the address of a symbol in the ELF symtab, or zero
+		/// @brief Performs a lookup in the symbol table and returns the address
+		/// of any symbol matchine the given name. This can, for example, be
+		/// used to find the address of a function.
+		/// @param name The symbol to find.
+		/// @return The address of the symbol, or 0x0 if not found.
 		address_t address_of(std::string_view name) const;
 
-		// Custom user pointer
+		/// @brief Set a custom pointer that only you know the meaning of.
+		/// This pointer can be retrieved from many of the callbacks in the
+		/// machine, such as system calls, printers etc. It is used to
+		/// facilitate wrapping the RISC-V Machine inside of your custom
+		/// structure, such as a Script class.
+		/// @tparam T The type of the pointer.
+		/// @param data The pointer to the outer class.
 		template <typename T> void set_userdata(T* data) { m_userdata = data; }
+
+		/// @brief Return a previously set user pointer. It is usually
+		/// a pointer to an outer wrapper class that manages the Machine, such
+		/// as a Script class.
+		/// @tparam T The type of the previously set user pointer.
+		/// @return The previously set user pointer.
 		template <typename T> T* get_userdata() const noexcept { return static_cast<T*> (m_userdata); }
 
 		// Stdout, stderr (for when the guest wants to write)
@@ -193,6 +313,13 @@ namespace riscv
 		// Realign the stack pointer, to make sure that function calls succeed
 		void realign_stack();
 
+		/// @brief An internal function that facilitates function
+		/// calls into the guest program.
+		/// @tparam ...Args 
+		/// @param ...args The arguments to the function.
+		template<typename... Args> constexpr
+		void setup_call(Args&&... args);
+
 		// Invoke an installed system call handler at the given index (system call number).
 		void system_call(size_t);
 		// Invoke the EBREAK system function
@@ -213,7 +340,7 @@ namespace riscv
 		static void default_unknown_syscall_no(Machine&, size_t);
 		static inline void (*on_unhandled_syscall) (Machine&, size_t) = default_unknown_syscall_no;
 
-		// Execute CSRs
+		// Execute CSRs and system functions
 		void system(union rv32i_instruction);
 		// User callback for unhandled CSRs
 		static inline void (*on_unhandled_csr) (Machine&, int, int, int)
