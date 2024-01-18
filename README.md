@@ -51,6 +51,26 @@ See the [example project](/examples/embed) for directly embedding libriscv using
 On Windows you can use Clang-cl in Visual Studio. See the [example CMake project](/examples/msvc). It requires Clang and Git installed.
 
 
+## Emulator using Docker CLI
+
+```sh
+docker build . -t libriscv
+docker run -v $PWD/binaries:/app/binaries --rm -i -t libriscv binaries/<binary>
+```
+
+A fib(256000000) program for testing is built automatically. You can test-run it like so:
+```sh
+docker run -v $PWD/binaries:/app/binaries --rm -i -t libriscv fib
+```
+
+If you want to use `rvlinux` from terminal, or you want to compile RISC-V programs, you can enter the docker container instead of using it from the outside. A 64-bit RISC-V compiler is installed in the container, and it can be used to build RISC-V programs. You can enter the container like so:
+```sh
+docker run -v $PWD/binaries:/app/binaries --entrypoint='' -i -t libriscv /bin/bash
+```
+
+Inside the container you have access to the emulator `rvlinux`, and the compilers `riscv64-linux-gnu-gcc-12` and `riscv64-linux-gnu-g++-12`. There is also `rvlinux-fast` which cannot run RISC-V programs with compressed instructions, but is a lot faster.
+
+
 ## Installing a RISC-V GCC compiler
 
 On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler for running Linux programs with a one-liner:
