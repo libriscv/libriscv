@@ -392,8 +392,6 @@ namespace riscv
 		if (UNLIKELY(prelen > plen || prelen + exlen > plen)) {
 			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 		}
-		// An additional wrap-around check because we are adding 12 bytes
-		// as well as additional padding to len.
 		if (UNLIKELY(pbase + plen < pbase)) {
 			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 		}

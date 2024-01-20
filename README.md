@@ -8,6 +8,7 @@ There is also a CLI that you can use to run RISC-V programs and step through ins
 
 ![render1702368897099](https://github.com/fwsGonzo/libriscv/assets/3758947/89d6c128-c410-4fe5-bf03-eff0279f8933)
 
+For discussions & help, [visit Discord](https://discord.gg/aGhUSBpH).
 
 ## Ultra-Low latency emulation
 
