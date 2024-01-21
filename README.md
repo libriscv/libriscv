@@ -1,8 +1,8 @@
 # RISC-V userspace emulator library
 
-_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. There are several [CMake options](lib/CMakeLists.txt) that control RISC-V extensions and how the emulator behaves.
+_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. In the C folder there is a [libriscv C API](/c).
 
-There is also a CLI that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or connect with GDB.
+There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or connect with GDB.
 
 [![Debian Packaging](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml) [![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
@@ -12,14 +12,14 @@ For discussions & help, [visit Discord](https://discord.gg/aGhUSBpH).
 
 ## Ultra-Low latency emulation
 
-libriscv is a [low latency emulator](https://medium.com/@fwsgonzo/using-c-as-a-scripting-language-part-10-ad7dd7e4325d), designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
+libriscv is an ultra-low latency emulator, designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
 
 Goals:
 - No overhead when used for game engine scripting or request-based workloads
 - Type-safe VM call and system call interfaces
 - [Secure speculation-safe sandbox](SECURITY.md)
-- Low attack surface
-- Platform-independent and easy to embed
+- Low attack surface, only 20k LOC
+- Platform-independent and super-easy to embed
 
 Non goals:
 - Just-in-time compilation
@@ -77,10 +77,10 @@ Inside the container you have access to the emulator `rvlinux`, and the compiler
 On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler for running Linux programs with a one-liner:
 
 ```
-sudo apt install gcc-11-riscv64-linux-gnu g++-11-riscv64-linux-gnu
+sudo apt install gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu
 ```
 
-Depending on your distro you may have access to GCC versions 10, 11 and 12. Now you have a full Linux C/C++ compiler for 64-bit RISC-V.
+Depending on your distro you may have access to GCC versions 10 to 13. Now you have a full Linux C/C++ compiler for 64-bit RISC-V.
 
 To build smaller and leaner programs you will want a (limited) Linux userspace environment. Check out the guide on how to [build a Newlib compiler](/docs/NEWLIB.md).
 
@@ -181,11 +181,11 @@ In order to have the machine not throw an exception when the instruction limit i
 ```C++
 machine.simulate<false>(5'000'000ull);
 ```
-If the machine runs out of instructions, it will simply stop running. Use `machine.instruction_limit_reached()` to check if the machine stopped running because it hit the instruction limit.
+If the machine runs out of instructions, it will now simply stop running. Use `machine.instruction_limit_reached()` to check if the machine stopped running because it hit the instruction limit.
 
 You can limit the amount of (virtual) memory the machine can use like so:
 ```C++
-	const uint32_t memsize = 1024 * 1024 * 64u;
+	const uint64_t memsize = 1024 * 1024 * 64ul;
 	riscv::Machine<riscv::RISCV32> machine { binary, { .memory_max = memsize } };
 ```
 You can find the `MachineOptions` structure in [common.hpp](/lib/libriscv/common.hpp).
