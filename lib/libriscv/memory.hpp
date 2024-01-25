@@ -9,6 +9,9 @@
 #include "mmap_cache.hpp"
 #include "util/buffer.hpp" // <string>
 #include "util/function.hpp"
+#if __cplusplus >= 202002L
+#include <span>
+#endif
 
 namespace riscv
 {
@@ -56,6 +59,11 @@ namespace riscv
 		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
 		// View known-sequential virtual memory (or throw exception)
 		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
+#if __cplusplus >= 202002L
+		// View known-sequential virtual memory as array of T with given number of elements (or throw exception)
+		template <typename T>
+		std::span<T> rvspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const;
+#endif
 		// Read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t maxlen = 16384) const;
 		size_t strlen(address_t addr, size_t maxlen = 16384) const;

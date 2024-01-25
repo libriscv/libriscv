@@ -150,6 +150,23 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 	return std::string_view{};
 }
 
+#if __cplusplus >= 202002L
+
+template <int W>
+template <typename T> inline
+std::span<T> Memory<W>::rvspan(address_t addr, size_t count, size_t maxlen) const
+{
+	if (addr % alignof(T) != 0)
+		protection_fault(addr);
+
+	auto view = rvview(addr, count * sizeof(T), maxlen);
+	if (!view.empty() && view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
+		return {(T *)view.data(), count};
+	return {};
+}
+
+#endif // __cplusplus >= 202002L
+
 template <int W> inline
 size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 {
