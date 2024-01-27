@@ -1,6 +1,6 @@
 # RISC-V userspace emulator library
 
-_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. In the C folder there is a [libriscv C API](/c).
+_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50ns to enter the virtual machine and return, _libriscv_ requires 3ns. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
 
 There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or connect with GDB.
 
