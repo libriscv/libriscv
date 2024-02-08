@@ -2,13 +2,13 @@
 
 _libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50ns to enter the virtual machine and return, _libriscv_ requires 3ns. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
 
-There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or connect with GDB.
+There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to live-debug something.
 
 [![Debian Packaging](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml) [![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
 ![render1702368897099](https://github.com/fwsGonzo/libriscv/assets/3758947/89d6c128-c410-4fe5-bf03-eff0279f8933)
 
-For discussions & help, [visit Discord](https://discord.gg/aGhUSBpH).
+For discussions & help, [visit Discord](https://discord.gg/n4GcXr66X5).
 
 ## Ultra-Low latency emulation
 
@@ -357,4 +357,5 @@ When binary translation is enabled, the experimental option `RISCV_LIBTCC` is av
 
 ## Game development example
 
-Have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example framework and automatically builds fully functional C++ programs for low latency scripting.
+Have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example framework and automatically builds fully functional C++ programs for low latency scripting. Keep in mind that disabling the C-extension increases interpreter speed by ~20-25%, but requires a custom RISC-V toolchain. [Here's how to create one](/docs/NEWLIB.md).
+
