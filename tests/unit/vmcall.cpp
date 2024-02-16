@@ -96,6 +96,12 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 		return 3;
 	}
 
+	extern int fps(float f1, double d1) {
+		assert(f1 == 1.0f);
+		assert(d1 == 2.0);
+		return 4;
+	}
+
 	int main() {
 		value = 1;
 		return 666;
@@ -154,6 +160,9 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 
 		int res3 = fork.vmcall("ints", 123L, intref, (long&&)intref);
 		REQUIRE(res3 == 3);
+
+		int res4 = fork.vmcall("fps", 1.0f, 2.0);
+		REQUIRE(res4 == 4);
 
 		// XXX: Binary translation currently "remembers" that arena
 		// was enabled, and will not disable it for the fork.

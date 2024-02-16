@@ -16,8 +16,10 @@ inline void Machine<W>::setup_call(Args&&... args)
 			cpu.reg(iarg++) = stack_push(args.data(), args.size()+1);
 		else if constexpr (is_string<Args>::value)
 			cpu.reg(iarg++) = stack_push(args, strlen(args)+1);
-		else if constexpr (std::is_floating_point_v<remove_cvref<Args>>)
+		else if constexpr (std::is_same_v<float, remove_cvref<Args>>)
 			cpu.registers().getfl(farg++).set_float(args);
+		else if constexpr (std::is_same_v<double, remove_cvref<Args>>)
+			cpu.registers().getfl(farg++).f64 = args;
 		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>>)
 			cpu.reg(iarg++) = stack_push(&args, sizeof(args));
 		else
