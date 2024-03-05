@@ -1,3 +1,4 @@
+#pragma once
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -50,7 +51,7 @@ inline constexpr auto crc32(uint32_t crc, const void* vdata, const size_t len)
 template <uint32_t POLYNOMIAL = 0xEDB88320>
 inline constexpr auto crc32(const void* vdata, const size_t len)
 {
-	return ~crc32(0xFFFFFFFF, vdata, len);
+	return ~crc32<POLYNOMIAL>(0xFFFFFFFF, vdata, len);
 }
 
 // CRC32-C with hardware acceleration on amd64
