@@ -162,7 +162,9 @@ std::span<T> Memory<W>::rvspan(address_t addr, size_t count, size_t maxlen) cons
 	auto view = rvview(addr, count * sizeof(T), maxlen);
 	if (!view.empty() && view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
 		return {(T *)view.data(), count};
-	return {};
+
+	// It's too dangerous to return an empty span here
+	protection_fault(addr);
 }
 
 #endif // __cplusplus >= 202002L
