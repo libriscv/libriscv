@@ -136,6 +136,9 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 	if (UNLIKELY(len > maxlen))
 		protection_fault(addr);
 
+	if (len == 0)
+		return {};
+
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(addr + len - RWREAD_BEGIN < memory_arena_read_boundary() && addr < addr + len)) {
 			auto* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
@@ -147,7 +150,8 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 	if (gather_buffers_from_range(1, buffers.data(), addr, len) == 1)
 		return {(const char *)buffers[0].ptr, buffers[0].len};
 
-	return std::string_view{};
+	// It's too dangerous to return an empty view here
+	protection_fault(addr);
 }
 
 #if __cplusplus >= 202002L
@@ -159,8 +163,11 @@ std::span<T> Memory<W>::rvspan(address_t addr, size_t count, size_t maxlen) cons
 	if (addr % alignof(T) != 0)
 		protection_fault(addr);
 
+	if (count == 0)
+		return {};
+
 	auto view = rvview(addr, count * sizeof(T), maxlen);
-	if (!view.empty() && view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
+	if (view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
 		return {(T *)view.data(), count};
 
 	// It's too dangerous to return an empty span here
