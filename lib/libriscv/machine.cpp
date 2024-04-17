@@ -379,6 +379,9 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole &= ~(imm & 0xFF);
 				return;
+			default:
+				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				return;
 			}
 			break;
 		} // CSRRCI
