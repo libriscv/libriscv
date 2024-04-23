@@ -75,7 +75,9 @@ inline void Machine<W>::debug_print(const char* buffer, size_t len) const
 template <int W> inline
 void Machine<W>::install_syscall_handler(size_t sysn, syscall_t handler)
 {
-	syscall_handlers.at(sysn) = handler;
+	// A work-around for thread-sanitizer false positives (setting the same handler)
+	if (syscall_handlers.at(sysn) != handler)
+		syscall_handlers.at(sysn) = handler;
 }
 template <int W> inline
 void Machine<W>::install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>> syscalls)
