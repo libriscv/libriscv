@@ -23,6 +23,10 @@
 #define RISCV_FORCE_ALIGN_MEMORY 1
 #endif
 
+#ifndef RISCV_BRK_MEMORY_SIZE
+#define RISCV_BRK_MEMORY_SIZE  (16ull << 20) // 16MB
+#endif
+
 namespace riscv
 {
 	template <int W> struct Memory;

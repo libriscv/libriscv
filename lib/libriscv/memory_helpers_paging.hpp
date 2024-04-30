@@ -146,12 +146,10 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 		}
 	}
 
+	// Fallback: Try gathering a single buffer, which throws OUT_OF_MEMORY if it fails
 	std::array<vBuffer, 1> buffers;
-	if (gather_buffers_from_range(1, buffers.data(), addr, len) == 1)
-		return {(const char *)buffers[0].ptr, buffers[0].len};
-
-	// It's too dangerous to return an empty view here
-	protection_fault(addr);
+	gather_buffers_from_range(1, buffers.data(), addr, len);
+	return {(const char *)buffers[0].ptr, buffers[0].len};
 }
 
 #if __cplusplus >= 202002L

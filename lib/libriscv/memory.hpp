@@ -26,7 +26,7 @@ namespace riscv
 		using page_fault_cb_t = riscv::Function<Page&(Memory&, address_t, bool)>;
 		using page_readf_cb_t = riscv::Function<const Page&(const Memory&, address_t)>;
 		using page_write_cb_t = riscv::Function<void(Memory&, address_t, Page&)>;
-		static constexpr address_t BRK_MAX      = 0x1000000; // Default BRK size
+		static constexpr address_t BRK_MAX      = RISCV_BRK_MEMORY_SIZE; // Default BRK size
 		static constexpr address_t DYLINK_BASE  = 0x40000; // Dynamic link base address
 		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
 		static constexpr size_t    MAX_EXECUTE_SEGS = 8;
