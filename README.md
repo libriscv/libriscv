@@ -42,6 +42,9 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
 
   ![STREAM memory wasm3 vs  libriscv (no SIMD)](https://github.com/fwsGonzo/libriscv/assets/3758947/0a259f83-0a60-4f0d-88e8-901333ca1c7d)
   ![CoreMark 1 0 Interpreted wasm3 vs  interpreted libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/236c6620-6812-4e6c-89be-15cdb7340412)
+  ![Compute Rainbow Color (3x sinf)](https://github.com/fwsGonzo/libriscv/assets/3758947/ea59f2ca-1087-4f06-afd9-f54de24eed52)
+
+  libriscv beats established gold-standard emulators for all short-running functions.
 
 </details>
 
