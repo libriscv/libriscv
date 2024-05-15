@@ -505,13 +505,17 @@ namespace riscv
 			[] (const char* strtab, address_t addr, const auto* sym)
 		{
 			const char* symname = &strtab[sym->st_name];
+			std::string result;
 #ifdef DEMANGLE_ENABLED
-			char* dma = __cxa_demangle(symname, nullptr, nullptr, nullptr);
+			if (char* dma = __cxa_demangle(symname, nullptr, nullptr, nullptr); dma != nullptr) {
+				result = dma;
+				free(dma);
+			}
 #else
-			char* dma = nullptr;
+			result = symname;
 #endif
 			return Callsite {
-				.name = (dma) ? dma : symname,
+				.name = result,
 				.address = static_cast<address_t>(sym->st_value),
 				.offset = (uint32_t) (addr - sym->st_value),
 				.size   = sym->st_size
