@@ -31,55 +31,11 @@
 #define GENERATE_SYSCALL_WRAPPER(name, number) \
 	asm(".global " #name "\n" #name ":\n  li a7, " STRINGIFY(number) "\n  ecall\n  ret\n");
 
-GENERATE_SYSCALL_WRAPPER(sys_malloc,  SYSCALL_MALLOC);
-GENERATE_SYSCALL_WRAPPER(sys_calloc,  SYSCALL_CALLOC);
-GENERATE_SYSCALL_WRAPPER(sys_realloc, SYSCALL_REALLOC);
-GENERATE_SYSCALL_WRAPPER(sys_free,    SYSCALL_FREE);
+GENERATE_SYSCALL_WRAPPER(malloc,  SYSCALL_MALLOC);
+GENERATE_SYSCALL_WRAPPER(calloc,  SYSCALL_CALLOC);
+GENERATE_SYSCALL_WRAPPER(realloc, SYSCALL_REALLOC);
+GENERATE_SYSCALL_WRAPPER(free,    SYSCALL_FREE);
 
-extern "C" NATIVE_MEM_FUNCATTR
-void* malloc(size_t size)
-{
-	void* result = sys_malloc(size);
-	#ifdef VERBOSE_HEAP
-		fmt_print("malloc(", size, ") = ", result);
-		if (result == nullptr)
-			fmt_print("** WARNING: malloc(", size, ") FAILED");
-	#endif
-	return result;
-}
-extern "C" NATIVE_MEM_FUNCATTR
-void* calloc(size_t count, size_t size)
-{
-	void* result = sys_calloc(count, size);
-	#ifdef VERBOSE_HEAP
-		fmt_print("calloc(", count * size, ") = ", result);
-		if (result == nullptr)
-			fmt_print("** WARNING: calloc(", count * size, ") FAILED");
-	#endif
-	return result;
-}
-extern "C" NATIVE_MEM_FUNCATTR
-void* realloc(void* ptr, size_t newsize)
-{
-	void* result = sys_realloc(ptr, newsize);
-	#ifdef VERBOSE_HEAP
-		fmt_print("realloc(", ptr, ", ", newsize, ") = ", result);
-		if (result == nullptr)
-			fmt_print("** WARNING: realloc(", ptr, ", ", newsize, ") FAILED");
-	#endif
-	return result;
-}
-extern "C" NATIVE_MEM_FUNCATTR
-void free(void* ptr)
-{
-	int result = sys_free(ptr);
-	#ifdef VERBOSE_HEAP
-		fmt_print("free(", ptr, ") = ", result);
-		if (result < 0)
-			fmt_print("** WARNING: free(", ptr, ") FAILED");
-	#endif
-	(void) result;
-}
 extern "C" NATIVE_MEM_FUNCATTR
 void* reallocf(void *ptr, size_t newsize)
 {

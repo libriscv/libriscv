@@ -74,9 +74,9 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		const auto ptr = machine.sysarg(0);
 		if (ptr != 0x0)
 		{
-			int ret = machine.arena().free(ptr);
+			[[maybe_unused]] int ret = machine.arena().free(ptr);
 			HPRINT("SYSCALL free(0x%lX) = %d\n", (long)ptr, ret);
-			machine.set_result(ret);
+			//machine.set_result(ret);
 			if (ret < 0) {
 				throw MachineException(SYSTEM_CALL_FAILED, "Possible double-free for freed pointer", ptr);
 			}
@@ -84,7 +84,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			return;
 		}
 		HPRINT("SYSCALL free(0x0) = 0\n");
-		machine.set_result(0);
+		//machine.set_result(0);
 		machine.penalize(COMPLEX_CALL_PENALTY);
 		return;
 	});
