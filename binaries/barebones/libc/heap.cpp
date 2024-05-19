@@ -26,6 +26,10 @@
 #define memalign       __wrap_memalign
 #define aligned_alloc  __wrap_aligned_alloc
 #define posix_memalign __wrap_posix_memalign
+extern "C" void* malloc(size_t bytes);
+extern "C" void* calloc(size_t count, size_t size);
+extern "C" void* realloc(void* ptr, size_t bytes);
+extern "C" void  free(void* ptr);
 #endif
 
 #define GENERATE_SYSCALL_WRAPPER(name, number) \
