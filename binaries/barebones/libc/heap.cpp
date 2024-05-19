@@ -31,10 +31,12 @@
 #define GENERATE_SYSCALL_WRAPPER(name, number) \
 	asm(".global " #name "\n" #name ":\n  li a7, " STRINGIFY(number) "\n  ecall\n  ret\n");
 
+asm(".pushsection .text, \"ax\", @progbits\n");
 GENERATE_SYSCALL_WRAPPER(malloc,  SYSCALL_MALLOC);
 GENERATE_SYSCALL_WRAPPER(calloc,  SYSCALL_CALLOC);
 GENERATE_SYSCALL_WRAPPER(realloc, SYSCALL_REALLOC);
 GENERATE_SYSCALL_WRAPPER(free,    SYSCALL_FREE);
+asm(".popsection\n");
 
 extern "C" NATIVE_MEM_FUNCATTR
 void* reallocf(void *ptr, size_t newsize)
