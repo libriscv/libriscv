@@ -4,11 +4,12 @@
 using namespace riscv;
 using gaddr_t = Script::gaddr_t;
 using machine_t = Script::machine_t;
-inline Script& script(machine_t& m) {
+inline Script& getScript(machine_t& m) {
 	return *m.get_userdata<Script>();
 }
 
-template <unsigned SAMPLES = 3000>
+// A simple benchmarking function that subtracts the call overhead
+template <unsigned SAMPLES = 2000>
 static void benchmark(std::string_view name, Script& script, std::function<void()> fn)
 {
 	static unsigned overhead = 0;
@@ -31,6 +32,24 @@ static void benchmark(std::string_view name, Script& script, std::function<void(
 		name, elapsed - overhead);
 }
 
+// ScriptFunction is a function that can be safely called from the script
+using ScriptFunction = std::function<void(Script&)>;
+// A map of host functions that can be called from the script
+static std::vector<ScriptFunction> g_script_functions(64);
+static void register_script_function(uint32_t number, ScriptFunction&& fn) {
+	g_script_functions.at(number) = std::move(fn);
+}
+
+void Script::setup_syscall_interface()
+{
+	// Add a custom system call that executes a function based on a hash
+	machine_t::install_syscall_handler(510,
+	[] (machine_t& machine) {
+		auto& script = getScript(machine);
+		g_script_functions.at(machine.cpu.reg(riscv::REG_T0))(script);
+	});
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 2) {
@@ -39,6 +58,27 @@ int main(int argc, char** argv)
 	}
 
 	fmt::print("Loading program: {}\n", argv[1]);
+
+	// Register a custom function that can be called from the script
+	// This is the handler for dyncall1
+	register_script_function(1, [](Script& script) {
+		auto [arg] = script.machine().sysargs<int>();
+
+		fmt::print("dyncall1 called with argument: 0x{:x}\n", arg);
+
+		script.machine().set_result(42);
+	});
+	// This is the handler for dyncall2
+	register_script_function(2, [](Script& script) {
+		// string_view consumes 2 arguments, the first is the pointer, the second is the length
+		// unlike std::string, which consumes only 1 argument (zero-terminated string pointer)
+		auto [view, str] = script.machine().sysargs<std::string_view, std::string>();
+
+		fmt::print("dyncall2 called with arguments: '{}' and '{}'\n", view, str);
+	});
+	// This is the handler for dyncall_empty
+	register_script_function(3, [](Script&) {
+	});
 
 	// Create a new script instance, loading and initializing the given program file
 	// The programs main() function will be called
@@ -65,4 +105,22 @@ int main(int argc, char** argv)
 	Event<void(std::string)> test3(script, "test3");
 	if (auto ret = test3("Oh, no! An exception!"); !ret)
 		throw std::runtime_error("Failed to call test3!?");
+
+	// Pass data structure to the script
+	struct Data {
+		int a, b, c, d;
+		float e, f, g, h;
+		double i, j, k, l;
+		char buffer[32];
+	};
+	const Data data = { 1, 2, 3, 4, 5.0f, 6.0f, 7.0f, 8.0f, 9.0, 10.0, 11.0, 12.0, "Hello, World!" };
+	Event<void(Data)> test4(script, "test4");
+	if (auto ret = test4(data); !ret)
+		throw std::runtime_error("Failed to call test4!?");
+
+	// Benchmark the overhead of dynamic calls
+	Event<void()> bench_dyncall_overhead(script, "bench_dyncall_overhead");
+	benchmark("Overhead of dynamic calls", script, [&] {
+		bench_dyncall_overhead();
+	});
 }

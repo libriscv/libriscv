@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <new>
+#define PUBLIC(x) extern "C" __attribute__((used, retain)) x
 
 #define NATIVE_MEM_FUNCATTR /* */
 #define NATIVE_SYSCALLS_BASE  490  /* libc starts at 490 */
