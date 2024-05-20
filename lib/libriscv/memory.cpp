@@ -510,6 +510,8 @@ namespace riscv
 			if (char* dma = __cxa_demangle(symname, nullptr, nullptr, nullptr); dma != nullptr) {
 				result = dma;
 				free(dma);
+			} else {
+				result = symname;
 			}
 #else
 			result = symname;
