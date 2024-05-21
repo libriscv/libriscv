@@ -125,6 +125,9 @@ inline T Machine<W>::sysarg(int idx) const
 		return *(T*)memory.template rvspan<typename T::value_type>(cpu.reg(REG_ARG0 + idx), std::tuple_size_v<T>).data();
 	else if constexpr (is_span_v<T>)
 		return memory.template rvspan<typename T::value_type>(cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
+	else if constexpr (std::is_pointer_v<remove_cvref<T>>) {
+		return (T)memory.template rvspan<std::remove_pointer_t<remove_cvref<T>>, 1>(cpu.reg(REG_ARG0 + idx)).data();
+	}
 #endif
 	else if constexpr (std::is_standard_layout_v<remove_cvref<T>> && std::is_trivial_v<remove_cvref<T>>) {
 		T value;
