@@ -188,6 +188,15 @@ namespace riscv
 	template<class T>
 	struct is_stdstring : public std::is_same<T, std::basic_string<char>> {};
 
+	template<class T>
+	struct is_stdarray : std::false_type {};
+
+	template<class T, std::size_t N>
+	struct is_stdarray<std::array<T, N>> : std::true_type {};
+
+	template<class T>
+	constexpr bool is_stdarray_v = is_stdarray<T>::value;
+
 	template <typename T>
 	struct is_span : std::false_type{};
 #if __cplusplus >= 202002L

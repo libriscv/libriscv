@@ -63,6 +63,10 @@ namespace riscv
 		// View known-sequential virtual memory as array of T with given number of elements (or throw exception)
 		template <typename T>
 		std::span<T> rvspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const;
+		template <typename T, size_t N>
+		std::span<T, N> rvspan(address_t addr, size_t maxlen = 16ul << 20) const {
+			return rvspan<T>(addr, N, maxlen).template first<N>();
+		}
 #endif
 		// Read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t maxlen = 16384) const;
