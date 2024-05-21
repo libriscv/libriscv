@@ -2,6 +2,7 @@
 #include "dyncall.hpp"
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 // A dynamic call for testing integer arguments and return values
 DEFINE_DYNCALL(1, dyncall1, int(int));
@@ -9,6 +10,11 @@ DEFINE_DYNCALL(1, dyncall1, int(int));
 DEFINE_DYNCALL(2, dyncall2, void(const char*, size_t, const char*));
 // A dynamic call for benchmarking the overhead of dynamic calls
 DEFINE_DYNCALL(3, dyncall_empty, void());
+// A dynamic call that passes a view to complex data
+struct MyData {
+	char buffer[32];
+};
+DEFINE_DYNCALL(4, dyncall_data, void(const MyData*, size_t, const MyData&));
 
 // Every instantiated program runs through main()
 int main(int argc, char** argv)
@@ -70,6 +76,15 @@ PUBLIC(void test4(const Data& data))
 		data.i, data.j, data.k, data.l,
 		data.buffer);
 	fflush(stdout);
+}
+
+PUBLIC(void test5())
+{
+	std::vector<MyData> vec;
+	vec.push_back(MyData{ "Hello, World!" });
+	MyData data = { "Second data!" };
+
+	dyncall_data(vec.data(), vec.size(), data);
 }
 
 // This function is used to benchmark the overhead of dynamic calls.
