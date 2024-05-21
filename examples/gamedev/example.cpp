@@ -79,6 +79,15 @@ int main(int argc, char** argv)
 	// This is the handler for dyncall_empty
 	register_script_function(3, [](Script&) {
 	});
+	// This is the handler for dyncall_data
+	register_script_function(4, [](Script& script) {
+		struct MyData {
+			char buffer[32];
+		};
+		auto [data_span, data] = script.machine().sysargs<std::span<MyData>, MyData>();
+
+		fmt::print("dyncall_data called with args: '{}' and '{}'\n", data_span[0].buffer, data.buffer);
+	});
 
 	// Create a new script instance, loading and initializing the given program file
 	// The programs main() function will be called
@@ -123,4 +132,10 @@ int main(int argc, char** argv)
 	benchmark("Overhead of dynamic calls", script, [&] {
 		bench_dyncall_overhead();
 	});
+
+	// Call test5 function
+	Event<void()> test5(script, "test5");
+	if (auto ret = test5(); !ret)
+		throw std::runtime_error("Failed to call test5!?");
+
 }

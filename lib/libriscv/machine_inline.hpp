@@ -120,6 +120,10 @@ inline T Machine<W>::sysarg(int idx) const
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 	else if constexpr (is_stdstring<T>::value)
 		return memory.memstring(cpu.reg(REG_ARG0 + idx));
+#if __cplusplus >= 202002L
+	else if constexpr (is_span_v<T>)
+		return memory.template rvspan<typename decltype(T{})::value_type>(cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
+#endif
 	else if constexpr (std::is_standard_layout_v<remove_cvref<T>> && std::is_trivial_v<remove_cvref<T>>) {
 		T value;
 		memory.memcpy_out(&value, cpu.reg(REG_ARG0 + idx), sizeof(T));
@@ -150,6 +154,11 @@ inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
 		}
 		else if constexpr (is_stdstring<Args>::value)
 			std::get<Indices>(retval) = sysarg<Args>(i++);
+#if __cplusplus >= 202002L
+		else if constexpr (is_span_v<Args>) {
+			std::get<Indices>(retval) = sysarg<Args>(i); i+= 2;
+		}
+#endif
 		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>> && std::is_trivial_v<remove_cvref<Args>>)
 			std::get<Indices>(retval) = sysarg<Args>(i++);
 		else

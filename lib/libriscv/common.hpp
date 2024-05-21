@@ -2,6 +2,9 @@
 #include "libriscv_settings.h" // Build-system generated
 
 #include <type_traits>
+#if __cplusplus >= 202002L
+#include <span>
+#endif
 #include <string>
 #include <string_view>
 #include "util/function.hpp"
@@ -184,6 +187,15 @@ namespace riscv
 
 	template<class T>
 	struct is_stdstring : public std::is_same<T, std::basic_string<char>> {};
+
+	template <typename T>
+	struct is_span : std::false_type{};
+#if __cplusplus >= 202002L
+	template <typename T>
+	struct is_span<std::span<T>> : std::true_type{};
+	template <typename T>
+	constexpr bool is_span_v = is_span<T>::value;
+#endif
 } // riscv
 
 #ifdef __GNUG__
