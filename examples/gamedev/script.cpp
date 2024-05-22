@@ -2,7 +2,7 @@
 using gaddr_t = Script::gaddr_t;
 
 #include <fstream> // Windows doesn't implement C getline()
-#include <fmt/printf.h>
+#include <fmt/core.h>
 #include <libriscv/native_heap.hpp>
 static std::vector<uint8_t> load_file(const std::string& filename);
 static const int HEAP_SYSCALLS_BASE	  = 490; // 490-494 (5)

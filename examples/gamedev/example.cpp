@@ -1,51 +1,24 @@
 #include "event.hpp"
 #include <chrono>
-#include <fmt/printf.h>
+#include <fmt/core.h>
 using namespace riscv;
-using gaddr_t = Script::gaddr_t;
-using machine_t = Script::machine_t;
-inline Script& getScript(machine_t& m) {
-	return *m.get_userdata<Script>();
-}
-
-// A simple benchmarking function that subtracts the call overhead
 template <unsigned SAMPLES = 2000>
-static void benchmark(std::string_view name, Script& script, std::function<void()> fn)
-{
-	static unsigned overhead = 0;
-	if (overhead == 0) {
-		Event<void()> measure_overhead(script, "measure_overhead");
-		auto start = std::chrono::high_resolution_clock::now();
-		for (unsigned i = 0; i < SAMPLES; i++)
-			measure_overhead();
-		auto end = std::chrono::high_resolution_clock::now();
-		overhead = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / SAMPLES;
-		fmt::print("Call overhead: {}ns\n", overhead);
-	}
+static void benchmark(std::string_view name, Script& script, std::function<void()> fn);
 
-	auto start = std::chrono::high_resolution_clock::now();
-	for (unsigned i = 0; i < SAMPLES; i++)
-		fn();
-	auto end = std::chrono::high_resolution_clock::now();
-	auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / SAMPLES;
-	fmt::print("Benchmark: {}  Elapsed time: {}ns\n",
-		name, elapsed - overhead);
-}
-
-// ScriptFunction is a function that can be safely called from the script
-using ScriptFunction = std::function<void(Script&)>;
+// ScriptCallable is a function that can be requested from the script
+using ScriptCallable = std::function<void(Script&)>;
 // A map of host functions that can be called from the script
-static std::vector<ScriptFunction> g_script_functions(64);
-static void register_script_function(uint32_t number, ScriptFunction&& fn) {
+static std::array<ScriptCallable, 64> g_script_functions {};
+static void register_script_function(uint32_t number, ScriptCallable&& fn) {
 	g_script_functions.at(number) = std::move(fn);
 }
 
 void Script::setup_syscall_interface()
 {
 	// Add a custom system call that executes a function based on a hash
-	machine_t::install_syscall_handler(510,
-	[] (machine_t& machine) {
-		auto& script = getScript(machine);
+	Script::machine_t::install_syscall_handler(510,
+	[] (auto& machine) {
+		auto& script = *machine.template get_userdata<Script>();
 		g_script_functions.at(machine.cpu.reg(riscv::REG_T0))(script);
 	});
 }
@@ -56,8 +29,6 @@ int main(int argc, char** argv)
 		fmt::print("Usage: {} [program file] [arguments ...]\n", argv[0]);
 		return -1;
 	}
-
-	fmt::print("Loading program: {}\n", argv[1]);
 
 	// Register a custom function that can be called from the script
 	// This is the handler for dyncall1
@@ -84,9 +55,9 @@ int main(int argc, char** argv)
 		struct MyData {
 			char buffer[32];
 		};
-		auto [data_span, data] = script.machine().sysargs<std::span<MyData>, MyData>();
+		auto [data_span, data] = script.machine().sysargs<std::span<MyData>, const MyData*>();
 
-		fmt::print("dyncall_data called with args: '{}' and '{}'\n", data_span[0].buffer, data.buffer);
+		fmt::print("dyncall_data called with args: '{}' and '{}'\n", data_span[0].buffer, data->buffer);
 	});
 
 	// Create a new script instance, loading and initializing the given program file
@@ -138,4 +109,29 @@ int main(int argc, char** argv)
 	if (auto ret = test5(); !ret)
 		throw std::runtime_error("Failed to call test5!?");
 
+}
+
+// A simple benchmarking function that subtracts the call overhead
+template <unsigned SAMPLES>
+void benchmark(std::string_view name, Script &script, std::function<void()> fn)
+{
+	static unsigned overhead = 0;
+	if (overhead == 0)
+	{
+		Event<void()> measure_overhead(script, "measure_overhead");
+		auto start = std::chrono::high_resolution_clock::now();
+		for (unsigned i = 0; i < SAMPLES; i++)
+			measure_overhead();
+		auto end = std::chrono::high_resolution_clock::now();
+		overhead = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / SAMPLES;
+		fmt::print("Call overhead: {}ns\n", overhead);
+	}
+
+	auto start = std::chrono::high_resolution_clock::now();
+	for (unsigned i = 0; i < SAMPLES; i++)
+		fn();
+	auto end = std::chrono::high_resolution_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / SAMPLES;
+	fmt::print("Benchmark: {}  Elapsed time: {}ns\n",
+			   name, elapsed - overhead);
 }

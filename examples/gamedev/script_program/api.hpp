@@ -22,7 +22,7 @@
 
 #define SYSCALL_BACKTRACE (NATIVE_SYSCALLS_BASE+19)
 
-
+extern "C" __attribute__((noreturn)) void fast_exit(int);
 
 
 inline void* sys_malloc(std::size_t size) {

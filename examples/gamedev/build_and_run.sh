@@ -19,4 +19,5 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
 make -j4
 popd
 
-./.build/example script_program/micro 64
+#./.build/simple_example test
+./.build/example script_program/micro

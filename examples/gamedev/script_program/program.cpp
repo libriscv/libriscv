@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 	// Let's avoid calling global destructors, as they have a tendency
 	// to make global variables unusable before we're done with them.
 	// Remember, we're going to be making function calls after this.
-	_exit(0);
+	fast_exit(0);
 }
 
 // A PUBLIC() function can be called from the host using script.call("test1"), or an event.
@@ -47,7 +47,11 @@ PUBLIC(int test1(int a, int b, int c, int d))
 // This function tests that heap operations are optimized.
 PUBLIC(void test2())
 {
+#ifdef __cpp_lib_smart_ptr_for_overwrite
 	auto x = std::make_unique_for_overwrite<char[]>(1024);
+#else
+	auto x = std::unique_ptr<char[]>(new char[1024]);
+#endif
 	__asm__("" :: "m"(x[0]) : "memory");
 }
 
