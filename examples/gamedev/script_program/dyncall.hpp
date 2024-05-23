@@ -14,16 +14,16 @@
 	using name##_t = type; \
 	extern "C" __attribute__((used, retain)) void sys_##name(); \
 	template <typename... Args> \
-	static inline auto name(Args... args) { \
+	static inline auto name(Args&&... args) { \
 		auto fn = (name##_t*) sys_##name; \
-		return fn(args...); \
+		return fn(std::forward<Args>(args)...); \
 	}
 
 #define EXTERN_DYNCALL(name, type) \
 	using name##_t = type; \
 	extern "C" __attribute__((used, retain)) void sys_##name(); \
 	template <typename... Args> \
-	static inline auto name(Args... args) { \
+	static inline auto name(Args&&... args) { \
 		auto fn = (name##_t*) sys_##name; \
-		return fn(args...); \
+		return fn(std::forward<Args>(args)...); \
 	}
