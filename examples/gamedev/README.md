@@ -10,3 +10,11 @@ The [build script](build_and_run.sh) will first build the RISC-V guest program, 
 An [example program](script_program/program.cpp) that modifies some libc functions to use host-side functions with native performance.
 
 The program showcases low-latency and full C++ support.
+
+
+## Guides
+
+- [An Introduction to Low-Latency Scripting With libriscv](https://fwsgonzo.medium.com/an-introduction-to-low-latency-scripting-with-libriscv-ad0619edab40)
+
+- [An Introduction to Low-Latency Scripting With libriscv, Part 2](https://fwsgonzo.medium.com/an-introduction-to-low-latency-scripting-with-libriscv-part-2-4fce605dfa24)
+
