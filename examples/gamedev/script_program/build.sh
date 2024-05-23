@@ -10,6 +10,11 @@ if command -v "riscv64-unknown-elf-g++" &> /dev/null; then
 	GCC_TRIPLE="riscv64-unknown-elf"
 	export CXX="ccache $GCC_TRIPLE-g++"
 
+elif command -v "riscv64-linux-gnu-g++-14" &> /dev/null; then
+	echo "* Building game scripts with system GCC/glibc compiler"
+	GCC_TRIPLE="riscv64-linux-gnu"
+	export CXX="ccache $GCC_TRIPLE-g++-14"
+
 elif command -v "riscv64-linux-gnu-g++-12" &> /dev/null; then
 	echo "* Building game scripts with system GCC/glibc compiler"
 	GCC_TRIPLE="riscv64-linux-gnu"
