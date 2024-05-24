@@ -23,6 +23,30 @@ void Script::setup_syscall_interface()
 	});
 }
 
+struct Location {
+	int x = 0, y = 0, z = 0;
+
+	bool operator==(const Location& other) const {
+		return x == other.x && y == other.y && z == other.z;
+	}
+};
+namespace std {
+	template<> struct hash<Location> {
+		std::size_t operator()(const Location& loc) const {
+			return std::hash<int>()(loc.x) ^ std::hash<int>()(loc.y) ^ std::hash<int>()(loc.z);
+		}
+	};
+}
+struct LocationData
+{
+	std::vector<uint8_t> data;
+};
+static std::unordered_map<Location, LocationData> locations;
+
+static Script::gaddr_t         remote_addr;
+static std::array<uint8_t, 32> remote_capture;
+static std::function<void(int)> on_event;
+
 int main(int argc, char** argv)
 {
 	if (argc < 2) {
@@ -58,6 +82,43 @@ int main(int argc, char** argv)
 		auto [data_span, data] = script.machine().sysargs<std::span<MyData>, const MyData*>();
 
 		fmt::print("dyncall_data called with args: '{}' and '{}'\n", data_span[0].buffer, data->buffer);
+	});
+
+	// This is the callback for sys_location_get
+	register_script_function(10, [](Script& script) {
+		auto [x, y, z] = script.machine().sysargs<int, int, int>();
+		auto it = locations.find(Location(x, y, z));
+		if (it != locations.end()) {
+			auto alloc = script.guest_alloc(it->second.data.size());
+			script.machine().copy_to_guest(alloc, it->second.data.data(), it->second.data.size());
+			script.machine().set_result(alloc, it->second.data.size());
+		} else {
+			script.machine().set_result(0, 0);
+		}
+	});
+	// This is the callback for sys_location_commit
+	register_script_function(11, [](Script& script) {
+		auto [x, y, z, data] = script.machine().sysargs<int, int, int, std::span<uint8_t>>();
+		// This will create a new location or update an existing one
+		auto& loc = locations[Location(x, y, z)];
+		loc.data = std::vector<uint8_t>(data.begin(), data.end());
+	});
+
+	register_script_function(12, [](Script& script) {
+		auto [addr, capture] = script.machine().sysargs<Script::gaddr_t, std::array<uint8_t, 32>>();
+
+		remote_addr = addr;
+		remote_capture = capture;
+	});
+
+	register_script_function(13, [](Script& script) {
+		auto [name, func, capture] = script.machine().sysargs<std::string, Script::gaddr_t, std::array<uint8_t, 32>*>();
+
+		on_event =
+		[func, &script, capture = *capture] (auto id) {
+			// Call the function with the entity ID as an argument
+			script.call(func, id, capture);
+		};
 	});
 
 	// Create a new script instance, loading and initializing the given program file
@@ -109,6 +170,10 @@ int main(int argc, char** argv)
 	if (auto ret = test5(); !ret)
 		throw std::runtime_error("Failed to call test5!?");
 
+	auto script2 = script.clone("myscript2");
+
+	// Call the remote function, with the capture pushed to stack
+	script2.call(remote_addr, remote_capture);
 }
 
 // A simple benchmarking function that subtracts the call overhead

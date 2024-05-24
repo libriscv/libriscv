@@ -16,10 +16,87 @@ struct MyData {
 };
 DEFINE_DYNCALL(4, dyncall_data, void(const MyData*, size_t, const MyData&));
 
+// A function that retrieves the contents of a location,
+// or returns a nullptr if the location is not found.
+struct LocationGet {
+	uint8_t* data;
+	size_t size = 0;
+};
+DEFINE_DYNCALL(10, location_get, LocationGet(int, int, int));
+// A function that commits the contents of a location
+// It cannot return an error, instead it will throw an exception.
+DEFINE_DYNCALL(11, location_commit, void(int, int, int, const void*, size_t));
+
+DEFINE_DYNCALL(12, remote_lambda, void(void(*)(void*), const void *, size_t));
+
+#include "../../../lib/libriscv/util/function.hpp"
+static void rpc(riscv::Function<void()> func)
+{
+	remote_lambda(
+		[](void* data) {
+			auto func = reinterpret_cast<riscv::Function<void()>*>(data);
+			(*func)();
+		},
+		&func, sizeof(func));
+}
+
+#include <span>
+struct LocationData {
+	LocationData(int x, int y, int z)
+		: x(x), y(y), z(z)
+	{
+		auto res = location_get(x, y, z);
+		if (res.data) {
+			m_data.reset(res.data);
+			m_size = res.size;
+		}
+	}
+	void commit() {
+		location_commit(x, y, z, m_data.get(), m_size);
+	}
+
+	bool empty() const noexcept {
+		return m_data == nullptr || m_size == 0;
+	}
+	std::span<uint8_t> data() {
+		return { m_data.get(), m_size };
+	}
+	void assign(const uint8_t* data, size_t size) {
+		m_data = std::make_unique<uint8_t[]>(size);
+		std::copy(data, data + size, m_data.get());
+		m_size = size;
+	}
+
+	const int x, y, z;
+private:
+	std::unique_ptr<uint8_t[]> m_data = nullptr;
+	std::size_t m_size = 0;
+};
+
+DEFINE_DYNCALL(13, my_callback, void(const char*, void(*)(int, void*), const void*, size_t));
+
+static void entity_on_event(const char* name, riscv::Function<void(int)> callback)
+{
+	my_callback(name,
+	[] (int id, void* data) {
+		auto callback = reinterpret_cast<riscv::Function<void(int)>*>(data);
+		(*callback)(id);
+	},
+	&callback, sizeof(callback));
+}
+
 // Every instantiated program runs through main()
 int main(int argc, char** argv)
 {
 	printf("Hello, World from a RISC-V virtual machine!\n");
+
+	// Register a callback for an entity
+	int x = 42;
+	entity_on_event("entity1",
+	[x] (int id) {
+		//printf("Callback from entity %s\n", Entity{id}.getName().c_str());
+		printf("x = %d\n", x);
+	});
 
 	// Call a function that was registered as a dynamic call
 	auto result = dyncall1(0x12345678);
@@ -30,6 +107,35 @@ int main(int argc, char** argv)
 
 	// Printf uses an internal buffer, so we need to flush it
 	fflush(stdout);
+
+	// Test LocationGet and LocationCommit
+	LocationData loc(1, 2, 3);
+	if (!loc.empty()) {
+		printf("Location (1, 2, 3) contains %zu bytes\n", loc.data().size());
+		location_commit(1, 2, 3, loc.data().data(), loc.data().size());
+	} else {
+		printf("LocationGet(1, 2, 3) was empty!\n");
+	}
+
+	std::vector<uint8_t> data = { 0x01, 0x02, 0x03, 0x04 };
+	loc.assign(data.data(), data.size());
+	loc.commit();
+
+	LocationData loc2(1, 2, 3);
+	if (!loc2.empty()) {
+		printf("Location (1, 2, 3) contains %zu bytes\n", loc2.data().size());
+		location_commit(1, 2, 3, loc2.data().data(), loc2.data().size());
+	} else {
+		printf("LocationGet(1, 2, 3) was empty!\n");
+	}
+
+	// Test remote lambda
+	x = 42;
+	rpc([x] {
+		printf("Hello from a remote virtual machine!\n");
+		printf("x = %d\n", x);
+		fflush(stdout);
+	});
 
 	// Let's avoid calling global destructors, as they have a tendency
 	// to make global variables unusable before we're done with them.
