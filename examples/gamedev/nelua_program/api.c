@@ -42,10 +42,36 @@ void measure_overhead() {}
 		".popsection .text\n"); \
 	extern void name() __attribute__((used));
 
-DEFINE_DYNCALL(1, dyncall1); // int(int)
-DEFINE_DYNCALL(2, dyncall2); // void(const char*, size_t, const char*)
-DEFINE_DYNCALL(3, dyncall_empty); // void()
-struct MyData {
-	char buffer[32];
-};
-DEFINE_DYNCALL(4, dyncall_data); // void(const MyData*, size_t, const MyData*)
+DEFINE_DYNCALL(1, dyncall1);
+DEFINE_DYNCALL(2, dyncall2);
+DEFINE_DYNCALL(3, dyncall3);
+DEFINE_DYNCALL(4, dyncall4);
+DEFINE_DYNCALL(5, dyncall5);
+DEFINE_DYNCALL(6, dyncall6);
+DEFINE_DYNCALL(7, dyncall7);
+DEFINE_DYNCALL(8, dyncall8);
+DEFINE_DYNCALL(9, dyncall9);
+DEFINE_DYNCALL(10, dyncall10);
+DEFINE_DYNCALL(11, dyncall11);
+DEFINE_DYNCALL(12, dyncall12);
+DEFINE_DYNCALL(13, dyncall13);
+DEFINE_DYNCALL(14, dyncall14);
+DEFINE_DYNCALL(15, dyncall15);
+DEFINE_DYNCALL(16, dyncall16);
+DEFINE_DYNCALL(17, dyncall17);
+DEFINE_DYNCALL(18, dyncall18);
+DEFINE_DYNCALL(19, dyncall19);
+DEFINE_DYNCALL(20, dyncall20);
+DEFINE_DYNCALL(21, dyncall21);
+DEFINE_DYNCALL(22, dyncall22);
+DEFINE_DYNCALL(23, dyncall23);
+DEFINE_DYNCALL(24, dyncall24);
+DEFINE_DYNCALL(25, dyncall25);
+DEFINE_DYNCALL(26, dyncall26);
+DEFINE_DYNCALL(27, dyncall27);
+DEFINE_DYNCALL(28, dyncall28);
+DEFINE_DYNCALL(29, dyncall29);
+DEFINE_DYNCALL(30, dyncall30);
+DEFINE_DYNCALL(31, dyncall31);
+DEFINE_DYNCALL(32, dyncall32);
+

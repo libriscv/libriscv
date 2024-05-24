@@ -1,18 +1,15 @@
 require("api")
-require("io")
 
-print("Hello from Lua!")
+print("Hello from Nelua!")
 
 local n = api.dyncall1(0x12345678)
 api.dyncall2("Hello, Vieworld!", "A zero-terminated string!");
 
 print("dyncall1 returned: ", n)
-io.flush()
 api.exit(0) -- prevent global destructors from running
 
 local function test1(a: cint, b: cint, c: cint, d: cint) <cexport, codename 'test1'>
   print("test1 called with: ", a, b, c, d)
-  io.flush()
   return a + b + c + d
 end
 
@@ -25,10 +22,10 @@ local function test3(str: cstring) <cexport, codename 'test3'>
 end
 
 local Data = @record{
-  a: cint,
-  b: cint,
-  c: cint,
-  d: cint,
+  a: int32,
+  b: int32,
+  c: int32,
+  d: int32,
   e: float32,
   f: float32,
   g: float32,
