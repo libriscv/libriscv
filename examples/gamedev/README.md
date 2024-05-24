@@ -18,3 +18,13 @@ The program showcases low-latency and full C++ support.
 
 - [An Introduction to Low-Latency Scripting With libriscv, Part 2](https://fwsgonzo.medium.com/an-introduction-to-low-latency-scripting-with-libriscv-part-2-4fce605dfa24)
 
+
+## Other languages
+
+### Nelua
+
+Nelua has been implemented [here](nelua_program/)
+
+### Nim
+
+There is a [Nim example](nim_program/)
