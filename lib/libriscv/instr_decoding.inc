@@ -179,6 +179,8 @@
 								DECODER(DECODED_INSTR(OP_IMM32_SRLIW));
 							} else if (instruction.Itype.high_bits() == 0x400) {
 								DECODER(DECODED_INSTR(OP_IMM32_SRAIW));
+							} else {
+								DECODER(DECODED_INSTR(OP_IMM32));
 							}
 							break;
 						}
