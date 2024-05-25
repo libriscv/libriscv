@@ -14,6 +14,8 @@ FetchContent_Declare(libfmt
 FetchContent_MakeAvailable(libriscv)
 FetchContent_MakeAvailable(libfmt)
 
+set(CMAKE_CXX_STANDARD 20)
+
 add_executable(example example.cpp script.cpp)
 target_link_libraries(example riscv fmt)
 

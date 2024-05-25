@@ -3,6 +3,7 @@
 #include <functional>
 #include <libriscv/machine.hpp>
 #include <optional>
+#include <stdexcept>
 #include <unordered_set>
 template <typename T> struct GuestObjects;
 
