@@ -1,6 +1,7 @@
 #include "event.hpp"
 #include <chrono>
 #include <fmt/core.h>
+#include <libriscv/rsp_server.hpp>
 using namespace riscv;
 template <unsigned SAMPLES = 2000>
 static void benchmark(std::string_view name, Script& script, std::function<void()> fn);
@@ -108,6 +109,24 @@ int main(int argc, char** argv)
 	Event<void()> test5(script, "test5");
 	if (auto ret = test5(); !ret)
 		throw std::runtime_error("Failed to call test5!?");
+
+	// If GDB=1, start the RSP server for debugging
+	if (getenv("GDB"))
+	{
+		// Setup the test6 function to be debugged from GDB
+		script.machine().setup_call();
+		script.machine().cpu.jump(script.machine().address_of("remote_debug_test"));
+		// Start the RSP server on port 2159
+		fmt::print("Waiting for GDB to connect on port 2159...\n");
+		riscv::RSP rsp(script.machine(), 2159);
+		if (auto client = rsp.accept(); client) {
+			fmt::print("GDB connected\n");
+			while (client->process_one());
+			fmt::print("GDB session ended\n");
+		} else {
+			fmt::print("Failed to accept GDB connection. Waited too long?\n");
+		}
+	}
 
 }
 

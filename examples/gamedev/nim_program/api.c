@@ -156,9 +156,8 @@ void* __wrap_memcpy(void* vdest, const void* vsrc, size_t size)
 	register long syscall_id __asm__("a7") = SYSCALL_MEMCPY;
 
 	asm volatile ("ecall"
-	:	"=m"(*(char(*)[size]) a0)
-	:	"r"(a0),
-		"r"(a1), "m"(*(const char(*)[size]) a1),
+	:	"=m"(*(char(*)[size]) a0), "+r"(a0)
+	:	"r"(a1), "m"(*(const char(*)[size]) a1),
 		"r"(a2), "r"(syscall_id));
 	return vdest;
 }

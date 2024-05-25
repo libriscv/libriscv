@@ -16,7 +16,14 @@ NIM_LIBS="${NIM_LIBS/bin*/lib}"
 NIMCACHE=$PWD/nimcache
 mkdir -p $NIMCACHE
 
-nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --mm:arc --threads:off -d:release -d:useMalloc=true -c ${NIMFILE}
+set -e
+if [ -z "$GDB" ]; then
+	echo "Compiling for Release"
+	nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --mm:arc --threads:off -d:release -d:useMalloc=true -c ${NIMFILE}
+else
+	echo "Compiling for Debug with Remote GDB"
+	nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --mm:arc --threads:off -d:useMalloc=true --stackTrace:off --debugger=native -c ${NIMFILE}
+fi
 jq '.compile[] [0]' $NIMCACHE/*.json -r > buildfiles.txt
 
 files=""

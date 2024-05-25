@@ -48,5 +48,13 @@ proc test5() {.exportc.} =
     data.buffer[0..20] = "Hello Buffered World!".toOpenArray(0, 20)
     api.dyncall4(addr data, 1, addr data)
 
+proc remote_debug_test() {.exportc.} =
+    api.print("Remote Debug Test\n")
+    api.print("1\n")
+    api.print("2\n")
+    api.print("3\n")
+    api.print("4\n")
+    api.print("5\n")
+
 proc bench_dyncall_overhead() {.exportc.} =
     api.dyncall3()
