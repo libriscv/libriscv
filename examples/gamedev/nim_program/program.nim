@@ -11,17 +11,16 @@ proc test1(a: int, b: int, c: int, d: int): int {.exportc.} =
     api.print("test1 called with: " & $a & " " & $b & " " & $c & " " & $d & "\n")
     return a + b + c + d
 
-proc newCStringArray*(len: int): cstringArray =
-  result = cast[cstringArray](alloc0((len+1) * sizeof(cstring)))
-
 proc test2() {.exportc.} =
     var data = alloc(1024)
     dealloc(data)
     return
 
 proc test3(str: cstring) {.exportc.} =
-    api.print("Test3 called with " & $str)
-    return
+    try:
+        raise newException(IOError, $str)
+    except IOError as e:
+        api.print("Test3 called with " & e.msg & "\n")
 
 type
     Data* = object

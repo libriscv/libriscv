@@ -16,7 +16,7 @@ NIM_LIBS="${NIM_LIBS/bin*/lib}"
 NIMCACHE=$PWD/nimcache
 mkdir -p $NIMCACHE
 
-nim c --nimcache:$NIMCACHE $NIMCPU --passL="-static" --colors:on --os:linux --mm:arc --threads:off -d:release -d:useMalloc=true -c ${NIMFILE}
+nim c --nimcache:$NIMCACHE $NIMCPU --colors:on --os:linux --mm:arc --threads:off -d:release -d:useMalloc=true -c ${NIMFILE}
 jq '.compile[] [0]' $NIMCACHE/*.json -r > buildfiles.txt
 
 files=""
@@ -24,5 +24,5 @@ for i in $(cat buildfiles.txt); do
     files="$files $i"
 done
 
-$CC -static -O2 -ggdb3 -Wall -Wno-unused -Wno-maybe-uninitialized -Wno-discarded-qualifiers -Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc -I$NIM_LIBS -o $binfile $NIMAPI $files
+$CC -static -O2 -ggdb3 -Wall -Wno-unused -Wno-maybe-uninitialized -Wno-discarded-qualifiers -Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc,--wrap=memcpy,--wrap=memset,--wrap=memmove,--wrap=memcmp,--wrap=strlen,--wrap=strcmp,--wrap=strncmp -I$NIM_LIBS -o $binfile $NIMAPI $files
 popd
