@@ -23,8 +23,12 @@ The program showcases low-latency and full C++ support.
 
 ### Nelua
 
-Nelua has been implemented [here](nelua_program/)
+Nelua has been [implemented here](nelua_program/)
+
+[Guide to Scripting with Nelua](https://medium.com/@fwsgonzo/an-introduction-to-low-latency-scripting-with-libriscv-part-3-5947b06bc00c)
 
 ### Nim
 
 There is a [Nim example](nim_program/)
+
+[Guide to Scripting with Nim](https://medium.com/@fwsgonzo/an-introduction-to-low-latency-scripting-with-libriscv-part-4-103ff7e67c24)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-CC=riscv64-unknown-elf-gcc
+CC=riscv64-linux-gnu-gcc-12 #riscv64-unknown-elf-gcc
 NIMFILE="$PWD/${1:-program}"
 NIMCPU="--cpu=riscv64"
 NIMAPI="$PWD/api.c"
