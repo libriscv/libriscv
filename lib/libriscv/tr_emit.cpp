@@ -29,7 +29,6 @@ static std::string funclabel(const std::string& func, uint64_t addr) {
 
 struct BranchInfo {
 	bool sign;
-	bool goto_enabled;
 	uint64_t jump_pc;
 	uint64_t call_pc;
 };
@@ -330,10 +329,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		return;
 	}
 
-	if (binfo.goto_enabled) {
-		// this is a jump back to the start of the function
-		code += "if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
-	} else if (binfo.jump_pc != 0) {
+	if (binfo.jump_pc != 0) {
 		if (binfo.jump_pc > this->pc()) {
 			// unconditional forward jump + bracket
 			code += "goto " + FUNCLABEL(binfo.jump_pc) + "; }\n";
@@ -351,7 +347,7 @@ template <int W>
 void Emitter<W>::emit()
 {
 	this->add_mapping(this->pc(), this->func);
-	add_code(func + "_start:;");
+	code.append(FUNCLABEL(this->pc()) + ":;\n");
 	auto next_pc = tinfo.basepc;
 
 	for (int i = 0; i < tinfo.len; i++) {
@@ -370,7 +366,7 @@ void Emitter<W>::emit()
 			});
 		}
 		// known jump locations
-		else if (tinfo.jump_locations.count(this->pc()) || labels.count(i)) {
+		else if (i > 0 && (tinfo.jump_locations.count(this->pc()) || labels.count(i))) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
 		}
@@ -438,9 +434,12 @@ void Emitter<W>::emit()
 			uint64_t jump_pc = 0;
 			uint64_t call_pc = 0;
 			// goto branch: restarts function
-			bool ge = dest_pc == this->begin_pc();
+			if (dest_pc == this->begin_pc()) {
+				// restart function
+				jump_pc = dest_pc;
+			}
 			// forward label: branch inside code block
-			if (offset > 0 && dest_pc < this->end_pc()) {
+			else if (offset > 0 && dest_pc < this->end_pc()) {
 				// forward label: future address
 				labels.insert(dest_pc);
 				jump_pc = dest_pc;
@@ -454,26 +453,26 @@ void Emitter<W>::emit()
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch({ false, ge, jump_pc, call_pc }, " == ");
+				add_branch({ false, jump_pc, call_pc }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch({ false, ge, jump_pc, call_pc }, " != ");
+				add_branch({ false, jump_pc, call_pc }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
 				UNKNOWN_INSTRUCTION();
 				break;
 			case 0x4: // LT
-				add_branch({ true, ge, jump_pc, call_pc }, " < ");
+				add_branch({ true, jump_pc, call_pc }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch({ true, ge, jump_pc, call_pc }, " >= ");
+				add_branch({ true, jump_pc, call_pc }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch({ false, ge, jump_pc, call_pc }, " < ");
+				add_branch({ false, jump_pc, call_pc }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch({ false, ge, jump_pc, call_pc }, " >= ");
+				add_branch({ false, jump_pc, call_pc }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
@@ -1324,8 +1323,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	if (e.get_mappings().size() > 1)
 	{
 		code += "switch (pc) {\n";
-		code += "case " + std::to_string(tinfo.basepc) + ": goto " + e.get_func() + "_start;\n";
-		for (size_t idx = 1; idx < e.get_mappings().size(); idx++) {
+		for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
 			auto& entry = e.get_mappings().at(idx);
 			const auto label = funclabel<W>(e.get_func(), entry.addr);
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
