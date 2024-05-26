@@ -147,7 +147,7 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 if constexpr (SCAN_FOR_GP) {
 	// We assume that GP is initialized with AUIPC,
 	// followed by OP_IMM (and maybe OP_IMM32)
-	for (address_t pc = basepc; pc < endbasepc; pc += 4) {
+	for (address_t pc = basepc; pc < endbasepc; ) {
 		const rv32i_instruction instruction
 			= read_instruction(exec.exec_data(), pc, endbasepc);
 		if (instruction.opcode() == RV32I_AUIPC) {
@@ -167,6 +167,8 @@ if constexpr (SCAN_FOR_GP) {
 				}
 			}
 		} // opcode
+
+		pc += instruction.length();
 	} // iterator
 	if constexpr (BINTR_TIMING) {
 		TIME_POINT(t1);
@@ -183,14 +185,16 @@ if constexpr (SCAN_FOR_GP) {
 	for (address_t pc = basepc; pc < endbasepc && icounter < options.translate_instr_max; )
 	{
 		const auto block = pc;
+		std::size_t block_insns = 0;
 
-		for (; pc < endbasepc; pc += 4) {
+		for (; pc < endbasepc; ) {
 			const rv32i_instruction instruction
 				= read_instruction(exec.exec_data(), pc, endbasepc);
+			pc += instruction.length();
+			block_insns++;
 
 			// JALR and STOP are show-stoppers / code-block enders
 			if (is_stopping_instruction(instruction)) {
-				pc += 4;
 				break;
 			}
 		}
@@ -199,7 +203,7 @@ if constexpr (SCAN_FOR_GP) {
 		std::unordered_set<address_t> jump_locations;
 
 		// Find jump locations inside block
-		for (pc = block; pc < block_end; pc += 4) {
+		for (pc = block; pc < block_end; ) {
 			const rv32i_instruction instruction
 				= read_instruction(exec.exec_data(), pc, endbasepc);
 			const auto opcode = instruction.opcode();
@@ -208,17 +212,18 @@ if constexpr (SCAN_FOR_GP) {
 			if (opcode == RV32I_JAL) {
 				const auto offset = instruction.Jtype.jump_offset();
 				const auto location = pc + offset;
+				// All JAL target addresses need to be recorded in order
+				// to detect function calls
+				global_jump_locations.insert(location);
+
 				// Long jumps are considered returnable
 				if (location < block || location >= block_end) {
-					pc += 4;
+					pc += instruction.length();
 					block_end = pc;
 					break;
 				}
 				if (location >= block && location < block_end)
 					jump_locations.insert(location);
-				// All JAL target addresses need to be recorded in order
-				// to detect function calls
-				global_jump_locations.insert(location);
 			}
 			// loop detection (negative branch offsets)
 			if (opcode == RV32I_BRANCH) {
@@ -229,10 +234,12 @@ if constexpr (SCAN_FOR_GP) {
 				if (location >= block && location < block_end)
 					jump_locations.insert(location);
 			}
+
+			pc += instruction.length();
 		} // process block
 
 		// Process block and add it for emission
-		const size_t length = (block_end - block) / 4; // XXX: ASSUMPTION
+		const size_t length = block_insns;
 		if (length >= options.block_size_treshold
 			&& icounter + length < options.translate_instr_max)
 		{

@@ -1,5 +1,6 @@
 #include "machine.hpp"
 #include "instruction_list.hpp"
+#include <inttypes.h>
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include "tr_types.hpp"
@@ -10,12 +11,21 @@
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define STRADDR(x) (std::to_string(x) + "UL")
-#define FUNCLABEL(i) (func + "_" + std::to_string(i))
 #define UNKNOWN_INSTRUCTION() { code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "counter < max_counter";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
+static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
+
+template <int W>
+static std::string funclabel(const std::string& func, uint64_t addr) {
+	char buf[32];
+	if (const int len = snprintf(buf, sizeof(buf), "%s_%" PRIx64, func.c_str(), addr); len > 0)
+		return std::string(buf, len);
+	throw MachineException(INVALID_PROGRAM, "Failed to format function label");
+}
+#define FUNCLABEL(addr) funclabel<W>(func, addr)
 
 struct BranchInfo {
 	bool sign;
@@ -34,7 +44,7 @@ struct Emitter
 	Emitter(CPU<W>& c, const TransInfo<W>& ptinfo)
 		: cpu(c), m_pc(ptinfo.basepc), tinfo(ptinfo)
 	{
-		this->func = "f" + std::to_string(this->pc());
+		this->func = funclabel<W>("f", this->pc());
 	}
 
 	template <typename ... Args>
@@ -244,7 +254,7 @@ struct Emitter
 	void add_reentry_next() {
 		// Avoid re-entering at the end of the function
 		// WARNING: End-of-function can be empty
-		if (this->pc() + 4 >= end_pc())
+		if (this->pc() + this->instr.length() >= end_pc())
 			return;
 		this->mapping_labels.insert(index() + 1);
 		//code.append(FUNCLABEL(this->pc() + 4) + ":;\n");
@@ -311,7 +321,8 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	else
 		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
 
-	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & 0x3)) {
+	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & ALIGN_MASK))
+	{
 		// TODO: Make exception a helper function, as return values are implementation detail
 		code +=
 			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
@@ -341,11 +352,13 @@ void Emitter<W>::emit()
 {
 	this->add_mapping(this->pc(), this->func);
 	add_code(func + "_start:;");
+	auto next_pc = tinfo.basepc;
 
 	for (int i = 0; i < tinfo.len; i++) {
 		this->m_idx = i;
 		this->instr = tinfo.instr[i];
-		this->m_pc = tinfo.basepc + i * 4;
+		this->m_pc = next_pc;
+		next_pc = this->m_pc + this->instr.length();
 
 		// If the address is a return address or a global JAL target
 		if (i > 0 && (mapping_labels.count(i) || tinfo.global_jump_locations.count(this->pc()))) {
@@ -486,13 +499,11 @@ void Emitter<W>::emit()
 				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
 			}
 			// XXX: mask off unaligned jumps - is this OK?
-			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(0x3);
+			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
 			// forward label: jump inside code block
-			const auto offset = instr.Jtype.jump_offset() / 4;
-			int fl = i+offset;
-			if (fl > 0 && fl < tinfo.len) {
+			if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
 				// forward labels require creating future labels
-				if (fl > i) {
+				if (dest_pc > this->pc()) {
 					labels.insert(dest_pc);
 					add_code("goto " + FUNCLABEL(dest_pc) + ";");
 				} else {
@@ -1316,7 +1327,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 		code += "case " + std::to_string(tinfo.basepc) + ": goto " + e.get_func() + "_start;\n";
 		for (size_t idx = 1; idx < e.get_mappings().size(); idx++) {
 			auto& entry = e.get_mappings().at(idx);
-			const auto label = e.get_func() + "_" + std::to_string(entry.addr);
+			const auto label = funclabel<W>(e.get_func(), entry.addr);
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 		}
 		//code += "default: api.exception(cpu, 3);\n";
