@@ -1,4 +1,5 @@
 require("api")
+require 'allocators.general'
 
 print("Hello from Nelua!")
 
@@ -14,7 +15,10 @@ local function test1(a: cint, b: cint, c: cint, d: cint) <cexport, codename 'tes
 end
 
 local function test2() <cexport, codename 'test2'>
-  local a: [4]integer <volatile> = {1,2,3,4}
+  local Buffer = @record{buf: [128]integer}
+  local b: *Buffer = general_allocator:new(@Buffer)
+  general_allocator:delete(b) -- free the Buffer allocation
+  b = nilptr
 end
 
 local function test3(str: cstring) <cexport, codename 'test3'>
@@ -48,4 +52,12 @@ end
 
 local function bench_dyncall_overhead() <cexport, codename 'bench_dyncall_overhead'>
   api.dyncall_empty()
+end
+
+local function remote_debug_test() <cexport, codename 'remote_debug_test'>
+  print("remote_debug_test called")
+  print("remote_debug_test 1")
+  print("remote_debug_test 2")
+  print("remote_debug_test 3")
+  print("remote_debug_test 4")
 end
