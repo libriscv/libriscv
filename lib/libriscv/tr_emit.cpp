@@ -4,6 +4,9 @@
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include "tr_types.hpp"
+#ifdef RISCV_EXT_C
+#include "rvc.hpp"
+#endif
 #ifdef RISCV_EXT_VECTOR
 #include "rvv.hpp"
 #endif
@@ -11,7 +14,9 @@
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define STRADDR(x) (std::to_string(x) + "UL")
-#define UNKNOWN_INSTRUCTION() { code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
+#define UNKNOWN_INSTRUCTION() { \
+	code += "cpu->pc = " + STRADDR(this->pc()) + ";\n"; \
+	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "counter < max_counter";
@@ -112,7 +117,7 @@ struct Emitter
 			this->restore_all_registers();
 		}
 		add_code(
-			"cpu->pc = " + new_pc + ";",
+			(new_pc != "cpu->pc") ? "cpu->pc = " + new_pc + ";" : "",
 			"return (ReturnValues){counter, max_counter};", (add_bracket) ? " }" : "");
 	}
 
@@ -283,6 +288,7 @@ struct Emitter
 	address_t end_pc() const noexcept { return tinfo.endpc; }
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
+	rv32i_instruction emit_rvc();
 
 private:
 	static std::string speculation_safe(const std::string& address) {
@@ -343,6 +349,10 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	exit_function(PCRELS(instr.Btype.signed_imm()), true); // Bracket (NOTE: not actually ending the function)
 }
 
+#ifdef RISCV_EXT_C
+#include "tr_emit_rvc.cpp"
+#endif
+
 template <int W>
 void Emitter<W>::emit()
 {
@@ -350,11 +360,12 @@ void Emitter<W>::emit()
 	code.append(FUNCLABEL(this->pc()) + ":;\n");
 	auto next_pc = tinfo.basepc;
 
-	for (int i = 0; i < tinfo.len; i++) {
+	for (int i = 0; i < int(tinfo.instr.size()); i++) {
 		this->m_idx = i;
 		this->instr = tinfo.instr[i];
 		this->m_pc = next_pc;
-		next_pc = this->m_pc + this->instr.length();
+		const auto instr_length = this->instr.length();
+		next_pc = this->m_pc + instr_length;
 
 		// If the address is a return address or a global JAL target
 		if (i > 0 && (mapping_labels.count(i) || tinfo.global_jump_locations.count(this->pc()))) {
@@ -374,6 +385,32 @@ void Emitter<W>::emit()
 		this->m_instr_counter += 1;
 
 		// instruction generation
+#ifdef RISCV_EXT_C
+		if (instr.is_compressed()) {
+			// Compressed 16-bit instructions
+			instr = this->emit_rvc();
+
+			if (instr.is_compressed())
+			{
+				printf("Unexpanded instruction: 0x%08x\n", instr.whole);
+				const uint16_t compressed_instr = instr.half[0];
+				// When illegal opcode is encountered, reveal PC
+				if (compressed_instr == 0x0) {
+					code += "cpu->pc = " + STRADDR(this->pc()) + ";\n";
+				}
+				char buffer[64];
+				const int len = snprintf(buffer, sizeof(buffer),
+					"api.execute(cpu, %#04hx);\n", compressed_instr);
+				if (len > 0) {
+					code += std::string(buffer, len);
+				} else {
+					throw MachineException(INVALID_PROGRAM, "Failed to format instruction");
+				}
+				continue;
+			}
+		}
+#endif
+
 		switch (instr.opcode()) {
 		case RV32I_LOAD:
 			if (instr.Itype.rd != 0) {
@@ -482,7 +519,7 @@ void Emitter<W>::emit()
 				// NOTE: We need to remember RS1 because it can be clobbered by RD
 				add_code(
 					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
-					to_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";",
+					to_reg(instr.Itype.rd) + " = " + PCRELS(instr_length) + ";",
 					"jump(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
 				);
 			} else {
@@ -495,7 +532,7 @@ void Emitter<W>::emit()
 		case RV32I_JAL: {
 			this->increment_counter_so_far();
 			if (instr.Jtype.rd != 0) {
-				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
+				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(instr_length) + ";\n");
 			}
 			// XXX: mask off unaligned jumps - is this OK?
 			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
@@ -1047,7 +1084,7 @@ void Emitter<W>::emit()
 			}
 #endif
 			default:
-				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				UNKNOWN_INSTRUCTION();
 				break;
 			}
 			} break;
@@ -1068,7 +1105,7 @@ void Emitter<W>::emit()
 			}
 #endif
 			default:
-				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				UNKNOWN_INSTRUCTION();
 				break;
 			}
 			} break;
@@ -1264,7 +1301,7 @@ void Emitter<W>::emit()
 						"}\n";
 					break;
 				default:
-					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+					UNKNOWN_INSTRUCTION();
 				}
 				break;
 			case 0x5: { // OPF.VF
@@ -1286,21 +1323,22 @@ void Emitter<W>::emit()
 						"}\n";
 					break;
 				default:
-					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+					UNKNOWN_INSTRUCTION();
 				}
 				break;
 			}
 			default:
-				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				UNKNOWN_INSTRUCTION();
 			}
 			break;
 #else
-			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			UNKNOWN_INSTRUCTION();
 			break;
 #endif
 		}
 		default:
-			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			code += "cpu->pc = " + PCRELS(0) + ";\n";
+			UNKNOWN_INSTRUCTION();
 		}
 	}
 	// If the function ends with an unimplemented instruction,

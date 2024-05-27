@@ -9,6 +9,9 @@
 #include "tr_api.hpp"
 #include "tr_types.hpp"
 #include "util/crc32.hpp"
+#ifdef RISCV_EXT_C
+#include "rvc.hpp"
+#endif
 
 namespace riscv
 {
@@ -53,6 +56,9 @@ static std::unordered_map<std::string, std::string> create_cflags_from(const Mac
 	cflags.emplace("RISCV_ARENA_ROEND", std::to_string(machine.memory.initial_rodata_end()));
 	cflags.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
 	cflags.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
+#ifdef RISCV_EXT_C
+	cflags.emplace("RISCV_EXT_C", "1");
+#endif
 #ifdef RISCV_EXT_VECTOR
 	cflags.emplace("RISCV_EXT_VECTOR", std::to_string(RISCV_EXT_VECTOR));
 #endif
@@ -129,9 +135,23 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 }
 
 static bool is_stopping_instruction(rv32i_instruction instr) {
-	return instr.opcode() == RV32I_JALR || instr.whole == RV32_INSTR_STOP
+	if (instr.opcode() == RV32I_JALR || instr.whole == RV32_INSTR_STOP
 		|| (instr.opcode() == RV32I_SYSTEM && instr.Itype.funct3 == 0 && instr.Itype.imm == 261) // WFI
-		;
+	) return true;
+
+#ifdef RISCV_EXT_C
+	if (instr.is_compressed()) {
+		#define CI_CODE(x, y) ((x << 13) | (y))
+		const rv32c_instruction ci { instr };
+		if (ci.opcode() == CI_CODE(0b100, 0b10)) { // VARIOUS
+			if (ci.CR.rd != 0 && ci.CR.rs2 == 0) {
+				return true; // C.JR and C.JALR (aka. RET)
+			}
+		}
+	}
+#endif
+
+	return false;
 }
 
 template <int W>
@@ -182,6 +202,11 @@ if constexpr (SCAN_FOR_GP) {
 	std::unordered_set<address_type<W>> global_jump_locations;
 	std::vector<TransInfo<W>> blocks;
 
+	// Insert the ELF entry point as the first global jump location
+	const auto elf_entry = machine().memory.start_address();
+	if (elf_entry >= basepc && elf_entry < endbasepc)
+		global_jump_locations.insert(elf_entry);
+
 	for (address_t pc = basepc; pc < endbasepc && icounter < options.translate_instr_max; )
 	{
 		const auto block = pc;
@@ -201,23 +226,65 @@ if constexpr (SCAN_FOR_GP) {
 
 		auto block_end = pc;
 		std::unordered_set<address_t> jump_locations;
+		std::vector<rv32i_instruction> block_instructions;
+		block_instructions.reserve(block_insns);
 
 		// Find jump locations inside block
 		for (pc = block; pc < block_end; ) {
 			const rv32i_instruction instruction
 				= read_instruction(exec.exec_data(), pc, endbasepc);
 			const auto opcode = instruction.opcode();
+			bool is_jal = false;
+			bool is_branch = false;
+
+			address_t location = 0;
+			if (opcode == RV32I_JAL) {
+				is_jal = true;
+				const auto offset = instruction.Jtype.jump_offset();
+				location = pc + offset;
+			} else if (opcode == RV32I_BRANCH) {
+				is_branch = true;
+				const auto offset = instruction.Btype.signed_imm();
+				location = pc + offset;
+			}
+#ifdef RISCV_EXT_C
+			else if (instruction.is_compressed())
+			{
+				const rv32c_instruction ci { instruction };
+
+				// Find branch and jump locations
+				if (W == 4 && ci.opcode() == CI_CODE(0b001, 0b01)) { // C.JAL
+					is_jal = true;
+					const int32_t imm = ci.CJ.signed_imm();
+					location = pc + imm;
+				}
+				else if (ci.opcode() == CI_CODE(0b101, 0b01)) { // C.JMP
+					is_jal = true;
+					const int32_t imm = ci.CJ.signed_imm();
+					location = pc + imm;
+				}
+				else if (ci.opcode() == CI_CODE(0b110, 0b01)) { // C.BEQZ
+					is_branch = true;
+					const int32_t imm = ci.CB.signed_imm();
+					location = pc + imm;
+				}
+				else if (ci.opcode() == CI_CODE(0b111, 0b01)) { // C.BNEZ
+					is_branch = true;
+					const int32_t imm = ci.CB.signed_imm();
+					location = pc + imm;
+				}
+			}
+#endif
 
 			// detect far JAL, otherwise use as local jump
-			if (opcode == RV32I_JAL) {
-				const auto offset = instruction.Jtype.jump_offset();
-				const auto location = pc + offset;
+			if (is_jal) {
 				// All JAL target addresses need to be recorded in order
 				// to detect function calls
 				global_jump_locations.insert(location);
 
 				// Long jumps are considered returnable
 				if (location < block || location >= block_end) {
+					block_instructions.push_back(instruction);
 					pc += instruction.length();
 					block_end = pc;
 					break;
@@ -226,20 +293,19 @@ if constexpr (SCAN_FOR_GP) {
 					jump_locations.insert(location);
 			}
 			// loop detection (negative branch offsets)
-			if (opcode == RV32I_BRANCH) {
-				// detect jump location
-				const auto offset = instruction.Btype.signed_imm();
-				const auto location = pc + offset;
+			else if (is_branch) {
 				// only accept branches relative to current block
 				if (location >= block && location < block_end)
 					jump_locations.insert(location);
 			}
 
+			// Add instruction to block
+			block_instructions.push_back(instruction);
 			pc += instruction.length();
 		} // process block
 
 		// Process block and add it for emission
-		const size_t length = block_insns;
+		const size_t length = block_instructions.size();
 		if (length >= options.block_size_treshold
 			&& icounter + length < options.translate_instr_max)
 		{
@@ -249,9 +315,8 @@ if constexpr (SCAN_FOR_GP) {
 					printf("-> Jump to %#lX\n", long(loc));
 			}
 
-			rv32i_instruction* ip = (rv32i_instruction *)exec.exec_data(block);
 			blocks.push_back({
-				ip, block, block_end, gp, (int)length,
+				std::move(block_instructions), block, block_end, gp,
 				true,
 				std::move(jump_locations),
 				nullptr, // blocks
@@ -511,8 +576,6 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib) const;
 	template void CPU<8>::activate_dylib(DecodedExecuteSegment<8>&, void*) const;
 #endif
-	static_assert(!compressed_enabled,
-		"C-extension incompatible with binary translation");
 
 	timespec time_now()
 	{

@@ -349,6 +349,9 @@ new_execute_segment: {
 
 execute_invalid:
 	MACHINE().set_instruction_counter(counter.value());
+	// Calculate the current PC from the decoder pointer
+	pc = (decoder - exec_decoder) << DecoderCache<W>::SHIFT;
+	registers().pc = pc;
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 
 } // CPU::simulate_XXX()

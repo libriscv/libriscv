@@ -17,6 +17,11 @@ namespace riscv {
 	typedef int64_t saddr_t;
 #  define XLEN  64
 #endif
+#ifdef RISCV_EXT_C
+#define RISCV_ALIGN_MASK 0x1
+#else
+#define RISCV_ALIGN_MASK 0x3
+#endif
 
 #define HOST_UNKNOWN 0
 #define HOST_AMD64   1
@@ -164,7 +169,7 @@ static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, a
 }
 
 static inline void jump(CPU* cpu, addr_t addr) {
-	if (__builtin_expect((addr & 0x3) == 0, 1)) {
+	if (__builtin_expect((addr & RISCV_ALIGN_MASK) == 0, 1)) {
 		cpu->pc = addr;
 	} else {
 		api.exception(cpu, MISALIGNED_INSTRUCTION);

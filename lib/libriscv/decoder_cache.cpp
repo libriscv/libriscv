@@ -288,10 +288,16 @@ namespace riscv
 			rv32i_instruction rewritten = instruction;
 
 #ifdef RISCV_BINARY_TRANSLATION
-			// With translator ops we pretend the original opcode is JAL,
-			// which ends the block-finding loop.
 			if (entry.get_bytecode() == block_ending_bytecode) {
-				dst += 4;
+				if constexpr (compressed_enabled) {
+					dst += 2;
+					if (was_full_instruction) {
+						was_full_instruction = (instruction.length() == 2);
+					} else {
+						was_full_instruction = true;
+					}
+				} else
+					dst += 4;
 				continue;
 			}
 #endif // RISCV_BINARY_TRANSLATION
