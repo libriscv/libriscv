@@ -15,6 +15,7 @@ namespace riscv
 		address_type<W> basepc;
 		address_type<W> endpc;
 		address_type<W> gp;
+		bool trace_instructions;
 		bool forward_jumps;
 		std::unordered_set<address_type<W>> jump_locations;
 		// Pointer to all the other blocks (including current)

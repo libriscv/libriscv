@@ -100,7 +100,7 @@ namespace riscv
 					// All opcodes that can modify PC
 					if (length == 2)
 					{
-						if (!is_regular_compressed<W>(instruction.half[0]))
+						if (!is_regular_compressed<W>(instruction.half[0]) || entry.get_bytecode() == translator_op)
 							break;
 					} else {
 						if (opcode == RV32I_BRANCH || is_stopping_system(instruction)

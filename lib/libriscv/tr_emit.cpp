@@ -258,7 +258,7 @@ struct Emitter
 	void add_reentry_next() {
 		// Avoid re-entering at the end of the function
 		// WARNING: End-of-function can be empty
-		if (this->pc() + this->instr.length() >= end_pc())
+		if (this->pc() + this->m_instr_length >= end_pc())
 			return;
 		this->mapping_labels.insert(index() + 1);
 		//code.append(FUNCLABEL(this->pc() + 4) + ":;\n");
@@ -303,6 +303,7 @@ private:
 	size_t m_idx = 0;
 	address_t m_pc = 0x0;
 	rv32i_instruction instr;
+	unsigned m_instr_length = 0;
 	uint64_t m_instr_counter = 0;
 
 	std::array<bool, 32> gprs {};
@@ -364,8 +365,8 @@ void Emitter<W>::emit()
 		this->m_idx = i;
 		this->instr = tinfo.instr[i];
 		this->m_pc = next_pc;
-		const auto instr_length = this->instr.length();
-		next_pc = this->m_pc + instr_length;
+		this->m_instr_length = this->instr.length();
+		next_pc = this->m_pc + this->m_instr_length;
 
 		// If the address is a return address or a global JAL target
 		if (i > 0 && (mapping_labels.count(i) || tinfo.global_jump_locations.count(this->pc()))) {
@@ -380,6 +381,17 @@ void Emitter<W>::emit()
 		else if (i > 0 && (tinfo.jump_locations.count(this->pc()) || labels.count(i))) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
+		}
+
+		if (tinfo.trace_instructions) {
+			char buffer[64];
+			const int len = snprintf(buffer, sizeof(buffer),
+				"printf(\"%s: 0x%08lx, instr 0x%08x\\n\");\n", this->func.c_str(), long(this->pc()), this->instr.whole);
+			if (len > 0) {
+				code += std::string(buffer, len);
+			} else {
+				throw MachineException(INVALID_PROGRAM, "Failed to format instruction trace");
+			}
 		}
 
 		this->m_instr_counter += 1;
@@ -519,7 +531,7 @@ void Emitter<W>::emit()
 				// NOTE: We need to remember RS1 because it can be clobbered by RD
 				add_code(
 					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
-					to_reg(instr.Itype.rd) + " = " + PCRELS(instr_length) + ";",
+					to_reg(instr.Itype.rd) + " = " + PCRELS(m_instr_length) + ";",
 					"jump(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
 				);
 			} else {
@@ -532,7 +544,7 @@ void Emitter<W>::emit()
 		case RV32I_JAL: {
 			this->increment_counter_so_far();
 			if (instr.Jtype.rd != 0) {
-				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(instr_length) + ";\n");
+				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(m_instr_length) + ";\n");
 			}
 			// XXX: mask off unaligned jumps - is this OK?
 			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
@@ -1366,7 +1378,8 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 			const auto label = funclabel<W>(e.get_func(), entry.addr);
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 		}
-		//code += "default: api.exception(cpu, 3);\n";
+		if (tinfo.trace_instructions)
+			code += "default: api.exception(cpu, 3);\n";
 		code += "}\n";
 	}
 

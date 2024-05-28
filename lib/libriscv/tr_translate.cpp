@@ -161,6 +161,7 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 {
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = (getenv("VERBOSE") != nullptr);
+	const bool trace_instructions = (getenv("TRACE") != nullptr);
 
 	address_t gp = 0;
 	TIME_POINT(t0);
@@ -317,6 +318,7 @@ if constexpr (SCAN_FOR_GP) {
 
 			blocks.push_back({
 				std::move(block_instructions), block, block_end, gp,
+				trace_instructions,
 				true,
 				std::move(jump_locations),
 				nullptr, // blocks

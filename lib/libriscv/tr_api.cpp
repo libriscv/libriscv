@@ -3,6 +3,7 @@
 namespace riscv {
 	extern const std::string bintr_code =
 		R"123(#include <stdint.h>
+#include <stdio.h>
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #define ILLEGAL_OPCODE  0
