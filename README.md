@@ -1,6 +1,6 @@
 # RISC-V userspace emulator library
 
-_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50ns to enter the virtual machine and return, _libriscv_ requires 3ns. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
+_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50-100ns to enter the virtual machine and return, _libriscv_ requires 3ns. _libriscv_ is also routinely faster than other interpreters. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
 
 There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to live-debug something.
 
@@ -42,9 +42,12 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
 
   ![STREAM memory wasm3 vs  libriscv (no SIMD)](https://github.com/fwsGonzo/libriscv/assets/3758947/0a259f83-0a60-4f0d-88e8-901333ca1c7d)
   ![CoreMark 1 0 Interpreted wasm3 vs  interpreted libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/236c6620-6812-4e6c-89be-15cdb7340412)
+
+  We can see that _libriscv_ is 25-35% faster than wasm3.
+
   ![Compute Rainbow Color (3x sinf)](https://github.com/fwsGonzo/libriscv/assets/3758947/ea59f2ca-1087-4f06-afd9-f54de24eed52)
 
-  libriscv beats established gold-standard emulators for all short-running functions.
+  libriscv beats established gold-standard emulators for all short-running functions due to its lower latency.
 
 </details>
 
@@ -358,7 +361,22 @@ There is multiprocessing support, but it is in its early stages. It is achieved 
 When binary translation is enabled, the experimental option `RISCV_LIBTCC` is available. libtcc will be embedded in the RISC-V emulator and used as compiler for binary translation. `libtcc-dev` package will be required for building.
 
 
+### Performance settings
+
+Disabling the C-extension increases interpreter speed by ~20-25%, but requires a custom RISC-V toolchain. [Here's how to create one](/docs/NEWLIB.md). There are technical reasons for this, and it will not get better over time.
+
+The C-extension can be disabled by setting the RISCV_EXT_C CMake option to OFF:
+
+```sh
+cd build
+cmake .. -DRISCV_EXT_C=OFF -DCMAKE_BUILD_TYPE=Release
+```
+
+Other build options that aid performance: Enabling link-time optimizations. Using the latest and greatest compiler version. Enabling all the native accelerated system calls. Enabling the read-write arena (default ON). Unrolling loops.
+
+
 ## Game development example
 
-Have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example framework and automatically builds fully functional C++ programs for low latency scripting. Keep in mind that disabling the C-extension increases interpreter speed by ~20-25%, but requires a custom RISC-V toolchain. [Here's how to create one](/docs/NEWLIB.md).
+There is a simple [step-by-step gamedev example](/examples/gamedev) under the examples folder. There are examples for the C++, Nelua and Nim languages.
 
+For a more complete and thorough implementation, have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example framework and automatically builds fully functional C++ programs for low latency scripting.
