@@ -45,9 +45,9 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
 
   We can see that _libriscv_ is 25-35% faster than wasm3.
 
-  ![Compute Rainbow Color (3x sinf)](https://github.com/fwsGonzo/libriscv/assets/3758947/ea59f2ca-1087-4f06-afd9-f54de24eed52)
+  ![Compute Rainbow Color (3x sinf)](https://github.com/fwsGonzo/libriscv/assets/3758947/57242652-8e7c-47d5-8cc6-310c5c3a2a7b)
 
-  libriscv beats established gold-standard emulators for all short-running functions due to its lower latency.
+  _libriscv_ can call the above function 4.5 times before _wasmtime_ has called it once. _libriscv_ beats established gold-standard emulators for all short-running functions due to its lower latency.
 
 </details>
 
