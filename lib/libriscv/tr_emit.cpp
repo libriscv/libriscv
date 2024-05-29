@@ -255,13 +255,14 @@ struct Emitter
 	void add_mapping(address_t addr, std::string symbol) { this->mappings.push_back({addr, std::move(symbol)}); }
 	auto& get_mappings() { return this->mappings; }
 
-	void add_reentry_next() {
+	bool add_reentry_next() {
 		// Avoid re-entering at the end of the function
 		// WARNING: End-of-function can be empty
 		if (this->pc() + this->m_instr_length >= end_pc())
-			return;
+			return false;
 		this->mapping_labels.insert(index() + 1);
 		//code.append(FUNCLABEL(this->pc() + 4) + ":;\n");
+		return true;
 	}
 
 	uint64_t reset_and_get_icounter() {
@@ -281,6 +282,11 @@ struct Emitter
 		}
 		return false;
 	}
+
+	void add_forward(const std::string& target_func) {
+		this->m_forward_declared.push_back(target_func);
+	}
+	const auto& get_forward_declared() const noexcept { return this->m_forward_declared; }
 
 	size_t index() const noexcept { return this->m_idx; }
 	address_t pc() const noexcept { return this->m_pc; }
@@ -316,6 +322,8 @@ private:
 	std::set<unsigned> labels;
 	std::set<unsigned> mapping_labels;
 	std::set<address_t> pagedata;
+
+	std::vector<std::string> m_forward_declared;
 };
 
 template <int W>
@@ -560,6 +568,29 @@ void Emitter<W>::emit()
 				}
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
+			else if (this->block_exists(dest_pc)) {
+				// Allow directly calling a function, as long as it's a forward jump
+				if (dest_pc > this->pc()) {
+					// Get the function name of the target block
+					auto target_func = funclabel<W>("f", dest_pc);
+					// Call the function and get the return values
+					add_code("{ReturnValues rv;");
+					add_forward(target_func);
+					add_code("rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc), ");");
+					// Update the local counter registers
+					add_code("counter = rv.counter;");
+					add_code("max_counter = rv.max_counter;}");
+					// If the counter is exhausted, or PC has diverged, exit the function
+					if (instr.Jtype.rd != 0) {
+						if (this->add_reentry_next()) {
+							// Fast-path if cpu->pc is already set to the next instruction
+							add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") goto " + FUNCLABEL(next_pc) + ";");
+						}
+					}
+					exit_function("cpu->pc", false);
+				}
+			}
+
 			// Because of forward jumps we can't end the function here
 			exit_function(STRADDR(dest_pc));
 			// Some blocks end with unconditional jumps
@@ -1365,6 +1396,11 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 {
 	Emitter<W> e(const_cast<CPU<W>&>(*this), tinfo);
 	e.emit();
+
+	// Forward declarations
+	for (const auto& entry : e.get_forward_declared()) {
+		code += "static ReturnValues " + entry + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc);\n";
+	}
 
 	// Function header
 	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc) {\n";
