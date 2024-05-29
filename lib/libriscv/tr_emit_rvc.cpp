@@ -38,7 +38,7 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				instr.Itype.funct3 = 0b000; // ADDI
 				instr.Itype.rd = 2; // sp
 				instr.Itype.rs1 = 2; // sp
-				instr.Itype.imm = ci.CI.signed_imm() << 4;
+				instr.Itype.imm = ci.CI16.signed_imm();
 			}
 			else if (ci.CI.rd != 0) { // C.LUI
 				instr.Utype.opcode = RV32I_LUI;
@@ -59,10 +59,10 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				if (instr.Jtype.jump_offset() != imm)
 					throw MachineException(INVALID_PROGRAM, "Failed to sign-extend C.JAL immediate");
 			} else { // C.ADDIW
-				instr.Itype.opcode = RV32I_OP_IMM;
-				instr.Itype.funct3 = 0b000; // ADDI
-				instr.Itype.rd = ci.CI.rd + 8;
-				instr.Itype.rs1 = ci.CI.rd + 8;
+				instr.Itype.opcode = RV64I_OP_IMM32;
+				instr.Itype.funct3 = 0b000; // ADDIW
+				instr.Itype.rd = ci.CI.rd;
+				instr.Itype.rs1 = ci.CI.rd;
 				instr.Itype.imm = ci.CI.signed_imm();
 			}
 			break;
