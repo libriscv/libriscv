@@ -44,7 +44,8 @@ static void syscall_ppoll(Machine<W>& machine)
 		}
 		machine.set_result_or_error(res);
 	} else {
-		machine.set_result(-EBADF);
+		// No file descriptors, just return 0
+		machine.set_result(0);
 	}
 #if defined(SYSCALL_VERBOSE)
 	const auto res = (long)machine.return_value();
