@@ -404,7 +404,7 @@ void Emitter<W>::emit()
 
 			if (instr.is_compressed())
 			{
-				printf("Unexpanded instruction: 0x%08x\n", instr.whole);
+				//printf("Unexpanded instruction: 0x%08x\n", instr.whole);
 				const uint16_t compressed_instr = instr.half[0];
 				// When illegal opcode is encountered, reveal PC
 				if (compressed_instr == 0x0) {
