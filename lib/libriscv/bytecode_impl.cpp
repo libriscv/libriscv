@@ -593,7 +593,7 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
 {
 	auto handler = DECODER().get_handler();
-	//printf("Slowpath: 0x%lX\n", pc);
+	//printf("Slowpath: 0x%X  (instr: 0x%X)\n", uint32_t(pc), DECODER().instr);
 	handler(CPU(), {DECODER().instr});
 	NEXT_INSTR();
 }

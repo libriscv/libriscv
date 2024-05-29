@@ -1,6 +1,7 @@
 #include "types.hpp"
 #include "rv32i_instr.hpp"
 #include <unordered_set>
+#include <vector>
 
 namespace riscv
 {
@@ -10,11 +11,11 @@ namespace riscv
 	template <int W>
 	struct TransInfo
 	{
-		const rv32i_instruction* instr;
+		const std::vector<rv32i_instruction> instr;
 		address_type<W> basepc;
 		address_type<W> endpc;
 		address_type<W> gp;
-		int len;
+		bool trace_instructions;
 		bool forward_jumps;
 		std::unordered_set<address_type<W>> jump_locations;
 		// Pointer to all the other blocks (including current)

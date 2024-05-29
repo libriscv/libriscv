@@ -1,8 +1,12 @@
 #include "machine.hpp"
 #include "instruction_list.hpp"
+#include <inttypes.h>
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include "tr_types.hpp"
+#ifdef RISCV_EXT_C
+#include "rvc.hpp"
+#endif
 #ifdef RISCV_EXT_VECTOR
 #include "rvv.hpp"
 #endif
@@ -10,16 +14,26 @@
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define STRADDR(x) (std::to_string(x) + "UL")
-#define FUNCLABEL(i) (func + "_" + std::to_string(i))
-#define UNKNOWN_INSTRUCTION() { code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
+#define UNKNOWN_INSTRUCTION() { \
+	code += "cpu->pc = " + STRADDR(this->pc()) + ";\n"; \
+	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "counter < max_counter";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
+static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
+
+template <int W>
+static std::string funclabel(const std::string& func, uint64_t addr) {
+	char buf[32];
+	if (const int len = snprintf(buf, sizeof(buf), "%s_%" PRIx64, func.c_str(), addr); len > 0)
+		return std::string(buf, len);
+	throw MachineException(INVALID_PROGRAM, "Failed to format function label");
+}
+#define FUNCLABEL(addr) funclabel<W>(func, addr)
 
 struct BranchInfo {
 	bool sign;
-	bool goto_enabled;
 	uint64_t jump_pc;
 	uint64_t call_pc;
 };
@@ -34,7 +48,7 @@ struct Emitter
 	Emitter(CPU<W>& c, const TransInfo<W>& ptinfo)
 		: cpu(c), m_pc(ptinfo.basepc), tinfo(ptinfo)
 	{
-		this->func = "f" + std::to_string(this->pc());
+		this->func = funclabel<W>("f", this->pc());
 	}
 
 	template <typename ... Args>
@@ -103,7 +117,7 @@ struct Emitter
 			this->restore_all_registers();
 		}
 		add_code(
-			"cpu->pc = " + new_pc + ";",
+			(new_pc != "cpu->pc") ? "cpu->pc = " + new_pc + ";" : "",
 			"return (ReturnValues){counter, max_counter};", (add_bracket) ? " }" : "");
 	}
 
@@ -244,7 +258,7 @@ struct Emitter
 	void add_reentry_next() {
 		// Avoid re-entering at the end of the function
 		// WARNING: End-of-function can be empty
-		if (this->pc() + 4 >= end_pc())
+		if (this->pc() + this->m_instr_length >= end_pc())
 			return;
 		this->mapping_labels.insert(index() + 1);
 		//code.append(FUNCLABEL(this->pc() + 4) + ":;\n");
@@ -274,6 +288,7 @@ struct Emitter
 	address_t end_pc() const noexcept { return tinfo.endpc; }
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
+	rv32i_instruction emit_rvc();
 
 private:
 	static std::string speculation_safe(const std::string& address) {
@@ -288,6 +303,7 @@ private:
 	size_t m_idx = 0;
 	address_t m_pc = 0x0;
 	rv32i_instruction instr;
+	unsigned m_instr_length = 0;
 	uint64_t m_instr_counter = 0;
 
 	std::array<bool, 32> gprs {};
@@ -311,7 +327,8 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	else
 		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
 
-	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & 0x3)) {
+	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & ALIGN_MASK))
+	{
 		// TODO: Make exception a helper function, as return values are implementation detail
 		code +=
 			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
@@ -319,10 +336,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		return;
 	}
 
-	if (binfo.goto_enabled) {
-		// this is a jump back to the start of the function
-		code += "if (" + LOOP_EXPRESSION + ") goto " + func + "_start;\n";
-	} else if (binfo.jump_pc != 0) {
+	if (binfo.jump_pc != 0) {
 		if (binfo.jump_pc > this->pc()) {
 			// unconditional forward jump + bracket
 			code += "goto " + FUNCLABEL(binfo.jump_pc) + "; }\n";
@@ -336,16 +350,23 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	exit_function(PCRELS(instr.Btype.signed_imm()), true); // Bracket (NOTE: not actually ending the function)
 }
 
+#ifdef RISCV_EXT_C
+#include "tr_emit_rvc.cpp"
+#endif
+
 template <int W>
 void Emitter<W>::emit()
 {
 	this->add_mapping(this->pc(), this->func);
-	add_code(func + "_start:;");
+	code.append(FUNCLABEL(this->pc()) + ":;\n");
+	auto next_pc = tinfo.basepc;
 
-	for (int i = 0; i < tinfo.len; i++) {
+	for (int i = 0; i < int(tinfo.instr.size()); i++) {
 		this->m_idx = i;
 		this->instr = tinfo.instr[i];
-		this->m_pc = tinfo.basepc + i * 4;
+		this->m_pc = next_pc;
+		this->m_instr_length = this->instr.length();
+		next_pc = this->m_pc + this->m_instr_length;
 
 		// If the address is a return address or a global JAL target
 		if (i > 0 && (mapping_labels.count(i) || tinfo.global_jump_locations.count(this->pc()))) {
@@ -357,14 +378,51 @@ void Emitter<W>::emit()
 			});
 		}
 		// known jump locations
-		else if (tinfo.jump_locations.count(this->pc()) || labels.count(i)) {
+		else if (i > 0 && (tinfo.jump_locations.count(this->pc()) || labels.count(i))) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
+		}
+
+		if (tinfo.trace_instructions) {
+			char buffer[64];
+			const int len = snprintf(buffer, sizeof(buffer),
+				"printf(\"%s: 0x%08lx, instr 0x%08x\\n\");\n", this->func.c_str(), long(this->pc()), this->instr.whole);
+			if (len > 0) {
+				code += std::string(buffer, len);
+			} else {
+				throw MachineException(INVALID_PROGRAM, "Failed to format instruction trace");
+			}
 		}
 
 		this->m_instr_counter += 1;
 
 		// instruction generation
+#ifdef RISCV_EXT_C
+		if (instr.is_compressed()) {
+			// Compressed 16-bit instructions
+			instr = this->emit_rvc();
+
+			if (instr.is_compressed())
+			{
+				//printf("Unexpanded instruction: 0x%08x\n", instr.whole);
+				const uint16_t compressed_instr = instr.half[0];
+				// When illegal opcode is encountered, reveal PC
+				if (compressed_instr == 0x0) {
+					code += "cpu->pc = " + STRADDR(this->pc()) + ";\n";
+				}
+				char buffer[64];
+				const int len = snprintf(buffer, sizeof(buffer),
+					"api.execute(cpu, %#04hx);\n", compressed_instr);
+				if (len > 0) {
+					code += std::string(buffer, len);
+				} else {
+					throw MachineException(INVALID_PROGRAM, "Failed to format instruction");
+				}
+				continue;
+			}
+		}
+#endif
+
 		switch (instr.opcode()) {
 		case RV32I_LOAD:
 			if (instr.Itype.rd != 0) {
@@ -425,9 +483,12 @@ void Emitter<W>::emit()
 			uint64_t jump_pc = 0;
 			uint64_t call_pc = 0;
 			// goto branch: restarts function
-			bool ge = dest_pc == this->begin_pc();
+			if (dest_pc == this->begin_pc()) {
+				// restart function
+				jump_pc = dest_pc;
+			}
 			// forward label: branch inside code block
-			if (offset > 0 && dest_pc < this->end_pc()) {
+			else if (offset > 0 && dest_pc < this->end_pc()) {
 				// forward label: future address
 				labels.insert(dest_pc);
 				jump_pc = dest_pc;
@@ -441,26 +502,26 @@ void Emitter<W>::emit()
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch({ false, ge, jump_pc, call_pc }, " == ");
+				add_branch({ false, jump_pc, call_pc }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch({ false, ge, jump_pc, call_pc }, " != ");
+				add_branch({ false, jump_pc, call_pc }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
 				UNKNOWN_INSTRUCTION();
 				break;
 			case 0x4: // LT
-				add_branch({ true, ge, jump_pc, call_pc }, " < ");
+				add_branch({ true, jump_pc, call_pc }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch({ true, ge, jump_pc, call_pc }, " >= ");
+				add_branch({ true, jump_pc, call_pc }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch({ false, ge, jump_pc, call_pc }, " < ");
+				add_branch({ false, jump_pc, call_pc }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch({ false, ge, jump_pc, call_pc }, " >= ");
+				add_branch({ false, jump_pc, call_pc }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
@@ -470,7 +531,7 @@ void Emitter<W>::emit()
 				// NOTE: We need to remember RS1 because it can be clobbered by RD
 				add_code(
 					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
-					to_reg(instr.Itype.rd) + " = " + PCRELS(4) + ";",
+					to_reg(instr.Itype.rd) + " = " + PCRELS(m_instr_length) + ";",
 					"jump(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
 				);
 			} else {
@@ -483,16 +544,14 @@ void Emitter<W>::emit()
 		case RV32I_JAL: {
 			this->increment_counter_so_far();
 			if (instr.Jtype.rd != 0) {
-				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(4) + ";\n");
+				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(m_instr_length) + ";\n");
 			}
 			// XXX: mask off unaligned jumps - is this OK?
-			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(0x3);
+			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
 			// forward label: jump inside code block
-			const auto offset = instr.Jtype.jump_offset() / 4;
-			int fl = i+offset;
-			if (fl > 0 && fl < tinfo.len) {
+			if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
 				// forward labels require creating future labels
-				if (fl > i) {
+				if (dest_pc > this->pc()) {
 					labels.insert(dest_pc);
 					add_code("goto " + FUNCLABEL(dest_pc) + ";");
 				} else {
@@ -1037,7 +1096,7 @@ void Emitter<W>::emit()
 			}
 #endif
 			default:
-				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				UNKNOWN_INSTRUCTION();
 				break;
 			}
 			} break;
@@ -1058,7 +1117,7 @@ void Emitter<W>::emit()
 			}
 #endif
 			default:
-				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				UNKNOWN_INSTRUCTION();
 				break;
 			}
 			} break;
@@ -1254,7 +1313,7 @@ void Emitter<W>::emit()
 						"}\n";
 					break;
 				default:
-					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+					UNKNOWN_INSTRUCTION();
 				}
 				break;
 			case 0x5: { // OPF.VF
@@ -1276,21 +1335,22 @@ void Emitter<W>::emit()
 						"}\n";
 					break;
 				default:
-					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+					UNKNOWN_INSTRUCTION();
 				}
 				break;
 			}
 			default:
-				code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+				UNKNOWN_INSTRUCTION();
 			}
 			break;
 #else
-			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			UNKNOWN_INSTRUCTION();
 			break;
 #endif
 		}
 		default:
-			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			code += "cpu->pc = " + PCRELS(0) + ";\n";
+			UNKNOWN_INSTRUCTION();
 		}
 	}
 	// If the function ends with an unimplemented instruction,
@@ -1313,13 +1373,13 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	if (e.get_mappings().size() > 1)
 	{
 		code += "switch (pc) {\n";
-		code += "case " + std::to_string(tinfo.basepc) + ": goto " + e.get_func() + "_start;\n";
-		for (size_t idx = 1; idx < e.get_mappings().size(); idx++) {
+		for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
 			auto& entry = e.get_mappings().at(idx);
-			const auto label = e.get_func() + "_" + std::to_string(entry.addr);
+			const auto label = funclabel<W>(e.get_func(), entry.addr);
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 		}
-		//code += "default: api.exception(cpu, 3);\n";
+		if (tinfo.trace_instructions)
+			code += "default: api.exception(cpu, 3);\n";
 		code += "}\n";
 	}
 

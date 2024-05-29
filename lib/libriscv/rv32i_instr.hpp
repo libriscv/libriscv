@@ -157,6 +157,9 @@ namespace riscv
 		bool is_long() const noexcept {
 			return (whole & 0x3) == 0x3;
 		}
+		bool is_compressed() const noexcept {
+			return (whole & 0x3) != 0x3;
+		}
 		uint32_t length() const noexcept {
 			//return is_long() ? 4 : 2;
 			return 2 + 2 * is_long();
