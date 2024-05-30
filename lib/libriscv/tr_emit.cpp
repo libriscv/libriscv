@@ -282,6 +282,12 @@ struct Emitter
 		}
 		return false;
 	}
+	uint64_t find_block_base(address_t pc) const noexcept {
+		for (auto& blk : *tinfo.blocks) {
+			if (blk.basepc >= pc && blk.endpc <= pc) return blk.basepc;
+		}
+		return 0;
+	}
 
 	void add_forward(const std::string& target_func) {
 		this->m_forward_declared.push_back(target_func);
@@ -408,12 +414,15 @@ void Emitter<W>::emit()
 #ifdef RISCV_EXT_C
 		if (instr.is_compressed()) {
 			// Compressed 16-bit instructions
+			auto original = instr.whole;
 			instr = this->emit_rvc();
 
 			if (instr.is_compressed())
 			{
-				//printf("Unexpanded instruction: 0x%08x\n", instr.whole);
 				const uint16_t compressed_instr = instr.half[0];
+				// Unexpanded instruction (except all-zeroes, which is illegal)
+				if (tinfo.trace_instructions && compressed_instr != 0x0)
+					printf("Unexpanded instruction: 0x%04hx at PC 0x%lX (original 0x%x)\n", compressed_instr, long(this->pc()), original);
 				// When illegal opcode is encountered, reveal PC
 				if (compressed_instr == 0x0) {
 					code += "cpu->pc = " + STRADDR(this->pc()) + ";\n";
@@ -505,8 +514,6 @@ void Emitter<W>::emit()
 				if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
 					jump_pc = dest_pc;
 				}
-			} else if (this->block_exists(dest_pc)) {
-				call_pc = dest_pc;
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
@@ -568,11 +575,12 @@ void Emitter<W>::emit()
 				}
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
-			else if (this->block_exists(dest_pc)) {
+			else if (this->tinfo.global_jump_locations.count(dest_pc)) {
+				// Get the function name of the target block
+				auto target_funcaddr = this->find_block_base(dest_pc);
 				// Allow directly calling a function, as long as it's a forward jump
-				if (dest_pc > this->pc()) {
-					// Get the function name of the target block
-					auto target_func = funclabel<W>("f", dest_pc);
+				if (target_funcaddr != 0 && dest_pc > this->pc()) {
+					auto target_func = funclabel<W>("f", target_funcaddr);
 					// Call the function and get the return values
 					add_code("{ReturnValues rv;");
 					add_forward(target_func);

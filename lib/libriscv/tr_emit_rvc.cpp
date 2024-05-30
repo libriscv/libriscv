@@ -21,14 +21,13 @@ rv32i_instruction Emitter<W>::emit_rvc()
 		case CI_CODE(0b011, 0b00): {
 			if (ci.CL.funct3 == 0x1) {
 				// C.FLD
-				rv32f_instruction fi {instr};
-				fi.Itype.opcode = RV32F_LOAD;
-				fi.Itype.funct3 = 0b011; // FLD
-				fi.Itype.rd  = ci.CL.srd  + 8;
-				fi.Itype.rs1 = ci.CL.srs1 + 8;
-				fi.Itype.imm = ci.CSD.offset8();
+				instr.Itype.opcode = RV32F_LOAD;
+				instr.Itype.funct3 = 0b011; // FLD
+				instr.Itype.rd  = ci.CL.srd  + 8;
+				instr.Itype.rs1 = ci.CL.srs1 + 8;
+				instr.Itype.imm = ci.CSD.offset8();
 
-				if (fi.Itype.signed_imm() != int32_t(ci.CSD.offset8()))
+				if (instr.Itype.signed_imm() != int32_t(ci.CSD.offset8()))
 					throw MachineException(INVALID_PROGRAM, "Failed to sign-extend C.FLD immediate");
 			}
 			else if (ci.CL.funct3 == 0x2) {
@@ -49,12 +48,11 @@ rv32i_instruction Emitter<W>::emit_rvc()
 					instr.Itype.imm = ci.CSD.offset8();
 				} else {
 					// C.FLW
-					rv32f_instruction fi {instr};
-					fi.Itype.opcode = RV32F_LOAD;
-					fi.Itype.funct3 = 0b010; // FLW
-					fi.Itype.rd  = ci.CL.srd  + 8;
-					fi.Itype.rs1 = ci.CL.srs1 + 8;
-					fi.Itype.imm = ci.CL.offset();
+					instr.Itype.opcode = RV32F_LOAD;
+					instr.Itype.funct3 = 0b010; // FLW
+					instr.Itype.rd  = ci.CL.srd  + 8;
+					instr.Itype.rs1 = ci.CL.srs1 + 8;
+					instr.Itype.imm = ci.CL.offset();
 				}
 			}
 			// C.UNIMP
@@ -76,6 +74,7 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				fi.Stype.imm04  = (imm >> 0) & 0x1F;
 				fi.Stype.imm510 = (imm >> 5) & 0x3F;
 				fi.Stype.imm11  = (imm >> 11) & 0x1;
+				instr.whole = fi.whole;
 				}
 				break;
 			case 6: { // C.SW
@@ -109,6 +108,7 @@ rv32i_instruction Emitter<W>::emit_rvc()
 					fi.Stype.imm04  = (imm >> 0) & 0x1F;
 					fi.Stype.imm510 = (imm >> 5) & 0x3F;
 					fi.Stype.imm11  = (imm >> 11) & 0x1;
+					instr.whole = fi.whole;
 				}
 				break;
 			}
@@ -301,8 +301,16 @@ rv32i_instruction Emitter<W>::emit_rvc()
 			break;
 			}
 		// Quadrant 2
+		case CI_CODE(0b001, 0b10): {
+			// C.FLDSP
+			instr.Itype.opcode = RV32F_LOAD;
+			instr.Itype.funct3 = 0b011; // FLD
+			instr.Itype.rd  = ci.CIFLD.rd;
+			instr.Itype.rs1 = 2; // sp
+			instr.Itype.imm = ci.CIFLD.offset();
+			break;
+		}
 		case CI_CODE(0b000, 0b10):
-		case CI_CODE(0b001, 0b10):
 		case CI_CODE(0b010, 0b10):
 		case CI_CODE(0b011, 0b10): {
 			if (ci.CI.funct3 == 0x0 && ci.CI.rd != 0) {
@@ -316,15 +324,6 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				} else {
 					instr.Itype.imm = ci.CI.shift_imm();
 				}
-			}
-			else if (ci.CI2.funct3 == 0x1) {
-				// C.FLDSP
-				rv32f_instruction fi {instr};
-				fi.Itype.opcode = RV32F_LOAD;
-				fi.Itype.funct3 = 0b011; // FLD
-				fi.Itype.rd  = ci.CIFLD.rd;
-				fi.Itype.rs1 = 2; // sp
-				fi.Itype.imm = ci.CIFLD.offset();
 			}
 			else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
 				// C.LWSP
@@ -421,6 +420,7 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				fi.Stype.imm04  = (imm >> 0) & 0x1F;
 				fi.Stype.imm510 = (imm >> 5) & 0x3F;
 				fi.Stype.imm11  = (imm >> 11) & 0x1;
+				instr.whole = fi.whole;
 			}
 			else if (ci.CSS.funct3 == 6) {
 				// SWSP
@@ -453,6 +453,7 @@ rv32i_instruction Emitter<W>::emit_rvc()
 					fi.Stype.imm04  = (imm >> 0) & 0x1F;
 					fi.Stype.imm510 = (imm >> 5) & 0x3F;
 					fi.Stype.imm11  = (imm >> 11) & 0x1;
+					instr.whole = fi.whole;
 				}
 			}
 			// C.UNIMP?
