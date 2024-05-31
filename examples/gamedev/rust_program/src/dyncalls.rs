@@ -54,12 +54,11 @@ extern "C" {
 pub fn __wrap_memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8
 {
 	unsafe {
-		asm!(
-			"li a7, 495+0",
-			"ecall",
+		asm!("ecall",
 			in("a0") dest,
 			in("a1") src,
 			in("a2") n,
+			in("a7") 495+0,
 			options(nostack)
 		);
 	}
@@ -70,12 +69,11 @@ pub fn __wrap_memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8
 pub fn __wrap_memset(s: *mut u8, c: i32, n: usize) -> *mut u8
 {
 	unsafe {
-		asm!(
-			"li a7, 495+1",
-			"ecall",
+		asm!("ecall",
 			in("a0") s,
 			in("a1") c,
 			in("a2") n,
+			in("a7") 495+1,
 			options(nostack)
 		);
 	}
@@ -86,12 +84,11 @@ pub fn __wrap_memset(s: *mut u8, c: i32, n: usize) -> *mut u8
 pub fn __wrap_memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8
 {
 	unsafe {
-		asm!(
-			"li a7, 495+2",
-			"ecall",
+		asm!("ecall",
 			in("a0") dest,
 			in("a1") src,
 			in("a2") n,
+			in("a7") 495+2,
 			options(nostack)
 		);
 	}
@@ -103,12 +100,11 @@ pub fn __wrap_memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32
 {
 	let result: i32;
 	unsafe {
-		asm!(
-			"li a7, 495+3",
-			"ecall",
+		asm!("ecall",
 			in("a0") s1,
 			in("a1") s2,
 			in("a2") n,
+			in("a7") 495+3,
 			lateout("a0") result,
 			options(nostack, readonly)
 		);
