@@ -40,10 +40,10 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
   ### Benchmarks against wasm3
   RISC-V is a register machine architecture, which makes it very easy to reach good interpreter performance without needing a register allocator.
 
-  ![STREAM memory wasm3 vs  libriscv (no SIMD)](https://github.com/fwsGonzo/libriscv/assets/3758947/0a259f83-0a60-4f0d-88e8-901333ca1c7d)
-  ![CoreMark 1 0 Interpreted wasm3 vs  interpreted libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/236c6620-6812-4e6c-89be-15cdb7340412)
+  ![STREAM memory wasm3 vs  libriscv (no SIMD)](https://github.com/fwsGonzo/libriscv/assets/3758947/faddfb23-b341-4824-a968-70f0ee1301de)
+  ![CoreMark 1 0 Interpreted wasm3 vs  interpreted libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/871e96d9-f9aa-40cb-9317-825d1bcad569)
 
-  We can see that _libriscv_ is 25-35% faster than wasm3.
+  We can see that _libriscv_ is substantially faster than wasm3.
 
   ![Compute Rainbow Color (3x sinf)](https://github.com/fwsGonzo/libriscv/assets/3758947/57242652-8e7c-47d5-8cc6-310c5c3a2a7b)
 
