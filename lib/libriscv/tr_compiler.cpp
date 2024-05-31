@@ -35,11 +35,11 @@ static std::string host_arch()
 
 namespace riscv
 {
-	std::string compile_command(int /*arch*/, const std::unordered_map<std::string, std::string>& cflags)
+	std::string compile_command(int /*arch*/, const std::unordered_map<std::string, std::string>& defines)
 	{
-		std::string cfstr;
-		for (auto pair : cflags) {
-			cfstr += " -D" + pair.first + "=" + pair.second;
+		std::string defstr;
+		for (auto pair : defines) {
+			defstr += " -D" + pair.first + "=" + pair.second;
 		}
 
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
@@ -47,13 +47,13 @@ namespace riscv
 #ifdef RISCV_EXT_VECTOR
 			" -march=native" +
 #endif
-			cfstr +
+			defstr +
 			" -DARCH=" + host_arch() + ""
 			" -pipe " + extra_cflags();
 	}
 
 	void*
-	compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& cflags, const char* outfile)
+	compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const char* outfile)
 	{
 		// create temporary filename
 		char namebuffer[64];
@@ -71,7 +71,7 @@ namespace riscv
 		}
 		// system compiler invocation
 		const std::string command =
-			compile_command(arch, cflags) + " "
+			compile_command(arch, defines) + " "
 			 + " -o " + std::string(outfile) + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
