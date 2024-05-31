@@ -32,3 +32,9 @@ Nelua has been [implemented here](nelua_program/)
 There is a [Nim example](nim_program/)
 
 [Guide to Scripting with Nim](https://medium.com/@fwsgonzo/an-introduction-to-low-latency-scripting-with-libriscv-part-4-103ff7e67c24)
+
+### Rust
+
+There is a [Rust example](rust_program/)
+
+[Guide to Scripting with Rust](https://fwsgonzo.medium.com/an-introduction-to-low-latency-scripting-for-game-engines-part-5-d7f12630e6bf)
