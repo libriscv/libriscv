@@ -56,12 +56,15 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	defines.emplace("RISCV_ARENA_ROEND", std::to_string(machine.memory.initial_rodata_end()));
 	defines.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
 	defines.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
-#ifdef RISCV_EXT_C
-	defines.emplace("RISCV_EXT_C", "1");
-#endif
-#ifdef RISCV_EXT_VECTOR
-	defines.emplace("RISCV_EXT_VECTOR", std::to_string(RISCV_EXT_VECTOR));
-#endif
+	if constexpr (compressed_enabled) {
+		defines.emplace("RISCV_EXT_C", "1");
+	}
+	if constexpr (vector_extension) {
+		defines.emplace("RISCV_EXT_VECTOR", std::to_string(vector_extension));
+	}
+	if constexpr (nanboxing) {
+		defines.emplace("RISCV_NANBOXING", "1");
+	}
 	return defines;
 }
 

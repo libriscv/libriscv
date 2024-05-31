@@ -32,14 +32,16 @@ namespace riscv
 		}
 		void set_float(float f) {
 			this->f32[0] = f;
-			this->nanbox();
+			if constexpr (nanboxing)
+				this->nanbox();
 		}
 		void set_double(double d) {
 			this->f64 = d;
 		}
 		void load_u32(uint32_t val) {
 			this->i32[0] = val;
-			this->nanbox();
+			if constexpr (nanboxing)
+				this->nanbox();
 		}
 		void load_u64(uint64_t val) {
 			this->i64 = val;

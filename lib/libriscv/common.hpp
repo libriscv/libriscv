@@ -116,10 +116,16 @@ namespace riscv
 	static constexpr bool memory_alignment_check = true;
 	static constexpr bool verbose_branches_enabled = false;
 	static constexpr bool unaligned_memory_slowpaths = true;
+	static constexpr bool nanboxing = true;
 #else
 	static constexpr bool memory_alignment_check = false;
 	static constexpr bool verbose_branches_enabled = false;
 	static constexpr bool unaligned_memory_slowpaths = false;
+#ifdef RISCV_ALWAYS_NANBOXING // In order to override the default
+	static constexpr bool nanboxing = true;
+#else
+	static constexpr bool nanboxing = false;
+#endif
 #endif
 
 #ifdef RISCV_EXT_A

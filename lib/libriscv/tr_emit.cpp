@@ -1122,7 +1122,9 @@ void Emitter<W>::emit()
 			switch (fi.Itype.funct3) {
 			case 0x2: // FLW
 				this->memory_load<uint32_t>(from_fpreg(fi.Itype.rd) + ".i32[0]", "uint32_t", fi.Itype.rs1, fi.Itype.signed_imm());
-				code += from_fpreg(fi.Itype.rd) + ".i32[1] = 0;\n";
+				if constexpr (nanboxing) {
+					code += from_fpreg(fi.Itype.rd) + ".i32[1] = 0;\n";
+				}
 				break;
 			case 0x3: // FLD
 				this->memory_load<uint64_t>(from_fpreg(fi.Itype.rd) + ".i64", "uint64_t", fi.Itype.rs1, fi.Itype.signed_imm());
