@@ -19,10 +19,7 @@ long fast_write(int fd, const char *buffer, size_t size)
 
 void fast_exit(int status)
 {
-	register long    a0 __asm__("a0") = status;
-	register long sysid __asm__("a7") = ECALL_EXIT;
-
-	__asm__ volatile("ecall" : : "r"(a0), "r"(sysid));
+	__asm__ volatile("wfi\nj fast_exit\n");
 	__builtin_unreachable();
 }
 
