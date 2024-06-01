@@ -257,8 +257,7 @@ namespace riscv
 			std::string bintr_filename;
 			int result = machine().cpu.load_translation(options, &bintr_filename, exec);
 			const bool must_translate = result > 0;
-
-			if (!exec.is_binary_translated() && must_translate)
+			if (must_translate)
 			{
 				machine().cpu.try_translate(
 					options, bintr_filename, exec, addr, addr + len);

@@ -147,11 +147,14 @@ if (RISCV_MULTIPROCESS)
 	find_package(Threads REQUIRED)
 	target_link_libraries(riscv PUBLIC Threads::Threads)
 endif()
-if (RISCV_BINARY_TRANSLATION)
-	target_link_libraries(riscv PUBLIC dl)
-endif()
+
 if (WIN32 OR MINGW_TOOLCHAIN)
 	target_link_libraries(riscv PUBLIC wsock32 ws2_32)
+	if (RISCV_BINARY_TRANSLATION)
+		target_sources(riscv PRIVATE libriscv/win32/dlfcn.cpp)
+	endif()
+elseif (RISCV_BINARY_TRANSLATION)
+	target_link_libraries(riscv PUBLIC dl)
 endif()
 
 

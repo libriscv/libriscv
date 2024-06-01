@@ -57,7 +57,10 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
+		void* binary_translation_so() const { return m_bintr_dl; }
 		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
+		uint32_t translation_hash() const { return m_bintr_hash; }
+		void set_translation_hash(uint32_t hash) { m_bintr_hash = hash; }
 		void reserve_mappings(size_t mappings) { m_translator_mappings.reserve(mappings); }
 		void add_mapping(bintr_block_func<W> handler) { m_translator_mappings.push_back(handler); }
 		bintr_block_func<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
@@ -87,6 +90,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<bintr_block_func<W>> m_translator_mappings;
 		mutable void* m_bintr_dl = nullptr;
+		uint32_t m_bintr_hash = 0x0; // CRC32-C of the execute segment + compiler options
 #endif
 	};
 

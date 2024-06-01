@@ -1,7 +1,11 @@
 #include "common.hpp"
 
 #include <cstring>
+#if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
+#include "win32/dlfcn.h"
+#else
 #include <dlfcn.h>
+#endif
 #include <unistd.h>
 
 static std::string compiler()
@@ -53,7 +57,8 @@ namespace riscv
 	}
 
 	void*
-	compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const char* outfile)
+	compile(const std::string& code, int arch,
+		const std::unordered_map<std::string, std::string>& defines, const std::string& outfile)
 	{
 		// create temporary filename
 		char namebuffer[64];
@@ -72,7 +77,7 @@ namespace riscv
 		// system compiler invocation
 		const std::string command =
 			compile_command(arch, defines) + " "
-			 + " -o " + std::string(outfile) + " "
+			 + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
 		// compile the translated code
@@ -97,7 +102,81 @@ namespace riscv
 			unlink(namebuffer);
 		}
 
-		return dlopen(outfile, RTLD_LAZY);
+		return dlopen(outfile.c_str(), RTLD_LAZY);
+	}
+
+	static std::string mingw_compile_command(int /*arch*/,
+		const std::unordered_map<std::string, std::string>& defines, const MachineMingWTranslationOptions& mingw_options)
+	{
+		std::string defstr;
+		for (auto pair : defines) {
+			defstr += " -D" + pair.first + "=" + pair.second;
+		}
+
+		// We always want to produce a generic PE-dll that can be loaded on *most* Windows machines.
+		return mingw_options.mingw_cross_compiler + " -O2 -s -std=c99 -fPIC -shared -x c "
+			" -fexceptions" +
+			defstr +
+			" -DARCH=" + host_arch() + ""
+			" -pipe " + extra_cflags();
+	}
+
+	std::string MachineMingWTranslationOptions::filename(const std::string& prefix, uint32_t hash, const std::string& suffix)
+	{
+		char buffer[256];
+		const int len = snprintf(buffer, sizeof(buffer), "%s%08x%s",
+			prefix.c_str(), hash, suffix.c_str());
+		return std::string(buffer, len);
+	}
+
+	bool
+	mingw_compile(const std::string& code, int arch,
+		const std::unordered_map<std::string, std::string>& defines,
+		const std::string& outfile, const MachineMingWTranslationOptions& mingw_options)
+	{
+		// create temporary filename
+		char namebuffer[64];
+		strncpy(namebuffer, "/tmp/rvtrcode-XXXXXX", sizeof(namebuffer));
+		// open a temporary file with owner privs
+		const int fd = mkstemp(namebuffer);
+		if (fd < 0) {
+			return false;
+		}
+		// write translated code to temp file
+		ssize_t len = write(fd, code.c_str(), code.size());
+		if (len < (ssize_t) code.size()) {
+			unlink(namebuffer);
+			return false;
+		}
+		// system compiler invocation
+		const std::string command =
+			mingw_compile_command(arch, defines, mingw_options) + " "
+			 + " -o " + outfile + " "
+			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
+
+		// compile the translated code
+		if (verbose()) {
+			printf("MinGW Command: %s\n", command.c_str());
+		}
+		FILE* f = popen(command.c_str(), "r");
+		if (f == nullptr) {
+			unlink(namebuffer);
+			return false;
+		}
+		// get compiler output
+		char buffer[2048];
+		while (fgets(buffer, sizeof(buffer), f) != NULL) {
+			if (verbose())
+				fprintf(stderr, "%s", buffer);
+		}
+		pclose(f);
+
+		if (!keep_code()) {
+			// delete temporary code file
+			unlink(namebuffer);
+		}
+
+		return true;
 	}
 
 	void* dylib_lookup(void* dylib, const char* symbol)

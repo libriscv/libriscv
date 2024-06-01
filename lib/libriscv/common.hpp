@@ -1,6 +1,7 @@
 #pragma once
 #include "libriscv_settings.h" // Build-system generated
 
+#include <memory>
 #include <type_traits>
 #if __cplusplus >= 202002L
 #include <span>
@@ -33,6 +34,7 @@
 namespace riscv
 {
 	template <int W> struct Memory;
+	struct MachineMingWTranslationOptions;
 
 	/// @brief Options passed to Machine constructor
 	/// @tparam W The RISC-V architecture
@@ -64,6 +66,8 @@ namespace riscv
 		bool enforce_exec_only = false;
 
 		/// @brief Print some verbose loader information to stdout.
+		/// @details If binary translation is enabled, this will also make the
+		/// binary translation process print verbose information.
 		bool verbose_loader = false;
 
 		/// @brief Enabling this will skip assignment of copy-on-write pages
@@ -85,18 +89,66 @@ namespace riscv
 		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
 
 #ifdef RISCV_BINARY_TRANSLATION
+		/// @brief Limits placed on the binary translator.
+		/// @details The binary translator will stop translating after reaching
+		/// either of these limits. The limits are per shared object.
+		/// The translator can be disabled at run-time by setting translate_blocks_max to 0.
 		unsigned block_size_treshold = 5;
 		unsigned translate_blocks_max = 16'000;
 		unsigned translate_instr_max = 150'000;
+		/// @brief Enable tracing during emulation of the binary translated parts of the program.
 		bool translate_trace  = false;
+		/// @brief Enable verbose timing information for the binary translator.
 		bool translate_timing = false;
+		/// @brief Enable the translation cache for the binary translator.
+		/// Translated shared objects will be stored in a file and can be re-used later.
 		bool translation_cache = true;
+		/// @brief Prefix for the translation output file.
+		std::string translation_prefix = "/tmp/rvbintr-";
+		/// @brief Suffix for the translation output file.
+		std::string translation_suffix = "";
+		/// @brief Allow the production of a secondary dependency-free DLL that can be
+		/// transferred to and loaded on Windows machines. It will be used to greatly
+		/// accelerate the emulation of the RISC-V program.
+		std::shared_ptr<MachineMingWTranslationOptions> mingw_options = nullptr;
 #ifdef RISCV_LIBTCC
 		std::string libtcc1_location;
 #endif
 #endif
 	};
 
+	struct MachineMingWTranslationOptions
+	{
+		/// @brief Provide a custom binary-translation compiler in order
+		/// to produce a secondary binary that can be loaded on Windows machines.
+		/// @example "x86_64-w64-mingw32-gcc"
+		std::string mingw_cross_compiler = "x86_64-w64-mingw32-gcc";
+
+		/// @brief Provide a custom prefix for the mingw PE-dll output.
+		/// @example "rvbintr-"
+		std::string mingw_cross_prefix = "rvbintr-";
+
+		/// @brief Provide a custom suffix for the mingw PE-dll output.
+		/// @example ".dll"
+		std::string mingw_cross_suffix = ".dll";
+
+		/// @brief Produce the mingw PE-dll filename from the prefix, hash and suffix.
+		/// @param prefix A prefix for the filename.
+		/// @param hash   A hash to include in the filename, retrieved from the execute segment.
+		/// @param suffix A suffix for the filename.
+		/// @return A filename string.
+		/// @details The filename will be constructed as follows:
+		/// @code
+		/// const uint32_t hash = machine.current_execute_segment().translation_hash();
+		/// char buffer[256];
+		/// const int len = snprintf(buffer, sizeof(buffer), "%s%08x%s",
+		/// 	prefix.c_str(), hash, suffix.c_str());
+		/// return std::string(buffer, len);
+		/// @endcode
+		/// @note The hash is a CRC32-C of the execute segment + compiler options.
+		/// @note The hash can be found with machine.current_execute_segment().translation_hash()
+		static std::string filename(const std::string& prefix, uint32_t hash, const std::string& suffix);
+	};
 
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
 
