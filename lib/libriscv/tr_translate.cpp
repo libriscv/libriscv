@@ -132,6 +132,17 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
 		}
 	}
+	bool must_compile = dylib == nullptr;
+
+	// If MinGW compilation is enabled, we should check for the PE-dll too
+	if (options.mingw_options) {
+		const uint32_t hash = checksum;
+		const std::string mingw_filename = MachineMingWTranslationOptions::filename(
+			options.mingw_options->mingw_cross_prefix, hash, options.mingw_options->mingw_cross_suffix);
+		if (access(mingw_filename.c_str(), R_OK) != 0) {
+			must_compile = true;
+		}
+	}
 
 	// We must compile ourselves
 	if (dylib == nullptr) {
@@ -144,6 +155,12 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	if (options.translate_timing) {
 		TIME_POINT(t10);
 		printf(">> Total binary translation loading time %ld ns\n", nanodiff(t5, t10));
+	}
+
+	// If the mingw PE-dll is not found, we must also compile (despite activating the ELF)
+	if (must_compile) {
+		if (filename) *filename = std::string(filebuffer);
+		return 1;
 	}
 	return 0;
 }
@@ -176,6 +193,16 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = options.verbose_loader;
 	const bool trace_instructions = options.translate_trace;
+
+#ifdef YEP_IS_WINDOWS
+	// Windows users don't have C compilers laying around
+	if (verbose) {
+		printf("Binary translation not supported on Windows\n");
+		printf("The translation filename is %s\n", filename.c_str());
+	}
+	// TODO: Check for MinGW and other compilers instead of just disabling
+	return;
+#endif
 
 	address_t gp = 0;
 	TIME_POINT(t0);
@@ -421,7 +448,13 @@ const struct Mapping mappings[] = {
 #else
 		extern void* compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
 		extern bool mingw_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&, const MachineMingWTranslationOptions&);
-		dylib = compile(code, W, defines, filename);
+
+		// If the binary translation has already been loaded, we can skip compilation
+		if (exec.is_binary_translated()) {
+			dylib = exec.binary_translation_so();
+		} else {
+			dylib = compile(code, W, defines, filename);
+		}
 
 		// Optionally produce a mingw PE-dll for Windows
 		// This is a secondary binary that can be loaded on Windows machines.
@@ -443,7 +476,9 @@ const struct Mapping mappings[] = {
 		return;
 	}
 
-	this->activate_dylib(options, exec, dylib);
+	if (!exec.is_binary_translated()) {
+		this->activate_dylib(options, exec, dylib);
+	}
 
 	if constexpr (!libtcc_enabled) {
 		if (!options.translation_cache) {
