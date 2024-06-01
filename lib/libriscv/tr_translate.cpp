@@ -542,7 +542,14 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				entry.set_bytecode(0x0); /* Invalid opcode */
 			}
 		} else {
-			throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
+			if (options.verbose_loader) {
+				fprintf(stderr, "libriscv: Translation mapping 0x%lX outside execute area 0x%lX-0x%lX\n",
+					(long)addr, (long)exec.exec_begin(), (long)exec.exec_end());
+			}
+			//throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
+			// It might be technically possible to produce some valid instructions in the
+			// padding areas, but it's not worth the effort to support this. Ignore.
+			continue;
 		}
 	}
 

@@ -36,6 +36,9 @@ TEST_CASE("Main example", "[Examples]")
 
 			machine.stop();
 		});
+	// Newlib uses regular exit syscall (93)
+	Machine<RISCV64>::install_syscall_handler(93,
+		Machine<RISCV64>::syscall_handlers.at(94));
 
 	machine.simulate(5'000'000UL);
 

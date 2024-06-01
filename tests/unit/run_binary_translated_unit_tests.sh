@@ -1,6 +1,9 @@
 FOLDER=build_tr
 set -e
 source scripts/find_compiler.sh
+#export RCC="riscv64-unknown-elf-gcc"
+#export RCXX="riscv64-unknown-elf-g++"
+
 
 mkdir -p $FOLDER
 pushd $FOLDER
