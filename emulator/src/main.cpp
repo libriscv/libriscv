@@ -17,12 +17,26 @@ static void run_program(
 	const bool is_dynamic,
 	const std::vector<std::string>& args)
 {
+	// -= Executing the emulator with ... =-
+	// DEBUG=1 ./rvlinux myprogram
+	// ... will enable the CLI debugger.
+	// VERBOSE=1  will print loader and translator details.
+	// SILENT=1   will suppress the exit message.
+	// GDB=1      will start a GDB server on port 2159.
+	// TRACE=1    will enable tracing in the binary translator.
+	// TIMING=1   will enable timing information in the binary translator.
+	// FROM_START=1 will start the debugger from the beginning (_start).
+	//
 	const bool debugging_enabled = getenv("DEBUG") != nullptr;
 	const bool verbose_enabled = getenv("VERBOSE") != nullptr;
 
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
-		.verbose_loader = verbose_enabled
+		.verbose_loader = verbose_enabled,
+#ifdef RISCV_BINARY_TRANSLATION
+		.translate_trace = getenv("TRACE") != nullptr,
+		.translate_timing = getenv("TIMING") != nullptr,
+#endif
 	}};
 
 	if constexpr (full_linux_guest)

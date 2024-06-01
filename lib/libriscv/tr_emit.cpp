@@ -398,14 +398,7 @@ void Emitter<W>::emit()
 		}
 
 		if (tinfo.trace_instructions) {
-			char buffer[64];
-			const int len = snprintf(buffer, sizeof(buffer),
-				"printf(\"%s: 0x%08lx, instr 0x%08x\\n\");\n", this->func.c_str(), long(this->pc()), this->instr.whole);
-			if (len > 0) {
-				code += std::string(buffer, len);
-			} else {
-				throw MachineException(INVALID_PROGRAM, "Failed to format instruction trace");
-			}
+			code += "api.trace(cpu, \"" + this->func + "\", " + STRADDR(this->pc()) + ", " + std::to_string(this->instr.whole) + ");\n";
 		}
 
 		this->m_instr_counter += 1;

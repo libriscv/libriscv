@@ -88,6 +88,8 @@ namespace riscv
 		unsigned block_size_treshold = 5;
 		unsigned translate_blocks_max = 16'000;
 		unsigned translate_instr_max = 150'000;
+		bool translate_trace  = false;
+		bool translate_timing = false;
 #ifdef RISCV_LIBTCC
 		std::string libtcc1_location;
 #endif

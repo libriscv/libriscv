@@ -143,6 +143,7 @@ static struct CallbackTable {
 	void (*system)(CPU*, uint32_t);
 	void (*execute)(CPU*, uint32_t);
 	void (*exception) (CPU*, int);
+	void (*trace) (CPU*, const char*, addr_t, uint32_t);
 	float  (*sqrtf32)(float);
 	double (*sqrtf64)(double);
 	int (*clz) (uint32_t);

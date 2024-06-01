@@ -16,14 +16,13 @@
 namespace riscv
 {
 	static constexpr bool VERBOSE_BLOCKS = false;
-	static constexpr bool BINTR_TIMING = false;
 	static constexpr bool SCAN_FOR_GP = true;
 
 	inline timespec time_now();
 	inline long nanodiff(timespec, timespec);
 	#define TIME_POINT(x) \
 		[[maybe_unused]] timespec x;  \
-		if constexpr (BINTR_TIMING) { \
+		if (options.translate_timing) { \
 			asm("" : : : "memory");   \
 			x = time_now();           \
 			asm("" : : : "memory");   \
@@ -42,7 +41,7 @@ inline DecoderData<W>& decoder_entry_at(const DecodedExecuteSegment<W>& exec, ad
 }
 
 template <int W>
-static std::unordered_map<std::string, std::string> create_defines_for(const Machine<W>& machine)
+static std::unordered_map<std::string, std::string> create_defines_for(const Machine<W>& machine, const MachineOptions<W>& options)
 {
 	// Calculate offset from Machine to each counter
 	auto counters = const_cast<Machine<W>&> (machine).get_counters();
@@ -65,6 +64,11 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	if constexpr (nanboxing) {
 		defines.emplace("RISCV_NANBOXING", "1");
 	}
+	if (options.translate_trace) {
+		// Adding this as a define will change the hash of the translation,
+		// so it will be recompiled if the trace option is toggled.
+		defines.emplace("RISCV_TRACING", "1");
+	}
 	return defines;
 }
 
@@ -80,8 +84,8 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	// Disable translator with NO_TRANSLATE=1
 	// or by setting max blocks to zero.
 	if (0 == options.translate_blocks_max || getenv("NO_TRANSLATE")) {
-		if (getenv("VERBOSE")) {
-			printf("Binary translation disabled\n");
+		if (options.verbose_loader) {
+			printf("libriscv: Binary translation disabled\n");
 		}
 		exec.set_binary_translated(nullptr);
 		return -1;
@@ -95,7 +99,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	// Checksum the execute segment + compiler flags
 	TIME_POINT(t5);
 	extern std::string compile_command(int arch, const std::unordered_map<std::string, std::string>& cflags);
-	const auto cc = compile_command(W, create_defines_for(machine()));
+	const auto cc = compile_command(W, create_defines_for(machine(), options));
 	const uint32_t checksum =
 		crc32c(exec_data, exec.exec_end() - exec.exec_begin())
 		^ crc32c(cc.c_str(), cc.size());
@@ -107,7 +111,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return -1;
 
 	void* dylib = nullptr;
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		TIME_POINT(t6);
 		printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
 	}
@@ -116,7 +120,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	if (access(filebuffer, R_OK) == 0) {
 		TIME_POINT(t7);
 		dylib = dlopen(filebuffer, RTLD_LAZY);
-		if constexpr (BINTR_TIMING) {
+		if (options.translate_timing) {
 			TIME_POINT(t8);
 			printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
 		}
@@ -128,11 +132,11 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return 1;
 	}
 
-	this->activate_dylib(exec, dylib);
+	this->activate_dylib(options, exec, dylib);
 
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		TIME_POINT(t10);
-		printf(">> Loading binary translation took %ld ns\n", nanodiff(t5, t10));
+		printf(">> Total binary translation loading time %ld ns\n", nanodiff(t5, t10));
 	}
 	return 0;
 }
@@ -163,8 +167,8 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 	DecodedExecuteSegment<W>& exec, address_t basepc, address_t endbasepc) const
 {
 	// Run with VERBOSE=1 to see command and output
-	const bool verbose = (getenv("VERBOSE") != nullptr);
-	const bool trace_instructions = (getenv("TRACE") != nullptr);
+	const bool verbose = options.verbose_loader;
+	const bool trace_instructions = options.translate_trace;
 
 	address_t gp = 0;
 	TIME_POINT(t0);
@@ -194,7 +198,7 @@ if constexpr (SCAN_FOR_GP) {
 
 		pc += instruction.length();
 	} // iterator
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		TIME_POINT(t1);
 		printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(t0, t1), (long)gp);
 	}
@@ -338,7 +342,7 @@ if constexpr (SCAN_FOR_GP) {
 	}
 
 	TIME_POINT(t3);
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		printf(">> Code block detection %ld ns\n", nanodiff(t2, t3));
 	}
 
@@ -376,7 +380,7 @@ const struct Mapping mappings[] = {
 	}
 	code += "};\n";
 
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		TIME_POINT(t4);
 		printf(">> Code generation took %ld ns\n", nanodiff(t3, t4));
 	}
@@ -393,7 +397,7 @@ const struct Mapping mappings[] = {
 		return;
 	}
 
-	const auto defines = create_defines_for(machine());
+	const auto defines = create_defines_for(machine(), options);
 	void* dylib = nullptr;
 
 	TIME_POINT(t9);
@@ -405,7 +409,7 @@ const struct Mapping mappings[] = {
 		extern void* compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const char*);
 		dylib = compile(code, W, defines, filename.c_str());
 	}
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		TIME_POINT(t10);
 		printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
 	}
@@ -415,7 +419,7 @@ const struct Mapping mappings[] = {
 		return;
 	}
 
-	this->activate_dylib(exec, dylib);
+	this->activate_dylib(options, exec, dylib);
 
 	if constexpr (!libtcc_enabled) {
 		if (getenv("NO_TR_CACHE") != nullptr) {
@@ -423,14 +427,14 @@ const struct Mapping mappings[] = {
 			unlink(filename.c_str());
 		}
 	}
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		TIME_POINT(t12);
 		printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
 	}
 }
 
 template <int W>
-void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
+void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib) const
 {
 	TIME_POINT(t11);
 
@@ -483,7 +487,7 @@ void CPU<W>::activate_dylib(DecodedExecuteSegment<W>& exec, void* dylib) const
 		}
 	}
 
-	if constexpr (BINTR_TIMING) {
+	if (options.translate_timing) {
 		TIME_POINT(t12);
 		printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
 	}
@@ -539,6 +543,10 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 		.trigger_exception = [] (CPU<W>& cpu, int e) {
 			cpu.trigger_exception(e);
 		},
+		.trace = [] (CPU<W>& cpu, const char* msg, address_type<W> addr, uint32_t instr) {
+			(void)cpu;
+			printf("f %s pc 0x%lX instr %08X\n", msg, (long)addr, instr);
+		},
 		.sqrtf32 = [] (float f) -> float {
 			return std::sqrt(f);
 		},
@@ -573,13 +581,13 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
 	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib) const;
-	template void CPU<4>::activate_dylib(DecodedExecuteSegment<4>&, void*) const;
+	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*) const;
 #endif
 #ifdef RISCV_64I
 	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib) const;
-	template void CPU<8>::activate_dylib(DecodedExecuteSegment<8>&, void*) const;
+	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*) const;
 #endif
 
 	timespec time_now()
