@@ -29,6 +29,7 @@ static void run_program(
 	//
 	const bool debugging_enabled = getenv("DEBUG") != nullptr;
 	const bool verbose_enabled = getenv("VERBOSE") != nullptr;
+	const bool mingw_enabled = getenv("MINGW") != nullptr;
 
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
@@ -36,6 +37,13 @@ static void run_program(
 #ifdef RISCV_BINARY_TRANSLATION
 		.translate_trace = getenv("TRACE") != nullptr,
 		.translate_timing = getenv("TIMING") != nullptr,
+#ifdef _WIN32
+		.translation_prefix = "translations/rvbintr-",
+		.translation_suffix = ".dll",
+#else
+		.mingw_options = mingw_enabled ?
+			std::make_shared<riscv::MachineMingWTranslationOptions>() : nullptr,
+#endif
 #endif
 	}};
 

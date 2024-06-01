@@ -1,6 +1,12 @@
 #include <bit>
 #include <cmath>
+#include <chrono>
+#if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
+#define YEP_IS_WINDOWS 1
+#include "win32/dlfcn.h"
+#else
 #include <dlfcn.h>
+#endif
 #include <unistd.h>
 #include "machine.hpp"
 #include "decoder_cache.hpp"
@@ -103,10 +109,11 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	const uint32_t checksum =
 		crc32c(exec_data, exec.exec_end() - exec.exec_begin())
 		^ crc32c(cc.c_str(), cc.size());
+	exec.set_translation_hash(checksum);
 
 	char filebuffer[256];
 	int len = snprintf(filebuffer, sizeof(filebuffer),
-		"/tmp/rvbintr-%08X", checksum);
+		"%s%08X%s", options.translation_prefix.c_str(), checksum, options.translation_suffix.c_str());
 	if (len <= 0)
 		return -1;
 
@@ -406,8 +413,25 @@ const struct Mapping mappings[] = {
 		dylib = libtcc_compile(code, W, defines, options.libtcc1_location);
 
 	} else {
-		extern void* compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const char*);
-		dylib = compile(code, W, defines, filename.c_str());
+#ifdef YEP_IS_WINDOWS
+		// Windows users don't have C compilers laying around
+		dylib = nullptr;
+		printf("Binary translation not supported on Windows\n");
+		printf("The translation filename is %s\n", filename.c_str());
+#else
+		extern void* compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
+		extern bool mingw_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&, const MachineMingWTranslationOptions&);
+		dylib = compile(code, W, defines, filename);
+
+		// Optionally produce a mingw PE-dll for Windows
+		// This is a secondary binary that can be loaded on Windows machines.
+		if (options.mingw_options) {
+			const uint32_t hash = exec.translation_hash();
+			const std::string mingw_filename = MachineMingWTranslationOptions::filename(
+				options.mingw_options->mingw_cross_prefix, hash, options.mingw_options->mingw_cross_suffix);
+			mingw_compile(code, W, defines, mingw_filename, *options.mingw_options);
+		}
+#endif
 	}
 	if (options.translate_timing) {
 		TIME_POINT(t10);
@@ -593,7 +617,14 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	timespec time_now()
 	{
 		timespec t;
+#ifdef YEP_IS_WINDOWS
+		std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::high_resolution_clock::now().time_since_epoch());
+		t.tv_sec  = ns.count() / 1000000000;
+		t.tv_nsec = ns.count() % 1000000000;
+#else
 		clock_gettime(CLOCK_MONOTONIC, &t);
+#endif
 		return t;
 	}
 	long nanodiff(timespec start_time, timespec end_time)

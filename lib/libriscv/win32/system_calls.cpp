@@ -703,6 +703,12 @@ static void syscall_brk(Machine<W> &machine) {
 	machine.set_result(new_end);
 }
 
+template <int W>
+static void syscall_getrandom(Machine<W>& machine)
+{
+	machine.set_result(-ENOSYS);
+}
+
 #include "../linux/syscalls_mman.cpp"
 
 template<int W>
@@ -773,6 +779,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets) {
 
 	this->install_syscall_handler(160, syscall_uname<W>);
 	this->install_syscall_handler(214, syscall_brk<W>);
+
+	install_syscall_handler(278, syscall_getrandom<W>);
 
 	add_mman_syscalls<W>();
 
