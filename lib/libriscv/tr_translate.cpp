@@ -422,7 +422,7 @@ const struct Mapping mappings[] = {
 	this->activate_dylib(options, exec, dylib);
 
 	if constexpr (!libtcc_enabled) {
-		if (getenv("NO_TR_CACHE") != nullptr) {
+		if (!options.translation_cache) {
 			// Delete the program if the shared ELF is unwanted
 			unlink(filename.c_str());
 		}

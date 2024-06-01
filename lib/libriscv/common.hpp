@@ -90,6 +90,7 @@ namespace riscv
 		unsigned translate_instr_max = 150'000;
 		bool translate_trace  = false;
 		bool translate_timing = false;
+		bool translation_cache = true;
 #ifdef RISCV_LIBTCC
 		std::string libtcc1_location;
 #endif

@@ -84,12 +84,11 @@ namespace riscv
 			unlink(namebuffer);
 			return nullptr;
 		}
-		if (verbose()) {
-			// get compiler output
-			char buffer[1024];
-			while (fgets(buffer, sizeof(buffer), f) != NULL) {
+		// get compiler output
+		char buffer[2048];
+		while (fgets(buffer, sizeof(buffer), f) != NULL) {
+			if (verbose())
 				fprintf(stderr, "%s", buffer);
-			}
 		}
 		pclose(f);
 
