@@ -14,8 +14,9 @@ namespace riscv {
 		syscall_t<W>* syscalls;
 		void (*unknown_syscall)(CPU<W>&, address_type<W>);
 		void (*system)(CPU<W>&, uint32_t);
-		void (*execute)(CPU<W>&, uint32_t);
-		void (*trigger_exception)(CPU<W>&, int);
+		unsigned (*execute)(CPU<W>&, uint32_t);
+		void (**handlers)(CPU<W>&, uint32_t);
+		void (*trigger_exception)(CPU<W>&, address_type<W>, int);
 		void (*trace)(CPU<W>&, const char*, address_type<W>, uint32_t);
 		float  (*sqrtf32)(float);
 		double (*sqrtf64)(double);

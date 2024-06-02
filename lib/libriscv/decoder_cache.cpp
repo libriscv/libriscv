@@ -361,8 +361,10 @@ namespace riscv
 		if (it != handler_cache.end())
 			return it->second;
 
-		instr_handlers.push_back(new_handler);
-		const size_t idx = instr_handlers.size()-1;
+		if (UNLIKELY(handler_count >= instr_handlers.size()))
+			throw MachineException(INVALID_PROGRAM, "Too many instruction handlers");
+		instr_handlers[handler_count] = new_handler;
+		const size_t idx = handler_count++;
 		handler_cache.try_emplace(new_handler, idx);
 		return idx;
 	}

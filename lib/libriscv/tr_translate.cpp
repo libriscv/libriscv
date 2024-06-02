@@ -53,6 +53,7 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	auto counters = const_cast<Machine<W>&> (machine).get_counters();
 	const auto ins_counter_offset = uintptr_t(&counters.first) - uintptr_t(&machine);
 	const auto max_counter_offset = uintptr_t(&counters.second) - uintptr_t(&machine);
+	const auto arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
 
 	std::unordered_map<std::string, std::string> defines;
 	defines.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
@@ -61,6 +62,7 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	defines.emplace("RISCV_ARENA_ROEND", std::to_string(machine.memory.initial_rodata_end()));
 	defines.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
 	defines.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
+	defines.emplace("RISCV_ARENA_OFF", std::to_string(arena_offset));
 	if constexpr (compressed_enabled) {
 		defines.emplace("RISCV_EXT_C", "1");
 	}
@@ -126,7 +128,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	// Always check if there is an existing file
 	if (access(filebuffer, R_OK) == 0) {
 		TIME_POINT(t7);
-		dylib = dlopen(filebuffer, RTLD_LAZY);
+		dylib = dlopen(filebuffer, RTLD_LAZY | RTLD_LOCAL);
 		if (options.translate_timing) {
 			TIME_POINT(t8);
 			printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
@@ -230,7 +232,10 @@ if constexpr (SCAN_FOR_GP) {
 			}
 		} // opcode
 
-		pc += instruction.length();
+		if constexpr (compressed_enabled)
+			pc += instruction.length();
+		else
+			pc += 4;
 	} // iterator
 	if (options.translate_timing) {
 		TIME_POINT(t1);
@@ -257,7 +262,10 @@ if constexpr (SCAN_FOR_GP) {
 		for (; pc < endbasepc; ) {
 			const rv32i_instruction instruction
 				= read_instruction(exec.exec_data(), pc, endbasepc);
-			pc += instruction.length();
+			if constexpr (compressed_enabled)
+				pc += instruction.length();
+			else
+				pc += 4;
 			block_insns++;
 
 			// JALR and STOP are show-stoppers / code-block enders
@@ -327,7 +335,10 @@ if constexpr (SCAN_FOR_GP) {
 				// Long jumps are considered returnable
 				if (location < block || location >= block_end) {
 					block_instructions.push_back(instruction);
-					pc += instruction.length();
+					if constexpr (compressed_enabled)
+						pc += instruction.length();
+					else
+						pc += 4;
 					block_end = pc;
 					break;
 				}
@@ -343,7 +354,10 @@ if constexpr (SCAN_FOR_GP) {
 
 			// Add instruction to block
 			block_instructions.push_back(instruction);
-			pc += instruction.length();
+			if constexpr (compressed_enabled)
+				pc += instruction.length();
+			else
+				pc += 4;
 		} // process block
 
 		// Process block and add it for emission
@@ -571,7 +585,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	}
 
 	// Map the API callback table
-	auto func = (void (*)(const CallbackTable<W>&, void*)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
 			return cpu.machine().memory.cached_readable_page(addr << 12, 1).buffer8.data();
@@ -602,11 +616,15 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
 			cpu.machine().system(rv32i_instruction{instr});
 		},
-		.execute = [] (CPU<W>& cpu, uint32_t instr) {
+		.execute = [] (CPU<W>& cpu, uint32_t instr) -> unsigned {
 			const rv32i_instruction rvi{instr};
-			cpu.decode(rvi).handler(cpu, rvi);
+			auto* handler = cpu.decode(rvi).handler;
+			handler(cpu, rvi);
+			return DecoderData<W>::handler_index_for(handler);
 		},
-		.trigger_exception = [] (CPU<W>& cpu, int e) {
+		.handlers = (void (**)(CPU<W>&, uint32_t)) DecoderData<W>::get_handlers(),
+		.trigger_exception = [] (CPU<W>& cpu, address_type<W> pc, int e) {
+			cpu.registers().pc = pc; // XXX: Set PC to the failing instruction (?)
 			cpu.trigger_exception(e);
 		},
 		.trace = [] (CPU<W>& cpu, const char* msg, address_type<W> addr, uint32_t instr) {
@@ -637,8 +655,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 		.cpopl = [] (uint64_t x) -> int {
 			return std::popcount(x);
 		},
-	},
-	m_machine.memory.memory_arena_ptr());
+	});
 
 	return true;
 }

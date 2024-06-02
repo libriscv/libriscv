@@ -132,6 +132,7 @@ typedef struct {
 #define PAGENO(x) ((addr_t)(x) >> 12)
 #define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
 typedef void (*syscall_t) (CPU*);
+typedef void (*handler) (CPU*, uint32_t);
 
 static struct CallbackTable {
 	const char* (*mem_ld) (const CPU*, addr_t);
@@ -141,8 +142,9 @@ static struct CallbackTable {
 	syscall_t* syscalls;
 	void (*unknown_syscall)(CPU*, addr_t);
 	void (*system)(CPU*, uint32_t);
-	void (*execute)(CPU*, uint32_t);
-	void (*exception) (CPU*, int);
+	unsigned (*execute)(CPU*, uint32_t);
+	handler* handlers;
+	void (*exception) (CPU*, addr_t, int);
 	void (*trace) (CPU*, const char*, addr_t, uint32_t);
 	float  (*sqrtf32)(float);
 	double (*sqrtf64)(double);
@@ -153,13 +155,13 @@ static struct CallbackTable {
 	int (*cpop) (uint32_t);
 	int (*cpopl) (uint64_t);
 } api;
-static char* arena_base;
 #define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_INS_COUNTER_OFF))
 #define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_MAX_COUNTER_OFF))
 static const addr_t ARENA_READ_BOUNDARY  = RISCV_ARENA_END - 0x1000;
 static const addr_t ARENA_WRITE_BOUNDARY = RISCV_ARENA_END - RISCV_ARENA_ROEND;
 #define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
 #define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
+#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFF))[x]
 
 static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {
@@ -178,7 +180,7 @@ static inline void jump(CPU* cpu, addr_t addr) {
 	if (__builtin_expect((addr & RISCV_ALIGN_MASK) == 0, 1)) {
 		cpu->pc = addr;
 	} else {
-		api.exception(cpu, MISALIGNED_INSTRUCTION);
+		api.exception(cpu, addr, MISALIGNED_INSTRUCTION);
 		UNREACHABLE();
 	}
 }
@@ -205,11 +207,9 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern void init(struct CallbackTable* table,
-	char*    abase)
+extern void init(struct CallbackTable* table)
 {
 	api = *table;
-	arena_base = abase;
 };
 
 typedef struct {

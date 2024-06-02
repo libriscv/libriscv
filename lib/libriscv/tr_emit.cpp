@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include "decoder_cache.hpp"
 #include "instruction_list.hpp"
 #include <inttypes.h>
 #include "rv32i_instr.hpp"
@@ -14,9 +15,15 @@
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define STRADDR(x) (std::to_string(x) + "UL")
+// Reveal PC on unknown instructions
+// Since it is possible to send a program to another machine, we don't exactly know
+// the order of intruction handlers, so we need to lazily get the handler index by
+// calling the execute function the first time.
 #define UNKNOWN_INSTRUCTION() { \
-	code += "cpu->pc = " + STRADDR(this->pc()) + ";\n"; \
-	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
+	code += "{ static int handler_idx = 0;\n"; \
+	code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
+	code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+	}
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "counter < max_counter";
@@ -189,7 +196,7 @@ struct Emitter
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
-					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "];"
+					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ");"
 				);
 				return;
 			}
@@ -199,7 +206,7 @@ struct Emitter
 		if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
-					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(address) + "];",
+					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ");",
 				"else {",
 					"const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));",
 					dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];",
@@ -220,7 +227,7 @@ struct Emitter
 			/* XXX: Check page permissions */
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
-				add_code("*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "] = " + value + ";");
+				add_code("*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ") = " + value + ";");
 			}
 			return;
 		}
@@ -229,7 +236,7 @@ struct Emitter
 		if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
-				"  *(" + type + "*)&arena_base[" + speculation_safe(address) + "] = " + value + ";",
+				"  *(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ") = " + value + ";",
 				"else {",
 				"  char *" + data + " = api.mem_st(cpu, PAGENO(" + address + "));",
 				"  *(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";",
@@ -345,7 +352,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	{
 		// TODO: Make exception a helper function, as return values are implementation detail
 		code +=
-			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
+			"api.exception(cpu, " + PCRELS(0) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
 			"}\n";
 		return;
 	}
@@ -379,7 +386,10 @@ void Emitter<W>::emit()
 		this->m_idx = i;
 		this->instr = tinfo.instr[i];
 		this->m_pc = next_pc;
-		this->m_instr_length = this->instr.length();
+		if constexpr (compressed_enabled)
+			this->m_instr_length = this->instr.length();
+		else
+			this->m_instr_length = 4;
 		next_pc = this->m_pc + this->m_instr_length;
 
 		// If the address is a return address or a global JAL target
@@ -657,15 +667,15 @@ void Emitter<W>::emit()
 							std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
 					} else if (instr.Itype.high_bits() == 0x280) {
 						// BSETI: Bit-set immediate
-						add_code(dst + " = " + src + " | (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+						add_code(dst + " = " + src + " | ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					}
 					else if (instr.Itype.high_bits() == 0x480) {
 						// BCLRI: Bit-clear immediate
-						add_code(dst + " = " + src + " & ~(1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+						add_code(dst + " = " + src + " & ~((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					}
 					else if (instr.Itype.high_bits() == 0x680) {
 						// BINVI: Bit-invert immediate
-						add_code(dst + " = " + src + " ^ (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+						add_code(dst + " = " + src + " ^ ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					} else {
 						UNKNOWN_INSTRUCTION();
 					}
@@ -708,6 +718,9 @@ void Emitter<W>::emit()
 				} else if (instr.Itype.high_bits() == 0x400) { // SRAI: preserve the sign bit
 					add_code(
 						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
+				} else if (instr.Itype.high_bits() == 0x480) { // BEXTI: Bit-extract immediate
+					add_code(
+						dst + " = (" + src + " >> (" + std::to_string(instr.Itype.imm & (XLEN-1)) + ")) & 1;");
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}
@@ -869,13 +882,13 @@ void Emitter<W>::emit()
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 3);");
 				break;
 			case 0x141: // BSET
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " | (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " | ((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x142: // BCLR
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " & ~(1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " & ~((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x143: // BINV
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " ^ (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " ^ ((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x204: // XNOR
 				add_code(to_reg(instr.Rtype.rd) + " = ~(" + to_reg(instr.Rtype.rs1) + " ^ " + to_reg(instr.Rtype.rs2) + ");");
@@ -1383,7 +1396,6 @@ void Emitter<W>::emit()
 #endif
 		}
 		default:
-			code += "cpu->pc = " + PCRELS(0) + ";\n";
 			UNKNOWN_INSTRUCTION();
 		}
 	}
@@ -1418,7 +1430,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 		}
 		if (tinfo.trace_instructions)
-			code += "default: api.exception(cpu, 3);\n";
+			code += "default: api.exception(cpu, pc, 3);\n";
 		code += "}\n";
 	}
 
