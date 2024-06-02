@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include "decoder_cache.hpp"
 #include "instruction_list.hpp"
 #include <inttypes.h>
 #include "rv32i_instr.hpp"
@@ -15,9 +16,14 @@
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define STRADDR(x) (std::to_string(x) + "UL")
 // Reveal PC on unknown instructions
+// Since it is possible to send a program to another machine, we don't exactly know
+// the order of intruction handlers, so we need to lazily get the handler index by
+// calling the execute function the first time.
 #define UNKNOWN_INSTRUCTION() { \
-	code += "cpu->pc = " + STRADDR(this->pc()) + ";\n"; \
-	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
+	code += "{ static int handler_idx = 0;\n"; \
+	code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
+	code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+	}
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "counter < max_counter";
@@ -712,6 +718,9 @@ void Emitter<W>::emit()
 				} else if (instr.Itype.high_bits() == 0x400) { // SRAI: preserve the sign bit
 					add_code(
 						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
+				} else if (instr.Itype.high_bits() == 0x480) { // BEXTI: Bit-extract immediate
+					add_code(
+						dst + " = (" + src + " >> (" + std::to_string(instr.Itype.imm & (XLEN-1)) + ")) & 1;");
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}

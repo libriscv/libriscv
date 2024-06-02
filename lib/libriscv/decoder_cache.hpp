@@ -64,9 +64,13 @@ struct DecoderData {
 #endif
 	}
 
-private:
 	static size_t handler_index_for(Handler new_handler);
-	static inline std::vector<Handler> instr_handlers;
+	static Handler* get_handlers() noexcept {
+		return &instr_handlers[0];
+	}
+private:
+	static inline std::array<Handler, 256> instr_handlers;
+	static inline std::size_t handler_count = 0;
 	static inline std::unordered_map<Handler, size_t> handler_cache;
 };
 

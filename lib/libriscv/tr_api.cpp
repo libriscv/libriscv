@@ -132,6 +132,7 @@ typedef struct {
 #define PAGENO(x) ((addr_t)(x) >> 12)
 #define PAGEOFF(x) ((addr_t)(x) & 0xFFF)
 typedef void (*syscall_t) (CPU*);
+typedef void (*handler) (CPU*, uint32_t);
 
 static struct CallbackTable {
 	const char* (*mem_ld) (const CPU*, addr_t);
@@ -141,7 +142,8 @@ static struct CallbackTable {
 	syscall_t* syscalls;
 	void (*unknown_syscall)(CPU*, addr_t);
 	void (*system)(CPU*, uint32_t);
-	void (*execute)(CPU*, uint32_t);
+	unsigned (*execute)(CPU*, uint32_t);
+	handler* handlers;
 	void (*exception) (CPU*, addr_t, int);
 	void (*trace) (CPU*, const char*, addr_t, uint32_t);
 	float  (*sqrtf32)(float);

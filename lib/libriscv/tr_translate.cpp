@@ -616,10 +616,13 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
 			cpu.machine().system(rv32i_instruction{instr});
 		},
-		.execute = [] (CPU<W>& cpu, uint32_t instr) {
+		.execute = [] (CPU<W>& cpu, uint32_t instr) -> unsigned {
 			const rv32i_instruction rvi{instr};
-			cpu.decode(rvi).handler(cpu, rvi);
+			auto* handler = cpu.decode(rvi).handler;
+			handler(cpu, rvi);
+			return DecoderData<W>::handler_index_for(handler);
 		},
+		.handlers = (void (**)(CPU<W>&, uint32_t)) DecoderData<W>::get_handlers(),
 		.trigger_exception = [] (CPU<W>& cpu, address_type<W> pc, int e) {
 			cpu.registers().pc = pc; // XXX: Set PC to the failing instruction (?)
 			cpu.trigger_exception(e);
