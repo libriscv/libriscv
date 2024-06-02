@@ -661,15 +661,15 @@ void Emitter<W>::emit()
 							std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
 					} else if (instr.Itype.high_bits() == 0x280) {
 						// BSETI: Bit-set immediate
-						add_code(dst + " = " + src + " | (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+						add_code(dst + " = " + src + " | ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					}
 					else if (instr.Itype.high_bits() == 0x480) {
 						// BCLRI: Bit-clear immediate
-						add_code(dst + " = " + src + " & ~(1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+						add_code(dst + " = " + src + " & ~((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					}
 					else if (instr.Itype.high_bits() == 0x680) {
 						// BINVI: Bit-invert immediate
-						add_code(dst + " = " + src + " ^ (1UL << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+						add_code(dst + " = " + src + " ^ ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					} else {
 						UNKNOWN_INSTRUCTION();
 					}
@@ -873,13 +873,13 @@ void Emitter<W>::emit()
 				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 3);");
 				break;
 			case 0x141: // BSET
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " | (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " | ((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x142: // BCLR
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " & ~(1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " & ~((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x143: // BINV
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " ^ (1UL << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " ^ ((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x204: // XNOR
 				add_code(to_reg(instr.Rtype.rd) + " = ~(" + to_reg(instr.Rtype.rs1) + " ^ " + to_reg(instr.Rtype.rs2) + ");");
