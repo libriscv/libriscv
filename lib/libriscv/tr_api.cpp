@@ -153,13 +153,13 @@ static struct CallbackTable {
 	int (*cpop) (uint32_t);
 	int (*cpopl) (uint64_t);
 } api;
-static char* arena_base;
 #define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_INS_COUNTER_OFF))
 #define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_MAX_COUNTER_OFF))
 static const addr_t ARENA_READ_BOUNDARY  = RISCV_ARENA_END - 0x1000;
 static const addr_t ARENA_WRITE_BOUNDARY = RISCV_ARENA_END - RISCV_ARENA_ROEND;
 #define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
 #define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
+#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFF))[x]
 
 static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {
@@ -205,11 +205,9 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern void init(struct CallbackTable* table,
-	char*    abase)
+extern void init(struct CallbackTable* table)
 {
 	api = *table;
-	arena_base = abase;
 };
 
 typedef struct {

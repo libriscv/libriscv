@@ -42,7 +42,7 @@ namespace riscv
 				}
 #else
 				// TODO: XXX: Investigate if this is a time sink
-				this->m_arena.data = new PageData[pages_max];
+				this->m_arena.data = new PageData[pages_max + 1];
 				this->m_arena.pages = pages_max;
 #endif
 			}

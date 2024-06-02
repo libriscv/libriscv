@@ -190,7 +190,7 @@ struct Emitter
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
-					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "];"
+					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ");"
 				);
 				return;
 			}
@@ -200,7 +200,7 @@ struct Emitter
 		if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
-					dst + " = " + cast + "*(" + type + "*)&arena_base[" + speculation_safe(address) + "];",
+					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ");",
 				"else {",
 					"const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));",
 					dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];",
@@ -221,7 +221,7 @@ struct Emitter
 			/* XXX: Check page permissions */
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
-				add_code("*(" + type + "*)&arena_base[" + speculation_safe(absolute_vaddr) + "] = " + value + ";");
+				add_code("*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ") = " + value + ";");
 			}
 			return;
 		}
@@ -230,7 +230,7 @@ struct Emitter
 		if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
-				"  *(" + type + "*)&arena_base[" + speculation_safe(address) + "] = " + value + ";",
+				"  *(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ") = " + value + ";",
 				"else {",
 				"  char *" + data + " = api.mem_st(cpu, PAGENO(" + address + "));",
 				"  *(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";",

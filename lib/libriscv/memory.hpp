@@ -189,6 +189,7 @@ namespace riscv
 
 		bool uses_flat_memory_arena() const noexcept { return riscv::flat_readwrite_arena && this->m_arena.data != nullptr; }
 		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena.data; }
+		auto& memory_arena_ptr_ref() const noexcept { return this->m_arena.data; }
 		address_t memory_arena_size() const noexcept { return this->m_arena.pages * Page::size(); }
 		address_t memory_arena_read_boundary() const noexcept { return this->m_arena.read_boundary; }
 		address_t memory_arena_write_boundary() const noexcept { return this->m_arena.write_boundary; }
