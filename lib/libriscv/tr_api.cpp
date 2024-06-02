@@ -142,7 +142,7 @@ static struct CallbackTable {
 	void (*unknown_syscall)(CPU*, addr_t);
 	void (*system)(CPU*, uint32_t);
 	void (*execute)(CPU*, uint32_t);
-	void (*exception) (CPU*, int);
+	void (*exception) (CPU*, addr_t, int);
 	void (*trace) (CPU*, const char*, addr_t, uint32_t);
 	float  (*sqrtf32)(float);
 	double (*sqrtf64)(double);
@@ -178,7 +178,7 @@ static inline void jump(CPU* cpu, addr_t addr) {
 	if (__builtin_expect((addr & RISCV_ALIGN_MASK) == 0, 1)) {
 		cpu->pc = addr;
 	} else {
-		api.exception(cpu, MISALIGNED_INSTRUCTION);
+		api.exception(cpu, addr, MISALIGNED_INSTRUCTION);
 		UNREACHABLE();
 	}
 }

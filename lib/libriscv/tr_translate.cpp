@@ -230,7 +230,10 @@ if constexpr (SCAN_FOR_GP) {
 			}
 		} // opcode
 
-		pc += instruction.length();
+		if constexpr (compressed_enabled)
+			pc += instruction.length();
+		else
+			pc += 4;
 	} // iterator
 	if (options.translate_timing) {
 		TIME_POINT(t1);
@@ -257,7 +260,10 @@ if constexpr (SCAN_FOR_GP) {
 		for (; pc < endbasepc; ) {
 			const rv32i_instruction instruction
 				= read_instruction(exec.exec_data(), pc, endbasepc);
-			pc += instruction.length();
+			if constexpr (compressed_enabled)
+				pc += instruction.length();
+			else
+				pc += 4;
 			block_insns++;
 
 			// JALR and STOP are show-stoppers / code-block enders
@@ -327,7 +333,10 @@ if constexpr (SCAN_FOR_GP) {
 				// Long jumps are considered returnable
 				if (location < block || location >= block_end) {
 					block_instructions.push_back(instruction);
-					pc += instruction.length();
+					if constexpr (compressed_enabled)
+						pc += instruction.length();
+					else
+						pc += 4;
 					block_end = pc;
 					break;
 				}
@@ -343,7 +352,10 @@ if constexpr (SCAN_FOR_GP) {
 
 			// Add instruction to block
 			block_instructions.push_back(instruction);
-			pc += instruction.length();
+			if constexpr (compressed_enabled)
+				pc += instruction.length();
+			else
+				pc += 4;
 		} // process block
 
 		// Process block and add it for emission
@@ -606,7 +618,8 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			const rv32i_instruction rvi{instr};
 			cpu.decode(rvi).handler(cpu, rvi);
 		},
-		.trigger_exception = [] (CPU<W>& cpu, int e) {
+		.trigger_exception = [] (CPU<W>& cpu, address_type<W> pc, int e) {
+			cpu.registers().pc = pc; // XXX: Set PC to the failing instruction (?)
 			cpu.trigger_exception(e);
 		},
 		.trace = [] (CPU<W>& cpu, const char* msg, address_type<W> addr, uint32_t instr) {

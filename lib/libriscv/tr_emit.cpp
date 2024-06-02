@@ -14,6 +14,7 @@
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define STRADDR(x) (std::to_string(x) + "UL")
+// Reveal PC on unknown instructions
 #define UNKNOWN_INSTRUCTION() { \
 	code += "cpu->pc = " + STRADDR(this->pc()) + ";\n"; \
 	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; }
@@ -345,7 +346,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	{
 		// TODO: Make exception a helper function, as return values are implementation detail
 		code +=
-			"api.exception(cpu, MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
+			"api.exception(cpu, " + PCRELS(0) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
 			"}\n";
 		return;
 	}
@@ -379,7 +380,10 @@ void Emitter<W>::emit()
 		this->m_idx = i;
 		this->instr = tinfo.instr[i];
 		this->m_pc = next_pc;
-		this->m_instr_length = this->instr.length();
+		if constexpr (compressed_enabled)
+			this->m_instr_length = this->instr.length();
+		else
+			this->m_instr_length = 4;
 		next_pc = this->m_pc + this->m_instr_length;
 
 		// If the address is a return address or a global JAL target
@@ -1383,7 +1387,6 @@ void Emitter<W>::emit()
 #endif
 		}
 		default:
-			code += "cpu->pc = " + PCRELS(0) + ";\n";
 			UNKNOWN_INSTRUCTION();
 		}
 	}
@@ -1418,7 +1421,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 		}
 		if (tinfo.trace_instructions)
-			code += "default: api.exception(cpu, 3);\n";
+			code += "default: api.exception(cpu, pc, 3);\n";
 		code += "}\n";
 	}
 
