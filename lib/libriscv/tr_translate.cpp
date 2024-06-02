@@ -109,8 +109,12 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	extern std::string compile_command(int arch, const std::unordered_map<std::string, std::string>& cflags);
 	const auto cc = compile_command(W, create_defines_for(machine(), options));
 	const uint32_t checksum =
-		crc32c(exec_data, exec.exec_end() - exec.exec_begin())
-		^ crc32c(cc.c_str(), cc.size());
+		crc32c(exec_data, exec.exec_end() - exec.exec_begin());
+	// Ideally we would also checksum compiler and flags, but we are producing a
+	// generic everywhere-working binary translation, so it makes more sense to
+	// be more accepting, allowing transmission of the binary translation to other
+	// machines without recompilation. This is why we only checksum the execute segment.
+	(void) cc;
 	exec.set_translation_hash(checksum);
 
 	char filebuffer[256];
@@ -128,7 +132,11 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	// Always check if there is an existing file
 	if (access(filebuffer, R_OK) == 0) {
 		TIME_POINT(t7);
-		dylib = dlopen(filebuffer, RTLD_LAZY | RTLD_LOCAL);
+		// Probably not needed, but on Windows there might be some issues
+		// with the emulated dlopen() functionality. Let's serialize it.
+		static std::mutex dlopen_mutex;
+		std::lock_guard<std::mutex> lock(dlopen_mutex);
+		dylib = dlopen(filebuffer, RTLD_LAZY);
 		if (options.translate_timing) {
 			TIME_POINT(t8);
 			printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
