@@ -92,10 +92,11 @@ namespace riscv
 		/// @brief Limits placed on the binary translator.
 		/// @details The binary translator will stop translating after reaching
 		/// either of these limits. The limits are per shared object.
-		/// The translator can be disabled at run-time by setting translate_blocks_max to 0.
 		unsigned block_size_treshold = 5;
 		unsigned translate_blocks_max = 16'000;
 		unsigned translate_instr_max = 150'000;
+		/// @brief Enable the binary translator.
+		bool translate_enabled = true;
 		/// @brief Enable tracing during emulation of the binary translated parts of the program.
 		bool translate_trace  = false;
 		/// @brief Enable verbose timing information for the binary translator.

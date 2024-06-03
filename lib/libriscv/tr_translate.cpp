@@ -91,7 +91,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 	// Disable translator with NO_TRANSLATE=1
 	// or by setting max blocks to zero.
-	if (0 == options.translate_blocks_max || getenv("NO_TRANSLATE")) {
+	if (0 == options.translate_blocks_max || !options.translate_enabled) {
 		if (options.verbose_loader) {
 			printf("libriscv: Binary translation disabled\n");
 		}
@@ -523,7 +523,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	{
 		if constexpr (!libtcc_enabled) {
 			// only warn when translation is not already disabled
-			if (getenv("NO_TRANSLATE") == nullptr) {
+			if (!options.translate_enabled) {
 				fprintf(stderr, "libriscv: Could not find dylib init function\n");
 			}
 		}
