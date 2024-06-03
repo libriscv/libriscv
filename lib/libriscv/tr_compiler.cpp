@@ -124,7 +124,7 @@ namespace riscv
 	std::string MachineMingWTranslationOptions::filename(const std::string& prefix, uint32_t hash, const std::string& suffix)
 	{
 		char buffer[256];
-		const int len = snprintf(buffer, sizeof(buffer), "%s%08x%s",
+		const int len = snprintf(buffer, sizeof(buffer), "%s%08X%s",
 			prefix.c_str(), hash, suffix.c_str());
 		return std::string(buffer, len);
 	}
