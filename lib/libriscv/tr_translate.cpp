@@ -35,6 +35,7 @@ namespace riscv
 		}
 	extern void  dylib_close(void* dylib);
 	extern void* dylib_lookup(void* dylib, const char*);
+	extern std::string defines_to_string(const std::unordered_map<std::string, std::string>& defines);
 
 template <int W>
 inline uint32_t opcode(const TransInstr<W>& ti) {
@@ -106,15 +107,13 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 	// Checksum the execute segment + compiler flags
 	TIME_POINT(t5);
-	extern std::string compile_command(int arch, const std::unordered_map<std::string, std::string>& cflags);
-	const auto cc = compile_command(W, create_defines_for(machine(), options));
-	const uint32_t checksum =
+	const std::string cflags = defines_to_string(create_defines_for(machine(), options));
+	extern std::string compile_command(int arch, const std::string& cflags);
+	const auto cc = compile_command(W, cflags);
+	uint32_t checksum =
 		crc32c(exec_data, exec.exec_end() - exec.exec_begin());
-	// Ideally we would also checksum compiler and flags, but we are producing a
-	// generic everywhere-working binary translation, so it makes more sense to
-	// be more accepting, allowing transmission of the binary translation to other
-	// machines without recompilation. This is why we only checksum the execute segment.
-	(void) cc;
+	// Also add the compiler flags to the checksum
+	checksum = crc32c(checksum, cflags.c_str(), cflags.size());
 	exec.set_translation_hash(checksum);
 
 	char filebuffer[256];
@@ -457,14 +456,15 @@ const struct Mapping mappings[] = {
 		dylib = libtcc_compile(code, W, defines, options.libtcc1_location);
 
 	} else {
-		extern void* compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
-		extern bool mingw_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&, const MachineTranslationCrossOptions&);
+		extern void* compile(const std::string& code, int arch, const std::string& cflags, const std::string&);
+		extern bool mingw_compile(const std::string& code, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
+		const std::string cflags = defines_to_string(defines);
 
 		// If the binary translation has already been loaded, we can skip compilation
 		if (exec.is_binary_translated()) {
 			dylib = exec.binary_translation_so();
 		} else {
-			dylib = compile(code, W, defines, filename);
+			dylib = compile(code, W, cflags, filename);
 		}
 
 		// Optionally produce a mingw PE-dll for Windows
@@ -473,7 +473,7 @@ const struct Mapping mappings[] = {
 			const uint32_t hash = exec.translation_hash();
 			const std::string cross_filename = options.translation_filename(
 				mingw.cross_prefix, hash, mingw.cross_suffix);
-			mingw_compile(code, W, defines, cross_filename, mingw);
+			mingw_compile(code, W, cflags, cross_filename, mingw);
 		}
 	}
 

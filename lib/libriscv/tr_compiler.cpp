@@ -39,26 +39,30 @@ static std::string host_arch()
 
 namespace riscv
 {
-	std::string compile_command(int /*arch*/, const std::unordered_map<std::string, std::string>& defines)
+	std::string defines_to_string(const std::unordered_map<std::string, std::string>& cflags)
 	{
 		std::string defstr;
-		for (auto pair : defines) {
+		for (auto pair : cflags) {
 			defstr += " -D" + pair.first + "=" + pair.second;
 		}
+		return defstr;
+	}
 
+	std::string compile_command(int /*arch*/, const std::string& cflags)
+	{
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
 			" -fexceptions" +
 #ifdef RISCV_EXT_VECTOR
 			" -march=native" +
 #endif
-			defstr +
+			cflags +
 			" -DARCH=" + host_arch() + ""
 			" -pipe " + extra_cflags();
 	}
 
 	void*
-	compile(const std::string& code, int arch,
-		const std::unordered_map<std::string, std::string>& defines, const std::string& outfile)
+	compile(const std::string& code, int arch, const std::string& cflags,
+		const std::string& outfile)
 	{
 		// create temporary filename
 		char namebuffer[64];
@@ -76,7 +80,7 @@ namespace riscv
 		}
 		// system compiler invocation
 		const std::string command =
-			compile_command(arch, defines) + " "
+			compile_command(arch, cflags) + " "
 			 + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
@@ -106,24 +110,18 @@ namespace riscv
 	}
 
 	static std::string mingw_compile_command(int /*arch*/,
-		const std::unordered_map<std::string, std::string>& defines, const MachineTranslationCrossOptions& cross_options)
+		const std::string& cflags, const MachineTranslationCrossOptions& cross_options)
 	{
-		std::string defstr;
-		for (auto pair : defines) {
-			defstr += " -D" + pair.first + "=" + pair.second;
-		}
-
 		// We always want to produce a generic PE-dll that can be loaded on *most* Windows machines.
 		return cross_options.cross_compiler + " -O2 -s -std=c99 -fPIC -shared -x c "
 			" -fexceptions" +
-			defstr +
+			cflags +
 			" -DARCH=" + host_arch() + ""
 			" -pipe " + extra_cflags();
 	}
 
 	bool
-	mingw_compile(const std::string& code, int arch,
-		const std::unordered_map<std::string, std::string>& defines,
+	mingw_compile(const std::string& code, int arch, const std::string& cflags,
 		const std::string& outfile, const MachineTranslationCrossOptions& cross_options)
 	{
 		// create temporary filename
@@ -142,7 +140,7 @@ namespace riscv
 		}
 		// system compiler invocation
 		const std::string command =
-			mingw_compile_command(arch, defines, cross_options) + " "
+			mingw_compile_command(arch, cflags, cross_options) + " "
 			 + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 
