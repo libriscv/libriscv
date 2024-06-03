@@ -41,8 +41,9 @@ static void run_program(
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
 #else
-		.mingw_options = mingw_enabled ?
-			std::make_shared<riscv::MachineMingWTranslationOptions>() : nullptr,
+		.cross_compile = mingw_enabled ?
+			std::vector<riscv::MachineTranslationCrossOptions>{riscv::MachineTranslationCrossOptions{}}
+		  : std::vector<riscv::MachineTranslationCrossOptions>{},
 #endif
 #endif
 	}};

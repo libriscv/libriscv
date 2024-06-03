@@ -106,7 +106,7 @@ namespace riscv
 	}
 
 	static std::string mingw_compile_command(int /*arch*/,
-		const std::unordered_map<std::string, std::string>& defines, const MachineMingWTranslationOptions& mingw_options)
+		const std::unordered_map<std::string, std::string>& defines, const MachineTranslationCrossOptions& cross_options)
 	{
 		std::string defstr;
 		for (auto pair : defines) {
@@ -114,25 +114,17 @@ namespace riscv
 		}
 
 		// We always want to produce a generic PE-dll that can be loaded on *most* Windows machines.
-		return mingw_options.mingw_cross_compiler + " -O2 -s -std=c99 -fPIC -shared -x c "
+		return cross_options.cross_compiler + " -O2 -s -std=c99 -fPIC -shared -x c "
 			" -fexceptions" +
 			defstr +
 			" -DARCH=" + host_arch() + ""
 			" -pipe " + extra_cflags();
 	}
 
-	std::string MachineMingWTranslationOptions::filename(const std::string& prefix, uint32_t hash, const std::string& suffix)
-	{
-		char buffer[256];
-		const int len = snprintf(buffer, sizeof(buffer), "%s%08X%s",
-			prefix.c_str(), hash, suffix.c_str());
-		return std::string(buffer, len);
-	}
-
 	bool
 	mingw_compile(const std::string& code, int arch,
 		const std::unordered_map<std::string, std::string>& defines,
-		const std::string& outfile, const MachineMingWTranslationOptions& mingw_options)
+		const std::string& outfile, const MachineTranslationCrossOptions& cross_options)
 	{
 		// create temporary filename
 		char namebuffer[64];
@@ -150,7 +142,7 @@ namespace riscv
 		}
 		// system compiler invocation
 		const std::string command =
-			mingw_compile_command(arch, defines, mingw_options) + " "
+			mingw_compile_command(arch, defines, cross_options) + " "
 			 + " -o " + outfile + " "
 			 + std::string(namebuffer) + " 2>&1"; // redirect stderr
 

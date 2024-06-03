@@ -144,13 +144,14 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	}
 	bool must_compile = dylib == nullptr;
 
-	// If MinGW compilation is enabled, we should check for the PE-dll too
-	if (options.mingw_options) {
+	// If cross compilation is enabled, we should check if all results exist
+	for (auto& mingw : options.cross_compile) {
 		const uint32_t hash = checksum;
-		const std::string mingw_filename = MachineMingWTranslationOptions::filename(
-			options.mingw_options->mingw_cross_prefix, hash, options.mingw_options->mingw_cross_suffix);
-		if (access(mingw_filename.c_str(), R_OK) != 0) {
+		const std::string cross_filename = options.translation_filename(
+			mingw.cross_prefix, hash, mingw.cross_suffix);
+		if (access(cross_filename.c_str(), R_OK) != 0) {
 			must_compile = true;
+			break; // We must compile at least one of the cross-compiled binaries
 		}
 	}
 
@@ -204,15 +205,9 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 	const bool verbose = options.verbose_loader;
 	const bool trace_instructions = options.translate_trace;
 
-#ifdef YEP_IS_WINDOWS
-	// Windows users don't have C compilers laying around
-	if (verbose) {
-		printf("Binary translation not supported on Windows\n");
-		printf("The translation filename is %s\n", filename.c_str());
-	}
-	// TODO: Check for MinGW and other compilers instead of just disabling
-	return;
-#endif
+	// Check if compiling new translations is enabled
+	if (!options.translate_invoke_compiler)
+		return;
 
 	address_t gp = 0;
 	TIME_POINT(t0);
@@ -462,14 +457,8 @@ const struct Mapping mappings[] = {
 		dylib = libtcc_compile(code, W, defines, options.libtcc1_location);
 
 	} else {
-#ifdef YEP_IS_WINDOWS
-		// Windows users don't have C compilers laying around
-		dylib = nullptr;
-		printf("Binary translation not supported on Windows\n");
-		printf("The translation filename is %s\n", filename.c_str());
-#else
 		extern void* compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
-		extern bool mingw_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&, const MachineMingWTranslationOptions&);
+		extern bool mingw_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&, const MachineTranslationCrossOptions&);
 
 		// If the binary translation has already been loaded, we can skip compilation
 		if (exec.is_binary_translated()) {
@@ -480,14 +469,14 @@ const struct Mapping mappings[] = {
 
 		// Optionally produce a mingw PE-dll for Windows
 		// This is a secondary binary that can be loaded on Windows machines.
-		if (options.mingw_options) {
+		for (auto& mingw : options.cross_compile) {
 			const uint32_t hash = exec.translation_hash();
-			const std::string mingw_filename = MachineMingWTranslationOptions::filename(
-				options.mingw_options->mingw_cross_prefix, hash, options.mingw_options->mingw_cross_suffix);
-			mingw_compile(code, W, defines, mingw_filename, *options.mingw_options);
+			const std::string cross_filename = options.translation_filename(
+				mingw.cross_prefix, hash, mingw.cross_suffix);
+			mingw_compile(code, W, defines, cross_filename, mingw);
 		}
-#endif
 	}
+
 	if (options.translate_timing) {
 		TIME_POINT(t10);
 		printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
@@ -668,17 +657,28 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	return true;
 }
 
+template <int W>
+std::string MachineOptions<W>::translation_filename(const std::string& prefix, uint32_t hash, const std::string& suffix)
+{
+	char buffer[256];
+	const int len = snprintf(buffer, sizeof(buffer), "%s%08X%s",
+		prefix.c_str(), hash, suffix.c_str());
+	return std::string(buffer, len);
+}
+
 #ifdef RISCV_32I
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
 	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib) const;
 	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*) const;
+	template std::string MachineOptions<4>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 #ifdef RISCV_64I
 	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib) const;
 	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*) const;
+	template std::string MachineOptions<8>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 
 	timespec time_now()
