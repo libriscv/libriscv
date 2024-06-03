@@ -39,15 +39,6 @@ static std::string host_arch()
 
 namespace riscv
 {
-	std::string defines_to_string(const std::unordered_map<std::string, std::string>& cflags)
-	{
-		std::string defstr;
-		for (auto pair : cflags) {
-			defstr += " -D" + pair.first + "=" + pair.second;
-		}
-		return defstr;
-	}
-
 	std::string compile_command(int /*arch*/, const std::string& cflags)
 	{
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "

@@ -1,13 +1,22 @@
 #include <bit>
 #include <cmath>
 #include <chrono>
+#include <mutex>
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
-#define YEP_IS_WINDOWS 1
-#include "win32/dlfcn.h"
+# define YEP_IS_WINDOWS 1
+# include "win32/dlfcn.h"
+# ifdef _MSC_VER
+#  define access _access
+#  define unlink _unlink
+extern "C" int access(const char* path, int mode);
+extern "C" int unlink(const char* path);
+#  define R_OK   4       /* Test for read permission.  */
+# else // _MSC_VER
+#  include <unistd.h>
+# endif
 #else
-#include <dlfcn.h>
+# include <dlfcn.h>
 #endif
-#include <unistd.h>
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
@@ -35,7 +44,15 @@ namespace riscv
 		}
 	extern void  dylib_close(void* dylib);
 	extern void* dylib_lookup(void* dylib, const char*);
-	extern std::string defines_to_string(const std::unordered_map<std::string, std::string>& defines);
+
+	static std::string defines_to_string(const std::unordered_map<std::string, std::string>& cflags)
+	{
+		std::string defstr;
+		for (auto pair : cflags) {
+			defstr += " -D" + pair.first + "=" + pair.second;
+		}
+		return defstr;
+	}
 
 template <int W>
 inline uint32_t opcode(const TransInstr<W>& ti) {
@@ -109,7 +126,6 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	TIME_POINT(t5);
 	const std::string cflags = defines_to_string(create_defines_for(machine(), options));
 	extern std::string compile_command(int arch, const std::string& cflags);
-	const auto cc = compile_command(W, cflags);
 	uint32_t checksum =
 		crc32c(exec_data, exec.exec_end() - exec.exec_begin());
 	// Also add the compiler flags to the checksum
@@ -143,6 +159,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	}
 	bool must_compile = dylib == nullptr;
 
+#ifndef _MSC_VER
 	// If cross compilation is enabled, we should check if all results exist
 	for (auto& mingw : options.cross_compile) {
 		const uint32_t hash = checksum;
@@ -153,6 +170,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			break; // We must compile at least one of the cross-compiled binaries
 		}
 	}
+#endif
 
 	// We must compile ourselves
 	if (dylib == nullptr) {
@@ -467,14 +485,15 @@ const struct Mapping mappings[] = {
 			dylib = compile(code, W, cflags, filename);
 		}
 
-		// Optionally produce a mingw PE-dll for Windows
-		// This is a secondary binary that can be loaded on Windows machines.
+#ifndef _MSC_VER
+		// Optionally produce cross-compiled binaries
 		for (auto& mingw : options.cross_compile) {
 			const uint32_t hash = exec.translation_hash();
 			const std::string cross_filename = options.translation_filename(
 				mingw.cross_prefix, hash, mingw.cross_suffix);
 			mingw_compile(code, W, cflags, cross_filename, mingw);
 		}
+#endif
 	}
 
 	if (options.translate_timing) {
