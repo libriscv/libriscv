@@ -305,6 +305,11 @@ struct Emitter
 	address_t pc() const noexcept { return this->m_pc; }
 	address_t begin_pc() const noexcept { return tinfo.basepc; }
 	address_t end_pc() const noexcept { return tinfo.endpc; }
+
+	bool within_segment(address_t addr) const noexcept {
+		return addr >= this->tinfo.segment_basepc && addr < this->tinfo.segment_endpc;
+	}
+
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
 	rv32i_instruction emit_rvc();
@@ -578,7 +583,9 @@ void Emitter<W>::emit()
 				}
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
-			else if (this->tinfo.global_jump_locations.count(dest_pc)) {
+			else if (this->tinfo.global_jump_locations.count(dest_pc) && this->within_segment(dest_pc)) {
+				//printf("Global jump location: 0x%lX for block 0x%lX -> 0x%lX\n", long(dest_pc),
+				//	long(this->begin_pc()), long(this->end_pc()));
 				// Get the function name of the target block
 				auto target_funcaddr = this->find_block_base(dest_pc);
 				// Allow directly calling a function, as long as it's a forward jump

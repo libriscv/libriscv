@@ -120,6 +120,10 @@ namespace riscv
 		/// Translated shared objects will be stored in a file and can be re-used later.
 		/// @details When TCC is enabled, the translation cache will be disabled.
 		bool translation_cache = true;
+		/// @brief Enable the use of the memory arena for the binary translator.
+		/// @details If disabled, remote machines will be able to make remote
+		/// calls to this machine. In most cases, this is not needed.
+		bool translation_use_arena = true;
 		/// @brief Prefix for the translation output file.
 		std::string translation_prefix = "/tmp/rvbintr-";
 		/// @brief Suffix for the translation output file.

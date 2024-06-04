@@ -14,6 +14,8 @@ namespace riscv
 		const std::vector<rv32i_instruction> instr;
 		address_type<W> basepc;
 		address_type<W> endpc;
+		address_type<W> segment_basepc;
+		address_type<W> segment_endpc;
 		address_type<W> gp;
 		bool trace_instructions;
 		bool forward_jumps;

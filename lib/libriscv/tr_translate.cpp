@@ -73,11 +73,19 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	const auto max_counter_offset = uintptr_t(&counters.second) - uintptr_t(&machine);
 	const auto arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
 
+	// Some executables are loaded at high-memory addresses, which is outside of the memory arena.
+	auto arena_end          = machine.memory.memory_arena_size();
+	auto initial_rodata_end = machine.memory.initial_rodata_end();
+	if (!options.translation_use_arena) {
+		initial_rodata_end = 0;
+		arena_end = 0x1000;
+	}
+
 	std::unordered_map<std::string, std::string> defines;
 	defines.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
 	defines.emplace("RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX));
-	defines.emplace("RISCV_ARENA_END", std::to_string(machine.memory.memory_arena_size()));
-	defines.emplace("RISCV_ARENA_ROEND", std::to_string(machine.memory.initial_rodata_end()));
+	defines.emplace("RISCV_ARENA_END", std::to_string(arena_end));
+	defines.emplace("RISCV_ARENA_ROEND", std::to_string(initial_rodata_end));
 	defines.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
 	defines.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
 	defines.emplace("RISCV_ARENA_OFF", std::to_string(arena_offset));
@@ -392,7 +400,10 @@ if constexpr (SCAN_FOR_GP) {
 			}
 
 			blocks.push_back({
-				std::move(block_instructions), block, block_end, gp,
+				std::move(block_instructions),
+				block, block_end,
+				basepc, endbasepc,
+				gp,
 				trace_instructions,
 				true,
 				std::move(jump_locations),
