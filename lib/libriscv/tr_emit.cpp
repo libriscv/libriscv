@@ -305,6 +305,11 @@ struct Emitter
 	address_t pc() const noexcept { return this->m_pc; }
 	address_t begin_pc() const noexcept { return tinfo.basepc; }
 	address_t end_pc() const noexcept { return tinfo.endpc; }
+
+	bool within_segment(address_t addr) const noexcept {
+		return addr >= this->tinfo.segment_basepc && addr < this->tinfo.segment_endpc;
+	}
+
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
 	rv32i_instruction emit_rvc();
@@ -402,9 +407,23 @@ void Emitter<W>::emit()
 			});
 		}
 		// known jump locations
-		else if (i > 0 && (tinfo.jump_locations.count(this->pc()) || labels.count(i))) {
+		else if (i > 0 && tinfo.jump_locations.count(this->pc())) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
+		}
+
+		// With garbage instructions, it's possible that someone is trying to jump to
+		// the middle of an instruction. This technically allowed, so we need to check
+		// there's a jump label in the middle of this instruction.
+		if (compressed_enabled && this->m_instr_length == 4 && tinfo.jump_locations.count(this->pc() + 2)) {
+			// This occurence should be very rare, so we permit outselves to jump over it, so that
+			// we can trigger an exception for anyone trying to jump to the middle of an instruction.
+			// It is technically possible to create an endless loop without this, as we are not
+			// counting instructions correctly for this case.
+			code.append("goto " + FUNCLABEL(this->pc() + 2) + "_skip;\n");
+			code.append(FUNCLABEL(this->pc() + 2) + ":;\n");
+			code.append("api.exception(cpu, " + STRADDR(this->pc() + 2) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n");
+			code.append(FUNCLABEL(this->pc() + 2) + "_skip:;\n");
 		}
 
 		if (tinfo.trace_instructions) {
@@ -578,7 +597,9 @@ void Emitter<W>::emit()
 				}
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
-			else if (this->tinfo.global_jump_locations.count(dest_pc)) {
+			else if (this->tinfo.global_jump_locations.count(dest_pc) && this->within_segment(dest_pc)) {
+				//printf("Global jump location: 0x%lX for block 0x%lX -> 0x%lX\n", long(dest_pc),
+				//	long(this->begin_pc()), long(this->end_pc()));
 				// Get the function name of the target block
 				auto target_funcaddr = this->find_block_base(dest_pc);
 				// Allow directly calling a function, as long as it's a forward jump

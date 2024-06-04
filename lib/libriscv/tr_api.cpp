@@ -157,8 +157,8 @@ static struct CallbackTable {
 } api;
 #define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_INS_COUNTER_OFF))
 #define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_MAX_COUNTER_OFF))
-static const addr_t ARENA_READ_BOUNDARY  = RISCV_ARENA_END - 0x1000;
-static const addr_t ARENA_WRITE_BOUNDARY = RISCV_ARENA_END - RISCV_ARENA_ROEND;
+#define ARENA_READ_BOUNDARY  (RISCV_ARENA_END - 0x1000)
+#define ARENA_WRITE_BOUNDARY (RISCV_ARENA_END - RISCV_ARENA_ROEND)
 #define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
 #define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
 #define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFF))[x]

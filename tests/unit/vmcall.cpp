@@ -107,7 +107,10 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 		return 666;
 	})M");
 
-	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	riscv::Machine<RISCV64> machine { binary, {
+		.memory_max = MAX_MEMORY,
+		.use_memory_arena = false,
+	} };
 	machine.setup_linux_syscalls();
 	machine.setup_linux(
 		{"vmcall"},
@@ -120,7 +123,9 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 	for (size_t i = 0; i < 10; i++)
 	{
 		riscv::Machine<RISCV64> fork { machine, {
-			.use_memory_arena = false
+#ifdef RISCV_BINARY_TRANSLATION
+			.use_memory_arena = false,
+#endif
 		} };
 		REQUIRE(fork.memory.uses_flat_memory_arena() == false);
 
