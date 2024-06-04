@@ -89,6 +89,9 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	defines.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
 	defines.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
 	defines.emplace("RISCV_ARENA_OFF", std::to_string(arena_offset));
+	if constexpr (atomics_enabled) {
+		defines.emplace("RISCV_EXT_A", "1");
+	}
 	if constexpr (compressed_enabled) {
 		defines.emplace("RISCV_EXT_C", "1");
 	}
@@ -137,7 +140,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	uint32_t checksum =
 		crc32c(exec_data, exec.exec_end() - exec.exec_begin());
 	// Also add the compiler flags to the checksum
-	checksum = crc32c(checksum, cflags.c_str(), cflags.size());
+	checksum = ~crc32c(~checksum, cflags.c_str(), cflags.size());
 	exec.set_translation_hash(checksum);
 
 	char filebuffer[256];
