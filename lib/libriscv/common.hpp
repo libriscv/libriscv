@@ -156,7 +156,7 @@ namespace riscv
 		/// @note The hash can be found with machine.current_execute_segment().translation_hash()
 		static std::string translation_filename(const std::string& prefix, uint32_t hash, const std::string& suffix);
 #ifdef RISCV_LIBTCC
-		std::string libtcc1_location;
+		std::string libtcc1_location {};
 #endif
 #endif
 	};
