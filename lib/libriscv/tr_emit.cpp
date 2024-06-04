@@ -407,9 +407,23 @@ void Emitter<W>::emit()
 			});
 		}
 		// known jump locations
-		else if (i > 0 && (tinfo.jump_locations.count(this->pc()) || labels.count(i))) {
+		else if (i > 0 && tinfo.jump_locations.count(this->pc())) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
+		}
+
+		// With garbage instructions, it's possible that someone is trying to jump to
+		// the middle of an instruction. This technically allowed, so we need to check
+		// there's a jump label in the middle of this instruction.
+		if (compressed_enabled && this->m_instr_length == 4 && tinfo.jump_locations.count(this->pc() + 2)) {
+			// This occurence should be very rare, so we permit outselves to jump over it, so that
+			// we can trigger an exception for anyone trying to jump to the middle of an instruction.
+			// It is technically possible to create an endless loop without this, as we are not
+			// counting instructions correctly for this case.
+			code.append("goto " + FUNCLABEL(this->pc() + 2) + "_skip;\n");
+			code.append(FUNCLABEL(this->pc() + 2) + ":;\n");
+			code.append("api.exception(cpu, " + STRADDR(this->pc() + 2) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n");
+			code.append(FUNCLABEL(this->pc() + 2) + "_skip:;\n");
 		}
 
 		if (tinfo.trace_instructions) {
