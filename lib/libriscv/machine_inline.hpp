@@ -120,7 +120,7 @@ inline T Machine<W>::sysarg(int idx) const
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 	else if constexpr (is_stdstring<T>::value)
 		return memory.memstring(cpu.reg(REG_ARG0 + idx));
-#if __cplusplus >= 202002L
+#ifdef RISCV_SPAN_AVAILABLE
 	else if constexpr (is_stdarray_v<T>)
 		return *(T*)memory.template rvspan<typename T::value_type>(cpu.reg(REG_ARG0 + idx), std::tuple_size_v<T>).data();
 	else if constexpr (is_span_v<T>)
@@ -128,7 +128,7 @@ inline T Machine<W>::sysarg(int idx) const
 	else if constexpr (std::is_pointer_v<remove_cvref<T>>) {
 		return (T)memory.template rvspan<std::remove_pointer_t<remove_cvref<T>>, 1>(cpu.reg(REG_ARG0 + idx)).data();
 	}
-#endif
+#endif // RISCV_SPAN_AVAILABLE
 	else if constexpr (std::is_standard_layout_v<remove_cvref<T>> && std::is_trivial_v<remove_cvref<T>>) {
 		T value;
 		memory.memcpy_out(&value, cpu.reg(REG_ARG0 + idx), sizeof(T));
@@ -159,13 +159,13 @@ inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
 		}
 		else if constexpr (is_stdstring<Args>::value)
 			std::get<Indices>(retval) = sysarg<Args>(i++);
-#if __cplusplus >= 202002L
+#ifdef RISCV_SPAN_AVAILABLE
 		else if constexpr (is_stdarray_v<Args>)
 			std::get<Indices>(retval) = sysarg<Args>(i++); // Fixed: One register
 		else if constexpr (is_span_v<Args>) {
 			std::get<Indices>(retval) = sysarg<Args>(i); i+= 2; // Dynamic: Two registers
 		}
-#endif
+#endif // RISCV_SPAN_AVAILABLE
 		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>> && std::is_trivial_v<remove_cvref<Args>>)
 			std::get<Indices>(retval) = sysarg<Args>(i++);
 		else

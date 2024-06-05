@@ -9,7 +9,7 @@
 #include "mmap_cache.hpp"
 #include "util/buffer.hpp" // <string>
 #include "util/function.hpp"
-#if __cplusplus >= 202002L
+#if __cplusplus >= 202002L && __has_include(<span>)
 #include <span>
 #endif
 
@@ -59,7 +59,7 @@ namespace riscv
 		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
 		// View known-sequential virtual memory (or throw exception)
 		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
-#if __cplusplus >= 202002L
+#ifdef RISCV_SPAN_AVAILABLE
 		// View known-sequential virtual memory as array of T with given number of elements (or throw exception)
 		template <typename T>
 		std::span<T> rvspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const;
