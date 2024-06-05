@@ -35,6 +35,7 @@ static void run_program(
 		.memory_max = MAX_MEMORY,
 		.verbose_loader = verbose_enabled,
 #ifdef RISCV_BINARY_TRANSLATION
+		.translate_enabled = getenv("NO_TRANSLATE") == nullptr,
 		.translate_trace = getenv("TRACE") != nullptr,
 		.translate_timing = getenv("TIMING") != nullptr,
 #ifdef _WIN32
@@ -90,25 +91,31 @@ static void run_program(
 				path = DYNAMIC_LINKER;
 				return true;
 			}
-			// libc6
-			if (path == "/lib/riscv64-linux-gnu/libc.so.6") {
-				path = "/usr/riscv64-linux-gnu/lib/libc.so.6";
+
+			// Paths that are allowed to be opened
+			static const std::string sandbox_libdir  = "/lib/riscv64-linux-gnu/";
+			// The real path to the libraries (on the host system)
+			static const std::string real_libdir = "/usr/riscv64-linux-gnu/lib/";
+			// The dynamic linker and libraries we allow
+			static const std::vector<std::string> libs = {
+				"libdl.so.2", "libm.so.6", "libgcc_s.so.1", "libc.so.6",
+				"libstdc++.so.6", "libresolv.so.2", "libnss_dns.so.2", "libnss_files.so.2"
+			};
+
+			if (path.find(sandbox_libdir) == 0) {
+				// Find the library name
+				auto lib = path.substr(sandbox_libdir.size());
+				if (std::find(libs.begin(), libs.end(), lib) == libs.end()) {
+					if (verbose_enabled) {
+						fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
+					}
+					return false;
+				}
+				// Construct new path
+				path = real_libdir + path.substr(sandbox_libdir.size());
 				return true;
 			}
-			// libresolv
-			if (path == "/lib/riscv64-linux-gnu/libresolv.so.2") {
-				path = "/usr/riscv64-linux-gnu/lib/libresolv.so.2";
-				return true;
-			}
-			// libnss_dns && libnss_files
-			if (path == "/lib/riscv64-linux-gnu/libnss_dns.so.2") {
-				path = "/usr/riscv64-linux-gnu/lib/libnss_dns.so.2";
-				return true;
-			}
-			if (path == "/lib/riscv64-linux-gnu/libnss_files.so.2") {
-				path = "/usr/riscv64-linux-gnu/lib/libnss_files.so.2";
-				return true;
-			}
+
 			if (is_dynamic && args.size() > 1 && path == args.at(1)) {
 				return true;
 			}
