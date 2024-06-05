@@ -152,7 +152,7 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 	return {(const char *)buffers[0].ptr, buffers[0].len};
 }
 
-#if __cplusplus >= 202002L
+#ifdef RISCV_SPAN_AVAILABLE
 
 template <int W>
 template <typename T> inline
@@ -172,7 +172,7 @@ std::span<T> Memory<W>::rvspan(address_t addr, size_t count, size_t maxlen) cons
 	protection_fault(addr);
 }
 
-#endif // __cplusplus >= 202002L
+#endif // RISCV_SPAN_AVAILABLE
 
 template <int W> inline
 size_t Memory<W>::strlen(address_t addr, size_t maxlen) const

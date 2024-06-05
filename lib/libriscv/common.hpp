@@ -3,8 +3,9 @@
 
 #include <memory>
 #include <type_traits>
-#if __cplusplus >= 202002L
+#if __cplusplus >= 202002L && __has_include(<span>)
 #include <span>
+#define RISCV_SPAN_AVAILABLE 1
 #endif
 #include <string>
 #include <string_view>
@@ -271,7 +272,7 @@ namespace riscv
 
 	template <typename T>
 	struct is_span : std::false_type{};
-#if __cplusplus >= 202002L
+#ifdef RISCV_SPAN_AVAILABLE
 	template <typename T>
 	struct is_span<std::span<T>> : std::true_type{};
 	template <typename T>
