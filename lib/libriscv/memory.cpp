@@ -520,7 +520,7 @@ namespace riscv
 				.name = result,
 				.address = static_cast<address_t>(sym->st_value),
 				.offset = (uint32_t) (addr - sym->st_value),
-				.size   = sym->st_size
+				.size   = size_t(sym->st_size)
 			};
 		};
 

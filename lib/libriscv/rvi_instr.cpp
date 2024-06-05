@@ -1,7 +1,10 @@
 #include "instr_helpers.hpp"
 #include "rvc.hpp"
 #include <atomic>
+#if __has_include(<bit>)
 #include <bit>
+#define RISCV_HAS_BITOPS
+#endif
 #include <inttypes.h>
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -376,13 +379,34 @@ namespace riscv
 				dst = RVSIGNTYPE(cpu)(int16_t(src));
 				return;
 			case 0b011000000000: // CLZ
+#ifdef RISCV_HAS_BITOPS
 				dst = std::countl_zero(src);
+#else
+				if constexpr (RVIS32BIT(cpu))
+					dst = src ? __builtin_clz(src) : RVXLEN(cpu);
+				else
+					dst = src ? __builtin_clzl(src) : RVXLEN(cpu);
+#endif
 				return;
 			case 0b011000000001: // CTZ
+#ifdef RISCV_HAS_BITOPS
 				dst = std::countr_zero(src);
+#else
+				if constexpr (RVIS32BIT(cpu))
+					dst = src ? __builtin_ctz(src) : 0;
+				else
+					dst = src ? __builtin_ctzl(src) : 0;
+#endif
 				return;
 			case 0b011000000010: // CPOP
+#ifdef RISCV_HAS_BITOPS
 				dst = std::popcount(src);
+#else
+				if constexpr (RVIS32BIT(cpu))
+					dst = __builtin_popcount(src);
+				else
+					dst = __builtin_popcountl(src);
+#endif
 				return;
 			default:
 				if (instr.Itype.high_bits() == 0x280) {
@@ -965,13 +989,25 @@ namespace riscv
 		case 0x1:
 			switch (instr.Itype.imm) {
 			case 0b011000000000: // CLZ.W
+#ifdef RISCV_HAS_BITOPS
 				dst = std::countl_zero(src);
+#else
+				dst = src ? __builtin_clz(src) : RVXLEN(cpu);
+#endif
 				return;
 			case 0b011000000001: // CTZ.W
+#ifdef RISCV_HAS_BITOPS
 				dst = std::countr_zero(src);
+#else
+				dst = src ? __builtin_ctz(src) : 0;
+#endif
 				return;
 			case 0b011000000010: // CPOP.W
+#ifdef RISCV_HAS_BITOPS
 				dst = std::popcount(src);
+#else
+				dst = __builtin_popcount(src);
+#endif
 				return;
 			}
 			break;
