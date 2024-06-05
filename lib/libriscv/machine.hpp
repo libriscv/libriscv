@@ -324,7 +324,14 @@ namespace riscv
 		void system_call(size_t);
 		// Invoke the EBREAK system function
 		void ebreak();
-		static void install_syscall_handler(size_t, syscall_t);
+
+		/// @brief Install a system call handler at the given index (system call number).
+		/// @param idx The system call number.
+		/// @param handler The system call handler function.
+		static void install_syscall_handler(size_t idx, syscall_t handler);
+
+		/// @brief Install multiple system call handlers at once.
+		/// @param handlers A list of system call handlers.
 		static void install_syscall_handlers(std::initializer_list<std::pair<size_t, syscall_t>>);
 
 		static void unknown_syscall_handler(Machine<W>&);
@@ -357,6 +364,10 @@ namespace riscv
 		// Returns true if this machine is forked from another, and thus
 		// dependent on the original machine to function properly.
 		bool is_forked() const noexcept { return memory.is_forked(); }
+
+		/// @brief Check if the performance is accelerated by a binary translator.
+		/// @return True if the current execute segment is binary translated.
+		bool is_binary_translation_enabled() const noexcept { return cpu.current_execute_segment().is_binary_translated(); }
 
 		// Optional custom native-performance arena
 		const Arena& arena() const;
