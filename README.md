@@ -98,19 +98,7 @@ cd emulator
 ./rvlinux <path to RISC-V ELF binary>
 ```
 
-You can step through programs instruction by instruction by running the emulator with `DEBUG=1`:
-```sh
-cd emulator
-DEBUG=1 ./rvlinux <path to RISC-V ELF binary>
-```
-
-You can use GDB remotely by starting the emulator with `GDB=1`:
-```sh
-cd emulator
-GDB=1 ./rvlinux <path to RISC-V ELF binary>
-```
-Connect from `gdb-multiarch` with `target remote :2159` after loading the program with `file <path>`.
-
+Check out the [CLI documentation](/emulator/README.md).
 
 ## Example RISC-V programs
 
@@ -126,7 +114,7 @@ There are also examples for [Nim](/binaries/nim), [Zig](/binaries/zig), [Rust](/
 
 ## Remote debugging using GDB
 
-If you have built the emulator, you can use `GDB=1 ./rvlinux /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote :2159`. Now you can step through the code.
+If you have built the emulator, you can use `./rvlinux --gdb /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote :2159`. Now you can step through the code.
 
 Most modern languages embed their own pretty printers for debuginfo which enables you to go line by line in your favorite language.
 
@@ -339,11 +327,11 @@ Using the [debugging wrapper](/lib/libriscv/debug.hpp):
 
 ### Binary translation
 
-The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLATION` CMake option) can greatly improve performance in some cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. The feature is stable, but still undergoing work.
+The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLATION` CMake option) can greatly improve performance in most cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. It is also possible to cross-compile the binary translation for end-user systems, such as Windows. In other words, it's possible to ship a game with not just a sandboxed RISC-V program, but also a complementary binary translated .dll in order to reap heavy performance gains.
 
-Instead of JIT, the emulator supports translating binaries to native code using any local C compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. `NO_TRANSLATE=1` can be used to disable binary translation in order to compare output or performance.
+Instead of JIT, the emulator supports translating binaries to native code using any local C compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. For the [CLI](/emulator), the `--no-translate` option can be used to disable binary translation in order to compare output or performance.
 
-An experimental libtcc mode can be unlocked by enabling `RISCV_EXPERIMENTAL`, called `RISCV_LIBTCC`. When enabled, libriscv will invoke libtcc on code generated for each execute segment. It is usually faster than bytecode simulation, but not always.
+An experimental libtcc mode can be unlocked by enabling `RISCV_EXPERIMENTAL`, called `RISCV_LIBTCC`. When enabled, libriscv will invoke libtcc on code generated for each execute segment. It is usually 2x faster than interpreting RISC-V.
 
 
 ## Experimental and special features
@@ -358,7 +346,7 @@ There is multiprocessing support, but it is in its early stages. It is achieved 
 
 ### Embedded libtcc
 
-When binary translation is enabled, the experimental option `RISCV_LIBTCC` is available. libtcc will be embedded in the RISC-V emulator and used as compiler for binary translation. `libtcc-dev` package will be required for building.
+When binary translation is enabled, the experimental option `RISCV_LIBTCC` is available. libtcc will be embedded in the RISC-V emulator and used as compiler for binary translation. The `libtcc-dev` package will be required for building.
 
 
 ### Performance settings
@@ -372,11 +360,11 @@ cd build
 cmake .. -DRISCV_EXT_C=OFF -DCMAKE_BUILD_TYPE=Release
 ```
 
-Other build options that aid performance: Enabling link-time optimizations. Using the latest and greatest compiler version. Enabling all the native accelerated system calls. Enabling the read-write arena (default ON). Unrolling loops.
+Other build options that aid performance: Enabling link-time optimizations. Using the latest and greatest compiler version. Enabling all the native accelerated system calls. Enabling the read-write arena (default ON). Unrolling loops in the sandboxed program.
 
 
 ## Game development example
 
-There is a simple [step-by-step gamedev example](/examples/gamedev) under the examples folder. There are examples for the C++, Nelua and Nim languages.
+There is a simple [step-by-step gamedev example](/examples/gamedev) under the examples folder. There are also examples for the C++, Rust, Nelua and Nim languages.
 
-For a more complete and thorough implementation, have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example framework and automatically builds fully functional C++ programs for low latency scripting.
+For a more complete and thorough implementation, have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example game framework and automatically builds fully functional C++ programs for ultra low-latency scripting.
