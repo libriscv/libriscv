@@ -21,10 +21,37 @@ namespace riscv
 #else
 #define bswap32(x)   __builtin_bswap32(x)
 #define bswap64(x)   __builtin_bswap64(x)
-#define mulhi64(a, b)  (__int128_t(int64_t(a)) * __int128_t(int64_t(b))) >> 64u;
-#define mulhu64(a, b)  (__int128_t(a) * __int128_t(b)) >> 64u;
-#define mulhsu64(a, b) (__int128_t(int64_t(a)) * __int128_t(b)) >> 64u;
-#endif
+# ifdef __SIZEOF_INT128__ // GCC/Clang 64-bit
+#  define mulhi64(a, b)  (__int128_t(int64_t(a)) * __int128_t(int64_t(b))) >> 64u;
+#  define mulhu64(a, b)  (__int128_t(a) * __int128_t(b)) >> 64u;
+#  define mulhsu64(a, b) (__int128_t(int64_t(a)) * __int128_t(b)) >> 64u;
+# else
+// https://stackoverflow.com/questions/28868367/getting-the-high-part-of-64-bit-integer-multiplication
+// As written by catid
+static inline uint64_t MUL128(
+	uint64_t* r_hi,
+	const uint64_t x,
+	const uint64_t y)
+{
+	const uint64_t x0 = (uint32_t)x, x1 = x >> 32;
+	const uint64_t y0 = (uint32_t)y, y1 = y >> 32;
+	const uint64_t p11 = x1 * y1, p01 = x0 * y1;
+	const uint64_t p10 = x1 * y0, p00 = x0 * y0;
+
+	// 64-bit product + two 32-bit values
+	const uint64_t middle = p10 + (p00 >> 32) + (uint32_t)p01;
+
+	// 64-bit product + two 32-bit values
+	*r_hi = p11 + (middle >> 32) + (p01 >> 32);
+
+	// Add LOW PART and lower half of MIDDLE PART
+	return (middle << 32) | (uint32_t)p00;
+}
+#  define mulhi64(a, b)  ([](uint64_t a, uint64_t b) { uint64_t hi; MUL128(&hi, a, b); return hi; })(a, b)
+#  define mulhu64(a, b)  mulhi64(a, b)
+#  define mulhsu64(a, b) mulhi64(a, b)
+# endif // sizeof long == 8
+#endif // _MSC_VER
 
 	INSTRUCTION(NOP,
 	[] (auto& /* cpu */, rv32i_instruction /* instr */) RVINSTR_COLDATTR {
