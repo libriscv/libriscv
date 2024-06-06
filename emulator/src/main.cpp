@@ -8,41 +8,131 @@ static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = 2000ULL << 20;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
 
+struct Arguments {
+	bool verbose = false;
+	bool debug = false;
+	bool gdb = false;
+	bool silent = false;
+	bool timing = false;
+	bool trace = false;
+	bool no_translate = false;
+	bool mingw = false;
+	bool from_start = false;
+	bool sandbox = false;
+	uint64_t fuel = UINT64_MAX;
+};
+
+#ifdef HAVE_GETOPT_LONG
+#include <getopt.h>
+
+static const struct option long_options[] = {
+	{"help", no_argument, 0, 'h'},
+	{"verbose", no_argument, 0, 'v'},
+	{"debug", no_argument, 0, 'd'},
+	{"fuel", required_argument, 0, 'f'},
+	{"gdb", no_argument, 0, 'g'},
+	{"silent", no_argument, 0, 's'},
+	{"timing", no_argument, 0, 't'},
+	{"trace", no_argument, 0, 'T'},
+	{"no-translate", no_argument, 0, 'n'},
+	{"mingw", no_argument, 0, 'm'},
+	{"from-start", no_argument, 0, 'F'},
+	{"sandbox", no_argument, 0, 'S'},
+	{0, 0, 0, 0}
+};
+
+static void print_help(const char* name)
+{
+	printf("Usage: %s [options] <program> [args]\n", name);
+	printf("Options:\n"
+		"  -h, --help         Print this help message\n"
+		"  -v, --verbose      Enable verbose loader output\n"
+		"  -d, --debug        Enable CLI debugger\n"
+		"  -f, --fuel         Set max instructions until program halts\n"
+		"  -g, --gdb          Start GDB server on port 2159\n"
+		"  -s, --silent       Suppress program completion information\n"
+		"  -t, --timing       Enable timing information in binary translator\n"
+		"  -T, --trace        Enable tracing in binary translator\n"
+		"  -n, --no-translate Disable binary translation\n"
+		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
+		"  -F, --from-start   Start debugger from the beginning (_start)\n"
+		"  -S  --sandbox      Enable strict sandbox\n"
+	);
+}
+
+static int parse_arguments(int argc, const char** argv, Arguments& args)
+{
+	int c;
+	while ((c = getopt_long(argc, (char**)argv, "hvdf:gstTnmFS", long_options, nullptr)) != -1)
+	{
+		switch (c)
+		{
+			case 'h': print_help(argv[0]); return 0;
+			case 'v': args.verbose = true; break;
+			case 'd': args.debug = true; break;
+			case 'f': break;
+			case 'g': args.gdb = true; break;
+			case 's': args.silent = true; break;
+			case 't': args.timing = true; break;
+			case 'T': args.trace = true; break;
+			case 'n': args.no_translate = true; break;
+			case 'm': args.mingw = true; break;
+			case 'F': args.from_start = true; break;
+			case 'S': args.sandbox = true; break;
+			default:
+				fprintf(stderr, "Unknown option: %c\n", c);
+				return -1;
+		}
+
+		if (c == 'f') {
+			char* endptr;
+			args.fuel = strtoull(optarg, &endptr, 10);
+			if (*endptr != '\0') {
+				fprintf(stderr, "Invalid number: %s\n", optarg);
+				return -1;
+			}
+			if (args.fuel == 0) {
+				args.fuel = UINT64_MAX;
+			}
+			if (args.verbose) {
+				printf("Fuel set to %" PRIu64 "\n", args.fuel);
+			}
+		}
+	}
+
+	if (optind >= argc) {
+		print_help(argv[0]);
+		return -1;
+	}
+
+	return optind;
+}
+
+#endif
+
 template <int W>
 static void run_sighandler(riscv::Machine<W>&);
 
 template <int W>
 static void run_program(
+	const Arguments& cli_args,
 	const std::vector<uint8_t>& binary,
 	const bool is_dynamic,
 	const std::vector<std::string>& args)
 {
-	// -= Executing the emulator with ... =-
-	// DEBUG=1 ./rvlinux myprogram
-	// ... will enable the CLI debugger.
-	// VERBOSE=1  will print loader and translator details.
-	// SILENT=1   will suppress the exit message.
-	// GDB=1      will start a GDB server on port 2159.
-	// TRACE=1    will enable tracing in the binary translator.
-	// TIMING=1   will enable timing information in the binary translator.
-	// FROM_START=1 will start the debugger from the beginning (_start).
-	//
-	const bool debugging_enabled = getenv("DEBUG") != nullptr;
-	const bool verbose_enabled = getenv("VERBOSE") != nullptr;
-	const bool mingw_enabled = getenv("MINGW") != nullptr;
-
+	// Create a RISC-V machine with the binary as input program
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
-		.verbose_loader = verbose_enabled,
+		.verbose_loader = cli_args.verbose,
 #ifdef RISCV_BINARY_TRANSLATION
-		.translate_enabled = getenv("NO_TRANSLATE") == nullptr,
-		.translate_trace = getenv("TRACE") != nullptr,
-		.translate_timing = getenv("TIMING") != nullptr,
+		.translate_enabled = !cli_args.no_translate,
+		.translate_trace = cli_args.trace,
+		.translate_timing = cli_args.timing,
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
 #else
-		.cross_compile = mingw_enabled ?
+		.cross_compile = cli_args.mingw ?
 			std::vector<riscv::MachineTranslationCrossOptions>{riscv::MachineTranslationCrossOptions{}}
 		  : std::vector<riscv::MachineTranslationCrossOptions>{},
 #endif
@@ -57,8 +147,8 @@ static void run_program(
 		machine.setup_linux(args, env);
 		// Linux system to open files and access internet
 		machine.setup_linux_syscalls();
-		machine.fds().permit_filesystem = true;
-		machine.fds().permit_sockets = true;
+		machine.fds().permit_filesystem = !cli_args.sandbox;
+		machine.fds().permit_sockets    = !cli_args.sandbox;
 		// Rewrite certain links to masquerade and simplify some interactions (eg. /proc/self/exe)
 		machine.fds().filter_readlink = [=] (void* user, std::string& path) {
 			if (path == "/proc/self/exe") {
@@ -106,7 +196,7 @@ static void run_program(
 				// Find the library name
 				auto lib = path.substr(sandbox_libdir.size());
 				if (std::find(libs.begin(), libs.end(), lib) == libs.end()) {
-					if (verbose_enabled) {
+					if (cli_args.verbose) {
 						fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
 					}
 					return false;
@@ -119,7 +209,7 @@ static void run_program(
 			if (is_dynamic && args.size() > 1 && path == args.at(1)) {
 				return true;
 			}
-			if (verbose_enabled) {
+			if (cli_args.verbose) {
 				fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
 			}
 			return false;
@@ -153,22 +243,19 @@ static void run_program(
 		exit(1);
 	}
 
-	// A CLI debugger used when DEBUG=1
+	// A CLI debugger used with --debug or DEBUG=1
 	riscv::DebugMachine debug { machine };
 
-	if (debugging_enabled)
+	if (cli_args.debug)
 	{
 		// Print all instructions by default
 		const bool vi = true;
-		// With VERBOSE=1 we also print register values after
+		// With --verbose we also print register values after
 		// every instruction.
-		const bool vr = (getenv("VERBOSE") != nullptr);
-		// If you want to start debugging from the beginning,
-		// set FROM_START=1.
-		const bool debug_from_start = getenv("FROM_START") != nullptr;
+		const bool vr = cli_args.verbose;
 
 		auto main_address = machine.address_of("main");
-		if (debug_from_start || main_address == 0x0) {
+		if (cli_args.from_start || main_address == 0x0) {
 			debug.verbose_instructions = vi;
 			debug.verbose_registers = vr;
 			// Without main() this is a custom or stripped program,
@@ -191,27 +278,26 @@ static void run_program(
 
 	auto t0 = std::chrono::high_resolution_clock::now();
 	try {
-		// If you run the emulator with GDB=1, you can connect
+		// If you run the emulator with --gdb or GDB=1, you can connect
 		// with gdb-multiarch using target remote localhost:2159.
-		if (getenv("GDB")) {
+		if (cli_args.gdb) {
 			printf("GDB server is listening on localhost:2159\n");
 			riscv::RSP<W> server { machine, 2159 };
 			auto client = server.accept();
 			if (client != nullptr) {
 				printf("GDB is connected\n");
-				//client->set_verbose(true);
 				while (client->process_one());
 			}
 			if (!machine.stopped()) {
 				// Run remainder of program
-				machine.simulate();
+				machine.simulate(cli_args.fuel);
 			}
-		} else if (debugging_enabled) {
+		} else if (cli_args.debug) {
 			// CLI debug simulation
 			debug.simulate();
 		} else {
 			// Normal RISC-V simulation
-			machine.simulate();
+			machine.simulate(cli_args.fuel);
 		}
 	} catch (riscv::MachineException& me) {
 		printf("%s\n", machine.cpu.current_instruction_to_string().c_str());
@@ -227,7 +313,7 @@ static void run_program(
 			printf(">>> A-extension: %d  C-extension: %d  V-extension: %d\n",
 				riscv::atomics_enabled, riscv::compressed_enabled, riscv::vector_extension);
 		}
-		if (debugging_enabled)
+		if (cli_args.debug)
 			debug.print_and_pause();
 		else
 			run_sighandler(machine);
@@ -237,18 +323,17 @@ static void run_program(
 			[] (std::string_view line) {
 				printf("-> %.*s\n", (int)line.size(), line.begin());
 			});
-		if (debugging_enabled)
+		if (cli_args.debug)
 			debug.print_and_pause();
 		else
 			run_sighandler(machine);
 	}
+
 	auto t1 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> runtime = t1 - t0;
 
-	const auto retval = machine.return_value();
-	// You can silence this output by setting SILENT=1, like so:
-	// SILENT=1 ./rvlinux myprogram
-	if (getenv("SILENT") == nullptr) {
+	if (!cli_args.silent) {
+		const auto retval = machine.return_value();
 		printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
 			int64_t(retval), uint64_t(retval));
 		printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms  Insn/s: %.0fmi/s\n",
@@ -263,46 +348,73 @@ static void run_program(
 
 int main(int argc, const char** argv)
 {
+	Arguments cli_args;
+#ifdef HAVE_GETOPT_LONG
+	const int optind = parse_arguments(argc, argv, cli_args);
+	if (optind < 0)
+		return 1;
+	else if (optind == 0)
+		return 0;
+	// Skip over the parsed arguments
+	argc -= optind;
+	argv += optind;
+#else
 	if (argc < 2) {
 		fprintf(stderr, "Provide RISC-V binary as argument!\n");
 		exit(1);
 	}
+	// Skip over the program name
+	argc -= 1;
+	argv += 1;
+
+	// Environment variables can be used to control the emulator
+	cli_args.verbose = getenv("VERBOSE") != nullptr;
+	cli_args.debug = getenv("DEBUG") != nullptr;
+	cli_args.gdb = getenv("GDB") != nullptr;
+	cli_args.silent = getenv("SILENT") != nullptr;
+	cli_args.timing = getenv("TIMING") != nullptr;
+	cli_args.trace = getenv("TRACE") != nullptr;
+	cli_args.no_translate = getenv("NO_TRANSLATE") != nullptr;
+	cli_args.mingw = getenv("MINGW") != nullptr;
+	cli_args.from_start = getenv("FROM_START") != nullptr;
+
+#endif
 
 	std::vector<std::string> args;
-	for (int i = 1; i < argc; i++) {
+	for (int i = 0; i < argc; i++) {
 		args.push_back(argv[i]);
 	}
 	const std::string& filename = args.front();
 
 	using ElfHeader = typename riscv::Elf<4>::Header;
 
-	auto binary = load_file(filename);
-	if (binary.size() < sizeof(ElfHeader)) {
-		fprintf(stderr, "ELF binary was too small to be usable!\n");
-		exit(1);
-	}
-
-	const bool is_dynamic = ((ElfHeader *)binary.data())->e_type == ElfHeader::ET_DYN;
-
-	if (binary[4] == riscv::ELFCLASS64 && is_dynamic) {
-		// Load the dynamic linker shared object
-		binary = load_file(DYNAMIC_LINKER);
-		// Insert program name as argv[1]
-		args.insert(args.begin() + 1, args.at(0));
-		// Set dynamic linker to argv[0]
-		args.at(0) = DYNAMIC_LINKER;
-	}
-
 	try {
+		auto binary = load_file(filename);
+		if (binary.size() < sizeof(ElfHeader)) {
+			fprintf(stderr, "ELF binary was too small to be usable!\n");
+			exit(1);
+		}
+
+		const bool is_dynamic = ((ElfHeader *)binary.data())->e_type == ElfHeader::ET_DYN;
+
+		if (binary[4] == riscv::ELFCLASS64 && is_dynamic) {
+			// Load the dynamic linker shared object
+			binary = load_file(DYNAMIC_LINKER);
+			// Insert program name as argv[1]
+			args.insert(args.begin() + 1, args.at(0));
+			// Set dynamic linker to argv[0]
+			args.at(0) = DYNAMIC_LINKER;
+		}
+
 		if (binary[4] == riscv::ELFCLASS64)
 #ifdef RISCV_64I
-			run_program<riscv::RISCV64> (binary, is_dynamic, args);
+			run_program<riscv::RISCV64> (cli_args, binary, is_dynamic, args);
 #else
 			throw riscv::MachineException(riscv::FEATURE_DISABLED, "64-bit not currently enabled");
 #endif
 		else if (binary[4] == riscv::ELFCLASS32)
 #ifdef RISCV_32I
-			run_program<riscv::RISCV32> (binary, is_dynamic, args);
+			run_program<riscv::RISCV32> (cli_args, binary, is_dynamic, args);
 #else
 			throw riscv::MachineException(riscv::FEATURE_DISABLED, "32-bit not currently enabled");
 #endif
