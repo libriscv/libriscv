@@ -446,14 +446,14 @@ if constexpr (SCAN_FOR_GP) {
 		}
 	}
 	// Append all instruction handler -> dl function mappings
-	code += "const uint32_t no_mappings = "
+	code += "VISIBLE const uint32_t no_mappings = "
 		+ std::to_string(dlmappings.size()) + ";\n";
 	code += R"V0G0N(
 struct Mapping {
 	addr_t addr;
 	ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
 };
-const struct Mapping mappings[] = {
+VISIBLE const struct Mapping mappings[] = {
 )V0G0N";
 	for (const auto& mapping : dlmappings)
 	{

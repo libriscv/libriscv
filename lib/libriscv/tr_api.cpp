@@ -8,6 +8,7 @@ namespace riscv {
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #define ILLEGAL_OPCODE  0
 #define MISALIGNED_INSTRUCTION 4
+#define VISIBLE  __attribute__((visibility("default")))
 
 #if RISCV_TRANSLATION_DYLIB == 4
 	typedef uint32_t addr_t;
@@ -207,7 +208,7 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern void init(struct CallbackTable* table)
+extern VISIBLE void init(struct CallbackTable* table)
 {
 	api = *table;
 };

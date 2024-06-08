@@ -42,7 +42,7 @@ namespace riscv
 	std::string compile_command(int /*arch*/, const std::string& cflags)
 	{
 		return compiler() + " -O2 -s -std=c99 -fPIC -shared -rdynamic -x c "
-			" -fexceptions" +
+			" -fexceptions -fvisibility=hidden -fomit-frame-pointer " +
 #ifdef RISCV_EXT_VECTOR
 			" -march=native" +
 #endif
