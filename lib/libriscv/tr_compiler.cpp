@@ -105,7 +105,7 @@ namespace riscv
 	{
 		// We always want to produce a generic PE-dll that can be loaded on *most* Windows machines.
 		return cross_options.cross_compiler + " -O2 -s -std=c99 -fPIC -shared -x c "
-			" -fexceptions" +
+			" -fexceptions -fvisibility=hidden -fomit-frame-pointer " +
 			cflags +
 			" -DARCH=" + host_arch() + ""
 			" -pipe " + extra_cflags();
