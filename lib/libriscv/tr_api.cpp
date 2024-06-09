@@ -178,12 +178,7 @@ static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, a
 }
 
 static inline void jump(CPU* cpu, addr_t addr) {
-	if (__builtin_expect((addr & RISCV_ALIGN_MASK) == 0, 1)) {
-		cpu->pc = addr;
-	} else {
-		api.exception(cpu, addr, MISALIGNED_INSTRUCTION);
-		UNREACHABLE();
-	}
+	cpu->pc = addr & ~(addr_t)RISCV_ALIGN_MASK;
 }
 
 // https://stackoverflow.com/questions/28868367/getting-the-high-part-of-64-bit-integer-multiplication
