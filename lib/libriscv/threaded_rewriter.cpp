@@ -85,6 +85,8 @@ namespace riscv
 				rewritten.imm = original.Itype.signed_imm();
 
 				instr.whole = rewritten.whole;
+				if (bytecode == RV32I_BC_ADDI && rewritten.rs1 == rewritten.rs2)
+					return RV32I_BC_INC;
 				return bytecode;
 			}
 			case RV32I_BC_BEQ:

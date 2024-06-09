@@ -10,6 +10,7 @@ namespace riscv
 		RV32I_BC_ADDI,
 		RV32I_BC_LI,
 		RV32I_BC_MV,
+		RV32I_BC_INC,
 
 		RV32I_BC_SLLI,
 		RV32I_BC_SLTI,

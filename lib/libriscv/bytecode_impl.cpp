@@ -35,6 +35,11 @@ INSTRUCTION(RV32I_BC_MV, rv32i_mv) {
 	REG(fi.get_rd()) = REG(fi.get_rs1());
 	NEXT_INSTR();
 }
+INSTRUCTION(RV32I_BC_INC, rv32i_inc) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) += fi.signed_imm();
+	NEXT_INSTR();
+}
 #ifdef RISCV_64I
 INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw) {
 	if constexpr (W >= 8) {

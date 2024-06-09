@@ -89,6 +89,7 @@ bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 		[RV32I_BC_ADDI]    = &&rv32i_addi,
 		[RV32I_BC_LI]      = &&rv32i_li,
 		[RV32I_BC_MV]      = &&rv32i_mv,
+		[RV32I_BC_INC]     = &&rv32i_inc,
 		[RV32I_BC_SLLI]    = &&rv32i_slli,
 		[RV32I_BC_SLTI]    = &&rv32i_slti,
 		[RV32I_BC_SLTIU]   = &&rv32i_sltiu,
