@@ -366,16 +366,6 @@ if constexpr (SCAN_FOR_GP) {
 				// to detect function calls
 				global_jump_locations.insert(location);
 
-				// Long jumps are considered returnable
-				if (location < block || location >= block_end) {
-					block_instructions.push_back(instruction);
-					if constexpr (compressed_enabled)
-						pc += instruction.length();
-					else
-						pc += 4;
-					block_end = pc;
-					break;
-				}
 				if (location >= block && location < block_end)
 					jump_locations.insert(location);
 			}

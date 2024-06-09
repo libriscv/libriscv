@@ -291,7 +291,7 @@ struct Emitter
 	}
 	uint64_t find_block_base(address_t pc) const noexcept {
 		for (auto& blk : *tinfo.blocks) {
-			if (blk.basepc >= pc && blk.endpc <= pc) return blk.basepc;
+			if (pc >= blk.basepc && pc < blk.endpc) return blk.basepc;
 		}
 		return 0;
 	}
@@ -598,17 +598,17 @@ void Emitter<W>::emit()
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
 			else if (this->tinfo.global_jump_locations.count(dest_pc) && this->within_segment(dest_pc)) {
-				//printf("Global jump location: 0x%lX for block 0x%lX -> 0x%lX\n", long(dest_pc),
-				//	long(this->begin_pc()), long(this->end_pc()));
 				// Get the function name of the target block
 				auto target_funcaddr = this->find_block_base(dest_pc);
 				// Allow directly calling a function, as long as it's a forward jump
 				if (target_funcaddr != 0 && dest_pc > this->pc()) {
+					//printf("Jump location OK (forward): 0x%lX for block 0x%lX -> 0x%lX\n", long(dest_pc),
+					//	long(this->begin_pc()), long(this->end_pc()));
 					auto target_func = funclabel<W>("f", target_funcaddr);
 					// Call the function and get the return values
 					add_code("{ReturnValues rv;");
 					add_forward(target_func);
-					add_code("rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc), ");");
+					add_code("rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
 					// Update the local counter registers
 					add_code("counter = rv.counter;");
 					add_code("max_counter = rv.max_counter;}");
@@ -620,16 +620,14 @@ void Emitter<W>::emit()
 						}
 					}
 					exit_function("cpu->pc", false);
+				} else {
+					//printf("Jump location inconvenient (backward): 0x%lX at func 0x%lX for block 0x%lX -> 0x%lX\n",
+					//	long(dest_pc), long(target_funcaddr), long(this->begin_pc()), long(this->end_pc()));
 				}
 			}
 
 			// Because of forward jumps we can't end the function here
-			exit_function(STRADDR(dest_pc));
-			// Some blocks end with unconditional jumps
-			if (no_labels_after_this()) {
-				add_code("}");
-				return;
-			}
+			exit_function(STRADDR(dest_pc), false);
 			if (instr.Jtype.rd != 0)
 				this->add_reentry_next();
 			} break;
