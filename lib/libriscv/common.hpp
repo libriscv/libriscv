@@ -132,7 +132,6 @@ namespace riscv
 		/// @brief Limits placed on the binary translator.
 		/// @details The binary translator will stop translating after reaching
 		/// either of these limits. The limits are per shared object.
-		unsigned block_size_treshold = 5;
 		unsigned translate_blocks_max = 16'000;
 		unsigned translate_instr_max = 150'000;
 		/// @brief Allow the production of a secondary dependency-free DLL that can be

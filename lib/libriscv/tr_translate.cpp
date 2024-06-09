@@ -386,8 +386,7 @@ if constexpr (SCAN_FOR_GP) {
 
 		// Process block and add it for emission
 		const size_t length = block_instructions.size();
-		if (length >= options.block_size_treshold
-			&& icounter + length < options.translate_instr_max)
+		if (length > 0 && icounter + length < options.translate_instr_max)
 		{
 			if constexpr (VERBOSE_BLOCKS) {
 				printf("Block found at %#lX -> %#lX. Length: %zu\n", long(block), long(block_end), length);
@@ -611,10 +610,10 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	auto func = (void (*)(const CallbackTable<W>&)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
-			return cpu.machine().memory.cached_readable_page(addr << 12, 1).buffer8.data();
+			return cpu.machine().memory.cached_readable_page(addr, 1).buffer8.data();
 		},
 		.mem_write = [] (CPU<W>& cpu, address_type<W> addr) -> void* {
-			return cpu.machine().memory.cached_writable_page(addr << 12).buffer8.data();
+			return cpu.machine().memory.cached_writable_page(addr).buffer8.data();
 		},
 		.vec_load = [] (CPU<W>& cpu, int vd, address_type<W> addr) {
 #ifdef RISCV_EXT_VECTOR
