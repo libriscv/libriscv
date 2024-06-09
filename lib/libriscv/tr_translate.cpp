@@ -610,10 +610,10 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	auto func = (void (*)(const CallbackTable<W>&)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
-			return cpu.machine().memory.cached_readable_page(addr << 12, 1).buffer8.data();
+			return cpu.machine().memory.cached_readable_page(addr, 1).buffer8.data();
 		},
 		.mem_write = [] (CPU<W>& cpu, address_type<W> addr) -> void* {
-			return cpu.machine().memory.cached_writable_page(addr << 12).buffer8.data();
+			return cpu.machine().memory.cached_writable_page(addr).buffer8.data();
 		},
 		.vec_load = [] (CPU<W>& cpu, int vd, address_type<W> addr) {
 #ifdef RISCV_EXT_VECTOR

@@ -208,12 +208,12 @@ struct Emitter
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
 					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ");",
 				"else {",
-					"const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));",
+					"const char* " + data + " = api.mem_ld(cpu, " + address + ");",
 					dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];",
 				"}");
 		} else {
 			add_code(
-				"const char* " + data + " = api.mem_ld(cpu, PAGENO(" + address + "));",
+				"const char* " + data + " = api.mem_ld(cpu, " + address + ");",
 				dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];"
 			);
 		}
@@ -238,11 +238,11 @@ struct Emitter
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
 				"  *(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ") = " + value + ";",
 				"else {",
-				"  char *" + data + " = api.mem_st(cpu, PAGENO(" + address + "));",
+				"  char *" + data + " = api.mem_st(cpu, " + address + ");",
 				"  *(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";",
 				"}");
 		} else {
-			add_code("char* " + data + " = api.mem_st(cpu, PAGENO(" + address + "));");
+			add_code("char* " + data + " = api.mem_st(cpu, " + address + ");");
 			add_code(
 				"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
 			);
