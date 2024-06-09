@@ -191,8 +191,10 @@ bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 
 		[RV32F_BC_FLW]     = &&rv32i_flw,
 		[RV32F_BC_FLD]     = &&rv32i_fld,
+		[RV32F_BC_FLD_GP]  = &&rv32i_fld_gp,
 		[RV32F_BC_FSW]     = &&rv32i_fsw,
 		[RV32F_BC_FSD]     = &&rv32i_fsd,
+		[RV32F_BC_FSD_GP]  = &&rv32i_fsd_gp,
 		[RV32F_BC_FADD]    = &&rv32f_fadd,
 		[RV32F_BC_FSUB]    = &&rv32f_fsub,
 		[RV32F_BC_FMUL]    = &&rv32f_fmul,

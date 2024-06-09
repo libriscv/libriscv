@@ -288,6 +288,13 @@ INSTRUCTION(RV32F_BC_FLD, rv32i_fld) {
 	dst.load_u64(CPU().memory().template read<uint64_t> (addr));
 	NEXT_INSTR();
 }
+INSTRUCTION(RV32F_BC_FLD_GP, rv32i_fld_gp) {
+	auto reg  = 10 + (decoder->instr & 0x7); // FA0-FA7
+	auto addr = decoder->instr & ~0x7;
+	auto& dst = REGISTERS().getfl(reg);
+	dst.f64 = *(double *)((const char*)CPU().memory().memory_arena_ptr() + addr);
+	NEXT_INSTR();
+}
 
 #ifdef RISCV_EXT_COMPRESSED
 INSTRUCTION(RV32C_BC_LDD, rv32c_ldd) {
@@ -515,6 +522,12 @@ INSTRUCTION(RV32F_BC_FSD, rv32i_fsd) {
 	const auto& src = REGISTERS().getfl(fi.rs2);
 	auto addr = REG(fi.rs1) + fi.signed_imm();
 	CPU().memory().template write<uint64_t> (addr, src.i64);
+	NEXT_INSTR();
+}
+INSTRUCTION(RV32F_BC_FSD_GP, rv32i_fsd_gp) {
+	const auto& src = REGISTERS().getfl(10 + (decoder->instr & 0x7));
+	auto addr = decoder->instr & ~0x7;
+	*(double *)((char*)CPU().memory().memory_arena_ptr() + addr) = src.f64;
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {

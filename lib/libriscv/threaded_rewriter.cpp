@@ -11,8 +11,8 @@
 namespace riscv
 {
 	template <int W> RISCV_INTERNAL
-	size_t DecodedExecuteSegment<W>::threaded_rewrite(
-		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr)
+	size_t DecodedExecuteSegment<W>::threaded_rewrite(Memory<W>& memory,
+		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr, address_t gp)
 	{
 		static constexpr unsigned PCAL = compressed_enabled ? 2 : 4;
 		static constexpr unsigned XLEN = 8 * W;
@@ -205,6 +205,25 @@ namespace riscv
 			case RV32F_BC_FLW:
 			case RV32F_BC_FLD: {
 				const rv32f_instruction fi{original};
+
+				if (flat_readwrite_arena && bytecode == RV32F_BC_FLD && fi.Itype.rs1 == REG_GP && gp != 0x0)
+				{
+					const address_t address = gp + fi.Itype.signed_imm();
+					const bool is_aligned = (address & 0x7) == 0;
+					// Fast-path: FA0-FA7 with GP+imm inside the arena
+					if (fi.Itype.rd >= REG_ARG0 && fi.Itype.rd <= REG_ARG7 && is_aligned)
+					if (address - Memory<W>::RWREAD_BEGIN < memory.memory_arena_read_boundary()) {
+						// Inside the arena, we can read directly
+						instr.whole = address | (fi.Itype.rd - REG_ARG0);
+						printf("FLD_GP: %08x\n", instr.whole);
+						return RV32F_BC_FLD_GP;
+					}
+
+					if (!is_aligned) {
+						printf("Unaligned FLD: %08x\n", pc);
+					}
+				}
+
 				FasterItype rewritten;
 				rewritten.rs1 = fi.Itype.rd;
 				rewritten.rs2 = fi.Itype.rs1;
@@ -216,6 +235,26 @@ namespace riscv
 			case RV32F_BC_FSW:
 			case RV32F_BC_FSD: {
 				const rv32f_instruction fi{original};
+
+				if (flat_readwrite_arena && bytecode == RV32F_BC_FSD && fi.Stype.rs2 == REG_GP && gp != 0x0)
+				{
+					printf("Testing FSD: %08x\n", pc);
+					const address_t address = gp + fi.Stype.signed_imm();
+					const bool is_aligned = (address & 0x7) == 0;
+					// Fast-path: FA0-FA7 with GP+imm inside the arena
+					if (fi.Stype.rs1 >= REG_ARG0 && fi.Stype.rs1 <= REG_ARG7 && is_aligned)
+					if (address - memory.initial_rodata_end() < memory.memory_arena_write_boundary()) {
+						// Inside the arena, we can read directly
+						instr.whole = address | (fi.Stype.rs1 - REG_ARG0);
+						printf("FSD_GP: %08x\n", instr.whole);
+						return RV32F_BC_FSD_GP;
+					}
+
+					if (!is_aligned) {
+						printf("Unaligned FSD: %08x\n", pc);
+					}
+				}
+
 				FasterItype rewritten;
 				rewritten.rs1 = fi.Stype.rs1;
 				rewritten.rs2 = fi.Stype.rs2;

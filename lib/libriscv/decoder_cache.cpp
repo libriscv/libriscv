@@ -247,6 +247,8 @@ namespace riscv
 
 		// PC-relative pointer to instruction bits
 		auto* exec_segment = exec.exec_data();
+		// GP-relative pointer deduced during decoding
+		address_t gp = 0;
 
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
@@ -286,6 +288,24 @@ namespace riscv
 				exec_segment, dst, end_addr);
 			rv32i_instruction rewritten = instruction;
 
+			// GP-detection
+			if (gp == 0x0 && instruction.opcode() == RV32I_AUIPC) {
+				const auto auipc = instruction;
+				if (auipc.Utype.rd == 3) { // GP
+					const rv32i_instruction addi
+						= read_instruction(exec.exec_data(), dst + 4, end_addr);
+					if (addi.opcode() == RV32I_OP_IMM && addi.Itype.funct3 == 0x0) {
+						printf("Found OP_IMM: ADDI  rd=%d, rs1=%d\n", addi.Itype.rd, addi.Itype.rs1);
+						if (addi.Itype.rd == 3 && addi.Itype.rs1 == 3) { // GP
+							gp = dst + auipc.Utype.upper_imm() + addi.Itype.signed_imm();
+						}
+					} else {
+						gp = dst + auipc.Utype.upper_imm();
+					}
+				}
+			} // opcode
+
+
 #ifdef RISCV_BINARY_TRANSLATION
 			if (entry.get_bytecode() == block_ending_bytecode) {
 				if constexpr (compressed_enabled) {
@@ -309,7 +329,7 @@ namespace riscv
 				// Cache the (modified) instruction bits
 				auto bytecode = CPU<W>::computed_index_for(instruction);
 				// Threaded rewrites are **always** enabled
-				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
+				bytecode = exec.threaded_rewrite(*this, bytecode, dst, rewritten, gp);
 				entry.set_bytecode(bytecode);
 				entry.instr = rewritten.whole;
 			} else {

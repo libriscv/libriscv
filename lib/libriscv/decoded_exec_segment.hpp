@@ -53,7 +53,7 @@ namespace riscv
 		DecodedExecuteSegment(DecodedExecuteSegment&&);
 		~DecodedExecuteSegment();
 
-		size_t threaded_rewrite(size_t bytecode, address_t pc, rv32i_instruction& instr);
+		size_t threaded_rewrite(Memory<W>&, size_t bytecode, address_t pc, rv32i_instruction& instr, address_t gp);
 
 #ifdef RISCV_BINARY_TRANSLATION
 		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
