@@ -386,8 +386,7 @@ if constexpr (SCAN_FOR_GP) {
 
 		// Process block and add it for emission
 		const size_t length = block_instructions.size();
-		if (length >= options.block_size_treshold
-			&& icounter + length < options.translate_instr_max)
+		if (length > 0 && icounter + length < options.translate_instr_max)
 		{
 			if constexpr (VERBOSE_BLOCKS) {
 				printf("Block found at %#lX -> %#lX. Length: %zu\n", long(block), long(block_end), length);

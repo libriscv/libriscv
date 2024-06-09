@@ -271,14 +271,21 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 
 #ifdef RISCV_BINARY_TRANSLATION
 INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
-	VIEW_INSTR();
+retry_translated_function:
 	// Invoke translated code
 	auto bintr_results = 
-		exec->unchecked_mapping_at(instr.whole)(*this, counter.value()-1, counter.max(), pc);
+		exec->unchecked_mapping_at(decoder->instr)(*this, counter.value()-1, counter.max(), pc);
 	pc = REGISTERS().pc;
 	counter.set_counters(bintr_results.counter, bintr_results.max_counter);
-	if (LIKELY(!counter.overflowed() && (pc - current_begin < current_end - current_begin)))
+	if (LIKELY(!counter.overflowed() && (pc - current_begin < current_end - current_begin))) {
+		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
+			pc += decoder->block_bytes();
+			counter.increment_counter(decoder->instruction_count());
+			goto retry_translated_function;
+		}
 		goto continue_segment;
+	}
 	goto check_jump;
 }
 #endif // RISCV_BINARY_TRANSLATION
