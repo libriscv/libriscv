@@ -226,8 +226,16 @@ bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 	if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
 		goto new_execute_segment;
 
+#  ifdef RISCV_BINARY_TRANSLATION
+	// There's a very high chance that the (first) instruction is a translated function
+	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+	if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
+		goto retry_translated_function;
+#  endif
+
 continue_segment:
 	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+
 	pc += decoder->block_bytes();
 	counter.increment_counter(decoder->instruction_count());
 
@@ -238,7 +246,6 @@ while (true) {
 	#define INSTRUCTION(bc, lbl) case bc:
 
 #else
-
 	goto *computed_opcode[decoder->get_bytecode()];
 	#define INSTRUCTION(bc, lbl) lbl:
 
@@ -271,17 +278,18 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 
 #ifdef RISCV_BINARY_TRANSLATION
 INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
+	counter.increment_counter(-1);
 retry_translated_function:
 	// Invoke translated code
 	auto bintr_results = 
-		exec->unchecked_mapping_at(decoder->instr)(*this, counter.value()-1, counter.max(), pc);
+		exec->unchecked_mapping_at(decoder->instr)(*this, counter.value(), counter.max(), pc);
 	pc = REGISTERS().pc;
 	counter.set_counters(bintr_results.counter, bintr_results.max_counter);
 	if (LIKELY(!counter.overflowed() && (pc - current_begin < current_end - current_begin))) {
 		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			pc += decoder->block_bytes();
-			counter.increment_counter(decoder->instruction_count());
+			counter.increment_counter(decoder->instruction_count() - 1);
 			goto retry_translated_function;
 		}
 		goto continue_segment;
