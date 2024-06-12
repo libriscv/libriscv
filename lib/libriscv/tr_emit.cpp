@@ -569,11 +569,11 @@ void Emitter<W>::emit()
 				add_code(
 					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
 					to_reg(instr.Itype.rd) + " = " + PCRELS(m_instr_length) + ";",
-					"jump(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
+					"JUMP_TO(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
 				);
 			} else {
 				add_code(
-					"jump(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					"JUMP_TO(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			exit_function("cpu->pc", true);
