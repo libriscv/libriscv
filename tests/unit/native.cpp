@@ -135,7 +135,9 @@ TEST_CASE("Free unknown causes exception", "[Native]")
 	try {
 		machine.simulate(MAX_INSTRUCTIONS);
 	} catch (const std::exception& e) {
-		REQUIRE(std::string(e.what()) == "Possible double-free for freed pointer");
+		// Libtcc does not forward the real exception (instead throws a generic SYSTEM_CALL_FAILED)
+		if constexpr (!libtcc_enabled)
+			REQUIRE(std::string(e.what()) == "Possible double-free for freed pointer");
 		error = true;
 	}
 	REQUIRE(error);

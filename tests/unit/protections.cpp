@@ -102,8 +102,12 @@ TEST_CASE("Writes to read-only segment", "[Memory]")
 
 	const auto binary = build_and_load(R"M(
 	static const int array[4] = {1, 2, 3, 4};
+	__attribute__((optimize("-O0")))
 	int main() {
 		*(volatile int *)array = 1234;
+
+		if (array[0] != 1234)
+			return -1;
 		return 666;
 	}
 	void write_to(char* dst) {

@@ -46,7 +46,7 @@ if (RISCV_EXPERIMENTAL)
 	# executing RISC-V guest functions in parallel using a custom API.
 	option(RISCV_MULTIPROCESS        "Enable multiprocessing" OFF)
 endif()
-if (RISCV_EXPERIMENTAL AND RISCV_BINARY_TRANSLATION)
+if (RISCV_BINARY_TRANSLATION)
 	# LIBTCC will embed the TCC compiler library, using it for binary translation.
 	option(RISCV_LIBTCC              "Enable binary translation with libtcc" OFF)
 endif()
