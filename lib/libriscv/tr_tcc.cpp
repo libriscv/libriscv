@@ -19,11 +19,15 @@ namespace riscv
 		if (!libtcc1.empty())
 			tcc_add_library_path(state, libtcc1.c_str());
 
-		if (tcc_compile_string(state, code.c_str()) < 0)
+		if (tcc_compile_string(state, code.c_str()) < 0) {
+			tcc_delete(state);
 			return nullptr;
+		}
 
-		if (tcc_relocate(state, TCC_RELOCATE_AUTO) < 0)
+		if (tcc_relocate(state, TCC_RELOCATE_AUTO) < 0) {
+			tcc_delete(state);
 			return nullptr;
+		}
 
 		return state;
 	}
