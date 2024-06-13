@@ -2,7 +2,7 @@
 
 _libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50-100ns to enter the virtual machine and return, _libriscv_ requires 3ns. _libriscv_ is also routinely faster than other interpreters. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
 
-There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to live-debug something.
+There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to remotely live-debug programs.
 
 [![Debian Packaging](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml) [![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
@@ -15,11 +15,12 @@ For discussions & help, [visit Discord](https://discord.gg/n4GcXr66X5).
 libriscv is an ultra-low latency emulator, designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
 
 Goals:
-- No overhead when used for game engine scripting or request-based workloads
+- Change the conversation around scripting, overhead is reduced to almost nothing
 - Type-safe VM call and system call interfaces
 - [Secure speculation-safe sandbox](SECURITY.md)
 - Low attack surface, only 20k LOC
 - Platform-independent and super-easy to embed
+- Ship high-performance enmulation through DLLs on end-user systems (eg. Windows)
 
 Non goals:
 - Just-in-time compilation
@@ -330,27 +331,29 @@ Using the [debugging wrapper](/lib/libriscv/debug.hpp):
 
 The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLATION` CMake option) can greatly improve performance in most cases, but requires compiling the program on the first run. The RISC-V binary is scanned for code blocks that are safe to translate, and then a C compiler is invoked on the generated code. This step takes a long time. The resulting code is then dynamically loaded and ready to use. It is also possible to cross-compile the binary translation for end-user systems, such as Windows. In other words, it's possible to ship a game with not just a sandboxed RISC-V program, but also a complementary binary translated .dll in order to reap heavy performance gains.
 
-Instead of JIT, the emulator supports translating binaries to native code using any local C compiler. You can control compilation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. For the [CLI](/emulator), the `--no-translate` option can be used to disable binary translation in order to compare output or performance.
+You can control binary translation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. For the [CLI](/emulator), the `--no-translate` option can be used to disable binary translation in order to compare output or performance.
 
-An experimental libtcc mode can be unlocked by enabling `RISCV_EXPERIMENTAL`, called `RISCV_LIBTCC`. When enabled, libriscv will invoke libtcc on code generated for each execute segment. It is usually 2x faster than interpreting RISC-V.
+When embedded libtcc is enabled, by setting the CMake option `RISCV_LIBTCC` to `ON`, libriscv behaves like it's dynamically translated. _libriscv_ will invoke _libtcc_ on code generated for each execute segment, including those loaded from shared objects. This requires your distros equivalent of the `libtcc-dev` package.
 
 
 ## Experimental and special features
 
 ### Read-write arena
 
-The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, pages can still be allocated outside of the arena memory area, and there page protections will apply as normal.
-
-### Multiprocessing
-
-There is multiprocessing support, but it is in its early stages. It is achieved by calling a (C/SYSV ABI) function on many machines, with differing CPU IDs. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
+The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, pages can still be allocated outside of the arena memory area, and there page protections will apply as normal. It is default-enabled, providing a performance boost.
 
 ### Embedded libtcc
 
-When binary translation is enabled, the experimental option `RISCV_LIBTCC` is available. libtcc will be embedded in the RISC-V emulator and used as compiler for binary translation. The `libtcc-dev` package will be required for building.
+When binary translation is enabled, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. The `libtcc-dev` package will be required for building. It will give a handsome 25-100% performance boost.
+
+### Experimental multiprocessing
+
+There is multiprocessing support, but it is in its early stages. It is achieved by simultaneously calling a (C/SYSV ABI) function on many machines, each with a unique CPU ID. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
 
 
-### Performance settings
+### Interpreter performance settings
+
+When binary translation is enabled, all emulator settings have roughly the same performance. However, when in interpreter mode (eg. on devices where loading shared objects is not allowed), there are a few ways to reliably improve performance.
 
 Disabling the C-extension increases interpreter speed by ~20-25%, but requires a custom RISC-V toolchain. [Here's how to create one](/docs/NEWLIB.md). There are technical reasons for this, and it will not get better over time.
 
