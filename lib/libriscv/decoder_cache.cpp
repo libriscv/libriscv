@@ -4,6 +4,7 @@
 #include "rvc.hpp"
 #include "safe_instr_loader.hpp"
 #include "threaded_rewriter.cpp"
+#include "threaded_bytecodes.hpp"
 
 namespace riscv
 {
@@ -54,7 +55,9 @@ namespace riscv
 		address_type<W> base_pc, address_type<W> last_pc,
 		const uint8_t* exec_segment, DecoderData<W>* exec_decoder)
 	{
-		const auto translator_op = CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END);
+#ifdef RISCV_BINARY_TRANSLATION
+		const auto translator_op = RV32I_BC_TRANSLATOR;
+#endif
 
 		if constexpr (compressed_enabled)
 		{
@@ -100,14 +103,18 @@ namespace riscv
 					// All opcodes that can modify PC
 					if (length == 2)
 					{
-						if (!is_regular_compressed<W>(instruction.half[0]) || entry.get_bytecode() == translator_op)
+						if (!is_regular_compressed<W>(instruction.half[0]))
 							break;
 					} else {
 						if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 							|| opcode == RV32I_JAL || opcode == RV32I_JALR
-							|| is_stopping_auipc(instruction) || entry.get_bytecode() == translator_op)
+							|| is_stopping_auipc(instruction))
 							break;
 					}
+				#ifdef RISCV_BINARY_TRANSLATION
+					if (entry.get_bytecode() == translator_op)
+						break;
+				#endif
 
 					// A last test for the last instruction, which should have been a block-ending
 					// instruction. Since it wasn't we must force-end the block here.
@@ -179,8 +186,12 @@ namespace riscv
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
 					|| opcode == RV32I_JAL || opcode == RV32I_JALR
-					|| is_stopping_auipc(instruction) || entry.get_bytecode() == translator_op)
+					|| is_stopping_auipc(instruction))
 					idxend = 0;
+			#ifdef RISCV_BINARY_TRANSLATION
+				if (entry.get_bytecode() == translator_op)
+					idxend = 0;
+			#endif
 				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
 				// Increment after, idx becomes block count - 1
@@ -288,16 +299,21 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 			if (entry.get_bytecode() == block_ending_bytecode) {
-				if constexpr (compressed_enabled) {
-					dst += 2;
-					if (was_full_instruction) {
-						was_full_instruction = (instruction.length() == 2);
-					} else {
-						was_full_instruction = true;
-					}
-				} else
-					dst += 4;
-				continue;
+				// Translator activation uses a special bytecode
+				// but we must still validate the mapping index.
+				if (entry.instr < exec.translator_mappings()) {
+					entry.set_bytecode(RV32I_BC_TRANSLATOR);
+					if constexpr (compressed_enabled) {
+						dst += 2;
+						if (was_full_instruction) {
+							was_full_instruction = (instruction.length() == 2);
+						} else {
+							was_full_instruction = true;
+						}
+					} else
+						dst += 4;
+					continue;
+				}
 			}
 #endif // RISCV_BINARY_TRANSLATION
 
