@@ -345,6 +345,18 @@ check_jump:
 		goto new_execute_segment;
 
 counter_overflow:
+	if constexpr (libtcc_enabled)
+	{
+		// We need to check if we have a current exception
+		if (CPU().has_current_exception())
+		{
+			// We have an exception, so we need to handle it
+			const auto except_num = CPU().current_exception();
+			CPU().clear_current_exception();
+			CPU().trigger_exception(except_num, CPU().pc());
+		}
+	}
+
 	registers().pc = pc;
 	MACHINE().set_instruction_counter(counter.value());
 

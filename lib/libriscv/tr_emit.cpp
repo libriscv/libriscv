@@ -19,11 +19,17 @@
 // Since it is possible to send a program to another machine, we don't exactly know
 // the order of intruction handlers, so we need to lazily get the handler index by
 // calling the execute function the first time.
+#ifdef RISCV_LIBTCC
+#define UNKNOWN_INSTRUCTION() \
+	code += "if (api.execute(cpu, " + std::to_string(instr.whole) + "))\n" \
+		"  return (ReturnValues){0, 0};\n"; // Exception thrown
+#else
 #define UNKNOWN_INSTRUCTION() { \
 	code += "{ static int handler_idx = 0;\n"; \
 	code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
 	code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
 	}
+#endif
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "counter < max_counter";
@@ -1449,7 +1455,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 		}
 		if (tinfo.trace_instructions)
-			code += "default: api.exception(cpu, pc, 3);\n";
+			code += "default: api.exception(cpu, pc, 3); return (ReturnValues){0, 0};\n";
 		code += "}\n";
 	}
 

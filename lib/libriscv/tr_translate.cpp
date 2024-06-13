@@ -605,15 +605,38 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	if (ptr == nullptr) {
 		return false;
 	}
+	// 4x8-byte aligned scratch buffer for returning a valid pointer to
+	// the memory read/write functions in case of a fault.
+	static uint64_t scratch_buffer[4];
 
 	// Map the API callback table
 	auto func = (void (*)(const CallbackTable<W>&)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
-			return cpu.machine().memory.cached_readable_page(addr, 1).buffer8.data();
+			if constexpr (libtcc_enabled) {
+				try {
+					return cpu.machine().memory.cached_readable_page(addr, 1).buffer8.data();
+				} catch (MachineException& e) {
+					cpu.set_current_exception(e.type());
+					cpu.machine().stop();
+					return &scratch_buffer[0];
+				}
+			} else {
+				return cpu.machine().memory.cached_readable_page(addr, 1).buffer8.data();
+			}
 		},
 		.mem_write = [] (CPU<W>& cpu, address_type<W> addr) -> void* {
-			return cpu.machine().memory.cached_writable_page(addr).buffer8.data();
+			if constexpr (libtcc_enabled) {
+				try {
+					return cpu.machine().memory.cached_writable_page(addr).buffer8.data();
+				} catch (MachineException& e) {
+					cpu.set_current_exception(e.type());
+					cpu.machine().stop();
+					return &scratch_buffer[0];
+				}
+			} else {
+				return cpu.machine().memory.cached_writable_page(addr).buffer8.data();
+			}
 		},
 		.vec_load = [] (CPU<W>& cpu, int vd, address_type<W> addr) {
 #ifdef RISCV_EXT_VECTOR
@@ -632,22 +655,72 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 #endif
 		},
 		.syscalls = machine().syscall_handlers.data(),
+		.system_call = [] (CPU<W>& cpu, int sysno) -> int {
+			if constexpr (libtcc_enabled) {
+				try {
+					const auto current_pc = cpu.registers().pc;
+					cpu.machine().system_call(sysno);
+					return cpu.registers().pc != current_pc || cpu.machine().stopped();
+				} catch (const MachineException& e) {
+					cpu.set_current_exception(e.type());
+					cpu.machine().stop();
+					return false;
+				} catch (const std::exception& e) {
+					cpu.set_current_exception(SYSTEM_CALL_FAILED);
+					cpu.machine().stop();
+					return false;
+				}
+			} else {
+				return false;
+			}
+		},
 		.unknown_syscall = [] (CPU<W>& cpu, address_type<W> sysno) {
 			cpu.machine().on_unhandled_syscall(cpu.machine(), sysno);
 		},
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
-			cpu.machine().system(rv32i_instruction{instr});
+			if constexpr (libtcc_enabled) {
+				try {
+					cpu.machine().system(rv32i_instruction{instr});
+				} catch (const MachineException& e) {
+					cpu.set_current_exception(e.type());
+					cpu.machine().stop();
+				} catch (const std::exception& e) {
+					cpu.set_current_exception(SYSTEM_CALL_FAILED);
+					cpu.machine().stop();
+				}
+			} else {
+				cpu.machine().system(rv32i_instruction{instr});
+			}
 		},
 		.execute = [] (CPU<W>& cpu, uint32_t instr) -> unsigned {
 			const rv32i_instruction rvi{instr};
-			auto* handler = cpu.decode(rvi).handler;
-			handler(cpu, rvi);
-			return DecoderData<W>::handler_index_for(handler);
+			if constexpr (libtcc_enabled) {
+				try {
+					cpu.decode(rvi).handler(cpu, rvi);
+					return 0;
+				} catch (const MachineException& e) {
+					cpu.set_current_exception(e.type());
+					return 1;
+				}
+			} else {
+				auto* handler = cpu.decode(rvi).handler;
+				handler(cpu, rvi);
+				return DecoderData<W>::handler_index_for(handler);
+			}
 		},
 		.handlers = (void (**)(CPU<W>&, uint32_t)) DecoderData<W>::get_handlers(),
 		.trigger_exception = [] (CPU<W>& cpu, address_type<W> pc, int e) {
 			cpu.registers().pc = pc; // XXX: Set PC to the failing instruction (?)
-			cpu.trigger_exception(e);
+			if constexpr (libtcc_enabled) {
+				// If we're using libtcc, we can't throw C++ exceptions because
+				// there's no unwinding support. But we can mark an exception
+				// in the CPU state and return back to dispatch.
+				cpu.set_current_exception(e);
+				// Trigger a slow-path in dispatch (which will check for exceptions)
+				cpu.machine().stop();
+			} else {
+				cpu.trigger_exception(e);
+			}
 		},
 		.trace = [] (CPU<W>& cpu, const char* msg, address_type<W> addr, uint32_t instr) {
 			(void)cpu;

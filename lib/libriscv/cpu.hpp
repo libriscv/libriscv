@@ -143,6 +143,12 @@ namespace riscv
 		// Retrieve default handler for unimplemented instructions (can be returned in on_unimplemented_instruction)
 		static const instruction_t& get_unimplemented_instruction() noexcept;
 
+		// Set current exception
+		void set_current_exception(unsigned exception) noexcept { m_current_exception = exception + 1; }
+		void clear_current_exception() noexcept { m_current_exception = 0; }
+		bool has_current_exception() const noexcept { return m_current_exception != 0; }
+		exceptions current_exception() const noexcept { return exceptions(m_current_exception-1); }
+
 	private:
 		Registers<W> m_regs;
 		Machine<W>&  m_machine;
@@ -154,6 +160,9 @@ namespace riscv
 		mutable CachedPage<W, const Page> m_cache;
 
 		const unsigned m_cpuid;
+
+		// The current exception (used by eg. TCC which doesn't create unwinding tables)
+		unsigned m_current_exception = 0;
 
 		// The default execute fault simply triggers the exception
 		execute_fault_t m_fault = [] (auto& cpu, auto&) {

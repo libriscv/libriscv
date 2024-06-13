@@ -12,6 +12,7 @@ namespace riscv {
 		void (*vec_load)(CPU<W>&, int vd, address_type<W> addr);
 		void (*vec_store) (CPU<W>&, address_type<W> addr, int vd);
 		syscall_t<W>* syscalls;
+		int  (*system_call)(CPU<W>&, int);
 		void (*unknown_syscall)(CPU<W>&, address_type<W>);
 		void (*system)(CPU<W>&, uint32_t);
 		unsigned (*execute)(CPU<W>&, uint32_t);
