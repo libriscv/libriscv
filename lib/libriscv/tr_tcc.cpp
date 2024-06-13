@@ -9,7 +9,7 @@ namespace riscv
 		TCCState* state = tcc_new();
 		tcc_set_output_type(state, TCC_OUTPUT_MEMORY);
 
-		for (auto pair : cflags) {
+		for (const auto& pair : cflags) {
 			tcc_define_symbol(state, pair.first.c_str(), pair.second.c_str());
 		}
 
