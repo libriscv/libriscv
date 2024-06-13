@@ -103,18 +103,18 @@ typedef union {
 	} usign;
 } fp64reg;
 
-static inline void load_fl(fp64reg* reg, uint32_t fv) {
-	reg->i32[0] = fv;
 #ifdef RISCV_NANBOXING
-	reg->i32[1] = 0;
+#define load_fl(reg, iv) \
+	(reg)->i32[0] = (iv);
+	(reg)->i32[1] = 0;
+#define set_fl(reg, fv) \
+	(reg)->f32[0] = (fv);
+	(reg)->i32[1] = 0;
+#else
+#define load_fl(reg, fv) (reg)->i32[0] = (fv)
+#define set_fl(reg, fv)  (reg)->f32[0] = (fv)
 #endif
-}
-static inline void set_fl(fp64reg* reg, float f) {
-	reg->f32[0] = f;
-#ifdef RISCV_NANBOXING
-	reg->i32[1] = 0;
-#endif
-}
+
 #define load_dbl(reg, dv) (reg)->i64 = (dv)
 #define set_dbl(reg, dv)  (reg)->f64 = (dv)
 
