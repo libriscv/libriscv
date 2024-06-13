@@ -567,9 +567,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	const auto nmappings = *no_mappings;
 	exec.reserve_mappings(nmappings);
 	for (size_t i = 0; i < nmappings; i++) {
-		exec.add_mapping(mappings[i].handler);
 		const auto addr = mappings[i].addr;
 		if (exec.is_within(addr)) {
+			exec.add_mapping(mappings[i].handler);
 			auto& entry = decoder_entry_at(exec, addr);
 			if (mappings[i].handler != nullptr) {
 				entry.instr = i;
@@ -582,6 +582,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				fprintf(stderr, "libriscv: Translation mapping 0x%lX outside execute area 0x%lX-0x%lX\n",
 					(long)addr, (long)exec.exec_begin(), (long)exec.exec_end());
 			}
+			exec.add_mapping([] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
+				throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
+			});
 			//throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
 			// It might be technically possible to produce some valid instructions in the
 			// padding areas, but it's not worth the effort to support this. Ignore.

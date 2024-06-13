@@ -65,6 +65,7 @@ namespace riscv
 		void add_mapping(bintr_block_func<W> handler) { m_translator_mappings.push_back(handler); }
 		bintr_block_func<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
 		bintr_block_func<W> unchecked_mapping_at(unsigned i) const { return m_translator_mappings[i]; }
+		size_t translator_mappings() const noexcept { return m_translator_mappings.size(); }
 #else
 		bool is_binary_translated() const noexcept { return false; }
 #endif
