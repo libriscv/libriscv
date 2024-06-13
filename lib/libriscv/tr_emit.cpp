@@ -1368,21 +1368,22 @@ void Emitter<W>::emit()
 		case RV32V_OP: {   // General handler for vector instructions
 #ifdef RISCV_EXT_VECTOR
 			const rv32v_instruction vi{instr};
+			const unsigned vlen = RISCV_EXT_VECTOR / 4;
 			switch (instr.vwidth()) {
 			case 0x1: // OPF.VV
 				switch (vi.OPVV.funct6)
 				{
 				case 0b000000: // VFADD.VV
-					code +=
-						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
-						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs1) + ".f32[i] + " + from_rvvreg(vi.OPVV.vs2) + ".f32[i];\n"
-						"}\n";
+					for (unsigned i = 0; i < vlen; i++) {
+						const std::string f32 = ".f32[" + std::to_string(i) + "]";
+						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs1) + f32 + " + " + from_rvvreg(vi.OPVV.vs2) + f32 + ";\n";
+					}
 					break;
 				case 0b100100: // VFMUL.VV
-					code +=
-						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
-						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs1) + ".f32[i] * " + from_rvvreg(vi.OPVV.vs2) + ".f32[i];\n"
-						"}\n";
+					for (unsigned i = 0; i < vlen; i++) {
+						const std::string f32 = ".f32[" + std::to_string(i) + "]";
+						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs1) + f32 + " * " + from_rvvreg(vi.OPVV.vs2) + f32 + ";\n";
+					}
 					break;
 				default:
 					UNKNOWN_INSTRUCTION();
@@ -1393,18 +1394,18 @@ void Emitter<W>::emit()
 				switch (vi.OPVV.funct6)
 				{
 				case 0b000000: // VFADD.VF
-					code +=
-						"const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n"
-						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
-						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs2) + ".f32[i] + " + scalar + ";\n"
-						"}\n";
+					code += "const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
+					for (unsigned i = 0; i < vlen; i++) {
+						const std::string f32 = ".f32[" + std::to_string(i) + "]";
+						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs2) + f32 + " + " + scalar + ";\n";
+					}
 					break;
 				case 0b100100: // VFMUL.VF
-					code +=
-						"const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n"
-						"for (unsigned i = 0; i < RISCV_EXT_VECTOR/4; i++) {\n"
-						"  " + from_rvvreg(vi.OPVV.vd) + ".f32[i] = " + from_rvvreg(vi.OPVV.vs2) + ".f32[i] * " + scalar + ";\n"
-						"}\n";
+					code += "const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
+					for (unsigned i = 0; i < vlen; i++) {
+						const std::string f32 = ".f32[" + std::to_string(i) + "]";
+						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs2) + f32 + " * " + scalar + ";\n";
+					}
 					break;
 				default:
 					UNKNOWN_INSTRUCTION();
