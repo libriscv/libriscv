@@ -28,7 +28,7 @@ namespace riscv
 		return 0;
 	}
 
-	// Default: RDTIME produces monotonic time with *millisecond*-granularity
+	// Default: RDTIME produces monotonic time with *microsecond*-granularity
 	template <int W>
 	uint64_t Machine<W>::default_rdtime(const Machine<W>&) {
 		auto now = std::chrono::steady_clock::now();

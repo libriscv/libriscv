@@ -134,7 +134,11 @@ if (RISCV_BINARY_TRANSLATION)
 endif()
 
 configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
-configure_file(libriscv.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
+if (RISCV_LIBTCC)
+	configure_file(libriscv_libtcc.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
+else()
+	configure_file(libriscv.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
+endif()
 
 add_library(riscv ${SOURCES})
 target_compile_features(riscv PUBLIC cxx_std_20)
@@ -161,16 +165,29 @@ endif()
 
 
 if (RISCV_LIBTCC)
-	#include(FetchContent)
-	#FetchContent_Declare(
-	#	libtcc
-	#	GIT_REPOSITORY    https://github.com/fwsGonzo/libtcc-cmake
-	#	GIT_TAG           master
-	#)
-	#FetchContent_MakeAvailable(libtcc)
-	#target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
+	if(CMAKE_VERSION VERSION_LESS "3.14.0") 
+		target_link_libraries(riscv PUBLIC libtcc.a dl)
+		target_compile_definitions(riscv PUBLIC LIBTCC_PACKAGE=1)
+		set(LIBTCC_FROM_PACKAGE TRUE)
+	else()
+		include(FetchContent)
+		FetchContent_Declare(
+			libtcc
+			GIT_REPOSITORY    https://github.com/fwsGonzo/libtcc-cmake
+			GIT_TAG           master
+		)
+		FetchContent_MakeAvailable(libtcc)
+		target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
+		target_link_libraries(riscv PUBLIC libtcc libtcc1)
+		set(LIBTCC_FROM_PACKAGE FALSE)
 
-	target_link_libraries(riscv PUBLIC libtcc.a)
+		# Installed version will need to find libtcc
+		if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
+			target_compile_definitions(riscv PUBLIC
+				LIBTCC_LIBRARY_PATH="/usr/lib/libriscv"
+			)
+		endif()
+	endif()
 endif()
 
 if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
@@ -235,4 +252,14 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		FILES ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc
 		DESTINATION lib/pkgconfig
 	)
+	if (RISCV_LIBTCC)
+		# Install our own copy of libtcc, if we're not using the system package
+		if (NOT LIBTCC_FROM_PACKAGE)
+			install(FILES
+				${CMAKE_BINARY_DIR}/_deps/libtcc-build/libtcc.a
+				${CMAKE_BINARY_DIR}/libtcc1.a
+				DESTINATION lib/${PROJECT_NAME}
+			)
+		endif()
+	endif()
 endif()

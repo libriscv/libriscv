@@ -1,4 +1,7 @@
+#if __has_include(<bit>)
 #include <bit>
+#define RISCV_HAS_BITOPS
+#endif
 #include <cmath>
 #include <chrono>
 #include <mutex>
@@ -16,6 +19,7 @@ extern "C" int unlink(const char* path);
 # endif
 #else
 # include <dlfcn.h>
+# include <unistd.h>
 #endif
 #include "machine.hpp"
 #include "decoder_cache.hpp"
@@ -736,22 +740,46 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			return std::sqrt(d);
 		},
 		.clz = [] (uint32_t x) -> int {
+#ifdef RISCV_HAS_BITOPS
 			return std::countl_zero(x);
+#else
+			return x ? __builtin_clz(x) : 32;
+#endif
 		},
 		.clzl = [] (uint64_t x) -> int {
+#ifdef RISCV_HAS_BITOPS
 			return std::countl_zero(x);
+#else
+			return x ? __builtin_clzl(x) : 64;
+#endif
 		},
 		.ctz = [] (uint32_t x) -> int {
+#ifdef RISCV_HAS_BITOPS
 			return std::countr_zero(x);
+#else
+			return x ? __builtin_ctz(x) : 0;
+#endif
 		},
 		.ctzl = [] (uint64_t x) -> int {
+#ifdef RISCV_HAS_BITOPS
 			return std::countr_zero(x);
+#else
+			return x ? __builtin_ctzl(x) : 0;
+#endif
 		},
 		.cpop = [] (uint32_t x) -> int {
+#ifdef RISCV_HAS_BITOPS
 			return std::popcount(x);
+#else
+			return __builtin_popcount(x);
+#endif
 		},
 		.cpopl = [] (uint64_t x) -> int {
+#ifdef RISCV_HAS_BITOPS
 			return std::popcount(x);
+#else
+			return __builtin_popcountl(x);
+#endif
 		},
 	});
 

@@ -1,7 +1,7 @@
 FROM ubuntu:latest
 
 RUN apt update && apt install -y \
-	cmake \
+	cmake git \
 	clang-18 \
 	tcc libtcc-dev \
 	g++-13-riscv64-linux-gnu
@@ -16,7 +16,7 @@ COPY binaries/measure_mips/fib.c /app/emulator/fib.c
 
 # Fast emulation (with TCC JIT compilation)
 WORKDIR /app/emulator
-RUN ./build.sh --tcc && cp .build/rvlinux /app/rvlinux
+RUN ./build.sh --tcc && cp .build/rvlinux /app/rvlinux && cp .build/libtcc1.a /app/libtcc1.a
 
 # Fastest emulator (with binary translation)
 WORKDIR /app/emulator
