@@ -1,8 +1,12 @@
 #include "common.hpp"
+
 #ifdef LIBTCC_PACKAGE
-#include <libtcc.h>
+# include <libtcc.h>
 #else
-#include <tcc/libtcc.h>
+# include <tcc/libtcc.h>
+# ifndef LIBTCC_LIBRARY_PATH
+#  define LIBTCC_LIBRARY_PATH "."
+# endif
 #endif
 
 namespace riscv
@@ -22,9 +26,8 @@ namespace riscv
 
 		if (!libtcc1.empty())
 			tcc_add_library_path(state, libtcc1.c_str());
-#ifndef LIBTCC_PACKAGE
-		else
-			tcc_add_library_path(state, ".");
+#ifdef LIBTCC_LIBRARY_PATH
+		tcc_add_library_path(state, LIBTCC_LIBRARY_PATH);
 #endif
 
 		if (tcc_compile_string(state, code.c_str()) < 0) {
