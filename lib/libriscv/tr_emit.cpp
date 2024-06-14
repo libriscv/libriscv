@@ -32,7 +32,7 @@
 #endif
 
 namespace riscv {
-static const std::string LOOP_EXPRESSION = "counter < max_counter";
+static const std::string LOOP_EXPRESSION = "LIKELY(counter < max_counter)";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
 

@@ -547,12 +547,12 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	}
 
 	// Map all the functions to instruction handlers
-	uint32_t* no_mappings = (uint32_t *)dylib_lookup(dylib, "no_mappings");
+	const uint32_t* no_mappings = (const uint32_t *)dylib_lookup(dylib, "no_mappings");
 	struct Mapping {
 		address_t addr;
 		bintr_block_func<W> handler;
 	};
-	Mapping* mappings = (Mapping *)dylib_lookup(dylib, "mappings");
+	const Mapping* mappings = (const Mapping *)dylib_lookup(dylib, "mappings");
 
 	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
 		dylib_close(dylib);
@@ -566,7 +566,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// Apply mappings to decoder cache
 	const auto nmappings = *no_mappings;
 	exec.reserve_mappings(nmappings);
-	for (size_t i = 0; i < nmappings; i++) {
+	for (unsigned i = 0; i < nmappings; i++) {
 		const auto addr = mappings[i].addr;
 		if (exec.is_within(addr)) {
 			exec.add_mapping(mappings[i].handler);
