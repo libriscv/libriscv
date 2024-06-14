@@ -19,7 +19,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu libtcc-dev tcc
+        sudo apt install -y gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu
         git submodule update --init ${{github.workspace}}/tests/Catch2
         git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
 
@@ -31,4 +31,4 @@ jobs:
 
     - name: Run tests
       working-directory: ${{github.workspace}}/build
-      run: CFLAGS=-O0 ctest --verbose . -j4
+      run: ctest --verbose . -j4

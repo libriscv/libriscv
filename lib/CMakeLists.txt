@@ -161,16 +161,20 @@ endif()
 
 
 if (RISCV_LIBTCC)
-	#include(FetchContent)
-	#FetchContent_Declare(
-	#	libtcc
-	#	GIT_REPOSITORY    https://github.com/fwsGonzo/libtcc-cmake
-	#	GIT_TAG           master
-	#)
-	#FetchContent_MakeAvailable(libtcc)
-	#target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
-
-	target_link_libraries(riscv PUBLIC libtcc.a)
+	if(CMAKE_VERSION VERSION_LESS "3.14.0") 
+		target_link_libraries(riscv PUBLIC libtcc.a)
+		target_compile_definitions(riscv PUBLIC LIBTCC_PACKAGE=1)
+	else()
+		include(FetchContent)
+		FetchContent_Declare(
+			libtcc
+			GIT_REPOSITORY    https://github.com/fwsGonzo/libtcc-cmake
+			GIT_TAG           master
+		)
+		FetchContent_MakeAvailable(libtcc)
+		target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
+		target_link_libraries(riscv PUBLIC libtcc libtcc1)
+	endif()
 endif()
 
 if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")

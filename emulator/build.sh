@@ -42,4 +42,7 @@ fi
 if test -f ".build/rvnewlib"; then
 	ln -fs .build/rvnewlib .
 fi
+if test -f ".build/libtcc1.a"; then
+	ln -fs .build/libtcc1.a .
+fi
 ln -fs .build/rvlinux .
