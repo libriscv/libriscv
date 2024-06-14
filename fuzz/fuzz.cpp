@@ -30,7 +30,7 @@ static void fuzz_instruction_set(const uint8_t* data, size_t len)
 
 	try
 	{
-		riscv::Machine<W> machine { empty };
+		riscv::Machine<W> machine { empty, {} };
 		machine.memory.set_page_attr(S, 0x1000, {.read = true, .write = true});
 		machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
 		machine.on_unhandled_syscall = [] (auto&, size_t) {};
