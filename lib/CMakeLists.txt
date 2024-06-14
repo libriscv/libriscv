@@ -162,7 +162,7 @@ endif()
 
 if (RISCV_LIBTCC)
 	if(CMAKE_VERSION VERSION_LESS "3.14.0") 
-		target_link_libraries(riscv PUBLIC libtcc.a)
+		target_link_libraries(riscv PUBLIC libtcc.a dl)
 		target_compile_definitions(riscv PUBLIC LIBTCC_PACKAGE=1)
 	else()
 		include(FetchContent)

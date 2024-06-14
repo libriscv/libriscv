@@ -19,6 +19,7 @@ extern "C" int unlink(const char* path);
 # endif
 #else
 # include <dlfcn.h>
+# include <unistd.h>
 #endif
 #include "machine.hpp"
 #include "decoder_cache.hpp"
