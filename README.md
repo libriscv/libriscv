@@ -72,12 +72,13 @@ A fib(256000000) program for testing is built automatically. You can test-run it
 docker run -v $PWD/binaries:/app/binaries --rm -i -t libriscv fib
 ```
 
-If you want to use `rvlinux` from terminal, or you want to compile RISC-V programs, you can enter the docker container instead of using it from the outside. A 64-bit RISC-V compiler is installed in the container, and it can be used to build RISC-V programs. You can enter the container like so:
+You can enter the docker container instead of using it from the outside. A 64-bit RISC-V compiler is installed in the container, and it can be used to build RISC-V programs.
+
 ```sh
 docker run -v $PWD/binaries:/app/binaries --entrypoint='' -i -t libriscv /bin/bash
 ```
 
-Inside the container you have access to the emulator `rvlinux`, and the compilers `riscv64-linux-gnu-gcc-12` and `riscv64-linux-gnu-g++-12`. There is also `rvlinux-fast` which cannot run RISC-V programs with compressed instructions, but is a lot faster.
+Inside the container you have access to `rvlinux`, and the compilers `riscv64-linux-gnu-gcc-13` and `riscv64-linux-gnu-g++-13`. There is also `rvlinux-fast` which uses binary translation to make emulation a lot faster, but needs time to compile beforehand.
 
 
 ## Installing a RISC-V GCC compiler
@@ -88,7 +89,7 @@ On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC c
 sudo apt install gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu
 ```
 
-Depending on your distro you may have access to GCC versions 10 to 13. Now you have a full Linux C/C++ compiler for 64-bit RISC-V.
+Depending on your distro you may have access to GCC versions 10 to 14. Now you have a full Linux C/C++ compiler for 64-bit RISC-V.
 
 To build smaller and leaner programs you will want a (limited) Linux userspace environment. Check out the guide on how to [build a Newlib compiler](/docs/NEWLIB.md).
 
