@@ -620,7 +620,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	static uint64_t scratch_buffer[4];
 
 	// Map the API callback table
-	auto func = (void (*)(const CallbackTable<W>&)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&, void*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
 			if constexpr (libtcc_enabled) {
@@ -784,7 +784,9 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			return __builtin_popcountl(x);
 #endif
 		},
-	});
+	},
+		machine().memory.memory_arena_ptr_ref()
+	);
 
 	return true;
 }

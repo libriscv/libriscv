@@ -8,6 +8,7 @@ namespace riscv {
 #define ILLEGAL_OPCODE  0
 #define MISALIGNED_INSTRUCTION 4
 #define VISIBLE  __attribute__((visibility("default")))
+#define INTERNAL __attribute__((visibility("hidden")))
 
 #if RISCV_TRANSLATION_DYLIB == 4
 	typedef uint32_t addr_t;
@@ -162,7 +163,14 @@ static struct CallbackTable {
 #define ARENA_WRITE_BOUNDARY (RISCV_ARENA_END - RISCV_ARENA_ROEND)
 #define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
 #define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
+
+INTERNAL static char* arena_ptr;
+
+#ifdef __TINYC__
+#define ARENA_AT(cpu, x)  arena_ptr[x]
+#else
 #define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFF))[x]
+#endif
 
 static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {
@@ -206,10 +214,11 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-extern VISIBLE void init(struct CallbackTable* table)
+extern VISIBLE void init(struct CallbackTable* table, char* arena)
 {
 	api = *table;
-};
+	arena_ptr = arena;
+}
 
 typedef struct {
 	uint64_t counter;
