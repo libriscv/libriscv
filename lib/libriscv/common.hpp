@@ -236,6 +236,11 @@ namespace riscv
 #else
 	static constexpr bool flat_readwrite_arena = false;
 #endif
+#ifdef RISCV_ENCOMPASSING_ARENA
+	static constexpr bool encompassing_32bit_arena = true;
+#else
+	static constexpr bool encompassing_32bit_arena = false;
+#endif
 #ifdef RISCV_LIBTCC
 	static constexpr bool libtcc_enabled = true;
 #else

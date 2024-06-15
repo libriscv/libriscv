@@ -110,6 +110,9 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 		// so it will be recompiled if the trace option is toggled.
 		defines.emplace("RISCV_TRACING", "1");
 	}
+	if constexpr (W == 4 && encompassing_32bit_arena) {
+		defines.emplace("RISCV_32BIT_UNBOUNDED", "1");
+	}
 	return defines;
 }
 
@@ -617,7 +620,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	static uint64_t scratch_buffer[4];
 
 	// Map the API callback table
-	auto func = (void (*)(const CallbackTable<W>&)) ptr;
+	auto func = (void (*)(const CallbackTable<W>&, void*)) ptr;
 	func(CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
 			if constexpr (libtcc_enabled) {
@@ -781,7 +784,9 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			return __builtin_popcountl(x);
 #endif
 		},
-	});
+	},
+		machine().memory.memory_arena_ptr_ref()
+	);
 
 	return true;
 }

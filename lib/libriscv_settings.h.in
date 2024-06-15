@@ -17,6 +17,7 @@
 #cmakedefine RISCV_MULTIPROCESS
 #cmakedefine RISCV_BINARY_TRANSLATION
 #cmakedefine RISCV_FLAT_RW_ARENA
+#cmakedefine RISCV_ENCOMPASSING_ARENA
 #cmakedefine RISCV_THREADED
 #cmakedefine RISCV_TAILCALL_DISPATCH
 #cmakedefine RISCV_LIBTCC
