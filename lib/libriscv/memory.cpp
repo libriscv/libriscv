@@ -11,6 +11,8 @@ __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 
 namespace riscv
 {
+	static constexpr uint64_t UNBOUNDED_ARENA_SIZE = 0x100000000 + (16ULL << 20);
+
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
 					MachineOptions<W> options)
@@ -30,15 +32,40 @@ namespace riscv
 			if (options.use_memory_arena)
 			{
 #ifdef __linux__
-				// Over-allocate by 1 page in order to avoid bounds-checking with size
-				const size_t len = (pages_max + 1) * Page::size();
-				this->m_arena.data = (PageData *)mmap(NULL, len, PROT_READ | PROT_WRITE,
-					MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-				this->m_arena.pages = pages_max;
-				// mmap() returns MAP_FAILED (-1) when mapping fails
-				if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
-					this->m_arena.data = nullptr;
-					this->m_arena.pages = 0;
+				if constexpr (W == 4 && encompassing_32bit_arena)
+				{
+					static_assert(flat_readwrite_arena || !encompassing_32bit_arena,
+						"32-bit encompassing arena requires flat_readwrite_arena to be enabled");
+					// Allocate a complete 32-bit arena, covering the entire 4GB address space
+					// Also 16MB extra to avoid having to check for 32-bit overflow for some helper functions
+					// TODO: Allocate maximum signed offset below 0x0 for bounds-checking
+					// TODO: Allocate unpresent pages for the whole 4GB address space,
+					// and only allocate real memory according to pages_max. Then handle
+					// page faults for the rest of the address space using userfaultfd.
+					this->m_arena.data = (PageData *)mmap(NULL, UNBOUNDED_ARENA_SIZE, PROT_READ | PROT_WRITE,
+						MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+					this->m_arena.pages = UNBOUNDED_ARENA_SIZE / Page::size();
+					if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
+						// We probably reached a limit on the number of mappings
+						throw MachineException(OUT_OF_MEMORY, "Out of memory", UNBOUNDED_ARENA_SIZE);
+					}
+					/*this->m_arena.data = (PageData *)mmap(m_arena.data, (pages_max + 1) * Page::size(), PROT_READ | PROT_WRITE,
+						MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+					this->m_arena.pages = pages_max;
+					if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
+						throw MachineException(OUT_OF_MEMORY, "Out of memory", this->m_arena.pages * Page::size());
+					}*/
+				} else {
+					// Over-allocate by 1 page in order to avoid bounds-checking with size
+					const size_t len = (pages_max + 1) * Page::size();
+					this->m_arena.data = (PageData *)mmap(NULL, len, PROT_READ | PROT_WRITE,
+						MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+					this->m_arena.pages = pages_max;
+					// mmap() returns MAP_FAILED (-1) when mapping fails
+					if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
+						this->m_arena.data = nullptr;
+						this->m_arena.pages = 0;
+					}
 				}
 #else
 				// TODO: XXX: Investigate if this is a time sink
@@ -112,7 +139,13 @@ namespace riscv
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
 #ifdef __linux__
-			munmap(this->m_arena.data, this->m_arena.pages * Page::size());
+			if constexpr (W == 4 && riscv::encompassing_32bit_arena)
+			{
+				// munmap() the entire 4GB address space
+				munmap(this->m_arena.data, UNBOUNDED_ARENA_SIZE);
+			} else {
+				munmap(this->m_arena.data, (this->m_arena.pages + 1) * Page::size());
+			}
 #else
 			delete[] this->m_arena.data;
 #endif

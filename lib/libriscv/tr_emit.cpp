@@ -209,7 +209,11 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (cpu.machine().memory.uses_flat_memory_arena()) {
+		if (W == 4 && cpu.machine().memory.uses_32bit_encompassing_arena())
+		{
+			add_code(dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, (uint32_t)(" + address + "));");
+		}
+		else if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
 					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ");",
@@ -234,12 +238,16 @@ struct Emitter
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
 				add_code("*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ") = " + value + ";");
+				return;
 			}
-			return;
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (cpu.machine().memory.uses_flat_memory_arena()) {
+		if (W == 4 && cpu.machine().memory.uses_32bit_encompassing_arena())
+		{
+			add_code("*(" + type + "*)&ARENA_AT(cpu, (uint32_t)(" + address + ")) = " + value + ";");
+		}
+		else if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
 				"  *(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ") = " + value + ";",

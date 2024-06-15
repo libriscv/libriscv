@@ -110,6 +110,9 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 		// so it will be recompiled if the trace option is toggled.
 		defines.emplace("RISCV_TRACING", "1");
 	}
+	if constexpr (W == 4 && encompassing_32bit_arena) {
+		defines.emplace("RISCV_32BIT_UNBOUNDED", "1");
+	}
 	return defines;
 }
 

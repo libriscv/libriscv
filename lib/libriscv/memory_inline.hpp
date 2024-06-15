@@ -19,6 +19,10 @@ T Memory<W>::read(address_t address)
 			return value;
 		}
 	}
+	else if constexpr (W == 4 && riscv::encompassing_32bit_arena)
+	{
+		return *(T *)&((const char*)m_arena.data)[address];
+	}
 	else if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address - RWREAD_BEGIN < memory_arena_read_boundary())) {
 #ifdef RISCV_EXT_VECTOR
@@ -41,7 +45,11 @@ template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
-	if constexpr (flat_readwrite_arena) {
+	if constexpr (W == 4 && riscv::encompassing_32bit_arena)
+	{
+		return *(T *)&((char*)m_arena.data)[address];
+	}
+	else if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address - initial_rodata_end() < memory_arena_write_boundary())) {
 			return *(T *)&((char*)m_arena.data)[RISCV_SPECSAFE(address)];
 		}
@@ -62,6 +70,11 @@ void Memory<W>::write(address_t address, T value)
 			memcpy(address, &value, sizeof(T));
 			return;
 		}
+	}
+	else if constexpr (W == 4 && riscv::encompassing_32bit_arena)
+	{
+		*(T *)&((char*)m_arena.data)[address] = value;
+		return;
 	}
 	else if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address - initial_rodata_end() < memory_arena_write_boundary())) {
