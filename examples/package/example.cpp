@@ -22,8 +22,8 @@ int main(int argc, char** argv)
 	);
 
 	// Take program arguments and make a new string vector, from 1..N
-	std::vector<std::string> arguments { argv[1] };
-	for (size_t i = 2; i < argc; i++)
+	std::vector<std::string> arguments;
+	for (size_t i = 1; i < argc; i++)
 		arguments.push_back(argv[i]);
 
 	// Create a new 64-bit RISC-V machine

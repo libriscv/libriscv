@@ -35,6 +35,7 @@
 namespace riscv
 {
 	template <int W> struct Memory;
+
 	struct MachineTranslationCrossOptions
 	{
 		/// @brief Provide a custom binary-translation compiler in order
@@ -155,7 +156,9 @@ namespace riscv
 		/// @note The hash is a CRC32-C of the execute segment + emulator settings.
 		/// @note The hash can be found with machine.current_execute_segment().translation_hash()
 		static std::string translation_filename(const std::string& prefix, uint32_t hash, const std::string& suffix);
+
 #ifdef RISCV_LIBTCC
+		/// @brief Provide a custom libtcc1 location for the binary translator.
 		std::string libtcc1_location {};
 #endif
 #endif

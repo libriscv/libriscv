@@ -1,6 +1,6 @@
 #include "common.hpp"
 
-#ifdef LIBTCC_PACKAGE
+#ifdef RISCV_LIBTCC_PACKAGE
 # include <libtcc.h>
 #else
 # include <tcc/libtcc.h>
@@ -15,6 +15,9 @@ namespace riscv
 		int, const std::unordered_map<std::string, std::string>& cflags, const std::string& libtcc1)
 	{
 		TCCState* state = tcc_new();
+		if (!state)
+			return nullptr;
+
 		tcc_set_output_type(state, TCC_OUTPUT_MEMORY);
 
 		for (const auto& pair : cflags) {
