@@ -24,5 +24,7 @@ namespace riscv
 		std::vector<TransInfo<W>>* blocks = nullptr;
 
 		std::unordered_set<address_type<W>>& global_jump_locations;
+
+		uintptr_t arena_ptr;
 	};
 }

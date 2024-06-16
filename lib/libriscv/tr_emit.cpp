@@ -187,6 +187,34 @@ struct Emitter
 	bool gpr_exists_at(int reg) const noexcept { return this->gpr_exists.at(reg); }
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
 
+	std::string arena_at(const std::string& address) {
+		if constexpr (libtcc_enabled) {
+			if (cpu.machine().memory.uses_32bit_encompassing_arena()) {
+				return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (uint32_t)(" + address + ")))";
+			} else {
+				return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + " + speculation_safe(address) + "))";
+			}
+		} else if (cpu.machine().memory.uses_32bit_encompassing_arena()) {
+			return "ARENA_AT(cpu, (uint32_t)(" + address + "))";
+		} else {
+			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
+		}
+	}
+
+	std::string arena_at_fixed(address_t address) {
+		if constexpr (libtcc_enabled) {
+			if (cpu.machine().memory.uses_32bit_encompassing_arena()) {
+				return "(*(char*)" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ul)";
+			} else {
+				return "(*(char*)" + std::to_string(tinfo.arena_ptr + address) + "ul)";
+			}
+		} else if (cpu.machine().memory.uses_32bit_encompassing_arena()) {
+			return "ARENA_AT(cpu, (uint32_t)(" + std::to_string(address) + "))";
+		} else {
+			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
+		}
+	}
+
 	template <typename T>
 	void memory_load(std::string dst, std::string type, int reg, int32_t imm)
 	{
@@ -202,7 +230,7 @@ struct Emitter
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
-					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ");"
+					dst + " = " + cast + "*(" + type + "*)&" + arena_at_fixed(absolute_vaddr) + ";"
 				);
 				return;
 			}
@@ -211,12 +239,12 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_32bit_encompassing_arena())
 		{
-			add_code(dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, (uint32_t)(" + address + "));");
+			add_code(dst + " = " + cast + "*(" + type + "*)&" + arena_at(address) + ";");
 		}
 		else if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
-					dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ");",
+					dst + " = " + cast + "*(" + type + "*)&" + arena_at(address) + ";",
 				"else {",
 					"const char* " + data + " = api.mem_ld(cpu, " + address + ");",
 					dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];",
@@ -245,12 +273,12 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_32bit_encompassing_arena())
 		{
-			add_code("*(" + type + "*)&ARENA_AT(cpu, (uint32_t)(" + address + ")) = " + value + ";");
+			add_code("*(" + type + "*)&" + arena_at(address) + " = " + value + ";");
 		}
 		else if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
-				"  *(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(address) + ") = " + value + ";",
+				"  *(" + type + "*)&" + arena_at(address) + " = " + value + ";",
 				"else {",
 				"  char *" + data + " = api.mem_st(cpu, " + address + ");",
 				"  *(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";",

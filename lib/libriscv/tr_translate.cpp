@@ -410,7 +410,8 @@ if constexpr (SCAN_FOR_GP) {
 				true,
 				std::move(jump_locations),
 				nullptr, // blocks
-				global_jump_locations
+				global_jump_locations,
+				(uintptr_t)machine().memory.memory_arena_ptr_ref()
 			});
 			icounter += length;
 			// we can't translate beyond this estimate, otherwise
