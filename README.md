@@ -15,17 +15,16 @@ For discussions & help, [visit Discord](https://discord.gg/n4GcXr66X5).
 libriscv is an ultra-low latency emulator, designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
 
 Goals:
-- Change the conversation around scripting, overhead is reduced to almost nothing
-- Type-safe VM call and system call interfaces
+- Lowest possible latency
+- Modern, type-safe VM call and system call interfaces
 - [Secure speculation-safe sandbox](SECURITY.md)
 - Low attack surface, only 20k LOC
 - Platform-independent and super-easy to embed
-- Ship high-performance enmulation through DLLs on end-user systems (eg. Windows)
+- Shippable high-performance emulation on end-user systems through DLLs (eg. Windows)
 
 Non goals:
-- Just-in-time compilation
 - Wide support for Linux system calls
-- Other attack surface inflators
+- Higher performance at the cost of call latency
 
 ## Benchmarks
 
@@ -334,7 +333,7 @@ The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLA
 
 You can control binary translation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. For the [CLI](/emulator), the `--no-translate` option can be used to disable binary translation in order to compare output or performance.
 
-When embedded libtcc is enabled, by setting the CMake option `RISCV_LIBTCC` to `ON`, libriscv behaves like it's dynamically translated. _libriscv_ will invoke _libtcc_ on code generated for each execute segment, including those loaded from shared objects. This requires your distros equivalent of the `libtcc-dev` package.
+When embedded libtcc is enabled, by setting the CMake option `RISCV_LIBTCC` to `ON`, libriscv behaves like it's dynamically translated. _libriscv_ will invoke _libtcc_ on code generated for each execute segment, including those loaded from shared objects. You can use your distros `libtcc-dev` package, or embed libtcc with the emulator (default).
 
 
 ## Experimental and special features
