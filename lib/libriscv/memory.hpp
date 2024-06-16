@@ -174,9 +174,8 @@ namespace riscv
 			address_t dst, void* src, size_t size, PageAttributes = {});
 
 		// Custom execute segment, returns page base, final size and execute segment pointer
-		DecodedExecuteSegment<W>& exec_segment_for(address_t vaddr);
-		const DecodedExecuteSegment<W>& exec_segment_for(address_t vaddr) const;
-		const DecodedExecuteSegment<W>& main_execute_segment() const { return m_exec.at(0); }
+		std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr);
+		const std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr) const;
 		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
 		size_t cached_execute_segments() const noexcept { return m_exec_segs; }
 		// Evict newest execute segments until only remaining left
@@ -277,9 +276,9 @@ namespace riscv
 #endif
 
 		// Execute segments
-		std::array<DecodedExecuteSegment<W>, MAX_EXECUTE_SEGS> m_exec;
+		std::array<std::shared_ptr<DecodedExecuteSegment<W>>, MAX_EXECUTE_SEGS> m_exec;
 		size_t m_exec_segs = 0;
-		DecodedExecuteSegment<W>& next_execute_segment();
+		std::shared_ptr<DecodedExecuteSegment<W>>& next_execute_segment();
 
 		// Linear arena at start of memory (mmap-backed)
 		struct alignas(16) {

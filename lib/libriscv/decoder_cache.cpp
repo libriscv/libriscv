@@ -5,6 +5,7 @@
 #include "safe_instr_loader.hpp"
 #include "threaded_rewriter.cpp"
 #include "threaded_bytecodes.hpp"
+#include "util/crc32.hpp"
 
 namespace riscv
 {
@@ -259,6 +260,15 @@ namespace riscv
 		// PC-relative pointer to instruction bits
 		auto* exec_segment = exec.exec_data();
 
+		// Create CRC32-C hash of the execute segment
+		{
+			auto* exec_data = exec.exec_data(exec.exec_begin());
+			uint32_t checksum = crc32c(exec_data, exec.exec_end() - exec.exec_begin());
+
+			// Store the hash in the decoder cache
+			exec.set_crc32c_hash(checksum);
+		}
+
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
 		// Also, don't run the translator again (for now)
@@ -421,9 +431,9 @@ namespace riscv
 
 		// Create the whole executable memory range
 		auto& current_exec = this->next_execute_segment();
-		new (&current_exec) DecodedExecuteSegment<W>(pbase, plen, vaddr, exlen);
+		current_exec = std::make_shared<DecodedExecuteSegment<W>>(pbase, plen, vaddr, exlen);
 
-		auto* exec_data = current_exec.exec_data(pbase);
+		auto* exec_data = current_exec->exec_data(pbase);
 		// This is a zeroed prologue in order to be able to use whole pages
 		std::memset(&exec_data[0],      0,     prelen);
 		// This is the actual instruction bytes
@@ -431,13 +441,13 @@ namespace riscv
 		// This memset() operation will end up zeroing the extra 4 bytes
 		std::memset(&exec_data[prelen + exlen], 0,   postlen);
 
-		this->generate_decoder_cache(options, current_exec);
+		this->generate_decoder_cache(options, *current_exec);
 
-		return current_exec;
+		return *current_exec;
 	}
 
 	template <int W>
-	DecodedExecuteSegment<W>& Memory<W>::next_execute_segment()
+	std::shared_ptr<DecodedExecuteSegment<W>>& Memory<W>::next_execute_segment()
 	{
 		if (LIKELY(m_exec_segs < MAX_EXECUTE_SEGS)) {
 			auto& result = this->m_exec.at(m_exec_segs);
@@ -448,17 +458,17 @@ namespace riscv
 	}
 
 	template <int W>
-	DecodedExecuteSegment<W>& Memory<W>::exec_segment_for(address_t vaddr)
+	std::shared_ptr<DecodedExecuteSegment<W>>& Memory<W>::exec_segment_for(address_t vaddr)
 	{
 		for (size_t i = 0; i < m_exec_segs; i++) {
 			auto& segment = m_exec[i];
-			if (segment.is_within(vaddr)) return segment;
+			if (segment->is_within(vaddr)) return segment;
 		}
 		return CPU<W>::empty_execute_segment();
 	}
 
 	template <int W>
-	const DecodedExecuteSegment<W>& Memory<W>::exec_segment_for(address_t vaddr) const
+	const std::shared_ptr<DecodedExecuteSegment<W>>& Memory<W>::exec_segment_for(address_t vaddr) const
 	{
 		return const_cast<Memory<W>*>(this)->exec_segment_for(vaddr);
 	}
@@ -470,11 +480,11 @@ namespace riscv
 			return;
 
 		// destructor could throw, so let's invalidate early
-		machine().cpu.set_execute_segment(CPU<W>::empty_execute_segment());
+		machine().cpu.set_execute_segment(*CPU<W>::empty_execute_segment());
 
 		while (m_exec_segs > remaining_size) {
 			m_exec_segs--;
-			m_exec.at(m_exec_segs).~DecodedExecuteSegment<W>();
+			m_exec.at(m_exec_segs) = nullptr;
 		}
 	}
 

@@ -55,6 +55,9 @@ namespace riscv
 
 		size_t threaded_rewrite(size_t bytecode, address_t pc, rv32i_instruction& instr);
 
+		uint32_t crc32c_hash() const noexcept { return m_crc32c_hash; }
+		void set_crc32c_hash(uint32_t hash) { m_crc32c_hash = hash; }
+
 #ifdef RISCV_BINARY_TRANSLATION
 		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
 		void* binary_translation_so() const { return m_bintr_dl; }
@@ -93,6 +96,7 @@ namespace riscv
 		mutable void* m_bintr_dl = nullptr;
 		uint32_t m_bintr_hash = 0x0; // CRC32-C of the execute segment + compiler options
 #endif
+		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment
 	};
 
 	template <int W>
