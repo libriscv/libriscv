@@ -141,14 +141,14 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		throw MachineException(ILLEGAL_OPERATION, "Execute segment already binary translated");
 	}
 
-	auto* exec_data = exec.exec_data(exec.exec_begin());
-
 	// Checksum the execute segment + compiler flags
 	TIME_POINT(t5);
 	const std::string cflags = defines_to_string(create_defines_for(machine(), options));
 	extern std::string compile_command(int arch, const std::string& cflags);
-	uint32_t checksum =
-		crc32c(exec_data, exec.exec_end() - exec.exec_begin());
+	uint32_t checksum = exec.crc32c_hash();
+	if (UNLIKELY(checksum == 0)) {
+		throw MachineException(INVALID_PROGRAM, "Invalid execute segment hash for translation");
+	}
 	// Also add the compiler flags to the checksum
 	checksum = ~crc32c(~checksum, cflags.c_str(), cflags.size());
 	exec.set_translation_hash(checksum);

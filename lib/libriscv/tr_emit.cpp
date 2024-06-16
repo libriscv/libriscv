@@ -32,6 +32,11 @@
 #endif
 
 namespace riscv {
+// libtcc direct arena pointer access
+// This is a performance optimization for libtcc, which allows direct access to the memory arena
+// however, with it execute segments can no longer be shared between different machines.
+// So, for a simple CLI tool, this is a good optimization. But not for a system of multiple machines.
+static constexpr bool libtcc_direct_pointer_enabled = false;
 static const std::string LOOP_EXPRESSION = "LIKELY(counter < max_counter)";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
@@ -188,7 +193,7 @@ struct Emitter
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
 
 	std::string arena_at(const std::string& address) {
-		if constexpr (libtcc_enabled) {
+		if constexpr (libtcc_direct_pointer_enabled && libtcc_enabled) {
 			if (cpu.machine().memory.uses_32bit_encompassing_arena()) {
 				return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (uint32_t)(" + address + ")))";
 			} else {
@@ -202,7 +207,7 @@ struct Emitter
 	}
 
 	std::string arena_at_fixed(address_t address) {
-		if constexpr (libtcc_enabled) {
+		if constexpr (libtcc_direct_pointer_enabled && libtcc_enabled) {
 			if (cpu.machine().memory.uses_32bit_encompassing_arena()) {
 				return "(*(char*)" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ul)";
 			} else {

@@ -128,7 +128,7 @@ namespace riscv
 			address_t pc;
 		};
 		NextExecuteReturn next_execute_segment(address_t pc);
-		static DecodedExecuteSegment<W>& empty_execute_segment();
+		static std::shared_ptr<DecodedExecuteSegment<W>>& empty_execute_segment();
 		bool is_executable(address_t addr) const noexcept;
 
 		// Override the function that gets called when the CPU
@@ -171,7 +171,7 @@ namespace riscv
 
 		// The default execute override returns no new execute segment
 		override_execute_segment_t m_override_exec = [] (auto&) -> DecodedExecuteSegment<W>& {
-			return empty_execute_segment();
+			return *empty_execute_segment();
 		};
 
 #ifdef RISCV_BINARY_TRANSLATION

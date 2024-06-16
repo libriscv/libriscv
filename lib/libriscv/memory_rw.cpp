@@ -323,7 +323,8 @@ namespace riscv
 		}
 
 		for (const auto& exec : m_exec) {
-			total += exec.size_bytes();
+			if (exec)
+				total += exec->size_bytes();
 		}
 
 		return total;
