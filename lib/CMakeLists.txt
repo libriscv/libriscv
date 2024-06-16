@@ -185,7 +185,7 @@ endif()
 
 if (RISCV_LIBTCC)
 	if(CMAKE_VERSION VERSION_LESS "3.14.0" OR RISCV_LIBTCC_DISTRO_PACKAGE) 
-		target_link_libraries(riscv PUBLIC libtcc.a)
+		target_link_libraries(riscv PUBLIC -l:libtcc.a)
 		set_source_files_properties(libriscv/tr_tcc.cpp PROPERTIES
 			COMPILE_DEFINITIONS RISCV_LIBTCC_PACKAGE=1)
 		set(LIBTCC_FROM_PACKAGE TRUE)
