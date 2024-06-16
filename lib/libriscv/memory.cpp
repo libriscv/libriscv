@@ -137,6 +137,8 @@ namespace riscv
 	Memory<W>::~Memory()
 	{
 		this->clear_all_pages();
+		// remove execute segments
+		this->evict_execute_segments(0);
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
 #ifdef __linux__

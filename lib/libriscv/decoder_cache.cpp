@@ -6,10 +6,58 @@
 #include "threaded_rewriter.cpp"
 #include "threaded_bytecodes.hpp"
 #include "util/crc32.hpp"
+#include <mutex>
 
 namespace riscv
 {
 	static constexpr bool VERBOSE_DECODER = false;
+
+	template <int W>
+	struct SharedExecuteSegments {
+		SharedExecuteSegments() = default;
+		SharedExecuteSegments(const SharedExecuteSegments&) = delete;
+		SharedExecuteSegments& operator=(const SharedExecuteSegments&) = delete;
+
+		struct Segment {
+			std::shared_ptr<DecodedExecuteSegment<W>> segment;
+			std::mutex mutex;
+
+			std::shared_ptr<DecodedExecuteSegment<W>> get() {
+				std::lock_guard<std::mutex> lock(mutex);
+				return segment;
+			}
+
+			void unlocked_set(std::shared_ptr<DecodedExecuteSegment<W>> segment) {
+				this->segment = std::move(segment);
+			}
+		};
+
+		// Remove a segment if it is the last reference
+		void remove_if_unique(uint32_t hash) {
+			std::lock_guard<std::mutex> lock(mutex);
+			// We are not able to remove the Segment itself, as the mutex
+			// may be locked by another thread. We can, however, lock the
+			// Segments mutex and set the segment to nullptr.
+			auto it = m_segments.find(hash);
+			if (it != m_segments.end()) {
+				std::scoped_lock lock(it->second.mutex);
+				if (it->second.segment.use_count() == 1)
+					it->second.segment = nullptr;
+			}
+		}
+
+		auto& get_segment(const uint32_t hash) {
+			std::scoped_lock lock(mutex);
+			auto& entry = m_segments[hash];
+			return entry;
+		}
+
+	private:
+		std::unordered_map<uint32_t, Segment> m_segments;
+		std::mutex mutex;
+	};
+	template <int W>
+	static SharedExecuteSegments<W> shared_execute_segments;
 
 	template <int W>
 	static bool is_regular_compressed(uint16_t instr) {
@@ -260,15 +308,6 @@ namespace riscv
 		// PC-relative pointer to instruction bits
 		auto* exec_segment = exec.exec_data();
 
-		// Create CRC32-C hash of the execute segment
-		{
-			auto* exec_data = exec.exec_data(exec.exec_begin());
-			uint32_t checksum = crc32c(exec_data, exec.exec_end() - exec.exec_begin());
-
-			// Store the hash in the decoder cache
-			exec.set_crc32c_hash(checksum);
-		}
-
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
 		// Also, don't run the translator again (for now)
@@ -430,8 +469,7 @@ namespace riscv
 		}
 
 		// Create the whole executable memory range
-		auto& current_exec = this->next_execute_segment();
-		current_exec = std::make_shared<DecodedExecuteSegment<W>>(pbase, plen, vaddr, exlen);
+		auto current_exec = std::make_shared<DecodedExecuteSegment<W>>(pbase, plen, vaddr, exlen);
 
 		auto* exec_data = current_exec->exec_data(pbase);
 		// This is a zeroed prologue in order to be able to use whole pages
@@ -441,9 +479,34 @@ namespace riscv
 		// This memset() operation will end up zeroing the extra 4 bytes
 		std::memset(&exec_data[prelen + exlen], 0,   postlen);
 
-		this->generate_decoder_cache(options, *current_exec);
+		// Create CRC32-C hash of the execute segment
+		const uint32_t hash = crc32c(exec_data, current_exec->exec_end() - current_exec->exec_begin());
 
-		return *current_exec;
+		// Get a free slot to reference the execute segment
+		auto& free_slot = this->next_execute_segment();
+
+		// In order to prevent others from creating the same execute segment
+		// we need to lock the shared execute segments mutex.
+		auto& segment = shared_execute_segments<W>.get_segment(hash);
+		std::scoped_lock lock(segment.mutex);
+
+		if (segment.segment != nullptr) {
+			free_slot = segment.segment;
+			return *free_slot;
+		}
+
+		// We need to create a new execute segment, as there is no shared
+		// execute segment with the same hash.
+		free_slot = std::move(current_exec);
+		// Store the hash in the decoder cache
+		free_slot->set_crc32c_hash(hash);
+
+		this->generate_decoder_cache(options, *free_slot);
+
+		// Share the execute segment in the shared execute segments
+		segment.unlocked_set(free_slot);
+
+		return *free_slot;
 	}
 
 	template <int W>
@@ -484,7 +547,13 @@ namespace riscv
 
 		while (m_exec_segs > remaining_size) {
 			m_exec_segs--;
-			m_exec.at(m_exec_segs) = nullptr;
+
+			auto& segment = m_exec.at(m_exec_segs);
+			if (segment) {
+				const uint32_t hash = segment->crc32c_hash();
+				segment = nullptr;
+				shared_execute_segments<W>.remove_if_unique(hash);
+			}
 		}
 	}
 
