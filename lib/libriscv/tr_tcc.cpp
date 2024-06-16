@@ -38,7 +38,11 @@ namespace riscv
 			return nullptr;
 		}
 
+#if defined(TCC_RELOCATE_AUTO)
 		if (tcc_relocate(state, TCC_RELOCATE_AUTO) < 0) {
+#else
+		if (tcc_relocate(state) < 0) {
+#endif
 			tcc_delete(state);
 			return nullptr;
 		}
