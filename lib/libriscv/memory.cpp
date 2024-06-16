@@ -32,7 +32,7 @@ namespace riscv
 			if (options.use_memory_arena)
 			{
 #ifdef __linux__
-				if constexpr (W == 4 && encompassing_32bit_arena)
+				if constexpr (encompassing_32bit_arena)
 				{
 					static_assert(flat_readwrite_arena || !encompassing_32bit_arena,
 						"32-bit encompassing arena requires flat_readwrite_arena to be enabled");
@@ -47,6 +47,7 @@ namespace riscv
 					this->m_arena.pages = UNBOUNDED_ARENA_SIZE / Page::size();
 					if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
 						// We probably reached a limit on the number of mappings
+						this->m_arena.data = nullptr;
 						throw MachineException(OUT_OF_MEMORY, "Out of memory", UNBOUNDED_ARENA_SIZE);
 					}
 					/*this->m_arena.data = (PageData *)mmap(m_arena.data, (pages_max + 1) * Page::size(), PROT_READ | PROT_WRITE,

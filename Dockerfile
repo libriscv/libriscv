@@ -16,11 +16,11 @@ COPY binaries/measure_mips/fib.c /app/emulator/fib.c
 
 # Fast emulation (with TCC JIT compilation)
 WORKDIR /app/emulator
-RUN ./build.sh --tcc && cp .build/rvlinux /app/rvlinux && cp .build/libtcc1.a /app/libtcc1.a
+RUN ./build.sh -x --tcc && cp .build/rvlinux /app/rvlinux && cp .build/libtcc1.a /app/libtcc1.a
 
 # Fastest emulator (with binary translation)
 WORKDIR /app/emulator
-RUN ./build.sh --bintr && cp .build/rvlinux /app/rvlinux-fast
+RUN ./build.sh -x --bintr && cp .build/rvlinux /app/rvlinux-fast
 
 # Clean up
 RUN rm -rf /app/emulator/.build

@@ -14,6 +14,7 @@ function usage()
      -h, --help           show this help message and exit
      -b, --bintr          enable binary translation using system compiler
      -t, --tcc            jit-compile using tcc
+     -x, --expr           enable experimental features (eg. unbounded 32-bit addressing, etc.)
      -v, --verbose        increase the verbosity of the bash script
 
 HEREDOC
@@ -24,6 +25,7 @@ while [[ "$#" -gt 0 ]]; do
 		-h|--help ) usage; exit; ;;
         -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
         -t|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
+        -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;
 		-v|--verbose ) set -x ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac

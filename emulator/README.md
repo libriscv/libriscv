@@ -105,13 +105,10 @@ It took 1303152 instructions to throw, catch and print the exception
 
 ## Binary translation
 
-Binary translation is enabled with a CMake option, currently. In the future it might be enabled by default, but not active.
-
-Enabling binary translation is toggling a CMake option, which can be done from the terminal:
+Binary translation is enabled with a CMake option. However, there are options to `build.sh` to simplify enabling it:
 
 ```sh
-pushd .build && cmake .. -DRISCV_BINARY_TRANSLATION=ON && popd
-bash build.sh
+bash build.sh -x --bintr
 ```
 
 In doing so, there are now more options available.
@@ -144,3 +141,23 @@ Pages in use: 4 (16 kB virtual memory, total 38 kB)
 ```
 
 So it was ~15x faster with binary translation!
+
+
+## Using TCC as JIT compiler
+
+Binary translation with TCC is enabled with a CMake option. However, there are options to `build.sh` to simplify enabling it:
+
+```sh
+bash build.sh -x --tcc
+```
+
+With this option enabled, rvlinux will run programs almost instantly, but execute them faster than when in interpreter mode:
+
+```sh
+$ ./rvlinux ../binaries/measure_mips/fib
+>>> Program exited, exit code = 3819729467 (0xE3AC723B)
+Instructions executed: 1280000008  Runtime: 511.892ms  Insn/s: 2501mi/s
+Pages in use: 4 (16 kB virtual memory, total 30 kB)
+```
+
+Exactly 2x faster than interpreted!

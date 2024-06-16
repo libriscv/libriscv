@@ -165,12 +165,13 @@ static struct CallbackTable {
 #define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
 
 INTERNAL static char* arena_ptr;
-
-#ifdef __TINYC__
 #define ARENA_AT(cpu, x)  arena_ptr[x]
-#else
-#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFF))[x]
-#endif
+
+//#ifdef __TINYC__
+//#define ARENA_AT(cpu, x)  arena_ptr[x]
+//#else
+//#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFF))[x]
+//#endif
 
 static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {

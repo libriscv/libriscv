@@ -209,7 +209,7 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (W == 4 && cpu.machine().memory.uses_32bit_encompassing_arena())
+		if (cpu.machine().memory.uses_32bit_encompassing_arena())
 		{
 			add_code(dst + " = " + cast + "*(" + type + "*)&ARENA_AT(cpu, (uint32_t)(" + address + "));");
 		}
@@ -243,7 +243,7 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (W == 4 && cpu.machine().memory.uses_32bit_encompassing_arena())
+		if (cpu.machine().memory.uses_32bit_encompassing_arena())
 		{
 			add_code("*(" + type + "*)&ARENA_AT(cpu, (uint32_t)(" + address + ")) = " + value + ";");
 		}

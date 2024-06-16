@@ -29,7 +29,7 @@ Non goals:
 
 ## Benchmarks
 
-[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 18063](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native.
+[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 20631](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~50%).
 
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
@@ -352,6 +352,11 @@ When binary translation is enabled, the option `RISCV_LIBTCC` is also available.
 There is multiprocessing support, but it is in its early stages. It is achieved by simultaneously calling a (C/SYSV ABI) function on many machines, each with a unique CPU ID. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
 
 
+### Experimental unbounded 32-bit addressing
+
+It is possible to map out the entire 32-bit address space for 32-bit RISC-V guests, such that memory operations no longer require bounds-checking. This mode usually goes with features like userfaultfd, however currently only the address space is created, fully readable and writable. This means the feature should not be used when sandboxing is necessary, and instead it makes more sense currently for running CLI applications from the terminal. It can be enabled with `RISCV_EXPERIMENTAL` and then `RISCV_ENCOMPASSING_ARENA`. 64-bit is supported by casting all addresses to 32-bit.
+
+
 ### Interpreter performance settings
 
 When binary translation is enabled, all emulator settings have roughly the same performance. However, when in interpreter mode (eg. on devices where loading shared objects is not allowed), there are a few ways to reliably improve performance.
@@ -365,7 +370,7 @@ cd build
 cmake .. -DRISCV_EXT_C=OFF -DCMAKE_BUILD_TYPE=Release
 ```
 
-Other build options that aid performance: Enabling link-time optimizations. Using the latest and greatest compiler version. Enabling all the native accelerated system calls. Enabling the read-write arena (default ON). Unrolling loops in the sandboxed program.
+Other build options that aid performance: Enabling link-time optimizations. Using the latest and greatest compiler version. Enabling all the native accelerated system calls. Enabling the read-write arena (default ON). Enabling experimental features, like 32-bit unbounded address space. Unrolling loops in the sandboxed program.
 
 
 ## Game development example
