@@ -1498,6 +1498,8 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 		}
 		if (tinfo.trace_instructions)
 			code += "default: api.exception(cpu, pc, 3); return (ReturnValues){0, 0};\n";
+		else // XXX: This is a performance optimization, but it may hide bugs
+			code += "default: UNREACHABLE(); break;\n";
 		code += "}\n";
 	}
 
