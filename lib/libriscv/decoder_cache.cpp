@@ -7,11 +7,13 @@
 #include "threaded_bytecodes.hpp"
 #include "util/crc32.hpp"
 #include <mutex>
+#define RISCV_SHARED_EXECUTE_SEGMENTS // TODO: Make this a configuration option
 
 namespace riscv
 {
 	static constexpr bool VERBOSE_DECODER = false;
 
+#ifdef RISCV_SHARED_EXECUTE_SEGMENTS
 	template <int W>
 	struct SharedExecuteSegments {
 		SharedExecuteSegments() = default;
@@ -58,6 +60,7 @@ namespace riscv
 	};
 	template <int W>
 	static SharedExecuteSegments<W> shared_execute_segments;
+#endif
 
 	template <int W>
 	static bool is_regular_compressed(uint16_t instr) {
@@ -485,6 +488,7 @@ namespace riscv
 		// Get a free slot to reference the execute segment
 		auto& free_slot = this->next_execute_segment();
 
+#ifdef RISCV_SHARED_EXECUTE_SEGMENTS
 		// In order to prevent others from creating the same execute segment
 		// we need to lock the shared execute segments mutex.
 		auto& segment = shared_execute_segments<W>.get_segment(hash);
@@ -494,6 +498,7 @@ namespace riscv
 			free_slot = segment.segment;
 			return *free_slot;
 		}
+#endif
 
 		// We need to create a new execute segment, as there is no shared
 		// execute segment with the same hash.
@@ -503,8 +508,10 @@ namespace riscv
 
 		this->generate_decoder_cache(options, *free_slot);
 
+#ifdef RISCV_SHARED_EXECUTE_SEGMENTS
 		// Share the execute segment in the shared execute segments
 		segment.unlocked_set(free_slot);
+#endif
 
 		return *free_slot;
 	}
@@ -550,9 +557,11 @@ namespace riscv
 
 			auto& segment = m_exec.at(m_exec_segs);
 			if (segment) {
-				const uint32_t hash = segment->crc32c_hash();
+				[[maybe_unused]] const uint32_t hash = segment->crc32c_hash();
 				segment = nullptr;
+#ifdef RISCV_SHARED_EXECUTE_SEGMENTS
 				shared_execute_segments<W>.remove_if_unique(hash);
+#endif
 			}
 		}
 	}

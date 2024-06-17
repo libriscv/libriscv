@@ -44,15 +44,14 @@ namespace riscv
 					// page faults for the rest of the address space using userfaultfd.
 					this->m_arena.data = (PageData *)mmap(NULL, UNBOUNDED_ARENA_SIZE, PROT_READ | PROT_WRITE,
 						MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-					this->m_arena.pages = UNBOUNDED_ARENA_SIZE / Page::size();
 					if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
 						// We probably reached a limit on the number of mappings
 						this->m_arena.data = nullptr;
 						throw MachineException(OUT_OF_MEMORY, "Out of memory", UNBOUNDED_ARENA_SIZE);
 					}
+					this->m_arena.pages = pages_max;
 					/*this->m_arena.data = (PageData *)mmap(m_arena.data, (pages_max + 1) * Page::size(), PROT_READ | PROT_WRITE,
 						MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-					this->m_arena.pages = pages_max;
 					if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
 						throw MachineException(OUT_OF_MEMORY, "Out of memory", this->m_arena.pages * Page::size());
 					}*/
@@ -137,8 +136,6 @@ namespace riscv
 	Memory<W>::~Memory()
 	{
 		this->clear_all_pages();
-		// remove execute segments
-		this->evict_execute_segments(0);
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
 #ifdef __linux__
