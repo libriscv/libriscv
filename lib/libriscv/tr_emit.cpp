@@ -327,7 +327,7 @@ struct Emitter
 	}
 	void increment_counter_so_far() {
 		auto icount = this->reset_and_get_icounter();
-		if (icount > 0)
+		if (icount > 0 && !tinfo.ignore_instruction_limit)
 			code.append("counter += " + std::to_string(icount) + ";\n");
 	}
 
@@ -661,13 +661,18 @@ void Emitter<W>::emit()
 					add_forward(target_func);
 					add_code("rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
 					// Update the local counter registers
-					add_code("counter = rv.counter;");
+					if (!tinfo.ignore_instruction_limit)
+						add_code("counter = rv.counter;");
 					add_code("max_counter = rv.max_counter;}");
 					// If the counter is exhausted, or PC has diverged, exit the function
 					if (instr.Jtype.rd != 0) {
 						if (this->add_reentry_next()) {
 							// Fast-path if cpu->pc is already set to the next instruction
-							add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") goto " + FUNCLABEL(next_pc) + ";");
+							if (tinfo.ignore_instruction_limit)
+								add_code("if (cpu->pc == " + STRADDR(next_pc) + ") goto " + FUNCLABEL(next_pc) + ";");
+							else {
+								add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") goto " + FUNCLABEL(next_pc) + ";");
+							}
 						}
 					}
 					exit_function("cpu->pc", false);

@@ -10,6 +10,7 @@ static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-r
 
 struct Arguments {
 	bool verbose = false;
+	bool accurate = false;
 	bool debug = false;
 	bool gdb = false;
 	bool silent = false;
@@ -28,6 +29,7 @@ struct Arguments {
 static const struct option long_options[] = {
 	{"help", no_argument, 0, 'h'},
 	{"verbose", no_argument, 0, 'v'},
+	{"accurate", no_argument, 0, 'a'},
 	{"debug", no_argument, 0, 'd'},
 	{"fuel", required_argument, 0, 'f'},
 	{"gdb", no_argument, 0, 'g'},
@@ -47,6 +49,7 @@ static void print_help(const char* name)
 	printf("Options:\n"
 		"  -h, --help         Print this help message\n"
 		"  -v, --verbose      Enable verbose loader output\n"
+		"  -a, --accurate     Accurate instruction counting\n"
 		"  -d, --debug        Enable CLI debugger\n"
 		"  -f, --fuel         Set max instructions until program halts\n"
 		"  -g, --gdb          Start GDB server on port 2159\n"
@@ -63,12 +66,13 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvdf:gstTnmFS", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvadf:gstTnmFS", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
 			case 'h': print_help(argv[0]); return 0;
 			case 'v': args.verbose = true; break;
+			case 'a': args.accurate = true; break;
 			case 'd': args.debug = true; break;
 			case 'f': break;
 			case 'g': args.gdb = true; break;
@@ -128,7 +132,7 @@ static void run_program(
 		.translate_enabled = !cli_args.no_translate,
 		.translate_trace = cli_args.trace,
 		.translate_timing = cli_args.timing,
-		.translate_ignore_instruction_limit = true, // Press Ctrl+C to stop
+		.translate_ignore_instruction_limit = !cli_args.accurate, // Press Ctrl+C to stop
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
@@ -337,9 +341,13 @@ static void run_program(
 		const auto retval = machine.return_value();
 		printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
 			int64_t(retval), uint64_t(retval));
+		if (cli_args.accurate || !riscv::binary_translation_enabled)
 		printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms  Insn/s: %.0fmi/s\n",
 			machine.instruction_counter(), runtime.count()*1000.0,
 			machine.instruction_counter() / (runtime.count() * 1e6));
+		else
+		printf("Runtime: %.3fms   (Use --accurate for instruction counting)\n",
+			runtime.count()*1000.0);
 		printf("Pages in use: %zu (%" PRIu64 " kB virtual memory, total %" PRIu64 " kB)\n",
 			machine.memory.pages_active(),
 			machine.memory.pages_active() * riscv::Page::size() / uint64_t(1024),
