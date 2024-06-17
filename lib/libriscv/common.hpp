@@ -126,6 +126,13 @@ namespace riscv
 		/// @details If disabled, remote machines will be able to make remote
 		/// calls to this machine. In most cases, this is not needed.
 		bool translation_use_arena = true;
+		/// @brief Allow the program to run forever, ignoring the instruction counter limit.
+		/// @details This is useful when there are other ways of interrupting and cancelling the program.
+		/// @note This option is only available when the binary translator is enabled. The main dispatch
+		/// will always check the instruction counter limit.
+		/// It is completely fine to enable this option when running from the command line,
+		/// as a simple Ctrl+C will stop the program.
+		bool translate_ignore_instruction_limit = false;
 		/// @brief Prefix for the translation output file.
 		std::string translation_prefix = "/tmp/rvbintr-";
 		/// @brief Suffix for the translation output file.

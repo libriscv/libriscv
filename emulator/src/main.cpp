@@ -128,6 +128,7 @@ static void run_program(
 		.translate_enabled = !cli_args.no_translate,
 		.translate_trace = cli_args.trace,
 		.translate_timing = cli_args.timing,
+		.translate_ignore_instruction_limit = true, // Press Ctrl+C to stop
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",

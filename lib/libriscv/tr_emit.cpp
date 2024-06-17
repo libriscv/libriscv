@@ -52,6 +52,7 @@ static std::string funclabel(const std::string& func, uint64_t addr) {
 
 struct BranchInfo {
 	bool sign;
+	bool ignore_instruction_limit;
 	uint64_t jump_pc;
 	uint64_t call_pc;
 };
@@ -410,7 +411,7 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	}
 
 	if (binfo.jump_pc != 0) {
-		if (binfo.jump_pc > this->pc()) {
+		if (binfo.jump_pc > this->pc() || binfo.ignore_instruction_limit) {
 			// unconditional forward jump + bracket
 			code += "goto " + FUNCLABEL(binfo.jump_pc) + "; }\n";
 			return;
@@ -586,26 +587,26 @@ void Emitter<W>::emit()
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch({ false, jump_pc, call_pc }, " == ");
+				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch({ false, jump_pc, call_pc }, " != ");
+				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
 				UNKNOWN_INSTRUCTION();
 				break;
 			case 0x4: // LT
-				add_branch({ true, jump_pc, call_pc }, " < ");
+				add_branch({ true, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch({ true, jump_pc, call_pc }, " >= ");
+				add_branch({ true, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch({ false, jump_pc, call_pc }, " < ");
+				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch({ false, jump_pc, call_pc }, " >= ");
+				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
@@ -637,6 +638,9 @@ void Emitter<W>::emit()
 				// forward labels require creating future labels
 				if (dest_pc > this->pc()) {
 					labels.insert(dest_pc);
+					add_code("goto " + FUNCLABEL(dest_pc) + ";");
+				} else if (tinfo.ignore_instruction_limit) {
+					// jump backwards: without counters
 					add_code("goto " + FUNCLABEL(dest_pc) + ";");
 				} else {
 					// jump backwards: use counters

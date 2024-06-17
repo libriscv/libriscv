@@ -110,6 +110,9 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 		// so it will be recompiled if the trace option is toggled.
 		defines.emplace("RISCV_TRACING", "1");
 	}
+	if (options.translate_ignore_instruction_limit) {
+		defines.emplace("RISCV_IGNORE_INSTRUCTION_LIMIT", "1");
+	}
 	if constexpr (W == 4 && encompassing_32bit_arena) {
 		defines.emplace("RISCV_32BIT_UNBOUNDED", "1");
 	}
@@ -408,7 +411,7 @@ if constexpr (SCAN_FOR_GP) {
 				basepc, endbasepc,
 				gp,
 				trace_instructions,
-				true,
+				options.translate_ignore_instruction_limit,
 				std::move(jump_locations),
 				nullptr, // blocks
 				global_jump_locations,
