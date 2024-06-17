@@ -286,6 +286,7 @@ if constexpr (SCAN_FOR_GP) {
 
 	// Code block and loop detection
 	TIME_POINT(t2);
+	static constexpr size_t ITS_TIME_TO_SPLIT = 1'250;
 	size_t icounter = 0;
 	std::unordered_set<address_type<W>> global_jump_locations;
 	std::vector<TransInfo<W>> blocks;
@@ -310,7 +311,7 @@ if constexpr (SCAN_FOR_GP) {
 			block_insns++;
 
 			// JALR and STOP are show-stoppers / code-block enders
-			if (is_stopping_instruction(instruction)) {
+			if (block_insns >= ITS_TIME_TO_SPLIT && is_stopping_instruction(instruction)) {
 				break;
 			}
 		}
