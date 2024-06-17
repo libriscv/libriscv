@@ -623,8 +623,8 @@ void Emitter<W>::emit()
 					"JUMP_TO(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
-			exit_function("cpu->pc", true);
-			} return;
+			exit_function("cpu->pc", false);
+			} break;
 		case RV32I_JAL: {
 			this->increment_counter_so_far();
 			if (instr.Jtype.rd != 0) {
@@ -1034,8 +1034,8 @@ void Emitter<W>::emit()
 					break;
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_counter = 0;\n"; // Immediate stop PC + 4
-					exit_function(PCRELS(4), true);
-					return;
+					exit_function(PCRELS(4), false);
+					break;
 				} else {
 					// Zero funct3, unknown imm: Don't exit
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
