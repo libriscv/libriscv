@@ -12,7 +12,7 @@ For discussions & help, [visit Discord](https://discord.gg/n4GcXr66X5).
 
 ## Ultra-Low latency emulation
 
-libriscv is an ultra-low latency emulator, designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
+_libriscv_ is an ultra-low latency emulator, designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
 
 Goals:
 - Lowest possible latency
@@ -28,7 +28,7 @@ Non goals:
 
 ## Benchmarks
 
-[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 32388](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~78%).
+[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 34997](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~85%).
 
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
@@ -37,14 +37,14 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
 <details>
   <summary>Register vs stack machines (interpreted)</summary>
   
-  ### Benchmarks against wasm3
+  ### Benchmarks against other emulators
   RISC-V is a register machine architecture, which makes it very easy to reach good interpreter performance without needing a register allocator.
 
   ![Ryzen 7950X STREAM memory wasm3 vs  libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/4e23b2c8-71bb-4bd8-92e6-523a4e84dd32)
   ![Ryzen 6860Z STREAM memory wasm3 vs  libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/79f8d0a0-5bfa-44c8-932d-d41f4538f4be)
   ![CoreMark 1 0 Interpreted wasm3 vs  interpreted libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/871e96d9-f9aa-40cb-9317-825d1bcad569)
 
-  We can see that _libriscv_ is substantially faster than wasm3.
+  We can see that _libriscv_ in interpreter mode is substantially faster than wasm3, also an interpreter.
 
   ![Compare rainbow color calculation (3x sinf)](https://github.com/fwsGonzo/libriscv/assets/3758947/66c2055f-e3e1-40cf-88bc-e0e0275d6b6f)
 
@@ -344,7 +344,9 @@ The read-write arena simplifies memory operations immediately outside of the loa
 
 ### Embedded libtcc
 
-When binary translation is enabled, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. The `libtcc-dev` package will be required for building. It will give a handsome 25-100% performance boost.
+When binary translation is enabled, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. The `libtcc-dev` package will be required for building. It will give a handsome 25-100% performance boost compared to interpreting RISC-V.
+
+If you are seeing the error `tcc: error: file 'libtcc1.a' not found`, you can change to using the distro package instead by enabling `RISCV_LIBTCC_DISTRO_PACKAGE`, where `libtcc1.a` is pre-installed. Otherwise, the CMake build scripts produces `libtcc1.a` and puts it at the root of the build folder. So, a very common solution to the error is to just create a link: `ln -fs build/libtcc1.a .`. It is a run-time dependency.
 
 ### Experimental multiprocessing
 
