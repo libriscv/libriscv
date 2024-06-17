@@ -122,6 +122,21 @@ static void syscall_sigaction(Machine<W>& machine)
 
 	machine.set_result(0);
 }
+template <int W>
+static void syscall_sigprocmask(Machine<W>& machine)
+{
+    const auto how = machine.template sysarg<int>(0);
+    const auto set_ptr = machine.sysarg(1);
+    const auto oldset_ptr = machine.sysarg(2);
+    SYSPRINT("SYSCALL sigprocmask, how: %d set_ptr: 0x%lX oldset_ptr: 0x%lX\n",
+        how, (long)set_ptr, (long)oldset_ptr);
+	(void)how;
+	(void)set_ptr;
+	(void)oldset_ptr;
+
+	machine.set_result_or_error(0);
+	return;
+}
 
 template <int W>
 void syscall_lseek(Machine<W>& machine)
@@ -731,6 +746,27 @@ static void syscall_clock_gettime64(Machine<W>& machine)
 	machine.set_result_or_error(res);
 }
 template <int W>
+static void syscall_clock_getres(Machine<W>& machine)
+{
+    const auto clkid = machine.template sysarg<int>(0);
+    const auto buffer = machine.sysarg(1);
+    SYSPRINT("SYSCALL clock_getres, clkid: %x buffer: 0x%lX\n",
+        clkid, (long)buffer);
+
+    struct timespec ts;
+    const int res = clock_getres(clkid, &ts);
+    if (res >= 0) {
+        if constexpr (W == 4) {
+            int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
+            machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
+        } else {
+            machine.copy_to_guest(buffer, &ts, sizeof(ts));
+        }
+    }
+    machine.set_result_or_error(res);
+}
+
+template <int W>
 static void syscall_nanosleep(Machine<W>& machine)
 {
 	const auto g_req = machine.sysarg(0);
@@ -803,6 +839,50 @@ static void syscall_uname(Machine<W>& machine)
 
 	machine.copy_to_guest(buffer, &uts, sizeof(uts));
 	machine.set_result(0);
+}
+template<int W>
+static void syscall_capget(Machine<W>& machine) {
+    const auto header_ptr = machine.sysarg(0);
+    const auto data_ptr = machine.sysarg(1);
+
+    struct __user_cap_header_struct {
+        uint32_t version;
+        int pid;
+    };
+
+    struct __user_cap_data_struct {
+        uint32_t effective;
+        uint32_t permitted;
+        uint32_t inheritable;
+    };
+
+    __user_cap_header_struct header;
+    __user_cap_data_struct data;
+
+    // Copy the header from guest to host
+    machine.copy_from_guest(&header, header_ptr, sizeof(header));
+
+    // Initialize the header structure
+    if (header.version != 0x20080522) {
+        // Unsupported version, set error
+        machine.set_result_or_error(-EINVAL);
+    } else {
+		// Here you would typically interact with the capability subsystem of the
+		// emulated environment to get the actual capabilities.
+		// For simplicity, let's assume no capabilities:
+		data.effective = 0;
+		data.permitted = 0;
+		data.inheritable = 0;
+
+		// Copy the data back to the guest
+		machine.copy_to_guest(data_ptr, &data, sizeof(data));
+
+		// Set result to 0 indicating success
+		machine.set_result_or_error(0);
+	}
+
+    SYSPRINT("SYSCALL capget, header: 0x%lX, data: 0x%lX => %ld\n",
+             (long)header_ptr, (long)data_ptr, (long)machine.return_value());
 }
 
 template <int W>
@@ -909,6 +989,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(79, syscall_fstatat<W>);
 	// 80: fstat
 	install_syscall_handler(80, syscall_fstat<W>);
+	// 90: capget
+	install_syscall_handler(90, syscall_capget<W>);
 
 	install_syscall_handler(93, syscall_exit<W>);
 	// 94: exit_group (exit process)
@@ -951,6 +1033,9 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// clock_gettime
 	install_syscall_handler(113, syscall_clock_gettime<W>);
 	install_syscall_handler(403, syscall_clock_gettime64<W>);
+	// clock_getres
+	install_syscall_handler(114, syscall_clock_getres<W>);
+	install_syscall_handler(406, syscall_clock_getres<W>);
 	// clock_nanosleep
 	install_syscall_handler(115, syscall_clock_nanosleep<W>);
 	// sched_getaffinity
@@ -979,7 +1064,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// rt_sigaction
 	install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
-	install_syscall_handler(135, syscall_stub_zero<W>);
+	install_syscall_handler(135, syscall_sigprocmask);
 	// uname
 	install_syscall_handler(160, syscall_uname<W>);
 	// gettimeofday
