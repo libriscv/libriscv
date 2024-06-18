@@ -6,6 +6,10 @@
 #include "posix/signals.hpp"
 #include <array>
 #include <string_view>
+#ifdef RISCV_BINARY_TRANSLATION
+#include "decoder_cache.hpp"
+#include "threaded_bytecodes.hpp"
+#endif
 
 namespace riscv
 {

@@ -22,6 +22,35 @@ template <int W>
 template <bool Throw>
 inline bool Machine<W>::simulate_with(uint64_t max_instr, uint64_t counter, address_t pc)
 {
+#ifdef RISCV_BINARY_TRANSLATION
+	auto& exec = cpu.current_execute_segment();
+	DecoderData<W>* exec_decoder = exec.decoder_cache();
+	DecoderData<W>* decoder;
+retry_direct_translation:
+	// We need an execute segment matching current PC
+	if (pc >= exec.exec_begin() && pc < exec.exec_end())
+	{
+		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		// There's a very high chance that the (first) instruction is a translated function
+		if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
+		{
+			auto bintr_results = 
+				exec.unchecked_mapping_at(decoder->instr)(cpu, counter, max_instr, pc);
+
+			if (bintr_results.counter >= bintr_results.max_counter)
+			{
+				// Stopped normally (setting max counter to 0)
+				if (UNLIKELY(m_max_counter == 0))
+					return true;
+				if constexpr (Throw)
+					timeout_exception(max_instr);
+				return false;
+			}
+			pc = cpu.pc();
+			goto retry_direct_translation;
+		}
+	}
+#endif
 	const bool stopped_normally = cpu.simulate(pc, counter, max_instr);
 	if constexpr (Throw) {
 		// The simulation either ends normally, or it throws an exception
