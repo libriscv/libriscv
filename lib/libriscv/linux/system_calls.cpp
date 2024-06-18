@@ -201,8 +201,6 @@ static void syscall_write(Machine<W>& machine)
 	const int  vfd     = machine.template sysarg<int>(0);
 	const auto address = machine.sysarg(1);
 	const size_t len   = machine.sysarg(2);
-	SYSPRINT("SYSCALL write, fd: %d addr: 0x%lX, len: %zu\n",
-		vfd, (long)address, len);
 	// Zero-copy retrieval of buffers
 	std::array<riscv::vBuffer, 64> buffers;
 
@@ -222,9 +220,13 @@ static void syscall_write(Machine<W>& machine)
 		SYSPRINT("SYSCALL write(real fd: %d iovec: %zu) = %ld\n",
 			real_fd, cnt, res);
 		machine.set_result_or_error(res);
+		return;
 	} else {
 		machine.set_result(-EBADF);
 	}
+
+	SYSPRINT("SYSCALL write(vfd: %d address: 0x%lX len: %zu) = %ld\n",
+		vfd, (long)address, len, (long)machine.return_value());
 }
 
 template <int W>
@@ -417,10 +419,14 @@ static void syscall_pipe2(Machine<W>& machine)
 		int res = pipe2(pipes, flags);
 		if (res == 0) {
 			int vpipes[2];
-			vpipes[0] = machine.fds().assign_file(pipes[0]);
-			vpipes[1] = machine.fds().assign_file(pipes[1]);
+			vpipes[0] = machine.fds().assign_pipe(pipes[0]);
+			vpipes[1] = machine.fds().assign_pipe(pipes[1]);
 			machine.copy_to_guest(vfd_array, vpipes, sizeof(vpipes));
 			machine.set_result(0);
+
+			SYSPRINT("SYSCALL pipe2, fd %d -> vfd %d, fd %d -> vfd %d\n",
+				pipes[0], vpipes[0], pipes[1], vpipes[1]);
+
 		} else {
 			machine.set_result_or_error(res);
 		}
