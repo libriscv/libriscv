@@ -625,6 +625,7 @@ void Emitter<W>::emit()
 				);
 			}
 			exit_function("cpu->pc", false);
+			this->add_reentry_next();
 			} break;
 		case RV32I_JAL: {
 			this->increment_counter_so_far();
