@@ -1,4 +1,8 @@
 #include "machine.hpp"
+#if defined(RISCV_BINARY_TRANSLATION)
+#include "decoder_cache.hpp"
+#include "threaded_bytecodes.hpp"
+#endif
 
 namespace riscv
 {
@@ -9,13 +13,13 @@ namespace riscv
 	 * stack pointer is manually restored.
 	 * 
 	 * 1. Initialization:
-	 * riscv::StoredCall<RISCV32> prepper;
-	 * prepper.store(machine, "my_function",
+	 * riscv::StoredCall<RISCV32> stored;
+	 * stored.store(machine, "my_function",
 	 * 		"This is a string", test,
 	 * 		333, 444, 555, 666, 777, 888);
 	 * 
 	 * 2. Make call:
-	 * prepper.vmcall();
+	 * stored.vmcall();
 	 * 
 	 * A stored call can drastically reduce the call overhead, when
 	 * needed, at the cost of stack space taken by the arguments up-front.
@@ -160,54 +164,112 @@ namespace riscv
 	 * A prepared vmcall makes preparations for a given type of call
 	 * by recording the PC, max instructions, and enforcing a function type
 	 * 
+	 * When binary translation is enabled, the prepared call will attempt
+	 * to check if the function is binary translated, and if so, call the
+	 * function directly. Work in progress.
 	**/
 	template <int W, typename F>
 	struct PreparedCall
 	{
+	public:
 		using address_t = address_type<W>;
+		using Ret = std::function<F>::result_type;
 
 		template <typename... Args>
-		auto vmcall(Args&&... args) const
+		Ret vmcall(Args&&... args) const
 		{
-			static_assert(std::is_invocable_v<F, Args...>);
-			using Ret = decltype((F*){}(args...));
+			static_assert(std::is_invocable_v<F, Args...>,
+				"PreparedCall: Invalid argument types for function call");
 
 			if (UNLIKELY(m_machine == nullptr))
-				throw riscv::MachineException(
-					riscv::INVALID_PROGRAM, "PreparedCall: must call prepare() first");
+				throw MachineException(ILLEGAL_OPERATION,
+					"The call was not prepared", 0x0);
 
-			auto& m = *m_machine;
-			auto  pc   = m_pc;
-			auto  max  = m_max_instr;
+			auto& m   = *m_machine;
+			auto  max = m_max;
+			auto  cnt = uint64_t(0);
+			auto  pc  = m_pc;
+#if defined(RISCV_BINARY_TRANSLATION)
+			auto  exit_addr = m.memory.exit_address();
+#endif
 
-			// reset the stack pointer to an initial location (deliberately)
 			m.cpu.reset_stack_pointer();
+			m.setup_call(std::forward<Args>(args)...);
 
-			m.setup_call(std::forward<Args> (args)...);
-
-			m.template simulate_with<true>(max, 0u, pc);
-
+#if defined(RISCV_BINARY_TRANSLATION)
+			auto results = m_mapping(m.cpu, 0, max, pc);
+			max = results.max_counter;
+			if (max == 0 || m.cpu.pc() == exit_addr)
+			{
+				[[likely]];
+				goto resolve_return_value;
+			}
+			else if (results.counter >= max) {
+				[[unlikely]];
+				throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
+					"PreparedCall: execution timeout", max);
+			}
+			// Continue with normal simulation
+			cnt = results.counter;
+#endif
+			m.simulate_with(max, cnt, pc);
+resolve_return_value:
 			if constexpr (std::is_same_v<void, Ret>)
 				return;
+			else if constexpr (std::is_same_v<Ret, float>)
+				return m.cpu.registers().getfl(REG_RETVAL).f32[0];
+			else if constexpr (std::is_same_v<Ret, double>)
+				return m.cpu.registers().getfl(REG_RETVAL).f64;
 			else
-				return Ret(m.cpu.reg(REG_RETVAL));
+				return m.cpu.reg(REG_RETVAL);
 		}
 
-		void prepare(Machine<W>& m, address_t call_addr, uint64_t imax = UINT64_MAX)
+		bool prepared(Machine<W>& m) const noexcept {
+			return m_machine == &m;
+		}
+
+		void prepare(Machine<W>& m, address_t call_addr, uint64_t max = UINT64_MAX)
 		{
 			if (call_addr == 0x0)
-				throw riscv::MachineException(
-					riscv::EXECUTION_SPACE_PROTECTION_FAULT, "Invalid function address for PreparedCall", call_addr);
-			this->m_machine = &m;
+				throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+					"Function address for PreparedCall was 0x0", call_addr);
 
 			// Check if the jump is OK
 			auto old_pc = m.cpu.pc();
 			m.cpu.jump(call_addr);
 
-			this->m_pc = call_addr;
-			this->m_max_instr = imax;
+			auto pc  = call_addr;
 
 			m.cpu.aligned_jump(old_pc);
+
+			this->m_machine = &m;
+			this->m_max = max;
+			this->m_pc = pc;
+
+#if defined(RISCV_BINARY_TRANSLATION)
+			auto& exec = m.cpu.current_execute_segment();
+			DecoderData<W>* exec_decoder = exec.decoder_cache();
+			// We need an execute segment matching current PC
+			if (pc >= exec.exec_begin() && pc < exec.exec_end())
+			{
+				auto* decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+				// There's a very high chance that the (first) instruction is a translated function
+				if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
+				{
+					//printf("PreparedCall: Using direct translation for %s\n", m.memory.lookup(call_addr).name.c_str());
+					this->m_mapping = exec.mapping_at(decoder->instr);
+					return;
+				} else {
+					this->m_machine = nullptr;
+					throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+						"Function was not directly invocable (not binary translated)", call_addr);
+				}
+			} else {
+				this->m_machine = nullptr;
+				throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+					"Function address for PreparedCall was not in current execute segment", call_addr);
+			}
+#endif
 		}
 
 		void prepare(Machine<W>& m, const std::string& func, uint64_t imax = UINT64_MAX)
@@ -215,13 +277,13 @@ namespace riscv
 			this->prepare(m, m.address_of(func), imax);
 		}
 
-		PreparedCall() = default;
-		~PreparedCall() = default;
-
 	private:
 		Machine<W>* m_machine = nullptr;
-		address_t m_pc = 0;
-		uint64_t  m_max_instr = 0;
+		uint64_t    m_max = 0;
+		address_t   m_pc = 0;
+#if defined(RISCV_BINARY_TRANSLATION)
+		bintr_block_func<W> m_mapping = nullptr;
+#endif
 	};
 
 } // riscv
