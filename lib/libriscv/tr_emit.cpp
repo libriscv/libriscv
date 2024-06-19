@@ -643,9 +643,19 @@ void Emitter<W>::emit()
 				} else if (tinfo.ignore_instruction_limit) {
 					// jump backwards: without counters
 					add_code("goto " + FUNCLABEL(dest_pc) + ";");
+					// Random jumps around often have useful code immediately after,
+					// so make sure it's accessible (add a re-entry point)
+					// TODO: Check if the next instruction is a public symbol address
+					if (instr.Jtype.rd == 0)
+						this->add_reentry_next();
 				} else {
 					// jump backwards: use counters
 					add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
+					// Random jumps around often have useful code immediately after,
+					// so make sure it's accessible (add a re-entry point)
+					// TODO: Check if the next instruction is a public symbol address
+					if (instr.Jtype.rd == 0)
+						this->add_reentry_next();
 				}
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
@@ -1045,6 +1055,7 @@ void Emitter<W>::emit()
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_counter = 0;\n"; // Immediate stop PC + 4
 					exit_function(PCRELS(4), false);
+					this->add_reentry_next();
 					break;
 				} else {
 					// Zero funct3, unknown imm: Don't exit
