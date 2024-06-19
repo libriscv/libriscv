@@ -145,7 +145,7 @@ if (RISCV_BINARY_TRANSLATION)
 endif()
 
 configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
-if (RISCV_LIBTCC)
+if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 	option(RISCV_LIBTCC_DISTRO_PACKAGE "Use the distributions libtcc" OFF)
 
 	if (RISCV_LIBTCC_DISTRO_PACKAGE)
@@ -183,7 +183,7 @@ elseif (RISCV_BINARY_TRANSLATION)
 endif()
 
 
-if (RISCV_LIBTCC)
+if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 	if(CMAKE_VERSION VERSION_LESS "3.14.0" OR RISCV_LIBTCC_DISTRO_PACKAGE) 
 		target_link_libraries(riscv PUBLIC -l:libtcc.a)
 		set_source_files_properties(libriscv/tr_tcc.cpp PROPERTIES
@@ -272,7 +272,7 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		FILES ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc
 		DESTINATION lib/pkgconfig
 	)
-	if (RISCV_LIBTCC)
+	if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 		# Install our own copy of libtcc, if we're not using the system package
 		if (NOT LIBTCC_FROM_PACKAGE)
 			install(FILES
