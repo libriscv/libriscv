@@ -620,37 +620,57 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 	if (ptr == nullptr) {
 		return false;
 	}
-	// 4x8-byte aligned scratch buffer for returning a valid pointer to
-	// the memory read/write functions in case of a fault.
-	static uint64_t scratch_buffer[4];
 
 	// Map the API callback table
 	auto func = (void (*)(const CallbackTable<W>&, void*)) ptr;
 	func(CallbackTable<W>{
-		.mem_read = [] (CPU<W>& cpu, address_type<W> addr) -> const void* {
+		.mem_read = [] (CPU<W>& cpu, address_type<W> addr, unsigned size) -> address_type<W> {
 			if constexpr (libtcc_enabled) {
 				try {
-					return cpu.machine().memory.cached_readable_page(addr, 1).buffer8.data();
-				} catch (MachineException& e) {
+					switch (size) {
+					case 1: return cpu.machine().memory.template read<uint8_t>(addr);
+					case 2: return cpu.machine().memory.template read<uint16_t>(addr);
+					case 4: return cpu.machine().memory.template read<uint32_t>(addr);
+					case 8: return cpu.machine().memory.template read<uint64_t>(addr);
+					default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory read size", size);
+					}
+				} catch (const MachineException& e) {
 					cpu.set_current_exception(e.type());
 					cpu.machine().stop();
-					return &scratch_buffer[0];
+					return 0;
 				}
 			} else {
-				return cpu.machine().memory.cached_readable_page(addr, 1).buffer8.data();
+				switch (size) {
+				case 1: return cpu.machine().memory.template read<uint8_t>(addr);
+				case 2: return cpu.machine().memory.template read<uint16_t>(addr);
+				case 4: return cpu.machine().memory.template read<uint32_t>(addr);
+				case 8: return cpu.machine().memory.template read<uint64_t>(addr);
+				default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory read size", size);
+				}
 			}
 		},
-		.mem_write = [] (CPU<W>& cpu, address_type<W> addr) -> void* {
+		.mem_write = [] (CPU<W>& cpu, address_type<W> addr, address_type<W> value, unsigned size) -> void {
 			if constexpr (libtcc_enabled) {
 				try {
-					return cpu.machine().memory.cached_writable_page(addr).buffer8.data();
-				} catch (MachineException& e) {
+					switch (size) {
+					case 1: cpu.machine().memory.template write<uint8_t>(addr, value); break;
+					case 2: cpu.machine().memory.template write<uint16_t>(addr, value); break;
+					case 4: cpu.machine().memory.template write<uint32_t>(addr, value); break;
+					case 8: cpu.machine().memory.template write<uint64_t>(addr, value); break;
+					default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory write size", size);
+					}
+				} catch (const MachineException& e) {
 					cpu.set_current_exception(e.type());
 					cpu.machine().stop();
-					return &scratch_buffer[0];
 				}
 			} else {
-				return cpu.machine().memory.cached_writable_page(addr).buffer8.data();
+				switch (size) {
+				case 1: cpu.machine().memory.template write<uint8_t>(addr, value); break;
+				case 2: cpu.machine().memory.template write<uint16_t>(addr, value); break;
+				case 4: cpu.machine().memory.template write<uint32_t>(addr, value); break;
+				case 8: cpu.machine().memory.template write<uint64_t>(addr, value); break;
+				default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory write size", size);
+				}
 			}
 		},
 		.vec_load = [] (CPU<W>& cpu, int vd, address_type<W> addr) {
