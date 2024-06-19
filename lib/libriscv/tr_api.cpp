@@ -136,8 +136,8 @@ typedef void (*syscall_t) (CPU*);
 typedef void (*handler) (CPU*, uint32_t);
 
 static struct CallbackTable {
-	const char* (*mem_ld) (const CPU*, addr_t);
-	char* (*mem_st) (const CPU*, addr_t);
+	addr_t (*mem_ld) (const CPU*, addr_t, unsigned);
+	void (*mem_st) (const CPU*, addr_t, addr_t, unsigned);
 	void (*vec_load)(const CPU*, int, addr_t);
 	void (*vec_store)(const CPU*, addr_t, int);
 	syscall_t* syscalls;

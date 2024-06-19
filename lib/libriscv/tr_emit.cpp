@@ -252,13 +252,11 @@ struct Emitter
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
 					dst + " = " + cast + "*(" + type + "*)&" + arena_at(address) + ";",
 				"else {",
-					"const char* " + data + " = api.mem_ld(cpu, " + address + ");",
-					dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];",
+					dst + " = " + cast + "(" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");",
 				"}");
 		} else {
 			add_code(
-				"const char* " + data + " = api.mem_ld(cpu, " + address + ");",
-				dst + " = " + cast + "*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")];"
+				dst + " = " + cast + "(" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");"
 			);
 		}
 	}
@@ -286,13 +284,11 @@ struct Emitter
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
 				"  *(" + type + "*)&" + arena_at(address) + " = " + value + ";",
 				"else {",
-				"  char *" + data + " = api.mem_st(cpu, " + address + ");",
-				"  *(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";",
+				"  api.mem_st(cpu, " + address + ", " + value + ", sizeof(" + type + "));",
 				"}");
 		} else {
-			add_code("char* " + data + " = api.mem_st(cpu, " + address + ");");
 			add_code(
-				"*(" + type + "*)&" + data + "[PAGEOFF(" + address + ")] = " + value + ";"
+				"api.mem_st(cpu, " + address + ", " + value + ", sizeof(" + type + "));"
 			);
 		}
 	}
@@ -634,6 +630,7 @@ void Emitter<W>::emit()
 			}
 			// XXX: mask off unaligned jumps - is this OK?
 			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
+			bool add_reentry = instr.Jtype.rd != 0;
 			// forward label: jump inside code block
 			if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
 				// forward labels require creating future labels
@@ -643,9 +640,19 @@ void Emitter<W>::emit()
 				} else if (tinfo.ignore_instruction_limit) {
 					// jump backwards: without counters
 					add_code("goto " + FUNCLABEL(dest_pc) + ";");
+					// Random jumps around often have useful code immediately after,
+					// so make sure it's accessible (add a re-entry point)
+					// TODO: Check if the next instruction is a public symbol address
+					if (instr.Jtype.rd == 0)
+						add_reentry = true;
 				} else {
 					// jump backwards: use counters
 					add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
+					// Random jumps around often have useful code immediately after,
+					// so make sure it's accessible (add a re-entry point)
+					// TODO: Check if the next instruction is a public symbol address
+					if (instr.Jtype.rd == 0)
+						add_reentry = true;
 				}
 				// .. if we run out of instructions, we must jump manually and exit:
 			}
@@ -685,7 +692,7 @@ void Emitter<W>::emit()
 
 			// Because of forward jumps we can't end the function here
 			exit_function(STRADDR(dest_pc), false);
-			if (instr.Jtype.rd != 0)
+			if (add_reentry)
 				this->add_reentry_next();
 			} break;
 
@@ -1045,6 +1052,7 @@ void Emitter<W>::emit()
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_counter = 0;\n"; // Immediate stop PC + 4
 					exit_function(PCRELS(4), false);
+					this->add_reentry_next();
 					break;
 				} else {
 					// Zero funct3, unknown imm: Don't exit
