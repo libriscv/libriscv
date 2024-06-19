@@ -224,6 +224,12 @@ resolve_return_value:
 				return m.cpu.reg(REG_RETVAL);
 		}
 
+		template <typename... Args>
+		Ret operator()(Args&&... args) const
+		{
+			return this->vmcall(std::forward<Args>(args)...);
+		}
+
 		bool prepared(Machine<W>& m) const noexcept {
 			return m_machine == &m;
 		}
@@ -275,6 +281,21 @@ resolve_return_value:
 		void prepare(Machine<W>& m, const std::string& func, uint64_t imax = UINT64_MAX)
 		{
 			this->prepare(m, m.address_of(func), imax);
+		}
+
+		PreparedCall() = default;
+		~PreparedCall() = default;
+
+		PreparedCall(Machine<W>& m, address_t call_addr, uint64_t max = UINT64_MAX)
+		{
+			this->prepare(m, call_addr, max);
+		}
+		PreparedCall(const PreparedCall& other)
+			: m_machine(other.m_machine), m_max(other.m_max), m_pc(other.m_pc)
+		{
+#if defined(RISCV_BINARY_TRANSLATION)
+			this->m_mapping = other.m_mapping;
+#endif
 		}
 
 	private:
