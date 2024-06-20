@@ -1,3 +1,4 @@
+#pragma once
 #include "machine.hpp"
 #if defined(RISCV_BINARY_TRANSLATION)
 #include "decoder_cache.hpp"
@@ -176,7 +177,7 @@ namespace riscv
 		using Ret = std::function<F>::result_type;
 
 		template <typename... Args>
-		Ret vmcall(Args&&... args) const
+		auto vmcall(Args&&... args) const
 		{
 			static_assert(std::is_invocable_v<F, Args...>,
 				"PreparedCall: Invalid argument types for function call");
@@ -212,10 +213,10 @@ namespace riscv
 			}
 #endif
 			m.simulate_with(max, cnt, pc);
+#if defined(RISCV_BINARY_TRANSLATION)
 resolve_return_value:
-			if constexpr (std::is_same_v<void, Ret>)
-				return;
-			else if constexpr (std::is_same_v<Ret, float>)
+#endif
+			if constexpr (std::is_same_v<Ret, float>)
 				return m.cpu.registers().getfl(REG_RETVAL).f32[0];
 			else if constexpr (std::is_same_v<Ret, double>)
 				return m.cpu.registers().getfl(REG_RETVAL).f64;
@@ -224,12 +225,15 @@ resolve_return_value:
 		}
 
 		template <typename... Args>
-		Ret operator()(Args&&... args) const
+		auto operator()(Args&&... args) const
 		{
 			return this->vmcall(std::forward<Args>(args)...);
 		}
 
-		address_t pc() const noexcept { return m_pc; }
+		Machine<W>& machine() const noexcept { return *m_machine; }
+		Machine<W>& machine() noexcept { return *m_machine; }
+
+		address_t address() const noexcept { return m_pc; }
 
 		uint64_t max_instructions() const noexcept { return m_max; }
 
