@@ -177,12 +177,11 @@ namespace riscv
 		using Ret = std::function<F>::result_type;
 
 		template <typename... Args>
-		auto vmcall(Args&&... args) const
+		auto call_with(Machine<W>& m, Args&&... args) const
 		{
 			static_assert(std::is_invocable_v<F, Args...>,
 				"PreparedCall: Invalid argument types for function call");
 
-			auto& m   = *m_machine;
 #if defined(RISCV_BINARY_TRANSLATION)
 			auto  exit_addr = m.memory.exit_address();
 #endif
@@ -224,7 +223,7 @@ resolve_return_value:
 		template <typename... Args>
 		auto operator()(Args&&... args) const
 		{
-			return this->vmcall(std::forward<Args>(args)...);
+			return this->call_with(*m_machine, std::forward<Args>(args)...);
 		}
 
 		Machine<W>& machine() const noexcept { return *m_machine; }
