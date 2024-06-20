@@ -169,7 +169,7 @@ namespace riscv
 	 * to check if the function is binary translated, and if so, call the
 	 * function directly. Work in progress.
 	**/
-	template <int W, typename F>
+	template <int W, typename F, uint64_t IMAX = UINT64_MAX>
 	struct PreparedCall
 	{
 	public:
@@ -183,37 +183,34 @@ namespace riscv
 				"PreparedCall: Invalid argument types for function call");
 
 			auto& m   = *m_machine;
-			auto  max = m_max;
-			auto  cnt = uint64_t(0);
-			auto  pc  = m_pc;
 #if defined(RISCV_BINARY_TRANSLATION)
 			auto  exit_addr = m.memory.exit_address();
 #endif
-
 			m.cpu.reset_stack_pointer();
 			m.setup_call(std::forward<Args>(args)...);
 
 #if defined(RISCV_BINARY_TRANSLATION)
 			if (m_mapping != nullptr)
 			{
-			auto results = m_mapping(m.cpu, 0, max, pc);
-			max = results.max_counter;
-			if (max == 0 || m.cpu.pc() == exit_addr)
-			{
-				[[likely]];
-				goto resolve_return_value;
-			}
-			else if (results.counter >= max) {
-				[[unlikely]];
-				throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
-					"PreparedCall: execution timeout", max);
-			}
-			// Continue with normal simulation
-			cnt = results.counter;
-			}
+				auto results = m_mapping(m.cpu, 0, IMAX, m_pc);
+				auto max = results.max_counter;
+				if (max == 0 || m.cpu.pc() == exit_addr)
+				{
+					[[likely]];
+					goto resolve_return_value;
+				}
+				else if (results.counter >= max) {
+					[[unlikely]];
+					throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
+						"PreparedCall: execution timeout", max);
+				}
+				// Continue with normal simulation
+				m.simulate_with(max, results.counter, m.cpu.pc());
+			} else {
 #endif
-			m.simulate_with(max, cnt, pc);
+				m.simulate_with(IMAX, 0, m_pc);
 #if defined(RISCV_BINARY_TRANSLATION)
+			}
 resolve_return_value:
 #endif
 			if constexpr (std::is_same_v<Ret, float>)
@@ -235,9 +232,9 @@ resolve_return_value:
 
 		address_t address() const noexcept { return m_pc; }
 
-		uint64_t max_instructions() const noexcept { return m_max; }
+		constexpr uint64_t max_instructions() const noexcept { return IMAX; }
 
-		void prepare(Machine<W>& m, address_t call_addr, uint64_t max = UINT64_MAX)
+		void prepare(Machine<W>& m, address_t call_addr)
 		{
 			if (call_addr == 0x0)
 				throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
@@ -252,7 +249,6 @@ resolve_return_value:
 			m.cpu.aligned_jump(old_pc);
 
 			this->m_machine = &m;
-			this->m_max = max;
 			this->m_pc = pc;
 
 #if defined(RISCV_BINARY_TRANSLATION)
@@ -277,17 +273,17 @@ resolve_return_value:
 #endif
 		}
 
-		void prepare(Machine<W>& m, const std::string& func, uint64_t imax = UINT64_MAX)
+		void prepare(Machine<W>& m, const std::string& func)
 		{
-			this->prepare(m, m.address_of(func), imax);
+			this->prepare(m, m.address_of(func));
 		}
 
-		PreparedCall(Machine<W>& m, address_t call_addr, uint64_t max = UINT64_MAX)
+		PreparedCall(Machine<W>& m, address_t call_addr)
 		{
-			this->prepare(m, call_addr, max);
+			this->prepare(m, call_addr);
 		}
 		PreparedCall(const PreparedCall& other)
-			: m_machine(other.m_machine), m_max(other.m_max), m_pc(other.m_pc)
+			: m_machine(other.m_machine), m_pc(other.m_pc)
 		{
 #if defined(RISCV_BINARY_TRANSLATION)
 			this->m_mapping = other.m_mapping;
@@ -297,7 +293,6 @@ resolve_return_value:
 
 	private:
 		Machine<W>* m_machine = nullptr;
-		uint64_t    m_max = 0;
 		address_t   m_pc = 0;
 #if defined(RISCV_BINARY_TRANSLATION)
 		bintr_block_func<W> m_mapping = nullptr;
