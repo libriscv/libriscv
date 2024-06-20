@@ -25,9 +25,6 @@ struct DecoderData {
 	void execute(CPU<W>& cpu, Args... args) const {
 		get_handler()(cpu, args...);
 	}
-	bool isset() const noexcept {
-		return m_handler != 0x0;
-	}
 	void set_handler(Instruction<W> insn) noexcept {
 		this->set_insn_handler(insn.handler);
 	}
