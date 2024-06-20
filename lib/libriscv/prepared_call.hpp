@@ -233,6 +233,14 @@ resolve_return_value:
 
 		constexpr uint64_t max_instructions() const noexcept { return IMAX; }
 
+		bool is_directly_translated() const noexcept {
+#if defined(RISCV_BINARY_TRANSLATION)
+			return m_mapping != nullptr;
+#else
+			return false;
+#endif
+		}
+
 		void prepare(Machine<W>& m, address_t call_addr)
 		{
 			if (call_addr == 0x0)
