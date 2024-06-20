@@ -583,7 +583,7 @@ namespace riscv
 	}
 	template <int W>
 	void Memory<W>::print_backtrace(
-		std::function<void(std::string_view)> print_function, bool ra)
+		std::function<void(std::string_view)> print_function, bool ra) const
 	{
 		auto print_trace =
 			[this, print_function] (const int N, const address_type<W> addr) {

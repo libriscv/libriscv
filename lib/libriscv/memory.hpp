@@ -115,7 +115,7 @@ namespace riscv
 			size_t      size    = 0;
 		};
 		Callsite lookup(address_t) const;
-		void print_backtrace(std::function<void(std::string_view)>, bool ra = true);
+		void print_backtrace(std::function<void(std::string_view)>, bool ra = true) const;
 
 		// Counts all the memory used by the machine, execute segments, pages, etc.
 		uint64_t memory_usage_total() const;
