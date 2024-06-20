@@ -181,10 +181,6 @@ namespace riscv
 			static_assert(std::is_invocable_v<F, Args...>,
 				"PreparedCall: Invalid argument types for function call");
 
-			if (UNLIKELY(m_machine == nullptr))
-				throw MachineException(ILLEGAL_OPERATION,
-					"The call was not prepared", 0x0);
-
 			auto& m   = *m_machine;
 			auto  max = m_max;
 			auto  cnt = uint64_t(0);
@@ -197,6 +193,8 @@ namespace riscv
 			m.setup_call(std::forward<Args>(args)...);
 
 #if defined(RISCV_BINARY_TRANSLATION)
+			if (m_mapping != nullptr)
+			{
 			auto results = m_mapping(m.cpu, 0, max, pc);
 			max = results.max_counter;
 			if (max == 0 || m.cpu.pc() == exit_addr)
@@ -211,6 +209,7 @@ namespace riscv
 			}
 			// Continue with normal simulation
 			cnt = results.counter;
+			}
 #endif
 			m.simulate_with(max, cnt, pc);
 resolve_return_value:
@@ -230,9 +229,9 @@ resolve_return_value:
 			return this->vmcall(std::forward<Args>(args)...);
 		}
 
-		bool prepared(Machine<W>& m) const noexcept {
-			return m_machine == &m;
-		}
+		address_t pc() const noexcept { return m_pc; }
+
+		uint64_t max_instructions() const noexcept { return m_max; }
 
 		void prepare(Machine<W>& m, address_t call_addr, uint64_t max = UINT64_MAX)
 		{
@@ -254,26 +253,22 @@ resolve_return_value:
 
 #if defined(RISCV_BINARY_TRANSLATION)
 			auto& exec = m.cpu.current_execute_segment();
-			DecoderData<W>* exec_decoder = exec.decoder_cache();
 			// We need an execute segment matching current PC
 			if (pc >= exec.exec_begin() && pc < exec.exec_end())
 			{
+				DecoderData<W>* exec_decoder = exec.decoder_cache();
 				auto* decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
 				// There's a very high chance that the (first) instruction is a translated function
 				if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
 				{
 					//printf("PreparedCall: Using direct translation for %s\n", m.memory.lookup(call_addr).name.c_str());
 					this->m_mapping = exec.mapping_at(decoder->instr);
-					return;
 				} else {
-					this->m_machine = nullptr;
-					throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
-						"Function was not directly invocable (not binary translated)", call_addr);
+					//printf("PreparedCall: No direct translation for %s\n", m.memory.lookup(call_addr).name.c_str());
+					this->m_mapping = nullptr;
 				}
 			} else {
-				this->m_machine = nullptr;
-				throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
-					"Function address for PreparedCall was not in current execute segment", call_addr);
+				this->m_mapping = nullptr;
 			}
 #endif
 		}
@@ -282,9 +277,6 @@ resolve_return_value:
 		{
 			this->prepare(m, m.address_of(func), imax);
 		}
-
-		PreparedCall() = default;
-		~PreparedCall() = default;
 
 		PreparedCall(Machine<W>& m, address_t call_addr, uint64_t max = UINT64_MAX)
 		{
@@ -297,6 +289,7 @@ resolve_return_value:
 			this->m_mapping = other.m_mapping;
 #endif
 		}
+		~PreparedCall() = default;
 
 	private:
 		Machine<W>* m_machine = nullptr;
