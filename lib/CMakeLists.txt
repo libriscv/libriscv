@@ -49,9 +49,6 @@ if (RISCV_EXPERIMENTAL)
 	# the entire memory space, allowing for more efficient memory
 	# accesses, but is only available for 32-bit RISC-V.
 	option(RISCV_ENCOMPASSING_ARENA  "Enable encompassing memory arena" OFF)
-	if (RISCV_ENCOMPASSING_ARENA AND NOT RISCV_32I)
-		message(FATAL_ERROR "RISCV_ENCOMPASSING_ARENA requires RISCV_32I to be enabled")
-	endif()
 	if (RISCV_ENCOMPASSING_ARENA)
 		# Encompassing arena implies flat read-write arena
 		set(RISCV_FLAT_RW_ARENA ON)
