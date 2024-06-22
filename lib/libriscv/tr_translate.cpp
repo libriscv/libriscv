@@ -634,8 +634,8 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 					case 8: return cpu.machine().memory.template read<uint64_t>(addr);
 					default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory read size", size);
 					}
-				} catch (const MachineException& e) {
-					cpu.set_current_exception(e.type());
+				} catch (...) {
+					cpu.set_current_exception(std::current_exception());
 					cpu.machine().stop();
 					return 0;
 				}
@@ -659,8 +659,8 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 					case 8: cpu.machine().memory.template write<uint64_t>(addr, value); break;
 					default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory write size", size);
 					}
-				} catch (const MachineException& e) {
-					cpu.set_current_exception(e.type());
+				} catch (...) {
+					cpu.set_current_exception(std::current_exception());
 					cpu.machine().stop();
 				}
 			} else {
@@ -696,12 +696,8 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 					const auto current_pc = cpu.registers().pc;
 					cpu.machine().system_call(sysno);
 					return cpu.registers().pc != current_pc || cpu.machine().stopped();
-				} catch (const MachineException& e) {
-					cpu.set_current_exception(e.type());
-					cpu.machine().stop();
-					return false;
-				} catch (const std::exception& e) {
-					cpu.set_current_exception(SYSTEM_CALL_FAILED);
+				} catch (...) {
+					cpu.set_current_exception(std::current_exception());
 					cpu.machine().stop();
 					return false;
 				}
@@ -716,11 +712,8 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			if constexpr (libtcc_enabled) {
 				try {
 					cpu.machine().system(rv32i_instruction{instr});
-				} catch (const MachineException& e) {
-					cpu.set_current_exception(e.type());
-					cpu.machine().stop();
-				} catch (const std::exception& e) {
-					cpu.set_current_exception(SYSTEM_CALL_FAILED);
+				} catch (...) {
+					cpu.set_current_exception(std::current_exception());
 					cpu.machine().stop();
 				}
 			} else {
@@ -733,14 +726,24 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 				try {
 					cpu.decode(rvi).handler(cpu, rvi);
 					return 0;
-				} catch (const MachineException& e) {
-					cpu.set_current_exception(e.type());
+				} catch (...) {
+					cpu.set_current_exception(std::current_exception());
 					return 1;
 				}
 			} else {
 				auto* handler = cpu.decode(rvi).handler;
 				handler(cpu, rvi);
 				return DecoderData<W>::handler_index_for(handler);
+			}
+		},
+		.execute_handler = [] (CPU<W>& cpu, unsigned index, uint32_t instr) -> unsigned {
+			const rv32i_instruction rvi{instr};
+			try {
+				DecoderData<W>::get_handlers()[index](cpu, rvi);
+				return 0;
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				return 1;
 			}
 		},
 		.handlers = (void (**)(CPU<W>&, uint32_t)) DecoderData<W>::get_handlers(),
@@ -750,9 +753,13 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 				// If we're using libtcc, we can't throw C++ exceptions because
 				// there's no unwinding support. But we can mark an exception
 				// in the CPU state and return back to dispatch.
-				cpu.set_current_exception(e);
-				// Trigger a slow-path in dispatch (which will check for exceptions)
-				cpu.machine().stop();
+				try {
+					cpu.trigger_exception(e);
+				} catch (...) {
+					cpu.set_current_exception(std::current_exception());
+					// Trigger a slow-path in dispatch (which will check for exceptions)
+					cpu.machine().stop();
+				}
 			} else {
 				cpu.trigger_exception(e);
 			}

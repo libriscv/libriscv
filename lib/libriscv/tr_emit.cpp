@@ -20,9 +20,11 @@
 // the order of intruction handlers, so we need to lazily get the handler index by
 // calling the execute function the first time.
 #ifdef RISCV_LIBTCC
-#define UNKNOWN_INSTRUCTION() \
-	code += "if (api.execute(cpu, " + std::to_string(instr.whole) + "))\n" \
-		"  return (ReturnValues){0, 0};\n"; // Exception thrown
+#define UNKNOWN_INSTRUCTION() { \
+	auto* handler = cpu.decode(instr).handler; \
+	const auto index = DecoderData<W>::handler_index_for(handler); \
+	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
+		"  return (ReturnValues){0, 0};\n"; } // Exception thrown
 #else
 #define UNKNOWN_INSTRUCTION() { \
 	code += "{ static int handler_idx = 0;\n"; \
@@ -1416,13 +1418,13 @@ void Emitter<W>::emit()
 						UNKNOWN_INSTRUCTION();
 					}
 				} else { // FPCLASSIFY etc.
-					code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+					UNKNOWN_INSTRUCTION();
 				} break;
 			} // fpfunc
 			} else UNKNOWN_INSTRUCTION();
 			} break; // RV32F_FPFUNC
 		case RV32A_ATOMIC: // General handler for atomics
-			code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+			UNKNOWN_INSTRUCTION();
 			break;
 		case RV32V_OP: {   // General handler for vector instructions
 #ifdef RISCV_EXT_VECTOR

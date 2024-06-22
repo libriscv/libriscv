@@ -144,10 +144,10 @@ namespace riscv
 		static const instruction_t& get_unimplemented_instruction() noexcept;
 
 		// Set current exception
-		void set_current_exception(unsigned exception) noexcept { m_current_exception = exception + 1; }
-		void clear_current_exception() noexcept { m_current_exception = 0; }
-		bool has_current_exception() const noexcept { return m_current_exception != 0; }
-		exceptions current_exception() const noexcept { return exceptions(m_current_exception-1); }
+		void set_current_exception(std::exception_ptr&& ptr) noexcept { m_current_exception = std::move(ptr); }
+		void clear_current_exception() noexcept { m_current_exception = nullptr; }
+		bool has_current_exception() const noexcept { return m_current_exception != nullptr; }
+		auto& current_exception() const noexcept { return m_current_exception; }
 
 	private:
 		Registers<W> m_regs;
@@ -162,7 +162,7 @@ namespace riscv
 		const unsigned m_cpuid;
 
 		// The current exception (used by eg. TCC which doesn't create unwinding tables)
-		unsigned m_current_exception = 0;
+		std::exception_ptr m_current_exception = nullptr;
 
 		// The default execute fault simply triggers the exception
 		execute_fault_t m_fault = [] (auto& cpu, auto&) {

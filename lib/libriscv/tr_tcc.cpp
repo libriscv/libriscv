@@ -27,6 +27,11 @@ namespace riscv
 		tcc_define_symbol(state, "ARCH", "HOST_UNKNOWN");
 		tcc_set_options(state, "-std=c99 -O2");
 
+#ifdef _WIN32
+		// Look for some headers in the win32 directory
+		tcc_add_include_path(state, "win32");
+#endif
+
 		if (!libtcc1.empty())
 			tcc_add_library_path(state, libtcc1.c_str());
 #ifdef LIBTCC_LIBRARY_PATH
