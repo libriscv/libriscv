@@ -113,8 +113,8 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	if (options.translate_ignore_instruction_limit) {
 		defines.emplace("RISCV_IGNORE_INSTRUCTION_LIMIT", "1");
 	}
-	if constexpr (W == 4 && encompassing_32bit_arena) {
-		defines.emplace("RISCV_32BIT_UNBOUNDED", "1");
+	if constexpr (encompassing_Nbit_arena != 0) {
+		defines.emplace("RISCV_NBIT_UNBOUNDED", std::to_string(encompassing_Nbit_arena));
 	}
 	return defines;
 }

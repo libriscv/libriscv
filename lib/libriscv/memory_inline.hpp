@@ -19,9 +19,12 @@ T Memory<W>::read(address_t address)
 			return value;
 		}
 	}
-	else if constexpr (encompassing_32bit_arena)
+	else if constexpr (encompassing_Nbit_arena)
 	{
-		return *(T *)&((const char*)m_arena.data)[uint32_t(address)];
+		if constexpr (encompassing_Nbit_arena == 32)
+			return *(T *)&((const char*)m_arena.data)[uint32_t(address)];
+		else // It's a power-of-two encompassing arena
+			return *(T *)&((const char*)m_arena.data)[address & encompassing_arena_mask];
 	}
 	else if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address - RWREAD_BEGIN < memory_arena_read_boundary())) {
@@ -45,9 +48,12 @@ template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
-	if constexpr (encompassing_32bit_arena)
+	if constexpr (encompassing_Nbit_arena)
 	{
-		return *(T *)&((char*)m_arena.data)[uint32_t(address)];
+		if constexpr (encompassing_Nbit_arena == 32)
+			return *(T *)&((char*)m_arena.data)[uint32_t(address)];
+		else // It's a power-of-two encompassing arena
+			return *(T *)&((char*)m_arena.data)[address & encompassing_arena_mask];
 	}
 	else if constexpr (flat_readwrite_arena) {
 		if (LIKELY(address - initial_rodata_end() < memory_arena_write_boundary())) {
@@ -71,9 +77,12 @@ void Memory<W>::write(address_t address, T value)
 			return;
 		}
 	}
-	else if constexpr (encompassing_32bit_arena)
+	else if constexpr (encompassing_Nbit_arena)
 	{
-		*(T *)&((char*)m_arena.data)[uint32_t(address)] = value;
+		if constexpr (encompassing_Nbit_arena == 32)
+			*(T *)&((char*)m_arena.data)[uint32_t(address)] = value;
+		else // It's a power-of-two encompassing arena
+			*(T *)&((char*)m_arena.data)[address & encompassing_arena_mask] = value;
 		return;
 	}
 	else if constexpr (flat_readwrite_arena) {
