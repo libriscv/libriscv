@@ -489,8 +489,10 @@ VISIBLE const struct Mapping mappings[] = {
 	TIME_POINT(t9);
 	if constexpr (libtcc_enabled) {
 		extern void* libtcc_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
+		static std::mutex libtcc_mutex;
+		// libtcc uses global state, so we need to serialize compilation
+		std::lock_guard<std::mutex> lock(libtcc_mutex);
 		dylib = libtcc_compile(code, W, defines, options.libtcc1_location);
-
 	} else {
 		extern void* compile(const std::string& code, int arch, const std::string& cflags, const std::string&);
 		extern bool mingw_compile(const std::string& code, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
