@@ -736,11 +736,27 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 				} catch (const MachineException& e) {
 					cpu.set_current_exception(e.type());
 					return 1;
+				} catch (const std::exception& e) {
+					cpu.set_current_exception(SYSTEM_CALL_FAILED);
+					return 1;
 				}
 			} else {
 				auto* handler = cpu.decode(rvi).handler;
 				handler(cpu, rvi);
 				return DecoderData<W>::handler_index_for(handler);
+			}
+		},
+		.execute_handler = [] (CPU<W>& cpu, unsigned index, uint32_t instr) -> unsigned {
+			const rv32i_instruction rvi{instr};
+			try {
+				DecoderData<W>::get_handlers()[index](cpu, rvi);
+				return 0;
+			} catch (const MachineException& e) {
+				cpu.set_current_exception(e.type());
+				return 1;
+			} catch (const std::exception& e) {
+				cpu.set_current_exception(SYSTEM_CALL_FAILED);
+				return 1;
 			}
 		},
 		.handlers = (void (**)(CPU<W>&, uint32_t)) DecoderData<W>::get_handlers(),
