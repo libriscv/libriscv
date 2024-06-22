@@ -11,7 +11,7 @@ __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 
 namespace riscv
 {
-	static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + (16ULL << 20);
+	static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + Page::size();
 
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
@@ -37,8 +37,7 @@ namespace riscv
 					static_assert(flat_readwrite_arena || encompassing_Nbit_arena == 0,
 						"N-bit encompassing arena requires flat_readwrite_arena to be enabled");
 					// Allocate a complete N-bit arena, covering the entire N-bit address space
-					// Add 16MB extra to avoid having to check for overflow for some helper functions
-					// TODO: Allocate maximum signed offset below 0x0 for bounds-checking?
+					// Add 1 extra page to avoid having to bounds-check memory accesses
 					// TODO: Allocate unpresent pages for the whole address space,
 					// and only allocate real memory according to pages_max. Then handle
 					// page faults for the rest of the address space using userfaultfd.
