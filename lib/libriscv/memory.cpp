@@ -49,7 +49,7 @@ namespace riscv
 						this->m_arena.data = nullptr;
 						throw MachineException(OUT_OF_MEMORY, "Out of memory", UNBOUNDED_ARENA_SIZE);
 					}
-					this->m_arena.pages = pages_max;
+					this->m_arena.pages = (1ULL << encompassing_Nbit_arena) / Page::size();
 					/*this->m_arena.data = (PageData *)mmap(m_arena.data, (pages_max + 1) * Page::size(), PROT_READ | PROT_WRITE,
 						MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
 					if (UNLIKELY(this->m_arena.data == MAP_FAILED)) {
