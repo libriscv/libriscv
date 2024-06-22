@@ -11,7 +11,7 @@ __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 
 namespace riscv
 {
-	static constexpr uint64_t UNBOUNDED_ARENA_SIZE = 0x100000000 + (16ULL << 20);
+	static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + (16ULL << 20);
 
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
@@ -32,14 +32,14 @@ namespace riscv
 			if (options.use_memory_arena)
 			{
 #ifdef __linux__
-				if constexpr (encompassing_32bit_arena)
+				if constexpr (encompassing_Nbit_arena != 0)
 				{
-					static_assert(flat_readwrite_arena || !encompassing_32bit_arena,
-						"32-bit encompassing arena requires flat_readwrite_arena to be enabled");
-					// Allocate a complete 32-bit arena, covering the entire 4GB address space
-					// Also 16MB extra to avoid having to check for 32-bit overflow for some helper functions
-					// TODO: Allocate maximum signed offset below 0x0 for bounds-checking
-					// TODO: Allocate unpresent pages for the whole 4GB address space,
+					static_assert(flat_readwrite_arena || encompassing_Nbit_arena == 0,
+						"N-bit encompassing arena requires flat_readwrite_arena to be enabled");
+					// Allocate a complete N-bit arena, covering the entire N-bit address space
+					// Add 16MB extra to avoid having to check for overflow for some helper functions
+					// TODO: Allocate maximum signed offset below 0x0 for bounds-checking?
+					// TODO: Allocate unpresent pages for the whole address space,
 					// and only allocate real memory according to pages_max. Then handle
 					// page faults for the rest of the address space using userfaultfd.
 					this->m_arena.data = (PageData *)mmap(NULL, UNBOUNDED_ARENA_SIZE, PROT_READ | PROT_WRITE,
@@ -139,9 +139,9 @@ namespace riscv
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
 #ifdef __linux__
-			if constexpr (W == 4 && riscv::encompassing_32bit_arena)
+			if constexpr (riscv::encompassing_Nbit_arena != 0)
 			{
-				// munmap() the entire 4GB address space
+				// munmap() the entire address space
 				munmap(this->m_arena.data, UNBOUNDED_ARENA_SIZE);
 			} else {
 				munmap(this->m_arena.data, (this->m_arena.pages + 1) * Page::size());

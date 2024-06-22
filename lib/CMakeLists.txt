@@ -50,6 +50,8 @@ if (RISCV_EXPERIMENTAL)
 	# accesses, but is only available for 32-bit RISC-V.
 	option(RISCV_ENCOMPASSING_ARENA  "Enable encompassing memory arena" OFF)
 	if (RISCV_ENCOMPASSING_ARENA)
+		# Encompassing arena defaults to 32-bit address space, but it is configurable (power of 2).
+		set(RISCV_ENCOMPASSING_ARENA_BITS "32" CACHE STRING "Encompassing arena address space bits")
 		# Encompassing arena implies flat read-write arena
 		set(RISCV_FLAT_RW_ARENA ON)
 	endif()
@@ -163,6 +165,12 @@ target_include_directories(riscv PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 if (NOT WIN32 OR MINGW_TOOLCHAIN)
 	target_compile_options(riscv PRIVATE -Wall -Wextra)
+endif()
+
+if (RISCV_ENCOMPASSING_ARENA)
+	target_compile_definitions(riscv PUBLIC
+		RISCV_ENCOMPASSING_ARENA_BITS=${RISCV_ENCOMPASSING_ARENA_BITS}
+	)
 endif()
 
 if (RISCV_MULTIPROCESS)
