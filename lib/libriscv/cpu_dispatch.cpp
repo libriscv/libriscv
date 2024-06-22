@@ -348,13 +348,8 @@ counter_overflow:
 	if constexpr (libtcc_enabled)
 	{
 		// We need to check if we have a current exception
-		if (CPU().has_current_exception())
-		{
-			// We have an exception, so we need to handle it
-			const auto except_num = CPU().current_exception();
-			CPU().clear_current_exception();
-			CPU().trigger_exception(except_num, CPU().pc());
-		}
+		if (UNLIKELY(CPU().has_current_exception()))
+			goto handle_rethrow_exception;
 	}
 
 	registers().pc = pc;
@@ -380,6 +375,11 @@ execute_invalid:
 	pc = (decoder - exec_decoder) << DecoderCache<W>::SHIFT;
 	registers().pc = pc;
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
+handle_rethrow_exception:
+	// We have an exception, so we need to rethrow it
+	const auto except = CPU().current_exception();
+	CPU().clear_current_exception();
+	std::rethrow_exception(except);
 
 } // CPU::simulate_XXX()
 
