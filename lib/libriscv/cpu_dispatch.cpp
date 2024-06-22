@@ -345,12 +345,11 @@ check_jump:
 		goto new_execute_segment;
 
 counter_overflow:
-	if constexpr (libtcc_enabled)
-	{
-		// We need to check if we have a current exception
-		if (UNLIKELY(CPU().has_current_exception()))
-			goto handle_rethrow_exception;
-	}
+#ifdef RISCV_LIBTCC
+	// We need to check if we have a current exception
+	if (UNLIKELY(CPU().has_current_exception()))
+		goto handle_rethrow_exception;
+#endif
 
 	registers().pc = pc;
 	MACHINE().set_instruction_counter(counter.value());
@@ -375,11 +374,14 @@ execute_invalid:
 	pc = (decoder - exec_decoder) << DecoderCache<W>::SHIFT;
 	registers().pc = pc;
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
+
+#ifdef RISCV_LIBTCC
 handle_rethrow_exception:
 	// We have an exception, so we need to rethrow it
 	const auto except = CPU().current_exception();
 	CPU().clear_current_exception();
 	std::rethrow_exception(except);
+#endif
 
 } // CPU::simulate_XXX()
 
