@@ -16,20 +16,24 @@
 #define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
 #define STRADDR(x) (std::to_string(x) + "UL")
 // Reveal PC on unknown instructions
-// Since it is possible to send a program to another machine, we don't exactly know
-// the order of intruction handlers, so we need to lazily get the handler index by
-// calling the execute function the first time.
 #ifdef RISCV_LIBTCC
+// libtcc always runs on the current machine, so we can use the handler index directly
 #define UNKNOWN_INSTRUCTION() { \
 	auto* handler = cpu.decode(instr).handler; \
 	const auto index = DecoderData<W>::handler_index_for(handler); \
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; } // Exception thrown
 #else
+// Since it is possible to send a program to another machine, we don't exactly know
+// the order of intruction handlers, so we need to lazily get the handler index by
+// calling the execute function the first time.
 #define UNKNOWN_INSTRUCTION() { \
+	if (instr.whole != 0x0) { \
 	code += "{ static int handler_idx = 0;\n"; \
 	code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
 	code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+	} else \
+	code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_INSTRUCTION);\n"; \
 	}
 #endif
 
