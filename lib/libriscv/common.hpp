@@ -95,6 +95,13 @@ namespace riscv
 		/// locality and also enables read-write arena if the CMake option is ON.
 		bool use_memory_arena = true;
 
+		/// @brief Enable sharing of execute segments between machines.
+		/// @details This will allow multiple machines to share the same execute
+		/// segment, reducing memory usage and increasing performance.
+		/// When binary translation is enabled, this will also share the dynamically
+		/// translated code between machines. (Prevents some optimizations)
+		bool use_shared_execute_segments = true;
+
 		/// @brief Override a default-injected exit function with another function
 		/// that is found by looking up the provided symbol name in the current program.
 		/// Eg. if default_exit_function is "fast_exit", then the ELF binary must have
