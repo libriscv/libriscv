@@ -38,11 +38,6 @@
 #endif
 
 namespace riscv {
-// libtcc direct arena pointer access
-// This is a performance optimization for libtcc, which allows direct access to the memory arena
-// however, with it execute segments can no longer be shared between different machines.
-// So, for a simple CLI tool, this is a good optimization. But not for a system of multiple machines.
-static constexpr bool libtcc_direct_pointer_enabled = false;
 static const std::string LOOP_EXPRESSION = "LIKELY(counter < max_counter)";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
@@ -200,12 +195,16 @@ struct Emitter
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
 
 	std::string arena_at(const std::string& address) {
-		if constexpr (libtcc_direct_pointer_enabled && libtcc_enabled) {
+		// libtcc direct arena pointer access
+		// This is a performance optimization for libtcc, which allows direct access to the memory arena
+		// however, with it execute segments can no longer be shared between different machines.
+		// So, for a simple CLI tool, this is a good optimization. But not for a system of multiple machines.
+		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
 					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (uint32_t)(" + address + ")))";
 				else
-					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (" + address + " & " + std::to_string(riscv::encompassing_arena_mask) + "))";
+					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (" + address + " & " + std::to_string(riscv::encompassing_arena_mask) + ")))";
 			} else {
 				return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + " + speculation_safe(address) + "))";
 			}
@@ -220,12 +219,12 @@ struct Emitter
 	}
 
 	std::string arena_at_fixed(address_t address) {
-		if constexpr (libtcc_direct_pointer_enabled && libtcc_enabled) {
+		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 				if constexpr (riscv::encompassing_Nbit_arena == 32)
-					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (uint32_t)(" + std::to_string(address) + "))";
+					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (uint32_t)(" + std::to_string(address) + ")))";
 				else
-					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (" + std::to_string(address) + " & " + std::to_string(riscv::encompassing_arena_mask) + "))";
+					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (" + std::to_string(address) + " & " + std::to_string(riscv::encompassing_arena_mask) + ")))";
 			} else {
 				return "(*(char*)" + std::to_string(tinfo.arena_ptr + address) + "ul)";
 			}

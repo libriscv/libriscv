@@ -412,6 +412,7 @@ if constexpr (SCAN_FOR_GP) {
 				gp,
 				trace_instructions,
 				options.translate_ignore_instruction_limit,
+				options.use_shared_execute_segments,
 				std::move(jump_locations),
 				nullptr, // blocks
 				global_jump_locations,

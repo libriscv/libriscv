@@ -128,6 +128,7 @@ static void run_program(
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
 		.verbose_loader = cli_args.verbose,
+		.use_shared_execute_segments = false, // We are only creating one machine, disabling this can enable some optimizations
 #ifdef RISCV_BINARY_TRANSLATION
 		.translate_enabled = !cli_args.no_translate,
 		.translate_trace = cli_args.trace,

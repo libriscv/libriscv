@@ -19,6 +19,7 @@ namespace riscv
 		address_type<W> gp;
 		bool trace_instructions;
 		bool ignore_instruction_limit;
+		bool use_shared_execute_segments;
 		std::unordered_set<address_type<W>> jump_locations;
 		// Pointer to all the other blocks (including current)
 		std::vector<TransInfo<W>>* blocks = nullptr;
