@@ -34,10 +34,11 @@ static Allocation alloc_random(riscv::Arena& arena)
 static Allocation alloc_sequential(riscv::Arena& arena)
 {
 	const size_t size	 = randInt(0, 8000);
-	const uintptr_t addr = arena.seq_alloc_aligned(size, 8);
+	const uintptr_t addr = arena.seq_alloc_aligned(size, 8, false);
 	REQUIRE(IS_WITHIN(addr));
 	// In order for the memory to be sequential in both the
-	// host and the guest, it must be on the same page (for now).
+	// host and the guest, it must be on the same page. We explicitly
+	// disable the flat read-write arena optimization for this test.
 	if (size > 0 && size < RISCV_PAGE_SIZE)
 	{
 		const auto page1 = addr & ~(RISCV_PAGE_SIZE - 1);

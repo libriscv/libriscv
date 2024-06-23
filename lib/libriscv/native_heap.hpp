@@ -42,15 +42,51 @@ struct Arena
 	using unknown_realloc_func_t = Function<ReallocResult(PointerType, size_t)>;
 	using unknown_free_func_t = Function<int(PointerType, ArenaChunk *)>;
 
-	Arena(const Arena& other);
+	/// @brief Construct an arena that manages allocations for a given memory range.
+	/// @param base The base address of the memory range.
+	/// @param end  The end address of the memory range.
 	Arena(PointerType base, PointerType end);
 
+	/// @brief Transfer allocations from another arena.
+	/// @param other The arena to transfer allocations from.
+	/// @note The other arena is left unchanged, allowing for multiple transfers.
+	Arena(const Arena& other);
+
+	/// @brief Allocate memory from the arena.
+	/// @param size The size of the allocation.
+	/// @return Address to the allocated memory range, or 0 if allocation failed.
+	/// @note The memory range is not guaranteed to be zeroed. 8-byte alignment is guaranteed.
 	PointerType malloc(size_t size);
+
+	/// @brief Reallocate memory from the arena.
+	/// @param ptr The allocation to resize.
+	/// @param newsize The new size of the allocation.
+	/// @return Pointer to the reallocated memory range, or 0 if reallocation failed.
+	/// @note Memory is not moved here, only the allocation itself. An implementor
+	/// should copy the data from the old pointer to the new pointer if necessary.
 	ReallocResult realloc(PointerType old, size_t size);
+
+	/// @brief Get the size of an allocation.
+	/// @param src The pointer to the memory range.
+	/// @param allow_free Whether to allow querying the size of a free chunk.
+	/// @return The size of the memory range, or 0 if the pointer is invalid.
 	size_t      size(PointerType src, bool allow_free = false);
+
+	/// @brief Free a previous allocation.
+	/// @param src The pointer to the memory range.
+	/// @return 0 if the memory range was successfully freed, or -1 if the pointer is invalid.
 	signed int  free(PointerType);
 
-	PointerType seq_alloc_aligned(size_t size, size_t alignment);
+	/// @brief Attempt to allocate a fully sequential memory range,
+	/// unless the arena is flat, in which case all memory is sequential.
+	/// Alignment is currently ignored, but 8-byte alignment is guaranteed.
+	/// @param size The size of the memory range to allocate.
+	/// @param alignment The alignment of the returned address.
+	/// @param arena_is_flat Whether the arena is flat. A configuration option.
+	/// @return Pointer to the allocated memory range, or 0 if allocation failed.
+	/// @note The memory range is not guaranteed to be zeroed.
+	/// @note If an excessive amount of chunks are allocated, an exception is thrown.
+	PointerType seq_alloc_aligned(size_t size, size_t alignment, bool arena_is_flat = riscv::flat_readwrite_arena);
 
 	size_t bytes_free() const;
 	size_t bytes_used() const;
@@ -229,10 +265,14 @@ inline Arena::PointerType Arena::malloc(size_t size)
 // when accessed outside of emulation. A single page
 // has fully sequential memory within itself, so we can
 // always allocate sequential memory within a single page.
-inline Arena::PointerType Arena::seq_alloc_aligned(size_t size, size_t alignment)
+inline Arena::PointerType Arena::seq_alloc_aligned(size_t size, size_t alignment, bool arena_is_flat)
 {
 	assert(alignment != 0x0);
 	(void)alignment;
+
+	if (arena_is_flat) {
+		return malloc(size);
+	}
 
 	// XXX: Alignment is ignored for now,
 	// but 8-byte alignment is guaranteed.
