@@ -11,7 +11,10 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#if __has_include(<linux/netlink.h>)
+#define HAVE_LINUX_NETLINK
 #include <linux/netlink.h>
+#endif
 #else
 #include "../win32/ws2.hpp"
 WSADATA riscv::ws2::global_winsock_data;
@@ -68,11 +71,13 @@ static void print_address(std::array<char, 128> buffer, address_type<W> addrlen)
 		printf("SYSCALL -- UNIX address: %s\n", sun->sun_path);
 		break;
 	}
+#ifdef HAVE_LINUX_NETLINK
 	case AF_NETLINK: {
 		auto* snl = (struct sockaddr_nl *)buffer.data();
 		printf("SYSCALL -- NetLink port: %u\n", snl->nl_pid);
 		break;
 	}
+#endif
 	}
 }
 #endif
@@ -105,7 +110,9 @@ static void syscall_socket(Machine<W>& machine)
 		case AF_UNIX: domname = "Unix"; break;
 		case AF_INET: domname = "IPv4"; break;
 		case AF_INET6: domname = "IPv6"; break;
+#ifdef HAVE_LINUX_NETLINK
 		case AF_NETLINK: domname = "Netlink"; break;
+#endif
 		default: domname = "unknown";
 	}
 	const char* typname;

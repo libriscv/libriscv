@@ -24,6 +24,9 @@ static constexpr bool verbose_syscalls = false;
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
+#ifndef EBADFD
+#define EBADFD EBADF  // OpenBSD, FreeBSD
+#endif
 #define SA_ONSTACK	0x08000000
 
 namespace riscv {

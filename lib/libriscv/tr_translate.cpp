@@ -86,6 +86,17 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	}
 
 	std::unordered_map<std::string, std::string> defines;
+#if defined(__linux__)
+	defines.emplace("RISCV_PLATFORM_LINUX", "1");
+#elif defined(__APPLE__)
+	defines.emplace("RISCV_PLATFORM_DARWIN", "1");
+#elif defined(_WIN32)
+	defines.emplace("RISCV_PLATFORM_WINDOWS", "1");
+#elif defined(__FreeBSD__)
+	defines.emplace("RISCV_PLATFORM_FREEBSD", "1");
+#elif defined(__OpenBSD__)
+	defines.emplace("RISCV_PLATFORM_OPENBSD", "1");
+#endif
 	defines.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
 	defines.emplace("RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX));
 	defines.emplace("RISCV_ARENA_END", std::to_string(arena_end));
