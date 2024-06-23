@@ -2,7 +2,20 @@
 
 namespace riscv {
 	extern const std::string bintr_code =
-		R"123(#include <stdint.h>
+		R"123(
+#if defined(__TINYC__) && defined(RISCV_PLATFORM_FREEBSD)
+#define int8_t   char
+#define uint8_t  unsigned char
+#define int16_t  short
+#define uint16_t unsigned short
+#define int32_t  int
+#define uint32_t unsigned int
+#define int64_t  long long
+#define uint64_t unsigned long long
+#define uintptr_t unsigned long long
+#else
+#include <stdint.h>
+#endif
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
 #define ILLEGAL_OPCODE  0
