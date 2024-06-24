@@ -33,7 +33,7 @@
 	code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
 	code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
 	} else \
-	code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_INSTRUCTION);\n"; \
+	code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 	}
 #endif
 
