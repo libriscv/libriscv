@@ -35,6 +35,12 @@ namespace riscv
 		/// @return Returns true if the machine stopped normally, otherwise an execution timeout happened.
 		bool simulate(address_t pc, uint64_t icounter, uint64_t maxcounter);
 
+		/// @brief Simulate faster by not counting instructions, and consequently
+		/// not checking for timeouts. This is useful when there is another
+		/// layer of timeout checking, like signal handling.
+		/// @param pc The starting address
+		void simulate_inaccurate(address_t pc);
+
 		// Step precisely one instruction forward from current PC.
 		void step_one();
 
