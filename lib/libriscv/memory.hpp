@@ -280,7 +280,7 @@ namespace riscv
 		std::shared_ptr<DecodedExecuteSegment<W>>& next_execute_segment();
 
 		// Linear arena at start of memory (mmap-backed)
-		struct alignas(16) {
+		struct {
 			PageData* data = nullptr;
 			address_t read_boundary = 0;
 			address_t write_boundary = 0;
