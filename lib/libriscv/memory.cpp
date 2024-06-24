@@ -135,6 +135,8 @@ namespace riscv
 	Memory<W>::~Memory()
 	{
 		this->clear_all_pages();
+		// Potentially deallocate execute segments that are no longer referenced
+		this->evict_execute_segments(0); // Leave 0 remaining referenced segments
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
 #ifdef __linux__
@@ -480,6 +482,12 @@ namespace riscv
 		this->m_heap_address = master.memory.m_heap_address;
 		this->m_mmap_address = master.memory.m_mmap_address;
 		this->m_mmap_cache   = master.memory.m_mmap_cache;
+
+		// Reference the same execute segments
+		this->m_exec_segs = master.memory.m_exec_segs;
+		for (size_t i = 0; i < m_exec_segs; i++) {
+			this->m_exec[i] = master.memory.m_exec[i];
+		}
 
 		if (options.use_memory_arena) {
 			this->m_arena.data = master.memory.m_arena.data;
