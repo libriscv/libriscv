@@ -73,6 +73,9 @@ namespace riscv
 		bool is_binary_translated() const noexcept { return false; }
 #endif
 
+		bool is_execute_only() const noexcept { return m_is_execute_only; }
+		void set_execute_only(bool is_xo) { m_is_execute_only = is_xo; }
+
 	private:
 		address_t m_vaddr_begin = 0;
 		address_t m_vaddr_end   = 0;
@@ -97,6 +100,7 @@ namespace riscv
 		uint32_t m_bintr_hash = 0x0; // CRC32-C of the execute segment + compiler options
 #endif
 		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment
+		bool m_is_execute_only = false;
 	};
 
 	template <int W>

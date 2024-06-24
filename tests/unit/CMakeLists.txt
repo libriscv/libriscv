@@ -6,7 +6,10 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -O1 -ggdb3 -fno-omit-frame-pointer -fsanitize
 
 option(RISCV_MULTIPROCESS "" ON)
 add_subdirectory(../../lib lib)
-target_compile_definitions(riscv PUBLIC FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION=1)
+target_compile_definitions(riscv PUBLIC
+	FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION=1
+	RISCV_SYSCALLS_MAX=600
+)
 
 add_subdirectory(../Catch2 Catch2)
 target_compile_features(Catch2 PUBLIC cxx_std_17)

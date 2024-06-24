@@ -178,9 +178,8 @@ namespace riscv
 		const std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr) const;
 		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
 		size_t cached_execute_segments() const noexcept { return m_exec_segs; }
-		// Evict newest execute segments until only remaining left
-		// Default: Leave only the main execute segment left.
-		void evict_execute_segments(size_t remaining_size = 1);
+		// Evict all execute segments, also disabling the main execute segment
+		void evict_execute_segments();
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();

@@ -549,22 +549,24 @@ namespace riscv
 	}
 
 	template <int W>
-	void Memory<W>::evict_execute_segments(size_t remaining_size)
+	void Memory<W>::evict_execute_segments()
 	{
-		if (m_exec_segs <= remaining_size)
-			return;
-
 		// destructor could throw, so let's invalidate early
 		machine().cpu.set_execute_segment(*CPU<W>::empty_execute_segment());
 
-		while (m_exec_segs > remaining_size) {
+		m_exec_segs = std::min(m_exec_segs, m_exec.size());
+		while (m_exec_segs > 0) {
 			m_exec_segs--;
 
-			auto& segment = m_exec.at(m_exec_segs);
-			if (segment) {
-				[[maybe_unused]] const uint32_t hash = segment->crc32c_hash();
-				segment = nullptr;
-				shared_execute_segments<W>.remove_if_unique(hash);
+			try {
+				auto& segment = m_exec.at(m_exec_segs);
+				if (segment) {
+					const uint32_t hash = segment->crc32c_hash();
+					segment = nullptr;
+					shared_execute_segments<W>.remove_if_unique(hash);
+				}
+			} catch (...) {
+				// Ignore exceptions
 			}
 		}
 	}

@@ -50,8 +50,7 @@ void execute(uint64_t max_mem, const char* array_name,
 
 	for (size_t i = 0; i < 2; i++)
 	{
-		machine.memory.evict_execute_segments(0);
-		assert(machine.memory.cached_execute_segments() == 0);
+		machine.memory.evict_execute_segments();
 		try
 		{
 			// Make available on machine

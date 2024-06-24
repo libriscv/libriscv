@@ -182,7 +182,7 @@ namespace riscv
 		// completely reset the paging system as
 		// all pages will be completely replaced
 		this->clear_all_pages();
-		this->evict_execute_segments(0);
+		this->evict_execute_segments();
 
 		size_t off = state.mem_offset;
 		for (size_t p = 0; p < state.n_pages; p++)
