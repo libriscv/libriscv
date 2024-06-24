@@ -134,9 +134,11 @@ namespace riscv
 	template <int W>
 	Memory<W>::~Memory()
 	{
-		this->clear_all_pages();
+		try {
+			this->clear_all_pages();
+		} catch (...) {}
 		// Potentially deallocate execute segments that are no longer referenced
-		this->evict_execute_segments(0); // Leave 0 remaining referenced segments
+		this->evict_execute_segments();
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
 #ifdef __linux__
