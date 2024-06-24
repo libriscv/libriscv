@@ -276,6 +276,8 @@ namespace riscv
 
 		auto& exec_segment =
 			this->create_execute_segment(options, data, vaddr, exlen);
+		// Set the segment as execute-only when R|W are not set
+		exec_segment.set_execute_only((hdr->p_flags & (Elf::PF_R | Elf::PF_W)) == 0);
 		// Select the first execute segment
 		if (machine().cpu.current_execute_segment().empty())
 			machine().cpu.set_execute_segment(exec_segment);

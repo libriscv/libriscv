@@ -168,3 +168,41 @@ TEST_CASE("RV64 Newlib with B-ext Hello World", "[Verify]")
 	REQUIRE(state.text.find("[problems]") != std::string::npos);
 	REQUIRE(state.text.find("Caught exception: Hello Exceptions!") != std::string::npos);
 }
+
+TEST_CASE("RV32 Execute-Only Hello World", "[Verify]")
+{
+	const auto binary = load_file(cwd + "/elf/riscv32gb-execute-only");
+	constexpr uint64_t MAX_MEMORY = 128ul << 20; /* 128MB */
+
+	riscv::Machine<RISCV32> machine{binary, {
+		.memory_max = MAX_MEMORY,
+		.enforce_exec_only = true,
+	}};
+	machine.setup_newlib_syscalls();
+	machine.setup_argv(
+		{"riscv32gb-execute-only"}, {});
+
+	machine.setup_native_heap(580,
+		machine.memory.mmap_allocate(0x1800000), 0x1800000);
+	machine.setup_native_memory(585);
+
+	struct State {
+		std::string text;
+	} state;
+	machine.set_userdata(&state);
+
+	machine.install_syscall_handler(502,
+	[] (auto& machine) {
+		auto [buf, count] = machine.template sysargs<uint32_t, uint32_t>();
+		auto view = machine.memory.rvview(buf, count);
+		printf("%.*s", (int) view.size(), view.data());
+
+		auto* state = machine.template get_userdata<State>();
+		state->text.append((const char*) view.data(), view.size());
+	});
+
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	REQUIRE(machine.return_value() == 123);
+	REQUIRE(state.text == "Hello, World!");
+}

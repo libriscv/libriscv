@@ -40,10 +40,15 @@ namespace riscv
 		// We can't jump if there's been no ELF loader
 		if (!current_execute_segment().empty()) {
 			const auto initial_pc = machine().memory.start_address();
-			const auto& page =
-				machine().memory.get_exec_pageno(initial_pc / riscv::Page::size());
-			if (UNLIKELY(!page.attr.exec))
-				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
+			// Check if the initial PC is executable, unless
+			// the execute segment is marked as execute-only.
+			if (!current_execute_segment().is_execute_only())
+			{
+				const auto& page =
+					machine().memory.get_exec_pageno(initial_pc / riscv::Page::size());
+				if (UNLIKELY(!page.attr.exec))
+					trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
+			}
 			// This function will (at most) validate the execute segment
 			this->jump(initial_pc);
 		}
