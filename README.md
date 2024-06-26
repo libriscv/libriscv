@@ -340,13 +340,13 @@ When embedded libtcc is enabled, by setting the CMake option `RISCV_LIBTCC` to `
 
 ### Read-write arena
 
-The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, pages can still be allocated outside of the arena memory area, and there page protections will apply as normal. It is default-enabled, providing a performance boost.
+The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, pages can still be allocated outside of the arena memory area, and there page protections will apply as normal. It is default-enabled, providing a performance boost. Disabling the read-write arena enables full virtual paging.
 
 ### Embedded libtcc
 
-When binary translation is enabled, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. The `libtcc-dev` package will be required for building. It will give a handsome 25-100% performance boost compared to interpreting RISC-V.
+When binary translation is enabled, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. The `libtcc-dev` package will be required for building. It will give a handsome 25-100% performance boost compared to interpreter mode.
 
-If you are seeing the error `tcc: error: file 'libtcc1.a' not found`, you can change to using the distro package instead by enabling `RISCV_LIBTCC_DISTRO_PACKAGE`, where `libtcc1.a` is pre-installed. Otherwise, the CMake build scripts produces `libtcc1.a` and puts it at the root of the build folder. So, a very common solution to the error is to just create a link: `ln -fs build/libtcc1.a .`. It is a run-time dependency.
+If you are seeing the error `tcc: error: file 'libtcc1.a' not found`, you can change to using the distro package instead by enabling `RISCV_LIBTCC_DISTRO_PACKAGE`, where `libtcc1.a` is pre-installed. In which case, install your distros `libtcc-dev` equivalent package. Otherwise, the CMake build scripts produces `libtcc1.a` and puts it at the root of the build folder. So, a very quick solution to the error is to just create a symbolic link: `ln -fs build/libtcc1.a .`. It is a run-time dependency of TCC.
 
 ### Experimental multiprocessing
 
@@ -356,6 +356,8 @@ There is multiprocessing support, but it is in its early stages. It is achieved 
 ### Experimental unbounded 32-bit addressing
 
 It is possible to map out the entire 32-bit address space for 32-bit RISC-V guests, such that memory operations no longer require bounds-checking. This mode usually goes with features like userfaultfd, however currently only the address space is created, fully readable and writable. This means the feature should not be used when sandboxing is necessary, and instead it makes more sense currently for running CLI applications from the terminal. It can be enabled with `RISCV_EXPERIMENTAL` and then `RISCV_ENCOMPASSING_ARENA`. 64-bit is supported by casting all addresses to 32-bit.
+
+The feature is not restricted to just 32-bit address spaces. It can be configured by setting `RISCV_ENCOMPASSING_ARENA_BITS` to something other than 32. 32 is the fastest as addresses are replaced with 32-bit casts. For other N-bit address spaces, and-masking is used. For example, the bit value `27` represents a 128MB address space, and 33 is an 8GB address space.
 
 
 ### Interpreter performance settings

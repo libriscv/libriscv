@@ -119,62 +119,156 @@ void syscall_write(Machine<W>& machine)
 
 A fictive system call that has a single string as system call argument can be implemented in a variety of ways:
 
+1. Retrieve buffer address and length, then copy data into a host buffer.
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions apply, but not invalid lengths. If the length is 256GB, `copy_from_guest()` *will* attempt to copy that, and will only fail when running out of memory. All memory operations in _libriscv_ are strictly bounds-checked, but if there really is 256GB of memory in the guest, the copy operation will try to copy all 256GB out.
+
 ```C++
 template <int W>
 void syscall_string(Machine<W>& machine)
 {
-	// 1. Read the guests virtual address and length
 	const auto [address, len] =
 		machine.template sysargs <address_type<W>, address_type<W>> ();
 
 	// Create a buffer and copy into it. Page protections apply.
 	std::vector<uint8_t> buffer(len);
 	machine.memory.copy_from_guest(buffer.data(), address, len);
+}
+```
 
-	// 2. Read-only iovec buffers for readv/writev etc. Page protections apply.
+2. Fill an array of iovec-like structs with the guest buffer address and length. The buffers will contain host pointers and safe lengths, and can be passed directly to readv/writev.
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions apply. The operation is unbounded, meaning that if, for example, we attempt to fill iovec buffers with 32GB of memory, and that memory is sequential in the guest, it only needs 1 iovec entry to represent that, and so it *will* return a single buffer that is 32GB long. It will only fail if there are not enough buffers to represent the entire data.
+
+```C++
+template <int W>
+void syscall_string(Machine<W>& machine)
+{
+	const auto [address, len] =
+		machine.template sysargs <address_type<W>, address_type<W>> ();
+
 	riscv::vBuffer buffers[16];
 	size_t cnt =
 		machine.memory.gather_buffers_from_range(16, buffers, address, len);
 	const ssize_t res =
 		writev(1, (struct iovec *)&buffers[0], cnt);
-
-	// 2. Directly read a zero-terminated string. Page protections apply.
-	const auto string = machine.memory.memstring(address);
-
-	// Shortcut:
-	const auto [string] =
-		machine.template sysargs <std::string> (); // Consumes 1 register
-
-	// 3. Get a string view directly (fastest option, read-write arena only)
-	// Page protections do not apply inside the read-write arena. It is always
-	// read-write, but also always sequential.
-	const auto strview = machine.memory.rvview(address, len);
-
-	// Shortcut:
-	const auto [string] =
-		machine.template sysargs <std::string_view> (); // Consumes 2 registers
-
-	// 4. Get a zero-copy buffer. Page protections apply.
-	const auto rvbuffer = machine.memory.rvbuffer(address, len);
-
-	std::string str = rvbuffer.to_string();
-
-	std::vector<uint8_t> buf;
-	rvbuffer.copy_to(buf);
-
-	if (buffer.is_sequential()) {
-		consumer(buffer.data(), buffer.size());
-	}
-
-	// Shortcut:
-	const auto [string] =
-		machine.template sysargs <riscv::Buffer> (); // Consumes 2 registers
 }
 ```
 
-These are various ways that you can safely look at the guests memory provided by system call arguments. Most of these have a third argument setting a maximum length that puts a limit on the size of the buffers length. For example the maxlen argument in `memory.memstring(addr, len, maxlen)`.
+3. Directly read a zero-terminated string. Page protections apply.
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions apply. The operation is bounded by a second argument `memstring(addr, maxlen)` that limits the operation to by default 16MB. This acts as a preventative measure against invalid strings, and simplifies API usage.
+```C++
+template <int W>
+void syscall_string(Machine<W>& machine)
+{
+	const auto [address] =
+		machine.template sysargs <address_type<W>> ();
 
-One last function that needs to be mentioned is how to get writable buffers into the guest for writing eg. from a iovec-like reader in the host:
+	const auto string = machine.memory.memstring(address);
+}
+```
+
+4. Using `std::string` directly is a shortcut for example 3, shown above. The same rules apply.
+```C++
+template <int W>
+void syscall_string(Machine<W>& machine)
+{
+	const auto [string] =
+		machine.template sysargs <std::string> (); // Consumes 1 register
+}
+```
+
+
+5. Read an address and a length (2 registers) to a `std::string_view`.
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions *do not* apply, but read-write arena rules apply (eg. cannot write to read-only program area). The operation has a default hard 16MB limit (third argument to `rvview(addr, len, maxlen)`). This acts as a defensive measure against invalid lengths, and simplifies API usage.
+```C++
+template <int W>
+void syscall_string(Machine<W>& machine)
+{
+	const auto [address, len] =
+		machine.template sysargs <address_type<W>, address_type<W>> ();
+
+	const auto strview = machine.memory.rvview(address, len);
+}
+```
+6. Using `std::string_view` directly is a shortcut for example 5, shown above. The same rules apply.
+```C++
+template <int W>
+void syscall_string(Machine<W>& machine)
+{
+	const auto [view] =
+		machine.template sysargs <std::string_view> (); // Consumes 2 registers
+}
+```
+
+## Other examples
+
+1. Read a struct by value.
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions apply. Uses `memcpy_out(&t, addr, sizeof(T))` behind the scenes.
+
+```C++
+template <int W>
+void syscall_struct(Machine<W>& machine)
+{
+	struct MyStruct {
+		std::array<int, 44> mydata;
+		char buffer[64];
+	};
+	const auto [mystruct] =
+		machine.template sysargs <MyStruct> (); // Consumes 1 register (the address)
+}
+```
+
+2. Get a fixed 1-element span of struct (`std::span<T, 1>`).
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions *do not* apply, instead read-write arena rules apply. Uses `rvspan<T> (addr, 1)` behind the scenes.
+
+```C++
+template <int W>
+void syscall_struct(Machine<W>& machine)
+{
+	struct MyStruct {
+		std::array<int, 44> mydata;
+		char buffer[64];
+	};
+	const auto [mystruct_ptr] =
+		machine.template sysargs <MyStruct*> (); // Consumes 1 register (the address)
+}
+```
+Notice how the type is _a pointer_. If instead you want a fixed-size span of T, you can instead use a pointer to a fixed-size std::array: `std::array<T, N>*`.
+
+3. Get a dynamic N-element span of struct (`std::span<T>`).
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions *do not* apply, instead read-write arena rules apply. Uses `rvspan<T> (addr, n)` behind the scenes.
+
+```C++
+template <int W>
+void syscall_struct(Machine<W>& machine)
+{
+	struct MyStruct {
+		int value;
+	};
+	const auto [span] =
+		machine.template sysargs <std::span<MyStruct>> (); // Consumes 2 registers
+}
+```
+
+4. Get an N-element array of struct (`std::array<T, N>`) by value.
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions *do not* apply, instead read-write arena rules apply. Uses `rvspan<T, N> (addr)` behind the scenes.
+
+```C++
+template <int W>
+void syscall_struct(Machine<W>& machine)
+{
+	struct MyStruct {
+		int value;
+	};
+	const auto [mystruct_ptr] =
+		machine.template sysargs <std::array<MyStruct, 44>> (); // Consumes 1 register (the address)
+}
+```
+Maybe this one can be improved to become a reference to a `std::array` in the future.
+
+
+5. Getting writable buffers for `readv()`.
+
+> Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions apply. The function creates writable pages for the entire segment, and returns `cnt` iovec entries that can be passed directly to `readv()`.
 
 ```C++
 	riscv::vBuffer buffers[16];
@@ -185,6 +279,7 @@ One last function that needs to be mentioned is how to get writable buffers into
 ```
 
 Using `gather_writable_buffers_from_range` we can let the Linux kernel block and read into the guests memory until completion.
+
 
 ## Communicating the other way
 
@@ -241,3 +336,9 @@ The `EBREAK` instruction is handled as a system call in this emulator, specifica
 `EBREAK` is very convenient for debugging purposes, as adding it somewhere in the code is very simple: `asm("ebreak");`.
 
 NOTE: Be careful of `__builtin_trap()`, as it erroneously assumes that you are never returning, and the compiler will stop producing instructions after it.
+
+## Special note on read-write arena rules
+
+The read-write arena is by default enabled, and splits the address space into 3 zones: Inaccessible, read-only and read-write. The area before the ELF program becomes inaccessible, such as the zero page (and consequently 0x0). The read-only area of the ELF becomes read-only (rodata sections). And finally, the .data, .bss and the heap becomes read-write until the end of configured memory.
+
+This is purely an optimization, and it maintains the sandbox. It can be disabled in order to get full paging support for the entire address space. When disabled, some helper functions become unavailable as the address space is no longer guaranteed to be sequential, but other opportunities arise in their place. For example, forking is fully supported, native heap allocator that only allocates sequential data, taking over page allocation in order to use custom arenas etc.
