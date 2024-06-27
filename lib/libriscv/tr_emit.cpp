@@ -202,11 +202,11 @@ struct Emitter
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
-					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (uint32_t)(" + address + ")))";
+					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + (uint32_t)(" + address + "))";
 				else
-					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (" + address + " & " + std::to_string(riscv::encompassing_arena_mask) + ")))";
+					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + ((" + address + ") & " + std::to_string(riscv::encompassing_arena_mask) + "))";
 			} else {
-				return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + " + speculation_safe(address) + "))";
+				return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + " + speculation_safe(address) + ")";
 			}
 		} else if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
@@ -222,17 +222,17 @@ struct Emitter
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 				if constexpr (riscv::encompassing_Nbit_arena == 32)
-					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (uint32_t)(" + std::to_string(address) + ")))";
+					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ull)";
 				else
-					return "(*(char*)(" + std::to_string(tinfo.arena_ptr) + " + (" + std::to_string(address) + " & " + std::to_string(riscv::encompassing_arena_mask) + ")))";
+					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + (address & riscv::encompassing_arena_mask)) + "ull)";
 			} else {
-				return "(*(char*)" + std::to_string(tinfo.arena_ptr + address) + "ul)";
+				return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + address) + "ull)";
 			}
 		} else if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
-				return "ARENA_AT(cpu, (uint32_t)(" + std::to_string(address) + "))";
+				return "ARENA_AT(cpu, " + std::to_string(uint32_t(address)) + ")";
 			else
-				return "ARENA_AT(cpu, " + std::to_string(address) + " & " + std::to_string(riscv::encompassing_arena_mask) + ")";
+				return "ARENA_AT(cpu, " + std::to_string(address & riscv::encompassing_arena_mask) + ")";
 		} else {
 			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
@@ -253,7 +253,7 @@ struct Emitter
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
-					dst + " = " + cast + "*(" + type + "*)&" + arena_at_fixed(absolute_vaddr) + ";"
+					dst + " = " + cast + "*(" + type + "*)" + arena_at_fixed(absolute_vaddr) + ";"
 				);
 				return;
 			}
@@ -262,12 +262,12 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_Nbit_encompassing_arena())
 		{
-			add_code(dst + " = " + cast + "*(" + type + "*)&" + arena_at(address) + ";");
+			add_code(dst + " = " + cast + "*(" + type + "*)" + arena_at(address) + ";");
 		}
 		else if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
-					dst + " = " + cast + "*(" + type + "*)&" + arena_at(address) + ";",
+					dst + " = " + cast + "*(" + type + "*)" + arena_at(address) + ";",
 				"else {",
 					dst + " = " + cast + "(" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");",
 				"}");
@@ -286,7 +286,7 @@ struct Emitter
 			/* XXX: Check page permissions */
 			const address_t absolute_vaddr = tinfo.gp + imm;
 			if (absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
-				add_code("*(" + type + "*)&ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ") = " + value + ";");
+				add_code("*(" + type + "*)ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ") = " + value + ";");
 				return;
 			}
 		}
@@ -294,12 +294,12 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (cpu.machine().memory.uses_Nbit_encompassing_arena())
 		{
-			add_code("*(" + type + "*)&" + arena_at(address) + " = " + value + ";");
+			add_code("*(" + type + "*)" + arena_at(address) + " = " + value + ";");
 		}
 		else if (cpu.machine().memory.uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
-				"  *(" + type + "*)&" + arena_at(address) + " = " + value + ";",
+				"  *(" + type + "*)" + arena_at(address) + " = " + value + ";",
 				"else {",
 				"  api.mem_st(cpu, " + address + ", " + value + ", sizeof(" + type + "));",
 				"}");
