@@ -36,6 +36,9 @@ namespace riscv
 				{
 					static_assert(flat_readwrite_arena || encompassing_Nbit_arena == 0,
 						"N-bit encompassing arena requires flat_readwrite_arena to be enabled");
+					if (pages_max * Page::size() > (1ULL << encompassing_Nbit_arena))
+						throw MachineException(OUT_OF_MEMORY, "Out of memory", UNBOUNDED_ARENA_SIZE);
+
 					// Allocate a complete N-bit arena, covering the entire N-bit address space
 					// Add 1 extra page to avoid having to bounds-check memory accesses
 					// TODO: Allocate unpresent pages for the whole address space,

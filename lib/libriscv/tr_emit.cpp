@@ -204,7 +204,7 @@ struct Emitter
 				if (riscv::encompassing_Nbit_arena == 32)
 					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + (uint32_t)(" + address + "))";
 				else
-					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + ((" + address + ") & " + std::to_string(riscv::encompassing_arena_mask) + "))";
+					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + ((" + address + ") & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + "))";
 			} else {
 				return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + " + speculation_safe(address) + ")";
 			}
@@ -212,7 +212,7 @@ struct Emitter
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
 				return "ARENA_AT(cpu, (uint32_t)(" + address + "))";
 			else
-				return "ARENA_AT(cpu, " + address + " & " + std::to_string(riscv::encompassing_arena_mask) + ")";
+				return "ARENA_AT(cpu, " + address + " & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + ")";
 		} else {
 			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
@@ -224,7 +224,7 @@ struct Emitter
 				if constexpr (riscv::encompassing_Nbit_arena == 32)
 					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ull)";
 				else
-					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + (address & riscv::encompassing_arena_mask)) + "ull)";
+					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "ull)";
 			} else {
 				return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + address) + "ull)";
 			}
@@ -232,7 +232,7 @@ struct Emitter
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
 				return "ARENA_AT(cpu, " + std::to_string(uint32_t(address)) + ")";
 			else
-				return "ARENA_AT(cpu, " + std::to_string(address & riscv::encompassing_arena_mask) + ")";
+				return "ARENA_AT(cpu, " + std::to_string(address & address_t(riscv::encompassing_arena_mask)) + ")";
 		} else {
 			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
