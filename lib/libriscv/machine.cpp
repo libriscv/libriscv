@@ -4,6 +4,7 @@
 #include "rv32i_instr.hpp"
 #include "threads.hpp"
 #include "util/auxvec.hpp"
+#include <algorithm>
 #include <errno.h> // Used by emulated POSIX system calls
 #include <random>
 #ifdef __GNUG__ /* Workaround for GCC bug */
