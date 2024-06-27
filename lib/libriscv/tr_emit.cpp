@@ -199,14 +199,16 @@ struct Emitter
 		// This is a performance optimization for libtcc, which allows direct access to the memory arena
 		// however, with it execute segments can no longer be shared between different machines.
 		// So, for a simple CLI tool, this is a good optimization. But not for a system of multiple machines.
-		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
+		// XXX: This is a workaround for a bug in libtcc, which doesn't handle 64-bit + 32- or higher -bit pointer arithmetic
+		constexpr bool avoid_codegen_bug = W > 4 || riscv::encompassing_Nbit_arena < 32;
+		if (libtcc_enabled && !tinfo.use_shared_execute_segments && avoid_codegen_bug) {
 			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
-					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + (uint32_t)(" + address + "))";
+					return "(" + std::to_string(tinfo.arena_ptr) + "ull + (uint32_t)(" + address + "))";
 				else
-					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + ((" + address + ") & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + "))";
+					return "(" + std::to_string(tinfo.arena_ptr) + "ull + ((" + address + ") & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + "))";
 			} else {
-				return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr) + "ull + " + speculation_safe(address) + ")";
+				return "(" + std::to_string(tinfo.arena_ptr) + "ull + " + speculation_safe(address) + ")";
 			}
 		} else if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
@@ -222,11 +224,11 @@ struct Emitter
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 				if constexpr (riscv::encompassing_Nbit_arena == 32)
-					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ull)";
+					return "(" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ull)";
 				else
-					return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "ull)";
+					return "(" + std::to_string(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "ull)";
 			} else {
-				return "(uintptr_t)(" + std::to_string(tinfo.arena_ptr + address) + "ull)";
+				return "(" + std::to_string(tinfo.arena_ptr + address) + "ull)";
 			}
 		} else if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
