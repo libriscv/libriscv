@@ -165,9 +165,9 @@ static void run_program(
 		machine.fds().permit_filesystem = !cli_args.sandbox;
 		machine.fds().permit_sockets    = !cli_args.sandbox;
 		// Rewrite certain links to masquerade and simplify some interactions (eg. /proc/self/exe)
-		machine.fds().filter_readlink = [=] (void* user, std::string& path) {
+		machine.fds().filter_readlink = [&] (void* user, std::string& path) {
 			if (path == "/proc/self/exe") {
-				path = "/program";
+				path = machine.fds().cwd + "/program";
 				return true;
 			}
 			fprintf(stderr, "Guest wanted to readlink: %s (denied)\n", path.c_str());
@@ -189,11 +189,6 @@ static void run_program(
 				path = args.at(0); // Sneakily open the real program instead
 				return true;
 			}
-			if (path == "/home"
-				|| path == "lib"
-				|| path == "lib/zig"
-				|| path == "std/std.zig"
-			) return true;
 			if (path == "/etc/ssl/certs/ca-certificates.crt")
 				return true;
 			// ld-linux

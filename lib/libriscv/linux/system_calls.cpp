@@ -337,6 +337,8 @@ static void syscall_openat(Machine<W>& machine)
 			// filter_open() can modify the path
 			if (!machine.fds().filter_open(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
+				SYSPRINT("SYSCALL openat(path: %s) => %d\n",
+					path.c_str(), machine.template return_value<int>());
 				return;
 			}
 		}
@@ -493,15 +495,17 @@ void syscall_readlinkat(Machine<W>& machine)
 			SYSPRINT("SYSCALL readlinkat, fd: %d path: %s (filter => %s) buffer: 0x%lX size: %zu >= %ld\n",
 					 vfd, original_path.c_str(), path.c_str(), (long)g_buf, (size_t)bufsize, (long)machine.return_value());
 		}
-		const int real_fd = machine.fds().translate(vfd);
+		else
+		{
+			const int real_fd = machine.fds().translate(vfd);
 
-		const int res = readlinkat(real_fd, original_path.c_str(), buffer, bufsize);
-		if (res > 0) {
-			// TODO: Only necessary if g_buf is not sequential.
-			machine.copy_to_guest(g_buf, buffer, res);
+			const int res = readlinkat(real_fd, original_path.c_str(), buffer, bufsize);
+			if (res > 0) {
+				// TODO: Only necessary if g_buf is not sequential.
+				machine.copy_to_guest(g_buf, buffer, res);
+			}
+			machine.set_result_or_error(res);
 		}
-
-		machine.set_result_or_error(res);
 	} else {
 		machine.set_result(-ENOSYS);
 	}
@@ -556,12 +560,12 @@ template <int W>
 static void syscall_getcwd(Machine<W>& machine)
 {
 	const auto g_buf = machine.sysarg(0);
-	const auto size = machine.sysarg(1);
+	[[maybe_unused]] const auto size = machine.sysarg(1);
 
 	auto& cwd = machine.fds().cwd;
 	if (!cwd.empty()) {
 		machine.copy_to_guest(g_buf, cwd.c_str(), cwd.size()+1);
-		machine.set_result(0);
+		machine.set_result(cwd.size()+1);
 	} else {
 		machine.set_result(-1);
 	}
