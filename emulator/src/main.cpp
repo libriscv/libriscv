@@ -12,6 +12,7 @@ struct Arguments {
 	bool verbose = false;
 	bool accurate = false;
 	bool debug = false;
+	bool singlestep = false;
 	bool gdb = false;
 	bool silent = false;
 	bool timing = false;
@@ -20,6 +21,7 @@ struct Arguments {
 	bool mingw = false;
 	bool from_start = false;
 	bool sandbox = false;
+	bool ignore_text = false;
 	uint64_t fuel = UINT64_MAX;
 };
 
@@ -31,6 +33,7 @@ static const struct option long_options[] = {
 	{"verbose", no_argument, 0, 'v'},
 	{"accurate", no_argument, 0, 'a'},
 	{"debug", no_argument, 0, 'd'},
+	{"single-step", no_argument, 0, '1'},
 	{"fuel", required_argument, 0, 'f'},
 	{"gdb", no_argument, 0, 'g'},
 	{"silent", no_argument, 0, 's'},
@@ -40,6 +43,7 @@ static const struct option long_options[] = {
 	{"mingw", no_argument, 0, 'm'},
 	{"from-start", no_argument, 0, 'F'},
 	{"sandbox", no_argument, 0, 'S'},
+	{"ignore-text", no_argument, 0, 'I'},
 	{0, 0, 0, 0}
 };
 
@@ -51,6 +55,7 @@ static void print_help(const char* name)
 		"  -v, --verbose      Enable verbose loader output\n"
 		"  -a, --accurate     Accurate instruction counting\n"
 		"  -d, --debug        Enable CLI debugger\n"
+		"  -1, --single-step  One instruction at a time, enabling exact exceptions\n"
 		"  -f, --fuel         Set max instructions until program halts\n"
 		"  -g, --gdb          Start GDB server on port 2159\n"
 		"  -s, --silent       Suppress program completion information\n"
@@ -60,13 +65,14 @@ static void print_help(const char* name)
 		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
 		"  -S  --sandbox      Enable strict sandbox\n"
+		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
 	);
 }
 
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvadf:gstTnmFS", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnmFSI", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -74,6 +80,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'v': args.verbose = true; break;
 			case 'a': args.accurate = true; break;
 			case 'd': args.debug = true; break;
+			case '1': args.singlestep = true; break;
 			case 'f': break;
 			case 'g': args.gdb = true; break;
 			case 's': args.silent = true; break;
@@ -83,6 +90,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'm': args.mingw = true; break;
 			case 'F': args.from_start = true; break;
 			case 'S': args.sandbox = true; break;
+			case 'I': args.ignore_text = true; break;
 			default:
 				fprintf(stderr, "Unknown option: %c\n", c);
 				return -1;
@@ -127,6 +135,7 @@ static void run_program(
 	// Create a RISC-V machine with the binary as input program
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
+		.ignore_text_section = cli_args.ignore_text,
 		.verbose_loader = cli_args.verbose,
 		.use_shared_execute_segments = false, // We are only creating one machine, disabling this can enable some optimizations
 #ifdef RISCV_BINARY_TRANSLATION
@@ -301,6 +310,10 @@ static void run_program(
 		} else if (cli_args.debug) {
 			// CLI debug simulation
 			debug.simulate();
+		} else if (cli_args.singlestep) {
+			// Single-step precise simulation
+			machine.set_max_instructions(~0ULL);
+			machine.cpu.simulate_precise();
 		} else {
 			// Normal RISC-V simulation
 			machine.simulate(cli_args.fuel);

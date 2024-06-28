@@ -81,6 +81,11 @@ namespace riscv
 		/// @brief Enabling this will enforce execute-only segments (X ^ R).
 		bool enforce_exec_only = false;
 
+		/// @brief Ignore .text section, as if not all executable code is in it.
+		/// Instead, load all executable segments as normal. Some programs require using
+		/// the .text section in order to get correctly aligned instructions.
+		bool ignore_text_section = false;
+
 		/// @brief Print some verbose loader information to stdout.
 		/// @details If binary translation is enabled, this will also make the
 		/// binary translation process print verbose information.
