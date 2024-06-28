@@ -477,27 +477,21 @@ void syscall_readlinkat(Machine<W>& machine)
 
 	const std::string original_path = machine.memory.memstring(g_path);
 
-	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
-		vfd, original_path.c_str(), (long)g_buf, (size_t)bufsize);
-
-	char buffer[512];
+	char buffer[4096];
 	if (bufsize > sizeof(buffer)) {
 		machine.set_result(-ENOMEM);
-		return;
-	}
-
-	if (machine.has_file_descriptors()) {
-
+	} else if (machine.has_file_descriptors()) {
 		if (machine.fds().filter_readlink != nullptr) {
 			std::string path = original_path;
 			if (!machine.fds().filter_readlink(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
-				return;
+			} else {
+				// Readlink always rewrites the answer
+				machine.copy_to_guest(g_buf, path.c_str(), path.size());
+				machine.set_result(path.size());
 			}
-			// Readlink always rewrites the answer
-			machine.copy_to_guest(g_buf, path.c_str(), path.size());
-			machine.set_result(path.size());
-			return;
+			SYSPRINT("SYSCALL readlinkat, fd: %d path: %s (filter => %s) buffer: 0x%lX size: %zu >= %ld\n",
+					 vfd, original_path.c_str(), path.c_str(), (long)g_buf, (size_t)bufsize, (long)machine.return_value());
 		}
 		const int real_fd = machine.fds().translate(vfd);
 
@@ -508,9 +502,11 @@ void syscall_readlinkat(Machine<W>& machine)
 		}
 
 		machine.set_result_or_error(res);
-		return;
+	} else {
+		machine.set_result(-ENOSYS);
 	}
-	machine.set_result(-ENOSYS);
+	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu => %ld\n",
+			 vfd, original_path.c_str(), (long)g_buf, (size_t)bufsize, (long)machine.return_value());
 }
 
 // The RISC-V stat structure is different from x86
@@ -554,6 +550,23 @@ inline void copy_stat_buffer(struct stat& st, struct riscv_stat& rst)
 	rst.rv_mtime_nsec = st.st_mtim.tv_nsec;
 	rst.rv_ctime = st.st_ctime;
 	rst.rv_ctime_nsec = st.st_ctim.tv_nsec;
+}
+
+template <int W>
+static void syscall_getcwd(Machine<W>& machine)
+{
+	const auto g_buf = machine.sysarg(0);
+	const auto size = machine.sysarg(1);
+
+	auto& cwd = machine.fds().cwd;
+	if (!cwd.empty()) {
+		machine.copy_to_guest(g_buf, cwd.c_str(), cwd.size()+1);
+		machine.set_result(0);
+	} else {
+		machine.set_result(-1);
+	}
+	SYSPRINT("SYSCALL getcwd, buffer: 0x%lX size: %ld => %ld\n",
+		(long)g_buf, (long)size, (long)machine.return_value());
 }
 
 template <int W>
@@ -878,6 +891,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 {
 	install_syscall_handler(SYSCALL_EBREAK, syscall_ebreak<W>);
 
+	// getcwd
+	install_syscall_handler(17, syscall_getcwd<W>);
 #ifdef __linux__
 	// eventfd2
 	install_syscall_handler(19, syscall_eventfd2<W>);

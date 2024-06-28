@@ -189,6 +189,11 @@ static void run_program(
 				path = args.at(0); // Sneakily open the real program instead
 				return true;
 			}
+			if (path == "/home"
+				|| path == "lib"
+				|| path == "lib/zig"
+				|| path == "std/std.zig"
+			) return true;
 			if (path == "/etc/ssl/certs/ca-certificates.crt")
 				return true;
 			// ld-linux

@@ -38,6 +38,8 @@ struct FileDescriptors
 
     std::map<int, real_fd_type> translation;
 
+	// Default working directory (fake root)
+	std::string cwd = "/home";
 
 	static constexpr int FILE_D_BASE = 0x1000;
 	static constexpr int SOCKET_D_BASE = 0x40001000;
