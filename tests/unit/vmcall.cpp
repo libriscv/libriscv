@@ -53,6 +53,67 @@ TEST_CASE("VM function call", "[VMCall]")
 	REQUIRE(state.output_is_hello_world);
 }
 
+TEST_CASE("VM call return values", "[VMCall]")
+{
+	const auto binary = build_and_load(R"M(
+	extern const char* hello() {
+		return "Hello World!";
+	}
+
+	static struct Data {
+		int val1;
+		int val2;
+		float f1;
+	} data = {.val1 = 1, .val2 = 2, .f1 = 3.0f};
+	extern struct Data* structs() {
+		return &data;
+	}
+
+	int main() {
+		return 666;
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// We need to install Linux system calls for maximum gucciness
+	machine.setup_linux_syscalls();
+	// We need to create a Linux environment for runtimes to work well
+	machine.setup_linux(
+		{"vmcall"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	const auto hello_address = machine.address_of("hello");
+	REQUIRE(hello_address != 0x0);
+
+	// Test returning a string
+	machine.vmcall(hello_address);
+	REQUIRE(machine.return_value<std::string>() == "Hello World!");
+
+	const auto structs_address = machine.address_of("structs");
+	REQUIRE(structs_address != 0x0);
+
+	// Test returning a structure
+	struct Data {
+		int val1;
+		int val2;
+		float f1;
+	};
+	machine.vmcall(structs_address);
+
+	const auto data = machine.return_value<Data>();
+	REQUIRE(data.val1 == 1);
+	REQUIRE(data.val2 == 2);
+	REQUIRE(data.f1 == 3.0f);
+
+	// Test returning a pointer to a structure
+	// This is probably fine as the stack starts at the end of a page,
+	// making this structure very likely sequential in memory.
+	// If it wasn't an exception would be thrown.
+	const auto* data_ptr = machine.return_value<Data*>();
+	REQUIRE(data_ptr->val1 == 1);
+	REQUIRE(data_ptr->val2 == 2);
+	REQUIRE(data_ptr->f1 == 3.0f);
+}
+
 TEST_CASE("VM function call in fork", "[VMCall]")
 {
 	// The global variable 'value' should get
