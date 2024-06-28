@@ -197,8 +197,8 @@ namespace riscv
 		}
 
 		if (options.verbose_loader) {
-		printf("* Loading program of size %zu from %p to virtual %p\n",
-				len, src, (void*)uintptr_t(vaddr));
+		printf("* Loading program of size %zu from %p to virtual %p -> %p\n",
+				len, src, (void*)uintptr_t(vaddr), (void*)uintptr_t(vaddr + len));
 		}
 		// Serialize pages cannot be called with len == 0,
 		// and there is nothing further to do.
@@ -259,7 +259,8 @@ namespace riscv
 		size_t exlen = hdr->p_filesz;
 		const char* data = m_binary.data() + hdr->p_offset;
 
-		if constexpr (W <= 8)
+		// Zig's ELF writer is insane, so we add an option to disable .text section segment reduction.
+		if (W <= 8 && !options.ignore_text_section)
 		{
 			// Look for a .text section inside this segment:
 			const auto* texthdr = section_by_name(".text");
