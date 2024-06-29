@@ -305,13 +305,15 @@ namespace riscv
 		// switch on atomic type
 		if (instr.Atype.funct3 == AMOSIZE_W)
 		{
-			cpu.atomics().load_reserve(4, addr);
+			if (!cpu.atomics().load_reserve(4, addr))
+				cpu.trigger_exception(DEADLOCK_REACHED);
 			value = (int32_t)cpu.machine().memory.template read<uint32_t> (addr);
 		}
 		else if (instr.Atype.funct3 == AMOSIZE_D)
 		{
 			if constexpr (RVISGE64BIT(cpu)) {
-				cpu.atomics().load_reserve(8, addr);
+				if (!cpu.atomics().load_reserve(8, addr))
+					cpu.trigger_exception(DEADLOCK_REACHED);
 				value = (int64_t)cpu.machine().memory.template read<uint64_t> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);
@@ -319,7 +321,8 @@ namespace riscv
 		else if (instr.Atype.funct3 == AMOSIZE_Q)
 		{
 			if constexpr (RVIS128BIT(cpu)) {
-				cpu.atomics().load_reserve(16, addr);
+				if (!cpu.atomics().load_reserve(16, addr))
+					cpu.trigger_exception(DEADLOCK_REACHED);
 				value = cpu.machine().memory.template read<RVREGTYPE(cpu)> (addr);
 			} else
 				cpu.trigger_exception(ILLEGAL_OPCODE);

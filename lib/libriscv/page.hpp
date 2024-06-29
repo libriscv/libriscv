@@ -48,7 +48,11 @@ struct alignas(32) PageData {
 	{
 		if constexpr (memory_alignment_check) {
 			if (offset % sizeof(T))
+#if __cpp_exceptions
 				throw MachineException(INVALID_ALIGNMENT, "Misaligned read", offset);
+#else
+				std::abort();
+#endif
 		}
 		return *(T*) &buffer8[offset];
 	}
@@ -58,7 +62,11 @@ struct alignas(32) PageData {
 	{
 		if constexpr (memory_alignment_check) {
 			if (offset % sizeof(T))
+#if __cpp_exceptions
 				throw MachineException(INVALID_ALIGNMENT, "Misaligned write", offset);
+#else
+				std::abort();
+#endif
 		}
 		*(T*) &buffer8[offset] = value;
 	}
@@ -164,7 +172,7 @@ struct Page
 
 	bool has_trap() const noexcept { return m_trap != nullptr; }
 	// NOTE: Setting a trap makes the page uncacheable
-	void set_trap(mmio_cb_t newtrap) const;
+	bool set_trap(mmio_cb_t newtrap) const;
 	void trap(uint32_t offset, int mode, int64_t value) const;
 	static int trap_mode(int mode) noexcept { return mode & 0xF000; }
 	static int trap_size(int mode) noexcept { return mode & 0x0FFF; }
@@ -176,7 +184,11 @@ inline Page::Page(const PageAttributes& a, PageData* data)
 	: attr(a)
 {
 	if (UNLIKELY(data == nullptr))
+#if __cpp_exceptions
 		throw MachineException(ILLEGAL_OPERATION, "Tried to create a page with no page data");
+#else
+		std::abort();
+#endif
 	attr.non_owning = true;
 	m_page.reset(data);
 }
@@ -193,16 +205,17 @@ inline void Page::trap(uint32_t offset, int mode, int64_t value) const
 {
 	this->m_trap((Page&) *this, offset, mode, value);
 }
-inline void Page::set_trap(mmio_cb_t newtrap) const {
+inline bool Page::set_trap(mmio_cb_t newtrap) const {
 	if constexpr (memory_traps_enabled) {
 		// Setting a trap makes the page uncacheable and vice versa
 		// This is done so that reads and writes always trigger the
 		// slow-path that allows trapping.
 		this->attr.cacheable = (newtrap == nullptr);
 		this->m_trap = newtrap;
+		return true;
 	} else {
 		(void) newtrap;
-		throw MachineException(FEATURE_DISABLED, "Memory traps have not been enabled");
+		return false;
 	}
 }
 

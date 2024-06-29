@@ -221,7 +221,12 @@ namespace riscv
 		template <typename T> T* elf_offset(size_t ofs) const {
 			if (ofs + sizeof(T) >= ofs && ofs + sizeof(T) < m_binary.size())
 				return (T*) &m_binary[ofs];
+#if __cpp_exceptions
 			throw MachineException(INVALID_PROGRAM, "Invalid ELF offset", ofs);
+#else
+			std::abort();
+#endif
+
 		}
 		const auto* elf_header() const {
 			return elf_offset<const typename Elf::Header> (0);
@@ -230,12 +235,7 @@ namespace riscv
 		void dynamic_linking(const typename Elf::Header&);
 		void relocate_section(const char* section_name, const char* symtab);
 		const typename Elf::Sym* resolve_symbol(std::string_view name) const;
-		const auto* elf_sym_index(const typename Elf::SectionHeader* shdr, uint32_t symidx) const {
-			if (symidx >= shdr->sh_size / sizeof(typename Elf::Sym))
-				throw MachineException(INVALID_PROGRAM, "ELF Symtab section index overflow");
-			auto* symtab = elf_offset<typename Elf::Sym>(shdr->sh_offset);
-			return &symtab[symidx];
-		}
+		const typename Elf::Sym* elf_sym_index(const typename Elf::SectionHeader* shdr, uint32_t symidx) const;
 		// ELF loader
 		void binary_loader(const MachineOptions<W>&);
 		void binary_load_ph(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);

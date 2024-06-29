@@ -545,7 +545,7 @@ namespace riscv
 		// Add the correct offset to address for dynamically loaded programs
 		address = this->elf_base_address(address);
 
-		const auto* symtab = elf_sym_index(sym_hdr, 0);
+		const auto* symtab = elf_offset<typename Elf::Sym>(sym_hdr->sh_offset);
 		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf::Sym);
 		const char* strtab = elf_offset<char>(str_hdr->sh_offset);
 

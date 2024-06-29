@@ -326,7 +326,7 @@ size_t Memory<W>::gather_buffers_from_range(
 		len -= size;
 	}
 	if (UNLIKELY(len != 0)) {
-		throw MachineException(OUT_OF_MEMORY, "Out of buffers", index);
+		machine().cpu.trigger_exception(OUT_OF_MEMORY, index);
 	}
 	return index;
 }
@@ -356,7 +356,7 @@ size_t Memory<W>::gather_writable_buffers_from_range(
 		len -= size;
 	}
 	if (UNLIKELY(len != 0)) {
-		throw MachineException(OUT_OF_MEMORY, "Out of buffers", index);
+		machine().cpu.trigger_exception(OUT_OF_MEMORY, index);
 	}
 	return index;
 }

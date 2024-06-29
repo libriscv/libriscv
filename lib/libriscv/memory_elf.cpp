@@ -17,6 +17,19 @@ namespace riscv
 	}
 
 	template <int W>
+	const typename Elf<W>::Sym* Memory<W>::elf_sym_index(const typename Elf::SectionHeader* shdr, uint32_t symidx) const
+	{
+		if (symidx >= shdr->sh_size / sizeof(typename Elf::Sym))
+#ifdef __EXCEPTIONS
+			throw MachineException(INVALID_PROGRAM, "ELF Symtab section index overflow");
+#else
+			std::abort();
+#endif
+		auto* symtab = this->elf_offset<typename Elf::Sym>(shdr->sh_offset);
+		return &symtab[symidx];
+	}
+
+	template <int W>
 	const typename Elf<W>::SectionHeader* Memory<W>::section_by_name(const std::string& name) const
 	{
 		auto& elf = *elf_header();

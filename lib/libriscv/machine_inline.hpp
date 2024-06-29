@@ -253,29 +253,45 @@ void Machine<W>::realign_stack() noexcept
 template <int W> inline
 const MultiThreading<W>& Machine<W>::threads() const
 {
-	if (UNLIKELY(m_mt == nullptr))
-		throw MachineException(FEATURE_DISABLED, "Threads are not initialized");
-	return *m_mt;
+	if (LIKELY(m_mt != nullptr))
+		return *m_mt;
+#if __cpp_exceptions
+	throw MachineException(FEATURE_DISABLED, "Threads are not initialized");
+#else
+	std::abort();
+#endif
 }
 template <int W> inline
 MultiThreading<W>& Machine<W>::threads()
 {
-	if (UNLIKELY(m_mt == nullptr))
-		throw MachineException(FEATURE_DISABLED, "Threads are not initialized");
-	return *m_mt;
+	if (LIKELY(m_mt != nullptr))
+		return *m_mt;
+#if __cpp_exceptions
+	throw MachineException(FEATURE_DISABLED, "Threads are not initialized");
+#else
+	std::abort();
+#endif
 }
 
 template <int W> inline
 const FileDescriptors& Machine<W>::fds() const
 {
 	if (m_fds != nullptr) return *m_fds;
+#if __cpp_exceptions
 	throw MachineException(ILLEGAL_OPERATION, "No access to files or sockets", 0);
+#else
+	std::abort();
+#endif
 }
 template <int W> inline
 FileDescriptors& Machine<W>::fds()
 {
 	if (m_fds != nullptr) return *m_fds;
+#if __cpp_exceptions
 	throw MachineException(ILLEGAL_OPERATION, "No access to files or sockets", 0);
+#else
+	std::abort();
+#endif
 }
 
 template <int W> inline
