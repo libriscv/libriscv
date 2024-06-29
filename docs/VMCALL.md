@@ -1,8 +1,8 @@
 # Function calls into the guest VM
 
-## Example
-
 It is possible to make arbitrary function calls into the VM guest. The functions must be C ABI, and if you use the string name, the function must be in the symbol table.
+
+## Example
 
 Host:
 ```C++
@@ -18,48 +18,60 @@ Host:
 Guest:
 ```C++
 extern "C" __attribute__((used, retain))
-int test(int a, int b, const char* c, Four& four) {
+int test(int a, int b, const char* c, Four* four) {
 	return a + b;
 }
 ```
 
-This will look up `test` in the symbol table, get the address and use that as the starting address. Further, it will put arguments into registers according to the C ABI, eg. A0-A7 are integral and pointer arguments. A regular function call is performed.
+This will look up `test` in the symbol table to get the address and use that for the function call. Further, it will put arguments into registers according to the C ABI, as if it was a regular function call.
 
-The first argument 111 goes to register A0 and 222 goes to register A1, as they are both integers. "333" will be pushed on the stack and the pointer to the new string on the guests stack is placed in register A2. The struct is pushed by value on stack, and its address is placed in register A3. When the guest program executes the function it will place a + b == 333 in A0, which is the return value register.
+Strings are always zero-terminated, but one may still speed up string-operations by passing known lengths.
 
 We can take Four by reference (`Four&`) or by pointer (`Four*`) inside the guest. Const is also up to you (eg. `const Four *four`), as the stack is writable in the guest, you may just pick what makes the most sense.
 
+The first argument 111 goes to register A0 and 222 goes to register A1, as they are both integers. "333" will be pushed on the stack and the pointer to the new string on the guests stack is placed in register A2. The struct is pushed by value on stack, and its address is placed in register A3. When the guest program runs the function it will place a + b (333) in A0, which is the return value register for integers and pointers.
+
 ## Prerequisites
 
-There are a handful of things that need to be taken care of in order to make function calls into a VM guest program. First off, you should not return normally from `int main()`, as that will call global destructors which will make the run-time environment unreliable for certain programming languages, eg. C++. Instead, one should call `_exit(status)` (or equivalent) from `int main()`, which immediately exits the machine, but does not call global destructors and does not attempt to free resources.
-
-It is not unsafe to call `_exit()` or any other equivalent function directly, as all it does is invoke the `exit` or `exit_group` system calls, which immediately stops execution of the program. In a normal operating system this also makes the execution environment (usually a process) disappear, and releases all the resources back. In this case we just want to preserve the machine state (which is in a good known state) by stopping execution, so that we can call a function.
+1. Avoid returning from `int main()`, as that will call global destructors which will make the run-time environment unreliable for certain programming languages, eg. C++. It also closes open files.
+    - Call `_exit(status)` instead, which immediately exits the machine, but does not call global destructors and does not attempt to free resources.
 
 Once the machine is no longer running, but still left in a state in which we can call into it, we have to make sure that our callable function in the Machine is present in the symbol table of the ELF, so that we can find the address of this function.
 
-A third, and final, stumbling block is sometimes having functions, even those marked with `__attribute__((used))`, not appearing in the ELF symbol table, which is a linker issue. This can happen when using `-gc-sections` and friends. You can test if your symbol is visible to the emulator by using `machine.address_of("myFunction")` which returns a memory address. If the address is 0, then the name was not found in the symbol table, which makes `vmcall(...)` impossible to perform. Calling will likely cause a CPU exception on address 0, which by default has no execute privileges. You can also use `riscv64-***-readelf -a myprogram | grep mysymbol` to check (or even automate the checking).
+2. Sometimes functions, even those marked with `__attribute__((used))`, will not appear in the ELF symbol table. This can happen when using `-gc-sections` and friends. The simplest solution is to use GCC 11 or later and use a function attribute that retains the symbol: `__attribute__((used, retain))` Be careful about stripping symbols though, because the function attribute only protects it against being pruned by linker GC. You can use `--retain-symbols-file`to only keep the symbols you care about, but it is more advanced to automate.
 
-The simplest solution is to use GCC 11 or later and use a function attribute that retains the symbol, even against pruning: `__attribute__((used, retain))` Be careful about stripping symbols though, because the function attribute only protects it against being pruned by linker GC. You can use `--retain-symbols-file`to only keep the symbols you care about, but it is more advanced to automate.
+### Example: Exiting early
 
-## Exiting early
+```C
+int main(int argc, char** argv)
+{
+	// Initialization
+	...
 
-Start by running the machine normally and complete `int main()` , but don't return from it, making sure global constructors are called and the C run-time environment is fully initialized, as well as your own things. So, if you are calling `_exit(0)` from main (or stopping the machine another way) you are ready to make function calls into the virtual machine. The primary reason to use `_exit` is because it's a function call, and it also stops the machine. Both of these things are important. The function call makes sure the compiler keeps the stack pristine, and stopping inside the function makes it so that everything we would want later is properly kept. You can even use local stack variables and data to future vmcalls if you stop the machine properly.
+	_exit(0);
+}
+```
 
-## VMCall exact behavior
+## VM function calls
 
 VM calls should match the C ABI such that when using `machine.vmcall("myfunc", arg1, arg2)`, it is as if you were calling a C function. Example:
 
 ```C++
-machine.vmcall("my_function", "Hello Sandboxed World!");
+static const std::string hello = "Hello Sandboxed World!";
+machine.vmcall("my_function", hello, hello.size());
 ```
-This function will look up `my_function` in the programs symbol table (expensive), push the string on the stack, and puts its address in A0. After that, it will run the function:
+
+This function will look up `my_function` in the programs symbol table (expensive), push the string on the stack, put its address in A0, and finally its length in A1. After that, it will run the function:
 
 ```C++
-void my_function(const char* str) {
-	printf("%s\n", str);
+extern "C"
+void my_function(const char* str, size_t len) {
+	printf("%.*s\n", (int)len, str);
 }
 ```
-Should print `Hello Sandboxed World!\n`.
+Will write `Hello Sandboxed World!\n` to the stdout handler of the emulator (usually forwarded to your terminal). Passing known lengths can make many operations in the script faster and safer.
+
+In C++ we use `extern "C"` to make C-ABI functions. In Rust I know there is a `#[no_mangle]`, as well as `extern "C"`, although please consult the Rust documentation.
 
 Take care to distinguish between float and double values properly. There are (in practice) different handling for these. For example:
 
@@ -89,15 +101,15 @@ void my_function(float d1, float d2, float d3) {
 
 Currently these argument types are fully supported: Integers, floats, doubles, strings, simple structs.
 
-On 32-bit RISC-V, 64-bit integer arguments will be use two integer registers. Further, a 64-bit return value will use two integer registers (A0, A1).
+On 32-bit RISC-V, 64-bit integer arguments will use two integer registers. Further, a 64-bit return value will use two integer registers (A0, A1).
 
-There is room for 8 integer arguments and 8 floating-point arguments separately. This means you can efficiently call a function with up to 16 arguments, if you need to.
+There is room for 8 integer arguments and 8 floating-point arguments separately. This means you can efficiently call a function with up to 16 arguments, if need be.
 
 ## Return values
 
-Most functions return an integer, so that is the default return value from `machine.vmcall(...)`, however there are other return types. For this we have `machine.return_value<T>`. It's a helper that allows you to return basically anything legal, except 16-byte structs (not yet implemented).
+Most functions return an integer, so that is the default return value from `machine.vmcall(...)`, however there are other return types. For this we have `machine.return_value<T>`. It's a helper that allows you to return basically anything legal, except 16-byte structs by registers (not yet implemented).
 
-`machine.return_value<T>` supports integers, floats, doubles, C-strings, and pointer to structs.
+`machine.return_value<T>` supports integers, floats, doubles, C-strings, structs and pointer to structs.
 
 With the following guest program:
 ```C
@@ -125,7 +137,7 @@ We can get the results like so:
 	assert(data_ptr->val2 == 2);
 	assert(data_ptr->f1 == 3.0f);
 ```
-
+Retrieving a struct by pointer is a zero-copy operation that internally uses the fixed-size span API. The system call documentation goes into more detail here.
 
 ## Function references
 
@@ -234,4 +246,31 @@ The helper function `machine.instruction_limit_reached()` will tell you if the i
 
 ## Interrupting a running machine
 
-It is possible to interrupt a running machine to perform another task. This can be done using the `Machine::preempt()` function. A machine can also interrupt itself without any issues. Preemption stores and restores all registers, making it slightly expensive, but guarantees the ability to preempt from any location.
+It is possible to interrupt a running machine to perform another task. This can be done using the `machine.preempt()` function. A machine can also interrupt itself without any issues. Preemption stores and restores all registers, making it slightly expensive, but guarantees the ability to preempt from any location.
+
+High-quality scripting solutions will use pre-emption when re-entrancy is detected:
+
+```C++
+template <typename... Args>
+inline std::optional<Script::sgaddr_t> Script::call(gaddr_t address, Args&&... args)
+{
+	ScriptDepthMeter meter(this->m_call_depth);
+	try
+	{
+		if (LIKELY(meter.is_one()))
+			return {machine().vmcall<MAX_CALL_INSTR>(
+				address, std::forward<Args>(args)...)};
+		else if (LIKELY(meter.get() < MAX_CALL_DEPTH))
+			return {machine().preempt(MAX_CALL_INSTR,
+				address, std::forward<Args>(args)...)};
+		else
+			this->max_depth_exceeded(address);
+	}
+	catch (const std::exception& e)
+	{
+		this->handle_exception(address);
+	}
+	return std::nullopt;
+}
+```
+From `script.call(...)` as implemented in the [gamedev example](/examples/gamedev/script.hpp). `ScriptDepthMeter` measures the current call depth in order to avoid recursive calls back into the script, while also using `preempt()` on the second call.
