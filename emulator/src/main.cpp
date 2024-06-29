@@ -23,6 +23,7 @@ struct Arguments {
 	bool sandbox = false;
 	bool ignore_text = false;
 	uint64_t fuel = UINT64_MAX;
+	std::string output_file;
 };
 
 #ifdef HAVE_GETOPT_LONG
@@ -41,6 +42,7 @@ static const struct option long_options[] = {
 	{"trace", no_argument, 0, 'T'},
 	{"no-translate", no_argument, 0, 'n'},
 	{"mingw", no_argument, 0, 'm'},
+	{"output", required_argument, 0, 'o'},
 	{"from-start", no_argument, 0, 'F'},
 	{"sandbox", no_argument, 0, 'S'},
 	{"ignore-text", no_argument, 0, 'I'},
@@ -56,13 +58,14 @@ static void print_help(const char* name)
 		"  -a, --accurate     Accurate instruction counting\n"
 		"  -d, --debug        Enable CLI debugger\n"
 		"  -1, --single-step  One instruction at a time, enabling exact exceptions\n"
-		"  -f, --fuel         Set max instructions until program halts\n"
+		"  -f, --fuel amt     Set max instructions until program halts\n"
 		"  -g, --gdb          Start GDB server on port 2159\n"
 		"  -s, --silent       Suppress program completion information\n"
 		"  -t, --timing       Enable timing information in binary translator\n"
 		"  -T, --trace        Enable tracing in binary translator\n"
 		"  -n, --no-translate Disable binary translation\n"
 		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
+		"  -o, --output file  Output embeddable binary translated code (C99)\n"
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
 		"  -S  --sandbox      Enable strict sandbox\n"
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
@@ -110,7 +113,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnmFSI", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnmo:FSI", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -126,6 +129,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'T': args.trace = true; break;
 			case 'n': args.no_translate = true; break;
 			case 'm': args.mingw = true; break;
+			case 'o': break;
 			case 'F': args.from_start = true; break;
 			case 'S': args.sandbox = true; break;
 			case 'I': args.ignore_text = true; break;
@@ -146,6 +150,11 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			}
 			if (args.verbose) {
 				printf("Fuel set to %" PRIu64 "\n", args.fuel);
+			}
+		} else if (c == 'o') {
+			args.output_file = optarg;
+			if (args.verbose) {
+				printf("Output file set to %s\n", args.output_file.c_str());
 			}
 		}
 	}
@@ -170,6 +179,19 @@ static void run_program(
 	const bool is_dynamic,
 	const std::vector<std::string>& args)
 {
+	if (cli_args.mingw && (!riscv::binary_translation_enabled || riscv::libtcc_enabled)) {
+		fprintf(stderr, "Error: Full binary translation must be enabled for MinGW cross-compilation\n");
+		exit(1);
+	}
+
+	std::vector<riscv::MachineTranslationOptions> cc;
+	if (cli_args.mingw) {
+		cc.push_back(riscv::MachineTranslationCrossOptions{});
+	}
+	if (!cli_args.output_file.empty()) {
+		cc.push_back(riscv::MachineTranslationEmbeddableCodeOptions{cli_args.output_file});
+	}
+
 	// Create a RISC-V machine with the binary as input program
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
@@ -185,9 +207,7 @@ static void run_program(
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
 #else
-		.cross_compile = cli_args.mingw ?
-			std::vector<riscv::MachineTranslationCrossOptions>{riscv::MachineTranslationCrossOptions{}}
-		  : std::vector<riscv::MachineTranslationCrossOptions>{},
+		.cross_compile = cc,
 #endif
 #endif
 	}};

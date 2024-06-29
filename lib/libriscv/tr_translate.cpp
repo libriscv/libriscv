@@ -4,6 +4,7 @@
 #endif
 #include <cmath>
 #include <chrono>
+#include <fstream>
 #include <mutex>
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
 # define YEP_IS_WINDOWS 1
@@ -48,6 +49,54 @@ namespace riscv
 		}
 	extern void  dylib_close(void* dylib);
 	extern void* dylib_lookup(void* dylib, const char*);
+
+	template <int W>
+	using binary_translation_init_func = void (*)(const CallbackTable<W>&, void*);
+	template <int W>
+	static CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu);
+
+	// Translations that are embeddable in the binary will be added as a source
+	// file directly in the project, which allows it to run global constructors.
+	// The constructor will register the translation with the binary translator,
+	// and we can check against this list when loading translations.
+	template <int W>
+	struct Mapping {
+		address_type<W> addr;
+		bintr_block_func<W> handler;
+	};
+
+	// This implementation is designed to make sure it's not a global constructor
+	// instead it will get zeroed from BSS
+	static constexpr size_t MAX_EMBEDDED = 12;
+	template <int W>
+	struct EmbeddedTranslation {
+		uint32_t    hash = 0;
+		uint32_t    nmappings = 0;
+		const Mapping<W>* mappings = nullptr;
+		// NOTE: Pointer to the callback table (which we host here)
+		riscv::CallbackTable<W>* api_table = nullptr;
+	};
+	template <int W>
+	struct EmbeddedTranslations {
+		std::array<EmbeddedTranslation<W>, MAX_EMBEDDED> translations;
+		size_t count = 0;
+	};
+	template <int W>
+	static EmbeddedTranslations<W> registered_embedded_translations;
+
+	template <int W>
+	static void register_translation(uint32_t hash, const Mapping<W>* mappings, uint32_t nmappings, riscv::CallbackTable<W>* table_ptr)
+	{
+		auto& translations = registered_embedded_translations<W>;
+		if (translations.count >= MAX_EMBEDDED) {
+			throw MachineException(INVALID_PROGRAM, "Too many embedded translations");
+		}
+		auto& translation = translations.translations[translations.count++];
+		translation.hash = hash;
+		translation.nmappings = nmappings;
+		translation.mappings  = mappings;
+		translation.api_table = table_ptr;
+	}
 
 	static std::string defines_to_string(const std::unordered_map<std::string, std::string>& cflags)
 	{
@@ -167,6 +216,34 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	checksum = ~crc32c(~checksum, cflags.c_str(), cflags.size());
 	exec.set_translation_hash(checksum);
 
+	// Check if translation is registered
+	if (options.translate_enable_embedded)
+	{
+		printf("Checking for embedded translations\n");
+		for (size_t i = 0; i < registered_embedded_translations<W>.count; i++)
+		{
+			auto& translation = registered_embedded_translations<W>.translations[i];
+			if (translation.hash == checksum)
+			{
+				printf("Found embedded translation for hash %08X\n", checksum);
+				*translation.api_table = create_bintr_callback_table(*this);
+				exec.reserve_mappings(translation.nmappings);
+				for (unsigned i = 0; i < translation.nmappings; i++) {
+					const auto& mapping = translation.mappings[i];
+					exec.add_mapping(mapping.handler);
+					auto& entry = decoder_entry_at(exec, mapping.addr);
+					if (mapping.handler != nullptr) {
+						entry.instr = i;
+						entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+					} else {
+						entry.set_bytecode(0x0); /* Invalid opcode */
+					}
+				}
+				return 0;
+			}
+		}
+	}
+
 	char filebuffer[256];
 	int len = snprintf(filebuffer, sizeof(filebuffer),
 		"%s%08X%s", options.translation_prefix.c_str(), checksum, options.translation_suffix.c_str());
@@ -196,13 +273,22 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 #ifndef _MSC_VER
 	// If cross compilation is enabled, we should check if all results exist
-	for (auto& mingw : options.cross_compile) {
-		const uint32_t hash = checksum;
-		const std::string cross_filename = options.translation_filename(
-			mingw.cross_prefix, hash, mingw.cross_suffix);
-		if (access(cross_filename.c_str(), R_OK) != 0) {
+	for (auto& cc : options.cross_compile) {
+		if (std::holds_alternative<MachineTranslationCrossOptions>(cc))
+		{
+			auto& mingw = std::get<MachineTranslationCrossOptions>(cc);
+			const uint32_t hash = checksum;
+			const std::string cross_filename = options.translation_filename(
+				mingw.cross_prefix, hash, mingw.cross_suffix);
+			if (access(cross_filename.c_str(), R_OK) != 0) {
+				must_compile = true;
+				break; // We must compile at least one of the cross-compiled binaries
+			}
+		} else if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc)) {
 			must_compile = true;
-			break; // We must compile at least one of the cross-compiled binaries
+			break; // We must compile embeddable source code
+		} else {
+			throw MachineException(INVALID_PROGRAM, "Invalid cross-compile option");
 		}
 	}
 #endif
@@ -459,9 +545,11 @@ if constexpr (SCAN_FOR_GP) {
 		}
 	}
 	// Append all instruction handler -> dl function mappings
-	code += "VISIBLE const uint32_t no_mappings = "
+	// to the footer used by shared libraries
+	std::string footer;
+	footer += "VISIBLE const uint32_t no_mappings = "
 		+ std::to_string(dlmappings.size()) + ";\n";
-	code += R"V0G0N(
+	footer += R"V0G0N(
 struct Mapping {
 	addr_t addr;
 	ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
@@ -474,9 +562,9 @@ VISIBLE const struct Mapping mappings[] = {
 		snprintf(buffer, sizeof(buffer), 
 			"{0x%lX, %s},\n",
 			(long)mapping.addr, mapping.symbol.c_str());
-		code.append(buffer);
+		footer.append(buffer);
 	}
-	code += "};\n";
+	footer += "};\n";
 
 	if (options.translate_timing) {
 		TIME_POINT(t4);
@@ -497,35 +585,81 @@ VISIBLE const struct Mapping mappings[] = {
 
 	const auto defines = create_defines_for(machine(), options);
 	void* dylib = nullptr;
+	// Final shared library loadable code w/footer
+	const std::string shared_library_code = code + footer;
 
 	TIME_POINT(t9);
 	if constexpr (libtcc_enabled) {
-		extern void* libtcc_compile(const std::string& code, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
+		extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
 		static std::mutex libtcc_mutex;
 		// libtcc uses global state, so we need to serialize compilation
 		std::lock_guard<std::mutex> lock(libtcc_mutex);
-		dylib = libtcc_compile(code, W, defines, options.libtcc1_location);
+		dylib = libtcc_compile(shared_library_code, W, defines, options.libtcc1_location);
 	} else {
-		extern void* compile(const std::string& code, int arch, const std::string& cflags, const std::string&);
-		extern bool mingw_compile(const std::string& code, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
+		extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
+		extern bool mingw_compile(const std::string&, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
 		const std::string cflags = defines_to_string(defines);
 
 		// If the binary translation has already been loaded, we can skip compilation
 		if (exec.is_binary_translated()) {
 			dylib = exec.binary_translation_so();
 		} else {
-			dylib = compile(code, W, cflags, filename);
+			dylib = compile(shared_library_code, W, cflags, filename);
 		}
 
-#ifndef _MSC_VER
 		// Optionally produce cross-compiled binaries
-		for (auto& mingw : options.cross_compile) {
-			const uint32_t hash = exec.translation_hash();
-			const std::string cross_filename = options.translation_filename(
-				mingw.cross_prefix, hash, mingw.cross_suffix);
-			mingw_compile(code, W, cflags, cross_filename, mingw);
-		}
+		for (auto& cc : options.cross_compile)
+		{
+			if (std::holds_alternative<MachineTranslationCrossOptions>(cc))
+			{
+#ifndef _MSC_VER
+				auto& mingw = std::get<MachineTranslationCrossOptions>(cc);
+				const uint32_t hash = exec.translation_hash();
+				const std::string cross_filename = options.translation_filename(
+					mingw.cross_prefix, hash, mingw.cross_suffix);
+				mingw_compile(shared_library_code, W, cflags, cross_filename, mingw);
 #endif
+			}
+			else if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
+			{
+				auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
+				const uint32_t hash = exec.translation_hash();
+				const std::string& embed_filename = embed.filename;
+				// Write the embeddable code to a file
+				std::ofstream embed_file(embed_filename);
+				for (auto& def : defines) {
+					embed_file << "#define " << def.first << " " << def.second << "\n";
+				}
+				embed_file << code;
+				// Construct a footer that self-registers the translation
+				const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
+				embed_file << R"V0G0N(
+				struct Mappings {
+					addr_t addr;
+					ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
+				};
+				extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
+				extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
+				static __attribute__((constructor)) void register_translation() {
+					static const Mappings mappings[] = {
+				)V0G0N";
+				for (const auto& mapping : dlmappings)
+				{
+					char buffer[128];
+					snprintf(buffer, sizeof(buffer), 
+						"{0x%lX, %s},\n",
+						(long)mapping.addr, mapping.symbol.c_str());
+					embed_file << buffer;
+				}
+				embed_file << "    };\n";
+				embed_file << "    " << reg_func << "(" << hash << ", mappings, " << dlmappings.size() << ", &api);\n";
+				embed_file << "}\n";
+			}
+			else
+			{
+				throw MachineException(INVALID_PROGRAM, "Invalid/unrecognized cross-compile option");
+			}
+		}
 	}
 
 	if (options.translate_timing) {
@@ -567,18 +701,15 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				fprintf(stderr, "libriscv: Could not find dylib init function\n");
 			}
 		}
-		dylib_close(dylib);
+		if (dylib != nullptr)
+			dylib_close(dylib);
 		exec.set_binary_translated(nullptr);
 		return;
 	}
 
 	// Map all the functions to instruction handlers
 	const uint32_t* no_mappings = (const uint32_t *)dylib_lookup(dylib, "no_mappings");
-	struct Mapping {
-		address_t addr;
-		bintr_block_func<W> handler;
-	};
-	const Mapping* mappings = (const Mapping *)dylib_lookup(dylib, "mappings");
+	const auto* mappings = (const Mapping<W> *)dylib_lookup(dylib, "mappings");
 
 	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
 		dylib_close(dylib);
@@ -625,19 +756,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 }
 
 template <int W>
-bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dylib) const
+CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 {
-	// NOTE: At some point this must be able to duplicate the dylib
-	// in order to be able to share execute segments across machines.
-
-	auto* ptr = dylib_lookup(dylib, "init"); // init() function
-	if (ptr == nullptr) {
-		return false;
-	}
-
-	// Map the API callback table
-	auto func = (void (*)(const CallbackTable<W>&, void*)) ptr;
-	func(CallbackTable<W>{
+	return CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr, unsigned size) -> address_type<W> {
 			if constexpr (libtcc_enabled) {
 				try {
@@ -703,7 +824,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			(void)cpu; (void)addr; (void)vd;
 #endif
 		},
-		.syscalls = machine().syscall_handlers.data(),
+		.syscalls = cpu.machine().syscall_handlers.data(),
 		.system_call = [] (CPU<W>& cpu, int sysno) -> int {
 			if constexpr (libtcc_enabled) {
 				try {
@@ -830,9 +951,23 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 			return __builtin_popcountl(x);
 #endif
 		},
-	},
-		machine().memory.memory_arena_ptr_ref()
-	);
+	};
+}
+
+template <int W>
+bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dylib) const
+{
+	// NOTE: At some point this must be able to duplicate the dylib
+	// in order to be able to share execute segments across machines.
+
+	auto* ptr = dylib_lookup(dylib, "init"); // init() function
+	if (ptr == nullptr) {
+		return false;
+	}
+
+	// Map the API callback table
+	auto func = (binary_translation_init_func<W>) ptr;
+	func(create_bintr_callback_table<W>(*this), machine().memory.memory_arena_ptr_ref());
 
 	return true;
 }
@@ -879,3 +1014,18 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 		return (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
 	}
 } // riscv
+
+extern "C" {
+#ifdef RISCV_32I
+	void libriscv_register_translation4(uint32_t hash, const riscv::Mapping<4>* mappings, uint32_t nmappings, riscv::CallbackTable<4>* table_ptr)
+	{
+		riscv::register_translation<4>(hash, mappings, nmappings, table_ptr);
+	}
+#endif
+#ifdef RISCV_64I
+	void libriscv_register_translation8(uint32_t hash, const riscv::Mapping<8>* mappings, uint32_t nmappings, riscv::CallbackTable<8>* table_ptr)
+	{
+		riscv::register_translation<8>(hash, mappings, nmappings, table_ptr);
+	}
+#endif
+}
