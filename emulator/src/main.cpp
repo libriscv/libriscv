@@ -66,6 +66,44 @@ static void print_help(const char* name)
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
 		"  -S  --sandbox      Enable strict sandbox\n"
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
+		"\n"
+	);
+	printf("libriscv is compiled with:\n"
+#ifdef RISCV_32I
+		"-  32-bit RISC-V support (RV32GB)\n"
+#endif
+#ifdef RISCV_64I
+		"-  64-bit RISC-V support (RV64GB)\n"
+#endif
+#ifdef RISCV_128I
+		"-  128-bit RISC-V support (RV128G)\n"
+#endif
+#ifdef RISCV_EXT_A
+		"-  A: Atomic extension is enabled\n"
+#endif
+#ifdef RISCV_EXT_C
+		"-  C: Compressed extension is enabled\n"
+#endif
+#ifdef RISCV_EXT_V
+		"-  V: Vector extension is enabled\n"
+#endif
+#if defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)
+		"-  Binary translation is enabled (libtcc)\n"
+#elif defined(RISCV_BINARY_TRANSLATION)
+		"-  Binary translation is enabled\n"
+#endif
+#ifdef RISCV_DEBUG
+		"-  Extra debugging features are enabled\n"
+#endif
+#ifdef RISCV_FLAT_RW_ARENA
+		"-  Flat sequential memory arena is enabled\n"
+#endif
+#ifdef RISCV_ENCOMPASSING_ARENA
+#define _STR(x) #x
+#define STR(x) _STR(x)
+		"-  Fixed N-bit address space is enabled (" STR(RISCV_ENCOMPASSING_ARENA_BITS) " bits)\n"
+#endif
+		"\n"
 	);
 }
 
