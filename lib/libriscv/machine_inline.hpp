@@ -182,12 +182,12 @@ inline auto Machine<W>::sysargs() const {
 
 template <int W>
 template <typename... Args>
-inline void Machine<W>::set_result(Args... args) {
+inline void Machine<W>::set_result(Args... args) noexcept {
 	size_t i = 0;
 	size_t f = 0;
 	([&] {
 		if constexpr (std::is_integral_v<Args>) {
-			cpu.registers().at(REG_ARG0 + i++) = args;
+			cpu.registers().get(REG_ARG0 + i++) = args;
 		}
 		else if constexpr (std::is_same_v<Args, float>)
 			cpu.registers().getfl(REG_FA0 + f++).set_float(args);
@@ -244,7 +244,7 @@ address_type<W> Machine<W>::stack_push(const T& type)
 }
 
 template <int W> inline
-void Machine<W>::realign_stack()
+void Machine<W>::realign_stack() noexcept
 {
 	// the RISC-V calling convention mandates a 16-byte alignment
 	cpu.reg(REG_SP) &= ~address_t{0xF};

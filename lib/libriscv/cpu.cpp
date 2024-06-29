@@ -11,7 +11,7 @@ namespace riscv
 	template <int W>
 	static std::shared_ptr<DecodedExecuteSegment<W>> empty_shared = std::make_shared<DecodedExecuteSegment<W>>(0, 0, 0, 0);
 	template <int W>
-	std::shared_ptr<DecodedExecuteSegment<W>>& CPU<W>::empty_execute_segment() {
+	std::shared_ptr<DecodedExecuteSegment<W>>& CPU<W>::empty_execute_segment() noexcept {
 		return empty_shared<W>;
 	}
 

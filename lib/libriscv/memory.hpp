@@ -118,7 +118,7 @@ namespace riscv
 		void print_backtrace(std::function<void(std::string_view)>, bool ra = true) const;
 
 		// Counts all the memory used by the machine, execute segments, pages, etc.
-		uint64_t memory_usage_total() const;
+		uint64_t memory_usage_total() const noexcept;
 		// Helpers for memory usage
 		size_t pages_active() const noexcept { return m_pages.size(); }
 		size_t owned_pages_active() const noexcept;
@@ -133,14 +133,14 @@ namespace riscv
 		void  set_page_attr(address_t, size_t len, PageAttributes);
 		void set_pageno_attr(address_t pageno, PageAttributes);
 		std::string get_page_info(address_t addr) const;
-		static inline address_t page_number(const address_t address) {
+		static inline address_t page_number(const address_t address) noexcept {
 			return address / Page::size();
 		}
 		// Page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(address_t page, Args&& ...);
-		void  invalidate_cache(address_t pageno, Page*) const;
-		void  invalidate_reset_cache() const;
+		void  invalidate_cache(address_t pageno, Page*) const noexcept;
+		void  invalidate_reset_cache() const noexcept;
 		void  free_pages(address_t, size_t len);
 		bool  free_pageno(address_t pageno);
 

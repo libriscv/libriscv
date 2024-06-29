@@ -60,7 +60,7 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const
 }
 
 template <int W> inline void
-Memory<W>::invalidate_cache(address_t pageno, Page* page) const
+Memory<W>::invalidate_cache(address_t pageno, Page* page) const noexcept
 {
 	// NOTE: It is only possible to keep the write page as long as
 	// the page tables are node-based. In that case, we only have
@@ -71,7 +71,7 @@ Memory<W>::invalidate_cache(address_t pageno, Page* page) const
 	(void)page;
 }
 template <int W> inline void
-Memory<W>::invalidate_reset_cache() const
+Memory<W>::invalidate_reset_cache() const noexcept
 {
 	m_rd_cache.pageno = (address_t)-1;
 	m_wr_cache.pageno = (address_t)-1;

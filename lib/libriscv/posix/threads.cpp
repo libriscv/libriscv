@@ -243,7 +243,7 @@ void Machine<W>::setup_posix_threads()
 }
 
 template <int W>
-int Machine<W>::gettid() const
+int Machine<W>::gettid() const noexcept
 {
 	if (m_mt) return m_mt->get_tid();
 	return 0;
@@ -251,10 +251,10 @@ int Machine<W>::gettid() const
 
 #ifdef RISCV_32I
 template void Machine<4>::setup_posix_threads();
-template int Machine<4>::gettid() const;
+template int Machine<4>::gettid() const noexcept;
 #endif
 #ifdef RISCV_64I
 template void Machine<8>::setup_posix_threads();
-template int Machine<8>::gettid() const;
+template int Machine<8>::gettid() const noexcept;
 #endif
 } // riscv

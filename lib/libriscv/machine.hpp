@@ -189,7 +189,7 @@ namespace riscv
 		/// @tparam ...Args The types of results to return.
 		/// @param ...args The results to return.
 		template <typename... Args>
-		inline void set_result(Args... args);
+		void set_result(Args... args) noexcept;
 
 		/// @brief Convert the result of a C library function call that
 		/// returns 0 or positive on success, and -1 on failure. errno
@@ -291,19 +291,19 @@ namespace riscv
 		// Stdout, stderr (for when the guest wants to write)
 		void print(const char*, size_t) const;
 		auto& get_printer() const noexcept { return m_printer; }
-		void set_printer(printer_func pf = default_printer) const { m_printer = pf; }
+		void set_printer(printer_func pf = default_printer) noexcept { m_printer = pf; }
 		// Stdin (for when the guest wants to read)
 		long stdin_read(char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
-		void set_stdin(stdin_func sin = default_stdin) const { m_stdin = sin; }
+		void set_stdin(stdin_func sin = default_stdin) noexcept { m_stdin = sin; }
 		// Debug printer (for when the machine wants to inform)
 		void debug_print(const char*, size_t) const;
 		auto& get_debug_printer() const noexcept { return m_debug_printer; }
-		void set_debug_printer(printer_func pf = default_printer) const { m_debug_printer = pf; }
+		void set_debug_printer(printer_func pf = default_printer) noexcept { m_debug_printer = pf; }
 		// Monotonic time function (used by RDTIME and RDTIMEH)
 		uint64_t rdtime() const { return m_rdtime(*this); }
 		auto& get_rdtime() const noexcept { return m_rdtime; }
-		void set_rdtime(rdtime_func tf = default_rdtime) const { m_rdtime = tf; }
+		void set_rdtime(rdtime_func tf = default_rdtime) noexcept { m_rdtime = tf; }
 
 		// Push something onto the stack, moving the current stack pointer.
 		address_t stack_push(const void* data, size_t length);
@@ -311,7 +311,7 @@ namespace riscv
 		template <typename T>
 		address_t stack_push(const T& pod_type);
 		// Realign the stack pointer, to make sure that function calls succeed
-		void realign_stack();
+		void realign_stack() noexcept;
 
 		/// @brief An internal function that facilitates function
 		/// calls into the guest program.
@@ -391,7 +391,7 @@ namespace riscv
 		const MultiThreading<W>& threads() const;
 		MultiThreading<W>& threads();
 		bool has_threads() const noexcept { return this->m_mt != nullptr; }
-		int gettid() const;
+		int gettid() const noexcept;
 		// FileDescriptors: Access to translation between guest fds
 		// and real system fds. The destructor also closes all opened files.
 		const FileDescriptors& fds() const;

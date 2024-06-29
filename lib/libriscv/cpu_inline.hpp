@@ -46,13 +46,13 @@ inline void CPU<W>::jump(const address_t dst)
 }
 
 template<int W>
-inline void CPU<W>::aligned_jump(const address_t dst)
+inline void CPU<W>::aligned_jump(const address_t dst) noexcept
 {
 	this->registers().pc = dst;
 }
 
 template<int W>
-inline void CPU<W>::increment_pc(int delta)
+inline void CPU<W>::increment_pc(int delta) noexcept
 {
 	registers().pc += delta;
 }

@@ -57,7 +57,7 @@ struct MultiThreading
 
 	thread_t* create(int flags, address_t ctid, address_t ptid,
 		address_t stack, address_t tls, address_t stkbase, address_t stksize);
-	int       get_tid() const { return m_current->tid; }
+	int       get_tid() const noexcept { return m_current->tid; }
 	thread_t* get_thread();
 	thread_t* get_thread(int tid); /* or nullptr */
 	bool      preempt();

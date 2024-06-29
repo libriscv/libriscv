@@ -45,24 +45,24 @@ namespace riscv
 		/// @brief  Get the current PC
 		/// @return The current PC address
 		address_t pc() const noexcept { return registers().pc; }
-		void increment_pc(int delta);
+		void increment_pc(int delta) noexcept;
 		void jump(address_t);
-		void aligned_jump(address_t);
+		void aligned_jump(address_t) noexcept;
 
 		/// @brief Retrieve current register state
 		/// @return Current register state
-		RISCV_ALWAYS_INLINE auto& registers() { return this->m_regs; }
+		RISCV_ALWAYS_INLINE auto& registers() noexcept { return this->m_regs; }
 		/// @brief Retrieve current register state
 		/// @return Current register state
-		RISCV_ALWAYS_INLINE const auto& registers() const { return this->m_regs; }
+		RISCV_ALWAYS_INLINE const auto& registers() const noexcept { return this->m_regs; }
 
 		int cpu_id() const noexcept { return m_cpuid; }
 
-		auto& reg(uint32_t idx) { return registers().get(idx); }
-		const auto& reg(uint32_t idx) const { return registers().get(idx); }
-		auto& cireg(uint16_t idx) { return registers().get(idx + 0x8); }
-		const auto& cireg(uint16_t idx) const { return registers().get(idx + 0x8); }
-		auto& ciflp(uint16_t idx) { return registers().getfl(idx + 0x8); }
+		auto& reg(uint32_t idx) noexcept { return registers().get(idx); }
+		const auto& reg(uint32_t idx) const noexcept { return registers().get(idx); }
+		auto& cireg(uint16_t idx) noexcept { return registers().get(idx + 0x8); }
+		const auto& cireg(uint16_t idx) const noexcept { return registers().get(idx + 0x8); }
+		auto& ciflp(uint16_t idx) noexcept { return registers().getfl(idx + 0x8); }
 
 		Machine<W>& machine() noexcept;
 		const Machine<W>& machine() const noexcept;
@@ -98,7 +98,7 @@ namespace riscv
 		format_t read_next_instruction_slowpath() const RISCV_COLD_PATH();
 		static const instruction_t& decode(format_t);
 		// Convert a RISC-V instruction into a fast bytecode
-		static size_t computed_index_for(format_t bits);
+		static size_t computed_index_for(format_t bits) noexcept;
 
 		/// @brief Serializes the current CPU state to a vector
 		/// @param vec The vector to serialize into
@@ -120,7 +120,7 @@ namespace riscv
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
 
 		DecodedExecuteSegment<W>& init_execute_area(const void* data, address_t begin, address_t length);
-		void set_execute_segment(DecodedExecuteSegment<W>& seg) { m_exec = &seg; }
+		void set_execute_segment(DecodedExecuteSegment<W>& seg) noexcept { m_exec = &seg; }
 		auto& current_execute_segment() noexcept { return *m_exec; }
 		auto& current_execute_segment() const noexcept { return *m_exec; }
 		struct NextExecuteReturn {
@@ -128,15 +128,15 @@ namespace riscv
 			address_t pc;
 		};
 		NextExecuteReturn next_execute_segment(address_t pc);
-		static std::shared_ptr<DecodedExecuteSegment<W>>& empty_execute_segment();
+		static std::shared_ptr<DecodedExecuteSegment<W>>& empty_execute_segment() noexcept;
 		bool is_executable(address_t addr) const noexcept;
 
 		// Override the function that gets called when the CPU
 		// throws an execute space protection fault.
-		void set_fault_handler(execute_fault_t func) { m_fault = func; }
+		void set_fault_handler(execute_fault_t func) noexcept { m_fault = func; }
 
 		// Override how to produce the next active execute segment
-		void set_override_new_execute_segment(override_execute_segment_t func) { m_override_exec = func; }
+		void set_override_new_execute_segment(override_execute_segment_t func) noexcept { m_override_exec = func; }
 
 		// Override how to handle unknown instructions, so that you may implement your own
 		static inline std::function<const instruction_t& (format_t)> on_unimplemented_instruction;

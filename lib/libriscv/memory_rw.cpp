@@ -306,7 +306,7 @@ namespace riscv
 	}
 
 	template <int W>
-	uint64_t Memory<W>::memory_usage_total() const
+	uint64_t Memory<W>::memory_usage_total() const noexcept
 	{
 		uint64_t total = 0;
 		total += sizeof(Machine<W>);
