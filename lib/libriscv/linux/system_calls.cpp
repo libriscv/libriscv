@@ -30,6 +30,36 @@ static constexpr bool verbose_syscalls = false;
 #define SA_ONSTACK	0x08000000
 
 namespace riscv {
+
+#ifdef __linux__ 
+int get_time(int clkid, struct timespec* ts) {
+    return clock_gettime(clkid, ts);
+}
+#elif __APPLE__
+#include <mach/mach_time.h>
+int get_time(int clkid, struct timespec* ts) {
+    if (clkid == CLOCK_REALTIME) {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        ts->tv_sec = tv.tv_sec;
+        ts->tv_nsec = tv.tv_usec * 1000;
+        return 0;
+    } else if (clkid == CLOCK_MONOTONIC) {
+        uint64_t time = mach_absolute_time();
+        mach_timebase_info_data_t timebase;
+        mach_timebase_info(&timebase);
+        double nsec = ((double)time * (double)timebase.numer)/((double)timebase.denom);
+        ts->tv_sec = nsec * 1e-9;  
+        ts->tv_nsec = nsec - (ts->tv_sec * 1e9);
+        return 0;
+    } else {
+        return -1;
+    }
+}
+#else
+#error "Unknown compiler"
+#endif
+
 	template <int W>
 	void add_socket_syscalls(Machine<W>&);
 
@@ -395,30 +425,51 @@ static void syscall_dup(Machine<W>& machine)
 	machine.set_result(-EBADF);
 }
 
+int create_pipe(int* pipes, int flags) {
+    #ifdef __linux__ 
+        return pipe2(pipes, flags);
+    #elif __APPLE__
+        // On macOS, we don't have pipe2, so we need to use pipe and then set the flags manually.
+        int res = pipe(pipes);
+        if (res == 0 && flags != 0) {
+            if (flags & O_CLOEXEC) {
+                fcntl(pipes[0], F_SETFD, FD_CLOEXEC);
+                fcntl(pipes[1], F_SETFD, FD_CLOEXEC);
+            }
+            if (flags & O_NONBLOCK) {
+                fcntl(pipes[0], F_SETFL, O_NONBLOCK);
+                fcntl(pipes[1], F_SETFL, O_NONBLOCK);
+            }
+        }
+        return res;
+    #else
+        #error "Unknown compiler"
+    #endif
+}
+
 template <int W>
 static void syscall_pipe2(Machine<W>& machine)
 {
-	// int pipe2(int pipefd[2], int flags);
-	const auto vfd_array = machine.sysarg(0);
-	const auto flags = machine.template sysarg<int>(1);
+    const auto vfd_array = machine.sysarg(0);
+    const auto flags = machine.template sysarg<int>(1);
 
-	if (machine.has_file_descriptors()) {
-		int pipes[2];
-		int res = pipe2(pipes, flags);
-		if (res == 0) {
-			int vpipes[2];
-			vpipes[0] = machine.fds().assign_file(pipes[0]);
-			vpipes[1] = machine.fds().assign_file(pipes[1]);
-			machine.copy_to_guest(vfd_array, vpipes, sizeof(vpipes));
-			machine.set_result(0);
-		} else {
-			machine.set_result_or_error(res);
-		}
-	} else {
-		machine.set_result(-EBADF);
-	}
-	SYSPRINT("SYSCALL pipe2, fd array: 0x%lX flags: %d = %ld\n",
-		(long)vfd_array, flags, (long)machine.return_value());
+    if (machine.has_file_descriptors()) {
+        int pipes[2];
+        int res = create_pipe(pipes, flags);
+        if (res == 0) {
+            int vpipes[2];
+            vpipes[0] = machine.fds().assign_file(pipes[0]);
+            vpipes[1] = machine.fds().assign_file(pipes[1]);
+            machine.copy_to_guest(vfd_array, vpipes, sizeof(vpipes));
+            machine.set_result(0);
+        } else {
+            machine.set_result_or_error(res);
+        }
+    } else {
+        machine.set_result(-EBADF);
+    }
+    SYSPRINT("SYSCALL pipe2, fd array: 0x%lX flags: %d = %ld\n",
+        (long)vfd_array, flags, (long)machine.return_value());
 }
 
 template <int W>
@@ -479,38 +530,40 @@ void syscall_readlinkat(Machine<W>& machine)
 
 	const std::string original_path = machine.memory.memstring(g_path);
 
-	char buffer[4096];
+	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
+		vfd, original_path.c_str(), (long)g_buf, (size_t)bufsize);
+
+	char buffer[512];
 	if (bufsize > sizeof(buffer)) {
 		machine.set_result(-ENOMEM);
-	} else if (machine.has_file_descriptors()) {
+		return;
+	}
+
+	if (machine.has_file_descriptors()) {
+
 		if (machine.fds().filter_readlink != nullptr) {
 			std::string path = original_path;
 			if (!machine.fds().filter_readlink(machine.template get_userdata<void>(), path)) {
 				machine.set_result(-EPERM);
-			} else {
-				// Readlink always rewrites the answer
-				machine.copy_to_guest(g_buf, path.c_str(), path.size());
-				machine.set_result(path.size());
+				return;
 			}
-			SYSPRINT("SYSCALL readlinkat, fd: %d path: %s (filter => %s) buffer: 0x%lX size: %zu >= %ld\n",
-					 vfd, original_path.c_str(), path.c_str(), (long)g_buf, (size_t)bufsize, (long)machine.return_value());
+			// Readlink always rewrites the answer
+			machine.copy_to_guest(g_buf, path.c_str(), path.size());
+			machine.set_result(path.size());
+			return;
 		}
-		else
-		{
-			const int real_fd = machine.fds().translate(vfd);
+		const int real_fd = machine.fds().translate(vfd);
 
-			const int res = readlinkat(real_fd, original_path.c_str(), buffer, bufsize);
-			if (res > 0) {
-				// TODO: Only necessary if g_buf is not sequential.
-				machine.copy_to_guest(g_buf, buffer, res);
-			}
-			machine.set_result_or_error(res);
+		const int res = readlinkat(real_fd, original_path.c_str(), buffer, bufsize);
+		if (res > 0) {
+			// TODO: Only necessary if g_buf is not sequential.
+			machine.copy_to_guest(g_buf, buffer, res);
 		}
-	} else {
-		machine.set_result(-ENOSYS);
+
+		machine.set_result_or_error(res);
+		return;
 	}
-	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu => %ld\n",
-			 vfd, original_path.c_str(), (long)g_buf, (size_t)bufsize, (long)machine.return_value());
+	machine.set_result(-ENOSYS);
 }
 
 // The RISC-V stat structure is different from x86
@@ -549,12 +602,37 @@ inline void copy_stat_buffer(struct stat& st, struct riscv_stat& rst)
 	rst.st_blksize = st.st_blksize;
 	rst.st_blocks = st.st_blocks;
 	rst.rv_atime = st.st_atime;
+	#ifdef __APPLE__
+	rst.rv_atime_nsec = st.st_atimespec.tv_nsec;
+	#else
+	#ifdef __USE_MISC
 	rst.rv_atime_nsec = st.st_atim.tv_nsec;
+	#else
+	rst.rv_atime_nsec = 0; // or another appropriate value
+	#endif
+	#endif
 	rst.rv_mtime = st.st_mtime;
+	#ifdef __APPLE__
+	rst.rv_mtime_nsec = st.st_mtimespec.tv_nsec;
+	#else
+	#ifdef __USE_MISC
 	rst.rv_mtime_nsec = st.st_mtim.tv_nsec;
+	#else
+	rst.rv_mtime_nsec = 0; // or another appropriate value
+	#endif
+	#endif
 	rst.rv_ctime = st.st_ctime;
+	#ifdef __APPLE__
+	rst.rv_ctime_nsec = st.st_ctimespec.tv_nsec;
+	#else
+	#ifdef __USE_MISC
 	rst.rv_ctime_nsec = st.st_ctim.tv_nsec;
+	#else
+	rst.rv_ctime_nsec = 0; // or another appropriate value
+	#endif
+	#endif
 }
+
 
 template <int W>
 static void syscall_getcwd(Machine<W>& machine)
@@ -712,43 +790,44 @@ static void syscall_gettimeofday(Machine<W>& machine)
 template <int W>
 static void syscall_clock_gettime(Machine<W>& machine)
 {
-	const auto clkid = machine.template sysarg<int>(0);
-	const auto buffer = machine.sysarg(1);
-	SYSPRINT("SYSCALL clock_gettime, clkid: %x buffer: 0x%lX\n",
-		clkid, (long)buffer);
+    const auto clkid = machine.template sysarg<int>(0);
+    const auto buffer = machine.sysarg(1);
+    SYSPRINT("SYSCALL clock_gettime, clkid: %x buffer: 0x%lX\n",
+        clkid, (long)buffer);
 
-	struct timespec ts;
-	const int res = clock_gettime(clkid, &ts);
-	if (res >= 0) {
-		if constexpr (W == 4) {
-			int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
-			machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
-		} else {
-			machine.copy_to_guest(buffer, &ts, sizeof(ts));
-		}
-	}
-	machine.set_result_or_error(res);
+    struct timespec ts;
+    const int res = get_time(clkid, &ts);
+    if (res >= 0) {
+        if constexpr (W == 4) {
+            int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
+            machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
+        } else {
+            machine.copy_to_guest(buffer, &ts, sizeof(ts));
+        }
+    }
+    machine.set_result_or_error(res);
 }
 template <int W>
 static void syscall_clock_gettime64(Machine<W>& machine)
 {
-	const auto clkid = machine.template sysarg<int>(0);
-	const auto buffer = machine.sysarg(1);
-	SYSPRINT("SYSCALL clock_gettime64, clkid: %x buffer: 0x%lX\n",
-		clkid, (long)buffer);
+    const auto clkid = machine.template sysarg<int>(0);
+    const auto buffer = machine.sysarg(1);
+    SYSPRINT("SYSCALL clock_gettime64, clkid: %x buffer: 0x%lX\n",
+        clkid, (long)buffer);
 
-	struct timespec ts;
-	const int res = clock_gettime(clkid, &ts);
-	if (res >= 0) {
-		struct {
-			int64_t tv_sec;
-			int64_t tv_msec;
-		} kernel_ts;
-		kernel_ts.tv_sec  = ts.tv_sec;
-		kernel_ts.tv_msec = ts.tv_nsec;
-		machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
-	}
-	machine.set_result_or_error(res);
+    struct timespec ts;
+    int res = get_time(clkid, &ts);
+
+    if (res >= 0) {
+        struct {
+            int64_t tv_sec;
+            int64_t tv_msec;
+        } kernel_ts;
+        kernel_ts.tv_sec  = ts.tv_sec;
+        kernel_ts.tv_msec = ts.tv_nsec;
+        machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
+    }
+    machine.set_result_or_error(res);
 }
 template <int W>
 static void syscall_nanosleep(Machine<W>& machine)
@@ -776,8 +855,6 @@ static void syscall_nanosleep(Machine<W>& machine)
 template <int W>
 static void syscall_clock_nanosleep(Machine<W>& machine)
 {
-	const auto clkid = machine.template sysarg<int>(0);
-	const auto flags = machine.template sysarg<int>(1);
 	const auto g_request = machine.sysarg(2);
 	const auto g_remain = machine.sysarg(3);
 
@@ -785,14 +862,14 @@ static void syscall_clock_nanosleep(Machine<W>& machine)
 	struct timespec ts_rem;
 	machine.copy_from_guest(&ts_req, g_request, sizeof(ts_req));
 
-	const int res = clock_nanosleep(clkid, flags, &ts_req, &ts_rem);
+	const int res = nanosleep(&ts_req, &ts_rem);
 	if (res >= 0 && g_remain != 0x0) {
 		machine.copy_to_guest(g_remain, &ts_rem, sizeof(ts_rem));
 	}
 	machine.set_result_or_error(res);
 
-	SYSPRINT("SYSCALL clock_nanosleep, clkid: %x req: 0x%lX rem: 0x%lX = %ld\n",
-		clkid, (long)g_request, (long)g_remain, (long)machine.return_value());
+	SYSPRINT("SYSCALL clock_nanosleep, req: 0x%lX rem: 0x%lX = %ld\n",
+		(long)g_request, (long)g_remain, (long)machine.return_value());
 }
 
 template <int W>
@@ -841,6 +918,10 @@ static void syscall_brk(Machine<W>& machine)
 	machine.set_result(new_end);
 }
 
+#if defined(__APPLE__)
+    #include <Security/Security.h>
+#endif
+
 template <int W>
 static void syscall_getrandom(Machine<W>& machine)
 {
@@ -856,6 +937,9 @@ static void syscall_getrandom(Machine<W>& machine)
 #if defined(__OpenBSD__)
 	const ssize_t result = 0; // always success
 	arc4random_buf(buffer, need);
+#elif defined(__APPLE__)
+    const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
+    const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
 #else
 	const ssize_t result = getrandom(buffer, need, 0);
 #endif
@@ -897,6 +981,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 
 	// getcwd
 	install_syscall_handler(17, syscall_getcwd<W>);
+	
 #ifdef __linux__
 	// eventfd2
 	install_syscall_handler(19, syscall_eventfd2<W>);

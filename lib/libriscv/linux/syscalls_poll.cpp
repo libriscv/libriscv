@@ -1,4 +1,31 @@
+#if defined(__APPLE__)
+    #include <time.h>
+    struct timespec {
+        time_t   tv_sec;  /* seconds */
+        long     tv_nsec; /* nanoseconds */
+    };
+#else
+    #include <sys/time.h>
+#endif
+
 #include <poll.h>
+
+int poll_with_timeout(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts) {
+    #ifdef __linux__
+        return ppoll(fds, nfds, timeout_ts, NULL);
+    #elif __APPLE__
+        // On macOS, we don't have ppoll, so we need to use poll and then handle the timeout manually.
+        int timeout_ms;
+        if (timeout_ts != NULL) {
+            timeout_ms = timeout_ts->tv_sec * 1000 + timeout_ts->tv_nsec / 1000000;
+        } else {
+            timeout_ms = -1;
+        }
+        return poll(fds, nfds, timeout_ms);
+    #else
+        #error "Unknown compiler"
+    #endif
+}
 
 // int ppoll(struct pollfd *fds, nfds_t nfds,
 //        const struct timespec *timeout_ts, const sigset_t *sigmask);
@@ -30,7 +57,7 @@ static void syscall_ppoll(Machine<W>& machine)
 			linux_fds[i].fd = machine.fds().translate(fds[i].fd);
 		}
 
-		const int res = ppoll(linux_fds.data(), nfds, &ts, NULL);
+	    const int res = poll_with_timeout(linux_fds.data(), nfds, &ts);
 		// The ppoll system call modifies TS
 		//clock_gettime(CLOCK_MONOTONIC, &ts);
 		//machine.copy_to_guest(g_ts, &ts, sizeof(ts));

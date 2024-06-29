@@ -165,6 +165,18 @@ add_library(riscv ${SOURCES})
 if (COSMOPOLITAN)
 	target_compile_options(riscv PUBLIC -fexceptions)
 endif()
+
+if(APPLE)
+    find_library(SECURITY_FRAMEWORK Security)
+    find_library(FOUNDATION_FRAMEWORK Foundation)
+    mark_as_advanced(SECURITY_FRAMEWORK FOUNDATION_FRAMEWORK)
+
+    target_link_libraries(riscv PUBLIC 
+        "${SECURITY_FRAMEWORK}"
+        "${FOUNDATION_FRAMEWORK}"
+    )
+endif()
+
 target_compile_features(riscv PUBLIC cxx_std_20)
 target_include_directories(riscv PUBLIC .)
 target_include_directories(riscv PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
