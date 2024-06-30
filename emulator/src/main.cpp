@@ -24,6 +24,7 @@ struct Arguments {
 	bool ignore_text = false;
 	uint64_t fuel = UINT64_MAX;
 	std::string output_file;
+	std::string call_function;
 };
 
 #ifdef HAVE_GETOPT_LONG
@@ -46,6 +47,7 @@ static const struct option long_options[] = {
 	{"from-start", no_argument, 0, 'F'},
 	{"sandbox", no_argument, 0, 'S'},
 	{"ignore-text", no_argument, 0, 'I'},
+	{"call", required_argument, 0, 'c'},
 	{0, 0, 0, 0}
 };
 
@@ -69,6 +71,7 @@ static void print_help(const char* name)
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
 		"  -S  --sandbox      Enable strict sandbox\n"
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
+		"  -c, --call func    Call a function after loading the program\n"
 		"\n"
 	);
 	printf("libriscv is compiled with:\n"
@@ -106,6 +109,9 @@ static void print_help(const char* name)
 #define STR(x) _STR(x)
 		"-  Fixed N-bit address space is enabled (" STR(RISCV_ENCOMPASSING_ARENA_BITS) " bits)\n"
 #endif
+#ifdef RISCV_TIMED_VMCALLS
+		"-  Timed VM calls are enabled\n"
+#endif
 		"\n"
 	);
 }
@@ -113,7 +119,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnmo:FSI", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnmo:FSIc:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -133,6 +139,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'F': args.from_start = true; break;
 			case 'S': args.sandbox = true; break;
 			case 'I': args.ignore_text = true; break;
+			case 'c': break;
 			default:
 				fprintf(stderr, "Unknown option: %c\n", c);
 				return -1;
@@ -149,12 +156,17 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 				args.fuel = UINT64_MAX;
 			}
 			if (args.verbose) {
-				printf("Fuel set to %" PRIu64 "\n", args.fuel);
+				printf("* Fuel set to %" PRIu64 "\n", args.fuel);
 			}
 		} else if (c == 'o') {
 			args.output_file = optarg;
 			if (args.verbose) {
-				printf("Output file prefix set to %s\n", args.output_file.c_str());
+				printf("* Output file prefix set to %s\n", args.output_file.c_str());
+			}
+		} else if (c == 'c') {
+			args.call_function = optarg;
+			if (args.verbose) {
+				printf("* Function to VMCall: %s\n", args.call_function.c_str());
 			}
 		}
 	}
@@ -211,6 +223,18 @@ static void run_program(
 #endif
 #endif
 	}};
+
+	// A helper system call to ask for symbols that is possibly only known at runtime
+	// Used by testing executables
+	riscv::address_type<W> symbol_function = 0;
+	machine.set_userdata(&symbol_function);
+	machine.install_syscall_handler(500,
+		[] (auto& machine) {
+			auto [addr] = machine.template sysargs<riscv::address_type<W>>();
+			auto& symfunc = *machine.template get_userdata<decltype(symbol_function)>();
+			symfunc = addr;
+			printf("Introduced to symbol function: 0x%" PRIX64 "\n", uint64_t(addr));
+		});
 
 	if constexpr (full_linux_guest)
 	{
@@ -273,6 +297,8 @@ static void run_program(
 						fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
 					}
 					return false;
+				} else if (cli_args.verbose) {
+					fprintf(stderr, "Guest wanted to open: %s (allowed)\n", path.c_str());
 				}
 				// Construct new path
 				path = real_libdir + path.substr(sandbox_libdir.size());
@@ -429,6 +455,24 @@ static void run_program(
 			machine.memory.pages_active(),
 			machine.memory.pages_active() * riscv::Page::size() / uint64_t(1024),
 			machine.memory.memory_usage_total() / uint64_t(1024));
+	}
+
+	if (!cli_args.call_function.empty())
+	{
+		auto addr = machine.address_of(cli_args.call_function);
+		if (addr == 0 && symbol_function != 0) {
+			addr = machine.vmcall(symbol_function, cli_args.call_function);
+		}
+		if (addr != 0) {
+			printf("Calling function %s @ 0x%lX\n", cli_args.call_function.c_str(), long(addr));
+#ifdef RISCV_TIMED_VMCALLS
+			machine.timed_vmcall(addr, 30.0f);
+#else
+			machine.vmcall(addr);
+#endif
+		} else {
+			printf("Error: Function %s not found, not able to call\n", cli_args.call_function.c_str());
+		}
 	}
 }
 
