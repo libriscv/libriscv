@@ -28,7 +28,7 @@ Non goals:
 
 ## Benchmarks
 
-[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 34997](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~85%).
+[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 35475](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~86%).
 
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
@@ -368,7 +368,7 @@ $ ./rvlinux -v ~/github/coremark/coremark-rv32g_b
 * Program segment readable: 1 writable: 1  executable: 0
 Found embedded translation for hash 17A11122
 ...
-CoreMark 1.0 : 34952.813702 / GCC13.2.0 -O3 -DPERFORMANCE_RUN=1   / Static
+CoreMark 1.0 : 35475.669603 / GCC13.2.0 -O3 -DPERFORMANCE_RUN=1   / Static
 ```
 
 - The original RISC-V binary is still needed, as it is treated as the ultimate truth by the emulator

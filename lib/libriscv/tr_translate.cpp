@@ -193,7 +193,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 
 	// Disable translator by setting options.translate_enabled to false
 	// or by setting max blocks to zero.
-	if (0 == options.translate_blocks_max || !options.translate_enabled) {
+	if (0 == options.translate_blocks_max || (!options.translate_enabled && !options.translate_enable_embedded)) {
 		if (options.verbose_loader) {
 			printf("libriscv: Binary translation disabled\n");
 		}
@@ -247,6 +247,9 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			printf("No embedded translation found for hash %08X\n", checksum);
 		}
 	}
+
+	if (!options.translate_enabled)
+		return -1;
 
 	char filebuffer[256];
 	int len = snprintf(filebuffer, sizeof(filebuffer),
