@@ -59,7 +59,7 @@ namespace riscv
 		void set_crc32c_hash(uint32_t hash) { m_crc32c_hash = hash; }
 
 #ifdef RISCV_BINARY_TRANSLATION
-		bool is_binary_translated() const noexcept { return m_bintr_dl != nullptr; }
+		bool is_binary_translated() const noexcept { return !m_translator_mappings.empty(); }
 		void* binary_translation_so() const { return m_bintr_dl; }
 		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
 		uint32_t translation_hash() const { return m_bintr_hash; }

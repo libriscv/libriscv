@@ -16,6 +16,10 @@ option(MICRO_EMULATOR  "Build the special micro emulator (custom system calls)" 
 set(SOURCES
 	src/main.cpp
 )
+if (EMBED_FILES)
+	message(STATUS "Embedding code file ${EMBED_FILE}")
+	set(SOURCES ${SOURCES} ${EMBED_FILES})
+endif()
 
 if (NATIVE)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")

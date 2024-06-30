@@ -66,6 +66,10 @@ namespace riscv
 		/// @brief Tears down the machine, freeing all owned memory and pages.
 		~Machine();
 
+		/// @brief Returns the machine options that were used to create the machine.
+		/// @return The machine options.
+		auto& options() const noexcept { return m_options; }
+
 		/// @brief Simulate RISC-V starting from the PC register, and
 		/// stopping when at most @max_instructions have been executed.
 		/// If Throw == true, the machine will throw a
@@ -443,6 +447,9 @@ namespace riscv
 		std::unique_ptr<FileDescriptors> m_fds = nullptr;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		std::unique_ptr<Signals<W>> m_signals = nullptr;
+
+		MachineOptions<W> m_options;
+
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static void default_printer(const Machine&, const char*, size_t);
 		static long default_stdin(const Machine&, char*, size_t);

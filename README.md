@@ -28,7 +28,7 @@ Non goals:
 
 ## Benchmarks
 
-[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 34997](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~85%).
+[STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 35475](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~86%).
 
 Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
 
@@ -347,6 +347,35 @@ The read-write arena simplifies memory operations immediately outside of the loa
 When binary translation is enabled, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. The `libtcc-dev` package will be required for building. It will give a handsome 25-100% performance boost compared to interpreter mode.
 
 If you are seeing the error `tcc: error: file 'libtcc1.a' not found`, you can change to using the distro package instead by enabling `RISCV_LIBTCC_DISTRO_PACKAGE`, where `libtcc1.a` is pre-installed. In which case, install your distros `libtcc-dev` equivalent package. Otherwise, the CMake build scripts produces `libtcc1.a` and puts it at the root of the build folder. So, a very quick solution to the error is to just create a symbolic link: `ln -fs build/libtcc1.a .`. It is a run-time dependency of TCC.
+
+### Full binary translation as embeddable code
+
+It is possible to generate C99 freestanding source files from a binary translated program, embed it in a project at some later time, and automatically load and utilize the binary translation at run-time. This feature makes it possible to use full binary translation on platforms where it is ordinarily not possible. If a RISC-V program is changed without generating new sources, the emulator will (intentionally) not find these embedded functions and instead fall back to other modes, eg. interpreter mode. Changing a RISC-V program requires regenerating the sources and rebuilding the final program. This practically adds support for high-performance emulation on all console systems, for final/shipped builds.
+
+In order to test this feature, follow these instructions:
+```
+cd emulator
+./build.sh --bintr
+./rvlinux -o test ~/github/coremark/coremark-rv32g_b
+$ ls test*
+test17A11122.cpp
+./build.sh --embed test17A11122.cpp
+./rvlinux -v ~/github/coremark/coremark-rv32g_b
+$ ./rvlinux -v ~/github/coremark/coremark-rv32g_b
+* Loading program of size 75145 from 0x77e75e5b2010 to virtual 0x10000 -> 0x22589
+* Program segment readable: 1 writable: 0  executable: 1
+* Loading program of size 1864 from 0x77e75e5c459c to virtual 0x2358c -> 0x23cd4
+* Program segment readable: 1 writable: 1  executable: 0
+Found embedded translation for hash 17A11122
+...
+CoreMark 1.0 : 35475.669603 / GCC13.2.0 -O3 -DPERFORMANCE_RUN=1   / Static
+```
+
+- The original RISC-V binary is still needed, as it is treated as the ultimate truth by the emulator
+- If the RISC-V program changes, the emulator will not use the outdated embedded code and instead fall back to another emulation mode, eg. interpreter mode
+- Many files can be embedded allowing for dynamic executables to be embedded, with all their dependencies
+- The configuration settings of libriscv are added to the hash of the filename, so in order to use the generated code on other systems and platforms the configurations must match exactly
+- Embedded segments can be re-used by many emulators, for high scalability
 
 ### Experimental multiprocessing
 

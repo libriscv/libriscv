@@ -1472,18 +1472,20 @@ void Emitter<W>::emit()
 				switch (vi.OPVV.funct6)
 				{
 				case 0b000000: // VFADD.VF
-					code += "const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
+					code += "{ const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
 					for (unsigned i = 0; i < vlen; i++) {
 						const std::string f32 = ".f32[" + std::to_string(i) + "]";
 						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs2) + f32 + " + " + scalar + ";\n";
 					}
+					code += "}\n";
 					break;
 				case 0b100100: // VFMUL.VF
-					code += "const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
+					code += "{ const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
 					for (unsigned i = 0; i < vlen; i++) {
 						const std::string f32 = ".f32[" + std::to_string(i) + "]";
 						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs2) + f32 + " * " + scalar + ";\n";
 					}
+					code += "}\n";
 					break;
 				default:
 					UNKNOWN_INSTRUCTION();

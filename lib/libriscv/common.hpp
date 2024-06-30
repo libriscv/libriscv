@@ -9,6 +9,7 @@
 #endif
 #include <string>
 #include <string_view>
+#include <variant>
 #include "util/function.hpp"
 #include "types.hpp"
 
@@ -51,6 +52,18 @@ namespace riscv
 		/// @example ".dll"
 		std::string cross_suffix = ".dll";
 	};
+	/// @brief Options for generating embeddable C99 code into a C or C++ program.
+	struct MachineTranslationEmbeddableCodeOptions
+	{
+		/// @brief Provide a filename prefix for the embedded code output.
+		/// @example "mycode-"
+		std::string prefix = "mycode-";
+
+		/// @brief Provide a filename suffix for the embedded code output.
+		/// @example ".c" or ".cpp"
+		std::string suffix = ".cpp";
+	};
+	using MachineTranslationOptions = std::variant<MachineTranslationCrossOptions, MachineTranslationEmbeddableCodeOptions>;
 
 	/// @brief Options passed to Machine constructor
 	/// @tparam W The RISC-V architecture
@@ -119,6 +132,10 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		/// @brief Enable the binary translator.
 		bool translate_enabled = true;
+		/// @brief Enable loading of embedded binary translated programs.
+		/// @details This will allow the machine to load and execute embedded
+		/// binary translated programs. They auto-register themselves.
+		bool translate_enable_embedded = true;
 		/// @brief Enable compiling execute segment on-demand during emulation.
 		/// @details Not available on most Windows systems.
 #ifdef _WIN32
@@ -157,7 +174,7 @@ namespace riscv
 		/// @brief Allow the production of a secondary dependency-free DLL that can be
 		/// transferred to and loaded on Windows (or other) machines. It will be used
 		/// to greatly accelerate the emulation of the RISC-V program.
-		std::vector<MachineTranslationCrossOptions> cross_compile {};
+		std::vector<MachineTranslationOptions> cross_compile {};
 
 		/// @brief Produce the translation output filename from the prefix, hash and suffix.
 		/// @param prefix A prefix for the filename.
