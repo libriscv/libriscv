@@ -10,6 +10,11 @@
 #ifdef __GNUG__ /* Workaround for GCC bug */
 #include "machine_defaults.cpp"
 #endif
+#ifdef RISCV_TIMED_VMCALLS
+#include <signal.h>
+#include <sys/timerfd.h>
+extern "C" int gettid();
+#endif
 
 namespace riscv
 {
@@ -392,6 +397,95 @@ namespace riscv
 		// if we got here, its an illegal operation!
 		cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.funct3);
 	}
+
+#ifdef RISCV_TIMED_VMCALLS
+	struct ksigevent
+	{
+		union sigval sigev_value;
+		int sigev_signo;
+		int sigev_notify;
+		int sigev_tid;
+	};
+
+	extern "C"
+	void timed_vmcall_sighandler(int sig, siginfo_t* si, void* usr)
+	{
+		(void)si; (void)usr;
+		if (sig == SIGUSR2) {
+			throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED, "Timed out", 0);
+		}
+	}
+
+	template <int W>
+	void Machine<W>::execute_with_timeout(float timeout, uint64_t max_instructions, uint64_t counter, address_t pc)
+	{
+		if (this->m_timer_id == nullptr)
+		{
+			// Establish handler for timer signal
+			struct sigaction sa;
+			sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+			sa.sa_sigaction = timed_vmcall_sighandler;
+			sigemptyset(&sa.sa_mask);
+			if (::sigaction(SIGUSR2, &sa, NULL) < 0) {
+				throw MachineException(ILLEGAL_OPERATION, "sigaction failed");
+			}
+
+			// Create the timer
+			struct ksigevent sev {};
+			sev.sigev_signo = SIGUSR2;
+			sev.sigev_notify = SIGEV_THREAD_ID;
+			sev.sigev_tid = ::gettid();
+
+			if (timer_create(CLOCK_MONOTONIC, (struct sigevent *)&sev, &m_timer_id) < 0) {
+				throw MachineException(ILLEGAL_OPERATION, "timer_create failed");
+			}
+		}
+
+		// Start the timer
+		const struct itimerspec its {
+			/* Interrupt every 50ms after timeout. This makes sure
+			that we will eventually exit all blocking calls. If
+			there is a blocking loop that doesn't exit properly,
+			the 50ms recurring interruption should not cause too
+			much wasted CPU-time. */
+			.it_interval = {
+				.tv_sec = 0, .tv_nsec = 50'000'000L
+			},
+			/* The execution timeout. */
+			.it_value = {
+				.tv_sec = (time_t) timeout,
+				.tv_nsec = (long) ((timeout - (time_t) timeout) * 1'000'000'000L)
+			}
+		};
+
+		if (timer_settime(m_timer_id, 0, &its, NULL) < 0) {
+			throw MachineException(SYSTEM_CALL_FAILED, "timer_settime failed");
+		}
+
+		// Execute the VM call
+		try {
+			simulate_with<true>(max_instructions, counter, pc);
+		} catch (...) {
+			if (timeout > 0.0f) {
+				// Stop the timer
+				disable_timer();
+			}
+			throw;
+		}
+
+		if (timeout > 0.0f) {
+			disable_timer();
+		}
+	}
+
+	template <int W>
+	void Machine<W>::disable_timer()
+	{
+		struct itimerspec its;
+		__builtin_memset(&its, 0, sizeof(its));
+		timer_settime(this->m_timer_id, 0, &its, nullptr);
+	}
+#endif
 
 	INSTANTIATE_32_IF_ENABLED(Machine);
 	INSTANTIATE_64_IF_ENABLED(Machine);
