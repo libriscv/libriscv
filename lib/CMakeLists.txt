@@ -55,6 +55,8 @@ if (RISCV_EXPERIMENTAL)
 		# Encompassing arena implies flat read-write arena
 		set(RISCV_FLAT_RW_ARENA ON)
 	endif()
+	# TIMED_VMCALLS enables timed VM calls through timers and signals.
+	option(RISCV_TIMED_VMCALLS       "Enable timed VM calls" OFF)
 endif()
 if (RISCV_BINARY_TRANSLATION)
 	# LIBTCC will embed the TCC compiler library, using it for binary translation.
@@ -174,6 +176,10 @@ if (RISCV_ENCOMPASSING_ARENA)
 	target_compile_definitions(riscv PUBLIC
 		RISCV_ENCOMPASSING_ARENA_BITS=${RISCV_ENCOMPASSING_ARENA_BITS}
 	)
+endif()
+
+if (RISCV_TIMED_VMCALLS)
+	target_compile_definitions(riscv PUBLIC RISCV_TIMED_VMCALLS=1)
 endif()
 
 if (RISCV_MULTIPROCESS)

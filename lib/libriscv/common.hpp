@@ -279,6 +279,11 @@ namespace riscv
 	static constexpr int encompassing_Nbit_arena = 0;
 	static constexpr uint64_t encompassing_arena_mask = 0;
 #endif
+#ifdef RISCV_TIMED_VMCALLS
+	static constexpr bool timed_vm_calls = true;
+#else
+	static constexpr bool timed_vm_calls = false;
+#endif
 #ifdef RISCV_LIBTCC
 	static constexpr bool libtcc_enabled = true;
 #else

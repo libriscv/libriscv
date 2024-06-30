@@ -373,8 +373,13 @@ static void run_program(
 			machine.set_max_instructions(~0ULL);
 			machine.cpu.simulate_precise();
 		} else {
+#ifdef RISCV_TIMED_VMCALLS
+			// Simulation with experimental timeout
+			machine.execute_with_timeout(30.0f, ~0ULL, 0U, machine.cpu.pc());
+#else
 			// Normal RISC-V simulation
 			machine.simulate(cli_args.fuel);
+#endif
 		}
 	} catch (riscv::MachineException& me) {
 		printf("%s\n", machine.cpu.current_instruction_to_string().c_str());
