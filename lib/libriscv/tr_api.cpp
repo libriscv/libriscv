@@ -224,11 +224,13 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
+#ifndef EMBEDDABLE_CODE
 extern VISIBLE void init(struct CallbackTable* table, char* arena)
 {
 	api = *table;
 	arena_ptr = arena;
 }
+#endif
 
 typedef struct {
 	uint64_t counter;

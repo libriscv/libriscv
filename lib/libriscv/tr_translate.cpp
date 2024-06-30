@@ -624,9 +624,11 @@ VISIBLE const struct Mapping mappings[] = {
 			{
 				auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
 				const uint32_t hash = exec.translation_hash();
-				const std::string& embed_filename = embed.filename;
+				const std::string& embed_filename = options.translation_filename(
+					embed.prefix, hash, embed.suffix);
 				// Write the embeddable code to a file
 				std::ofstream embed_file(embed_filename);
+				embed_file << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
 				for (auto& def : defines) {
 					embed_file << "#define " << def.first << " " << def.second << "\n";
 				}

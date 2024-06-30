@@ -63,7 +63,7 @@ namespace riscv
 			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, begin);
 
 		this->m_exec = &machine().memory.create_execute_segment(
-			{}, vdata, begin, vlength);
+			machine().options(), vdata, begin, vlength);
 		return *this->m_exec;
 	} // CPU::init_execute_area
 

@@ -154,7 +154,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 		} else if (c == 'o') {
 			args.output_file = optarg;
 			if (args.verbose) {
-				printf("Output file set to %s\n", args.output_file.c_str());
+				printf("Output file prefix set to %s\n", args.output_file.c_str());
 			}
 		}
 	}

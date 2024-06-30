@@ -52,11 +52,16 @@ namespace riscv
 		/// @example ".dll"
 		std::string cross_suffix = ".dll";
 	};
+	/// @brief Options for generating embeddable C99 code into a C or C++ program.
 	struct MachineTranslationEmbeddableCodeOptions
 	{
-		/// @brief Provide a custom filename for the embedded code output.
-		/// @example "mycode.cpp"
-		std::string filename = "mycode.cpp";
+		/// @brief Provide a filename prefix for the embedded code output.
+		/// @example "mycode-"
+		std::string prefix = "mycode-";
+
+		/// @brief Provide a filename suffix for the embedded code output.
+		/// @example ".c" or ".cpp"
+		std::string suffix = ".cpp";
 	};
 	using MachineTranslationOptions = std::variant<MachineTranslationCrossOptions, MachineTranslationEmbeddableCodeOptions>;
 

@@ -2,7 +2,7 @@
 set -e
 
 OPTS=""
-EMBED_FILE=""
+EMBED_FILES=""
 
 function usage()
 {
@@ -27,7 +27,7 @@ while [[ "$#" -gt 0 ]]; do
         -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
         -t|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
         -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;
-		-e|--embed) EMBED_FILE=$2; shift ;;
+		-e|--embed) EMBED_FILES="$EMBED_FILES;$2"; shift ;;
 		-v|--verbose ) set -x ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
@@ -36,7 +36,7 @@ done
 
 mkdir -p .build
 pushd .build
-cmake .. -DCMAKE_BUILD_TYPE=Release $OPTS -DEMBED_FILE=$EMBED_FILE
+cmake .. -DCMAKE_BUILD_TYPE=Release $OPTS -DEMBED_FILES="$EMBED_FILES"
 make -j6
 popd
 
