@@ -99,11 +99,11 @@ namespace riscv
 		if constexpr (W == 4) {
 			printf("-> Sym is at 0x%" PRIX32 " with size %" PRIu32 ", type %u name %u\n",
 				sym->st_value, sym->st_size,
-				typename Elf<W>::SymbolType(sym->st_info), sym->st_name);
+				Elf<W>::SymbolType(sym->st_info), sym->st_name);
 		} else {
 			printf("-> Sym is at 0x%" PRIX64 " with size %" PRIu64 ", type %u name %u\n",
 				(uint64_t)sym->st_value, sym->st_size,
-				typename Elf<W>::SymbolType(sym->st_info), sym->st_name);
+				Elf<W>::SymbolType(sym->st_info), sym->st_name);
 		}
 	}
 
