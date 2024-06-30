@@ -219,13 +219,14 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	// Check if translation is registered
 	if (options.translate_enable_embedded)
 	{
-		printf("Checking for embedded translations\n");
 		for (size_t i = 0; i < registered_embedded_translations<W>.count; i++)
 		{
 			auto& translation = registered_embedded_translations<W>.translations[i];
 			if (translation.hash == checksum)
 			{
-				printf("Found embedded translation for hash %08X\n", checksum);
+				if (options.verbose_loader) {
+					printf("Found embedded translation for hash %08X\n", checksum);
+				}
 				*translation.api_table = create_bintr_callback_table(*this);
 				exec.reserve_mappings(translation.nmappings);
 				for (unsigned i = 0; i < translation.nmappings; i++) {
@@ -241,6 +242,9 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 				}
 				return 0;
 			}
+		}
+		if (options.verbose_loader) {
+			printf("No embedded translation found for hash %08X\n", checksum);
 		}
 	}
 
