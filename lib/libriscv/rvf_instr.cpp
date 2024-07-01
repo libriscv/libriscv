@@ -755,6 +755,7 @@ namespace riscv
 				dst = RVSIGNTYPE(cpu)(rs1.i64);
 				return;
 			}
+			break;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
@@ -783,6 +784,7 @@ namespace riscv
 				dst.load_u64(rs1);
 				return;
 			}
+			break;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},

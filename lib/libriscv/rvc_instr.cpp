@@ -241,18 +241,19 @@ namespace riscv
 					case 3: // C.AND
 						dst = dst & src;
 						return;
-					case 0x4: // C.SUBW
+					case 4: // C.SUBW
 					if constexpr (RVIS64BIT(cpu)) {
 						dst = (int32_t) ((uint32_t)dst - (uint32_t)src);
 						return;
 					}
-					case 0x5: // C.ADDW
+						break;
+					case 5: // C.ADDW
 					if constexpr (RVIS64BIT(cpu)) {
 						dst = (int32_t) ((uint32_t)dst + (uint32_t)src);
 						return;
 					}
-					case 0x6: // RESERVED
-					case 0x7: // RESERVED
+						break;
+					default:
 						break;
 				}
 		}
