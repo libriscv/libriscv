@@ -136,9 +136,10 @@ struct Emitter
 		if constexpr (CACHED_REGISTERS) {
 			this->restore_all_registers();
 		}
+		const char* return_code = (tinfo.ignore_instruction_limit) ? "return (ReturnValues){0, max_counter};" : "return (ReturnValues){counter, max_counter};";
 		add_code(
 			(new_pc != "cpu->pc") ? "cpu->pc = " + new_pc + ";" : "",
-			"return (ReturnValues){counter, max_counter};", (add_bracket) ? " }" : "");
+			return_code, (add_bracket) ? " }" : "");
 	}
 
 	std::string from_reg(int reg) {
@@ -650,6 +651,7 @@ void Emitter<W>::emit()
 			// XXX: mask off unaligned jumps - is this OK?
 			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
 			bool add_reentry = instr.Jtype.rd != 0;
+			bool already_exited = false;
 			// forward label: jump inside code block
 			if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
 				// forward labels require creating future labels
@@ -686,10 +688,13 @@ void Emitter<W>::emit()
 					// Call the function and get the return values
 					add_code("{ReturnValues rv;");
 					add_forward(target_func);
-					add_code("rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
 					// Update the local counter registers
-					if (!tinfo.ignore_instruction_limit)
+					if (!tinfo.ignore_instruction_limit) {
+						add_code("rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
 						add_code("counter = rv.counter;");
+					} else {
+						add_code("rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
+					}
 					add_code("max_counter = rv.max_counter;}");
 					// If the counter is exhausted, or PC has diverged, exit the function
 					if (instr.Jtype.rd != 0) {
@@ -703,6 +708,7 @@ void Emitter<W>::emit()
 						}
 					}
 					exit_function("cpu->pc", false);
+					already_exited = true;
 				} else {
 					//printf("Jump location inconvenient (backward): 0x%lX at func 0x%lX for block 0x%lX -> 0x%lX\n",
 					//	long(dest_pc), long(target_funcaddr), long(this->begin_pc()), long(this->end_pc()));
@@ -710,7 +716,8 @@ void Emitter<W>::emit()
 			}
 
 			// Because of forward jumps we can't end the function here
-			exit_function(STRADDR(dest_pc), false);
+			if (!already_exited)
+				exit_function(STRADDR(dest_pc), false);
 			if (add_reentry)
 				this->add_reentry_next();
 			} break;
@@ -1061,8 +1068,13 @@ void Emitter<W>::emit()
 						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
 					this->restore_syscall_registers();
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
-					code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
-						"  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+					if (!tinfo.ignore_instruction_limit) {
+						code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
+							"  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+					} else {
+						code += "if (UNLIKELY(do_syscall(cpu, 0, max_counter, " + syscall_reg + "))) {\n"
+							"  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
+					}
 					code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
 					// Restore A0
 					this->invalidate_register(REG_ARG0);
@@ -1082,7 +1094,8 @@ void Emitter<W>::emit()
 			} else {
 				// Non-zero funct3: CSR and other system functions
 				code += "cpu->pc = " + PCRELS(0) + ";\n";
-				code += "INS_COUNTER(cpu) = counter;\n"; // Reveal instruction counters
+				if (!tinfo.ignore_instruction_limit)
+					code += "INS_COUNTER(cpu) = counter;\n"; // Reveal instruction counters
 				code += "MAX_COUNTER(cpu) = max_counter;\n";
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 			} break;
@@ -1520,7 +1533,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 
 	// Forward declarations
 	for (const auto& entry : e.get_forward_declared()) {
-		code += "static ReturnValues " + entry + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc);\n";
+		code += "static ReturnValues " + entry + "(CPU*, uint64_t, uint64_t, addr_t);\n";
 	}
 
 	// Function header
