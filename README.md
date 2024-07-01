@@ -12,18 +12,33 @@ For discussions & help, [visit Discord](https://discord.gg/n4GcXr66X5).
 
 ## Ultra-Low latency emulation
 
-_libriscv_ is an ultra-low latency emulator, designed specifically to have very low overheads when sandboxing certain programs, such as game scripts.
+_libriscv_ is an ultra-low latency emulator, designed specifically to have very low overheads when sandboxing certain programs, such as game scripts. All the listed goals reflect current implementation.
 
 Goals:
 - Lowest possible latency
+	- Calling a guest VM function can finish an order of magnitude before other emulators begin executing the first instruction
 - Modern, type-safe VM call and system call interfaces
+	- The safe interfaces prevents all kinds of footguns that the author has personally suffered, and consequently blocked off forever :-)
 - [Secure speculation-safe sandbox](SECURITY.md)
 - Low attack surface, only 20k LOC
 - Platform-independent and super-easy to embed
-- Shippable high-performance emulation on end-user systems through DLLs (eg. Windows)
+	- Supports platforms with C++20 or later support (GCC/Clang with C++17 or later)
+- Just-in-time compilation for development usage
+	- [libtcc](#embedded-libtcc) can used to instantly improve emulation of RISC-V programs on Linux systems
+- High-performance binary translation on end-user systems through DLLs (eg. Windows)
+	- Cross-compile RISC-V programs to a [binary translated](#binary-translation) .dll executable in _libriscv_ on end-user systems (where shared libraries are allowed)
+- Maximum final-build performance on all platforms, including Consoles, Mobiles, production systems
+	- Supports [embeddable](#full-binary-translation-as-embeddable-code) high-performance binary translations that can be baked into final builds (eg. where shared libraries are not allowed, or static builds are preferred)
+- Tiny memory footprint
+	- Less than 40kB total memory usage for [fibonacci program](/binaries/measure_mips/fib.c)
+- High scalability with special fork support and shared memories
+	- Serve requests using ephemeral VMs in ~1us in production (not microbenchmark/slideware)
+	- Execute segments are automatically shared among all instances (with or without forking)
+- Dynamic linking and run-time dlopen() support
 
 Non goals:
 - Wide support for Linux system calls
+- Proxying system calls
 - Higher performance at the cost of call latency
 
 ## Benchmarks
