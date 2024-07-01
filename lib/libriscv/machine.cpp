@@ -466,23 +466,18 @@ namespace riscv
 		try {
 			simulate_with<true>(max_instructions, counter, pc);
 		} catch (...) {
-			if (timeout > 0.0f) {
-				// Stop the timer
-				disable_timer();
-			}
+			// Stop the timer
+			disable_timer();
 			throw;
 		}
-
-		if (timeout > 0.0f) {
-			disable_timer();
-		}
+		// Stop the timer
+		disable_timer();
 	}
 
 	template <int W>
 	void Machine<W>::disable_timer()
 	{
-		struct itimerspec its;
-		__builtin_memset(&its, 0, sizeof(its));
+		struct itimerspec its {};
 		timer_settime(this->m_timer_id, 0, &its, nullptr);
 	}
 #endif

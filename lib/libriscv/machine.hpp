@@ -406,7 +406,7 @@ namespace riscv
 		Signals<W>& signals();
 		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
 
-#ifdef RISCV_TIMED_VMCALL
+#ifdef RISCV_TIMED_VMCALLS
 		template <uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args>
 		address_t timed_vmcall(float timeout, const char* func_name, Args&&... args);
 

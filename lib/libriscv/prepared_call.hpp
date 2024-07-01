@@ -285,6 +285,15 @@ resolve_return_value:
 			this->prepare(m, m.address_of(func));
 		}
 
+		void prepare(Machine<W>& m)
+		{
+			this->m_machine = &m;
+		}
+
+		PreparedCall(Machine<W>& m, const std::string& func)
+		{
+			this->prepare(m, func);
+		}
 		PreparedCall(Machine<W>& m, address_t call_addr)
 		{
 			this->prepare(m, call_addr);
