@@ -9,6 +9,7 @@
 			abort();         \
 	}                        \
 	goto *computed_opcode[decoder->get_bytecode()];
+#define UNUSED_FUNCTION() ;
 
 #include "cpu_dispatch.cpp"
 

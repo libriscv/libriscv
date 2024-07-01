@@ -5,6 +5,8 @@
 
 #define EXECUTE_INSTR() \
 	break;
+#define UNUSED_FUNCTION() \
+	break;
 
 #include "cpu_dispatch.cpp"
 

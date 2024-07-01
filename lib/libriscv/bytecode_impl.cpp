@@ -43,9 +43,7 @@ INSTRUCTION(RV64I_BC_ADDIW, rv64i_addiw) {
 			((uint32_t)REG(fi.get_rs2()) + fi.signed_imm());
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 #endif // RISCV_64I
 
@@ -257,9 +255,7 @@ INSTRUCTION(RV32I_BC_LDD, rv32i_ldd) {
 			(int64_t)CPU().memory().template read<uint64_t>(addr);
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV32I_BC_STD, rv32i_std) {
 	if constexpr (W >= 8) {
@@ -268,9 +264,7 @@ INSTRUCTION(RV32I_BC_STD, rv32i_std) {
 		CPU().memory().template write<uint64_t>(addr, REG(fi.get_rs2()));
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 #endif // RISCV_64I
 
@@ -298,9 +292,7 @@ INSTRUCTION(RV32C_BC_LDD, rv32c_ldd) {
 			(int64_t)CPU().memory().template read<uint64_t>(addr);
 		NEXT_C_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 	if constexpr (W >= 8) {
@@ -309,9 +301,7 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 		CPU().memory().template write<uint64_t>(addr, REG(fi.get_rs2()));
 		NEXT_C_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 #endif // RISCV_EXT_COMPRESSED
 
@@ -420,9 +410,7 @@ INSTRUCTION(RV64I_BC_OP_ADDW, rv64i_op_addw) {
 		dst = int32_t(uint32_t(src1) + uint32_t(src2));
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV64I_BC_OP_SUBW, rv64i_op_subw) {
 	if constexpr (W >= 8) {
@@ -430,9 +418,7 @@ INSTRUCTION(RV64I_BC_OP_SUBW, rv64i_op_subw) {
 		dst = int32_t(uint32_t(src1) - uint32_t(src2));
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV64I_BC_OP_MULW, rv64i_op_mulw) {
 	if constexpr (W >= 8) {
@@ -440,9 +426,7 @@ INSTRUCTION(RV64I_BC_OP_MULW, rv64i_op_mulw) {
 		dst = int32_t(int32_t(src1) * int32_t(src2));
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV64I_BC_OP_ADD_UW, rv64i_op_add_uw) {
 	if constexpr (W >= 8) {
@@ -450,9 +434,7 @@ INSTRUCTION(RV64I_BC_OP_ADD_UW, rv64i_op_add_uw) {
 		REG(instr.Rtype.rd) = REG(instr.Rtype.rs2) + uint32_t(REG(instr.Rtype.rs1));
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV64I_BC_SLLIW, rv64i_slliw) {
 	if constexpr (W >= 8) {
@@ -461,9 +443,7 @@ INSTRUCTION(RV64I_BC_SLLIW, rv64i_slliw) {
 			((uint32_t)REG(fi.get_rs2()) << fi.imm);
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 	if constexpr (W >= 8) {
@@ -472,9 +452,7 @@ INSTRUCTION(RV64I_BC_SRLIW, rv64i_srliw) {
 			((uint32_t)REG(fi.get_rs2()) >> fi.imm);
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 #endif // RISCV_64I
 
@@ -633,9 +611,7 @@ INSTRUCTION(RV64I_BC_SRAIW, rv64i_sraiw) {
 			(int32_t)REG(fi.get_rs2()) >> fi.imm;
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV64I_BC_OP_SH1ADD_UW, rv64i_op_sh1add_uw) {
 	if constexpr (W >= 8) {
@@ -643,9 +619,7 @@ INSTRUCTION(RV64I_BC_OP_SH1ADD_UW, rv64i_op_sh1add_uw) {
 		dst = src2 + (addr_t(uint32_t(src1)) << 1);
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 INSTRUCTION(RV64I_BC_OP_SH2ADD_UW, rv64i_op_sh2add_uw) {
 	if constexpr (W >= 8) {
@@ -653,9 +627,7 @@ INSTRUCTION(RV64I_BC_OP_SH2ADD_UW, rv64i_op_sh2add_uw) {
 		dst = src2 + (addr_t(uint32_t(src1)) << 2);
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 #endif // RISCV_64I
 
@@ -762,9 +734,7 @@ INSTRUCTION(RV32I_BC_LDWU, rv32i_ldwu) {
 			CPU().memory().template read<uint32_t>(addr);
 		NEXT_INSTR();
 	}
-#ifdef DISPATCH_MODE_TAILCALL
 	else UNUSED_FUNCTION();
-#endif
 }
 #endif // RISCV_64I
 
