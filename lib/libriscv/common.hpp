@@ -346,12 +346,16 @@ namespace riscv
 #endif
 #define RISCV_NOINLINE __attribute__((noinline))
 #define RISCV_ALWAYS_INLINE __attribute__((always_inline))
+#define RISCV_UNREACHABLE() __builtin_unreachable()
 
 #else
 #define LIKELY(x)   (x)
 #define UNLIKELY(x) (x)
 #define RISCV_COLD_PATH() /* */
 #define RISCV_HOT_PATH()  /* */
+#define RISCV_NOINLINE    /* */
+#define RISCV_ALWAYS_INLINE /* */
+#define RISCV_UNREACHABLE()  /* */
 #endif
 
 #ifdef _MSC_VER

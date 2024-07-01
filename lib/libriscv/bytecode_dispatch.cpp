@@ -6,7 +6,7 @@
 #define EXECUTE_INSTR() \
 	break;
 #define UNUSED_FUNCTION() \
-	break;
+	RISCV_UNREACHABLE(); break;
 
 #include "cpu_dispatch.cpp"
 

@@ -9,7 +9,8 @@
 			abort();         \
 	}                        \
 	goto *computed_opcode[decoder->get_bytecode()];
-#define UNUSED_FUNCTION() ;
+#define UNUSED_FUNCTION() \
+	RISCV_UNREACHABLE();
 
 #include "cpu_dispatch.cpp"
 
