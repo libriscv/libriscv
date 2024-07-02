@@ -60,8 +60,9 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 		bool is_binary_translated() const noexcept { return !m_translator_mappings.empty(); }
+		bool is_libtcc() const noexcept { return m_is_libtcc; }
 		void* binary_translation_so() const { return m_bintr_dl; }
-		void set_binary_translated(void* dl) const { m_bintr_dl = dl; }
+		void set_binary_translated(void* dl, bool is_libtcc) const { m_bintr_dl = dl; m_is_libtcc = is_libtcc; }
 		uint32_t translation_hash() const { return m_bintr_hash; }
 		void set_translation_hash(uint32_t hash) { m_bintr_hash = hash; }
 		void reserve_mappings(size_t mappings) { m_translator_mappings.reserve(mappings); }
@@ -101,6 +102,9 @@ namespace riscv
 #endif
 		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment
 		bool m_is_execute_only = false;
+#ifdef RISCV_BINARY_TRANSLATION
+		mutable bool m_is_libtcc = false;
+#endif
 	};
 
 	template <int W>
@@ -140,9 +144,9 @@ namespace riscv
 	inline DecodedExecuteSegment<W>::~DecodedExecuteSegment()
 	{
 #ifdef RISCV_BINARY_TRANSLATION
-		extern void  dylib_close(void* dylib);
+		extern void  dylib_close(void* dylib, bool is_libtcc);
 		if (m_bintr_dl)
-			dylib_close(m_bintr_dl);
+			dylib_close(m_bintr_dl, m_is_libtcc);
 #endif
 	}
 

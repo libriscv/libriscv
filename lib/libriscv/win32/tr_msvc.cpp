@@ -15,12 +15,12 @@ namespace riscv
 		return nullptr;
 	}
 
-	void* dylib_lookup(void* dylib, const char* symbol)
+	void* dylib_lookup(void* dylib, const char* symbol, bool)
 	{
 		return dlsym(dylib, symbol);
 	}
 
-	void dylib_close(void* dylib)
+	void dylib_close(void* dylib, bool)
 	{
 		dlclose(dylib);
 	}

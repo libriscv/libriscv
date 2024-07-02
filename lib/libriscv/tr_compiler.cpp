@@ -160,13 +160,27 @@ namespace riscv
 		return true;
 	}
 
-	void* dylib_lookup(void* dylib, const char* symbol)
+	extern void  tcc_close(void* state);
+	extern void* tcc_lookup(void* state, const char*);
+
+	void* dylib_lookup(void* dylib, const char* symbol, bool is_libtcc)
 	{
+#ifdef RISCV_LIBTCC
+		if (is_libtcc) {
+			return tcc_lookup(dylib, symbol);
+		}
+#endif
 		return dlsym(dylib, symbol);
 	}
 
-	void dylib_close(void* dylib)
+	void dylib_close(void* dylib, bool is_libtcc)
 	{
+#ifdef RISCV_LIBTCC
+		if (is_libtcc) {
+			tcc_close(dylib);
+			return;
+		}
+#endif
 		dlclose(dylib);
 	}
 }
