@@ -35,6 +35,13 @@ function usage()
 HEREDOC
 }
 
+embed_all()
+{
+	for file in $(ls -1 *.cpp); do
+		EMBED_FILES="$EMBED_FILES;$file"
+	done
+}
+
 while [[ "$#" -gt 0 ]]; do
     case $1 in
 		-h|--help ) usage; exit; ;;
@@ -55,8 +62,9 @@ while [[ "$#" -gt 0 ]]; do
         -t|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
         -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;
 		--embed) EMBED_FILES="$EMBED_FILES;$2"; shift ;;
+		--embed-all) embed_all ;;
 		-v|--verbose ) set -x ;;
-        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+		*) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
 done

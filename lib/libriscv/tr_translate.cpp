@@ -183,14 +183,6 @@ template <int W>
 int CPU<W>::load_translation(const MachineOptions<W>& options,
 	std::string* filename, DecodedExecuteSegment<W>& exec) const
 {
-	// Binary translation using libtcc doesn't use files
-	if constexpr (libtcc_enabled) {
-		if (options.translate_enabled)
-			return 1;
-		else
-			return -1;
-	}
-
 	// Disable translator by setting options.translate_enabled to false
 	// or by setting max blocks to zero.
 	if (0 == options.translate_blocks_max || (!options.translate_enabled && !options.translate_enable_embedded)) {
@@ -248,10 +240,18 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		}
 	}
 
+	// Binary translation using libtcc doesn't use files
+	// (although we always allow embedding the translation)
+	if constexpr (libtcc_enabled) {
+		if (options.translate_enabled)
+			return 1;
+		else
+			return -1;
+	}
 	if (!options.translate_enabled)
 		return -1;
 
-	char filebuffer[256];
+	char filebuffer[512];
 	int len = snprintf(filebuffer, sizeof(filebuffer),
 		"%s%08X%s", options.translation_prefix.c_str(), checksum, options.translation_suffix.c_str());
 	if (len <= 0)
