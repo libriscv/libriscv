@@ -399,12 +399,16 @@ static void run_program(
 			machine.set_max_instructions(~0ULL);
 			machine.cpu.simulate_precise();
 		} else {
-#ifdef RISCV_TIMED_VMCALLS
-			// Simulation with experimental timeout
-			machine.execute_with_timeout(30.0f, ~0ULL, 0U, machine.cpu.pc());
-#else
 			// Normal RISC-V simulation
-			machine.simulate(cli_args.fuel);
+			if (cli_args.accurate)
+				machine.simulate(cli_args.fuel);
+			else
+#ifdef RISCV_TIMED_VMCALLS
+				// Simulation with experimental timeout
+				machine.execute_with_timeout(30.0f, machine.cpu.pc());
+#else
+				// Simulate until it eventually stops (or user interrupts)
+				machine.cpu.simulate_inaccurate(machine.cpu.pc());
 #endif
 		}
 	} catch (riscv::MachineException& me) {
@@ -444,7 +448,7 @@ static void run_program(
 		const auto retval = machine.return_value();
 		printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
 			int64_t(retval), uint64_t(retval));
-		if (cli_args.accurate || !riscv::binary_translation_enabled)
+		if (cli_args.accurate)
 		printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms  Insn/s: %.0fmi/s\n",
 			machine.instruction_counter(), runtime.count()*1000.0,
 			machine.instruction_counter() / (runtime.count() * 1e6));

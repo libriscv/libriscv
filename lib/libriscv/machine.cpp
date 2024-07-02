@@ -417,7 +417,7 @@ namespace riscv
 	}
 
 	template <int W>
-	void Machine<W>::execute_with_timeout(float timeout, uint64_t max_instructions, uint64_t counter, address_t pc)
+	void Machine<W>::execute_with_timeout(float timeout, address_t pc)
 	{
 		if (this->m_timer_id == nullptr)
 		{
@@ -464,7 +464,7 @@ namespace riscv
 
 		// Execute the VM call
 		try {
-			simulate_with<true>(max_instructions, counter, pc);
+			cpu.simulate_inaccurate(pc);
 		} catch (...) {
 			// Stop the timer
 			disable_timer();

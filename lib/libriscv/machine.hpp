@@ -407,10 +407,10 @@ namespace riscv
 		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
 
 #ifdef RISCV_TIMED_VMCALLS
-		template <uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args>
+		template <typename... Args>
 		address_t timed_vmcall(float timeout, const char* func_name, Args&&... args);
 
-		template <uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args>
+		template <typename... Args>
 		address_t timed_vmcall(float timeout, address_t func_addr, Args&&... args);
 #endif
 
@@ -458,7 +458,7 @@ namespace riscv
 
 #ifdef RISCV_TIMED_VMCALLS
 	public:
-		void execute_with_timeout(float timeout, uint64_t max_instructions, uint64_t counter, address_t pc);
+		void execute_with_timeout(float timeout, address_t pc);
 	private:
 		void disable_timer();
 		void* m_timer_id = nullptr;

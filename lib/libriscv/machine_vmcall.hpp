@@ -53,22 +53,22 @@ inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 
 #ifdef RISCV_TIMED_VMCALLS
 template <int W>
-template <uint64_t MAXI, bool Throw, typename... Args>
+template <typename... Args>
 inline address_type<W> Machine<W>::timed_vmcall(float timeout, address_t pc, Args&&... args)
 {
 	this->cpu.reset_stack_pointer();
 	this->setup_call(std::forward<Args>(args)...);
-	this->execute_with_timeout(timeout, MAXI, 0u, pc);
+	this->execute_with_timeout(timeout, pc);
 
 	return cpu.reg(REG_ARG0);
 }
 
 template <int W>
-template <uint64_t MAXI, bool Throw, typename... Args>
+template <typename... Args>
 inline address_type<W> Machine<W>::timed_vmcall(float timeout, const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
-	return timed_vmcall<MAXI, Throw>(timeout, call_addr, std::forward<Args>(args)...);
+	return timed_vmcall(timeout, call_addr, std::forward<Args>(args)...);
 }
 #endif
 

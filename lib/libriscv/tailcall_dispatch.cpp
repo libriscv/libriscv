@@ -353,7 +353,14 @@ namespace riscv
 		// Machine stopped normally?
 		return counter.max() == 0;
 
-	} // CPU::simulate_tco()
+	} // CPU::simulate()
+
+	template <int W>
+	void CPU<W>::simulate_inaccurate(address_t pc)
+	{
+		if (!simulate(pc, 0, ~0ULL))
+			throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED, "Execution limit reached");
+	}
 
 	INSTANTIATE_32_IF_ENABLED(CPU);
 	INSTANTIATE_64_IF_ENABLED(CPU);
