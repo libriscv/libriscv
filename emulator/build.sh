@@ -13,9 +13,11 @@ function usage()
 
    optional arguments:
      -h, --help           show this help message and exit
+	 --no-bintr           disable binary translation
      -b, --bintr          enable binary translation using system compiler
      -t, --tcc            jit-compile using tcc
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing, etc.)
+	 -e, --embed FILE     embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 
 HEREDOC
@@ -24,6 +26,7 @@ HEREDOC
 while [[ "$#" -gt 0 ]]; do
     case $1 in
 		-h|--help ) usage; exit; ;;
+        --no-bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=OFF" ;;
         -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
         -t|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
         -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;

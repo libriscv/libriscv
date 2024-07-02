@@ -27,6 +27,7 @@ namespace riscv
 #undef NEXT_SEGMENT
 #undef PERFORM_BRANCH
 #undef PERFORM_FORWARD_BRANCH
+#undef OVERFLOW_CHECKED_JUMP
 
 #define VIEW_INSTR() \
 	auto instr = *(rv32i_instruction *)&decoder->instr;
@@ -62,8 +63,11 @@ namespace riscv
 
 #define PERFORM_FORWARD_BRANCH PERFORM_BRANCH
 
-#define OVERFLOW_CHECKED_JUMP() \
-	goto check_jump
+#define OVERFLOW_CHECKED_JUMP()                                   \
+	if (LIKELY(pc - current_begin < current_end - current_begin)) \
+		goto continue_segment;                                    \
+	else                                                          \
+		goto new_execute_segment;
 
 	template <int W>
 	DISPATCH_ATTR void CPU<W>::simulate_inaccurate(address_t pc)
@@ -202,8 +206,6 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 	check_jump:
 		if (LIKELY(pc - current_begin < current_end - current_begin))
 			goto continue_segment;
-		else
-			goto new_execute_segment;
 
 		// Change to a new execute segment
 	new_execute_segment:
