@@ -47,8 +47,8 @@ namespace riscv
 			x = time_now();           \
 			asm("" : : : "memory");   \
 		}
-	extern void  dylib_close(void* dylib);
-	extern void* dylib_lookup(void* dylib, const char*);
+	extern void  dylib_close(void* dylib, bool is_libtcc);
+	extern void* dylib_lookup(void* dylib, const char*, bool is_libtcc);
 
 	template <int W>
 	using binary_translation_init_func = void (*)(const CallbackTable<W>&, void*);
@@ -189,7 +189,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		if (options.verbose_loader) {
 			printf("libriscv: Binary translation disabled\n");
 		}
-		exec.set_binary_translated(nullptr);
+		exec.set_binary_translated(nullptr, false);
 		return -1;
 	}
 	if (exec.is_binary_translated()) {
@@ -240,14 +240,6 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		}
 	}
 
-	// Binary translation using libtcc doesn't use files
-	// (although we always allow embedding the translation)
-	if constexpr (libtcc_enabled) {
-		if (options.translate_enabled)
-			return 1;
-		else
-			return -1;
-	}
 	if (!options.translate_enabled)
 		return -1;
 
@@ -278,6 +270,14 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	}
 	bool must_compile = dylib == nullptr;
 
+	// JIT-compilation with libtcc is secondary to high-performance
+	// pre-compiled translations. If no embedded translation is found,
+	// and no shared library is found we may JIT-compile the translation.
+	if constexpr (libtcc_enabled) {
+		if (must_compile)
+			return 1;
+	}
+
 #ifndef _MSC_VER
 	// If cross compilation is enabled, we should check if all results exist
 	for (auto& cc : options.cross_compile) {
@@ -306,7 +306,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return 1;
 	}
 
-	this->activate_dylib(options, exec, dylib);
+	this->activate_dylib(options, exec, dylib, false);
 
 	if (options.translate_timing) {
 		TIME_POINT(t10);
@@ -682,7 +682,7 @@ VISIBLE const struct Mapping mappings[] = {
 	}
 
 	if (!exec.is_binary_translated()) {
-		this->activate_dylib(options, exec, dylib);
+		this->activate_dylib(options, exec, dylib, libtcc_enabled);
 	}
 
 	if constexpr (!libtcc_enabled) {
@@ -698,36 +698,37 @@ VISIBLE const struct Mapping mappings[] = {
 }
 
 template <int W>
-void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib) const
+void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, bool is_libtcc) const
 {
 	TIME_POINT(t11);
 
-	if (!initialize_translated_segment(exec, dylib))
+	if (!initialize_translated_segment(exec, dylib, is_libtcc))
 	{
 		if constexpr (!libtcc_enabled) {
 			// only warn when translation is not already disabled
-			if (!options.translate_enabled) {
+			if (options.verbose_loader) {
 				fprintf(stderr, "libriscv: Could not find dylib init function\n");
 			}
 		}
-		if (dylib != nullptr)
-			dylib_close(dylib);
-		exec.set_binary_translated(nullptr);
+		if (dylib != nullptr) {
+			dylib_close(dylib, is_libtcc);
+		}
+		exec.set_binary_translated(nullptr, false);
 		return;
 	}
 
 	// Map all the functions to instruction handlers
-	const uint32_t* no_mappings = (const uint32_t *)dylib_lookup(dylib, "no_mappings");
-	const auto* mappings = (const Mapping<W> *)dylib_lookup(dylib, "mappings");
+	const uint32_t* no_mappings = (const uint32_t *)dylib_lookup(dylib, "no_mappings", is_libtcc);
+	const auto* mappings = (const Mapping<W> *)dylib_lookup(dylib, "mappings", is_libtcc);
 
 	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
-		dylib_close(dylib);
-		exec.set_binary_translated(nullptr);
+		dylib_close(dylib, is_libtcc);
+		exec.set_binary_translated(nullptr, false);
 		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
 	}
 
 	// After this, we should automatically close the dylib on destruction
-	exec.set_binary_translated(dylib);
+	exec.set_binary_translated(dylib, is_libtcc);
 
 	// Apply mappings to decoder cache
 	const auto nmappings = *no_mappings;
@@ -835,17 +836,13 @@ CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 		},
 		.syscalls = cpu.machine().syscall_handlers.data(),
 		.system_call = [] (CPU<W>& cpu, int sysno) -> int {
-			if constexpr (libtcc_enabled) {
-				try {
-					const auto current_pc = cpu.registers().pc;
-					cpu.machine().system_call(sysno);
-					return cpu.registers().pc != current_pc || cpu.machine().stopped();
-				} catch (...) {
-					cpu.set_current_exception(std::current_exception());
-					cpu.machine().stop();
-					return false;
-				}
-			} else {
+			try {
+				const auto current_pc = cpu.registers().pc;
+				cpu.machine().system_call(sysno);
+				return cpu.registers().pc != current_pc || cpu.machine().stopped();
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
 				return false;
 			}
 		},
@@ -853,7 +850,7 @@ CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 			cpu.machine().on_unhandled_syscall(cpu.machine(), sysno);
 		},
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
-			if constexpr (libtcc_enabled) {
+			if (libtcc_enabled && cpu.current_execute_segment().is_libtcc()) {
 				try {
 					cpu.machine().system(rv32i_instruction{instr});
 				} catch (...) {
@@ -893,7 +890,8 @@ CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 		.handlers = (void (**)(CPU<W>&, uint32_t)) DecoderData<W>::get_handlers(),
 		.trigger_exception = [] (CPU<W>& cpu, address_type<W> pc, int e) {
 			cpu.registers().pc = pc; // XXX: Set PC to the failing instruction (?)
-			if constexpr (libtcc_enabled) {
+			if (libtcc_enabled && cpu.current_execute_segment().is_libtcc())
+			{
 				// If we're using libtcc, we can't throw C++ exceptions because
 				// there's no unwinding support. But we can mark an exception
 				// in the CPU state and return back to dispatch.
@@ -904,9 +902,9 @@ CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 					// Trigger a slow-path in dispatch (which will check for exceptions)
 					cpu.machine().stop();
 				}
-			} else {
-				cpu.trigger_exception(e);
+				return;
 			}
+			cpu.trigger_exception(e);
 		},
 		.trace = [] (CPU<W>& cpu, const char* msg, address_type<W> addr, uint32_t instr) {
 			(void)cpu;
@@ -964,12 +962,12 @@ CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 }
 
 template <int W>
-bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dylib) const
+bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dylib, bool is_libtcc) const
 {
 	// NOTE: At some point this must be able to duplicate the dylib
 	// in order to be able to share execute segments across machines.
 
-	auto* ptr = dylib_lookup(dylib, "init"); // init() function
+	auto* ptr = dylib_lookup(dylib, "init", is_libtcc); // init() function
 	if (ptr == nullptr) {
 		return false;
 	}
@@ -993,15 +991,15 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 #ifdef RISCV_32I
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
-	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib) const;
-	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*) const;
+	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib, bool) const;
+	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*, bool) const;
 	template std::string MachineOptions<4>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 #ifdef RISCV_64I
 	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
-	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib) const;
-	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*) const;
+	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib, bool) const;
+	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*, bool) const;
 	template std::string MachineOptions<8>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 

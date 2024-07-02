@@ -136,12 +136,13 @@ if (RISCV_BINARY_TRANSLATION)
 		libriscv/tr_emit.cpp
 		libriscv/tr_translate.cpp
 	)
-	if (RISCV_LIBTCC)
-		list(APPEND SOURCES libriscv/tr_tcc.cpp)
-	elseif (MSVC)
+	if (MSVC)
 		list(APPEND SOURCES libriscv/win32/tr_msvc.cpp)
 	else()
 		list(APPEND SOURCES libriscv/tr_compiler.cpp)
+		if (RISCV_LIBTCC)
+			list(APPEND SOURCES libriscv/tr_tcc.cpp)
+		endif()
 	endif()
 endif()
 

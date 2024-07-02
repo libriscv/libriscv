@@ -55,12 +55,12 @@ namespace riscv
 		return state;
 	}
 
-	void* dylib_lookup(void* state, const char* symbol)
+	void* tcc_lookup(void* state, const char* symbol)
 	{
 		return tcc_get_symbol((TCCState *)state, symbol);
 	}
 
-	void dylib_close(void* state)
+	void tcc_close(void* state)
 	{
 		tcc_delete((TCCState *)state);
 	}
