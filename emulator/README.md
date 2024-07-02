@@ -26,21 +26,58 @@ Usage: ./rvlinux [options] <program> [args]
 Options:
   -h, --help         Print this help message
   -v, --verbose      Enable verbose loader output
+  -a, --accurate     Accurate instruction counting
   -d, --debug        Enable CLI debugger
-  -f, --fuel         Set max instructions until program halts
+  -1, --single-step  One instruction at a time, enabling exact exceptions
+  -f, --fuel amt     Set max instructions until program halts
   -g, --gdb          Start GDB server on port 2159
   -s, --silent       Suppress program completion information
   -t, --timing       Enable timing information in binary translator
   -T, --trace        Enable tracing in binary translator
   -n, --no-translate Disable binary translation
   -m, --mingw        Cross-compile for Windows (MinGW)
+  -o, --output file  Output embeddable binary translated code (C99)
   -F, --from-start   Start debugger from the beginning (_start)
   -S  --sandbox      Enable strict sandbox
+  -I, --ignore-text  Ignore .text section, and use segments only
+  -c, --call func    Call a function after loading the program
 ```
 
 In order to use the CLI you will need some RISC-V programs. There are a few ready-to-run programs in the [tests/unit/elf](/tests/unit/elf) folder. These are part of the automated tests for the emulator.
 
 If you are looking for the internals of the RISC-V emulator, that is in the [library folder](/lib/libriscv/). If you want to use it as a library, then that is shown in the [examples folder](/examples).
+
+## Build options
+
+The CLI can be built with a variety of options.
+
+```
+$ ./build.sh --help
+
+   Usage: build.sh [options] [--embed file] [--embed file] ...
+
+   optional arguments:
+     -h, --help           show this help message and exit
+     --A                  enable atomic extension
+     --no-A               disable atomic extension
+     --C                  enable compressed extension
+     --no-C               disable compressed extension
+     --V                  enable vector extension
+     --no-V               disable vector extension
+     --32                 enable RV32
+     --no-32              disable RV32
+     --64                 enable RV64
+     --no-64              disable RV64
+     --128                enable RV128
+     --no-128             disable RV128
+     -b, --bintr          enable binary translation using system compiler
+     -t, --tcc            jit-compile using tcc
+     --no-bintr           disable binary translation
+     -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
+     --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
+     -v, --verbose        increase the verbosity of the bash script
+
+```
 
 ## Debugging
 
