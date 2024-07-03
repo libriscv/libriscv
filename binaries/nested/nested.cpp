@@ -1,7 +1,7 @@
 #include <chrono>
 #include <libriscv/machine.hpp>
 #include <inttypes.h>
-static constexpr uint64_t MAX_MEMORY = 2000ULL << 20;
+static constexpr uint64_t MAX_MEMORY = 512ULL << 20;
 static constexpr int  RISCV_ARCH = 8; // 64-bit
 static constexpr bool verbose_enabled = true;
 #include "stream.h"
@@ -22,13 +22,11 @@ int main()
 
 	// Linux system to open files and access internet
 	machine.setup_linux_syscalls();
-	machine.fds().permit_filesystem = true;
-	machine.fds().permit_sockets = true;
 
 	auto t0 = std::chrono::high_resolution_clock::now();
 	try {
 		// Normal RISC-V simulation
-		machine.simulate();
+		machine.cpu.simulate_inaccurate(machine.cpu.pc());
 	} catch (const riscv::MachineException& me) {
 		printf("%s\n", machine.cpu.current_instruction_to_string().c_str());
 		printf(">>> Machine exception %d: %s (data: 0x%" PRIX64 ")\n",

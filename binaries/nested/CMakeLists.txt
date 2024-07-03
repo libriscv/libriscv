@@ -19,6 +19,9 @@ endif()
 
 option(RISCV_EXT_C "" OFF)
 option(RISCV_EXT_V "" ON)
+option(RISCV_EXPERIMENTAL "" ON)
+option(RISCV_ENCOMPASSING_ARENA "" ON)
+set(RISCV_ENCOMPASSING_ARENA_BITS "30" CACHE STRING "Encompassing arena bits")
 add_subdirectory(../../lib lib)
 
 add_executable(nested ${SOURCES})
