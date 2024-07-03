@@ -6,6 +6,8 @@ riscv32-unknown-elf/
 emulator/*rvmicro
 emulator/*rvnewlib
 emulator/*rvlinux
+emulator/*.cpp
+emulator/*.dll
 **/libtcc1.a
 nodiverge
 tests/autotest/emulator/emulator
