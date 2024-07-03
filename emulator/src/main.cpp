@@ -3,6 +3,7 @@
 #include <libriscv/rsp_server.hpp>
 #include <inttypes.h>
 #include <chrono>
+#include <thread>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = 2000ULL << 20;
@@ -219,6 +220,12 @@ static void run_program(
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
 #else
+		.translate_background_callback =
+			[] (auto& compilation_step) {
+				std::thread([compilation_step = std::move(compilation_step)] {
+					compilation_step();
+				}).detach();
+			},
 		.cross_compile = cc,
 #endif
 #endif

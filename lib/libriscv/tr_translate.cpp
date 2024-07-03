@@ -26,6 +26,7 @@ extern "C" int unlink(const char* path);
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
 #include "safe_instr_loader.hpp"
+#include "threaded_bytecodes.hpp"
 #include "tr_api.hpp"
 #include "tr_types.hpp"
 #include "util/crc32.hpp"
@@ -220,10 +221,10 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 					printf("Found embedded translation for hash %08X\n", checksum);
 				}
 				*translation.api_table = create_bintr_callback_table(*this);
-				exec.reserve_mappings(translation.nmappings);
+				exec.create_mappings(translation.nmappings);
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
-					exec.add_mapping(mapping.handler);
+					exec.set_mapping(i, mapping.handler);
 					auto& entry = decoder_entry_at(exec, mapping.addr);
 					if (mapping.handler != nullptr) {
 						entry.instr = i;
@@ -306,7 +307,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return 1;
 	}
 
-	this->activate_dylib(options, exec, dylib, false);
+	this->activate_dylib(options, exec, dylib, false, false);
 
 	if (options.translate_timing) {
 		TIME_POINT(t10);
@@ -591,106 +592,121 @@ VISIBLE const struct Mapping mappings[] = {
 	}
 
 	const auto defines = create_defines_for(machine(), options);
-	void* dylib = nullptr;
-	// Final shared library loadable code w/footer
-	const std::string shared_library_code = code + footer;
+	const bool live_patch = options.translate_background_callback != nullptr;
 
-	TIME_POINT(t9);
-	if constexpr (libtcc_enabled) {
-		extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
-		static std::mutex libtcc_mutex;
-		// libtcc uses global state, so we need to serialize compilation
-		std::lock_guard<std::mutex> lock(libtcc_mutex);
-		dylib = libtcc_compile(shared_library_code, W, defines, options.libtcc1_location);
-	} else {
-		extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
-		extern bool mingw_compile(const std::string&, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
-		const std::string cflags = defines_to_string(defines);
+	std::function<void()> compilation_step =
+	[this, options, defines = std::move(defines), code = std::move(code), footer = std::move(footer), filename, exec = &exec, live_patch] () mutable
+	{
+		void* dylib = nullptr;
+		// Final shared library loadable code w/footer
+		const std::string shared_library_code = code + footer;
 
-		// If the binary translation has already been loaded, we can skip compilation
-		if (exec.is_binary_translated()) {
-			dylib = exec.binary_translation_so();
+		TIME_POINT(t9);
+		if constexpr (libtcc_enabled) {
+			extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
+			static std::mutex libtcc_mutex;
+			// libtcc uses global state, so we need to serialize compilation
+			std::lock_guard<std::mutex> lock(libtcc_mutex);
+			dylib = libtcc_compile(shared_library_code, W, defines, "");
 		} else {
-			dylib = compile(shared_library_code, W, cflags, filename);
-		}
+			extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
+			extern bool mingw_compile(const std::string&, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
+			const std::string cflags = defines_to_string(defines);
 
-		// Optionally produce cross-compiled binaries
-		for (auto& cc : options.cross_compile)
-		{
-			if (std::holds_alternative<MachineTranslationCrossOptions>(cc))
-			{
-#ifndef _MSC_VER
-				auto& mingw = std::get<MachineTranslationCrossOptions>(cc);
-				const uint32_t hash = exec.translation_hash();
-				const std::string cross_filename = options.translation_filename(
-					mingw.cross_prefix, hash, mingw.cross_suffix);
-				mingw_compile(shared_library_code, W, cflags, cross_filename, mingw);
-#endif
+			// If the binary translation has already been loaded, we can skip compilation
+			if (exec->is_binary_translated()) {
+				dylib = exec->binary_translation_so();
+			} else {
+				dylib = compile(shared_library_code, W, cflags, filename);
 			}
-			else if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
+
+			// Optionally produce cross-compiled binaries
+			for (auto& cc : options.cross_compile)
 			{
-				auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
-				const uint32_t hash = exec.translation_hash();
-				const std::string& embed_filename = options.translation_filename(
-					embed.prefix, hash, embed.suffix);
-				// Write the embeddable code to a file
-				std::ofstream embed_file(embed_filename);
-				embed_file << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
-				for (auto& def : defines) {
-					embed_file << "#define " << def.first << " " << def.second << "\n";
-				}
-				embed_file << code;
-				// Construct a footer that self-registers the translation
-				const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
-				embed_file << R"V0G0N(
-				struct Mappings {
-					addr_t addr;
-					ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
-				};
-				extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
-				extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
-				static __attribute__((constructor)) void register_translation() {
-					static const Mappings mappings[] = {
-				)V0G0N";
-				for (const auto& mapping : dlmappings)
+				if (std::holds_alternative<MachineTranslationCrossOptions>(cc))
 				{
-					char buffer[128];
-					snprintf(buffer, sizeof(buffer), 
-						"{0x%lX, %s},\n",
-						(long)mapping.addr, mapping.symbol.c_str());
-					embed_file << buffer;
+	#ifndef _MSC_VER
+					auto& mingw = std::get<MachineTranslationCrossOptions>(cc);
+					const uint32_t hash = exec->translation_hash();
+					const std::string cross_filename = options.translation_filename(
+						mingw.cross_prefix, hash, mingw.cross_suffix);
+					mingw_compile(shared_library_code, W, cflags, cross_filename, mingw);
+	#endif
 				}
-				embed_file << "    };\n";
-				embed_file << "    " << reg_func << "(" << hash << ", mappings, " << dlmappings.size() << ", &api);\n";
-				embed_file << "}\n";
 			}
-			else
+		}
+
+		if (options.translate_timing) {
+			TIME_POINT(t10);
+			printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
+		}
+
+		// Check compilation result
+		if (dylib == nullptr) {
+			return;
+		}
+
+		if (!exec->is_binary_translated()) {
+			this->activate_dylib(options, *exec, dylib, libtcc_enabled, live_patch);
+		}
+
+		if constexpr (!libtcc_enabled) {
+			if (!options.translation_cache) {
+				// Delete the program if the shared ELF is unwanted
+				unlink(filename.c_str());
+			}
+		}
+	};
+
+	for (auto& cc : options.cross_compile)
+	{
+		if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
+		{
+			auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
+			const uint32_t hash = exec.translation_hash();
+			const std::string& embed_filename = options.translation_filename(
+				embed.prefix, hash, embed.suffix);
+			// Write the embeddable code to a file
+			std::ofstream embed_file(embed_filename);
+			embed_file << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
+			for (auto& def : defines) {
+				embed_file << "#define " << def.first << " " << def.second << "\n";
+			}
+			embed_file << code;
+			// Construct a footer that self-registers the translation
+			const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
+			embed_file << R"V0G0N(
+			struct Mappings {
+				addr_t addr;
+				ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
+			};
+			extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
+			extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
+			static __attribute__((constructor)) void register_translation() {
+				static const Mappings mappings[] = {
+			)V0G0N";
+			for (const auto& mapping : dlmappings)
 			{
-				throw MachineException(INVALID_PROGRAM, "Invalid/unrecognized cross-compile option");
+				char buffer[128];
+				snprintf(buffer, sizeof(buffer), 
+					"{0x%lX, %s},\n",
+					(long)mapping.addr, mapping.symbol.c_str());
+				embed_file << buffer;
 			}
+			embed_file << "    };\n";
+			embed_file << "    " << reg_func << "(" << hash << ", mappings, " << dlmappings.size() << ", &api);\n";
+			embed_file << "}\n";
 		}
 	}
 
-	if (options.translate_timing) {
-		TIME_POINT(t10);
-		printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
+	if (options.translate_background_callback) {
+		// User-provided callback for background compilation
+		options.translate_background_callback(compilation_step);
+	} else {
+		// Synchronous compilation
+		compilation_step();
 	}
 
-	// Check compilation result
-	if (dylib == nullptr) {
-		return;
-	}
-
-	if (!exec.is_binary_translated()) {
-		this->activate_dylib(options, exec, dylib, libtcc_enabled);
-	}
-
-	if constexpr (!libtcc_enabled) {
-		if (!options.translation_cache) {
-			// Delete the program if the shared ELF is unwanted
-			unlink(filename.c_str());
-		}
-	}
 	if (options.translate_timing) {
 		TIME_POINT(t12);
 		printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
@@ -698,7 +714,7 @@ VISIBLE const struct Mapping mappings[] = {
 }
 
 template <int W>
-void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, bool is_libtcc) const
+void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, bool is_libtcc, bool live_patch) const
 {
 	TIME_POINT(t11);
 
@@ -730,17 +746,70 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// After this, we should automatically close the dylib on destruction
 	exec.set_binary_translated(dylib, is_libtcc);
 
+	// Helper to rebuild decoder blocks
+	unsigned livepatch_counter = 0;
+	unsigned livepatch_counter_block_end = 0;
+	unsigned livepatch_counter_hotpatch = 0;
+
 	// Apply mappings to decoder cache
 	const auto nmappings = *no_mappings;
-	exec.reserve_mappings(nmappings);
+	exec.create_mappings(nmappings);
 	for (unsigned i = 0; i < nmappings; i++) {
 		const auto addr = mappings[i].addr;
 		if (exec.is_within(addr)) {
-			exec.add_mapping(mappings[i].handler);
+			exec.set_mapping(i, mappings[i].handler);
 			auto& entry = decoder_entry_at(exec, addr);
 			if (mappings[i].handler != nullptr) {
-				entry.instr = i;
-				entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+				if (live_patch) {
+					livepatch_counter++;
+					// When live-patching we can only insert translations where blocks end.
+					if (entry.block_bytes() == 0) {
+						auto dd = entry;
+						dd.instr = i;
+						dd.set_bytecode(RV32I_BC_TRANSLATOR);
+
+						// Atomic overwrite of the 64-bit entry with the new one
+						entry.atomic_overwrite(dd);
+						livepatch_counter_block_end++;
+					} else if (true) {
+						// Here it gets complicated. We can't insert translations without the
+						// block ending, so we have to live-patch changes to slowly make the
+						// block end at the right place.
+						// 1. The last instruction will be the current entry
+						// 2. Later instructions will work as normal
+						// 3. Look back to find the beginning of the block
+						auto* last    = &entry;
+						auto* current = &entry;
+						while ((current-1)->block_bytes() != 0) {
+							current--;
+						}
+						auto addr_patch = addr + entry.block_bytes() - current->block_bytes();
+						// 4. Erase each instruction in the block, by replacing each
+						// with a block-ending instruction, lowering performance temporarily.
+						for (auto* dd = current; dd < last; dd++) {
+							auto instr = read_instruction(exec.exec_data(), addr_patch, exec.exec_end());
+							auto d = *dd;
+							d.set_bytecode(RV32I_BC_FUNCBLOCK);
+							d.idxend = 0; // 0(+1) instructions to next block
+							d.instr  = instr.whole;
+							dd->atomic_overwrite(d);
+							addr_patch += instr.length();
+						}
+						// 5. Insert the new translation at the end of the block
+						auto dd = entry;
+						dd.set_bytecode(RV32I_BC_TRANSLATOR);
+						dd.idxend = 0;
+						dd.instr  = i;
+						entry.atomic_overwrite(dd);
+
+						livepatch_counter_hotpatch++;
+					}
+				} else {
+					// Normal block-end hint that will be transformed into a translation
+					// bytecode if it passes a few more checks, later.
+					entry.instr = i;
+					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+				}
 			} else {
 				entry.set_bytecode(0x0); /* Invalid opcode */
 			}
@@ -749,13 +818,21 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				fprintf(stderr, "libriscv: Translation mapping 0x%lX outside execute area 0x%lX-0x%lX\n",
 					(long)addr, (long)exec.exec_begin(), (long)exec.exec_end());
 			}
-			exec.add_mapping([] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
+			exec.set_mapping(i, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
 				throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 			});
 			//throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
 			// It might be technically possible to produce some valid instructions in the
 			// padding areas, but it's not worth the effort to support this. Ignore.
 			continue;
+		}
+	}
+
+	if (options.verbose_loader) {
+		printf("libriscv: Activated binary translation with %u mappings\n", nmappings);
+		if (live_patch) {
+			printf("libriscv: Live-patching enabled, %u block-ends, %u hot-patches (%u total)\n",
+				livepatch_counter_block_end, livepatch_counter_hotpatch, livepatch_counter);
 		}
 	}
 
@@ -992,14 +1069,14 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
 	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib, bool) const;
-	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*, bool) const;
+	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*, bool, bool) const;
 	template std::string MachineOptions<4>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 #ifdef RISCV_64I
 	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib, bool) const;
-	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*, bool) const;
+	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*, bool, bool) const;
 	template std::string MachineOptions<8>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 

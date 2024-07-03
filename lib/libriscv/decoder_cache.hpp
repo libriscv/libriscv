@@ -65,6 +65,11 @@ struct DecoderData {
 	static Handler* get_handlers() noexcept {
 		return &instr_handlers[0];
 	}
+
+	void atomic_overwrite(const DecoderData<W>& other) noexcept {
+		static_assert(sizeof(DecoderData<W>) == 8, "DecoderData size mismatch");
+		*(uint64_t*)this = *(uint64_t*)&other;
+	}
 private:
 	static inline std::array<Handler, 256> instr_handlers;
 	static inline std::size_t handler_count = 0;
