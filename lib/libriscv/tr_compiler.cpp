@@ -163,7 +163,7 @@ namespace riscv
 	extern void  tcc_close(void* state);
 	extern void* tcc_lookup(void* state, const char*);
 
-	void* dylib_lookup(void* dylib, const char* symbol, bool is_libtcc)
+	void* dylib_lookup(void* dylib, const char* symbol, [[maybe_unused]] bool is_libtcc)
 	{
 #ifdef RISCV_LIBTCC
 		if (is_libtcc) {
@@ -173,7 +173,7 @@ namespace riscv
 		return dlsym(dylib, symbol);
 	}
 
-	void dylib_close(void* dylib, bool is_libtcc)
+	void dylib_close(void* dylib, [[maybe_unused]] bool is_libtcc)
 	{
 #ifdef RISCV_LIBTCC
 		if (is_libtcc) {
