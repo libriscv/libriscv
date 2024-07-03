@@ -235,7 +235,7 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 		registers().pc = pc;
 		trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 
-#ifdef RISCV_LIBTCC
+#if defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)
 	handle_rethrow_exception:
 		// We have an exception, so we need to rethrow it
 		const auto except = CPU().current_exception();
