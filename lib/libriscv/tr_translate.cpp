@@ -600,8 +600,11 @@ VISIBLE const struct Mapping mappings[] = {
 
 	// Compilation step
 	std::function<void()> compilation_step =
-	[this, options, defines = std::move(defines), code = std::move(code), footer = std::move(footer), filename, arena, live_patch, shared_segment = shared_segment]
+	[options, defines = std::move(defines), code = std::move(code), footer = std::move(footer), filename, arena, live_patch, shared_segment = shared_segment]
 	{
+		//printf("*** Compiling translation from 0x%lX to 0x%lX ***\n",
+		//	long(shared_segment->exec_begin()), long(shared_segment->exec_end()));
+
 		void* dylib = nullptr;
 		auto* exec = shared_segment.get();
 		// Final shared library loadable code w/footer
@@ -653,7 +656,7 @@ VISIBLE const struct Mapping mappings[] = {
 		}
 
 		if (!exec->is_binary_translated()) {
-			this->activate_dylib(options, *exec, dylib, arena, libtcc_enabled, live_patch);
+			activate_dylib(options, *exec, dylib, arena, libtcc_enabled, live_patch);
 		}
 
 		if constexpr (!libtcc_enabled) {
@@ -828,7 +831,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				#ifdef RISCV_EXT_C
 					p.icount = 0;
 				#endif
-					livepatch_bintr.push_back({ current, last });
+					livepatch_bintr.push_back({ last, last });
 				} else {
 					// Normal block-end hint that will be transformed into a translation
 					// bytecode if it passes a few more checks, later.
@@ -850,14 +853,17 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		// Set regular decoder cache to the patched decoder cache
 		exec.set_decoder(patched_decoder);
 
-		// Memory fence to ensure that the patched decoder is visible to all threads
-		std::atomic_thread_fence(std::memory_order_release);
+		if constexpr (true)
+		{
+			// Memory fence to ensure that the patched decoder is visible to all threads
+			std::atomic_thread_fence(std::memory_order_seq_cst);
 
-		// Atomically set a livepatch bytecode for each instruction that is patched
-		// It will swap out the current decoder with the patched one, and then continue.
-		for (auto [begin, end] : livepatch_bintr) {
-			for (auto* dd = begin; dd <= end; dd++)
-				dd->set_bytecode(RV32I_BC_LIVEPATCH);
+			// Atomically set a livepatch bytecode for each instruction that is patched
+			// It will swap out the current decoder with the patched one, and then continue.
+			for (auto [begin, end] : livepatch_bintr) {
+				for (auto* dd = begin; dd <= end; dd++)
+					dd->set_bytecode(RV32I_BC_LIVEPATCH);
+			}
 		}
 	}
 

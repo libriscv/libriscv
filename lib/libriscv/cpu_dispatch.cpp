@@ -189,7 +189,11 @@ INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
 	exec_decoder = exec->patched_decoder_cache();
 	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 	// 3. Execute the instruction
+#ifdef DISPATCH_MODE_SWITCH_BASED
 	EXECUTE_INSTR();
+#else
+	goto translated_function;
+#endif
 }
 #endif // RISCV_BINARY_TRANSLATION
 
