@@ -753,7 +753,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	exec.set_binary_translated(dylib, is_libtcc);
 
 	// Helper to rebuild decoder blocks
-	unsigned livepatch_counter = 0;
 	std::unique_ptr<DecoderCache<W>[]> patched_decoder_cache = nullptr;
 	DecoderData<W>* patched_decoder = nullptr;
 	if (live_patch) {
@@ -775,10 +774,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 			auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
 			if (mappings[i].handler != nullptr) {
 				if (live_patch) {
-					livepatch_counter++;
-					// Here it gets complicated. We can't insert translations without the
-					// block ending, so we have to live-patch changes to slowly make the
-					// block end at the right place.
 					// 1. The last instruction will be the current entry
 					// 2. Later instructions will work as normal
 					// 3. Look back to find the beginning of the block
@@ -788,8 +783,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 						current--;
 					}
 					auto patched_addr = addr + entry.block_bytes() - current->block_bytes();
-					// 4. Erase each instruction in the block, by replacing each
-					// with a safe instruction, lowering performance temporarily.
+					// 4. Replace each with a safe instruction, lowering performance temporarily.
 					for (auto* dd = current; dd < last; dd++) {
 						// Get the patched decoder entry
 						auto* p = patched_decoder + (dd - exec.decoder_cache());
@@ -853,10 +847,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	}
 
 	if (options.verbose_loader) {
-		printf("libriscv: Activated binary translation with %u mappings\n", nmappings);
-		if (live_patch) {
-			printf("libriscv: Live-patching enabled, %u total\n", livepatch_counter);
-		}
+		printf("libriscv: Activated binary translation with %u mappings%s\n",
+			nmappings,
+			live_patch ? ", live-patching enabled" : "");
 	}
 
 	if (options.translate_timing) {
