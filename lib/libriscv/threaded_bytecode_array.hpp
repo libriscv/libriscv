@@ -118,10 +118,11 @@ static constexpr void *computed_opcode[] = {
 	[RV32V_BC_VFADD_VV] = &&rv32v_vfadd_vv,
 	[RV32V_BC_VFMUL_VF] = &&rv32v_vfmul_vf,
 #endif
-	[RV32I_BC_FUNCTION] = &&execute_decoded_function,
+	[RV32I_BC_FUNCTION]  = &&execute_decoded_function,
 	[RV32I_BC_FUNCBLOCK] = &&execute_function_block,
 #ifdef RISCV_BINARY_TRANSLATION
 	[RV32I_BC_TRANSLATOR] = &&translated_function,
+	[RV32I_BC_LIVEPATCH]  = &&execute_livepatch,
 #endif
 	[RV32I_BC_SYSTEM] = &&rv32i_system,
 };

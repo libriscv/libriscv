@@ -319,6 +319,7 @@ namespace riscv
 		[RV32I_BC_FUNCBLOCK] = execute_function_block,
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = translated_function,
+		[RV32I_BC_LIVEPATCH] = execute_livepatch,
 #endif
 		[RV32I_BC_SYSTEM]  = rv32i_system,
 		};
