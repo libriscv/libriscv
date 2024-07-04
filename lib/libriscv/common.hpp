@@ -173,15 +173,11 @@ namespace riscv
 		unsigned translate_instr_max = 250'000;
 		/// @brief Enable background compilation of shared objects. The compilation step
 		/// will be executed from a user-provided callback, and will be applied to the machine
-		/// when ready. Applying the translation is thread-safe. Enabling this option will make
-		/// the shared execute segment become referenced by the background compilation step,
-		/// keeping it alive until the compilation is done. For short-lived programs, this
-		/// should be disabled.
-		/// @details Throws an exception if shared execute segments are disabled. The user-provided
-		/// callback receives a callback function that is the compilation step. The point of the
-		/// callback is to allow the user to compile the shared object in a separate thread or process.
-		/// Once the callback is done, if the compilation was successful, it will automatically apply.
-		std::function<void(std::function<void()>&)> translate_background_callback = nullptr;
+		/// when ready. Applying the translation is thread-safe and will take effect on all
+		/// machines using the translated execute segment, even while they are executing.
+		/// For short-lived programs, this feature should be disabled, as it often takes more
+		/// time to translate and compile than to execute the program.
+		std::function<void(std::function<void()>& compilation_step)> translate_background_callback = nullptr;
 		/// @brief Allow the production of a secondary dependency-free DLL that can be
 		/// transferred to and loaded on Windows (or other) machines. It will be used
 		/// to greatly accelerate the emulation of the RISC-V program.

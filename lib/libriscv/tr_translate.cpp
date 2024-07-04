@@ -54,7 +54,7 @@ namespace riscv
 	template <int W>
 	using binary_translation_init_func = void (*)(const CallbackTable<W>&, void*);
 	template <int W>
-	static CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu);
+	static CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&);
 
 	// Translations that are embeddable in the binary will be added as a source
 	// file directly in the project, which allows it to run global constructors.
@@ -220,7 +220,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 				if (options.verbose_loader) {
 					printf("Found embedded translation for hash %08X\n", checksum);
 				}
-				*translation.api_table = create_bintr_callback_table(*this);
+				*translation.api_table = create_bintr_callback_table(exec);
 				exec.create_mappings(translation.nmappings);
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
@@ -307,7 +307,8 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return 1;
 	}
 
-	this->activate_dylib(options, exec, dylib, false, false);
+	void* arena = machine().memory.memory_arena_ptr_ref();
+	this->activate_dylib(options, exec, dylib, arena, false, false);
 
 	if (options.translate_timing) {
 		TIME_POINT(t10);
@@ -345,7 +346,7 @@ static bool is_stopping_instruction(rv32i_instruction instr) {
 template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
 	const std::string& filename,
-	DecodedExecuteSegment<W>& exec, address_t basepc, address_t endbasepc) const
+	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, address_t basepc, address_t endbasepc) const
 {
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = options.verbose_loader;
@@ -354,6 +355,8 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 	// Check if compiling new translations is enabled
 	if (!options.translate_invoke_compiler)
 		return;
+
+	auto& exec = *shared_segment;
 
 	address_t gp = 0;
 	TIME_POINT(t0);
@@ -593,11 +596,14 @@ VISIBLE const struct Mapping mappings[] = {
 
 	const auto defines = create_defines_for(machine(), options);
 	const bool live_patch = options.translate_background_callback != nullptr;
+	void* arena = machine().memory.memory_arena_ptr_ref();
 
+	// Compilation step
 	std::function<void()> compilation_step =
-	[this, options, defines = std::move(defines), code = std::move(code), footer = std::move(footer), filename, exec = &exec, live_patch] () mutable
+	[this, options, defines = std::move(defines), code = std::move(code), footer = std::move(footer), filename, arena, live_patch, shared_segment = shared_segment]
 	{
 		void* dylib = nullptr;
+		auto* exec = shared_segment.get();
 		// Final shared library loadable code w/footer
 		const std::string shared_library_code = code + footer;
 
@@ -647,12 +653,12 @@ VISIBLE const struct Mapping mappings[] = {
 		}
 
 		if (!exec->is_binary_translated()) {
-			this->activate_dylib(options, *exec, dylib, libtcc_enabled, live_patch);
+			this->activate_dylib(options, *exec, dylib, arena, libtcc_enabled, live_patch);
 		}
 
 		if constexpr (!libtcc_enabled) {
 			if (!options.translation_cache) {
-				// Delete the program if the shared ELF is unwanted
+				// Delete the shared object if it is unwanted
 				unlink(filename.c_str());
 			}
 		}
@@ -714,11 +720,11 @@ VISIBLE const struct Mapping mappings[] = {
 }
 
 template <int W>
-void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, bool is_libtcc, bool live_patch) const
+void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, void* arena, bool is_libtcc, bool live_patch)
 {
 	TIME_POINT(t11);
 
-	if (!initialize_translated_segment(exec, dylib, is_libtcc))
+	if (!initialize_translated_segment(exec, dylib, arena, is_libtcc))
 	{
 		if constexpr (!libtcc_enabled) {
 			// only warn when translation is not already disabled
@@ -791,6 +797,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 							auto d = *dd;
 							d.set_bytecode(RV32I_BC_FUNCBLOCK);
 							d.idxend = 0; // 0(+1) instructions to next block
+						#ifdef RISCV_EXT_C
+							d.icount = 0; // 0 + 1 - 0 == 1 instruction
+						#endif
 							d.instr  = instr.whole;
 							dd->atomic_overwrite(d);
 							addr_patch += instr.length();
@@ -843,7 +852,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 }
 
 template <int W>
-CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
+CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 {
 	return CallbackTable<W>{
 		.mem_read = [] (CPU<W>& cpu, address_type<W> addr, unsigned size) -> address_type<W> {
@@ -911,7 +920,7 @@ CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 			(void)cpu; (void)addr; (void)vd;
 #endif
 		},
-		.syscalls = cpu.machine().syscall_handlers.data(),
+		.syscalls = Machine<W>::syscall_handlers.data(),
 		.system_call = [] (CPU<W>& cpu, int sysno) -> int {
 			try {
 				const auto current_pc = cpu.registers().pc;
@@ -1039,7 +1048,7 @@ CallbackTable<W> create_bintr_callback_table(const CPU<W>& cpu)
 }
 
 template <int W>
-bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dylib, bool is_libtcc) const
+bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void* dylib, void* arena, bool is_libtcc)
 {
 	// NOTE: At some point this must be able to duplicate the dylib
 	// in order to be able to share execute segments across machines.
@@ -1051,7 +1060,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>&, void* dyli
 
 	// Map the API callback table
 	auto func = (binary_translation_init_func<W>) ptr;
-	func(create_bintr_callback_table<W>(*this), machine().memory.memory_arena_ptr_ref());
+	func(create_bintr_callback_table<W>(exec), arena);
 
 	return true;
 }
@@ -1066,17 +1075,17 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 }
 
 #ifdef RISCV_32I
-	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, DecodedExecuteSegment<4>&, address_t, address_t) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<4>>&, address_t, address_t) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
-	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib, bool) const;
-	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*, bool, bool) const;
+	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib, void*, bool);
+	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*, void*, bool, bool);
 	template std::string MachineOptions<4>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 #ifdef RISCV_64I
-	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, DecodedExecuteSegment<8>&, address_t, address_t) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<8>>&, address_t, address_t) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
-	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib, bool) const;
-	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*, bool, bool) const;
+	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib, void*, bool);
+	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*, void*, bool, bool);
 	template std::string MachineOptions<8>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 
