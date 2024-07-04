@@ -117,7 +117,7 @@ namespace riscv
 
 		// Binary translation functions
 		int  load_translation(const MachineOptions<W>&, std::string* filename, DecodedExecuteSegment<W>&) const;
-		void try_translate(const MachineOptions<W>&, const std::string&, DecodedExecuteSegment<W>&, address_t pc, address_t endpc) const;
+		void try_translate(const MachineOptions<W>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<W>>&, address_t pc, address_t endpc) const;
 
 		void reset();
 		void reset_stack_pointer() noexcept;
@@ -182,8 +182,8 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
-		void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, bool) const RISCV_INTERNAL;
-		bool initialize_translated_segment(DecodedExecuteSegment<W>&, void*, bool) const RISCV_INTERNAL;
+		static void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, void*, bool, bool) RISCV_INTERNAL;
+		static bool initialize_translated_segment(DecodedExecuteSegment<W>&, void*, void*, bool) RISCV_INTERNAL;
 #endif
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 	};

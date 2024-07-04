@@ -267,8 +267,9 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
 		[[maybe_unused]] const MachineOptions<W>& options,
-		DecodedExecuteSegment<W>& exec)
+		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment)
 	{
+		auto& exec = *shared_segment;
 		if (exec.exec_end() < exec.exec_begin())
 			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
 
@@ -320,7 +321,7 @@ namespace riscv
 			if (must_translate)
 			{
 				machine().cpu.try_translate(
-					options, bintr_filename, exec, addr, addr + len);
+					options, bintr_filename, shared_segment, addr, addr + len);
 			}
 		} // W != 16
 	#endif
@@ -504,7 +505,7 @@ namespace riscv
 			// Store the hash in the decoder cache
 			free_slot->set_crc32c_hash(hash);
 
-			this->generate_decoder_cache(options, *free_slot);
+			this->generate_decoder_cache(options, free_slot);
 
 			// Share the execute segment
 			shared_execute_segments<W>.get_segment(hash).unlocked_set(free_slot);
@@ -515,7 +516,7 @@ namespace riscv
 			// Store the hash in the decoder cache
 			free_slot->set_crc32c_hash(hash);
 
-			this->generate_decoder_cache(options, *free_slot);
+			this->generate_decoder_cache(options, free_slot);
 		}
 
 		return *free_slot;

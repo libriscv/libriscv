@@ -170,7 +170,14 @@ namespace riscv
 		/// @details The binary translator will stop translating after reaching
 		/// either of these limits. The limits are per shared object.
 		unsigned translate_blocks_max = 16'000;
-		unsigned translate_instr_max = 150'000;
+		unsigned translate_instr_max = 250'000;
+		/// @brief Enable background compilation of shared objects. The compilation step
+		/// will be executed from a user-provided callback, and will be applied to the machine
+		/// when ready. Applying the translation is thread-safe and will take effect on all
+		/// machines using the translated execute segment, even while they are executing.
+		/// For short-lived programs, this feature should be disabled, as it often takes more
+		/// time to translate and compile than to execute the program.
+		std::function<void(std::function<void()>& compilation_step)> translate_background_callback = nullptr;
 		/// @brief Allow the production of a secondary dependency-free DLL that can be
 		/// transferred to and loaded on Windows (or other) machines. It will be used
 		/// to greatly accelerate the emulation of the RISC-V program.

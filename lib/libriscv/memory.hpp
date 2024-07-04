@@ -240,7 +240,7 @@ namespace riscv
 		void binary_loader(const MachineOptions<W>&);
 		void binary_load_ph(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
 		void serialize_execute_segment(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
-		void generate_decoder_cache(const MachineOptions<W>&, DecodedExecuteSegment<W>&);
+		void generate_decoder_cache(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
 
