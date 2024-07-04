@@ -24,6 +24,7 @@ namespace riscv
 #undef NEXT_INSTR
 #undef NEXT_C_INSTR
 #undef NEXT_BLOCK
+#undef SAFE_INSTR_NEXT
 #undef NEXT_SEGMENT
 #undef PERFORM_BRANCH
 #undef PERFORM_FORWARD_BRANCH
@@ -50,6 +51,10 @@ namespace riscv
 		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT]; \
 	pc += decoder->block_bytes();                              \
 	EXECUTE_INSTR();
+
+#define SAFE_INSTR_NEXT(len)                  \
+	pc += len;                                \
+	decoder += len >> DecoderCache<W>::SHIFT;
 
 #define NEXT_SEGMENT()                                       \
 	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];   \

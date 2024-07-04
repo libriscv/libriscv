@@ -293,8 +293,7 @@ namespace riscv
 		}
 		// Here we allocate the decoder cache which is page-sized
 		auto* decoder_cache = exec.create_decoder_cache(
-			new DecoderCache<W> [n_pages],
-			n_pages * sizeof(DecoderCache<W>));
+			new DecoderCache<W> [n_pages], n_pages);
 		auto* exec_decoder = 
 			decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
 		exec.set_decoder(exec_decoder);

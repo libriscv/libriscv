@@ -54,6 +54,11 @@ namespace riscv
 	counter.increment_counter(decoder->instruction_count()); \
 	EXECUTE_INSTR();
 
+#define SAFE_INSTR_NEXT(len)                  \
+	pc += len;                                \
+	decoder += len >> DecoderCache<W>::SHIFT; \
+	counter.increment_counter(1);
+
 #define NEXT_SEGMENT()                                       \
 	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];  \
 	pc += decoder->block_bytes();                            \

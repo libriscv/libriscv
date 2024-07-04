@@ -114,8 +114,8 @@ inline uint32_t opcode(const TransInstr<W>& ti) {
 }
 
 template <int W>
-inline DecoderData<W>& decoder_entry_at(const DecodedExecuteSegment<W>& exec, address_type<W> addr) {
-	return exec.decoder_cache()[addr / DecoderCache<W>::DIVISOR];
+inline DecoderData<W>& decoder_entry_at(DecoderData<W>* cache, address_type<W> addr) {
+	return cache[addr / DecoderCache<W>::DIVISOR];
 }
 
 template <int W>
@@ -225,7 +225,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
 					exec.set_mapping(i, mapping.handler);
-					auto& entry = decoder_entry_at(exec, mapping.addr);
+					auto& entry = decoder_entry_at(exec.decoder_cache(), mapping.addr);
 					if (mapping.handler != nullptr) {
 						entry.instr = i;
 						entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
@@ -754,8 +754,16 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 
 	// Helper to rebuild decoder blocks
 	unsigned livepatch_counter = 0;
-	unsigned livepatch_counter_block_end = 0;
-	unsigned livepatch_counter_hotpatch = 0;
+	std::unique_ptr<DecoderCache<W>[]> patched_decoder_cache = nullptr;
+	DecoderData<W>* patched_decoder = nullptr;
+	if (live_patch) {
+		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
+		// A horrible calculation to find the patched decoder
+		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
+		// Copy the decoder cache to the patched decoder cache
+		std::copy(exec.decoder_cache_base(), exec.decoder_cache_base() + exec.decoder_cache_size(), patched_decoder_cache.get());
+	}
+	std::vector<DecoderData<W>*> livepatch_bintr;
 
 	// Apply mappings to decoder cache
 	const auto nmappings = *no_mappings;
@@ -764,55 +772,49 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		const auto addr = mappings[i].addr;
 		if (exec.is_within(addr)) {
 			exec.set_mapping(i, mappings[i].handler);
-			auto& entry = decoder_entry_at(exec, addr);
+			auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
 			if (mappings[i].handler != nullptr) {
 				if (live_patch) {
 					livepatch_counter++;
-					// When live-patching we can only insert translations where blocks end.
-					if (entry.block_bytes() == 0) {
-						auto dd = entry;
-						dd.instr = i;
-						dd.set_bytecode(RV32I_BC_TRANSLATOR);
-
-						// Atomic overwrite of the 64-bit entry with the new one
-						entry.atomic_overwrite(dd);
-						livepatch_counter_block_end++;
-					} else if (true) {
-						// Here it gets complicated. We can't insert translations without the
-						// block ending, so we have to live-patch changes to slowly make the
-						// block end at the right place.
-						// 1. The last instruction will be the current entry
-						// 2. Later instructions will work as normal
-						// 3. Look back to find the beginning of the block
-						auto* last    = &entry;
-						auto* current = &entry;
-						while ((current-1)->block_bytes() != 0) {
-							current--;
-						}
-						auto addr_patch = addr + entry.block_bytes() - current->block_bytes();
-						// 4. Erase each instruction in the block, by replacing each
-						// with a block-ending instruction, lowering performance temporarily.
-						for (auto* dd = current; dd < last; dd++) {
-							auto instr = read_instruction(exec.exec_data(), addr_patch, exec.exec_end());
-							auto d = *dd;
-							d.set_bytecode(RV32I_BC_FUNCBLOCK);
-							d.idxend = 0; // 0(+1) instructions to next block
-						#ifdef RISCV_EXT_C
-							d.icount = 0; // 0 + 1 - 0 == 1 instruction
-						#endif
-							d.instr  = instr.whole;
-							dd->atomic_overwrite(d);
-							addr_patch += instr.length();
-						}
-						// 5. Insert the new translation at the end of the block
-						auto dd = entry;
-						dd.set_bytecode(RV32I_BC_TRANSLATOR);
-						dd.idxend = 0;
-						dd.instr  = i;
-						entry.atomic_overwrite(dd);
-
-						livepatch_counter_hotpatch++;
+					// Here it gets complicated. We can't insert translations without the
+					// block ending, so we have to live-patch changes to slowly make the
+					// block end at the right place.
+					// 1. The last instruction will be the current entry
+					// 2. Later instructions will work as normal
+					// 3. Look back to find the beginning of the block
+					auto* last    = &entry;
+					auto* current = &entry;
+					while ((current-1)->block_bytes() != 0) {
+						current--;
 					}
+					auto patched_addr = addr + entry.block_bytes() - current->block_bytes();
+					// 4. Erase each instruction in the block, by replacing each
+					// with a safe instruction, lowering performance temporarily.
+					for (auto* dd = current; dd < last; dd++) {
+						// Get the patched decoder entry
+						auto* p = patched_decoder + (dd - exec.decoder_cache());
+						// Create a single-instruction bytecode to replace the original instruction
+						p->set_bytecode(RV32I_BC_FUNCBLOCK);
+						p->idxend = 0;
+					#ifdef RISCV_EXT_C
+						p->icount = 0;
+					#endif
+						auto instr = read_instruction(exec.exec_data(), patched_addr, exec.exec_end());
+						p->instr = instr.whole;
+						patched_addr += instr.length();
+
+						livepatch_bintr.push_back(dd);
+					}
+					// 5. The last instruction will be replaced with a binary translation
+					// function, which will be the last instruction in the block.
+					auto* p = patched_decoder + (last - exec.decoder_cache());
+					p->set_bytecode(RV32I_BC_TRANSLATOR);
+					p->instr = i;
+					p->idxend = 0;
+				#ifdef RISCV_EXT_C
+					p->icount = 0;
+				#endif
+					livepatch_bintr.push_back(last);
 				} else {
 					// Normal block-end hint that will be transformed into a translation
 					// bytecode if it passes a few more checks, later.
@@ -837,11 +839,23 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		}
 	}
 
+	if (live_patch) {
+		// Move the patched decoder cache to the execute segment
+		exec.set_patched_decoder_cache(std::move(patched_decoder_cache), patched_decoder);
+		// Set regular decoder cache to the patched decoder cache
+		exec.set_decoder(patched_decoder);
+
+		// Atomically set a livepatch bytecode for each instruction that is patched
+		// It will swap out the current decoder with the patched one, and then continue.
+		for (auto* entry : livepatch_bintr) {
+			entry->set_bytecode(RV32I_BC_LIVEPATCH);
+		}
+	}
+
 	if (options.verbose_loader) {
 		printf("libriscv: Activated binary translation with %u mappings\n", nmappings);
 		if (live_patch) {
-			printf("libriscv: Live-patching enabled, %u block-ends, %u hot-patches (%u total)\n",
-				livepatch_counter_block_end, livepatch_counter_hotpatch, livepatch_counter);
+			printf("libriscv: Live-patching enabled, %u total\n", livepatch_counter);
 		}
 	}
 

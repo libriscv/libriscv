@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <unordered_map>
 #include "types.hpp"
 
 namespace riscv
@@ -35,6 +36,8 @@ namespace riscv
 
 		auto* decoder_cache() noexcept { return m_exec_decoder; }
 		auto* decoder_cache() const noexcept { return m_exec_decoder; }
+		auto* decoder_cache_base() const noexcept { return m_decoder_cache.get(); }
+		size_t decoder_cache_size() const noexcept { return m_decoder_cache_size; }
 
 		auto* create_decoder_cache(DecoderCache<W>* cache, size_t size) {
 			m_decoder_cache.reset(cache);
@@ -44,7 +47,7 @@ namespace riscv
 		void set_decoder(DecoderData<W>* dec) { m_exec_decoder = dec; }
 
 		size_t size_bytes() const noexcept {
-			return sizeof(*this) + m_exec_pagedata_size + m_decoder_cache_size;
+			return sizeof(*this) + m_exec_pagedata_size + m_decoder_cache_size; // * sizeof(DecoderCache<W>);
 		}
 		bool empty() const noexcept { return m_exec_pagedata_size == 0; }
 
@@ -70,6 +73,9 @@ namespace riscv
 		bintr_block_func<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
 		bintr_block_func<W> unchecked_mapping_at(unsigned i) const { return m_translator_mappings[i]; }
 		size_t translator_mappings() const noexcept { return m_translator_mappings.size(); }
+		auto* patched_decoder_cache() noexcept { return m_patched_exec_decoder; }
+		void set_patched_decoder_cache(std::unique_ptr<DecoderCache<W>[]> cache, DecoderData<W>* dec)
+			{ m_patched_decoder_cache = std::move(cache); m_patched_exec_decoder = dec; }
 #else
 		bool is_binary_translated() const noexcept { return false; }
 #endif
@@ -90,13 +96,14 @@ namespace riscv
 		address_t m_exec_pagedata_base = 0;
 		std::unique_ptr<uint8_t[]> m_exec_pagedata = nullptr;
 
-		// Decoder cache is used to run simulation at a
-		// high speed, without resorting to JIT
+		// Decoder cache is used to run bytecode simulation at a high speed
 		size_t          m_decoder_cache_size = 0;
 		std::unique_ptr<DecoderCache<W>[]> m_decoder_cache = nullptr;
 
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<bintr_block_func<W>> m_translator_mappings;
+		std::unique_ptr<DecoderCache<W>[]> m_patched_decoder_cache = nullptr;
+		DecoderData<W>* m_patched_exec_decoder = nullptr;
 		mutable void* m_bintr_dl = nullptr;
 		uint32_t m_bintr_hash = 0x0; // CRC32-C of the execute segment + compiler options
 #endif
@@ -137,6 +144,8 @@ namespace riscv
 		m_translator_mappings = std::move(other.m_translator_mappings);
 		m_bintr_dl = other.m_bintr_dl;
 		other.m_bintr_dl = nullptr;
+		m_bintr_hash = other.m_bintr_hash;
+		m_is_libtcc = other.m_is_libtcc;
 #endif
 	}
 
