@@ -170,6 +170,12 @@ namespace riscv
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
 	}
+	INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
+		pc = pc - d->block_bytes();
+		auto* patched = &exec->patched_decoder_cache()[pc / DecoderCache<W>::DIVISOR];
+		d = patched;
+		EXECUTE_CURRENT();
+	}
 #endif
 
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {

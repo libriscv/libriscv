@@ -169,6 +169,16 @@ retry_translated_function:
 	else
 		goto check_jump;
 }
+INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
+	// Special bytecode that does not read any decoder data
+	// 1. Wind back PC to the current decoder position
+	pc = pc - decoder->block_bytes();
+	// 2. Find the correct decoder pointer in the patched decoder cache
+	exec_decoder = exec->patched_decoder_cache();
+	decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+	// 3. Execute the instruction
+	EXECUTE_INSTR();
+}
 #endif // RISCV_BINARY_TRANSLATION
 
 INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
