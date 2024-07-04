@@ -1548,10 +1548,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 			const auto label = funclabel<W>(e.get_func(), entry.addr);
 			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 		}
-		if (tinfo.trace_instructions)
-			code += "default: api.exception(cpu, pc, 3); return (ReturnValues){0, 0};\n";
-		else // XXX: This is a performance optimization, but it may hide bugs
-			code += "default: UNREACHABLE(); break;\n";
+		code += "default: api.exception(cpu, pc, 3); return (ReturnValues){0, 0};\n";
 		code += "}\n";
 	}
 

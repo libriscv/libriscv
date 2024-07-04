@@ -760,76 +760,87 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		// A horrible calculation to find the patched decoder
 		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
 		// Copy the decoder cache to the patched decoder cache
-		std::copy(exec.decoder_cache_base(), exec.decoder_cache_base() + exec.decoder_cache_size(), patched_decoder_cache.get());
+		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
 	}
-	std::vector<DecoderData<W>*> livepatch_bintr;
+	std::vector<std::tuple<DecoderData<W>*, DecoderData<W>*>> livepatch_bintr;
+	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
+	const unsigned nmappings = *no_mappings;
+	unsigned unique_mappings = 0;
+	for (unsigned i = 0; i < nmappings; i++)
+	{
+		auto it = block_indices.find(mappings[i].handler);
+		if (it == block_indices.end()) {
+			block_indices.emplace(mappings[i].handler, unique_mappings);
+			unique_mappings++;
+		}
+	}
+
+	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
+	exec.create_mappings(unique_mappings + 1);
+	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
+		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
+	});
+
+	auto* decoder_begin = &decoder_entry_at(exec.decoder_cache(), exec.exec_begin());
 
 	// Apply mappings to decoder cache
-	const auto nmappings = *no_mappings;
-	exec.create_mappings(nmappings);
-	for (unsigned i = 0; i < nmappings; i++) {
+	for (unsigned i = 0; i < nmappings; i++)
+	{
+		const unsigned mapping_index = block_indices.at(mappings[i].handler);
 		const auto addr = mappings[i].addr;
+
 		if (exec.is_within(addr)) {
-			exec.set_mapping(i, mappings[i].handler);
+			exec.set_mapping(mapping_index, mappings[i].handler);
 			auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
-			if (mappings[i].handler != nullptr) {
+			if (mappings[i].handler != nullptr)
+			{
 				if (live_patch) {
 					// 1. The last instruction will be the current entry
 					// 2. Later instructions will work as normal
 					// 3. Look back to find the beginning of the block
 					auto* last    = &entry;
 					auto* current = &entry;
-					while ((current-1)->block_bytes() != 0) {
+					while (current > decoder_begin && (current-1)->block_bytes() != 0) {
 						current--;
 					}
+
 					auto patched_addr = addr + entry.block_bytes() - current->block_bytes();
-					// 4. Replace each with a safe instruction, lowering performance temporarily.
+					if (patched_addr < exec.exec_begin() || patched_addr >= exec.exec_end()) {
+						throw MachineException(INVALID_PROGRAM, "Invalid live-patching address");
+					}
+
+					// 4. Correct block_bytes() for all entries in the block
 					for (auto* dd = current; dd < last; dd++) {
 						// Get the patched decoder entry
-						auto* p = patched_decoder + (dd - exec.decoder_cache());
-						// Create a single-instruction bytecode to replace the original instruction
-						p->set_bytecode(RV32I_BC_FUNCBLOCK);
-						p->idxend = 0;
+						auto& p = decoder_entry_at(patched_decoder, patched_addr);
+						p.idxend = last - dd;
 					#ifdef RISCV_EXT_C
-						p->icount = 0;
+						p.icount = 0; // TODO: Implement C-ext icount for live-patching
 					#endif
-						auto instr = read_instruction(exec.exec_data(), patched_addr, exec.exec_end());
-						p->instr = instr.whole;
-						patched_addr += instr.length();
-
-						livepatch_bintr.push_back(dd);
+						patched_addr += (compressed_enabled) ? 2 : 4;
 					}
 					// 5. The last instruction will be replaced with a binary translation
 					// function, which will be the last instruction in the block.
-					auto* p = patched_decoder + (last - exec.decoder_cache());
-					p->set_bytecode(RV32I_BC_TRANSLATOR);
-					p->instr = i;
-					p->idxend = 0;
+					auto& p = decoder_entry_at(patched_decoder, addr);
+					p.set_bytecode(RV32I_BC_TRANSLATOR);
+					p.instr  = mapping_index;
+					p.idxend = 0;
 				#ifdef RISCV_EXT_C
-					p->icount = 0;
+					p.icount = 0;
 				#endif
-					livepatch_bintr.push_back(last);
+					livepatch_bintr.push_back({ current, last });
 				} else {
 					// Normal block-end hint that will be transformed into a translation
 					// bytecode if it passes a few more checks, later.
-					entry.instr = i;
+					entry.instr = mapping_index;
 					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
 				}
 			} else {
 				entry.set_bytecode(0x0); /* Invalid opcode */
 			}
-		} else {
-			if (options.verbose_loader) {
-				fprintf(stderr, "libriscv: Translation mapping 0x%lX outside execute area 0x%lX-0x%lX\n",
-					(long)addr, (long)exec.exec_begin(), (long)exec.exec_end());
-			}
-			exec.set_mapping(i, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
-				throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
-			});
-			//throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area", addr);
-			// It might be technically possible to produce some valid instructions in the
-			// padding areas, but it's not worth the effort to support this. Ignore.
-			continue;
+		} else if (options.verbose_loader) {
+			fprintf(stderr, "libriscv: Translation mapping 0x%lX outside execute area 0x%lX-0x%lX\n",
+				(long)addr, (long)exec.exec_begin(), (long)exec.exec_end());
 		}
 	}
 
@@ -839,16 +850,20 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		// Set regular decoder cache to the patched decoder cache
 		exec.set_decoder(patched_decoder);
 
+		// Memory fence to ensure that the patched decoder is visible to all threads
+		std::atomic_thread_fence(std::memory_order_release);
+
 		// Atomically set a livepatch bytecode for each instruction that is patched
 		// It will swap out the current decoder with the patched one, and then continue.
-		for (auto* entry : livepatch_bintr) {
-			entry->set_bytecode(RV32I_BC_LIVEPATCH);
+		for (auto [begin, end] : livepatch_bintr) {
+			for (auto* dd = begin; dd <= end; dd++)
+				dd->set_bytecode(RV32I_BC_LIVEPATCH);
 		}
 	}
 
 	if (options.verbose_loader) {
-		printf("libriscv: Activated binary translation with %u mappings%s\n",
-			nmappings,
+		printf("libriscv: Activated binary translation with %u/%u mappings%s\n",
+			unique_mappings, nmappings,
 			live_patch ? ", live-patching enabled" : "");
 	}
 

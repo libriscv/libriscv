@@ -1,6 +1,5 @@
 #pragma once
 #include <memory>
-#include <unordered_map>
 #include "types.hpp"
 
 namespace riscv
@@ -146,6 +145,8 @@ namespace riscv
 		other.m_bintr_dl = nullptr;
 		m_bintr_hash = other.m_bintr_hash;
 		m_is_libtcc = other.m_is_libtcc;
+		m_patched_decoder_cache = std::move(other.m_patched_decoder_cache);
+		m_patched_exec_decoder = other.m_patched_exec_decoder;
 #endif
 	}
 

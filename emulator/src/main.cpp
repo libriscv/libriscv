@@ -23,6 +23,7 @@ struct Arguments {
 	bool from_start = false;
 	bool sandbox = false;
 	bool ignore_text = false;
+	bool background = false; // Run binary translation in background thread
 	uint64_t fuel = UINT64_MAX;
 	std::string output_file;
 	std::string call_function;
@@ -43,6 +44,7 @@ static const struct option long_options[] = {
 	{"timing", no_argument, 0, 't'},
 	{"trace", no_argument, 0, 'T'},
 	{"no-translate", no_argument, 0, 'n'},
+	{"background", no_argument, 0, 'B'},
 	{"mingw", no_argument, 0, 'm'},
 	{"output", required_argument, 0, 'o'},
 	{"from-start", no_argument, 0, 'F'},
@@ -67,6 +69,7 @@ static void print_help(const char* name)
 		"  -t, --timing       Enable timing information in binary translator\n"
 		"  -T, --trace        Enable tracing in binary translator\n"
 		"  -n, --no-translate Disable binary translation\n"
+		"  -B  --background   Run binary translation in background thread\n"
 		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
 		"  -o, --output file  Output embeddable binary translated code (C99)\n"
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
@@ -120,7 +123,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnmo:FSIc:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnBmo:FSIc:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -135,6 +138,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 't': args.timing = true; break;
 			case 'T': args.trace = true; break;
 			case 'n': args.no_translate = true; break;
+			case 'B': args.background = true; break;
 			case 'm': args.mingw = true; break;
 			case 'o': break;
 			case 'F': args.from_start = true; break;
@@ -220,12 +224,12 @@ static void run_program(
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
 #else
-		.translate_background_callback =
+		.translate_background_callback = cli_args.background ?
 			[] (auto& compilation_step) {
 				std::thread([compilation_step = std::move(compilation_step)] {
 					compilation_step();
 				}).detach();
-			},
+			} : std::function<void(std::function<void()>&)>(nullptr),
 		.cross_compile = cc,
 #endif
 #endif
