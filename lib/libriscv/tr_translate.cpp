@@ -774,14 +774,16 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// Helper to rebuild decoder blocks
 	std::unique_ptr<DecoderCache<W>[]> patched_decoder_cache = nullptr;
 	DecoderData<W>* patched_decoder = nullptr;
+	std::vector<DecoderData<W>*> livepatch_bintr;
 	if (live_patch) {
 		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
 		// Copy the decoder cache to the patched decoder cache
 		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
 		// A horrible calculation to find the patched decoder
 		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
+		// Pre-allocate the livepatch_bintr vector
+		livepatch_bintr.reserve(*no_mappings);
 	}
-	std::vector<DecoderData<W>*> livepatch_bintr;
 	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
 	const unsigned nmappings = *no_mappings;
 	unsigned unique_mappings = 0;
@@ -806,6 +808,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	auto* decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
 
 	// Apply mappings to decoder cache
+	// NOTE: It is possible to optimize this by applying from the end towards the beginning
+	// and for each mapping, move on to the next mapping when that mappings address is reached.
+	// This way, we can avoid the O(n) search for each mapping, and instead do it in O(1).
 	for (unsigned i = 0; i < nmappings; i++)
 	{
 		const unsigned mapping_index = block_indices.at(mappings[i].handler);
@@ -823,21 +828,22 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					// 3. Look back to find the beginning of the block
 					auto* last    = &entry;
 					auto* current = &entry;
-					int last_block_bytes = entry.block_bytes();
+					auto last_block_bytes = entry.block_bytes();
 					while (current > decoder_begin && (current-1)->block_bytes() > last_block_bytes) {
 						current--;
 						last_block_bytes = current->block_bytes();
 					}
 
-					auto patched_addr = addr - (compressed_enabled ? 2 : 4) * (last - current);
-					if (patched_addr < exec.exec_begin() || patched_addr >= exec.exec_end()) {
+					const auto block_begin_addr = addr - (compressed_enabled ? 2 : 4) * (last - current);
+					if (block_begin_addr < exec.exec_begin() || block_begin_addr >= exec.exec_end()) {
 						if (options.verbose_loader)
 						fprintf(stderr, "libriscv: Patched address 0x%lX outside execute area 0x%lX-0x%lX\n",
-							(long)patched_addr, (long)exec.exec_begin(), (long)exec.exec_end());
+							(long)block_begin_addr, (long)exec.exec_begin(), (long)exec.exec_end());
 						throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 					}
 
 					// 4. Correct block_bytes() for all entries in the block
+					auto patched_addr = block_begin_addr;
 					for (auto* dd = current; dd < last; dd++) {
 						// Get the patched decoder entry
 						auto& p = decoder_entry_at(patched_decoder, patched_addr);
