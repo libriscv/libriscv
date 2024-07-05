@@ -53,6 +53,76 @@ The engine subfolder is adding libriscv [here](https://github.com/fwsGonzo/rvscr
 
 Note that you can also install libriscv through packaging, eg. `libriscv` on AUR.
 
+## Configuring libriscv
+
+_libriscv_ has good defaults, but has a variety of configuration options that changes its behavior and even performance.
+
+_libriscv_ is primarily configured using CMake options:
+
+> RISCV_DEBUG
+- Enable extra debugging features, such as verbose jumps. _libriscv_ does not ordinarily need this enabled.
+
+> RISCV_EXT_A
+- Enable atomic instructions (A-extension)
+
+> RISCV_EXT_C
+- Enable compressed instructions (C-extension)
+
+> RISCV_EXT_V
+- Enable vector instructions (V-extension)
+
+> RISCV_32I
+- Enable 32-bit RISC-V emulation
+
+> RISCV_64I
+- Enable 64-bit RISC-V emulation
+
+> RISCV_128I
+- Enable 128-bit RISC-V emulation
+
+> RISCV_FCSR
+- Enable floating-point rounding mode emulation, as well as extra NaN-handling.
+
+> RISCV_EXPERIMENTAL
+- Enable or reveal experimental features. Extra options revealed must be separately enabled to take effect.
+
+> RISCV_MEMORY_TRAPS
+- Enable traps on pages. Pages with traps must have caching disabled, and may not lie inside the memory arena (if enabled). Pages with traps that lie outside of the memory arena can be repeatedly triggered using reads, writes and jumps.
+
+> RISCV_BINARY_TRANSLATION
+- Enable high-performance emulation using binary translation.
+
+> RISCV_LIBTCC
+- Enable JIT-compilation using libtcc. Binary translation must also be enabled.
+
+> RISCV_FLAT_RW_ARENA
+- Enable high-performance memory operations using a flat read-write arena. The guest address is separated into 4 parts: 1. The area starting at zero up to the ELF begin is made invalid. 2. The area starting from the ELF to the end of .rodata is made read-only. The .data section and up to the end of the arena is made read+write. And finally, outside of the arena uses virtual paging, where page protections apply.
+
+> RISCV_THREADED
+- Enable threaded dispatch, using computed goto. Fastest dispatch method. When threaded and tailcall are both disabled, fall back to switch-based dispatch.
+
+> RISCV_TAILCALL_DISPATCH
+- Enable dispatch using musttail. Clang only.
+
+> RISCV_ENCOMPASSING_ARENA
+- Create an N-bit address space where all memory operations must reside. All memory accesses outside of this address space is inaccessible.
+
+> RISCV_ENCOMPASSING_ARENA_BITS
+- When RISCV_ENCOMPASSING_ARENA is enabled, this option sets the number of bits each memory address has, effectively making up the size of the address space. For example, 32-bits is a 4GB address space, and 30 is a 1GB address space. 32-bits is most likely the fastest setting. The entire address space is mapped out at construction. Experimental feature.
+
+> RISCV_TIMED_VMCALLS
+- Allow execution without instruction counting, instead timed out using timers and signals. Very experimental feature.
+
+The fastest configuration is:
+1. Use 32-bit RISC-V
+2. Disable C-extension
+3. Enable flat read-write arena
+4. Enable experimental + 32-bit encompassing arena
+5. Enable binary translation (or use embedded source files)
+6. Enable timed VM calls
+
+Although this is the fastest known configuration, one should use the one that is most convenient.
+
 ## Machine Options
 
 The Machine constructor has many options, and we will go through each one.
