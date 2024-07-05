@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 get_directory_property(hasParent PARENT_DIRECTORY)
 
 if (NOT hasParent)
-	project (libriscv VERSION 1.5 LANGUAGES CXX)
+	project (libriscv VERSION 1.6 LANGUAGES CXX)
 
 	set(CPACK_PACKAGE_NAME libriscv-dev)
 	set(CPACK_DEBIAN_PACKAGE_MAINTAINER "fwsgonzo")
