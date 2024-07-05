@@ -217,21 +217,37 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			auto& translation = registered_embedded_translations<W>.translations[i];
 			if (translation.hash == checksum)
 			{
-				if (options.verbose_loader) {
-					printf("Found embedded translation for hash %08X\n", checksum);
-				}
 				*translation.api_table = create_bintr_callback_table(exec);
-				exec.create_mappings(translation.nmappings);
+
+				// Find unique mappings
+				std::unordered_map<bintr_block_func<W>, unsigned> mapping_indices;
+				unsigned unique_mappings = 0;
+
+				for (size_t i = 0; i < translation.nmappings; i++)
+				{
+					auto it = mapping_indices.find(translation.mappings[i].handler);
+					if (it == mapping_indices.end()) {
+						mapping_indices.emplace(translation.mappings[i].handler, unique_mappings);
+						unique_mappings++;
+					}
+				}
+
+				if (options.verbose_loader) {
+					printf("Found embedded translation for hash %08X, %u/%u mappings\n",
+						checksum, unique_mappings, translation.nmappings);
+				}
+
+				exec.create_mappings(unique_mappings);
+				for (auto it : mapping_indices) {
+					exec.set_mapping(it.second, it.first);
+				}
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
-					exec.set_mapping(i, mapping.handler);
+					const auto mapping_index = mapping_indices.at(mapping.handler);
+
 					auto& entry = decoder_entry_at(exec.decoder_cache(), mapping.addr);
-					if (mapping.handler != nullptr) {
-						entry.instr = i;
-						entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
-					} else {
-						entry.set_bytecode(0x0); /* Invalid opcode */
-					}
+					entry.instr = mapping_index;
+					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
 				}
 				return 0;
 			}
@@ -780,6 +796,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 
 	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
 	exec.create_mappings(unique_mappings + 1);
+	for (auto it : block_indices) {
+		exec.set_mapping(it.second, it.first);
+	}
 	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
 		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 	});
@@ -793,7 +812,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		const auto addr = mappings[i].addr;
 
 		if (exec.is_within(addr)) {
-			exec.set_mapping(mapping_index, mappings[i].handler);
 			if (mappings[i].handler != nullptr)
 			{
 				if (live_patch) {
@@ -813,7 +831,8 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 
 					auto patched_addr = addr - (compressed_enabled ? 2 : 4) * (last - current);
 					if (patched_addr < exec.exec_begin() || patched_addr >= exec.exec_end()) {
-						printf("libriscv: Patched address 0x%lX outside execute area 0x%lX-0x%lX\n",
+						if (options.verbose_loader)
+						fprintf(stderr, "libriscv: Patched address 0x%lX outside execute area 0x%lX-0x%lX\n",
 							(long)patched_addr, (long)exec.exec_begin(), (long)exec.exec_end());
 						throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 					}
