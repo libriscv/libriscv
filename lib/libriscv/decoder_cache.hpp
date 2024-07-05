@@ -61,6 +61,13 @@ struct DecoderData {
 #endif
 	}
 
+	bool operator==(const DecoderData<W>& other) const noexcept {
+		return m_bytecode == other.m_bytecode &&
+			m_handler == other.m_handler &&
+			idxend == other.idxend &&
+			instr == other.instr;
+	}
+
 	static size_t handler_index_for(Handler new_handler);
 	static Handler* get_handlers() noexcept {
 		return &instr_handlers[0];

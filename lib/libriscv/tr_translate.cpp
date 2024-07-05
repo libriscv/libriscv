@@ -760,12 +760,12 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	DecoderData<W>* patched_decoder = nullptr;
 	if (live_patch) {
 		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
-		// A horrible calculation to find the patched decoder
-		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
 		// Copy the decoder cache to the patched decoder cache
 		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
+		// A horrible calculation to find the patched decoder
+		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
 	}
-	std::vector<std::tuple<DecoderData<W>*, DecoderData<W>*>> livepatch_bintr;
+	std::vector<DecoderData<W>*> livepatch_bintr;
 	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
 	const unsigned nmappings = *no_mappings;
 	unsigned unique_mappings = 0;
@@ -784,7 +784,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 	});
 
-	auto* decoder_begin = &decoder_entry_at(exec.decoder_cache(), exec.exec_begin());
+	auto* decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
 
 	// Apply mappings to decoder cache
 	for (unsigned i = 0; i < nmappings; i++)
@@ -794,22 +794,28 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 
 		if (exec.is_within(addr)) {
 			exec.set_mapping(mapping_index, mappings[i].handler);
-			auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
 			if (mappings[i].handler != nullptr)
 			{
 				if (live_patch) {
+					// NOTE: If we don't use the patched decoder here, entries
+					// will trample each other in the patched decoder cache.
+					auto& entry = decoder_entry_at(patched_decoder, addr);
 					// 1. The last instruction will be the current entry
 					// 2. Later instructions will work as normal
 					// 3. Look back to find the beginning of the block
 					auto* last    = &entry;
 					auto* current = &entry;
-					while (current > decoder_begin && (current-1)->block_bytes() != 0) {
+					int last_block_bytes = entry.block_bytes();
+					while (current > decoder_begin && (current-1)->block_bytes() > last_block_bytes) {
 						current--;
+						last_block_bytes = current->block_bytes();
 					}
 
-					auto patched_addr = addr + entry.block_bytes() - current->block_bytes();
+					auto patched_addr = addr - (compressed_enabled ? 2 : 4) * (last - current);
 					if (patched_addr < exec.exec_begin() || patched_addr >= exec.exec_end()) {
-						throw MachineException(INVALID_PROGRAM, "Invalid live-patching address");
+						printf("libriscv: Patched address 0x%lX outside execute area 0x%lX-0x%lX\n",
+							(long)patched_addr, (long)exec.exec_begin(), (long)exec.exec_end());
+						throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 					}
 
 					// 4. Correct block_bytes() for all entries in the block
@@ -822,6 +828,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					#endif
 						patched_addr += (compressed_enabled) ? 2 : 4;
 					}
+
 					// 5. The last instruction will be replaced with a binary translation
 					// function, which will be the last instruction in the block.
 					auto& p = decoder_entry_at(patched_decoder, addr);
@@ -831,14 +838,17 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				#ifdef RISCV_EXT_C
 					p.icount = 0;
 				#endif
-					livepatch_bintr.push_back({ last, last });
+					auto& original_entry = decoder_entry_at(exec.decoder_cache(), addr);
+					livepatch_bintr.push_back(&original_entry);
 				} else {
 					// Normal block-end hint that will be transformed into a translation
 					// bytecode if it passes a few more checks, later.
+					auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
 					entry.instr = mapping_index;
 					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
 				}
 			} else {
+				auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
 				entry.set_bytecode(0x0); /* Invalid opcode */
 			}
 		} else if (options.verbose_loader) {
@@ -860,10 +870,8 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 
 			// Atomically set a livepatch bytecode for each instruction that is patched
 			// It will swap out the current decoder with the patched one, and then continue.
-			for (auto [begin, end] : livepatch_bintr) {
-				for (auto* dd = begin; dd <= end; dd++)
-					dd->set_bytecode(RV32I_BC_LIVEPATCH);
-			}
+			for (auto* dd : livepatch_bintr)
+				dd->set_bytecode(RV32I_BC_LIVEPATCH);
 		}
 	}
 
