@@ -1,6 +1,6 @@
 # Integration
 
-Integrating libriscv into your project is fairly straight-forward, but employing it as a low-latency scripting solution is of higher difficulty. There is an example of how to do this in my [RVScript repository](https://github.com/fwsGonzo/rvscript). There is also a simpler version of this in this repostiryo, [the gamedev examples](/examples/gamedev).
+Integrating libriscv into your project is fairly straight-forward, but employing it as a low-latency scripting solution is more difficult. There is an example of how to do this in my [RVScript repository](https://github.com/fwsGonzo/rvscript). There is also a simpler version of this in this repostiryo, [the gamedev examples](/examples/gamedev).
 
 Despite the complexity required, let's just go through everything from the start.
 
@@ -17,10 +17,9 @@ git submodule add git@github.com:fwsGonzo/libriscv.git
 Now create a CMakeLists.txt in the ext folder:
 
 ```cmake
-# libriscv in 64-bit mode with read-write arena
+# libriscv in 64-bit
 option(RISCV_32I "" OFF)
 option(RISCV_64I "" ON)
-option(RISCV_FLAT_RW_ARENA "" ON)
 
 add_subdirectory(libriscv/lib)
 # We need to make room for our own system calls, as well as
@@ -44,7 +43,7 @@ libriscv is now accessible in the code:
 
 int main()
 {
-    riscv::Machine<riscv::RISCV64> machine(binary_vec_u8);
+    riscv::Machine<riscv::RISCV64> machine(binary_vec_u8, options);
 }
 ```
 
@@ -53,6 +52,77 @@ You can see how RVScript does the same thing [here](https://github.com/fwsGonzo/
 The engine subfolder is adding libriscv [here](https://github.com/fwsGonzo/rvscript/blob/master/engine/CMakeLists.txt#L46).
 
 Note that you can also install libriscv through packaging, eg. `libriscv` on AUR.
+
+## Machine Options
+
+The Machine constructor has many options, and we will go through each one.
+
+> memory_max
+- Set the maximum amount (upper limit) of memory a guest program can consume. Inside this memory a guest program can do anything it wants to, however it may never access memory outside of this area.
+
+> stack_size
+- Set the initial stack size for the main thread. This is a simple mmap allocation. Think of it as `stack = machine.memory.mmap_allocate(stack_size)`. It does not extend guest memory, nor does it touch memory.
+
+> cpu_id
+- A largely unused setting that sets the Machine's current CPU id. Used only by the experimental multi-processing feature.
+
+> load_program
+- When true, the binary provided to Machine will be loaded as an ELF program. Default: true.
+
+> protect_segments
+- When true, the protection bits in the ELF segments of a loaded ELF program will be applied to the pages they are loaded to. Default: true.
+
+> allow_write_exec_segment
+- Allow loading a segment with write+execute at the same time. Default: false.
+
+> enforce_exec_only
+- Only allow execute-only segments. An executable segment with read- or write-permissions will cause an exception, preventing construction. Default: false.
+
+> ignore_text_section
+- Some programs have executable code outside of the .text section, which is unfortunate. Setting this to true allows loading these programs. Default: false.
+
+> verbose_loader
+- Verbose logging to stdout when loading a program. Default: false.
+
+> minimal_fork
+- When forking a Machine into another, do not loan any pages, leaving the new fork blank. In order for the new machine to work, pages must now be loaned on-demand using callbacks. Default: false.
+
+> use_memory_arena
+- Pre-allocate all guest memory using mmap. All pages will be backed by the arena, making guest memory sequential and improving performance. 
+
+> use_shared_execute_segments
+- Share matching execute between all machines automatically. Thread-safe. Default: true.
+
+> default_exit_function
+- When making calls into the VM, an exit function is created by default that stops the machine. It is possible to override this with your own.
+
+> page_fault_handler
+- A callback which gets called when the Machine needs memory for a certain address. This facilitates sharing, custom arenas, avoiding zeroing memory and so on. A default page fault handler is normally created that constructs pages backed by the arena (if enabled) or simple memory allocations.
+
+> translate_enabled
+- Binary translation yields performance improvements to individual execute segments. For example, a dynamic executable might have 3 execute segments (1. the dynamic linker, 2. libc, 3. your program). When _libriscv_ is configured with binary translation, and whenever a new execute segment is about to be executed on, it will try to look for an existing translation first. In order to match with an existing translation, the hash of the translation must match both the emulators configuration and the execute segment it was produced from. When enabled, _libriscv_ will use binary translation according to these rules:
+1. If `translate_enable_embedded` is enabled, and embedded binary translation has self-registered, use this first, if there is a matching execute segment hash. This translation is never loaded in the background, and is applied instantly. It is the most efficient translation, anIfd supports all platforms (even those without dynamic linking).
+2. If no embedded translation is found, attempt to load a translation from a shared object. This is done by checking the file system for a filename built from `translation_prefix` and `translation_suffix`. Once found, it is dynamically loaded and applied. It is applied instantly and is never loaded in the background.
+3. If no translation was loaded and libtcc is enabled, perform binary translation using libtcc right now.
+4. If `translate_invoke_compiler` is enabled, and there are no translations to be found, one can be generated using a system compiler. This is done by compiling the C99 binary translation using the CC environment variable. After the compilation finishes, it will be loaded and applied.
+5. If `translate_background_callback` is set, background compilation can be performed from the user-provided callback. After background compilation is completed, the results are loaded and live-patched in a thread-safe manner.
+6. If `translation_cache` is enabled, the final shared object will be kept in the file system, so that it may be reused later. Default: true
+
+> translate_trace
+- When enabled, trace information is generated during binary translation execution. Very spammy. Default: false
+
+> translate_timing
+- When enabled, verbose timing information will be printed to stdout during the binary translation process, showing the time spent in each sub-system. Default: false
+
+> translation_use_arena
+- When enabled, the binary translator will make use of the memory arena. Default: true
+
+> translate_ignore_instruction_limit
+- When enabled, instruction counting is not performed during binary translation, and execution can only stop using another external method. This slightly improves performance. Default: false
+
+> cross_compile
+- A vector of cross-compilation methods. Each method is invoked during binary translation, as needed. If an output already exists, skip. A method can be to produce embeddable source files, while another method can be a cross-compiler invocation. Windows-compatible MinGW .dll's can be cross-compiled from Linux.
+
 
 ## Compiling a RISC-V program
 
