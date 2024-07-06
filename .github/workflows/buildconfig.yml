@@ -2,9 +2,9 @@ name: Build configuration matrix
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   config_matrix:
@@ -12,65 +12,71 @@ jobs:
     defaults:
       run:
         working-directory: ${{github.workspace}}/tests/buildconfig
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         compiler: [g++, clang++-17]
+        exclude:
+          - os: macos-latest
+            compiler: clang++-17
     env:
       CXX: ${{ matrix.compiler }}
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y g++
+      - name: Install dependencies
+        if: ${{ matrix.os != 'macos-latest' }}
+        run: |
+          sudo apt update
+          sudo apt install -y g++
 
-    - name: Install newer Clang
-      run: |
-       wget https://apt.llvm.org/llvm.sh
-       chmod +x ./llvm.sh
-       sudo ./llvm.sh 17
+      - name: Install newer Clang
+        if: ${{ matrix.os != 'macos-latest' }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x ./llvm.sh
+          sudo ./llvm.sh 17
 
-    - name: Default build
-      run: bash ci.sh
+      - name: Default build
+        run: bash ci.sh
 
-    - name: Emulator debug build
-      run: bash ci.sh -DRISCV_DEBUG=ON
+      - name: Emulator debug build
+        run: bash ci.sh -DRISCV_DEBUG=ON
 
-    - name: No threaded build
-      run: bash ci.sh -DRISCV_THREADED=OFF
+      - name: No threaded build
+        run: bash ci.sh -DRISCV_THREADED=OFF
 
-    - name: No extensions build
-      run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
+      - name: No extensions build
+        run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
 
-    - name: A-ext only build
-      run: bash ci.sh -DRISCV_EXT_A=ON -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
+      - name: A-ext only build
+        run: bash ci.sh -DRISCV_EXT_A=ON -DRISCV_EXT_C=OFF -DRISCV_EXT_F=OFF
 
-    - name: C-ext only build
-      run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=ON -DRISCV_EXT_F=OFF
+      - name: C-ext only build
+        run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=ON -DRISCV_EXT_F=OFF
 
-    - name: F-ext only build
-      run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=ON
+      - name: F-ext only build
+        run: bash ci.sh -DRISCV_EXT_A=OFF -DRISCV_EXT_C=OFF -DRISCV_EXT_F=ON
 
-    - name: Experimental build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=OFF
+      - name: Experimental build
+        run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=OFF
 
-    - name: Experimental + threaded build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON
+      - name: Experimental + threaded build
+        run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON
 
-    - name: Experimental + threaded debug build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON -DRISCV_DEBUG=ON
+      - name: Experimental + threaded debug build
+        run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_THREADED=ON -DRISCV_DEBUG=ON
 
-    - name: No multiprocessing build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_MULTIPROCESS=OFF
+      - name: No multiprocessing build
+        run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_MULTIPROCESS=OFF
 
-    - name: Multiprocessing debug build
-      run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_MULTIPROCESS=ON -DRISCV_DEBUG=ON
+      - name: Multiprocessing debug build
+        run: bash ci.sh -DRISCV_EXPERIMENTAL=ON -DRISCV_MULTIPROCESS=ON -DRISCV_DEBUG=ON
 
-    - name: Binary translation build
-      run: bash ci.sh -DRISCV_BINARY_TRANSLATION=ON -DRISCV_DEBUG=OFF -DRISCV_EXT_C=OFF
+      - name: Binary translation build
+        run: bash ci.sh -DRISCV_BINARY_TRANSLATION=ON -DRISCV_DEBUG=OFF -DRISCV_EXT_C=OFF
 
-    - name: Binary translation debug build
-      run: bash ci.sh -DRISCV_BINARY_TRANSLATION=ON -DRISCV_DEBUG=ON -DRISCV_EXT_C=OFF
+      - name: Binary translation debug build
+        run: bash ci.sh -DRISCV_BINARY_TRANSLATION=ON -DRISCV_DEBUG=ON -DRISCV_EXT_C=OFF
