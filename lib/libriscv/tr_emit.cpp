@@ -1357,23 +1357,36 @@ void Emitter<W>::emit()
 				} break;
 			case RV32F__FADD:
 			case RV32F__FSUB:
-			case RV32F__FMUL:
-			case RV32F__FDIV: {
+			case RV32F__FMUL: {
 				std::string fop = " + ";
 				if (instr.fpfunc() == RV32F__FSUB) fop = " - ";
 				else if (instr.fpfunc() == RV32F__FMUL) fop = " * ";
-				else if (instr.fpfunc() == RV32F__FDIV) fop = " / ";
 				if (fi.R4type.funct2 == 0x0) { // fp32
 					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0]" + fop + rs2 + ".f32[0]);\n";
 				} else { // fp64
 					code += "set_dbl(&" + dst + ", " + rs1 + ".f64" + fop + rs2 + ".f64);\n";
 				}
 				} break;
+			case RV32F__FDIV:
+				if (fi.R4type.funct2 == 0x0) { // fp32
+					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0] / " + rs2 + ".f32[0]);\n";
+					if (!tinfo.ignore_instruction_limit)
+						code += "counter += 10;\n"; // divf is a slow operation
+				} else { // fp64
+					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 / " + rs2 + ".f64);\n";
+					if (!tinfo.ignore_instruction_limit)
+						code += "counter += 15;\n"; // divd is a slow operation
+				}
+				break;
 			case RV32F__FSQRT:
 				if (fi.R4type.funct2 == 0x0) { // fp32
 					code += "set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
+					if (!tinfo.ignore_instruction_limit)
+						code += "counter += 10;\n"; // sqrtf is a slow operation
 				} else { // fp64
 					code += "set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
+					if (!tinfo.ignore_instruction_limit)
+						code += "counter += 15;\n"; // sqrtd is a slow operation
 				}
 				break;
 			case RV32F__FSGNJ_NX:
