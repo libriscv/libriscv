@@ -12,7 +12,7 @@ static std::string compiler()
 {
 	const char* cc = getenv("CC");
 	if (cc) return std::string(cc);
-	return "gcc";
+	return "cc";
 }
 static std::string extra_cflags()
 {
