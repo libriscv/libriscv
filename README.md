@@ -300,6 +300,8 @@ See [this unit test](/tests/unit/custom.cpp) for an example on how to add your o
 
 ## Documentation
 
+[Integrating libriscv into your projects](docs/INTEGRATION.md)
+
 [Fast custom RISC-V compiler](docs/NEWLIB.md)
 
 [System calls](docs/SYSCALLS.md)

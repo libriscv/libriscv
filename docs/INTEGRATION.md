@@ -2,7 +2,7 @@
 
 Integrating libriscv into your project is fairly straight-forward, but employing it as a low-latency scripting solution is more difficult. There is an example of how to do this in my [RVScript repository](https://github.com/fwsGonzo/rvscript). There is also a simpler version of this in this repostiryo, [the gamedev examples](/examples/gamedev).
 
-Despite the complexity required, let's just go through everything from the start.
+This document explains how to integrate _libriscv_ into your projects.
 
 ## Embedding libriscv
 
@@ -55,7 +55,7 @@ Note that you can also install libriscv through packaging, eg. `libriscv` on AUR
 
 ## Configuring libriscv
 
-_libriscv_ has good defaults, but has a variety of configuration options that changes its behavior and even performance.
+_libriscv_ has good defaults, but has a variety of configuration options that alters its behavior and even performance. Some options are declared experimental, and not appropriate for sandboxing.
 
 _libriscv_ is primarily configured using CMake options:
 
@@ -95,31 +95,35 @@ _libriscv_ is primarily configured using CMake options:
 > RISCV_LIBTCC
 - Enable JIT-compilation using libtcc. Binary translation must also be enabled.
 
+> RISCV_LIBTCC_DISTRO_PACKAGE
+- When RISCV_LIBTCC is enabled, an option to use libtcc from a distro package is available. When enabled, `libtcc.a` is used directly and must be in the search path. When disabled, a CMake version of libtcc is fetched from a remote Git repository.
+
 > RISCV_FLAT_RW_ARENA
-- Enable high-performance memory operations using a flat read-write arena. The guest address is separated into 4 parts: 1. The area starting at zero up to the ELF begin is made invalid. 2. The area starting from the ELF to the end of .rodata is made read-only. The .data section and up to the end of the arena is made read+write. And finally, outside of the arena uses virtual paging, where page protections apply.
+- Enable high-performance memory operations using a flat read-write arena. The guest address space is separated into 4 parts: 1. The area starting at zero up to the beginning of the ELF program is made invalid. 2. The area starting from the ELF to the end of .rodata is made read-only. The .data section and up to the end of the arena is made read+write. And finally, outside of the arena uses virtual paging, where page protections apply.
 
 > RISCV_THREADED
 - Enable threaded dispatch, using computed goto. Fastest dispatch method. When threaded and tailcall are both disabled, fall back to switch-based dispatch.
 
 > RISCV_TAILCALL_DISPATCH
-- Enable dispatch using musttail. Clang only.
+- Enable dispatch using musttail. Clang only. Faster than threaded for simple loops, but on real programs it is always a bit slower.
 
 > RISCV_ENCOMPASSING_ARENA
 - Create an N-bit address space where all memory operations must reside. All memory accesses outside of this address space is inaccessible.
 
 > RISCV_ENCOMPASSING_ARENA_BITS
-- When RISCV_ENCOMPASSING_ARENA is enabled, this option sets the number of bits each memory address has, effectively making up the size of the address space. For example, 32-bits is a 4GB address space, and 30 is a 1GB address space. 32-bits is most likely the fastest setting. The entire address space is mapped out at construction. Experimental feature.
+- When RISCV_ENCOMPASSING_ARENA is enabled, this option sets the number of bits each memory address has, effectively making up the size of the address space. For example, 32-bits is a 4GB address space, and 30 is a 1GB address space. 32-bits is most likely the fastest setting. The entire address space is mapped out at construction. Address masking is used to avoid bounds-checking and speculation issues. Experimental feature.
 
 > RISCV_TIMED_VMCALLS
-- Allow execution without instruction counting, instead timed out using timers and signals. Very experimental feature.
+- Allow execution without instruction counting, instead execution is timed out using timers and signals. Very experimental feature. Works well in a CLI, but should _definitely not_ be used in production.
 
 The fastest configuration is:
-1. Use 32-bit RISC-V
-2. Disable C-extension
-3. Enable flat read-write arena
+1. Use 32-bit RISC-V for fast instruction dispatch, or 64-bit RISC-V for higher memory bandwidth
+2. Disable C-extension, unless your RISC-V programs use it
+3. Always enable flat read-write arena
 4. Enable experimental + 32-bit encompassing arena
 5. Enable binary translation (or use embedded source files)
 6. Enable timed VM calls
+7. Enable link-time optimization
 
 Although this is the fastest known configuration, one should use the one that is most convenient.
 
@@ -128,7 +132,7 @@ Although this is the fastest known configuration, one should use the one that is
 The Machine constructor has many options, and we will go through each one.
 
 > memory_max
-- Set the maximum amount (upper limit) of memory a guest program can consume. Inside this memory a guest program can do anything it wants to, however it may never access memory outside of this area.
+- Set the maximum amount (upper limit) of memory a guest program can consume. Inside this memory a guest program can do anything it wants to, however it may never access memory outside of this area. If you give the guest 8GB of memory, it is possible it will only end up using 100MB. Only memory that is written to will use physical memory on your machine.
 
 > stack_size
 - Set the initial stack size for the main thread. This is a simple mmap allocation. Think of it as `stack = machine.memory.mmap_allocate(stack_size)`. It does not extend guest memory, nor does it touch memory.
@@ -137,16 +141,16 @@ The Machine constructor has many options, and we will go through each one.
 - A largely unused setting that sets the Machine's current CPU id. Used only by the experimental multi-processing feature.
 
 > load_program
-- When true, the binary provided to Machine will be loaded as an ELF program. Default: true.
+- When enabled, the binary provided to Machine will be loaded as an ELF program. Default: true.
 
 > protect_segments
-- When true, the protection bits in the ELF segments of a loaded ELF program will be applied to the pages they are loaded to. Default: true.
+- When enabled, the protection bits in the ELF segments of a loaded ELF program will be applied to the pages they are loaded to. Default: true.
 
 > allow_write_exec_segment
-- Allow loading a segment with write+execute at the same time. Default: false.
+- Allow loading a segment with write+execute at the same time. When not enabled, any W+E segment will throw an exception, preventing Machine construction. Default: false.
 
 > enforce_exec_only
-- Only allow execute-only segments. An executable segment with read- or write-permissions will cause an exception, preventing construction. Default: false.
+- Only allow execute-only segments. An executable segment with read- or write-permissions will cause an exception, preventing Machine construction. Default: false.
 
 > ignore_text_section
 - Some programs have executable code outside of the .text section, which is unfortunate. Setting this to true allows loading these programs. Default: false.
@@ -196,37 +200,15 @@ The Machine constructor has many options, and we will go through each one.
 
 ## Compiling a RISC-V program
 
-There are compilers for RISC-V that comes with Linux distributions, however they are not the most performant way to go. They primarily use RV64GC, which is not the fastest way to emulate RISC-V, but still quite acceptable. If you have the choice, clone the riscv-gnu-toolchain and compile for Newlib:
-
-```sh
-./configure --prefix=$HOME/riscv --with-arch=rv64g_zba_zbb_zbc_zbs --with-abi=lp64d
-make
-```
-
-Or, for 32-bit:
-```sh
-./configure --prefix=$HOME/riscv --with-arch=rv32g_zba_zbb_zbc_zbs --with-abi=ilp32d
-make
-```
-
-Now adding `$HOME/riscv/bin` to your PATH will expose a custom built RISC-V compiler.
-Add this to `.bashrc`:
-
-```sh
-export PATH=$PATH:$HOME/riscv/bin
-```
-
-You should now be able to execute this from command-line:
-
-```sh
-$ riscv64-unknown-elf-g++ --version
-riscv64-unknown-elf-g++ (gc891d8dc23e) 13.2.0
-
-$ riscv32-unknown-elf-g++ --version
-riscv32-unknown-elf-g++ (gc891d8dc23e) 13.2.0
-```
-
 Note that compiling your own RISC-V compiler is completely optional. _libriscv_ is fully compatible with any local RISC-V compilers in your packaging system, and compatible with most if not all systems languages (C/C++, Zig, Rust, ...).
+
+Further, just using your distributions local RISC-V cross-compiler is recommended. If, however, you want to compile your own RISC-V toolchain [have a look at our guide](/docs/NEWLIB.md).
+
+Your distributions RISC-V cross-compiler is typically installed like this:
+
+```sh
+sudo apt install gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu
+```
 
 ## Compiling a basic program
 
@@ -249,10 +231,10 @@ int main()
 
 We can compile it like so:
 ```sh
-riscv64-unknown-elf-gcc -static -O2 myprogram.cpp -o myprogram
+riscv64-linux-gnu-gcc-12 -static -O2 myprogram.cpp -o myprogram
 ```
 
-We always compile statically, in order for everything (all dependencies) to be available to us inside the program. The program will be self-contained.
+We generally compile statically, in order for everything (all dependencies) to be available to us inside the program. The program will be self-contained. Although dynamic executables are supported, some whitelisting is needed in order to allow the sandbox to dynamically load and link shared libraries. This is why we prefer static linking over other mechanisms.
 
 Now we can run through `main()` and we can also make a function call to `my_function`:
 
@@ -287,6 +269,11 @@ int main()
 ```
 
 Note: If you strip the program, you cannot call even retained functions. Use a linker option to strip all symbols except the ones you care about instead from a text file: `-Wl,--retain-symbols-file=symbols.txt`. Alternatively, only strip debug symbols. Debug information is often the largest contributor to file size.
+
+# Simple system-call implementation
+
+For most people, just using a simple system call scheme that doesn't require much scaffolding will be good enough. So, have a look at the [gamedev example](/examples/gamedev) where this is done.
+
 
 # Advanced features
 
