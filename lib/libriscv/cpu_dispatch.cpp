@@ -201,7 +201,7 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	// Invoke system call
 	MACHINE().system_call(REG(REG_ECALL));
 	// Restore max counter
-	counter.retrieve_max_counter(MACHINE());
+	counter.retrieve_counters(MACHINE());
 	if (UNLIKELY(counter.overflowed() || pc != REGISTERS().pc))
 	{
 		// System calls are always full-length instructions

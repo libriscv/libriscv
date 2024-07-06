@@ -13,12 +13,6 @@ inline bool Machine<W>::instruction_limit_reached() const noexcept {
 }
 
 template <int W>
-void Machine<W>::penalize(uint64_t val) noexcept
-{
-	m_max_counter = (val >= m_max_counter) ? 0u : m_max_counter - val;
-}
-
-template <int W>
 template <bool Throw>
 inline bool Machine<W>::simulate_with(uint64_t max_instr, uint64_t counter, address_t pc)
 {

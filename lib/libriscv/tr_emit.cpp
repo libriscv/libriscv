@@ -1071,6 +1071,7 @@ void Emitter<W>::emit()
 					if (!tinfo.ignore_instruction_limit) {
 						code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
 							"  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+						code += "counter = INS_COUNTER(cpu);\n"; // Restore instruction counter
 					} else {
 						code += "if (UNLIKELY(do_syscall(cpu, 0, max_counter, " + syscall_reg + "))) {\n"
 							"  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";

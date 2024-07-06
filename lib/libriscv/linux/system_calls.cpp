@@ -935,7 +935,7 @@ static void syscall_getrandom(Machine<W>& machine)
 	}
 	const size_t need = std::min((size_t)g_len, sizeof(buffer));
 #if defined(__OpenBSD__)
-	const ssize_t result = 0; // always success
+	const ssize_t result = need; // always success
 	arc4random_buf(buffer, need);
 #elif defined(__APPLE__)
     const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
@@ -945,6 +945,8 @@ static void syscall_getrandom(Machine<W>& machine)
 #endif
 	if (result > 0) {
 		machine.copy_to_guest(g_addr, buffer, result);
+		// getrandom() is a slow syscall, penalize it
+		machine.penalize(20'000 * result); // 20K insn per byte
 	}
 	machine.set_result(result);
 

@@ -149,7 +149,7 @@ namespace riscv
 		// Invoke system call
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
 		// Restore max counter
-		counter.retrieve_max_counter(MACHINE());
+		counter.retrieve_counters(MACHINE());
 		// Clone-like system calls can change PC
 		if (UNLIKELY(pc != cpu.registers().pc))
 		{

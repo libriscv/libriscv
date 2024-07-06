@@ -128,9 +128,15 @@ namespace riscv
 		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
 		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
-		void     penalize(uint64_t val) noexcept;
 		uint64_t max_instructions() const noexcept { return m_max_counter; }
 		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
+		/// @brief Adding a penalty is used to prevent guest programs from
+		/// monopolizing the CPU by executing expensive system calls. The
+		/// instruction counter is increased by the penalty value, and has
+		/// the same effect as if the guest program executed that many
+		/// instructions.
+		/// @param val The value to add to the instruction counter.
+		void     penalize(uint32_t val);
 
 		CPU<W>    cpu;
 		Memory<W> memory;

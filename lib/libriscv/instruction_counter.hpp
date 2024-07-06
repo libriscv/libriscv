@@ -35,6 +35,11 @@ namespace riscv
 		void retrieve_max_counter(Machine<W>& machine) {
 			m_max     = machine.max_instructions();
 		}
+		template <int W>
+		void retrieve_counters(Machine<W>& machine) {
+			m_counter = machine.instruction_counter();
+			m_max     = machine.max_instructions();
+		}
 
 		uint64_t value() const noexcept {
 			return m_counter;
