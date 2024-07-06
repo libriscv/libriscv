@@ -233,7 +233,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 				}
 
 				if (options.verbose_loader) {
-					printf("Found embedded translation for hash %08X, %u/%u mappings\n",
+					printf("libriscv: Found embedded translation for hash %08X, %u/%u mappings\n",
 						checksum, unique_mappings, translation.nmappings);
 				}
 
@@ -253,7 +253,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			}
 		}
 		if (options.verbose_loader) {
-			printf("No embedded translation found for hash %08X\n", checksum);
+			printf("libriscv: No embedded translation found for hash %08X\n", checksum);
 		}
 	}
 
@@ -599,13 +599,13 @@ VISIBLE const struct Mapping mappings[] = {
 	}
 
 	if (verbose) {
-		printf("Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
+		printf("libriscv: Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
 			icounter, dlmappings.size(), (long) gp);
 	}
 	// nothing to compile without mappings
 	if (dlmappings.empty()) {
 		if (verbose) {
-			printf("Binary translator has nothing to compile! No mappings.\n");
+			printf("libriscv: Binary translator has nothing to compile! No mappings.\n");
 		}
 		return;
 	}
@@ -900,15 +900,15 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		}
 	}
 
-	if (options.verbose_loader) {
-		printf("libriscv: Activated binary translation with %u/%u mappings%s\n",
-			unique_mappings, nmappings,
-			live_patch ? ", live-patching enabled" : "");
-	}
-
 	if (options.translate_timing) {
 		TIME_POINT(t12);
 		printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
+	}
+	if (options.verbose_loader) {
+		printf("libriscv: Activated %s binary translation with %u/%u mappings%s\n",
+			is_libtcc ? "libtcc" : "full",
+			unique_mappings, nmappings,
+			live_patch ? ", live-patching enabled" : "");
 	}
 }
 
