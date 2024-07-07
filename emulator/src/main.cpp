@@ -108,7 +108,7 @@ static void print_help(const char* name)
 #ifdef RISCV_FLAT_RW_ARENA
 		"-  Flat sequential memory arena is enabled\n"
 #endif
-#ifdef RISCV_ENCOMPASSING_ARENA
+#ifdef RISCV_ENCOMPASSING_ARENA_BITS
 #define _STR(x) #x
 #define STR(x) _STR(x)
 		"-  Fixed N-bit address space is enabled (" STR(RISCV_ENCOMPASSING_ARENA_BITS) " bits)\n"
