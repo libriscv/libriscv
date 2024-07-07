@@ -209,9 +209,16 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	checksum = ~crc32c(~checksum, cflags.c_str(), cflags.size());
 	exec.set_translation_hash(checksum);
 
+	if (options.translate_timing) {
+		TIME_POINT(t6);
+		printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
+	}
+
 	// Check if translation is registered
 	if (options.translate_enable_embedded)
 	{
+		TIME_POINT(t6);
+
 		for (size_t i = 0; i < registered_embedded_translations<W>.count; i++)
 		{
 			auto& translation = registered_embedded_translations<W>.translations[i];
@@ -248,6 +255,10 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 					auto& entry = decoder_entry_at(exec.decoder_cache(), mapping.addr);
 					entry.instr = mapping_index;
 					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+				}
+				if (options.translate_timing) {
+					TIME_POINT(t7);
+					printf(">> Activating embedded code took %ld ns\n", nanodiff(t5, t6));
 				}
 				return 0;
 			}

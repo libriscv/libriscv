@@ -346,6 +346,9 @@ struct Emitter
 		if (icount > 0 && !tinfo.ignore_instruction_limit)
 			code.append("counter += " + std::to_string(icount) + ";\n");
 	}
+	void penalty(uint64_t cycles) {
+		this->m_instr_counter += cycles;
+	}
 
 	bool block_exists(address_t pc) const noexcept {
 		for (auto& blk : *tinfo.blocks) {
@@ -1371,23 +1374,19 @@ void Emitter<W>::emit()
 			case RV32F__FDIV:
 				if (fi.R4type.funct2 == 0x0) { // fp32
 					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0] / " + rs2 + ".f32[0]);\n";
-					if (!tinfo.ignore_instruction_limit)
-						code += "counter += 10;\n"; // divf is a slow operation
+					this->penalty(10); // divf is a slow operation
 				} else { // fp64
 					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 / " + rs2 + ".f64);\n";
-					if (!tinfo.ignore_instruction_limit)
-						code += "counter += 15;\n"; // divd is a slow operation
+					this->penalty(15); // divd is a slow operation
 				}
 				break;
 			case RV32F__FSQRT:
 				if (fi.R4type.funct2 == 0x0) { // fp32
 					code += "set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
-					if (!tinfo.ignore_instruction_limit)
-						code += "counter += 10;\n"; // sqrtf is a slow operation
+					this->penalty(10); // sqrtf is a slow operation
 				} else { // fp64
 					code += "set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
-					if (!tinfo.ignore_instruction_limit)
-						code += "counter += 15;\n"; // sqrtd is a slow operation
+					this->penalty(15); // sqrtd is a slow operation
 				}
 				break;
 			case RV32F__FSGNJ_NX:
@@ -1469,6 +1468,7 @@ void Emitter<W>::emit()
 			} else UNKNOWN_INSTRUCTION();
 			} break; // RV32F_FPFUNC
 		case RV32A_ATOMIC: // General handler for atomics
+			this->penalty(20); // Atomic operations are slow
 			UNKNOWN_INSTRUCTION();
 			break;
 		case RV32V_OP: {   // General handler for vector instructions
