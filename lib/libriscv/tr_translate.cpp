@@ -616,7 +616,7 @@ VISIBLE const struct Mapping mappings[] = {
 
 	// Compilation step
 	std::function<void()> compilation_step =
-	[options, defines = std::move(defines), code = std::move(code), footer = std::move(footer), filename, arena, live_patch, shared_segment = shared_segment]
+	[options, defines = std::move(defines), code, footer = std::move(footer), filename, arena, live_patch, shared_segment = shared_segment]
 	{
 		//printf("*** Compiling translation from 0x%lX to 0x%lX ***\n",
 		//	long(shared_segment->exec_begin()), long(shared_segment->exec_end()));
