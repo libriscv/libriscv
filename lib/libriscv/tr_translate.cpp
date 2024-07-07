@@ -560,12 +560,12 @@ if constexpr (SCAN_FOR_GP) {
 	// Code generation
 	std::vector<TransMapping<W>> dlmappings;
 	extern const std::string bintr_code;
-	std::string code = bintr_code;
+	std::shared_ptr<std::string> code = std::make_shared<std::string>(bintr_code);
 
 	for (auto& block : blocks)
 	{
 		block.blocks = &blocks;
-		auto result = emit(code, block);
+		auto result = emit(*code, block);
 
 		for (auto& mapping : result) {
 			dlmappings.push_back(std::move(mapping));
@@ -624,7 +624,7 @@ VISIBLE const struct Mapping mappings[] = {
 		void* dylib = nullptr;
 		auto* exec = shared_segment.get();
 		// Final shared library loadable code w/footer
-		const std::string shared_library_code = code + footer;
+		const std::string shared_library_code = *code + footer;
 
 		TIME_POINT(t9);
 		if constexpr (libtcc_enabled) {
@@ -697,7 +697,7 @@ VISIBLE const struct Mapping mappings[] = {
 			for (auto& def : defines) {
 				embed_file << "#define " << def.first << " " << def.second << "\n";
 			}
-			embed_file << code;
+			embed_file << *code;
 			// Construct a footer that self-registers the translation
 			const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
 			embed_file << R"V0G0N(
