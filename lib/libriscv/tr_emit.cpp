@@ -511,15 +511,16 @@ void Emitter<W>::emit()
 					printf("Unexpanded instruction: 0x%04hx at PC 0x%lX (original 0x%x)\n", compressed_instr, long(this->pc()), original);
 				// When illegal opcode is encountered, reveal PC
 				if (compressed_instr == 0x0) {
-					code += "cpu->pc = " + STRADDR(this->pc()) + ";\n";
-				}
-				char buffer[64];
-				const int len = snprintf(buffer, sizeof(buffer),
-					"api.execute(cpu, %#04hx);\n", compressed_instr);
-				if (len > 0) {
-					code += std::string(buffer, len);
+					code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
 				} else {
-					throw MachineException(INVALID_PROGRAM, "Failed to format instruction");
+					char buffer[64];
+					const int len = snprintf(buffer, sizeof(buffer),
+						"api.execute(cpu, %#04hx);\n", compressed_instr);
+					if (len > 0) {
+						code += std::string(buffer, len);
+					} else {
+						throw MachineException(INVALID_PROGRAM, "Failed to format instruction");
+					}
 				}
 				continue;
 			}
