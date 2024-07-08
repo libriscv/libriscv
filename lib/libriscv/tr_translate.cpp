@@ -63,7 +63,7 @@ namespace riscv
 	template <int W>
 	struct Mapping {
 		address_type<W> addr;
-		bintr_block_func<W> handler;
+		unsigned mapping_index;
 	};
 
 	// This implementation is designed to make sure it's not a global constructor
@@ -73,7 +73,9 @@ namespace riscv
 	struct EmbeddedTranslation {
 		uint32_t    hash = 0;
 		uint32_t    nmappings = 0;
+		uint32_t    nhandlers = 0;
 		const Mapping<W>* mappings = nullptr;
+		const bintr_block_func<W>* handlers = nullptr;
 		// NOTE: Pointer to the callback table (which we host here)
 		riscv::CallbackTable<W>* api_table = nullptr;
 	};
@@ -86,7 +88,8 @@ namespace riscv
 	static EmbeddedTranslations<W> registered_embedded_translations;
 
 	template <int W>
-	static void register_translation(uint32_t hash, const Mapping<W>* mappings, uint32_t nmappings, riscv::CallbackTable<W>* table_ptr)
+	static void register_translation(uint32_t hash, const Mapping<W>* mappings, uint32_t nmappings,
+		const bintr_block_func<W>* handlers, uint32_t nhandlers, riscv::CallbackTable<W>* table_ptr)
 	{
 		auto& translations = registered_embedded_translations<W>;
 		if (translations.count >= MAX_EMBEDDED) {
@@ -96,6 +99,8 @@ namespace riscv
 		translation.hash = hash;
 		translation.nmappings = nmappings;
 		translation.mappings  = mappings;
+		translation.nhandlers = nhandlers;
+		translation.handlers  = handlers;
 		translation.api_table = table_ptr;
 	}
 
@@ -225,19 +230,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			if (translation.hash == checksum)
 			{
 				*translation.api_table = create_bintr_callback_table(exec);
-
-				// Find unique mappings
-				std::unordered_map<bintr_block_func<W>, unsigned> mapping_indices;
-				unsigned unique_mappings = 0;
-
-				for (size_t i = 0; i < translation.nmappings; i++)
-				{
-					auto it = mapping_indices.find(translation.mappings[i].handler);
-					if (it == mapping_indices.end()) {
-						mapping_indices.emplace(translation.mappings[i].handler, unique_mappings);
-						unique_mappings++;
-					}
-				}
+				auto unique_mappings = translation.nhandlers;
 
 				if (options.verbose_loader) {
 					printf("libriscv: Found embedded translation for hash %08X, %u/%u mappings\n",
@@ -245,20 +238,20 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 				}
 
 				exec.create_mappings(unique_mappings);
-				for (auto it : mapping_indices) {
-					exec.set_mapping(it.second, it.first);
+				for (unsigned i = 0; i < translation.nhandlers; i++) {
+					exec.set_mapping(i, translation.handlers[i]);
 				}
+
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
-					const auto mapping_index = mapping_indices.at(mapping.handler);
 
 					auto& entry = decoder_entry_at(exec.decoder_cache(), mapping.addr);
-					entry.instr = mapping_index;
+					entry.instr = mapping.mapping_index;
 					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
 				}
 				if (options.translate_timing) {
 					TIME_POINT(t7);
-					printf(">> Activating embedded code took %ld ns\n", nanodiff(t5, t6));
+					printf(">> Activating embedded code took %ld ns\n", nanodiff(t6, t7));
 				}
 				return 0;
 			}
@@ -589,18 +582,44 @@ if constexpr (SCAN_FOR_GP) {
 		+ std::to_string(dlmappings.size()) + ";\n";
 	footer += R"V0G0N(
 struct Mapping {
-	addr_t addr;
-	ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
+	addr_t   addr;
+	unsigned mapping_index;
 };
 VISIBLE const struct Mapping mappings[] = {
 )V0G0N";
+
+	std::unordered_map<std::string, unsigned> mapping_indices;
+	std::vector<const std::string*> handlers;
+	handlers.reserve(blocks.size());
+
 	for (const auto& mapping : dlmappings)
 	{
+		// Create map of unique mappings
+		unsigned mapping_index = 0;
+		auto it = mapping_indices.find(mapping.symbol);
+		if (it == mapping_indices.end()) {
+			mapping_index = handlers.size();
+			mapping_indices.emplace(mapping.symbol, mapping_index);
+			handlers.push_back(&mapping.symbol);
+		} else {
+			mapping_index = it->second;
+		}
+
 		char buffer[128];
 		snprintf(buffer, sizeof(buffer), 
-			"{0x%lX, %s},\n",
-			(long)mapping.addr, mapping.symbol.c_str());
+			"{0x%lX, %u},\n",
+			(long)mapping.addr, mapping_index);
 		footer.append(buffer);
+	}
+	footer += "};\nVISIBLE const uint32_t no_handlers = "
+		+ std::to_string(mapping_indices.size()) + ";\n"
+		+ "VISIBLE const void* unique_mappings[] = {\n";
+
+	// Create array of unique mappings
+	if (handlers.size() != blocks.size())
+		throw MachineException(INVALID_PROGRAM, "Mismatch in unique mappings");
+	for (auto* handler : handlers) {
+		footer += "    " + *handler + ",\n";
 	}
 	footer += "};\n";
 
@@ -713,24 +732,46 @@ VISIBLE const struct Mapping mappings[] = {
 			const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
 			embed_file << R"V0G0N(
 			struct Mappings {
-				addr_t addr;
-				ReturnValues (*handler)(CPU*, uint64_t, uint64_t, addr_t);
+				addr_t   addr;
+				unsigned mapping_index;
 			};
-			extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
-			extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, struct CallbackTable*);
+			typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
+			extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, struct CallbackTable*);
+			extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, struct CallbackTable*);
 			static __attribute__((constructor)) void register_translation() {
 				static const Mappings mappings[] = {
 			)V0G0N";
+
+			std::unordered_map<std::string, unsigned> mapping_indices;
+			std::vector<const std::string*> handlers;
+
 			for (const auto& mapping : dlmappings)
 			{
+				// Create map of unique mappings
+				unsigned mapping_index = 0;
+				auto it = mapping_indices.find(mapping.symbol);
+				if (it == mapping_indices.end()) {
+					mapping_index = handlers.size();
+					mapping_indices.emplace(mapping.symbol, mapping_index);
+					handlers.push_back(&mapping.symbol);
+				} else {
+					mapping_index = it->second;
+				}
+
 				char buffer[128];
 				snprintf(buffer, sizeof(buffer), 
-					"{0x%lX, %s},\n",
-					(long)mapping.addr, mapping.symbol.c_str());
+					"{0x%lX, %u},\n",
+					(long)mapping.addr, mapping_index);
 				embed_file << buffer;
 			}
-			embed_file << "    };\n";
-			embed_file << "    " << reg_func << "(" << hash << ", mappings, " << dlmappings.size() << ", &api);\n";
+			embed_file << "    };\n"
+				"static bintr_func unique_mappings[] = {\n";
+			for (auto* handler : handlers) {
+				embed_file << "    " << *handler << ",\n";
+			}
+			embed_file << "};\n"
+				"    " << reg_func << "(" << hash << ", mappings, " << dlmappings.size()
+				<< ", unique_mappings, " << mapping_indices.size() << ", &api);\n";
 			embed_file << "}\n";
 		}
 	}
@@ -772,6 +813,8 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// Map all the functions to instruction handlers
 	const uint32_t* no_mappings = (const uint32_t *)dylib_lookup(dylib, "no_mappings", is_libtcc);
 	const auto* mappings = (const Mapping<W> *)dylib_lookup(dylib, "mappings", is_libtcc);
+	const uint32_t* no_handlers = (const uint32_t *)dylib_lookup(dylib, "no_handlers", is_libtcc);
+	const auto* handlers = (const bintr_block_func<W> *)dylib_lookup(dylib, "unique_mappings", is_libtcc);
 
 	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
 		dylib_close(dylib, is_libtcc);
@@ -797,20 +840,12 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	}
 	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
 	const unsigned nmappings = *no_mappings;
-	unsigned unique_mappings = 0;
-	for (unsigned i = 0; i < nmappings; i++)
-	{
-		auto it = block_indices.find(mappings[i].handler);
-		if (it == block_indices.end()) {
-			block_indices.emplace(mappings[i].handler, unique_mappings);
-			unique_mappings++;
-		}
-	}
+	const unsigned unique_mappings = *no_handlers;
 
 	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
 	exec.create_mappings(unique_mappings + 1);
-	for (auto it : block_indices) {
-		exec.set_mapping(it.second, it.first);
+	for (unsigned i = 0; i < unique_mappings; i++) {
+		exec.set_mapping(i, handlers[i]);
 	}
 	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
 		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
@@ -824,11 +859,12 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// This way, we can avoid the O(n) search for each mapping, and instead do it in O(1).
 	for (unsigned i = 0; i < nmappings; i++)
 	{
-		const unsigned mapping_index = block_indices.at(mappings[i].handler);
+		const unsigned mapping_index = mappings[i].mapping_index;
 		const auto addr = mappings[i].addr;
 
 		if (exec.is_within(addr)) {
-			if (mappings[i].handler != nullptr)
+			auto* handler = handlers[mapping_index];
+			if (handler != nullptr)
 			{
 				if (live_patch) {
 					// NOTE: If we don't use the patched decoder here, entries
@@ -1182,15 +1218,17 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 
 extern "C" {
 #ifdef RISCV_32I
-	void libriscv_register_translation4(uint32_t hash, const riscv::Mapping<4>* mappings, uint32_t nmappings, riscv::CallbackTable<4>* table_ptr)
+	void libriscv_register_translation4(uint32_t hash, const riscv::Mapping<4>* mappings, uint32_t nmappings,
+		const riscv::bintr_block_func<4>* handlers, uint32_t nhandlers, riscv::CallbackTable<4>* table_ptr)
 	{
-		riscv::register_translation<4>(hash, mappings, nmappings, table_ptr);
+		riscv::register_translation<4>(hash, mappings, nmappings, handlers, nhandlers, table_ptr);
 	}
 #endif
 #ifdef RISCV_64I
-	void libriscv_register_translation8(uint32_t hash, const riscv::Mapping<8>* mappings, uint32_t nmappings, riscv::CallbackTable<8>* table_ptr)
+	void libriscv_register_translation8(uint32_t hash, const riscv::Mapping<8>* mappings, uint32_t nmappings,
+		const riscv::bintr_block_func<8>* handlers, uint32_t nhandlers, riscv::CallbackTable<8>* table_ptr)
 	{
-		riscv::register_translation<8>(hash, mappings, nmappings, table_ptr);
+		riscv::register_translation<8>(hash, mappings, nmappings, handlers, nhandlers, table_ptr);
 	}
 #endif
 }
