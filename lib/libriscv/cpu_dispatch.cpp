@@ -171,8 +171,6 @@ retry_translated_function:
 	if (LIKELY(cnt < max && (pc - current_begin < current_end - current_begin))) {
 		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
-			pc += decoder->block_bytes();
-			cnt += decoder->instruction_count() - 1;
 			goto retry_translated_function;
 		}
 		counter.set_counters(cnt, max);
