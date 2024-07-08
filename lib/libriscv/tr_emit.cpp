@@ -662,6 +662,7 @@ void Emitter<W>::emit()
 				if (dest_pc > this->pc()) {
 					labels.insert(dest_pc);
 					add_code("goto " + FUNCLABEL(dest_pc) + ";");
+					already_exited = true; // Unconditional jump
 				} else if (tinfo.ignore_instruction_limit) {
 					// jump backwards: without counters
 					add_code("goto " + FUNCLABEL(dest_pc) + ";");
@@ -670,6 +671,7 @@ void Emitter<W>::emit()
 					// TODO: Check if the next instruction is a public symbol address
 					if (instr.Jtype.rd == 0)
 						add_reentry = true;
+					already_exited = true; // Unconditional jump
 				} else {
 					// jump backwards: use counters
 					add_code("if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(dest_pc) + ";");
@@ -689,15 +691,14 @@ void Emitter<W>::emit()
 					//printf("Jump location OK (forward): 0x%lX for block 0x%lX -> 0x%lX\n", long(dest_pc),
 					//	long(this->begin_pc()), long(this->end_pc()));
 					auto target_func = funclabel<W>("f", target_funcaddr);
-					// Call the function and get the return values
-					add_code("{ReturnValues rv;");
 					add_forward(target_func);
-					// Update the local counter registers
 					if (!tinfo.ignore_instruction_limit) {
-						add_code("rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
+						// Call the function and get the return values
+						add_code("{ReturnValues rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
+						// Update the local counter registers
 						add_code("counter = rv.counter;");
 					} else {
-						add_code("rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
+						add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
 					}
 					add_code("max_counter = rv.max_counter;}");
 					// If the counter is exhausted, or PC has diverged, exit the function
