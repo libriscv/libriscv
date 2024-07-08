@@ -29,6 +29,7 @@ function usage()
      -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
+	 -N bits              enable N-bits of masked address space (experimental feature)
 	 --no-expr            disable experimental features
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
@@ -62,6 +63,7 @@ while [[ "$#" -gt 0 ]]; do
         -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
         -t|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
         -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;
+		-N) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON -DRISCV_ENCOMPASSING_ARENA_BITS=$2"; shift ;;
         --no-expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=OFF" ;;
 		--embed) EMBED_FILES="$EMBED_FILES;$2"; shift ;;
 		--embed-all) embed_all ;;

@@ -6,7 +6,7 @@
 #include <thread>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
-static constexpr uint64_t MAX_MEMORY = 2000ULL << 20;
+static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(2000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
 
 struct Arguments {
@@ -111,10 +111,10 @@ static void print_help(const char* name)
 #ifdef RISCV_ENCOMPASSING_ARENA_BITS
 #define _STR(x) #x
 #define STR(x) _STR(x)
-		"-  Fixed N-bit address space is enabled (" STR(RISCV_ENCOMPASSING_ARENA_BITS) " bits)\n"
+		"-  " STR(RISCV_ENCOMPASSING_ARENA_BITS) "-bit masked address space is enabled (experimental)\n"
 #endif
 #ifdef RISCV_TIMED_VMCALLS
-		"-  Timed VM calls are enabled\n"
+		"-  Timed VM calls are enabled (experimental)\n"
 #endif
 		"\n"
 	);

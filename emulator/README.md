@@ -74,6 +74,8 @@ $ ./build.sh --help
      -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
+	 -N bits              enable N-bits of masked address space (experimental feature)
+	 --no-expr            disable experimental features
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 
