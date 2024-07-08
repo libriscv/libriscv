@@ -644,6 +644,10 @@ void Emitter<W>::emit()
 					"JUMP_TO(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
+			if (!tinfo.ignore_instruction_limit)
+				code += "if (cpu->pc >= " + STRADDR(this->begin_pc()) + " && cpu->pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }\n";
+			else
+				code += "if (cpu->pc >= " + STRADDR(this->begin_pc()) + " && cpu->pc < " + STRADDR(this->end_pc()) + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }\n";
 			exit_function("cpu->pc", false);
 			this->add_reentry_next();
 			} break;
@@ -1555,18 +1559,15 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	// Function header
 	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc) {\n";
 
-	// Extra function entries
-	if (e.get_mappings().size() > 1)
-	{
-		code += "switch (pc) {\n";
-		for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
-			auto& entry = e.get_mappings().at(idx);
-			const auto label = funclabel<W>(e.get_func(), entry.addr);
-			code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
-		}
-		code += "default: api.exception(cpu, pc, 3); return (ReturnValues){0, 0};\n";
-		code += "}\n";
+	code += e.get_func() + "_jumptbl:\n";
+	code += "switch (pc) {\n";
+	for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
+		auto& entry = e.get_mappings().at(idx);
+		const auto label = funclabel<W>(e.get_func(), entry.addr);
+		code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 	}
+	code += "default: return (ReturnValues){counter, max_counter};\n";
+	code += "}\n";
 
 	// Function GPRs
 	for (size_t reg = 1; reg < 32; reg++) {

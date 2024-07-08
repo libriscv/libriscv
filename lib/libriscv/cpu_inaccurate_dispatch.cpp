@@ -159,10 +159,7 @@ retry_translated_function:
 	{
 		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR)
-		{
-			pc += decoder->block_bytes();
 			goto retry_translated_function;
-		}
 		goto continue_segment;
 	} else if (bintr_results.max_counter == 0)
 		goto exit_check;
