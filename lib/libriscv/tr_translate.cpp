@@ -102,6 +102,11 @@ namespace riscv
 		translation.nhandlers = nhandlers;
 		translation.handlers  = handlers;
 		translation.api_table = table_ptr;
+
+		if (getenv("VERBOSE")) {
+			printf("libriscv: Registered embedded translation for hash %08X, %u/%u mappings\n",
+				hash, nhandlers, nmappings);
+		}
 	}
 
 	static std::string defines_to_string(const std::unordered_map<std::string, std::string>& cflags)
@@ -736,9 +741,9 @@ VISIBLE const struct Mapping mappings[] = {
 				unsigned mapping_index;
 			};
 			typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
-			extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, struct CallbackTable*);
-			extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, struct CallbackTable*);
-			static __attribute__((constructor)) void register_translation() {
+			extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+			extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+			static __attribute__((constructor, used)) void register_translation() {
 				static const Mappings mappings[] = {
 			)V0G0N";
 
@@ -1217,18 +1222,24 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 } // riscv
 
 extern "C" {
-#ifdef RISCV_32I
 	void libriscv_register_translation4(uint32_t hash, const riscv::Mapping<4>* mappings, uint32_t nmappings,
-		const riscv::bintr_block_func<4>* handlers, uint32_t nhandlers, riscv::CallbackTable<4>* table_ptr)
+		const riscv::bintr_block_func<4>* handlers, uint32_t nhandlers, void* table_ptr)
 	{
-		riscv::register_translation<4>(hash, mappings, nmappings, handlers, nhandlers, table_ptr);
-	}
+#ifdef RISCV_32I
+		riscv::register_translation<4>(hash, mappings, nmappings, handlers, nhandlers, (riscv::CallbackTable<4>*)table_ptr);
+#else
+		(void)hash; (void)mappings; (void)nmappings; (void)handlers; (void)nhandlers; (void)table_ptr;
+		fprintf(stderr, "libriscv: Warning: libriscv_register_translation4 called on 64-bit build\n");
 #endif
-#ifdef RISCV_64I
+	}
 	void libriscv_register_translation8(uint32_t hash, const riscv::Mapping<8>* mappings, uint32_t nmappings,
-		const riscv::bintr_block_func<8>* handlers, uint32_t nhandlers, riscv::CallbackTable<8>* table_ptr)
+		const riscv::bintr_block_func<8>* handlers, uint32_t nhandlers, void* table_ptr)
 	{
-		riscv::register_translation<8>(hash, mappings, nmappings, handlers, nhandlers, table_ptr);
-	}
+#ifdef RISCV_64I
+		riscv::register_translation<8>(hash, mappings, nmappings, handlers, nhandlers, (riscv::CallbackTable<8>*)table_ptr);
+#else
+		(void)hash; (void)mappings; (void)nmappings; (void)handlers; (void)nhandlers; (void)table_ptr;
+		fprintf(stderr, "libriscv: Warning: libriscv_register_translation8 called on 32-bit build\n");
 #endif
+	}
 }
