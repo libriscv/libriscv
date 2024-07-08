@@ -22,7 +22,7 @@ static const Instruction<RISCV64> custom_instruction_handler
 {
 	[] (CPU<RISCV64>& cpu, rv32i_instruction instr) {
 		printf("Hello custom instruction World!\n");
-		REQUIRE(instr.opcode() == 0b1010111);
+		REQUIRE(instr.opcode() == 0b1011011);
 
 		auto* state = cpu.machine().get_userdata<InstructionState> ();
 		// Argument number
@@ -57,8 +57,8 @@ int main()
 	__asm__("fcvt.d.w fa1, t0");      // Move integer from T0 to FA1 (64-bit fp)
 	__asm__("li a3, 0xDEADB33F");     // Load integer in A3
 	__asm__("li a7, 500");            // System call number 500
-	__asm__(".word 0b1000011010111"); // Indicate F1 contains a 64-bit fp argument
-	__asm__(".word 0b0000111010111"); // Indicate A3 contains a 64-bit unsigned argument
+	__asm__(".word 0b1000011011011"); // Indicate F1 contains a 64-bit fp argument
+	__asm__(".word 0b0000111011011"); // Indicate A3 contains a 64-bit unsigned argument
 	__asm__("ecall");                 // Execute system call
 	__asm__("ret");
 }
@@ -68,7 +68,7 @@ int main()
 	// select our custom instruction for a reserved opcode.
 	CPU<RISCV64>::on_unimplemented_instruction =
 	[] (rv32i_instruction instr) -> const Instruction<RISCV64>& {
-		if (instr.opcode() == 0b1010111) {
+		if (instr.opcode() == 0b1011011) {
 			return custom_instruction_handler;
 		}
 		return CPU<RISCV64>::get_unimplemented_instruction();

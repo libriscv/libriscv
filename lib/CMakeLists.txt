@@ -8,7 +8,7 @@ option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
 # set extensions. Not recommended to disable any.
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
-option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
+option(RISCV_EXT_V  "Enable RISC-V vector instructions" ON)
 # Enable 32-, 64- and 128-bit architecture emulation
 option(RISCV_32I    "Enable 32-bit RISC-V" ON)
 option(RISCV_64I    "Enable 64-bit RISC-V" ON)
@@ -267,6 +267,7 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/page.hpp
 		libriscv/prepared_call.hpp
 		libriscv/registers.hpp
+		libriscv/rvv_registers.hpp
 		libriscv/riscvbase.hpp
 		libriscv/rv32i_instr.hpp
 		libriscv/rva.hpp
