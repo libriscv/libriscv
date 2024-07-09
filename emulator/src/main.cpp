@@ -307,7 +307,7 @@ static void run_program(
 			static const std::string real_libdir = "/usr/riscv64-linux-gnu/lib/";
 			// The dynamic linker and libraries we allow
 			static const std::vector<std::string> libs = {
-				"libdl.so.2", "libm.so.6", "libgcc_s.so.1", "libc.so.6",
+				"libdl.so.2", "libm.so.6", "libgcc_s.so.1", "libc.so.6", "libatomic.so.1",
 				"libstdc++.so.6", "libresolv.so.2", "libnss_dns.so.2", "libnss_files.so.2"
 			};
 
