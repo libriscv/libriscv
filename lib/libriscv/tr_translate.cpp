@@ -216,12 +216,12 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		throw MachineException(INVALID_PROGRAM, "Invalid execute segment hash for translation");
 	}
 	// Also add the compiler flags to the checksum
-	checksum = ~crc32c(~checksum, cflags.c_str(), cflags.size());
+	checksum = crc32c(checksum, cflags.c_str(), cflags.size());
 	exec.set_translation_hash(checksum);
 
 	if (options.translate_timing) {
 		TIME_POINT(t6);
-		printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
+		printf(">> Execute segment 0x%X hashing took %ld ns\n", checksum, nanodiff(t5, t6));
 	}
 
 	// Check if translation is registered
@@ -235,24 +235,24 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			if (translation.hash == checksum)
 			{
 				*translation.api_table = create_bintr_callback_table(exec);
-				auto unique_mappings = translation.nhandlers;
 
 				if (options.verbose_loader) {
 					printf("libriscv: Found embedded translation for hash %08X, %u/%u mappings\n",
-						checksum, unique_mappings, translation.nmappings);
+						checksum, translation.nhandlers, translation.nmappings);
 				}
 
-				exec.create_mappings(unique_mappings);
+				exec.create_mappings(translation.nhandlers);
 				for (unsigned i = 0; i < translation.nhandlers; i++) {
 					exec.set_mapping(i, translation.handlers[i]);
 				}
 
+				const auto bytecode = CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END);
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
 
 					auto& entry = decoder_entry_at(exec.decoder_cache(), mapping.addr);
 					entry.instr = mapping.mapping_index;
-					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+					entry.set_bytecode(bytecode);
 				}
 				if (options.translate_timing) {
 					TIME_POINT(t7);
@@ -276,10 +276,6 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return -1;
 
 	void* dylib = nullptr;
-	if (options.translate_timing) {
-		TIME_POINT(t6);
-		printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
-	}
 
 	// Always check if there is an existing file
 	if (access(filebuffer, R_OK) == 0) {
