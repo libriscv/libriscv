@@ -246,7 +246,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 					exec.set_mapping(i, translation.handlers[i]);
 				}
 
-				const auto bytecode = CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END);
+				const auto bytecode = RV32I_BC_TRANSLATOR;
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
 
@@ -829,6 +829,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// Helper to rebuild decoder blocks
 	std::unique_ptr<DecoderCache<W>[]> patched_decoder_cache = nullptr;
 	DecoderData<W>* patched_decoder = nullptr;
+	DecoderData<W>* decoder_begin   = nullptr;
 	std::vector<DecoderData<W>*> livepatch_bintr;
 	if (live_patch) {
 		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
@@ -836,6 +837,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
 		// A horrible calculation to find the patched decoder
 		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
+		decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
 		// Pre-allocate the livepatch_bintr vector
 		livepatch_bintr.reserve(*no_mappings);
 	}
@@ -851,8 +853,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
 		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 	});
-
-	auto* decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
 
 	// Apply mappings to decoder cache
 	// NOTE: It is possible to optimize this by applying from the end towards the beginning
@@ -918,7 +918,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					// bytecode if it passes a few more checks, later.
 					auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
 					entry.instr = mapping_index;
-					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+					entry.set_bytecode(RV32I_BC_TRANSLATOR);
 				}
 			} else {
 				auto& entry = decoder_entry_at(exec.decoder_cache(), addr);

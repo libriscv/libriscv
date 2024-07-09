@@ -328,8 +328,6 @@ namespace riscv
 		// When compressed instructions are enabled, many decoder
 		// entries are illegal because they between instructions.
 		bool was_full_instruction = true;
-		[[maybe_unused]] const auto block_ending_bytecode =
-			CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END);
 
 		/* Generate all instruction pointers for executable code.
 		   Cannot step outside of this area when pregen is enabled,
@@ -347,22 +345,21 @@ namespace riscv
 			rv32i_instruction rewritten = instruction;
 
 #ifdef RISCV_BINARY_TRANSLATION
-			if (entry.get_bytecode() == block_ending_bytecode) {
+			if (entry.get_bytecode() == RV32I_BC_TRANSLATOR) {
 				// Translator activation uses a special bytecode
 				// but we must still validate the mapping index.
-				if (entry.instr < exec.translator_mappings()) {
-					entry.set_bytecode(RV32I_BC_TRANSLATOR);
-					if constexpr (compressed_enabled) {
-						dst += 2;
-						if (was_full_instruction) {
-							was_full_instruction = (instruction.length() == 2);
-						} else {
-							was_full_instruction = true;
-						}
-					} else
-						dst += 4;
-					continue;
-				}
+				if (entry.instr >= exec.translator_mappings())
+					throw MachineException(INVALID_PROGRAM, "Invalid translator mapping index");
+				if constexpr (compressed_enabled) {
+					dst += 2;
+					if (was_full_instruction) {
+						was_full_instruction = (instruction.length() == 2);
+					} else {
+						was_full_instruction = true;
+					}
+				} else
+					dst += 4;
+				continue;
 			}
 #endif // RISCV_BINARY_TRANSLATION
 
