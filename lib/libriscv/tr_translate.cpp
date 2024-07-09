@@ -216,12 +216,12 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		throw MachineException(INVALID_PROGRAM, "Invalid execute segment hash for translation");
 	}
 	// Also add the compiler flags to the checksum
-	checksum = ~crc32c(~checksum, cflags.c_str(), cflags.size());
+	checksum = crc32c(checksum, cflags.c_str(), cflags.size());
 	exec.set_translation_hash(checksum);
 
 	if (options.translate_timing) {
 		TIME_POINT(t6);
-		printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
+		printf(">> Execute segment 0x%X hashing took %ld ns\n", checksum, nanodiff(t5, t6));
 	}
 
 	// Check if translation is registered
@@ -235,24 +235,24 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			if (translation.hash == checksum)
 			{
 				*translation.api_table = create_bintr_callback_table(exec);
-				auto unique_mappings = translation.nhandlers;
 
 				if (options.verbose_loader) {
 					printf("libriscv: Found embedded translation for hash %08X, %u/%u mappings\n",
-						checksum, unique_mappings, translation.nmappings);
+						checksum, translation.nhandlers, translation.nmappings);
 				}
 
-				exec.create_mappings(unique_mappings);
+				exec.create_mappings(translation.nhandlers);
 				for (unsigned i = 0; i < translation.nhandlers; i++) {
 					exec.set_mapping(i, translation.handlers[i]);
 				}
 
+				const auto bytecode = RV32I_BC_TRANSLATOR;
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
 
 					auto& entry = decoder_entry_at(exec.decoder_cache(), mapping.addr);
 					entry.instr = mapping.mapping_index;
-					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+					entry.set_bytecode(bytecode);
 				}
 				if (options.translate_timing) {
 					TIME_POINT(t7);
@@ -276,10 +276,6 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return -1;
 
 	void* dylib = nullptr;
-	if (options.translate_timing) {
-		TIME_POINT(t6);
-		printf(">> Execute segment hashing took %ld ns\n", nanodiff(t5, t6));
-	}
 
 	// Always check if there is an existing file
 	if (access(filebuffer, R_OK) == 0) {
@@ -833,6 +829,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// Helper to rebuild decoder blocks
 	std::unique_ptr<DecoderCache<W>[]> patched_decoder_cache = nullptr;
 	DecoderData<W>* patched_decoder = nullptr;
+	DecoderData<W>* decoder_begin   = nullptr;
 	std::vector<DecoderData<W>*> livepatch_bintr;
 	if (live_patch) {
 		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
@@ -840,6 +837,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
 		// A horrible calculation to find the patched decoder
 		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
+		decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
 		// Pre-allocate the livepatch_bintr vector
 		livepatch_bintr.reserve(*no_mappings);
 	}
@@ -855,8 +853,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
 		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 	});
-
-	auto* decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
 
 	// Apply mappings to decoder cache
 	// NOTE: It is possible to optimize this by applying from the end towards the beginning
@@ -922,7 +918,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					// bytecode if it passes a few more checks, later.
 					auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
 					entry.instr = mapping_index;
-					entry.set_bytecode(CPU<W>::computed_index_for(RV32_INSTR_BLOCK_END));
+					entry.set_bytecode(RV32I_BC_TRANSLATOR);
 				}
 			} else {
 				auto& entry = decoder_entry_at(exec.decoder_cache(), addr);

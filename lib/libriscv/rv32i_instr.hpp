@@ -153,6 +153,9 @@ namespace riscv
 		uint32_t opcode() const noexcept {
 			return Rtype.opcode;
 		}
+		bool is_illegal() const noexcept {
+			return half[0] == 0x0000;
+		}
 
 		bool is_long() const noexcept {
 			return (whole & 0x3) == 0x3;

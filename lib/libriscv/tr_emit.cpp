@@ -19,22 +19,26 @@
 #ifdef RISCV_LIBTCC
 // libtcc always runs on the current machine, so we can use the handler index directly
 #define UNKNOWN_INSTRUCTION() { \
+  if (!instr.is_illegal()) { \
 	auto* handler = cpu.decode(instr).handler; \
 	const auto index = DecoderData<W>::handler_index_for(handler); \
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
-		"  return (ReturnValues){0, 0};\n"; } // Exception thrown
+		"  return (ReturnValues){0, 0};\n"; \
+  } else if (m_zero_insn_counter <= 1) \
+    code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+}
 #else
 // Since it is possible to send a program to another machine, we don't exactly know
 // the order of intruction handlers, so we need to lazily get the handler index by
 // calling the execute function the first time.
 #define UNKNOWN_INSTRUCTION() { \
-	if (instr.whole != 0x0) { \
-	code += "{ static int handler_idx = 0;\n"; \
-	code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
-	code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
-	} else \
-	code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
-	}
+  if (!instr.is_illegal()) { \
+    code += "{ static int handler_idx = 0;\n"; \
+    code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
+    code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+  } else if (m_zero_insn_counter <= 1) \
+    code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+}
 #endif
 
 namespace riscv {
@@ -396,6 +400,7 @@ private:
 	rv32i_instruction instr;
 	unsigned m_instr_length = 0;
 	uint64_t m_instr_counter = 0;
+	uint32_t m_zero_insn_counter = 0;
 
 	std::array<bool, 32> gprs {};
 	std::array<bool, 32> gpr_exists {};
@@ -404,9 +409,9 @@ private:
 	const TransInfo<W>& tinfo;
 
 	std::vector<TransMapping<W>> mappings;
-	std::set<unsigned> labels;
-	std::set<unsigned> mapping_labels;
-	std::set<address_t> pagedata;
+	std::unordered_set<unsigned> labels;
+	std::unordered_set<unsigned> mapping_labels;
+	std::unordered_set<address_t> pagedata;
 
 	std::vector<std::string> m_forward_declared;
 };
@@ -464,6 +469,14 @@ void Emitter<W>::emit()
 			this->m_instr_length = 4;
 		next_pc = this->m_pc + this->m_instr_length;
 
+		if (this->instr.is_illegal()) {
+			this->m_zero_insn_counter ++;
+		} else if (this->m_zero_insn_counter >= 4) {
+			// After a ream of zero instructions, we predict a jump target
+			this->m_zero_insn_counter = 0;
+			mapping_labels.insert(i);
+		}
+
 		// If the address is a return address or a global JAL target
 		if (i > 0 && (mapping_labels.count(i) || tinfo.global_jump_locations.count(this->pc()))) {
 			this->increment_counter_so_far();
@@ -514,7 +527,8 @@ void Emitter<W>::emit()
 					printf("Unexpanded instruction: 0x%04hx at PC 0x%lX (original 0x%x)\n", compressed_instr, long(this->pc()), original);
 				// When illegal opcode is encountered, reveal PC
 				if (compressed_instr == 0x0) {
-					code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
+					if (m_zero_insn_counter <= 1)
+						code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
 				} else {
 					char buffer[64];
 					const int len = snprintf(buffer, sizeof(buffer),
