@@ -6,7 +6,7 @@
 #include <thread>
 #include "settings.hpp"
 static inline std::vector<uint8_t> load_file(const std::string&);
-static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(2000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
+static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
 
 struct Arguments {
@@ -24,6 +24,7 @@ struct Arguments {
 	bool sandbox = false;
 	bool ignore_text = false;
 	bool background = false; // Run binary translation in background thread
+	bool proxy_mode = false;  // Proxy mode for system calls
 	uint64_t fuel = UINT64_MAX;
 	std::string output_file;
 	std::string call_function;
@@ -49,6 +50,7 @@ static const struct option long_options[] = {
 	{"output", required_argument, 0, 'o'},
 	{"from-start", no_argument, 0, 'F'},
 	{"sandbox", no_argument, 0, 'S'},
+	{"proxy", no_argument, 0, 'P'},
 	{"ignore-text", no_argument, 0, 'I'},
 	{"call", required_argument, 0, 'c'},
 	{0, 0, 0, 0}
@@ -74,6 +76,7 @@ static void print_help(const char* name)
 		"  -o, --output file  Output embeddable binary translated code (C99)\n"
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
 		"  -S  --sandbox      Enable strict sandbox\n"
+		"  -P, --proxy        Enable proxy mode for system calls\n"
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
 		"  -c, --call func    Call a function after loading the program\n"
 		"\n"
@@ -123,7 +126,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnBmo:FSIc:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnBmo:FSPIc:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -143,6 +146,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'o': break;
 			case 'F': args.from_start = true; break;
 			case 'S': args.sandbox = true; break;
+			case 'P': args.proxy_mode = true; break;
 			case 'I': args.ignore_text = true; break;
 			case 'c': break;
 			default:
@@ -257,6 +261,13 @@ static void run_program(
 		machine.setup_linux_syscalls();
 		machine.fds().permit_filesystem = !cli_args.sandbox;
 		machine.fds().permit_sockets    = !cli_args.sandbox;
+		if (cli_args.proxy_mode) {
+			if (cli_args.sandbox)
+				fprintf(stderr, "Warning: Proxy mode is enabled, but sandbox is also enabled\n");
+			machine.fds().permit_filesystem = true;
+			machine.fds().permit_sockets    = true;
+			machine.fds().permit_file_write = true;
+		}
 		// Rewrite certain links to masquerade and simplify some interactions (eg. /proc/self/exe)
 		machine.fds().filter_readlink = [&] (void* user, std::string& path) {
 			if (path == "/proc/self/exe") {
@@ -296,7 +307,7 @@ static void run_program(
 			static const std::string real_libdir = "/usr/riscv64-linux-gnu/lib/";
 			// The dynamic linker and libraries we allow
 			static const std::vector<std::string> libs = {
-				"libdl.so.2", "libm.so.6", "libgcc_s.so.1", "libc.so.6",
+				"libdl.so.2", "libm.so.6", "libgcc_s.so.1", "libc.so.6", "libatomic.so.1",
 				"libstdc++.so.6", "libresolv.so.2", "libnss_dns.so.2", "libnss_files.so.2"
 			};
 
@@ -317,6 +328,9 @@ static void run_program(
 			}
 
 			if (is_dynamic && args.size() > 1 && path == args.at(1)) {
+				return true;
+			}
+			if (cli_args.proxy_mode) {
 				return true;
 			}
 			if (cli_args.verbose) {
@@ -416,7 +430,7 @@ static void run_program(
 			else
 #ifdef RISCV_TIMED_VMCALLS
 				// Simulation with experimental timeout
-				machine.execute_with_timeout(30.0f, machine.cpu.pc());
+				machine.execute_with_timeout(360.0f, machine.cpu.pc());
 #else
 				// Simulate until it eventually stops (or user interrupts)
 				machine.cpu.simulate_inaccurate(machine.cpu.pc());

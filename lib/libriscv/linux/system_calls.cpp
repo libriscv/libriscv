@@ -1109,6 +1109,11 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// msync
 	install_syscall_handler(227, syscall_stub_zero<W>);
 
+	// riscv_hwprobe
+	install_syscall_handler(258, syscall_stub_zero<W>);
+	// riscv_flush_icache
+	install_syscall_handler(259, syscall_stub_zero<W>);
+
 	install_syscall_handler(278, syscall_getrandom<W>);
 
 	add_mman_syscalls<W>();

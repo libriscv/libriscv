@@ -25,7 +25,7 @@ static void add_mman_syscalls()
 		const auto addr_g = machine.sysarg(0);
 		auto length       = machine.sysarg(1);
 		const auto prot   = machine.template sysarg<int>(2);
-		const auto flags  = machine.template sysarg<int>(3);
+		auto flags        = machine.template sysarg<int>(3);
 		const auto vfd    = machine.template sysarg<int>(4);
 		const auto voff   = machine.sysarg(5);
 		PageAttributes attr{
@@ -107,6 +107,11 @@ static void add_mman_syscalls()
 			// Fixed mapping at current end of mmap arena
 			result = addr_g;
 			nextfree += length;
+		} else if (addr_g < machine.memory.mmap_start()) {
+			// v8 likes to modify ranges below ELF, ignore
+			result    = nextfree;
+			nextfree += length;
+			//flags  = 0;
 		} else if (addr_g >= machine.memory.mmap_start() && addr_g + length <= nextfree) {
 			// Fixed mapping inside mmap arena
 			result = addr_g;
