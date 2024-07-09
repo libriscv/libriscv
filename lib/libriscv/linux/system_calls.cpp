@@ -1091,6 +1091,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(135, syscall_stub_zero<W>);
 	// uname
 	install_syscall_handler(160, syscall_uname<W>);
+	// prctl
+	install_syscall_handler(167, syscall_stub_nosys<W>);
 	// gettimeofday
 	install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid
