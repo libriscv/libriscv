@@ -54,9 +54,14 @@ if (RISCV_EXPERIMENTAL)
 		set(RISCV_ENCOMPASSING_ARENA_BITS "32" CACHE STRING "Encompassing arena address space bits")
 		# Encompassing arena implies flat read-write arena
 		set(RISCV_FLAT_RW_ARENA ON)
+	else()
+		unset(RISCV_ENCOMPASSING_ARENA_BITS CACHE)
 	endif()
 	# TIMED_VMCALLS enables timed VM calls through timers and signals.
 	option(RISCV_TIMED_VMCALLS       "Enable timed VM calls" OFF)
+else()
+	unset(RISCV_ENCOMPASSING_ARENA CACHE)
+	unset(RISCV_ENCOMPASSING_ARENA_BITS CACHE)
 endif()
 if (RISCV_BINARY_TRANSLATION)
 	# LIBTCC will embed the TCC compiler library, using it for binary translation.
