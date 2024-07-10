@@ -267,7 +267,7 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
 		[[maybe_unused]] const MachineOptions<W>& options,
-		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, bool is_initial)
+		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, [[maybe_unused]] bool is_initial)
 	{
 		auto& exec = *shared_segment;
 		if (exec.exec_end() < exec.exec_begin())
