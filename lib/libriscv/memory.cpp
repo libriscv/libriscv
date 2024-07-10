@@ -280,8 +280,9 @@ namespace riscv
 			}
 		}
 
+		// Create an *initial* execute segment
 		auto& exec_segment =
-			this->create_execute_segment(options, data, vaddr, exlen);
+			this->create_execute_segment(options, data, vaddr, exlen, true);
 		// Set the segment as execute-only when R|W are not set
 		exec_segment.set_execute_only((hdr->p_flags & (Elf::PF_R | Elf::PF_W)) == 0);
 		// Select the first execute segment

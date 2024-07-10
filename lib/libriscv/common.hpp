@@ -133,9 +133,12 @@ namespace riscv
 		/// @brief Enable the binary translator.
 		bool translate_enabled = true;
 		/// @brief Enable loading of embedded binary translated programs.
-		/// @details This will allow the machine to load and execute embedded
+		/// @details This will allow the machine to load and execute *embedded*
 		/// binary translated programs. They auto-register themselves.
 		bool translate_enable_embedded = true;
+		/// @brief Translate not just the initial execute segments of the ELF program,
+		/// but also any future shared objects or JIT-produced segments.
+		bool translate_future_segments = true;
 		/// @brief Enable compiling execute segment on-demand during emulation.
 		/// @details Not available on most Windows systems.
 #ifdef _WIN32

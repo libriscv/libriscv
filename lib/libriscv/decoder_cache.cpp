@@ -267,7 +267,7 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
 		[[maybe_unused]] const MachineOptions<W>& options,
-		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment)
+		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, bool is_initial)
 	{
 		auto& exec = *shared_segment;
 		if (exec.exec_end() < exec.exec_begin())
@@ -313,7 +313,8 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
 		// Also, avoid binary translation for execute segments that are likely JIT-compiled
-		if (W != 16 && !exec.is_binary_translated() && !exec.is_likely_jit()) {
+		const bool allow_translation = is_initial || options.translate_future_segments;
+		if (W != 16 && !exec.is_binary_translated() && allow_translation && !exec.is_likely_jit()) {
 			// Attempt to load binary translation
 			// Also, fill out the binary translation SO filename for later
 			std::string bintr_filename;
@@ -444,7 +445,7 @@ namespace riscv
 	// no matter where you are in the segment, a whole instruction unchecked.
 	template <int W> RISCV_INTERNAL
 	DecodedExecuteSegment<W>& Memory<W>::create_execute_segment(
-		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen)
+		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen, bool is_initial)
 	{
 		if (UNLIKELY(exlen % (compressed_enabled ? 2 : 4)))
 			throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
@@ -503,7 +504,7 @@ namespace riscv
 			// Store the hash in the decoder cache
 			free_slot->set_crc32c_hash(hash);
 
-			this->generate_decoder_cache(options, free_slot);
+			this->generate_decoder_cache(options, free_slot, is_initial);
 
 			// Share the execute segment
 			shared_execute_segments<W>.get_segment(hash).unlocked_set(free_slot);
@@ -514,7 +515,7 @@ namespace riscv
 			// Store the hash in the decoder cache
 			free_slot->set_crc32c_hash(hash);
 
-			this->generate_decoder_cache(options, free_slot);
+			this->generate_decoder_cache(options, free_slot, is_initial);
 		}
 
 		return *free_slot;

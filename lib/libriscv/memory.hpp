@@ -176,7 +176,7 @@ namespace riscv
 		// Custom execute segment, returns page base, final size and execute segment pointer
 		std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr);
 		const std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr) const;
-		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len);
+		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len, bool is_initial);
 		size_t cached_execute_segments() const noexcept { return m_exec_segs; }
 		// Evict all execute segments, also disabling the main execute segment
 		void evict_execute_segments();
@@ -241,7 +241,7 @@ namespace riscv
 		void binary_loader(const MachineOptions<W>&);
 		void binary_load_ph(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
 		void serialize_execute_segment(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
-		void generate_decoder_cache(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&);
+		void generate_decoder_cache(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&, bool is_initial);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
 
