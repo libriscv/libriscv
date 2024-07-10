@@ -201,26 +201,24 @@ The stringify macro is a common method to turn a `#define` into a string number,
 
 ## Faster calls with Prepared Calls
 
-Prepared calls can improve latency when binary translation is enabled.
+Prepared calls can improve latency when binary translation is enabled. It also helps enforce function types, as the function has to be specified up-front.
 
 ```C++
 #include <libriscv/prepared_call.hpp>
 ...
 riscv::Machine<riscv::RISCV64> machine(...);
 
-auto func = machine.address_of("my_function");
-
 // Create a prepared call
-riscv::PreparedCall<riscv::RISCV64, void(int, float)> caller(machine, func);
-// Make the function call
-caller(1, 2.0f);
-// Make the function call again
-caller(3, 4.0f);
+riscv::PreparedCall<riscv::RISCV64, void(int, float)> my_function(machine, "my_function");
+// Make the VM function call
+my_function(1, 2.0f);
+// Make the VM function call again
+my_function(3, 4.0f);
 ```
 
 ## Manual VM call
 
-Here is an example of a manual vmcall that also exits the simulate() call every ~1000 instructions. Maybe you want to do some things in between? This method is used in the [D00M example](/examples/doom/src/main.cpp).
+Here is an example of a manual vmcall that also exits the simulation every ~10 000 instructions. Maybe you want to do some things in between? This method is used in the [D00M example](/examples/doom/src/main.cpp).
 
 ```C++
 auto test_addr = machine.address_of("test");
@@ -235,14 +233,14 @@ machine.cpu.jump(test_addr);
 // Run the program for X amount of instructions, then print something, then
 // resume execution again. Do this until stopped.
 do {
-	// Execute 1000 instructions at a time without resetting the counter
-	machine.resume<false>(1000);
+	// Execute 10'000 instructions at a time without resetting the counter
+	machine.resume<false>(10'000);
 	// Do some work in between simulation
 	printf("Working ...\n");
 } while (machine.instruction_limit_reached());
 ```
 
-The helper function `machine.instruction_limit_reached()` will tell you if the instruction limit was reached during simulation, but it *will not* tell you if the machine stopped normally. Use `machine.stopped()` for that. Combining both helpers you can determine the stopping cause.
+The helper function `machine.instruction_limit_reached()` will tell you if the instruction limit was reached during simulation, and will return `false` when the machine stops normally (in this case).
 
 ## Interrupting a running machine
 
