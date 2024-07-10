@@ -64,7 +64,7 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	this->install_syscall_handler(syscall_base+4,
 	[] (Machine<W>& machine) {
 		// begone!
-		if (machine.threads().block(machine.template sysarg<int> (0)))
+		if (machine.threads().block(machine.template sysarg<int> (0), 0))
 			return;
 		// error, we didn't block
 		machine.set_result(-1);

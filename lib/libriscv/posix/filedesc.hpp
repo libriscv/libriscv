@@ -31,7 +31,7 @@ struct FileDescriptors
 	bool is_socket(int) const;
 	bool permit_write(int vfd) {
 		if (is_socket(vfd)) return true;
-		else return permit_file_write;
+		else return proxy_mode;
 	}
 
 	~FileDescriptors();
@@ -47,8 +47,8 @@ struct FileDescriptors
 	int socket_counter = SOCKET_D_BASE;
 
 	bool permit_filesystem = false;
-	bool permit_file_write = false;
 	bool permit_sockets = false;
+	bool proxy_mode = false;
 
 	std::function<bool(void*, std::string&)> filter_open = nullptr; /* NOTE: Can modify path */
 	std::function<bool(void*, std::string&)> filter_readlink = nullptr; /* NOTE: Can modify path */

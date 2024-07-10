@@ -181,6 +181,9 @@ static void add_mman_syscalls()
 			case 1: // MADV_RANDOM
 			case 2: // MADV_SEQUENTIAL
 			case 3: // MADV_WILLNEED:
+			case 10: // MADV_DONTFORK
+			case 11: // MADV_DOFORK
+			case 12: // MADV_MERGEABLE
 			case 15: // MADV_NOHUGEPAGE
 			case 18: // MADV_WIPEONFORK
 				machine.set_result(0);
