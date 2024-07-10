@@ -36,6 +36,7 @@ struct Thread
 	address_t clear_tid = 0;
 	// The current or last blocked word
 	uint32_t block_word = 0;
+	uint32_t block_extra = 0;
 
 	Thread(MultiThreading<W>&, int tid, address_t tls,
 		address_t stack, address_t stkbase, address_t stksize);
@@ -43,8 +44,8 @@ struct Thread
 	bool exit(); // Returns false when we *cannot* continue
 	void suspend();
 	void suspend(address_t return_value);
-	void block(uint32_t reason);
-	void block(uint32_t reason, address_t return_value);
+	void block(uint32_t reason, uint32_t extra = 0);
+	void block_return(address_t return_value, uint32_t reason, uint32_t extra);
 	void activate();
 	void resume();
 };
@@ -65,9 +66,9 @@ struct MultiThreading
 	bool      yield_to(int tid, bool store_retval = true);
 	void      erase_thread(int tid);
 	void      wakeup_next();
-	bool      block(uint32_t reason);
+	bool      block(address_t retval, uint32_t reason, uint32_t extra = 0);
 	void      unblock(int tid);
-	size_t    wakeup_blocked(uint32_t reason);
+	size_t    wakeup_blocked(uint32_t reason, uint32_t mask = ~0U);
 	/* A suspended thread can at any time be resumed. */
 	auto&     suspended_threads() { return m_suspended; }
 	/* A blocked thread can only be resumed by unblocking it. */
@@ -160,21 +161,22 @@ inline void Thread<W>::suspend(address_t return_value)
 }
 
 template <int W>
-inline void Thread<W>::block(uint32_t reason)
+inline void Thread<W>::block(uint32_t reason, uint32_t extra)
 {
 	// copy all regs except vector lanes
 	this->stored_regs.copy_from(
 		Registers<W>::Options::NoVectors,
 		threading.machine.cpu.registers());
 	this->block_word = reason;
+	this->block_extra = extra;
 	// add to blocked (NB: can throw)
 	threading.m_blocked.push_back(this);
 }
 
 template <int W>
-inline void Thread<W>::block(uint32_t reason, address_t return_value)
+inline void Thread<W>::block_return(address_t return_value, uint32_t reason, uint32_t extra)
 {
-	this->block(reason);
+	this->block(reason, extra);
 	// set the block reason as the next return value
 	this->stored_regs.get(REG_ARG0) = return_value;
 }
@@ -203,6 +205,7 @@ inline void MultiThreading<W>::wakeup_next()
 		// resume next thread
 		next->resume();
 	} else {
+		THPRINT(machine, "No more threads to resume. Fallback to tid=0 (*ERROR*)\n");
 		auto* next = get_thread(0);
 		next->resume();
 	}
@@ -223,7 +226,7 @@ inline Thread<W>::Thread(
 	MultiThreading<W>& mt, const Thread& other)
 	: threading(mt), tid(other.tid),
 	  stack_base(other.stack_base), stack_size(other.stack_size),
-	  clear_tid(other.clear_tid), block_word(other.block_word)
+	  clear_tid(other.clear_tid), block_word(other.block_word), block_extra(other.block_extra)
 {
 	stored_regs.copy_from(Registers<W>::Options::NoVectors, other.stored_regs);
 }
@@ -323,7 +326,7 @@ inline bool MultiThreading<W>::suspend_and_yield(long result)
 }
 
 template <int W>
-inline bool MultiThreading<W>::block(uint32_t reason)
+inline bool MultiThreading<W>::block(address_t retval, uint32_t reason, uint32_t extra)
 {
 	auto* thread = get_thread();
 	if (UNLIKELY(m_suspended.empty())) {
@@ -331,7 +334,7 @@ inline bool MultiThreading<W>::block(uint32_t reason)
 		return false; // continue immediately?
 	}
 	// block thread, write reason to future return value
-	thread->block(reason, reason);
+	thread->block_return(retval, reason, extra);
 	// resume some other thread
 	this->wakeup_next();
 	return true;
@@ -388,13 +391,14 @@ inline void MultiThreading<W>::unblock(int tid)
 	machine.cpu.reg(REG_ARG0) = -1;
 }
 template <int W>
-inline size_t MultiThreading<W>::wakeup_blocked(uint32_t reason)
+inline size_t MultiThreading<W>::wakeup_blocked(uint32_t reason, uint32_t mask)
 {
 	size_t awakened = 0;
 	for (auto it = m_blocked.begin(); it != m_blocked.end(); )
 	{
 		// compare against block reason
-		if ((*it)->block_word == reason)
+		const auto bits = (*it)->block_extra;
+		if ((*it)->block_word == reason && (bits == 0 || (bits & mask) != 0))
 		{
 			// move to suspended
 			m_suspended.push_back(*it);

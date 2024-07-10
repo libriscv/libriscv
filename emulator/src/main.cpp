@@ -271,7 +271,7 @@ static void run_program(
 				fprintf(stderr, "Warning: Proxy mode is enabled, but sandbox is also enabled\n");
 			machine.fds().permit_filesystem = true;
 			machine.fds().permit_sockets    = true;
-			machine.fds().permit_file_write = true;
+			machine.fds().proxy_mode = true; // Proxy mode for system calls (no more sandbox)
 		}
 		// Rewrite certain links to masquerade and simplify some interactions (eg. /proc/self/exe)
 		machine.fds().filter_readlink = [&] (void* user, std::string& path) {

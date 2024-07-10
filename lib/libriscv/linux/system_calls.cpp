@@ -24,6 +24,9 @@ static constexpr bool verbose_syscalls = false;
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
+#if __has_include(<termios.h>)
+#include <termios.h>
+#endif
 #ifndef EBADFD
 #define EBADFD EBADF  // OpenBSD, FreeBSD
 #endif
@@ -33,28 +36,28 @@ namespace riscv {
 
 #ifdef __linux__ 
 int get_time(int clkid, struct timespec* ts) {
-    return clock_gettime(clkid, ts);
+	return clock_gettime(clkid, ts);
 }
 #elif __APPLE__
 #include <mach/mach_time.h>
 int get_time(int clkid, struct timespec* ts) {
-    if (clkid == CLOCK_REALTIME) {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        ts->tv_sec = tv.tv_sec;
-        ts->tv_nsec = tv.tv_usec * 1000;
-        return 0;
-    } else if (clkid == CLOCK_MONOTONIC) {
-        uint64_t time = mach_absolute_time();
-        mach_timebase_info_data_t timebase;
-        mach_timebase_info(&timebase);
-        double nsec = ((double)time * (double)timebase.numer)/((double)timebase.denom);
-        ts->tv_sec = nsec * 1e-9;  
-        ts->tv_nsec = nsec - (ts->tv_sec * 1e9);
-        return 0;
-    } else {
-        return -1;
-    }
+	if (clkid == CLOCK_REALTIME) {
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		ts->tv_sec = tv.tv_sec;
+		ts->tv_nsec = tv.tv_usec * 1000;
+		return 0;
+	} else if (clkid == CLOCK_MONOTONIC) {
+		uint64_t time = mach_absolute_time();
+		mach_timebase_info_data_t timebase;
+		mach_timebase_info(&timebase);
+		double nsec = ((double)time * (double)timebase.numer)/((double)timebase.denom);
+		ts->tv_sec = nsec * 1e-9;  
+		ts->tv_nsec = nsec - (ts->tv_sec * 1e9);
+		return 0;
+	} else {
+		return -1;
+	}
 }
 #else
 #error "Unknown compiler"
@@ -426,50 +429,50 @@ static void syscall_dup(Machine<W>& machine)
 }
 
 int create_pipe(int* pipes, int flags) {
-    #ifdef __linux__ 
-        return pipe2(pipes, flags);
-    #elif __APPLE__
-        // On macOS, we don't have pipe2, so we need to use pipe and then set the flags manually.
-        int res = pipe(pipes);
-        if (res == 0 && flags != 0) {
-            if (flags & O_CLOEXEC) {
-                fcntl(pipes[0], F_SETFD, FD_CLOEXEC);
-                fcntl(pipes[1], F_SETFD, FD_CLOEXEC);
-            }
-            if (flags & O_NONBLOCK) {
-                fcntl(pipes[0], F_SETFL, O_NONBLOCK);
-                fcntl(pipes[1], F_SETFL, O_NONBLOCK);
-            }
-        }
-        return res;
-    #else
-        #error "Unknown compiler"
-    #endif
+	#ifdef __linux__ 
+		return pipe2(pipes, flags);
+	#elif __APPLE__
+		// On macOS, we don't have pipe2, so we need to use pipe and then set the flags manually.
+		int res = pipe(pipes);
+		if (res == 0 && flags != 0) {
+			if (flags & O_CLOEXEC) {
+				fcntl(pipes[0], F_SETFD, FD_CLOEXEC);
+				fcntl(pipes[1], F_SETFD, FD_CLOEXEC);
+			}
+			if (flags & O_NONBLOCK) {
+				fcntl(pipes[0], F_SETFL, O_NONBLOCK);
+				fcntl(pipes[1], F_SETFL, O_NONBLOCK);
+			}
+		}
+		return res;
+	#else
+		#error "Unknown compiler"
+	#endif
 }
 
 template <int W>
 static void syscall_pipe2(Machine<W>& machine)
 {
-    const auto vfd_array = machine.sysarg(0);
-    const auto flags = machine.template sysarg<int>(1);
+	const auto vfd_array = machine.sysarg(0);
+	const auto flags = machine.template sysarg<int>(1);
 
-    if (machine.has_file_descriptors()) {
-        int pipes[2];
-        int res = create_pipe(pipes, flags);
-        if (res == 0) {
-            int vpipes[2];
-            vpipes[0] = machine.fds().assign_file(pipes[0]);
-            vpipes[1] = machine.fds().assign_file(pipes[1]);
-            machine.copy_to_guest(vfd_array, vpipes, sizeof(vpipes));
-            machine.set_result(0);
-        } else {
-            machine.set_result_or_error(res);
-        }
-    } else {
-        machine.set_result(-EBADF);
-    }
-    SYSPRINT("SYSCALL pipe2, fd array: 0x%lX flags: %d = %ld\n",
-        (long)vfd_array, flags, (long)machine.return_value());
+	if (machine.has_file_descriptors()) {
+		int pipes[2];
+		int res = create_pipe(pipes, flags);
+		if (res == 0) {
+			int vpipes[2];
+			vpipes[0] = machine.fds().assign_file(pipes[0]);
+			vpipes[1] = machine.fds().assign_file(pipes[1]);
+			machine.copy_to_guest(vfd_array, vpipes, sizeof(vpipes));
+			machine.set_result(0);
+		} else {
+			machine.set_result_or_error(res);
+		}
+	} else {
+		machine.set_result(-EBADF);
+	}
+	SYSPRINT("SYSCALL pipe2, fd array: 0x%lX flags: %d = %ld\n",
+		(long)vfd_array, flags, (long)machine.return_value());
 }
 
 template <int W>
@@ -513,6 +516,20 @@ static void syscall_ioctl(Machine<W>& machine)
 		}
 
 		int real_fd = machine.fds().translate(vfd);
+
+#if __has_include(<termios.h>) && defined(TCGETS)
+		// Terminal control - ~unsandboxable, but we permit with proxy mode
+		if (machine.fds().proxy_mode && (req == TCGETS || req == TCSETS || req == TCSETSW || req == TCSETSF)) {
+			struct termios term {};
+			machine.copy_from_guest(&term, arg1, sizeof(term));
+			int res = ioctl(real_fd, req, &term);
+			if (req == TCGETS)
+				machine.copy_to_guest(arg1, &term, sizeof(term));
+			machine.set_result_or_error(res);
+			return;
+		}
+#endif
+
 		int res = ioctl(real_fd, req, arg1, arg2, arg3, arg4);
 		machine.set_result_or_error(res);
 		return;
@@ -790,44 +807,44 @@ static void syscall_gettimeofday(Machine<W>& machine)
 template <int W>
 static void syscall_clock_gettime(Machine<W>& machine)
 {
-    const auto clkid = machine.template sysarg<int>(0);
-    const auto buffer = machine.sysarg(1);
-    SYSPRINT("SYSCALL clock_gettime, clkid: %x buffer: 0x%lX\n",
-        clkid, (long)buffer);
+	const auto clkid = machine.template sysarg<int>(0);
+	const auto buffer = machine.sysarg(1);
+	SYSPRINT("SYSCALL clock_gettime, clkid: %x buffer: 0x%lX\n",
+		clkid, (long)buffer);
 
-    struct timespec ts;
-    const int res = get_time(clkid, &ts);
-    if (res >= 0) {
-        if constexpr (W == 4) {
-            int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
-            machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
-        } else {
-            machine.copy_to_guest(buffer, &ts, sizeof(ts));
-        }
-    }
-    machine.set_result_or_error(res);
+	struct timespec ts;
+	const int res = get_time(clkid, &ts);
+	if (res >= 0) {
+		if constexpr (W == 4) {
+			int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
+			machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
+		} else {
+			machine.copy_to_guest(buffer, &ts, sizeof(ts));
+		}
+	}
+	machine.set_result_or_error(res);
 }
 template <int W>
 static void syscall_clock_gettime64(Machine<W>& machine)
 {
-    const auto clkid = machine.template sysarg<int>(0);
-    const auto buffer = machine.sysarg(1);
-    SYSPRINT("SYSCALL clock_gettime64, clkid: %x buffer: 0x%lX\n",
-        clkid, (long)buffer);
+	const auto clkid = machine.template sysarg<int>(0);
+	const auto buffer = machine.sysarg(1);
+	SYSPRINT("SYSCALL clock_gettime64, clkid: %x buffer: 0x%lX\n",
+		clkid, (long)buffer);
 
-    struct timespec ts;
-    int res = get_time(clkid, &ts);
+	struct timespec ts;
+	int res = get_time(clkid, &ts);
 
-    if (res >= 0) {
-        struct {
-            int64_t tv_sec;
-            int64_t tv_msec;
-        } kernel_ts;
-        kernel_ts.tv_sec  = ts.tv_sec;
-        kernel_ts.tv_msec = ts.tv_nsec;
-        machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
-    }
-    machine.set_result_or_error(res);
+	if (res >= 0) {
+		struct {
+			int64_t tv_sec;
+			int64_t tv_msec;
+		} kernel_ts;
+		kernel_ts.tv_sec  = ts.tv_sec;
+		kernel_ts.tv_msec = ts.tv_nsec;
+		machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
+	}
+	machine.set_result_or_error(res);
 }
 template <int W>
 static void syscall_nanosleep(Machine<W>& machine)
@@ -903,6 +920,52 @@ static void syscall_uname(Machine<W>& machine)
 }
 
 template <int W>
+static void syscall_capget(Machine<W>& machine)
+{
+	const auto header_ptr = machine.sysarg(0);
+	const auto data_ptr = machine.sysarg(1);
+
+	struct __user_cap_header_struct {
+		uint32_t version;
+		int pid;
+	};
+
+	struct __user_cap_data_struct {
+		uint32_t effective;
+		uint32_t permitted;
+		uint32_t inheritable;
+	};
+
+	__user_cap_header_struct header;
+	__user_cap_data_struct data;
+
+	// Copy the header from guest to host
+	machine.copy_from_guest(&header, header_ptr, sizeof(header));
+
+	// Initialize the header structure
+	if (header.version != 0x20080522) {
+		// Unsupported version, set error
+		machine.set_result_or_error(-EINVAL);
+	} else {
+		// Here you would typically interact with the capability subsystem of the
+		// emulated environment to get the actual capabilities.
+		// For simplicity, let's assume no capabilities:
+		data.effective = 0;
+		data.permitted = 0;
+		data.inheritable = 0;
+
+		// Copy the data back to the guest
+		machine.copy_to_guest(data_ptr, &data, sizeof(data));
+
+		// Set result to 0 indicating success
+		machine.set_result_or_error(0);
+	}
+
+	SYSPRINT("SYSCALL capget, header: 0x%lX, data: 0x%lX => %ld\n",
+			 (long)header_ptr, (long)data_ptr, (long)machine.return_value());
+}
+
+template <int W>
 static void syscall_brk(Machine<W>& machine)
 {
 	auto new_end = machine.sysarg(0);
@@ -919,7 +982,7 @@ static void syscall_brk(Machine<W>& machine)
 }
 
 #if defined(__APPLE__)
-    #include <Security/Security.h>
+	#include <Security/Security.h>
 #endif
 
 template <int W>
@@ -938,8 +1001,8 @@ static void syscall_getrandom(Machine<W>& machine)
 	const ssize_t result = need; // always success
 	arc4random_buf(buffer, need);
 #elif defined(__APPLE__)
-    const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
-    const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
+	const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
+	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
 #else
 	const ssize_t result = getrandom(buffer, need, 0);
 #endif
@@ -1018,6 +1081,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(79, syscall_fstatat<W>);
 	// 80: fstat
 	install_syscall_handler(80, syscall_fstat<W>);
+	// 90: capget
+	install_syscall_handler(90, syscall_capget<W>);
 
 	install_syscall_handler(93, syscall_exit<W>);
 	// 94: exit_group (exit process)

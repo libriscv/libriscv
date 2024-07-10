@@ -4,7 +4,7 @@ namespace riscv {
 
 template <int W>
 static inline void futex_op(Machine<W>& machine,
-	address_type<W> addr, int futex_op, int val)
+	address_type<W> addr, int futex_op, int val, uint32_t val3)
 {
 	using address_t = address_type<W>;
 	#define FUTEX_WAIT           0
@@ -12,29 +12,31 @@ static inline void futex_op(Machine<W>& machine,
 	#define FUTEX_WAIT_BITSET	 9
 	#define FUTEX_WAKE_BITSET	10
 
-	THPRINT(machine, ">>> futex(0x%lX, op=%d, val=%d)\n",
-		(long)addr, futex_op, val);
+	THPRINT(machine, ">>> futex(0x%lX, op=%d, val=%d val3=0x%X)\n",
+		(long)addr, futex_op, val, val3);
 
 	if ((futex_op & 0xF) == FUTEX_WAIT || (futex_op & 0xF) == FUTEX_WAIT_BITSET)
 	{
+		const bool is_bitset = (futex_op & 0xF) == FUTEX_WAIT_BITSET;
 		if (machine.memory.template read<address_t> (addr) == (address_t)val) {
 			THPRINT(machine,
-				"FUTEX: Waiting (blocked)... uaddr=0x%lX val=%d\n", (long)addr, val);
-			if (machine.threads().block(addr)) {
+				"FUTEX: Waiting (blocked)... uaddr=0x%lX val=%d, bitset=%d\n", (long)addr, val, is_bitset);
+			if (machine.threads().block(0, addr, is_bitset ? val3 : 0x0)) {
 				return;
 			}
 			throw MachineException(DEADLOCK_REACHED, "FUTEX deadlock", addr);
 		}
 		THPRINT(machine,
-			"FUTEX: Wait condition EAGAIN... uaddr=0x%lX val=%d\n", (long)addr, val);
+			"FUTEX: Wait condition EAGAIN... uaddr=0x%lX val=%d, bitset=%d\n", (long)addr, val, is_bitset);
 		machine.set_result(-EAGAIN);
 		return;
 	} else if ((futex_op & 0xF) == FUTEX_WAKE || (futex_op & 0xF) == FUTEX_WAKE_BITSET) {
+		const bool is_bitset = (futex_op & 0xF) == FUTEX_WAKE_BITSET;
 		THPRINT(machine,
-			"FUTEX: Waking %d others on 0x%lX\n", val, (long)addr);
+			"FUTEX: Waking %d others on 0x%lX, bitset=%d\n", val, (long)addr, is_bitset);
 		// XXX: Guaranteed not to expire early when
 		// timeout != 0x0.
-		unsigned awakened = machine.threads().wakeup_blocked(addr);
+		unsigned awakened = machine.threads().wakeup_blocked(addr, is_bitset ? val3 : ~0x0);
 		machine.template set_result<unsigned>(awakened);
 		THPRINT(machine,
 			"FUTEX: Awakened: %u\n", awakened);
@@ -131,8 +133,9 @@ void Machine<W>::setup_posix_threads()
 		const auto addr = machine.template sysarg<address_type<W>> (0);
 		const int fx_op = machine.template sysarg<int> (1);
 		const int   val = machine.template sysarg<int> (2);
+		const uint32_t val3 = machine.template sysarg<uint32_t> (5);
 
-		futex_op<W>(machine, addr, fx_op, val);
+		futex_op<W>(machine, addr, fx_op, val, val3);
 	});
 	// futex_time64
 	this->install_syscall_handler(422,
@@ -140,14 +143,15 @@ void Machine<W>::setup_posix_threads()
 		const auto addr = machine.template sysarg<address_type<W>> (0);
 		const int fx_op = machine.template sysarg<int> (1);
 		const int   val = machine.template sysarg<int> (2);
+		const uint32_t val3 = machine.template sysarg<uint32_t> (5);
 
-		futex_op<W>(machine, addr, fx_op, val);
+		futex_op<W>(machine, addr, fx_op, val, val3);
 	});
 	// clone
 	this->install_syscall_handler(220,
 	[] (Machine<W>& machine) {
 		/* int clone(int (*fn)(void *arg), void *child_stack, int flags, void *arg,
-		             void *parent_tidptr, void *tls, void *child_tidptr) */
+					 void *parent_tidptr, void *tls, void *child_tidptr) */
 		const int  flags = machine.template sysarg<int> (0);
 		const auto stack = machine.template sysarg<address_type<W>> (1);
 #ifdef THREADS_DEBUG
@@ -158,12 +162,12 @@ void Machine<W>::setup_posix_threads()
 		const auto   tls = machine.template sysarg<address_type<W>> (5);
 		const auto  ctid = machine.template sysarg<address_type<W>> (6);
 		auto* parent = machine.threads().get_thread();
+		auto* thread = machine.threads().create(flags, ctid, ptid, stack, tls, 0, 0);
 		THPRINT(machine,
 			">>> clone(func=0x%lX, stack=0x%lX, flags=%x, args=0x%lX,"
-				" parent=%p, ctid=0x%lX ptid=0x%lX, tls=0x%lX)\n",
+				" parent=%p, ctid=0x%lX ptid=0x%lX, tls=0x%lX) = %d\n",
 				(long)func, (long)stack, flags, (long)args, parent,
-				(long)ctid, (long)ptid, (long)tls);
-		auto* thread = machine.threads().create(flags, ctid, ptid, stack, tls, 0, 0);
+				(long)ctid, (long)ptid, (long)tls, thread->tid);
 		// store return value for parent: child TID
 		parent->suspend(thread->tid);
 		// activate and return 0 for the child
@@ -226,19 +230,23 @@ void Machine<W>::setup_posix_threads()
 			address_type<W> cur = 0;
 			address_type<W> max = 0;
 		} lim;
-		constexpr int RISCV_RLIMIT_STACK = 3;
-		if (old_addr != 0) {
-			if (resource == RISCV_RLIMIT_STACK) {
-				lim.cur = 0x200000;
-				lim.max = 0x200000;
-			}
+		constexpr int RISCV_RLIMIT_STACK  = 3;
+		constexpr int RISCV_RLIMIT_NOFILE = 7;
+		if (old_addr != 0 && resource == RISCV_RLIMIT_STACK) {
+			lim.cur = 0x200000;
+			lim.max = 0x200000;
+			machine.copy_to_guest(old_addr, &lim, sizeof(lim));
+			machine.set_result(0);
+		} else if (old_addr != 0 && resource == RISCV_RLIMIT_NOFILE) {
+			lim.cur = 1024;
+			lim.max = 1024;
 			machine.copy_to_guest(old_addr, &lim, sizeof(lim));
 			machine.set_result(0);
 		} else {
 			machine.set_result(-EINVAL);
 		}
 		THPRINT(machine,
-			">>> prlimit64(...) = %d\n", machine.return_value<int>());
+			">>> prlimit64(0x%X) = %d\n", resource, machine.return_value<int>());
 	});
 }
 
