@@ -1,8 +1,8 @@
 # RISC-V userspace emulator library
 
-_libriscv_ is a simple, slim and complete RISC-V userspace emulator library that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50-100ns to enter the virtual machine and return, _libriscv_ requires 3ns. _libriscv_ is also routinely faster than other interpreters. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
+_libriscv_ is a simple, slim and complete RISC-V userspace emulator that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50-150ns to call a VM function and return, _libriscv_ requires 3ns. _libriscv_ is also routinely faster than other interpreters, JIT-compilers and binary translators. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
 
-There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to remotely live-debug programs. A [Cosmopolitan](https://github.com/jart/cosmopolitan) build can be [downloaded here](https://github.com/fwsGonzo/libriscv/releases/download/v1.5/libriscv-cli).
+There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to remotely live-debug programs. A [Cosmopolitan](https://github.com/jart/cosmopolitan) build can be [downloaded here](https://github.com/fwsGonzo/libriscv/releases/download/v1.6/libriscv-cli).
 
 [![Debian Packaging](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml) [![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
@@ -16,7 +16,7 @@ _libriscv_ is an ultra-low latency emulator, designed specifically to have very 
 
 Goals:
 - Lowest possible latency
-	- Calling a guest VM function can finish an order of magnitude before other emulators begin executing the first instruction
+	- Calling a guest VM function can finish 1-2 orders of magnitude before other emulators begin executing the first instruction
 - Modern, type-safe VM call and system call interfaces
 	- The safe interfaces prevents all kinds of footguns that the author has personally suffered, and consequently blocked off forever :-)
 - [Secure speculation-safe sandbox](SECURITY.md)
@@ -24,7 +24,7 @@ Goals:
 - Platform-independent and super-easy to embed
 	- Supports platforms with C++20 or later support (GCC/Clang with C++17 or later)
 - Just-in-time compilation for development usage
-	- [libtcc](#embedded-libtcc) can used to instantly improve emulation of RISC-V programs on Linux systems
+	- [libtcc](#embedded-libtcc) can be used to instantly improve emulation of RISC-V programs
 - High-performance binary translation on end-user systems through DLLs (eg. Windows)
 	- Cross-compile RISC-V programs to a [binary translated](#binary-translation) .dll executable in _libriscv_ on end-user systems (where shared libraries are allowed)
 - Maximum final-build performance on all platforms, including Consoles, Mobiles, production systems
@@ -37,6 +37,7 @@ Goals:
 	- Serve requests using ephemeral VMs in ~1us in production (not microbenchmark/slideware)
 	- Execute segments are automatically shared among all instances (with or without forking)
 - Dynamic linking and run-time dlopen() support
+- Supports sandboxing language-runtimes that use JIT-compilation, eg. V8 JavaScript
 
 Non goals:
 - Wide support for Linux system calls
