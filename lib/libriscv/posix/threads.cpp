@@ -87,6 +87,11 @@ void Machine<W>::setup_posix_threads()
 	// set_robust_list
 	this->install_syscall_handler(99,
 	[] (Machine<W>& machine) {
+		address_t addr = machine.template sysarg<address_type<W>> (0);
+		THPRINT(machine,
+			">>> set_robust_list(0x%lX) = 0\n", (long)addr);
+		//machine.threads().get_thread()->robust_list_head = addr;
+		(void)addr;
 		machine.set_result(0);
 	});
 	// sched_yield
