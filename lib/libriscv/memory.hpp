@@ -180,6 +180,7 @@ namespace riscv
 		size_t cached_execute_segments() const noexcept { return m_exec_segs; }
 		// Evict all execute segments, also disabling the main execute segment
 		void evict_execute_segments();
+		void evict_execute_segment(DecodedExecuteSegment<W>&);
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();

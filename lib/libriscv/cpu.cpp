@@ -76,8 +76,8 @@ restart_next_execute_segment:
 
 		// Immediately look at the page in order to
 		// verify execute and see if it has a trap handler
-		auto base_pageno = pc / Page::size();
-		auto end_pageno  = base_pageno + 1;
+		address_t base_pageno = pc / Page::size();
+		address_t end_pageno  = base_pageno + 1;
 		// We absolutely need to write PC here because even read-fault handlers
 		// like get_pageno() slowpaths could be reading PC.
 		this->registers().pc = pc;
@@ -112,10 +112,13 @@ restart_next_execute_segment:
 			}
 		}
 
-		// Find previously decoded execute segment
+		// Find previously decoded execute segment,
+		// but skip segments tagged as likely JIT-compiled (as they are likely to be stale)
 		this->m_exec = machine().memory.exec_segment_for(pc).get();
-		if (LIKELY(!this->m_exec->empty())) {
+		if (LIKELY(!this->m_exec->empty() && !this->m_exec->is_likely_jit())) {
 			return {this->m_exec, pc};
+		} else if (this->m_exec->is_likely_jit()) {
+			machine().memory.evict_execute_segment(*this->m_exec);
 		}
 
 		// Find decoded execute segment via override

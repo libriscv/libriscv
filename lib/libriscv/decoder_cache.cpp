@@ -272,6 +272,8 @@ namespace riscv
 		auto& exec = *shared_segment;
 		if (exec.exec_end() < exec.exec_begin())
 			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
+		if constexpr (W >= 8)
+			exec.set_likely_jit(exec.pagedata_base() >= 0x100000000);
 
 		const auto pbase = exec.pagedata_base();
 		const auto addr  = exec.exec_begin();
@@ -310,8 +312,8 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
-		// Also, don't run the translator again (for now)
-		if (W != 16 && !exec.is_binary_translated()) {
+		// Also, avoid binary translation for execute segments that are likely JIT-compiled
+		if (W != 16 && !exec.is_binary_translated() && !exec.is_likely_jit()) {
 			// Attempt to load binary translation
 			// Also, fill out the binary translation SO filename for later
 			std::string bintr_filename;
@@ -534,7 +536,7 @@ namespace riscv
 	{
 		for (size_t i = 0; i < m_exec_segs; i++) {
 			auto& segment = m_exec[i];
-			if (segment->is_within(vaddr)) return segment;
+			if (segment && segment->is_within(vaddr)) return segment;
 		}
 		return CPU<W>::empty_execute_segment();
 	}
@@ -566,6 +568,21 @@ namespace riscv
 				// Ignore exceptions
 			}
 		}
+	}
+
+	template <int W>
+	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
+	{
+		const uint32_t hash = segment.crc32c_hash();
+		for (size_t i = 0; i < m_exec_segs; i++) {
+			if (m_exec[i].get() == &segment) {
+				m_exec[i] = nullptr;
+				if (i == m_exec_segs - 1)
+					m_exec_segs--;
+				break;
+			}
+		}
+		shared_execute_segments<W>.remove_if_unique(hash);
 	}
 
 	INSTANTIATE_32_IF_ENABLED(DecoderData);
