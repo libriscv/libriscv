@@ -82,6 +82,9 @@ namespace riscv
 		bool is_execute_only() const noexcept { return m_is_execute_only; }
 		void set_execute_only(bool is_xo) { m_is_execute_only = is_xo; }
 
+		bool is_likely_jit() const noexcept { return m_is_likely_jit; }
+		void set_likely_jit(bool is_jit) { m_is_likely_jit = is_jit; }
+
 	private:
 		address_t m_vaddr_begin = 0;
 		address_t m_vaddr_end   = 0;
@@ -111,6 +114,9 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		mutable bool m_is_libtcc = false;
 #endif
+		// High-memory execute segments are likely to be JIT'd, and needs to
+		// be nuked when attempting to re-use the segment
+		bool m_is_likely_jit = false;
 	};
 
 	template <int W>

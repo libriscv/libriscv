@@ -197,11 +197,15 @@ template <int W>
 inline void MultiThreading<W>::wakeup_next()
 {
 	// resume a waiting thread
-	assert(!m_suspended.empty());
-	auto* next = m_suspended.front();
-	m_suspended.erase(m_suspended.begin());
-	// resume next thread
-	next->resume();
+	if (!m_suspended.empty()) {
+		auto* next = m_suspended.front();
+		m_suspended.erase(m_suspended.begin());
+		// resume next thread
+		next->resume();
+	} else {
+		auto* next = get_thread(0);
+		next->resume();
+	}
 }
 
 template <int W>
