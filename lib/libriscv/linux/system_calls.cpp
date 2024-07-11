@@ -21,6 +21,7 @@ static constexpr bool verbose_syscalls = false;
 #if !defined(__OpenBSD__)
 #include <sys/random.h>
 #endif
+extern "C" int dup3(int oldfd, int newfd, int flags);
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -157,6 +158,36 @@ static void syscall_sigaction(Machine<W>& machine)
 	}
 
 	machine.set_result(0);
+}
+
+template <int W>
+void syscall_getdents64(Machine<W>& machine)
+{
+	const int fd = machine.template sysarg<int>(0);
+	const auto g_dirp = machine.sysarg(1);
+	const auto count = machine.template sysarg<int>(2);
+
+	SYSPRINT("SYSCALL getdents64, fd: %d, dirp: 0x%lX, count: %d\n",
+		fd, (long)g_dirp, count);
+	(void)count;
+
+	if (machine.has_file_descriptors() && machine.fds().proxy_mode) {
+#ifdef __linux__
+		const int real_fd = machine.fds().translate(fd);
+
+		char buffer[4096];
+		const int res = syscall(SYS_getdents64, real_fd, buffer, sizeof(buffer));
+		if (res > 0)
+		{
+			machine.copy_to_guest(g_dirp, buffer, res);
+		}
+		machine.set_result_or_error(res);
+#else
+		machine.set_result(-ENOSYS);
+#endif
+	} else {
+		machine.set_result(-EBADF);
+	}
 }
 
 template <int W>
@@ -426,6 +457,33 @@ static void syscall_dup(Machine<W>& machine)
 		return;
 	}
 	machine.set_result(-EBADF);
+}
+
+template <int W>
+static void syscall_dup3(Machine<W>& machine)
+{
+	const int old_vfd = machine.template sysarg<int>(0);
+	const int new_vfd = machine.template sysarg<int>(1);
+	const int flags = machine.template sysarg<int>(2);
+
+	if (machine.has_file_descriptors()) {
+		int real_old_fd = machine.fds().translate(old_vfd);
+		int real_new_fd = machine.fds().translate(new_vfd);
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+		int res = dup3(real_old_fd, real_new_fd, flags);
+		if (res > 0) {
+			res = machine.fds().assign_file(res);
+		}
+		machine.set_result_or_error(res);
+#else
+		machine.set_result(-ENOSYS);
+#endif
+	} else {
+		machine.set_result(-EBADF);
+	}
+
+	SYSPRINT("SYSCALL dup3(old_vfd: %d, new_vfd: %d, flags: 0x%X) => %d\n",
+		old_vfd, new_vfd, flags, (int)machine.return_value());
 }
 
 int create_pipe(int* pipes, int flags) {
@@ -1059,6 +1117,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 #endif
 	// dup
 	install_syscall_handler(23, syscall_dup<W>);
+	// dup3
+	install_syscall_handler(24, syscall_dup3<W>);
 	// fcntl
 	install_syscall_handler(25, syscall_fcntl<W>);
 	// ioctl
@@ -1069,6 +1129,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(56, syscall_openat<W>);
 	install_syscall_handler(57, syscall_close<W>);
 	install_syscall_handler(59, syscall_pipe2<W>);
+	install_syscall_handler(61, syscall_getdents64<W>);
 	install_syscall_handler(62, syscall_lseek<W>);
 	install_syscall_handler(63, syscall_read<W>);
 	install_syscall_handler(64, syscall_write<W>);
