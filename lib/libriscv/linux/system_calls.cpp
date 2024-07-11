@@ -171,7 +171,7 @@ void syscall_getdents64(Machine<W>& machine)
 	(void)count;
 
 	if (machine.has_file_descriptors() && machine.fds().proxy_mode) {
-#ifdef __linux__
+#if defined(__linux__) && defined(__LP64__)
 		const int real_fd = machine.fds().translate(fd);
 
 		char buffer[4096];
@@ -182,6 +182,7 @@ void syscall_getdents64(Machine<W>& machine)
 		}
 		machine.set_result_or_error(res);
 #else
+		(void)fd; (void)g_dirp;
 		machine.set_result(-ENOSYS);
 #endif
 	} else {
