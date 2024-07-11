@@ -72,7 +72,7 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	// unblock (w/reason)
 	this->install_syscall_handler(syscall_base+5,
 	[] (Machine<W>& machine) {
-		if (!machine.threads().wakeup_blocked(machine.template sysarg<int> (0)))
+		if (!machine.threads().wakeup_blocked(64, machine.template sysarg<int> (0)))
 			machine.set_result(-1);
 	});
 	// unblock thread

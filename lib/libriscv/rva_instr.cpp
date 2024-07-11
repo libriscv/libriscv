@@ -2,7 +2,10 @@
 
 #include "instr_helpers.hpp"
 #if __has_include(<atomic>)
+#define USE_ATOMIC_OPS __cpp_lib_atomic_ref
 #include <atomic>
+#else
+#define USE_ATOMIC_OPS 0
 #endif
 #include <cstdint>
 #include <inttypes.h>
@@ -49,7 +52,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_add(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -72,7 +75,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_xor(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -87,7 +90,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_or(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -102,7 +105,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_and(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -161,7 +164,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_add(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -176,7 +179,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_xor(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -191,7 +194,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_or(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -206,7 +209,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).fetch_and(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -265,7 +268,7 @@ namespace riscv
 	{
 		cpu.template amo<int32_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).exchange(cpu.reg(rs2));
 #else
 			auto old_value = value;
@@ -287,7 +290,7 @@ namespace riscv
 	{
 		cpu.template amo<int64_t>(instr,
 		[] (auto& cpu, auto& value, auto rs2) {
-#ifdef __cpp_lib_atomic_ref
+#if USE_ATOMIC_OPS
 			return std::atomic_ref(value).exchange(cpu.reg(rs2));
 #else
 			auto old_value = value;

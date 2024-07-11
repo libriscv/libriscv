@@ -12,8 +12,8 @@ static inline void futex_op(Machine<W>& machine,
 	#define FUTEX_WAIT_BITSET	 9
 	#define FUTEX_WAKE_BITSET	10
 
-	THPRINT(machine, ">>> futex(0x%lX, op=%d, val=%d val3=0x%X)\n",
-		(long)addr, futex_op, val, val3);
+	THPRINT(machine, ">>> futex(0x%lX, op=%d (0x%X), val=%d val3=0x%X)\n",
+		(long)addr, futex_op & 0xF, futex_op, val, val3);
 
 	if ((futex_op & 0xF) == FUTEX_WAIT || (futex_op & 0xF) == FUTEX_WAIT_BITSET)
 	{
@@ -28,7 +28,8 @@ static inline void futex_op(Machine<W>& machine,
 		}
 		THPRINT(machine,
 			"FUTEX: Wait condition EAGAIN... uaddr=0x%lX val=%d, bitset=%d\n", (long)addr, val, is_bitset);
-		machine.set_result(-EAGAIN);
+		// This thread isn't blocked, but yielding may be necessary
+		machine.threads().suspend_and_yield(-EAGAIN);
 		return;
 	} else if ((futex_op & 0xF) == FUTEX_WAKE || (futex_op & 0xF) == FUTEX_WAKE_BITSET) {
 		const bool is_bitset = (futex_op & 0xF) == FUTEX_WAKE_BITSET;
@@ -36,7 +37,7 @@ static inline void futex_op(Machine<W>& machine,
 			"FUTEX: Waking %d others on 0x%lX, bitset=%d\n", val, (long)addr, is_bitset);
 		// XXX: Guaranteed not to expire early when
 		// timeout != 0x0.
-		unsigned awakened = machine.threads().wakeup_blocked(addr, is_bitset ? val3 : ~0x0);
+		unsigned awakened = machine.threads().wakeup_blocked(val, addr, is_bitset ? val3 : ~0x0);
 		machine.template set_result<unsigned>(awakened);
 		THPRINT(machine,
 			"FUTEX: Awakened: %u\n", awakened);
