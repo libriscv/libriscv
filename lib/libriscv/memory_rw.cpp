@@ -177,8 +177,9 @@ namespace riscv
 			// Apply madvise on the memory ranges
 			for (const auto& b : range) {
 				const int res = madvise((void*)std::get<0>(b), std::get<1>(b) - std::get<0>(b), MADV_DONTNEED);
-				if (UNLIKELY(res < 0))
-					throw MachineException(UNKNOWN_EXCEPTION, "memzero: madvise() failed");
+				//if (UNLIKELY(res < 0))
+				//	throw MachineException(UNKNOWN_EXCEPTION, "memzero: madvise() failed");
+				(void)res;
 			}
 		}
 	}
