@@ -34,14 +34,22 @@ extern "C" int dup3(int oldfd, int newfd, int flags);
 #define SA_ONSTACK	0x08000000
 
 namespace riscv {
+template <int W>
+extern void add_socket_syscalls(Machine<W>&);
+
+template <int W>
+struct guest_iovec {
+	address_type<W> iov_base;
+	address_type<W> iov_len;
+};
 
 #ifdef __linux__ 
-int get_time(int clkid, struct timespec* ts) {
+static int get_time(int clkid, struct timespec* ts) {
 	return clock_gettime(clkid, ts);
 }
 #elif __APPLE__
 #include <mach/mach_time.h>
-int get_time(int clkid, struct timespec* ts) {
+static int get_time(int clkid, struct timespec* ts) {
 	if (clkid == CLOCK_REALTIME) {
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
@@ -63,15 +71,6 @@ int get_time(int clkid, struct timespec* ts) {
 #else
 #error "Unknown compiler"
 #endif
-
-	template <int W>
-	void add_socket_syscalls(Machine<W>&);
-
-template <int W>
-struct guest_iovec {
-	address_type<W> iov_base;
-	address_type<W> iov_len;
-};
 
 template <int W>
 static void syscall_stub_zero(Machine<W>& machine) {
@@ -858,6 +857,7 @@ static void syscall_gettimeofday(Machine<W>& machine)
 	struct timeval tv;
 	const int res = gettimeofday(&tv, nullptr);
 	if (res >= 0) {
+		tv.tv_usec &= ~0x3FFLL; // Speculation safety measure
 		machine.copy_to_guest(buffer, &tv, sizeof(tv));
 	}
 	machine.set_result_or_error(res);
@@ -873,6 +873,7 @@ static void syscall_clock_gettime(Machine<W>& machine)
 	struct timespec ts;
 	const int res = get_time(clkid, &ts);
 	if (res >= 0) {
+		ts.tv_nsec &= ~0xFFFFFLL; // Speculation safety measure
 		if constexpr (W == 4) {
 			int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
 			machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
@@ -894,12 +895,13 @@ static void syscall_clock_gettime64(Machine<W>& machine)
 	int res = get_time(clkid, &ts);
 
 	if (res >= 0) {
+		ts.tv_nsec &= ~0xFFFFFLL; // Speculation safety measure
 		struct {
 			int64_t tv_sec;
-			int64_t tv_msec;
+			int64_t tv_nsec;
 		} kernel_ts;
 		kernel_ts.tv_sec  = ts.tv_sec;
-		kernel_ts.tv_msec = ts.tv_nsec;
+		kernel_ts.tv_nsec = ts.tv_nsec;
 		machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
 	}
 	machine.set_result_or_error(res);
