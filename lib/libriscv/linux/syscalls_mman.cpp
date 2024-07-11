@@ -1,6 +1,7 @@
 /// Linux memory mapping system call emulation
 /// Works on all platforms
 #define MAP_ANONYMOUS        0x20
+#define MAP_NORESERVE     0x04000
 
 template <int W>
 static void add_mman_syscalls()
@@ -128,8 +129,11 @@ static void add_mman_syscalls()
 		if (flags & MAP_ANONYMOUS) {
 			machine.memory.memdiscard(result, length, true);
 		}
-
-		machine.memory.set_page_attr(result, length, attr);
+		// avoid potentially creating pages when MAP_NORESERVE is set
+		if ((flags & MAP_NORESERVE) == 0)
+		{
+			machine.memory.set_page_attr(result, length, attr);
+		}
 		machine.set_result(result);
 		SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = 0x%lX\n",
 				(long)addr_g, (size_t)length, (long)result);
