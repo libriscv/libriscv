@@ -104,7 +104,7 @@ namespace riscv
 					if (page.attr.is_cow) {
 						m_page_write_handler(*this, pageno, page);
 					}
-					if (page.attr.write) {
+					if (page.attr.write || ignore_protections) {
 
 						if constexpr (MADVISE_ENABLED) {
 							// madvise "fast-path" (XXX: doesn't scale on busy server)
@@ -147,7 +147,7 @@ namespace riscv
 					auto& page = this->create_writable_pageno(pageno);
 					// Unfortunately we don't know if this page is untouched,
 					// but we can use MADV_DONTNEED
-					if (page.attr.write) {
+					if (page.attr.write || ignore_protections) {
 						std::memset(page.data() + offset, 0, size);
 					} else if (!ignore_protections) {
 						this->protection_fault(dst);
