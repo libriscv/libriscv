@@ -276,9 +276,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return -1;
 
 	void* dylib = nullptr;
-
-	// Always check if there is an existing file
-	if (access(filebuffer, R_OK) == 0) {
+	{
 		TIME_POINT(t7);
 		// Probably not needed, but on Windows there might be some issues
 		// with the emulated dlopen() functionality. Let's serialize it.
