@@ -172,8 +172,8 @@ namespace riscv
 		/// @brief Limits placed on the binary translator.
 		/// @details The binary translator will stop translating after reaching
 		/// either of these limits. The limits are per shared object.
-		unsigned translate_blocks_max = 16'000;
-		unsigned translate_instr_max = 250'000;
+		unsigned translate_blocks_max = 1024;
+		unsigned translate_instr_max = 500'000;
 		/// @brief Enable background compilation of shared objects. The compilation step
 		/// will be executed from a user-provided callback, and will be applied to the machine
 		/// when ready. Applying the translation is thread-safe and will take effect on all

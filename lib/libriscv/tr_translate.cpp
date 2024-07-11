@@ -628,8 +628,8 @@ VISIBLE const struct Mapping mappings[] = {
 	}
 
 	if (verbose) {
-		printf("libriscv: Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
-			icounter, dlmappings.size(), (long) gp);
+		printf("libriscv: Emitted %zu accelerated instructions, %zu blocks and %zu functions. GP=0x%lX\n",
+			icounter, blocks.size(), dlmappings.size(), (long) gp);
 	}
 	// nothing to compile without mappings
 	if (dlmappings.empty()) {
