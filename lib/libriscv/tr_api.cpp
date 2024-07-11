@@ -199,8 +199,8 @@ static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, a
 #endif
 }
 
-#define JUMP_TO(cpu, addr) \
-	cpu->pc = addr & ~(addr_t)RISCV_ALIGN_MASK;
+#define JUMP_TO(addr) \
+	pc = addr & ~(addr_t)RISCV_ALIGN_MASK;
 
 // https://stackoverflow.com/questions/28868367/getting-the-high-part-of-64-bit-integer-multiplication
 // As written by catid

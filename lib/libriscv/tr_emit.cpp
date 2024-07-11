@@ -651,18 +651,18 @@ void Emitter<W>::emit()
 				add_code(
 					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
 					to_reg(instr.Itype.rd) + " = " + PCRELS(m_instr_length) + ";",
-					"JUMP_TO(cpu, rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
+					"JUMP_TO(rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
 				);
 			} else {
 				add_code(
-					"JUMP_TO(cpu, " + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
+					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			if (!tinfo.ignore_instruction_limit)
-				code += "if (cpu->pc >= " + STRADDR(this->begin_pc()) + " && cpu->pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }\n";
+				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") { goto " + this->func + "_jumptbl; }\n";
 			else
-				code += "if (cpu->pc >= " + STRADDR(this->begin_pc()) + " && cpu->pc < " + STRADDR(this->end_pc()) + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }\n";
-			exit_function("cpu->pc", false);
+				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + ") { goto " + this->func + "_jumptbl; }\n";
+			exit_function("pc", false);
 			this->add_reentry_next();
 			} break;
 		case RV32I_JAL: {
@@ -722,15 +722,24 @@ void Emitter<W>::emit()
 					// If the counter is exhausted, or PC has diverged, exit the function
 					if (instr.Jtype.rd != 0) {
 						if (this->add_reentry_next()) {
-							// Fast-path if cpu->pc is already set to the next instruction
-							if (tinfo.ignore_instruction_limit)
-								add_code("if (cpu->pc == " + STRADDR(next_pc) + ") goto " + FUNCLABEL(next_pc) + ";");
-							else {
-								add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") goto " + FUNCLABEL(next_pc) + ";");
+							// Hope and pray that the next PC is local to this block
+							if (tinfo.ignore_instruction_limit) {
+								add_code("pc = cpu->pc; goto " + this->func + "_jumptbl;");
+								already_exited = true;
+							} else {
+								add_code("if (" + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
 							}
+							/* The more sane option is to guess that the return PC is this PC + 1
+							if (tinfo.ignore_instruction_limit)
+								add_code("if (cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
+							else {
+								add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
+							}*/
 						}
 					}
-					exit_function("cpu->pc", false);
+
+					if (!already_exited)
+						exit_function("cpu->pc", false);
 					already_exited = true;
 				} else {
 					//printf("Jump location inconvenient (backward): 0x%lX at func 0x%lX for block 0x%lX -> 0x%lX\n",
@@ -1580,7 +1589,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 		const auto label = funclabel<W>(e.get_func(), entry.addr);
 		code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 	}
-	code += "default: return (ReturnValues){counter, max_counter};\n";
+	code += "default: cpu->pc = pc; return (ReturnValues){counter, max_counter};\n";
 	code += "}\n";
 
 	// Function GPRs
