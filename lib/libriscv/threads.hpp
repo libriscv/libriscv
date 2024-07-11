@@ -68,7 +68,7 @@ struct MultiThreading
 	void      wakeup_next();
 	bool      block(address_t retval, uint32_t reason, uint32_t extra = 0);
 	void      unblock(int tid);
-	size_t    wakeup_blocked(uint32_t reason, uint32_t mask = ~0U);
+	size_t    wakeup_blocked(size_t max, uint32_t reason, uint32_t mask = ~0U);
 	/* A suspended thread can at any time be resumed. */
 	auto&     suspended_threads() { return m_suspended; }
 	/* A blocked thread can only be resumed by unblocking it. */
@@ -391,10 +391,10 @@ inline void MultiThreading<W>::unblock(int tid)
 	machine.cpu.reg(REG_ARG0) = -1;
 }
 template <int W>
-inline size_t MultiThreading<W>::wakeup_blocked(uint32_t reason, uint32_t mask)
+inline size_t MultiThreading<W>::wakeup_blocked(size_t max, uint32_t reason, uint32_t mask)
 {
 	size_t awakened = 0;
-	for (auto it = m_blocked.begin(); it != m_blocked.end(); )
+	for (auto it = m_blocked.begin(); it != m_blocked.end() && awakened < max; )
 	{
 		// compare against block reason
 		const auto bits = (*it)->block_extra;

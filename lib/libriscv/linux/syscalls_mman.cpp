@@ -10,7 +10,6 @@ static void add_mman_syscalls()
 	[] (Machine<W>& machine) {
 		const auto addr = machine.sysarg(0);
 		const auto len  = machine.sysarg(1);
-		SYSPRINT(">>> munmap(0x%lX, len=%zu)\n", (long)addr, (size_t)len);
 		if (addr + len < addr)
 			throw MachineException(SYSTEM_CALL_FAILED, "munmap() arguments overflow");
 		machine.memory.free_pages(addr, len);
@@ -18,6 +17,8 @@ static void add_mman_syscalls()
 			machine.memory.mmap_unmap(addr, len);
 		}
 		machine.set_result(0);
+		SYSPRINT(">>> munmap(0x%lX, len=%zu) => %d\n",
+			(long)addr, (size_t)len, (int)machine.return_value());
 	});
 	// mmap
 	Machine<W>::install_syscall_handler(222,
@@ -159,14 +160,14 @@ static void add_mman_syscalls()
 		const auto addr = machine.sysarg(0);
 		const auto len  = machine.sysarg(1);
 		const int  prot = machine.template sysarg<int> (2);
-		SYSPRINT(">>> mprotect(0x%lX, len=%zu, prot=%x)\n",
-			(long)addr, (size_t)len, prot);
 		machine.memory.set_page_attr(addr, len, {
 			.read  = (prot & 1) != 0,
 			.write = (prot & 2) != 0,
 			.exec  = (prot & 4) != 0
 		});
 		machine.set_result(0);
+		SYSPRINT(">>> mprotect(0x%lX, len=%zu, prot=%x) => %d\n",
+			(long)addr, (size_t)len, prot, (int)machine.return_value());
 	});
 	// madvise
 	Machine<W>::install_syscall_handler(233,
@@ -174,8 +175,6 @@ static void add_mman_syscalls()
 		const auto addr  = machine.sysarg(0);
 		const auto len   = machine.sysarg(1);
 		const int advice = machine.template sysarg<int> (2);
-		SYSPRINT(">>> madvise(0x%lX, len=%zu, advice=%x)\n",
-			(uint64_t)addr, (size_t)len, advice);
 		switch (advice) {
 			case 0: // MADV_NORMAL
 			case 1: // MADV_RANDOM
@@ -187,22 +186,24 @@ static void add_mman_syscalls()
 			case 15: // MADV_NOHUGEPAGE
 			case 18: // MADV_WIPEONFORK
 				machine.set_result(0);
-				return;
+				break;
 			case 4: // MADV_DONTNEED
 				machine.memory.memdiscard(addr, len, true);
 				machine.set_result(0);
-				return;
+				break;
 			case 8: // MADV_FREE
 			case 9: // MADV_REMOVE
 				machine.memory.free_pages(addr, len);
 				machine.set_result(0);
-				return;
+				break;
 			case -1: // Work-around for Zig behavior
 				machine.set_result(-EINVAL);
-				return;
+				break;
 			default:
 				throw MachineException(SYSTEM_CALL_FAILED,
 					"Unimplemented madvise() advice", advice);
 		}
+		SYSPRINT(">>> madvise(0x%lX, len=%zu, advice=%x) => %d\n",
+			(uint64_t)addr, (size_t)len, advice, (int)machine.return_value());
 	});
 }
