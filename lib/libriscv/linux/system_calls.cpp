@@ -587,6 +587,13 @@ static void syscall_ioctl(Machine<W>& machine)
 		}
 #endif
 
+		if (machine.fds().proxy_mode && req == FIONBIO) {
+			int opt = machine.memory.template read<int>(arg1);
+			int res = ioctl(real_fd, req, &opt);
+			machine.set_result_or_error(res);
+			return;
+		}
+
 		int res = ioctl(real_fd, req, arg1, arg2, arg3, arg4);
 		machine.set_result_or_error(res);
 		return;
