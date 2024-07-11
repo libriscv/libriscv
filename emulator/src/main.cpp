@@ -8,6 +8,7 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
+//#define NODEJS_WORKAROUND
 
 struct Arguments {
 	bool verbose = false;
@@ -272,11 +273,18 @@ static void run_program(
 			machine.fds().permit_filesystem = true;
 			machine.fds().permit_sockets    = true;
 			machine.fds().proxy_mode = true; // Proxy mode for system calls (no more sandbox)
+#ifndef _WIN32
+			char buf[4096];
+			machine.fds().cwd = getcwd(buf, sizeof(buf));
+#endif
 		}
 		// Rewrite certain links to masquerade and simplify some interactions (eg. /proc/self/exe)
 		machine.fds().filter_readlink = [&] (void* user, std::string& path) {
 			if (path == "/proc/self/exe") {
 				path = machine.fds().cwd + "/program";
+				return true;
+			}
+			if (path == "/proc/self/fd/1" || path == "/proc/self/fd/2") {
 				return true;
 			}
 			fprintf(stderr, "Guest wanted to readlink: %s (denied)\n", path.c_str());
@@ -432,7 +440,27 @@ static void run_program(
 			// Normal RISC-V simulation
 			if (cli_args.accurate)
 				machine.simulate(cli_args.fuel);
-			else
+			else {
+#ifdef NODEJS_WORKAROUND
+				const auto rw_rdlock = machine.address_of("pthread_rwlock_rdlock");
+				const auto rw_wrlock = machine.address_of("pthread_rwlock_wrlock");
+				const auto rw_unlock = machine.address_of("pthread_rwlock_unlock");
+
+				machine.set_max_instructions(cli_args.fuel);
+				do {
+					// Whenever we hit rwlock, step twice and check if it's a deadlock
+					if (machine.cpu.pc() == rw_rdlock || machine.cpu.pc() == rw_wrlock) {
+						machine.cpu.step_one();
+						machine.cpu.step_one();
+						if(machine.cpu.reg(14) == machine.cpu.reg(15)) {
+							// Deadlock detected, avoid branch (beq a4, a5) and reset the lock
+							machine.cpu.reg(14) = 0xFF;
+							machine.memory.template write<uint32_t>(machine.cpu.reg(10), 0);
+						}
+					}
+					machine.cpu.step_one();
+				} while (!machine.stopped());
+#endif // NODEJS_WORKAROUND
 #ifdef RISCV_TIMED_VMCALLS
 				// Simulation with experimental timeout
 				machine.execute_with_timeout(360.0f, machine.cpu.pc());
@@ -440,8 +468,9 @@ static void run_program(
 				// Simulate until it eventually stops (or user interrupts)
 				machine.cpu.simulate_inaccurate(machine.cpu.pc());
 #endif
+			}
 		}
-	} catch (riscv::MachineException& me) {
+	} catch (const riscv::MachineException& me) {
 		printf("%s\n", machine.cpu.current_instruction_to_string().c_str());
 		printf(">>> Machine exception %d: %s (data: 0x%" PRIX64 ")\n",
 				me.type(), me.what(), me.data());

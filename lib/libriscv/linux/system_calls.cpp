@@ -21,6 +21,7 @@ static constexpr bool verbose_syscalls = false;
 #if !defined(__OpenBSD__)
 #include <sys/random.h>
 #endif
+extern "C" int dup3(int oldfd, int newfd, int flags);
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -33,14 +34,22 @@ static constexpr bool verbose_syscalls = false;
 #define SA_ONSTACK	0x08000000
 
 namespace riscv {
+template <int W>
+extern void add_socket_syscalls(Machine<W>&);
+
+template <int W>
+struct guest_iovec {
+	address_type<W> iov_base;
+	address_type<W> iov_len;
+};
 
 #ifdef __linux__ 
-int get_time(int clkid, struct timespec* ts) {
+static int get_time(int clkid, struct timespec* ts) {
 	return clock_gettime(clkid, ts);
 }
 #elif __APPLE__
 #include <mach/mach_time.h>
-int get_time(int clkid, struct timespec* ts) {
+static int get_time(int clkid, struct timespec* ts) {
 	if (clkid == CLOCK_REALTIME) {
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
@@ -62,15 +71,6 @@ int get_time(int clkid, struct timespec* ts) {
 #else
 #error "Unknown compiler"
 #endif
-
-	template <int W>
-	void add_socket_syscalls(Machine<W>&);
-
-template <int W>
-struct guest_iovec {
-	address_type<W> iov_base;
-	address_type<W> iov_len;
-};
 
 template <int W>
 static void syscall_stub_zero(Machine<W>& machine) {
@@ -157,6 +157,36 @@ static void syscall_sigaction(Machine<W>& machine)
 	}
 
 	machine.set_result(0);
+}
+
+template <int W>
+void syscall_getdents64(Machine<W>& machine)
+{
+	const int fd = machine.template sysarg<int>(0);
+	const auto g_dirp = machine.sysarg(1);
+	const auto count = machine.template sysarg<int>(2);
+
+	SYSPRINT("SYSCALL getdents64, fd: %d, dirp: 0x%lX, count: %d\n",
+		fd, (long)g_dirp, count);
+	(void)count;
+
+	if (machine.has_file_descriptors() && machine.fds().proxy_mode) {
+#ifdef __linux__
+		const int real_fd = machine.fds().translate(fd);
+
+		char buffer[4096];
+		const int res = syscall(SYS_getdents64, real_fd, buffer, sizeof(buffer));
+		if (res > 0)
+		{
+			machine.copy_to_guest(g_dirp, buffer, res);
+		}
+		machine.set_result_or_error(res);
+#else
+		machine.set_result(-ENOSYS);
+#endif
+	} else {
+		machine.set_result(-EBADF);
+	}
 }
 
 template <int W>
@@ -428,6 +458,33 @@ static void syscall_dup(Machine<W>& machine)
 	machine.set_result(-EBADF);
 }
 
+template <int W>
+static void syscall_dup3(Machine<W>& machine)
+{
+	const int old_vfd = machine.template sysarg<int>(0);
+	const int new_vfd = machine.template sysarg<int>(1);
+	const int flags = machine.template sysarg<int>(2);
+
+	if (machine.has_file_descriptors()) {
+		int real_old_fd = machine.fds().translate(old_vfd);
+		int real_new_fd = machine.fds().translate(new_vfd);
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+		int res = dup3(real_old_fd, real_new_fd, flags);
+		if (res > 0) {
+			res = machine.fds().assign_file(res);
+		}
+		machine.set_result_or_error(res);
+#else
+		machine.set_result(-ENOSYS);
+#endif
+	} else {
+		machine.set_result(-EBADF);
+	}
+
+	SYSPRINT("SYSCALL dup3(old_vfd: %d, new_vfd: %d, flags: 0x%X) => %d\n",
+		old_vfd, new_vfd, flags, (int)machine.return_value());
+}
+
 int create_pipe(int* pipes, int flags) {
 	#ifdef __linux__ 
 		return pipe2(pipes, flags);
@@ -529,6 +586,13 @@ static void syscall_ioctl(Machine<W>& machine)
 			return;
 		}
 #endif
+
+		if (machine.fds().proxy_mode && req == FIONBIO) {
+			int opt = machine.memory.template read<int>(arg1);
+			int res = ioctl(real_fd, req, &opt);
+			machine.set_result_or_error(res);
+			return;
+		}
 
 		int res = ioctl(real_fd, req, arg1, arg2, arg3, arg4);
 		machine.set_result_or_error(res);
@@ -800,6 +864,7 @@ static void syscall_gettimeofday(Machine<W>& machine)
 	struct timeval tv;
 	const int res = gettimeofday(&tv, nullptr);
 	if (res >= 0) {
+		tv.tv_usec &= ~0x3FFLL; // Speculation safety measure
 		machine.copy_to_guest(buffer, &tv, sizeof(tv));
 	}
 	machine.set_result_or_error(res);
@@ -815,6 +880,7 @@ static void syscall_clock_gettime(Machine<W>& machine)
 	struct timespec ts;
 	const int res = get_time(clkid, &ts);
 	if (res >= 0) {
+		ts.tv_nsec &= ~0xFFFFFLL; // Speculation safety measure
 		if constexpr (W == 4) {
 			int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
 			machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
@@ -836,12 +902,13 @@ static void syscall_clock_gettime64(Machine<W>& machine)
 	int res = get_time(clkid, &ts);
 
 	if (res >= 0) {
+		ts.tv_nsec &= ~0xFFFFFLL; // Speculation safety measure
 		struct {
 			int64_t tv_sec;
-			int64_t tv_msec;
+			int64_t tv_nsec;
 		} kernel_ts;
 		kernel_ts.tv_sec  = ts.tv_sec;
-		kernel_ts.tv_msec = ts.tv_nsec;
+		kernel_ts.tv_nsec = ts.tv_nsec;
 		machine.copy_to_guest(buffer, &kernel_ts, sizeof(kernel_ts));
 	}
 	machine.set_result_or_error(res);
@@ -1059,6 +1126,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 #endif
 	// dup
 	install_syscall_handler(23, syscall_dup<W>);
+	// dup3
+	install_syscall_handler(24, syscall_dup3<W>);
 	// fcntl
 	install_syscall_handler(25, syscall_fcntl<W>);
 	// ioctl
@@ -1069,6 +1138,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(56, syscall_openat<W>);
 	install_syscall_handler(57, syscall_close<W>);
 	install_syscall_handler(59, syscall_pipe2<W>);
+	install_syscall_handler(61, syscall_getdents64<W>);
 	install_syscall_handler(62, syscall_lseek<W>);
 	install_syscall_handler(63, syscall_read<W>);
 	install_syscall_handler(64, syscall_write<W>);

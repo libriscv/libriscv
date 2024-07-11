@@ -81,14 +81,14 @@ static void syscall_epoll_pwait(Machine<W>& machine)
 	const auto g_events = machine.sysarg(1);
 	auto maxevents = machine.template sysarg<int>(2);
 	auto timeout = machine.template sysarg<int>(3);
-	if (timeout < 0 || timeout > 100) timeout = 100;
+	if (timeout < 0 || timeout > 1) timeout = 1;
 
 	std::array<struct epoll_event, 4096> events;
 	if (maxevents < 0 || maxevents > (int)events.size()) {
 		SYSPRINT("WARNING: Too many epoll events for %d\n", vepoll_fd);
 		maxevents = events.size();
 	}
-	int real_fd = -EBADFD;
+	int real_fd = -EBADF;
 
 	if (machine.has_file_descriptors()) {
 		real_fd = machine.fds().translate(vepoll_fd);
@@ -100,10 +100,8 @@ static void syscall_epoll_pwait(Machine<W>& machine)
 		} else if (res < 0 || timeout == 0) {
 			machine.set_result_or_error(res);
 		} else {
-			// Finish up: Set -EINTR
-			machine.set_result(-EINTR);
-			// Check other threads
-			if (machine.threads().preempt()) {
+			// Finish up: Set -EINTR, then yield
+			if (machine.threads().suspend_and_yield(-EINTR)) {
 				SYSPRINT("SYSCALL epoll_pwait yielded...\n");
 				return;
 			}

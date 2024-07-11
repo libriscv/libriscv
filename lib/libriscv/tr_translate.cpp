@@ -276,9 +276,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return -1;
 
 	void* dylib = nullptr;
-
-	// Always check if there is an existing file
-	if (access(filebuffer, R_OK) == 0) {
+	{
 		TIME_POINT(t7);
 		// Probably not needed, but on Windows there might be some issues
 		// with the emulated dlopen() functionality. Let's serialize it.
@@ -630,8 +628,8 @@ VISIBLE const struct Mapping mappings[] = {
 	}
 
 	if (verbose) {
-		printf("libriscv: Emitted %zu accelerated instructions and %zu functions. GP=0x%lX\n",
-			icounter, dlmappings.size(), (long) gp);
+		printf("libriscv: Emitted %zu accelerated instructions, %zu blocks and %zu functions. GP=0x%lX\n",
+			icounter, blocks.size(), dlmappings.size(), (long) gp);
 	}
 	// nothing to compile without mappings
 	if (dlmappings.empty()) {
