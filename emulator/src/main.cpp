@@ -8,6 +8,7 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
+//#define NODEJS_WORKAROUND
 
 struct Arguments {
 	bool verbose = false;
@@ -272,6 +273,10 @@ static void run_program(
 			machine.fds().permit_filesystem = true;
 			machine.fds().permit_sockets    = true;
 			machine.fds().proxy_mode = true; // Proxy mode for system calls (no more sandbox)
+#ifndef _WIN32
+			char buf[4096];
+			machine.fds().cwd = getcwd(buf, sizeof(buf));
+#endif
 		}
 		// Rewrite certain links to masquerade and simplify some interactions (eg. /proc/self/exe)
 		machine.fds().filter_readlink = [&] (void* user, std::string& path) {
