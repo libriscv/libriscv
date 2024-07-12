@@ -120,7 +120,15 @@ static void add_mman_syscalls()
 		} else if (addr_g > nextfree) {
 			// Fixed mapping after current end of mmap arena
 			// TODO: Evaluate if relaxation is counter-productive with the new cache
-			result = addr_g;
+			if constexpr (riscv::encompassing_Nbit_arena > 0) {
+				// We have to force the address to be within the arena
+				if (nextfree + length > riscv::encompassing_arena_mask)
+					MMAP_HAS_FAILED();
+				result = nextfree;
+				nextfree += length;
+			} else {
+				result = addr_g;
+			}
 		} else {
 			MMAP_HAS_FAILED();
 		}
