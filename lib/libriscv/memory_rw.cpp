@@ -89,7 +89,6 @@ namespace riscv
 #ifndef MADV_DONTNEED
 		static constexpr int MADV_DONTNEED = 0x4;
 #endif
-		std::vector<std::tuple<uint8_t*, uint8_t*>> range;
 		while (len > 0)
 		{
 			const size_t offset = dst & (Page::size()-1); // offset within page
@@ -113,11 +112,7 @@ namespace riscv
 						if constexpr (MADVISE_ENABLED) {
 							// madvise "fast-path" (XXX: doesn't scale on busy server)
 							if (offset == 0 && size == Page::size()) {
-								if (!range.empty() && std::get<1>(range.back()) == page.data()) {
-									std::get<1>(range.back()) += size;
-								} else {
-									range.emplace_back(page.data(), page.data() + size);
-								}
+								madvise(page.data(), Page::size(), MADV_DONTNEED);
 							} else {
 								std::memset(page.data() + offset, 0, size);
 							}
@@ -143,11 +138,8 @@ namespace riscv
 							const size_t new_size = new_dst - dst;
 
 							auto* baseptr = &((uint8_t *)m_arena.data)[dst];
-							if (!range.empty() && std::get<1>(range.back()) == baseptr) {
-								std::get<1>(range.back()) += new_size;
-							} else {
-								range.emplace_back(baseptr, baseptr + new_size);
-							}
+							madvise(baseptr, Page::size(), MADV_DONTNEED);
+
 							dst += new_size;
 							len -= new_size;
 							continue;
@@ -170,16 +162,6 @@ namespace riscv
 
 			dst += size;
 			len -= size;
-		}
-
-		if constexpr (MADVISE_ENABLED)
-		{
-			// Apply madvise on the memory ranges
-			for (const auto& b : range) {
-				const int res = madvise((void*)std::get<0>(b), std::get<1>(b) - std::get<0>(b), MADV_DONTNEED);
-				if (UNLIKELY(res < 0))
-					throw MachineException(UNKNOWN_EXCEPTION, "memzero: madvise() failed");
-			}
 		}
 	}
 
