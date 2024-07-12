@@ -4,9 +4,23 @@
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
 #include "threaded_bytecodes.hpp"
+//#define TIME_EXECUTION
 
 namespace riscv
 {
+#ifdef TIME_EXECUTION
+	static timespec time_now()
+	{
+		timespec t;
+		clock_gettime(CLOCK_MONOTONIC, &t);
+		return t;
+	}
+	static long nanodiff(timespec start_time, timespec end_time)
+	{
+		return (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
+	}
+#endif
+
 	// A default empty execute segment used to enforce that the
 	// current CPU execute segment is never null.
 	template <int W>
@@ -123,61 +137,92 @@ restart_next_execute_segment:
 		// Find decoded execute segment via override
 		// If it returns empty, we build a new execute segment
 		auto& next = this->m_override_exec(*this);
-		if (LIKELY(!next.empty())) {
+		if (!next.empty()) {
 			this->m_exec = &next;
 			return {this->m_exec, this->registers().pc};
 		}
 
 		// Find the earliest execute page in new segment
+		const uint8_t* base_page_data = current_page.data();
+
 		while (base_pageno > 0) {
 			const auto& page =
 				machine().memory.get_pageno(base_pageno-1);
 			if (page.attr.exec) {
 				base_pageno -= 1;
+				base_page_data = page.data();
 			} else break;
 		}
 
 		// Find the last execute page in segment
+		const uint8_t* end_page_data = current_page.data();
 		while (end_pageno != 0) {
 			const auto& page =
 				machine().memory.get_pageno(end_pageno);
 			if (page.attr.exec) {
 				end_pageno += 1;
+				end_page_data = page.data();
 			} else break;
 		}
 
-		// Allocate full execute area
 		if (UNLIKELY(end_pageno <= base_pageno))
 			throw MachineException(INVALID_PROGRAM, "Failed to create execute segment");
 		const size_t n_pages = end_pageno - base_pageno;
-		thread_local std::vector<uint8_t> area;
-		area.resize(n_pages * Page::size());
-		// Copy from each individual page
-		for (address_t p = base_pageno; p < end_pageno; p++) {
-			// Cannot use get_exec_pageno here as we may need
-			// access to read fault handler.
-			auto& page = machine().memory.get_pageno(p);
-			const size_t offset = (p - base_pageno) * Page::size();
-			std::memcpy(area.data() + offset, page.data(), Page::size());
-		}
+		end_page_data += Page::size();
+		const bool sequential = end_page_data == base_page_data + n_pages * Page::size();
 
 		// Check for write + execute
 		if (UNLIKELY(current_page.attr.write && current_page.attr.exec))
 		{
+#ifdef TIME_EXECUTION
+			auto t0 = time_now();
+#endif
 			// This is a JIT-compiled page, we need execute it directly
 			const address_t basepc = base_pageno * Page::size();
 			const address_t endpc  = basepc + n_pages * Page::size();
-			this->simulate_precise_single_segment(area.data(), basepc, endpc, pc);
-			pc = this->pc();
 
+			if (sequential) {
+				pc = this->simulate_precise_single_segment(base_page_data, basepc, endpc, pc);
+			} else {
+				std::unique_ptr<uint8_t[]> area(new uint8_t[n_pages * Page::size() + 4]);
+				// Slow, but reliable copy
+				for (address_t p = base_pageno; p < end_pageno; p++) {
+					auto& page = machine().memory.get_pageno(p);
+					if (UNLIKELY(!page.attr.exec))
+						trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, pc);
+					const size_t offset = (p - base_pageno) * Page::size();
+					std::memcpy(&area[offset], page.data(), Page::size());
+				}
+
+				pc = this->simulate_precise_single_segment(area.get(), basepc, endpc, pc);
+			}
+
+#ifdef TIME_EXECUTION
+			auto t1 = time_now();
+			auto diff = nanodiff(t0, t1);
+			static uint64_t total = 0;
+			total += diff;
+			printf("Simulated JIT-compiled instructions in %ld ns, total %ld ns\n", diff, total);
+#endif
 			if (UNLIKELY(++restarts == MAX_RESTARTS))
 				trigger_exception(EXECUTION_LOOP_DETECTED, pc);
 
 			goto restart_next_execute_segment;
 		}
 
+		// Allocate full execute area
+		std::unique_ptr<uint8_t[]> area(new uint8_t[n_pages * Page::size()]);
+		// Copy from each individual page
+		for (address_t p = base_pageno; p < end_pageno; p++) {
+			// Cannot use get_exec_pageno here as we may need
+			// access to read fault handler.
+			auto& page = machine().memory.get_pageno(p);
+			const size_t offset = (p - base_pageno) * Page::size();
+			std::memcpy(area.get() + offset, page.data(), Page::size());
+		}
+
 		// Decode and store it for later
-		return {&this->init_execute_area(area.data(), base_pageno * Page::size(), n_pages * Page::size()), pc};
+		return {&this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size()), pc};
 	} // CPU::next_execute_segment
 
 	template <int W> RISCV_NOINLINE RISCV_INTERNAL
@@ -247,7 +292,7 @@ restart_next_execute_segment:
 	}
 
 	template<int W> RISCV_HOT_PATH()
-	void CPU<W>::simulate_precise_single_segment(
+	address_type<W> CPU<W>::simulate_precise_single_segment(
 		const uint8_t* exec_seg_data, address_t begin_pc, address_t end_pc, address_t pc)
 	{
 		exec_seg_data -= begin_pc;
@@ -259,29 +304,34 @@ restart_next_execute_segment:
 				auto instruction = decode_safely<W>(exec_seg_data, pc);
 				this->execute(instruction);
 
-				registers().pc += instruction.length();
+				if constexpr (compressed_enabled)
+					registers().pc += instruction.length();
+				else
+					registers().pc += 4;
 				pc = registers().pc;
 			}
-			return;
+
+			return pc;
 		}
 
 		for (; machine().instruction_counter() < machine().max_instructions();
 			machine().increment_counter(1)) {
 
-			auto pc = this->pc();
+			pc = this->pc();
 			if (UNLIKELY(pc < begin_pc || pc >= end_pc))
-				return;
+				return pc;
 
 			auto instruction = decode_safely<W>(exec_seg_data, pc);
 			this->execute(instruction);
 
-			// increment PC
 			if constexpr (compressed_enabled)
 				registers().pc += instruction.length();
 			else
 				registers().pc += 4;
 
 		} // while not stopped
+
+		return pc;
 
 	} // CPU::simulate_precise_single_segment
 

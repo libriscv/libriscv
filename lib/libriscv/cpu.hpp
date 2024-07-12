@@ -50,7 +50,7 @@ namespace riscv
 
 		/// @brief Executes one instruction at a time, until the execute
 		/// segment is left. Used to execute JIT-compiled code.
-		void simulate_precise_single_segment(const uint8_t* exec_seg, address_t begin_pc, address_t end_pc, address_t pc);
+		address_t simulate_precise_single_segment(const uint8_t* exec_seg, address_t begin_pc, address_t end_pc, address_t pc);
 
 		/// @brief  Get the current PC
 		/// @return The current PC address

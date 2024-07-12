@@ -457,19 +457,18 @@ static void run_program(
 			[] (auto& machine)
 			{
 				auto& cpu = machine.cpu;
-				auto pc = cpu.pc();
-				if (pc == rw_rdlock || pc == rw_wrlock) {
+				if (cpu.pc() == rw_rdlock || cpu.pc() == rw_wrlock) {
 					// Execute 2 instruction and step over them
 					cpu.step_one(false);
 					cpu.step_one(false);
 					// Check for deadlock
-					if(cpu.reg(14) == cpu.reg(15)) {
+					if (cpu.reg(14) == cpu.reg(15)) {
 						// Deadlock detected, avoid branch (beq a4, a5) and reset the lock
 						cpu.reg(14) = 0xFF;
 						machine.memory.template write<uint32_t>(cpu.reg(10), 0);
 					}
 				} else {
-					throw riscv::MachineException(riscv::UNHANDLED_SYSCALL, "EBREAK instruction", pc);
+					throw riscv::MachineException(riscv::UNHANDLED_SYSCALL, "EBREAK instruction", cpu.pc());
 				}
 			});
 #endif // NODEJS_WORKAROUND
