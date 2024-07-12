@@ -5,6 +5,12 @@
 #include <chrono>
 #include <thread>
 #include "settings.hpp"
+#ifdef __linux__
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#endif
 static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
@@ -201,7 +207,7 @@ static void run_sighandler(riscv::Machine<W>&);
 template <int W>
 static void run_program(
 	const Arguments& cli_args,
-	const std::vector<uint8_t>& binary,
+	const std::string_view binary,
 	const bool is_dynamic,
 	const std::vector<std::string>& args)
 {
@@ -593,17 +599,46 @@ int main(int argc, const char** argv)
 	using ElfHeader = typename riscv::Elf<4>::Header;
 
 	try {
-		auto binary = load_file(filename);
-		if (binary.size() < sizeof(ElfHeader)) {
+		std::vector<uint8_t> vbin;
+#if !defined(__linux__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__)
+		// Use load_file for non-Posix systems
+		vbin = load_file(filename);
+		if (vbin.size() < sizeof(ElfHeader)) {
 			fprintf(stderr, "ELF binary was too small to be usable!\n");
 			exit(1);
 		}
+		std::string_view binary { (const char*)vbin.data(), vbin.size() };
+#else
+		// Use mmap for Posix systems, not sure if Apple supports this
+		std::string_view binary;
+		int fd = open(filename.c_str(), O_RDONLY);
+		if (fd < 0) {
+			fprintf(stderr, "Could not open file: %s\n", filename.c_str());
+			exit(1);
+		}
+		struct stat st;
+		if (fstat(fd, &st) < 0) {
+			fprintf(stderr, "Could not stat file: %s\n", filename.c_str());
+			exit(1);
+		}
+		if (st.st_size < sizeof(ElfHeader)) {
+			fprintf(stderr, "ELF binary was too small to be usable!\n");
+			exit(1);
+		}
+		void* ptr = mmap(nullptr, st.st_size, PROT_READ, MAP_FILE|MAP_PRIVATE|MAP_NORESERVE, fd, 0);
+		if (ptr == MAP_FAILED) {
+			fprintf(stderr, "Could not mmap file: %s\n", filename.c_str());
+			exit(1);
+		}
+		binary = { (const char*)ptr, size_t(st.st_size) };
+#endif
 
 		const bool is_dynamic = ((ElfHeader *)binary.data())->e_type == ElfHeader::ET_DYN;
 
 		if (binary[4] == riscv::ELFCLASS64 && is_dynamic) {
 			// Load the dynamic linker shared object
-			binary = load_file(DYNAMIC_LINKER);
+			vbin = load_file(DYNAMIC_LINKER);
+			binary = { (const char*)vbin.data(), vbin.size() };
 			// Insert program name as argv[1]
 			args.insert(args.begin() + 1, args.at(0));
 			// Set dynamic linker to argv[0]

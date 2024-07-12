@@ -376,6 +376,40 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return RV32C_BC_SLLI;
 			}
+			case RV32C_BC_SRLI: {
+				const rv32c_instruction ci{original};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CA.srd  + 8;
+				if constexpr (W >= 8) {
+					rewritten.imm = ci.CAB.shift64_imm();
+				} else {
+					rewritten.imm = ci.CAB.shift_imm();
+				}
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_ANDI: {
+				const rv32c_instruction ci{original};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CA.srd  + 8;
+				rewritten.imm = ci.CAB.signed_imm();
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_XOR: {
+				const rv32c_instruction ci{original};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CA.srd  + 8;
+				rewritten.rs2 = ci.CA.srs2 + 8;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
 			case RV32C_BC_BEQZ:
 			case RV32C_BC_BNEZ: {
 				const rv32c_instruction ci { original };

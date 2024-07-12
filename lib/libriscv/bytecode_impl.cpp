@@ -743,6 +743,21 @@ INSTRUCTION(RV32I_BC_NOP, rv32i_nop)
 }
 
 #ifdef RISCV_EXT_COMPRESSED
+INSTRUCTION(RV32C_BC_SRLI, rv32c_srli) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) >>= fi.imm;
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_XOR, rv32c_xor) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) ^= REG(fi.get_rs2());
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_ANDI, rv32c_andi) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) &= fi.signed_imm();
+	NEXT_C_INSTR();
+}
 INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jumpfunc) {
 	VIEW_INSTR();
 	REGISTERS().pc = pc;

@@ -128,6 +128,33 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				}
 				return RV32C_BC_FUNCTION; // C.UNIMP?
 			}
+			case CI_CODE(0b100, 0b01): { // C1 ALU OPS
+				switch (ci.CA.funct6 & 0x3)
+				{
+				case 0x0:
+					return RV32C_BC_SRLI; // C.SRLI
+				case 0x1:
+					return RV32C_BC_FUNCTION; // C.SRAI
+				case 0x2:
+					return RV32C_BC_ANDI; // C.ANDI
+				case 0x3: // More ALU ops
+					switch (ci.CA.funct2 | (ci.CA.funct6 & 0x4))
+					{
+					case 0x0:
+						return RV32C_BC_FUNCTION; // C.SUB
+					case 0x1:
+						return RV32C_BC_XOR; // C.XOR
+					case 0x2:
+						return RV32C_BC_FUNCTION; // C.OR
+					case 0x3:
+						return RV32C_BC_FUNCTION; // C.AND
+					default:
+						return RV32C_BC_FUNCTION;
+					}
+				default:
+					return RV32C_BC_FUNCTION;
+				}
+			}
 			case CI_CODE(0b100, 0b10): {
 				const bool topbit = ci.whole & (1 << 12);
 				if (!topbit && ci.CR.rd != 0 && ci.CR.rs2 == 0)
