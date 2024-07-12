@@ -1196,6 +1196,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// clock_gettime
 	install_syscall_handler(113, syscall_clock_gettime<W>);
 	install_syscall_handler(403, syscall_clock_gettime64<W>);
+	// clock_getres
+	install_syscall_handler(114, syscall_stub_nosys<W>);
 	// clock_nanosleep
 	install_syscall_handler(115, syscall_clock_nanosleep<W>);
 	// sched_getaffinity
