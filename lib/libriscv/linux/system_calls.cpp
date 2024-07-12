@@ -233,8 +233,7 @@ static void syscall_read(Machine<W>& machine)
 	} else if (machine.has_file_descriptors()) {
 		const int real_fd = machine.fds().translate(vfd);
 
-		// Gather up to 1MB of pages we can read into
-		std::array<riscv::vBuffer, 256> buffers;
+		std::array<riscv::vBuffer, 512> buffers;
 		size_t cnt =
 			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), address, len);
 		const ssize_t res =
@@ -245,6 +244,46 @@ static void syscall_read(Machine<W>& machine)
 	} else {
 		machine.set_result(-EBADF);
 		SYSPRINT("SYSCALL read, vfd: %d = -EBADF\n", vfd);
+	}
+}
+template <int W>
+static void syscall_pread64(Machine<W>& machine)
+{
+	const int  vfd     = machine.template sysarg<int>(0);
+	const auto address = machine.sysarg(1);
+	const size_t len   = machine.sysarg(2);
+	const auto offset  = machine.sysarg(3);
+	SYSPRINT("SYSCALL pread64, vfd: %d addr: 0x%lX, len: %zu, offset: %lu\n",
+		vfd, (long)address, len, (long)offset);
+	if (machine.has_file_descriptors()) {
+		const int real_fd = machine.fds().translate(vfd);
+
+		std::array<riscv::vBuffer, 512> buffers;
+		const size_t cnt =
+			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), address, len);
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+		const ssize_t res =
+			preadv64(real_fd, (const iovec *)&buffers[0], cnt, offset);
+#else
+		size_t total = 0;
+		ssize_t res = 0;
+		for (size_t i = 0; i < cnt; i++) {
+			res = pread(real_fd, buffers[i].ptr, buffers[i].len, offset + total);
+			if (res < 0)
+				break;
+			total += res;
+			if ((size_t)res < buffers[i].len) {
+				res = total; // Return the total read
+				break;
+			}
+		}
+#endif
+		machine.set_result_or_error(res);
+		SYSPRINT("SYSCALL pread64, fd: %d from vfd: %d => %ld\n",
+				 real_fd, vfd, (long)machine.return_value());
+	} else {
+		machine.set_result(-EBADF);
+		SYSPRINT("SYSCALL pread64, vfd: %d => -EBADF\n", vfd);
 	}
 }
 template <int W>
@@ -1145,6 +1184,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(64, syscall_write<W>);
 	install_syscall_handler(65, syscall_readv<W>);
 	install_syscall_handler(66, syscall_writev<W>);
+	install_syscall_handler(67, syscall_pread64<W>);
 	install_syscall_handler(72, syscall_pselect<W>);
 	install_syscall_handler(73, syscall_ppoll<W>);
 	install_syscall_handler(78, syscall_readlinkat<W>);
