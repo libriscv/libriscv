@@ -414,6 +414,22 @@ if constexpr (SCAN_FOR_GP) {
 	}
 } // SCAN_FOR_GP
 
+	// EBREAK locations
+	std::unordered_set<address_type<W>> ebreak_locations;
+	for (auto& loc : options.ebreak_locations) {
+		address_t addr = 0;
+		if (std::holds_alternative<address_type<W>>(loc))
+			addr = std::get<address_type<W>>(loc);
+		else
+			addr = machine().address_of(std::get<std::string>(loc));
+		if (addr != 0x0) {
+			ebreak_locations.insert(addr);
+			if (verbose) {
+				printf("libriscv: Added ebreak location at 0x%lX\n", (long)addr);
+			}
+		}
+	}
+
 	// Code block and loop detection
 	TIME_POINT(t2);
 	static constexpr size_t ITS_TIME_TO_SPLIT = 1'250;
@@ -542,6 +558,7 @@ if constexpr (SCAN_FOR_GP) {
 				options.use_shared_execute_segments,
 				std::move(jump_locations),
 				nullptr, // blocks
+				&ebreak_locations,
 				global_jump_locations,
 				(uintptr_t)machine().memory.memory_arena_ptr_ref()
 			});

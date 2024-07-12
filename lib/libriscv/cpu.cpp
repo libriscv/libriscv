@@ -3,6 +3,7 @@
 #include "instruction_counter.hpp"
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
+#include "threaded_bytecodes.hpp"
 
 namespace riscv
 {
@@ -115,10 +116,8 @@ restart_next_execute_segment:
 		// Find previously decoded execute segment,
 		// but skip segments tagged as likely JIT-compiled (as they are likely to be stale)
 		this->m_exec = machine().memory.exec_segment_for(pc).get();
-		if (LIKELY(!this->m_exec->empty() && !this->m_exec->is_likely_jit())) {
+		if (LIKELY(!this->m_exec->empty())) {
 			return {this->m_exec, pc};
-		} else if (this->m_exec->is_likely_jit()) {
-			machine().memory.evict_execute_segment(*this->m_exec);
 		}
 
 		// Find decoded execute segment via override
@@ -151,18 +150,34 @@ restart_next_execute_segment:
 		if (UNLIKELY(end_pageno <= base_pageno))
 			throw MachineException(INVALID_PROGRAM, "Failed to create execute segment");
 		const size_t n_pages = end_pageno - base_pageno;
-		std::unique_ptr<uint8_t[]> area (new uint8_t[n_pages * Page::size()]);
+		thread_local std::vector<uint8_t> area;
+		area.resize(n_pages * Page::size());
 		// Copy from each individual page
 		for (address_t p = base_pageno; p < end_pageno; p++) {
 			// Cannot use get_exec_pageno here as we may need
 			// access to read fault handler.
 			auto& page = machine().memory.get_pageno(p);
 			const size_t offset = (p - base_pageno) * Page::size();
-			std::memcpy(area.get() + offset, page.data(), Page::size());
+			std::memcpy(area.data() + offset, page.data(), Page::size());
+		}
+
+		// Check for write + execute
+		if (UNLIKELY(current_page.attr.write && current_page.attr.exec))
+		{
+			// This is a JIT-compiled page, we need execute it directly
+			const address_t basepc = base_pageno * Page::size();
+			const address_t endpc  = basepc + n_pages * Page::size();
+			this->simulate_precise_single_segment(area.data(), basepc, endpc, pc);
+			pc = this->pc();
+
+			if (UNLIKELY(++restarts == MAX_RESTARTS))
+				trigger_exception(EXECUTION_LOOP_DETECTED, pc);
+
+			goto restart_next_execute_segment;
 		}
 
 		// Decode and store it for later
-		return {&this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size()), pc};
+		return {&this->init_execute_area(area.data(), base_pageno * Page::size(), n_pages * Page::size()), pc};
 	} // CPU::next_execute_segment
 
 	template <int W> RISCV_NOINLINE RISCV_INTERNAL
@@ -219,6 +234,57 @@ restart_next_execute_segment:
 		return read_next_instruction_slowpath();
 	}
 
+	template <int W>
+	static inline rv32i_instruction decode_safely(const uint8_t* exec_seg_data, address_type<W> pc)
+	{
+		// Instructions may be unaligned with C-extension
+		// On amd64 we take the cost, because it's faster
+#    if defined(RISCV_EXT_COMPRESSED) && !defined(__x86_64__)
+		return rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
+#    else  // aligned/unaligned loads
+		return rv32i_instruction { *(uint32_t*) &exec_seg_data[pc] };
+#    endif // aligned/unaligned loads
+	}
+
+	template<int W> RISCV_HOT_PATH()
+	void CPU<W>::simulate_precise_single_segment(
+		const uint8_t* exec_seg_data, address_t begin_pc, address_t end_pc, address_t pc)
+	{
+		exec_seg_data -= begin_pc;
+		this->registers().pc = pc;
+
+		// Inaccurate simulation doesn't use instruction counting
+		if (machine().instruction_counter() == 0 && machine().max_instructions() == 1) {
+			for (; pc >= begin_pc && pc < end_pc; ) {
+				auto instruction = decode_safely<W>(exec_seg_data, pc);
+				this->execute(instruction);
+
+				registers().pc += instruction.length();
+				pc = registers().pc;
+			}
+			return;
+		}
+
+		for (; machine().instruction_counter() < machine().max_instructions();
+			machine().increment_counter(1)) {
+
+			auto pc = this->pc();
+			if (UNLIKELY(pc < begin_pc || pc >= end_pc))
+				return;
+
+			auto instruction = decode_safely<W>(exec_seg_data, pc);
+			this->execute(instruction);
+
+			// increment PC
+			if constexpr (compressed_enabled)
+				registers().pc += instruction.length();
+			else
+				registers().pc += 4;
+
+		} // while not stopped
+
+	} // CPU::simulate_precise_single_segment
+
 	template<int W> RISCV_HOT_PATH()
 	void CPU<W>::simulate_precise()
 	{
@@ -230,13 +296,11 @@ restart_next_execute_segment:
 
 		auto* exec = this->m_exec;
 restart_precise_sim:
-		auto* exec_decoder = exec->decoder_cache();
 		auto* exec_seg_data = exec->exec_data();
 
 		for (; machine().instruction_counter() < machine().max_instructions();
 			machine().increment_counter(1)) {
 
-			format_t instruction;
 			auto pc = this->pc();
 
 			// TODO: This can me made much faster
@@ -249,28 +313,8 @@ restart_precise_sim:
 				goto restart_precise_sim;
 			}
 
-			// Instructions may be unaligned with C-extension
-			// On amd64 we take the cost, because it's faster
-#    if defined(RISCV_EXT_COMPRESSED) && !defined(__x86_64__)
-			instruction = format_t { *(UnderAlign32*) &exec_seg_data[pc] };
-#    else  // aligned/unaligned loads
-			instruction = format_t { *(uint32_t*) &exec_seg_data[pc] };
-#    endif // aligned/unaligned loads
-
-			constexpr bool enable_cache =
-				!binary_translation_enabled;
-
-			if constexpr (enable_cache)
-			{
-				// Retrieve handler directly from the instruction handler cache
-				auto& cache_entry =
-					exec_decoder[pc / DecoderCache<W>::DIVISOR];
-				cache_entry.execute(*this, instruction);
-			}
-			else // Not the slowest path, since we have the instruction already
-			{
-				this->execute(instruction);
-			}
+			auto instruction = decode_safely<W>(exec_seg_data, pc);
+			this->execute(instruction);
 
 			// increment PC
 			if constexpr (compressed_enabled)
@@ -282,7 +326,7 @@ restart_precise_sim:
 	} // CPU::simulate_precise
 
 	template<int W>
-	void CPU<W>::step_one()
+	void CPU<W>::step_one(bool use_instruction_counter)
 	{
 		// Read, decode & execute instructions directly
 		auto instruction = this->read_next_instruction();
@@ -293,7 +337,7 @@ restart_precise_sim:
 		else
 			registers().pc += 4;
 
-		machine().increment_counter(1);
+		machine().increment_counter(use_instruction_counter ? 1 : 0);
 	}
 
 	template<int W>
@@ -322,6 +366,34 @@ restart_precise_sim:
 			this->registers() = old_regs;
 		}
 		return retval;
+	}
+
+	template <int W>
+	uint32_t CPU<W>::install_ebreak_at(address_t addr)
+	{
+		if (!is_executable(addr)) {
+			this->next_execute_segment(addr);
+		}
+
+		auto* exec = this->m_exec;
+		auto* exec_decoder = exec->decoder_cache();
+
+		// Install an ebreak instruction at the given address
+		// This is used to break into the debugger
+		// when the instruction is executed
+		auto& cache_entry = exec_decoder[addr / DecoderCache<W>::DIVISOR];
+		cache_entry.set_bytecode(RV32I_BC_SYSTEM);
+		const auto old_instruction = cache_entry.instr;
+		rv32i_instruction new_instruction;
+		new_instruction.Itype.opcode = 0b1110011; // SYSTEM
+		new_instruction.Itype.rd = 0;
+		new_instruction.Itype.funct3 = 0b000;
+		new_instruction.Itype.rs1 = 0;
+		new_instruction.Itype.imm = 1; // EBREAK
+		cache_entry.instr = new_instruction.whole;
+
+		// Return the old instruction
+		return old_instruction;
 	}
 
 	template<int W> RISCV_COLD_PATH()

@@ -196,6 +196,8 @@ struct Emitter
 
 	void add_branch(const BranchInfo& binfo, const std::string& op);
 
+	void produce_system_call(const std::string& syscall_reg);
+
 	bool gpr_exists_at(int reg) const noexcept { return this->gpr_exists.at(reg); }
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
 
@@ -448,6 +450,25 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 	exit_function(PCRELS(instr.Btype.signed_imm()), true); // Bracket (NOTE: not actually ending the function)
 }
 
+template <int W>
+inline void Emitter<W>::produce_system_call(const std::string& syscall_reg)
+{
+	this->restore_syscall_registers();
+	code += "cpu->pc = " + PCRELS(0) + ";\n";
+	if (!tinfo.ignore_instruction_limit) {
+		code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
+			"  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+		code += "counter = INS_COUNTER(cpu);\n"; // Restore instruction counter
+	} else {
+		code += "if (UNLIKELY(do_syscall(cpu, 0, max_counter, " + syscall_reg + "))) {\n"
+			"  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
+	}
+	code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
+	// Restore A0
+	this->invalidate_register(REG_ARG0);
+	this->potentially_reload_register(REG_ARG0);
+}
+
 #ifdef RISCV_EXT_C
 #include "tr_emit_rvc.cpp"
 #endif
@@ -508,6 +529,9 @@ void Emitter<W>::emit()
 
 		if (tinfo.trace_instructions) {
 			code += "api.trace(cpu, \"" + this->func + "\", " + STRADDR(this->pc()) + ", " + std::to_string(this->instr.whole) + ");\n";
+		}
+		if (tinfo.ebreak_locations->count(this->pc())) {
+			this->produce_system_call(std::to_string(SYSCALL_EBREAK));
 		}
 
 		this->m_instr_counter += 1;
@@ -1098,20 +1122,7 @@ void Emitter<W>::emit()
 				if (instr.Itype.imm < 2) {
 					const auto syscall_reg =
 						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
-					this->restore_syscall_registers();
-					code += "cpu->pc = " + PCRELS(0) + ";\n";
-					if (!tinfo.ignore_instruction_limit) {
-						code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
-							"  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
-						code += "counter = INS_COUNTER(cpu);\n"; // Restore instruction counter
-					} else {
-						code += "if (UNLIKELY(do_syscall(cpu, 0, max_counter, " + syscall_reg + "))) {\n"
-							"  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
-					}
-					code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
-					// Restore A0
-					this->invalidate_register(REG_ARG0);
-					this->potentially_reload_register(REG_ARG0);
+					this->produce_system_call(syscall_reg);
 					break;
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_counter = 0;\n"; // Immediate stop PC + 4
