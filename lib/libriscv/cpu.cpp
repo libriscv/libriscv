@@ -127,11 +127,22 @@ restart_next_execute_segment:
 			}
 		}
 
-		// Find previously decoded execute segment,
-		// but skip segments tagged as likely JIT-compiled (as they are likely to be stale)
+		// Find previously decoded execute segment
 		this->m_exec = machine().memory.exec_segment_for(pc).get();
 		if (LIKELY(!this->m_exec->empty())) {
 			return {this->m_exec, pc};
+		}
+
+		// Check for trivially sequential execute segment
+		if (flat_readwrite_arena && pc >= this->m_jit_area.basepc && pc < this->m_jit_area.endpc) {
+			// This shortcut will only be used for trivially sequential execute segments
+			// Eg. read-write arena, or N-bit address space is enabled
+			// It's a very fast path, but it's not possible with plain virtual pages
+			pc = this->simulate_precise_single_segment(this->m_jit_area.area, this->m_jit_area.basepc, this->m_jit_area.endpc, pc);
+
+			if (UNLIKELY(++restarts == MAX_RESTARTS))
+				trigger_exception(EXECUTION_LOOP_DETECTED, pc);
+			goto restart_next_execute_segment;
 		}
 
 		// Find decoded execute segment via override
@@ -182,6 +193,9 @@ restart_next_execute_segment:
 			const address_t endpc  = basepc + n_pages * Page::size();
 
 			if (sequential) {
+				this->m_jit_area.basepc = basepc;
+				this->m_jit_area.endpc  = endpc;
+				this->m_jit_area.area   = base_page_data;
 				pc = this->simulate_precise_single_segment(base_page_data, basepc, endpc, pc);
 			} else {
 				std::unique_ptr<uint8_t[]> area(new uint8_t[n_pages * Page::size() + 4]);

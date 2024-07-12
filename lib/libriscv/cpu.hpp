@@ -188,6 +188,13 @@ namespace riscv
 			return *empty_execute_segment();
 		};
 
+		struct JitArea {
+			address_t basepc = 0;
+			address_t endpc  = 0;
+			const uint8_t* area = nullptr;
+		};
+		JitArea m_jit_area;
+
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
 		static void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, void*, bool, bool) RISCV_INTERNAL;
