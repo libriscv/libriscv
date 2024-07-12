@@ -527,14 +527,14 @@ void Emitter<W>::emit()
 			code.append(FUNCLABEL(this->pc() + 2) + "_skip:;\n");
 		}
 
+		this->m_instr_counter += 1;
+
 		if (tinfo.trace_instructions) {
 			code += "api.trace(cpu, \"" + this->func + "\", " + STRADDR(this->pc()) + ", " + std::to_string(this->instr.whole) + ");\n";
 		}
 		if (tinfo.ebreak_locations->count(this->pc())) {
 			this->produce_system_call(std::to_string(SYSCALL_EBREAK));
 		}
-
-		this->m_instr_counter += 1;
 
 		// instruction generation
 #ifdef RISCV_EXT_C
