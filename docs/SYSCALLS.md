@@ -131,9 +131,11 @@ void syscall_string(Machine<W>& machine)
 
 	// Create a buffer and copy into it. Page protections apply.
 	std::vector<uint8_t> buffer(len);
-	machine.memory.copy_from_guest(buffer.data(), address, len);
+	machine.copy_from_guest(buffer.data(), address, len);
 }
 ```
+
+The helpers `machine.copy_from_guest` and `machine.copy_to_guest` work in all configurations, and in all settings. They are, as mentioned, dutifully going to copy every byte you requested, even if it's a large amount of bytes. So remember to check!
 
 2. Fill an array of iovec-like structs with the guest buffer address and length. The buffers will contain host pointers and safe lengths, and can be passed directly to readv/writev.
 > Note: This function will throw an exception under all circumstances if it cannot complete successfully. Page permissions apply. The operation is unbounded, meaning that if, for example, we attempt to fill iovec buffers with 32GB of memory, and that memory is sequential in the guest, it only needs 1 iovec entry to represent that, and so it *will* return a single buffer that is 32GB long. It will only fail if there are not enough buffers to represent the entire data.
