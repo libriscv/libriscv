@@ -150,7 +150,12 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	// Invoke SYSTEM
 	MACHINE().system(instr);
 	// Restore counters
-	counter.retrieve_max_counter(MACHINE());
+	counter.retrieve_counters(MACHINE());
+	if (UNLIKELY(counter.overflowed() || pc != REGISTERS().pc))
+	{
+		pc = REGISTERS().pc;
+		goto check_jump;
+	}
 	// Overflow-check, next block
 	NEXT_BLOCK(4, true);
 }
@@ -198,7 +203,7 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	counter.apply(MACHINE());
 	// Invoke system call
 	MACHINE().system_call(REG(REG_ECALL));
-	// Restore max counter
+	// Restore counters
 	counter.retrieve_counters(MACHINE());
 	if (UNLIKELY(counter.overflowed() || pc != REGISTERS().pc))
 	{

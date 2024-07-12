@@ -143,6 +143,12 @@ INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system)
 	REGISTERS().pc = pc;
 	// Invoke SYSTEM
 	MACHINE().system(instr);
+	// Check if we need to jump
+	if (UNLIKELY(pc != REGISTERS().pc))
+	{
+		pc = REGISTERS().pc;
+		goto check_jump;
+	}
 	// Overflow-check, next block
 	NEXT_BLOCK(4, true);
 }

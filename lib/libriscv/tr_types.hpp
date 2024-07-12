@@ -23,6 +23,8 @@ namespace riscv
 		std::unordered_set<address_type<W>> jump_locations;
 		// Pointer to all the other blocks (including current)
 		std::vector<TransInfo<W>>* blocks = nullptr;
+		// Pointer to list of ebreak-locations
+		const std::unordered_set<address_type<W>>* ebreak_locations = nullptr;
 
 		std::unordered_set<address_type<W>>& global_jump_locations;
 

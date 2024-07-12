@@ -129,6 +129,10 @@ namespace riscv
 		/// @brief Provide a custom page-fault handler at construction.
 		riscv::Function<struct Page&(Memory<W>&, address_type<W>, bool)> page_fault_handler = nullptr;
 
+		/// @brief Call ebreak for each of the addresses in the vector.
+		/// @details This is useful for debugging and live-patching programs.
+		std::vector<std::variant<address_type<W>, std::string>> ebreak_locations {};
+
 #ifdef RISCV_BINARY_TRANSLATION
 		/// @brief Enable the binary translator.
 		bool translate_enabled = true;

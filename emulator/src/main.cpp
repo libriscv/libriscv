@@ -8,7 +8,7 @@
 static inline std::vector<uint8_t> load_file(const std::string&);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
-//#define NODEJS_WORKAROUND
+#define NODEJS_WORKAROUND
 
 struct Arguments {
 	bool verbose = false;
@@ -224,6 +224,11 @@ static void run_program(
 		.ignore_text_section = cli_args.ignore_text,
 		.verbose_loader = cli_args.verbose,
 		.use_shared_execute_segments = false, // We are only creating one machine, disabling this can enable some optimizations
+#ifdef NODEJS_WORKAROUND
+		.ebreak_locations = {
+			"pthread_rwlock_rdlock", "pthread_rwlock_wrlock" // Live-patch locations
+		},
+#endif
 #ifdef RISCV_BINARY_TRANSLATION
 		.translate_enabled = !cli_args.no_translate,
 		.translate_future_segments = cli_args.translate_future,
@@ -437,30 +442,36 @@ static void run_program(
 			machine.set_max_instructions(~0ULL);
 			machine.cpu.simulate_precise();
 		} else {
+#ifdef NODEJS_WORKAROUND
+			// In order to get NodeJS to work we need to live-patch deadlocked rwlocks
+			// This is a temporary workaround until the issue is found and fixed.
+			static const auto rw_rdlock = machine.address_of("pthread_rwlock_rdlock");
+			static const auto rw_wrlock = machine.address_of("pthread_rwlock_wrlock");
+			machine.install_syscall_handler(riscv::SYSCALL_EBREAK,
+			[] (auto& machine)
+			{
+				auto& cpu = machine.cpu;
+				auto pc = cpu.pc();
+				if (pc == rw_rdlock || pc == rw_wrlock) {
+					// Execute 2 instruction and step over them
+					cpu.step_one(false);
+					cpu.step_one(false);
+					// Check for deadlock
+					if(cpu.reg(14) == cpu.reg(15)) {
+						// Deadlock detected, avoid branch (beq a4, a5) and reset the lock
+						cpu.reg(14) = 0xFF;
+						machine.memory.template write<uint32_t>(cpu.reg(10), 0);
+					}
+				} else {
+					throw riscv::MachineException(riscv::UNHANDLED_SYSCALL, "EBREAK instruction", pc);
+				}
+			});
+#endif // NODEJS_WORKAROUND
+
 			// Normal RISC-V simulation
 			if (cli_args.accurate)
 				machine.simulate(cli_args.fuel);
 			else {
-#ifdef NODEJS_WORKAROUND
-				const auto rw_rdlock = machine.address_of("pthread_rwlock_rdlock");
-				const auto rw_wrlock = machine.address_of("pthread_rwlock_wrlock");
-				const auto rw_unlock = machine.address_of("pthread_rwlock_unlock");
-
-				machine.set_max_instructions(cli_args.fuel);
-				do {
-					// Whenever we hit rwlock, step twice and check if it's a deadlock
-					if (machine.cpu.pc() == rw_rdlock || machine.cpu.pc() == rw_wrlock) {
-						machine.cpu.step_one();
-						machine.cpu.step_one();
-						if(machine.cpu.reg(14) == machine.cpu.reg(15)) {
-							// Deadlock detected, avoid branch (beq a4, a5) and reset the lock
-							machine.cpu.reg(14) = 0xFF;
-							machine.memory.template write<uint32_t>(machine.cpu.reg(10), 0);
-						}
-					}
-					machine.cpu.step_one();
-				} while (!machine.stopped());
-#endif // NODEJS_WORKAROUND
 #ifdef RISCV_TIMED_VMCALLS
 				// Simulation with experimental timeout
 				machine.execute_with_timeout(360.0f, machine.cpu.pc());

@@ -6,7 +6,9 @@
 #include "threaded_rewriter.cpp"
 #include "threaded_bytecodes.hpp"
 #include "util/crc32.hpp"
+#include <inttypes.h>
 #include <mutex>
+#include <unordered_set>
 
 namespace riscv
 {
@@ -164,6 +166,9 @@ namespace riscv
 					if (entry.get_bytecode() == translator_op)
 						break;
 				#endif
+					// Catch-all for SYSTEM and patched EBREAK instructions
+					if (entry.get_bytecode() == RV32I_BC_SYSTEM)
+						break;
 
 					// A last test for the last instruction, which should have been a block-ending
 					// instruction. Since it wasn't we must force-end the block here.
@@ -241,6 +246,9 @@ namespace riscv
 				if (entry.get_bytecode() == translator_op)
 					idxend = 0;
 			#endif
+				// Catch-all for SYSTEM and patched EBREAK instructions
+				if (entry.get_bytecode() == RV32I_BC_SYSTEM)
+					idxend = 0;
 				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
 				// Increment after, idx becomes block count - 1
@@ -328,6 +336,23 @@ namespace riscv
 		} // W != 16
 	#endif
 
+		// Debugging: EBREAK locations
+		std::unordered_set<address_type<W>> ebreak_locations;
+		for (auto& loc : options.ebreak_locations) {
+			address_t addr = 0;
+			if (std::holds_alternative<address_type<W>>(loc))
+				addr = std::get<address_type<W>>(loc);
+			else
+				addr = machine().address_of(std::get<std::string>(loc));
+			if (addr != 0x0) {
+				ebreak_locations.insert(addr);
+				if (options.verbose_loader) {
+					printf("libriscv: Added ebreak location at 0x%" PRIx64 "\n", uint64_t(addr));
+				}
+			}
+		}
+		const bool has_ebreak_locations = !ebreak_locations.empty();
+
 		// When compressed instructions are enabled, many decoder
 		// entries are illegal because they between instructions.
 		bool was_full_instruction = true;
@@ -390,6 +415,21 @@ namespace riscv
 				}
 				if (entry.get_bytecode() == RV32I_BC_BEQ_FW || entry.get_bytecode() == RV32I_BC_BNE_FW) {
 					fprintf(stderr, "Detected forward branch bytecode at 0x%lX\n", dst);
+				}
+			}
+
+			if (has_ebreak_locations) {
+				if (ebreak_locations.count(dst)) {
+					// Insert EBREAK bytecode and handler at ebreak locations
+					entry.set_bytecode(RV32I_BC_SYSTEM);
+					rv32i_instruction ebreak;
+					ebreak.Itype.opcode = RV32I_SYSTEM;
+					ebreak.Itype.funct3 = 0;
+					ebreak.Itype.rd = 0;
+					ebreak.Itype.rs1 = 0;
+					ebreak.Itype.imm = 0x1; // EBREAK
+					entry.instr = ebreak.whole;
+					entry.set_handler(CPU<W>::decode(ebreak));
 				}
 			}
 

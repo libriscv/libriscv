@@ -42,11 +42,15 @@ namespace riscv
 		void simulate_inaccurate(address_t pc);
 
 		// Step precisely one instruction forward from current PC.
-		void step_one();
+		void step_one(bool use_instruction_counter = true);
 
-		// Executes one instruction at a time, and can stop at
+		/// @brief Executes one instruction at a time, and can stop at
 		// any instruction. Can be used for debugging.
 		void simulate_precise();
+
+		/// @brief Executes one instruction at a time, until the execute
+		/// segment is left. Used to execute JIT-compiled code.
+		void simulate_precise_single_segment(const uint8_t* exec_seg, address_t begin_pc, address_t end_pc, address_t pc);
 
 		/// @brief  Get the current PC
 		/// @return The current PC address
@@ -136,6 +140,10 @@ namespace riscv
 		NextExecuteReturn next_execute_segment(address_t pc);
 		static std::shared_ptr<DecodedExecuteSegment<W>>& empty_execute_segment() noexcept;
 		bool is_executable(address_t addr) const noexcept;
+
+		//-- Debugging functions --//
+		/// @brief Install a breakpoint at a specific address, returning the old instruction
+		uint32_t install_ebreak_at(address_t addr);
 
 		// Override the function that gets called when the CPU
 		// throws an execute space protection fault.
