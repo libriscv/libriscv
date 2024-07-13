@@ -267,9 +267,16 @@ new_execute_segment: {
 	goto continue_segment;
 
 execute_invalid:
-	MACHINE().set_instruction_counter(counter.value());
 	// Calculate the current PC from the decoder pointer
 	pc = (decoder - exec_decoder) << DecoderCache<W>::SHIFT;
+	// Check if the instruction is still invalid
+	try {
+		if (exec->is_likely_jit() && MACHINE().memory.template read<uint16_t>(pc) != uint16_t(decoder->instr)) {
+			exec->set_stale(true);
+			goto new_execute_segment;
+		}
+	} catch (...) {}
+	MACHINE().set_instruction_counter(counter.value());
 	registers().pc = pc;
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 

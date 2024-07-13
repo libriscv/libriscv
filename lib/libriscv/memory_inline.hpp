@@ -153,3 +153,13 @@ inline void Memory<W>::set_exit_address(address_t addr)
 {
 	this->m_exit_address = addr;
 }
+
+template <int W>
+inline std::shared_ptr<DecodedExecuteSegment<W>>& Memory<W>::exec_segment_for(address_t vaddr)
+{
+	for (size_t i = 0; i < m_exec_segs; i++) {
+		auto& segment = m_exec[i];
+		if (segment && segment->is_within(vaddr)) return segment;
+	}
+	return CPU<W>::empty_execute_segment();
+}

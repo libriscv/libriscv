@@ -85,6 +85,9 @@ namespace riscv
 		bool is_likely_jit() const noexcept { return m_is_likely_jit; }
 		void set_likely_jit(bool is_jit) { m_is_likely_jit = is_jit; }
 
+		bool is_stale() const noexcept { return m_is_stale; }
+		void set_stale(bool is_stale) { m_is_stale = is_stale; }
+
 	private:
 		address_t m_vaddr_begin = 0;
 		address_t m_vaddr_end   = 0;
@@ -117,6 +120,7 @@ namespace riscv
 		// High-memory execute segments are likely to be JIT'd, and needs to
 		// be nuked when attempting to re-use the segment
 		bool m_is_likely_jit = false;
+		bool m_is_stale = false;
 	};
 
 	template <int W>

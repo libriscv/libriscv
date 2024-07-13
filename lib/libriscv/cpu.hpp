@@ -48,10 +48,6 @@ namespace riscv
 		// any instruction. Can be used for debugging.
 		void simulate_precise();
 
-		/// @brief Executes one instruction at a time, until the execute
-		/// segment is left. Used to execute JIT-compiled code.
-		address_t simulate_precise_single_segment(const uint8_t* exec_seg, address_t begin_pc, address_t end_pc, address_t pc);
-
 		/// @brief  Get the current PC
 		/// @return The current PC address
 		address_t pc() const noexcept { return registers().pc; }
@@ -129,7 +125,7 @@ namespace riscv
 		CPU(Machine<W>&, unsigned cpu_id);
 		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
 
-		DecodedExecuteSegment<W>& init_execute_area(const void* data, address_t begin, address_t length);
+		DecodedExecuteSegment<W>& init_execute_area(const void* data, address_t begin, address_t length, bool is_likely_jit = false);
 		void set_execute_segment(DecodedExecuteSegment<W>& seg) noexcept { m_exec = &seg; }
 		auto& current_execute_segment() noexcept { return *m_exec; }
 		auto& current_execute_segment() const noexcept { return *m_exec; }
@@ -187,14 +183,6 @@ namespace riscv
 		override_execute_segment_t m_override_exec = [] (auto&) -> DecodedExecuteSegment<W>& {
 			return *empty_execute_segment();
 		};
-
-		struct JitArea {
-			address_t basepc = 0;
-			address_t endpc  = 0;
-			const uint8_t* area = nullptr;
-			std::unique_ptr<instruction_handler<W>[]> handlers = nullptr;
-		};
-		JitArea m_jit_area;
 
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
