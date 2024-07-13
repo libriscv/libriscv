@@ -192,6 +192,7 @@ namespace riscv
 			address_t basepc = 0;
 			address_t endpc  = 0;
 			const uint8_t* area = nullptr;
+			std::unique_ptr<instruction_handler<W>[]> handlers = nullptr;
 		};
 		JitArea m_jit_area;
 

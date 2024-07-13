@@ -196,6 +196,11 @@ restart_next_execute_segment:
 				this->m_jit_area.basepc = basepc;
 				this->m_jit_area.endpc  = endpc;
 				this->m_jit_area.area   = base_page_data;
+				constexpr size_t IHANDLER_PER_PAGE = Page::size() / (compressed_enabled ? 2 : 4);
+				if (this->m_jit_area.handlers == nullptr) {
+					this->m_jit_area.handlers.reset(new instruction_handler<W>[IHANDLER_PER_PAGE * n_pages]);
+					std::memset(this->m_jit_area.handlers.get(), 0, sizeof(instruction_handler<W>) * IHANDLER_PER_PAGE * n_pages);
+				}
 				pc = this->simulate_precise_single_segment(base_page_data, basepc, endpc, pc);
 			} else {
 				std::unique_ptr<uint8_t[]> area(new uint8_t[n_pages * Page::size() + 4]);
@@ -305,12 +310,71 @@ restart_next_execute_segment:
 #    endif // aligned/unaligned loads
 	}
 
+	// A slow-path for executing JIT-emitted execute segments where the instructions
+	// are changing frequently. We can't use the decoder cache here, because it's
+	// designed for stable/complete segments. A new type of dispatch could be used
+	// for this, but it's not implemented, where fast bytecodes are produced on-demand.
 	template<int W> RISCV_HOT_PATH()
 	address_type<W> CPU<W>::simulate_precise_single_segment(
 		const uint8_t* exec_seg_data, address_t begin_pc, address_t end_pc, address_t pc)
 	{
 		exec_seg_data -= begin_pc;
 		this->registers().pc = pc;
+
+		if (this->m_jit_area.handlers != nullptr)
+		{
+			auto* handlers = this->m_jit_area.handlers.get() - begin_pc / (compressed_enabled ? 2 : 4);
+
+			if (machine().instruction_counter() == 0 && machine().max_instructions() == 1) {
+				for (; pc >= begin_pc && pc < end_pc; ) {
+					auto instruction = decode_safely<W>(exec_seg_data, pc);
+
+					auto& handler = handlers[pc >> (compressed_enabled ? 1 : 2)];
+					if (handler) {
+						handler(*this, instruction);
+					} else {
+						auto ih = this->decode(instruction);
+						handler = ih.handler;
+						handler(*this, instruction);
+					}
+
+					if constexpr (compressed_enabled)
+						registers().pc += instruction.length();
+					else
+						registers().pc += 4;
+					pc = registers().pc;
+				}
+
+				return pc;
+			}
+
+			for (; machine().instruction_counter() < machine().max_instructions();
+				machine().increment_counter(1)) {
+
+				pc = this->pc();
+				if (UNLIKELY(pc < begin_pc || pc >= end_pc))
+					return pc;
+
+				auto instruction = decode_safely<W>(exec_seg_data, pc);
+
+				auto& handler = handlers[pc >> (compressed_enabled ? 1 : 2)];
+				if (handler) {
+					handler(*this, instruction);
+				} else {
+					auto ih = this->decode(instruction);
+					handler = ih.handler;
+					handler(*this, instruction);
+				}
+
+				if constexpr (compressed_enabled)
+					registers().pc += instruction.length();
+				else
+					registers().pc += 4;
+
+			} // while not stopped
+
+			return pc;
+		}
 
 		// Inaccurate simulation doesn't use instruction counting
 		if (machine().instruction_counter() == 0 && machine().max_instructions() == 1) {
