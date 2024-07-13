@@ -280,8 +280,6 @@ namespace riscv
 		auto& exec = *shared_segment;
 		if (exec.exec_end() < exec.exec_begin())
 			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
-		if constexpr (W >= 8)
-			exec.set_likely_jit(exec.pagedata_base() >= 0x100000000);
 
 		const auto pbase = exec.pagedata_base();
 		const auto addr  = exec.exec_begin();
@@ -485,7 +483,7 @@ namespace riscv
 	// no matter where you are in the segment, a whole instruction unchecked.
 	template <int W> RISCV_INTERNAL
 	DecodedExecuteSegment<W>& Memory<W>::create_execute_segment(
-		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen, bool is_initial)
+		const MachineOptions<W>& options, const void *vdata, address_t vaddr, size_t exlen, bool is_initial, bool is_likely_jit)
 	{
 		if (UNLIKELY(exlen % (compressed_enabled ? 2 : 4)))
 			throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
@@ -541,6 +539,7 @@ namespace riscv
 			// We need to create a new execute segment, as there is no shared
 			// execute segment with the same hash.
 			free_slot = std::move(current_exec);
+			free_slot->set_likely_jit(is_likely_jit);
 			// Store the hash in the decoder cache
 			free_slot->set_crc32c_hash(hash);
 
@@ -552,6 +551,7 @@ namespace riscv
 		else
 		{
 			free_slot = std::move(current_exec);
+			free_slot->set_likely_jit(is_likely_jit);
 			// Store the hash in the decoder cache
 			free_slot->set_crc32c_hash(hash);
 

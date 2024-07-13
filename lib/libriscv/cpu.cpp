@@ -72,13 +72,13 @@ namespace riscv
 	}
 
 	template <int W>
-	DecodedExecuteSegment<W>& CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t vlength)
+	DecodedExecuteSegment<W>& CPU<W>::init_execute_area(const void* vdata, address_t begin, address_t vlength, bool is_likely_jit)
 	{
 		if (vlength < 4)
 			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, begin);
 		// Create a new *non-initial* execute segment
 		this->m_exec = &machine().memory.create_execute_segment(
-			machine().options(), vdata, begin, vlength, false);
+			machine().options(), vdata, begin, vlength, false, is_likely_jit);
 		return *this->m_exec;
 	} // CPU::init_execute_area
 
@@ -129,20 +129,10 @@ restart_next_execute_segment:
 
 		// Find previously decoded execute segment
 		this->m_exec = machine().memory.exec_segment_for(pc).get();
-		if (LIKELY(!this->m_exec->empty())) {
+		if (LIKELY(!this->m_exec->empty() && !this->m_exec->is_stale())) {
 			return {this->m_exec, pc};
-		}
-
-		// Check for trivially sequential execute segment
-		if (flat_readwrite_arena && pc >= this->m_jit_area.basepc && pc < this->m_jit_area.endpc) {
-			// This shortcut will only be used for trivially sequential execute segments
-			// Eg. read-write arena, or N-bit address space is enabled
-			// It's a very fast path, but it's not possible with plain virtual pages
-			pc = this->simulate_precise_single_segment(this->m_jit_area.area, this->m_jit_area.basepc, this->m_jit_area.endpc, pc);
-
-			if (UNLIKELY(++restarts == MAX_RESTARTS))
-				trigger_exception(EXECUTION_LOOP_DETECTED, pc);
-			goto restart_next_execute_segment;
+		} else if (this->m_exec->is_stale()) {
+			machine().memory.evict_execute_segment(*this->m_exec);
 		}
 
 		// Find decoded execute segment via override
@@ -181,67 +171,27 @@ restart_next_execute_segment:
 		const size_t n_pages = end_pageno - base_pageno;
 		end_page_data += Page::size();
 		const bool sequential = end_page_data == base_page_data + n_pages * Page::size();
-
-		// Check for write + execute
-		if (UNLIKELY(current_page.attr.write && current_page.attr.exec))
-		{
-#ifdef TIME_EXECUTION
-			auto t0 = time_now();
-#endif
-			// This is a JIT-compiled page, we need execute it directly
-			const address_t basepc = base_pageno * Page::size();
-			const address_t endpc  = basepc + n_pages * Page::size();
-
-			if (sequential) {
-				this->m_jit_area.basepc = basepc;
-				this->m_jit_area.endpc  = endpc;
-				this->m_jit_area.area   = base_page_data;
-				constexpr size_t IHANDLER_PER_PAGE = Page::size() / (compressed_enabled ? 2 : 4);
-				if (this->m_jit_area.handlers == nullptr) {
-					this->m_jit_area.handlers.reset(new instruction_handler<W>[IHANDLER_PER_PAGE * n_pages]);
-					std::memset(this->m_jit_area.handlers.get(), 0, sizeof(instruction_handler<W>) * IHANDLER_PER_PAGE * n_pages);
-				}
-				pc = this->simulate_precise_single_segment(base_page_data, basepc, endpc, pc);
-			} else {
-				std::unique_ptr<uint8_t[]> area(new uint8_t[n_pages * Page::size() + 4]);
-				// Slow, but reliable copy
-				for (address_t p = base_pageno; p < end_pageno; p++) {
-					auto& page = machine().memory.get_pageno(p);
-					if (UNLIKELY(!page.attr.exec))
-						trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, pc);
-					const size_t offset = (p - base_pageno) * Page::size();
-					std::memcpy(&area[offset], page.data(), Page::size());
-				}
-
-				pc = this->simulate_precise_single_segment(area.get(), basepc, endpc, pc);
-			}
-
-#ifdef TIME_EXECUTION
-			auto t1 = time_now();
-			auto diff = nanodiff(t0, t1);
-			static uint64_t total = 0;
-			total += diff;
-			printf("Simulated JIT-compiled instructions in %ld ns, total %ld ns\n", diff, total);
-#endif
-			if (UNLIKELY(++restarts == MAX_RESTARTS))
-				trigger_exception(EXECUTION_LOOP_DETECTED, pc);
-
-			goto restart_next_execute_segment;
-		}
+		// Check if it's likely a JIT-compiled area
+		const bool is_likely_jit = current_page.attr.exec && current_page.attr.write;
 
 		// Allocate full execute area
-		std::unique_ptr<uint8_t[]> area(new uint8_t[n_pages * Page::size()]);
-		// Copy from each individual page
-		for (address_t p = base_pageno; p < end_pageno; p++) {
-			// Cannot use get_exec_pageno here as we may need
-			// access to read fault handler.
-			auto& page = machine().memory.get_pageno(p);
-			const size_t offset = (p - base_pageno) * Page::size();
-			std::memcpy(area.get() + offset, page.data(), Page::size());
-		}
+		if (!sequential) {
+			std::unique_ptr<uint8_t[]> area(new uint8_t[n_pages * Page::size()]);
+			// Copy from each individual page
+			for (address_t p = base_pageno; p < end_pageno; p++) {
+				// Cannot use get_exec_pageno here as we may need
+				// access to read fault handler.
+				auto& page = machine().memory.get_pageno(p);
+				const size_t offset = (p - base_pageno) * Page::size();
+				std::memcpy(area.get() + offset, page.data(), Page::size());
+			}
 
-		// Decode and store it for later
-		return {&this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size()), pc};
+			// Decode and store it for later
+			return {&this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size(), is_likely_jit), pc};
+		} else {
+			// We can use the sequential execute segment directly
+			return {&this->init_execute_area(base_page_data, base_pageno * Page::size(), n_pages * Page::size(), is_likely_jit), pc};
+		}
 	} // CPU::next_execute_segment
 
 	template <int W> RISCV_NOINLINE RISCV_INTERNAL
@@ -309,109 +259,6 @@ restart_next_execute_segment:
 		return rv32i_instruction { *(uint32_t*) &exec_seg_data[pc] };
 #    endif // aligned/unaligned loads
 	}
-
-	// A slow-path for executing JIT-emitted execute segments where the instructions
-	// are changing frequently. We can't use the decoder cache here, because it's
-	// designed for stable/complete segments. A new type of dispatch could be used
-	// for this, but it's not implemented, where fast bytecodes are produced on-demand.
-	template<int W> RISCV_HOT_PATH()
-	address_type<W> CPU<W>::simulate_precise_single_segment(
-		const uint8_t* exec_seg_data, address_t begin_pc, address_t end_pc, address_t pc)
-	{
-		exec_seg_data -= begin_pc;
-		this->registers().pc = pc;
-
-		if (this->m_jit_area.handlers != nullptr)
-		{
-			auto* handlers = this->m_jit_area.handlers.get() - begin_pc / (compressed_enabled ? 2 : 4);
-
-			if (machine().instruction_counter() == 0 && machine().max_instructions() == 1) {
-				for (; pc >= begin_pc && pc < end_pc; ) {
-					auto instruction = decode_safely<W>(exec_seg_data, pc);
-
-					auto& handler = handlers[pc >> (compressed_enabled ? 1 : 2)];
-					if (handler) {
-						handler(*this, instruction);
-					} else {
-						auto ih = this->decode(instruction);
-						handler = ih.handler;
-						handler(*this, instruction);
-					}
-
-					if constexpr (compressed_enabled)
-						registers().pc += instruction.length();
-					else
-						registers().pc += 4;
-					pc = registers().pc;
-				}
-
-				return pc;
-			}
-
-			for (; machine().instruction_counter() < machine().max_instructions();
-				machine().increment_counter(1)) {
-
-				pc = this->pc();
-				if (UNLIKELY(pc < begin_pc || pc >= end_pc))
-					return pc;
-
-				auto instruction = decode_safely<W>(exec_seg_data, pc);
-
-				auto& handler = handlers[pc >> (compressed_enabled ? 1 : 2)];
-				if (handler) {
-					handler(*this, instruction);
-				} else {
-					auto ih = this->decode(instruction);
-					handler = ih.handler;
-					handler(*this, instruction);
-				}
-
-				if constexpr (compressed_enabled)
-					registers().pc += instruction.length();
-				else
-					registers().pc += 4;
-
-			} // while not stopped
-
-			return pc;
-		}
-
-		// Inaccurate simulation doesn't use instruction counting
-		if (machine().instruction_counter() == 0 && machine().max_instructions() == 1) {
-			for (; pc >= begin_pc && pc < end_pc; ) {
-				auto instruction = decode_safely<W>(exec_seg_data, pc);
-				this->execute(instruction);
-
-				if constexpr (compressed_enabled)
-					registers().pc += instruction.length();
-				else
-					registers().pc += 4;
-				pc = registers().pc;
-			}
-
-			return pc;
-		}
-
-		for (; machine().instruction_counter() < machine().max_instructions();
-			machine().increment_counter(1)) {
-
-			pc = this->pc();
-			if (UNLIKELY(pc < begin_pc || pc >= end_pc))
-				return pc;
-
-			auto instruction = decode_safely<W>(exec_seg_data, pc);
-			this->execute(instruction);
-
-			if constexpr (compressed_enabled)
-				registers().pc += instruction.length();
-			else
-				registers().pc += 4;
-
-		} // while not stopped
-
-		return pc;
-
-	} // CPU::simulate_precise_single_segment
 
 	template<int W> RISCV_HOT_PATH()
 	void CPU<W>::simulate_precise()
