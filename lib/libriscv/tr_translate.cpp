@@ -528,6 +528,8 @@ if constexpr (SCAN_FOR_GP) {
 				// only accept branches relative to current block
 				if (location >= block && location < block_end)
 					jump_locations.insert(location);
+				else
+					global_jump_locations.insert(location);
 			}
 
 			// Add instruction to block
