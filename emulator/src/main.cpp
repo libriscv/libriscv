@@ -34,6 +34,7 @@ struct Arguments {
 	bool background = false; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
 	uint64_t fuel = 16'000'000'000ULL; // Default: Timeout after ~16bn instructions
+	std::vector<std::string> allowed_files;
 	std::string output_file;
 	std::string call_function;
 };
@@ -60,6 +61,7 @@ static const struct option long_options[] = {
 	{"from-start", no_argument, 0, 'F'},
 	{"sandbox", no_argument, 0, 'S'},
 	{"proxy", no_argument, 0, 'P'},
+	{"allow", required_argument, 0, 'A'},
 	{"ignore-text", no_argument, 0, 'I'},
 	{"call", required_argument, 0, 'c'},
 	{0, 0, 0, 0}
@@ -86,7 +88,8 @@ static void print_help(const char* name)
 		"  -o, --output file  Output embeddable binary translated code (C99)\n"
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
 		"  -S  --sandbox      Enable strict sandbox\n"
-		"  -P, --proxy        Enable proxy mode for system calls\n"
+		"  -P, --proxy        Enable proxy mode, allowing access to all files (disabling the sandbox)\n"
+		"  -A, --allow file   Allow file to be opened by the guest\n"
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
 		"  -c, --call func    Call a function after loading the program\n"
 		"\n"
@@ -136,7 +139,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnNBmo:FSPIc:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnNBmo:FSPA:Ic:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -158,6 +161,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'F': args.from_start = true; break;
 			case 'S': args.sandbox = true; break;
 			case 'P': args.proxy_mode = true; break;
+			case 'A': args.allowed_files.push_back(optarg); break;
 			case 'I': args.ignore_text = true; break;
 			case 'c': break;
 			default:
@@ -356,6 +360,11 @@ static void run_program(
 			}
 			if (cli_args.proxy_mode) {
 				return true;
+			}
+			for (const auto& allowed : cli_args.allowed_files) {
+				if (path == allowed) {
+					return true;
+				}
 			}
 			if (cli_args.verbose) {
 				fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
