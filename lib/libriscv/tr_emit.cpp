@@ -194,9 +194,12 @@ struct Emitter
 		}
 	}
 
-	void add_branch(const BranchInfo& binfo, const std::string& op);
+	void emit_branch(const BranchInfo& binfo, const std::string& op);
 
-	void produce_system_call(const std::string& syscall_reg);
+	void emit_system_call(const std::string& syscall_reg);
+
+	// Returns true if the function call has exited/returned from the block
+	bool emit_function_call(address_t target, address_t dest_pc);
 
 	bool gpr_exists_at(int reg) const noexcept { return this->gpr_exists.at(reg); }
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
@@ -419,7 +422,7 @@ private:
 };
 
 template <int W>
-inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& op)
+inline void Emitter<W>::emit_branch(const BranchInfo& binfo, const std::string& op)
 {
 	using address_t = address_type<W>;
 	if (binfo.sign == false)
@@ -444,6 +447,19 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 		}
 		// backward jump
 		code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
+	} else if (binfo.call_pc != 0 && binfo.call_pc > this->pc()) {
+		// potentially call a function
+		auto target_funcaddr = this->find_block_base(binfo.call_pc);
+		// Allow directly calling a function, as long as it's a forward branch
+		if (target_funcaddr != 0) {
+			if (emit_function_call(target_funcaddr, binfo.call_pc)) {
+				code += "}\n"; // Bracket (NOTE: not ending the function, just the branch)
+				return;
+			}
+			// After the call PC may have changed, so exit with stored PC
+			exit_function("cpu->pc", true);
+			return;
+		}
 	}
 	// else, exit binary translation
 	// The number of instructions to increment depends on if branch-instruction-counting is enabled
@@ -451,7 +467,37 @@ inline void Emitter<W>::add_branch(const BranchInfo& binfo, const std::string& o
 }
 
 template <int W>
-inline void Emitter<W>::produce_system_call(const std::string& syscall_reg)
+inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t dest_pc)
+{
+	auto target_func = funclabel<W>("f", target_funcaddr);
+	add_forward(target_func);
+	if (!tinfo.ignore_instruction_limit) {
+		// Call the function and get the return values
+		add_code("{ReturnValues rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
+		// Update the local counter registers
+		add_code("counter = rv.counter;");
+	} else {
+		add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
+	}
+	add_code("max_counter = rv.max_counter;}");
+	// Hope and pray that the next PC is local to this block
+	if (tinfo.ignore_instruction_limit) {
+		add_code("pc = cpu->pc; goto " + this->func + "_jumptbl;");
+		return true;
+	} else {
+		add_code("if (" + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
+		return false;
+	}
+	/* The more sane option is to guess that the return PC is this PC + 1
+	if (tinfo.ignore_instruction_limit)
+		add_code("if (cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
+	else {
+		add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
+	}*/
+}
+
+template <int W>
+inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 {
 	this->restore_syscall_registers();
 	code += "cpu->pc = " + PCRELS(0) + ";\n";
@@ -533,7 +579,7 @@ void Emitter<W>::emit()
 			code += "api.trace(cpu, \"" + this->func + "\", " + STRADDR(this->pc()) + ", " + std::to_string(this->instr.whole) + ");\n";
 		}
 		if (tinfo.ebreak_locations->count(this->pc())) {
-			this->produce_system_call(std::to_string(SYSCALL_EBREAK));
+			this->emit_system_call(std::to_string(SYSCALL_EBREAK));
 		}
 
 		// instruction generation
@@ -642,29 +688,32 @@ void Emitter<W>::emit()
 				if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
 					jump_pc = dest_pc;
 				}
+			} else if (tinfo.global_jump_locations.count(dest_pc) && this->within_segment(dest_pc)) {
+				// global jump location
+				call_pc = dest_pc;
 			}
 			switch (instr.Btype.funct3) {
 			case 0x0: // EQ
-				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " == ");
+				emit_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " == ");
 				break;
 			case 0x1: // NE
-				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " != ");
+				emit_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " != ");
 				break;
 			case 0x2:
 			case 0x3:
 				UNKNOWN_INSTRUCTION();
 				break;
 			case 0x4: // LT
-				add_branch({ true, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " < ");
+				emit_branch({ true, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " < ");
 				break;
 			case 0x5: // GE
-				add_branch({ true, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
+				emit_branch({ true, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
 				break;
 			case 0x6: // LTU
-				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " < ");
+				emit_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " < ");
 				break;
 			case 0x7: // GEU
-				add_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
+				emit_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
 				break;
 			} } break;
 		case RV32I_JALR: {
@@ -697,6 +746,16 @@ void Emitter<W>::emit()
 			// XXX: mask off unaligned jumps - is this OK?
 			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
 			bool add_reentry = instr.Jtype.rd != 0;
+			// Also add a re-entry point if the next instruction is also a jump
+			if (!add_reentry) {
+				// Catch jumptable entries
+				if (i + 1 < int(tinfo.instr.size())) {
+					const auto& next_instr = tinfo.instr[i + 1];
+					if (next_instr.opcode() == RV32I_JAL && next_instr.Jtype.rd == 0) {
+						add_reentry = true;
+					}
+				}
+			}
 			bool already_exited = false;
 			// forward label: jump inside code block
 			if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
@@ -732,35 +791,7 @@ void Emitter<W>::emit()
 				if (target_funcaddr != 0 && dest_pc > this->pc()) {
 					//printf("Jump location OK (forward): 0x%lX for block 0x%lX -> 0x%lX\n", long(dest_pc),
 					//	long(this->begin_pc()), long(this->end_pc()));
-					auto target_func = funclabel<W>("f", target_funcaddr);
-					add_forward(target_func);
-					if (!tinfo.ignore_instruction_limit) {
-						// Call the function and get the return values
-						add_code("{ReturnValues rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
-						// Update the local counter registers
-						add_code("counter = rv.counter;");
-					} else {
-						add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
-					}
-					add_code("max_counter = rv.max_counter;}");
-					// If the counter is exhausted, or PC has diverged, exit the function
-					if (instr.Jtype.rd != 0) {
-						if (this->add_reentry_next()) {
-							// Hope and pray that the next PC is local to this block
-							if (tinfo.ignore_instruction_limit) {
-								add_code("pc = cpu->pc; goto " + this->func + "_jumptbl;");
-								already_exited = true;
-							} else {
-								add_code("if (" + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
-							}
-							/* The more sane option is to guess that the return PC is this PC + 1
-							if (tinfo.ignore_instruction_limit)
-								add_code("if (cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
-							else {
-								add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
-							}*/
-						}
-					}
+					already_exited = this->emit_function_call(target_funcaddr, dest_pc);
 
 					if (!already_exited)
 						exit_function("cpu->pc", false);
@@ -1122,7 +1153,7 @@ void Emitter<W>::emit()
 				if (instr.Itype.imm < 2) {
 					const auto syscall_reg =
 						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
-					this->produce_system_call(syscall_reg);
+					this->emit_system_call(syscall_reg);
 					break;
 				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_counter = 0;\n"; // Immediate stop PC + 4
