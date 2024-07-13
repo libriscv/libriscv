@@ -188,12 +188,34 @@ namespace riscv
 		cpu.machine().system(instr);
 		// Restore counters
 		counter.retrieve_max_counter(MACHINE());
+		if (UNLIKELY(pc != cpu.registers().pc))
+		{
+			pc = cpu.registers().pc;
+			QUICK_EXEC_CHECK();
+			d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
+		}
 		// Overflow-check, next block
 		NEXT_BLOCK(4, true);
 	}
 
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
 	{
+		// Calculate the current PC (mid block)
+		pc = (d - exec->decoder_cache()) << DecoderCache<W>::SHIFT;
+		// Check if the instruction is still invalid
+		bool stale = false;
+		try {
+			if (exec->is_likely_jit() && MACHINE().memory.template read<uint16_t>(pc) != uint16_t(d->instr)) {
+				exec->set_stale(true);
+				stale = true;
+			}
+		} catch (...) {}
+		if (stale) {
+			exec = resolve_execute_segment<W>(cpu, pc);
+			d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
+			NEXT_BLOCK(0, true);
+		}
+		cpu.registers().pc = pc;
 		cpu.trigger_exception(ILLEGAL_OPCODE, d->instr);
 	}
 

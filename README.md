@@ -38,10 +38,10 @@ Goals:
 	- Execute segments are automatically shared among all instances (with or without forking)
 - Dynamic linking and run-time dlopen() support
 - Supports sandboxing language-runtimes that use JIT-compilation, eg. V8 JavaScript
+	- JIT-compiled segments will be detected, processed and can use the fast-path dispatch
 
 Non goals:
 - Wide support for Linux system calls
-- Proxying system calls
 - Higher performance at the cost of call latency
 
 ## Benchmarks
