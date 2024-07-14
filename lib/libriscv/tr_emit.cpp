@@ -1620,6 +1620,20 @@ void Emitter<W>::emit()
 			break;
 #endif
 		}
+		case 0b1011011: // Dynamic call custom-2 instruction
+			// Assumption: Dynamic calls are like regular function calls
+			// Note: This behavior can be turned off by disabling register_caching
+			// Load and realize registers A0-A7
+			for (unsigned i = 10; i < 18; i++) {
+				this->load_register(i);
+				this->potentially_realize_register(i);
+			}
+			WELL_KNOWN_INSTRUCTION();
+			// Reload registers A0-A1
+			for (unsigned i = 10; i < 12; i++) {
+				this->potentially_reload_register(i);
+			}
+			break;
 		default:
 			UNKNOWN_INSTRUCTION();
 		}
