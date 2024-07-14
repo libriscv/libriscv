@@ -126,6 +126,11 @@ struct Emitter
 		if (uses_register_caching())
 			add_code("LOAD_REGS_" + this->func + "();");
 	}
+	void reload_syscall_registers() {
+		// Use the LOAD_SYS_REGS macro to restore registers modified by a syscall
+		if (uses_register_caching())
+			add_code("LOAD_SYS_REGS_" + this->func + "();");
+	}
 	void store_loaded_registers() {
 		// Use the STORE_REGS macro to store the registers
 		if (uses_register_caching())
@@ -510,7 +515,7 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 		code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 	}
 	code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
-	this->reload_all_registers();
+	this->reload_syscall_registers();
 }
 
 #ifdef RISCV_EXT_C
@@ -1626,6 +1631,13 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 		code += "  ;\n";
 		code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
 		for (size_t reg = 1; reg < 32; reg++) {
+			if (e.gpr_exists_at(reg)) {
+				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
+			}
+		}
+		code += "  ;\n";
+		code += "#define LOAD_SYS_REGS_" + e.get_func() + "() \\\n";
+		for (size_t reg = 10; reg < 12; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
 			}
