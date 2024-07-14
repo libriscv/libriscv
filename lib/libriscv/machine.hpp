@@ -392,7 +392,8 @@ namespace riscv
 		// The "minimum": lseek, read, write, exit (provided for example usage)
 		static void setup_minimal_syscalls();
 		// Enough to run minimal newlib programs
-		void setup_newlib_syscalls(bool filesystem = false);
+		static void setup_newlib_syscalls(); // no filesystem access
+		void setup_newlib_syscalls(bool filesystem); // optional filesystem access
 		// Set up every supported system call, emulating Linux
 		void setup_linux_syscalls(bool filesystem = true, bool sockets = true);
 		void setup_posix_threads();

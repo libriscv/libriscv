@@ -721,11 +721,15 @@ void Machine<W>::setup_minimal_syscalls() {
 }
 
 template<int W>
-void Machine<W>::setup_newlib_syscalls(bool) {
+void Machine<W>::setup_newlib_syscalls() {
 	setup_minimal_syscalls();
 	install_syscall_handler(169, syscall_gettimeofday<W>);
 	install_syscall_handler(214, syscall_brk<W>);
 	add_mman_syscalls<W>();
+}
+template<int W>
+void Machine<W>::setup_newlib_syscalls(bool) {
+	setup_newlib_syscalls();
 }
 
 template<int W>
@@ -797,11 +801,13 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets) {
 
 #ifdef RISCV_32I
 template void Machine<4>::setup_minimal_syscalls();
+template void Machine<4>::setup_newlib_syscalls();
 template void Machine<4>::setup_newlib_syscalls(bool);
 template void Machine<4>::setup_linux_syscalls(bool, bool);
 #endif
 #ifdef RISCV_64I
 template void Machine<8>::setup_minimal_syscalls();
+template void Machine<8>::setup_newlib_syscalls();
 template void Machine<8>::setup_newlib_syscalls(bool);
 template void Machine<8>::setup_linux_syscalls(bool, bool);
 #endif

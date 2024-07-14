@@ -1135,7 +1135,7 @@ static void syscall_getrandom(Machine<W>& machine)
 #endif
 
 template <int W>
-void Machine<W>::setup_newlib_syscalls(bool filesystem)
+void Machine<W>::setup_newlib_syscalls()
 {
 	install_syscall_handler(57, syscall_stub_zero<W>); // close
 	install_syscall_handler(62, syscall_lseek<W>);
@@ -1145,6 +1145,11 @@ void Machine<W>::setup_newlib_syscalls(bool filesystem)
 	install_syscall_handler(93, syscall_exit<W>);
 	install_syscall_handler(169, syscall_gettimeofday<W>);
 	install_syscall_handler(214, syscall_brk<W>);
+}
+template <int W>
+void Machine<W>::setup_newlib_syscalls(bool filesystem)
+{
+	setup_newlib_syscalls();
 
 	if (filesystem)
 		m_fds.reset(new FileDescriptors);
@@ -1319,10 +1324,12 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 }
 
 #ifdef RISCV_32I
+template void Machine<4>::setup_newlib_syscalls();
 template void Machine<4>::setup_newlib_syscalls(bool filesystem);
 template void Machine<4>::setup_linux_syscalls(bool, bool);
 #endif
 #ifdef RISCV_64I
+template void Machine<8>::setup_newlib_syscalls();
 template void Machine<8>::setup_newlib_syscalls(bool filesystem);
 template void Machine<8>::setup_linux_syscalls(bool, bool);
 #endif
