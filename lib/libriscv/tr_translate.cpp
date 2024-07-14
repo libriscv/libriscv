@@ -558,6 +558,7 @@ if constexpr (SCAN_FOR_GP) {
 				trace_instructions,
 				options.translate_ignore_instruction_limit,
 				options.use_shared_execute_segments,
+				options.translate_use_register_caching,
 				std::move(jump_locations),
 				nullptr, // blocks
 				&ebreak_locations,

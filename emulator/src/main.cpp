@@ -26,6 +26,7 @@ struct Arguments {
 	bool timing = false;
 	bool trace = false;
 	bool no_translate = false;
+	bool translate_regcache = riscv::libtcc_enabled; // Default: Register caching w/libtcc
 	bool translate_future = true;
 	bool mingw = false;
 	bool from_start = false;
@@ -55,6 +56,7 @@ static const struct option long_options[] = {
 	{"trace", no_argument, 0, 'T'},
 	{"no-translate", no_argument, 0, 'n'},
 	{"no-translate-future", no_argument, 0, 'N'},
+	{"translate-regcache", no_argument, 0, 'R'},
 	{"background", no_argument, 0, 'B'},
 	{"mingw", no_argument, 0, 'm'},
 	{"output", required_argument, 0, 'o'},
@@ -83,6 +85,7 @@ static void print_help(const char* name)
 		"  -T, --trace        Enable tracing in binary translator\n"
 		"  -n, --no-translate Disable binary translation\n"
 		"  -N, --no-translate-future Disable binary translation of non-initial segments\n"
+		"  -R, --translate-regcache Enable register caching in binary translator\n"
 		"  -B  --background   Run binary translation in background thread\n"
 		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
 		"  -o, --output file  Output embeddable binary translated code (C99)\n"
@@ -139,7 +142,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnNBmo:FSPA:Ic:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnNRBmo:FSPA:Ic:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -155,6 +158,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'T': args.trace = true; break;
 			case 'n': args.no_translate = true; break;
 			case 'N': args.translate_future = false; break;
+			case 'R': args.translate_regcache = true; break;
 			case 'B': args.background = true; break;
 			case 'm': args.mingw = true; break;
 			case 'o': break;
@@ -245,6 +249,7 @@ static void run_program(
 		.translate_trace = cli_args.trace,
 		.translate_timing = cli_args.timing,
 		.translate_ignore_instruction_limit = !cli_args.accurate, // Press Ctrl+C to stop
+		.translate_use_register_caching = cli_args.translate_regcache,
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",

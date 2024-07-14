@@ -194,6 +194,9 @@ The Machine constructor has many options, and we will go through each one.
 > translate_ignore_instruction_limit
 - When enabled, instruction counting is not performed during binary translation, and execution can only stop using another external method. This slightly improves performance. Default: false
 
+> translate_use_register_caching
+- When enabled, Machine registers will be put into local stack variables in the binary translation, and loaded and stored more efficiently than unoptimized code. This improves code compiled with -O0, or code produced using simpler compilers like TCC. Default: Enabled with libtcc, otherwise disabled.
+
 > cross_compile
 - A vector of cross-compilation methods. Each method is invoked during binary translation, as needed. If an output already exists, skip. A method can be to produce embeddable source files, while another method can be a cross-compiler invocation. Windows-compatible MinGW .dll's can be cross-compiled from Linux.
 

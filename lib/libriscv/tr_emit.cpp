@@ -69,9 +69,10 @@ struct BranchInfo {
 template <int W>
 struct Emitter
 {
-	static constexpr bool CACHED_REGISTERS = riscv::libtcc_enabled;
 	static constexpr unsigned XLEN = W * 8u;
 	using address_t = address_type<W>;
+
+	bool uses_register_caching() const noexcept { return tinfo.use_register_caching; }
 
 	Emitter(CPU<W>& c, const TransInfo<W>& ptinfo)
 		: cpu(c), m_pc(ptinfo.basepc), tinfo(ptinfo)
@@ -91,27 +92,27 @@ struct Emitter
 		return "reg" + std::to_string(reg);
 	}
 	void load_register(int reg) {
-		if constexpr (CACHED_REGISTERS) {
+		if (uses_register_caching()) {
 			if (LIKELY(reg != 0))
 				gpr_exists[reg] = true;
 		}
 	}
 	void potentially_reload_register(int reg) {
-		if constexpr (CACHED_REGISTERS) {
+		if (uses_register_caching()) {
 			if (reg != 0) {
 				add_code(loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];");
 			}
 		}
 	}
 	void potentially_realize_register(int reg) {
-		if constexpr (CACHED_REGISTERS) {
+		if (uses_register_caching()) {
 			if (reg != 0) {
 				add_code("cpu->r[" + std::to_string(reg) + "] = " + loaded_regname(reg) + ";");
 			}
 		}
 	}
 	void potentially_realize_registers(int x0, int x1) {
-		if constexpr (CACHED_REGISTERS) {
+		if (uses_register_caching()) {
 			for (int reg = x0; reg < x1; reg++) {
 				if (reg != 0) {
 					add_code("cpu->r[" + std::to_string(reg) + "] = " + loaded_regname(reg) + ";");
@@ -122,18 +123,18 @@ struct Emitter
 
 	void reload_all_registers() {
 		// Use the LOAD_REGS macro to restore the registers
-		add_code("LOAD_REGS_" + this->func + "();");
+		if (uses_register_caching())
+			add_code("LOAD_REGS_" + this->func + "();");
 	}
 	void store_loaded_registers() {
 		// Use the STORE_REGS macro to store the registers
-		add_code("STORE_REGS_" + this->func + "();");
+		if (uses_register_caching())
+			add_code("STORE_REGS_" + this->func + "();");
 	}
 
 	void exit_function(const std::string& new_pc, bool add_bracket = false)
 	{
-		if constexpr (CACHED_REGISTERS) {
-			this->store_loaded_registers();
-		}
+		this->store_loaded_registers();
 		const char* return_code = (tinfo.ignore_instruction_limit) ? "return (ReturnValues){0, max_counter};" : "return (ReturnValues){counter, max_counter};";
 		add_code(
 			(new_pc != "cpu->pc") ? "cpu->pc = " + new_pc + ";" : "",
@@ -144,7 +145,7 @@ struct Emitter
 		if (reg == 3 && tinfo.gp != 0)
 			return std::to_string(tinfo.gp);
 		else if (reg != 0) {
-			if constexpr (CACHED_REGISTERS) {
+			if (uses_register_caching()) {
 				load_register(reg);
 				return loaded_regname(reg);
 			} else {
@@ -155,7 +156,7 @@ struct Emitter
 	}
 	std::string to_reg(int reg) {
 		if (reg != 0) {
-			if constexpr (CACHED_REGISTERS) {
+			if (uses_register_caching()) {
 				load_register(reg);
 				return loaded_regname(reg);
 			} else {
@@ -1615,20 +1616,22 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	e.emit();
 
 	// Create register push and pop macros
-	code += "#define STORE_REGS_" + e.get_func() + "() \\\n";
-	for (size_t reg = 1; reg < 32; reg++) {
-		if (e.gpr_exists_at(reg)) {
-			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+	if (tinfo.use_register_caching) {
+		code += "#define STORE_REGS_" + e.get_func() + "() \\\n";
+		for (size_t reg = 1; reg < 32; reg++) {
+			if (e.gpr_exists_at(reg)) {
+				code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+			}
 		}
-	}
-	code += "  ;\n";
-	code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
-	for (size_t reg = 1; reg < 32; reg++) {
-		if (e.gpr_exists_at(reg)) {
-			code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
+		code += "  ;\n";
+		code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
+		for (size_t reg = 1; reg < 32; reg++) {
+			if (e.gpr_exists_at(reg)) {
+				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
+			}
 		}
+		code += "  ;\n";
 	}
-	code += "  ;\n";
 
 	// Forward declarations
 	for (const auto& entry : e.get_forward_declared()) {
@@ -1639,9 +1642,11 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc) {\n";
 
 	// Function GPRs
-	for (size_t reg = 1; reg < 32; reg++) {
-		if (e.gpr_exists_at(reg)) {
-			code += "addr_t " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];\n";
+	if (tinfo.use_register_caching) {
+		for (size_t reg = 1; reg < 32; reg++) {
+			if (e.gpr_exists_at(reg)) {
+				code += "addr_t " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];\n";
+			}
 		}
 	}
 

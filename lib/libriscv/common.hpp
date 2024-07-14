@@ -169,6 +169,14 @@ namespace riscv
 		/// It is completely fine to enable this option when running from the command line,
 		/// as a simple Ctrl+C will stop the program.
 		bool translate_ignore_instruction_limit = false;
+		/// @brief Enable the use of register caching for the binary translator. Always enabled
+		/// when binary translation with libtcc is enabled.
+		/// @details Enable this when compiling with -O0 or when using simple compilers like TCC.
+#ifdef RISCV_LIBTCC
+		bool translate_use_register_caching = true;
+#else
+		bool translate_use_register_caching = false;
+#endif
 		/// @brief Prefix for the translation output file.
 		std::string translation_prefix = "/tmp/rvbintr-";
 		/// @brief Suffix for the translation output file.
