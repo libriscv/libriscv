@@ -377,8 +377,30 @@ static void run_program(
 	else if constexpr (newlib_mini_guest)
 	{
 		// the minimum number of syscalls needed for malloc and C++ exceptions
-		machine.setup_newlib_syscalls();
+		machine.setup_newlib_syscalls(true);
+		machine.fds().permit_filesystem = !cli_args.sandbox;
 		machine.setup_argv(args);
+		machine.on_unhandled_syscall =
+		[] (riscv::Machine<W>& machine, size_t num) {
+			if (num == 1024) { // newlib_open()
+#include "newlib_open.hpp"
+			}
+			fprintf(stderr, "Unhandled syscall: %zu\n", num);
+		};
+		machine.fds().filter_open = [=] (void*, std::string& path) {
+			if (cli_args.proxy_mode) {
+				return true;
+			}
+			for (const auto& allowed : cli_args.allowed_files) {
+				if (path == allowed) {
+					return true;
+				}
+			}
+			if (cli_args.verbose) {
+				fprintf(stderr, "Guest wanted to open: %s (denied)\n", path.c_str());
+			}
+			return false;
+		};
 	}
 	else if constexpr (micro_guest)
 	{
