@@ -20,10 +20,12 @@
 // libtcc always runs on the current machine, so we can use the handler index directly
 #define UNKNOWN_INSTRUCTION() { \
   if (!instr.is_illegal()) { \
+    this->store_loaded_registers(); \
 	auto* handler = cpu.decode(instr).handler; \
 	const auto index = DecoderData<W>::handler_index_for(handler); \
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; \
+	this->reload_all_registers(); \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
@@ -33,9 +35,11 @@
 // calling the execute function the first time.
 #define UNKNOWN_INSTRUCTION() { \
   if (!instr.is_illegal()) { \
+    this->store_loaded_registers(); \
     code += "{ static int handler_idx = 0;\n"; \
     code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
     code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+	this->reload_all_registers(); \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
@@ -65,7 +69,7 @@ struct BranchInfo {
 template <int W>
 struct Emitter
 {
-	static constexpr bool CACHED_REGISTERS = false;
+	static constexpr bool CACHED_REGISTERS = riscv::libtcc_enabled;
 	static constexpr unsigned XLEN = W * 8u;
 	using address_t = address_type<W>;
 
@@ -87,58 +91,48 @@ struct Emitter
 		return "reg" + std::to_string(reg);
 	}
 	void load_register(int reg) {
-		if (UNLIKELY(reg == 0))
-			throw MachineException(INVALID_PROGRAM, "Attempt to cache register x0");
-		if (!gprs[reg]) {
-			gprs[reg] = true;
-			bool exists = gpr_exists[reg];
-			if (exists == false) {
-				gpr_exists[reg] = true;
-			} else {
-				add_code(loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];");
-			}
-		}
-	}
-	void invalidate_register(int reg) {
 		if constexpr (CACHED_REGISTERS) {
-			gpr_exists[reg] = true;
-			gprs[reg] = false;
+			if (LIKELY(reg != 0))
+				gpr_exists[reg] = true;
 		}
 	}
 	void potentially_reload_register(int reg) {
 		if constexpr (CACHED_REGISTERS) {
-			if (gpr_exists[reg]) {
+			if (reg != 0) {
 				add_code(loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];");
-				gprs[reg] = true;
 			}
 		}
 	}
-	void potentially_reload_all_registers() {
-		for (int reg = 1; reg < 32; reg++) {
-			this->potentially_reload_register(reg);
-		}
-	}
-	void realize_registers(int x0, int x1) {
-		for (int reg = x0; reg < x1; reg++) {
-			if (gprs[reg]) {
+	void potentially_realize_register(int reg) {
+		if constexpr (CACHED_REGISTERS) {
+			if (reg != 0) {
 				add_code("cpu->r[" + std::to_string(reg) + "] = " + loaded_regname(reg) + ";");
 			}
 		}
 	}
-	void restore_syscall_registers() {
+	void potentially_realize_registers(int x0, int x1) {
 		if constexpr (CACHED_REGISTERS) {
-			this->realize_registers(10, 18);
+			for (int reg = x0; reg < x1; reg++) {
+				if (reg != 0) {
+					add_code("cpu->r[" + std::to_string(reg) + "] = " + loaded_regname(reg) + ";");
+				}
+			}
 		}
 	}
-	void restore_all_registers() {
-		if constexpr (CACHED_REGISTERS) {
-			this->realize_registers(0, 32);
-		}
+
+	void reload_all_registers() {
+		// Use the LOAD_REGS macro to restore the registers
+		add_code("LOAD_REGS_" + this->func + "();");
 	}
+	void store_loaded_registers() {
+		// Use the STORE_REGS macro to store the registers
+		add_code("STORE_REGS_" + this->func + "();");
+	}
+
 	void exit_function(const std::string& new_pc, bool add_bracket = false)
 	{
 		if constexpr (CACHED_REGISTERS) {
-			this->restore_all_registers();
+			this->store_loaded_registers();
 		}
 		const char* return_code = (tinfo.ignore_instruction_limit) ? "return (ReturnValues){0, max_counter};" : "return (ReturnValues){counter, max_counter};";
 		add_code(
@@ -407,7 +401,6 @@ private:
 	uint64_t m_instr_counter = 0;
 	uint32_t m_zero_insn_counter = 0;
 
-	std::array<bool, 32> gprs {};
 	std::array<bool, 32> gpr_exists {};
 
 	std::string func;
@@ -462,13 +455,15 @@ inline void Emitter<W>::emit_branch(const BranchInfo& binfo, const std::string& 
 		}
 	}
 	// else, exit binary translation
-	// The number of instructions to increment depends on if branch-instruction-counting is enabled
 	exit_function(PCRELS(instr.Btype.signed_imm()), true); // Bracket (NOTE: not actually ending the function)
 }
 
 template <int W>
 inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t dest_pc)
 {
+	// Store the registers
+	this->store_loaded_registers();
+
 	auto target_func = funclabel<W>("f", target_funcaddr);
 	add_forward(target_func);
 	if (!tinfo.ignore_instruction_limit) {
@@ -480,6 +475,10 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 		add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
 	}
 	add_code("max_counter = rv.max_counter;}");
+
+	// Restore the registers
+	this->reload_all_registers();
+
 	// Hope and pray that the next PC is local to this block
 	if (tinfo.ignore_instruction_limit) {
 		add_code("pc = cpu->pc; goto " + this->func + "_jumptbl;");
@@ -499,20 +498,18 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 template <int W>
 inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 {
-	this->restore_syscall_registers();
+	this->store_loaded_registers();
 	code += "cpu->pc = " + PCRELS(0) + ";\n";
 	if (!tinfo.ignore_instruction_limit) {
-		code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n"
-			"  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+		code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n";
+		code += "  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
 		code += "counter = INS_COUNTER(cpu);\n"; // Restore instruction counter
 	} else {
-		code += "if (UNLIKELY(do_syscall(cpu, 0, max_counter, " + syscall_reg + "))) {\n"
-			"  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
+		code += "if (UNLIKELY(do_syscall(cpu, 0, max_counter, " + syscall_reg + "))) {\n";
+		code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 	}
 	code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
-	// Restore A0
-	this->invalidate_register(REG_ARG0);
-	this->potentially_reload_register(REG_ARG0);
+	this->reload_all_registers();
 }
 
 #ifdef RISCV_EXT_C
@@ -579,7 +576,9 @@ void Emitter<W>::emit()
 			code += "api.trace(cpu, \"" + this->func + "\", " + STRADDR(this->pc()) + ", " + std::to_string(this->instr.whole) + ");\n";
 		}
 		if (tinfo.ebreak_locations->count(this->pc())) {
+			this->store_loaded_registers();
 			this->emit_system_call(std::to_string(SYSCALL_EBREAK));
+			this->reload_all_registers();
 		}
 
 		// instruction generation
@@ -596,19 +595,8 @@ void Emitter<W>::emit()
 				if (tinfo.trace_instructions && compressed_instr != 0x0)
 					printf("Unexpanded instruction: 0x%04hx at PC 0x%lX (original 0x%x)\n", compressed_instr, long(this->pc()), original);
 				// When illegal opcode is encountered, reveal PC
-				if (compressed_instr == 0x0) {
-					if (m_zero_insn_counter <= 1)
-						code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
-				} else {
-					char buffer[64];
-					const int len = snprintf(buffer, sizeof(buffer),
-						"api.execute(cpu, %#04hx);\n", compressed_instr);
-					if (len > 0) {
-						code += std::string(buffer, len);
-					} else {
-						throw MachineException(INVALID_PROGRAM, "Failed to format instruction");
-					}
-				}
+				if (m_zero_insn_counter <= 1 || compressed_instr != 0x0)
+					code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
 				continue;
 			}
 		}
@@ -616,6 +604,7 @@ void Emitter<W>::emit()
 
 		switch (instr.opcode()) {
 		case RV32I_LOAD:
+			load_register(instr.Itype.rs1);
 			if (instr.Itype.rd != 0) {
 			switch (instr.Itype.funct3) {
 			case 0x0: // I8
@@ -650,6 +639,7 @@ void Emitter<W>::emit()
 				add_code("(void)" + temp + ";");
 			} break;
 		case RV32I_STORE:
+			load_register(instr.Stype.rs1);
 			switch (instr.Stype.funct3) {
 			case 0x0: // I8
 				this->memory_store("int8_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
@@ -669,6 +659,8 @@ void Emitter<W>::emit()
 			break;
 		case RV32I_BRANCH: {
 			this->increment_counter_so_far();
+			load_register(instr.Btype.rs1);
+			load_register(instr.Btype.rs2);
 			const auto offset = instr.Btype.signed_imm();
 			uint64_t dest_pc = this->pc() + offset;
 			uint64_t jump_pc = 0;
@@ -731,6 +723,7 @@ void Emitter<W>::emit()
 					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
+			this->store_loaded_registers();
 			if (!tinfo.ignore_instruction_limit)
 				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") { goto " + this->func + "_jumptbl; }\n";
 			else
@@ -1151,18 +1144,30 @@ void Emitter<W>::emit()
 					this->add_reentry_next();
 					break;
 				} else {
+					this->load_register(instr.Itype.rd);
+					this->potentially_realize_register(instr.Itype.rd);
+					this->load_register(instr.Itype.rs1);
+					this->potentially_realize_register(instr.Itype.rs1);
 					// Zero funct3, unknown imm: Don't exit
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+					this->potentially_reload_register(instr.Itype.rd);
+					this->potentially_reload_register(instr.Itype.rs1);
 					break;
 				}
 			} else {
 				// Non-zero funct3: CSR and other system functions
+				this->load_register(instr.Itype.rd);
+				this->potentially_realize_register(instr.Itype.rd);
+				this->load_register(instr.Itype.rs1);
+				this->potentially_realize_register(instr.Itype.rs1);
 				code += "cpu->pc = " + PCRELS(0) + ";\n";
 				if (!tinfo.ignore_instruction_limit)
 					code += "INS_COUNTER(cpu) = counter;\n"; // Reveal instruction counters
 				code += "MAX_COUNTER(cpu) = max_counter;\n";
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+				this->potentially_reload_register(instr.Itype.rd);
+				this->potentially_reload_register(instr.Itype.rs1);
 			} break;
 		case RV64I_OP_IMM32: {
 			if constexpr (W < 8) {
@@ -1529,6 +1534,9 @@ void Emitter<W>::emit()
 			} break; // RV32F_FPFUNC
 		case RV32A_ATOMIC: // General handler for atomics
 			this->penalty(20); // Atomic operations are slow
+			load_register(instr.Atype.rd);
+			load_register(instr.Atype.rs1);
+			load_register(instr.Atype.rs2);
 			UNKNOWN_INSTRUCTION();
 			break;
 		case RV32V_OP: {   // General handler for vector instructions
@@ -1606,6 +1614,22 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	Emitter<W> e(const_cast<CPU<W>&>(*this), tinfo);
 	e.emit();
 
+	// Create register push and pop macros
+	code += "#define STORE_REGS_" + e.get_func() + "() \\\n";
+	for (size_t reg = 1; reg < 32; reg++) {
+		if (e.gpr_exists_at(reg)) {
+			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+		}
+	}
+	code += "  ;\n";
+	code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
+	for (size_t reg = 1; reg < 32; reg++) {
+		if (e.gpr_exists_at(reg)) {
+			code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
+		}
+	}
+	code += "  ;\n";
+
 	// Forward declarations
 	for (const auto& entry : e.get_forward_declared()) {
 		code += "static ReturnValues " + entry + "(CPU*, uint64_t, uint64_t, addr_t);\n";
@@ -1614,7 +1638,15 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	// Function header
 	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc) {\n";
 
-	code += e.get_func() + "_jumptbl:\n";
+	// Function GPRs
+	for (size_t reg = 1; reg < 32; reg++) {
+		if (e.gpr_exists_at(reg)) {
+			code += "addr_t " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];\n";
+		}
+	}
+
+	code += e.get_func() + "_jumptbl:;\n";
+
 	code += "switch (pc) {\n";
 	for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
 		auto& entry = e.get_mappings().at(idx);
@@ -1623,13 +1655,6 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 	}
 	code += "default: cpu->pc = pc; return (ReturnValues){counter, max_counter};\n";
 	code += "}\n";
-
-	// Function GPRs
-	for (size_t reg = 1; reg < 32; reg++) {
-		if (e.get_gpr_exists()[reg]) {
-			code += "addr_t " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];\n";
-		}
-	}
 
 	// Function code
 	code += e.get_code();
