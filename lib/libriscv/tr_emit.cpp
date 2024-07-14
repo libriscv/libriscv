@@ -746,16 +746,6 @@ void Emitter<W>::emit()
 			// XXX: mask off unaligned jumps - is this OK?
 			const auto dest_pc = (this->pc() + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK);
 			bool add_reentry = instr.Jtype.rd != 0;
-			// Also add a re-entry point if the next instruction is also a jump
-			if (!add_reentry) {
-				// Catch jumptable entries
-				if (i + 1 < int(tinfo.instr.size())) {
-					const auto& next_instr = tinfo.instr[i + 1];
-					if (next_instr.opcode() == RV32I_JAL && next_instr.Jtype.rd == 0) {
-						add_reentry = true;
-					}
-				}
-			}
 			bool already_exited = false;
 			// forward label: jump inside code block
 			if (dest_pc >= this->begin_pc() && dest_pc < this->end_pc()) {
