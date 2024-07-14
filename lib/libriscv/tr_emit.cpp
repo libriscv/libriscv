@@ -29,6 +29,12 @@
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
+#define WELL_KNOWN_INSTRUCTION() { \
+	auto* handler = cpu.decode(instr).handler; \
+	const auto index = DecoderData<W>::handler_index_for(handler); \
+	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
+		"  return (ReturnValues){0, 0};\n"; \
+}
 #else
 // Since it is possible to send a program to another machine, we don't exactly know
 // the order of intruction handlers, so we need to lazily get the handler index by
@@ -42,6 +48,11 @@
 	this->reload_all_registers(); \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+}
+#define WELL_KNOWN_INSTRUCTION() { \
+    code += "{ static int handler_idx = 0;\n"; \
+    code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
+    code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
 }
 #endif
 
@@ -1543,7 +1554,13 @@ void Emitter<W>::emit()
 			load_register(instr.Atype.rd);
 			load_register(instr.Atype.rs1);
 			load_register(instr.Atype.rs2);
-			UNKNOWN_INSTRUCTION();
+			this->potentially_realize_register(instr.Atype.rd);
+			this->potentially_realize_register(instr.Atype.rs1);
+			this->potentially_realize_register(instr.Atype.rs2);
+			WELL_KNOWN_INSTRUCTION();
+			this->potentially_reload_register(instr.Atype.rd);
+			this->potentially_reload_register(instr.Atype.rs1);
+			this->potentially_reload_register(instr.Atype.rs2);
 			break;
 		case RV32V_OP: {   // General handler for vector instructions
 #ifdef RISCV_EXT_VECTOR
