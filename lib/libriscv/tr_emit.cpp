@@ -29,6 +29,12 @@
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
+#define WELL_KNOWN_INSTRUCTION() { \
+	auto* handler = cpu.decode(instr).handler; \
+	const auto index = DecoderData<W>::handler_index_for(handler); \
+	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
+		"  return (ReturnValues){0, 0};\n"; \
+}
 #else
 // Since it is possible to send a program to another machine, we don't exactly know
 // the order of intruction handlers, so we need to lazily get the handler index by
@@ -42,6 +48,11 @@
 	this->reload_all_registers(); \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+}
+#define WELL_KNOWN_INSTRUCTION() { \
+    code += "{ static int handler_idx = 0;\n"; \
+    code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
+    code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
 }
 #endif
 
@@ -125,6 +136,11 @@ struct Emitter
 		// Use the LOAD_REGS macro to restore the registers
 		if (uses_register_caching())
 			add_code("LOAD_REGS_" + this->func + "();");
+	}
+	void reload_syscall_registers() {
+		// Use the LOAD_SYS_REGS macro to restore registers modified by a syscall
+		if (uses_register_caching())
+			add_code("LOAD_SYS_REGS_" + this->func + "();");
 	}
 	void store_loaded_registers() {
 		// Use the STORE_REGS macro to store the registers
@@ -510,7 +526,7 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 		code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 	}
 	code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
-	this->reload_all_registers();
+	this->reload_syscall_registers();
 }
 
 #ifdef RISCV_EXT_C
@@ -1538,7 +1554,13 @@ void Emitter<W>::emit()
 			load_register(instr.Atype.rd);
 			load_register(instr.Atype.rs1);
 			load_register(instr.Atype.rs2);
-			UNKNOWN_INSTRUCTION();
+			this->potentially_realize_register(instr.Atype.rd);
+			this->potentially_realize_register(instr.Atype.rs1);
+			this->potentially_realize_register(instr.Atype.rs2);
+			WELL_KNOWN_INSTRUCTION();
+			this->potentially_reload_register(instr.Atype.rd);
+			this->potentially_reload_register(instr.Atype.rs1);
+			this->potentially_reload_register(instr.Atype.rs2);
 			break;
 		case RV32V_OP: {   // General handler for vector instructions
 #ifdef RISCV_EXT_VECTOR
@@ -1598,6 +1620,20 @@ void Emitter<W>::emit()
 			break;
 #endif
 		}
+		case 0b1011011: // Dynamic call custom-2 instruction
+			// Assumption: Dynamic calls are like regular function calls
+			// Note: This behavior can be turned off by disabling register_caching
+			// Load and realize registers A0-A7
+			for (unsigned i = 10; i < 18; i++) {
+				this->load_register(i);
+				this->potentially_realize_register(i);
+			}
+			WELL_KNOWN_INSTRUCTION();
+			// Reload registers A0-A1
+			for (unsigned i = 10; i < 12; i++) {
+				this->potentially_reload_register(i);
+			}
+			break;
 		default:
 			UNKNOWN_INSTRUCTION();
 		}
@@ -1626,6 +1662,13 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 		code += "  ;\n";
 		code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
 		for (size_t reg = 1; reg < 32; reg++) {
+			if (e.gpr_exists_at(reg)) {
+				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
+			}
+		}
+		code += "  ;\n";
+		code += "#define LOAD_SYS_REGS_" + e.get_func() + "() \\\n";
+		for (size_t reg = 10; reg < 12; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
 			}
