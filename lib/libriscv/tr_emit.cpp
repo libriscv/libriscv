@@ -26,6 +26,7 @@
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; \
 	this->reload_all_registers(); \
+	this->untrack_all_gprs();     \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
@@ -46,6 +47,7 @@
     code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
     code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
 	this->reload_all_registers(); \
+	this->untrack_all_gprs();     \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
@@ -82,6 +84,7 @@ struct Emitter
 {
 	static constexpr unsigned XLEN = W * 8u;
 	using address_t = address_type<W>;
+	using saddr_t = signed_address_type<W>;
 
 	bool uses_register_caching() const noexcept { return tinfo.use_register_caching; }
 
@@ -159,9 +162,11 @@ struct Emitter
 
 	std::string from_reg(int reg) {
 		if (reg == 3 && tinfo.gp != 0)
-			return std::to_string(tinfo.gp);
+			return std::to_string(tinfo.gp) + "UL";
 		else if (reg != 0) {
-			if (uses_register_caching()) {
+			if (gpr_has_known_value(reg)) {
+				return std::to_string(get_gpr_value(reg)) + "UL";
+			} else if (uses_register_caching()) {
 				load_register(reg);
 				return loaded_regname(reg);
 			} else {
@@ -271,17 +276,19 @@ struct Emitter
 	template <typename T>
 	void memory_load(std::string dst, std::string type, int reg, int32_t imm)
 	{
-		const std::string data = "rpage" + PCRELS(0);
 		std::string cast;
 		if constexpr (std::is_signed_v<T>) {
 			cast = "(saddr_t)";
 		}
 
-		if (reg == REG_GP && tinfo.gp != 0x0 && uses_flat_memory_arena())
-		{
-			/* XXX: Check page permissions here? */
-			const address_t absolute_vaddr = tinfo.gp + imm;
-			if (absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
+		if (uses_flat_memory_arena()) {
+			address_t absolute_vaddr = 0;
+			if (reg == REG_GP && tinfo.gp != 0x0) {
+				absolute_vaddr = tinfo.gp + imm;
+			} else if (gpr_has_known_value(reg)) {
+				absolute_vaddr = get_gpr_value(reg) + imm;
+			}
+			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
 					dst + " = " + cast + "*(" + type + "*)" + arena_at_fixed(absolute_vaddr) + ";"
 				);
@@ -309,13 +316,14 @@ struct Emitter
 	}
 	void memory_store(std::string type, int reg, int32_t imm, std::string value)
 	{
-		const std::string data = "wpage" + PCRELS(0);
-
-		if (reg == REG_GP && tinfo.gp != 0x0 && uses_flat_memory_arena())
-		{
-			/* XXX: Check page permissions */
-			const address_t absolute_vaddr = tinfo.gp + imm;
-			if (absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
+		if (uses_flat_memory_arena()) {
+			address_t absolute_vaddr = 0;
+			if (reg == REG_GP && tinfo.gp != 0x0) {
+				absolute_vaddr = tinfo.gp + imm;
+			} else if (gpr_has_known_value(reg)) {
+				absolute_vaddr = get_gpr_value(reg) + imm;
+			}
+			if (absolute_vaddr != 0 && absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
 				add_code("*(" + type + "*)ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ") = " + value + ";");
 				return;
 			}
@@ -415,6 +423,54 @@ private:
 	static std::string speculation_safe(const address_t address) {
 		return "SPECSAFE(" + std::to_string(address) + ")";
 	}
+	// Register value tracking
+	void track_gpr(int reg, address_t value) {
+		if (reg != 0) {
+			gpr_values[reg] = value;
+		}
+	}
+	// Track a register if another register has a known value
+	// otherwise, we don't know the value and we untrack it
+	void track_gpr_if_known(int reg, int reg2, address_t value) {
+		if (gpr_has_known_value(reg2)) {
+			track_gpr(reg, value);
+		} else {
+			untrack_gpr(reg);
+		}
+	}
+	void track_gpr_if_known(int reg, int reg2, int reg3, address_t value) {
+		if (gpr_has_known_value(reg2) && gpr_has_known_value(reg3)) {
+			track_gpr(reg, value);
+		} else {
+			untrack_gpr(reg);
+		}
+	}
+	void untrack_gpr(int reg) {
+		if (reg != 0) {
+			gpr_values[reg] = std::monostate();
+		}
+	}
+	void untrack_all_gprs() {
+		for (int i = 1; i < 32; i++)
+			untrack_gpr(i);
+	}
+	bool gpr_has_known_value(int reg) const noexcept {
+		if (reg == 0)
+			return true;
+		return std::holds_alternative<address_t>(gpr_values[reg]);
+	}
+	address_t get_gpr_value(int reg) const {
+		if (reg == 0)
+			return 0;
+		return std::get<address_t>(gpr_values[reg]);
+	}
+	address_t get_potential_gpr_value(int reg) const {
+		if (reg == 0)
+			return 0;
+		else if (std::holds_alternative<address_t>(gpr_values[reg]))
+			return std::get<address_t>(gpr_values[reg]);
+		return 0;
+	}
 
 	std::string code;
 	const CPU<W>& cpu;
@@ -426,6 +482,8 @@ private:
 	uint32_t m_zero_insn_counter = 0;
 
 	std::array<bool, 32> gpr_exists {};
+	// Register tracking
+	std::array<std::variant<std::monostate, address_t>, 32> gpr_values {};
 
 	std::string func;
 	const TransInfo<W>& tinfo;
@@ -494,29 +552,28 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 		// Call the function and get the return values
 		add_code("{ReturnValues rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
 		// Update the local counter registers
-		add_code("counter = rv.counter;");
+		add_code("counter = rv.counter; max_counter = rv.max_counter;}");
 	} else {
 		add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
+		add_code("max_counter = rv.max_counter;}");
 	}
-	add_code("max_counter = rv.max_counter;}");
 
 	// Restore the registers
 	this->reload_all_registers();
 
-	// Hope and pray that the next PC is local to this block
-	if (tinfo.ignore_instruction_limit) {
-		add_code("pc = cpu->pc; goto " + this->func + "_jumptbl;");
-		return true;
-	} else {
-		add_code("if (" + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
-		return false;
+	if (tinfo.trace_instructions) {
+		code += "api.trace(cpu, \"" + this->func + "\", cpu->pc, max_counter);\n";
 	}
-	/* The more sane option is to guess that the return PC is this PC + 1
-	if (tinfo.ignore_instruction_limit)
-		add_code("if (cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
-	else {
-		add_code("if (" + LOOP_EXPRESSION + " && cpu->pc == " + STRADDR(next_pc) + ") { pc = cpu->pc; goto " + FUNCLABEL(next_pc) + "; }");
-	}*/
+
+	// Hope and pray that the next PC is local to this block
+	if (!tinfo.ignore_instruction_limit) {
+		add_code("if (" + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
+		add_code("return (ReturnValues){counter, max_counter};");
+	} else {
+		add_code("if (max_counter) { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
+		add_code("return (ReturnValues){0, 0};");
+	}
+	return true;
 }
 
 template <int W>
@@ -573,11 +630,13 @@ void Emitter<W>::emit()
 			this->mappings.push_back({
 				this->pc(), this->func
 			});
+			this->untrack_all_gprs();
 		}
 		// known jump locations
 		else if (i > 0 && tinfo.jump_locations.count(this->pc())) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
+			this->untrack_all_gprs();
 		}
 
 		// With garbage instructions, it's possible that someone is trying to jump to
@@ -603,6 +662,7 @@ void Emitter<W>::emit()
 			this->store_loaded_registers();
 			this->emit_system_call(std::to_string(SYSCALL_EBREAK));
 			this->reload_all_registers();
+			this->untrack_all_gprs();
 		}
 
 		// instruction generation
@@ -655,6 +715,9 @@ void Emitter<W>::emit()
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
+			// TODO: If the memory address is in the read-only area, we can
+			// track the value by reading it
+			this->untrack_gpr(instr.Itype.rd); // We don't know the value of the register anymore
 			} else {
 				// We don't care about where we are in the page when rd=0
 				const auto temp = "tmp" + PCRELS(0);
@@ -747,6 +810,8 @@ void Emitter<W>::emit()
 					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
+			// Untrack all registers, as we don't know the value of any register after a branch
+			this->untrack_all_gprs();
 			this->store_loaded_registers();
 			if (!tinfo.ignore_instruction_limit)
 				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") { goto " + this->func + "_jumptbl; }\n";
@@ -757,6 +822,8 @@ void Emitter<W>::emit()
 			} break;
 		case RV32I_JAL: {
 			this->increment_counter_so_far();
+			// Untrack all registers, as we don't know the value of any register after a branch
+			this->untrack_all_gprs();
 			if (instr.Jtype.rd != 0) {
 				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(m_instr_length) + ";\n");
 			}
@@ -821,14 +888,16 @@ void Emitter<W>::emit()
 			if (UNLIKELY(instr.Itype.rd == 0)) break;
 
 			const auto dst = to_reg(instr.Itype.rd);
-			const auto src = from_reg(instr.Itype.rs1);
+			std::string src = from_reg(instr.Itype.rs1);
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
 				if (instr.Itype.signed_imm() == 0) {
 					add_code(dst + " = " + src + ";");
 				} else {
 					emit_op(" + ", " += ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
-				} break;
+				}
+				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1, get_potential_gpr_value(instr.Itype.rs1) + instr.Itype.signed_imm());
+				break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
 				switch (instr.Itype.imm) {
@@ -939,6 +1008,8 @@ void Emitter<W>::emit()
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
+			if (instr.Itype.funct3 != 0x0)
+				this->untrack_gpr(instr.Itype.rd);
 			} break;
 		case RV32I_OP:
 			if (UNLIKELY(instr.Rtype.rd == 0)) break;
@@ -946,6 +1017,7 @@ void Emitter<W>::emit()
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD
 				emit_op(" + ", " += ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				this->track_gpr_if_known(instr.Rtype.rd, instr.Rtype.rs1, instr.Rtype.rs2, get_potential_gpr_value(instr.Rtype.rs1) + get_potential_gpr_value(instr.Rtype.rs2));
 				break;
 			case 0x200: // SUB
 				emit_op(" - ", " -= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
@@ -988,21 +1060,21 @@ void Emitter<W>::emit()
 				add_code(
 					(W == 4) ?
 					to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					"MUL128(&" + to_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
 				add_code(
 					(W == 4) ?
 					to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					"MUL128(&" + to_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x13: // MULHU (unsigned x unsigned)
 				add_code(
 					(W == 4) ?
 					to_reg(instr.Rtype.rd) + " = ((uint64_t) " + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + from_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					"MUL128(&" + to_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
 				);
 				break;
 			case 0x14: // DIV
@@ -1011,13 +1083,13 @@ void Emitter<W>::emit()
 					add_code(
 						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))"
-						"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
+						"		" + to_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				} else {
 					add_code(
 						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
-						"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
+						"		" + to_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				}
 				break;
@@ -1032,13 +1104,13 @@ void Emitter<W>::emit()
 					add_code(
 					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))",
-					"		" + from_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " % (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
+					"		" + to_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " % (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
 					"}");
 				} else {
 					add_code(
 					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
-					"		" + from_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " % (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
+					"		" + to_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " % (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
 					"}");
 				}
 				break;
@@ -1138,18 +1210,22 @@ void Emitter<W>::emit()
 				//		instr.Rtype.jumptable_friendly_op());
 				UNKNOWN_INSTRUCTION();
 			}
+			if (instr.Rtype.jumptable_friendly_op() != 0x0)
+				this->untrack_gpr(instr.Rtype.rd);
 			break;
 		case RV32I_LUI:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
 			add_code(
 				to_reg(instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
+			this->track_gpr(instr.Utype.rd, instr.Utype.upper_imm());
 			break;
 		case RV32I_AUIPC:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
 			add_code(
 				to_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
+			this->track_gpr(instr.Utype.rd, this->pc() + instr.Utype.upper_imm());
 			break;
 		case RV32I_FENCE:
 			break;
@@ -1158,14 +1234,21 @@ void Emitter<W>::emit()
 				this->increment_counter_so_far();
 				// System calls and EBREAK
 				if (instr.Itype.imm < 2) {
-					const auto syscall_reg =
-						(instr.Itype.imm == 0) ? from_reg(REG_ECALL) : std::to_string(SYSCALL_EBREAK);
+					std::string syscall_reg;
+					if (instr.Itype.imm == 0) {
+						// ECALL: System call
+						syscall_reg = this->from_reg(REG_ECALL);
+					} else { // EBREAK
+						syscall_reg = std::to_string(SYSCALL_EBREAK);
+					}
 					this->emit_system_call(syscall_reg);
+					this->untrack_all_gprs();
 					break;
-				} if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
+				} else if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_counter = 0;\n"; // Immediate stop PC + 4
 					exit_function(PCRELS(4), false);
 					this->add_reentry_next();
+					this->untrack_all_gprs();
 					break;
 				} else {
 					this->load_register(instr.Itype.rd);
@@ -1177,6 +1260,7 @@ void Emitter<W>::emit()
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 					this->potentially_reload_register(instr.Itype.rd);
 					this->potentially_reload_register(instr.Itype.rs1);
+					this->untrack_all_gprs();
 					break;
 				}
 			} else {
@@ -1192,6 +1276,7 @@ void Emitter<W>::emit()
 				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 				this->potentially_reload_register(instr.Itype.rd);
 				this->potentially_reload_register(instr.Itype.rs1);
+				this->untrack_all_gprs();
 			} break;
 		case RV64I_OP_IMM32: {
 			if constexpr (W < 8) {
@@ -1206,6 +1291,7 @@ void Emitter<W>::emit()
 			case 0x0:
 				// ADDIW: Add sign-extended 12-bit immediate
 				add_code(dst + " = " + SIGNEXTW + " (" + src + " + " + from_imm(instr.Itype.signed_imm()) + ");");
+				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1, (saddr_t)(int32_t)((uint32_t)get_potential_gpr_value(instr.Itype.rs1) + instr.Itype.signed_imm()));
 				break;
 			case 0x1: // SLLI.W / SLLI.UW:
 				if (instr.Itype.high_bits() == 0x000) {
@@ -1247,6 +1333,8 @@ void Emitter<W>::emit()
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
+			if (instr.Itype.funct3 != 0x0)
+				this->untrack_gpr(instr.Itype.rd);
 			} break;
 		case RV64I_OP32: {
 			if constexpr (W < 8) {
@@ -1320,18 +1408,19 @@ void Emitter<W>::emit()
 			case 0x301: // ROLW: Rotate left 32-bit
 				add_code(
 				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & 31;\n",
-					to_reg(instr.Rtype.rd) + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> (32 - shift)); }"
+					dst + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> (32 - shift)); }"
 				);
 				break;
 			case 0x305: // RORW: Rotate right (32-bit)
 				add_code(
 				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & 31;\n",
-					to_reg(instr.Rtype.rd) + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (32 - shift)); }"
+					dst + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (32 - shift)); }"
 				);
 				break;
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
+			this->untrack_gpr(instr.Rtype.rd);
 			} break;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi{instr};
@@ -1430,7 +1519,9 @@ void Emitter<W>::emit()
 					break;
 				default:
 					UNKNOWN_INSTRUCTION();
-				} break;
+				}
+				this->untrack_gpr(fi.R4type.rd);
+				break;
 			case RV32F__FMIN_MAX:
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FMIN.S
@@ -1532,6 +1623,7 @@ void Emitter<W>::emit()
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}
+				this->untrack_gpr(fi.R4type.rd);
 				} break;
 			case RV32F__FMV_W_X:
 				if (fi.R4type.funct2 == 0x0) {
@@ -1552,7 +1644,9 @@ void Emitter<W>::emit()
 					}
 				} else { // FPCLASSIFY etc.
 					UNKNOWN_INSTRUCTION();
-				} break;
+				}
+				this->untrack_gpr(fi.R4type.rd);
+				break;
 			} // fpfunc
 			} else UNKNOWN_INSTRUCTION();
 			} break; // RV32F_FPFUNC
@@ -1568,6 +1662,7 @@ void Emitter<W>::emit()
 			this->potentially_reload_register(instr.Atype.rd);
 			this->potentially_reload_register(instr.Atype.rs1);
 			this->potentially_reload_register(instr.Atype.rs2);
+			this->untrack_gpr(instr.Atype.rd);
 			break;
 		case RV32V_OP: {   // General handler for vector instructions
 #ifdef RISCV_EXT_VECTOR
@@ -1640,6 +1735,7 @@ void Emitter<W>::emit()
 			for (unsigned i = 10; i < 12; i++) {
 				this->potentially_reload_register(i);
 			}
+			this->untrack_all_gprs();
 			break;
 		default:
 			UNKNOWN_INSTRUCTION();
