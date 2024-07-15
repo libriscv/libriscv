@@ -363,24 +363,20 @@ static bool is_stopping_instruction(rv32i_instruction instr) {
 }
 
 template <int W>
-void CPU<W>::try_translate(const MachineOptions<W>& options,
-	const std::string& filename,
-	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment) const
+void CPU<W>::binary_translate(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec,
+	TransOutput<W>& output) const
 {
-	// Check if compiling new translations is enabled
-	if (!options.translate_invoke_compiler)
-		return;
-
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = options.verbose_loader;
 	const bool trace_instructions = options.translate_trace;
 
-	auto& exec = *shared_segment;
 	const address_t basepc    = exec.exec_begin();
 	const address_t endbasepc = exec.exec_end();
 
-	address_t gp = 0;
 	TIME_POINT(t0);
+	output.t0 = t0;
+
+	address_t gp = 0;
 if constexpr (SCAN_FOR_GP) {
 	// We assume that GP is initialized with AUIPC,
 	// followed by OP_IMM (and maybe OP_IMM32)
@@ -585,14 +581,14 @@ if constexpr (SCAN_FOR_GP) {
 	}
 
 	// Code generation
-	std::vector<TransMapping<W>> dlmappings;
+	auto& dlmappings = output.mappings;
 	extern const std::string bintr_code;
-	std::shared_ptr<std::string> code = std::make_shared<std::string>(bintr_code);
+	output.code = std::make_shared<std::string>(bintr_code);
 
 	for (auto& block : blocks)
 	{
 		block.blocks = &blocks;
-		auto result = emit(*this, *code, block);
+		auto result = emit(*this, *output.code, block);
 
 		for (auto& mapping : result) {
 			dlmappings.push_back(std::move(mapping));
@@ -600,7 +596,7 @@ if constexpr (SCAN_FOR_GP) {
 	}
 	// Append all instruction handler -> dl function mappings
 	// to the footer used by shared libraries
-	std::string footer;
+	auto& footer = output.footer;
 	footer += "VISIBLE const uint32_t no_mappings = "
 		+ std::to_string(dlmappings.size()) + ";\n";
 	footer += R"V0G0N(
@@ -655,13 +651,33 @@ VISIBLE const struct Mapping mappings[] = {
 		printf("libriscv: Emitted %zu accelerated instructions, %zu blocks and %zu functions. GP=0x%lX\n",
 			icounter, blocks.size(), dlmappings.size(), (long) gp);
 	}
+}
+
+template <int W>
+void CPU<W>::try_translate(const MachineOptions<W>& options,
+	const std::string& filename,
+	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment) const
+{
+	// Check if compiling new translations is enabled
+	if (!options.translate_invoke_compiler)
+		return;
+	const bool verbose = options.verbose_loader;
+
+	auto& exec = *shared_segment;
+
+	TransOutput<W> output;
+	this->binary_translate(options, exec, output);
+
 	// nothing to compile without mappings
+	auto& dlmappings = output.mappings;
 	if (dlmappings.empty()) {
 		if (verbose) {
 			printf("libriscv: Binary translator has nothing to compile! No mappings.\n");
 		}
 		return;
 	}
+	auto& footer = output.footer;
+	auto& code   = output.code;
 
 	const auto defines = create_defines_for(machine(), options);
 	const bool live_patch = options.translate_background_callback != nullptr;
@@ -809,7 +825,7 @@ VISIBLE const struct Mapping mappings[] = {
 
 	if (options.translate_timing) {
 		TIME_POINT(t12);
-		printf(">> Binary translation totals %.2f ms\n", nanodiff(t0, t12) / 1e6);
+		printf(">> Binary translation totals %.2f ms\n", nanodiff(output.t0, t12) / 1e6);
 	}
 }
 
@@ -1209,15 +1225,11 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 #ifdef RISCV_32I
 	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<4>>&) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
-	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib, void*, bool);
-	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*, void*, bool, bool);
 	template std::string MachineOptions<4>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 #ifdef RISCV_64I
 	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<8>>&) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
-	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib, void*, bool);
-	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*, void*, bool, bool);
 	template std::string MachineOptions<8>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 
