@@ -441,6 +441,8 @@ if constexpr (SCAN_FOR_GP) {
 	const auto elf_entry = machine().memory.start_address();
 	if (elf_entry >= basepc && elf_entry < endbasepc)
 		global_jump_locations.insert(elf_entry);
+	// Speculate that the first instruction is a jump target
+	global_jump_locations.insert(exec.exec_begin());
 
 	for (address_t pc = basepc; pc < endbasepc && icounter < options.translate_instr_max; )
 	{
