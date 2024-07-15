@@ -11,6 +11,7 @@ namespace riscv
 	template <int W>
 	struct TransOutput
 	{
+		std::unordered_map<std::string, std::string> defines;
 		timespec t0;
 		std::shared_ptr<std::string> code;
 		std::string footer;

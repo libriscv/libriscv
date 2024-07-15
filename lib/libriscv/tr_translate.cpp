@@ -372,9 +372,7 @@ void CPU<W>::binary_translate(const MachineOptions<W>& options, DecodedExecuteSe
 
 	const address_t basepc    = exec.exec_begin();
 	const address_t endbasepc = exec.exec_end();
-
-	TIME_POINT(t0);
-	output.t0 = t0;
+	const uintptr_t arena_ponter_ref = (uintptr_t)machine().memory.memory_arena_ptr_ref();
 
 	address_t gp = 0;
 if constexpr (SCAN_FOR_GP) {
@@ -408,7 +406,7 @@ if constexpr (SCAN_FOR_GP) {
 	} // iterator
 	if (options.translate_timing) {
 		TIME_POINT(t1);
-		printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(t0, t1), (long)gp);
+		printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(output.t0, t1), (long)gp);
 	}
 } // SCAN_FOR_GP
 
@@ -420,10 +418,10 @@ if constexpr (SCAN_FOR_GP) {
 			addr = std::get<address_type<W>>(loc);
 		else
 			addr = machine().address_of(std::get<std::string>(loc));
-		if (addr != 0x0) {
+		if (addr >= basepc && addr < endbasepc) {
 			ebreak_locations.insert(addr);
 			if (verbose) {
-				printf("libriscv: Added ebreak location at 0x%lX\n", (long)addr);
+				printf("libriscv: Binary translator added ebreak location at 0x%lX\n", (long)addr);
 			}
 		}
 	}
@@ -563,7 +561,7 @@ if constexpr (SCAN_FOR_GP) {
 				nullptr, // blocks
 				&ebreak_locations,
 				global_jump_locations,
-				(uintptr_t)machine().memory.memory_arena_ptr_ref()
+				arena_ponter_ref
 			});
 			icounter += length;
 			// we can't translate beyond this estimate, otherwise
@@ -654,46 +652,105 @@ VISIBLE const struct Mapping mappings[] = {
 }
 
 template <int W>
-void CPU<W>::try_translate(const MachineOptions<W>& options,
-	const std::string& filename,
+void CPU<W>::produce_embeddable_code(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec,
+	const TransOutput<W>& output, const MachineTranslationEmbeddableCodeOptions& embed)
+{
+	const uint32_t hash = exec.translation_hash();
+	const std::string& embed_filename = options.translation_filename(
+		embed.prefix, hash, embed.suffix);
+	// Write the embeddable code to a file
+	std::ofstream embed_file(embed_filename);
+	embed_file << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
+	for (auto& def : output.defines) {
+		embed_file << "#define " << def.first << " " << def.second << "\n";
+	}
+	embed_file << *output.code;
+	// Construct a footer that self-registers the translation
+	const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
+	embed_file << R"V0G0N(
+	struct Mappings {
+		addr_t   addr;
+		unsigned mapping_index;
+	};
+	typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
+	extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+	extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+	static __attribute__((constructor, used)) void register_translation() {
+		static const Mappings mappings[] = {
+	)V0G0N";
+
+	std::unordered_map<std::string, unsigned> mapping_indices;
+	std::vector<const std::string*> handlers;
+
+	for (const auto& mapping : output.mappings)
+	{
+		// Create map of unique mappings
+		unsigned mapping_index = 0;
+		auto it = mapping_indices.find(mapping.symbol);
+		if (it == mapping_indices.end()) {
+			mapping_index = handlers.size();
+			mapping_indices.emplace(mapping.symbol, mapping_index);
+			handlers.push_back(&mapping.symbol);
+		} else {
+			mapping_index = it->second;
+		}
+
+		char buffer[128];
+		snprintf(buffer, sizeof(buffer), 
+			"{0x%lX, %u},\n",
+			(long)mapping.addr, mapping_index);
+		embed_file << buffer;
+	}
+	embed_file << "    };\n"
+		"static bintr_func unique_mappings[] = {\n";
+	for (auto* handler : handlers) {
+		embed_file << "    " << *handler << ",\n";
+	}
+	embed_file << "};\n"
+		"    " << reg_func << "(" << hash << ", mappings, " << output.mappings.size()
+		<< ", unique_mappings, " << mapping_indices.size() << ", &api);\n";
+	embed_file << "}\n";
+}
+
+template <int W>
+void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& filename,
 	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment) const
 {
 	// Check if compiling new translations is enabled
 	if (!options.translate_invoke_compiler)
 		return;
-	const bool verbose = options.verbose_loader;
-
-	auto& exec = *shared_segment;
 
 	TransOutput<W> output;
-	this->binary_translate(options, exec, output);
+	TIME_POINT(t0);
+	output.t0 = t0;
 
-	// nothing to compile without mappings
-	auto& dlmappings = output.mappings;
-	if (dlmappings.empty()) {
-		if (verbose) {
-			printf("libriscv: Binary translator has nothing to compile! No mappings.\n");
-		}
-		return;
-	}
-	auto& footer = output.footer;
-	auto& code   = output.code;
-
-	const auto defines = create_defines_for(machine(), options);
+	output.defines = create_defines_for(machine(), options);
 	const bool live_patch = options.translate_background_callback != nullptr;
 	void* arena = machine().memory.memory_arena_ptr_ref();
 
 	// Compilation step
 	std::function<void()> compilation_step =
-	[options, defines = std::move(defines), code, footer = std::move(footer), filename, arena, live_patch, shared_segment = shared_segment]
+	[this, options, output = std::move(output), filename, arena, live_patch, shared_segment = shared_segment] () mutable
 	{
+		auto* exec = shared_segment.get();
+
+		this->binary_translate(options, *exec, output);
+
 		//printf("*** Compiling translation from 0x%lX to 0x%lX ***\n",
 		//	long(shared_segment->exec_begin()), long(shared_segment->exec_end()));
 
+		for (auto& cc : options.cross_compile)
+		{
+			if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
+			{
+				auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
+				produce_embeddable_code(options, *shared_segment, output, embed);
+			}
+		}
+
 		void* dylib = nullptr;
-		auto* exec = shared_segment.get();
 		// Final shared library loadable code w/footer
-		const std::string shared_library_code = *code + footer;
+		const std::string shared_library_code = *output.code + output.footer;
 
 		TIME_POINT(t9);
 		if constexpr (libtcc_enabled) {
@@ -701,11 +758,11 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 			static std::mutex libtcc_mutex;
 			// libtcc uses global state, so we need to serialize compilation
 			std::lock_guard<std::mutex> lock(libtcc_mutex);
-			dylib = libtcc_compile(shared_library_code, W, defines, "");
+			dylib = libtcc_compile(shared_library_code, W, output.defines, "");
 		} else {
 			extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
 			extern bool mingw_compile(const std::string&, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
-			const std::string cflags = defines_to_string(defines);
+			const std::string cflags = defines_to_string(output.defines);
 
 			// If the binary translation has already been loaded, we can skip compilation
 			if (exec->is_binary_translated()) {
@@ -736,84 +793,24 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 		}
 
 		// Check compilation result
-		if (dylib == nullptr) {
-			return;
-		}
-
-		if (!exec->is_binary_translated()) {
-			activate_dylib(options, *exec, dylib, arena, libtcc_enabled, live_patch);
-		}
-
-		if constexpr (!libtcc_enabled) {
-			if (!options.translation_cache) {
-				// Delete the shared object if it is unwanted
-				unlink(filename.c_str());
+		if (dylib != nullptr) {
+			if (!exec->is_binary_translated()) {
+				activate_dylib(options, *exec, dylib, arena, libtcc_enabled, live_patch);
 			}
+
+			if constexpr (!libtcc_enabled) {
+				if (!options.translation_cache) {
+					// Delete the shared object if it is unwanted
+					unlink(filename.c_str());
+				}
+			}
+		}
+
+		if (options.translate_timing) {
+			TIME_POINT(t12);
+			printf(">> Binary translation totals %.2f ms\n", nanodiff(output.t0, t12) / 1e6);
 		}
 	};
-
-	for (auto& cc : options.cross_compile)
-	{
-		if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
-		{
-			auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
-			const uint32_t hash = exec.translation_hash();
-			const std::string& embed_filename = options.translation_filename(
-				embed.prefix, hash, embed.suffix);
-			// Write the embeddable code to a file
-			std::ofstream embed_file(embed_filename);
-			embed_file << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
-			for (auto& def : defines) {
-				embed_file << "#define " << def.first << " " << def.second << "\n";
-			}
-			embed_file << *code;
-			// Construct a footer that self-registers the translation
-			const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
-			embed_file << R"V0G0N(
-			struct Mappings {
-				addr_t   addr;
-				unsigned mapping_index;
-			};
-			typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
-			extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
-			extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
-			static __attribute__((constructor, used)) void register_translation() {
-				static const Mappings mappings[] = {
-			)V0G0N";
-
-			std::unordered_map<std::string, unsigned> mapping_indices;
-			std::vector<const std::string*> handlers;
-
-			for (const auto& mapping : dlmappings)
-			{
-				// Create map of unique mappings
-				unsigned mapping_index = 0;
-				auto it = mapping_indices.find(mapping.symbol);
-				if (it == mapping_indices.end()) {
-					mapping_index = handlers.size();
-					mapping_indices.emplace(mapping.symbol, mapping_index);
-					handlers.push_back(&mapping.symbol);
-				} else {
-					mapping_index = it->second;
-				}
-
-				char buffer[128];
-				snprintf(buffer, sizeof(buffer), 
-					"{0x%lX, %u},\n",
-					(long)mapping.addr, mapping_index);
-				embed_file << buffer;
-			}
-			embed_file << "    };\n"
-				"static bintr_func unique_mappings[] = {\n";
-			for (auto* handler : handlers) {
-				embed_file << "    " << *handler << ",\n";
-			}
-			embed_file << "};\n"
-				"    " << reg_func << "(" << hash << ", mappings, " << dlmappings.size()
-				<< ", unique_mappings, " << mapping_indices.size() << ", &api);\n";
-			embed_file << "}\n";
-		}
-	}
 
 	if (options.translate_background_callback) {
 		// User-provided callback for background compilation
@@ -821,11 +818,6 @@ void CPU<W>::try_translate(const MachineOptions<W>& options,
 	} else {
 		// Synchronous compilation
 		compilation_step();
-	}
-
-	if (options.translate_timing) {
-		TIME_POINT(t12);
-		printf(">> Binary translation totals %.2f ms\n", nanodiff(output.t0, t12) / 1e6);
 	}
 }
 

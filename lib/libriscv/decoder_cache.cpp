@@ -342,7 +342,7 @@ namespace riscv
 				addr = std::get<address_type<W>>(loc);
 			else
 				addr = machine().address_of(std::get<std::string>(loc));
-			if (addr != 0x0) {
+			if (addr != 0x0 && addr >= exec.exec_begin() && addr < exec.exec_end()) {
 				ebreak_locations.insert(addr);
 				if (options.verbose_loader) {
 					printf("libriscv: Added ebreak location at 0x%" PRIx64 "\n", uint64_t(addr));
