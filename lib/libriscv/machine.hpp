@@ -379,6 +379,10 @@ namespace riscv
 		/// @return True if the current execute segment is binary translated.
 		bool is_binary_translation_enabled() const noexcept { return cpu.current_execute_segment().is_binary_translated(); }
 
+		/// @brief Check if the machine has enforced and loaded an execute-only program.
+		/// @return True if all execute segments are execute-only.
+		bool is_execute_only() const noexcept { return options().enforce_exec_only; }
+
 		// Optional custom native-performance arena
 		const Arena& arena() const;
 		Arena& arena();
