@@ -9,6 +9,16 @@ namespace riscv
 	struct TransInstr;
 
 	template <int W>
+	struct TransOutput
+	{
+		std::unordered_map<std::string, std::string> defines;
+		timespec t0;
+		std::shared_ptr<std::string> code;
+		std::string footer;
+		std::vector<TransMapping<W>> mappings;
+	};
+
+	template <int W>
 	struct TransInfo
 	{
 		const std::vector<rv32i_instruction> instr;

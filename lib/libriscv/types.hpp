@@ -92,6 +92,9 @@ namespace riscv
 	struct TransInfo;
 
 	template <int W>
+	struct TransOutput;
+
+	template <int W>
 	struct TransMapping {
 		address_type<W> addr;
 		std::string     symbol;

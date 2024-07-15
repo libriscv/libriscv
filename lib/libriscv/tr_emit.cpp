@@ -215,6 +215,13 @@ struct Emitter
 	bool gpr_exists_at(int reg) const noexcept { return this->gpr_exists.at(reg); }
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
 
+	bool uses_flat_memory_arena() noexcept {
+		return riscv::flat_readwrite_arena && tinfo.arena_ptr != 0;
+	}
+	bool uses_Nbit_encompassing_arena() noexcept {
+		return riscv::encompassing_Nbit_arena != 0 && tinfo.arena_ptr != 0;
+	}
+
 	std::string arena_at(const std::string& address) {
 		// libtcc direct arena pointer access
 		// This is a performance optimization for libtcc, which allows direct access to the memory arena
@@ -223,7 +230,7 @@ struct Emitter
 		// XXX: This is a workaround for a bug in libtcc, which doesn't handle 64-bit + 32- or higher -bit pointer arithmetic
 		constexpr bool avoid_codegen_bug = W > 4 || riscv::encompassing_Nbit_arena < 32;
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments && avoid_codegen_bug) {
-			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
+			if (uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
 					return "(" + std::to_string(tinfo.arena_ptr) + "ull + (uint32_t)(" + address + "))";
 				else
@@ -231,7 +238,7 @@ struct Emitter
 			} else {
 				return "(" + std::to_string(tinfo.arena_ptr) + "ull + " + speculation_safe(address) + ")";
 			}
-		} else if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
+		} else if (uses_Nbit_encompassing_arena()) {
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
 				return "ARENA_AT(cpu, (uint32_t)(" + address + "))";
 			else
@@ -243,7 +250,7 @@ struct Emitter
 
 	std::string arena_at_fixed(address_t address) {
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
-			if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
+			if (uses_Nbit_encompassing_arena()) {
 				if constexpr (riscv::encompassing_Nbit_arena == 32)
 					return "(" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ull)";
 				else
@@ -251,7 +258,7 @@ struct Emitter
 			} else {
 				return "(" + std::to_string(tinfo.arena_ptr + address) + "ull)";
 			}
-		} else if (cpu.machine().memory.uses_Nbit_encompassing_arena()) {
+		} else if (uses_Nbit_encompassing_arena()) {
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
 				return "ARENA_AT(cpu, " + std::to_string(uint32_t(address)) + ")";
 			else
@@ -270,7 +277,7 @@ struct Emitter
 			cast = "(saddr_t)";
 		}
 
-		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_flat_memory_arena())
+		if (reg == REG_GP && tinfo.gp != 0x0 && uses_flat_memory_arena())
 		{
 			/* XXX: Check page permissions here? */
 			const address_t absolute_vaddr = tinfo.gp + imm;
@@ -283,11 +290,11 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (cpu.machine().memory.uses_Nbit_encompassing_arena())
+		if (uses_Nbit_encompassing_arena())
 		{
 			add_code(dst + " = " + cast + "*(" + type + "*)" + arena_at(address) + ";");
 		}
-		else if (cpu.machine().memory.uses_flat_memory_arena()) {
+		else if (uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
 					dst + " = " + cast + "*(" + type + "*)" + arena_at(address) + ";",
@@ -304,7 +311,7 @@ struct Emitter
 	{
 		const std::string data = "wpage" + PCRELS(0);
 
-		if (reg == REG_GP && tinfo.gp != 0x0 && cpu.machine().memory.uses_flat_memory_arena())
+		if (reg == REG_GP && tinfo.gp != 0x0 && uses_flat_memory_arena())
 		{
 			/* XXX: Check page permissions */
 			const address_t absolute_vaddr = tinfo.gp + imm;
@@ -315,11 +322,11 @@ struct Emitter
 		}
 
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
-		if (cpu.machine().memory.uses_Nbit_encompassing_arena())
+		if (uses_Nbit_encompassing_arena())
 		{
 			add_code("*(" + type + "*)" + arena_at(address) + " = " + value + ";");
 		}
-		else if (cpu.machine().memory.uses_flat_memory_arena()) {
+		else if (uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
 				"  *(" + type + "*)" + arena_at(address) + " = " + value + ";",
