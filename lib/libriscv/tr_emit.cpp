@@ -85,7 +85,7 @@ struct Emitter
 
 	bool uses_register_caching() const noexcept { return tinfo.use_register_caching; }
 
-	Emitter(CPU<W>& c, const TransInfo<W>& ptinfo)
+	Emitter(const CPU<W>& c, const TransInfo<W>& ptinfo)
 		: cpu(c), m_pc(ptinfo.basepc), tinfo(ptinfo)
 	{
 		this->func = funclabel<W>("f", this->pc());
@@ -410,7 +410,7 @@ private:
 	}
 
 	std::string code;
-	CPU<W>& cpu;
+	const CPU<W>& cpu;
 	size_t m_idx = 0;
 	address_t m_pc = 0x0;
 	rv32i_instruction instr;
@@ -1646,9 +1646,9 @@ void Emitter<W>::emit()
 
 template <int W>
 std::vector<TransMapping<W>>
-CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
+CPU<W>::emit(const CPU<W>& cpu, std::string& code, const TransInfo<W>& tinfo)
 {
-	Emitter<W> e(const_cast<CPU<W>&>(*this), tinfo);
+	Emitter<W> e(cpu, tinfo);
 	e.emit();
 
 	// Create register push and pop macros
@@ -1711,9 +1711,9 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo) const
 }
 
 #ifdef RISCV_32I
-template std::vector<TransMapping<4>> CPU<4>::emit(std::string&, const TransInfo<4>&) const;
+template std::vector<TransMapping<4>> CPU<4>::emit(const CPU<4>&, std::string&, const TransInfo<4>&);
 #endif
 #ifdef RISCV_64I
-template std::vector<TransMapping<8>> CPU<8>::emit(std::string&, const TransInfo<8>&) const;
+template std::vector<TransMapping<8>> CPU<8>::emit(const CPU<8>&, std::string&, const TransInfo<8>&);
 #endif
 } // riscv

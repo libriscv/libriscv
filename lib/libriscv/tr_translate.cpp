@@ -365,17 +365,19 @@ static bool is_stopping_instruction(rv32i_instruction instr) {
 template <int W>
 void CPU<W>::try_translate(const MachineOptions<W>& options,
 	const std::string& filename,
-	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, address_t basepc, address_t endbasepc) const
+	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment) const
 {
-	// Run with VERBOSE=1 to see command and output
-	const bool verbose = options.verbose_loader;
-	const bool trace_instructions = options.translate_trace;
-
 	// Check if compiling new translations is enabled
 	if (!options.translate_invoke_compiler)
 		return;
 
+	// Run with VERBOSE=1 to see command and output
+	const bool verbose = options.verbose_loader;
+	const bool trace_instructions = options.translate_trace;
+
 	auto& exec = *shared_segment;
+	const address_t basepc    = exec.exec_begin();
+	const address_t endbasepc = exec.exec_end();
 
 	address_t gp = 0;
 	TIME_POINT(t0);
@@ -590,7 +592,7 @@ if constexpr (SCAN_FOR_GP) {
 	for (auto& block : blocks)
 	{
 		block.blocks = &blocks;
-		auto result = emit(*code, block);
+		auto result = emit(*this, *code, block);
 
 		for (auto& mapping : result) {
 			dlmappings.push_back(std::move(mapping));
@@ -1205,14 +1207,14 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 }
 
 #ifdef RISCV_32I
-	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<4>>&, address_t, address_t) const;
+	template void CPU<4>::try_translate(const MachineOptions<4>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<4>>&) const;
 	template int CPU<4>::load_translation(const MachineOptions<4>&, std::string*, DecodedExecuteSegment<4>&) const;
 	template bool CPU<4>::initialize_translated_segment(DecodedExecuteSegment<4>&, void* dylib, void*, bool);
 	template void CPU<4>::activate_dylib(const MachineOptions<4>&, DecodedExecuteSegment<4>&, void*, void*, bool, bool);
 	template std::string MachineOptions<4>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 #ifdef RISCV_64I
-	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<8>>&, address_t, address_t) const;
+	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<8>>&) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template bool CPU<8>::initialize_translated_segment(DecodedExecuteSegment<8>&, void* dylib, void*, bool);
 	template void CPU<8>::activate_dylib(const MachineOptions<8>&, DecodedExecuteSegment<8>&, void*, void*, bool, bool);

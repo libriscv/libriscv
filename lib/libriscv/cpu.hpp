@@ -117,7 +117,7 @@ namespace riscv
 
 		// Binary translation functions
 		int  load_translation(const MachineOptions<W>&, std::string* filename, DecodedExecuteSegment<W>&) const;
-		void try_translate(const MachineOptions<W>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<W>>&, address_t pc, address_t endpc) const;
+		void try_translate(const MachineOptions<W>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<W>>&) const;
 
 		void reset();
 		void reset_stack_pointer() noexcept;
@@ -185,7 +185,7 @@ namespace riscv
 		};
 
 #ifdef RISCV_BINARY_TRANSLATION
-		std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&) const;
+		static std::vector<TransMapping<W>> emit(const CPU<W>&, std::string& code, const TransInfo<W>&);
 		static void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, void*, bool, bool) RISCV_INTERNAL;
 		static bool initialize_translated_segment(DecodedExecuteSegment<W>&, void*, void*, bool) RISCV_INTERNAL;
 #endif

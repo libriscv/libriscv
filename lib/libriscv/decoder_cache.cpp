@@ -329,7 +329,7 @@ namespace riscv
 			if (must_translate)
 			{
 				machine().cpu.try_translate(
-					options, bintr_filename, shared_segment, addr, addr + len);
+					options, bintr_filename, shared_segment);
 			}
 		} // W != 16
 	#endif
