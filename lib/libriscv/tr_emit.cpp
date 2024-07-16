@@ -939,6 +939,7 @@ void Emitter<W>::emit()
 
 			const auto dst = to_reg(instr.Itype.rd);
 			std::string src = from_reg(instr.Itype.rs1);
+			bool tracked = false;
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
 				if (instr.Itype.signed_imm() == 0) {
@@ -947,6 +948,7 @@ void Emitter<W>::emit()
 					emit_op(" + ", " += ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				}
 				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1, get_potential_gpr_value(instr.Itype.rs1) + instr.Itype.signed_imm());
+				tracked = true;
 				break;
 			case 0x1: // SLLI
 				// SLLI: Logical left-shift 5/6-bit immediate
@@ -984,9 +986,13 @@ void Emitter<W>::emit()
 							dst + " = do_cpopl(" + src + ");");
 					break;
 				default:
-					if (instr.Itype.high_bits() == 0) { // SLLI
+					if (instr.Itype.high_bits() == 0) {
+						// SLLI: Logical left-shift immediate
 						emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
 							std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
+						this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
+							get_potential_gpr_value(instr.Itype.rs1) << (instr.Itype.shift64_imm() & (XLEN-1)));
+						tracked = true;
 					} else if (instr.Itype.high_bits() == 0x280) {
 						// BSETI: Bit-set immediate
 						add_code(dst + " = " + src + " | ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
@@ -1003,8 +1009,8 @@ void Emitter<W>::emit()
 					}
 				}
 				break;
-			case 0x2: // SLTI:
-				// signed less than immediate
+			case 0x2: // SLTI
+				// SLTI: Set less than immediate
 				add_code(
 					dst + " = ((saddr_t)" + src + " < " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
 				break;
@@ -1014,6 +1020,8 @@ void Emitter<W>::emit()
 				break;
 			case 0x4: // XORI:
 				emit_op(" ^ ", " ^= ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
+				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1, get_potential_gpr_value(instr.Itype.rs1) ^ instr.Itype.signed_imm());
+				tracked = true;
 				break;
 			case 0x5: // SRLI / SRAI / ORC.B:
 				if (instr.Itype.is_rori()) {
@@ -1034,10 +1042,15 @@ void Emitter<W>::emit()
 						add_code(dst + " = do_bswap32(" + src + ");");
 					else
 						add_code(dst + " = do_bswap64(" + src + ");");
-				} else if (instr.Itype.high_bits() == 0x0) { // SRLI
+				} else if (instr.Itype.high_bits() == 0x0) {
+					// SRLI: Logical right-shift immediate
 					emit_op(" >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
-				} else if (instr.Itype.high_bits() == 0x400) { // SRAI: preserve the sign bit
+					this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
+						get_potential_gpr_value(instr.Itype.rs1) >> (instr.Itype.shift64_imm() & (XLEN-1)));
+					tracked = true;
+				} else if (instr.Itype.high_bits() == 0x400) {
+					// SRAI: Arithmetic right-shift immediate
 					add_code(
 						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
 				} else if (instr.Itype.high_bits() == 0x480) { // BEXTI: Bit-extract immediate
@@ -1050,16 +1063,22 @@ void Emitter<W>::emit()
 			case 0x6: // ORI
 				add_code(
 					dst + " = " + src + " | " + from_imm(instr.Itype.signed_imm()) + ";");
+				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
+					instr.Itype.signed_imm(), get_potential_gpr_value(instr.Itype.rs1) | instr.Itype.signed_imm());
+				tracked = true;
 				break;
 			case 0x7: // ANDI
 				add_code(
 					dst + " = " + src + " & " + from_imm(instr.Itype.signed_imm()) + ";");
+				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
+					instr.Itype.signed_imm(), get_potential_gpr_value(instr.Itype.rs1) & instr.Itype.signed_imm());
+				tracked = true;
 				break;
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
-			if (instr.Itype.funct3 != 0x0)
-				this->untrack_gpr(instr.Itype.rd);
+			// Not all are currently supported for register tracking
+			if (!tracked) this->untrack_gpr(instr.Itype.rd);
 			} break;
 		case RV32I_OP:
 			if (UNLIKELY(instr.Rtype.rd == 0)) break;
@@ -1071,6 +1090,7 @@ void Emitter<W>::emit()
 				break;
 			case 0x200: // SUB
 				emit_op(" - ", " -= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				this->track_gpr_if_known(instr.Rtype.rd, instr.Rtype.rs1, instr.Rtype.rs2, get_potential_gpr_value(instr.Rtype.rs1) - get_potential_gpr_value(instr.Rtype.rs2));
 				break;
 			case 0x1: // SLL
 				add_code(
@@ -1284,7 +1304,7 @@ void Emitter<W>::emit()
 				//		instr.Rtype.jumptable_friendly_op());
 				UNKNOWN_INSTRUCTION();
 			}
-			if (instr.Rtype.jumptable_friendly_op() != 0x0)
+			if (instr.Rtype.jumptable_friendly_op() != 0x0 && instr.Rtype.jumptable_friendly_op() != 0x200)
 				this->untrack_gpr(instr.Rtype.rd);
 			break;
 		case RV32I_LUI:
@@ -1424,9 +1444,13 @@ void Emitter<W>::emit()
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADDW
 				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " + " + src2 + ");");
+				this->track_gpr_if_known(instr.Rtype.rd, instr.Rtype.rs1, instr.Rtype.rs2,
+					(saddr_t)(int32_t)((uint32_t)get_potential_gpr_value(instr.Rtype.rs1) + (uint32_t)get_potential_gpr_value(instr.Rtype.rs2)));
 				break;
 			case 0x200: // SUBW
 				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " - " + src2 + ");");
+				this->track_gpr_if_known(instr.Rtype.rd, instr.Rtype.rs1, instr.Rtype.rs2,
+					(saddr_t)(int32_t)((uint32_t)get_potential_gpr_value(instr.Rtype.rs1) - (uint32_t)get_potential_gpr_value(instr.Rtype.rs2)));
 				break;
 			case 0x1: // SLLW
 				add_code(dst + " = " + SIGNEXTW + " (" + src1 + " << (" + src2 + " & 0x1F));");
@@ -1494,7 +1518,8 @@ void Emitter<W>::emit()
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
-			this->untrack_gpr(instr.Rtype.rd);
+			if (instr.Rtype.jumptable_friendly_op() != 0x0 && instr.Rtype.jumptable_friendly_op() != 0x200)
+				this->untrack_gpr(instr.Rtype.rd);
 			} break;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi{instr};
