@@ -253,23 +253,17 @@ struct Emitter
 		}
 	}
 
-	std::string arena_at_fixed(address_t address) {
+	std::string arena_at_fixed(const std::string& type, address_t address) {
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
-				if constexpr (riscv::encompassing_Nbit_arena == 32)
-					return "(" + std::to_string(tinfo.arena_ptr + uint32_t(address)) + "ull)";
-				else
-					return "(" + std::to_string(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "ull)";
+				return "*(" + type + "*)" + std::to_string(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "";
 			} else {
-				return "(" + std::to_string(tinfo.arena_ptr + address) + "ull)";
+				return "*(" + type + "*)" + std::to_string(tinfo.arena_ptr + address) + "";
 			}
 		} else if (uses_Nbit_encompassing_arena()) {
-			if constexpr (riscv::encompassing_Nbit_arena == 32)
-				return "ARENA_AT(cpu, " + std::to_string(uint32_t(address)) + ")";
-			else
-				return "ARENA_AT(cpu, " + std::to_string(address & address_t(riscv::encompassing_arena_mask)) + ")";
+			return "*(" + type + "*)ARENA_AT(cpu, " + std::to_string(address & address_t(riscv::encompassing_arena_mask)) + ")";
 		} else {
-			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
+			return "*(" + type + "*)ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
 	}
 
@@ -305,7 +299,7 @@ struct Emitter
 			}
 			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
 				add_code(
-					dst + " = " + cast + "*(" + type + "*)" + arena_at_fixed(absolute_vaddr) + ";"
+					dst + " = " + cast + arena_at_fixed(type, absolute_vaddr) + ";"
 				);
 				return;
 			}
@@ -339,7 +333,7 @@ struct Emitter
 				absolute_vaddr = get_gpr_value(reg) + imm;
 			}
 			if (absolute_vaddr != 0 && absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
-				add_code("*(" + type + "*)ARENA_AT(cpu, " + speculation_safe(absolute_vaddr) + ") = " + value + ";");
+				add_code("{" + type + "* t = &" + arena_at_fixed(type, absolute_vaddr) + "; *t = " + value + "; }");
 				return;
 			}
 		}
