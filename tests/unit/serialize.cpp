@@ -20,9 +20,15 @@ TEST_CASE("Catch output from write system call", "[Serialize]")
 		std::vector<uint8_t> data;
 	} state;
 	const auto binary = build_and_load(R"M(
-	extern long write(int, const void*, unsigned long);
+	static inline void sched_yield(int num, const char* text, unsigned len) {
+		register int         a0 __asm__("a0") = num;
+		register const char* a1 __asm__("a1") = text;
+		register unsigned    a2 __asm__("a2") = len;
+		register int         a7 __asm__("a7") = 124;
+		__asm__ volatile ("ecall" : "+r"(a0) : "r"(a1), "m"(*a1), "r"(a2), "r"(a7) : "memory");
+	}
 	int main(int argc, char** argv) {
-		write(1, argv[0], 12);
+		sched_yield(1, "serialize_me", 12);
 		return 666;
 	})M");
 
@@ -36,13 +42,15 @@ TEST_CASE("Catch output from write system call", "[Serialize]")
 	machine.setup_linux(
 		{"serialize_me"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
-
 	machine.set_userdata(&state);
-	machine.set_printer(
-		[] (auto& m, const char*, size_t) {
-			auto* state = m.template get_userdata<State> ();
-			m.serialize_to(state->data);
-		});
+
+	// Use a system call that requires all registers to be saved
+	static constexpr int SYSCALL_SCHED_YIELD  = 124;
+	machine.syscall_handlers.at(SYSCALL_SCHED_YIELD) = [] (auto& m) {
+		auto* state = m.template get_userdata<State> ();
+		m.serialize_to(state->data);
+	};
+
 	// Run for at most X instructions before giving up
 	machine.simulate(MAX_INSTRUCTIONS);
 
@@ -53,12 +61,13 @@ TEST_CASE("Catch output from write system call", "[Serialize]")
 	REQUIRE(result == 0);
 
 	// Verify some known registers
-	REQUIRE(restored_machine.sysarg(0) == 1); // STDOUT_FILENO
+	REQUIRE(restored_machine.sysarg(0) == 1);
 	REQUIRE(restored_machine.memory.memstring(restored_machine.sysarg(1)) == "serialize_me");
 	REQUIRE(restored_machine.sysarg(2) == 12u);
 	REQUIRE(restored_machine.return_value<int>() != 666);
 
 	// Resume the program
+	restored_machine.set_userdata(&state);
 	restored_machine.simulate(MAX_INSTRUCTIONS);
 
 	REQUIRE(restored_machine.return_value<int>() == 666);
@@ -69,9 +78,15 @@ static std::vector<uint8_t> serialized_from_another_place;
 TEST_CASE("Serialized state goes out of scope", "[Serialize]")
 {
 	const auto binary = build_and_load(R"M(
-	extern long write(int, const void*, unsigned long);
+	static inline void sched_yield(int num, const char* text, unsigned len) {
+		register int         a0 __asm__("a0") = num;
+		register const char* a1 __asm__("a1") = text;
+		register unsigned    a2 __asm__("a2") = len;
+		register int         a7 __asm__("a7") = 124;
+		__asm__ volatile ("ecall" : "+r"(a0) : "r"(a1), "m"(*a1), "r"(a2), "r"(a7) : "memory");
+	}
 	int main(int argc, char** argv) {
-		write(1, argv[0], 12);
+		sched_yield(1234, "serialize_me", 12);
 		return 666;
 	})M");
 
@@ -86,20 +101,26 @@ TEST_CASE("Serialized state goes out of scope", "[Serialize]")
 		{"serialize_me"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 
+	// Use a system call that requires all registers to be saved
+	static constexpr int SYSCALL_SCHED_YIELD  = 124;
+	struct State {
+		std::vector<uint8_t> data;
+	};
+	machine.syscall_handlers.at(SYSCALL_SCHED_YIELD) = [] (auto& m) {
+		// Serialize the machine in a state where the
+		// system call instruction is skipped over (so we don't re-run it)
+		m.cpu.increment_pc(4);
+		auto* state = m.template get_userdata<State> ();
+		m.serialize_to(state->data);
+		m.cpu.increment_pc(-4);
+	};
+
 	// 1. We are creating a completely empty machine, with no binary
 	// 2. We are going to let the state go out of scope
 	riscv::Machine<RISCV64> restored_machine { empty, restored_options };
 	{
-		struct State {
-			std::vector<uint8_t> data;
-		} state;
-
+		State state;
 		machine.set_userdata(&state);
-		machine.set_printer(
-			[] (auto& m, const char*, size_t) {
-				auto* state = m.template get_userdata<State> ();
-				m.serialize_to(state->data);
-			});
 		// Let the original machine finish
 		machine.simulate(MAX_INSTRUCTIONS);
 		REQUIRE(machine.return_value<int>() == 666);
@@ -114,7 +135,7 @@ TEST_CASE("Serialized state goes out of scope", "[Serialize]")
 	}
 
 	// Verify some known registers
-	REQUIRE(restored_machine.sysarg(0) == 1); // STDOUT_FILENO
+	REQUIRE(restored_machine.sysarg(0) == 1234);
 	REQUIRE(restored_machine.memory.memstring(restored_machine.sysarg(1)) == "serialize_me");
 	REQUIRE(restored_machine.sysarg(2) == 12u);
 	REQUIRE(restored_machine.return_value<int>() != 666);
@@ -133,7 +154,7 @@ TEST_CASE("Serialized state from another place", "[Serialize]")
 	restored_machine.deserialize_from(serialized_from_another_place);
 
 	// Verify some known registers
-	REQUIRE(restored_machine.sysarg(0) == 1); // STDOUT_FILENO
+	REQUIRE(restored_machine.sysarg(0) == 1234);
 	REQUIRE(restored_machine.memory.memstring(restored_machine.sysarg(1)) == "serialize_me");
 	REQUIRE(restored_machine.sysarg(2) == 12u);
 	REQUIRE(restored_machine.return_value<int>() != 666);
