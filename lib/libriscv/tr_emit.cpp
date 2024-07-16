@@ -671,8 +671,13 @@ void Emitter<W>::emit()
 		this->m_instr_counter += 1;
 
 		if (tinfo.trace_instructions) {
-			code += "api.trace(cpu, \"" + this->func + "\", " + STRADDR(this->pc()) + ", " + std::to_string(this->instr.whole) + ");\n";
+			char buffer[128];
+			const int len = snprintf(buffer, sizeof(buffer),
+				"api.trace(cpu, \"%s\", 0x%" PRIx64 ", 0x%X);\n",
+				this->func.c_str(), uint64_t(this->pc()), instr.whole);
+			code.append(buffer, len);
 		}
+
 		if (tinfo.ebreak_locations->count(this->pc())) {
 			this->store_loaded_registers();
 			this->emit_system_call(std::to_string(SYSCALL_EBREAK));
@@ -864,7 +869,6 @@ void Emitter<W>::emit()
 			}
 			// Untrack all registers, as we don't know the value of any register after a branch
 			this->untrack_all_gprs();
-			this->store_loaded_registers();
 			if (!tinfo.ignore_instruction_limit)
 				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") { goto " + this->func + "_jumptbl; }\n";
 			else
@@ -1880,7 +1884,13 @@ CPU<W>::emit(const CPU<W>& cpu, std::string& code, const TransInfo<W>& tinfo)
 		const auto label = funclabel<W>(e.get_func(), entry.addr);
 		code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 	}
-	code += "default: cpu->pc = pc; return (ReturnValues){counter, max_counter};\n";
+	code += "default:\n";
+	for (size_t reg = 1; reg < 32; reg++) {
+		if (e.gpr_exists_at(reg)) {
+			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + ";\n";
+		}
+	}
+	code += "  cpu->pc = pc; return (ReturnValues){counter, max_counter};\n";
 	code += "}\n";
 
 	// Function code
