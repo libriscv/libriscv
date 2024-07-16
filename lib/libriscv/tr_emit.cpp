@@ -82,6 +82,7 @@ struct BranchInfo {
 template <int W>
 struct Emitter
 {
+	static constexpr bool OPTIMIZE_SYSCALL_REGISTERS = true;
 	static constexpr unsigned XLEN = W * 8u;
 	using address_t = address_type<W>;
 	using saddr_t = signed_address_type<W>;
@@ -140,15 +141,22 @@ struct Emitter
 		if (uses_register_caching())
 			add_code("LOAD_REGS_" + this->func + "();");
 	}
+	void store_loaded_registers() {
+		// Use the STORE_REGS macro to store the registers
+		if (uses_register_caching())
+			add_code("STORE_REGS_" + this->func + "();");
+	}
 	void reload_syscall_registers() {
 		// Use the LOAD_SYS_REGS macro to restore registers modified by a syscall
 		if (uses_register_caching())
 			add_code("LOAD_SYS_REGS_" + this->func + "();");
 	}
-	void store_loaded_registers() {
-		// Use the STORE_REGS macro to store the registers
-		if (uses_register_caching())
-			add_code("STORE_REGS_" + this->func + "();");
+	void store_syscall_registers() {
+		// Use the STORE_SYS_REGS macro to store registers used by a syscall
+		if (uses_register_caching()) {
+			add_code("STORE_SYS_REGS_" + this->func + "();");
+			this->m_used_store_syscalls = true;
+		}
 	}
 
 	void exit_function(const std::string& new_pc, bool add_bracket = false)
@@ -420,6 +428,7 @@ struct Emitter
 	bool within_segment(address_t addr) const noexcept {
 		return addr >= this->tinfo.segment_basepc && addr < this->tinfo.segment_endpc;
 	}
+	bool used_store_syscalls() const noexcept { return this->m_used_store_syscalls; }
 
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
@@ -489,6 +498,7 @@ private:
 	unsigned m_instr_length = 0;
 	uint64_t m_instr_counter = 0;
 	uint32_t m_zero_insn_counter = 0;
+	bool m_used_store_syscalls = false;
 
 	std::array<bool, 32> gpr_exists {};
 	// Register tracking
@@ -588,10 +598,64 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 template <int W>
 inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 {
-	this->store_loaded_registers();
+	bool clobber_all = false;
+	if (OPTIMIZE_SYSCALL_REGISTERS && this->uses_register_caching())
+	{
+		// If we know the system call number, we can check against:
+		static constexpr int SYSCALL_CLONE        = 220;
+		static constexpr int SYSCALL_CLONE3	      = 435;
+		static constexpr int SYSCALL_SCHED_YIELD  = 124;
+		static constexpr int SYSCALL_EXIT         = 93;
+		static constexpr int SYSCALL_EXIT_GROUP   = 94;
+		static constexpr int SYSCALL_FUTEX        = 98;
+		static constexpr int SYSCALL_FUTEX_TIME64 = 422;
+		static constexpr int SYSCALL_TKILL        = 130;
+		static constexpr int SYSCALL_TGKILL       = 131;
+		// There may be more, but these are known to clobber all registers
+		static constexpr std::array<int, 9> clobbering_syscalls = {
+			SYSCALL_CLONE,
+			SYSCALL_CLONE3,
+			SYSCALL_SCHED_YIELD,
+			SYSCALL_EXIT,
+			SYSCALL_EXIT_GROUP,
+			SYSCALL_FUTEX,
+			SYSCALL_FUTEX_TIME64,
+			SYSCALL_TKILL,
+			SYSCALL_TGKILL,
+		};
+
+		if (this->gpr_has_known_value(REG_ECALL)) {
+			// With the system call number known, we can check if it clobbers all registers
+			const int syscall_number = this->get_gpr_value(REG_ECALL);
+			for (auto syscall : clobbering_syscalls) {
+				if (syscall == syscall_number) {
+					clobber_all = true;
+					break;
+				}
+			}
+		} else {
+			clobber_all = true;
+		}
+	} else {
+		clobber_all = true;
+	}
+	if (clobber_all) {
+		this->store_loaded_registers();
+	} else {
+		this->store_syscall_registers();
+	}
 	code += "cpu->pc = " + PCRELS(0) + ";\n";
 	if (!tinfo.ignore_instruction_limit) {
 		code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n";
+		if (this->uses_register_caching() && !clobber_all)
+		{
+			// If we didn't clobber all registers, and the machine timed out,
+			// we need to store back the registers so that the timed out machine
+			// can resume from where it left off, if it is re-entered.
+			code += "if (INS_COUNTER(cpu) >= MAX_COUNTER(cpu)) {\n";
+			code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
+			code += "}\n";
+		}
 		code += "  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
 		code += "counter = INS_COUNTER(cpu);\n"; // Restore instruction counter
 	} else {
@@ -1827,14 +1891,13 @@ void Emitter<W>::emit()
 			// Load and realize registers A0-A7
 			for (unsigned i = 10; i < 18; i++) {
 				this->load_register(i);
-				this->potentially_realize_register(i);
 			}
+			store_syscall_registers();
 			WELL_KNOWN_INSTRUCTION();
 			// Reload registers A0-A1
-			for (unsigned i = 10; i < 12; i++) {
-				this->potentially_reload_register(i);
-			}
-			this->untrack_all_gprs();
+			reload_syscall_registers();
+			this->untrack_gpr(10);
+			this->untrack_gpr(11);
 			break;
 		default:
 			UNKNOWN_INSTRUCTION();
@@ -1869,6 +1932,27 @@ CPU<W>::emit(const CPU<W>& cpu, std::string& code, const TransInfo<W>& tinfo)
 			}
 		}
 		code += "  ;\n";
+		if (e.used_store_syscalls()) {
+			code += "#define STORE_SYS_REGS_" + e.get_func() + "() \\\n";
+			for (size_t reg = 10; reg < 18; reg++) {
+				if (e.gpr_exists_at(reg)) {
+					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+				}
+			}
+			code += "  ;\n";
+			code += "#define STORE_NON_SYS_REGS_" + e.get_func() + "() \\\n";
+			for (size_t reg = 0; reg < 10; reg++) {
+				if (e.gpr_exists_at(reg)) {
+					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+				}
+			}
+			for (size_t reg = 18; reg < 32; reg++) {
+				if (e.gpr_exists_at(reg)) {
+					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+				}
+			}
+			code += "  ;\n";
+		}
 		code += "#define LOAD_SYS_REGS_" + e.get_func() + "() \\\n";
 		for (size_t reg = 10; reg < 12; reg++) {
 			if (e.gpr_exists_at(reg)) {
