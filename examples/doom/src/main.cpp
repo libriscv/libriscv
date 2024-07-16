@@ -244,7 +244,7 @@ int main(int argc, char *argv[])
 		{"rvdoom"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 	machine.setup_linux_syscalls();
-	machine.fds().permit_file_write = true;
+	machine.fds().proxy_mode = true;
 	// Doom communicates intentions via some system calls
 	machine.on_unhandled_syscall = doom_system_calls;
 
