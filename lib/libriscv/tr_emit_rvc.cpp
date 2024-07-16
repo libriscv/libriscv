@@ -39,7 +39,7 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				instr.Itype.imm = ci.CL.offset();
 			}
 			else if (ci.CL.funct3 == 0x3) {
-				if constexpr (sizeof(address_t) == 8) {
+				if constexpr (sizeof(address_t) >= 8) {
 					// C.LD
 					instr.Itype.opcode = RV32I_LOAD;
 					instr.Itype.funct3 = 0b011; // LD
