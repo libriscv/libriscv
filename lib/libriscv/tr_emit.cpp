@@ -1080,12 +1080,28 @@ void Emitter<W>::emit()
 			case 0x14: // DIV
 				// division by zero is not an exception
 				if constexpr (W == 8) {
+					if (this->gpr_has_known_value(instr.Rtype.rs2))
+					{
+						const auto rs2 = this->get_gpr_value(instr.Rtype.rs2);
+						if (rs2 != 0 && rs2 != -1ull) {
+							add_code(to_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";");
+							break;
+						}
+					}
 					add_code(
 						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))"
 						"		" + to_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				} else {
+					if (this->gpr_has_known_value(instr.Rtype.rs2))
+					{
+						const auto rs2 = this->get_gpr_value(instr.Rtype.rs2);
+						if (rs2 != 0 && rs2 != 4294967295) {
+							add_code(to_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";");
+							break;
+						}
+					}
 					add_code(
 						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
@@ -1094,6 +1110,14 @@ void Emitter<W>::emit()
 				}
 				break;
 			case 0x15: // DIVU
+				if (this->gpr_has_known_value(instr.Rtype.rs2))
+				{
+					const auto rs2 = this->get_gpr_value(instr.Rtype.rs2);
+					if (rs2 != 0) {
+						add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " / " + from_reg(instr.Rtype.rs2) + ";");
+						break;
+					}
+				}
 				add_code(
 					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
 					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " / " + from_reg(instr.Rtype.rs2) + ";"
