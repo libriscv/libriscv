@@ -274,6 +274,21 @@ struct Emitter
 	}
 
 	template <typename T>
+	bool try_tracking_memory(address_t absolute_vaddr, int reg, T value) {
+		(void)value;
+		if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.initial_rodata_end()) {
+			auto* ptr = reinterpret_cast<T*>(this->tinfo.arena_ptr + absolute_vaddr);
+			if constexpr (std::is_signed_v<T>) {
+				this->track_gpr(reg, (saddr_t)*ptr);
+			} else {
+				this->track_gpr(reg, *ptr);
+			}
+			return true;
+		}
+		return false;
+	}
+
+	template <typename T>
 	void memory_load(std::string dst, std::string type, int reg, int32_t imm)
 	{
 		std::string cast;
@@ -715,9 +730,46 @@ void Emitter<W>::emit()
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
-			// TODO: If the memory address is in the read-only area, we can
-			// track the value by reading it
-			this->untrack_gpr(instr.Itype.rd); // We don't know the value of the register anymore
+			// If the memory address is in the read-only area, we can
+			// track the value by reading it directly from rodata area
+			if (uses_flat_memory_arena()) {
+				address_t absolute_vaddr = 0;
+				const int reg = instr.Itype.rs1;
+				const auto imm = instr.Itype.signed_imm();
+				if (reg == REG_GP && tinfo.gp != 0x0) {
+					absolute_vaddr = tinfo.gp + imm;
+				} else if (gpr_has_known_value(reg)) {
+					absolute_vaddr = get_gpr_value(reg) + imm;
+				}
+				bool tracked = false;
+				switch (instr.Itype.funct3) {
+				case 0x0: // I8
+					tracked = this->try_tracking_memory<int8_t>(absolute_vaddr, instr.Itype.rd, uint8_t());
+					break;
+				case 0x1: // I16
+					tracked = this->try_tracking_memory<int16_t>(absolute_vaddr, instr.Itype.rd, uint16_t());
+					break;
+				case 0x2: // I32
+					tracked = this->try_tracking_memory<int32_t>(absolute_vaddr, instr.Itype.rd, uint32_t());
+					break;
+				case 0x3: // I64
+					tracked = this->try_tracking_memory<int64_t>(absolute_vaddr, instr.Itype.rd, uint64_t());
+					break;
+				case 0x4: // U8
+					tracked = this->try_tracking_memory<uint8_t>(absolute_vaddr, instr.Itype.rd, uint8_t());
+					break;
+				case 0x5: // U16
+					tracked = this->try_tracking_memory<uint16_t>(absolute_vaddr, instr.Itype.rd, uint16_t());
+					break;
+				case 0x6: // U32
+					tracked = this->try_tracking_memory<uint32_t>(absolute_vaddr, instr.Itype.rd, uint32_t());
+					break;
+				}
+				if (tracked)
+					break;
+			}
+			// We don't know the value of the register anymore
+			this->untrack_gpr(instr.Itype.rd);
 			} else {
 				// We don't care about where we are in the page when rd=0
 				const auto temp = "tmp" + PCRELS(0);
