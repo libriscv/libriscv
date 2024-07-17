@@ -6,7 +6,7 @@ static long fib(long n, long acc, long prev)
 		return fib(n - 1, prev + acc, acc);
 }
 
-inline long syscall(long n, long arg0) {
+static inline long syscall(long n, long arg0) {
 	register long a0 asm("a0") = arg0;
 	register long syscall_id asm("a7") = n;
 

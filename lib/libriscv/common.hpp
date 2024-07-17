@@ -9,6 +9,7 @@
 #endif
 #include <string>
 #include <string_view>
+#include <vector>
 #include <variant>
 #include "util/function.hpp"
 #include "types.hpp"

@@ -43,11 +43,7 @@ struct guest_iovec {
 	address_type<W> iov_len;
 };
 
-#ifdef __linux__ 
-static int get_time(int clkid, struct timespec* ts) {
-	return clock_gettime(clkid, ts);
-}
-#elif __APPLE__
+#if defined(__APPLE__)
 #include <mach/mach_time.h>
 static int get_time(int clkid, struct timespec* ts) {
 	if (clkid == CLOCK_REALTIME) {
@@ -69,7 +65,10 @@ static int get_time(int clkid, struct timespec* ts) {
 	}
 }
 #else
-#error "Unknown compiler"
+static int get_time(int clkid, struct timespec *ts)
+{
+	return clock_gettime(clkid, ts);
+}
 #endif
 
 template <int W>
@@ -261,7 +260,7 @@ static void syscall_pread64(Machine<W>& machine)
 		std::array<riscv::vBuffer, 512> buffers;
 		const size_t cnt =
 			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), address, len);
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__linux__)
 		const ssize_t res =
 			preadv64(real_fd, (const iovec *)&buffers[0], cnt, offset);
 #else
@@ -526,9 +525,7 @@ static void syscall_dup3(Machine<W>& machine)
 }
 
 int create_pipe(int* pipes, int flags) {
-	#ifdef __linux__ 
-		return pipe2(pipes, flags);
-	#elif __APPLE__
+	#if defined(__APPLE__)
 		// On macOS, we don't have pipe2, so we need to use pipe and then set the flags manually.
 		int res = pipe(pipes);
 		if (res == 0 && flags != 0) {
@@ -543,7 +540,7 @@ int create_pipe(int* pipes, int flags) {
 		}
 		return res;
 	#else
-		#error "Unknown compiler"
+		return pipe2(pipes, flags);
 	#endif
 }
 

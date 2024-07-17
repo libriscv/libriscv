@@ -68,6 +68,10 @@ check_function_exists("getopt_long" HAVE_GETOPT_LONG)
 
 add_subdirectory(../lib lib)
 
+if (RISCV_BINARY_TRANSLATION)
+	find_package(Threads REQUIRED)
+endif()
+
 function (add_emulator NAME)
 	add_executable(${NAME} ${SOURCES})
 	target_link_libraries(${NAME} riscv)
@@ -75,6 +79,9 @@ function (add_emulator NAME)
 	target_compile_definitions(${NAME} PRIVATE ${ARGN} HAVE_GETOPT_LONG=${HAVE_GETOPT_LONG})
 	if (STATIC_BUILD)
 		target_link_libraries(${NAME} -static)
+	endif()
+	if (RISCV_BINARY_TRANSLATION)
+		target_link_libraries(${NAME} Threads::Threads)
 	endif()
 
 	if (SANITIZE)
