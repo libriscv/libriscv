@@ -3,6 +3,15 @@ import sys
 import subprocess
 import os
 
+# Linux compiler detection, looking for riscv64-linux-gnu-g++-[10-14]
+# Starting from the top (to get the latest version)
+riscv_cross_compiler = "riscv64-linux-gnu-g++"
+for i in range(15, 9, -1):
+	riscv_cross_compiler = "riscv64-linux-gnu-g++-" + str(i)
+	rc = subprocess.call(['which', riscv_cross_compiler])
+	if rc == 0:
+		break
+
 project_base = sys.argv[1]
 project_dir  = sys.argv[2]
 method       = sys.argv[3]
@@ -39,7 +48,7 @@ dc_shared = "/usr/outside"
 dc_extra = []
 if method == "linux":
 	dc_instance = "linux-rv64gc"
-	dc_gnucpp = "riscv64-linux-gnu-g++-11"
+	dc_gnucpp = riscv_cross_compiler
 	dc_extra = ["-pthread"]
 else:
 	dc_instance = "newlib-rv64gc"

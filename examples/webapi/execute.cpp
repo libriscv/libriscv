@@ -76,7 +76,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 		const uint64_t t0 = micros_now();
 		asm("" : : : "memory");
 
-		machine.template preempt<0>(addr);
+		machine.preempt(~0ULL, addr);
 
 		asm("" : : : "memory");
 		const uint64_t t1 = micros_now();

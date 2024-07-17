@@ -80,14 +80,14 @@
 
 int main()
 {
-    printf("Test!\n");
+    printf("Test!\\n");
 
 	std::jthread t(
 			[] (int a, long long b, std::string c) -> void {
 				assert(a == 1);
 				assert(b == 2LL);
 				assert(c == std::string("test"));
-				printf("Hello from a thread!\n");
+				printf("Hello from a thread!\\n");
 			},
 			1, 2L, std::string("test")
 	);
