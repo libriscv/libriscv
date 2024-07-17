@@ -22,7 +22,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y g++ clang
+        sudo apt install -y g++ clang libsdl2-dev
 
     - name: Install newer Clang
       run: |
@@ -46,10 +46,16 @@ jobs:
       working-directory: ${{github.workspace}}/examples/noexcept
       env:
         CXX: ${{ matrix.compiler }}
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: cmake -B ${{github.workspace}}/build_noexcept -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build noexcept emulator
-      # Build your program with the given configuration
       run: cmake --build ${{github.workspace}}/build_noexcept --parallel 4 --config ${{env.BUILD_TYPE}}
+
+    - name: Configure D00M example
+      working-directory: ${{github.workspace}}/examples/doom
+      env:
+        CXX: ${{ matrix.compiler }}
+      run: cmake -B ${{github.workspace}}/build_doom -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build D00M example
+      run: cmake --build ${{github.workspace}}/build_doom --parallel 4 --config ${{env.BUILD_TYPE}}
