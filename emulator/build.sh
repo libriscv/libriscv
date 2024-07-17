@@ -13,6 +13,7 @@ function usage()
 
    optional arguments:
      -h, --help           show this help message and exit
+     --debug              enable debugging
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension
@@ -47,6 +48,7 @@ embed_all()
 while [[ "$#" -gt 0 ]]; do
     case $1 in
 		-h|--help ) usage; exit; ;;
+		--debug) OPTS="$OPTS -DCMAKE_BUILD_TYPE=Debug" ;;
 		--A) OPTS="$OPTS -DRISCV_EXT_A=ON" ;;
 		--no-A) OPTS="$OPTS -DRISCV_EXT_A=OFF" ;;
 		--C) OPTS="$OPTS -DRISCV_EXT_C=ON" ;;
