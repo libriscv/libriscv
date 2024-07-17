@@ -11,9 +11,7 @@
 #include <poll.h>
 
 int poll_with_timeout(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts) {
-    #ifdef __linux__
-        return ppoll(fds, nfds, timeout_ts, NULL);
-    #elif __APPLE__
+    #if defined(__APPLE__)
         // On macOS, we don't have ppoll, so we need to use poll and then handle the timeout manually.
         int timeout_ms;
         if (timeout_ts != NULL) {
@@ -23,7 +21,7 @@ int poll_with_timeout(struct pollfd *fds, nfds_t nfds, const struct timespec *ti
         }
         return poll(fds, nfds, timeout_ms);
     #else
-        #error "Unknown compiler"
+        return ppoll(fds, nfds, timeout_ts, NULL);
     #endif
 }
 

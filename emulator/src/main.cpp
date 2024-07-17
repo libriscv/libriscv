@@ -5,13 +5,15 @@
 #include <chrono>
 #include <thread>
 #include "settings.hpp"
-#ifdef __linux__
-#include <sys/stat.h>
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #include <fcntl.h>
 #include <unistd.h>
+#endif
+#if defined(__linux__)
+#include <sys/stat.h>
 #include <sys/mman.h>
 #endif
-static inline std::vector<uint8_t> load_file(const std::string&);
+static inline std::vector<uint8_t> load_file(const std::string &);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
 //#define NODEJS_WORKAROUND
@@ -635,7 +637,7 @@ int main(int argc, const char** argv)
 
 	try {
 		std::vector<uint8_t> vbin;
-#if !defined(__linux__) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__)
+#if !defined(__linux__)
 		// Use load_file for non-Posix systems
 		vbin = load_file(filename);
 		if (vbin.size() < sizeof(ElfHeader)) {
