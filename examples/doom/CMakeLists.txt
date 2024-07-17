@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9.4)
 project(sdldoom CXX)
 
-option(LTO         "Enable interprocedural optimizations" ON)
+option(LTO         "Enable interprocedural optimizations" OFF)
 option(NATIVE      "Enable native instructions" ON)
 option(BOLT        "Enable BOLT" OFF)
 option(LINKER_GC   "Enable linker section garbage collection" OFF)
