@@ -1,4 +1,6 @@
 #include <libriscv/machine.hpp>
+
+#include "internal_common.hpp"
 #ifdef __GNUG__
 #define RISCV_PACKED __attribute__((packed))
 #else

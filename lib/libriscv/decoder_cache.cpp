@@ -1,6 +1,7 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
+#include "internal_common.hpp"
 #include "rvc.hpp"
 #include "safe_instr_loader.hpp"
 #include "threaded_rewriter.cpp"

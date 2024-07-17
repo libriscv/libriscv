@@ -1,6 +1,7 @@
 #include "debug.hpp"
 
 #include "decoder_cache.hpp"
+#include "internal_common.hpp"
 #include "rv32i_instr.hpp"
 #include <cstdarg>
 #include <cstdio>
