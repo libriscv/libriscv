@@ -1,4 +1,6 @@
 #include "machine.hpp"
+
+#include "internal_common.hpp"
 #include "native_heap.hpp"
 
 //#define VERBOSE_NATSYS

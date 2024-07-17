@@ -1,6 +1,7 @@
 #include "machine.hpp"
 
 #include "decoder_cache.hpp"
+#include "internal_common.hpp"
 #include <inttypes.h>
 #ifdef __linux__
 #define DEMANGLE_ENABLED

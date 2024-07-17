@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include "internal_common.hpp"
 
 #include <inttypes.h>
 

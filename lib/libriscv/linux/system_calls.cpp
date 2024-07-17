@@ -1,5 +1,7 @@
-#include <libriscv/machine.hpp>
-#include <libriscv/threads.hpp>
+#include "../machine.hpp"
+
+#include "../internal_common.hpp"
+#include "../threads.hpp"
 
 //#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
@@ -901,7 +903,8 @@ static void syscall_gettimeofday(Machine<W>& machine)
 	struct timeval tv;
 	const int res = gettimeofday(&tv, nullptr);
 	if (res >= 0) {
-		tv.tv_usec &= ~0x3FFLL; // Speculation safety measure
+		if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
+			tv.tv_usec &= ANTI_FINGERPRINTING_MASK_MICROS();
 		machine.copy_to_guest(buffer, &tv, sizeof(tv));
 	}
 	machine.set_result_or_error(res);
@@ -917,7 +920,8 @@ static void syscall_clock_gettime(Machine<W>& machine)
 	struct timespec ts;
 	const int res = get_time(clkid, &ts);
 	if (res >= 0) {
-		ts.tv_nsec &= ~0xFFFFFLL; // Speculation safety measure
+		if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
+			ts.tv_nsec &= ANTI_FINGERPRINTING_MASK_NANOS();
 		if constexpr (W == 4) {
 			int32_t ts32[2] = {(int) ts.tv_sec, (int) ts.tv_nsec};
 			machine.copy_to_guest(buffer, &ts32, sizeof(ts32));
@@ -939,7 +943,8 @@ static void syscall_clock_gettime64(Machine<W>& machine)
 	int res = get_time(clkid, &ts);
 
 	if (res >= 0) {
-		ts.tv_nsec &= ~0xFFFFFLL; // Speculation safety measure
+		if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
+			ts.tv_nsec &= ANTI_FINGERPRINTING_MASK_NANOS();
 		struct {
 			int64_t tv_sec;
 			int64_t tv_nsec;
@@ -960,6 +965,8 @@ static void syscall_nanosleep(Machine<W>& machine)
 
 	struct timespec ts_req;
 	machine.copy_from_guest(&ts_req, g_req, sizeof(ts_req));
+	if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
+		ts_req.tv_nsec &= ANTI_FINGERPRINTING_MASK_NANOS();
 
 	struct timespec ts_rem;
 	if (g_rem)
@@ -982,6 +989,8 @@ static void syscall_clock_nanosleep(Machine<W>& machine)
 	struct timespec ts_req;
 	struct timespec ts_rem;
 	machine.copy_from_guest(&ts_req, g_request, sizeof(ts_req));
+	if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
+		ts_req.tv_nsec &= ANTI_FINGERPRINTING_MASK_NANOS();
 
 	const int res = nanosleep(&ts_req, &ts_rem);
 	if (res >= 0 && g_remain != 0x0) {

@@ -180,7 +180,7 @@ namespace riscv
 #endif
 		/// @brief Prefix for the translation output file.
 		std::string translation_prefix = "/tmp/rvbintr-";
-		/// @brief Suffix for the translation output file.
+		/// @brief Suffix for the translation output file. Eg. .dll or .so
 		std::string translation_suffix = "";
 		/// @brief Limits placed on the binary translator.
 		/// @details The binary translator will stop translating after reaching
@@ -367,18 +367,13 @@ namespace riscv
 #ifndef RISCV_HOT_PATH
 #define RISCV_HOT_PATH() __attribute__((hot))
 #endif
-#define RISCV_NOINLINE __attribute__((noinline))
 #define RISCV_ALWAYS_INLINE __attribute__((always_inline))
-#define RISCV_UNREACHABLE() __builtin_unreachable()
-
 #else
 #define LIKELY(x)   (x)
 #define UNLIKELY(x) (x)
 #define RISCV_COLD_PATH() /* */
 #define RISCV_HOT_PATH()  /* */
-#define RISCV_NOINLINE    /* */
 #define RISCV_ALWAYS_INLINE /* */
-#define RISCV_UNREACHABLE()  /* */
 #endif
 
 #ifdef _MSC_VER
@@ -398,22 +393,4 @@ namespace riscv
 #else
 #define RISCV_INTERNAL /* */
 #endif
-#endif
-
-#ifdef RISCV_32I
-#define INSTANTIATE_32_IF_ENABLED(x) template struct x<4>
-#else
-#define INSTANTIATE_32_IF_ENABLED(x) /* */
-#endif
-
-#ifdef RISCV_64I
-#define INSTANTIATE_64_IF_ENABLED(x) template struct x<8>
-#else
-#define INSTANTIATE_64_IF_ENABLED(x) /* */
-#endif
-
-#ifdef RISCV_128I
-#define INSTANTIATE_128_IF_ENABLED(x) template struct x<16>
-#else
-#define INSTANTIATE_128_IF_ENABLED(x) /* */
 #endif

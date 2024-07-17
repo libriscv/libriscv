@@ -1,4 +1,6 @@
 #include "machine.hpp"
+
+#include "internal_common.hpp"
 #ifdef __linux__
 #include <sys/mman.h>
 static constexpr bool MADVISE_ENABLED = true;

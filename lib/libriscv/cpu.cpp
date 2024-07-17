@@ -1,6 +1,7 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_counter.hpp"
+#include "internal_common.hpp"
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
 #include "threaded_bytecodes.hpp"

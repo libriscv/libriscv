@@ -1,6 +1,7 @@
 #include "multiprocessing.hpp"
 
 #include "machine.hpp"
+#include "internal_common.hpp"
 
 namespace riscv {
 
