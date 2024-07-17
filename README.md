@@ -48,7 +48,7 @@ Non goals:
 
 [STREAM benchmark](https://gist.github.com/fwsGonzo/a594727a9429cb29f2012652ad43fb37) [CoreMark: 38223](https://gist.github.com/fwsGonzo/7ef100ba4fe7116e97ddb20cf26e6879) vs 41382 native (~92%).
 
-Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 8% CPU at 60 fps.
+Run [D00M 1 in libriscv](/examples/doom) and see for yourself. It should use around 2% CPU at 60 fps.
 
 Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com/fwsGonzo/9132f0ef7d3f009baa5b222eedf392da), [interpreted libriscv vs LuaJIT](https://gist.github.com/fwsGonzo/1af5b2a9b4f38c1f3d3074d78acdf609) and also [interpreted libriscv vs Luau](https://gist.github.com/fwsGonzo/5ac8f4d8ca84e97b0c527aec76a86fe9).  Most benchmarks are hand-picked for the purposes of game engine scripting, but there are still some classic benchmarks.
 
