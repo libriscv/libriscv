@@ -35,10 +35,15 @@ Options:
   -t, --timing       Enable timing information in binary translator
   -T, --trace        Enable tracing in binary translator
   -n, --no-translate Disable binary translation
+  -N, --no-translate-future Disable binary translation of non-initial segments
+  -R, --translate-regcache Enable register caching in binary translator
+  -B  --background   Run binary translation in background thread
   -m, --mingw        Cross-compile for Windows (MinGW)
   -o, --output file  Output embeddable binary translated code (C99)
   -F, --from-start   Start debugger from the beginning (_start)
   -S  --sandbox      Enable strict sandbox
+  -P, --proxy        Enable proxy mode, allowing access to all files (disabling the sandbox)
+  -A, --allow file   Allow file to be opened by the guest
   -I, --ignore-text  Ignore .text section, and use segments only
   -c, --call func    Call a function after loading the program
 ```
