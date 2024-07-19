@@ -164,8 +164,11 @@ retry_translated_function:
 	if (LIKELY(bintr_results.max_counter != 0 && (pc - current_begin < current_end - current_begin)))
 	{
 		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
-		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR)
+		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			goto retry_translated_function;
+		}
+		if (exec->is_recording_slowpaths())
+			exec->insert_slowpath_address(pc);
 		goto continue_segment;
 	} else if (bintr_results.max_counter == 0)
 		goto exit_check;

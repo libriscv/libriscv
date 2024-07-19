@@ -40,6 +40,7 @@ struct Arguments {
 	std::vector<std::string> allowed_files;
 	std::string output_file;
 	std::string call_function;
+	std::string jump_hints_file;
 };
 
 #ifdef HAVE_GETOPT_LONG
@@ -59,6 +60,7 @@ static const struct option long_options[] = {
 	{"no-translate", no_argument, 0, 'n'},
 	{"no-translate-future", no_argument, 0, 'N'},
 	{"translate-regcache", no_argument, 0, 'R'},
+	{"jump-hints", required_argument, 0, 'J'},
 	{"background", no_argument, 0, 'B'},
 	{"mingw", no_argument, 0, 'm'},
 	{"output", required_argument, 0, 'o'},
@@ -88,6 +90,7 @@ static void print_help(const char* name)
 		"  -n, --no-translate Disable binary translation\n"
 		"  -N, --no-translate-future Disable binary translation of non-initial segments\n"
 		"  -R, --translate-regcache Enable register caching in binary translator\n"
+		"  -J, --jump-hints file  Load jump location hints from file, unless empty then record instead\n"
 		"  -B  --background   Run binary translation in background thread\n"
 		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
 		"  -o, --output file  Output embeddable binary translated code (C99)\n"
@@ -144,7 +147,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnNRBmo:FSPA:Ic:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnNRJ:Bmo:FSPA:Ic:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -161,6 +164,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'n': args.no_translate = true; break;
 			case 'N': args.translate_future = false; break;
 			case 'R': args.translate_regcache = true; break;
+			case 'J': break;
 			case 'B': args.background = true; break;
 			case 'm': args.mingw = true; break;
 			case 'o': break;
@@ -197,6 +201,11 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			args.call_function = optarg;
 			if (args.verbose) {
 				printf("* Function to VMCall: %s\n", args.call_function.c_str());
+			}
+		} else if (c == 'J') {
+			args.jump_hints_file = optarg;
+			if (args.verbose) {
+				printf("* Jump hints file: %s\n", args.jump_hints_file.c_str());
 			}
 		}
 	}
@@ -252,10 +261,12 @@ static void run_program(
 		.translate_timing = cli_args.timing,
 		.translate_ignore_instruction_limit = !cli_args.accurate, // Press Ctrl+C to stop
 		.translate_use_register_caching = cli_args.translate_regcache,
+		.record_slowpaths_to_jump_hints = !cli_args.jump_hints_file.empty(),
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
 #else
+		.translator_jump_hints = load_jump_hints<W>(cli_args.jump_hints_file, cli_args.verbose),
 		.translate_background_callback = cli_args.background ?
 			[] (auto& compilation_step) {
 				std::thread([compilation_step = std::move(compilation_step)] {
@@ -591,6 +602,15 @@ static void run_program(
 			printf("Error: Function %s not found, not able to call\n", cli_args.call_function.c_str());
 		}
 	}
+
+#ifdef RISCV_BINARY_TRANSLATION
+	if (!cli_args.jump_hints_file.empty()) {
+		const auto jump_hints = machine.memory.gather_jump_hints();
+		store_jump_hints<W>(cli_args.jump_hints_file, jump_hints);
+		if (cli_args.verbose)
+			printf("%zu jump hints were saved to %s\n", jump_hints.size(), cli_args.jump_hints_file.c_str());
+	}
+#endif
 }
 
 int main(int argc, const char** argv)
@@ -727,22 +747,61 @@ void run_sighandler(riscv::Machine<W>& machine)
 
 #include <stdexcept>
 #include <unistd.h>
+#include <fstream>
 std::vector<uint8_t> load_file(const std::string& filename)
 {
-    size_t size = 0;
-    FILE* f = fopen(filename.c_str(), "rb");
-    if (f == NULL) throw std::runtime_error("Could not open file: " + filename);
+    std::size_t size = 0;
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		throw std::runtime_error("Could not open file: " + filename);
+	}
 
-    fseek(f, 0, SEEK_END);
-    size = ftell(f);
-    fseek(f, 0, SEEK_SET);
+	file.seekg(0, std::ios::end);
+	size = file.tellg();
+	file.seekg(0, std::ios::beg);
 
     std::vector<uint8_t> result(size);
-    if (size != fread(result.data(), 1, size, f))
-    {
-        fclose(f);
-        throw std::runtime_error("Error when reading from file: " + filename);
-    }
-    fclose(f);
-    return result;
+	if (!file.read((char*)result.data(), size)) {
+		throw std::runtime_error("Error when reading from file: " + filename);
+	}
+
+	return result;
+}
+
+template <int W>
+std::vector<riscv::address_type<W>> load_jump_hints(const std::string& filename, bool verbose)
+{
+	std::vector<riscv::address_type<W>> hints;
+	if (filename.empty())
+		return hints;
+
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		if (verbose)
+			fprintf(stderr, "Could not open jump hints file: %s\n", filename.c_str());
+		return hints;
+	}
+
+	std::string line;
+	while (std::getline(file, line)) {
+		if (line.empty() || line[0] == '#') continue;
+		// Parse hex address from line
+		hints.push_back(std::stoull(line, nullptr, 16));
+		//printf("Jump hint: 0x%lX\n", long(hints.back()));
+	}
+	return hints;
+}
+
+template <int W>
+void store_jump_hints(const std::string& filename, const std::vector<riscv::address_type<W>>& hints)
+{
+	std::ofstream file(filename);
+	if (!file.is_open()) {
+		fprintf(stderr, "Could not open jump hints file for writing: %s\n", filename.c_str());
+		return;
+	}
+
+	for (auto addr : hints) {
+		file << "0x" << std::hex << addr << std::endl;
+	}
 }

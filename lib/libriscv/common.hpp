@@ -178,6 +178,10 @@ namespace riscv
 #else
 		bool translate_use_register_caching = false;
 #endif
+		/// @brief Enable recording of slowpaths to jump hints for the binary translator.
+		/// @details This will record slowpaths to the MachineOptions jump hints vector.
+		/// From there the CLI can save the jump hints to a file after the program has run.
+		bool record_slowpaths_to_jump_hints = false;
 		/// @brief Prefix for the translation output file.
 		std::string translation_prefix = "/tmp/rvbintr-";
 		/// @brief Suffix for the translation output file. Eg. .dll or .so
@@ -187,6 +191,9 @@ namespace riscv
 		/// either of these limits. The limits are per shared object.
 		unsigned translate_blocks_max = 1024;
 		unsigned translate_instr_max = 500'000;
+		/// @brief Jump location hints for the binary translator.
+		/// @details These hints can improve performance of the binary translation.
+		std::vector<address_type<W>> translator_jump_hints {};
 		/// @brief Enable background compilation of shared objects. The compilation step
 		/// will be executed from a user-provided callback, and will be applied to the machine
 		/// when ready. Applying the translation is thread-safe and will take effect on all

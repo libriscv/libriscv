@@ -207,7 +207,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		throw MachineException(ILLEGAL_OPERATION, "Execute segment already binary translated");
 	}
 
-	// Checksum the execute segment + compiler flags
+	// Checksum the execute segment, ...
 	TIME_POINT(t5);
 	const std::string cflags = defines_to_string(create_defines_for(machine(), options));
 	extern std::string compile_command(int arch, const std::string& cflags);
@@ -439,6 +439,12 @@ if constexpr (SCAN_FOR_GP) {
 		global_jump_locations.insert(elf_entry);
 	// Speculate that the first instruction is a jump target
 	global_jump_locations.insert(exec.exec_begin());
+
+	for (auto address : options.translator_jump_hints) {
+		if (address >= basepc && address < endbasepc) {
+			global_jump_locations.insert(address);
+		}
+	}
 
 	for (address_t pc = basepc; pc < endbasepc && icounter < options.translate_instr_max; )
 	{
