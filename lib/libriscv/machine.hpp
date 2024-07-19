@@ -69,6 +69,7 @@ namespace riscv
 		/// @brief Returns the machine options that were used to create the machine.
 		/// @return The machine options.
 		auto& options() const noexcept { return m_options; }
+		auto& options() noexcept { return m_options; }
 
 		/// @brief Simulate RISC-V starting from the PC register, and
 		/// stopping when at most @max_instructions have been executed.

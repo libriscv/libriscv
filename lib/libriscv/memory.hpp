@@ -181,6 +181,9 @@ namespace riscv
 		// Evict all execute segments, also disabling the main execute segment
 		void evict_execute_segments();
 		void evict_execute_segment(DecodedExecuteSegment<W>&);
+#ifdef RISCV_BINARY_TRANSLATION
+		std::vector<address_t> gather_jump_hints() const;
+#endif
 
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();

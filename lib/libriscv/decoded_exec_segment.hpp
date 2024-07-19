@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include "types.hpp"
+#include <unordered_set>
 
 namespace riscv
 {
@@ -75,6 +76,11 @@ namespace riscv
 		auto* patched_decoder_cache() noexcept { return m_patched_exec_decoder; }
 		void set_patched_decoder_cache(std::unique_ptr<DecoderCache<W>[]> cache, DecoderData<W>* dec)
 			{ m_patched_decoder_cache = std::move(cache); m_patched_exec_decoder = dec; }
+
+		void set_record_slowpaths(bool do_record) { m_do_record_slowpaths = do_record; }
+		bool is_recording_slowpaths() const noexcept { return m_do_record_slowpaths; }
+		void insert_slowpath_address(address_t addr) { m_slowpath_addresses.insert(addr); }
+		auto& slowpath_addresses() const noexcept { return m_slowpath_addresses; }
 #else
 		bool is_binary_translated() const noexcept { return false; }
 #endif
@@ -110,11 +116,13 @@ namespace riscv
 		std::unique_ptr<DecoderCache<W>[]> m_patched_decoder_cache = nullptr;
 		DecoderData<W>* m_patched_exec_decoder = nullptr;
 		mutable void* m_bintr_dl = nullptr;
+		std::unordered_set<address_t> m_slowpath_addresses;
 		uint32_t m_bintr_hash = 0x0; // CRC32-C of the execute segment + compiler options
 #endif
 		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment
 		bool m_is_execute_only = false;
 #ifdef RISCV_BINARY_TRANSLATION
+		bool m_do_record_slowpaths = false;
 		mutable bool m_is_libtcc = false;
 #endif
 		// High-memory execute segments are likely to be JIT'd, and needs to
