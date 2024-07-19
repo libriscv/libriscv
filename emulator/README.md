@@ -40,7 +40,7 @@ Options:
   -R, --translate-regcache Enable register caching in binary translator
   -B  --background   Run binary translation in background thread
   -m, --mingw        Cross-compile for Windows (MinGW)
-  -o, --output file  Output embeddable binary translated code (C99)
+  -o, --output file  Output an embeddable C99 code file, using binary translation
   -F, --from-start   Start debugger from the beginning (_start)
   -S  --sandbox      Enable strict sandbox
   -P, --proxy        Enable proxy mode, allowing access to all files (disabling the sandbox)
@@ -148,6 +148,13 @@ It took 1303152 instructions to throw, catch and print the exception
 >>> Program exited, exit code = 666 (0x29A)
 ```
 
+## Instruction counting vs. run forever
+
+With the `-a` option, the CLI will run programs with accurate instruction counting. It will also cancel execution after a certain amount of instructions has been executed. This is a safe and reliable way to execute sandboxed code.
+
+The default in the CLI is to not count instructions, and instead rely on the user to cancel by pressing eg. Ctrl+C. When using binary translation, the inaccurate emulation is faster.
+
+
 ## Binary translation
 
 Binary translation is enabled with a CMake option. However, there are options to `build.sh` to simplify enabling it:
@@ -167,25 +174,26 @@ With binary translation enabled, we can now run a program. Let's try the 2560000
 
 ```sh
 $ ./rvlinux -v ../binaries/measure_mips/fib
-* Loading program of size 204 from 0x5e180b24ece0 to virtual 0x10000
+* Loading program of size 204 from 0x70424ef08000 to virtual 0x10000 -> 0x100cc
 * Program segment readable: 1 writable: 0  executable: 1
-Emitted 22 accelerated instructions and 3 functions. GP=0x0
+libriscv: No embedded translation found for hash EAC3CF71
+libriscv: Activated full binary translation with 1/2 mappings
 * Entry is at 0x10074
 >>> Program exited, exit code = 3819729467 (0xE3AC723B)
-Instructions executed: 1280000008  Runtime: 70.233ms  Insn/s: 18225mi/s
-Pages in use: 4 (16 kB virtual memory, total 38 kB)
+Runtime: 45.466ms   (Use --accurate for instruction counting)
+Pages in use: 4 (16 kB virtual memory, total 22 kB)
 ```
 
 Quite fast! Without binary translation, it's a bit slower:
 
 ```sh
-$ ./rvlinux --no-translate ../binaries/measure_mips/fib
+$ ./rvlinux -na ../binaries/measure_mips/fib
 >>> Program exited, exit code = 3819729467 (0xE3AC723B)
-Instructions executed: 1280000008  Runtime: 1033.556ms  Insn/s: 1238mi/s
-Pages in use: 4 (16 kB virtual memory, total 38 kB)
+Instructions executed: 1280000008  Runtime: 964.903ms  Insn/s: 1327mi/s
+Pages in use: 4 (16 kB virtual memory, total 22 kB)
 ```
 
-So it was ~15x faster with binary translation!
+So it was ~21x faster with binary translation!
 
 
 ## Using TCC as JIT compiler
@@ -201,8 +209,8 @@ With this option enabled, rvlinux will run programs almost instantly, but execut
 ```sh
 $ ./rvlinux ../binaries/measure_mips/fib
 >>> Program exited, exit code = 3819729467 (0xE3AC723B)
-Instructions executed: 1280000008  Runtime: 511.892ms  Insn/s: 2501mi/s
-Pages in use: 4 (16 kB virtual memory, total 30 kB)
+Runtime: 189.872ms   (Use --accurate for instruction counting)
+Pages in use: 4 (16 kB virtual memory, total 22 kB)
 ```
 
-Exactly 2x faster than interpreted!
+Exactly 5x faster than interpreted!
