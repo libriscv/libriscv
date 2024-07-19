@@ -606,9 +606,12 @@ static void run_program(
 #ifdef RISCV_BINARY_TRANSLATION
 	if (!cli_args.jump_hints_file.empty()) {
 		const auto jump_hints = machine.memory.gather_jump_hints();
-		store_jump_hints<W>(cli_args.jump_hints_file, jump_hints);
-		if (cli_args.verbose)
-			printf("%zu jump hints were saved to %s\n", jump_hints.size(), cli_args.jump_hints_file.c_str());
+		if (jump_hints.size() > machine.options().translator_jump_hints.size()) {
+			store_jump_hints<W>(cli_args.jump_hints_file, jump_hints);
+			if (cli_args.verbose)
+				printf("%zu jump hints were saved to %s\n",
+					jump_hints.size(), cli_args.jump_hints_file.c_str());
+		}
 	}
 #endif
 }
