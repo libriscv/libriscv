@@ -373,22 +373,21 @@ If you are seeing the error `tcc: error: file 'libtcc1.a' not found`, you can ch
 It is possible to generate C99 freestanding source files from a binary translated program, embed it in a project at some later time, and automatically load and utilize the binary translation at run-time. This feature makes it possible to use full binary translation on platforms where it is ordinarily not possible. If a RISC-V program is changed without generating new sources, the emulator will (intentionally) not find these embedded functions and instead fall back to other modes, eg. interpreter mode. Changing a RISC-V program requires regenerating the sources and rebuilding the final program. This practically adds support for high-performance emulation on all console systems, for final/shipped builds.
 
 In order to test this feature, follow these instructions:
-```
-cd emulator
-./build.sh --bintr
-./rvlinux -o test ~/github/coremark/coremark-rv32g_b
-$ ls test*
-test17A11122.cpp
-./build.sh --embed test17A11122.cpp
-./rvlinux -v ~/github/coremark/coremark-rv32g_b
+```sh
+$ cd emulator
+$ ./build.sh -b
+$ ./rvlinux ~/github/coremark/coremark-rv32g_b -Qo coremark
+$ ls *.cpp
+coremark9C111F55.cpp
+$ ./build.sh --embed coremark9C111F55.cpp
 $ ./rvlinux -v ~/github/coremark/coremark-rv32g_b
-* Loading program of size 75145 from 0x77e75e5b2010 to virtual 0x10000 -> 0x22589
+* Loading program of size 75145 from 0x7584018cb000 to virtual 0x10000 -> 0x22589
 * Program segment readable: 1 writable: 0  executable: 1
-* Loading program of size 1864 from 0x77e75e5c459c to virtual 0x2358c -> 0x23cd4
+* Loading program of size 1864 from 0x7584018dd58c to virtual 0x2358c -> 0x23cd4
 * Program segment readable: 1 writable: 1  executable: 0
-Found embedded translation for hash 17A11122
+libriscv: Found embedded translation for hash 9C111F55, 13/1871 mappings
 ...
-CoreMark 1.0 : 35475.669603 / GCC13.2.0 -O3 -DPERFORMANCE_RUN=1   / Static
+CoreMark 1.0 : 37034.750941 / GCC13.2.0 -O3 -DPERFORMANCE_RUN=1   / Static
 ```
 
 - The original RISC-V binary is still needed, as it is treated as the ultimate truth by the emulator

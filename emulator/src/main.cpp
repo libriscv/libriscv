@@ -20,6 +20,7 @@ static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-r
 
 struct Arguments {
 	bool verbose = false;
+	bool quit = false;
 	bool accurate = false;
 	bool debug = false;
 	bool singlestep = false;
@@ -49,6 +50,7 @@ struct Arguments {
 static const struct option long_options[] = {
 	{"help", no_argument, 0, 'h'},
 	{"verbose", no_argument, 0, 'v'},
+	{"quit", no_argument, 0, 'Q'},
 	{"accurate", no_argument, 0, 'a'},
 	{"debug", no_argument, 0, 'd'},
 	{"single-step", no_argument, 0, '1'},
@@ -79,6 +81,7 @@ static void print_help(const char* name)
 	printf("Options:\n"
 		"  -h, --help         Print this help message\n"
 		"  -v, --verbose      Enable verbose loader output\n"
+		"  -Q, --quit         Quit after loading the program (to produce eg. binary translations)\n"
 		"  -a, --accurate     Accurate instruction counting\n"
 		"  -d, --debug        Enable CLI debugger\n"
 		"  -1, --single-step  One instruction at a time, enabling exact exceptions\n"
@@ -147,12 +150,13 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvad1f:gstTnNRJ:Bmo:FSPA:Ic:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvQad1f:gstTnNRJ:Bmo:FSPA:Ic:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
 			case 'h': print_help(argv[0]); return 0;
 			case 'v': args.verbose = true; break;
+			case 'Q': args.quit = true; break;
 			case 'a': args.accurate = true; break;
 			case 'd': args.debug = true; break;
 			case '1': args.singlestep = true; break;
@@ -277,6 +281,10 @@ static void run_program(
 #endif
 #endif
 	}};
+
+	if (cli_args.quit) { // Quit after instantiating the machine
+		return;
+	}
 
 	// A helper system call to ask for symbols that is possibly only known at runtime
 	// Used by testing executables

@@ -26,6 +26,7 @@ Usage: ./rvlinux [options] <program> [args]
 Options:
   -h, --help         Print this help message
   -v, --verbose      Enable verbose loader output
+  -Q, --quit         Quit after loading the program (to produce eg. binary translations)
   -a, --accurate     Accurate instruction counting
   -d, --debug        Enable CLI debugger
   -1, --single-step  One instruction at a time, enabling exact exceptions
