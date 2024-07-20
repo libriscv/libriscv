@@ -9,7 +9,7 @@
 #include "mmap_cache.hpp"
 #include "util/buffer.hpp" // <string>
 #include "util/function.hpp"
-#if __cplusplus >= 202002L && __has_include(<span>)
+#if RISCV_SPAN_AVAILABLE
 #include <span>
 #endif
 

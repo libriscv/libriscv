@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <type_traits>
-#if __cplusplus >= 202002L && __has_include(<span>)
+#if __has_include(<span>)
 #include <span>
 #define RISCV_SPAN_AVAILABLE 1
 #endif
