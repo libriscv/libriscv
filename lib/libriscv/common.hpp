@@ -3,9 +3,11 @@
 
 #include <memory>
 #include <type_traits>
-#if __cplusplus >= 202002L && __has_include(<span>)
-#include <span>
-#define RISCV_SPAN_AVAILABLE 1
+#if __has_include(<span>)
+# include <span>
+# if defined(cpp_lib_span) || defined(__cpp_lib_concepts)
+#  define RISCV_SPAN_AVAILABLE 1
+# endif
 #endif
 #include <string>
 #include <string_view>
