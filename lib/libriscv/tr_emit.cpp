@@ -1118,7 +1118,7 @@ void Emitter<W>::emit()
 				} else if (instr.Itype.high_bits() == 0x400) {
 					// SRAI: Arithmetic right-shift immediate
 					add_code(
-						dst + " = (saddr_t)" + src + " >> (" + from_imm(instr.Itype.signed_imm()) + " & (XLEN-1));");
+						dst + " = (saddr_t)" + src + " >> " + std::to_string(instr.Itype.imm & (XLEN-1)) + ";");
 				} else if (instr.Itype.high_bits() == 0x480) { // BEXTI: Bit-extract immediate
 					add_code(
 						dst + " = (" + src + " >> (" + std::to_string(instr.Itype.imm & (XLEN-1)) + ")) & 1;");
