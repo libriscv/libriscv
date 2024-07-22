@@ -913,12 +913,17 @@ void Emitter<W>::emit()
 		case RV32I_JALR: {
 			// jump to register + immediate
 			this->increment_counter_so_far();
-			if (instr.Itype.rd != 0) {
-				// NOTE: We need to remember RS1 because it can be clobbered by RD
+			if (instr.Itype.rd != 0 && instr.Itype.rd == instr.Itype.rs1) {
+				// NOTE: We need to remember RS1 because it is clobbered by RD
 				add_code(
 					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
 					to_reg(instr.Itype.rd) + " = " + PCRELS(m_instr_length) + ";",
 					"JUMP_TO(rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
+				);
+			} else if (instr.Itype.rd != 0) {
+				add_code(
+					to_reg(instr.Itype.rd) + " = " + PCRELS(m_instr_length) + ";",
+					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			} else {
 				add_code(
@@ -928,9 +933,9 @@ void Emitter<W>::emit()
 			// Untrack all registers, as we don't know the value of any register after a branch
 			this->untrack_all_gprs();
 			if (!tinfo.ignore_instruction_limit)
-				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") { goto " + this->func + "_jumptbl; }\n";
+				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") goto " + this->func + "_jumptbl;\n";
 			else
-				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + ") { goto " + this->func + "_jumptbl; }\n";
+				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + ") goto " + this->func + "_jumptbl;\n";
 			exit_function("pc", false);
 			this->add_reentry_next();
 			} break;
