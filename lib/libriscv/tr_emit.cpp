@@ -305,7 +305,8 @@ struct Emitter
 			} else if (gpr_has_known_value(reg)) {
 				absolute_vaddr = get_gpr_value(reg) + imm;
 			}
-			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size()) {
+			constexpr bool good = riscv::encompassing_Nbit_arena != 0;
+			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && (good || absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size())) {
 				add_code(
 					dst + " = " + cast + arena_at_fixed(type, absolute_vaddr) + ";"
 				);
@@ -340,7 +341,8 @@ struct Emitter
 			} else if (gpr_has_known_value(reg)) {
 				absolute_vaddr = get_gpr_value(reg) + imm;
 			}
-			if (absolute_vaddr != 0 && absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && absolute_vaddr < this->cpu.machine().memory.memory_arena_size()) {
+			constexpr bool good = riscv::encompassing_Nbit_arena != 0;
+			if (absolute_vaddr != 0 && absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && (good || absolute_vaddr < this->cpu.machine().memory.memory_arena_size())) {
 				add_code("{" + type + "* t = &" + arena_at_fixed(type, absolute_vaddr) + "; *t = " + value + "; }");
 				return;
 			}
