@@ -975,7 +975,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		if constexpr (true)
 		{
 			// Memory fence to ensure that the patched decoder is visible to all threads
+#ifndef __COSMOCC__
 			std::atomic_thread_fence(std::memory_order_seq_cst);
+#endif
 
 			// Atomically set a livepatch bytecode for each instruction that is patched
 			// It will swap out the current decoder with the patched one, and then continue.
