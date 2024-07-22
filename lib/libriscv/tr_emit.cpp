@@ -63,6 +63,13 @@ static const std::string LOOP_EXPRESSION = "LIKELY(counter < max_counter)";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
 
+static std::string hex_address(uint64_t addr) {
+	char buf[32];
+	if (const int len = snprintf(buf, sizeof(buf), "0x%" PRIx64, uint64_t(addr)); len > 0)
+		return std::string(buf, len);
+	throw MachineException(INVALID_PROGRAM, "Failed to format address");
+}
+
 template <int W>
 static std::string funclabel(const std::string& func, uint64_t addr) {
 	char buf[32];
@@ -93,6 +100,7 @@ struct Emitter
 		: cpu(c), m_pc(ptinfo.basepc), tinfo(ptinfo)
 	{
 		this->func = funclabel<W>("f", this->pc());
+		this->m_arena_hex_address = hex_address(tinfo.arena_ptr) + "L";
 	}
 
 	template <typename ... Args>
@@ -245,11 +253,11 @@ struct Emitter
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments && avoid_codegen_bug) {
 			if (uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
-					return "(" + std::to_string(tinfo.arena_ptr) + "ull + (uint32_t)(" + address + "))";
+					return "(" + m_arena_hex_address + " + (uint32_t)(" + address + "))";
 				else
-					return "(" + std::to_string(tinfo.arena_ptr) + "ull + ((" + address + ") & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + "))";
+					return "(" + m_arena_hex_address + " + ((" + address + ") & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + "))";
 			} else {
-				return "(" + std::to_string(tinfo.arena_ptr) + "ull + " + speculation_safe(address) + ")";
+				return "(" + m_arena_hex_address + " + " + speculation_safe(address) + ")";
 			}
 		} else if (uses_Nbit_encompassing_arena()) {
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
@@ -264,12 +272,12 @@ struct Emitter
 	std::string arena_at_fixed(const std::string& type, address_t address) {
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
-				return "*(" + type + "*)" + std::to_string(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "";
+				return "*(" + type + "*)" + hex_address(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "";
 			} else {
-				return "*(" + type + "*)" + std::to_string(tinfo.arena_ptr + address) + "";
+				return "*(" + type + "*)" + hex_address(tinfo.arena_ptr + address) + "";
 			}
 		} else if (uses_Nbit_encompassing_arena()) {
-			return "*(" + type + "*)ARENA_AT(cpu, " + std::to_string(address & address_t(riscv::encompassing_arena_mask)) + ")";
+			return "*(" + type + "*)ARENA_AT(cpu, " + hex_address(address & address_t(riscv::encompassing_arena_mask)) + ")";
 		} else {
 			return "*(" + type + "*)ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
@@ -441,7 +449,7 @@ private:
 		return "SPECSAFE(" + address + ")";
 	}
 	static std::string speculation_safe(const address_t address) {
-		return "SPECSAFE(" + std::to_string(address) + ")";
+		return "SPECSAFE(" + hex_address(address) + ")";
 	}
 	// Register value tracking
 	void track_gpr(int reg, address_t value) {
@@ -508,6 +516,7 @@ private:
 
 	std::string func;
 	const TransInfo<W>& tinfo;
+	std::string m_arena_hex_address;
 
 	std::vector<TransMapping<W>> mappings;
 	std::unordered_set<unsigned> labels;
