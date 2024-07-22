@@ -520,40 +520,37 @@ inline void Emitter<W>::emit_branch(const BranchInfo& binfo, const std::string& 
 {
 	using address_t = address_type<W>;
 	if (binfo.sign == false)
-		code += "if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ") {\n";
+		code += "if (" + from_reg(instr.Btype.rs1) + op + from_reg(instr.Btype.rs2) + ")";
 	else
-		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ") {\n";
+		code += "if ((saddr_t)" + from_reg(instr.Btype.rs1) + op + " (saddr_t)" + from_reg(instr.Btype.rs2) + ")";
 
 	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & ALIGN_MASK))
 	{
 		// TODO: Make exception a helper function, as return values are implementation detail
-		code +=
-			"api.exception(cpu, " + PCRELS(0) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n"
-			"}\n";
+		code += "\n  { api.exception(cpu, " + PCRELS(0) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0}; }\n";
 		return;
 	}
 
 	if (binfo.jump_pc != 0) {
 		if (binfo.jump_pc > this->pc() || binfo.ignore_instruction_limit) {
 			// unconditional forward jump + bracket
-			code += "goto " + FUNCLABEL(binfo.jump_pc) + "; }\n";
+			code += " goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
 			return;
 		}
 		// backward jump
-		code += "if (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
+		code += " {\nif (" + LOOP_EXPRESSION + ") goto " + FUNCLABEL(binfo.jump_pc) + ";\n";
 	} else if (binfo.call_pc != 0 && binfo.call_pc > this->pc()) {
+		code += " {\n";
 		// potentially call a function
 		auto target_funcaddr = this->find_block_base(binfo.call_pc);
 		// Allow directly calling a function, as long as it's a forward branch
 		if (target_funcaddr != 0) {
-			if (emit_function_call(target_funcaddr, binfo.call_pc)) {
-				code += "}\n"; // Bracket (NOTE: not ending the function, just the branch)
-				return;
-			}
-			// After the call PC may have changed, so exit with stored PC
-			exit_function("cpu->pc", true);
+			emit_function_call(target_funcaddr, binfo.call_pc);
+			code += "}\n"; // Bracket (NOTE: not ending the function, just the branch)
 			return;
 		}
+	} else {
+		code += " {\n";
 	}
 	// else, exit binary translation
 	exit_function(PCRELS(instr.Btype.signed_imm()), true); // Bracket (NOTE: not actually ending the function)
