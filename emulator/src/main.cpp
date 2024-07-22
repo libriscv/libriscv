@@ -701,16 +701,24 @@ int main(int argc, const char** argv)
 		binary = { (const char*)ptr, size_t(st.st_size) };
 #endif
 
-		const bool is_dynamic = ((ElfHeader *)binary.data())->e_type == ElfHeader::ET_DYN;
+		bool is_dynamic = false;
+		if (binary[4] == riscv::ELFCLASS64) {
+			std::string_view interpreter;
+			std::tie(is_dynamic, interpreter) =
+				riscv::Elf<8>::is_dynamic(std::string_view(binary.data(), binary.size()));
 
-		if (binary[4] == riscv::ELFCLASS64 && is_dynamic) {
-			// Load the dynamic linker shared object
-			vbin = load_file(DYNAMIC_LINKER);
-			binary = { (const char*)vbin.data(), vbin.size() };
-			// Insert program name as argv[1]
-			args.insert(args.begin() + 1, args.at(0));
-			// Set dynamic linker to argv[0]
-			args.at(0) = DYNAMIC_LINKER;
+			if (is_dynamic) {
+				// Load the dynamic linker shared object
+				if (interpreter.empty()) {
+					interpreter = DYNAMIC_LINKER;
+				}
+				vbin = load_file(std::string(interpreter));
+				binary = { (const char*)vbin.data(), vbin.size() };
+				// Insert program name as argv[1]
+				args.insert(args.begin() + 1, args.at(0));
+				// Set dynamic linker to argv[0]
+				args.at(0) = interpreter;
+			}
 		}
 
 		if (binary[4] == riscv::ELFCLASS64)
