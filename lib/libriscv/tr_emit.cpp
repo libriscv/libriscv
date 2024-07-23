@@ -21,7 +21,7 @@
 #define UNKNOWN_INSTRUCTION() { \
   if (!instr.is_illegal()) { \
     this->store_loaded_registers(); \
-	auto* handler = cpu.decode(instr).handler; \
+	auto* handler = CPU<W>::decode(instr).handler; \
 	const auto index = DecoderData<W>::handler_index_for(handler); \
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; \
@@ -31,7 +31,7 @@
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
 #define WELL_KNOWN_INSTRUCTION() { \
-	auto* handler = cpu.decode(instr).handler; \
+	auto* handler = CPU<W>::decode(instr).handler; \
 	const auto index = DecoderData<W>::handler_index_for(handler); \
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; \
@@ -96,8 +96,8 @@ struct Emitter
 
 	bool uses_register_caching() const noexcept { return tinfo.use_register_caching; }
 
-	Emitter(const CPU<W>& c, const TransInfo<W>& ptinfo)
-		: cpu(c), m_pc(ptinfo.basepc), tinfo(ptinfo)
+	Emitter(const TransInfo<W>& ptinfo)
+		: m_pc(ptinfo.basepc), tinfo(ptinfo)
 	{
 		this->func = funclabel<W>("f", this->pc());
 		this->m_arena_hex_address = hex_address(tinfo.arena_ptr) + "L";
@@ -286,7 +286,7 @@ struct Emitter
 	template <typename T>
 	bool try_tracking_memory(address_t absolute_vaddr, int reg, T value) {
 		(void)value;
-		if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.initial_rodata_end()) {
+		if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= tinfo.arena_roend) {
 			auto* ptr = reinterpret_cast<T*>(this->tinfo.arena_ptr + absolute_vaddr);
 			if constexpr (std::is_signed_v<T>) {
 				this->track_gpr(reg, (saddr_t)*ptr);
@@ -314,7 +314,7 @@ struct Emitter
 				absolute_vaddr = get_gpr_value(reg) + imm;
 			}
 			constexpr bool good = riscv::encompassing_Nbit_arena != 0;
-			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && (good || absolute_vaddr + sizeof(T) <= this->cpu.machine().memory.memory_arena_size())) {
+			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && (good || absolute_vaddr + sizeof(T) <= tinfo.arena_size)) {
 				add_code(
 					dst + " = " + cast + arena_at_fixed(type, absolute_vaddr) + ";"
 				);
@@ -350,7 +350,7 @@ struct Emitter
 				absolute_vaddr = get_gpr_value(reg) + imm;
 			}
 			constexpr bool good = riscv::encompassing_Nbit_arena != 0;
-			if (absolute_vaddr != 0 && absolute_vaddr >= this->cpu.machine().memory.initial_rodata_end() && (good || absolute_vaddr < this->cpu.machine().memory.memory_arena_size())) {
+			if (absolute_vaddr != 0 && absolute_vaddr >= tinfo.arena_roend && (good || absolute_vaddr < tinfo.arena_size)) {
 				add_code("{" + type + "* t = &" + arena_at_fixed(type, absolute_vaddr) + "; *t = " + value + "; }");
 				return;
 			}
@@ -501,7 +501,6 @@ private:
 	}
 
 	std::string code;
-	const CPU<W>& cpu;
 	size_t m_idx = 0;
 	address_t m_pc = 0x0;
 	rv32i_instruction instr;
@@ -1924,9 +1923,9 @@ void Emitter<W>::emit()
 
 template <int W>
 std::vector<TransMapping<W>>
-CPU<W>::emit(const CPU<W>& cpu, std::string& code, const TransInfo<W>& tinfo)
+CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 {
-	Emitter<W> e(cpu, tinfo);
+	Emitter<W> e(tinfo);
 	e.emit();
 
 	// Create register push and pop macros
@@ -2016,9 +2015,9 @@ CPU<W>::emit(const CPU<W>& cpu, std::string& code, const TransInfo<W>& tinfo)
 }
 
 #ifdef RISCV_32I
-template std::vector<TransMapping<4>> CPU<4>::emit(const CPU<4>&, std::string&, const TransInfo<4>&);
+template std::vector<TransMapping<4>> CPU<4>::emit(std::string&, const TransInfo<4>&);
 #endif
 #ifdef RISCV_64I
-template std::vector<TransMapping<8>> CPU<8>::emit(const CPU<8>&, std::string&, const TransInfo<8>&);
+template std::vector<TransMapping<8>> CPU<8>::emit(std::string&, const TransInfo<8>&);
 #endif
 } // riscv

@@ -185,7 +185,7 @@ namespace riscv
 		};
 
 #ifdef RISCV_BINARY_TRANSLATION
-		static std::vector<TransMapping<W>> emit(const CPU<W>&, std::string& code, const TransInfo<W>&);
+		static std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&);
 		void binary_translate(const MachineOptions<W>&, DecodedExecuteSegment<W>&, TransOutput<W>&) const;
 		static void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, void*, bool, bool) RISCV_INTERNAL;
 		static bool initialize_translated_segment(DecodedExecuteSegment<W>&, void*, void*, bool) RISCV_INTERNAL;

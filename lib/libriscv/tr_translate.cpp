@@ -373,6 +373,8 @@ void CPU<W>::binary_translate(const MachineOptions<W>& options, DecodedExecuteSe
 	const address_t basepc    = exec.exec_begin();
 	const address_t endbasepc = exec.exec_end();
 	const uintptr_t arena_ponter_ref = (uintptr_t)machine().memory.memory_arena_ptr_ref();
+	const address_t arena_roend = machine().memory.initial_rodata_end();
+	const address_t arena_size  = machine().memory.memory_arena_size();
 
 	address_t gp = 0;
 if constexpr (SCAN_FOR_GP) {
@@ -567,7 +569,10 @@ if constexpr (SCAN_FOR_GP) {
 				nullptr, // blocks
 				&ebreak_locations,
 				global_jump_locations,
-				arena_ponter_ref
+				// Memory arena
+				arena_ponter_ref,
+				arena_roend,
+				arena_size
 			});
 			icounter += length;
 			// we can't translate beyond this estimate, otherwise
@@ -592,7 +597,7 @@ if constexpr (SCAN_FOR_GP) {
 	for (auto& block : blocks)
 	{
 		block.blocks = &blocks;
-		auto result = emit(*this, *output.code, block);
+		auto result = emit(*output.code, block);
 
 		for (auto& mapping : result) {
 			dlmappings.push_back(std::move(mapping));

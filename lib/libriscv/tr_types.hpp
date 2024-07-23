@@ -40,5 +40,7 @@ namespace riscv
 		std::unordered_set<address_type<W>>& global_jump_locations;
 
 		uintptr_t arena_ptr;
+		address_type<W> arena_roend;
+		address_type<W> arena_size;
 	};
 }
