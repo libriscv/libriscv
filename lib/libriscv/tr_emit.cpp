@@ -286,7 +286,7 @@ struct Emitter
 	template <typename T>
 	bool try_tracking_memory(address_t absolute_vaddr, int reg, T value) {
 		(void)value;
-		if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= tinfo.arena_roend) {
+		if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && absolute_vaddr + sizeof(T) <= tinfo.arena_roend && absolute_vaddr + sizeof(T) > absolute_vaddr) {
 			auto* ptr = reinterpret_cast<T*>(this->tinfo.arena_ptr + absolute_vaddr);
 			if constexpr (std::is_signed_v<T>) {
 				this->track_gpr(reg, (saddr_t)*ptr);
