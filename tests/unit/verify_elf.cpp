@@ -169,6 +169,24 @@ TEST_CASE("RV64 Newlib with B-ext Hello World", "[Verify]")
 	REQUIRE(state.text.find("Caught exception: Hello Exceptions!") != std::string::npos);
 }
 
+TEST_CASE("TinyCC dynamic fib", "[Verify]")
+{
+	const auto binary = load_file(cwd + "/elf/tinycc-rv64g-fib");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	// Install Linux system calls
+	machine.setup_linux_syscalls();
+	// Create a Linux environment for runtimes to work well
+	machine.setup_linux(
+		{"tinycc-rv64g-fib"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=groot"});
+
+	// Run for at most X instructions before giving up
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	REQUIRE(machine.return_value() == 75025); // fib(25)
+}
+
 TEST_CASE("RV32 Execute-Only Hello World", "[Verify]")
 {
 	const auto binary = load_file(cwd + "/elf/riscv32gb-execute-only");
