@@ -2,6 +2,7 @@
 #include <include/common.hpp>
 #include <include/syscall.hpp>
 #include <functional>
+#include <cstdlib>
 #include <memory>
 
 /***
