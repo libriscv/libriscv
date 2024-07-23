@@ -7,6 +7,6 @@ export CXX=$RISCV_TC/bin/riscv64-unknown-elf-g++
 
 mkdir -p build64
 pushd build64
-cmake .. -DRISCV_ARCH=64 -DLIBC_USE_STDLIB=ON -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake
+cmake .. -DRISCV_ARCH=64 -DLIBC_USE_STDLIB=ON -DLIBC_WRAP_NATIVE=ON -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake
 make -j4
 popd

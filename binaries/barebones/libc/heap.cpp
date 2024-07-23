@@ -26,7 +26,7 @@
 #define memalign       __wrap_memalign
 #define aligned_alloc  __wrap_aligned_alloc
 #define posix_memalign __wrap_posix_memalign
-extern "C" void* malloc(size_t bytes);
+extern "C" void* malloc(size_t bytes) __attribute__((used, retain));
 extern "C" void* calloc(size_t count, size_t size);
 extern "C" void* realloc(void* ptr, size_t bytes);
 extern "C" void  free(void* ptr);
@@ -36,10 +36,17 @@ extern "C" void  free(void* ptr);
 	asm(".global " #name "\n" #name ":\n  li a7, " STRINGIFY(number) "\n  ecall\n  ret\n");
 
 asm(".pushsection .text, \"ax\", @progbits\n");
+#ifdef WRAP_NATIVE_SYSCALLS
+GENERATE_SYSCALL_WRAPPER(__wrap_malloc,  SYSCALL_MALLOC);
+GENERATE_SYSCALL_WRAPPER(__wrap_calloc,  SYSCALL_CALLOC);
+GENERATE_SYSCALL_WRAPPER(__wrap_realloc, SYSCALL_REALLOC);
+GENERATE_SYSCALL_WRAPPER(__wrap_free,    SYSCALL_FREE);
+#else
 GENERATE_SYSCALL_WRAPPER(malloc,  SYSCALL_MALLOC);
 GENERATE_SYSCALL_WRAPPER(calloc,  SYSCALL_CALLOC);
 GENERATE_SYSCALL_WRAPPER(realloc, SYSCALL_REALLOC);
 GENERATE_SYSCALL_WRAPPER(free,    SYSCALL_FREE);
+#endif
 asm(".popsection\n");
 
 extern "C" NATIVE_MEM_FUNCATTR
