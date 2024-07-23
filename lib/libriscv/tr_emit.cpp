@@ -1993,6 +1993,35 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	code += e.get_func() + "_jumptbl:;\n";
 
+#if 0 // A failed attempt at a faster dispatch
+	// This code exists here purely as a "no, I've tried it and it's not faster"
+	// Feel free to try to optimize it further
+	const auto str_begin_pc = std::to_string(e.begin_pc()) + "UL";
+	code += "if (pc < " + str_begin_pc + " || pc >= " + std::to_string(e.end_pc()) + ") goto dispatch;\n";
+	code += "static void* jumptbl[] = {\n";
+	size_t idx = 0;
+	const size_t max_idx = e.get_mappings().size();
+	for (address_type<W> pc = e.begin_pc(); pc < e.end_pc(); pc += 2) {
+
+		if (idx < max_idx) {
+			const auto& entry = e.get_mappings().at(idx);
+			// Default to dispatch if no mapping
+			if (entry.addr != pc) {
+				code += "&&dispatch,\n";
+				continue;
+			}
+			// Label for this jumpable address
+			const auto label = funclabel<W>(e.get_func(), pc);
+			code += "&&" + label + ",\n";
+			idx++;
+		} else {
+			code += "&&dispatch,\n";
+		}
+	}
+	code += "};\n";
+	code += "goto *jumptbl[(pc - " + str_begin_pc + ") >> 1];\n";
+	code += "dispatch: {\n";
+#else
 	code += "switch (pc) {\n";
 	for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
 		auto& entry = e.get_mappings().at(idx);
@@ -2000,6 +2029,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 		code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
 	}
 	code += "default:\n";
+#endif
 	for (size_t reg = 1; reg < 32; reg++) {
 		if (e.gpr_exists_at(reg)) {
 			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + ";\n";
