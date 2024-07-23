@@ -64,6 +64,10 @@ $ ./build.sh --help
 
    optional arguments:
      -h, --help           show this help message and exit
+     --debug              enable debugging
+     --debinfo            enable debugging information
+     --perf               build settings for performance profiling
+     --no-perf            disable performance profiling
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension

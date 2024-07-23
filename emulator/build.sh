@@ -14,6 +14,9 @@ function usage()
    optional arguments:
      -h, --help           show this help message and exit
      --debug              enable debugging
+     --debinfo            enable debugging information
+     --perf               build settings for performance profiling
+     --no-perf            disable performance profiling
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension
@@ -49,6 +52,9 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
 		-h|--help ) usage; exit; ;;
 		--debug) OPTS="$OPTS -DCMAKE_BUILD_TYPE=Debug" ;;
+		--debinfo) OPTS="$OPTS -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
+		--perf) OPTS="$OPTS -DPERF=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
+		--no-perf) OPTS="$OPTS -DPERF=OFF" ;;
 		--A) OPTS="$OPTS -DRISCV_EXT_A=ON" ;;
 		--no-A) OPTS="$OPTS -DRISCV_EXT_A=OFF" ;;
 		--C) OPTS="$OPTS -DRISCV_EXT_C=ON" ;;
