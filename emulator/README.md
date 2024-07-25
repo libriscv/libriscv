@@ -68,6 +68,10 @@ $ ./build.sh --help
      --debinfo            enable debugging information
      --perf               build settings for performance profiling
      --no-perf            disable performance profiling
+     --static             build static CLI executable
+     --no-static          build dynamic CLI executable
+     --native             build with -march=native
+     --no-native          disable -march=native
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension
@@ -84,8 +88,8 @@ $ ./build.sh --help
      -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
-	 -N bits              enable N-bits of masked address space (experimental feature)
-	 --no-expr            disable experimental features
+     -N bits              enable N-bits of masked address space (experimental feature)
+     --no-expr            disable experimental features
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 

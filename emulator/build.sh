@@ -17,6 +17,10 @@ function usage()
      --debinfo            enable debugging information
      --perf               build settings for performance profiling
      --no-perf            disable performance profiling
+     --static             build static CLI executable
+     --no-static          build dynamic CLI executable
+     --native             build with -march=native
+     --no-native          disable -march=native
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension
@@ -33,8 +37,8 @@ function usage()
      -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
-	 -N bits              enable N-bits of masked address space (experimental feature)
-	 --no-expr            disable experimental features
+     -N bits              enable N-bits of masked address space (experimental feature)
+     --no-expr            disable experimental features
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 
@@ -55,6 +59,10 @@ while [[ "$#" -gt 0 ]]; do
 		--debinfo) OPTS="$OPTS -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
 		--perf) OPTS="$OPTS -DPERF=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
 		--no-perf) OPTS="$OPTS -DPERF=OFF" ;;
+		--static) OPTS="$OPTS -DSTATIC_BUILD=ON" ;;
+		--no-static) OPTS="$OPTS -DSTATIC_BUILD=OFF" ;;
+		--native) OPTS="$OPTS -DNATIVE=ON" ;;
+		--no-native) OPTS="$OPTS -DNATIVE=OFF" ;;
 		--A) OPTS="$OPTS -DRISCV_EXT_A=ON" ;;
 		--no-A) OPTS="$OPTS -DRISCV_EXT_A=OFF" ;;
 		--C) OPTS="$OPTS -DRISCV_EXT_C=ON" ;;
