@@ -37,38 +37,36 @@
 	d += 1;            \
 	EXECUTE_CURRENT()
 
-#define COUNTER_OVERFLOWED(counter) \
-	counter.overflowed()
-#define RETURN_VALUES() \
+#define RETURN_VALUES()   \
 	{pc}
 #define UNUSED_FUNCTION() \
 	cpu.trigger_exception(ILLEGAL_OPCODE);
 
 #define BEGIN_BLOCK()                               \
-	pc += d->block_bytes(); \
+	pc += d->block_bytes();                         \
 	counter.increment_counter(d->instruction_count());
 #define NEXT_BLOCK(len, OF)              \
 	pc += len;                           \
-	d += len >> DecoderCache<W>::SHIFT; \
+	d += len >> DecoderCache<W>::SHIFT;  \
 	if constexpr (OF) {                  \
 		OVERFLOW_CHECK();                \
 	}									 \
-	if constexpr (FUZZING) /* Give OOB-aid to ASAN */           \
+	if constexpr (FUZZING) /* Give OOB-aid to ASAN */          \
 	d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];  \
 	BEGIN_BLOCK()                        \
 	EXECUTE_CURRENT()
 
 #define QUICK_EXEC_CHECK()                                              \
 	if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end()))) \
-		exec = resolve_execute_segment<W>(cpu, pc);
+		MUSTTAIL return next_execute_segment(d, exec, cpu, pc, counter);
 
 #define UNCHECKED_JUMP()                                       \
 	QUICK_EXEC_CHECK()                                         \
-	d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT]; \
+	d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];  \
 	BEGIN_BLOCK()                                              \
 	EXECUTE_CURRENT()
 #define OVERFLOW_CHECK()                            \
-	if (UNLIKELY(COUNTER_OVERFLOWED(counter)))      \
+	if (UNLIKELY(counter.overflowed())) \
 		return RETURN_VALUES();
 
 #define PERFORM_BRANCH()                \
@@ -197,6 +195,14 @@ namespace riscv
 		}
 		// Overflow-check, next block
 		NEXT_BLOCK(4, true);
+	}
+
+	INSTRUCTION(RV32I_BC_NOP, next_execute_segment) {
+		// A helper function to change execute segment
+		exec = resolve_execute_segment<W>(cpu, pc);
+		d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
+		BEGIN_BLOCK();
+		EXECUTE_CURRENT();
 	}
 
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
@@ -391,8 +397,27 @@ namespace riscv
 	template <int W>
 	void CPU<W>::simulate_inaccurate(address_t pc)
 	{
-		if (!simulate(pc, 0, ~0ULL))
-			throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED, "Execution limit reached");
+		InstrCounter counter{0, ~0ULL};
+
+		auto* exec = this->m_exec;
+
+		// We need an execute segment matching current PC
+		if (UNLIKELY(!exec->is_within(pc)))
+		{
+			auto results = this->next_execute_segment(pc);
+			exec = results.exec;
+			pc   = results.pc;
+		}
+
+		DecoderData<W>* exec_decoder = exec->decoder_cache();
+		auto* d = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		auto& cpu = *this;
+
+		BEGIN_BLOCK();
+
+		auto [new_pc] = EXECUTE_INSTR();
+
+		cpu.registers().pc = new_pc;
 	}
 
 	INSTANTIATE_32_IF_ENABLED(CPU);
