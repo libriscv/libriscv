@@ -37,7 +37,7 @@ struct Arguments {
 	bool ignore_text = false;
 	bool background = false; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
-	uint64_t fuel = 16'000'000'000ULL; // Default: Timeout after ~16bn instructions
+	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
 	std::vector<std::string> allowed_files;
 	std::string output_file;
 	std::string call_function;

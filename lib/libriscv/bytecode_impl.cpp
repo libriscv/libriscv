@@ -309,8 +309,9 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 INSTRUCTION(RV32I_BC_AUIPC, rv32i_auipc)
 {
 	VIEW_INSTR();
-	REG(instr.Utype.rd) = pc + instr.Utype.upper_imm();
-	NEXT_BLOCK(4, false);
+	// AUIPC using re-constructed PC
+	REG(instr.Utype.rd) = (pc - DECODER().block_bytes()) + instr.Utype.upper_imm();
+	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LUI, rv32i_lui)
 {

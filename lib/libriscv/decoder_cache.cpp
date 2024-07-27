@@ -98,9 +98,6 @@ namespace riscv
 		}
 		return false;
 	}
-	static bool is_stopping_auipc(rv32i_instruction instr) {
-		return (instr.opcode() == RV32I_AUIPC && instr.Utype.rd != 0);
-	}
 
 	template <int W>
 	static void realize_fastsim(
@@ -159,8 +156,7 @@ namespace riscv
 							break;
 					} else {
 						if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
-							|| opcode == RV32I_JAL || opcode == RV32I_JALR
-							|| is_stopping_auipc(instruction))
+							|| opcode == RV32I_JAL || opcode == RV32I_JALR)
 							break;
 					}
 				#ifdef RISCV_BINARY_TRANSLATION
@@ -240,8 +236,7 @@ namespace riscv
 
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
-					|| opcode == RV32I_JAL || opcode == RV32I_JALR
-					|| is_stopping_auipc(instruction))
+					|| opcode == RV32I_JAL || opcode == RV32I_JALR)
 					idxend = 0;
 			#ifdef RISCV_BINARY_TRANSLATION
 				if (entry.get_bytecode() == translator_op)
@@ -418,7 +413,9 @@ namespace riscv
 			}
 
 			if (has_ebreak_locations) {
+				[[unlikely]];
 				if (ebreak_locations.count(dst)) {
+					[[unlikely]];
 					// Insert EBREAK bytecode and handler at ebreak locations
 					entry.set_bytecode(RV32I_BC_SYSTEM);
 					rv32i_instruction ebreak;
