@@ -20,7 +20,7 @@ static constexpr bool verbose_syscalls = false;
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
-#if !defined(__OpenBSD__)
+#if !defined(__OpenBSD__) && !defined(TARGET_OS_IPHONE)
 #include <sys/random.h>
 #endif
 extern "C" int dup3(int oldfd, int newfd, int flags);
@@ -1114,8 +1114,12 @@ static void syscall_getrandom(Machine<W>& machine)
 	const ssize_t result = need; // always success
 	arc4random_buf(buffer, need);
 #elif defined(__APPLE__)
+	#if TARGET_OS_IPHONE
+	const ssize_t result = -1;
+	#else
 	const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
 	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
+	#endif
 #else
 	const ssize_t result = getrandom(buffer, need, 0);
 #endif
