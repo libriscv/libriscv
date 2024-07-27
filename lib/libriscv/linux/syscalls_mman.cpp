@@ -74,13 +74,13 @@ static void add_mman_syscalls()
 				if (_lseek(real_fd, voff, SEEK_SET) == -1L)
 					MMAP_HAS_FAILED();
 				for (size_t i = 0; i < cnt; i++) {
-					if (_read(real_fd, buffers.at(i).ptr, buffers.at(i).len) < 0)
+					if (_read(real_fd, buffers.at(i).ptr, buffers.at(i).len) != buffers.at(i).len)
 						MMAP_HAS_FAILED();
 				}
 #else
 				if (lseek(real_fd, voff, SEEK_SET) == (off_t)-1)
 					MMAP_HAS_FAILED();
-				if (readv(real_fd, (const iovec*)&buffers[0], cnt) < 0)
+				if (readv(real_fd, (const iovec*)&buffers[0], cnt) != (ssize_t)length)
 					MMAP_HAS_FAILED();
 #endif
 				// Set new page protections on area
