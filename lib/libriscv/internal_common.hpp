@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __APPLE__
+#include "TargetConditionals.h" // TARGET_* macros
+#endif
+
 #ifdef __GNUG__
 #define RISCV_NOINLINE __attribute__((noinline))
 #define RISCV_UNREACHABLE() __builtin_unreachable()
