@@ -193,7 +193,7 @@ namespace riscv
 		bool uses_Nbit_encompassing_arena() const noexcept { return riscv::encompassing_Nbit_arena != 0 && this->m_arena.data != nullptr; }
 		void* memory_arena_ptr() const noexcept { return (void *)this->m_arena.data; }
 		auto& memory_arena_ptr_ref() const noexcept { return this->m_arena.data; }
-		address_t memory_arena_size() const noexcept { return this->m_arena.pages * Page::size(); }
+		size_t memory_arena_size() const noexcept { return this->m_arena.pages * Page::size(); }
 		address_t memory_arena_read_boundary() const noexcept { return this->m_arena.read_boundary; }
 		address_t memory_arena_write_boundary() const noexcept { return this->m_arena.write_boundary; }
 		address_t initial_rodata_end() const noexcept { return this->m_arena.initial_rodata_end; }

@@ -27,10 +27,13 @@ namespace riscv {
 	typedef uint32_t addr_t;
 	typedef int32_t saddr_t;
 #  define XLEN  32
-#else
+#elif RISCV_TRANSLATION_DYLIB == 8
 	typedef uint64_t addr_t;
 	typedef int64_t saddr_t;
 #  define XLEN  64
+#elif RISCV_TRANSLATION_DYLIB == 16
+	typedef __uint128_t addr_t;
+	typedef __int128_t saddr_t;
 #endif
 #ifdef RISCV_EXT_C
 #define RISCV_ALIGN_MASK 0x1

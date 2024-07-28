@@ -316,7 +316,7 @@ namespace riscv
 		// We do not support binary translation for RV128I
 		// Also, avoid binary translation for execute segments that are likely JIT-compiled
 		const bool allow_translation = is_initial || options.translate_future_segments;
-		if (W != 16 && !exec.is_binary_translated() && allow_translation && !exec.is_likely_jit()) {
+		if (!exec.is_binary_translated() && allow_translation && !exec.is_likely_jit()) {
 			// Attempt to load binary translation
 			// Also, fill out the binary translation SO filename for later
 			std::string bintr_filename;
@@ -327,7 +327,7 @@ namespace riscv
 				machine().cpu.try_translate(
 					options, bintr_filename, shared_segment);
 			}
-		} // W != 16
+		}
 	#endif
 
 		// Debugging: EBREAK locations

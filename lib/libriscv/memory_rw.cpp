@@ -136,7 +136,7 @@ namespace riscv
 						// XXX: doesn't scale on busy server
 						if (offset == 0 && size == Page::size()) {
 							address_t new_dst = dst + (len & ~address_t(Page::size()-1));
-							new_dst = std::min(new_dst, memory_arena_size());
+							new_dst = std::min(new_dst, (address_t)memory_arena_size());
 							const size_t new_size = new_dst - dst;
 
 							auto* baseptr = &((uint8_t *)m_arena.data)[dst];
