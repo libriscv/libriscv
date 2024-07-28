@@ -21,6 +21,8 @@ function usage()
      --no-static          build dynamic CLI executable
      --native             build with -march=native
      --no-native          disable -march=native
+	 --lto                build with link-time optimization
+	 --no-lto             disable link-time optimization
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension
@@ -63,6 +65,8 @@ while [[ "$#" -gt 0 ]]; do
 		--no-static) OPTS="$OPTS -DSTATIC_BUILD=OFF" ;;
 		--native) OPTS="$OPTS -DNATIVE=ON" ;;
 		--no-native) OPTS="$OPTS -DNATIVE=OFF" ;;
+		--lto) OPTS="$OPTS -DLTO=ON" ;;
+		--no-lto) OPTS="$OPTS -DLTO=OFF" ;;
 		--A) OPTS="$OPTS -DRISCV_EXT_A=ON" ;;
 		--no-A) OPTS="$OPTS -DRISCV_EXT_A=OFF" ;;
 		--C) OPTS="$OPTS -DRISCV_EXT_C=ON" ;;
