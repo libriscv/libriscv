@@ -14,8 +14,12 @@ template <int W>
 RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	: m_machine{m}
 {
-	this->server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-
+	this->server_fd = socket(AF_INET,
+	                         SOCK_STREAM 
+#ifdef SOCK_NONBLOCK
+	                         	| SOCK_NONBLOCK
+#endif
+	                        ,0);
 	int opt = 1;
 	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
 		&opt, sizeof(opt))) {
