@@ -32,11 +32,15 @@ namespace riscv
 	// Default: RDTIME produces monotonic time with *microsecond*-granularity
 	template <int W>
 	uint64_t Machine<W>::default_rdtime(const Machine<W>& machine) {
+#ifdef __wasm__
+		return 0;
+#else
 		auto now = std::chrono::steady_clock::now();
 		auto micros = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 		if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
 			micros &= ANTI_FINGERPRINTING_MASK_MICROS();
 		return micros;
+#endif
 	}
 
 #ifndef __GNUG__ /* Workaround for GCC bug */
