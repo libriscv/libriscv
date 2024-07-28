@@ -80,7 +80,7 @@ static void add_mman_syscalls()
 #else
 				if (lseek(real_fd, voff, SEEK_SET) == (off_t)-1)
 					MMAP_HAS_FAILED();
-				if (readv(real_fd, (const iovec*)&buffers[0], cnt) != (ssize_t)length)
+				if (readv(real_fd, (const iovec*)&buffers[0], cnt) < 0)
 					MMAP_HAS_FAILED();
 #endif
 				// Set new page protections on area
