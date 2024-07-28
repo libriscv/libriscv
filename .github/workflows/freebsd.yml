@@ -5,7 +5,7 @@ on: [push]
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: A job to run test in FreeBSD
+    name: Emulator CLI
     env:
       MYTOKEN : "value1"
       MYTOKEN2: "value2"
