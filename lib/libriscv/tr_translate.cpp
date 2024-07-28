@@ -39,8 +39,8 @@ namespace riscv
 	static constexpr bool VERBOSE_BLOCKS = false;
 	static constexpr bool SCAN_FOR_GP = true;
 
-	inline timespec time_now();
-	inline long nanodiff(timespec, timespec);
+	static inline timespec time_now();
+	static inline long nanodiff(timespec, timespec);
 	#define TIME_POINT(x) \
 		[[maybe_unused]] timespec x;  \
 		if (options.translate_timing) { \

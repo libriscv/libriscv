@@ -10,10 +10,24 @@
 #include <inttypes.h>
 #include <mutex>
 #include <unordered_set>
+//#define ENABLE_TIMINGS
 
 namespace riscv
 {
 	static constexpr bool VERBOSE_DECODER = false;
+#ifdef ENABLE_TIMINGS
+	static inline timespec time_now();
+	static inline long nanodiff(timespec, timespec);
+	#define TIME_POINT(x) \
+		[[maybe_unused]] timespec x;  \
+		if (true) {                   \
+			asm("" : : : "memory");   \
+			x = time_now();           \
+			asm("" : : : "memory");   \
+		}
+#else
+	#define TIME_POINT(x) /* x */
+#endif
 
 	template <int W>
 	struct SharedExecuteSegments {
@@ -273,6 +287,7 @@ namespace riscv
 		[[maybe_unused]] const MachineOptions<W>& options,
 		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, [[maybe_unused]] bool is_initial)
 	{
+		TIME_POINT(t0);
 		auto& exec = *shared_segment;
 		if (exec.exec_end() < exec.exec_begin())
 			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
@@ -311,6 +326,7 @@ namespace riscv
 
 		// PC-relative pointer to instruction bits
 		auto* exec_segment = exec.exec_data();
+		TIME_POINT(t1);
 
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
@@ -354,6 +370,7 @@ namespace riscv
 		/* Generate all instruction pointers for executable code.
 		   Cannot step outside of this area when pregen is enabled,
 		   so it's fine to leave the boundries alone. */
+		TIME_POINT(t2);
 		address_t dst = addr;
 		const address_t end_addr = addr + len;
 		for (; dst < addr + len;)
@@ -451,8 +468,21 @@ namespace riscv
 		entry.set_bytecode(0);
 		entry.m_handler = 0;
 		entry.idxend = 0;
+		TIME_POINT(t3);
 
 		realize_fastsim<W>(addr, dst, exec_segment, exec_decoder);
+
+		TIME_POINT(t4);
+#ifdef ENABLE_TIMINGS
+		const long t1t0 = nanodiff(t0, t1);
+		const long t2t1 = nanodiff(t1, t2);
+		const long t3t2 = nanodiff(t2, t3);
+		const long t3t4 = nanodiff(t3, t4);
+		printf("libriscv: Decoder cache allocation took %ld ns\n", t1t0);
+		printf("libriscv: Decoder cache measurement took %ld ns\n", t2t1);
+		printf("libriscv: Decoder cache generation took %ld ns\n", t3t2);
+		printf("libriscv: Decoder cache realization took %ld ns\n", t3t4);
+#endif
 	}
 
 	template <int W> RISCV_INTERNAL
@@ -640,6 +670,19 @@ namespace riscv
 		for (auto addr : addresses)
 			result.push_back(addr);
 		return result;
+	}
+#endif
+
+#ifdef ENABLE_TIMINGS
+	timespec time_now()
+	{
+		timespec t;
+		clock_gettime(CLOCK_MONOTONIC, &t);
+		return t;
+	}
+	long nanodiff(timespec start_time, timespec end_time)
+	{
+		return (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
 	}
 #endif
 
