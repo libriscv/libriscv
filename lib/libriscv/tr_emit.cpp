@@ -1143,14 +1143,14 @@ void Emitter<W>::emit()
 				add_code(
 					dst + " = " + src + " | " + from_imm(instr.Itype.signed_imm()) + ";");
 				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
-					instr.Itype.signed_imm(), get_potential_gpr_value(instr.Itype.rs1) | instr.Itype.signed_imm());
+					get_potential_gpr_value(instr.Itype.rs1) | instr.Itype.signed_imm());
 				tracked = true;
 				break;
 			case 0x7: // ANDI
 				add_code(
 					dst + " = " + src + " & " + from_imm(instr.Itype.signed_imm()) + ";");
 				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
-					instr.Itype.signed_imm(), get_potential_gpr_value(instr.Itype.rs1) & instr.Itype.signed_imm());
+					get_potential_gpr_value(instr.Itype.rs1) & instr.Itype.signed_imm());
 				tracked = true;
 				break;
 			default:

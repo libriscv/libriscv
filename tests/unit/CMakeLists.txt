@@ -48,10 +48,9 @@ add_unit_test(rvbuffer rvbuffer.cpp)
 add_unit_test(serialize serialize.cpp)
 add_unit_test(vmcall   vmcall.cpp)
 add_unit_test(va_exec  va_execute.cpp)
+add_unit_test(elftest  verify_elf.cpp)
 
 if (NOT RISCV_BINARY_TRANSLATION)
-# Some of these ELFs use C-extension which is not supported
-add_unit_test(elftest  verify_elf.cpp)
 # Unknown issues, to be debugged later
 # Possibly bad (inline) assembly :)
 add_unit_test(mptest   mp_testsuite.cpp)
