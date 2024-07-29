@@ -7,6 +7,8 @@
 #include "settings.hpp"
 #if __has_include(<unistd.h>)
 #include <fcntl.h>
+#endif
+#if defined(__linux__)
 #include <sys/stat.h>
 #include <sys/mman.h>
 #endif
