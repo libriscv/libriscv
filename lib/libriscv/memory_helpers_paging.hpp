@@ -152,6 +152,34 @@ std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) co
 	return {(const char *)buffers[0].ptr, buffers[0].len};
 }
 
+template <int W>
+template <typename T, size_t N>
+std::array<T, N>* Memory<W>::memarray(address_t addr) const
+{
+	if (addr % alignof(T) != 0)
+		protection_fault(addr);
+
+	auto view = rvview(addr, sizeof(T) * N);
+	if (view.size() != sizeof(T) * N)
+		protection_fault(addr);
+
+	return (std::array<T, N>*) view.data();
+}
+
+template <int W>
+template <typename T>
+T* Memory<W>::memarray(address_t addr, size_t count, size_t maxbytes) const
+{
+	if (addr % alignof(T) != 0)
+		protection_fault(addr);
+
+	auto view = rvview(addr, count * sizeof(T), maxbytes);
+	if (view.size() != count * sizeof(T))
+		protection_fault(addr);
+
+	return (T*) view.data();
+}
+
 #ifdef RISCV_SPAN_AVAILABLE
 
 template <int W>
