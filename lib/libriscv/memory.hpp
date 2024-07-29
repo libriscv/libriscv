@@ -68,6 +68,12 @@ namespace riscv
 			return rvspan<T>(addr, N, maxlen).template first<N>();
 		}
 #endif
+		// View a fixed-size array of T from a known-sequential virtual memory region
+		template <typename T, size_t N>
+		std::array<T, N>* memarray(address_t addr) const;
+		// View a dynamically-sized array of T from a known-sequential virtual memory region
+		template <typename T>
+		T* memarray(address_t addr, size_t len, size_t maxbytes = 16ul << 20) const;
 		// Read a zero-terminated string directly from guests memory
 		std::string memstring(address_t addr, size_t maxlen = 16384) const;
 		size_t strlen(address_t addr, size_t maxlen = 16384) const;

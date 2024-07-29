@@ -344,13 +344,13 @@ namespace riscv
 	struct is_stdstring : public std::is_same<T, std::basic_string<char>> {};
 
 	template<class T>
-	struct is_stdarray : std::false_type {};
+	struct is_stdarray_ptr : std::false_type {};
 
 	template<class T, std::size_t N>
-	struct is_stdarray<std::array<T, N>> : std::true_type {};
+	struct is_stdarray_ptr<std::array<T, N>*> : std::true_type {};
 
 	template<class T>
-	constexpr bool is_stdarray_v = is_stdarray<T>::value;
+	constexpr bool is_stdarray_ptr_v = is_stdarray_ptr<T>::value;
 
 	template <typename T>
 	struct is_span : std::false_type{};
