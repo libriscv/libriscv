@@ -132,21 +132,21 @@ namespace riscv
 			// Go through entire executable segment and measure lengths
 			// Record entries while looking for jumping instruction, then
 			// fill out data and opcode lengths previous instructions.
-			std::vector<DecoderData<W>*> data;
+			std::vector<std::tuple<DecoderData<W>*, rv32i_instruction>> data;
 			address_type<W> pc = base_pc;
 			while (pc < last_pc) {
 				size_t datalength = 0;
 				address_type<W> block_pc = pc;
-				[[maybe_unused]] unsigned last_length = 0;
+				auto* entry = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
 				while (true) {
-					// Record the instruction
-					auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
-					data.push_back(&entry);
-
 					const auto instruction = read_instruction(
 						exec_segment, pc, last_pc);
 					const auto opcode = instruction.opcode();
 					const auto length = instruction.length();
+
+					// Record the instruction
+					data.push_back({entry, instruction});
+
 					// Make sure PC does not overflow
 					if (pc + length < pc)
 						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
@@ -155,13 +155,12 @@ namespace riscv
 					// If ending up crossing last_pc, it's an invalid block although
 					// it could just be garbage, so let's force-end with an invalid instruction.
 					if (UNLIKELY(pc > last_pc)) {
-						entry.m_bytecode = 0; // Invalid instruction
-						entry.m_handler = 0;
+						entry->m_bytecode = 0; // Invalid instruction
+						entry->m_handler = 0;
 						break;
 					}
 
 					datalength += length / 2;
-					last_length = length;
 
 					// All opcodes that can modify PC
 					if (length == 2)
@@ -174,18 +173,18 @@ namespace riscv
 							break;
 					}
 				#ifdef RISCV_BINARY_TRANSLATION
-					if (entry.get_bytecode() == translator_op)
+					if (entry->get_bytecode() == translator_op)
 						break;
 				#endif
 					// Catch-all for SYSTEM and patched EBREAK instructions
-					if (entry.get_bytecode() == RV32I_BC_SYSTEM)
+					if (entry->get_bytecode() == RV32I_BC_SYSTEM)
 						break;
 
 					// A last test for the last instruction, which should have been a block-ending
 					// instruction. Since it wasn't we must force-end the block here.
 					if (UNLIKELY(pc >= last_pc)) {
-						entry.m_bytecode = 0; // Invalid instruction
-						entry.m_handler = 0;
+						entry->m_bytecode = 0; // Invalid instruction
+						entry->m_handler = 0;
 						break;
 					}
 
@@ -194,11 +193,13 @@ namespace riscv
 						// NOTE: Reinsert original instruction, as long sequences will lead to
 						// PC becoming desynched, as it doesn't get increased.
 						// We use a new block-ending fallback function handler instead.
-						entry.set_bytecode(RV32I_BC_FUNCBLOCK);
-						entry.set_handler(CPU<W>::decode(instruction));
-						entry.instr = instruction.whole;
+						entry->set_bytecode(RV32I_BC_FUNCBLOCK);
+						entry->set_handler(CPU<W>::decode(instruction));
+						entry->instr = instruction.whole;
 						break;
 					}
+
+					entry += length / 2;
 				}
 				if constexpr (VERBOSE_DECODER) {
 					fprintf(stderr, "Block 0x%lX to 0x%lX\n", block_pc, pc);
@@ -207,11 +208,13 @@ namespace riscv
 				if (UNLIKELY(data.size() == 0))
 					throw MachineException(INVALID_PROGRAM, "Encountered empty block after measuring");
 
-				for (size_t i = 0; i < data.size(); i++) {
-					auto* entry = data[i];
+				const auto last_length = std::get<1>(data.back()).length();
 
-					const auto instruction = read_instruction(
-						exec_segment, block_pc, last_pc);
+				for (size_t i = 0; i < data.size(); i++) {
+					auto& tuple = data[i];
+					auto* entry = std::get<0>(tuple);
+
+					const auto instruction = std::get<1>(tuple);
 					const auto length = instruction.length();
 
 					// Ends at instruction *before* last PC
