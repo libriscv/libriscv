@@ -203,7 +203,11 @@ void syscall_lseek(Machine<W>& machine)
 
 	if (machine.has_file_descriptors()) {
 		const int real_fd = machine.fds().get(fd);
+#ifndef __wasm__
 		long res = lseek(real_fd, offset, whence);
+#else
+		long res = -ENOSYS;
+#endif
 		machine.set_result_or_error(res);
 	} else {
 		machine.set_result(-EBADF);
@@ -266,6 +270,8 @@ static void syscall_pread64(Machine<W>& machine)
 #if defined(__linux__) && !defined(__ANDROID__)
 		const ssize_t res =
 			preadv64(real_fd, (const iovec *)&buffers[0], cnt, offset);
+#elif defined(__wasm__)
+		const ssize_t res = -ENOSYS;
 #else
 		size_t total = 0;
 		ssize_t res = 0;

@@ -77,6 +77,11 @@ static void add_mman_syscalls()
 					if (_read(real_fd, buffers.at(i).ptr, buffers.at(i).len) != buffers.at(i).len)
 						MMAP_HAS_FAILED();
 				}
+#elif defined(__wasm__)
+				if (voff != 0) // lseek: Not supported
+					MMAP_HAS_FAILED();
+				if (readv(real_fd, (const iovec*)&buffers[0], cnt) < 0)
+					MMAP_HAS_FAILED();
 #else
 				if (lseek(real_fd, voff, SEEK_SET) == (off_t)-1)
 					MMAP_HAS_FAILED();
