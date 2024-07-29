@@ -1,6 +1,6 @@
-# RISC-V userspace emulator library
+# RISC-V sandboxing library
 
-_libriscv_ is a simple, slim and complete RISC-V userspace emulator that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50-150ns to call a VM function and return, _libriscv_ requires 3ns. _libriscv_ is also routinely faster than other interpreters, JIT-compilers and binary translators. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
+_libriscv_ is a simple, slim and complete sandbox that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50-150ns to call a VM function and return, _libriscv_ requires 3ns. _libriscv_ is also routinely faster than other interpreters, JIT-compilers and binary translators. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
 
 There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to remotely live-debug programs. A [Cosmopolitan](https://github.com/jart/cosmopolitan) build can be [downloaded here](https://github.com/fwsGonzo/libriscv/releases/download/v1.7/libriscv-cli).
 
