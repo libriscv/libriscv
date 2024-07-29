@@ -13,8 +13,8 @@
 #endif
 
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
-#define PCRELS(x) std::to_string(PCRELA(x)) + "UL"
-#define STRADDR(x) (std::to_string(x) + "UL")
+#define PCRELS(x) hex_address(PCRELA(x)) + "L"
+#define STRADDR(x) (hex_address(x) + "L")
 // Reveal PC on unknown instructions
 #ifdef RISCV_LIBTCC
 // libtcc always runs on the current machine, so we can use the handler index directly
@@ -49,7 +49,7 @@
 	this->reload_all_registers(); \
 	this->untrack_all_gprs();     \
   } else if (m_zero_insn_counter <= 1) \
-    code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+    code += "api.exception(cpu, " + hex_address(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
 #define WELL_KNOWN_INSTRUCTION() { \
     code += "{ static int handler_idx = 0;\n"; \
@@ -64,7 +64,7 @@ static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
 
 static std::string hex_address(uint64_t addr) {
-	char buf[32];
+	char buf[64];
 	if (const int len = snprintf(buf, sizeof(buf), "0x%" PRIx64, uint64_t(addr)); len > 0)
 		return std::string(buf, len);
 	throw MachineException(INVALID_PROGRAM, "Failed to format address");
@@ -72,7 +72,7 @@ static std::string hex_address(uint64_t addr) {
 
 template <int W>
 static std::string funclabel(const std::string& func, uint64_t addr) {
-	char buf[32];
+	char buf[64];
 	if (const int len = snprintf(buf, sizeof(buf), "%s_%" PRIx64, func.c_str(), addr); len > 0)
 		return std::string(buf, len);
 	throw MachineException(INVALID_PROGRAM, "Failed to format function label");
@@ -178,10 +178,13 @@ struct Emitter
 
 	std::string from_reg(int reg) {
 		if (reg == 3 && tinfo.gp != 0)
-			return std::to_string(tinfo.gp) + "UL";
+			return hex_address(tinfo.gp) + "L";
 		else if (reg != 0) {
 			if (gpr_has_known_value(reg)) {
-				return std::to_string(get_gpr_value(reg)) + "UL";
+				if constexpr (W == 16)
+					return hex_address(get_gpr_value(reg)) + "L";
+				else
+					return std::to_string(get_gpr_value(reg)) + "UL";
 			} else if (uses_register_caching()) {
 				load_register(reg);
 				return loaded_regname(reg);
@@ -255,7 +258,7 @@ struct Emitter
 				if (riscv::encompassing_Nbit_arena == 32)
 					return "(" + m_arena_hex_address + " + (uint32_t)(" + address + "))";
 				else
-					return "(" + m_arena_hex_address + " + ((" + address + ") & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + "))";
+					return "(" + m_arena_hex_address + " + ((" + address + ") & " + hex_address(address_t(riscv::encompassing_arena_mask)) + "))";
 			} else {
 				return "(" + m_arena_hex_address + " + " + speculation_safe(address) + ")";
 			}
@@ -263,7 +266,7 @@ struct Emitter
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
 				return "ARENA_AT(cpu, (uint32_t)(" + address + "))";
 			else
-				return "ARENA_AT(cpu, " + address + " & " + std::to_string(address_t(riscv::encompassing_arena_mask)) + ")";
+				return "ARENA_AT(cpu, " + address + " & " + hex_address(address_t(riscv::encompassing_arena_mask)) + ")";
 		} else {
 			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
@@ -1140,14 +1143,14 @@ void Emitter<W>::emit()
 				add_code(
 					dst + " = " + src + " | " + from_imm(instr.Itype.signed_imm()) + ";");
 				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
-					instr.Itype.signed_imm(), get_potential_gpr_value(instr.Itype.rs1) | instr.Itype.signed_imm());
+					get_potential_gpr_value(instr.Itype.rs1) | instr.Itype.signed_imm());
 				tracked = true;
 				break;
 			case 0x7: // ANDI
 				add_code(
 					dst + " = " + src + " & " + from_imm(instr.Itype.signed_imm()) + ";");
 				this->track_gpr_if_known(instr.Itype.rd, instr.Itype.rs1,
-					instr.Itype.signed_imm(), get_potential_gpr_value(instr.Itype.rs1) & instr.Itype.signed_imm());
+					get_potential_gpr_value(instr.Itype.rs1) & instr.Itype.signed_imm());
 				tracked = true;
 				break;
 			default:
@@ -2026,7 +2029,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
 		auto& entry = e.get_mappings().at(idx);
 		const auto label = funclabel<W>(e.get_func(), entry.addr);
-		code += "case " + std::to_string(entry.addr) + ": goto " + label + ";\n";
+		code += "case " + hex_address(entry.addr) + ": goto " + label + ";\n";
 	}
 	code += "default:\n";
 #endif
@@ -2049,5 +2052,8 @@ template std::vector<TransMapping<4>> CPU<4>::emit(std::string&, const TransInfo
 #endif
 #ifdef RISCV_64I
 template std::vector<TransMapping<8>> CPU<8>::emit(std::string&, const TransInfo<8>&);
+#endif
+#ifdef RISCV_128I
+template std::vector<TransMapping<16>> CPU<16>::emit(std::string&, const TransInfo<16>&);
 #endif
 } // riscv

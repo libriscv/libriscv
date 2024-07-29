@@ -39,8 +39,8 @@ namespace riscv
 	static constexpr bool VERBOSE_BLOCKS = false;
 	static constexpr bool SCAN_FOR_GP = true;
 
-	inline timespec time_now();
-	inline long nanodiff(timespec, timespec);
+	static inline timespec time_now();
+	static inline long nanodiff(timespec, timespec);
 	#define TIME_POINT(x) \
 		[[maybe_unused]] timespec x;  \
 		if (options.translate_timing) { \
@@ -138,8 +138,8 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	const auto arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
 
 	// Some executables are loaded at high-memory addresses, which is outside of the memory arena.
-	auto arena_end          = machine.memory.memory_arena_size();
-	auto initial_rodata_end = machine.memory.initial_rodata_end();
+	size_t arena_end                   = machine.memory.memory_arena_size();
+	address_type<W> initial_rodata_end = machine.memory.initial_rodata_end();
 	if (!options.translation_use_arena) {
 		initial_rodata_end = 0;
 		arena_end = 0x1000;
@@ -159,8 +159,13 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 #endif
 	defines.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
 	defines.emplace("RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX));
-	defines.emplace("RISCV_ARENA_END", std::to_string(arena_end));
-	defines.emplace("RISCV_ARENA_ROEND", std::to_string(initial_rodata_end));
+	if constexpr (W == 16) {
+		defines.emplace("RISCV_ARENA_END", std::to_string(uint64_t(arena_end)));
+		defines.emplace("RISCV_ARENA_ROEND", std::to_string(uint64_t(initial_rodata_end)));
+	} else {
+		defines.emplace("RISCV_ARENA_END", std::to_string(arena_end));
+		defines.emplace("RISCV_ARENA_ROEND", std::to_string(initial_rodata_end));
+	}
 	defines.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
 	defines.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
 	defines.emplace("RISCV_ARENA_OFF", std::to_string(arena_offset));
@@ -1236,6 +1241,11 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 	template void CPU<8>::try_translate(const MachineOptions<8>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<8>>&) const;
 	template int CPU<8>::load_translation(const MachineOptions<8>&, std::string*, DecodedExecuteSegment<8>&) const;
 	template std::string MachineOptions<8>::translation_filename(const std::string&, uint32_t, const std::string&);
+#endif
+#ifdef RISCV_128I
+	template void CPU<16>::try_translate(const MachineOptions<16>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<16>>&) const;
+	template int CPU<16>::load_translation(const MachineOptions<16>&, std::string*, DecodedExecuteSegment<16>&) const;
+	template std::string MachineOptions<16>::translation_filename(const std::string&, uint32_t, const std::string&);
 #endif
 
 	timespec time_now()

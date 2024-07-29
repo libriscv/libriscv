@@ -428,8 +428,8 @@ namespace riscv
 		}
 
 		if (this->uses_flat_memory_arena() && this->memory_arena_size() >= m_arena.initial_rodata_end) {
-			this->m_arena.read_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - RWREAD_BEGIN);
-			this->m_arena.write_boundary = std::min(this->memory_arena_size(), this->memory_arena_size() - m_arena.initial_rodata_end);
+			this->m_arena.read_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - RWREAD_BEGIN));
+			this->m_arena.write_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - m_arena.initial_rodata_end));
 		} else {
 			this->m_arena.initial_rodata_end = 0;
 		}
