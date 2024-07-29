@@ -1,6 +1,8 @@
 #if __has_include(<bit>)
-#include <bit>
-#define RISCV_HAS_BITOPS
+# include <bit>
+# if defined(__cpp_lib_bitops)
+#  define RISCV_HAS_BITOPS
+# endif
 #endif
 #include <cmath>
 #include <chrono>
