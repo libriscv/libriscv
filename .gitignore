@@ -17,5 +17,6 @@ webapi/tests/binary
 .vscode/
 gmon.out
 callgraph.svg
+*.o
 *.os
 .DS_Store
