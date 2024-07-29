@@ -376,6 +376,7 @@ namespace riscv
 		for (; dst < addr + len;)
 		{
 			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
+			entry.m_handler = 0;
 			entry.idxend = 0;
 
 			// Load unaligned instruction from execute segment
@@ -384,11 +385,9 @@ namespace riscv
 			rv32i_instruction rewritten = instruction;
 
 #ifdef RISCV_BINARY_TRANSLATION
-			if (entry.get_bytecode() == RV32I_BC_TRANSLATOR) {
-				// Translator activation uses a special bytecode
-				// but we must still validate the mapping index.
-				if (entry.instr >= exec.translator_mappings())
-					throw MachineException(INVALID_PROGRAM, "Invalid translator mapping index");
+			// Translator activation uses a special bytecode
+			// but we must still validate the mapping index.
+			if (entry.get_bytecode() == RV32I_BC_TRANSLATOR && entry.is_invalid_handler() && entry.instr < exec.translator_mappings()) {
 				if constexpr (compressed_enabled) {
 					dst += 2;
 					if (was_full_instruction) {
@@ -403,10 +402,6 @@ namespace riscv
 #endif // RISCV_BINARY_TRANSLATION
 
 			if (was_full_instruction) {
-				// Insert decoded instruction into decoder cache
-				Instruction<W> decoded = CPU<W>::decode(instruction);
-				entry.set_handler(decoded);
-
 				// Cache the (modified) instruction bits
 				auto bytecode = CPU<W>::computed_index_for(instruction);
 				// Threaded rewrites are **always** enabled
@@ -479,9 +474,10 @@ namespace riscv
 		const long t3t2 = nanodiff(t2, t3);
 		const long t3t4 = nanodiff(t3, t4);
 		printf("libriscv: Decoder cache allocation took %ld ns\n", t1t0);
-		printf("libriscv: Decoder cache measurement took %ld ns\n", t2t1);
+		printf("libriscv: Decoder cache bintr activation took %ld ns\n", t2t1);
 		printf("libriscv: Decoder cache generation took %ld ns\n", t3t2);
 		printf("libriscv: Decoder cache realization took %ld ns\n", t3t4);
+		printf("libriscv: Decoder cache totals: %ld us\n", nanodiff(t0, t4) / 1000);
 #endif
 	}
 

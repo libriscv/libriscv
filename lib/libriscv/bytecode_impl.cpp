@@ -571,9 +571,8 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 
 INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
 {
-	auto handler = DECODER().get_handler();
 	//printf("Slowpath: 0x%X  (instr: 0x%X)\n", uint32_t(pc), DECODER().instr);
-	handler(CPU(), {DECODER().instr});
+	CPU().execute(DECODER().m_handler, DECODER().instr);
 	NEXT_INSTR();
 }
 
@@ -760,10 +759,8 @@ INSTRUCTION(RV32C_BC_ANDI, rv32c_andi) {
 	NEXT_C_INSTR();
 }
 INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jumpfunc) {
-	VIEW_INSTR();
 	REGISTERS().pc = pc;
-	auto handler = DECODER().get_handler();
-	handler(CPU(), instr);
+	CPU().execute(DECODER().m_handler, DECODER().instr);
 	if constexpr (VERBOSE_JUMPS) {
 		fprintf(stderr, "Compressed jump from 0x%lX to 0x%lX\n",
 			long(pc), long(REGISTERS().pc + 2));
@@ -772,9 +769,7 @@ INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jumpfunc) {
 	OVERFLOW_CHECKED_JUMP();
 }
 INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func) {
-	VIEW_INSTR();
-	auto handler = DECODER().get_handler();
-	handler(CPU(), instr);
+	CPU().execute(DECODER().m_handler, DECODER().instr);
 	NEXT_C_INSTR();
 }
 #endif

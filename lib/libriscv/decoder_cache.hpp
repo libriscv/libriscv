@@ -47,6 +47,12 @@ struct DecoderData {
 	void set_insn_handler(instruction_handler<W> ih) noexcept {
 		this->m_handler = handler_index_for(ih);
 	}
+	void set_invalid_handler() noexcept {
+		this->m_handler = 0;
+	}
+	bool is_invalid_handler() const noexcept {
+		return this->m_handler == 0;
+	}
 
 	RISCV_ALWAYS_INLINE
 	auto block_bytes() const noexcept {
@@ -97,7 +103,7 @@ struct alignas(64) DecoderCache
 		return &cache[0];
 	}
 
-	std::array<DecoderData<W>, PageSize / DIVISOR> cache = {};
+	std::array<DecoderData<W>, PageSize / DIVISOR> cache;
 };
 
 }

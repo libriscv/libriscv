@@ -256,8 +256,9 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 					const auto& mapping = translation.mappings[i];
 
 					auto& entry = decoder_entry_at(exec.decoder_cache(), mapping.addr);
-					entry.instr = mapping.mapping_index;
 					entry.set_bytecode(bytecode);
+					entry.set_invalid_handler();
+					entry.instr = mapping.mapping_index;
 				}
 				if (options.translate_timing) {
 					TIME_POINT(t7);
@@ -952,6 +953,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					// function, which will be the last instruction in the block.
 					auto& p = decoder_entry_at(patched_decoder, addr);
 					p.set_bytecode(RV32I_BC_TRANSLATOR);
+					p.set_invalid_handler();
 					p.instr  = mapping_index;
 					p.idxend = 0;
 				#ifdef RISCV_EXT_C
@@ -963,8 +965,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					// Normal block-end hint that will be transformed into a translation
 					// bytecode if it passes a few more checks, later.
 					auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
-					entry.instr = mapping_index;
 					entry.set_bytecode(RV32I_BC_TRANSLATOR);
+					entry.set_invalid_handler();
+					entry.instr = mapping_index;
 				}
 			} else {
 				auto& entry = decoder_entry_at(exec.decoder_cache(), addr);
