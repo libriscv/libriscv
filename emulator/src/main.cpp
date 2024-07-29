@@ -5,9 +5,8 @@
 #include <chrono>
 #include <thread>
 #include "settings.hpp"
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#if __has_include(<unistd.h>)
 #include <fcntl.h>
-#include <unistd.h>
 #endif
 #if defined(__linux__)
 #include <sys/stat.h>
