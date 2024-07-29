@@ -320,7 +320,7 @@ static void syscall_sendto(Machine<W>& machine)
 
 		const struct msghdr hdr {
 			.msg_name = dest_addr,
-			.msg_namelen = dest_addrlen,
+			.msg_namelen = static_cast<socklen_t>(dest_addrlen),
 			.msg_iov = (struct iovec *)buffers.data(),
 			.msg_iovlen = buffer_cnt,
 			.msg_control = nullptr,

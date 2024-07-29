@@ -30,6 +30,7 @@ extern "C" int dup3(int oldfd, int newfd, int flags);
 #if __has_include(<termios.h>)
 #include <termios.h>
 #endif
+#include <sys/syscall.h>
 #ifndef EBADFD
 #define EBADFD EBADF  // OpenBSD, FreeBSD
 #endif
@@ -262,7 +263,7 @@ static void syscall_pread64(Machine<W>& machine)
 		std::array<riscv::vBuffer, 512> buffers;
 		const size_t cnt =
 			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), address, len);
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
 		const ssize_t res =
 			preadv64(real_fd, (const iovec *)&buffers[0], cnt, offset);
 #else
@@ -857,44 +858,6 @@ static void syscall_fstat(Machine<W>& machine)
 	machine.set_result(-ENOSYS);
 }
 
-#ifdef __linux__
-template <int W>
-static void syscall_statx(Machine<W>& machine)
-{
-	machine.set_result(-ENOSYS);
-	return;
-
-	const int   dir_fd = machine.template sysarg<int> (0);
-	const auto  g_path = machine.sysarg(1);
-	const int    flags = machine.template sysarg<int> (2);
-	const auto    mask = machine.template sysarg<uint32_t> (3);
-	const auto  buffer = machine.sysarg(4);
-
-	const auto path = machine.memory.memstring(g_path);
-
-	SYSPRINT("SYSCALL statx, fd: %d path: %s flags: %x buf: 0x%lX)\n",
-			dir_fd, path.c_str(), flags, (long)buffer);
-
-	if (machine.has_file_descriptors()) {
-		if (machine.fds().filter_stat != nullptr) {
-			if (!machine.fds().filter_stat(machine.template get_userdata<void>(), path)) {
-				machine.set_result(-EPERM);
-				return;
-			}
-		}
-
-		struct statx st;
-		int res = ::statx(dir_fd, path.c_str(), flags, mask, &st);
-		if (res == 0) {
-			machine.copy_to_guest(buffer, &st, sizeof(struct statx));
-		}
-		machine.set_result_or_error(res);
-		return;
-	}
-	machine.set_result(-ENOSYS);
-}
-#endif // __linux__
-
 template <int W>
 static void syscall_gettimeofday(Machine<W>& machine)
 {
@@ -1120,6 +1083,8 @@ static void syscall_getrandom(Machine<W>& machine)
 	const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
 	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
 	#endif
+#elif defined(__ANDROID__)
+	const ssize_t result = -1;
 #else
 	const ssize_t result = getrandom(buffer, need, 0);
 #endif
@@ -1326,11 +1291,6 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 		if (sockets)
 			add_socket_syscalls(*this);
 	}
-
-#ifdef __linux__
-	// statx
-	install_syscall_handler(291, syscall_statx<W>);
-#endif
 }
 
 #ifdef RISCV_32I
