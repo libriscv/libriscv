@@ -1,5 +1,7 @@
-#include "rv32i_instr.hpp"
 #include "machine.hpp"
+
+#include "decoder_cache.hpp"
+#include "rv32i_instr.hpp"
 #undef RISCV_EXT_COMPRESSED
 #define RISCV_128BIT_ISA_INSTRUCTIONS
 
@@ -34,6 +36,16 @@ namespace riscv
 #define DECODER(x) { x.handler(*this, instruction); return; }
 #include "instr_decoding.inc"
 #undef DECODER
+	}
+
+	template <> RISCV_INTERNAL
+	void CPU<16>::execute(uint8_t& handler_idx, uint32_t instr)
+	{
+		if (handler_idx == 0 && instr != 0) {
+			[[unlikely]];
+			handler_idx = DecoderData<16>::handler_index_for(decode(instr).handler);
+		}
+		DecoderData<16>::get_handlers()[handler_idx](*this, instr);
 	}
 
 	template <>

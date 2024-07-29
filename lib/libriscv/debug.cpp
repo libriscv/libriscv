@@ -486,7 +486,7 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 			// Retrieve handler directly from the instruction handler cache
 			auto& cache_entry =
 				exec_decoder[pc / DecoderCache<W>::DIVISOR];
-			cache_entry.execute(cpu, instruction);
+			cpu.execute(cache_entry.m_handler, instruction.whole);
 		}
 		else // Not the slowest path, since we have the instruction already
 		{

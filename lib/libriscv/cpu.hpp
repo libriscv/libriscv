@@ -88,6 +88,8 @@ namespace riscv
 
 		// Directly execute an instruction (given bits)
 		void execute(format_t);
+		// Directly execute a function by its handler, or if the handler is 0, resolve the handler then execute
+		void execute(uint8_t& handler_idx, uint32_t instr);
 		// Read the next instruction bits
 		format_t read_next_instruction() const;
 		// Internal preempt() implementation that executes and restores old registers

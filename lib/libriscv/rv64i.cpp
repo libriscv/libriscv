@@ -1,4 +1,6 @@
 #include "machine.hpp"
+
+#include "decoder_cache.hpp"
 #include "rv32i_instr.hpp"
 
 #define INSTRUCTION(x, ...) \
@@ -33,6 +35,16 @@ namespace riscv
 #define DECODER(x) { x.handler(*this, instruction); return; }
 #include "instr_decoding.inc"
 #undef DECODER
+	}
+
+	template <> RISCV_INTERNAL
+	void CPU<8>::execute(uint8_t& handler_idx, uint32_t instr)
+	{
+		if (handler_idx == 0 && instr != 0) {
+			[[unlikely]];
+			handler_idx = DecoderData<8>::handler_index_for(decode(instr).handler);
+		}
+		DecoderData<8>::get_handlers()[handler_idx](*this, instr);
 	}
 
 	template <>
