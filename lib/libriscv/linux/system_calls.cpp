@@ -1089,7 +1089,7 @@ static void syscall_getrandom(Machine<W>& machine)
 	const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
 	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
 	#endif
-#elif defined(__ANDROID__)
+#elif defined(__ANDROID__) || defined(__wasm__)
 	const ssize_t result = -1;
 #else
 	const ssize_t result = getrandom(buffer, need, 0);
@@ -1177,7 +1177,11 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(67, syscall_pread64<W>);
 	install_syscall_handler(72, syscall_pselect<W>);
 	install_syscall_handler(73, syscall_ppoll<W>);
+#ifdef __wasm__
+	install_syscall_handler(78, syscall_stub_nosys<W>);
+#else
 	install_syscall_handler(78, syscall_readlinkat<W>);
+#endif
 	// 79: fstatat
 	install_syscall_handler(79, syscall_fstatat<W>);
 	// 80: fstat
