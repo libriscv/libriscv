@@ -156,7 +156,7 @@ namespace riscv
 		/// @param dst The destination host buffer.
 		/// @param buf The virtual address to the programs buffer.
 		/// @param len The size of the programs buffer.
-		void copy_from_guest(void* dst, address_t buf, size_t len);
+		void copy_from_guest(void* dst, address_t buf, size_t len) const;
 
 		/// @brief Create a startup stack for a Newlib or equivalent program.
 		/// Program arguments and environment variables are pushed on the stack.
