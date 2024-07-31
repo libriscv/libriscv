@@ -93,6 +93,60 @@ namespace riscv
 		return nullptr;
 	}
 
+	template <int W>
+	std::vector<const char*> Memory<W>::all_symbols() const
+	{
+		std::vector<const char*> symbols;
+		if (UNLIKELY(m_binary.empty())) return symbols;
+		const auto* sym_hdr = section_by_name(".symtab");
+		const auto* str_hdr = section_by_name(".strtab");
+		if (UNLIKELY(sym_hdr == nullptr || str_hdr == nullptr)) return symbols;
+		// ELF with no symbols
+		if (UNLIKELY(sym_hdr->sh_size == 0)) return symbols;
+
+		const auto* symtab = elf_sym_index(sym_hdr, 0);
+		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf::Sym);
+		const char* strtab = elf_offset<char>(str_hdr->sh_offset);
+		symbols.reserve(symtab_ents);
+
+		for (size_t i = 0; i < symtab_ents; i++)
+		{
+			const char* symname = &strtab[symtab[i].st_name];
+			symbols.push_back(symname);
+		}
+		return symbols;
+	}
+
+	template <int W>
+	std::vector<std::string_view> Memory<W>::all_unmangled_function_symbols(const std::string& prefix) const
+	{
+		std::vector<std::string_view> symbols;
+		if (UNLIKELY(m_binary.empty())) return symbols;
+		const auto* sym_hdr = section_by_name(".symtab");
+		const auto* str_hdr = section_by_name(".strtab");
+		if (UNLIKELY(sym_hdr == nullptr || str_hdr == nullptr)) return symbols;
+		// ELF with no symbols
+		if (UNLIKELY(sym_hdr->sh_size == 0)) return symbols;
+
+		const auto* symtab = elf_sym_index(sym_hdr, 0);
+		const size_t symtab_ents = sym_hdr->sh_size / sizeof(typename Elf::Sym);
+		const char* strtab = elf_offset<char>(str_hdr->sh_offset);
+		symbols.reserve(symtab_ents);
+
+		for (size_t i = 0; i < symtab_ents; i++)
+		{
+			const char* symname = &strtab[symtab[i].st_name];
+			if (Elf::SymbolType(symtab[i].st_info) == Elf::STT_FUNC) {
+				std::string_view symview(symname);
+				// Detect if the symbol is unmangled (no _Z prefix)
+				if (symview.size() > 2 && symview[0] != '_' && symview[1] != 'Z') {
+					if (prefix.empty() || symview.compare(0, prefix.size(), prefix) == 0)
+						symbols.push_back(symview);
+				}
+			}
+		}
+		return symbols;
+	}
 
 	template <int W>
 	static void elf_print_sym(const typename Elf<W>::Sym* sym)
