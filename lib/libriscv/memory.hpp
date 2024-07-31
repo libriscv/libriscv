@@ -123,6 +123,12 @@ namespace riscv
 		Callsite lookup(address_t) const;
 		void print_backtrace(std::function<void(std::string_view)>, bool ra = true) const;
 
+		// Get list of all symbols in the binary
+		std::vector<const char*> all_symbols() const;
+		// Get list of all unmangled symbols in the binary that starts with a given prefix
+		// If the prefix is empty, all unmangled functions are returned
+		std::vector<std::string_view> all_unmangled_function_symbols(const std::string& prefix = "") const;
+
 		// Counts all the memory used by the machine, execute segments, pages, etc.
 		uint64_t memory_usage_total() const noexcept;
 		// Helpers for memory usage
