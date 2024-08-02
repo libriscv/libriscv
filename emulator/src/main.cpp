@@ -33,6 +33,7 @@ struct Arguments {
 	bool mingw = false;
 	bool from_start = false;
 	bool sandbox = false;
+	bool execute_only = false;
 	bool ignore_text = false;
 	bool background = false; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
@@ -69,6 +70,7 @@ static const struct option long_options[] = {
 	{"sandbox", no_argument, 0, 'S'},
 	{"proxy", no_argument, 0, 'P'},
 	{"allow", required_argument, 0, 'A'},
+	{"execute-only", no_argument, 0, 'X'},
 	{"ignore-text", no_argument, 0, 'I'},
 	{"call", required_argument, 0, 'c'},
 	{0, 0, 0, 0}
@@ -100,6 +102,7 @@ static void print_help(const char* name)
 		"  -S  --sandbox      Enable strict sandbox\n"
 		"  -P, --proxy        Enable proxy mode, allowing access to all files (disabling the sandbox)\n"
 		"  -A, --allow file   Allow file to be opened by the guest\n"
+		"  -X, --execute-only Enforce execute-only segments (no read/write)\n"
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
 		"  -c, --call func    Call a function after loading the program\n"
 		"\n"
@@ -149,7 +152,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvQad1f:gstTnNRJ:Bmo:FSPA:Ic:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvQad1f:gstTnNRJ:Bmo:FSPA:XIc:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -175,6 +178,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'S': args.sandbox = true; break;
 			case 'P': args.proxy_mode = true; break;
 			case 'A': args.allowed_files.push_back(optarg); break;
+			case 'X': args.execute_only = true; break;
 			case 'I': args.ignore_text = true; break;
 			case 'c': break;
 			default:
@@ -249,6 +253,7 @@ static void run_program(
 	// Create a RISC-V machine with the binary as input program
 	riscv::Machine<W> machine { binary, {
 		.memory_max = MAX_MEMORY,
+		.enforce_exec_only = cli_args.execute_only,
 		.ignore_text_section = cli_args.ignore_text,
 		.verbose_loader = cli_args.verbose,
 		.use_shared_execute_segments = false, // We are only creating one machine, disabling this can enable some optimizations
@@ -621,6 +626,7 @@ static void run_program(
 		}
 	}
 #endif
+	_exit(0);
 }
 
 int main(int argc, const char** argv)

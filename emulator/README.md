@@ -38,13 +38,15 @@ Options:
   -n, --no-translate Disable binary translation
   -N, --no-translate-future Disable binary translation of non-initial segments
   -R, --translate-regcache Enable register caching in binary translator
+  -J, --jump-hints file  Load jump location hints from file, unless empty then record instead
   -B  --background   Run binary translation in background thread
   -m, --mingw        Cross-compile for Windows (MinGW)
-  -o, --output file  Output an embeddable C99 code file, using binary translation
+  -o, --output file  Output embeddable binary translated code (C99)
   -F, --from-start   Start debugger from the beginning (_start)
   -S  --sandbox      Enable strict sandbox
   -P, --proxy        Enable proxy mode, allowing access to all files (disabling the sandbox)
   -A, --allow file   Allow file to be opened by the guest
+  -X, --execute-only Enforce execute-only segments (no read/write)
   -I, --ignore-text  Ignore .text section, and use segments only
   -c, --call func    Call a function after loading the program
 ```
