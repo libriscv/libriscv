@@ -17,12 +17,15 @@ _libriscv_ is an ultra-low latency emulator, designed specifically to have very 
 Goals:
 - Lowest possible latency
 	- Calling a guest VM function can finish 1-2 orders of magnitude before other emulators begin executing the first instruction
+- Lightning-fast interpreter mode
 - Modern, type-safe VM call and system call interfaces
 	- The safe interfaces prevents all kinds of footguns that the author has personally suffered, and consequently blocked off forever :-)
 - [Secure speculation-safe sandbox](SECURITY.md)
 - Low attack surface, only 20k LOC
 - Platform-independent and super-easy to embed
-	- Supports platforms with C++20 or later support (GCC/Clang with C++17 or later)
+	- Supports all architectures and all platforms, with binary translation
+	- Yes, that includes all consoles, all Mobile platforms etc. With embeddable binary translation.
+	- Requires only C++17 or later
 - Just-in-time compilation for development usage
 	- [libtcc](#embedded-libtcc) can be used to instantly improve emulation of RISC-V programs
 - High-performance binary translation on end-user systems through DLLs (eg. Windows)
@@ -33,7 +36,7 @@ Goals:
 	- Emulator starts instantly, and all binary translation modes can be compiled in a background thread, and then applied using thread-safe live-patching techniques
 - Tiny memory footprint
 	- Less than 40kB total memory usage for [fibonacci program](/binaries/measure_mips/fib.c)
-- High scalability with special fork support and shared memories
+- High scalability with unique CoW-support and shared memories
 	- Serve requests using ephemeral VMs in ~1us in production (not microbenchmark/slideware)
 	- Execute segments are automatically shared among all instances (with or without forking)
 - Dynamic linking and run-time dlopen() support
