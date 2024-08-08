@@ -585,7 +585,15 @@ namespace riscv
 			if (address >= symtab[i].st_value &&
 				address < symtab[i].st_value + symtab[i].st_size)
 			{
-				// exact match
+				// We have an exact match, however there are cases of overlapping symbols
+				// so we need to check one more entry to see if it is a better match.
+				if (i + 1 < symtab_ents && address >= symtab[i + 1].st_value &&
+					address < symtab[i + 1].st_value + symtab[i + 1].st_size)
+				{
+					// The next symbol was a better match
+					return result(strtab, address, &symtab[i + 1]);
+				}
+				// The current symbol was the best match
 				return result(strtab, address, &symtab[i]);
 			}
 			else if (address > symtab[i].st_value)
