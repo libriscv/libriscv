@@ -1107,6 +1107,44 @@ static void syscall_getrandom(Machine<W>& machine)
 	}
 }
 
+#if defined(__linux__) && !defined(__ANDROID__)
+template <int W>
+static void syscall_statx(Machine<W>& machine)
+{
+	machine.set_result(-ENOSYS);
+	return;
+
+	const int   dir_fd = machine.template sysarg<int> (0);
+	const auto  g_path = machine.sysarg(1);
+	const int    flags = machine.template sysarg<int> (2);
+	const auto    mask = machine.template sysarg<uint32_t> (3);
+	const auto  buffer = machine.sysarg(4);
+
+	const auto path = machine.memory.memstring(g_path);
+
+	SYSPRINT("SYSCALL statx, fd: %d path: %s flags: %x buf: 0x%lX)\n",
+			dir_fd, path.c_str(), flags, (long)buffer);
+
+	if (machine.has_file_descriptors() && machine.fds().proxy_mode) {
+		if (machine.fds().filter_stat != nullptr) {
+			if (!machine.fds().filter_stat(machine.template get_userdata<void>(), path)) {
+				machine.set_result(-EPERM);
+				return;
+			}
+		}
+
+		struct statx st;
+		int res = ::statx(dir_fd, path.c_str(), flags, mask, &st);
+		if (res == 0) {
+			machine.copy_to_guest(buffer, &st, sizeof(struct statx));
+		}
+		machine.set_result_or_error(res);
+		return;
+	}
+	machine.set_result(-ENOSYS);
+}
+#endif // __linux__
+
 #include "syscalls_mman.cpp"
 
 #include "syscalls_select.cpp"
@@ -1289,6 +1327,11 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(259, syscall_stub_zero<W>);
 
 	install_syscall_handler(278, syscall_getrandom<W>);
+
+#if defined(__linux__) && !defined(__ANDROID__)
+	// statx
+	install_syscall_handler(291, syscall_statx<W>);
+#endif
 
 	add_mman_syscalls<W>();
 
