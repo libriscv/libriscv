@@ -18,13 +18,18 @@ static inline void futex_op(Machine<W>& machine,
 	if ((futex_op & 0xF) == FUTEX_WAIT || (futex_op & 0xF) == FUTEX_WAIT_BITSET)
 	{
 		const bool is_bitset = (futex_op & 0xF) == FUTEX_WAIT_BITSET;
-		if (machine.memory.template read<address_t> (addr) == (address_t)val) {
+		if (machine.memory.template read<uint32_t> (addr) == (uint32_t)val) {
 			THPRINT(machine,
 				"FUTEX: Waiting (blocked)... uaddr=0x%lX val=%d, bitset=%d\n", (long)addr, val, is_bitset);
 			if (machine.threads().block(0, addr, is_bitset ? val3 : 0x0)) {
 				return;
 			}
-			throw MachineException(DEADLOCK_REACHED, "FUTEX deadlock", addr);
+			//throw MachineException(DEADLOCK_REACHED, "FUTEX deadlock", addr);
+			// This should never happen, but it does, and we have to unlock the futex and continue
+			// in order to be able to proceed with the execution. TODO: Investigate why this happens.
+			machine.memory.template write<address_t> (addr, 0);
+			machine.set_result(0);
+			return;
 		}
 		THPRINT(machine,
 			"FUTEX: Wait condition EAGAIN... uaddr=0x%lX val=%d, bitset=%d\n", (long)addr, val, is_bitset);
