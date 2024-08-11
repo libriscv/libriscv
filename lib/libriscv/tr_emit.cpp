@@ -1195,10 +1195,10 @@ void Emitter<W>::emit()
 					to_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1));");
 				break;
 			case 0x6: // OR
-				emit_op(" | ", " |= ", instr.Rtype.rd, instr.Rtype.rs1, to_reg(instr.Rtype.rs2));
+				emit_op(" | ", " |= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			case 0x7: // AND
-				emit_op(" & ", " &= ", instr.Rtype.rd, instr.Rtype.rs1, to_reg(instr.Rtype.rs2));
+				emit_op(" & ", " &= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
 				break;
 			// extension RV32M / RV64M
 			case 0x10: // MUL
@@ -1321,50 +1321,58 @@ void Emitter<W>::emit()
 					to_reg(instr.Rtype.rd) + " = result; }");
 				break;
 			case 0x102: // SH1ADD
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 1);");
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 1);");
 				break;
 			case 0x104: // SH2ADD
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 2);");
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 2);");
 				break;
 			case 0x106: // SH3ADD
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs2) + " + (" + to_reg(instr.Rtype.rs1) + " << 3);");
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs2) + " + (" + from_reg(instr.Rtype.rs1) + " << 3);");
 				break;
 			case 0x141: // BSET
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " | ((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " | ((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x142: // BCLR
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " & ~((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " & ~((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x143: // BINV
-				add_code(to_reg(instr.Rtype.rd) + " = " + to_reg(instr.Rtype.rs1) + " ^ ((addr_t)1 << (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " ^ ((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x204: // XNOR
-				add_code(to_reg(instr.Rtype.rd) + " = ~(" + to_reg(instr.Rtype.rs1) + " ^ " + to_reg(instr.Rtype.rs2) + ");");
+				add_code(to_reg(instr.Rtype.rd) + " = ~(" + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + ");");
 				break;
 			case 0x206: // ORN
-				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " | ~" + to_reg(instr.Rtype.rs2) + ");");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " | ~" + from_reg(instr.Rtype.rs2) + ");");
 				break;
 			case 0x207: // ANDN
-				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " & ~" + to_reg(instr.Rtype.rs2) + ");");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " & ~" + from_reg(instr.Rtype.rs2) + ");");
 				break;
 			case 0x245: // BEXT
-				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " >> (" + to_reg(instr.Rtype.rs2) + " & (XLEN-1))) & 1;");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1))) & 1;");
 				break;
 			case 0x54: // MIN
-				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + to_reg(instr.Rtype.rs1) + " < (saddr_t)" + to_reg(instr.Rtype.rs2) + ") "
-					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " < (saddr_t)" + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x55: // MINU
-				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " < " + to_reg(instr.Rtype.rs2) + ") "
-					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " < " + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x56: // MAX
-				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + to_reg(instr.Rtype.rs1) + " > (saddr_t)" + to_reg(instr.Rtype.rs2) + ") "
-					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = ((saddr_t)" + from_reg(instr.Rtype.rs1) + " > (saddr_t)" + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x57: // MAXU
-				add_code(to_reg(instr.Rtype.rd) + " = (" + to_reg(instr.Rtype.rs1) + " > " + to_reg(instr.Rtype.rs2) + ") "
-					" ? " + to_reg(instr.Rtype.rs1) + " : " + to_reg(instr.Rtype.rs2) + ";");
+				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " > " + from_reg(instr.Rtype.rs2) + ") "
+					" ? " + from_reg(instr.Rtype.rs1) + " : " + from_reg(instr.Rtype.rs2) + ";");
+				break;
+			case 0x75: // CZERO.EQZ
+				// dst = (src2 == 0) ? 0 : src1;
+				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs2) + " == 0) ? 0 : " + from_reg(instr.Rtype.rs1) + ";");
+				break;
+			case 0x77: // CZERO.NEZ
+				// dst = (src2 != 0) ? 0 : src1;
+				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs2) + " != 0) ? 0 : " + from_reg(instr.Rtype.rs1) + ";");
 				break;
 			case 0x301: // ROL: Rotate left
 				add_code(

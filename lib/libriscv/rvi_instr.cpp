@@ -744,6 +744,12 @@ static inline uint64_t MUL128(
 		case 0x57: // MAXU
 			dst = (src1 > src2) ? src1 : src2;
 			return;
+		case 0x75: // CZERO.EQZ
+			dst = (src2 == 0) ? 0 : src1;
+			return;
+		case 0x77: // CZERO.NEZ
+			dst = (src2 != 0) ? 0 : src1;
+			return;
 		case 0x102: // SH1ADD
 			dst = src2 + (src1 << 1);
 			return;
@@ -813,6 +819,8 @@ static inline uint64_t MUL128(
 			case 0x55: strop = "MINU"; break;
 			case 0x56: strop = "MAX"; break;
 			case 0x57: strop = "MAXU"; break;
+			case 0x75: strop = "CZERO.EQZ"; break;
+			case 0x77: strop = "CZERO.NEZ"; break;
 			case 0x102: strop = "SH1ADD"; break;
 			case 0x104: strop = "SH2ADD"; break;
 			case 0x106: strop = "SH3ADD"; break;
