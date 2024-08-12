@@ -106,6 +106,8 @@ inline T Machine<W>::sysarg(int idx) const
 		return cpu.registers().getfl(REG_FA0 + idx).f32[0];
 	else if constexpr (std::is_same_v<T, double>)
 		return cpu.registers().getfl(REG_FA0 + idx).f64;
+	else if constexpr (std::is_enum_v<T>)
+		return static_cast<T>(cpu.reg(REG_ARG0 + idx));
 	else if constexpr (std::is_same_v<T, riscv::Buffer>)
 		return memory.rvbuffer(
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
@@ -145,6 +147,8 @@ inline auto Machine<W>::resolve_args(std::index_sequence<Indices...>) const
 		}
 		else if constexpr (std::is_floating_point_v<Args>)
 			std::get<Indices>(retval) = sysarg<Args>(f++);
+		else if constexpr (std::is_enum_v<Args>)
+			std::get<Indices>(retval) = sysarg<Args>(i++);
 		else if constexpr (std::is_same_v<Args, riscv::Buffer>) {
 			std::get<Indices>(retval) = std::move(sysarg<Args>(i)); i += 2; // ptr, len
 		}
@@ -183,6 +187,8 @@ inline void Machine<W>::set_result(Args... args) noexcept {
 		if constexpr (std::is_integral_v<Args>) {
 			cpu.registers().get(REG_ARG0 + i++) = args;
 		}
+		else if constexpr (std::is_enum_v<Args>)
+			cpu.registers().get(REG_ARG0 + i++) = static_cast<int>(args);
 		else if constexpr (std::is_same_v<Args, float>)
 			cpu.registers().getfl(REG_FA0 + f++).set_float(args);
 		else if constexpr (std::is_same_v<Args, double>)

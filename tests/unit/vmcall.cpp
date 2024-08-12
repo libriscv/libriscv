@@ -114,6 +114,49 @@ TEST_CASE("VM call return values", "[VMCall]")
 	REQUIRE(data_ptr->f1 == 3.0f);
 }
 
+TEST_CASE("VM call enum values", "[VMCall]")
+{
+	const auto binary = build_and_load(R"M(
+	#include <assert.h>
+	int do_syscall(int value) {
+		register long         a0 __asm__("a0") = value;
+		register long syscall_id __asm__("a7") = 0;
+
+		__asm__ volatile ("ecall" : "+r"(a0) : "r"(syscall_id));
+		return a0;
+	}
+	extern int mycall(int value) {
+		assert(value == 1);
+		return do_syscall(value);
+	}
+
+	int main() {
+		return 666;
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"vmcall"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	// Test Enum values
+	enum class MyEnum : int {
+		Hello = 1,
+		World = 2,
+	};
+
+	machine.install_syscall_handler(0,
+	[] (auto& machine) {
+		auto [value] = machine.template sysargs <MyEnum> ();
+		REQUIRE(value == MyEnum::Hello);
+		machine.set_result(MyEnum::World);
+	});
+
+	machine.vmcall("mycall", MyEnum::Hello);
+	REQUIRE(machine.return_value<MyEnum>() == MyEnum::World);
+}
+
 TEST_CASE("VM function call in fork", "[VMCall]")
 {
 	// The global variable 'value' should get
