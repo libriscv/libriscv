@@ -20,6 +20,8 @@ inline void Machine<W>::setup_call(Args&&... args)
 			cpu.registers().getfl(farg++).set_float(args);
 		else if constexpr (std::is_same_v<double, remove_cvref<Args>>)
 			cpu.registers().getfl(farg++).f64 = args;
+		else if constexpr (std::is_enum_v<remove_cvref<Args>>)
+			cpu.reg(iarg++) = int(args);
 		else if constexpr (std::is_standard_layout_v<remove_cvref<Args>>)
 			cpu.reg(iarg++) = stack_push(&args, sizeof(args));
 		else

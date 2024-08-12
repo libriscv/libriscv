@@ -209,12 +209,9 @@ namespace riscv
 		void set_result_or_error(int result);
 
 		/// @brief A simple wrapper for getting a return value from a
-		/// function call. Does not support 2-register value returns,
-		/// such as 16-byte structs on 64-bit. Also does not support
-		/// floating point return values. Integral results only, for now.
-		/// By default, the return value is register-sized.
-		/// @tparam T The integral type to convert the return value to.
-		/// @return The integral result.
+		/// function call. Does not support 2-register value returns.
+		/// @tparam T The type to convert the return value to.
+		/// @return The result.
 		template <typename T = address_t>
 		inline T return_value() const { return sysarg<T> (0); }
 
