@@ -143,7 +143,7 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 
 ## Instruction set support
 
-The emulator currently supports RV32GCB, RV64GCB (imafdc_zicsr_zifence_zba_zbb_zbc_zbs) and RV128G.
+The emulator currently supports RV32GCB, RV64GCB (imafdc_zicsr_zifence_zicond_zba_zbb_zbc_zbs) and RV128G.
 The A-, F-, D-, C- and B-extensions should be 100% supported on 32- and 64-bit. V-extension is undergoing work.
 
 The 128-bit ISA support is experimental, and the specification is not yet complete.
@@ -321,16 +321,6 @@ See [this unit test](/tests/unit/custom.cpp) for an example on how to add your o
 [Unit tests](/tests/unit)
 
 
-## Dispatch modes
-
-### Bytecode simulation modes
-
-- Bytecode simulation using switch case
-- Threaded bytecode simulation
-- Tailcall bytecode simulation
-
-This can be controlled with CMake options, however the default is usually fastest.
-
 ### Remote GDB using RSP server
 
 Using an [RSP server](/lib/libriscv/rsp_server.hpp):
@@ -349,6 +339,7 @@ Using the [debugging wrapper](/lib/libriscv/debug.hpp):
 - Simulate one instruction at a time
 - Verbose instruction logging
 - Debugger CLI with commands
+- Pause simulation on arbitrary conditions
 
 ### Binary translation
 
@@ -406,7 +397,7 @@ There is multiprocessing support, but it is in its early stages. It is achieved 
 
 ### Experimental unbounded 32-bit addressing
 
-It is possible to map out the entire 32-bit address space for 32-bit RISC-V guests, such that memory operations no longer require bounds-checking. This mode usually goes with features like userfaultfd, however currently only the address space is created, fully readable and writable. This means the feature should not be used when sandboxing is necessary, and instead it makes more sense currently for running CLI applications from the terminal. It can be enabled with `RISCV_EXPERIMENTAL` and then `RISCV_ENCOMPASSING_ARENA`. Both 64-bit and 32-bit programs are supported.
+It is possible to map out the entire 32-bit address space such that memory operations no longer require bounds-checking. This mode usually goes with features like userfaultfd, however currently only the address space is created, fully readable and writable. This means the feature should not be used when sandboxing is necessary, and instead it makes more sense currently for running CLI applications from the terminal. It can be enabled with `RISCV_EXPERIMENTAL` and then `RISCV_ENCOMPASSING_ARENA`. Both 64-bit and 32-bit programs are supported.
 
 The feature is not restricted to just 32-bit address spaces. It can be configured by setting `RISCV_ENCOMPASSING_ARENA_BITS` to something other than 32. 32 is the fastest as addresses are replaced with 32-bit casts. For other N-bit address spaces, and-masking is used. For example, the bit value `27` represents a 128MB address space, and 33 is an 8GB address space.
 
