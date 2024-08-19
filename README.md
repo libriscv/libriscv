@@ -123,18 +123,6 @@ cd emulator
 
 Check out the [CLI documentation](/emulator/README.md).
 
-## Example RISC-V programs
-
-The [binaries folder](/binaries/) contains several example programs.
-
-The [newlib](/binaries/newlib) and [newlib64](/binaries/newlib64) example projects have much more C and C++ support, but still misses things like environment variables and such. This is a deliberate design as newlib is intended for embedded development. It supports C++ RTTI and exceptions, and is the best middle-ground for running a fuller C++ environment that still produces small binaries. You can run these programs with rvnewlib.
-
-The [linux](/binaries/linux) and [linux64](/binaries/linux64) example projects require a Linux-configured cross compiler. You can run these programs with rvlinux.
-
-The [Go](/binaries/go) examples only require Go installed. Go produces complex RV64G ELF executables.
-
-There are also examples for [Nim](/binaries/nim), [Zig](/binaries/zig), [Rust](/binaries/rust) and [Nelua](/binaries/nelua).
-
 ## Remote debugging using GDB
 
 If you have built the emulator, you can use `./rvlinux --gdb /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote :2159`. Now you can step through the code.
