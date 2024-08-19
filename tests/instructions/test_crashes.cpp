@@ -55,7 +55,7 @@ void execute(uint64_t max_mem, const char* array_name,
 		{
 			// Make available on machine
 			machine.cpu.init_execute_area(data, 0x1000, len);
-			auto* seg = machine.cpu.current_execute_segment();
+			auto &seg = machine.cpu.current_execute_segment();
 
 			// Also, make the instructions readable & executable
 			machine.copy_to_guest(0x1000, data, len);
