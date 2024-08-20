@@ -25,12 +25,14 @@ namespace riscv
 			insn.bits
 		};
 
-		machine.cpu.init_execute_area(&instr_page[0], MEMBASE, sizeof(instr_page));
+		DecodedExecuteSegment<W> &des = machine.cpu.init_execute_area(&instr_page[0], MEMBASE, sizeof(instr_page));
 		// jump to page containing instruction
 		machine.cpu.jump(MEMBASE);
 		// execute instruction
 		machine.cpu.reg(insn.reg) = insn.initial_value;
 		machine.cpu.step_one();
+		// There is a max number of execute segments. Evict the latest to avoid the max limit check
+		machine.cpu.memory().evict_execute_segment(des);
 		// call instruction validation callback
 		if ( callback(machine.cpu, insn) ) return true;
 		fprintf(stderr, "Failed test: %s on iteration %d\n", insn.name, insn.index);
