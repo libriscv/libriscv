@@ -382,6 +382,7 @@ namespace riscv
 		bool is_execute_only() const noexcept { return options().enforce_exec_only; }
 
 		// Optional custom native-performance arena
+		bool has_arena() const noexcept { return m_arena != nullptr; }
 		const Arena& arena() const;
 		Arena& arena();
 		void setup_native_heap(size_t sysnum, uint64_t addr, size_t size);
