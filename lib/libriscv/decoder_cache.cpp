@@ -176,9 +176,6 @@ namespace riscv
 					if (entry->get_bytecode() == translator_op)
 						break;
 				#endif
-					// Catch-all for SYSTEM and patched EBREAK instructions
-					if (entry->get_bytecode() == RV32I_BC_SYSTEM)
-						break;
 
 					// A last test for the last instruction, which should have been a block-ending
 					// instruction. Since it wasn't we must force-end the block here.
@@ -259,9 +256,6 @@ namespace riscv
 				if (entry.get_bytecode() == translator_op)
 					idxend = 0;
 			#endif
-				// Catch-all for SYSTEM and patched EBREAK instructions
-				if (entry.get_bytecode() == RV32I_BC_SYSTEM)
-					idxend = 0;
 				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
 				// Increment after, idx becomes block count - 1
@@ -349,23 +343,6 @@ namespace riscv
 		}
 	#endif
 
-		// Debugging: EBREAK locations
-		std::unordered_set<address_type<W>> ebreak_locations;
-		for (auto& loc : options.ebreak_locations) {
-			address_t addr = 0;
-			if (std::holds_alternative<address_type<W>>(loc))
-				addr = std::get<address_type<W>>(loc);
-			else
-				addr = machine().address_of(std::get<std::string>(loc));
-			if (addr != 0x0 && addr >= exec.exec_begin() && addr < exec.exec_end()) {
-				ebreak_locations.insert(addr);
-				if (options.verbose_loader) {
-					printf("libriscv: Added ebreak location at 0x%" PRIx64 "\n", uint64_t(addr));
-				}
-			}
-		}
-		const bool has_ebreak_locations = !ebreak_locations.empty();
-
 		// When compressed instructions are enabled, many decoder
 		// entries are illegal because they between instructions.
 		bool was_full_instruction = true;
@@ -427,23 +404,6 @@ namespace riscv
 				}
 			}
 
-			if (has_ebreak_locations) {
-				[[unlikely]];
-				if (ebreak_locations.count(dst)) {
-					[[unlikely]];
-					// Insert EBREAK bytecode and handler at ebreak locations
-					entry.set_bytecode(RV32I_BC_SYSTEM);
-					rv32i_instruction ebreak;
-					ebreak.Itype.opcode = RV32I_SYSTEM;
-					ebreak.Itype.funct3 = 0;
-					ebreak.Itype.rd = 0;
-					ebreak.Itype.rs1 = 0;
-					ebreak.Itype.imm = 0x1; // EBREAK
-					entry.instr = ebreak.whole;
-					entry.set_handler(CPU<W>::decode(ebreak));
-				}
-			}
-
 			// Increment PC after everything
 			if constexpr (compressed_enabled) {
 				// With compressed we always step forward 2 bytes at a time
@@ -470,6 +430,22 @@ namespace riscv
 
 		realize_fastsim<W>(addr, dst, exec_segment, exec_decoder);
 
+		// Debugging: EBREAK locations
+		for (auto& loc : options.ebreak_locations) {
+			address_t addr = 0;
+			if (std::holds_alternative<address_type<W>>(loc))
+				addr = std::get<address_type<W>>(loc);
+			else
+				addr = machine().address_of(std::get<std::string>(loc));
+
+			if (addr != 0x0 && addr >= exec.exec_begin() && addr < exec.exec_end()) {
+				CPU<W>::install_ebreak_for(exec, addr);
+				if (options.verbose_loader) {
+					printf("libriscv: Added ebreak location at 0x%" PRIx64 "\n", uint64_t(addr));
+				}
+			}
+		}
+
 		TIME_POINT(t4);
 #ifdef ENABLE_TIMINGS
 		const long t1t0 = nanodiff(t0, t1);
@@ -477,7 +453,8 @@ namespace riscv
 		const long t3t2 = nanodiff(t2, t3);
 		const long t3t4 = nanodiff(t3, t4);
 		printf("libriscv: Decoder cache allocation took %ld ns\n", t1t0);
-		printf("libriscv: Decoder cache bintr activation took %ld ns\n", t2t1);
+		if constexpr (binary_translation_enabled)
+			printf("libriscv: Decoder cache bintr activation took %ld ns\n", t2t1);
 		printf("libriscv: Decoder cache generation took %ld ns\n", t3t2);
 		printf("libriscv: Decoder cache realization took %ld ns\n", t3t4);
 		printf("libriscv: Decoder cache totals: %ld us\n", nanodiff(t0, t4) / 1000);

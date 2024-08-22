@@ -16,7 +16,7 @@ namespace riscv
 	{
 		static constexpr unsigned PCAL = compressed_enabled ? 2 : 4;
 		static constexpr unsigned XLEN = 8 * W;
-		const auto original = instr;
+		const auto& original = instr;
 
 		switch (bytecode)
 		{
@@ -313,7 +313,7 @@ namespace riscv
 			/** Compressed instructions **/
 #ifdef RISCV_EXT_COMPRESSED
 			case RV32C_BC_ADDI: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				if (ci.opcode() == RISCV_CI_CODE(0b000, 0b00))
@@ -341,7 +341,7 @@ namespace riscv
 				return RV32C_BC_ADDI;
 			}
 			case RV32C_BC_LI: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				rewritten.rs1 = ci.CI.rd;
@@ -352,7 +352,7 @@ namespace riscv
 				return RV32C_BC_ADDI;
 			}
 			case RV32C_BC_MV: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterMove rewritten;
 				rewritten.rd  = ci.CR.rd;
@@ -362,7 +362,7 @@ namespace riscv
 				return RV32C_BC_MV;
 			}
 			case RV32C_BC_SLLI: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				rewritten.rs1 = ci.CI.rd;
@@ -377,7 +377,7 @@ namespace riscv
 				return RV32C_BC_SLLI;
 			}
 			case RV32C_BC_SRLI: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				rewritten.rs1 = ci.CA.srd  + 8;
@@ -391,7 +391,7 @@ namespace riscv
 				return bytecode;
 			}
 			case RV32C_BC_ANDI: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				rewritten.rs1 = ci.CA.srd  + 8;
@@ -401,7 +401,7 @@ namespace riscv
 				return bytecode;
 			}
 			case RV32C_BC_XOR: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				rewritten.rs1 = ci.CA.srd  + 8;
@@ -412,7 +412,7 @@ namespace riscv
 			}
 			case RV32C_BC_BEQZ:
 			case RV32C_BC_BNEZ: {
-				const rv32c_instruction ci { original };
+				const rv32c_instruction ci{instr};
 
 				const int32_t imm = ci.CB.signed_imm();
 				const auto addr = pc + imm;
@@ -432,7 +432,7 @@ namespace riscv
 			}
 			case RV32C_BC_JMP:
 			case RV32C_BC_JAL_ADDIW: {
-				const rv32c_instruction ci { original };
+				const rv32c_instruction ci{instr};
 
 				if (W >= 8 && bytecode == RV32C_BC_JAL_ADDIW) {
 					// C.ADDIW instead
@@ -457,17 +457,17 @@ namespace riscv
 				return bytecode;
 			}
 			case RV32C_BC_JALR: {
-				const rv32c_instruction ci { original };
+				const rv32c_instruction ci{instr};
 				instr.whole = ci.CR.rd;
 				return bytecode;
 			}
 			case RV32C_BC_JR: {
-				const rv32c_instruction ci { original };
+				const rv32c_instruction ci{instr};
 				instr.whole = ci.CR.rd;
 				return bytecode;
 			}
 			case RV32C_BC_LDD: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				if ((ci.opcode() & 0x3) == 0x0)
@@ -487,7 +487,7 @@ namespace riscv
 				return bytecode;
 			}
 			case RV32C_BC_STD: {
-				const rv32c_instruction ci{original};
+				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
 				if ((ci.opcode() & 0x3) == 0x0)
