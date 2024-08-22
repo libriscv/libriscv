@@ -66,10 +66,16 @@ namespace riscv
 		/// @brief Tears down the machine, freeing all owned memory and pages.
 		~Machine();
 
+		/// @brief Returns true if the machine has MachineOptions set.
+		/// @return True if the machine has options.
+		bool has_options() const noexcept { return m_options != nullptr; }
+		/// @brief Set the machine options that will be used for future forked machines and execute segments.
+		/// @param opts The machine options.
+		void set_options(std::shared_ptr<MachineOptions<W>> opts) noexcept { m_options = std::move(opts); }
 		/// @brief Returns the machine options that were used to create the machine.
 		/// @return The machine options.
-		auto& options() const noexcept { return m_options; }
-		auto& options() noexcept { return m_options; }
+		MachineOptions<W>& options() const;
+		MachineOptions<W>& options();
 
 		/// @brief Simulate RISC-V starting from the PC register, and
 		/// stopping when at most @max_instructions have been executed.
@@ -379,7 +385,7 @@ namespace riscv
 
 		/// @brief Check if the machine has enforced and loaded an execute-only program.
 		/// @return True if all execute segments are execute-only.
-		bool is_execute_only() const noexcept { return options().enforce_exec_only; }
+		bool is_execute_only() const noexcept { if (!has_options()) return false; else return options().enforce_exec_only; }
 
 		// Optional custom native-performance arena
 		bool has_arena() const noexcept { return m_arena != nullptr; }
@@ -465,6 +471,7 @@ namespace riscv
 		std::unique_ptr<FileDescriptors> m_fds = nullptr;
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		std::unique_ptr<Signals<W>> m_signals = nullptr;
+		std::shared_ptr<MachineOptions<W>> m_options = nullptr;
 
 #ifdef RISCV_TIMED_VMCALLS
 	public:
@@ -473,8 +480,6 @@ namespace riscv
 		void disable_timer();
 		void* m_timer_id = nullptr;
 #endif
-
-		MachineOptions<W> m_options;
 
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static void default_printer(const Machine&, const char*, size_t);

@@ -29,8 +29,7 @@ namespace riscv
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
 		: cpu(*this, options.cpu_id),
 		  memory(*this, binary, options),
-		  m_arena(nullptr),
-		  m_options(options)
+		  m_arena(nullptr)
 	{
 		cpu.reset();
 	}
@@ -38,8 +37,7 @@ namespace riscv
 	inline Machine<W>::Machine(const Machine& other, const MachineOptions<W>& options)
 		: cpu(*this, options.cpu_id, other),
 		  memory(*this, other, options),
-		  m_arena(nullptr),
-		  m_options(options)
+		  m_arena(nullptr)
 	{
 		this->m_counter = other.m_counter;
 		this->m_max_counter = other.m_max_counter;
@@ -52,8 +50,8 @@ namespace riscv
 	template <int W>
 	inline Machine<W>::Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& opts)
 		: Machine(std::string_view{(char*) bin.data(), bin.size()}, opts) {}
-	template <int W>
 
+	template <int W>
 	inline Machine<W>::Machine(const MachineOptions<W>& opts)
 		: Machine(std::string_view{}, opts){}
 

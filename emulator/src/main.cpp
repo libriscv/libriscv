@@ -250,8 +250,7 @@ static void run_program(
 		cc.push_back(riscv::MachineTranslationEmbeddableCodeOptions{cli_args.output_file});
 	}
 
-	// Create a RISC-V machine with the binary as input program
-	riscv::Machine<W> machine { binary, {
+	auto options = std::make_shared<riscv::MachineOptions<W>>(riscv::MachineOptions<W>{
 		.memory_max = MAX_MEMORY,
 		.enforce_exec_only = cli_args.execute_only,
 		.ignore_text_section = cli_args.ignore_text,
@@ -284,7 +283,15 @@ static void run_program(
 		.cross_compile = cc,
 #endif
 #endif
-	}};
+	});
+
+	// Create a RISC-V machine with the binary as input program
+	riscv::Machine<W> machine { binary, *options };
+
+	// Remember the options for later in case background compilation is enabled,
+	// if new execute segments need to be decoded and so on. Basically all future
+	// operations that need to know the options. This is optional.
+	machine.set_options(std::move(options));
 
 	if (cli_args.quit) { // Quit after instantiating the machine
 		return;
