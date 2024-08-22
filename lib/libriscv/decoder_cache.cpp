@@ -132,9 +132,10 @@ namespace riscv
 			// Go through entire executable segment and measure lengths
 			// Record entries while looking for jumping instruction, then
 			// fill out data and opcode lengths previous instructions.
-			std::vector<std::tuple<DecoderData<W>*, rv32i_instruction>> data;
+			std::array<std::tuple<DecoderData<W>*, unsigned>, 256> block_array;
 			address_type<W> pc = base_pc;
 			while (pc < last_pc) {
+				size_t block_array_count = 0;
 				size_t datalength = 0;
 				address_type<W> block_pc = pc;
 				auto* entry = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
@@ -145,7 +146,7 @@ namespace riscv
 					const auto length = instruction.length();
 
 					// Record the instruction
-					data.push_back({entry, instruction});
+					block_array[block_array_count++] = { entry, length };
 
 					// Make sure PC does not overflow
 					if (pc + length < pc)
@@ -202,17 +203,15 @@ namespace riscv
 					fprintf(stderr, "Block 0x%lX to 0x%lX\n", block_pc, pc);
 				}
 
-				if (UNLIKELY(data.size() == 0))
+				if (UNLIKELY(block_array_count == 0))
 					throw MachineException(INVALID_PROGRAM, "Encountered empty block after measuring");
 
-				const auto last_length = std::get<1>(data.back()).length();
+				const auto last_length = std::get<1>(block_array[block_array_count - 1]);
 
-				for (size_t i = 0; i < data.size(); i++) {
-					auto& tuple = data[i];
+				for (size_t i = 0; i < block_array_count; i++) {
+					auto& tuple = block_array[i];
 					auto* entry = std::get<0>(tuple);
-
-					const auto instruction = std::get<1>(tuple);
-					const auto length = instruction.length();
+					const auto length = std::get<1>(tuple);
 
 					// Ends at instruction *before* last PC
 					// Subtract block PC in order to get length,
@@ -221,7 +220,7 @@ namespace riscv
 					if (count > 255)
 						throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
 					entry->idxend = count;
-					entry->icount = count + 1 - (data.size() - i);
+					entry->icount = count + 1 - (block_array_count - i);
 
 					if constexpr (VERBOSE_DECODER) {
 						fprintf(stderr, "Block 0x%lX has %u instructions\n", block_pc, count);
@@ -230,7 +229,6 @@ namespace riscv
 					block_pc += length;
 					datalength -= length / 2;
 				}
-				data.clear();
 			}
 		} else { // !compressed_enabled
 			// Count distance to next branching instruction backwards
@@ -344,7 +342,7 @@ namespace riscv
 	#endif
 
 		// When compressed instructions are enabled, many decoder
-		// entries are illegal because they between instructions.
+		// entries are illegal because they are between instructions.
 		bool was_full_instruction = true;
 
 		/* Generate all instruction pointers for executable code.
