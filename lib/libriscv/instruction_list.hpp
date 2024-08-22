@@ -41,6 +41,4 @@
 
 #define RV32V_OP        0b1010111
 
-#define RV32_INSTR_BLOCK_END  0xFFFF
-
 #define RV32_INSTR_STOP       0x7ff00073

@@ -344,22 +344,57 @@ restart_precise_sim:
 		return retval;
 	}
 
+	// Install an ebreak instruction at the given address
 	template <int W>
-	uint32_t CPU<W>::install_ebreak_at(address_t addr)
+	uint32_t CPU<W>::install_ebreak_for(DecodedExecuteSegment<W>& exec, address_t breakpoint_addr)
 	{
-		if (!is_executable(addr)) {
-			this->next_execute_segment(addr);
+		if (!exec.is_within(breakpoint_addr)) {
+			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+				"Breakpoint address is not within the execute segment", breakpoint_addr);
 		}
 
-		auto* exec = this->m_exec;
-		auto* exec_decoder = exec->decoder_cache();
+		auto* exec_decoder = exec.decoder_cache();
+		auto* decoder_begin = &exec_decoder[exec.exec_begin() / DecoderCache<W>::DIVISOR];
 
-		// Install an ebreak instruction at the given address
-		// This is used to break into the debugger
-		// when the instruction is executed
-		auto& cache_entry = exec_decoder[addr / DecoderCache<W>::DIVISOR];
-		cache_entry.set_bytecode(RV32I_BC_SYSTEM);
+		auto& cache_entry = exec_decoder[breakpoint_addr / DecoderCache<W>::DIVISOR];
 		const auto old_instruction = cache_entry.instr;
+
+		// The last instruction will be the current entry
+		// Later instructions will work as normal
+		// 1. Look back to find the beginning of the block
+		auto* last    = &cache_entry;
+		auto* current = &cache_entry;
+		auto last_block_bytes = cache_entry.block_bytes();
+		while (current > decoder_begin && (current-1)->block_bytes() > last_block_bytes) {
+			current--;
+			last_block_bytes = current->block_bytes();
+		}
+
+		// 2. Find the start address of the block
+		const auto block_begin_addr = breakpoint_addr - (compressed_enabled ? 2 : 4) * (last - current);
+		if (!exec.is_within(block_begin_addr)) {
+			throw MachineException(INVALID_PROGRAM,
+				"Breakpoint block was outside execute area", block_begin_addr);
+		}
+
+		// 3. Correct block_bytes() for all entries in the block
+		auto patched_addr = block_begin_addr;
+		for (auto* dd = current; dd < last; dd++) {
+			// Get the patched decoder entry
+			auto& p = exec_decoder[patched_addr / DecoderCache<W>::DIVISOR];
+			p.idxend = last - dd;
+		#ifdef RISCV_EXT_C
+			p.icount = 0; // TODO: Implement C-ext icount for breakpoints
+		#endif
+			patched_addr += (compressed_enabled) ? 2 : 4;
+		}
+		// Check if the last address matches the breakpoint address
+		if (patched_addr != breakpoint_addr) {
+			throw MachineException(INVALID_PROGRAM,
+				"Last instruction in breakpoint block was not aligned", patched_addr);
+		}
+
+		// 4. Install the ebreak instruction
 		rv32i_instruction new_instruction;
 		new_instruction.Itype.opcode = 0b1110011; // SYSTEM
 		new_instruction.Itype.rd = 0;
@@ -367,9 +402,20 @@ restart_precise_sim:
 		new_instruction.Itype.rs1 = 0;
 		new_instruction.Itype.imm = 1; // EBREAK
 		cache_entry.instr = new_instruction.whole;
+		cache_entry.set_bytecode(RV32I_BC_SYSTEM);
+		cache_entry.idxend = 0;
+	#ifdef RISCV_EXT_C
+		cache_entry.icount = 0; // TODO: Implement C-ext icount for breakpoints
+	#endif
 
 		// Return the old instruction
 		return old_instruction;
+	}
+
+	template <int W>
+	uint32_t CPU<W>::install_ebreak_at(address_t addr)
+	{
+		return install_ebreak_for(*m_exec, addr);
 	}
 
 	template<int W> RISCV_COLD_PATH()

@@ -143,6 +143,12 @@ namespace riscv
 		/// @brief Install a breakpoint at a specific address, returning the old instruction
 		uint32_t install_ebreak_at(address_t addr);
 
+		/// @brief Install an EBREAK (breakpoint) instruction at the given address
+		/// @param exec The execute segment in which to install the EBREAK instruction
+		/// @param addr The address to install the EBREAK instruction
+		/// @return The original instruction at the address
+		static uint32_t install_ebreak_for(DecodedExecuteSegment<W>& exec, address_t addr);
+
 		// Override the function that gets called when the CPU
 		// throws an execute space protection fault.
 		void set_fault_handler(execute_fault_t func) noexcept { m_fault = func; }

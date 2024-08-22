@@ -17,9 +17,6 @@ namespace riscv {
 template <int W>
 size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 {
-	if (instr.whole == RV32_INSTR_BLOCK_END)
-		return RV32I_BC_FUNCBLOCK;
-
 #ifdef RISCV_EXT_COMPRESSED
 	if (instr.length() == 2)
 	{
