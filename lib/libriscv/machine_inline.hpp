@@ -300,4 +300,27 @@ Signals<W>& Machine<W>::signals() {
 	return *m_signals;
 }
 
+template <int W> inline
+MachineOptions<W>& Machine<W>::options() const
+{
+	if (m_options == nullptr)
+#if __cpp_exceptions
+		throw MachineException(ILLEGAL_OPERATION, "Machine options have not been set/initialized");
+#else
+	std::abort();
+#endif
+	return *m_options;
+}
+template <int W> inline
+MachineOptions<W>& Machine<W>::options()
+{
+	if (m_options == nullptr)
+#if __cpp_exceptions
+		throw MachineException(ILLEGAL_OPERATION, "Machine options have not been set/initialized");
+#else
+	std::abort();
+#endif
+	return *m_options;
+}
+
 #include "machine_vmcall.hpp"
