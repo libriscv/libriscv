@@ -758,16 +758,6 @@ INSTRUCTION(RV32C_BC_ANDI, rv32c_andi) {
 	REG(fi.get_rs1()) &= fi.signed_imm();
 	NEXT_C_INSTR();
 }
-INSTRUCTION(RV32C_BC_JUMPFUNC, rv32c_jumpfunc) {
-	REGISTERS().pc = pc;
-	CPU().execute(DECODER().m_handler, DECODER().instr);
-	if constexpr (VERBOSE_JUMPS) {
-		fprintf(stderr, "Compressed jump from 0x%lX to 0x%lX\n",
-			long(pc), long(REGISTERS().pc + 2));
-	}
-	pc = REGISTERS().pc + 2;
-	OVERFLOW_CHECKED_JUMP();
-}
 INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func) {
 	CPU().execute(DECODER().m_handler, DECODER().instr);
 	NEXT_C_INSTR();

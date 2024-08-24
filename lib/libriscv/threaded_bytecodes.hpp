@@ -108,7 +108,6 @@ namespace riscv
 		RV32C_BC_ANDI,
 		RV32C_BC_XOR,
 		RV32C_BC_FUNCTION,
-		RV32C_BC_JUMPFUNC,
 #endif
 
 		RV32I_BC_SYSCALL,

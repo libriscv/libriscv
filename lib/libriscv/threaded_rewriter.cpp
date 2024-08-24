@@ -419,7 +419,8 @@ namespace riscv
 
 				if (!this->is_within(addr, 4) || (addr % PCAL) != 0)
 				{
-					return RV32C_BC_JUMPFUNC;
+					// Allow branch outside of execute segment?
+					return RV32I_BC_INVALID; // No, just return invalid
 				}
 
 				FasterItype rewritten;
