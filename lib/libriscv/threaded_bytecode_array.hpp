@@ -99,7 +99,6 @@ static constexpr void *computed_opcode[] = {
 	[RV32C_BC_ANDI] = &&rv32c_andi,
 	[RV32C_BC_XOR]  = &&rv32c_xor,
 	[RV32C_BC_FUNCTION] = &&rv32c_func,
-	[RV32C_BC_JUMPFUNC] = &&rv32c_jumpfunc,
 #endif
 
 	[RV32I_BC_SYSCALL] = &&rv32i_syscall,
