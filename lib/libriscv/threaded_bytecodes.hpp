@@ -106,7 +106,9 @@ namespace riscv
 		RV32C_BC_STD,
 		RV32C_BC_SRLI,
 		RV32C_BC_ANDI,
+		RV32C_BC_ADD,
 		RV32C_BC_XOR,
+		RV32C_BC_OR,
 		RV32C_BC_FUNCTION,
 #endif
 

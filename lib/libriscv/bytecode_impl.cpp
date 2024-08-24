@@ -748,9 +748,19 @@ INSTRUCTION(RV32C_BC_SRLI, rv32c_srli) {
 	REG(fi.get_rs1()) >>= fi.imm;
 	NEXT_C_INSTR();
 }
+INSTRUCTION(RV32C_BC_ADD, rv32c_add) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) += REG(fi.get_rs2());
+	NEXT_C_INSTR();
+}
 INSTRUCTION(RV32C_BC_XOR, rv32c_xor) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	REG(fi.get_rs1()) ^= REG(fi.get_rs2());
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_OR, rv32c_or) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) |= REG(fi.get_rs2());
 	NEXT_C_INSTR();
 }
 INSTRUCTION(RV32C_BC_ANDI, rv32c_andi) {
