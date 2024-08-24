@@ -15,14 +15,15 @@ function usage()
      -h, --help           show this help message and exit
      --debug              enable debugging
      --debinfo            enable debugging information
+     --defaults           build with default settings
      --perf               build settings for performance profiling
      --no-perf            disable performance profiling
      --static             build static CLI executable
      --no-static          build dynamic CLI executable
      --native             build with -march=native
      --no-native          disable -march=native
-	 --lto                build with link-time optimization
-	 --no-lto             disable link-time optimization
+     --lto                build with link-time optimization
+     --no-lto             disable link-time optimization
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension
@@ -59,6 +60,7 @@ while [[ "$#" -gt 0 ]]; do
 		-h|--help ) usage; exit; ;;
 		--debug) OPTS="$OPTS -DCMAKE_BUILD_TYPE=Debug" ;;
 		--debinfo) OPTS="$OPTS -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
+		--defaults) OPTS="$OPTS -DCMAKE_BUILD_TYPE=Release -DRISCV_EXT_A=ON -DRISCV_EXT_C=ON -DRISCV_EXT_V=OFF -DRISCV_32I=ON -DRISCV_64I=ON -DRISCV_128I=OFF -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_LIBTCC=OFF -DRISCV_EXPERIMENTAL=OFF -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_LIBTCC=OFF -DLTO=OFF -DPERF=OFF -DSTATIC_BUILD=OFF -DNATIVE=OFF" ;;
 		--perf) OPTS="$OPTS -DPERF=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
 		--no-perf) OPTS="$OPTS -DPERF=OFF" ;;
 		--static) OPTS="$OPTS -DSTATIC_BUILD=ON" ;;

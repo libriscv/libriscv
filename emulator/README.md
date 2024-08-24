@@ -68,6 +68,7 @@ $ ./build.sh --help
      -h, --help           show this help message and exit
      --debug              enable debugging
      --debinfo            enable debugging information
+     --defaults           build with default settings
      --perf               build settings for performance profiling
      --no-perf            disable performance profiling
      --static             build static CLI executable
