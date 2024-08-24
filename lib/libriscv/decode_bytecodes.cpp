@@ -144,7 +144,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					case 0x1:
 						return RV32C_BC_XOR; // C.XOR
 					case 0x2:
-						return RV32C_BC_FUNCTION; // C.OR
+						return RV32C_BC_OR; // C.OR
 					case 0x3:
 						return RV32C_BC_FUNCTION; // C.AND
 					default:
@@ -170,7 +170,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				}
 				else if (ci.CR.rd != 0)
 				{	// ADD rd, rd + rs2
-					return RV32C_BC_FUNCTION; // C.ADD
+					return RV32C_BC_ADD; // C.ADD
 				}
 				else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0)
 				{	// EBREAK

@@ -400,7 +400,18 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
-			case RV32C_BC_XOR: {
+			case RV32C_BC_ADD: {
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CR.rd;
+				rewritten.rs2 = ci.CR.rs2;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_XOR:
+			case RV32C_BC_OR: {
 				const rv32c_instruction ci{instr};
 
 				FasterItype rewritten;
