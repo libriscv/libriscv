@@ -996,8 +996,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 
 			// Atomically set a livepatch bytecode for each instruction that is patched
 			// It will swap out the current decoder with the patched one, and then continue.
-			for (auto* dd : livepatch_bintr)
-				dd->set_bytecode(RV32I_BC_LIVEPATCH);
+			for (auto* dd : livepatch_bintr) {
+				dd->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 0);
+			}
 		}
 	}
 

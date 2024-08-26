@@ -87,6 +87,8 @@ namespace riscv
 		TRAP_EXEC  = 0x2000,
 	};
 
+	template <int W> struct DecoderData;
+
 #ifdef RISCV_BINARY_TRANSLATION
 	template <int W>
 	struct TransInfo;
