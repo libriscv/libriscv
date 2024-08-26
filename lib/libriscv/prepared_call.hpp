@@ -277,6 +277,8 @@ resolve_return_value:
 			} else {
 				this->m_mapping = nullptr;
 			}
+#else
+			m.cpu.create_fast_path_function(pc);
 #endif
 		}
 
