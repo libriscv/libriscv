@@ -54,6 +54,12 @@ struct DecoderData {
 		return this->m_handler == 0;
 	}
 
+	// Used by live-patching to set both bytecode and handler index.
+	void set_atomic_bytecode_and_handler(uint8_t bytecode, uint8_t handler_idx) noexcept {
+		// XXX: Assumes little-endian
+		*(uint16_t* )&m_bytecode = ( handler_idx << 8 ) | bytecode;
+	}
+
 	RISCV_ALWAYS_INLINE
 	auto block_bytes() const noexcept {
 		return idxend * (compressed_enabled ? 2 : 4);

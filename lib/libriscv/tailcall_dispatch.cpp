@@ -169,13 +169,39 @@ namespace riscv
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
 	}
+#endif
+
 	INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
-		pc = pc - d->block_bytes();
-		auto* patched = &exec->patched_decoder_cache()[pc / DecoderCache<W>::DIVISOR];
-		d = patched;
+		switch (d->m_handler) {
+		case 0: { // Binary translation live-patch
+#ifdef RISCV_BINARY_TRANSLATION
+			pc = pc - d->block_bytes();
+			auto* patched = &exec->patched_decoder_cache()[pc / DecoderCache<W>::DIVISOR];
+			d = patched;
+			EXECUTE_CURRENT();
+#else
+			d->set_bytecode(0);
+			EXECUTE_INSTR();
+#endif
+		} break;
+		case 1: { // Function live-patch
+			// Check if RA == memory exit address
+			if (LIKELY(REG(REG_RA) == MACHINE().memory.exit_address())) {
+				// Hot-swap the bytecode to a STOP
+				d->set_bytecode(RV32I_BC_STOP);
+				EXECUTE_CURRENT();
+			}
+			// Otherwise, execute the instruction
+			d->set_bytecode(RV32I_BC_JALR);
+			EXECUTE_CURRENT();
+		} break;
+		default:
+			// Invalid handler
+			d->set_bytecode(RV32I_BC_INVALID);
+			d->set_invalid_handler();
+		}
 		EXECUTE_CURRENT();
 	}
-#endif
 
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 		VIEW_INSTR();
@@ -358,8 +384,8 @@ namespace riscv
 		[RV32I_BC_FUNCBLOCK] = execute_function_block,
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = translated_function,
-		[RV32I_BC_LIVEPATCH] = execute_livepatch,
 #endif
+		[RV32I_BC_LIVEPATCH] = execute_livepatch,
 		[RV32I_BC_SYSTEM]  = rv32i_system,
 		};
 	}

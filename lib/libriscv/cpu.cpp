@@ -348,20 +348,18 @@ restart_precise_sim:
 		return retval;
 	}
 
-	// Install an ebreak instruction at the given address
 	template <int W>
-	uint32_t CPU<W>::install_ebreak_for(DecodedExecuteSegment<W>& exec, address_t breakpoint_addr)
+	DecoderData<W>& CPU<W>::create_block_ending_entry_at(DecodedExecuteSegment<W>& exec, address_t addr)
 	{
-		if (!exec.is_within(breakpoint_addr)) {
+		if (!exec.is_within(addr)) {
 			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
-				"Breakpoint address is not within the execute segment", breakpoint_addr);
+				"Breakpoint address is not within the execute segment", addr);
 		}
 
 		auto* exec_decoder = exec.decoder_cache();
 		auto* decoder_begin = &exec_decoder[exec.exec_begin() / DecoderCache<W>::DIVISOR];
 
-		auto& cache_entry = exec_decoder[breakpoint_addr / DecoderCache<W>::DIVISOR];
-		const auto old_instruction = cache_entry.instr;
+		auto& cache_entry = exec_decoder[addr / DecoderCache<W>::DIVISOR];
 
 		// The last instruction will be the current entry
 		// Later instructions will work as normal
@@ -375,7 +373,7 @@ restart_precise_sim:
 		}
 
 		// 2. Find the start address of the block
-		const auto block_begin_addr = breakpoint_addr - (compressed_enabled ? 2 : 4) * (last - current);
+		const auto block_begin_addr = addr - (compressed_enabled ? 2 : 4) * (last - current);
 		if (!exec.is_within(block_begin_addr)) {
 			throw MachineException(INVALID_PROGRAM,
 				"Breakpoint block was outside execute area", block_begin_addr);
@@ -393,12 +391,23 @@ restart_precise_sim:
 			patched_addr += (compressed_enabled) ? 2 : 4;
 		}
 		// Check if the last address matches the breakpoint address
-		if (patched_addr != breakpoint_addr) {
+		if (patched_addr != addr) {
 			throw MachineException(INVALID_PROGRAM,
 				"Last instruction in breakpoint block was not aligned", patched_addr);
 		}
 
-		// 4. Install the ebreak instruction
+		return cache_entry;
+	}
+
+	// Install an ebreak instruction at the given address
+	template <int W>
+	uint32_t CPU<W>::install_ebreak_for(DecodedExecuteSegment<W>& exec, address_t breakpoint_addr)
+	{
+		// Get a reference to the decoder cache
+		auto& cache_entry = CPU<W>::create_block_ending_entry_at(exec, breakpoint_addr);
+		const auto old_instruction = cache_entry.instr;
+
+		// Install the new ebreak instruction at the breakpoint address
 		rv32i_instruction new_instruction;
 		new_instruction.Itype.opcode = 0b1110011; // SYSTEM
 		new_instruction.Itype.rd = 0;
@@ -420,6 +429,70 @@ restart_precise_sim:
 	uint32_t CPU<W>::install_ebreak_at(address_t addr)
 	{
 		return install_ebreak_for(*m_exec, addr);
+	}
+
+	template <int W>
+	bool CPU<W>::create_fast_path_function(DecodedExecuteSegment<W>& exec, address_t block_pc)
+	{
+		// First, find the end of the block that either returns or stops (ignore traps)
+		// 1. Return: JALR reg
+		// 2. Stop: STOP
+		if (!exec.is_within(block_pc)) {
+			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+				"Function start address is not within the execute segment", block_pc);
+		}
+
+		auto* exec_decoder = exec.decoder_cache();
+		// The beginning of the function:
+		auto* cache_entry = &exec_decoder[block_pc / DecoderCache<W>::DIVISOR];
+
+		const address_t current_end = exec.exec_end();
+		while (block_pc < current_end)
+		{
+			// Move to the end of the block
+			block_pc += cache_entry->block_bytes();
+			cache_entry += cache_entry->block_bytes() / DecoderCache<W>::DIVISOR;
+			// Check if we're still within the execute segment
+			if (UNLIKELY(block_pc >= current_end)) {
+				// TODO: Return false instead?
+				throw MachineException(INVALID_PROGRAM,
+					"Function block ended outside execute area", block_pc);
+			}
+			// Check if we're at the end of the function
+			auto bytecode = cache_entry->get_bytecode();
+			if (bytecode == RV32I_BC_JALR || bytecode == RV32I_BC_STOP) {
+				const rv32i_instruction instr { cache_entry->instr };
+
+				if (bytecode == RV32I_BC_JALR) {
+					// Check if it's a direct jump to a register
+					if (instr.Itype.rd == 0 && instr.Itype.imm == 0) {
+						if (cache_entry->block_bytes() != 0)
+							throw MachineException(INVALID_PROGRAM,
+								"Function block ended but was not last instruction in block", block_pc);
+						// We found the (potential) end of the function
+						// Now rewrite it to a STOP instruction
+						cache_entry->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 1);
+						return true;
+					}
+				} else if (bytecode == RV32I_BC_STOP) {
+					// It's already a fast-path function
+					return true;
+				}
+
+				// Which instructions end the function?
+			}
+
+			cache_entry++;
+			block_pc += (compressed_enabled) ? 2 : 4;
+		}
+		// Not able to find the end of the function
+		return false;
+	}
+
+	template <int W>
+	bool CPU<W>::create_fast_path_function(address_t addr)
+	{
+		return create_fast_path_function(*m_exec, addr);
 	}
 
 	template<int W> RISCV_COLD_PATH()
