@@ -29,6 +29,7 @@ namespace riscv
 #undef PERFORM_BRANCH
 #undef PERFORM_FORWARD_BRANCH
 #undef OVERFLOW_CHECKED_JUMP
+#define INACCURATE_DISPATCH
 
 #define VIEW_INSTR() \
 	auto instr = *(rv32i_instruction *)&decoder->instr;
@@ -177,45 +178,12 @@ retry_translated_function:
 }
 #endif // RISCV_BINARY_TRANSLATION
 
-INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
-	switch (decoder->m_handler) {
-	case 0: { // Live-patch binary translation
-#ifdef RISCV_BINARY_TRANSLATION
-		// Special bytecode that does not read any decoder data
-		// 1. Wind back PC to the current decoder position
-		pc = pc - decoder->block_bytes();
-		// 2. Find the correct decoder pointer in the patched decoder cache
-		exec_decoder = exec->patched_decoder_cache();
-		decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
-		// 3. Execute the instruction
-		EXECUTE_INSTR();
-#endif
-	}	break;
-	case 1: { // Live-patch JALR -> STOP
-		// Check if RA == memory exit address
-		if (LIKELY(REG(REG_RA) == MACHINE().memory.exit_address())) {
-			// Hot-swap the bytecode to a STOP
-			decoder->set_bytecode(RV32I_BC_STOP);
-			EXECUTE_INSTR();
-		}
-		// Otherwise, execute the instruction
-		decoder->set_bytecode(RV32I_BC_JALR);
-		EXECUTE_INSTR();
-	}	break;
-	default:
-		// Invalid handler
-		decoder->set_bytecode(RV32I_BC_INVALID);
-		decoder->set_invalid_handler();
-	}
-	goto execute_invalid;
-}
-
 INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
 {
 	// Make the current PC visible
 	REGISTERS().pc = pc;
 	// Invoke system call
-	MACHINE().system_call(REG(REG_ECALL));
+	MACHINE().syscall_handlers[decoder->instr](MACHINE());
 	if (MACHINE().stopped())
 		return;
 	else if (UNLIKELY(pc != REGISTERS().pc))

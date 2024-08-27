@@ -5,7 +5,7 @@
 #define DISPATCH_FUNC simulate_bytecode
 
 #define EXECUTE_INSTR() \
-	break;
+	continue;
 #define UNUSED_FUNCTION() \
 	RISCV_UNREACHABLE(); break;
 

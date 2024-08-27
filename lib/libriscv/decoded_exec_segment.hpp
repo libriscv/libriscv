@@ -56,7 +56,7 @@ namespace riscv
 		DecodedExecuteSegment(DecodedExecuteSegment&&);
 		~DecodedExecuteSegment();
 
-		size_t threaded_rewrite(size_t bytecode, address_t pc, rv32i_instruction& instr);
+		size_t threaded_rewrite(size_t bytecode, address_t pc, rv32i_instruction& instr, uint8_t& handler_idx);
 
 		uint32_t crc32c_hash() const noexcept { return m_crc32c_hash; }
 		void set_crc32c_hash(uint32_t hash) { m_crc32c_hash = hash; }

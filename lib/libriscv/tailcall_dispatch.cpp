@@ -146,7 +146,7 @@ namespace riscv
 		// Make the instruction counter(s) visible
 		counter.apply(MACHINE());
 		// Invoke system call
-		cpu.machine().system_call(cpu.reg(REG_ECALL));
+		MACHINE().syscall_handlers[d->instr](MACHINE());
 		// Restore max counter
 		counter.retrieve_counters(MACHINE());
 		// Clone-like system calls can change PC
@@ -170,38 +170,6 @@ namespace riscv
 		UNCHECKED_JUMP();
 	}
 #endif
-
-	INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
-		switch (d->m_handler) {
-		case 0: { // Binary translation live-patch
-#ifdef RISCV_BINARY_TRANSLATION
-			pc = pc - d->block_bytes();
-			auto* patched = &exec->patched_decoder_cache()[pc / DecoderCache<W>::DIVISOR];
-			d = patched;
-			EXECUTE_CURRENT();
-#else
-			d->set_bytecode(0);
-			EXECUTE_INSTR();
-#endif
-		} break;
-		case 1: { // Function live-patch
-			// Check if RA == memory exit address
-			if (LIKELY(REG(REG_RA) == MACHINE().memory.exit_address())) {
-				// Hot-swap the bytecode to a STOP
-				d->set_bytecode(RV32I_BC_STOP);
-				EXECUTE_CURRENT();
-			}
-			// Otherwise, execute the instruction
-			d->set_bytecode(RV32I_BC_JALR);
-			EXECUTE_CURRENT();
-		} break;
-		default:
-			// Invalid handler
-			d->set_bytecode(RV32I_BC_INVALID);
-			d->set_invalid_handler();
-		}
-		EXECUTE_CURRENT();
-	}
 
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 		VIEW_INSTR();

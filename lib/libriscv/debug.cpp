@@ -479,19 +479,8 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 			machine.print(string.c_str(), string.size());
 		}
 
-		// We can't use decoder cache when translator is enabled
-		constexpr bool enable_cache = !binary_translation_enabled;
-		if constexpr (enable_cache)
-		{
-			// Retrieve handler directly from the instruction handler cache
-			auto& cache_entry =
-				exec_decoder[pc / DecoderCache<W>::DIVISOR];
-			cpu.execute(cache_entry.m_handler, instruction.whole);
-		}
-		else // Not the slowest path, since we have the instruction already
-		{
-			cpu.execute(instruction);
-		}
+		// Avoid decoder cache when debugging, as it may contain custom handlers
+		cpu.execute(instruction);
 
 		if (UNLIKELY(this->verbose_registers)) {
 			this->register_debug_logging();

@@ -431,8 +431,8 @@ INSTRUCTION(RV64I_BC_OP_MULW, rv64i_op_mulw) {
 }
 INSTRUCTION(RV64I_BC_OP_ADD_UW, rv64i_op_add_uw) {
 	if constexpr (W >= 8) {
-		VIEW_INSTR();
-		REG(instr.Rtype.rd) = REG(instr.Rtype.rs2) + uint32_t(REG(instr.Rtype.rs1));
+		OP_INSTR();
+		dst = uint32_t(src1) + src2;
 		NEXT_INSTR();
 	}
 	else UNUSED_FUNCTION();
@@ -806,3 +806,81 @@ INSTRUCTION(RV32V_BC_VFMUL_VF, rv32v_vfmul_vf) {
 	NEXT_INSTR();
 }
 #endif // RISCV_EXT_VECTOR
+
+INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
+	switch (DECODER().m_handler) {
+	case 0: { // Live-patch binary translation
+#ifdef RISCV_BINARY_TRANSLATION
+		// Special bytecode that does not read any decoder data
+		// 1. Wind back PC to the current decoder position
+		pc = pc - DECODER().block_bytes();
+#  ifdef DISPATCH_MODE_TAILCALL
+		// 2. Find the correct decoder pointer in the patched decoder cache
+		auto* patched = &exec->patched_decoder_cache()[pc / DecoderCache<W>::DIVISOR];
+		d = patched;
+#  else
+		// 2. Find the correct decoder pointer in the patched decoder cache
+		exec_decoder = exec->patched_decoder_cache();
+		decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+#  endif
+		// 3. Execute the instruction
+		EXECUTE_CURRENT();
+#else
+		// Invalid handler
+		DECODER().set_bytecode(RV32I_BC_INVALID);
+		DECODER().set_invalid_handler();
+#endif
+	}	break;
+	case 1: { // Live-patch JALR -> STOP
+		// Check if RA == memory exit address
+		if (RISCV_SPECSAFE(REG(REG_RA) == MACHINE().memory.exit_address())) {
+			// Hot-swap the bytecode to a STOP
+			DECODER().set_bytecode(RV32I_BC_STOP);
+			EXECUTE_CURRENT();
+		}
+		// Otherwise, leave the JALR instruction as is (NOTE: sets invalid handler)
+		DECODER().set_atomic_bytecode_and_handler(RV32I_BC_JALR, 0);
+	}	break;
+	case 2:
+	case 3: { // Live-patch checked SYSCALL
+		// We suspect that the system call number is the same on every invocation for a given address
+		const unsigned ecall = REG(REG_ECALL);
+		if (RISCV_SPECSAFE(ecall < RISCV_SYSCALLS_MAX)) {
+			// If the syscall id matches the previous one, we increment the handler_idx
+			if (DECODER().instr == ecall) {
+				DECODER().m_handler++;
+				if (DECODER().m_handler > 3) {
+					// At maximum, we promote the livepatch bytecode a SYSCALL
+					DECODER().set_bytecode(RV32I_BC_SYSCALL);
+					// TODO: Set entry handler_idx to correct value
+					EXECUTE_CURRENT();
+				}
+			} else {
+				DECODER().m_handler = 2;
+				DECODER().instr = ecall;
+			}
+		}
+		//printf("Live-patch syscall %d, value: %d\n", ecall, DECODER().m_handler);
+#ifndef INACCURATE_DISPATCH
+		// Make the instruction counter(s) visible
+		counter.apply(MACHINE());
+#endif // INACCURATE_DISPATCH
+		REGISTERS().pc = pc;
+		MACHINE().system_call(ecall);
+		pc = REGISTERS().pc + 4;
+#ifndef INACCURATE_DISPATCH
+		// Restore counters
+		counter.retrieve_counters(MACHINE());
+#else
+		if (MACHINE().stopped())
+			return;
+#endif // INACCURATE_DISPATCH
+		OVERFLOW_CHECKED_JUMP();
+	}	break;
+	default:
+		// Invalid handler
+		DECODER().set_bytecode(RV32I_BC_INVALID);
+		DECODER().set_invalid_handler();
+	}
+	EXECUTE_CURRENT();
+}

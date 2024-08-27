@@ -389,7 +389,7 @@ namespace riscv
 				// Cache the (modified) instruction bits
 				auto bytecode = CPU<W>::computed_index_for(instruction);
 				// Threaded rewrites are **always** enabled
-				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
+				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten, entry.m_handler);
 				entry.set_bytecode(bytecode);
 				entry.instr = rewritten.whole;
 			} else {
