@@ -12,7 +12,7 @@ namespace riscv
 {
 	template <int W> RISCV_INTERNAL
 	size_t DecodedExecuteSegment<W>::threaded_rewrite(
-		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr)
+		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr, [[maybe_unused]] uint8_t& handler_idx)
 	{
 		static constexpr unsigned PCAL = compressed_enabled ? 2 : 4;
 		static constexpr unsigned XLEN = 8 * W;
@@ -20,6 +20,17 @@ namespace riscv
 
 		switch (bytecode)
 		{
+			case RV32I_BC_INVALID:
+			case RV32I_BC_LUI:
+			case RV32I_BC_AUIPC:
+			case RV32I_BC_NOP:
+			case RV32I_BC_FUNCTION:
+			case RV32I_BC_FUNCBLOCK:
+			case RV32I_BC_STOP:
+			case RV32I_BC_SYSTEM: {
+				// These bytecodes are already fast, no need to rewrite
+				return bytecode;
+			}
 			case RV32I_BC_MV: {
 				FasterMove rewritten;
 				rewritten.rd  = original.Itype.rd;
@@ -130,6 +141,7 @@ namespace riscv
 			case RV64I_BC_OP_ADDW:
 			case RV64I_BC_OP_SUBW:
 			case RV64I_BC_OP_MULW:
+			case RV64I_BC_OP_ADD_UW:
 			case RV64I_BC_OP_SH1ADD_UW:
 			case RV64I_BC_OP_SH2ADD_UW:
 				if (W == 4)
@@ -286,6 +298,10 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			case RV32F_BC_FMADD: {
+				// It's unclear how to optimize this instruction
+				return bytecode;
+			}
 			/** Vector instructions **/
 #ifdef RISCV_EXT_VECTOR
 			case RV32V_BC_VLE32:
@@ -312,6 +328,10 @@ namespace riscv
 #endif
 			/** Compressed instructions **/
 #ifdef RISCV_EXT_COMPRESSED
+			case RV32C_BC_FUNCTION: {
+				// Already fast, no need to rewrite
+				return bytecode;
+			}
 			case RV32C_BC_ADDI: {
 				const rv32c_instruction ci{instr};
 
@@ -519,6 +539,18 @@ namespace riscv
 				return bytecode;
 			}
 #endif // RISCV_EXT_COMPRESSED
+
+			case RV32I_BC_SYSCALL: {
+				instr.whole = 0;
+				handler_idx = 2;
+
+				return RV32I_BC_LIVEPATCH;
+			}
+			case RV32I_BC_LIVEPATCH: {
+				throw std::runtime_error("Live-patch bytecode is not valid here");
+			}
+			default:
+				throw std::runtime_error("Invalid bytecode " + std::to_string(bytecode) + " for threaded rewrite");
 		}
 
 		return bytecode;
