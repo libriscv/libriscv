@@ -149,8 +149,14 @@ namespace riscv
 					block_array[block_array_count++] = { entry, length };
 
 					// Make sure PC does not overflow
+#ifdef _MSC_VER
 					if (pc + length < pc)
 						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
+#else
+					[[maybe_unused]] address_type<W> pc2;
+					if (__builtin_add_overflow(pc, length, &pc2))
+						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
+#endif
 					pc += length;
 
 					// If ending up crossing last_pc, it's an invalid block although
@@ -504,10 +510,14 @@ namespace riscv
 		if (UNLIKELY(prelen > plen || prelen + exlen > plen)) {
 			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
 		}
-		if (UNLIKELY(pbase + plen < pbase)) {
+#ifdef _MSC_VER
+		if (UNLIKELY(pbase + plen < pbase))
 			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
-		}
-
+#else
+		[[maybe_unused]] address_t pbase2;
+		if (UNLIKELY(__builtin_add_overflow(pbase, plen, &pbase2)))
+			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
+#endif
 		// Create the whole executable memory range
 		auto current_exec = std::make_shared<DecodedExecuteSegment<W>>(pbase, plen, vaddr, exlen);
 
