@@ -686,6 +686,7 @@ void Emitter<W>::emit()
 	this->add_mapping(this->pc(), this->func);
 	code.append(FUNCLABEL(this->pc()) + ":;\n");
 	auto next_pc = tinfo.basepc;
+	address_t current_callable_pc = 0;
 
 	for (int i = 0; i < int(tinfo.instr.size()); i++) {
 		this->m_idx = i;
@@ -734,6 +735,18 @@ void Emitter<W>::emit()
 			code.append(FUNCLABEL(this->pc() + 2) + ":;\n");
 			code.append("api.exception(cpu, " + STRADDR(this->pc() + 2) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n");
 			code.append(FUNCLABEL(this->pc() + 2) + "_skip:;\n");
+		}
+
+		auto it = tinfo.single_return_locations.find(this->pc());
+		if (it != tinfo.single_return_locations.end()) {
+			// We don't know what function we are in, but we do know what functions get called
+			// Track the current callable PC, so that we can use that for JALR return addresses
+			// If the address is zero, it means many places call this function, so we can't predict
+			// a single return address.
+			if (it->second != 0)
+				current_callable_pc = this->pc();
+			else
+				current_callable_pc = 0;
 		}
 
 		this->m_instr_counter += 1;
@@ -936,10 +949,30 @@ void Emitter<W>::emit()
 					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			} else {
+				// If this is JALR ra, check if the return address is a single return location
+				if (instr.Itype.rs1 != 0 && instr.Itype.signed_imm() == 0 && current_callable_pc != 0) {
+					// Return locations are stored from the callee's perspective
+					auto it = tinfo.single_return_locations.find(current_callable_pc);
+					if (it == tinfo.single_return_locations.end()) {
+						throw std::runtime_error("JALR ra with current callable PC, without a return location");
+					}
+					// TODO: Check if the return location is in the current block
+					// If it is, we can jump directly to it
+					// Otherwise, we should immediately exit the function
+					//printf("Single return location: 0x%lX (pc=0x%lX) -> 0x%lX\n",
+					//	current_callable_pc, long(this->pc()), long(it->second));
+					if (it->second >= this->begin_pc() && it->second < this->end_pc()) {
+						// Jump directly to the return location
+						add_code("if (" + from_reg(instr.Itype.rs1) + " == " + STRADDR(current_callable_pc) + ") goto " + FUNCLABEL(it->second) + ";");
+					}
+					// Otherwise, we need to use unknown register values to jump
+				}
 				add_code(
 					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
+			// Untrack current callable PC
+			current_callable_pc = 0;
 			// Untrack all registers, as we don't know the value of any register after a branch
 			this->untrack_all_gprs();
 			if (!tinfo.ignore_instruction_limit)
