@@ -32,6 +32,7 @@ namespace riscv
 		bool use_shared_execute_segments;
 		bool use_register_caching;
 		std::unordered_set<address_type<W>> jump_locations;
+		std::unordered_map<address_type<W>, address_type<W>> single_return_locations;
 		// Pointer to all the other blocks (including current)
 		std::vector<TransInfo<W>>* blocks = nullptr;
 		// Pointer to list of ebreak-locations

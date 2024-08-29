@@ -371,6 +371,21 @@ static bool is_stopping_instruction(rv32i_instruction instr) {
 }
 
 template <int W>
+static void record_return_location(std::unordered_map<address_type<W>, address_type<W>>& single_return_locations, address_type<W> caller, address_type<W> callee)
+{
+	auto it = single_return_locations.find(callee);
+	if (it != single_return_locations.end()) {
+		// We already have a return location, disable it by setting it to zero
+		// This means JALR cannot predict the return location
+		it->second = 0;
+	} else {
+		// Record the return location
+		// This means JALR can predict the return location
+		single_return_locations.emplace(callee, caller);
+	}
+}
+
+template <int W>
 void CPU<W>::binary_translate(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec,
 	TransOutput<W>& output) const
 {
@@ -441,6 +456,7 @@ if constexpr (SCAN_FOR_GP) {
 	static constexpr size_t ITS_TIME_TO_SPLIT = (libtcc_enabled) ? 150'000 : 1'250;
 	size_t icounter = 0;
 	std::unordered_set<address_type<W>> global_jump_locations;
+	std::unordered_map<address_type<W>, address_type<W>> single_return_locations;
 	std::vector<TransInfo<W>> blocks;
 
 	// Insert the ELF entry point as the first global jump location
@@ -534,6 +550,12 @@ if constexpr (SCAN_FOR_GP) {
 				// to detect function calls
 				global_jump_locations.insert(location);
 
+				// Record return location for JALR prediction when rd != 0
+				if (instruction.opcode() == RV32I_JAL && instruction.Jtype.rd != 0) {
+					record_return_location<W>(single_return_locations, pc + instruction.length(), location);
+					global_jump_locations.insert(pc + instruction.length());
+				}
+
 				if (location >= block && location < block_end)
 					jump_locations.insert(location);
 			}
@@ -574,6 +596,7 @@ if constexpr (SCAN_FOR_GP) {
 				options.use_shared_execute_segments,
 				options.translate_use_register_caching,
 				std::move(jump_locations),
+				std::move(single_return_locations),
 				nullptr, // blocks
 				&ebreak_locations,
 				global_jump_locations,
