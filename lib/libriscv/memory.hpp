@@ -44,6 +44,9 @@ namespace riscv
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
 		void memcpy_out(void* dst, address_t src, size_t) const;
+		// Compare bounded memory
+		int memcmp(address_t p1, address_t p2, size_t len) const;
+		int memcmp(const void* p1, address_t p2, size_t len) const;
 		// Perform the equivalent of MADV_DONTNEED on memory region
 		void memdiscard(address_t dst, size_t len, bool ignore_protections);
 		/* Fill an array of buffers pointing to complete guest virtual [addr, len].
@@ -51,22 +54,23 @@ namespace riscv
 		   Returns the number of buffers filled, or an exception if not enough. */
 		size_t gather_buffers_from_range(size_t cnt, vBuffer[], address_t addr, size_t len) const;
 		size_t gather_writable_buffers_from_range(size_t cnt, vBuffer[], address_t addr, size_t len);
-		// Compare bounded memory
-		int memcmp(address_t p1, address_t p2, size_t len) const;
-		int memcmp(const void* p1, address_t p2, size_t len) const;
 		// Gather fragmented virtual memory into a buffer abstraction that can output
 		// to a vector, a string and check sequentiality.
-		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
+		riscv::Buffer membuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
+		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const { return membuffer(addr, len, maxlen); }
 		// View known-sequential virtual memory (or throw exception)
-		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
+		std::string_view memview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
+		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const { return memview(addr, len, maxlen); }
 #ifdef RISCV_SPAN_AVAILABLE
 		// View known-sequential virtual memory as array of T with given number of elements (or throw exception)
 		template <typename T>
-		std::span<T> rvspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const;
+		std::span<T> memspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const;
 		template <typename T, size_t N>
-		std::span<T, N> rvspan(address_t addr, size_t maxlen = 16ul << 20) const {
-			return rvspan<T>(addr, N, maxlen).template first<N>();
-		}
+		std::span<T, N> memspan(address_t addr, size_t maxlen = 16ul << 20) const { return memspan<T>(addr, N, maxlen).template first<N>(); }
+		template <typename T>
+		std::span<T> rvspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const { return memspan<T>(addr, elements, maxlen); }
+		template <typename T, size_t N>
+		std::span<T, N> rvspan(address_t addr, size_t maxlen = 16ul << 20) const { return memspan<T>(addr, N, maxlen).template first<N>(); }
 #endif
 		// View a fixed-size array of T from a known-sequential virtual memory region
 		template <typename T, size_t N>

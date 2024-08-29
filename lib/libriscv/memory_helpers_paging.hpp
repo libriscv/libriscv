@@ -94,7 +94,7 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 }
 
 template <int W> inline
-riscv::Buffer Memory<W>::rvbuffer(address_t addr,
+riscv::Buffer Memory<W>::membuffer(address_t addr,
 	const size_t datalen, const size_t maxlen) const
 {
 	riscv::Buffer result;
@@ -131,7 +131,7 @@ riscv::Buffer Memory<W>::rvbuffer(address_t addr,
 }
 
 template <int W> inline
-std::string_view Memory<W>::rvview(address_t addr, size_t len, size_t maxlen) const
+std::string_view Memory<W>::memview(address_t addr, size_t len, size_t maxlen) const
 {
 	if (UNLIKELY(len > maxlen))
 		protection_fault(addr);
@@ -184,7 +184,7 @@ T* Memory<W>::memarray(address_t addr, size_t count, size_t maxbytes) const
 
 template <int W>
 template <typename T> inline
-std::span<T> Memory<W>::rvspan(address_t addr, size_t count, size_t maxlen) const
+std::span<T> Memory<W>::memspan(address_t addr, size_t count, size_t maxlen) const
 {
 	if (addr % alignof(T) != 0)
 		protection_fault(addr);
