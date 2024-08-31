@@ -149,6 +149,38 @@ namespace riscv
 	}
 
 	template <int W>
+	std::vector<std::string_view> Memory<W>::elf_comments() const
+	{
+		std::vector<std::string_view> comments;
+		if (UNLIKELY(m_binary.empty())) return comments;
+		const auto* hdr = elf_header();
+		if (UNLIKELY(hdr == nullptr)) return comments;
+		const auto* shdr = section_by_name(".comment");
+		if (UNLIKELY(shdr == nullptr)) return comments;
+		// ELF with no comments
+		if (UNLIKELY(shdr->sh_size == 0)) return comments;
+
+		const char* strtab = elf_offset<char>(shdr->sh_offset);
+		const char* end = strtab + shdr->sh_size;
+		if (end < strtab || end > m_binary.end())
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF comment section");
+		// Check if the comment section is null-terminated at the end
+		if (UNLIKELY(end[-1] != '\0'))
+			throw MachineException(INVALID_PROGRAM, "Invalid ELF comment section");
+		// Use string_view to find each null-terminated comment
+		while (strtab < end) {
+			std::string_view comment(strtab);
+			if (comment.empty())
+				break;
+			comments.push_back(comment);
+			strtab += comment.size() + 1;
+			if (strtab >= m_binary.end())
+				break;
+		}
+		return comments;
+	}
+
+	template <int W>
 	static void elf_print_sym(const typename Elf<W>::Sym* sym)
 	{
 		if constexpr (W == 4) {

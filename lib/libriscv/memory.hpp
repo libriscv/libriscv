@@ -132,6 +132,8 @@ namespace riscv
 		// Get list of all unmangled symbols in the binary that starts with a given prefix
 		// If the prefix is empty, all unmangled functions are returned
 		std::vector<std::string_view> all_unmangled_function_symbols(const std::string& prefix = "") const;
+		// Get list of all comments in the ELF binary
+		std::vector<std::string_view> elf_comments() const;
 
 		// Counts all the memory used by the machine, execute segments, pages, etc.
 		uint64_t memory_usage_total() const noexcept;
