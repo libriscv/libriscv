@@ -427,7 +427,6 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 	auto new_values = cpu.next_execute_segment(pc);
 	exec = new_values.exec;
 	pc   = new_values.pc;
-	auto* exec_decoder = exec->decoder_cache();
 	auto* exec_seg_data = exec->exec_data();
 	std::unordered_map<address_t, std::string> backtrace_lookup;
 
@@ -456,7 +455,6 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 			auto new_values = cpu.next_execute_segment(pc);
 			exec = new_values.exec;
 			pc   = new_values.pc;
-			exec_decoder = exec->decoder_cache();
 			exec_seg_data = exec->exec_data();
 		}
 
