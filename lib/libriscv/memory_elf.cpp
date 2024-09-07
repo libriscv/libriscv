@@ -170,8 +170,10 @@ namespace riscv
 		// Use string_view to find each null-terminated comment
 		while (strtab < end) {
 			std::string_view comment(strtab);
-			if (comment.empty())
-				break;
+			if (comment.empty()) {
+				strtab++;
+				continue;
+			}
 			comments.push_back(comment);
 			strtab += comment.size() + 1;
 			if (strtab >= m_binary.end())
