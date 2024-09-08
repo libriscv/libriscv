@@ -309,6 +309,14 @@ static void run_program(
 			printf("Introduced to symbol function: 0x%" PRIX64 "\n", uint64_t(addr));
 		});
 
+	// Enable stdin when in proxy mode
+	if (cli_args.proxy_mode) {
+		machine.set_stdin(
+		[](const riscv::Machine<W> &machine, char *buf, size_t size) -> long {
+			return read(0, buf, size);
+		});
+	}
+
 	if constexpr (full_linux_guest)
 	{
 		std::vector<std::string> env = {
