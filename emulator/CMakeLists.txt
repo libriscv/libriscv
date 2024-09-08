@@ -20,6 +20,10 @@ set(SOURCES
 if (EMBED_FILES)
 	message(STATUS "Embedding code file ${EMBED_FILE}")
 	set(SOURCES ${SOURCES} ${EMBED_FILES})
+	# Disable warnings about constants changing signedness
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		set_source_files_properties(${EMBED_FILES} PROPERTIES COMPILE_FLAGS "-Wno-constant-conversion")
+	endif()
 endif()
 
 if (NATIVE)
