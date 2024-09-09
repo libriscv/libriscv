@@ -131,7 +131,7 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 
 ## Instruction set support
 
-The emulator currently supports RV32GCB, RV64GCB (imafdc_zicsr_zifence_zicond_zba_zbb_zbc_zbs) and RV128G.
+The emulator currently supports the RVA22U64 profile. More specifically, RV32GCB, RV64GCB (imafdc_zicsr_zifence_zicond_zba_zbb_zbc_zbs) and RV128G.
 The A-, F-, D-, C- and B-extensions should be 100% supported on 32- and 64-bit. V-extension is undergoing work.
 
 The 128-bit ISA support is experimental, and the specification is not yet complete.
