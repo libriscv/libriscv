@@ -448,7 +448,7 @@ namespace riscv
 				const int32_t imm = ci.CB.signed_imm();
 				const auto addr = pc + imm;
 
-				if (!this->is_within(addr, 4) || (addr % PCAL) != 0)
+				if (!this->is_within(addr, 2) || (addr % PCAL) != 0)
 				{
 					// Allow branch outside of execute segment?
 					return RV32I_BC_INVALID; // No, just return invalid
