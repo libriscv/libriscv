@@ -46,6 +46,23 @@ namespace riscv
 		void load_u64(uint64_t val) {
 			this->i64 = val;
 		}
+
+		template <typename T>
+		T get() const {
+			if constexpr (sizeof(T) == 4) {
+				return static_cast<T>(this->f32[0]);
+			} else {
+				return static_cast<T>(this->f64);
+			}
+		}
+		template <typename T>
+		void set(T val) {
+			if constexpr (sizeof(T) == 4) {
+				this->f32[0] = static_cast<float>(val);
+			} else {
+				this->f64 = static_cast<double>(val);
+			}
+		}
 	};
 
 	template <int W>
