@@ -156,10 +156,11 @@ template <int W>
 template <typename T, size_t N>
 std::array<T, N>* Memory<W>::memarray(address_t addr) const
 {
-	if (addr % alignof(T) != 0)
+	// Special case: empty array - NOT DEREFERENCABLE
+	if (N != 0 && addr % alignof(T) != 0)
 		protection_fault(addr);
 
-	auto view = rvview(addr, sizeof(T) * N);
+	auto view = memview(addr, sizeof(T) * N);
 	if (view.size() != sizeof(T) * N)
 		protection_fault(addr);
 
@@ -170,10 +171,11 @@ template <int W>
 template <typename T>
 T* Memory<W>::memarray(address_t addr, size_t count, size_t maxbytes) const
 {
-	if (addr % alignof(T) != 0)
+	// Special case: empty array - NOT DEREFERENCABLE
+	if (count != 0 && addr % alignof(T) != 0)
 		protection_fault(addr);
 
-	auto view = rvview(addr, count * sizeof(T), maxbytes);
+	auto view = memview(addr, count * sizeof(T), maxbytes);
 	if (view.size() != count * sizeof(T))
 		protection_fault(addr);
 
@@ -192,7 +194,7 @@ std::span<T> Memory<W>::memspan(address_t addr, size_t count, size_t maxlen) con
 	if (count == 0)
 		return {};
 
-	auto view = rvview(addr, count * sizeof(T), maxlen);
+	auto view = memview(addr, count * sizeof(T), maxlen);
 	if (view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
 		return {(T *)view.data(), count};
 
