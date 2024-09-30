@@ -246,7 +246,7 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 		pc = (decoder - exec_decoder) << DecoderCache<W>::SHIFT;
 		// Check if the instruction is still invalid
 		try {
-			if (exec->is_likely_jit() && MACHINE().memory.template read<uint16_t>(pc) != uint16_t(decoder->instr)) {
+			if (decoder->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
 				exec->set_stale(true);
 				goto new_execute_segment;
 			}
