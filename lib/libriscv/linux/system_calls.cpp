@@ -1087,13 +1087,13 @@ static void syscall_getrandom(Machine<W>& machine)
 	arc4random_buf(buffer, need);
 #elif defined(__APPLE__)
 	#if TARGET_OS_IPHONE
-	const ssize_t result = -1;
+	const ssize_t result = need;
 	#else
 	const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
 	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
 	#endif
 #elif defined(__ANDROID__) || defined(__wasm__)
-	const ssize_t result = -1;
+	const ssize_t result = need;
 #else
 	const ssize_t result = getrandom(buffer, need, 0);
 #endif
