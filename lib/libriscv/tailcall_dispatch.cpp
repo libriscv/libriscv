@@ -206,7 +206,7 @@ namespace riscv
 		// Check if the instruction is still invalid
 		bool stale = false;
 		try {
-			if (decoder->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
+			if (d->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
 				exec->set_stale(true);
 				stale = true;
 			}

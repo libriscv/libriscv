@@ -14,7 +14,7 @@ jobs:
         working-directory: ${{github.workspace}}/tests/unit
     strategy:
       matrix:
-        compiler: [clang++-15]
+        compiler: [clang++-17]
 
     steps:
     - uses: actions/checkout@v2
