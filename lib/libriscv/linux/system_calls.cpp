@@ -710,6 +710,7 @@ struct riscv_stat {
 	int32_t  st_blksize;	/* Optimal block size for I/O.  */
 	int32_t  __pad2;
 	int64_t  st_blocks;	/* Number 512-byte blocks allocated. */
+	// TODO: The following are all 32-bit on 32-bit RISC-V
 	int64_t  rv_atime;	/* Time of last access.  */
 	uint64_t rv_atime_nsec;
 	int64_t  rv_mtime;	/* Time of last modification.  */
@@ -846,9 +847,6 @@ static void syscall_fstat(Machine<W>& machine)
 	const auto vfd = machine.template sysarg<int> (0);
 	const auto g_buf = machine.sysarg(1);
 
-	SYSPRINT("SYSCALL fstat, fd: %d buf: 0x%lX)\n",
-			vfd, (long)g_buf);
-
 	if (machine.has_file_descriptors()) {
 
 		const int real_fd = machine.fds().translate(vfd);
@@ -858,13 +856,17 @@ static void syscall_fstat(Machine<W>& machine)
 		if (res == 0) {
 			// Convert to RISC-V structure
 			struct riscv_stat rst;
+			std::memset(&rst, 0, sizeof(rst));
 			copy_stat_buffer(st, rst);
 			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
 		}
 		machine.set_result_or_error(res);
-		return;
+	} else {
+		machine.set_result(-ENOSYS);
 	}
-	machine.set_result(-ENOSYS);
+
+	SYSPRINT("SYSCALL fstat, fd: %d buf: 0x%lX) => %d\n",
+			 vfd, (long)g_buf, (int)machine.return_value());
 }
 
 template <int W>
@@ -1335,6 +1337,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// statx
 	install_syscall_handler(291, syscall_statx<W>);
 #endif
+	// rseq
+	install_syscall_handler(293, syscall_stub_nosys<W>);
 
 	add_mman_syscalls<W>();
 
