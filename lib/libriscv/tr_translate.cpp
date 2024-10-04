@@ -21,8 +21,9 @@ extern "C" int unlink(const char* path);
 #  include <unistd.h>
 # endif
 #else
-# include <dlfcn.h>
-# include <unistd.h>
+#include <dlfcn.h>
+#include <unistd.h>
+#include <sstream>
 #endif
 #include "machine.hpp"
 #include "decoder_cache.hpp"
@@ -271,6 +272,17 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		}
 		if (options.verbose_loader) {
 			printf("libriscv: No embedded translation found for hash %08X\n", checksum);
+		}
+
+		// If we are only looking for embedded translations,
+		// check if we should emit embeddable code and then return.
+		if (!options.translate_enabled) {
+			for (auto& cc : options.cross_compile) {
+				if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
+					return 1; // We must compile embeddable source code
+			}
+			// No need to compile anything
+			return -1;
 		}
 	}
 
@@ -700,16 +712,16 @@ void CPU<W>::produce_embeddable_code(const MachineOptions<W>& options, DecodedEx
 	const uint32_t hash = exec.translation_hash();
 	const std::string& embed_filename = options.translation_filename(
 		embed.prefix, hash, embed.suffix);
-	// Write the embeddable code to a file
-	std::ofstream embed_file(embed_filename);
-	embed_file << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
+
+	std::stringstream embed_code;
+	embed_code << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
 	for (auto& def : output.defines) {
-		embed_file << "#define " << def.first << " " << def.second << "\n";
+		embed_code << "#define " << def.first << " " << def.second << "\n";
 	}
-	embed_file << *output.code;
+	embed_code << *output.code;
 	// Construct a footer that self-registers the translation
 	const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
-	embed_file << R"V0G0N(
+	embed_code << R"V0G0N(
 	struct Mappings {
 		addr_t   addr;
 		unsigned mapping_index;
@@ -741,17 +753,30 @@ void CPU<W>::produce_embeddable_code(const MachineOptions<W>& options, DecodedEx
 		snprintf(buffer, sizeof(buffer), 
 			"{0x%lX, %u},\n",
 			(long)mapping.addr, mapping_index);
-		embed_file << buffer;
+		embed_code << buffer;
 	}
-	embed_file << "    };\n"
+	embed_code << "    };\n"
 		"static bintr_func unique_mappings[] = {\n";
 	for (auto* handler : handlers) {
-		embed_file << "    " << *handler << ",\n";
+		embed_code << "    " << *handler << ",\n";
 	}
-	embed_file << "};\n"
+	embed_code << "};\n"
 		"    " << reg_func << "(" << hash << ", mappings, " << output.mappings.size()
 		<< ", unique_mappings, " << mapping_indices.size() << ", &api);\n";
-	embed_file << "}\n";
+	embed_code << "}\n";
+
+	if (embed.result_c99 == nullptr) {
+		// Write the embeddable code to a file
+		std::ofstream embed_file;
+		embed_file.open(embed_filename, std::ios::out | std::ios::trunc);
+		if (!embed_file.is_open()) {
+			throw MachineException(INVALID_PROGRAM, "Failed to open embeddable code file");
+		}
+		embed_file << embed_code.str();
+	} else {
+		// Return the embeddable code as a string
+		*embed.result_c99 = embed_code.str();
+	}
 }
 
 template <int W>
@@ -759,8 +784,19 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment) const
 {
 	// Check if compiling new translations is enabled
-	if (!options.translate_invoke_compiler)
-		return;
+	if (!options.translate_invoke_compiler) {
+		// Check if there are any embeddable code options
+		bool has_embeddable = false;
+		for (auto& cc : options.cross_compile) {
+			if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc)) {
+				// We must compile embeddable source code
+				has_embeddable = true;
+				break;
+			}
+		}
+		if (!has_embeddable)
+			return; // No need to compile anything
+	}
 
 	TransOutput<W> output;
 	TIME_POINT(t0);
@@ -795,13 +831,15 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 		const std::string shared_library_code = *output.code + output.footer;
 
 		TIME_POINT(t9);
-		if constexpr (libtcc_enabled) {
+		// If translate_invoke_compiler is disabled, do not compile
+		// This allows for producing embeddable code without invoking the compiler
+		if (libtcc_enabled && options.translate_invoke_compiler) {
 			extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
 			static std::mutex libtcc_mutex;
 			// libtcc uses global state, so we need to serialize compilation
 			std::lock_guard<std::mutex> lock(libtcc_mutex);
 			dylib = libtcc_compile(shared_library_code, W, output.defines, "");
-		} else {
+		} else if (options.translate_invoke_compiler) {
 			extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
 			extern bool mingw_compile(const std::string&, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
 			const std::string cflags = defines_to_string(output.defines);

@@ -65,6 +65,11 @@ namespace riscv
 		/// @brief Provide a filename suffix for the embedded code output.
 		/// @example ".c" or ".cpp"
 		std::string suffix = ".cpp";
+
+		/// @brief An optional std::string pointer to write the output code to,
+		/// instead of writing to a file.
+		/// @details Puts freestanding C99 code into the std::string pointer.
+		std::string* result_c99 = nullptr;
 	};
 	using MachineTranslationOptions = std::variant<MachineTranslationCrossOptions, MachineTranslationEmbeddableCodeOptions>;
 
