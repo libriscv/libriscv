@@ -3,7 +3,7 @@
 namespace riscv {
 	extern const std::string bintr_code =
 		R"123(
-#if defined(__TINYC__) && defined(RISCV_PLATFORM_FREEBSD)
+#if defined(__TINYC__) && defined(__FreeBSD__)
 #define int8_t   char
 #define uint8_t  unsigned char
 #define int16_t  short
@@ -174,16 +174,19 @@ static struct CallbackTable {
 	int (*cpop) (uint32_t);
 	int (*cpopl) (uint64_t);
 } api;
-#define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_INS_COUNTER_OFF))
-#define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + RISCV_MAX_COUNTER_OFF))
 #define ARENA_READ_BOUNDARY  (RISCV_ARENA_END - 0x1000)
 #define ARENA_WRITE_BOUNDARY (RISCV_ARENA_END - RISCV_ARENA_ROEND)
 #define ARENA_READABLE(x) ((x) - 0x1000 < ARENA_READ_BOUNDARY)
 #define ARENA_WRITABLE(x) ((x) - RISCV_ARENA_ROEND < ARENA_WRITE_BOUNDARY)
 
-INTERNAL static char* arena_ptr;
+INTERNAL static int32_t arena_offset;
 //#define ARENA_AT(cpu, x)  (arena_ptr + (x))
-#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFF) + (x))
+#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + arena_offset) + (x))
+
+INTERNAL static int32_t ins_counter_offset;
+INTERNAL static int32_t max_counter_offset;
+#define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + ins_counter_offset))
+#define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + max_counter_offset))
 
 static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {
@@ -227,13 +230,18 @@ static inline uint64_t MUL128(
 	return (middle << 32) | (uint32_t)p00;
 }
 
-#ifndef EMBEDDABLE_CODE
-extern VISIBLE void init(struct CallbackTable* table, char* arena)
+#ifdef EMBEDDABLE_CODE
+static
+#else
+extern VISIBLE
+#endif
+void init(struct CallbackTable* table, int32_t arena_off, int32_t ins_counter_off, int32_t max_counter_off)
 {
 	api = *table;
-	arena_ptr = arena;
+	arena_offset = arena_off;
+	ins_counter_offset = ins_counter_off;
+	max_counter_offset = max_counter_off;
 }
-#endif
 
 typedef struct {
 	uint64_t counter;

@@ -55,7 +55,7 @@ namespace riscv
 	extern void* dylib_lookup(void* dylib, const char*, bool is_libtcc);
 
 	template <int W>
-	using binary_translation_init_func = void (*)(const CallbackTable<W>&, void*);
+	using binary_translation_init_func = void (*)(const CallbackTable<W>&, int32_t, int32_t, int32_t);
 	template <int W>
 	static CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&);
 
@@ -79,8 +79,8 @@ namespace riscv
 		uint32_t    nhandlers = 0;
 		const Mapping<W>* mappings = nullptr;
 		const bintr_block_func<W>* handlers = nullptr;
-		// NOTE: Pointer to the callback table (which we host here)
-		riscv::CallbackTable<W>* api_table = nullptr;
+		// NOTE: Pointer to the init function of the translation
+		binary_translation_init_func<W> init_func = nullptr;
 	};
 	template <int W>
 	struct EmbeddedTranslations {
@@ -92,19 +92,19 @@ namespace riscv
 
 	template <int W>
 	static void register_translation(uint32_t hash, const Mapping<W>* mappings, uint32_t nmappings,
-		const bintr_block_func<W>* handlers, uint32_t nhandlers, riscv::CallbackTable<W>* table_ptr)
+		const bintr_block_func<W>* handlers, uint32_t nhandlers, binary_translation_init_func<W> init_func)
 	{
-		auto& translations = registered_embedded_translations<W>;
+		EmbeddedTranslations<W>& translations = registered_embedded_translations<W>;
 		if (translations.count >= MAX_EMBEDDED) {
-			throw MachineException(INVALID_PROGRAM, "Too many embedded translations");
+			throw MachineException(INVALID_PROGRAM, "Too many embedded translations", MAX_EMBEDDED);
 		}
-		auto& translation = translations.translations[translations.count++];
+		EmbeddedTranslation<W>& translation = translations.translations[translations.count++];
 		translation.hash = hash;
 		translation.nmappings = nmappings;
 		translation.mappings  = mappings;
 		translation.nhandlers = nhandlers;
 		translation.handlers  = handlers;
-		translation.api_table = table_ptr;
+		translation.init_func = init_func;
 
 		if (getenv("VERBOSE")) {
 			printf("libriscv: Registered embedded translation for hash %08X, %u/%u mappings\n",
@@ -134,12 +134,6 @@ inline DecoderData<W>& decoder_entry_at(DecoderData<W>* cache, address_type<W> a
 template <int W>
 static std::unordered_map<std::string, std::string> create_defines_for(const Machine<W>& machine, const MachineOptions<W>& options)
 {
-	// Calculate offset from Machine to each counter
-	auto counters = const_cast<Machine<W>&> (machine).get_counters();
-	const auto ins_counter_offset = uintptr_t(&counters.first) - uintptr_t(&machine);
-	const auto max_counter_offset = uintptr_t(&counters.second) - uintptr_t(&machine);
-	const auto arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
-
 	// Some executables are loaded at high-memory addresses, which is outside of the memory arena.
 	size_t arena_end                   = machine.memory.memory_arena_size();
 	address_type<W> initial_rodata_end = machine.memory.initial_rodata_end();
@@ -149,17 +143,6 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	}
 
 	std::unordered_map<std::string, std::string> defines;
-#if defined(__linux__)
-	defines.emplace("RISCV_PLATFORM_LINUX", "1");
-#elif defined(__APPLE__)
-	defines.emplace("RISCV_PLATFORM_DARWIN", "1");
-#elif defined(_WIN32)
-	defines.emplace("RISCV_PLATFORM_WINDOWS", "1");
-#elif defined(__FreeBSD__)
-	defines.emplace("RISCV_PLATFORM_FREEBSD", "1");
-#elif defined(__OpenBSD__)
-	defines.emplace("RISCV_PLATFORM_OPENBSD", "1");
-#endif
 	defines.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
 	defines.emplace("RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX));
 	if constexpr (W == 16) {
@@ -169,9 +152,6 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 		defines.emplace("RISCV_ARENA_END", std::to_string(arena_end));
 		defines.emplace("RISCV_ARENA_ROEND", std::to_string(initial_rodata_end));
 	}
-	defines.emplace("RISCV_INS_COUNTER_OFF", std::to_string(ins_counter_offset));
-	defines.emplace("RISCV_MAX_COUNTER_OFF", std::to_string(max_counter_offset));
-	defines.emplace("RISCV_ARENA_OFF", std::to_string(arena_offset));
 	if constexpr (atomics_enabled) {
 		defines.emplace("RISCV_EXT_A", "1");
 	}
@@ -242,7 +222,16 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 			auto& translation = registered_embedded_translations<W>.translations[i];
 			if (translation.hash == checksum)
 			{
-				*translation.api_table = create_bintr_callback_table(exec);
+				// Initialize the translation
+				Machine<W>& m = const_cast<Machine<W>&> (machine());
+				auto counters = m.get_counters();
+
+				const int32_t ins_counter_offset = uintptr_t(&counters.first) - uintptr_t(&m);
+				const int32_t max_counter_offset = uintptr_t(&counters.second) - uintptr_t(&m);
+				const int32_t arena_offset = uintptr_t(&machine().memory.memory_arena_ptr_ref()) - uintptr_t(&m);
+
+				translation.init_func(create_bintr_callback_table(exec),
+					arena_offset, ins_counter_offset, max_counter_offset);
 
 				if (options.verbose_loader) {
 					printf("libriscv: Found embedded translation for hash %08X, %u/%u mappings\n",
@@ -254,7 +243,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 					exec.set_mapping(i, translation.handlers[i]);
 				}
 
-				const auto bytecode = RV32I_BC_TRANSLATOR;
+				const uint8_t bytecode = RV32I_BC_TRANSLATOR;
 				for (unsigned i = 0; i < translation.nmappings; i++) {
 					const auto& mapping = translation.mappings[i];
 
@@ -346,8 +335,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return 1;
 	}
 
-	void* arena = machine().memory.memory_arena_ptr_ref();
-	this->activate_dylib(options, exec, dylib, arena, false, false);
+	this->activate_dylib(options, exec, dylib, machine(), false, false);
 
 	if (options.translate_timing) {
 		TIME_POINT(t10);
@@ -762,7 +750,7 @@ void CPU<W>::produce_embeddable_code(const MachineOptions<W>& options, DecodedEx
 	}
 	embed_code << "};\n"
 		"    " << reg_func << "(" << hash << ", mappings, " << output.mappings.size()
-		<< ", unique_mappings, " << mapping_indices.size() << ", &api);\n";
+		<< ", unique_mappings, " << mapping_indices.size() << ", (void*)&init);\n";
 	embed_code << "}\n";
 
 	if (embed.result_c99 == nullptr) {
@@ -804,11 +792,10 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 
 	output.defines = create_defines_for(machine(), options);
 	const bool live_patch = options.translate_background_callback != nullptr;
-	void* arena = machine().memory.memory_arena_ptr_ref();
 
 	// Compilation step
 	std::function<void()> compilation_step =
-	[this, options, output = std::move(output), filename, arena, live_patch, shared_segment = shared_segment] () mutable
+	[this, options, output = std::move(output), filename, live_patch, shared_segment = shared_segment] () mutable
 	{
 		auto* exec = shared_segment.get();
 
@@ -875,7 +862,7 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 		// Check compilation result
 		if (dylib != nullptr) {
 			if (!exec->is_binary_translated()) {
-				activate_dylib(options, *exec, dylib, arena, libtcc_enabled, live_patch);
+				activate_dylib(options, *exec, dylib, machine(), libtcc_enabled, live_patch);
 			}
 
 			if constexpr (!libtcc_enabled) {
@@ -902,11 +889,11 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 }
 
 template <int W>
-void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, void* arena, bool is_libtcc, bool live_patch)
+void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, const Machine<W>& machine, bool is_libtcc, bool live_patch)
 {
 	TIME_POINT(t11);
 
-	if (!initialize_translated_segment(exec, dylib, arena, is_libtcc))
+	if (!initialize_translated_segment(exec, dylib, machine, is_libtcc))
 	{
 		if constexpr (!libtcc_enabled) {
 			// only warn when translation is not already disabled
@@ -1273,7 +1260,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 }
 
 template <int W>
-bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void* dylib, void* arena, bool is_libtcc)
+bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void* dylib, const Machine<W>& machine, bool is_libtcc)
 {
 	// NOTE: At some point this must be able to duplicate the dylib
 	// in order to be able to share execute segments across machines.
@@ -1284,8 +1271,14 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void*
 	}
 
 	// Map the API callback table
+	auto counters = const_cast<Machine<W>&> (machine).get_counters();
 	auto func = (binary_translation_init_func<W>) ptr;
-	func(create_bintr_callback_table<W>(exec), arena);
+
+	const int32_t ins_counter_offset = uintptr_t(&counters.first) - uintptr_t(&machine);
+	const int32_t max_counter_offset = uintptr_t(&counters.second) - uintptr_t(&machine);
+	const int32_t arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
+
+	func(create_bintr_callback_table<W>(exec), arena_offset, ins_counter_offset, max_counter_offset);
 
 	return true;
 }
@@ -1336,22 +1329,22 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 
 extern "C" {
 	void libriscv_register_translation4(uint32_t hash, const riscv::Mapping<4>* mappings, uint32_t nmappings,
-		const riscv::bintr_block_func<4>* handlers, uint32_t nhandlers, void* table_ptr)
+		const riscv::bintr_block_func<4>* handlers, uint32_t nhandlers, void* init_func_ptr)
 	{
 #ifdef RISCV_32I
-		riscv::register_translation<4>(hash, mappings, nmappings, handlers, nhandlers, (riscv::CallbackTable<4>*)table_ptr);
+		riscv::register_translation<4>(hash, mappings, nmappings, handlers, nhandlers, (riscv::binary_translation_init_func<4>)init_func_ptr);
 #else
-		(void)hash; (void)mappings; (void)nmappings; (void)handlers; (void)nhandlers; (void)table_ptr;
+		(void)hash; (void)mappings; (void)nmappings; (void)handlers; (void)nhandlers; (void)init_func_ptr;
 		fprintf(stderr, "libriscv: Warning: libriscv_register_translation4 called on 64-bit build\n");
 #endif
 	}
 	void libriscv_register_translation8(uint32_t hash, const riscv::Mapping<8>* mappings, uint32_t nmappings,
-		const riscv::bintr_block_func<8>* handlers, uint32_t nhandlers, void* table_ptr)
+		const riscv::bintr_block_func<8>* handlers, uint32_t nhandlers, void* init_func_ptr)
 	{
 #ifdef RISCV_64I
-		riscv::register_translation<8>(hash, mappings, nmappings, handlers, nhandlers, (riscv::CallbackTable<8>*)table_ptr);
+		riscv::register_translation<8>(hash, mappings, nmappings, handlers, nhandlers, (riscv::binary_translation_init_func<8>)init_func_ptr);
 #else
-		(void)hash; (void)mappings; (void)nmappings; (void)handlers; (void)nhandlers; (void)table_ptr;
+		(void)hash; (void)mappings; (void)nmappings; (void)handlers; (void)nhandlers; (void)init_func_ptr;
 		fprintf(stderr, "libriscv: Warning: libriscv_register_translation8 called on 32-bit build\n");
 #endif
 	}
