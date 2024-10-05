@@ -114,9 +114,16 @@ namespace riscv
 
 	static std::string defines_to_string(const std::unordered_map<std::string, std::string>& cflags)
 	{
-		std::string defstr;
+		std::vector<std::string> cflags_str;
 		for (auto pair : cflags) {
-			defstr += " -D" + pair.first + "=" + pair.second;
+			cflags_str.push_back(" -D" + pair.first + "=" + pair.second);
+		}
+		// Sort the flags to make sure the hash is consistent
+		std::sort(cflags_str.begin(), cflags_str.end());
+
+		std::string defstr;
+		for (auto& str : cflags_str) {
+			defstr += str;
 		}
 		return defstr;
 	}
