@@ -230,7 +230,7 @@ namespace riscv
 			return ~crc32c_sse42(~crc, (const uint8_t*)data, len);
 		}
 	#endif
-		return ~crc32<0x1EDC6F41>(~crc, data, len);
+		return ~crc32<0x82F63B78>(~crc, data, len);
 	}
 
 	uint32_t crc32c(const void* data, size_t len)
@@ -245,6 +245,6 @@ namespace riscv
 			return ~crc32c_sse42(0xFFFFFFFF, (const uint8_t *)data, len);
 		}
 	#endif
-		return ~crc32<0x1EDC6F41>(0xFFFFFFFF, data, len);
+		return ~crc32<0x82F63B78>(0xFFFFFFFF, data, len);
 	}
 }

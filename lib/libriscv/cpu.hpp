@@ -13,7 +13,7 @@ namespace riscv
 	template<int W> struct DecodedExecuteSegment;
 
 	template<int W>
-	struct alignas(64) CPU
+	struct alignas(32) CPU
 	{
 		using address_t = address_type<W>;     // one unsigned memory address
 		using format_t  = instruction_format;  // machine instruction format
@@ -211,8 +211,8 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		static std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&);
 		void binary_translate(const MachineOptions<W>&, DecodedExecuteSegment<W>&, TransOutput<W>&) const;
-		static void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, void*, bool, bool) RISCV_INTERNAL;
-		static bool initialize_translated_segment(DecodedExecuteSegment<W>&, void*, void*, bool) RISCV_INTERNAL;
+		static void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, const Machine<W>&, bool, bool) RISCV_INTERNAL;
+		static bool initialize_translated_segment(DecodedExecuteSegment<W>&, void*, const Machine<W>&, bool) RISCV_INTERNAL;
 		static void produce_embeddable_code(const MachineOptions<W>&, DecodedExecuteSegment<W>&, const TransOutput<W>&, const MachineTranslationEmbeddableCodeOptions&) RISCV_INTERNAL;
 #endif
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
