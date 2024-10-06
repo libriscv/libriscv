@@ -43,20 +43,28 @@
 #define UNKNOWN_INSTRUCTION() { \
   if (!instr.is_illegal()) { \
     this->store_loaded_registers(); \
+	code += "#ifdef __wasm__\n"; \
+	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; \
+	code += "#else\n"; \
     code += "{ static int handler_idx = 0;\n"; \
     code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
     code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+	code += "#endif\n"; \
 	this->reload_all_registers(); \
 	this->untrack_all_gprs();     \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + hex_address(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 }
 #define WELL_KNOWN_INSTRUCTION() { \
+	code += "#ifdef __wasm__\n"; \
+	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; \
+	code += "#else\n"; \
     code += "{ static int handler_idx = 0;\n"; \
     code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
     code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+	code += "#endif\n"; \
 }
-#endif
+#endif // RISCV_LIBTCC
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "LIKELY(counter < max_counter)";
@@ -182,7 +190,9 @@ struct Emitter
 		else if (reg != 0) {
 			if (gpr_has_known_value(reg)) {
 				if constexpr (W == 16)
-					return hex_address(get_gpr_value(reg)) + "L";
+					return hex_address(get_gpr_value(reg)) + "LL";
+				else if constexpr (W == 8)
+					return std::to_string(get_gpr_value(reg)) + "ULL";
 				else
 					return std::to_string(get_gpr_value(reg)) + "UL";
 			} else if (uses_register_caching()) {
