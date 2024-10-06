@@ -182,7 +182,9 @@ struct Emitter
 		else if (reg != 0) {
 			if (gpr_has_known_value(reg)) {
 				if constexpr (W == 16)
-					return hex_address(get_gpr_value(reg)) + "L";
+					return hex_address(get_gpr_value(reg)) + "LL";
+				else if constexpr (W == 8)
+					return std::to_string(get_gpr_value(reg)) + "ULL";
 				else
 					return std::to_string(get_gpr_value(reg)) + "UL";
 			} else if (uses_register_caching()) {
