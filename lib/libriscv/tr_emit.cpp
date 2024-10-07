@@ -296,7 +296,7 @@ struct Emitter
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
 				return "ARENA_AT(cpu, (uint32_t)(" + address + "))";
 			else
-				return "ARENA_AT(cpu, " + address + " & " + hex_address(address_t(get_Nbit_encompassing_arena_mask())) + ")";
+				return "ARENA_AT(cpu, (" + address + ") & " + hex_address(address_t(get_Nbit_encompassing_arena_mask())) + ")";
 		} else {
 			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
