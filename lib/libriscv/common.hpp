@@ -185,6 +185,10 @@ namespace riscv
 #else
 		bool translate_use_register_caching = false;
 #endif
+		/// @brief Enable automatic n-bit address space for the binary translator by rounding down to the nearest power of 2.
+		/// @details This will allow the binary translator to use and-masked addresses
+		/// for all memory accesses, which can drastically improve performance.
+		bool translate_automatic_nbit_address_space = false;
 		/// @brief Enable recording of slowpaths to jump hints for the binary translator.
 		/// @details This will record slowpaths to the MachineOptions jump hints vector.
 		/// From there the CLI can save the jump hints to a file after the program has run.

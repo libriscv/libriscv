@@ -109,6 +109,14 @@ struct Emitter
 	{
 		this->func = funclabel<W>("f", this->pc());
 		this->m_arena_hex_address = hex_address(tinfo.arena_ptr) + "L";
+
+		if (ptinfo.use_automatic_nbit_address_space) {
+			// Calculate the encompassing arena bits, which is the highest bit set in the arena size
+			int encompassing_arena_bits = 0;
+			for (uint64_t i = 1; i < ptinfo.arena_size; i <<= 1)
+				encompassing_arena_bits++;
+			this->m_encompassing_arena_mask = (1ULL << encompassing_arena_bits) - 1;
+		}
 	}
 
 	template <typename ... Args>
@@ -253,7 +261,19 @@ struct Emitter
 		return riscv::flat_readwrite_arena && tinfo.arena_ptr != 0;
 	}
 	bool uses_Nbit_encompassing_arena() noexcept {
-		return riscv::encompassing_Nbit_arena != 0 && tinfo.arena_ptr != 0;
+		if (riscv::encompassing_Nbit_arena != 0 && tinfo.arena_ptr != 0)
+			return true;
+		if (tinfo.use_automatic_nbit_address_space && tinfo.arena_ptr != 0)
+			return true;
+		return false;
+	}
+	constexpr address_t get_Nbit_encompassing_arena_mask() noexcept {
+		if constexpr (riscv::encompassing_Nbit_arena != 0)
+			return riscv::encompassing_arena_mask;
+		else if (tinfo.use_automatic_nbit_address_space)
+			return this->m_encompassing_arena_mask;
+		else
+			return 0;
 	}
 
 	std::string arena_at(const std::string& address) {
@@ -268,7 +288,7 @@ struct Emitter
 				if (riscv::encompassing_Nbit_arena == 32)
 					return "(" + m_arena_hex_address + " + (uint32_t)(" + address + "))";
 				else
-					return "(" + m_arena_hex_address + " + ((" + address + ") & " + hex_address(address_t(riscv::encompassing_arena_mask)) + "))";
+					return "(" + m_arena_hex_address + " + ((" + address + ") & " + hex_address(address_t(get_Nbit_encompassing_arena_mask())) + "))";
 			} else {
 				return "(" + m_arena_hex_address + " + " + speculation_safe(address) + ")";
 			}
@@ -276,7 +296,7 @@ struct Emitter
 			if constexpr (riscv::encompassing_Nbit_arena == 32)
 				return "ARENA_AT(cpu, (uint32_t)(" + address + "))";
 			else
-				return "ARENA_AT(cpu, " + address + " & " + hex_address(address_t(riscv::encompassing_arena_mask)) + ")";
+				return "ARENA_AT(cpu, (" + address + ") & " + hex_address(address_t(get_Nbit_encompassing_arena_mask())) + ")";
 		} else {
 			return "ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
@@ -285,12 +305,12 @@ struct Emitter
 	std::string arena_at_fixed(const std::string& type, address_t address) {
 		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
-				return "*(" + type + "*)" + hex_address(tinfo.arena_ptr + (address & address_t(riscv::encompassing_arena_mask))) + "";
+				return "*(" + type + "*)" + hex_address(tinfo.arena_ptr + (address & address_t(get_Nbit_encompassing_arena_mask()))) + "";
 			} else {
 				return "*(" + type + "*)" + hex_address(tinfo.arena_ptr + address) + "";
 			}
 		} else if (uses_Nbit_encompassing_arena()) {
-			return "*(" + type + "*)ARENA_AT(cpu, " + hex_address(address & address_t(riscv::encompassing_arena_mask)) + ")";
+			return "*(" + type + "*)ARENA_AT(cpu, " + hex_address(address & address_t(get_Nbit_encompassing_arena_mask())) + ")";
 		} else {
 			return "*(" + type + "*)ARENA_AT(cpu, " + speculation_safe(address) + ")";
 		}
@@ -520,6 +540,7 @@ private:
 	unsigned m_instr_length = 0;
 	uint64_t m_instr_counter = 0;
 	uint32_t m_zero_insn_counter = 0;
+	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
 
 	std::array<bool, 32> gpr_exists {};
