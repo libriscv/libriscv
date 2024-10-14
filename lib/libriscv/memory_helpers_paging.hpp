@@ -307,20 +307,28 @@ void Memory<W>::memcpy(
 				srcm.memory.template read<uint8_t> (src++));
 			len --;
 		}
-		while (len >= 16) {
-			this->template write<uint32_t> (dst + 0,
-				srcm.memory.template read<uint32_t> (src + 0));
-			this->template write<uint32_t> (dst + 1*W,
-				srcm.memory.template read<uint32_t> (src + 1*W));
-			this->template write<uint32_t> (dst + 2*W,
-				srcm.memory.template read<uint32_t> (src + 2*W));
-			this->template write<uint32_t> (dst + 3*W,
-				srcm.memory.template read<uint32_t> (src + 3*W));
-			dst += 16; src += 16; len -= 16;
+		while (len >= 4*W) {
+			if constexpr (riscv::flat_readwrite_arena) {
+				// Fast-path: Find the entire source buffer in the memory arena using memarray()
+				if (uint8_t* srcptr = srcm.memory.template memarray<uint8_t> (src, 4*W, len)) {
+					this->memcpy(dst, srcptr, 4*W);
+					dst += 4*W; src += 4*W; len -= 4*W;
+					continue;
+				}
+			}
+			this->template write<address_t> (dst + 0,
+				srcm.memory.template read<address_t> (src + 0));
+			this->template write<address_t> (dst + 1*W,
+				srcm.memory.template read<address_t> (src + 1*W));
+			this->template write<address_t> (dst + 2*W,
+				srcm.memory.template read<address_t> (src + 2*W));
+			this->template write<address_t> (dst + 3*W,
+				srcm.memory.template read<address_t> (src + 3*W));
+			dst += 4*W; src += 4*W; len -= 4*W;
 		}
 		while (len >= W) {
-			this->template write<uint32_t> (dst,
-				srcm.memory.template read<uint32_t> (src));
+			this->template write<address_t> (dst,
+				srcm.memory.template read<address_t> (src));
 			dst += W; src += W; len -= W;
 		}
 	}
