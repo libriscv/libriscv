@@ -63,7 +63,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		// When data != src, srclen is the old length, and the
 		// chunks are non-overlapping, so we can use forwards memcpy.
 		if (data != src && srclen != 0) {
-			machine.memory.memcpy(data, machine, src, srclen);
+			machine.memory.memcpy(data, machine, src, std::min(address_t(srclen), newlen));
 			machine.penalize(2 * srclen);
 		}
 		machine.set_result(data);
