@@ -146,7 +146,7 @@ namespace riscv
 		// Make the instruction counter(s) visible
 		counter.apply(MACHINE());
 		// Invoke system call
-		MACHINE().syscall_handlers[d->instr](MACHINE());
+		cpu.machine().system_call(cpu.reg(REG_ECALL));
 		// Restore max counter
 		counter.retrieve_counters(MACHINE());
 		// Clone-like system calls can change PC
