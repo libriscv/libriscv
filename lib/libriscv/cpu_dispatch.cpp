@@ -194,7 +194,7 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	// Make the instruction counter(s) visible
 	counter.apply(MACHINE());
 	// Invoke system call
-	MACHINE().syscall_handlers[decoder->instr](MACHINE());
+	MACHINE().system_call(REG(REG_ECALL));
 	// Restore counters
 	counter.retrieve_counters(MACHINE());
 	if (UNLIKELY(counter.overflowed() || pc != REGISTERS().pc))

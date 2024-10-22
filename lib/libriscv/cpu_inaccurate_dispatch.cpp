@@ -183,7 +183,7 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
 	// Make the current PC visible
 	REGISTERS().pc = pc;
 	// Invoke system call
-	MACHINE().syscall_handlers[decoder->instr](MACHINE());
+	MACHINE().system_call(REG(REG_ECALL));
 	if (MACHINE().stopped())
 		return;
 	else if (UNLIKELY(pc != REGISTERS().pc))
