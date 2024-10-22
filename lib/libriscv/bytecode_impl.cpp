@@ -841,42 +841,6 @@ INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
 		// Otherwise, leave the JALR instruction as is (NOTE: sets invalid handler)
 		DECODER().set_atomic_bytecode_and_handler(RV32I_BC_JALR, 0);
 	}	break;
-	case 2:
-	case 3: { // Live-patch checked SYSCALL
-		// We suspect that the system call number is the same on every invocation for a given address
-		const unsigned ecall = REG(REG_ECALL);
-		if (RISCV_SPECSAFE(ecall < RISCV_SYSCALLS_MAX)) {
-			// If the syscall id matches the previous one, we increment the handler_idx
-			if (DECODER().instr == ecall) {
-				DECODER().m_handler++;
-				if (DECODER().m_handler > 3) {
-					// At maximum, we promote the livepatch bytecode a SYSCALL
-					DECODER().set_bytecode(RV32I_BC_SYSCALL);
-					// TODO: Set entry handler_idx to correct value
-					EXECUTE_CURRENT();
-				}
-			} else {
-				DECODER().m_handler = 2;
-				DECODER().instr = ecall;
-			}
-		}
-		//printf("Live-patch syscall %d, value: %d\n", ecall, DECODER().m_handler);
-#ifndef INACCURATE_DISPATCH
-		// Make the instruction counter(s) visible
-		counter.apply(MACHINE());
-#endif // INACCURATE_DISPATCH
-		REGISTERS().pc = pc;
-		MACHINE().system_call(ecall);
-		pc = REGISTERS().pc + 4;
-#ifndef INACCURATE_DISPATCH
-		// Restore counters
-		counter.retrieve_counters(MACHINE());
-#else
-		if (MACHINE().stopped())
-			return;
-#endif // INACCURATE_DISPATCH
-		OVERFLOW_CHECKED_JUMP();
-	}	break;
 	default:
 		// Invalid handler
 		DECODER().set_bytecode(RV32I_BC_INVALID);
