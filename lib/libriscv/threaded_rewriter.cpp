@@ -541,10 +541,7 @@ namespace riscv
 #endif // RISCV_EXT_COMPRESSED
 
 			case RV32I_BC_SYSCALL: {
-				instr.whole = 0;
-				handler_idx = 2;
-
-				return RV32I_BC_LIVEPATCH;
+				return RV32I_BC_SYSCALL;
 			}
 			case RV32I_BC_LIVEPATCH: {
 				throw std::runtime_error("Live-patch bytecode is not valid here");
