@@ -949,10 +949,8 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	const unsigned unique_mappings = *no_handlers;
 
 	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
-	exec.create_mappings(unique_mappings + 1);
-	for (unsigned i = 0; i < unique_mappings; i++) {
-		exec.set_mapping(i, handlers[i]);
-	}
+	auto& exec_mappings = exec.create_mappings(unique_mappings + 1);
+	std::copy(handlers, handlers + unique_mappings, exec_mappings.begin());
 	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
 		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 	});
