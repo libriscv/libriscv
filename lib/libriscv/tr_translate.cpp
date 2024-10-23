@@ -245,10 +245,8 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 						checksum, translation.nhandlers, translation.nmappings);
 				}
 
-				exec.create_mappings(translation.nhandlers);
-				for (unsigned i = 0; i < translation.nhandlers; i++) {
-					exec.set_mapping(i, translation.handlers[i]);
-				}
+				auto& mappings = exec.create_mappings(translation.nhandlers);
+				std::copy(translation.handlers, translation.handlers + translation.nhandlers, mappings.begin());
 
 				const uint8_t bytecode = RV32I_BC_TRANSLATOR;
 				for (unsigned i = 0; i < translation.nmappings; i++) {

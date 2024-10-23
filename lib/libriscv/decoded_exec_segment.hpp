@@ -68,7 +68,7 @@ namespace riscv
 		void set_binary_translated(void* dl, bool is_libtcc) const { m_bintr_dl = dl; m_is_libtcc = is_libtcc; }
 		uint32_t translation_hash() const { return m_bintr_hash; }
 		void set_translation_hash(uint32_t hash) { m_bintr_hash = hash; }
-		void create_mappings(size_t mappings) { m_translator_mappings.resize(mappings); }
+		auto& create_mappings(size_t mappings) { m_translator_mappings.resize(mappings); return m_translator_mappings; }
 		void set_mapping(unsigned i, bintr_block_func<W> handler) { m_translator_mappings.at(i) = handler; }
 		bintr_block_func<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
 		bintr_block_func<W> unchecked_mapping_at(unsigned i) const { return m_translator_mappings[i]; }
