@@ -314,6 +314,11 @@ namespace riscv
 		// Here we allocate the decoder cache which is page-sized
 		auto* decoder_cache = exec.create_decoder_cache(
 			new DecoderCache<W> [n_pages], n_pages);
+		// Clear the decoder cache! (technically only needed when binary translation is enabled)
+		std::memset(decoder_cache, 0, n_pages * sizeof(DecoderCache<W>));
+		// Get a base address relative pointer to the decoder cache
+		// Eg. exec_decoder[pbase] is the first entry in the decoder cache
+		// so that PC with a simple shift can be used as a direct index.
 		auto* exec_decoder = 
 			decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
 		exec.set_decoder(exec_decoder);
