@@ -136,7 +136,7 @@ namespace riscv
 		for (size_t i = 0; i < symtab_ents; i++)
 		{
 			const char* symname = &strtab[symtab[i].st_name];
-			if (Elf::SymbolType(symtab[i].st_info) == Elf::STT_FUNC) {
+			if (Elf::SymbolType(symtab[i].st_info) == Elf::STT_FUNC && Elf::SymbolBind(symtab[i].st_info) != Elf::STB_WEAK) {
 				std::string_view symview(symname);
 				// Detect if the symbol is unmangled (no _Z prefix)
 				if (symview.size() > 2 && !(symview[0] == '_' && symview[1] == 'Z')) {

@@ -27,6 +27,10 @@ namespace riscv
 		static constexpr unsigned STT_OBJECT = 1;
 		static constexpr unsigned STT_FUNC   = 2;
 
+		static constexpr unsigned STB_LOCAL  = 0;
+		static constexpr unsigned STB_GLOBAL = 1;
+		static constexpr unsigned STB_WEAK   = 2;
+
 		struct Header {
 			static constexpr unsigned EI_NIDENT = 16;
 			static constexpr unsigned EI_CLASS  = 4;
@@ -132,6 +136,9 @@ namespace riscv
 
 		static unsigned SymbolType(uint8_t st_info) {
 			return st_info & 0xF;
+		}
+		static unsigned SymbolBind(uint8_t st_info) {
+			return st_info >> 4;
 		}
 
 		static unsigned RelaSym(addr_t r_info) {
