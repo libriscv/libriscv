@@ -63,9 +63,9 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
 
   ![Ryzen 7950X STREAM memory wasm3 vs  libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/4e23b2c8-71bb-4bd8-92e6-523a4e84dd32)
   ![Ryzen 6860Z STREAM memory wasm3 vs  libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/79f8d0a0-5bfa-44c8-932d-d41f4538f4be)
-  ![CoreMark 1 0 Interpreted wasm3 vs  interpreted libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/871e96d9-f9aa-40cb-9317-825d1bcad569)
+  ![CoreMark 1 0 interpreters, Nov 2024 (Ryzen 7950X)](https://github.com/user-attachments/assets/3f03d5de-c17c-4cad-854f-0ce8f385d54b)
 
-  We can see that _libriscv_ in interpreter mode is substantially faster than wasm3, also an interpreter.
+  We can see that _libriscv_ in interpreter mode is substantially faster than other interpreters.
 
   ![Compare rainbow color calculation (3x sinf)](https://github.com/fwsGonzo/libriscv/assets/3758947/66c2055f-e3e1-40cf-88bc-e0e0275d6b6f)
 
