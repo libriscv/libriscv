@@ -176,9 +176,6 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 		// so it will be recompiled if the trace option is toggled.
 		defines.emplace("RISCV_TRACING", "1");
 	}
-	if (options.translate_ignore_instruction_limit) {
-		defines.emplace("RISCV_IGNORE_INSTRUCTION_LIMIT", "1");
-	}
 	if constexpr (encompassing_Nbit_arena != 0) {
 		defines.emplace("RISCV_NBIT_UNBOUNDED", std::to_string(encompassing_Nbit_arena));
 	}
