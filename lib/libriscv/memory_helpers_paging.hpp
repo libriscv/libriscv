@@ -94,6 +94,23 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 }
 
 template <int W> inline
+std::string_view Memory<W>::memstring_view(address_t addr, size_t max_len) const
+{
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(addr < memory_arena_size())) {
+			auto* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
+			// limit to the end of the arena
+			max_len = std::min(max_len, size_t(memory_arena_size() - addr));
+			// limit to the end of the string
+			const size_t len = strnlen(begin, max_len);
+			return {begin, len};
+		}
+	}
+
+	protection_fault(addr);
+}
+
+template <int W> inline
 riscv::Buffer Memory<W>::membuffer(address_t addr,
 	const size_t datalen, const size_t maxlen) const
 {

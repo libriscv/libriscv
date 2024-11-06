@@ -78,9 +78,11 @@ namespace riscv
 		// View a dynamically-sized array of T from a known-sequential virtual memory region
 		template <typename T>
 		T* memarray(address_t addr, size_t len, size_t maxbytes = 16ul << 20) const;
-		// Read a zero-terminated string directly from guests memory
+		// Read zero-terminated string directly from guests memory, into an owning std::string
 		std::string memstring(address_t addr, size_t maxlen = 16384) const;
 		size_t strlen(address_t addr, size_t maxlen = 16384) const;
+		// Read zero-terminated string directly from guests memory, returning a non-owning string_view
+		std::string_view memstring_view(address_t addr, size_t maxlen = 16384) const;
 
 		// Returns the ELF entry/start address (the first instruction)
 		address_t start_address() const noexcept { return this->m_start_address; }
