@@ -189,6 +189,7 @@ void Machine<W>::setup_posix_threads()
 	this->install_syscall_handler(435,
 	[] (Machine<W>& machine) {
 		/* int clone3(struct clone3_args*, size_t len) */
+		static constexpr uint32_t SETTLS = 0x00080000;
 		struct clone3_args {
 			address_type<W> flags;
 			address_type<W> pidfd;
@@ -212,7 +213,11 @@ void Machine<W>::setup_posix_threads()
 		const auto stack = args.stack + args.stack_size;
 		const auto  ptid = args.parent_tid;
 		const auto  ctid = args.child_tid;
-		const auto   tls = args.tls;
+		auto tls = args.tls;
+		if ((args.flags & SETTLS) == 0) {
+			tls = machine.cpu.reg(REG_TP);
+		}
+
 		auto* parent = machine.threads().get_thread();
 		THPRINT(machine,
 			">>> clone3(stack=0x%lX, flags=%x,"
