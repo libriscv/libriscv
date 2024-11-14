@@ -232,9 +232,9 @@ while (!machine.stopped()) {
 }
 ```
 
-## Executing a program in small increments
+## Pausing and resuming
 
-If we only want to run for a small amount of time and then leave the simulation, we can use the same example as above with an outer loop to keep it running as long as we want to until the machine stops normally.
+Pausing and resuming is a first-class feature in libriscv. Using the same example as above with an additional outer loop, we can keep stopping as many times as we want to until the program ends normally.
 ```C++
 	do {
 		// Only execute 1000 instructions at a time
