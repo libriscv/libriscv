@@ -187,7 +187,7 @@ target_include_directories(riscv PUBLIC .)
 target_include_directories(riscv PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
 if (NOT WIN32 OR MINGW_TOOLCHAIN)
-	target_compile_options(riscv PRIVATE -Wall -Wextra)
+	target_compile_options(riscv PRIVATE -Wall -Wextra -fPIC)
 endif()
 
 if (RISCV_EXPERIMENTAL AND RISCV_ENCOMPASSING_ARENA)
