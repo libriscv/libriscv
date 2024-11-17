@@ -1396,12 +1396,6 @@ void Emitter<W>::emit()
 			case 0x141: // BSET
 				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " | ((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
-			case 0x142: // BCLR
-				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " & ~((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
-				break;
-			case 0x143: // BINV
-				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " ^ ((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
-				break;
 			case 0x204: // XNOR
 				add_code(to_reg(instr.Rtype.rd) + " = ~(" + from_reg(instr.Rtype.rs1) + " ^ " + from_reg(instr.Rtype.rs2) + ");");
 				break;
@@ -1410,6 +1404,9 @@ void Emitter<W>::emit()
 				break;
 			case 0x207: // ANDN
 				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " & ~" + from_reg(instr.Rtype.rs2) + ");");
+				break;
+			case 0x241: // BCLR
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " & ~((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			case 0x245: // BEXT
 				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1))) & 1;");
@@ -1449,6 +1446,9 @@ void Emitter<W>::emit()
 				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
 					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (XLEN - shift)); }"
 				);
+				break;
+			case 0x341: // BINV
+				add_code(to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " ^ ((addr_t)1 << (" + from_reg(instr.Rtype.rs2) + " & (XLEN-1)));");
 				break;
 			default:
 				//fprintf(stderr, "RV32I_OP: Unhandled function 0x%X\n",

@@ -762,12 +762,6 @@ static inline uint64_t MUL128(
 		case 0x141: // BSET
 			dst = src1 | (RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
 			return;
-		case 0x142: // BCLR
-			dst = src1 & ~(RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
-			return;
-		case 0x143: // BINV
-			dst = src1 ^ (RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
-			return;
 		case 0x204: // XNOR
 			dst = ~(src1 ^ src2);
 			return;
@@ -780,6 +774,9 @@ static inline uint64_t MUL128(
 		case 0x207: // ANDN
 			dst = src1 & ~src2;
 			return;
+		case 0x241: // BCLR
+			dst = src1 & ~(RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
+			return;
 		case 0x245: // BEXT
 			dst = (src1 >> (src2 & (RVXLEN(cpu)-1))) & 1;
 			return;
@@ -791,6 +788,9 @@ static inline uint64_t MUL128(
 			const auto shift = src2 & (RVXLEN(cpu) - 1);
 			dst = (src1 >> shift) | (src1 << (RVXLEN(cpu) - shift));
 			} return;
+		case 0x341: // BINV
+			dst = src1 ^ (RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
+			return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
 	},
