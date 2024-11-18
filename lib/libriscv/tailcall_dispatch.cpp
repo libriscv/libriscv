@@ -392,7 +392,9 @@ namespace riscv
 	template <int W>
 	void CPU<W>::simulate_inaccurate(address_t pc)
 	{
-		InstrCounter counter{0, ~0ULL};
+		machine().set_instruction_counter(0);
+		machine().set_max_instructions(UINT64_MAX);
+		InstrCounter counter{0, UINT64_MAX};
 
 		auto* exec = this->m_exec;
 

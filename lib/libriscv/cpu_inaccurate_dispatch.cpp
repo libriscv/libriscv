@@ -86,7 +86,8 @@ namespace riscv
 #include "threaded_bytecode_array.hpp"
 #endif
 
-		machine().set_max_instructions(1);
+		machine().set_instruction_counter(0);
+		machine().set_max_instructions(UINT64_MAX);
 
 		DecodedExecuteSegment<W> *exec = this->m_exec;
 		address_t current_begin = exec->exec_begin();
