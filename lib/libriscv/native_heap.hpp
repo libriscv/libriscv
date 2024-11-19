@@ -94,6 +94,9 @@ struct Arena
 
 	void set_max_chunks(unsigned new_max) { this->m_max_chunks = new_max; }
 
+	unsigned allocation_counter() const noexcept { return m_allocation_counter; }
+	unsigned deallocation_counter() const noexcept { return m_deallocation_counter; }
+
 	void transfer(Arena& dest) const;
 
 	void on_unknown_free(unknown_free_func_t func) {
@@ -127,6 +130,8 @@ private:
 	std::vector<ArenaChunk*> m_free_chunks;
 	ArenaChunk  m_base_chunk;
 	unsigned    m_max_chunks = 4'000u;
+	unsigned    m_allocation_counter = 0u;
+	unsigned    m_deallocation_counter = 0u;
 
 	unknown_free_func_t m_free_unknown_chunk
 		= [] (auto, auto*) { return -1; };
@@ -237,6 +242,7 @@ inline ArenaChunk* Arena::find_chunk(PointerType ptr)
 
 inline void Arena::internal_free(ArenaChunk* ch)
 {
+	this->m_deallocation_counter++;
 	ch->free = true;
 	// merge chunks ahead and behind us
 	if (ch->next && ch->next->free) {
@@ -252,6 +258,7 @@ inline Arena::PointerType Arena::malloc(size_t size)
 {
 	const size_t length = fixup_size(size);
 	ArenaChunk* ch = base_chunk().find_free(length);
+	this->m_allocation_counter++;
 
 	if (ch != nullptr) {
 		ch->split_next(*this, length);
@@ -278,6 +285,7 @@ inline Arena::PointerType Arena::seq_alloc_aligned(size_t size, size_t alignment
 	// but 8-byte alignment is guaranteed.
 	const size_t objectsize = fixup_size(size);
 	const size_t oversized = fixup_size(size * 2);
+	this->m_allocation_counter++;
 
 	// Find memory that can always cover the object sequentially
 	ArenaChunk* ch = base_chunk().find_free(oversized);
