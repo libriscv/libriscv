@@ -30,4 +30,14 @@ jobs:
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLTO=OFF -DCMAKE_TOOLCHAIN_FILE=mingw_toolchain.cmake
 
     - name: Build emulator
-      run: cmake --build ${{github.workspace}}/build
+      run: cmake --build ${{github.workspace}}/build --parallel 2
+
+    - name: Emulator with Binary Translation
+      working-directory: ${{github.workspace}}/emulator
+      env:
+        CXX: ${{ matrix.compiler }}
+        BUILD_TYPE: ${{ matrix.buildtype }}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DRISCV_BINARY_TRANSLATION=ON -DCMAKE_TOOLCHAIN_FILE=mingw_toolchain.cmake
+
+    - name: Build with binary translation
+      run: cmake --build ${{github.workspace}}/build --parallel 2

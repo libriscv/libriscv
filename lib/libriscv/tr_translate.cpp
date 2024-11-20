@@ -8,6 +8,7 @@
 #include <chrono>
 #include <fstream>
 #include <mutex>
+#include <sstream>
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
 # define YEP_IS_WINDOWS 1
 # include "win32/dlfcn.h"
@@ -23,7 +24,6 @@ extern "C" int unlink(const char* path);
 #else
 #include <dlfcn.h>
 #include <unistd.h>
-#include <sstream>
 #endif
 #include "machine.hpp"
 #include "decoder_cache.hpp"
