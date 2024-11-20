@@ -714,16 +714,24 @@ void CPU<W>::produce_embeddable_code(const MachineOptions<W>& options, DecodedEx
 	// Construct a footer that self-registers the translation
 	const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
 	embed_code << R"V0G0N(
-	struct Mappings {
-		addr_t   addr;
-		unsigned mapping_index;
-	};
-	typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
-	extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
-	extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
-	static __attribute__((constructor, used)) void register_translation() {
-		static const Mappings mappings[] = {
-	)V0G0N";
+struct Mappings {
+	addr_t   addr;
+	unsigned mapping_index;
+};
+typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
+#ifndef CALLBACK_INIT
+extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+#define REGISTRATION_ATTR  __attribute__((constructor, used))
+#else
+typedef void (*RegistrationFunction) (uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+static RegistrationFunction libriscv_register_translation4;
+static RegistrationFunction libriscv_register_translation8;
+#define REGISTRATION_ATTR /* */
+#endif
+static REGISTRATION_ATTR void register_translation() {
+	static const Mappings mappings[] = {
+)V0G0N";
 
 	std::unordered_map<std::string, unsigned> mapping_indices;
 	std::vector<const std::string*> handlers;
@@ -755,7 +763,18 @@ void CPU<W>::produce_embeddable_code(const MachineOptions<W>& options, DecodedEx
 	embed_code << "};\n"
 		"    " << reg_func << "(" << hash << ", mappings, " << output.mappings.size()
 		<< ", unique_mappings, " << mapping_indices.size() << ", (void*)&init);\n";
-	embed_code << "}\n";
+	embed_code << R"V0G0N(}
+#ifdef CALLBACK_INIT
+extern "C" __attribute__((used, visibility("default"))) void libriscv_init_with_callback4(RegistrationFunction regfunc) {
+	libriscv_register_translation4 = regfunc;
+	register_translation();
+}
+extern "C" __attribute__((used, visibility("default"))) void libriscv_init_with_callback8(RegistrationFunction regfunc) {
+	libriscv_register_translation8 = regfunc;
+	register_translation();
+}
+#endif
+)V0G0N";
 
 	if (embed.result_c99 == nullptr) {
 		// Write the embeddable code to a file
