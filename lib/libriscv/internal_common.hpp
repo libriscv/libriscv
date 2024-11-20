@@ -7,9 +7,15 @@
 #ifdef __GNUG__
 #define RISCV_NOINLINE __attribute__((noinline))
 #define RISCV_UNREACHABLE() __builtin_unreachable()
+#define RISCV_EXPORT __attribute__((visibility("default")))
 #else
 #define RISCV_NOINLINE    /* */
 #define RISCV_UNREACHABLE()  /* */
+#  ifdef _MSC_VER
+#    define RISCV_EXPORT __declspec(dllexport)
+#  else
+#    define RISCV_EXPORT      /* */
+#  endif
 #endif
 
 #ifdef RISCV_32I

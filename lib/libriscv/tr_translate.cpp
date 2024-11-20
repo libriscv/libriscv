@@ -28,6 +28,7 @@ extern "C" int unlink(const char* path);
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
+#include "internal_common.hpp"
 #include "safe_instr_loader.hpp"
 #include "threaded_bytecodes.hpp"
 #include "tr_api.hpp"
@@ -1329,7 +1330,7 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 } // riscv
 
 extern "C" {
-	void libriscv_register_translation4(uint32_t hash, const riscv::Mapping<4>* mappings, uint32_t nmappings,
+	void RISCV_EXPORT libriscv_register_translation4(uint32_t hash, const riscv::Mapping<4>* mappings, uint32_t nmappings,
 		const riscv::bintr_block_func<4>* handlers, uint32_t nhandlers, void* init_func_ptr)
 	{
 #ifdef RISCV_32I
@@ -1339,7 +1340,7 @@ extern "C" {
 		fprintf(stderr, "libriscv: Warning: libriscv_register_translation4 called on 64-bit build\n");
 #endif
 	}
-	void libriscv_register_translation8(uint32_t hash, const riscv::Mapping<8>* mappings, uint32_t nmappings,
+	void RISCV_EXPORT libriscv_register_translation8(uint32_t hash, const riscv::Mapping<8>* mappings, uint32_t nmappings,
 		const riscv::bintr_block_func<8>* handlers, uint32_t nhandlers, void* init_func_ptr)
 	{
 #ifdef RISCV_64I
