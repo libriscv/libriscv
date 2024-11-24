@@ -40,7 +40,7 @@ struct PageAttributes
 	}
 };
 
-struct alignas(4096) PageData {
+struct PageData {
 	std::array<uint8_t, PageSize> buffer8;
 
 	template <typename T>
