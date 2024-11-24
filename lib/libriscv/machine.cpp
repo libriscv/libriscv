@@ -19,7 +19,7 @@ extern "C" int gettid();
 
 namespace riscv
 {
-#ifdef __linux__
+#if defined(__linux__) && !defined(RISCV_DISABLE_URANDOM)
 	static std::random_device rd("/dev/urandom");
 #else
 	static std::random_device rd{};
