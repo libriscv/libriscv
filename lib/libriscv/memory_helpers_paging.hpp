@@ -55,10 +55,10 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 }
 
 template <int W> inline
-void Memory<W>::memmove(address_t dst, address_t src, size_t len)
+bool Memory<W>::try_memmove(address_t dst, address_t src, size_t len)
 {
 	if (dst == src || len == 0)
-		return;
+		return true;
 
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(dst + len < memory_arena_size() && dst + len > dst &&
@@ -66,12 +66,11 @@ void Memory<W>::memmove(address_t dst, address_t src, size_t len)
 			char* p_src = &((char *)m_arena.data)[src];
 			char* p_dest = &((char *)m_arena.data)[dst];
 			std::memmove(p_dest, p_src, len);
-			return;
+			return true;
 		}
 	}
-
-	// We don't support memmove without flat-readwrite-arena
-	protection_fault(dst);
+	// Fast-path memmove requires flat-readwrite-arena
+	return false;
 }
 
 template <int W> inline

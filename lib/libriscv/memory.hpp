@@ -45,7 +45,7 @@ namespace riscv
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
 		void memcpy_out(void* dst, address_t src, size_t) const;
 		// Copy between overlapping memory regions. Only available when flat_readwrite_arena is enabled!
-		void memmove(address_t dst, address_t src, size_t len);
+		bool try_memmove(address_t dst, address_t src, size_t len);
 		// Compare bounded memory
 		int memcmp(address_t p1, address_t p2, size_t len) const;
 		int memcmp(const void* p1, address_t p2, size_t len) const;
