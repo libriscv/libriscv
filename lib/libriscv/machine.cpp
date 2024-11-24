@@ -86,11 +86,6 @@ namespace riscv
 	template <int W>
 	void Machine<W>::penalize(uint32_t val)
 	{
-		// Maximum instructions is set to 1 when using inaccurate simulation
-		// TODO: Use a better method to check for inaccurate simulation
-		if (max_instructions() == 1u)
-			return;
-
 		m_counter += val;
 	}
 
