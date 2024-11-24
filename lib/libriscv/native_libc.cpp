@@ -173,6 +173,12 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memmove(%#lX, %#lX, %zu)\n",
 			(long) dst, (long) src, (size_t)len);
+		// If we have a flat readwrite arena, we can use memmove
+		if constexpr (riscv::flat_readwrite_arena) {
+			m.memory.memmove(dst, src, len);
+			m.penalize(2 * len);
+			return;
+		}
 		// If the buffers don't overlap, we can use memcpy which copies forwards
 		if (dst < src) {
 			std::array<riscv::vBuffer, MEMCPY_BUFFERS> buffers;

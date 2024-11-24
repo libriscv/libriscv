@@ -55,6 +55,26 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 }
 
 template <int W> inline
+void Memory<W>::memmove(address_t dst, address_t src, size_t len)
+{
+	if (dst == src || len == 0)
+		return;
+
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(dst + len < memory_arena_size() && dst + len > dst &&
+			src + len < memory_arena_size() && src + len > src)) {
+			char* p_src = &((char *)m_arena.data)[src];
+			char* p_dest = &((char *)m_arena.data)[dst];
+			std::memmove(p_dest, p_src, len);
+			return;
+		}
+	}
+
+	// We don't support memmove without flat-readwrite-arena
+	protection_fault(dst);
+}
+
+template <int W> inline
 std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 {
 	std::string result;
@@ -327,10 +347,9 @@ void Memory<W>::memcpy(
 		while (len >= 4*W) {
 			if constexpr (riscv::flat_readwrite_arena) {
 				// Fast-path: Find the entire source buffer in the memory arena using memarray()
-				if (uint8_t* srcptr = srcm.memory.template memarray<uint8_t> (src, 4*W, len)) {
-					this->memcpy(dst, srcptr, 4*W);
-					dst += 4*W; src += 4*W; len -= 4*W;
-					continue;
+				if (uint8_t* srcptr = srcm.memory.template memarray<uint8_t> (src, len)) {
+					this->memcpy(dst, srcptr, len);
+					return;
 				}
 			}
 			this->template write<address_t> (dst + 0,
