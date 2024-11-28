@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cassert>
 #include <deque>
+#include <unordered_map>
 #include "util/function.hpp"
 
 namespace riscv
@@ -27,7 +28,7 @@ struct ArenaChunk
 	bool   free = false;
 	PointerType data = 0;
 
-	ArenaChunk* find(PointerType ptr);
+	ArenaChunk* find_used(PointerType ptr);
 	ArenaChunk* find_free(size_t size);
 	void merge_next(Arena&);
 	void split_next(Arena&, size_t size);
@@ -125,9 +126,11 @@ struct Arena
 private:
 	void internal_free(ArenaChunk* ch);
 	void foreach(Function<void(const ArenaChunk&)>) const;
+	ArenaChunk* begin_find_used(PointerType ptr);
 
 	std::deque<ArenaChunk> m_chunks;
 	std::vector<ArenaChunk*> m_free_chunks;
+	std::unordered_map<PointerType, ArenaChunk*> m_used_chunk_map;
 	ArenaChunk  m_base_chunk;
 	unsigned    m_max_chunks = 4'000u;
 	unsigned    m_allocation_counter = 0u;
@@ -137,10 +140,19 @@ private:
 		= [] (auto, auto*) { return -1; };
 	unknown_realloc_func_t m_realloc_unknown_chunk
 		= [] (auto, auto) { return ReallocResult{0, 0}; };
+	friend struct ArenaChunk;
 };
 
+inline ArenaChunk* Arena::begin_find_used(PointerType ptr)
+{
+	auto it = m_used_chunk_map.find(ptr);
+	if (it != m_used_chunk_map.end())
+		return it->second;
+	return nullptr;
+}
+
 // find exact free chunk that matches ptr
-inline ArenaChunk* ArenaChunk::find(PointerType ptr)
+inline ArenaChunk* ArenaChunk::find_used(PointerType ptr)
 {
 	ArenaChunk* ch = this;
 	while (ch != nullptr) {
@@ -199,17 +211,31 @@ inline void ArenaChunk::subsume_next(Arena& arena, size_t newlen)
 
 inline void ArenaChunk::split_next(Arena& arena, size_t size)
 {
-	ArenaChunk* newch = arena.new_chunk(
-		this->next,
-		this,
-		this->size - size,
-		true,
-		this->data + (PointerType) size
-	);
-	if (this->next) {
-		this->next->prev = newch;
+	// Only split if the new chunk would not be empty
+	if (this->size > size)
+	{
+		ArenaChunk* newch = arena.new_chunk(
+			this->next,
+			this,
+			this->size - size,
+			true, // free
+			this->data + (PointerType) size
+		);
+		if (this->next) {
+			this->next->prev = newch;
+		}
+		this->next = newch;
+	} else {
+		// If the new chunk would be empty, connect distant chunks instead
+		if (this->prev && this->next && this->prev->free && this->next->free) {
+			this->prev->next = this->next;
+			this->next->prev = this->prev;
+		} else if (this->prev && this->prev->free) {
+			this->prev->next = nullptr;
+		} else if (this->next && this->next->free) {
+			this->next->prev = nullptr;
+		}
 	}
-	this->next = newch;
 	this->size = size;
 }
 
@@ -243,6 +269,7 @@ inline ArenaChunk* Arena::find_chunk(PointerType ptr)
 inline void Arena::internal_free(ArenaChunk* ch)
 {
 	this->m_deallocation_counter++;
+	this->m_used_chunk_map.erase(ch->data);
 	ch->free = true;
 	// merge chunks ahead and behind us
 	if (ch->next && ch->next->free) {
@@ -263,6 +290,8 @@ inline Arena::PointerType Arena::malloc(size_t size)
 	if (ch != nullptr) {
 		ch->split_next(*this, length);
 		ch->free = false;
+
+		this->m_used_chunk_map.insert_or_assign(ch->data, ch);
 		return ch->data;
 	}
 	return 0;
@@ -311,12 +340,14 @@ inline Arena::PointerType Arena::seq_alloc_aligned(size_t size, size_t alignment
 
 			// XXX: Always split?
 			final_ch->split_next(*this, objectsize);
+			this->m_used_chunk_map.insert_or_assign(final_ch->data, final_ch);
 			return final_ch->data;
 		}
 		else
 		{
 			ch->split_next(*this, objectsize);
 			ch->free = false;
+			this->m_used_chunk_map.insert_or_assign(ch->data, ch);
 			return ch->data;
 		}
 	}
@@ -329,7 +360,7 @@ inline Arena::ReallocResult
 	if (ptr == 0x0) // Regular malloc
 		return {malloc(newsize), 0};
 
-	ArenaChunk* ch = base_chunk().find(ptr);
+	ArenaChunk* ch = this->begin_find_used(ptr);
 	if (UNLIKELY(ch == nullptr || ch->free)) {
 		// Realloc failure handler
 		return m_realloc_unknown_chunk(ptr, newsize);
@@ -360,7 +391,7 @@ inline Arena::ReallocResult
 
 inline size_t Arena::size(PointerType ptr, bool allow_free)
 {
-	ArenaChunk* ch = base_chunk().find(ptr);
+	ArenaChunk* ch = this->begin_find_used(ptr);
 	if (UNLIKELY(ch == nullptr || (ch->free && !allow_free)))
 		return 0;
 	return ch->size;
@@ -368,7 +399,7 @@ inline size_t Arena::size(PointerType ptr, bool allow_free)
 
 inline int Arena::free(PointerType ptr)
 {
-	ArenaChunk* ch = base_chunk().find(ptr);
+	ArenaChunk* ch = this->begin_find_used(ptr);
 	if (UNLIKELY(ch == nullptr || ch->free))
 		return m_free_unknown_chunk(ptr, ch);
 
