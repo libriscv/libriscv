@@ -719,18 +719,23 @@ struct Mappings {
 	unsigned mapping_index;
 };
 typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
+# ifdef __cplusplus
+#define EXTERN_C extern "C"
+# else
+#define EXTERN_C extern
+# endif
 #ifndef CALLBACK_INIT
-extern "C" void libriscv_register_translation4(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
-extern "C" void libriscv_register_translation8(uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+EXTERN_C void libriscv_register_translation4(uint32_t hash, const struct Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+EXTERN_C void libriscv_register_translation8(uint32_t hash, const struct Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
 #define REGISTRATION_ATTR  __attribute__((constructor, used))
 #else
-typedef void (*RegistrationFunction) (uint32_t hash, const Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
+typedef void (*RegistrationFunction) (uint32_t hash, const struct Mappings* mappings, uint32_t nmappings, const bintr_func* handlers, uint32_t nhandlers, void*);
 static RegistrationFunction libriscv_register_translation4;
 static RegistrationFunction libriscv_register_translation8;
 #define REGISTRATION_ATTR /* */
 #endif
 static REGISTRATION_ATTR void register_translation() {
-	static const Mappings mappings[] = {
+	static const struct Mappings mappings[] = {
 )V0G0N";
 
 	std::unordered_map<std::string, unsigned> mapping_indices;
@@ -765,11 +770,11 @@ static REGISTRATION_ATTR void register_translation() {
 		<< ", unique_mappings, " << mapping_indices.size() << ", (void*)&init);\n";
 	embed_code << R"V0G0N(}
 #ifdef CALLBACK_INIT
-extern "C" __attribute__((used, visibility("default"))) void libriscv_init_with_callback4(RegistrationFunction regfunc) {
+EXTERN_C __attribute__((used, visibility("default"))) void libriscv_init_with_callback4(RegistrationFunction regfunc) {
 	libriscv_register_translation4 = regfunc;
 	register_translation();
 }
-extern "C" __attribute__((used, visibility("default"))) void libriscv_init_with_callback8(RegistrationFunction regfunc) {
+EXTERN_C __attribute__((used, visibility("default"))) void libriscv_init_with_callback8(RegistrationFunction regfunc) {
 	libriscv_register_translation8 = regfunc;
 	register_translation();
 }
