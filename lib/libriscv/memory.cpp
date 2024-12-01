@@ -3,7 +3,7 @@
 #include "decoder_cache.hpp"
 #include "internal_common.hpp"
 #include <inttypes.h>
-#ifdef __linux__
+#if defined(__linux__) || defined(__wasm__)
 #define DEMANGLE_ENABLED
 #include <sys/mman.h>
 extern "C" char *
