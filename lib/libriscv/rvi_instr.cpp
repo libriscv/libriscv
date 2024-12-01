@@ -25,7 +25,7 @@ namespace riscv
 #define bswap32(x)   __builtin_bswap32(x)
 #define bswap64(x)   __builtin_bswap64(x)
 #endif
-# if defined(__SIZEOF_INT128__) && !defined(__wasm__) // GCC/Clang 64-bit
+# if defined(__SIZEOF_INT128__) // GCC/Clang 64-bit
 #  define mulhi64(a, b)  (__int128_t(int64_t(a)) * __int128_t(int64_t(b))) >> 64u;
 #  define mulhu64(a, b)  (__int128_t(a) * __int128_t(b)) >> 64u;
 #  define mulhsu64(a, b) (__int128_t(int64_t(a)) * __int128_t(b)) >> 64u;
