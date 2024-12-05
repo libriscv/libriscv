@@ -36,6 +36,10 @@
 #define RISCV_BRK_MEMORY_SIZE  (16ull << 20) // 16MB
 #endif
 
+#ifndef RISCV_MAX_EXECUTE_SEGS
+#define RISCV_MAX_EXECUTE_SEGS  16
+#endif
+
 namespace riscv
 {
 	template <int W> struct Memory;

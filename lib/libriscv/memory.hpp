@@ -29,7 +29,7 @@ namespace riscv
 		static constexpr address_t BRK_MAX      = RISCV_BRK_MEMORY_SIZE; // Default BRK size
 		static constexpr address_t DYLINK_BASE  = 0x40000; // Dynamic link base address
 		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
-		static constexpr size_t    MAX_EXECUTE_SEGS = 8;
+		static constexpr size_t    MAX_EXECUTE_SEGS = RISCV_MAX_EXECUTE_SEGS;
 
 		template <typename T>
 		T read(address_t src);
