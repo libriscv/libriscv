@@ -11,6 +11,33 @@
 #include <mutex>
 #include <unordered_set>
 //#define ENABLE_TIMINGS
+struct SegmentKey {
+	uint64_t pc;
+	uint32_t crc;
+
+	template <int W>
+	static SegmentKey from(const riscv::DecodedExecuteSegment<W>& segment) {
+		SegmentKey key;
+		key.pc = uint64_t(segment.exec_begin());
+		key.crc = segment.crc32c_hash();
+		return key;
+	}
+
+	bool operator==(const SegmentKey& other) const {
+		return pc == other.pc && crc == other.crc;
+	}
+	bool operator<(const SegmentKey& other) const {
+		return pc < other.pc || (pc == other.pc && crc < other.crc);
+	}
+};
+namespace std {
+	template <>
+	struct hash<SegmentKey> {
+		size_t operator()(const SegmentKey& key) const {
+			return key.pc ^ key.crc;
+		}
+	};
+}
 
 namespace riscv
 {
@@ -34,6 +61,7 @@ namespace riscv
 		SharedExecuteSegments() = default;
 		SharedExecuteSegments(const SharedExecuteSegments&) = delete;
 		SharedExecuteSegments& operator=(const SharedExecuteSegments&) = delete;
+		using key_t = SegmentKey;
 
 		struct Segment {
 			std::shared_ptr<DecodedExecuteSegment<W>> segment;
@@ -50,12 +78,12 @@ namespace riscv
 		};
 
 		// Remove a segment if it is the last reference
-		void remove_if_unique(uint32_t hash) {
+		void remove_if_unique(key_t key) {
 			std::lock_guard<std::mutex> lock(mutex);
 			// We are not able to remove the Segment itself, as the mutex
 			// may be locked by another thread. We can, however, lock the
 			// Segments mutex and set the segment to nullptr.
-			auto it = m_segments.find(hash);
+			auto it = m_segments.find(key);
 			if (it != m_segments.end()) {
 				std::scoped_lock lock(it->second.mutex);
 				if (it->second.segment.use_count() == 1)
@@ -63,14 +91,14 @@ namespace riscv
 			}
 		}
 
-		auto& get_segment(const uint32_t hash) {
+		auto& get_segment(key_t key) {
 			std::scoped_lock lock(mutex);
-			auto& entry = m_segments[hash];
+			auto& entry = m_segments[key];
 			return entry;
 		}
 
 	private:
-		std::unordered_map<uint32_t, Segment> m_segments;
+		std::unordered_map<key_t, Segment> m_segments;
 		std::mutex mutex;
 	};
 	template <int W>
@@ -543,9 +571,12 @@ namespace riscv
 
 		if (options.use_shared_execute_segments)
 		{
+			// We have to key on the base address of the execute segment as well as the hash
+			const SegmentKey key{uint64_t(current_exec->exec_begin()), hash};
+
 			// In order to prevent others from creating the same execute segment
 			// we need to lock the shared execute segments mutex.
-			auto& segment = shared_execute_segments<W>.get_segment(hash);
+			auto& segment = shared_execute_segments<W>.get_segment(key);
 			std::scoped_lock lock(segment.mutex);
 
 			if (segment.segment != nullptr) {
@@ -566,7 +597,7 @@ namespace riscv
 			this->generate_decoder_cache(options, free_slot, is_initial);
 
 			// Share the execute segment
-			shared_execute_segments<W>.get_segment(hash).unlocked_set(free_slot);
+			shared_execute_segments<W>.get_segment(key).unlocked_set(free_slot);
 		}
 		else
 		{
@@ -614,9 +645,9 @@ namespace riscv
 			try {
 				auto& segment = m_exec.at(m_exec_segs);
 				if (segment) {
-					const uint32_t hash = segment->crc32c_hash();
+					const SegmentKey key = SegmentKey::from(*segment);
 					segment = nullptr;
-					shared_execute_segments<W>.remove_if_unique(hash);
+					shared_execute_segments<W>.remove_if_unique(key);
 				}
 			} catch (...) {
 				// Ignore exceptions
@@ -627,7 +658,7 @@ namespace riscv
 	template <int W>
 	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
 	{
-		const uint32_t hash = segment.crc32c_hash();
+		const SegmentKey key = SegmentKey::from(segment);
 		for (size_t i = 0; i < m_exec_segs; i++) {
 			if (m_exec[i].get() == &segment) {
 				m_exec[i] = nullptr;
@@ -636,7 +667,7 @@ namespace riscv
 				break;
 			}
 		}
-		shared_execute_segments<W>.remove_if_unique(hash);
+		shared_execute_segments<W>.remove_if_unique(key);
 	}
 
 #ifdef RISCV_BINARY_TRANSLATION
