@@ -37,7 +37,7 @@ struct ArenaChunk
 
 struct Arena
 {
-	static constexpr size_t ALIGNMENT = 8u;
+	static constexpr size_t ALIGNMENT = 16u;
 	using PointerType = ArenaChunk::PointerType;
 	using ReallocResult = std::tuple<PointerType, size_t>;
 	using unknown_realloc_func_t = Function<ReallocResult(PointerType, size_t)>;
