@@ -337,6 +337,17 @@ template <int W> inline
 void Memory<W>::memcpy(
 	address_t dst, Machine<W>& srcm, address_t src, address_t len)
 {
+	if constexpr (riscv::flat_readwrite_arena) {
+		// Fast-path: Find the entire source and destination buffers in the memory arena
+		if (uint8_t* srcptr = srcm.memory.template memarray<uint8_t> (src, len)) {
+			if (uint8_t* dstptr = this->template memarray<uint8_t> (dst, len)) {
+				std::memcpy(dstptr, srcptr, len);
+				return;
+			}
+			this->memcpy(dst, srcptr, len);
+			return;
+		}
+	}
 	if ((dst & (W-1)) == (src & (W-1))) {
 		while ((src & (W-1)) != 0 && len > 0) {
 			this->template write<uint8_t> (dst++,
@@ -399,7 +410,7 @@ size_t Memory<W>::gather_buffers_from_range(
 		len -= size;
 	}
 	if (UNLIKELY(len != 0)) {
-		machine().cpu.trigger_exception(OUT_OF_MEMORY, index);
+		machine().cpu.trigger_exception(OUT_OF_MEMORY, len);
 	}
 	return index;
 }
