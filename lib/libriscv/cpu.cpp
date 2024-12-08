@@ -531,6 +531,9 @@ restart_precise_sim:
 		case DEADLOCK_REACHED:
 			throw MachineException(intr,
 					"Atomics deadlock reached", data);
+		case OUT_OF_MEMORY:
+			throw MachineException(intr,
+					"Out of memory", data);
 
 		default:
 			throw MachineException(UNKNOWN_EXCEPTION,
