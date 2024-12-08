@@ -79,10 +79,13 @@ namespace riscv
 
 			if (this->m_arena.pages > 0)
 			{
+				// There is now a sequential arena, but we should make room for
+				// some pages that can appear anywhere in the address space.
+				const unsigned anywhere_pages = pages_max / 2;
 				this->m_page_fault_handler =
-				[pages_max] (auto& mem, const address_t page, bool init) -> Page&
+				[anywhere_pages] (auto& mem, const address_t page, bool init) -> Page&
 				{
-					if (mem.pages_active() < pages_max || mem.owned_pages_active() < pages_max)
+					if (mem.pages_active() < anywhere_pages || mem.owned_pages_active() < anywhere_pages)
 					{
 						// Within linear arena at the start
 						if (page < mem.m_arena.pages)
@@ -98,7 +101,8 @@ namespace riscv
 						return mem.allocate_page(page,
 							init ? PageData::INITIALIZED : PageData::UNINITIALIZED);
 					}
-					throw MachineException(OUT_OF_MEMORY, "Out of memory", pages_max);
+					// Out of memory, which is (2 + 1) * anywhere_pages
+					throw MachineException(OUT_OF_MEMORY, "Out of memory", anywhere_pages * 3);
 				};
 			} else {
 				this->m_page_fault_handler =
