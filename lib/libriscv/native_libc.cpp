@@ -24,7 +24,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 {
 	// Malloc n+0
 	Machine<W>::install_syscall_handler(syscall_base+0,
-	[] (auto& machine)
+	[] (Machine<W>& machine)
 	{
 		const size_t len = machine.sysarg(0);
 		auto data = machine.arena().malloc(len);
@@ -34,7 +34,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	});
 	// Calloc n+1
 	Machine<W>::install_syscall_handler(syscall_base+1,
-	[] (auto& machine)
+	[] (Machine<W>& machine)
 	{
 		const auto [count, size] =
 			machine.template sysargs<address_type<W>, address_type<W>> ();
@@ -52,7 +52,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	});
 	// Realloc n+2
 	Machine<W>::install_syscall_handler(syscall_base+2,
-	[] (auto& machine)
+	[] (Machine<W>& machine)
 	{
 		const auto src = machine.sysarg(0);
 		const auto newlen = machine.sysarg(1);
@@ -71,7 +71,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	});
 	// Free n+3
 	Machine<W>::install_syscall_handler(syscall_base+3,
-	[] (auto& machine)
+	[] (Machine<W>& machine)
 	{
 		const auto ptr = machine.sysarg(0);
 		if (ptr != 0x0)
@@ -92,7 +92,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	});
 	// Meminfo n+4
 	Machine<W>::install_syscall_handler(syscall_base+4,
-	[] (auto& machine)
+	[] (Machine<W>& machine)
 	{
 		const auto dst = machine.sysarg(0);
 		const auto& arena = machine.arena();
@@ -149,14 +149,7 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		auto [dst, src, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcpy(%#lX, %#lX, %zu)\n", (long)dst, (long)src, (size_t)len);
-
-		std::array<riscv::vBuffer, MEMCPY_BUFFERS> buffers;
-		const size_t cnt =
-			m.memory.gather_buffers_from_range(buffers.size(), buffers.data(), src, len);
-		for (size_t i = 0; i < cnt; i++) {
-			m.memory.memcpy(dst, buffers[i].ptr, buffers[i].len);
-			dst += buffers[i].len;
-		}
+		m.memory.memcpy(dst, m, src, len);
 		m.penalize(2 * len);
 	}}, {syscall_base+1, [] (Machine<W>& m) {
 		// Memset n+1
