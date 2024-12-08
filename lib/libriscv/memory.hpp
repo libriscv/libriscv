@@ -80,6 +80,10 @@ namespace riscv
 		// View a dynamically-sized array of T from a known-sequential virtual memory region
 		template <typename T>
 		T* memarray(address_t addr, size_t len, size_t maxbytes = 16ul << 20) const;
+		// Try viewing a dynamically-sized array of T from a known-sequential virtual memory region
+		// Returns nullptr if the memory region is not sequential or too large
+		template <typename T>
+		T* try_memarray(address_t addr, size_t len, size_t maxbytes = 16ul << 20) const;
 		// Read zero-terminated string directly from guests memory, into an owning std::string
 		std::string memstring(address_t addr, size_t maxlen = 16384) const;
 		size_t strlen(address_t addr, size_t maxlen = 16384) const;

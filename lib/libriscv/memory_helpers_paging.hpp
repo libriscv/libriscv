@@ -218,6 +218,31 @@ T* Memory<W>::memarray(address_t addr, size_t count, size_t maxbytes) const
 	return (T*) view.data();
 }
 
+template <int W>
+template <typename T>
+T* Memory<W>::try_memarray(address_t addr, size_t count, size_t maxbytes) const
+{
+	if (count == 0)
+		return nullptr;
+
+	const size_t len = count * sizeof(T);
+	if (UNLIKELY(len > maxbytes))
+		protection_fault(addr);
+
+	if (addr % alignof(T) != 0)
+		protection_fault(addr);
+
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(addr + len - RWREAD_BEGIN < memory_arena_read_boundary() && addr < addr + len)) {
+			auto* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
+			return (T*) begin;
+		}
+	}
+
+	// TODO: Add try_gather_buffers_from_range
+	return nullptr;
+}
+
 #ifdef RISCV_SPAN_AVAILABLE
 
 template <int W>
@@ -339,8 +364,8 @@ void Memory<W>::memcpy(
 {
 	if constexpr (riscv::flat_readwrite_arena) {
 		// Fast-path: Find the entire source and destination buffers in the memory arena
-		if (uint8_t* srcptr = srcm.memory.template memarray<uint8_t> (src, len)) {
-			if (uint8_t* dstptr = this->template memarray<uint8_t> (dst, len)) {
+		if (uint8_t* srcptr = srcm.memory.template try_memarray<uint8_t> (src, len)) {
+			if (uint8_t* dstptr = this->template try_memarray<uint8_t> (dst, len)) {
 				std::memcpy(dstptr, srcptr, len);
 				return;
 			}
@@ -357,7 +382,7 @@ void Memory<W>::memcpy(
 		while (len >= 4*W) {
 			if constexpr (riscv::flat_readwrite_arena) {
 				// Fast-path: Find the entire source buffer in the memory arena using memarray()
-				if (uint8_t* srcptr = srcm.memory.template memarray<uint8_t> (src, len)) {
+				if (uint8_t* srcptr = srcm.memory.template try_memarray<uint8_t> (src, len)) {
 					this->memcpy(dst, srcptr, len);
 					return;
 				}
