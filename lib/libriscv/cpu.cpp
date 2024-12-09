@@ -94,13 +94,20 @@ namespace riscv
 		int restarts = 0;
 restart_next_execute_segment:
 
+		// Find previously decoded execute segment
+		this->m_exec = machine().memory.exec_segment_for(pc).get();
+		if (LIKELY(!this->m_exec->empty() && !this->m_exec->is_stale())) {
+			return {this->m_exec, pc};
+		}
+
+		// We absolutely need to write PC here because even read-fault handlers
+		// like get_pageno() slowpaths could be reading PC.
+		this->registers().pc = pc;
+
 		// Immediately look at the page in order to
 		// verify execute and see if it has a trap handler
 		address_t base_pageno = pc / Page::size();
 		address_t end_pageno  = base_pageno + 1;
-		// We absolutely need to write PC here because even read-fault handlers
-		// like get_pageno() slowpaths could be reading PC.
-		this->registers().pc = pc;
 
 		// Check for +exec
 		const auto& current_page =
@@ -132,11 +139,8 @@ restart_next_execute_segment:
 			}
 		}
 
-		// Find previously decoded execute segment
-		this->m_exec = machine().memory.exec_segment_for(pc).get();
-		if (LIKELY(!this->m_exec->empty() && !this->m_exec->is_stale())) {
-			return {this->m_exec, pc};
-		} else if (this->m_exec->is_stale()) {
+		// Evict stale execute segments
+		if (this->m_exec->is_stale()) {
 			machine().memory.evict_execute_segment(*this->m_exec);
 		}
 
