@@ -278,6 +278,9 @@ namespace riscv
 				&& texthdr->sh_addr >= vaddr && texthdr->sh_size <= exlen
 				&& texthdr->sh_addr + texthdr->sh_size <= vaddr + exlen)
 			{
+				data = m_binary.data() + texthdr->sh_offset;
+				vaddr = this->elf_base_address(texthdr->sh_addr);
+				exlen = texthdr->sh_size;
 				// Work-around for Zig's __lcxx_override section
 				// It comes right after .text, so we can merge them
 				// TODO: Automatically merge sections that are adjacent
@@ -287,18 +290,13 @@ namespace riscv
 					const unsigned size = texthdr->sh_size + lcxxhdr->sh_size;
 					if (size <= exlen && texthdr->sh_addr + size <= vaddr + exlen)
 					{
-						// Load the .text section
-						data = m_binary.data() + texthdr->sh_offset;
-						vaddr = this->elf_base_address(texthdr->sh_addr);
+						// Merge the two sections
 						exlen = size;
 					}
-				} else {
-					// Now we can use the .text section instead
-					data = m_binary.data() + texthdr->sh_offset;
-					vaddr = this->elf_base_address(texthdr->sh_addr);
-					exlen = texthdr->sh_size;
 				}
 			}
+			//printf("* Found .text section inside segment: %p -> %p\n",
+			//	(void*)uintptr_t(vaddr), (void*)uintptr_t(vaddr + exlen));
 		}
 
 		// Create an *initial* execute segment
