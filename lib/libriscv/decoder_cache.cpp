@@ -14,12 +14,14 @@
 struct SegmentKey {
 	uint64_t pc;
 	uint32_t crc;
+	uint64_t arena_size = 0;
 
 	template <int W>
-	static SegmentKey from(const riscv::DecodedExecuteSegment<W>& segment) {
+	static SegmentKey from(const riscv::DecodedExecuteSegment<W>& segment, uint64_t arena_size) {
 		SegmentKey key;
 		key.pc = uint64_t(segment.exec_begin());
 		key.crc = segment.crc32c_hash();
+		key.arena_size = arena_size;
 		return key;
 	}
 
@@ -34,7 +36,7 @@ namespace std {
 	template <>
 	struct hash<SegmentKey> {
 		size_t operator()(const SegmentKey& key) const {
-			return key.pc ^ key.crc;
+			return key.pc ^ key.crc ^ key.arena_size;
 		}
 	};
 }
@@ -572,7 +574,7 @@ namespace riscv
 		if (options.use_shared_execute_segments)
 		{
 			// We have to key on the base address of the execute segment as well as the hash
-			const SegmentKey key{uint64_t(current_exec->exec_begin()), hash};
+			const SegmentKey key{uint64_t(current_exec->exec_begin()), hash, memory_arena_size()};
 
 			// In order to prevent others from creating the same execute segment
 			// we need to lock the shared execute segments mutex.
@@ -645,7 +647,7 @@ namespace riscv
 			try {
 				auto& segment = m_exec.at(m_exec_segs);
 				if (segment) {
-					const SegmentKey key = SegmentKey::from(*segment);
+					const SegmentKey key = SegmentKey::from(*segment, memory_arena_size());
 					segment = nullptr;
 					shared_execute_segments<W>.remove_if_unique(key);
 				}
@@ -658,7 +660,7 @@ namespace riscv
 	template <int W>
 	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
 	{
-		const SegmentKey key = SegmentKey::from(segment);
+		const SegmentKey key = SegmentKey::from(segment, memory_arena_size());
 		for (size_t i = 0; i < m_exec_segs; i++) {
 			if (m_exec[i].get() == &segment) {
 				m_exec[i] = nullptr;
