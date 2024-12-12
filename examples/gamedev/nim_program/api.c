@@ -31,9 +31,7 @@ void measure_overhead() {}
 		".global " #name "\n" \
 		".type " #name ", @function\n" \
 		"" #name ":\n" \
-		"	li t0, " #number "\n" \
-		"   li a7, 510\n" \
-		"   ecall\n" \
+		"   .insn i 0b1011011, 0, x0, x0, " #number "\n" \
 		"   ret\n"   \
 		".popsection .text\n"); \
 	extern void name() __attribute__((used, retain));

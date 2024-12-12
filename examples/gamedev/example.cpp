@@ -2,6 +2,7 @@
 #include <chrono>
 #include <fmt/core.h>
 #include <libriscv/rsp_server.hpp>
+#include <libriscv/rv32i_instr.hpp>
 using namespace riscv;
 template <unsigned SAMPLES = 2000>
 static void benchmark(std::string_view name, Script& script, std::function<void()> fn);
@@ -16,12 +17,44 @@ static void register_script_function(uint32_t number, ScriptCallable&& fn) {
 
 void Script::setup_syscall_interface()
 {
-	// Add a custom system call that executes a function based on a hash
+	// ALTERNATIVE 1:
+	// A custom system call that executes a function based on an index
+	// The most common approach, but requires registers T0 and A7 to be used
 	Script::machine_t::install_syscall_handler(510,
-	[] (auto& machine) {
-		auto& script = *machine.template get_userdata<Script>();
+	[] (Script::machine_t& machine) {
+		Script& script = *machine.template get_userdata<Script>();
 		g_script_functions.at(machine.cpu.reg(riscv::REG_T0))(script);
 	});
+
+	// ALTERNATIVE 2:
+	// A custom instruction that executes a function based on an index
+	// This variant is faster than a system call, and can use 8 integers as arguments
+    using namespace riscv;
+    static const Instruction<MARCH> inlined_dyncall_instruction {
+        [](CPU<MARCH>& cpu, riscv::rv32i_instruction instr)
+        {
+            Script& script = *cpu.machine().template get_userdata<Script>();
+            g_script_functions.at(instr.Itype.imm)(script);
+        },
+        [](char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) -> int
+        {
+            return fmt::format_to_n(buffer, len,
+                "DYNCALL: 4-byte idx={:x} (inline, 0x{:X})",
+                uint32_t(instr.Itype.imm),
+                instr.whole
+            ).size;
+        }};
+    // Override the machines unimplemented instruction handling,
+    // in order to use the custom instruction for a given opcode.
+    CPU<MARCH>::on_unimplemented_instruction
+        = [](riscv::rv32i_instruction instr) -> const Instruction<MARCH>&
+    {
+        if (instr.opcode() == 0b1011011 && instr.Itype.rs1 == 0 && instr.Itype.rd == 0)
+        {
+            return inlined_dyncall_instruction;
+        }
+        return CPU<MARCH>::get_unimplemented_instruction();
+    };
 }
 
 int main(int argc, char** argv)
