@@ -30,11 +30,11 @@ void Script::setup_syscall_interface()
 	// A custom instruction that executes a function based on an index
 	// This variant is faster than a system call, and can use 8 integers as arguments
     using namespace riscv;
-    static const Instruction<MARCH> inlined_dyncall_instruction {
+    static const Instruction<MARCH> unchecked_dyncall_instruction {
         [](CPU<MARCH>& cpu, riscv::rv32i_instruction instr)
         {
             Script& script = *cpu.machine().template get_userdata<Script>();
-            g_script_functions.at(instr.Itype.imm)(script);
+            g_script_functions[instr.Itype.imm](script);
         },
         [](char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) -> int
         {
@@ -51,7 +51,8 @@ void Script::setup_syscall_interface()
     {
         if (instr.opcode() == 0b1011011 && instr.Itype.rs1 == 0 && instr.Itype.rd == 0)
         {
-            return inlined_dyncall_instruction;
+			if (instr.Itype.imm < g_script_functions.size())
+				return unchecked_dyncall_instruction;
         }
         return CPU<MARCH>::get_unimplemented_instruction();
     };
