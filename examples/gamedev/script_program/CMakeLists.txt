@@ -34,10 +34,11 @@ function (add_micro_binary NAME ORG)
 	add_executable(${NAME} ${ARGN} env.cpp)
 	# Add the whole libc directly as source files
 	target_link_libraries(${NAME} -static)
-	target_link_libraries(${NAME} "-Wl,-Ttext-segment=${ORG}")
+	target_link_libraries(${NAME} "-Wl,-Ttext-segment=${ORG}") # --image-base on LLVM
 	target_link_libraries(${NAME} "-Wl,--undefined=fast_exit")
 	target_link_libraries(${NAME} "-Wl,--wrap=memcpy,--wrap=memset,--wrap=memcmp,--wrap=memmove")
 	target_link_libraries(${NAME} "-Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc")
+	target_link_libraries(${NAME} "-Wl,--wrap=strlen,--wrap=strcmp,--wrap=strncmp")
 	# place ELF into the sub-projects source folder
 	set_target_properties(${NAME}
 		PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
