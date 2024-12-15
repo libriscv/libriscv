@@ -1,13 +1,5 @@
 #include "common.hpp"
-
-#ifdef RISCV_LIBTCC_PACKAGE
-# include <libtcc.h>
-#else
-# include <tcc/libtcc.h>
-# ifndef LIBTCC_LIBRARY_PATH
-#  define LIBTCC_LIBRARY_PATH "."
-# endif
-#endif
+#include <libtcc.h>
 
 namespace riscv
 {
@@ -44,10 +36,11 @@ namespace riscv
 		}
 
 #if defined(TCC_RELOCATE_AUTO)
-		if (tcc_relocate(state, TCC_RELOCATE_AUTO) < 0) {
+		if (tcc_relocate(state, TCC_RELOCATE_AUTO) < 0)
 #else
-		if (tcc_relocate(state) < 0) {
+		if (tcc_relocate(state) < 0)
 #endif
+		{
 			tcc_delete(state);
 			return nullptr;
 		}
