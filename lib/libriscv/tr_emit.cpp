@@ -582,7 +582,7 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 		static constexpr int SYSCALL_TKILL        = 130;
 		static constexpr int SYSCALL_TGKILL       = 131;
 		// There may be more, but these are known to clobber all registers
-		static constexpr std::array<int, 9> clobbering_syscalls = {
+		[[maybe_unused]] static constexpr std::array<int, 9> clobbering_syscalls = {
 			SYSCALL_CLONE,
 			SYSCALL_CLONE3,
 			SYSCALL_SCHED_YIELD,
