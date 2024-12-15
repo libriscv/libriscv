@@ -465,11 +465,11 @@ restart_precise_sim:
 			// Check if we're at the end of the function
 			auto bytecode = cache_entry->get_bytecode();
 			if (bytecode == RV32I_BC_JALR || bytecode == RV32I_BC_STOP) {
-				const rv32i_instruction instr { cache_entry->instr };
+				const FasterItype instr { cache_entry->instr };
 
 				if (bytecode == RV32I_BC_JALR) {
-					// Check if it's a direct jump to a register
-					if (instr.Itype.rd == 0 && instr.Itype.imm == 0) {
+					// Check if it's a direct jump to REG_RA
+					if (instr.rs2 == REG_RA && instr.rs1 == 0 && instr.imm == 0) {
 						if (cache_entry->block_bytes() != 0)
 							throw MachineException(INVALID_PROGRAM,
 								"Function block ended but was not last instruction in block", block_pc);
