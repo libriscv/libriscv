@@ -28,7 +28,7 @@ static inline std::vector<std::string> split(const std::string& txt, char ch)
 	return strs;
 }
 template <int W>
-static void dprintf(CPU<W>& cpu, const char* fmt, ...)
+void DebugMachine<W>::dprintf(const char* fmt, ...) const
 {
 	char buffer[2048];
 
@@ -38,14 +38,14 @@ static void dprintf(CPU<W>& cpu, const char* fmt, ...)
 	va_end(args);
 
 	if (len > 0) {
-		cpu.machine().debug_print(buffer, len);
+		this->debug_print(buffer, len);
 	} else {
 		throw MachineException(OUT_OF_MEMORY, "Debug print buffer too small");
 	}
 }
 
 template <int W>
-static void print_help(CPU<W>& cpu)
+void DebugMachine<W>::print_help() const
 {
 	const char* help_text = R"V0G0N(
   usage: command [options]
@@ -71,16 +71,15 @@ static void print_help(CPU<W>& cpu)
 	  vf, vfpregs           Toggle verbose fp-register output
 	  vj, vjumps            Toggle verbose jump output
 )V0G0N";
-	dprintf(cpu, "%s\n", help_text);
+	dprintf("%s\n", help_text);
 }
 
 template <int W>
-static bool execute_commands(DebugMachine<W>& debug)
+bool DebugMachine<W>::execute_commands()
 {
-	auto& machine = debug.machine;
 	auto& cpu = machine.cpu;
 
-	dprintf(cpu, "Enter = cont, help, quit: ");
+	this->dprintf("Enter = cont, help, quit: ");
 	std::string text;
 	while (true)
 	{
@@ -97,7 +96,7 @@ static bool execute_commands(DebugMachine<W>& debug)
 	// continue
 	if (cmd == "c" || cmd == "continue")
 	{
-		debug.break_on_steps(0);
+		this->break_on_steps(0);
 		return false;
 	}
 	// stepping
@@ -107,11 +106,11 @@ static bool execute_commands(DebugMachine<W>& debug)
 	}
 	else if (cmd == "s" || cmd == "step")
 	{
-		debug.verbose_instructions = true; // ???
+		this->verbose_instructions = true; // ???
 		int steps = 1;
 		if (params.size() > 1) steps = std::stoi(params[1]);
-		dprintf(cpu, "Pressing Enter will now execute %d steps\n", steps);
-		debug.break_on_steps(steps);
+		this->dprintf("Pressing Enter will now execute %d steps\n", steps);
+		this->break_on_steps(steps);
 		return false;
 	}
 	// breaking
@@ -119,31 +118,31 @@ static bool execute_commands(DebugMachine<W>& debug)
 	{
 		if (params.size() < 2)
 		{
-			dprintf(cpu, ">>> Not enough parameters: break [addr]\n");
+			this->dprintf(">>> Not enough parameters: break [addr]\n");
 			return true;
 		}
 		const auto addr = machine.address_of(params[1]);
 		if (addr != 0x0) {
-			dprintf(cpu, "Breakpoint on %s with address 0x%lX\n",
+			this->dprintf("Breakpoint on %s with address 0x%lX\n",
 				params[1].c_str(), addr);
-			debug.breakpoint(addr);
+			this->breakpoint(addr);
 		} else {
 			unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
-			dprintf(cpu, "Breakpoint on address 0x%lX\n", hex);
-			debug.breakpoint(hex);
+			this->dprintf("Breakpoint on address 0x%lX\n", hex);
+			this->breakpoint(hex);
 		}
 		return true;
 	}
 	else if (cmd == "clear")
 	{
-		debug.breakpoints().clear();
+		this->breakpoints().clear();
 		return true;
 	}
 	else if (cmd == "bt" || cmd == "backtrace")
 	{
 		machine.memory.print_backtrace(
-			[&cpu] (std::string_view line) {
-				dprintf(cpu, "-> %.*s\n", (int)line.size(), line.begin());
+			[&] (std::string_view line) {
+				this->dprintf("-> %.*s\n", (int)line.size(), line.begin());
 			});
 		return true;
 	}
@@ -151,18 +150,18 @@ static bool execute_commands(DebugMachine<W>& debug)
 	{
 		if (params.size() < 1)
 		{
-			dprintf(cpu, ">>> Not enough parameters: watch [addr]\n");
+			this->dprintf(">>> Not enough parameters: watch [addr]\n");
 			return true;
 		}
 		const auto addr = machine.address_of(params[1]);
 		if (addr != 0x0) {
-			dprintf(cpu, "Watchpoint on %s with address 0x%lX\n",
+			this->dprintf("Watchpoint on %s with address 0x%lX\n",
 				params[1].c_str(), addr);
-			debug.watchpoint(addr, W);
+			this->watchpoint(addr, W);
 		} else {
 			unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
-			dprintf(cpu, "Watchpoint on address 0x%lX\n", hex);
-			debug.watchpoint(hex, W);
+			this->dprintf("Watchpoint on address 0x%lX\n", hex);
+			this->watchpoint(hex, W);
 		}
 		return true;
 	}
@@ -170,53 +169,53 @@ static bool execute_commands(DebugMachine<W>& debug)
 	{
 		if (params.size() < 2)
 		{
-			dprintf(cpu, ">>> Not enough parameters: addrof [name]\n");
+			this->dprintf(">>> Not enough parameters: addrof [name]\n");
 			return true;
 		}
 		const auto addr = machine.address_of(params[1]);
-		dprintf(cpu, "The address of %s is 0x%lX.%s\n",
+		this->dprintf("The address of %s is 0x%lX.%s\n",
 			params[1].c_str(), addr, addr == 0x0 ? " (Likely not found)" : "");
 		return true;
 	}
 	// print registers
 	else if (cmd == "f")
 	{
-		dprintf(cpu, "%s\n", cpu.registers().flp_to_string().c_str());
+		this->dprintf("%s\n", cpu.registers().flp_to_string().c_str());
 		return true;
 	}
 	// verbose instructions
 	else if (cmd == "v" || cmd == "verbose")
 	{
-		bool& v = debug.verbose_instructions;
+		bool& v = this->verbose_instructions;
 		v = !v;
-		dprintf(cpu, "Verbose instructions are now %s\n", v ? "ON" : "OFF");
+		this->dprintf("Verbose instructions are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "vr" || cmd == "vregs")
 	{
-		bool& v = debug.verbose_registers;
+		bool& v = this->verbose_registers;
 		v = !v;
-		dprintf(cpu, "Verbose registers are now %s\n", v ? "ON" : "OFF");
+		this->dprintf("Verbose registers are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "vf" || cmd == "vfpregs")
 	{
-		bool& v = debug.verbose_fp_registers;
+		bool& v = this->verbose_fp_registers;
 		v = !v;
-		dprintf(cpu, "Verbose FP-registers are now %s\n", v ? "ON" : "OFF");
+		this->dprintf("Verbose FP-registers are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "vj" || cmd == "vjumps")
 	{
-		bool& v = debug.verbose_jumps;
+		bool& v = this->verbose_jumps;
 		v = !v;
-		dprintf(cpu, "Verbose jumps are now %s\n", v ? "ON" : "OFF");
+		this->dprintf("Verbose jumps are now %s\n", v ? "ON" : "OFF");
 		return true;
 	}
 	else if (cmd == "r" || cmd == "run")
 	{
-		debug.verbose_instructions = false;
-		debug.break_on_steps(0);
+		this->verbose_instructions = false;
+		this->break_on_steps(0);
 		return false;
 	}
 	else if (cmd == "q" || cmd == "quit" || cmd == "exit")
@@ -229,12 +228,12 @@ static bool execute_commands(DebugMachine<W>& debug)
 	{
 		if (params.size() < 2)
 		{
-			dprintf(cpu, ">>> Not enough parameters: read [addr]\n");
+			this->dprintf(">>> Not enough parameters: read [addr]\n");
 			return true;
 		}
 		unsigned long addr = std::strtoul(params[1].c_str(), 0, 16);
 		auto value = machine.memory.template read<uint32_t>(addr);
-		dprintf(cpu, "0x%lX: 0x%X\n", addr, value);
+		this->dprintf("0x%lX: 0x%X\n", addr, value);
 		return true;
 	}
 	// write 0xAddr value
@@ -242,12 +241,12 @@ static bool execute_commands(DebugMachine<W>& debug)
 	{
 		if (params.size() < 3)
 		{
-			dprintf(cpu, ">>> Not enough parameters: write [addr] [value]\n");
+			this->dprintf(">>> Not enough parameters: write [addr] [value]\n");
 			return true;
 		}
 		unsigned long hex = std::strtoul(params[1].c_str(), 0, 16);
 		int value = std::stoi(params[2]) & 0xff;
-		dprintf(cpu, "0x%04lx -> 0x%02x\n", hex, value);
+		this->dprintf("0x%04lx -> 0x%02x\n", hex, value);
 		machine.memory.template write<uint32_t>(hex, value);
 		return true;
 	}
@@ -256,14 +255,14 @@ static bool execute_commands(DebugMachine<W>& debug)
 	{
 		if (params.size() < 3)
 		{
-			dprintf(cpu, ">>> Not enough parameters: print addr length\n");
+			this->dprintf(">>> Not enough parameters: print addr length\n");
 			return true;
 		}
 		uint32_t src = std::strtoul(params[1].c_str(), 0, 16);
 		int bytes = std::stoi(params[2]);
 		std::unique_ptr<char[]> buffer(new char[bytes]);
 		machine.memory.memcpy_out(buffer.get(), src, bytes);
-		dprintf(cpu, "0x%X: %.*s\n", src, bytes, buffer.get());
+		this->dprintf("0x%X: %.*s\n", src, bytes, buffer.get());
 		return true;
 	}
 	else if (cmd == "ebreak")
@@ -275,19 +274,19 @@ static bool execute_commands(DebugMachine<W>& debug)
 	{
 		int num = 0;
 		if (params.size() > 1) num = std::stoi(params[1]);
-		dprintf(cpu, "Triggering system call %d\n", num);
+		this->dprintf("Triggering system call %d\n", num);
 		machine.system_call(num);
 		return true;
 	}
 	else if (cmd == "help" || cmd == "?")
 	{
-		print_help(cpu);
+		this->print_help();
 		return true;
 	}
 	else
 	{
-		dprintf(cpu, ">>> Unknown command: '%s'\n", cmd.c_str());
-		print_help(cpu);
+		this->dprintf(">>> Unknown command: '%s'\n", cmd.c_str());
+		this->print_help();
 		return true;
 	}
 	return false;
@@ -305,18 +304,18 @@ void DebugMachine<W>::print(const std::string& label, address_t override_pc)
 		const auto instruction = cpu.read_next_instruction();
 		const auto& handler = cpu.decode(instruction);
 		const auto string = cpu.to_string(instruction, handler);
-		dprintf(cpu, "\n>>> %s \t%s\n\n", label.c_str(), string.c_str());
+		this->dprintf("\n>>> %s \t%s\n\n", label.c_str(), string.c_str());
 	} catch (const std::exception& e) {
-		dprintf(cpu, "\n>>> %s \tError reading instruction: %s\n\n", label.c_str(), e.what());
+		this->dprintf("\n>>> %s \tError reading instruction: %s\n\n", label.c_str(), e.what());
 	}
 	cpu.aligned_jump(old_pc);
 	// CPU registers
-	dprintf(cpu, "%s", cpu.registers().to_string().c_str());
+	this->dprintf("%s", cpu.registers().to_string().c_str());
 	// Memory subsystem
-	dprintf(cpu, "[MEM PAGES     %8zu]\n", machine.memory.pages_active());
+	this->dprintf("[MEM PAGES     %8zu]\n", machine.memory.pages_active());
 	// Floating-point registers
 	if (this->verbose_fp_registers) {
-		dprintf(cpu, "%s", cpu.registers().flp_to_string().c_str());
+		this->dprintf("%s", cpu.registers().flp_to_string().c_str());
 	}
 }
 
@@ -325,7 +324,7 @@ void DebugMachine<W>::print_and_pause()
 {
 	this->print();
 
-	while (execute_commands(*this))
+	while (execute_commands())
 		;
 } // print_and_pause(...)
 
@@ -400,10 +399,10 @@ template<int W>
 void DebugMachine<W>::register_debug_logging() const
 {
 	auto regs = "\n" + machine.cpu.registers().to_string() + "\n\n";
-	machine.debug_print(regs.data(), regs.size());
+	this->debug_print(regs.data(), regs.size());
 	if (UNLIKELY(this->verbose_fp_registers)) {
 		regs = machine.cpu.registers().flp_to_string() + "\n";
-		machine.debug_print(regs.data(), regs.size());
+		this->debug_print(regs.data(), regs.size());
 	}
 }
 
@@ -492,6 +491,20 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 	} // while not stopped
 
 } // DebugMachine::simulate
+
+template <int W>
+DebugMachine<W>::DebugMachine(Machine<W>& m) : machine(m) {
+	m_debug_printer = [](const Machine<W>&, const char* buffer, size_t len) {
+		fprintf(stderr, "[DebugMachine] %.*s\n", (int)len, buffer);
+	};
+}
+
+template <int W>
+void DebugMachine<W>::debug_print(const char* buffer, size_t len) const
+{
+	if (m_debug_printer)
+		m_debug_printer(machine, buffer, len);
+}
 
 template<int W>
 void DebugMachine<W>::simulate(uint64_t imax)

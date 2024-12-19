@@ -67,6 +67,7 @@ template <int W>
 struct RSPClient
 {
 	using StopFunc = std::function<void(RSPClient<W>&)>;
+	using PrinterFunc = void(*)(const Machine<W>&, const char*, size_t);
 	bool is_closed() const noexcept { return m_closed; }
 
 	bool process_one();
@@ -82,6 +83,11 @@ struct RSPClient
 	void set_instruction_limit(uint64_t limit) { m_ilimit = limit; }
 	void set_verbose(bool v) { m_verbose = v; }
 	void on_stopped(StopFunc f) { m_on_stopped = f; }
+
+	// Debug printer (for printing exceptions)
+	void debug_print(const char*, size_t) const;
+	auto& get_debug_printer() const noexcept { return m_debug_printer; }
+	void set_debug_printer(PrinterFunc pf) noexcept { m_debug_printer = pf; }
 
 	RSPClient(riscv::Machine<W>& m, socket_fd_type fd);
 	~RSPClient();
@@ -117,6 +123,7 @@ private:
 	std::array<riscv::address_type<W>, 8> m_bp {};
 	size_t m_bp_iterator = 0;
 	StopFunc m_on_stopped = nullptr;
+	mutable PrinterFunc m_debug_printer = [](const Machine<W>&, const char*, size_t) {};
 };
 } // riscv
 
@@ -333,7 +340,7 @@ void RSPClient<W>::handle_exception(const std::exception& e)
 {
 	char buffer[1024];
 	int len = snprintf(buffer, sizeof(buffer), "Exception: %s\n", e.what());
-	m_machine->debug_print(buffer, len);
+	this->debug_print(buffer, len);
 	// Is this the right thing to do?
 	m_machine->stop();
 	send("S01");
@@ -581,6 +588,12 @@ void RSPClient<W>::reply_ok() {
 template <int W>
 void RSPClient<W>::interrupt() {
 	send("S05");
+}
+
+template <int W>
+inline void RSPClient<W>::debug_print(const char* buffer, size_t len) const
+{
+	this->m_debug_printer(*m_machine, buffer, len);
 }
 
 } // riscv

@@ -310,10 +310,6 @@ namespace riscv
 		long stdin_read(char*, size_t) const;
 		auto& get_stdin() const noexcept { return m_stdin; }
 		void set_stdin(stdin_func sin = default_stdin) noexcept { m_stdin = sin; }
-		// Debug printer (for when the machine wants to inform)
-		void debug_print(const char*, size_t) const;
-		auto& get_debug_printer() const noexcept { return m_debug_printer; }
-		void set_debug_printer(printer_func pf = default_printer) noexcept { m_debug_printer = pf; }
 		// Monotonic time function (used by RDTIME and RDTIMEH)
 		uint64_t rdtime() const { return m_rdtime(*this); }
 		auto& get_rdtime() const noexcept { return m_rdtime; }
@@ -463,7 +459,6 @@ namespace riscv
 		uint64_t     m_max_counter = 0;
 		mutable void*        m_userdata = nullptr;
 		mutable printer_func m_printer = default_printer;
-		mutable printer_func m_debug_printer = default_printer;
 		mutable stdin_func   m_stdin = default_stdin;
 		mutable rdtime_func  m_rdtime = default_rdtime;
 		std::unique_ptr<Arena> m_arena;

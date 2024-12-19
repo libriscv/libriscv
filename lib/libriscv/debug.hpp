@@ -9,6 +9,7 @@ namespace riscv
 	{
 		using address_t = address_type<W>;
 		using breakpoint_t = std::function<void(DebugMachine<W> &)>;
+		using printer_func_t = void(*)(const Machine<W>&, const char*, size_t);
 		struct Watchpoint {
 			address_t addr;
 			size_t    len;
@@ -37,12 +38,21 @@ namespace riscv
 		void watchpoint(address_t address, size_t len, breakpoint_t = default_pausepoint);
 		void erase_watchpoint(address_t address) { watchpoint(address, 0, nullptr); }
 
+		// Debug printer (for printing exceptions)
+		void debug_print(const char*, size_t) const;
+		auto& get_debug_printer() const noexcept { return m_debug_printer; }
+		void set_debug_printer(printer_func_t pf) noexcept { m_debug_printer = pf; }
+
 		Machine<W>& machine;
-		DebugMachine(Machine<W>& m) : machine(m) {}
+		DebugMachine(Machine<W>& m);
 	private:
+		void print_help() const;
+		void dprintf(const char* fmt, ...) const;
+		bool execute_commands();
 		// instruction step & breakpoints
 		mutable int32_t m_break_steps = 0;
 		mutable int32_t m_break_steps_cnt = 0;
+		mutable printer_func_t m_debug_printer = nullptr;
 		std::unordered_map<address_t, breakpoint_t> m_breakpoints;
 		std::vector<Watchpoint> m_watchpoints;
 		bool break_time() const;
