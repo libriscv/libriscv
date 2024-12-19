@@ -33,7 +33,7 @@ static Allocation alloc_random(riscv::Arena& arena)
 
 static Allocation alloc_sequential(riscv::Arena& arena)
 {
-	const size_t size	 = randInt(0, 8000);
+	const size_t size	 = randInt(0, 4096);
 	const uintptr_t addr = arena.seq_alloc_aligned(size, 8, false);
 	REQUIRE(IS_WITHIN(addr));
 	// In order for the memory to be sequential in both the

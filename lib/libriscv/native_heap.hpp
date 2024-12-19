@@ -303,7 +303,6 @@ inline Arena::PointerType Arena::malloc(size_t size)
 // always allocate sequential memory within a single page.
 inline Arena::PointerType Arena::seq_alloc_aligned(size_t size, size_t alignment, bool arena_is_flat)
 {
-	assert(alignment != 0x0);
 	(void)alignment;
 
 	if (arena_is_flat) {
@@ -311,45 +310,46 @@ inline Arena::PointerType Arena::seq_alloc_aligned(size_t size, size_t alignment
 	}
 
 	// XXX: Alignment is ignored for now,
-	// but 8-byte alignment is guaranteed.
+	// but 16-byte alignment is guaranteed.
 	const size_t objectsize = fixup_size(size);
-	const size_t oversized = fixup_size(size * 2);
 	this->m_allocation_counter++;
+	if (objectsize > RISCV_PAGE_SIZE)
+		throw MachineException(INVALID_PROGRAM, "Requested sequential allocation too large", objectsize);
 
+	ArenaChunk* ch = &base_chunk();
+restart_seq_alloc_search:
 	// Find memory that can always cover the object sequentially
-	ArenaChunk* ch = base_chunk().find_free(oversized);
+	ch = ch->find_free(objectsize);
 
 	if (ch != nullptr) {
-		// XXX: Assume that alignment of data is OK
-		// Check if the allocation crosses a page
+		// Check if data + size is on the same page
 		if ((ch->data & ~(RISCV_PAGE_SIZE-1)) !=
-			((ch->data + size) & ~(RISCV_PAGE_SIZE-1)))
+			((ch->data + objectsize - 1) & ~(RISCV_PAGE_SIZE-1)))
 		{
-			// The second page boundary
-			PointerType boundary = (ch->data + size) & ~(RISCV_PAGE_SIZE-1);
+			// The next page boundary
+			const PointerType boundary = (ch->data + objectsize - 1) & ~(RISCV_PAGE_SIZE-1);
+			if (boundary < ch->data)
+				throw MachineException(INVALID_PROGRAM, "Page boundary overflow", boundary);
+			// Figure out the size until the boundary
+			const size_t remaining = boundary - ch->data;
+			// If the chunks new size would be too small, find a new chunk instead
+			if (ch->size - remaining < objectsize) {
+				if (ch->next == nullptr) {
+					// We ran out of arena space
+					return 0;
+				}
+				ch = ch->next;
+				goto restart_seq_alloc_search;
+			}
 			// Split at the page boundary
-			ch->split_next(*this, boundary - ch->data);
-
-			// The data after the page boundary is usable,
-			// but it must be split to the object size
-			auto* final_ch = ch->next;
-			final_ch->free = false;
-
-			// Free the data before the boundary
-			this->internal_free(ch);
-
-			// XXX: Always split?
-			final_ch->split_next(*this, objectsize);
-			this->m_used_chunk_map.insert_or_assign(final_ch->data, final_ch);
-			return final_ch->data;
+			ch->split_next(*this, remaining);
+			ch = ch->next;
 		}
-		else
-		{
-			ch->split_next(*this, objectsize);
-			ch->free = false;
-			this->m_used_chunk_map.insert_or_assign(ch->data, ch);
-			return ch->data;
-		}
+
+		ch->split_next(*this, objectsize);
+		ch->free = false;
+		this->m_used_chunk_map.insert_or_assign(ch->data, ch);
+		return ch->data;
 	}
 	return 0;
 }
