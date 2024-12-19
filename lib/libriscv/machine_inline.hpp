@@ -60,11 +60,6 @@ inline long Machine<W>::stdin_read(char* buffer, size_t len) const
 {
 	return this->m_stdin(*this, buffer, len);
 }
-template <int W>
-inline void Machine<W>::debug_print(const char* buffer, size_t len) const
-{
-	this->m_debug_printer(*this, buffer, len);
-}
 
 template <int W> inline
 void Machine<W>::install_syscall_handler(size_t sysn, syscall_t handler)
