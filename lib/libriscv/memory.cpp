@@ -288,10 +288,13 @@ namespace riscv
 				if (lcxxhdr != nullptr && lcxxhdr->sh_addr == texthdr->sh_addr + texthdr->sh_size)
 				{
 					const unsigned size = texthdr->sh_size + lcxxhdr->sh_size;
-					if (size <= exlen && texthdr->sh_addr + size <= vaddr + exlen)
+					if (size <= hdr->p_filesz && texthdr->sh_addr + size <= vaddr + hdr->p_filesz)
 					{
 						// Merge the two sections
 						exlen = size;
+					} else if (options.verbose_loader) {
+						printf("* __lcxx_override section is outside of program header: %p -> %p where %zu <= %zu\n",
+							(void*)uintptr_t(vaddr), (void*)uintptr_t(vaddr + exlen), size_t(size), size_t(hdr->p_filesz));
 					}
 				}
 			}
