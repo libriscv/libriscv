@@ -17,6 +17,8 @@ namespace riscv
 
 		static constexpr uint32_t PT_LOAD    = 1;
 		static constexpr uint32_t PT_DYNAMIC = 2;
+		static constexpr uint32_t PT_PHDR	 = 6;
+		static constexpr uint32_t PT_GNU_EH_FRAME = 0x6474e550;
 		static constexpr uint32_t PT_GNU_STACK = 0x6474e551;
 		static constexpr uint32_t PT_GNU_RELRO = 0x6474e552;
 

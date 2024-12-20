@@ -181,13 +181,29 @@ namespace riscv
 		// Program headers
 		const auto* binary_ehdr = elf_header<W> (*this);
 		const auto* binary_phdr = elf_offset<W, typename Elf<W>::ProgramHeader> (*this, binary_ehdr->e_phoff);
-		const unsigned phdr_count = binary_ehdr->e_phnum;
-		for (unsigned i = 0; i < phdr_count; i++)
+		const int phdr_count = int(binary_ehdr->e_phnum);
+		// Check if we have a PT_PHDR program header already loaded into memory
+		address_t phdr_location = 0;
+		for (int i = 0; i < phdr_count; i++)
 		{
-			const auto* phd = &binary_phdr[i];
-			push_down(*this, dst, phd, sizeof(typename Elf<W>::ProgramHeader));
+			if (binary_phdr[i].p_type == Elf<W>::PT_PHDR) {
+				phdr_location = binary_phdr[i].p_vaddr;
+				break;
+			}
 		}
-		const auto phdr_location = dst;
+		if (phdr_location == 0) {
+			for (int i = phdr_count-1; i >= 0; i--)
+			{
+				const auto* phd = &binary_phdr[i];
+				push_down(*this, dst, phd, sizeof(typename Elf<W>::ProgramHeader));
+			}
+			phdr_location = dst;
+		} else {
+			// Verify that the PT_PHDR is loaded at the correct address
+			if (memory.memcmp(binary_phdr, phdr_location, phdr_count * sizeof(*binary_phdr)) != 0) {
+				throw MachineException(INVALID_PROGRAM, "PT_PHDR program header is not loaded at the correct address");
+			}
+		}
 
 		// Arguments to main()
 		std::vector<address_type<W>> argv;
@@ -210,7 +226,7 @@ namespace riscv
 		// ELF related
 		push_aux<W>(argv, {AT_PHDR,  phdr_location});
 		push_aux<W>(argv, {AT_PHENT, sizeof(*binary_phdr)});
-		push_aux<W>(argv, {AT_PHNUM, phdr_count});
+		push_aux<W>(argv, {AT_PHNUM, unsigned(phdr_count)});
 
 		// Misc
 		push_aux<W>(argv, {AT_BASE, address_type<W>(this->memory.start_address() & ~0xFFFFFFLL)});
