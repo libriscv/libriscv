@@ -19,3 +19,6 @@ fi
 
 #export RCC="riscv64-unknown-elf-gcc"
 #export RCXX="riscv64-unknown-elf-g++"
+
+#export RCC="zig cc -target riscv64-linux-musl -mcpu=baseline_rv64+rva22u64"
+#export RCXX="zig c++ -target riscv64-linux-musl -mcpu=baseline_rv64+rva22u64"

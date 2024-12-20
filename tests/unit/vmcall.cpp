@@ -3,7 +3,7 @@
 
 #include <libriscv/machine.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
-	const std::string& args = "-O2 -static -Wl,--undefined=hello", bool cpp = false);
+	const std::string& args = "-O2 -static", bool cpp = false);
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
@@ -15,7 +15,8 @@ TEST_CASE("VM function call", "[VMCall]")
 	} state;
 	const auto binary = build_and_load(R"M(
 	extern long write(int, const void*, unsigned long);
-	extern void hello() {
+	__attribute__((used, retain))
+	void hello() {
 		write(1, "Hello World!", 12);
 	}
 
@@ -56,7 +57,8 @@ TEST_CASE("VM function call", "[VMCall]")
 TEST_CASE("VM call return values", "[VMCall]")
 {
 	const auto binary = build_and_load(R"M(
-	extern const char* hello() {
+	__attribute__((used, retain))
+	const char* hello() {
 		return "Hello World!";
 	}
 
@@ -65,6 +67,7 @@ TEST_CASE("VM call return values", "[VMCall]")
 		int val2;
 		float f1;
 	} data = {.val1 = 1, .val2 = 2, .f1 = 3.0f};
+	__attribute__((used, retain))
 	extern struct Data* structs() {
 		return &data;
 	}
@@ -125,7 +128,8 @@ TEST_CASE("VM call enum values", "[VMCall]")
 		__asm__ volatile ("ecall" : "+r"(a0) : "r"(syscall_id));
 		return a0;
 	}
-	extern int mycall(int value) {
+	__attribute__((used, retain))
+	int mycall(int value) {
 		assert(value == 1);
 		return do_syscall(value);
 	}
@@ -170,13 +174,15 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 	extern long write(int, const void*, unsigned long);
 	static int value = 0;
 
-	extern void hello() {
+	__attribute__((used, retain))
+	void hello() {
 		assert(value == 1);
 		value = 0;
 		write(1, "Hello World!", 12);
 	}
 
-	extern int str(const char *arg) {
+	__attribute__((used, retain))
+	int str(const char *arg) {
 		assert(strcmp(arg, "Hello") == 0);
 		return 1;
 	}
@@ -186,21 +192,24 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 		int val2;
 		float f1;
 	};
-	extern int structs(struct Data *data) {
+	__attribute__((used, retain))
+	int structs(struct Data *data) {
 		assert(data->val1 == 1);
 		assert(data->val2 == 2);
 		assert(data->f1 == 3.0f);
 		return 2;
 	}
 
-	extern int ints(long i1, long i2, long i3) {
+	__attribute__((used, retain))
+	int ints(long i1, long i2, long i3) {
 		assert(i1 == 123);
 		assert(i2 == 456);
 		assert(i3 == 456);
 		return 3;
 	}
 
-	extern int fps(float f1, double d1) {
+	__attribute__((used, retain))
+	int fps(float f1, double d1) {
 		assert(f1 == 1.0f);
 		assert(d1 == 2.0);
 		return 4;
@@ -296,11 +305,13 @@ TEST_CASE("VM call and preemption", "[VMCall]")
 		return a0;
 	}
 
-	extern long start() {
+	__attribute__((used, retain))
+	long start() {
 		syscall1(500, 1234567);
 		return 1;
 	}
-	extern void preempt(int arg) {
+	__attribute__((used, retain))
+	void preempt(int arg) {
 		write(1, "Hello World!", arg);
 	}
 
@@ -379,12 +390,14 @@ TEST_CASE("VM call and STOP instruction", "[VMCall]")
 		__builtin_unreachable();
 	}
 
-	extern long start() {
+	__attribute__((used, retain))
+	long start() {
 		syscall1(500, 1234567);
 		return_fast1(1234);
 		return 5678;
 	}
-	extern long preempt(int arg) {
+	__attribute__((used, retain))
+	long preempt(int arg) {
 		write(1, "Hello World!", arg);
 		return_fast1(777);
 	}

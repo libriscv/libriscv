@@ -110,9 +110,11 @@ TEST_CASE("Writes to read-only segment", "[Memory]")
 			return -1;
 		return 666;
 	}
+	__attribute__((used, retain))
 	void write_to(char* dst) {
 		*dst = 1;
 	}
+	__attribute__((used, retain))
 	int read_from(char* dst) {
 		return *dst;
 	})M");

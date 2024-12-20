@@ -286,12 +286,16 @@ TEST_CASE("Take custom system arguments", "[Custom]")
 		machine.set_result(0);
 	});
 
+	static bool found = false;
 	machine.set_printer([] (const auto&, const char* data, size_t size) {
 		std::string text{data, data + size};
-		REQUIRE(text == "32-bit floating-point: 96.000000\n");
+		if (text == "32-bit floating-point: 96.000000" // musl
+			|| text == "32-bit floating-point: 96.000000\n") // glibc
+			found = true;
 	});
 
 	machine.simulate();
 
 	REQUIRE(machine.return_value() == 0x1234);
+	REQUIRE(found == true);
 }

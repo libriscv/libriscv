@@ -145,6 +145,7 @@ TEST_CASE("Build machine from empty", "[Examples]")
 TEST_CASE("Execute while doing other things", "[Examples]")
 {
 	const auto binary = build_and_load(R"M(
+	__attribute__((used, retain))
 	long test() {
 		for (volatile unsigned i = 0; i < 10000; i++);
 		return 0x5678;

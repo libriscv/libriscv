@@ -3,7 +3,7 @@
 
 #include <libriscv/machine.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
-	const std::string& args = "-O2 -static -Wl,--undefined=hello", bool cpp = false);
+	const std::string& args = "-O2 -static", bool cpp = false);
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
 
@@ -13,10 +13,12 @@ TEST_CASE("Read and write traps", "[Memory Traps]")
 		bool output_is_hello_world = false;
 	} state;
 	const auto binary = build_and_load(R"M(
-	extern void hello_write(long value) {
+	__attribute__((used, retain))
+	void hello_write(long value) {
 		*(long *)0xF0000010 = value;
 	}
-	extern long hello_read() {
+	__attribute__((used, retain))
+	long hello_read() {
 		return *(long *)0xF0000010;
 	}
 

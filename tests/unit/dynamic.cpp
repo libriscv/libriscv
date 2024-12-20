@@ -7,12 +7,21 @@ extern std::vector<uint8_t> build_and_load(const std::string& code,
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
+static bool is_zig() {
+	const char* rcc = getenv("RCC");
+	if (rcc == nullptr)
+		return false;
+	return std::string(rcc).find("zig") != std::string::npos;
+}
 
 static const std::string pie_compiler_args =
 	"-O2 -pie -Wl,--no-dynamic-linker,-z,text";
 
 TEST_CASE("Instantiate machine", "[Dynamic]")
 {
+	if (is_zig())
+		return;
+
 	const auto binary = build_and_load(R"M(
 	int main() {
 		return 666;
@@ -45,6 +54,9 @@ TEST_CASE("Instantiate machine using shared ELF", "[Dynamic]")
 
 TEST_CASE("Calculate fib(50) using dynamic ELF", "[Dynamic]")
 {
+	if (is_zig())
+		return;
+
 	const auto binary = build_and_load(R"M(
 	static long fib(long n, long acc, long prev)
 	{

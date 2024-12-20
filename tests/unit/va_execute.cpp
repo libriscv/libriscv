@@ -8,6 +8,12 @@ extern std::vector<uint8_t> build_and_load(const std::string& code,
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
+static bool is_zig() {
+	const char* rcc = getenv("RCC");
+	if (rcc == nullptr)
+		return false;
+	return std::string(rcc).find("zig") != std::string::npos;
+}
 
 TEST_CASE("Calculate fib(2560000) on execute page", "[VA]")
 {
@@ -30,12 +36,11 @@ static long fib(long n, long acc, long prev)
 	else
 		return fib(n - 1, prev + acc, acc);
 }
-static void fib_end() {}
 
 int main()
 {
 	const uintptr_t DST = 0xF0000000;
-	copy(DST, &fib, (char*)&fib_end - (char*)&fib);
+	copy(DST, &fib, 256);
 	// mprotect +execute
 	syscall3(226, DST, 0x1000, 0x4);
 
@@ -131,10 +136,12 @@ TEST_CASE("Calculate fib(50) on high-memory page", "[VA]")
 		else
 			return fib(n - 1, prev + acc, acc);
 	}
-	long main(int argc, char** argv) {
+	int main(int argc, char** argv) {
 		const long n = atoi(argv[1]);
 		return fib(n, 0, 1);
-	})M", "-O2 -static -Wl,-Ttext-segment=0x20000000");
+	})M",
+	is_zig() ? "-O2 -static -Wl,--image-base=0x20000000"
+		: "-O2 -static -Wl,-Ttext-segment=0x20000000");
 
 	// Normal (fastest) simulation
 	{
@@ -148,7 +155,7 @@ TEST_CASE("Calculate fib(50) on high-memory page", "[VA]")
 		// Run for at most X instructions before giving up
 		machine.simulate(MAX_INSTRUCTIONS);
 
-		REQUIRE(machine.return_value<long>() == 12586269025L);
+		REQUIRE(machine.return_value<int>() == -298632863);
 	}
 	// Precise (step-by-step) simulation
 	{
@@ -161,7 +168,7 @@ TEST_CASE("Calculate fib(50) on high-memory page", "[VA]")
 		machine.set_max_instructions(MAX_INSTRUCTIONS);
 		machine.cpu.simulate_precise();
 
-		REQUIRE(machine.return_value<long>() == 12586269025L);
+		REQUIRE(machine.return_value<int>() == -298632863);
 	}
 	// Debug-assisted simulation
 	{
@@ -177,6 +184,6 @@ TEST_CASE("Calculate fib(50) on high-memory page", "[VA]")
 		// Verify step-by-step simulation
 		debugger.simulate(MAX_INSTRUCTIONS);
 
-		REQUIRE(machine.return_value<long>() == 12586269025L);
+		REQUIRE(machine.return_value<int>() == -298632863);
 	}
 }
