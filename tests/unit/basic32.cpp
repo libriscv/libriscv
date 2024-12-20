@@ -6,6 +6,12 @@ extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
+static bool is_zig() {
+	const char* rcc = getenv("RCC");
+	if (rcc == nullptr)
+		return false;
+	return std::string(rcc).find("zig") != std::string::npos;
+}
 
 TEST_CASE("Instantiate 32-bit machine using 64-bit ELF", "[Instantiate]")
 {
@@ -20,6 +26,9 @@ TEST_CASE("Instantiate 32-bit machine using 64-bit ELF", "[Instantiate]")
 
 TEST_CASE("Validate custom 32-bit ELF", "[Instantiate]")
 {
+	if (is_zig())
+		return;
+
 	const auto binary = build_and_load(R"M(
 	__asm__(".global _start\n"
 	".section .text\n"
@@ -41,6 +50,9 @@ TEST_CASE("Validate custom 32-bit ELF", "[Instantiate]")
 
 TEST_CASE("Validate 32-bit fib()", "[Compute]")
 {
+	if (is_zig())
+		return;
+
     // 64-bit arguments require two registers
     // and consumes 2 return registers (A0, A1).
     const auto binary = build_and_load(R"M(

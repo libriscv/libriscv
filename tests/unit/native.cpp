@@ -61,7 +61,10 @@ TEST_CASE("Activate native helper syscalls", "[Native]")
 	machine.set_printer([] (const auto& m, const char* data, size_t size) {
 		auto* state = m.template get_userdata<State> ();
 		std::string text{data, data + size};
-		state->output_is_hello_world = (text == "Hello World!\n");
+		// musl writev:
+		state->output_is_hello_world = state->output_is_hello_world || (text == "Hello World!");
+		// glibc write:
+		state->output_is_hello_world = state->output_is_hello_world || (text == "Hello World!\n");
 	});
 
 	// Run simulation
@@ -103,7 +106,10 @@ TEST_CASE("Use native helper syscalls", "[Native]")
 	machine.set_printer([] (const auto& m, const char* data, size_t size) {
 		auto* state = m.template get_userdata<State> ();
 		std::string text{data, data + size};
-		state->output_is_hello_world = (text == "Hello World!\n");
+		// musl writev:
+		state->output_is_hello_world = state->output_is_hello_world || (text == "Hello World!");
+		// glibc write:
+		state->output_is_hello_world = state->output_is_hello_world || (text == "Hello World!\n");
 	});
 
 	// Run simulation

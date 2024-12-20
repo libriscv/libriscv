@@ -7,6 +7,12 @@ extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
 static const std::string cwd {SRCDIR};
 using namespace riscv;
+static bool is_zig() {
+	const char* rcc = getenv("RCC");
+	if (rcc == nullptr)
+		return false;
+	return std::string(rcc).find("zig") != std::string::npos;
+}
 
 /**
  * These tests are designed to be really brutal to support,
@@ -23,7 +29,8 @@ TEST_CASE("Calculate fib(50) slowly, basic", "[Compute]")
 		else
 			return fib(n - 1, prev + acc, acc);
 	}
-	long my_start(long n) {
+	__attribute__((used, retain))
+	extern long my_start(long n) {
 		return fib(n, 0, 1);
 	}
 	int main() {}
@@ -86,6 +93,9 @@ TEST_CASE("Execute libc_start_main, slowly", "[Compute]")
 
 TEST_CASE("Threads test-suite slowly", "[Compute]")
 {
+	if (is_zig())
+		return;
+
 	const auto binary = build_and_load(R"M(
 	#include "threads/test_threads.cpp"
 	)M", "-O1 -static -pthread -I" + cwd, true);
