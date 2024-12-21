@@ -133,6 +133,34 @@ namespace riscv
 	}
 
 	template <int W>
+	static inline void fill_entries(
+		const std::array<std::tuple<DecoderData<W>*, int>, 256>& block_array,
+		size_t block_array_count, address_type<W> block_pc, address_type<W> current_pc)
+	{
+		const unsigned last_count = std::get<1>(block_array[block_array_count - 1]);
+		unsigned count = (current_pc - block_pc) >> 1;
+		count -= last_count;
+		if (count > 255)
+			throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
+
+		for (size_t i = 0; i < block_array_count; i++) {
+			auto& tuple = block_array[i];
+			DecoderData<W>* entry = std::get<0>(tuple);
+			const int length = std::get<1>(tuple);
+
+			// Ends at instruction *before* last PC
+			entry->idxend = count;
+			entry->icount = count + 1 - (block_array_count - i);
+
+			if constexpr (VERBOSE_DECODER) {
+				fprintf(stderr, "Block 0x%lX has %u instructions\n", block_pc, count);
+			}
+
+			count -= length;
+		}
+	}
+
+	template <int W>
 	static void realize_fastsim(
 		address_type<W> base_pc, address_type<W> last_pc,
 		const uint8_t* exec_segment, DecoderData<W>* exec_decoder)
@@ -151,21 +179,20 @@ namespace riscv
 			// Go through entire executable segment and measure lengths
 			// Record entries while looking for jumping instruction, then
 			// fill out data and opcode lengths previous instructions.
-			std::array<std::tuple<DecoderData<W>*, unsigned>, 256> block_array;
+			std::array<std::tuple<DecoderData<W>*, int>, 256> block_array;
 			address_type<W> pc = base_pc;
 			while (pc < last_pc) {
 				size_t block_array_count = 0;
-				size_t datalength = 0;
-				address_type<W> block_pc = pc;
-				auto* entry = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				const address_type<W> block_pc = pc;
+				DecoderData<W>* entry = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				const AlignedLoad16* iptr  = (AlignedLoad16*)&exec_segment[pc];
+				const AlignedLoad16* iptr_begin = iptr;
 				while (true) {
-					const auto instruction = read_instruction(
-						exec_segment, pc, last_pc);
-					const auto opcode = instruction.opcode();
-					const auto length = instruction.length();
+					const unsigned length = iptr->length();
+					const int count = length >> 1;
 
 					// Record the instruction
-					block_array[block_array_count++] = { entry, length };
+					block_array[block_array_count++] = { entry, count };
 
 					// Make sure PC does not overflow
 #ifdef _MSC_VER
@@ -186,14 +213,13 @@ namespace riscv
 						break;
 					}
 
-					datalength += length / 2;
-
 					// All opcodes that can modify PC
 					if (length == 2)
 					{
-						if (!is_regular_compressed<W>(instruction.half[0]))
+						if (!is_regular_compressed<W>(iptr->half()))
 							break;
 					} else {
+						const unsigned opcode = iptr->opcode();
 						if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
 							|| opcode == RV32I_JAL || opcode == RV32I_JALR)
 							break;
@@ -211,18 +237,21 @@ namespace riscv
 						break;
 					}
 
+					iptr += count;
+
 					// Too large blocks are likely malicious (although could be many empty pages)
-					if (UNLIKELY(datalength >= 255)) {
+					if (UNLIKELY(iptr - iptr_begin >= 255)) {
 						// NOTE: Reinsert original instruction, as long sequences will lead to
 						// PC becoming desynched, as it doesn't get increased.
 						// We use a new block-ending fallback function handler instead.
+						rv32i_instruction instruction = read_instruction(exec_segment, pc - length, last_pc);
 						entry->set_bytecode(RV32I_BC_FUNCBLOCK);
 						entry->set_handler(CPU<W>::decode(instruction));
 						entry->instr = instruction.whole;
 						break;
 					}
 
-					entry += length / 2;
+					entry += count;
 				}
 				if constexpr (VERBOSE_DECODER) {
 					fprintf(stderr, "Block 0x%lX to 0x%lX\n", block_pc, pc);
@@ -231,29 +260,7 @@ namespace riscv
 				if (UNLIKELY(block_array_count == 0))
 					throw MachineException(INVALID_PROGRAM, "Encountered empty block after measuring");
 
-				const auto last_length = std::get<1>(block_array[block_array_count - 1]);
-
-				for (size_t i = 0; i < block_array_count; i++) {
-					auto& tuple = block_array[i];
-					DecoderData<W>* entry = std::get<0>(tuple);
-					const unsigned length = std::get<1>(tuple);
-
-					// Ends at instruction *before* last PC
-					// Subtract block PC in order to get length,
-					// then store half
-					auto count = (pc - last_length - block_pc) / 2;
-					if (count > 255)
-						throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
-					entry->idxend = count;
-					entry->icount = count + 1 - (block_array_count - i);
-
-					if constexpr (VERBOSE_DECODER) {
-						fprintf(stderr, "Block 0x%lX has %u instructions\n", block_pc, count);
-					}
-
-					block_pc += length;
-					datalength -= length / 2;
-				}
+				fill_entries(block_array, block_array_count, block_pc, pc);
 			}
 		} else { // !compressed_enabled
 			// Count distance to next branching instruction backwards
@@ -266,10 +273,10 @@ namespace riscv
 			// NOTE: The last check avoids overflow
 			while (pc >= base_pc && pc < last_pc)
 			{
-				const auto instruction = read_instruction(
+				const rv32i_instruction instruction = read_instruction(
 					exec_segment, pc, last_pc);
-				auto& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
-				const auto opcode = instruction.opcode();
+				DecoderData<W>& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				const unsigned opcode = instruction.opcode();
 
 				// All opcodes that can modify PC and stop the machine
 				if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
