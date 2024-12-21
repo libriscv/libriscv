@@ -286,7 +286,12 @@ static void run_program(
 	});
 
 	// Create a RISC-V machine with the binary as input program
+	auto st0 = std::chrono::high_resolution_clock::now();
 	riscv::Machine<W> machine { binary, *options };
+	if (cli_args.verbose) {
+		auto st1 = std::chrono::high_resolution_clock::now();
+		printf("* Loaded in %.3f ms\n", std::chrono::duration<double, std::milli>(st1 - st0).count());
+	}
 
 	// Remember the options for later in case background compilation is enabled,
 	// if new execute segments need to be decoded and so on. Basically all future
