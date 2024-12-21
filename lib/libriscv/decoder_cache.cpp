@@ -132,17 +132,6 @@ namespace riscv
 		}
 	}
 
-	static bool is_stopping_system(rv32i_instruction instr) {
-		if (instr.opcode() == RV32I_SYSTEM) {
-			return true;
-//			return instr.Itype.funct3 == 0
-//				&& (instr.Itype.imm == 0  // System call
-//					|| instr.Itype.imm == 0x105   // WFI
-//					|| instr.Itype.imm == 0x7ff); // STOP
-		}
-		return false;
-	}
-
 	template <int W>
 	static void realize_fastsim(
 		address_type<W> base_pc, address_type<W> last_pc,
@@ -205,7 +194,7 @@ namespace riscv
 						if (!is_regular_compressed<W>(instruction.half[0]))
 							break;
 					} else {
-						if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
+						if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
 							|| opcode == RV32I_JAL || opcode == RV32I_JALR)
 							break;
 					}
@@ -246,8 +235,8 @@ namespace riscv
 
 				for (size_t i = 0; i < block_array_count; i++) {
 					auto& tuple = block_array[i];
-					auto* entry = std::get<0>(tuple);
-					const auto length = std::get<1>(tuple);
+					DecoderData<W>* entry = std::get<0>(tuple);
+					const unsigned length = std::get<1>(tuple);
 
 					// Ends at instruction *before* last PC
 					// Subtract block PC in order to get length,
@@ -283,7 +272,7 @@ namespace riscv
 				const auto opcode = instruction.opcode();
 
 				// All opcodes that can modify PC and stop the machine
-				if (opcode == RV32I_BRANCH || is_stopping_system(instruction)
+				if (opcode == RV32I_BRANCH || opcode == RV32I_SYSTEM
 					|| opcode == RV32I_JAL || opcode == RV32I_JALR)
 					idxend = 0;
 			#ifdef RISCV_BINARY_TRANSLATION
