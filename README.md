@@ -23,9 +23,7 @@ Goals:
 - [Secure speculation-safe sandbox](SECURITY.md)
 - Low attack surface, only 20k LOC
 - Platform-independent and super-easy to embed
-	- Supports all architectures and all platforms, with binary translation
-	- Yes, that includes all consoles, all Mobile platforms etc. With embeddable binary translation.
-	- Requires only C++17 or later
+	- Supports all architectures and all platforms, C++17 or later
 - Just-in-time compilation for development usage
 	- [libtcc](#embedded-libtcc) can be used to instantly improve emulation of RISC-V programs
 - High-performance binary translation on end-user systems through DLLs (eg. Windows)
@@ -37,10 +35,10 @@ Goals:
 - Tiny memory footprint
 	- Less than 40kB total memory usage for [fibonacci program](/binaries/measure_mips/fib.c)
 - High scalability with unique CoW-support and shared memories
-	- Serve requests using ephemeral VMs in ~1us in production (not microbenchmark/slideware)
+	- Serve requests using ephemeral VMs in [~1us in production](https://github.com/libriscv/multi_tenant_drogon)
 	- Execute segments are automatically shared among all instances (with or without forking)
-- Dynamic linking and run-time dlopen() support
-- Supports sandboxing language-runtimes that use JIT-compilation, eg. V8 JavaScript
+- Dynamic linking and run-time dlopen() support (see CLI)
+- Supports sandboxing language-runtimes that use JIT-compilation, eg. V8 JavaScript and LuaJIT
 	- JIT-compiled segments will be detected, processed and can use the fast-path dispatch
 
 Non goals:
