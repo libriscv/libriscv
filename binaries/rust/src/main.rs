@@ -38,6 +38,15 @@ pub fn nth_prime(n: u32) -> Option<u64> {
 	None
 }
 
+#[no_mangle]
+pub extern "C" fn __floatsitf(n: u32) -> f64 {
+	n as f64
+}
+#[no_mangle]
+pub	extern "C" fn __floatunsitf(n: u32) -> f64 {
+	n as f64
+}
+
 fn main() {
 	assert_eq!(nth_prime(0), None);
 	assert_eq!(nth_prime(1), Some(2));
@@ -46,6 +55,6 @@ fn main() {
 
 	println!("Sieve(256000) == {}\n", nth_prime(256000).unwrap());
 
-	let resp = reqwest::blocking::get("https://httpbin.org/ip").unwrap().text().unwrap();
-	println!("{:#?}", resp);
+	//let resp = reqwest::blocking::get("https://httpbin.org/ip").unwrap().text().unwrap();
+	//println!("{:#?}", resp);
 }
