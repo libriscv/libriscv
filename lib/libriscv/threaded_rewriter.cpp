@@ -12,7 +12,7 @@ namespace riscv
 {
 	template <int W> RISCV_INTERNAL
 	size_t DecodedExecuteSegment<W>::threaded_rewrite(
-		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr, [[maybe_unused]] uint8_t& handler_idx)
+		size_t bytecode, [[maybe_unused]] address_t pc, rv32i_instruction& instr)
 	{
 		static constexpr unsigned PCAL = compressed_enabled ? 2 : 4;
 		static constexpr unsigned XLEN = 8 * W;

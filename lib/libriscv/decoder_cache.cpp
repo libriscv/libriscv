@@ -133,24 +133,30 @@ namespace riscv
 	}
 
 	template <int W>
+	struct DecoderEntryAndCount {
+		DecoderData<W>* entry;
+		int count;
+	};
+
+	template <int W>
 	static inline void fill_entries(
-		const std::array<std::tuple<DecoderData<W>*, int>, 256>& block_array,
+		const std::array<DecoderEntryAndCount<W>, 256>& block_array,
 		size_t block_array_count, address_type<W> block_pc, address_type<W> current_pc)
 	{
-		const unsigned last_count = std::get<1>(block_array[block_array_count - 1]);
+		const unsigned last_count = block_array[block_array_count - 1].count;
 		unsigned count = (current_pc - block_pc) >> 1;
 		count -= last_count;
-		if (count > 255)
-			throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
+		//if (count > 255)
+		//	throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
 
 		for (size_t i = 0; i < block_array_count; i++) {
-			auto& tuple = block_array[i];
-			DecoderData<W>* entry = std::get<0>(tuple);
-			const int length = std::get<1>(tuple);
+			const DecoderEntryAndCount<W>& tuple = block_array[i];
+			DecoderData<W>* entry = tuple.entry;
+			const int length = tuple.count;
 
 			// Ends at instruction *before* last PC
 			entry->idxend = count;
-			entry->icount = count + 1 - (block_array_count - i);
+			entry->icount = count + 1 - block_array_count + i;
 
 			if constexpr (VERBOSE_DECODER) {
 				fprintf(stderr, "Block 0x%lX has %u instructions\n", block_pc, count);
@@ -179,7 +185,7 @@ namespace riscv
 			// Go through entire executable segment and measure lengths
 			// Record entries while looking for jumping instruction, then
 			// fill out data and opcode lengths previous instructions.
-			std::array<std::tuple<DecoderData<W>*, int>, 256> block_array;
+			std::array<DecoderEntryAndCount<W>, 256> block_array;
 			address_type<W> pc = base_pc;
 			while (pc < last_pc) {
 				size_t block_array_count = 0;
@@ -200,7 +206,7 @@ namespace riscv
 						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
 #else
 					[[maybe_unused]] address_type<W> pc2;
-					if (__builtin_add_overflow(pc, length, &pc2))
+					if (UNLIKELY(__builtin_add_overflow(pc, length, &pc2)))
 						throw MachineException(INVALID_PROGRAM, "PC overflow during execute segment decoding");
 #endif
 					pc += length;
@@ -420,7 +426,7 @@ namespace riscv
 				// Cache the (modified) instruction bits
 				auto bytecode = CPU<W>::computed_index_for(instruction);
 				// Threaded rewrites are **always** enabled
-				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten, entry.m_handler);
+				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
 				entry.set_bytecode(bytecode);
 				entry.instr = rewritten.whole;
 			} else {
