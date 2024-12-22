@@ -26,6 +26,7 @@ namespace riscv
 		static constexpr unsigned PF_W = 1 << 1;
 		static constexpr unsigned PF_R = 1 << 2;
 
+		static constexpr unsigned STT_NOTYPE = 0;
 		static constexpr unsigned STT_OBJECT = 1;
 		static constexpr unsigned STT_FUNC   = 2;
 
