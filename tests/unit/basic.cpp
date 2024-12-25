@@ -16,6 +16,9 @@ static bool is_zig() {
 
 TEST_CASE("Instantiate machine", "[Instantiate]")
 {
+	REQUIRE(RISCV_VERSION_MAJOR >= 1);
+	REQUIRE(RISCV_VERSION_MINOR >= 10);
+
 	const auto binary = build_and_load(R"M(
 	int main() {
 		return 666;

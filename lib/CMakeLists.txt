@@ -68,6 +68,10 @@ if (RISCV_BINARY_TRANSLATION)
 	option(RISCV_LIBTCC              "Enable binary translation with libtcc" OFF)
 endif()
 
+# Version information from git tags
+set(RISCV_VERSION_MAJOR 1)
+set(RISCV_VERSION_MINOR 11)
+
 set (SOURCES
 		libriscv/cpu.cpp
 		libriscv/debug.cpp
@@ -151,6 +155,8 @@ if (RISCV_BINARY_TRANSLATION)
 	endif()
 endif()
 
+# Generate the settings header
+# RISCV_VERSION_MAJOR and RISCV_VERSION_MINOR are required by libriscv_settings.h.in
 configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
 if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 	option(RISCV_LIBTCC_DISTRO_PACKAGE "Use the distributions libtcc" OFF)

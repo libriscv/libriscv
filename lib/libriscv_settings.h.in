@@ -22,4 +22,10 @@
 #cmakedefine RISCV_TAILCALL_DISPATCH
 #cmakedefine RISCV_LIBTCC
 
+/*
+ * Version information.
+ */
+#define RISCV_VERSION_MAJOR @RISCV_VERSION_MAJOR@
+#define RISCV_VERSION_MINOR @RISCV_VERSION_MINOR@
+
 #endif /* LIBRISCV_SETTINGS_H */
