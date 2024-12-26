@@ -62,6 +62,7 @@ static const struct option long_options[] = {
 	{"no-translate", no_argument, 0, 'n'},
 	{"no-translate-future", no_argument, 0, 'N'},
 	{"translate-regcache", no_argument, 0, 'R'},
+	{"no-translate-regcache", no_argument, 0, 1000},
 	{"jump-hints", required_argument, 0, 'J'},
 	{"background", no_argument, 0, 'B'},
 	{"mingw", no_argument, 0, 'm'},
@@ -94,6 +95,7 @@ static void print_help(const char* name)
 		"  -n, --no-translate Disable binary translation\n"
 		"  -N, --no-translate-future Disable binary translation of non-initial segments\n"
 		"  -R, --translate-regcache Enable register caching in binary translator\n"
+		"      --no-translate-regcache Disable register caching in binary translator\n"
 		"  -J, --jump-hints file  Load jump location hints from file, unless empty then record instead\n"
 		"  -B  --background   Run binary translation in background thread\n"
 		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
@@ -181,6 +183,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'A': args.allowed_files.push_back(optarg); break;
 			case 'X': args.execute_only = true; break;
 			case 'I': args.ignore_text = true; break;
+			case 1000: args.translate_regcache = false; break;
 			case 'c': break;
 			default:
 				fprintf(stderr, "Unknown option: %c\n", c);
