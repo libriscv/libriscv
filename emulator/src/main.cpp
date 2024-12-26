@@ -107,7 +107,7 @@ static void print_help(const char* name)
 		"  -c, --call func    Call a function after loading the program\n"
 		"\n"
 	);
-	printf("libriscv is compiled with:\n"
+	printf("libriscv v%d.%d is compiled with:\n"
 #ifdef RISCV_32I
 		"-  32-bit RISC-V support (RV32GB)\n"
 #endif
@@ -145,7 +145,8 @@ static void print_help(const char* name)
 #ifdef RISCV_TIMED_VMCALLS
 		"-  Timed VM calls are enabled (experimental)\n"
 #endif
-		"\n"
+		"\n",
+		RISCV_VERSION_MAJOR, RISCV_VERSION_MINOR
 	);
 }
 
