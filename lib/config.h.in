@@ -1,0 +1,4 @@
+#define TCC_TARGET_X86_64 1
+#define TARGETOS_Linux 1
+#define TCC_VERSION "0.9.27"
+#define CONFIG_TCC_PREDEFS 1

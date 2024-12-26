@@ -158,19 +158,7 @@ endif()
 # Generate the settings header
 # RISCV_VERSION_MAJOR and RISCV_VERSION_MINOR are required by libriscv_settings.h.in
 configure_file(libriscv_settings.h.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv_settings.h)
-if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
-	option(RISCV_LIBTCC_DISTRO_PACKAGE "Use the distributions libtcc" OFF)
-
-	if (RISCV_LIBTCC_DISTRO_PACKAGE)
-		message(STATUS "libriscv: Using libtcc from distribution package")
-		configure_file(libriscv_libtcc_distro.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
-	else()
-		message(STATUS "libriscv: Using libtcc from remote repository")
-		configure_file(libriscv_libtcc.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
-	endif()
-else()
-	configure_file(libriscv.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
-endif()
+configure_file(libriscv.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc)
 
 add_library(riscv ${SOURCES})
 if (COSMOPOLITAN)
@@ -222,33 +210,36 @@ endif()
 
 
 if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
-	if(CMAKE_VERSION VERSION_LESS "3.14.0" OR RISCV_LIBTCC_DISTRO_PACKAGE) 
-		target_link_libraries(riscv PUBLIC -ltcc)
-		set_source_files_properties(libriscv/tr_tcc.cpp PROPERTIES
-			COMPILE_DEFINITIONS RISCV_LIBTCC_PACKAGE=1)
-		set(LIBTCC_FROM_PACKAGE TRUE)
-	else()
-		include(FetchContent)
-		FetchContent_Declare(
-			libtcc
-			GIT_REPOSITORY    https://github.com/fwsGonzo/libtcc-cmake
-			GIT_TAG           master
-		)
-		FetchContent_MakeAvailable(libtcc)
-		target_compile_definitions(libtcc PUBLIC LIBTCC1_NAME="libtcc1.a")
-		if (BUILD_SHARED_LIBS)
-			target_compile_options(libtcc PRIVATE -fPIC)
-		endif()
-		target_link_libraries(riscv PUBLIC libtcc libtcc1)
-		set(LIBTCC_FROM_PACKAGE FALSE)
+	enable_language(C)
+	include(FetchContent)
+	FetchContent_Declare(tinycc
+		GIT_REPOSITORY https://github.com/fwsGonzo/tinycc.git
+		GIT_TAG        mob
+	)
+	FetchContent_MakeAvailable(tinycc)
 
-		# Installed version will need to find libtcc
-		if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
-			target_compile_definitions(riscv PUBLIC
-				LIBTCC_LIBRARY_PATH="/usr/lib/libriscv"
-			)
-		endif()
-	endif()
+	set(TINYCC_LOCATION    "${CMAKE_BINARY_DIR}/_deps/tinycc-src")
+	set(CONFIG_H_LOCATION "${TINYCC_LOCATION}/config.h")
+	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CONFIG_H_LOCATION})
+	set_source_files_properties(${CONFIG_H_LOCATION} PROPERTIES GENERATED TRUE)
+	file(COPY "${TINYCC_LOCATION}/libtcc.h" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+	file(COPY "${TINYCC_LOCATION}/libtcc1.h" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+	target_sources(riscv PRIVATE
+		${tinycc_SOURCE_DIR}/libtcc.c
+		${tinycc_SOURCE_DIR}/libtcc.h
+		${CONFIG_H_LOCATION}
+	)
+	target_compile_definitions(riscv PRIVATE
+		CONFIG_TCC_PREDEFS=1
+		TARGETOS_Linux=1
+		TCC_VERSION="0.9.27"
+		TCC_IS_NATIVE=1
+		TCC_TARGET_X86_64=1
+	)
+	target_include_directories(riscv PUBLIC
+		"${CMAKE_CURRENT_BINARY_DIR}"
+	)
 endif()
 
 if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
@@ -314,14 +305,4 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		FILES ${CMAKE_CURRENT_BINARY_DIR}/libriscv.pc
 		DESTINATION lib/pkgconfig
 	)
-	if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
-		# Install our own copy of libtcc, if we're not using the system package
-		if (NOT LIBTCC_FROM_PACKAGE)
-			install(FILES
-				${CMAKE_BINARY_DIR}/_deps/libtcc-build/libtcc.a
-				${CMAKE_BINARY_DIR}/libtcc1.a
-				DESTINATION lib/${PROJECT_NAME}
-			)
-		endif()
-	endif()
 endif()
