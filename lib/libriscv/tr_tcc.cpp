@@ -24,9 +24,17 @@ namespace riscv
 		tcc_define_symbol(state, "ARCH", "HOST_UNKNOWN");
 		tcc_set_options(state, "-std=c99 -O2 -nostdlib");
 
-#ifdef _WIN32
+#if defined(_WIN32)
 		// Look for some headers in the win32 directory
 		tcc_add_include_path(state, "win32");
+#elif defined(__linux__) && defined(__x86_64__)
+		tcc_add_include_path(state, "/usr/include/x86_64-linux-gnu");
+#elif defined(__linux__) && defined(__i386__)
+		tcc_add_include_path(state, "/usr/include/i386-linux-gnu");
+#elif defined(__linux__) && defined(__aarch64__)
+		tcc_add_include_path(state, "/usr/include/aarch64-linux-gnu");
+#elif defined(__linux__) && defined(__risv)
+		tcc_add_include_path(state, "/usr/include/riscv64-linux-gnu");
 #endif
 
 		tcc_add_symbol(state, "memset", (void*)memset);
