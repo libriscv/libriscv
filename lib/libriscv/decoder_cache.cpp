@@ -44,6 +44,7 @@ namespace std {
 namespace riscv
 {
 	static constexpr bool VERBOSE_DECODER = false;
+	static std::mutex handler_idx_mutex;
 #ifdef ENABLE_TIMINGS
 	static inline timespec time_now();
 	static inline long nanodiff(timespec, timespec);
@@ -505,6 +506,8 @@ namespace riscv
 	template <int W> RISCV_INTERNAL
 	size_t DecoderData<W>::handler_index_for(Handler new_handler)
 	{
+		std::scoped_lock lock(handler_idx_mutex);
+
 		auto it = handler_cache.find(new_handler);
 		if (it != handler_cache.end())
 			return it->second;
