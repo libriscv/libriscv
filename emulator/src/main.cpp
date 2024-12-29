@@ -374,11 +374,6 @@ static void run_program(
 			}
 			if (path == "/etc/ssl/certs/ca-certificates.crt")
 				return true;
-			// ld-linux
-			if (path == "/lib/riscv64-linux-gnu/ld-linux-riscv64-lp64d.so.1") {
-				path = DYNAMIC_LINKER;
-				return true;
-			}
 
 			// Paths that are allowed to be opened
 			static const std::string sandbox_libdir  = "/lib/riscv64-linux-gnu/";
@@ -729,7 +724,11 @@ int main(int argc, const char** argv)
 				if (interpreter.empty()) {
 					interpreter = DYNAMIC_LINKER;
 				}
-				vbin = load_file(std::string(interpreter));
+				try {
+					vbin = load_file(std::string(interpreter));
+				} catch (const std::exception& e) {
+					vbin = load_file(DYNAMIC_LINKER);
+				}
 				binary = { (const char*)vbin.data(), vbin.size() };
 				// Insert program name as argv[1]
 				args.insert(args.begin() + 1, args.at(0));
