@@ -113,16 +113,13 @@ _libriscv_ is primarily configured using CMake options:
 > RISCV_ENCOMPASSING_ARENA_BITS
 - When RISCV_ENCOMPASSING_ARENA is enabled, this option sets the number of bits each memory address has, effectively making up the size of the address space. For example, 32-bits is a 4GB address space, and 30 is a 1GB address space. 32-bits is most likely the fastest setting. The entire address space is mapped out at construction. Address masking is used to avoid bounds-checking and speculation issues. Experimental feature.
 
-> RISCV_TIMED_VMCALLS
-- Allow execution without instruction counting, instead execution is timed out using timers and signals. Very experimental feature. Works well in a CLI, but should _definitely not_ be used in production.
-
 The fastest configuration is:
 1. Use 32-bit RISC-V for fast instruction dispatch, or 64-bit RISC-V for higher memory bandwidth
 2. Disable C-extension, unless your RISC-V programs use it
 3. Always enable flat read-write arena
 4. Enable experimental + 32-bit encompassing arena
 5. Enable binary translation (or use embedded source files)
-6. Enable timed VM calls
+6. Disable execution timeout (use CPU::simulate_inaccurate)
 7. Enable link-time optimization
 
 Although this is the fastest known configuration, one should use the one that is most convenient.

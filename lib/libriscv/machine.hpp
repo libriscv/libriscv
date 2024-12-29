@@ -418,14 +418,6 @@ namespace riscv
 		Signals<W>& signals();
 		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
 
-#ifdef RISCV_TIMED_VMCALLS
-		template <typename... Args>
-		address_t timed_vmcall(float timeout, const char* func_name, Args&&... args);
-
-		template <typename... Args>
-		address_t timed_vmcall(float timeout, address_t func_addr, Args&&... args);
-#endif
-
 		// Resets the machine to the initial state. It is, however, not a
 		// reliable way to reset complex machines with all kinds of features
 		// attached to it, and should almost never be used. It is recommended
@@ -467,14 +459,6 @@ namespace riscv
 		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		std::unique_ptr<Signals<W>> m_signals = nullptr;
 		std::shared_ptr<MachineOptions<W>> m_options = nullptr;
-
-#ifdef RISCV_TIMED_VMCALLS
-	public:
-		void execute_with_timeout(float timeout, address_t pc);
-	private:
-		void disable_timer();
-		void* m_timer_id = nullptr;
-#endif
 
 		static_assert((W == 4 || W == 8 || W == 16), "Must be either 32-bit, 64-bit or 128-bit ISA");
 		static void default_printer(const Machine&, const char*, size_t);

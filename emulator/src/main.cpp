@@ -144,9 +144,6 @@ static void print_help(const char* name)
 #define STR(x) _STR(x)
 		"-  " STR(RISCV_ENCOMPASSING_ARENA_BITS) "-bit masked address space is enabled (experimental)\n"
 #endif
-#ifdef RISCV_TIMED_VMCALLS
-		"-  Timed VM calls are enabled (experimental)\n"
-#endif
 		"\n",
 		RISCV_VERSION_MAJOR, RISCV_VERSION_MINOR
 	);
@@ -562,13 +559,8 @@ static void run_program(
 			if (cli_args.accurate)
 				machine.simulate(cli_args.fuel);
 			else {
-#ifdef RISCV_TIMED_VMCALLS
-				// Simulation with experimental timeout
-				machine.execute_with_timeout(360.0f, machine.cpu.pc());
-#else
 				// Simulate until it eventually stops (or user interrupts)
 				machine.cpu.simulate_inaccurate(machine.cpu.pc());
-#endif
 			}
 		}
 	} catch (const riscv::MachineException& me) {
@@ -629,11 +621,7 @@ static void run_program(
 		}
 		if (addr != 0) {
 			printf("Calling function %s @ 0x%lX\n", cli_args.call_function.c_str(), long(addr));
-#ifdef RISCV_TIMED_VMCALLS
-			machine.timed_vmcall(addr, 30.0f);
-#else
 			machine.vmcall(addr);
-#endif
 		} else {
 			printf("Error: Function %s not found, not able to call\n", cli_args.call_function.c_str());
 		}
