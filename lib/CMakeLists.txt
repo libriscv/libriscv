@@ -57,8 +57,6 @@ if (RISCV_EXPERIMENTAL)
 	else()
 		unset(RISCV_ENCOMPASSING_ARENA_BITS CACHE)
 	endif()
-	# TIMED_VMCALLS enables timed VM calls through timers and signals.
-	option(RISCV_TIMED_VMCALLS       "Enable timed VM calls" OFF)
 else()
 	unset(RISCV_ENCOMPASSING_ARENA CACHE)
 	unset(RISCV_ENCOMPASSING_ARENA_BITS CACHE)
@@ -188,10 +186,6 @@ if (RISCV_EXPERIMENTAL AND RISCV_ENCOMPASSING_ARENA)
 	target_compile_definitions(riscv PUBLIC
 		RISCV_ENCOMPASSING_ARENA_BITS=${RISCV_ENCOMPASSING_ARENA_BITS}
 	)
-endif()
-
-if (RISCV_TIMED_VMCALLS)
-	target_compile_definitions(riscv PUBLIC RISCV_TIMED_VMCALLS=1)
 endif()
 
 if (RISCV_MULTIPROCESS)
