@@ -58,7 +58,9 @@ static inline float fmaxf(float x, float y) {
 static inline double fmax(double x, double y) {
 	return (x >= y) ? x : y;
 }
-#define do_bswap32(x) __builtin_bswap32(x)
+static inline uint32_t do_bswap32(uint32_t x) {
+	return (x << 24 | (x & 0xFF00) << 8 | (x & 0xFF0000) >> 8 | x >> 24);
+}
 #define do_bswap64(x) (do_bswap32((x) >> 32) | ((uint64_t)do_bswap32((x) >> 32) << 32))
 #define do_clz(x) api.clz(x)
 #define do_clzl(x) api.clzl(x)
