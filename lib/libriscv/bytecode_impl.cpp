@@ -578,8 +578,7 @@ INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
 
 INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 	VIEW_INSTR();
-	auto handler = DECODER().get_handler();
-	handler(CPU(), instr);
+	CPU().execute(DECODER().m_handler, DECODER().instr);
 	NEXT_BLOCK(instr.length(), true);
 }
 

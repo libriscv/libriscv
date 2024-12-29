@@ -253,7 +253,7 @@ namespace riscv
 						// We use a new block-ending fallback function handler instead.
 						rv32i_instruction instruction = read_instruction(exec_segment, pc - length, last_pc);
 						entry->set_bytecode(RV32I_BC_FUNCBLOCK);
-						entry->set_handler(CPU<W>::decode(instruction));
+						entry->set_invalid_handler(); // Resolve lazily
 						entry->instr = instruction.whole;
 						break;
 					}
@@ -516,7 +516,7 @@ namespace riscv
 			throw MachineException(INVALID_PROGRAM, "Too many instruction handlers");
 		instr_handlers[handler_count] = new_handler;
 		const size_t idx = handler_count++;
-		handler_cache.try_emplace(new_handler, idx);
+		handler_cache.emplace(new_handler, idx);
 		return idx;
 	}
 
