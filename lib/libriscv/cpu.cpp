@@ -41,8 +41,8 @@ namespace riscv
 	};
 
 	template <int W>
-	CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id, const Machine<W>& other)
-		: m_machine { machine }, m_exec(other.cpu.m_exec), m_cpuid { cpu_id }
+	CPU<W>::CPU(Machine<W>& machine, const Machine<W>& other)
+		: m_machine { machine }, m_exec(other.cpu.m_exec)
 	{
 		// Copy all registers except vectors
 		// Users can still copy vector registers by assigning to registers().rvv().
@@ -68,8 +68,6 @@ namespace riscv
 			// This function will (at most) validate the execute segment
 			this->jump(initial_pc);
 		}
-		// reset the page cache
-		this->m_cache = {};
 	}
 
 	template <int W>
@@ -208,17 +206,10 @@ restart_next_execute_segment:
 	{
 		// Fallback: Read directly from page memory
 		const auto pageno = this->pc() / address_t(Page::size());
-		// Page cache
-		auto& entry = this->m_cache;
-		if (entry.pageno != pageno || entry.page == nullptr) {
-			// delay setting entry until we know it's good!
-			auto e = decltype(m_cache){pageno, &machine().memory.get_exec_pageno(pageno)};
-			if (UNLIKELY(!e.page->attr.exec)) {
-				trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
-			}
-			entry = e;
+		const auto& page = machine().memory.get_exec_pageno(pageno);
+		if (UNLIKELY(!page.attr.exec)) {
+			trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
 		}
-		const auto& page = *entry.page;
 		const auto offset = this->pc() & (Page::size()-1);
 		format_t instruction;
 

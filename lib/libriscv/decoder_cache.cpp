@@ -625,10 +625,9 @@ namespace riscv
 	template <int W>
 	std::shared_ptr<DecodedExecuteSegment<W>>& Memory<W>::next_execute_segment()
 	{
-		if (LIKELY(m_exec_segs < MAX_EXECUTE_SEGS)) {
-			auto& result = this->m_exec.at(m_exec_segs);
-			m_exec_segs ++;
-			return result;
+		if (LIKELY(m_exec.size() < RISCV_MAX_EXECUTE_SEGS)) {
+			m_exec.push_back(nullptr);
+			return m_exec.back();
 		}
 		throw MachineException(INVALID_PROGRAM, "Max execute segments reached");
 	}
@@ -645,17 +644,15 @@ namespace riscv
 		// destructor could throw, so let's invalidate early
 		machine().cpu.set_execute_segment(*CPU<W>::empty_execute_segment());
 
-		m_exec_segs = std::min(m_exec_segs, m_exec.size());
-		while (m_exec_segs > 0) {
-			m_exec_segs--;
-
+		while (!m_exec.empty()) {
 			try {
-				auto& segment = m_exec.at(m_exec_segs);
+				auto& segment = m_exec.back();
 				if (segment) {
 					const SegmentKey key = SegmentKey::from(*segment, memory_arena_size());
 					segment = nullptr;
 					shared_execute_segments<W>.remove_if_unique(key);
 				}
+				m_exec.pop_back();
 			} catch (...) {
 				// Ignore exceptions
 			}
@@ -666,11 +663,11 @@ namespace riscv
 	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
 	{
 		const SegmentKey key = SegmentKey::from(segment, memory_arena_size());
-		for (size_t i = 0; i < m_exec_segs; i++) {
-			if (m_exec[i].get() == &segment) {
-				m_exec[i] = nullptr;
-				if (i == m_exec_segs - 1)
-					m_exec_segs--;
+		for (auto& seg : m_exec) {
+			if (seg.get() == &segment) {
+				seg = nullptr;
+				if (&seg == &m_exec.back())
+					m_exec.pop_back();
 				break;
 			}
 		}
@@ -684,8 +681,7 @@ namespace riscv
 		std::unordered_set<address_type<W>> addresses;
 		for (auto addr : machine().options().translator_jump_hints)
 			addresses.insert(addr);
-		for (size_t i = 0; i < m_exec_segs; i++) {
-			auto& segment = m_exec[i];
+		for (auto& segment : m_exec) {
 			if (segment) {
 				if (segment->is_recording_slowpaths()) {
 					for (auto addr : segment->slowpath_addresses())

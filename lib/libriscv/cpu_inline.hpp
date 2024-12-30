@@ -18,8 +18,8 @@ template <int W> RISCV_ALWAYS_INLINE inline
 const Memory<W>& CPU<W>::memory() const noexcept { return machine().memory; }
 
 template <int W>
-inline CPU<W>::CPU(Machine<W>& machine, unsigned cpu_id)
-	: m_machine { machine }, m_exec(empty_execute_segment().get()), m_cpuid { cpu_id }
+inline CPU<W>::CPU(Machine<W>& machine)
+	: m_machine { machine }, m_exec(empty_execute_segment().get())
 {
 }
 template <int W>
