@@ -62,7 +62,7 @@ namespace riscv
 		/// @return Current register state
 		RISCV_ALWAYS_INLINE const auto& registers() const noexcept { return this->m_regs; }
 
-		int cpu_id() const noexcept { return m_cpuid; }
+		int cpu_id() const noexcept { return 0; }
 
 		auto& reg(uint32_t idx) noexcept { return registers().get(idx); }
 		const auto& reg(uint32_t idx) const noexcept { return registers().get(idx); }
@@ -124,8 +124,8 @@ namespace riscv
 		void reset();
 		void reset_stack_pointer() noexcept;
 
-		CPU(Machine<W>&, unsigned cpu_id);
-		CPU(Machine<W>&, unsigned cpu_id, const Machine<W>& other); // Fork
+		CPU(Machine<W>&);
+		CPU(Machine<W>&, const Machine<W>& other); // Fork
 
 		DecodedExecuteSegment<W>& init_execute_area(const void* data, address_t begin, address_t length, bool is_likely_jit = false);
 		void set_execute_segment(DecodedExecuteSegment<W>& seg) noexcept { m_exec = &seg; }
@@ -177,11 +177,13 @@ namespace riscv
 		// Retrieve default handler for unimplemented instructions (can be returned in on_unimplemented_instruction)
 		static const instruction_t& get_unimplemented_instruction() noexcept;
 
+#ifdef RISCV_LIBTCC
 		// Set current exception
 		void set_current_exception(std::exception_ptr&& ptr) noexcept { m_current_exception = std::move(ptr); }
 		void clear_current_exception() noexcept { m_current_exception = nullptr; }
 		bool has_current_exception() const noexcept { return m_current_exception != nullptr; }
 		auto& current_exception() const noexcept { return m_current_exception; }
+#endif
 
 	private:
 		Registers<W> m_regs;
@@ -190,13 +192,10 @@ namespace riscv
 		// ELF programs linear .text segment (initialized as empty segment)
 		DecodedExecuteSegment<W>* m_exec;
 
-		// Page cache for execution on virtual memory
-		mutable CachedPage<W, const Page> m_cache;
-
-		const unsigned m_cpuid;
-
+#ifdef RISCV_LIBTCC
 		// The current exception (used by eg. TCC which doesn't create unwinding tables)
 		std::exception_ptr m_current_exception = nullptr;
+#endif
 
 		// The default execute fault simply triggers the exception
 		execute_fault_t m_fault = [] (auto& cpu, auto&) {

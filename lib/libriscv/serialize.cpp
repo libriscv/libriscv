@@ -158,7 +158,7 @@ namespace riscv
 	{
 		// restore CPU registers and counters
 		this->m_regs = state.registers;
-		this->m_cache = {};
+		this->m_exec = CPU::empty_execute_segment().get();
 	}
 	template <int W>
 	void Memory<W>::deserialize_from(const std::vector<uint8_t>& vec,

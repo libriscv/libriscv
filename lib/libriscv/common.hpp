@@ -89,9 +89,6 @@ namespace riscv
 		/// @brief Virtual memory allocated for the main stack at construction.
 		uint32_t stack_size = 1ul << 20; // 1MB default stack
 
-		/// @brief The CPU id to assign to a constructed machine.
-		unsigned cpu_id = 0;
-
 		/// @brief Setting this option will load the binary at construction as if it
 		/// was a RISC-V ELF binary. When disabled, no loading occurs.
 		bool load_program = true;

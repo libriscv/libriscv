@@ -1165,15 +1165,20 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				cpu.machine().system_call(sysno);
 				return cpu.registers().pc != current_pc || cpu.reg(REG_TP) != current_tp || cpu.machine().stopped();
 			} catch (...) {
+#ifdef RISCV_LIBTCC
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
 				return false;
+#else
+				throw;
+#endif
 			}
 		},
 		.unknown_syscall = [] (CPU<W>& cpu, address_type<W> sysno) {
 			cpu.machine().on_unhandled_syscall(cpu.machine(), sysno);
 		},
 		.system = [] (CPU<W>& cpu, uint32_t instr) {
+#ifdef RISCV_LIBTCC
 			if (libtcc_enabled && cpu.current_execute_segment().is_libtcc()) {
 				try {
 					cpu.machine().system(rv32i_instruction{instr});
@@ -1184,6 +1189,9 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 			} else {
 				cpu.machine().system(rv32i_instruction{instr});
 			}
+#else
+			cpu.machine().system(rv32i_instruction{instr});
+#endif
 		},
 		.execute = [] (CPU<W>& cpu, uint32_t instr) -> unsigned {
 			const rv32i_instruction rvi{instr};
@@ -1192,8 +1200,12 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 					cpu.decode(rvi).handler(cpu, rvi);
 					return 0;
 				} catch (...) {
+#ifdef RISCV_LIBTCC
 					cpu.set_current_exception(std::current_exception());
 					return 1;
+#else
+					throw;
+#endif
 				}
 			} else {
 				auto* handler = cpu.decode(rvi).handler;
@@ -1207,13 +1219,18 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				DecoderData<W>::get_handlers()[index](cpu, rvi);
 				return 0;
 			} catch (...) {
+#ifdef RISCV_LIBTCC
 				cpu.set_current_exception(std::current_exception());
 				return 1;
+#else
+				throw;
+#endif
 			}
 		},
 		.handlers = (void (**)(CPU<W>&, uint32_t)) DecoderData<W>::get_handlers(),
 		.trigger_exception = [] (CPU<W>& cpu, address_type<W> pc, int e) {
 			cpu.registers().pc = pc; // XXX: Set PC to the failing instruction (?)
+#ifdef RISCV_LIBTCC
 			if (libtcc_enabled && cpu.current_execute_segment().is_libtcc())
 			{
 				// If we're using libtcc, we can't throw C++ exceptions because
@@ -1228,6 +1245,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				}
 				return;
 			}
+#endif
 			cpu.trigger_exception(e);
 		},
 		.trace = [] (CPU<W>& cpu, const char* msg, address_type<W> addr, uint32_t instr) {

@@ -66,7 +66,7 @@ bool Machine<W>::multiprocess(unsigned num_cpus, uint64_t maxi,
 			try {
 				// NOTE: minimal_fork causes a ton of contention. Avoid!
 				// NOTE: cannot use arena as it can fail to read the origin stack
-				Machine<W> fork { *this, { .cpu_id = id, .use_memory_arena = false } };
+				Machine<W> fork { *this, { .use_memory_arena = false } };
 
 				fork.set_userdata(this->get_userdata<void>());
 				fork.set_printer([] (const auto&, const char*, size_t) {});

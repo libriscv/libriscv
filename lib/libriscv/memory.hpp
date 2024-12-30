@@ -29,7 +29,6 @@ namespace riscv
 		static constexpr address_t BRK_MAX      = RISCV_BRK_MEMORY_SIZE; // Default BRK size
 		static constexpr address_t DYLINK_BASE  = 0x40000; // Dynamic link base address
 		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
-		static constexpr size_t    MAX_EXECUTE_SEGS = RISCV_MAX_EXECUTE_SEGS;
 
 		template <typename T>
 		T read(address_t src);
@@ -203,7 +202,7 @@ namespace riscv
 		std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr);
 		const std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr) const;
 		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len, bool is_initial, bool is_likely_jit = false);
-		size_t cached_execute_segments() const noexcept { return m_exec_segs; }
+		size_t execute_segments_count() const noexcept { return m_exec.size(); }
 		// Evict all execute segments, also disabling the main execute segment
 		void evict_execute_segments();
 		void evict_execute_segment(DecodedExecuteSegment<W>&);
@@ -305,8 +304,7 @@ namespace riscv
 #endif
 
 		// Execute segments
-		std::array<std::shared_ptr<DecodedExecuteSegment<W>>, MAX_EXECUTE_SEGS> m_exec;
-		size_t m_exec_segs = 0;
+		std::vector<std::shared_ptr<DecodedExecuteSegment<W>>> m_exec;
 		std::shared_ptr<DecodedExecuteSegment<W>>& next_execute_segment();
 
 		// Linear arena at start of memory (mmap-backed)

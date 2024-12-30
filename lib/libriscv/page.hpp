@@ -105,15 +105,15 @@ struct Page
 		if (attr.non_owning) m_page.release();
 	}
 
-	auto& page() noexcept { return *m_page; }
-	const auto& page() const noexcept { return *m_page; }
+	PageData& page() noexcept { return *m_page; }
+	const PageData& page() const noexcept { return *m_page; }
 
 	std::string to_string() const;
 
-	auto* data() noexcept {
+	uint8_t* data() noexcept {
 		return page().buffer8.data();
 	}
-	const auto* data() const noexcept {
+	const uint8_t* data() const noexcept {
 		return page().buffer8.data();
 	}
 	void new_data(PageData* data, bool data_owned);
