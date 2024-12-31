@@ -748,6 +748,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets) {
 	this->install_syscall_handler(56, syscall_openat<W>);
 	this->install_syscall_handler(57, syscall_close<W>);
 	this->install_syscall_handler(66, syscall_writev<W>);
+	// 73: ppoll
+	this->install_syscall_handler(73, syscall_stub_zero<W>);
 	this->install_syscall_handler(78, syscall_readlinkat<W>);
 	// 79: fstatat
 	this->install_syscall_handler(79, syscall_fstatat<W>);
