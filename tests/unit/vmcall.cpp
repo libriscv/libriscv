@@ -455,3 +455,92 @@ TEST_CASE("VM call and STOP instruction", "[VMCall]")
 		REQUIRE(state.output_is_hello_world);
 	}
 }
+
+TEST_CASE("VM call with arrays and vectors", "[VMCall]")
+{
+	const auto binary = build_and_load(R"M(
+	__attribute__((used, retain))
+	int pass_iarray(const int* data, unsigned size) {
+		if (size != 3)
+			return 0;
+		if (data[0] != 1 || data[1] != 2 || data[2] != 3)
+			return 0;
+		return 1;
+	}
+
+	__attribute__((used, retain))
+	int pass_farray(const float* data, unsigned size) {
+		if (size != 3)
+			return 0;
+		if (data[0] != 1.0f || data[1] != 2.0f || data[2] != 3.0f)
+			return 0;
+		return 1;
+	}
+
+	struct Data {
+		int val1;
+		int val2;
+		float f1;
+	};
+	__attribute__((used, retain))
+	int pass_struct(const struct Data* data, unsigned size) {
+		if (size != 3)
+			return 0;
+		if (data[0].val1 != 1 || data[0].val2 != 2 || data[0].f1 != 3.0f)
+			return 0;
+		if (data[1].val1 != 4 || data[1].val2 != 5 || data[1].f1 != 6.0f)
+			return 0;
+		if (data[2].val1 != 7 || data[2].val2 != 8 || data[2].f1 != 9.0f)
+			return 0;
+		return 1;
+	}
+
+	int main() {
+		return 666;
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"vmcall"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	machine.simulate(MAX_INSTRUCTIONS);
+	REQUIRE(machine.return_value<int>() == 666);
+
+	// Test passing an integer array
+	std::array<int, 3> iarray = {1, 2, 3};
+	// The array is pushed on the stack, so it becomes a sequential pointer argument
+	int res1 = machine.vmcall("pass_iarray", iarray, iarray.size());
+	REQUIRE(res1 == 1);
+
+	// A const-reference to an array should also work
+	const std::array<int, 3>& array_ref = iarray;
+	int res2 = machine.vmcall("pass_iarray", array_ref, array_ref.size());
+	REQUIRE(res2 == 1);
+
+	// Test passing a float array
+	std::array<float, 3> farray = {1.0f, 2.0f, 3.0f};
+	int res3 = machine.vmcall("pass_farray", farray, farray.size());
+	REQUIRE(res3 == 1);
+
+	// Test passing a vector
+	struct Data {
+		int val1;
+		int val2;
+		float f1;
+	};
+	std::vector<Data> vec = {
+		{1, 2, 3.0f},
+		{4, 5, 6.0f},
+		{7, 8, 9.0f},
+	};
+	// The vector is pushed on the stack, so it becomes a sequential pointer argument
+	int res4 = machine.vmcall("pass_struct", vec, vec.size());
+	REQUIRE(res4 == 1);
+
+	// A const-reference to a vector should also work
+	const std::vector<Data>& vec_ref = vec;
+	int res5 = machine.vmcall("pass_struct", vec_ref, vec_ref.size());
+	REQUIRE(res5 == 1);
+}

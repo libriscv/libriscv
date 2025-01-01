@@ -349,6 +349,12 @@ namespace riscv
 	struct is_stdstring : public std::is_same<T, std::basic_string<char>> {};
 
 	template<class T>
+	struct is_stdvector : public std::false_type {};
+
+	template<class T>
+	struct is_stdvector<std::vector<T>> : public std::true_type {};
+
+	template<class T>
 	struct is_stdarray_ptr : std::false_type {};
 
 	template<class T, std::size_t N>
