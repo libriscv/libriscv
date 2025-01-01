@@ -468,6 +468,10 @@ restart_precise_sim:
 						// Now rewrite it to a STOP instruction
 						cache_entry->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 1);
 						return true;
+					} else {
+						// Unconditional jump could be a tail call, in which
+						// case we can't confidently optimize this function
+						return false;
 					}
 				} else if (bytecode == RV32I_BC_STOP) {
 					// It's already a fast-path function
@@ -487,7 +491,8 @@ restart_precise_sim:
 	template <int W>
 	bool CPU<W>::create_fast_path_function(address_t addr)
 	{
-		return create_fast_path_function(*m_exec, addr);
+		DecodedExecuteSegment<W>* exec = machine().memory.exec_segment_for(addr).get();
+		return create_fast_path_function(*exec, addr);
 	}
 
 	template<int W> RISCV_COLD_PATH()
