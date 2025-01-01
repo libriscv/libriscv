@@ -14,7 +14,7 @@ inline bool Machine<W>::instruction_limit_reached() const noexcept {
 
 template <int W>
 template <bool Throw>
-inline bool Machine<W>::simulate_with(uint64_t max_instr, uint64_t counter, address_t pc)
+inline bool Machine<W>::simulate_with(int64_t max_instr, int64_t counter, address_t pc)
 {
 	const bool stopped_normally = cpu.simulate(pc, counter, max_instr);
 	if constexpr (Throw) {
@@ -31,14 +31,14 @@ inline bool Machine<W>::simulate_with(uint64_t max_instr, uint64_t counter, addr
 
 template <int W>
 template <bool Throw>
-inline bool Machine<W>::simulate(uint64_t max_instr, uint64_t counter)
+inline bool Machine<W>::simulate(int64_t max_instr, int64_t counter)
 {
 	return this->simulate_with<Throw>(max_instr, counter, cpu.pc());
 }
 
 template <int W>
 template <bool Throw>
-inline bool Machine<W>::resume(uint64_t max_instr)
+inline bool Machine<W>::resume(int64_t max_instr)
 {
 	return this->simulate<Throw>(this->instruction_counter() + max_instr, this->instruction_counter());
 }

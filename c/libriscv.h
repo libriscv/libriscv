@@ -94,10 +94,10 @@ LIBRISCVAPI const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigne
 LIBRISCVAPI void libriscv_stop(RISCVMachine *m);
 
 /* Return current instruction counter value. */
-LIBRISCVAPI uint64_t libriscv_instruction_counter(RISCVMachine *m);
+LIBRISCVAPI int64_t libriscv_instruction_counter(RISCVMachine *m);
 
 /* Return a *pointer* to the instruction max counter. */
-LIBRISCVAPI uint64_t * libriscv_max_counter_pointer(RISCVMachine *m);
+LIBRISCVAPI int64_t * libriscv_max_counter_pointer(RISCVMachine *m);
 
 /*** RISC-V system call handling ***/
 

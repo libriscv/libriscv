@@ -37,7 +37,7 @@ struct Arguments {
 	bool ignore_text = false;
 	bool background = false; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
-	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
+	int64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
 	std::vector<std::string> allowed_files;
 	std::string output_file;
 	std::string call_function;
@@ -195,7 +195,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 				return -1;
 			}
 			if (args.fuel == 0) {
-				args.fuel = UINT64_MAX;
+				args.fuel = INT64_MAX;
 			}
 			if (args.verbose) {
 				printf("* Fuel set to %" PRIu64 "\n", args.fuel);
@@ -602,10 +602,11 @@ static void run_program(
 		else
 		printf("Runtime: %.3fms   (Use --accurate for instruction counting)\n",
 			runtime.count()*1000.0);
-		printf("Pages in use: %zu (%" PRIu64 " kB virtual memory, total %" PRIu64 " kB)\n",
+		printf("Pages in use: %zu (%" PRIu64 " kB virtual memory, total %" PRIu64 " kB, machine: %zub)\n",
 			machine.memory.pages_active(),
 			machine.memory.pages_active() * riscv::Page::size() / uint64_t(1024),
-			machine.memory.memory_usage_total() / uint64_t(1024));
+			machine.memory.memory_usage_total() / uint64_t(1024),
+			sizeof(machine));
 	}
 
 	if (!cli_args.call_function.empty())

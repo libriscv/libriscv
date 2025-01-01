@@ -33,7 +33,7 @@ inline void Machine<W>::setup_call(Args&&... args)
 }
 
 template <int W>
-template <uint64_t MAXI, bool Throw, typename... Args> constexpr
+template <int64_t MAXI, bool Throw, typename... Args> constexpr
 inline address_type<W> Machine<W>::vmcall(address_t pc, Args&&... args)
 {
 	// reset the stack pointer to an initial location (deliberately)
@@ -41,7 +41,7 @@ inline address_type<W> Machine<W>::vmcall(address_t pc, Args&&... args)
 	// setup calling convention
 	this->setup_call(std::forward<Args>(args)...);
 	// execute guest function
-	if constexpr (MAXI == UINT64_MAX || MAXI == 0u) {
+	if constexpr (MAXI == INT64_MAX || MAXI == 0u) {
 		this->cpu.simulate_inaccurate(pc);
 	} else {
 		this->simulate_with<Throw>(MAXI, 0u, pc);
@@ -52,7 +52,7 @@ inline address_type<W> Machine<W>::vmcall(address_t pc, Args&&... args)
 }
 
 template <int W>
-template <uint64_t MAXI, bool Throw, typename... Args> constexpr
+template <int64_t MAXI, bool Throw, typename... Args> constexpr
 inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
@@ -61,7 +61,7 @@ inline address_type<W> Machine<W>::vmcall(const char* funcname, Args&&... args)
 
 template <int W>
 template <bool Throw, bool StoreRegs, typename... Args> inline
-address_type<W> Machine<W>::preempt(uint64_t max_instr, address_t call_addr, Args&&... args)
+address_type<W> Machine<W>::preempt(int64_t max_instr, address_t call_addr, Args&&... args)
 {
 	Registers<W> regs;
 	if constexpr (StoreRegs) {
@@ -77,7 +77,7 @@ address_type<W> Machine<W>::preempt(uint64_t max_instr, address_t call_addr, Arg
 
 template <int W>
 template <bool Throw, bool StoreRegs, typename... Args> inline
-address_type<W> Machine<W>::preempt(uint64_t max_instr, const char* funcname, Args&&... args)
+address_type<W> Machine<W>::preempt(int64_t max_instr, const char* funcname, Args&&... args)
 {
 	address_t call_addr = memory.resolve_address(funcname);
 	return preempt<Throw, StoreRegs>(max_instr, call_addr, std::forward<Args>(args)...);

@@ -64,7 +64,7 @@ struct {
 	uint32_t last_fps_ts = 0;
 	bool     restarting = false;
 	uint16_t frames;
-	uint64_t last_counter = 0;
+	int64_t  last_counter = 0;
 	double   fps = 60.0;
 	int64_t  adjust = 16700000L;
 } stats;
@@ -274,7 +274,7 @@ int main(int argc, char *argv[])
 			// Keep the instruction counter value without resetting it,
 			// by instead setting the max counter relative to the
 			// current instruction counter.
-			machine.resume(50'000'000ull);
+			machine.resume(50'000'000ll);
 
 			// Statistics performed outside of simulation
 			if (stats.restarting) {

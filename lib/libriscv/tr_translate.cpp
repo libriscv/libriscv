@@ -718,7 +718,7 @@ struct Mappings {
 	addr_t   addr;
 	unsigned mapping_index;
 };
-typedef ReturnValues (*bintr_func)(CPU*, uint64_t, uint64_t, addr_t);
+typedef ReturnValues (*bintr_func)(CPU*, int64_t, int64_t, addr_t);
 # ifdef __cplusplus
 #define EXTERN_C extern "C"
 # else
@@ -973,7 +973,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
 	auto& exec_mappings = exec.create_mappings(unique_mappings + 1);
 	std::copy(handlers, handlers + unique_mappings, exec_mappings.begin());
-	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
+	exec.set_mapping(unique_mappings, [] (CPU<W>&, int64_t, int64_t, address_t) -> bintr_block_returns<W> {
 		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
 	});
 

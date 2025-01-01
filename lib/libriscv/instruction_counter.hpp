@@ -9,7 +9,7 @@ namespace riscv
 	// When binary translation is enabled we cannot do this optimization.
 	struct InstrCounter
 	{
-		InstrCounter(uint64_t icounter, uint64_t maxcounter)
+		InstrCounter(int64_t icounter, int64_t maxcounter)
 		  : m_counter(icounter),
 			m_max(maxcounter)
 		{}
@@ -41,27 +41,27 @@ namespace riscv
 			m_max     = machine.max_instructions();
 		}
 
-		uint64_t value() const noexcept {
+		int64_t value() const noexcept {
 			return m_counter;
 		}
-		uint64_t max() const noexcept {
+		int64_t max() const noexcept {
 			return m_max;
 		}
 		void stop() noexcept {
 			m_max = 0; // This stops the machine
 		}
-		void set_counters(uint64_t value, uint64_t max) {
+		void set_counters(int64_t value, int64_t max) {
 			m_counter = value;
 			m_max     = max;
 		}
-		void increment_counter(uint64_t cnt) {
+		void increment_counter(int64_t cnt) {
 			m_counter += cnt;
 		}
 		bool overflowed() const noexcept {
 			return m_counter >= m_max;
 		}
 	private:
-		uint64_t m_counter;
-		uint64_t m_max;
+		int64_t m_counter;
+		int64_t m_max;
 	};
 } // riscv

@@ -6,7 +6,7 @@ using namespace httplib;
 
 // Avoid endless loops, code that takes too long and excessive memory usage
 static const uint64_t MAX_BINARY       = 32'000'000UL;
-static const uint64_t MAX_INSTRUCTIONS = 36'000'000UL;
+static const int64_t  MAX_INSTRUCTIONS = 36'000'000LL;
 static const uint64_t MAX_MEMORY       = 32UL * 1024 * 1024;
 static const size_t   NUM_SAMPLES      = 50;
 
@@ -43,9 +43,9 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 
 	struct BenchmarkState {
 		bool benchmark = false;
-		uint64_t begin_ic = 0;
+		int64_t  begin_ic = 0;
 		uint64_t bench_time = 0;
-		uint64_t bench_ic = 0;
+		int64_t  bench_ic = 0;
 		uint64_t first = 0;
 		std::vector<uint64_t> samples;
 		std::string output;
@@ -70,7 +70,7 @@ protected_execute(const Request& req, Response& res, const ContentReader& creade
 
 		auto pf = machine.get_printer();
 		machine.set_printer([] (auto&, const char*, size_t) {});
-		uint64_t ic = machine.instruction_counter();
+		int64_t ic = machine.instruction_counter();
 
 		asm("" : : : "memory");
 		const uint64_t t0 = micros_now();
