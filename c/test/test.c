@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 	struct timespec start_time = time_now();
 
 	/* RISC-V execution, timing out after 5bn instructions */
-	const int res = libriscv_run(m, 5000000000ull);
+	const int res = libriscv_run(m, 5000000000ll);
 	if (res < 0) {
 		fprintf(stderr, "Error during execution: %s\n", libriscv_strerror(res));
 		exit(1);
@@ -79,12 +79,12 @@ int main(int argc, char **argv)
 	struct timespec end_time = time_now();
 
 	const int64_t retval = libriscv_return_value(m);
-	const uint64_t icount = libriscv_instruction_counter(m);
+	const int64_t icount = libriscv_instruction_counter(m);
 	const int64_t nanos = nanodiff(start_time, end_time);
 
 	printf(">>> Program exited, exit code = %" PRId64 " (0x%" PRIX64 ")\n",
 		retval, (uint64_t)retval);
-	printf("Instructions executed: %" PRIu64 "  Runtime: %.3fms  Insn/s: %.0fmi/s\n",
+	printf("Instructions executed: %" PRIi64 "  Runtime: %.3fms  Insn/s: %.0fmi/s\n",
 		icount, nanos/1e6,
 		icount / (nanos * 1e-3));
 

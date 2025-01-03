@@ -27,7 +27,7 @@ if (!m) {
 }
 
 /* Execute the RISC-V program now, but time out execution at 5B instructions. */
-const int res = libriscv_run(m, 5000000000ull);
+const int res = libriscv_run(m, 5000000000ll);
 if (res < 0) {
 	fprintf(stderr, "Error during execution: %s\n", libriscv_strerror(res));
 	exit(1);

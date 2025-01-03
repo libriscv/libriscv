@@ -84,7 +84,7 @@ namespace riscv
 
 
 template <int W> DISPATCH_ATTR
-bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
+bool CPU<W>::simulate(address_t pc, int64_t inscounter, int64_t maxcounter)
 {
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;

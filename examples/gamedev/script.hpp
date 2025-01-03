@@ -24,9 +24,9 @@ struct Script
 	/// @brief A virtual memory area set aside for the heap
 	static constexpr gaddr_t MAX_HEAP	= 1024 * 1024 * 256ull;
 	/// @brief The max number of instructions allowed during startup
-	static constexpr uint64_t MAX_BOOT_INSTR = 32'000'000ull;
+	static constexpr int64_t MAX_BOOT_INSTR = 32'000'000ll;
 	/// @brief The max number of instructions allowed during calls
-	static constexpr uint64_t MAX_CALL_INSTR = 32'000'000ull;
+	static constexpr int64_t MAX_CALL_INSTR = 32'000'000ll;
 	/// @brief The max number of recursive calls into the Machine allowed
 	static constexpr uint8_t  MAX_CALL_DEPTH = 8;
 
@@ -68,7 +68,7 @@ struct Script
 	/// then stop execution and return. This function can be used to drive long-running tasks
 	/// over time, by continually resuming them.
 	/// @param instruction_count The max number of instructions to execute before returning.
-	bool resume(uint64_t instruction_count);
+	bool resume(int64_t instruction_count);
 
 	/// @brief Returns the pointer provided at instantiation of the Script instance.
 	/// @tparam T The real type of the user-provided pointer.
@@ -296,7 +296,7 @@ inline std::optional<Script::sgaddr_t> Script::preempt(const std::string& func, 
 	return {this->preempt(address, std::forward<Args>(args)...)};
 }
 
-inline bool Script::resume(uint64_t cycles)
+inline bool Script::resume(int64_t cycles)
 {
 	try
 	{

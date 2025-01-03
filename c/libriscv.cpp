@@ -140,12 +140,12 @@ int64_t libriscv_return_value(RISCVMachine *m)
 }
 
 extern "C"
-uint64_t libriscv_instruction_counter(RISCVMachine *m)
+int64_t libriscv_instruction_counter(RISCVMachine *m)
 {
 	return MACHINE(m)->instruction_counter();
 }
 extern "C"
-uint64_t * libriscv_max_counter_pointer(RISCVMachine *m)
+int64_t * libriscv_max_counter_pointer(RISCVMachine *m)
 {
 	return &MACHINE(m)->get_counters().second;
 }

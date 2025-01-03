@@ -403,7 +403,7 @@ struct Emitter
 		return true;
 	}
 
-	uint64_t reset_and_get_icounter() {
+	int64_t reset_and_get_icounter() {
 		auto result = this->m_instr_counter;
 		this->m_instr_counter = 0;
 		return result;
@@ -413,7 +413,7 @@ struct Emitter
 		if (icount > 0 && !tinfo.ignore_instruction_limit)
 			code.append("counter += " + std::to_string(icount) + ";\n");
 	}
-	void penalty(uint64_t cycles) {
+	void penalty(int64_t cycles) {
 		this->m_instr_counter += cycles;
 	}
 
@@ -462,7 +462,7 @@ private:
 	address_t m_pc = 0x0;
 	rv32i_instruction instr;
 	unsigned m_instr_length = 0;
-	uint64_t m_instr_counter = 0;
+	int64_t  m_instr_counter = 0;
 	uint32_t m_zero_insn_counter = 0;
 	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
@@ -1849,11 +1849,11 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	// Forward declarations
 	for (const auto& entry : e.get_forward_declared()) {
-		code += "static ReturnValues " + entry + "(CPU*, uint64_t, uint64_t, addr_t);\n";
+		code += "static ReturnValues " + entry + "(CPU*, int64_t, int64_t, addr_t);\n";
 	}
 
 	// Function header
-	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc) {\n";
+	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, int64_t counter, int64_t max_counter, addr_t pc) {\n";
 
 	// Function GPRs
 	if (tinfo.use_register_caching) {

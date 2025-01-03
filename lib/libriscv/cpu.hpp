@@ -33,7 +33,7 @@ namespace riscv
 		/// @param icounter The instruction counter start value (usually 0)
 		/// @param maxcounter The instruction limit value (usually several millions)
 		/// @return Returns true if the machine stopped normally, otherwise an execution timeout happened.
-		bool simulate(address_t pc, uint64_t icounter, uint64_t maxcounter);
+		bool simulate(address_t pc, int64_t icounter, int64_t maxcounter);
 
 		/// @brief Simulate faster by not counting instructions, and consequently
 		/// not checking for timeouts. This is useful when there is another

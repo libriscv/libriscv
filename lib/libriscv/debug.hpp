@@ -17,8 +17,8 @@ namespace riscv
 			breakpoint_t callback;
 		};
 
-		void simulate(uint64_t max = UINT64_MAX);
-		void simulate(breakpoint_t callback, uint64_t max = UINT64_MAX);
+		void simulate(int64_t max = INT64_MAX);
+		void simulate(breakpoint_t callback, int64_t max = INT64_MAX);
 		void print(const std::string& label = "Breakpoint", address_t pc = 0);
 		void print_and_pause();
 

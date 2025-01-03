@@ -418,7 +418,7 @@ union UnderAlign32
 };
 
 template<int W>
-void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, uint64_t imax)
+void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, int64_t imax)
 {
 	auto& cpu = machine.cpu;
 	address_t pc = cpu.pc();
@@ -430,10 +430,10 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 	std::unordered_map<address_t, std::string> backtrace_lookup;
 
 	// Calculate the instruction limit
-	if (imax != UINT64_MAX)
+	if (imax != INT64_MAX)
 		machine.set_max_instructions(machine.instruction_counter() + imax);
 	else
-		machine.set_max_instructions(UINT64_MAX);
+		machine.set_max_instructions(INT64_MAX);
 
 	for (; machine.instruction_counter() < machine.max_instructions();
 		machine.increment_counter(1)) {
@@ -507,7 +507,7 @@ void DebugMachine<W>::debug_print(const char* buffer, size_t len) const
 }
 
 template<int W>
-void DebugMachine<W>::simulate(uint64_t imax)
+void DebugMachine<W>::simulate(int64_t imax)
 {
 	this->simulate(nullptr, imax);
 }

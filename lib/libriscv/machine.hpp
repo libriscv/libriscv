@@ -92,7 +92,7 @@ namespace riscv
 		/// @return Returns true if the machine stopped normally, otherwise
 		/// it will return false, but only when Throw == false.
 		template <bool Throw = true>
-		bool simulate(uint64_t max_instructions = UINT64_MAX, uint64_t counter = 0u);
+		bool simulate(int64_t max_instructions = INT64_MAX, int64_t counter = 0u);
 
 		/// @brief Resume execution, by continuing from previous PC address,
 		/// with the same instruction counter, preserving its value. The only
@@ -103,7 +103,7 @@ namespace riscv
 		/// execute before stopping.
 		/// @return
 		template <bool Throw = true>
-		bool resume(uint64_t max_instructions);
+		bool resume(int64_t max_instructions);
 
 		/// @brief Sets the max instructions counter to zero, which effectively
 		/// causes the machine to stop. instruction_limit_reached() will return
@@ -130,13 +130,13 @@ namespace riscv
 		/// @brief Returns the precise number of instructions executed so far.
 		/// Can be called after simulate() ends, or inside a system call handler.
 		/// @return The exact number of instructions executed so far.
-		uint64_t instruction_counter() const noexcept { return m_counter; }
+		int64_t instruction_counter() const noexcept { return m_counter; }
 
-		void     set_instruction_counter(uint64_t val) noexcept { m_counter = val; }
-		void     increment_counter(uint64_t val) noexcept { m_counter += val; }
+		void     set_instruction_counter(int64_t val) noexcept { m_counter = val; }
+		void     increment_counter(int64_t val) noexcept { m_counter += val; }
 		void     reset_instruction_counter() noexcept { m_counter = 0; }
-		uint64_t max_instructions() const noexcept { return m_max_counter; }
-		void     set_max_instructions(uint64_t val) noexcept { m_max_counter = val; }
+		int64_t  max_instructions() const noexcept { return m_max_counter; }
+		void     set_max_instructions(int64_t val) noexcept { m_max_counter = val; }
 		/// @brief Adding a penalty is used to prevent guest programs from
 		/// monopolizing the CPU by executing expensive system calls. The
 		/// instruction counter is increased by the penalty value, and has
@@ -234,7 +234,7 @@ namespace riscv
 		/// @param func_name The function to call. A symbol table lookup is performed.
 		/// @param ...args The arguments to the function.
 		/// @return The result of the function call.
-		template <uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args>
+		template <int64_t MAXI = INT64_MAX, bool Throw = true, typename... Args>
 		constexpr address_t vmcall(const char* func_name, Args&&... args);
 
 		/// @brief Calls a RISC-V C ABI function in the program, with the
@@ -246,7 +246,7 @@ namespace riscv
 		/// @param func_addr The address of the function to call.
 		/// @param ...args The arguments to the function.
 		/// @return The result of the function call.
-		template <uint64_t MAXI = UINT64_MAX, bool Throw = true, typename... Args>
+		template <int64_t MAXI = INT64_MAX, bool Throw = true, typename... Args>
 		constexpr address_t vmcall(address_t func_addr, Args&&... args);
 
 		/// @brief Preempt is like vmcall() except it also stores and
@@ -262,7 +262,7 @@ namespace riscv
 		/// @param ...args
 		/// @return Returns the return register from the function call.
 		template<bool Throw = true, bool StoreRegs = true, typename... Args>
-		address_t preempt(uint64_t max_instr, const char* func_name, Args&&... args);
+		address_t preempt(int64_t max_instr, const char* func_name, Args&&... args);
 
 		/// @brief Preempt is like vmcall() except it also stores and
 		/// restores the current registers and counters before and after
@@ -277,7 +277,7 @@ namespace riscv
 		/// @param ...args 
 		/// @return Returns the return register from the function call.
 		template<bool Throw = true, bool StoreRegs = true, typename... Args>
-		address_t preempt(uint64_t max_instr, address_t func_addr, Args&&... args);
+		address_t preempt(int64_t max_instr, address_t func_addr, Args&&... args);
 
 		/// @brief Performs a lookup in the symbol table and returns the address
 		/// of any symbol matchine the given name. This can, for example, be
@@ -438,17 +438,17 @@ namespace riscv
 		/// @return Returns 0 on success, otherwise a non-zero integer
 		int deserialize_from(const std::vector<uint8_t>& vec);
 
-		std::pair<uint64_t&, uint64_t&> get_counters() noexcept { return {m_counter, m_max_counter}; }
+		std::pair<int64_t&, int64_t&> get_counters() noexcept { return {m_counter, m_max_counter}; }
 		template <bool Throw = true>
-		bool simulate_with(uint64_t max_instructions, uint64_t counter, address_t pc);
+		bool simulate_with(int64_t max_instructions, int64_t counter, address_t pc);
 	private:
 		template<typename... Args, std::size_t... indices>
 		auto resolve_args(std::index_sequence<indices...>) const;
 		static void setup_native_heap_internal(const size_t);
 		[[noreturn]] void timeout_exception(uint64_t);
 
-		uint64_t     m_counter = 0;
-		uint64_t     m_max_counter = 0;
+		int64_t     m_counter = 0;
+		int64_t     m_max_counter = 0;
 		mutable void*        m_userdata = nullptr;
 		mutable printer_func m_printer = default_printer;
 		mutable stdin_func   m_stdin = default_stdin;
