@@ -13,7 +13,7 @@ static const uint32_t CHILD_SETTID   = 0x01000000; /* set the TID in the child *
 //#define THREADS_DEBUG 1
 #ifdef THREADS_DEBUG
 #define THPRINT(machine, fmt, ...) \
-	{ char thrpbuf[1024]; machine.debug_print(thrpbuf, \
+	{ char thrpbuf[1024]; machine.print(thrpbuf, \
 		snprintf(thrpbuf, sizeof(thrpbuf), fmt, ##__VA_ARGS__)); }
 #else
 #define THPRINT(fmt, ...) /* fmt */
