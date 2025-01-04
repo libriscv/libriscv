@@ -1157,6 +1157,8 @@ static void syscall_statx(Machine<W>& machine)
 #include "syscalls_poll.cpp"
 #ifdef __linux__
 #include "syscalls_epoll.cpp"
+#else
+#include "../win32/epoll.cpp"
 #endif
 
 template <int W>
@@ -1187,8 +1189,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 
 	// getcwd
 	install_syscall_handler(17, syscall_getcwd<W>);
-	
-#ifdef __linux__
+
 	// eventfd2
 	install_syscall_handler(19, syscall_eventfd2<W>);
 	// epoll_create
@@ -1197,7 +1198,6 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(21, syscall_epoll_ctl<W>);
 	// epoll_pwait
 	install_syscall_handler(22, syscall_epoll_pwait<W>);
-#endif
 	// dup
 	install_syscall_handler(23, syscall_dup<W>);
 	// dup3

@@ -13,7 +13,7 @@ static constexpr size_t PATH_MAX = 512;
 //#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
 #define SYSPRINT(fmt, ...) \
-	{ char syspbuf[1024]; machine.debug_print(syspbuf, \
+	{ char syspbuf[1024]; machine.print(syspbuf, \
 		snprintf(syspbuf, sizeof(syspbuf), fmt, ##__VA_ARGS__)); }
 static constexpr bool verbose_syscalls = true;
 #else
@@ -208,6 +208,11 @@ static void syscall_write(Machine<W> &machine) {
 		machine.set_result(len);
 		return;
 	} else if (machine.has_file_descriptors() && machine.fds().permit_write(vfd)) {
+		if (vfd >= 123456780) {
+			machine.set_result(len);
+			return;
+		}
+
 		auto real_fd = machine.fds().get(vfd);
 		// Zero-copy retrieval of buffers (64 fragments)
 		riscv::vBuffer buffers[64];
@@ -357,6 +362,13 @@ static void syscall_fcntl(Machine<W> &machine) {
 	SYSPRINT("SYSCALL fcntl, fd: %d  cmd: 0x%X\n", vfd, cmd);
 
 	if (machine.has_file_descriptors()) {
+
+		// Emulate fcntl for stdin/stdout/stderr
+		if (vfd == 0 || vfd == 1 || vfd == 2) {
+			machine.set_result(0);
+			return;
+		}
+
 		/*int real_fd = machine.fds().translate(vfd);
 		int res = fcntl(real_fd, cmd, arg1, arg2, arg3);
 		machine.set_result_or_error(res);*/
@@ -511,6 +523,28 @@ static void syscall_fstatat(Machine<W> &machine) {
 			 vfd, path, (long) g_buf, flags);
 
 	if (machine.has_file_descriptors()) {
+
+		if (vfd == 0 || vfd == 1 || vfd == 2) {
+			// Emulate stat for stdin/stdout/stderr
+			struct riscv_stat rst;
+			std::memset(&rst, 0, sizeof(rst));
+			rst.st_mode = 0x2000; // S_IFCHR
+			rst.st_dev = 0;
+			rst.st_ino = 0;
+			rst.st_nlink = 1;
+			rst.st_uid = 0;
+			rst.st_gid = 0;
+			rst.st_rdev = 0;
+			rst.st_size = 0;
+			rst.st_blksize = 0;
+			rst.st_blocks = 0;
+			rst.rv_atime = 0;
+			rst.rv_mtime = 0;
+			rst.rv_ctime = 0;
+			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
+			machine.set_result(0);
+			return;
+		}
 
 		auto real_fd = machine.fds().translate(vfd);
 
@@ -674,7 +708,7 @@ static void syscall_uname(Machine<W> &machine) {
 	} uts;
 	strcpy_s(uts.sysname, UTSLEN, "RISC-V C++ Emulator");
 	strcpy_s(uts.nodename, UTSLEN, "libriscv");
-	strcpy_s(uts.release, UTSLEN, "5.0.0");
+	strcpy_s(uts.release, UTSLEN, "5.6.0");
 	strcpy_s(uts.version, UTSLEN, "");
 	if constexpr (W == 4)
 		strcpy_s(uts.machine, UTSLEN, "rv32imafdc");
@@ -686,6 +720,52 @@ static void syscall_uname(Machine<W> &machine) {
 
 	machine.copy_to_guest(buffer, &uts, sizeof(uts));
 	machine.set_result(0);
+}
+
+template <int W>
+static void syscall_capget(Machine<W>& machine)
+{
+	const auto header_ptr = machine.sysarg(0);
+	const auto data_ptr = machine.sysarg(1);
+
+	struct __user_cap_header_struct {
+		uint32_t version;
+		int pid;
+	};
+
+	struct __user_cap_data_struct {
+		uint32_t effective;
+		uint32_t permitted;
+		uint32_t inheritable;
+	};
+
+	__user_cap_header_struct header;
+	__user_cap_data_struct data;
+
+	// Copy the header from guest to host
+	machine.copy_from_guest(&header, header_ptr, sizeof(header));
+
+	// Initialize the header structure
+	if (header.version != 0x20080522) {
+		// Unsupported version, set error
+		machine.set_result_or_error(-EINVAL);
+	} else {
+		// Here you would typically interact with the capability subsystem of the
+		// emulated environment to get the actual capabilities.
+		// For simplicity, let's assume no capabilities:
+		data.effective = 0;
+		data.permitted = 0;
+		data.inheritable = 0;
+
+		// Copy the data back to the guest
+		machine.copy_to_guest(data_ptr, &data, sizeof(data));
+
+		// Set result to 0 indicating success
+		machine.set_result_or_error(0);
+	}
+
+	SYSPRINT("SYSCALL capget, header: 0x%lX, data: 0x%lX => %ld\n",
+			 (long)header_ptr, (long)data_ptr, (long)machine.return_value());
 }
 
 template<int W>
@@ -704,12 +784,32 @@ static void syscall_brk(Machine<W> &machine) {
 }
 
 template <int W>
+static void syscall_pipe2(Machine<W>& machine)
+{
+	const auto vfd_array = machine.sysarg(0);
+	const auto flags = machine.template sysarg<int>(1);
+
+	if (machine.has_file_descriptors()) {
+		int vpipes[2];
+		vpipes[0] = 123456784;
+		vpipes[1] = 123456785;
+		machine.copy_to_guest(vfd_array, vpipes, sizeof(vpipes));
+		machine.set_result(0);
+	} else {
+		machine.set_result(-1);
+	}
+	SYSPRINT("SYSCALL pipe2, fd array: 0x%lX flags: %d = %ld\n",
+		(long)vfd_array, flags, (long)machine.return_value());
+}
+
+template <int W>
 static void syscall_getrandom(Machine<W>& machine)
 {
 	machine.set_result(-ENOSYS);
 }
 
 #include "../linux/syscalls_mman.cpp"
+#include "epoll.cpp"
 
 template<int W>
 void Machine<W>::setup_minimal_syscalls() {
@@ -736,58 +836,82 @@ template<int W>
 void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets) {
 	this->setup_minimal_syscalls();
 
+	// eventfd2
+	install_syscall_handler(19, syscall_eventfd2<W>);
+	// epoll_create
+	install_syscall_handler(20, syscall_epoll_create<W>);
+	// epoll_ctl
+	install_syscall_handler(21, syscall_epoll_ctl<W>);
+	// epoll_pwait
+	install_syscall_handler(22, syscall_epoll_pwait<W>);
 	// dup
-	this->install_syscall_handler(23, syscall_dup<W>);
+	install_syscall_handler(23, syscall_dup<W>);
 	// fcntl
-	this->install_syscall_handler(25, syscall_fcntl<W>);
+	install_syscall_handler(25, syscall_fcntl<W>);
 	// ioctl
-	this->install_syscall_handler(29, syscall_ioctl<W>);
+	install_syscall_handler(29, syscall_ioctl<W>);
 	// faccessat
-	this->install_syscall_handler(48, syscall_stub_nosys<W>);
+	install_syscall_handler(48, syscall_stub_nosys<W>);
 
-	this->install_syscall_handler(56, syscall_openat<W>);
-	this->install_syscall_handler(57, syscall_close<W>);
-	this->install_syscall_handler(66, syscall_writev<W>);
+	install_syscall_handler(56, syscall_openat<W>);
+	install_syscall_handler(57, syscall_close<W>);
+	install_syscall_handler(59, syscall_pipe2<W>);
+	install_syscall_handler(66, syscall_writev<W>);
 	// 73: ppoll
-	this->install_syscall_handler(73, syscall_stub_zero<W>);
-	this->install_syscall_handler(78, syscall_readlinkat<W>);
+	install_syscall_handler(73, syscall_stub_zero<W>);
+	install_syscall_handler(78, syscall_readlinkat<W>);
 	// 79: fstatat
-	this->install_syscall_handler(79, syscall_fstatat<W>);
+	install_syscall_handler(79, syscall_fstatat<W>);
 	// 80: fstat
-	this->install_syscall_handler(80, syscall_fstat<W>);
+	install_syscall_handler(80, syscall_fstat<W>);
+	// 90: capget
+	install_syscall_handler(90, syscall_capget<W>);
 
 	// 94: exit_group (single-threaded)
-	this->install_syscall_handler(94, syscall_exit<W>);
+	install_syscall_handler(94, syscall_exit<W>);
 
 	// nanosleep
-	this->install_syscall_handler(101, syscall_stub_zero<W>);
+	install_syscall_handler(101, syscall_stub_zero<W>);
 	// clock_gettime
-	this->install_syscall_handler(113, syscall_clock_gettime<W>);
-	this->install_syscall_handler(403, syscall_clock_gettime64<W>);
+	install_syscall_handler(113, syscall_clock_gettime<W>);
+	install_syscall_handler(403, syscall_clock_gettime64<W>);
+	// clock_getres
+	install_syscall_handler(114, syscall_stub_nosys<W>);
+	// sched_getaffinity
+	install_syscall_handler(123, syscall_stub_nosys<W>);
 	// sigaltstack
-	this->install_syscall_handler(132, syscall_sigaltstack<W>);
+	install_syscall_handler(132, syscall_sigaltstack<W>);
 	// rt_sigaction
-	this->install_syscall_handler(134, syscall_sigaction<W>);
+	install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
-	this->install_syscall_handler(135, syscall_stub_zero<W>);
+	install_syscall_handler(135, syscall_stub_zero<W>);
 
 	// gettimeofday
-	this->install_syscall_handler(169, syscall_gettimeofday<W>);
+	install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid
-	this->install_syscall_handler(172, syscall_stub_zero<W>);
+	install_syscall_handler(172, syscall_stub_zero<W>);
 	// getuid
-	this->install_syscall_handler(174, syscall_stub_zero<W>);
+	install_syscall_handler(174, syscall_stub_zero<W>);
 	// geteuid
-	this->install_syscall_handler(175, syscall_stub_zero<W>);
+	install_syscall_handler(175, syscall_stub_zero<W>);
 	// getgid
-	this->install_syscall_handler(176, syscall_stub_zero<W>);
+	install_syscall_handler(176, syscall_stub_zero<W>);
 	// getegid
-	this->install_syscall_handler(177, syscall_stub_zero<W>);
+	install_syscall_handler(177, syscall_stub_zero<W>);
 
-	this->install_syscall_handler(160, syscall_uname<W>);
-	this->install_syscall_handler(214, syscall_brk<W>);
+	install_syscall_handler(160, syscall_uname<W>);
+	install_syscall_handler(214, syscall_brk<W>);
+	// riscv_hwprobe
+	install_syscall_handler(258, syscall_stub_zero<W>);
+	// riscv_flush_icache
+	install_syscall_handler(259, syscall_stub_zero<W>);
 
 	install_syscall_handler(278, syscall_getrandom<W>);
+
+	// statx
+	install_syscall_handler(291, syscall_statx<W>);
+	// rseq
+	install_syscall_handler(293, syscall_stub_nosys<W>);
 
 	add_mman_syscalls<W>();
 
@@ -796,9 +920,6 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets) {
 		if (sockets)
 			add_socket_syscalls(*this);
 	}
-
-	// statx
-	this->install_syscall_handler(291, syscall_statx<W>);
 }
 
 #ifdef RISCV_32I
