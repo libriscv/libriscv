@@ -154,7 +154,7 @@ namespace riscv
 		bool translate_future_segments = true;
 		/// @brief Enable compiling execute segment on-demand during emulation.
 		/// @details Not available on most Windows systems.
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(RISCV_LIBTCC)
 		bool translate_invoke_compiler = false;
 #else
 		bool translate_invoke_compiler = true;

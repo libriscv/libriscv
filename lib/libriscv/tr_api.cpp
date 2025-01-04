@@ -13,6 +13,16 @@ namespace riscv {
 #define int64_t  long long
 #define uint64_t unsigned long long
 #define uintptr_t unsigned long long
+#elif defined(__TINYC__) && defined(_WIN32)
+#define int8_t   char
+#define uint8_t  unsigned char
+#define int16_t  short
+#define uint16_t unsigned short
+#define int32_t  int
+#define uint32_t unsigned int
+#define int64_t  long long
+#define uint64_t unsigned long long
+#define uintptr_t unsigned long long
 #else
 #include <stdint.h>
 #endif
