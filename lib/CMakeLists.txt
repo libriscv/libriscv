@@ -226,11 +226,25 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 	)
 	target_compile_definitions(riscv PRIVATE
 		CONFIG_TCC_PREDEFS=1
-		TARGETOS_Linux=1
 		TCC_VERSION="0.9.27"
 		TCC_IS_NATIVE=1
 		TCC_TARGET_X86_64=1
 	)
+	if (CMAKE_HOST_WIN32 OR MINGW_TOOLCHAIN)
+		target_compile_definitions(riscv PRIVATE
+			TARGETOS_Windows=1
+			TCC_TARGET_PE=1
+		)
+	elseif (CMAKE_HOST_UNIX)
+		target_compile_definitions(riscv PRIVATE
+			TARGETOS_Linux=1
+		)
+	elseif (CMAKE_HOST_APPLE)
+		target_compile_definitions(riscv PRIVATE
+			TARGETOS_Darwin=1
+			TCC_TARGET_MACHO=1
+		)
+	endif()
 	target_include_directories(riscv PUBLIC
 		"${CMAKE_CURRENT_BINARY_DIR}"
 	)

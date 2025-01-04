@@ -33,7 +33,7 @@ namespace riscv
 		tcc_add_include_path(state, "/usr/include/i386-linux-gnu");
 #elif defined(__linux__) && defined(__aarch64__)
 		tcc_add_include_path(state, "/usr/include/aarch64-linux-gnu");
-#elif defined(__linux__) && defined(__risv)
+#elif defined(__linux__) && defined(__riscv)
 		tcc_add_include_path(state, "/usr/include/riscv64-linux-gnu");
 #endif
 
