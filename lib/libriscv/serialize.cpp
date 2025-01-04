@@ -27,7 +27,7 @@ namespace riscv
 		uint32_t mem_offset;
 
 		Registers<W> registers;
-		uint64_t     counter;
+		int64_t      counter;
 
 		address_t start_address = 0;
 		address_t stack_address = 0;

@@ -36,7 +36,7 @@ int main(int argc, char** argv)
 	machine.setup_linux_syscalls();
 
 	// Run the program, but timeout after 128bn instructions
-	machine.simulate(128'000'000'000ull);
+	machine.simulate(128'000'000'000ll);
 
 	std::cout << "Program exited with status: " << machine.return_value<long>() << std::endl;
 }

@@ -193,10 +193,10 @@ INTERNAL static int32_t arena_offset;
 
 INTERNAL static int32_t ins_counter_offset;
 INTERNAL static int32_t max_counter_offset;
-#define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + ins_counter_offset))
-#define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + max_counter_offset))
+#define INS_COUNTER(cpu) (*(int64_t *)((uintptr_t)cpu + ins_counter_offset))
+#define MAX_COUNTER(cpu) (*(int64_t *)((uintptr_t)cpu + max_counter_offset))
 
-static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
+static inline int do_syscall(CPU* cpu, int64_t counter, int64_t max_counter, addr_t sysno)
 {
 	INS_COUNTER(cpu) = counter; // Reveal instruction counters
 	MAX_COUNTER(cpu) = max_counter;
@@ -252,8 +252,8 @@ void init(struct CallbackTable* table, int32_t arena_off, int32_t ins_counter_of
 }
 
 typedef struct {
-	uint64_t counter;
-	uint64_t max_counter;
+	int64_t counter;
+	int64_t max_counter;
 } ReturnValues;
 )123";
 }

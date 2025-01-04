@@ -359,7 +359,7 @@ namespace riscv
 	}
 
 	template <int W> inline RISCV_HOT_PATH()
-	bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
+	bool CPU<W>::simulate(address_t pc, int64_t inscounter, int64_t maxcounter)
 	{
 		InstrCounter counter{inscounter, maxcounter};
 
@@ -393,8 +393,8 @@ namespace riscv
 	void CPU<W>::simulate_inaccurate(address_t pc)
 	{
 		machine().set_instruction_counter(0);
-		machine().set_max_instructions(UINT64_MAX);
-		InstrCounter counter{0, UINT64_MAX};
+		machine().set_max_instructions(INT64_MAX);
+		InstrCounter counter{0, INT64_MAX};
 
 		auto* exec = this->m_exec;
 

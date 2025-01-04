@@ -104,10 +104,10 @@ namespace riscv
 
 	template <int W>
 	struct bintr_block_returns {
-		uint64_t counter;
-		uint64_t max_counter;
+		int64_t counter;
+		int64_t max_counter;
 	};
 	template <int W>
-	using bintr_block_func = bintr_block_returns<W> (*)(CPU<W>&, uint64_t, uint64_t, address_type<W>);
+	using bintr_block_func = bintr_block_returns<W> (*)(CPU<W>&, int64_t, int64_t, address_type<W>);
 #endif
 }

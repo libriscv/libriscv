@@ -37,7 +37,7 @@ int main(int argc, char** argv)
 
 	try {
 		// Run the program, but timeout after 128bn instructions
-		machine.simulate(128'000'000'000ull);
+		machine.simulate(128'000'000'000ll);
 	} catch (const std::exception& e) {
 		std::cout << "Program error: " << e.what() << std::endl;
 		return -1;
