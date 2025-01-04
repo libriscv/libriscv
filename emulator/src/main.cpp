@@ -785,22 +785,12 @@ void run_sighandler(riscv::Machine<W>& machine)
 #include <fstream>
 std::vector<uint8_t> load_file(const std::string& filename)
 {
-    std::size_t size = 0;
-	std::ifstream file(filename);
+	std::ifstream file(filename, std::ios::in | std::ios::binary);
 	if (!file.is_open()) {
 		throw std::runtime_error("Could not open file: " + filename);
 	}
 
-	file.seekg(0, std::ios::end);
-	size = file.tellg();
-	file.seekg(0, std::ios::beg);
-
-    std::vector<uint8_t> result(size);
-	if (!file.read((char*)result.data(), size)) {
-		throw std::runtime_error("Error when reading from file: " + filename);
-	}
-
-	return result;
+	return std::vector<uint8_t> (std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
 template <int W>
