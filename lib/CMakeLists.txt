@@ -265,6 +265,7 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/decoded_exec_segment.hpp
 		libriscv/decoder_cache.hpp
 		libriscv/elf.hpp
+		libriscv/guest_datatypes.hpp
 		libriscv/instr_helpers.hpp
 		libriscv/instruction_counter.hpp
 		libriscv/instruction_list.hpp

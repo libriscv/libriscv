@@ -94,6 +94,12 @@ int main(int argc, char** argv)
 
 		fmt::print("dyncall_data called with args: '{}' and '{}'\n", data_span[0].buffer, data->buffer);
 	});
+	// This is the handler for dyncall_string
+	register_script_function(5, [](Script& script) {
+		auto [str] = script.machine().sysargs<GuestStdString<Script::MARCH>*>();
+
+		fmt::print("dyncall_string called: {}\n", str->to_string(script.machine()));
+	});
 
 	// Create a new script instance, loading and initializing the given program file
 	// The programs main() function will be called
@@ -143,6 +149,30 @@ int main(int argc, char** argv)
 	Event<void()> test5(script, "test5");
 	if (auto ret = test5(); !ret)
 		throw std::runtime_error("Failed to call test5!?");
+
+	// For C++ programs we have some guest abstractions we can test
+	// like std::string and std::vector wrappers.
+	if (script.address_of("test6"))
+	{
+		using CppString = GuestStdString<Script::MARCH>;
+		using CppVector = GuestStdVector<Script::MARCH>;
+		// Define the test6 function, which has a std::string& argument in the guest,
+		// and a std::vector<int>& and std::vector<std::string>&. The stack is writable,
+		// so the guest can choose whether or not to use const references.
+		Event<void(CppString, CppVector, CppVector)> test6(script, "test6");
+
+		// Create a GuestStdString object with a string
+		CppString str(script.machine(), "C++ World");
+		// Create a GuestStdVector object with a vector of integers
+		CppVector ivec(script.machine(), std::vector<int>{ 1, 2, 3, 4, 5 });
+		// Create a vector of strings using a specialization for std::string
+		CppVector svec(script.machine(),
+			std::vector<std::string>{ "Hello", "World", "This string is larger than the SSO limit :)" });
+
+		// Call the test6 function with the std::string managed by the arena
+		if (auto ret = test6(str, ivec, svec); !ret)
+			throw std::runtime_error("Failed to call test6!?");
+	}
 
 	// If GDB=1, start the RSP server for debugging
 	if (getenv("GDB"))

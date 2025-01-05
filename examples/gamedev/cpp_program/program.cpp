@@ -15,6 +15,8 @@ struct MyData {
 	char buffer[32];
 };
 DEFINE_DYNCALL(4, dyncall_data, void(const MyData*, size_t, const MyData&));
+// A dynamic call that takes and prints a string
+DEFINE_DYNCALL(5, dyncall_string, void(const std::string&));
 
 // Every instantiated program runs through main()
 int main(int argc, char** argv)
@@ -26,7 +28,8 @@ int main(int argc, char** argv)
 	printf("dyncall1(1) = %d\n", result);
 
 	// Call a function that passes a string (with length)
-	dyncall2("Hello, Vieworld!", 16, "A zero-terminated string!");
+	std::string_view view = "A C++ string_view!";
+	dyncall2(view.begin(), view.size(), "A zero-terminated string!");
 
 	// Printf uses an internal buffer, so we need to flush it
 	fflush(stdout);
@@ -95,4 +98,16 @@ PUBLIC(void test5())
 PUBLIC(void bench_dyncall_overhead())
 {
 	dyncall_empty();
+}
+
+// This function is used to test complex classes like std::string and std::vector.
+PUBLIC(void test6(const std::string& str, const std::vector<int>& ints, const std::vector<std::string>& strings))
+{
+	std::string result = "Hello, " + str + "! Integers:";
+	for (auto i : ints)
+		result += " " + std::to_string(i);
+	result += " Strings:";
+	for (const auto& s : strings)
+		result += " " + s;
+	dyncall_string(result);
 }
