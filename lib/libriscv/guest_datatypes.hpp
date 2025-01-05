@@ -149,11 +149,15 @@ struct GuestStdVector {
 
 	template <typename T>
 	T *view_as(const machine_t& machine, std::size_t max_bytes = 16UL << 20) {
-		return machine.memory.template memarray<T>(data(), size<T>(max_bytes));
+		if (size_bytes() > max_bytes)
+			throw std::runtime_error("Guest std::vector has size > max_bytes");
+		return machine.memory.template memarray<T>(data(), size<T>());
 	}
 	template <typename T>
 	const T *view_as(const machine_t& machine, std::size_t max_bytes = 16UL << 20) const {
-		return machine.memory.template memarray<T>(data(), size<T>(max_bytes));
+		if (size_bytes() > max_bytes)
+			throw std::runtime_error("Guest std::vector has size > max_bytes");
+		return machine.memory.template memarray<T>(data(), size<T>());
 	}
 
 	template <typename T>

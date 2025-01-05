@@ -7,7 +7,7 @@ The [build script](build_and_run.sh) will first build the RISC-V guest program, 
 
 ## Script_program folder
 
-An [example program](script_program/program.cpp) that modifies some libc functions to use host-side functions with native performance.
+An [example program](cpp_program/program.cpp) that modifies some libc functions to use host-side functions with native performance.
 
 The program showcases low-latency and full C++ support.
 
