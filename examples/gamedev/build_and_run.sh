@@ -4,8 +4,8 @@ set -e
 export ENGINE_CC="$CC"
 export ENGINE_CXX="$CXX"
 
-# The script program uses a different compiler
-pushd script_program
+# The C++ program uses a different compiler
+pushd cpp_program
 source ./build.sh
 popd
 
@@ -20,4 +20,4 @@ make -j4
 popd
 
 #./.build/simple_example test
-./.build/example script_program/micro
+./.build/example cpp_program/micro

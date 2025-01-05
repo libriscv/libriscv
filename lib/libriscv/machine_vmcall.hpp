@@ -16,6 +16,12 @@ inline void Machine<W>::setup_call(Args&&... args)
 			cpu.reg(iarg++) = stack_push(args.data(), args.size()+1);
 		else if constexpr (is_string<Args>::value)
 			cpu.reg(iarg++) = stack_push(args, strlen(args)+1);
+#ifdef __cpp_exceptions
+		else if constexpr (std::is_same_v<GuestStdString<W>, remove_cvref<Args>>) {
+			args.move(cpu.reg(REG_SP) - sizeof(Args)); // SSO-adjustment
+			cpu.reg(iarg++) = stack_push(&args, sizeof(Args));
+		}
+#endif
 		else if constexpr (is_stdvector<remove_cvref<Args>>::value)
 			cpu.reg(iarg++) = stack_push(args.data(), args.size() * sizeof(args[0]));
 		else if constexpr (std::is_same_v<float, remove_cvref<Args>>)

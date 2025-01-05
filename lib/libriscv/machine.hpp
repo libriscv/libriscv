@@ -4,8 +4,9 @@
 #include "riscvbase.hpp"
 #include "posix/filedesc.hpp"
 #include "posix/signals.hpp"
-#include <array>
-#include <string_view>
+#ifdef __cpp_exceptions
+# include "guest_datatypes.hpp"
+#endif
 
 namespace riscv
 {
