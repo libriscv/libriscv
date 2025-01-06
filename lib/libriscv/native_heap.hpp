@@ -130,7 +130,9 @@ private:
 
 	std::deque<ArenaChunk> m_chunks;
 	std::vector<ArenaChunk*> m_free_chunks;
+#ifdef ENABLE_ARENA_CHUNK_MAP
 	std::unordered_map<PointerType, ArenaChunk*> m_used_chunk_map;
+#endif
 	ArenaChunk  m_base_chunk;
 	unsigned    m_max_chunks = 4'000u;
 	unsigned    m_allocation_counter = 0u;
@@ -145,10 +147,14 @@ private:
 
 inline ArenaChunk* Arena::begin_find_used(PointerType ptr)
 {
+#ifdef ENABLE_ARENA_CHUNK_MAP
 	auto it = m_used_chunk_map.find(ptr);
 	if (it != m_used_chunk_map.end())
 		return it->second;
 	return nullptr;
+#else
+	return base_chunk().find_used(ptr);
+#endif
 }
 
 // find exact free chunk that matches ptr
@@ -269,7 +275,9 @@ inline ArenaChunk* Arena::find_chunk(PointerType ptr)
 inline void Arena::internal_free(ArenaChunk* ch)
 {
 	this->m_deallocation_counter++;
+#ifdef ENABLE_ARENA_CHUNK_MAP
 	this->m_used_chunk_map.erase(ch->data);
+#endif
 	ch->free = true;
 	// merge chunks ahead and behind us
 	if (ch->next && ch->next->free) {
@@ -291,7 +299,9 @@ inline Arena::PointerType Arena::malloc(size_t size)
 		ch->split_next(*this, length);
 		ch->free = false;
 
+#ifdef ENABLE_ARENA_CHUNK_MAP
 		this->m_used_chunk_map.insert_or_assign(ch->data, ch);
+#endif
 		return ch->data;
 	}
 	return 0;
@@ -348,7 +358,9 @@ restart_seq_alloc_search:
 
 		ch->split_next(*this, objectsize);
 		ch->free = false;
+#ifdef ENABLE_ARENA_CHUNK_MAP
 		this->m_used_chunk_map.insert_or_assign(ch->data, ch);
+#endif
 		return ch->data;
 	}
 	return 0;
