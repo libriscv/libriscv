@@ -365,6 +365,7 @@ struct ScopedArenaObject {
 	ScopedArenaObject& operator=(const T& other) {
 		// It's not possible for m_addr to be 0 here, as it would have thrown in the constructor
 		this->free_standard_types();
+		this->allocate_if_null();
 		this->m_ptr = m_machine->memory.template memarray<T>(this->m_addr, 1);
 		new (m_ptr) T(other);
 		return *this;
@@ -373,6 +374,7 @@ struct ScopedArenaObject {
 	// Special case for std::string
 	ScopedArenaObject& operator=(std::string_view other) {
 		static_assert(std::is_same_v<T, GuestStdString<W>>, "ScopedArenaObject<T> must be a GuestStdString<W>");
+		this->allocate_if_null();
 		this->m_ptr->set_string(*m_machine, this->m_addr, other.data(), other.size());
 		return *this;
 	}
@@ -381,6 +383,7 @@ struct ScopedArenaObject {
 	template <typename U>
 	ScopedArenaObject& operator=(const std::vector<U>& other) {
 		static_assert(std::is_same_v<T, GuestStdVector<W, U>>, "ScopedArenaObject<T> must be a GuestStdVector<W, U>");
+		this->allocate_if_null();
 		this->m_ptr->assign(*m_machine, other);
 		return *this;
 	}
@@ -388,14 +391,23 @@ struct ScopedArenaObject {
 	ScopedArenaObject& operator=(ScopedArenaObject&& other) {
 		this->free_standard_types();
 		this->m_machine = other.m_machine;
+		this->m_addr = other.m_addr;
 		this->m_ptr = other.m_ptr;
-		// Swap the addresses (to guarantee that m_addr is always valid)
-		std::swap(this->m_addr, other.m_addr);
+		other.m_addr = 0;
 		other.m_ptr = nullptr;
 		return *this;
 	}
 
 private:
+	void allocate_if_null() {
+		if (this->m_addr == 0) {
+			this->m_addr = m_machine->arena().malloc(sizeof(T));
+			if (this->m_addr == 0) {
+				throw std::bad_alloc();
+			}
+			this->m_ptr = m_machine->memory.template memarray<T>(this->m_addr, 1);
+		}
+	}
 	void free_standard_types() {
 		if constexpr (is_guest_stdvector<W, T>::value || std::is_same_v<T, GuestStdString<W>>) {
 			if (this->m_ptr) {
