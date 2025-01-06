@@ -149,15 +149,30 @@ struct GuestStdVector {
 	{
 	}
 
+	GuestStdVector(GuestStdVector&& other) noexcept
+		: ptr_begin(other.ptr_begin), ptr_end(other.ptr_end), ptr_capacity(other.ptr_capacity)
+	{
+		other.ptr_begin = 0;
+		other.ptr_end = 0;
+		other.ptr_capacity = 0;
+	}
+
+	// Copying is intentionally shallow/fast, in order to avoid copying/duplication
+	// Use the std::move if you need proper semantics
+	GuestStdVector(const GuestStdVector& other) = default;
+	GuestStdVector& operator=(const GuestStdVector& other) = default;
+
 	gaddr_t data() const noexcept { return ptr_begin; }
-	std::size_t size_bytes() const noexcept { return ptr_end - ptr_begin; }
-	std::size_t capacity() const noexcept { return ptr_capacity - ptr_begin; }
 
 	std::size_t size() const noexcept {
 		return size_bytes() / sizeof(T);
 	}
 	bool empty() const noexcept {
 		return size() == 0;
+	}
+
+	std::size_t capacity() const noexcept {
+		return capacity_bytes() / sizeof(T);
 	}
 
 	T& at(machine_t& machine, std::size_t index, std::size_t max_bytes = 16UL << 20) {
@@ -172,15 +187,15 @@ struct GuestStdVector {
 	}
 
 	void push_back(machine_t& machine, T&& value) {
-		if (size_bytes() >= capacity())
-			throw std::runtime_error("Guest std::vector has reached capacity");
+		if (size_bytes() >= capacity_bytes())
+			this->increase_capacity(machine);
 		T* array = machine.memory.template memarray<T>(this->data(), size() + 1);
 		new (&array[size()]) T(std::move(value));
 		this->ptr_end += sizeof(T);
 	}
 	void push_back(machine_t& machine, const T& value) {
-		if (size_bytes() >= capacity())
-			throw std::runtime_error("Guest std::vector has reached capacity");
+		if (size_bytes() >= capacity_bytes())
+			this->increase_capacity(machine);
 		T* array = machine.memory.template memarray<T>(this->data(), size() + 1);
 		new (&array[size()]) T(value);
 		this->ptr_end += sizeof(T);
@@ -233,7 +248,7 @@ struct GuestStdVector {
 	auto end(machine_t& machine) { return as_array(machine) + size(); }
 
 	std::vector<T> to_vector(const machine_t& machine) const {
-		if (size_bytes() > capacity())
+		if (size_bytes() > capacity_bytes())
 			throw std::runtime_error("Guest std::vector has size > capacity");
 		// Copy the vector from guest memory
 		const size_t elements = size_bytes() / sizeof(T);
@@ -249,6 +264,29 @@ struct GuestStdVector {
 		this->ptr_end = this->ptr_begin + vec.size() * sizeof(T);
 	}
 
+	void reserve(machine_t& machine, std::size_t elements)
+	{
+		if (elements <= capacity())
+			return;
+
+		GuestStdVector<W, T> old_vec(std::move(*this));
+		// Allocate new memory
+		auto [array, self] = this->alloc(machine, elements);
+		(void)self;
+		if (!old_vec.empty()) {
+			std::copy(old_vec.as_array(machine), old_vec.as_array(machine) + old_vec.size(), array);
+			// Free the old vector manually (as we don't want to call the destructor(s))
+			machine.arena().free(old_vec.ptr_begin);
+		}
+		this->ptr_end = this->ptr_begin + old_vec.size() * sizeof(T);
+		// Adjust SSO if the vector contains std::string
+		if constexpr (std::is_same_v<T, GuestStdString<W>>) {
+			T* array = machine.memory.template memarray<T>(this->data(), size());
+			for (std::size_t i = 0; i < size(); i++)
+				array[i].move(this->ptr_begin + i * sizeof(T));
+		}
+	}
+
 	void free(machine_t& machine) {
 		if (this->ptr_begin != 0) {
 			for (std::size_t i = 0; i < size(); i++)
@@ -259,7 +297,15 @@ struct GuestStdVector {
 			this->ptr_capacity = 0;
 		}
 	}
+
+	std::size_t size_bytes() const noexcept { return ptr_end - ptr_begin; }
+	std::size_t capacity_bytes() const noexcept { return ptr_capacity - ptr_begin; }
+
 private:
+	void increase_capacity(machine_t& machine) {
+		this->reserve(machine, capacity() * 2 + 4);
+	}
+
 	std::tuple<T *, gaddr_t> alloc(machine_t& machine, std::size_t elements) {
 		this->free(machine);
 

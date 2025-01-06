@@ -300,11 +300,22 @@ TEST_CASE("VM calls with std::string and std::vector", "[Native]")
 
 	// Test the third function
 	for (int i = 0; i < 10; i++) {
-		ScopedCppVector<CppVector<int>> vec(machine, 2);
-		vec->clear(machine);
+		ScopedCppVector<CppVector<int>> vec(machine);
 		vec->push_back(machine, std::vector<int>{1, 2, 3});
 		vec->push_back(machine, std::vector<int>{4, 5});
 		REQUIRE(vec->size() == 2);
+		REQUIRE(vec->capacity() >= 2);
+		vec->clear(machine);
+		REQUIRE(vec->empty());
+		REQUIRE(vec->capacity() >= 2);
+		vec->push_back(machine, std::vector<int>{1, 2, 3});
+		vec->push_back(machine, std::vector<int>{4, 5});
+		REQUIRE(vec->size() == 2);
+		// Using reserve increases the capacity, but not the size
+		vec->reserve(machine, 16);
+		REQUIRE(vec->capacity() >= 16);
+		REQUIRE(vec->size() == 2);
+		// Check that the vectors were correctly initialized
 		REQUIRE(vec->at(machine, 0).size() == 3);
 		REQUIRE(vec->at(machine, 1).size() == 2);
 		REQUIRE(vec->at(machine, 0).at(machine, 0) == 1);
