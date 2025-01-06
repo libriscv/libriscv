@@ -148,34 +148,28 @@ extern void *sys_calloc(size_t, size_t);
 extern void *sys_realloc(void *, size_t);
 extern void *sys_free(void *);
 
-static inline
 void* malloc(size_t size)
 {
 	return sys_malloc(size);
 }
-static inline
 void* calloc(size_t count, size_t size)
 {
 	return sys_calloc(count, size);
 }
-static inline
 void* realloc(void* ptr, size_t newsize)
 {
 	return sys_realloc(ptr, newsize);
 }
-static inline
 void free(void* ptr)
 {
 	(void)sys_free(ptr);
 }
-static inline
 void* reallocf(void *ptr, size_t newsize)
 {
 	void* newptr = realloc(ptr, newsize);
 	if (newptr == NULL) free(ptr);
 	return newptr;
 }
-static inline
 void* memalign(size_t align, size_t bytes)
 {
 	// XXX: TODO: Make an accelerated memalign system call
@@ -196,14 +190,12 @@ void* memalign(size_t align, size_t bytes)
 	for (size_t i = 0; i < freecounter; i++) sys_free(freelist[i]);
 	return ptr;
 }
-static inline
 int posix_memalign(void **memptr, size_t alignment, size_t size)
 {
 	void* ptr = memalign(alignment, size);
 	*memptr = ptr;
 	return 0;
 }
-static inline
 void* aligned_alloc(size_t alignment, size_t size)
 {
 	return memalign(alignment, size);

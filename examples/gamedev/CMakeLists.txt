@@ -11,8 +11,9 @@ FetchContent_Declare(libfmt
   GIT_TAG        master
   )
 
-FetchContent_MakeAvailable(libriscv)
+#FetchContent_MakeAvailable(libriscv)
 FetchContent_MakeAvailable(libfmt)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../lib libriscv)
 
 set(CMAKE_CXX_STANDARD 20)
 
