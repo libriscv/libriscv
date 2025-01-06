@@ -7,6 +7,13 @@ using namespace riscv;
 template <unsigned SAMPLES = 2000>
 static void benchmark(std::string_view name, Script& script, std::function<void()> fn);
 
+using CppString = GuestStdString<Script::MARCH>;
+template <typename T>
+using CppVector = GuestStdVector<Script::MARCH, T>;
+using ScopedCppString = ScopedArenaObject<Script::MARCH, CppString>;
+template <typename T>
+using ScopedCppVector = ScopedArenaObject<Script::MARCH, CppVector<T>>;
+
 // ScriptCallable is a function that can be requested from the script
 using ScriptCallable = std::function<void(Script&)>;
 // A map of host functions that can be called from the script
@@ -154,24 +161,24 @@ int main(int argc, char** argv)
 	// like std::string and std::vector wrappers.
 	if (script.address_of("test6"))
 	{
-		using CppString = GuestStdString<Script::MARCH>;
-		using CppVector = GuestStdVector<Script::MARCH>;
 		// Define the test6 function, which has a std::string& argument in the guest,
 		// and a std::vector<int>& and std::vector<std::string>&. The stack is writable,
 		// so the guest can choose whether or not to use const references.
-		Event<void(CppString, CppVector, CppVector)> test6(script, "test6");
+		Event<void(ScopedCppString&, ScopedCppVector<int>&, ScopedCppVector<CppString>&)> test6(script, "test6");
 
-		// Create a GuestStdString object with a string
-		CppString str(script.machine(), "C++ World");
-		// Create a GuestStdVector object with a vector of integers
-		CppVector ivec(script.machine(), std::vector<int>{ 1, 2, 3, 4, 5 });
-		// Create a vector of strings using a specialization for std::string
-		CppVector svec(script.machine(),
-			std::vector<std::string>{ "Hello", "World", "This string is larger than the SSO limit :)" });
+		for (int i = 0; i < 1; i++) {
+			// Allocate a GuestStdString object with a string
+			ScopedCppString str(script.machine(), "C++ World ..SSO..");
+			// Allocate a GuestStdVector object with a vector of integers
+			ScopedCppVector<int> ivec(script.machine(), std::vector<int>{ 1, 2, 3, 4, 5 });
+			// Allocate a vector of strings (using CppString)
+			ScopedCppVector<CppString> svec(script.machine(),
+				std::vector<std::string>{ "Hello,", "World!", "This string is long :)" });
 
-		// Call the test6 function with the std::string managed by the arena
-		if (auto ret = test6(str, ivec, svec); !ret)
-			throw std::runtime_error("Failed to call test6!?");
+			// Call the test6 function with all the objects
+			if (auto ret = test6(str, ivec, svec); !ret)
+				throw std::runtime_error("Failed to call test6!?");
+		}
 	}
 
 	// If GDB=1, start the RSP server for debugging

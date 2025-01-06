@@ -1,4 +1,3 @@
-
 template <int W>
 template <typename... Args> constexpr
 inline void Machine<W>::setup_call(Args&&... args)
@@ -20,6 +19,9 @@ inline void Machine<W>::setup_call(Args&&... args)
 		else if constexpr (std::is_same_v<GuestStdString<W>, remove_cvref<Args>>) {
 			args.move(cpu.reg(REG_SP) - sizeof(Args)); // SSO-adjustment
 			cpu.reg(iarg++) = stack_push(&args, sizeof(Args));
+		}
+		else if constexpr (is_scoped_guest_object<W, remove_cvref<Args>>::value) {
+			cpu.reg(iarg++) = args.address();
 		}
 #endif
 		else if constexpr (is_stdvector<remove_cvref<Args>>::value)

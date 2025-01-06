@@ -101,7 +101,9 @@ PUBLIC(void bench_dyncall_overhead())
 }
 
 // This function is used to test complex classes like std::string and std::vector.
-PUBLIC(void test6(const std::string& str, const std::vector<int>& ints, const std::vector<std::string>& strings))
+PUBLIC(void test6(const std::string& str,
+	const std::vector<int>& ints,
+	const std::vector<std::string>& strings))
 {
 	std::string result = "Hello, " + str + "! Integers:";
 	for (auto i : ints)
