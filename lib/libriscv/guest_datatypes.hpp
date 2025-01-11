@@ -14,7 +14,13 @@ struct GuestRef {
 	constexpr GuestRef() noexcept : ptr(0) {}
 	GuestRef(gaddr_t ptr) : ptr(ptr) {}
 
+	/// @brief Get the address of the reference.
+	/// @return The address of the reference.
 	gaddr_t address() const noexcept { return ptr; }
+
+	/// @brief Check if the reference is valid.
+	/// @return True if the reference is not null.
+	operator bool() const noexcept { return ptr == 0; }
 
 	const T& get(machine_t& machine) const noexcept {
 		// This function cannot silently fail, as it will
@@ -267,6 +273,15 @@ struct GuestStdVector {
 			throw std::runtime_error("Guest std::vector has size > max_bytes");
 		return machine.memory.template memarray<T>(data(), size());
 	}
+
+#if RISCV_SPAN_AVAILABLE
+	std::span<T> to_span(const machine_t& machine) {
+		return std::span<T>(as_array(machine), size());
+	}
+	std::span<const T> to_span(const machine_t& machine) const {
+		return std::span<const T>(as_array(machine), size());
+	}
+#endif
 
 	// Iterators
 	auto begin(machine_t& machine) { return as_array(machine); }
