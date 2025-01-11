@@ -1,6 +1,7 @@
 #pragma once
 #include "machine.hpp"
 #include <cstdarg>
+#include <inttypes.h>
 #include <unistd.h>
 
 /**
@@ -350,7 +351,7 @@ void RSPClient<W>::handle_breakpoint()
 {
 	uint32_t type = 0;
 	uint64_t addr = 0;
-	sscanf(&buffer[1], "%x,%lx", &type, &addr);
+	sscanf(&buffer[1], "%x,%"PRIx64, &type, &addr);
 	if (buffer[0] == 'Z') {
 		this->m_bp.at(m_bp_iterator) = addr;
 		m_bp_iterator = (m_bp_iterator + 1) % m_bp.size();
@@ -401,7 +402,7 @@ void RSPClient<W>::handle_readmem()
 {
 	uint64_t addr = 0;
 	uint32_t len = 0;
-	sscanf(buffer.c_str(), "m%lx,%x", &addr, &len);
+	sscanf(buffer.c_str(), "m%"PRIx64",%x", &addr, &len);
 	if (len >= 500) {
 		send("E01");
 		return;
@@ -428,7 +429,7 @@ void RSPClient<W>::handle_writemem()
 {
 	uint64_t addr = 0;
 	uint32_t len = 0;
-	int ret = sscanf(buffer.c_str(), "X%lx,%x:", &addr, &len);
+	int ret = sscanf(buffer.c_str(), "X%"PRIx64",%x:", &addr, &len);
 	if (ret <= 0) {
 		send("E01");
 		return;
@@ -541,7 +542,7 @@ void RSPClient<W>::handle_writereg()
 {
 	uint64_t value = 0;
 	uint32_t idx = 0;
-	sscanf(buffer.c_str(), "P%x=%lx", &idx, &value);
+	sscanf(buffer.c_str(), "P%x=%"PRIx64, &idx, &value);
 	value = __builtin_bswap64(value);
 
 	if (idx < 32) {
