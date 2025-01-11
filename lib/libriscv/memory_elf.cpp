@@ -40,7 +40,7 @@ namespace riscv
 			throw MachineException(INVALID_PROGRAM, "Invalid section header offset", elf.e_shoff);
 		if (sh_end_offset < elf.e_shoff || sh_end_offset > m_binary.size())
 			throw MachineException(INVALID_PROGRAM, "Invalid section header offset", sh_end_offset);
-		if (elf.e_shnum == 0 || elf.e_shnum > 40)
+		if (elf.e_shnum == 0 || elf.e_shnum > 64)
 			throw MachineException(INVALID_PROGRAM, "Invalid section header count", elf.e_shnum);
 		const auto* shdr = elf_offset<typename Elf::SectionHeader> (elf.e_shoff);
 
