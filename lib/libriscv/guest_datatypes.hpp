@@ -3,6 +3,31 @@
 
 namespace riscv {
 
+// View a guest memory location as a reference to a C++ object
+template <int W, typename T>
+struct GuestRef {
+	using gaddr_t = riscv::address_type<W>;
+	using machine_t = riscv::Machine<W>;
+
+	const gaddr_t ptr;
+
+	constexpr GuestRef() noexcept : ptr(0) {}
+	GuestRef(gaddr_t ptr) : ptr(ptr) {}
+
+	gaddr_t address() const noexcept { return ptr; }
+
+	const T& get(machine_t& machine) const noexcept {
+		// This function cannot silently fail, as it will
+		// throw an exception if the location is invalid or misaligned.
+		return *machine.memory.template memarray<T>(this->ptr, 1);
+	}
+	T& get(machine_t& machine) noexcept {
+		// This function cannot silently fail, as it will
+		// throw an exception if the location is invalid or misaligned.
+		return *machine.memory.template memarray<T>(this->ptr, 1);
+	}
+};
+
 // View into libstdc++'s std::string
 template <int W>
 struct GuestStdString {
