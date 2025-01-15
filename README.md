@@ -2,7 +2,7 @@
 
 _libriscv_ is a simple, slim and complete sandbox that is highly embeddable and configurable. It is a specialty emulator that specializes in low-latency, low-footprint emulation. _libriscv_ may be the only one of its kind. Where other solutions routinely require ~50-150ns to call a VM function and return, _libriscv_ requires 3ns. _libriscv_ is also routinely faster than other interpreters, JIT-compilers and binary translators. _libriscv_ has specialized APIs that make passing data in and out of the sandbox safe and low-latency.
 
-There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to remotely live-debug programs. A [Cosmopolitan](https://github.com/jart/cosmopolitan) build can be [downloaded here](https://github.com/fwsGonzo/libriscv/releases/download/v1.7/libriscv-cli).
+There is also [a CLI](/emulator) that you can use to run RISC-V programs and step through instructions one by one, like a simulator, or to connect with GDB in order to remotely live-debug programs. The CLI has many build and run-time options, so please check out [the README](/emulator/README.md).
 
 [![Debian Packaging](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/packaging.yml) [![Build configuration matrix](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/buildconfig.yml) [![Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests.yml) [![Experimental Unit Tests](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/unittests_exp.yml) [![Linux emulator](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/emulator.yml) [![MinGW 64-bit emulator build](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/mingw.yml) [![Verify example programs](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml/badge.svg)](https://github.com/fwsGonzo/libriscv/actions/workflows/verify_examples.yml)
 
@@ -333,7 +333,7 @@ The binary translation feature (accessible by enabling the `RISCV_BINARY_TRANSLA
 
 You can control binary translation by passing CC and CFLAGS environment variables to the program that runs the emulator. You can show the compiler arguments using VERBOSE=1. Example: `CFLAGS=-O2 VERBOSE=1 ./myemulator`. You may use `KEEPCODE=1` to preserve the generated code output from the translator for inspection. For the [CLI](/emulator), the `--no-translate` option can be used to disable binary translation in order to compare output or performance.
 
-When embedded libtcc is enabled, by setting the CMake option `RISCV_LIBTCC` to `ON`, libriscv behaves like it's dynamically translated. _libriscv_ will invoke _libtcc_ on code generated for each execute segment, including those loaded from shared objects. You can use your distros `libtcc-dev` package, or embed libtcc with the emulator (default).
+When embedded libtcc is enabled, by setting the CMake option `RISCV_LIBTCC` to `ON`, libriscv behaves like it's dynamically translated. _libriscv_ will invoke _libtcc_ on code generated for each execute segment, including those loaded from shared objects.
 
 
 ## Experimental and special features
@@ -344,9 +344,7 @@ The read-write arena simplifies memory operations immediately outside of the loa
 
 ### Embedded libtcc
 
-When binary translation is enabled, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. It will give a handsome 2-5x performance boost compared to interpreter mode.
-
-If you are seeing the error `tcc: error: file 'libtcc1.a' not found`, you can change to using the distro package instead by enabling `RISCV_LIBTCC_DISTRO_PACKAGE`, where `libtcc1.a` is pre-installed. In which case, install your distros `libtcc-dev` equivalent package (eg. `tcc` on Arch). Otherwise, the CMake build script produces `libtcc1.a` and puts it at the root of the build folder. So, a very quick solution to the error is to just create a symbolic link: `ln -fs build/libtcc1.a .`. It is a run-time dependency of TCC.
+When binary translation is enabled with `RISCV_BINARY_TRANSLATION=ON`, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. It will give a handsome 2-5x performance boost compared to interpreter mode. It's currently known to work on both Linux and Windows.
 
 ### Full binary translation as embeddable code
 
