@@ -573,10 +573,10 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // to float32
-			if (fi.R4type.rs2 == 0x0)
-				dst.set_float((RVSIGNTYPE(cpu)) rs1);
-			else
-				dst.set_float(rs1);
+			if (fi.R4type.rs2 == 0x0) // FCVT.S.W
+				dst.set_float((int32_t)rs1);
+			else // FCVT.S.WU
+				dst.set_float((uint32_t)rs1);
 			return;
 		case 0x1: // to float64
 			switch (fi.R4type.rs2) {

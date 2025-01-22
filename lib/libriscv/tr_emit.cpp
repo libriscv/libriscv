@@ -1658,11 +1658,28 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FCVT_SD_W: {
-				const std::string sign((fi.R4type.rs2 == 0x0) ? "(saddr_t)" : "");
 				if (fi.R4type.funct2 == 0x0) {
+					// FCVT.S.W && FCVT.S.WU
+					const std::string sign((fi.R4type.rs2 == 0x0) ? "(int32_t)" : "(uint32_t)");
 					code += "set_fl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
 				} else if (fi.R4type.funct2 == 0x1) {
-					code += "set_dbl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+					// FCVT.D.[LWU]
+					switch (fi.R4type.rs2) {
+					case 0x0: // FCVT.D.W
+						code += "set_dbl(&" + dst + ", (int32_t)" + from_reg(fi.R4type.rs1) + ");\n";
+						break;
+					case 0x1: // FCVT.D.WU
+						code += "set_dbl(&" + dst + ", (uint32_t)" + from_reg(fi.R4type.rs1) + ");\n";
+						break;
+					case 0x2: // FCVT.D.L
+						code += "set_dbl(&" + dst + ", (int64_t)" + from_reg(fi.R4type.rs1) + ");\n";
+						break;
+					case 0x3: // FCVT.D.LU
+						code += "set_dbl(&" + dst + ", (uint64_t)" + from_reg(fi.R4type.rs1) + ");\n";
+						break;
+					default:
+						UNKNOWN_INSTRUCTION();
+					}
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}
