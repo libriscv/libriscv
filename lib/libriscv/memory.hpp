@@ -19,7 +19,7 @@ namespace riscv
 	struct vBuffer { char* ptr; size_t len; };
 
 	template<int W>
-	struct alignas(32) Memory
+	struct alignas(RISCV_MACHINE_ALIGNMENT) Memory
 	{
 		using address_t = address_type<W>;
 		using mmio_cb_t = Page::mmio_cb_t;

@@ -32,6 +32,10 @@
 #define RISCV_FORCE_ALIGN_MEMORY 1
 #endif
 
+#ifndef RISCV_MACHINE_ALIGNMENT
+#define RISCV_MACHINE_ALIGNMENT 32
+#endif
+
 #ifndef RISCV_BRK_MEMORY_SIZE
 #define RISCV_BRK_MEMORY_SIZE  (16ull << 20) // 16MB
 #endif
