@@ -143,7 +143,7 @@ typedef union {
 #define set_dbl(reg, dv)  (reg)->f64 = (dv)
 
 // Thin variant of CPU for higher compilation speed
-__attribute__((aligned(32)))
+__attribute__((aligned(RISCV_MACHINE_ALIGNMENT)))
 typedef struct {
 	addr_t  pc;
 	addr_t  r[32];

@@ -1,4 +1,5 @@
 #pragma once
+#include "common.hpp"
 #include "types.hpp"
 #include <array>
 #include <memory>
@@ -66,7 +67,7 @@ namespace riscv
 	};
 
 	template <int W>
-	struct alignas(32) Registers
+	struct alignas(RISCV_MACHINE_ALIGNMENT) Registers
 	{
 		using address_t  = address_type<W>;   // one unsigned memory address
 		using register_t = register_type<W>;  // integer register

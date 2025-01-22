@@ -30,7 +30,7 @@ namespace riscv
 	/// @brief A RISC-V emulator
 	/// @tparam W The machine architecture
 	template <int W>
-	struct alignas(32) Machine
+	struct alignas(RISCV_MACHINE_ALIGNMENT) Machine
 	{
 		using syscall_t = void(*)(Machine&);
 		using address_t = address_type<W>; // one unsigned memory address

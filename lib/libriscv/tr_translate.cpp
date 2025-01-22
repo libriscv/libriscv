@@ -153,6 +153,7 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	std::unordered_map<std::string, std::string> defines;
 	defines.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
 	defines.emplace("RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX));
+	defines.emplace("RISCV_MACHINE_ALIGNMENT", std::to_string(RISCV_MACHINE_ALIGNMENT));
 	if constexpr (W == 16) {
 		defines.emplace("RISCV_ARENA_END", std::to_string(uint64_t(arena_end)));
 		defines.emplace("RISCV_ARENA_ROEND", std::to_string(uint64_t(initial_rodata_end)));
