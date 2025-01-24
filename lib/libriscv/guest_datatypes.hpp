@@ -251,6 +251,15 @@ struct GuestStdVector {
 		this->ptr_end -= sizeof(T);
 	}
 
+	void append(machine_t& machine, const T* values, std::size_t count) {
+		if (size_bytes() + count * sizeof(T) > capacity_bytes())
+			this->reserve(machine, size() + count);
+		T* array = machine.memory.template memarray<T>(this->data(), size() + count);
+		for (std::size_t i = 0; i < count; i++)
+			new (&array[size() + i]) T(values[i]);
+		this->ptr_end += count * sizeof(T);
+	}
+
 	void clear(machine_t& machine) {
 		for (std::size_t i = 0; i < size(); i++)
 			this->free_element(machine, i);
