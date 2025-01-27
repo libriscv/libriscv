@@ -313,6 +313,30 @@ struct GuestStdVector {
 		this->ptr_end = this->ptr_begin + vec.size() * sizeof(T);
 	}
 
+	void assign(machine_t& machine, const T* values, std::size_t count)
+	{
+		auto [array, self] = alloc(machine, count);
+		(void)self;
+		std::copy(values, values + count, array);
+		this->ptr_end = this->ptr_begin + count * sizeof(T);
+	}
+
+	void resize(machine_t& machine, std::size_t new_size)
+	{
+		if (new_size < size()) {
+			for (std::size_t i = new_size; i < size(); i++)
+				this->free_element(machine, i);
+			this->ptr_end = this->ptr_begin + new_size * sizeof(T);
+		} else if (new_size > size()) {
+			if (new_size > capacity())
+				this->reserve(machine, new_size);
+			T* array = machine.memory.template memarray<T>(this->data(), new_size);
+			for (std::size_t i = size(); i < new_size; i++)
+				new (&array[i]) T();
+			this->ptr_end = this->ptr_begin + new_size * sizeof(T);
+		}
+	}
+
 	void reserve(machine_t& machine, std::size_t elements)
 	{
 		if (elements <= capacity())
