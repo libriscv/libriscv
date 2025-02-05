@@ -169,8 +169,10 @@ retry_translated_function:
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			goto retry_translated_function;
 		}
+#ifdef RISCV_DEBUG
 		if (exec->is_recording_slowpaths())
 			exec->insert_slowpath_address(pc);
+#endif
 		goto continue_segment;
 	} else if (bintr_results.max_counter == 0)
 		goto exit_check;

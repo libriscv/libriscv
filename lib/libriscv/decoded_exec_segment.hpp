@@ -79,8 +79,10 @@ namespace riscv
 
 		void set_record_slowpaths(bool do_record) { m_do_record_slowpaths = do_record; }
 		bool is_recording_slowpaths() const noexcept { return m_do_record_slowpaths; }
+#ifdef RISCV_DEBUG
 		void insert_slowpath_address(address_t addr) { m_slowpath_addresses.insert(addr); }
 		auto& slowpath_addresses() const noexcept { return m_slowpath_addresses; }
+#endif
 #else
 		bool is_binary_translated() const noexcept { return false; }
 #endif
@@ -116,7 +118,9 @@ namespace riscv
 		std::unique_ptr<DecoderCache<W>[]> m_patched_decoder_cache = nullptr;
 		DecoderData<W>* m_patched_exec_decoder = nullptr;
 		mutable void* m_bintr_dl = nullptr;
+#ifdef RISCV_DEBUG
 		std::unordered_set<address_t> m_slowpath_addresses;
+#endif
 		uint32_t m_bintr_hash = 0x0; // CRC32-C of the execute segment + compiler options
 #endif
 		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment

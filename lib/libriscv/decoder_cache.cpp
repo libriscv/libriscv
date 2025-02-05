@@ -595,7 +595,7 @@ namespace riscv
 			// execute segment with the same hash.
 			free_slot = std::move(current_exec);
 			free_slot->set_likely_jit(is_likely_jit);
-#ifdef RISCV_BINARY_TRANSLATION
+#if defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_DEBUG)
 			free_slot->set_record_slowpaths(options.record_slowpaths_to_jump_hints && !is_likely_jit);
 #endif
 			// Store the hash in the decoder cache
@@ -610,7 +610,7 @@ namespace riscv
 		{
 			free_slot = std::move(current_exec);
 			free_slot->set_likely_jit(is_likely_jit);
-#ifdef RISCV_BINARY_TRANSLATION
+#if defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_DEBUG)
 			free_slot->set_record_slowpaths(options.record_slowpaths_to_jump_hints && !is_likely_jit);
 #endif
 			// Store the hash in the decoder cache
@@ -678,6 +678,8 @@ namespace riscv
 	template <int W>
 	std::vector<address_type<W>> Memory<W>::gather_jump_hints() const
 	{
+		std::vector<address_t> result;
+#  ifdef RISCV_DEBUG
 		std::unordered_set<address_type<W>> addresses;
 		for (auto addr : machine().options().translator_jump_hints)
 			addresses.insert(addr);
@@ -689,9 +691,9 @@ namespace riscv
 				}
 			}
 		}
-		std::vector<address_t> result;
 		for (auto addr : addresses)
 			result.push_back(addr);
+#  endif // RISCV_DEBUG
 		return result;
 	}
 #endif

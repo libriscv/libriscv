@@ -195,6 +195,7 @@ namespace riscv
 		/// for all memory accesses, which can drastically improve performance.
 		bool translate_automatic_nbit_address_space = false;
 		/// @brief Enable recording of slowpaths to jump hints for the binary translator.
+		/// @note This option is only available when RISCV_DEBUG and the binary translator is enabled.
 		/// @details This will record slowpaths to the MachineOptions jump hints vector.
 		/// From there the CLI can save the jump hints to a file after the program has run.
 		bool record_slowpaths_to_jump_hints = false;
