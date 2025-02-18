@@ -24,18 +24,20 @@ Goals:
 - Low attack surface, only 20k LOC
 - Platform-independent and super-easy to embed
 	- Supports all architectures and all platforms, C++17 or later
+- Pause and resume is a first-class citizen
+	- Pause on any instruction
+	- Make preemptive function calls
+	- Pause and serialize VM, deserialize and resume on another host/platform
 - Just-in-time compilation for development usage
 	- [libtcc](#embedded-libtcc) can be used to instantly improve emulation of RISC-V programs
 - High-performance binary translation on end-user systems through DLLs (eg. Windows)
 	- Cross-compile RISC-V programs to a [binary translated](#binary-translation) .dll executable in _libriscv_ on end-user systems (where shared libraries are allowed)
 - Maximum final-build performance on all platforms, including Consoles, Mobiles, production systems
 	- Supports [embeddable](#full-binary-translation-as-embeddable-code) high-performance binary translations that can be baked into final builds (eg. where shared libraries are not allowed, or static builds are preferred)
-- Highest development iteration rate
-	- Emulator starts instantly, and all binary translation modes can be compiled in a background thread, and then applied using thread-safe live-patching techniques
 - Tiny memory footprint
 	- Less than 40kB total memory usage for [fibonacci program](/binaries/measure_mips/fib.c)
 - High scalability with unique CoW-support and shared memories
-	- Serve requests using ephemeral VMs in [~1us in production](https://github.com/libriscv/multi_tenant_drogon)
+	- Serve requests using ephemeral VMs in [~1us in production](https://github.com/libriscv/drogon-sandbox)
 	- Execute segments are automatically shared among all instances (with or without forking)
 - Dynamic linking and run-time dlopen() support (see CLI)
 - Supports sandboxing language-runtimes that use JIT-compilation, eg. V8 JavaScript and LuaJIT
