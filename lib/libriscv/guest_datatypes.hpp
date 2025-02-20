@@ -1,5 +1,6 @@
 #pragma once
 #include "native_heap.hpp" // arena()
+#include <stdexcept>
 
 namespace riscv {
 
