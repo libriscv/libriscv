@@ -402,6 +402,7 @@ namespace riscv
 #endif
 
 #ifdef _MSC_VER
+#undef RISCV_ALWAYS_INLINE
 #define RISCV_ALWAYS_INLINE __forceinline
 #define RISCV_NOINLINE      __declspec(noinline)
 #endif

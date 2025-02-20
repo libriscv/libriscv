@@ -4,6 +4,7 @@
 #  define RISCV_HAS_BITOPS
 # endif
 #endif
+#include <algorithm>
 #include <cmath>
 #include <chrono>
 #include <fstream>
