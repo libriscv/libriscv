@@ -90,10 +90,4 @@ namespace riscv
 #ifdef RISCV_64I
 	template void Machine<8>::setup_minimal_syscalls();
 #endif
-
-#if defined(_WIN32) && !defined(__MINGW32__)
-	FileDescriptors::~FileDescriptors()
-	{
-	}
-#endif
 } // riscv
