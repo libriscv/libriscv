@@ -31,9 +31,9 @@ jobs:
 
     - name: Get Zig
       run: |
-        wget https://ziglang.org/builds/zig-linux-x86_64-0.14.0-dev.2851+b074fb7dd.tar.xz
-        tar -xf zig-linux-x86_64-0.14.0-dev.2851+b074fb7dd.tar.xz
-        mv zig-linux-x86_64-0.14.0-dev.2851+b074fb7dd ${{github.workspace}}/zig
+        wget https://ziglang.org/builds/zig-linux-x86_64-0.14.0-dev.3357+c44f4501e.tar.xz
+        tar -xf zig-linux-x86_64-0.14.0-dev.3357+c44f4501e.tar.xz
+        mv zig-linux-x86_64-0.14.0-dev.3357+c44f4501e ${{github.workspace}}/zig
 
     - name: Run tests
       working-directory: ${{github.workspace}}/build
