@@ -93,7 +93,7 @@ namespace riscv
 		// Read the next instruction bits
 		format_t read_next_instruction() const;
 		// Internal preempt() implementation that executes and restores old registers
-		address_t preempt_internal(Registers<W>& old_regs, bool store_regs, address_t pc, uint64_t max_instr);
+		address_t preempt_internal(Registers<W>& old_regs, bool Throw, bool store_regs, address_t pc, uint64_t max_instr);
 
 		// Pretty print instructions
 		std::string to_string(format_t format) const;

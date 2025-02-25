@@ -80,7 +80,7 @@ address_type<W> Machine<W>::preempt(uint64_t max_instr, address_t call_addr, Arg
 	// setup calling convention
 	this->setup_call(std::forward<Args>(args)...);
 	// execute!
-	return this->cpu.preempt_internal(regs, StoreRegs, call_addr, max_instr);
+	return this->cpu.preempt_internal(regs, Throw, StoreRegs, call_addr, max_instr);
 }
 
 template <int W>

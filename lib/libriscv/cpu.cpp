@@ -316,7 +316,7 @@ restart_precise_sim:
 	}
 
 	template<int W>
-	address_type<W> CPU<W>::preempt_internal(Registers<W>& old_regs, bool store_regs, address_t pc, uint64_t max_instr)
+	address_type<W> CPU<W>::preempt_internal(Registers<W>& old_regs, bool Throw, bool store_regs, address_t pc, uint64_t max_instr)
 	{
 		auto& m = machine();
 		const auto prev_max = m.max_instructions();
@@ -332,7 +332,8 @@ restart_precise_sim:
 			if (store_regs) {
 				this->registers() = old_regs;
 			}
-			throw;
+			if (Throw)
+				throw; // Only rethrow if we're supposed to forward exceptions
 		}
 		// restore registers and return value
 		m.set_max_instructions(prev_max);
