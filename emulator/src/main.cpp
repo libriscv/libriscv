@@ -196,6 +196,9 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			}
 			if (args.fuel == 0) {
 				args.fuel = UINT64_MAX;
+				args.accurate = false; // It will run forever anyway
+			} else {
+				args.accurate = true;
 			}
 			if (args.verbose) {
 				printf("* Fuel set to %" PRIu64 "\n", args.fuel);
