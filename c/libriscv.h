@@ -82,9 +82,9 @@ LIBRISCVAPI int libriscv_jump(RISCVMachine *m, uint64_t address);
 LIBRISCVAPI int libriscv_copy_to_guest(RISCVMachine *m, uint64_t dst, const void *src, unsigned len);
 LIBRISCVAPI int libriscv_copy_from_guest(RISCVMachine *m, void *dst, uint64_t src, unsigned len);
 
-/* Read a zero-terminated string from memory into a heap-allocated string of at most maxlen length.
-   On success, set *length and return a pointer to the new string. Otherwise, return null. */
-LIBRISCVAPI char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned maxlen, unsigned *length);
+/* View a zero-terminated string from readable memory of at most maxlen length. The string is read-only.
+   On success, set *length and return a pointer to the string, zero-copy. Otherwise, return null. */
+LIBRISCVAPI const char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned maxlen, unsigned *length);
 
 /* View a slice of readable (but not guaranteed writable) memory from src to src + length.
    On success, returns a pointer to the memory. Otherwise, returns null. */
