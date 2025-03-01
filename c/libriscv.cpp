@@ -298,6 +298,20 @@ const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length)
 }
 
 extern "C"
+char * libriscv_writable_memview(RISCVMachine *m, uint64_t src, unsigned length)
+{
+	try {
+		auto buffer = MACHINE(m)->memory.writable_memview(src, length);
+		return (char *)buffer.data();
+	} catch (const MachineException& me) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+	} catch (const std::exception& e) {
+		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
+	}
+	return nullptr;
+}
+
+extern "C"
 void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data)
 {
 	MACHINE(m)->cpu.trigger_exception(exception, data);

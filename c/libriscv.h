@@ -86,9 +86,13 @@ LIBRISCVAPI int libriscv_copy_from_guest(RISCVMachine *m, void *dst, uint64_t sr
    On success, set *length and return a pointer to the new string. Otherwise, return null. */
 LIBRISCVAPI char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsigned maxlen, unsigned *length);
 
-/* View a slice of readable memory from src to src + length.
-   On success, return a pointer to the memory. Otherwise, return null. */
+/* View a slice of readable (but not guaranteed writable) memory from src to src + length.
+   On success, returns a pointer to the memory. Otherwise, returns null. */
 LIBRISCVAPI const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length);
+
+/* View a slice of readable and writable memory from src to src + length.
+   On success, returns a pointer to the writable memory. Otherwise, returns null. */
+LIBRISCVAPI char * libriscv_writable_memview(RISCVMachine *m, uint64_t src, unsigned length);
 
 /* Stops execution normally. Only possible from a system call and EBREAK. */
 LIBRISCVAPI void libriscv_stop(RISCVMachine *m);
