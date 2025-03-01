@@ -27,7 +27,11 @@ TEST_CASE("Basic page protections", "[Memory]")
 
 	// V is not readable anymore
 	REQUIRE_THROWS_WITH([&] {
-		machine.memory.rvbuffer(V, VLEN);
+		machine.memory.membuffer(V, VLEN);
+	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
+
+	REQUIRE_THROWS_WITH([&] {
+		machine.memory.memview(V, VLEN);
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 
 	REQUIRE_THROWS_WITH([&] {

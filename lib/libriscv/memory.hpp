@@ -58,27 +58,47 @@ namespace riscv
 		// Gather fragmented virtual memory into a buffer abstraction that can output
 		// to a vector, a string and check sequentiality.
 		riscv::Buffer membuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
-		riscv::Buffer rvbuffer(address_t addr, size_t len, size_t maxlen = 16ul << 20) const { return membuffer(addr, len, maxlen); }
-		// View known-sequential virtual memory (or throw exception)
+
+		/// @brief View known-sequential read/write virtual memory (or throw exception)
+		/// @param addr The address to start reading from
+		/// @param len The number of bytes to read
+		/// @param maxlen The maximum number of bytes to read
+		/// @return A string_view of the readable memory
+		/// @note Do not attempt to write to the memory region, as it may be read-only
 		std::string_view memview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
-		std::string_view rvview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const { return memview(addr, len, maxlen); }
+
+		/// @brief View known-sequential writable virtual memory (or throw exception)
+		/// @param addr The address to start reading from
+		/// @param len The number of bytes to read
+		/// @param maxlen The maximum number of bytes to read
+		/// @return A string_view of the readable/writable memory
+		std::string_view writable_memview(address_t addr, size_t len, size_t maxlen = 16ul << 20) const;
+
 #ifdef RISCV_SPAN_AVAILABLE
 		// View known-sequential virtual memory as array of T with given number of elements (or throw exception)
+		// This always uses writable_memview() under the hood to ensure the memory is writable
 		template <typename T>
 		std::span<T> memspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const;
 		template <typename T, size_t N>
 		std::span<T, N> memspan(address_t addr, size_t maxlen = 16ul << 20) const { return memspan<T>(addr, N, maxlen).template first<N>(); }
-		template <typename T>
-		std::span<T> rvspan(address_t addr, size_t elements, size_t maxlen = 16ul << 20) const { return memspan<T>(addr, elements, maxlen); }
-		template <typename T, size_t N>
-		std::span<T, N> rvspan(address_t addr, size_t maxlen = 16ul << 20) const { return memspan<T>(addr, N, maxlen).template first<N>(); }
 #endif
-		// View a fixed-size array of T from a known-sequential virtual memory region
+
+		/// @brief View a fixed-size array of T from a known-sequential virtual memory region
+		/// @tparam T The type of the array elements. If T is const, the memory is read-only.
+		/// @param addr The address to start reading from
+		/// @return A pointer to the array, or nullptr if the memory region is not sequential or too large
 		template <typename T, size_t N>
 		std::array<T, N>* memarray(address_t addr) const;
-		// View a dynamically-sized array of T from a known-sequential virtual memory region
+
+		/// @brief View a dynamically-sized array of T from a known-sequential virtual memory region
+		/// @tparam T The type of the array elements. If T is const, the memory is read-only.
+		/// @param addr The address to start reading from
+		/// @param len The number of elements to read
+		/// @param maxbytes The maximum number of bytes to read
+		/// @return A pointer to the array, or nullptr if the memory region is not sequential or too large
 		template <typename T>
 		T* memarray(address_t addr, size_t len, size_t maxbytes = 16ul << 20) const;
+
 		// Try viewing a dynamically-sized array of T from a known-sequential virtual memory region
 		// Returns nullptr if the memory region is not sequential or too large
 		template <typename T>

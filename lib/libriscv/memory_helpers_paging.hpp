@@ -188,6 +188,28 @@ std::string_view Memory<W>::memview(address_t addr, size_t len, size_t maxlen) c
 	return {(const char *)buffers[0].ptr, buffers[0].len};
 }
 
+template <int W> inline
+std::string_view Memory<W>::writable_memview(address_t addr, size_t len, size_t maxlen) const
+{
+	if (UNLIKELY(len > maxlen))
+		protection_fault(addr);
+
+	if (len == 0)
+		return {};
+
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(addr + len - initial_rodata_end() < memory_arena_write_boundary() && addr < addr + len)) {
+			char* begin = &((char *)m_arena.data)[RISCV_SPECSAFE(addr)];
+			return {begin, len};
+		}
+	}
+
+	// Fallback: Try gathering a single buffer, which throws OUT_OF_MEMORY if it fails
+	std::array<vBuffer, 1> buffers;
+	const_cast<Memory<W>*> (this)->gather_writable_buffers_from_range(1, buffers.data(), addr, len);
+	return {(char *)buffers[0].ptr, buffers[0].len};
+}
+
 template <int W>
 template <typename T, size_t N>
 std::array<T, N>* Memory<W>::memarray(address_t addr) const
@@ -196,7 +218,12 @@ std::array<T, N>* Memory<W>::memarray(address_t addr) const
 	if (N != 0 && addr % alignof(T) != 0)
 		protection_fault(addr);
 
-	auto view = memview(addr, sizeof(T) * N);
+	std::string_view view;
+	if constexpr (std::is_const_v<T>) {
+		view = memview(addr, sizeof(T) * N);
+	} else {
+		view = writable_memview(addr, sizeof(T) * N);
+	}
 	if (view.size() != sizeof(T) * N)
 		protection_fault(addr);
 
@@ -211,7 +238,13 @@ T* Memory<W>::memarray(address_t addr, size_t count, size_t maxbytes) const
 	if (count != 0 && addr % alignof(T) != 0)
 		protection_fault(addr);
 
-	auto view = memview(addr, count * sizeof(T), maxbytes);
+	std::string_view view;
+	// When T* is const, we can use plain memview
+	if constexpr (std::is_const_v<T>) {
+		view = memview(addr, count * sizeof(T), maxbytes);
+	} else { // Otherwise, we need to use writable_memview
+		view = writable_memview(addr, count * sizeof(T), maxbytes);
+	}
 	if (view.size() != count * sizeof(T))
 		protection_fault(addr);
 
@@ -232,9 +265,14 @@ T* Memory<W>::try_memarray(address_t addr, size_t count, size_t maxbytes) const
 	if (addr % alignof(T) != 0)
 		protection_fault(addr);
 
-	if constexpr (flat_readwrite_arena) {
+	if constexpr (flat_readwrite_arena && std::is_const_v<T>) {
 		if (LIKELY(addr + len - RWREAD_BEGIN < memory_arena_read_boundary() && addr < addr + len)) {
-			auto* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
+			const char* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
+			return (T*) begin;
+		}
+	} else if constexpr (flat_readwrite_arena) {
+		if (LIKELY(addr + len - initial_rodata_end() < memory_arena_write_boundary() && addr < addr + len)) {
+			char* begin = &((char *)m_arena.data)[RISCV_SPECSAFE(addr)];
 			return (T*) begin;
 		}
 	}
@@ -255,7 +293,7 @@ std::span<T> Memory<W>::memspan(address_t addr, size_t count, size_t maxlen) con
 	if (count == 0)
 		return {};
 
-	auto view = memview(addr, count * sizeof(T), maxlen);
+	auto view = writable_memview(addr, count * sizeof(T), maxlen);
 	if (view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
 		return {(T *)view.data(), count};
 

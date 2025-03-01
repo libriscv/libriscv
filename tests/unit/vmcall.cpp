@@ -108,9 +108,6 @@ TEST_CASE("VM call return values", "[VMCall]")
 	REQUIRE(data.f1 == 3.0f);
 
 	// Test returning a pointer to a structure
-	// This is probably fine as the stack starts at the end of a page,
-	// making this structure very likely sequential in memory.
-	// If it wasn't an exception would be thrown.
 	const auto* data_ptr = machine.return_value<Data*>();
 	REQUIRE(data_ptr->val1 == 1);
 	REQUIRE(data_ptr->val2 == 2);

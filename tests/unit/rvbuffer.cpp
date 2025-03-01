@@ -32,7 +32,7 @@ TEST_CASE("Sequential buffer", "[Buffer]")
 	{
 		machine.memory.memcpy(addr, hello, sizeof(hello));
 
-		auto buf = machine.memory.rvbuffer(addr, 12);
+		auto buf = machine.memory.membuffer(addr, 12);
 		REQUIRE(buf.is_sequential());
 		REQUIRE(buf.size() == 12);
 		REQUIRE(buf.strview() == "hello world!");
@@ -41,7 +41,7 @@ TEST_CASE("Sequential buffer", "[Buffer]")
 
 	// maxlen works
 	REQUIRE_THROWS_WITH([&] {
-		machine.memory.rvbuffer(origin, 128, 127);
+		machine.memory.membuffer(origin, 128, 127);
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 }
 
@@ -68,7 +68,7 @@ TEST_CASE("Boundary buffer", "[Buffer]")
 	for (auto addr = origin + 4096 - 11; addr < origin + 4095; addr++)
 	{
 		machine.memory.memcpy(addr, hello, sizeof(hello));
-		auto buf = machine.memory.rvbuffer(addr, 12);
+		auto buf = machine.memory.membuffer(addr, 12);
 		REQUIRE(buf.is_sequential() == false);
 		REQUIRE(buf.size() == 12);
 		REQUIRE(buf.to_string() == "hello world!");

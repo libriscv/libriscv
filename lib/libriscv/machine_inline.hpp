@@ -104,21 +104,19 @@ inline T Machine<W>::sysarg(int idx) const
 	else if constexpr (std::is_enum_v<T>)
 		return static_cast<T>(cpu.reg(REG_ARG0 + idx));
 	else if constexpr (std::is_same_v<T, riscv::Buffer>)
-		return memory.rvbuffer(
+		return memory.membuffer(
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 	else if constexpr (std::is_same_v<T, std::basic_string_view<char>>)
-		return memory.rvview(
+		return memory.memview(
 			cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 	else if constexpr (is_stdstring<T>::value)
 		return memory.memstring(cpu.reg(REG_ARG0 + idx));
-	else if constexpr (is_stdarray_ptr_v<T>)
-		return memory.template memarray<typename std::remove_pointer_t<T>::value_type, std::tuple_size_v<std::remove_pointer_t<T>>>(cpu.reg(REG_ARG0 + idx));
 	else if constexpr (std::is_pointer_v<remove_cvref<T>>) {
-		return (T)memory.template memarray<std::remove_pointer_t<remove_cvref<T>>>(cpu.reg(REG_ARG0 + idx), 1);
+		return (T)memory.template memarray<std::remove_pointer_t<std::remove_reference_t<T>>>(cpu.reg(REG_ARG0 + idx), 1);
 	}
 #ifdef RISCV_SPAN_AVAILABLE
 	else if constexpr (is_span_v<T>)
-		return memory.template rvspan<typename T::value_type>(cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
+		return memory.template memspan<typename T::value_type>(cpu.reg(REG_ARG0 + idx), cpu.reg(REG_ARG0 + idx + 1));
 #endif // RISCV_SPAN_AVAILABLE
 	else if constexpr (std::is_standard_layout_v<remove_cvref<T>> && std::is_trivial_v<remove_cvref<T>>) {
 		T value;

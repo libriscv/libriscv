@@ -287,10 +287,8 @@ extern "C"
 const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length)
 {
 	try {
-		auto buffer = MACHINE(m)->memory.rvbuffer(src, length);
-		if (buffer.is_sequential()) {
-			return buffer.data();
-		}
+		auto buffer = MACHINE(m)->memory.memview(src, length);
+		return buffer.data();
 	} catch (const MachineException& me) {
 		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
 	} catch (const std::exception& e) {

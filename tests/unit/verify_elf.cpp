@@ -212,7 +212,7 @@ TEST_CASE("RV32 Execute-Only Hello World", "[Verify]")
 	machine.install_syscall_handler(502,
 	[] (auto& machine) {
 		auto [buf, count] = machine.template sysargs<uint32_t, uint32_t>();
-		auto view = machine.memory.rvview(buf, count);
+		auto view = machine.memory.memview(buf, count);
 		printf("%.*s", (int) view.size(), view.data());
 
 		auto* state = machine.template get_userdata<State>();
