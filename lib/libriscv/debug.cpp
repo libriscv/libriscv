@@ -461,19 +461,23 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 		const rv32i_instruction instruction =
 			rv32i_instruction { *(UnderAlign32*) &exec_seg_data[pc] };
 		if (this->verbose_instructions) {
-			auto string = cpu.to_string(instruction) + " ";
-			if (string.size() < 48)
-				string.resize(48, ' ');
+			auto it = backtrace_lookup.find(pc);
+			if (it == backtrace_lookup.end()) {
+				std::string string = cpu.to_string(instruction) + " ";
+				if (string.size() < 48)
+					string.resize(48, ' ');
 
-			std::string bt = backtrace_lookup[pc];
-			if (bt.empty()) {
 				machine.memory.print_backtrace([&] (auto view) {
-					bt = view;
+					string.append(view);
 				}, false);
+				string.append("\n");
+				// Print and move-insert at the same time
+				machine.print(string.c_str(), string.size());
+				backtrace_lookup.insert_or_assign(pc, std::move(string));
+			} else {
+				const std::string& bt = it->second;
+				machine.print(bt.c_str(), bt.size());
 			}
-
-			string.append(bt + "\n");
-			machine.print(string.c_str(), string.size());
 		}
 
 		// Avoid decoder cache when debugging, as it may contain custom handlers
