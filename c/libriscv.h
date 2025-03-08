@@ -90,9 +90,13 @@ LIBRISCVAPI const char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsig
    On success, returns a pointer to the memory. Otherwise, returns null. */
 LIBRISCVAPI const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length);
 
+#define LIBRISCV_VIEW_ARRAY(m, Type, Addr, Count)  ((Type*)libriscv_memview(m, Addr, sizeof(Type) * Count))
+
 /* View a slice of readable and writable memory from src to src + length.
    On success, returns a pointer to the writable memory. Otherwise, returns null. */
 LIBRISCVAPI char * libriscv_writable_memview(RISCVMachine *m, uint64_t src, unsigned length);
+
+#define LIBRISCV_VIEW_WRITABLE_ARRAY(m, Type, Addr, Count)  ((Type*)libriscv_writable_memview(m, Addr, sizeof(Type) * Count))
 
 /* Stops execution normally. Only possible from a system call and EBREAK. */
 LIBRISCVAPI void libriscv_stop(RISCVMachine *m);
@@ -131,6 +135,10 @@ static inline uint64_t libriscv_stack_push(RISCVMachine *m, RISCVRegisters *regs
 	libriscv_copy_to_guest(m, regs->r[2], data, len);
 	return regs->r[2];
 }
+
+/* Helper for viewing an argument registers as a given type or array of type */
+#define LIBRISCV_VIEW_ARG(m, regs, n, Type)  ((Type*)libriscv_memview(m, LIBRISCV_ARG_REGISTER(regs, n), sizeof(Type)))
+#define LIBRISCV_VIEW_ARG_ARRAY(m, regs, n, Type, Count)  ((Type*)libriscv_memview(m, LIBRISCV_ARG_REGISTER(regs, n), sizeof(Type) * Count))
 
 #ifdef __cplusplus
 }

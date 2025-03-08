@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(example LANGUAGES CXX)
+project(example LANGUAGES C CXX)
 
 include(FetchContent)
 FetchContent_Declare(libriscv
@@ -13,9 +13,12 @@ FetchContent_Declare(libfmt
 
 #FetchContent_MakeAvailable(libriscv)
 FetchContent_MakeAvailable(libfmt)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../lib libriscv)
 
 set(CMAKE_CXX_STANDARD 20)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../c libriscv_capi)
 
-add_executable(example src/example.cpp)
-target_link_libraries(example riscv fmt)
+add_executable(cxx_example src/example.cpp)
+target_link_libraries(cxx_example riscv fmt)
+
+add_executable(c_example src/example.c)
+target_link_libraries(c_example riscv_capi)

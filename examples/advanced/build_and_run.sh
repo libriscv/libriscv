@@ -19,4 +19,5 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
 make -j4
 popd
 
-./.build/example riscv_program/micro
+#./.build/cxx_example riscv_program/micro
+./.build/c_example riscv_program/micro

@@ -6,7 +6,7 @@ using namespace riscv;
 #define RISCV_ARCH  RISCV64
 #define MACHINE(x) ((Machine<RISCV_ARCH> *)x)
 #define ERROR_CALLBACK(m, type, msg, data) \
-	if (auto *usr = m->get_userdata<UserData> (); usr->error != nullptr) \
+	if (auto *usr = m->template get_userdata<UserData> (); usr->error != nullptr) \
 		usr->error(usr->opaque, type, msg, data);
 
 static std::vector<std::string> fill(unsigned count, const char* const* args) {
@@ -57,6 +57,9 @@ RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_length, RISCVOptio
 			else
 				printf("%.*s", (int)size, data);
 		});
+		Machine<RISCV_ARCH>::on_unhandled_syscall = [] (auto& m, size_t num) {
+			ERROR_CALLBACK((&m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, "Unknown system call", num);
+		};
 
 		if (options->argc > 0) {
 			std::vector<std::string> args = fill(options->argc, options->argv);
@@ -99,7 +102,14 @@ extern "C"
 int libriscv_run(RISCVMachine *m, uint64_t instruction_limit)
 {
 	try {
-		return MACHINE(m)->simulate<false>(instruction_limit) ? 0 : -RISCV_ERROR_TYPE_MACHINE_TIMEOUT;
+		auto& machine = *MACHINE(m);
+		if (instruction_limit == 0) {
+			machine.cpu.simulate_inaccurate(machine.cpu.pc());
+			return machine.instruction_limit_reached() ? -RISCV_ERROR_TYPE_MACHINE_TIMEOUT : 0;
+		}
+		else {
+			return machine.simulate<false>(instruction_limit) ? 0 : -RISCV_ERROR_TYPE_MACHINE_TIMEOUT;
+		}
 	} catch (const MachineTimeoutException& tmo) {
 		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_MACHINE_TIMEOUT, tmo.what(), tmo.data());
 		return RISCV_ERROR_TYPE_MACHINE_TIMEOUT;
