@@ -663,7 +663,7 @@ void syscall_readlinkat(Machine<W>& machine)
 	SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu\n",
 		vfd, original_path.c_str(), (long)g_buf, (size_t)bufsize);
 
-	char buffer[512];
+	char buffer[1024];
 	if (bufsize > sizeof(buffer)) {
 		machine.set_result(-ENOMEM);
 		return;
@@ -691,8 +691,11 @@ void syscall_readlinkat(Machine<W>& machine)
 		}
 
 		machine.set_result_or_error(res);
+		SYSPRINT("SYSCALL readlinkat, fd: %d path: %s buffer: 0x%lX size: %zu => %d\n",
+			vfd, original_path.c_str(), (long)g_buf, (size_t)bufsize, (int)machine.return_value());
 		return;
 	}
+
 	machine.set_result(-ENOSYS);
 }
 
