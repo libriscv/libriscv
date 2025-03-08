@@ -58,7 +58,7 @@ struct GuestStdString {
 
 	bool empty() const noexcept { return size == 0; }
 
-	std::string to_string(machine_t& machine, std::size_t max_len = 16UL << 20) const
+	std::string to_string(const machine_t& machine, std::size_t max_len = 16UL << 20) const
 	{
 		if (this->size <= SSO)
 			return std::string(data, size);
@@ -69,7 +69,7 @@ struct GuestStdString {
 		return std::string(view.data(), view.size());
 	}
 
-	std::string_view to_view(machine_t& machine, std::size_t max_len = 16UL << 20) const
+	std::string_view to_view(const machine_t& machine, std::size_t max_len = 16UL << 20) const
 	{
 		if (this->size <= SSO)
 			return std::string_view(data, size);
@@ -301,9 +301,26 @@ struct GuestStdVector {
 		if (size_bytes() > capacity_bytes())
 			throw std::runtime_error("Guest std::vector has size > capacity");
 		// Copy the vector from guest memory
-		const size_t elements = size_bytes() / sizeof(T);
+		const size_t elements = size();
 		const T *array = machine.memory.template memarray<T>(data(), elements);
 		return std::vector<T>(&array[0], &array[elements]);
+	}
+
+	/// @brief Specialization for std::string
+	/// @param machine The RISC-V machine
+	/// @return A vector of strings
+	std::vector<std::string> to_string_vector(const machine_t& machine) const {
+		if constexpr (std::is_same_v<T, GuestStdString<W>>) {
+			std::vector<std::string> vec;
+			const size_t elements = size();
+			const T *array = machine.memory.template memarray<T>(data(), elements);
+			vec.reserve(elements);
+			for (std::size_t i = 0; i < elements; i++)
+				vec.push_back(array[i].to_string(machine));
+			return vec;
+		} else {
+			throw std::runtime_error("GuestStdVector: T must be a GuestStdString<W>");
+		}
 	}
 
 	void assign(machine_t& machine, const std::vector<T>& vec)
