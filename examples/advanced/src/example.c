@@ -52,7 +52,7 @@ static void host_function_500(RISCVMachine *m)
 
 	// For each string up to count, read it from guest memory and print it
 	for (size_t i = 0; i < strings->count; i++) {
-		size_t len;
+		unsigned len;
 		const char *str = libriscv_memstring(m, strings->strings[i], 256, &len);
 		printf("  %s\n", str);
 	}
@@ -70,7 +70,7 @@ static void host_function_501(RISCVMachine *m)
 		gaddr_t another_count;
 		gaddr_t another_buffer_address; // A pointer to a buffer somewhere in guest memory
 	};
-	struct Buffers *buf = LIBRISCV_VIEW_ARG(m, regs, 0, struct Buffers);
+	struct Buffers *buf = LIBRISCV_VIEW_WRITABLE_ARG(m, regs, 0, struct Buffers);
 
 	// Write a string to the buffer in guest memory
 	strcpy(buf->buffer, "Hello from host function 1!");
