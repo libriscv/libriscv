@@ -1,20 +1,10 @@
 #include <fmt/core.h>
 #include <libriscv/machine.hpp>
-#include <libriscv/rv32i_instr.hpp>
 static std::vector<uint8_t> load_file(const std::string& filename);
-static void setup_syscall_interface();
 using namespace riscv;
 static constexpr int MARCH = riscv::RISCV64;
 using RiscvMachine = riscv::Machine<MARCH>;
 using gaddr_t = riscv::address_type<MARCH>;
-
-// A function that can be called from inside the guest program
-using HostFunction = std::function<void(RiscvMachine&)>;
-// An array of host functions that can be called from the guest program
-static std::array<HostFunction, 64> g_host_functions {};
-static void register_function(unsigned number, HostFunction&& fn) {
-	g_host_functions.at(number) = std::move(fn);
-}
 
 int main(int argc, char** argv)
 {
@@ -22,10 +12,11 @@ int main(int argc, char** argv)
 		fmt::print("Usage: {} [program file] [arguments ...]\n", argv[0]);
 		return -1;
 	}
+	// A function address we will call later
 	static gaddr_t g_host_functions_addr = 0;
 
 	// Register a host function that can be called from the guest program
-	register_function(0, [](RiscvMachine& machine) {
+	RiscvMachine::install_syscall_handler(500, [](RiscvMachine& machine) {
 		fmt::print("Hello from host function 0!\n");
 
 		// Get a zero-copy view of Strings in guest memory
@@ -43,7 +34,7 @@ int main(int argc, char** argv)
 	});
 
 	// Register a two-way host function that modifies guest memory
-	register_function(1, [](RiscvMachine& machine) {
+	RiscvMachine::install_syscall_handler(501, [](RiscvMachine& machine) {
 		fmt::print("Hello from host function 1!\n");
 
 		// Get a zero-copy view of Strings in guest memory
@@ -76,7 +67,7 @@ int main(int argc, char** argv)
 	});
 
 	// Register a host function that takes a function pointer
-	register_function(2, [](RiscvMachine& machine) {
+	RiscvMachine::install_syscall_handler(502, [](RiscvMachine& machine) {
 		// Get the function pointer argument as a guest address
 		auto [fn] = machine.sysargs<gaddr_t>();
 
@@ -93,7 +84,6 @@ int main(int argc, char** argv)
 	// Add POSIX system call interfaces (no filesystem or network access)
 	machine.setup_linux_syscalls(false, false);
 	machine.setup_posix_threads();
-	setup_syscall_interface();
 
 	// Run the machine
 	try {
@@ -111,37 +101,6 @@ int main(int argc, char** argv)
 	}
 
 	return 0;
-}
-
-void setup_syscall_interface()
-{
-	// A custom instruction that executes a function based on an index
-	// This variant is faster than a system call, and can use 8 integers as arguments
-    static const Instruction<MARCH> unchecked_dyncall_instruction {
-        [](CPU<MARCH>& cpu, riscv::rv32i_instruction instr)
-        {
-            g_host_functions[instr.Itype.imm](cpu.machine());
-        },
-        [](char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) -> int
-        {
-            return fmt::format_to_n(buffer, len,
-                "DYNCALL: 4-byte idx={:x} (inline, 0x{:X})",
-                uint32_t(instr.Itype.imm),
-                instr.whole
-            ).size;
-        }};
-    // Override the machines unimplemented instruction handling,
-    // in order to use the custom instruction for a given opcode.
-    CPU<MARCH>::on_unimplemented_instruction
-        = [](riscv::rv32i_instruction instr) -> const Instruction<MARCH>&
-    {
-        if (instr.opcode() == 0b1011011 && instr.Itype.rs1 == 0 && instr.Itype.rd == 0)
-        {
-			if (instr.Itype.imm < g_host_functions.size())
-				return unchecked_dyncall_instruction;
-        }
-        return CPU<MARCH>::get_unimplemented_instruction();
-    };
 }
 
 #include <unistd.h>
