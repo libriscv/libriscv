@@ -90,12 +90,18 @@ LIBRISCVAPI const char * libriscv_memstring(RISCVMachine *m, uint64_t src, unsig
    On success, returns a pointer to the memory. Otherwise, returns null. */
 LIBRISCVAPI const char * libriscv_memview(RISCVMachine *m, uint64_t src, unsigned length);
 
+/* View a slice of readable memory as an array of Type from src to src + sizeof(Type) * Count.
+   On success, returns a pointer to the memory. Otherwise, returns null.
+   Example: uint32_t *array_of_ten = LIBRISCV_VIEW_ARRAY(m, uint32_t, 0x1000, 10); */
 #define LIBRISCV_VIEW_ARRAY(m, Type, Addr, Count)  ((Type*)libriscv_memview(m, Addr, sizeof(Type) * Count))
 
 /* View a slice of readable and writable memory from src to src + length.
    On success, returns a pointer to the writable memory. Otherwise, returns null. */
 LIBRISCVAPI char * libriscv_writable_memview(RISCVMachine *m, uint64_t src, unsigned length);
 
+/* View a slice of writable memory as an array of Type from src to src + sizeof(Type) * Count.
+   On success, returns a pointer to the writable memory. Otherwise, returns null.
+   Example: uint32_t *array_of_ten = LIBRISCV_VIEW_WRITABLE_ARRAY(m, uint32_t, 0x1000, 10); */
 #define LIBRISCV_VIEW_WRITABLE_ARRAY(m, Type, Addr, Count)  ((Type*)libriscv_writable_memview(m, Addr, sizeof(Type) * Count))
 
 /* Stops execution normally. Only possible from a system call and EBREAK. */

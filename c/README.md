@@ -37,6 +37,8 @@ if (res < 0) {
 libriscv_delete(m);
 ```
 
+You can find a more advanced example of C API usage in the [advanced examples project](../examples/advanced/src/example.c). In that example we are defining host functions and calling them.
+
 ### API header
 
 The current [C API header](/c/libriscv.h) is a work in progress. It covers many basic operations, but can only load 64-bit RISC-V programs for now.
