@@ -1,8 +1,9 @@
 #include "libriscv.h"
 
 #include <libriscv/machine.hpp>
-
 using namespace riscv;
+static const std::vector<std::string> env = {"LC_CTYPE=C", "LC_ALL=C", "USER=groot"};
+
 #define RISCV_ARCH  RISCV64
 #define MACHINE(x) ((Machine<RISCV_ARCH> *)x)
 #define ERROR_CALLBACK(m, type, msg, data) \
@@ -61,17 +62,18 @@ RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_length, RISCVOptio
 			ERROR_CALLBACK((&m), RISCV_ERROR_TYPE_MACHINE_EXCEPTION, "Unknown system call", num);
 		};
 
+		std::vector<std::string> args;
 		if (options->argc > 0) {
-			std::vector<std::string> args = fill(options->argc, options->argv);
-			std::vector<std::string> env = {"LC_CTYPE=C", "LC_ALL=C", "USER=groot"};
-
-			m->setup_linux_syscalls();
-			m->setup_posix_threads();
-			m->setup_linux(args, env);
-			m->fds().permit_filesystem = !options->strict_sandbox;
-			m->fds().permit_sockets = !options->strict_sandbox;
-			// TODO: File permissions
+			args = fill(options->argc, options->argv);
+		} else {
+			args.push_back("./program"); // We need at least one argument
 		}
+		m->setup_linux_syscalls();
+		m->setup_posix_threads();
+		m->setup_linux(args, env);
+		m->fds().permit_filesystem = !options->strict_sandbox;
+		m->fds().permit_sockets = !options->strict_sandbox;
+		// TODO: File permissions
 
 		return (RISCVMachine *)m;
 	}
