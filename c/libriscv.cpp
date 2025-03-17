@@ -9,6 +9,7 @@ static const std::vector<std::string> env = {"LC_CTYPE=C", "LC_ALL=C", "USER=gro
 #define ERROR_CALLBACK(m, type, msg, data) \
 	if (auto *usr = m->template get_userdata<UserData> (); usr->error != nullptr) \
 		usr->error(usr->opaque, type, msg, data);
+#define USERDATA(m) (*m->template get_userdata<UserData> ())
 
 static std::vector<std::string> fill(unsigned count, const char* const* args) {
 	std::vector<std::string> v;
@@ -22,6 +23,7 @@ struct UserData {
 	riscv_error_func_t error = nullptr;
 	riscv_stdout_func_t stdout = nullptr;
 	void *opaque = nullptr;
+	std::vector<std::string> allowed_files;
 };
 
 extern "C"
@@ -68,14 +70,67 @@ RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_length, RISCVOptio
 		} else {
 			args.push_back("./program"); // We need at least one argument
 		}
+		m->setup_linux(args, env);
 		m->setup_linux_syscalls();
 		m->setup_posix_threads();
-		m->setup_linux(args, env);
 		m->fds().permit_filesystem = !options->strict_sandbox;
 		m->fds().permit_sockets = !options->strict_sandbox;
 		// TODO: File permissions
+		if (!options->strict_sandbox) {
+			if (m->memory.is_dynamic_executable()) {
+				// Since it's dynamic, the first argument (the program) is the dynamic linker
+				// we'll treat the first argument as the program path, and automatically allow it
+				USERDATA(m).allowed_files.push_back(args.at(0));
+			}
+			m->fds().filter_open = [=] (void* user, std::string& path) {
+				(void) user;
+				if (path == "/dev/urandom")
+					return true;
+				if (path == "/program") { // Fake program path
+					path = args.at(0); // Sneakily open the real program instead
+					return true;
+				}
+
+				// Paths that are allowed to be opened
+				static const std::string sandbox_libdir  = "/lib/riscv64-linux-gnu/";
+				// The real path to the libraries (on the host system)
+				static const std::string real_libdir = "/usr/riscv64-linux-gnu/lib/";
+				// The dynamic linker and libraries we allow
+				auto& allowed_files = USERDATA(m).allowed_files;
+
+				if (path.find(sandbox_libdir) == 0) {
+					// Find the library name
+					auto lib = path.substr(sandbox_libdir.size());
+					for (const std::string& allowed_lib : allowed_files) {
+						if (lib == allowed_lib) {
+							// Construct new path
+							path = real_libdir + path.substr(sandbox_libdir.size());
+							return true;
+						}
+					}
+				}
+
+				if (m->memory.is_dynamic_executable() && args.size() > 1 && path == args.at(1)) {
+					return true;
+				}
+
+				for (const auto& allowed : allowed_files) {
+					if (path == allowed) {
+						return true;
+					}
+				}
+				return false;
+			};
+		}
 
 		return (RISCVMachine *)m;
+	}
+	catch (const MachineException& me)
+	{
+		if (options->error)
+			options->error(options->opaque, RISCV_ERROR_TYPE_MACHINE_EXCEPTION, me.what(), me.data());
+		delete u;
+		return NULL;
 	}
 	catch (const std::exception& e)
 	{
@@ -183,6 +238,12 @@ extern "C"
 void * libriscv_opaque(RISCVMachine *m)
 {
 	return MACHINE(m)->get_userdata<UserData> ()->opaque;
+}
+
+extern "C"
+void libriscv_allow_file(RISCVMachine *m, const char *path)
+{
+	USERDATA(MACHINE(m)).allowed_files.push_back(path);
 }
 
 extern "C"

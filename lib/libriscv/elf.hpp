@@ -151,6 +151,12 @@ namespace riscv
 				return r_info >> 32;
 		}
 
+		static unsigned RelaType(addr_t r_info) {
+			if constexpr (W == 4)
+				return r_info & 0xFF;
+			else
+				return r_info & 0xFFFFFFFF;
+		}
 	};
 
 	template <int W>

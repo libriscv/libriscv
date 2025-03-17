@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.9.4)
 project(riscv)
 
-# Enable read-write arena, and disable memory traps
-option(RISCV_EXPERIMENTAL "" ON)
-option(RISCV_FLAT_RW_ARENA "" ON)
+# Disable memory traps and 32-bit
+option(RISCV_32I "" OFF)
+option(RISCV_MEMORY_TRAPS "" OFF)
 add_subdirectory(.. riscv)
 
 add_executable(test test.c)

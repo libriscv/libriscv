@@ -182,7 +182,7 @@ namespace riscv
 		for (int i = 0; i < phdr_count; i++)
 		{
 			if (binary_phdr[i].p_type == Elf<W>::PT_PHDR) {
-				phdr_location = binary_phdr[i].p_vaddr;
+				phdr_location = this->memory.elf_base_address(binary_phdr[i].p_vaddr);
 				break;
 			}
 		}
