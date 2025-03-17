@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 
 	/* Create guest program arguments from argv[2...] */
 	const unsigned g_argc = argc - 1;
-	const char **g_argv = calloc(g_argc, sizeof(char *));
+	const char **g_argv = calloc(1 + g_argc, sizeof(char *));
 	g_argv[0] = "my_program";
 	for (unsigned i = 1; i < g_argc; i++)
 		g_argv[i] = argv[i + 1];
@@ -56,6 +56,7 @@ int main(int argc, char **argv)
 	options.error = error_callback;
 	options.stdout = stdout_callback;
 	options.opaque = NULL;
+	options.strict_sandbox = 0;
 
 	/* RISC-V machine */
 	RISCVMachine *m = libriscv_new(buffer, size, &options);
@@ -66,6 +67,21 @@ int main(int argc, char **argv)
 
 	/* A custom exit system call handler. WARNING: POSIX threads will not work right! */
 	libriscv_set_syscall_handler(93, my_exit);
+
+	/* Add some allowed files that covers most dynamic executables. */
+	static const char *libs[] = {
+		"libdl.so.2",
+		"libm.so.6",
+		"libgcc_s.so.1",
+		"libc.so.6",
+		"libatomic.so.1",
+		"libstdc++.so.6",
+		"libresolv.so.2",
+		"libnss_dns.so.2",
+		"libnss_files.so.2"
+	};
+	for (unsigned i = 0; i < sizeof(libs)/sizeof(libs[0]); i++)
+		libriscv_allow_file(m, libs[i]);
 
 	struct timespec start_time = time_now();
 

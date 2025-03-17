@@ -76,6 +76,9 @@ int libriscv_delete(RISCVMachine *m);
    When an error occurs, the negative value is one of the RISCV_ERROR_ enum values. */
 LIBRISCVAPI int libriscv_run(RISCVMachine *m, uint64_t instruction_limit);
 
+/* Add a host-side filepath that can be opened by the guest program. Sandbox must be disabled. */
+LIBRISCVAPI void libriscv_allow_file(RISCVMachine *m, const char *path);
+
 /* Returns a string describing a negative return value. */
 LIBRISCVAPI const char * libriscv_strerror(int return_value);
 
