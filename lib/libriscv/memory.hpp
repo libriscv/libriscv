@@ -233,6 +233,7 @@ namespace riscv
 		const auto& binary() const noexcept { return m_binary; }
 		void reset();
 		bool is_dynamic_executable() const noexcept { return this->m_is_dynamic; }
+		address_t elf_base_address(address_t offset) const;
 
 		bool uses_flat_memory_arena() const noexcept { return riscv::flat_readwrite_arena && this->m_arena.data != nullptr; }
 		bool uses_Nbit_encompassing_arena() const noexcept { return riscv::encompassing_Nbit_arena != 0 && this->m_arena.data != nullptr; }
@@ -308,7 +309,6 @@ namespace riscv
 
 		const bool m_original_machine;
 		bool m_is_dynamic = false;
-		address_t elf_base_address(address_t offset) const;
 
 		const std::string_view m_binary;
 

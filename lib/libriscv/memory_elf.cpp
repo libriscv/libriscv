@@ -226,7 +226,7 @@ namespace riscv
 			auto* sym = elf_sym_index(dyn_hdr, symidx);
 
 			const uint8_t type = Elf::SymbolType(sym->st_info);
-			if (type == Elf::STT_FUNC || type == Elf::STT_OBJECT)
+			if (true || type == Elf::STT_FUNC || type == Elf::STT_OBJECT)
 			{
 				if constexpr (false)
 				{
@@ -234,7 +234,38 @@ namespace riscv
 							i, (long)symidx, (long)rela_addr[i].r_offset, (long)sym->st_value);
 					elf_print_sym<W>(sym);
 				}
-				this->write<address_t>(elf_base_address(rela_addr[i].r_offset), sym->st_value);
+				const auto rtype = Elf::RelaType(rela_addr[i].r_info);
+				static constexpr int R_RISCV_64 = 0x2;
+				static constexpr int R_RISCV_RELATIVE = 0x3;
+				static constexpr int R_RISCV_JUMPSLOT = 0x5;
+				if (rtype == 0) {
+					// Do nothing
+				}
+				else if (rtype == R_RISCV_64) {
+					this->write<address_t>(elf_base_address(rela_addr[i].r_offset), elf_base_address(sym->st_value));
+				}
+				else if (rtype == R_RISCV_RELATIVE) {
+					this->write<address_t>(elf_base_address(rela_addr[i].r_offset), sym->st_value);
+				}
+				else if (rtype == R_RISCV_JUMPSLOT) {
+					//typedef struct {
+					//	address_t r_offset;
+					//	address_t r_info;
+					//} Elf64_Rel;
+					//printf("Relocating jumpslot %zu with sym idx %ld where 0x%lX -> 0x%lX\n",
+					//		i, (long)symidx, (long)rela_addr[i].r_offset, (long)sym->st_value);
+					//const auto* plt = section_by_name(".plt");
+					//if (plt == nullptr)
+					//	throw MachineException(INVALID_PROGRAM, "Missing .plt section for jumpslot relocation");
+					//const auto* plt_addr = elf_offset<Elf64_Rel>(plt->sh_offset);
+					//const Elf64_Rel& plt_entry = plt_addr[sym->st_value / sizeof(Elf64_Rel)];
+					//const auto plt_address = elf_base_address(plt_entry.r_offset);
+					// Write the PLT address to the jumpslot
+					//this->write<address_t>(elf_base_address(rela_addr[i].r_offset), plt_address);
+				}
+				else {
+					throw MachineException(INVALID_PROGRAM, "Unknown relocation type", rtype);
+				}
 			}
 		}
 	}
@@ -244,7 +275,7 @@ namespace riscv
 	{
 		(void)hdr;
 		this->relocate_section(".rela.dyn", ".dynsym");
-		this->relocate_section(".rela.plt", ".dynsym");
+		this->relocate_section(".rela.plt", ".symtab");
 	}
 
 	INSTANTIATE_32_IF_ENABLED(Memory);
