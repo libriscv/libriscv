@@ -1,4 +1,5 @@
 #include <fmt/core.h>
+#include <cmath>
 #include <libriscv/machine.hpp>
 static std::vector<uint8_t> load_file(const std::string& filename);
 using namespace riscv;
@@ -73,6 +74,23 @@ int main(int argc, char** argv)
 
 		// Set our host function address so we can call it later
 		g_host_functions_addr = fn;
+	});
+
+	// Register a host function that normalizes a vec3
+	RiscvMachine::install_syscall_handler(503, [](RiscvMachine& machine) {
+		// Get the vec3 argument as a guest address
+		auto [x, y, z] = machine.sysargs<float, float, float>();
+
+		// Normalize the vector
+		float len = sqrtf(x * x + y * y + z * z);
+		if (len > 0) {
+			float inv_len = 1.0f / len;
+			x *= inv_len;
+			y *= inv_len;
+			z *= inv_len;
+		}
+
+		machine.set_result(x, y, z);
 	});
 
 	// Create a new machine

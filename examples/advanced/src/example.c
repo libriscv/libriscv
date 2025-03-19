@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include <libriscv.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -101,6 +102,33 @@ static void host_function_502(RISCVMachine *m)
 	g_host_functions_addr = LIBRISCV_ARG_REGISTER(regs, 0); // A0
 }
 
+// A host function that deals with floating-point numbers
+// As an example we take in X, Y, Z and normalize them, then
+// return the result in the same registers.
+static void host_function_503(RISCVMachine *m)
+{
+	RISCVRegisters *regs = libriscv_get_registers(m);
+
+	// Get the floating-point arguments
+	float x = LIBRISCV_FP32_ARG_REG(regs, 0);
+	float y = LIBRISCV_FP32_ARG_REG(regs, 1);
+	float z = LIBRISCV_FP32_ARG_REG(regs, 2);
+
+	// Normalize the vector
+	const float len = sqrtf(x*x + y*y + z*z);
+	if (len > 0) {
+		const float inv_len = 1.0f / len;
+		x *= inv_len;
+		y *= inv_len;
+		z *= inv_len;
+	}
+
+	// Return the result
+	LIBRISCV_FP32_ARG_REG(regs, 0) = x;
+	LIBRISCV_FP32_ARG_REG(regs, 1) = y;
+	LIBRISCV_FP32_ARG_REG(regs, 2) = z;
+}
+
 int main(int argc, char **argv)
 {
 	uint8_t *program;
@@ -115,6 +143,7 @@ int main(int argc, char **argv)
 	libriscv_set_syscall_handler(500, host_function_500);
 	libriscv_set_syscall_handler(501, host_function_501);
 	libriscv_set_syscall_handler(502, host_function_502);
+	libriscv_set_syscall_handler(503, host_function_503);
 
 	RISCVOptions options;
 	libriscv_set_defaults(&options);
