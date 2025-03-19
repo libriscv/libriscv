@@ -136,6 +136,8 @@ LIBRISCVAPI int libriscv_setup_vmcall(RISCVMachine *m, uint64_t address);
 
 /* Register function or system call argument helper. */
 #define LIBRISCV_ARG_REGISTER(regs, n)  (regs)->r[10 + (n)]
+#define LIBRISCV_FP32_ARG_REG(regs, n)  (regs)->fr[10 + (n)].f32[0]
+#define LIBRISCV_FP64_ARG_REG(regs, n)  (regs)->fr[10 + (n)].f64
 
 /* Put data on the current stack, with maintained 16-byte alignment. */
 static inline uint64_t libriscv_stack_push(RISCVMachine *m, RISCVRegisters *regs, const char *data, unsigned len) {
