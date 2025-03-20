@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <vector>
 
-std::vector<uint8_t> load_binary_file(const std::string& filename) {
+inline std::vector<uint8_t> load_binary_file(const std::string& filename) {
   size_t size = 0;
 
   FILE* f = fopen(filename.c_str(), "rb");
