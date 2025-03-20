@@ -1,7 +1,7 @@
 #include <fmt/core.h>
 #include <cmath>
 #include <libriscv/machine.hpp>
-static std::vector<uint8_t> load_file(const std::string& filename);
+#include <libriscv/util/load_binary_file.hpp>
 using namespace riscv;
 static constexpr int MARCH = riscv::RISCV64;
 using RiscvMachine = riscv::Machine<MARCH>;
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
 	});
 
 	// Create a new machine
-	std::vector<uint8_t> program = load_file(argv[1]);
+	std::vector<uint8_t> program = load_binary_file(argv[1]);
 	RiscvMachine machine(program);
 
 	// Setup the machine configuration and syscall interface
@@ -121,24 +121,4 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-#include <unistd.h>
-std::vector<uint8_t> load_file(const std::string& filename)
-{
-	size_t size = 0;
-	FILE* f		= fopen(filename.c_str(), "rb");
-	if (f == NULL)
-		throw std::runtime_error("Could not open file: " + filename);
 
-	fseek(f, 0, SEEK_END);
-	size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	std::vector<uint8_t> result(size);
-	if (size != fread(result.data(), 1, size, f))
-	{
-		fclose(f);
-		throw std::runtime_error("Error when reading from file: " + filename);
-	}
-	fclose(f);
-	return result;
-}

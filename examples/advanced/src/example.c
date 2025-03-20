@@ -7,27 +7,6 @@
 #include <unistd.h>
 typedef unsigned long gaddr_t;
 
-int load_file(const char *filename, uint8_t **data, size_t *size)
-{
-	FILE *f = fopen(filename, "rb");
-	if (f == NULL)
-		return -1;
-
-	fseek(f, 0, SEEK_END);
-	*size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	*data = (uint8_t *)malloc(*size);
-	if (*size != fread(*data, 1, *size, f))
-	{
-		fclose(f);
-		free(*data);
-		return -1;
-	}
-	fclose(f);
-	return 0;
-}
-
 static void error_callback(void *opaque, int type, const char *msg, long data)
 {
 	fprintf(stderr, "Error: %s (data: 0x%lX)\n", msg, data);
@@ -131,9 +110,11 @@ static void host_function_503(RISCVMachine *m)
 
 int main(int argc, char **argv)
 {
-	uint8_t *program;
+	char *program;
 	size_t size;
-	if (load_file(argv[1], &program, &size) != 0)
+	
+	size = libriscv_load_binary_file(argv[1], &program);
+	if (size < 0)
 	{
 		fprintf(stderr, "Error loading file %s. Check that it exists?\n", argv[1]);
 		return 1;
