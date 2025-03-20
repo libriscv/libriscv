@@ -154,6 +154,9 @@ static inline uint64_t libriscv_stack_push(RISCVMachine *m, RISCVRegisters *regs
 #define LIBRISCV_VIEW_WRITABLE_ARG(m, regs, n, Type)  ((Type*)libriscv_writable_memview(m, LIBRISCV_ARG_REGISTER(regs, n), sizeof(Type)))
 #define LIBRISCV_VIEW_WRITABLE_ARG_ARRAY(m, regs, n, Type, Count)  ((Type*)libriscv_writable_memview(m, LIBRISCV_ARG_REGISTER(regs, n), sizeof(Type) * Count))
 
+/* Helper for loading binary files */
+LIBRISCVAPI int libriscv_load_binary_file(const char *filename, char **data);
+
 #ifdef __cplusplus
 }
 #endif
