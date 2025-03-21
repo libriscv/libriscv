@@ -1,5 +1,6 @@
 #include "libriscv.h"
 
+#include <libriscv/util/load_binary_file.hpp>
 #include <libriscv/machine.hpp>
 using namespace riscv;
 static const std::vector<std::string> env = {"LC_CTYPE=C", "LC_ALL=C", "USER=groot"};
@@ -384,4 +385,25 @@ extern "C"
 void libriscv_trigger_exception(RISCVMachine *m, unsigned exception, uint64_t data)
 {
 	MACHINE(m)->cpu.trigger_exception(exception, data);
+}
+
+extern "C"
+int libriscv_load_binary_file(const char *filename, char **data)
+{
+	if (filename == NULL || data == NULL) {
+		return -1;
+	}
+
+	std::string filename_cpp(filename);
+	std::vector<uint8_t> loaded_file = load_binary_file(filename_cpp);
+	size_t size = loaded_file.size() * sizeof(char);
+
+	*data = (char *) malloc(size);
+	if (*data == nullptr) {
+		return -1;
+	}
+
+	std::copy(loaded_file.begin(), loaded_file.end(), *data);
+
+	return size;
 }
