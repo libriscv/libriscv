@@ -1098,7 +1098,9 @@ static void syscall_getrandom(Machine<W>& machine)
 	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
 	#endif
 #elif defined(__ANDROID__) || defined(__wasm__)
-	std::memset(buffer, 0x11, need);
+	for (size_t i = 0; i < need; ++i) {
+		buffer[i] ^= rand() & 0xFF; // XXX: Not secure
+	}
 	const ssize_t result = need;
 #else
 	const ssize_t result = getrandom(buffer, need, 0);
