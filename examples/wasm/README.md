@@ -16,4 +16,15 @@ source "$PWD/emsdk_env.sh"
 emrun .build/wasm_example.html
 ```
 
-It will calculate a fibonacci sequence and print it. The fib program is embedded in main.cpp.
+It will run a basic LuaJIT program as written in main.cpp. Have fun!
+
+## Example output
+
+```sh
+LuaJIT WebAssembly Example
+[luajit] Hello, WebAssembly!
+[luajit] The 500th fibonacci number is 1.394232245617e+104
+
+Runtime: 2.940ms  Result: 42.000000
+>>> Multiple execute segments detected, this means the JIT likely was activated!
+```
