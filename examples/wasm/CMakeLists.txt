@@ -5,7 +5,15 @@ add_subdirectory(../../lib libriscv)
 set(CMAKE_EXECUTABLE_SUFFIX ".html") # emcc
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s TOTAL_MEMORY=256MB -fexceptions")
 
-add_executable(wasm_example main.cpp)
+file(GLOB BINTR_SOURCES
+	"bintr/*.c"
+	"bintr/*.cpp"
+)
+foreach(src ${BINTR_SOURCES})
+	message(STATUS "Adding translation file: ${src}")
+endforeach()
+
+add_executable(wasm_example main.cpp ${BINTR_SOURCES})
 target_link_libraries(wasm_example PRIVATE riscv)
 set_target_properties(wasm_example PROPERTIES
 	CXX_STANDARD 20

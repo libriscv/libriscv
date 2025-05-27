@@ -7,7 +7,12 @@ mkdir -p .build
 pushd .build
 cmake -DCMAKE_BUILD_TYPE=Release \
 	  -DCMAKE_TOOLCHAIN_FILE=../cmake/wasm.cmake \
-	  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+	  -DRISCV_32I=OFF \
+	  -DRISCV_64I=ON \
+	  -DRISCV_EXT_V=OFF \
+	  -DRISCV_MEMORY_TRAPS=OFF \
+	  -DRISCV_BINARY_TRANSLATION=ON
 
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)

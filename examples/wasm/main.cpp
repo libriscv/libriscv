@@ -1,7 +1,12 @@
 #include <libriscv/machine.hpp>
+#include <chrono>
 using Machine = riscv::Machine<riscv::RISCV64>;
 static const std::vector<uint8_t> empty;
 static constexpr uint64_t MAX_CYCLES = 15'000'000'000ull;
+#define TIME_POINT(t) \
+	asm("" ::: "memory"); \
+	auto t = std::chrono::high_resolution_clock::now(); \
+	asm("" ::: "memory");
 namespace {
 	extern const std::array<unsigned char, 944> fib_elf;
 }
@@ -16,14 +21,20 @@ int main()
 		{"libriscv", "Hello", "World"},
 		{"LC_ALL=C", "USER=groot"}
 	);
+
+	TIME_POINT(t0);
 	try
 	{
 		machine.simulate(MAX_CYCLES);
 	} catch (const std::exception& e) {
 		fprintf(stderr, ">>> Exception: %s\n", e.what());
 	}
+	TIME_POINT(t1);
 
-	printf("Fibonacci number: 0x%llX\n", machine.return_value<uint64_t>());
+	const std::chrono::duration<double, std::milli> exec_time = t1 - t0;
+	printf("\nRuntime: %.3fms  MI/s: %.2f\n", exec_time.count(),
+		machine.instruction_counter() / (exec_time.count() * 1e3));
+	printf("fib(256000000) = 0x%llX\n", machine.return_value<uint64_t>());
 }
 
 namespace {
