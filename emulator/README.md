@@ -31,6 +31,7 @@ Options:
   -d, --debug        Enable CLI debugger
   -1, --single-step  One instruction at a time, enabling exact exceptions
   -f, --fuel amt     Set max instructions until program halts
+  -m, --memory amt   Set max memory size in MiB (default: 4096 MiB)
   -g, --gdb          Start GDB server on port 2159
   -s, --silent       Suppress program completion information
   -t, --timing       Enable timing information in binary translator
@@ -40,7 +41,7 @@ Options:
   -R, --translate-regcache Enable register caching in binary translator
   -J, --jump-hints file  Load jump location hints from file, unless empty then record instead
   -B  --background   Run binary translation in background thread
-  -m, --mingw        Cross-compile for Windows (MinGW)
+  -M, --mingw        Cross-compile for Windows (MinGW)
   -o, --output file  Output embeddable binary translated code (C99)
   -F, --from-start   Start debugger from the beginning (_start)
   -S  --sandbox      Enable strict sandbox

@@ -38,6 +38,7 @@ struct Arguments {
 	bool background = false; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
+	uint64_t max_memory = 0;
 	std::vector<std::string> allowed_files;
 	std::string output_file;
 	std::string call_function;
@@ -55,6 +56,7 @@ static const struct option long_options[] = {
 	{"debug", no_argument, 0, 'd'},
 	{"single-step", no_argument, 0, '1'},
 	{"fuel", required_argument, 0, 'f'},
+	{"memory", required_argument, 0, 'm'},
 	{"gdb", no_argument, 0, 'g'},
 	{"silent", no_argument, 0, 's'},
 	{"timing", no_argument, 0, 't'},
@@ -65,7 +67,7 @@ static const struct option long_options[] = {
 	{"no-translate-regcache", no_argument, 0, 1000},
 	{"jump-hints", required_argument, 0, 'J'},
 	{"background", no_argument, 0, 'B'},
-	{"mingw", no_argument, 0, 'm'},
+	{"mingw", no_argument, 0, 'M'},
 	{"output", required_argument, 0, 'o'},
 	{"from-start", no_argument, 0, 'F'},
 	{"sandbox", no_argument, 0, 'S'},
@@ -88,6 +90,7 @@ static void print_help(const char* name)
 		"  -d, --debug        Enable CLI debugger\n"
 		"  -1, --single-step  One instruction at a time, enabling exact exceptions\n"
 		"  -f, --fuel amt     Set max instructions until program halts\n"
+		"  -m, --memory amt   Set max memory size in MiB (default: 4096 MiB)\n"
 		"  -g, --gdb          Start GDB server on port 2159\n"
 		"  -s, --silent       Suppress program completion information\n"
 		"  -t, --timing       Enable timing information in binary translator\n"
@@ -98,7 +101,7 @@ static void print_help(const char* name)
 		"      --no-translate-regcache Disable register caching in binary translator\n"
 		"  -J, --jump-hints file  Load jump location hints from file, unless empty then record instead\n"
 		"  -B  --background   Run binary translation in background thread\n"
-		"  -m, --mingw        Cross-compile for Windows (MinGW)\n"
+		"  -M, --mingw        Cross-compile for Windows (MinGW)\n"
 		"  -o, --output file  Output embeddable binary translated code (C99)\n"
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
 		"  -S  --sandbox      Enable strict sandbox\n"
@@ -152,7 +155,7 @@ static void print_help(const char* name)
 static int parse_arguments(int argc, const char** argv, Arguments& args)
 {
 	int c;
-	while ((c = getopt_long(argc, (char**)argv, "hvQad1f:gstTnNRJ:Bmo:FSPA:XIc:", long_options, nullptr)) != -1)
+	while ((c = getopt_long(argc, (char**)argv, "hvQad1f:m:gstTnNRJ:BMo:FSPA:XIc:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -172,7 +175,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'R': args.translate_regcache = true; break;
 			case 'J': break;
 			case 'B': args.background = true; break;
-			case 'm': args.mingw = true; break;
+			case 'M': args.mingw = true; break;
 			case 'o': break;
 			case 'F': args.from_start = true; break;
 			case 'S': args.sandbox = true; break;
@@ -181,6 +184,20 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'X': args.execute_only = true; break;
 			case 'I': args.ignore_text = true; break;
 			case 1000: args.translate_regcache = false; break;
+			case 'm': // --memory
+				if (optarg) {
+					char* endptr;
+					args.max_memory = strtoull(optarg, &endptr, 10);
+					if (*endptr != '\0' || args.max_memory == 0) {
+						fprintf(stderr, "Invalid memory size: %s\n", optarg);
+						return -1;
+					}
+					args.max_memory <<= 20; // Convert MiB to bytes
+				} else {
+					fprintf(stderr, "Memory size must be specified\n");
+					return -1;
+				}
+				break;
 			case 'c': break;
 			default:
 				fprintf(stderr, "Unknown option: %c\n", c);
@@ -255,7 +272,7 @@ static void run_program(
 	}
 
 	auto options = std::make_shared<riscv::MachineOptions<W>>(riscv::MachineOptions<W>{
-		.memory_max = MAX_MEMORY,
+		.memory_max = cli_args.max_memory ? cli_args.max_memory : MAX_MEMORY,
 		.enforce_exec_only = cli_args.execute_only,
 		.ignore_text_section = cli_args.ignore_text,
 		.verbose_loader = cli_args.verbose,
