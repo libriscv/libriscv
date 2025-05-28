@@ -30,9 +30,15 @@ static int api_pause(lua_State *L) {
 
 static std::string result; // Global variable to hold the result
 extern "C" __attribute__((used, retain))
-const char *run(const char* code) {
-	// Load a string as a script
-	luaL_loadbuffer(L, code, strlen(code), "@code");
+const char *run(const char* code)
+{
+	if (code != nullptr) {
+		// Load a string as a script
+		if (luaL_loadbuffer(L, code, strlen(code), "@code") != LUA_OK) {
+			fprintf(stderr, "Error loading Lua code: %s\n", lua_tostring(L, -1));
+			return "(error)";
+		}
+	}
 
 	// Run the script (0 arguments, 1 result)
 	lua_pcall(L, 0, 1, 0);
@@ -57,6 +63,17 @@ const char *run(const char* code) {
 			break;
 	}
 	return result.c_str();
+}
+extern "C" __attribute__((used, retain))
+int compile(const char* code)
+{
+	// Load a string as a script
+	const int res = luaL_loadbuffer(L, code, strlen(code), "@code");
+	if (res != LUA_OK) {
+		fprintf(stderr, "Error loading Lua code: %s\n", lua_tostring(L, -1));
+		return -1;
+	}
+	return 0;
 }
 
 int main()

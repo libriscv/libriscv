@@ -25,6 +25,7 @@ LuaJIT WebAssembly Example
 [luajit] Hello, WebAssembly!
 [luajit] The 500th fibonacci number is 1.394232245617e+104
 
-Runtime: 2.940ms  Result: 42.000000
->>> Multiple execute segments detected, this means the JIT likely was activated!
+Runtime: 340us Insn/s: 387.3mi/s  Result: 42.000000
 ```
+
+For one-shots disabling the JIT will result in faster execution!
