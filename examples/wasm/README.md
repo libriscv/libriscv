@@ -1,5 +1,24 @@
 # WebAssembly example
 
+## Building the guest program
+
+Using a 64-bit RISC-V Newlib cross-compiler:
+```sh
+git submodule update --init program/LuaJIT
+cd program/LuaJIT
+CROSS=riscv64-unknown-elf- make
+```
+
+With LuaJIT built we can now build the RISC-V program:
+```sh
+cd program
+./build.sh
+$ ls -lah program.elf 
+-rwxrwxr-x 1 gonzo gonzo 772K mai   28 13:59 program.elf
+```
+
+## Building the WASM program
+
 1. Activate emsdk:
 ```sh
 ./emsdk activate latest
