@@ -20,6 +20,10 @@ An example that shows how to embed _libriscv_ in a project that disables C++ exc
 
 An example that uses _libriscv_ when installed on the system as a package.
 
+## WASM example
+
+An example that builds a RISC-V programs with JIT-enabled LuaJIT inside, and then adds that to a WebAssembly program. The program is pre-built so that users can test immediately with `emrun`.
+
 ## WebAPI example
 
 An example that uses a WebServer and Varnish Cache to implement a RISC-V playground.
