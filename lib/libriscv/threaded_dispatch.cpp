@@ -15,7 +15,9 @@
 
 #include "cpu_dispatch.cpp"
 
+#ifndef RISCV_ASM_DISPATCH
 #include "cpu_inaccurate_dispatch.cpp"
+#endif
 
 namespace riscv
 {

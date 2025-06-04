@@ -653,7 +653,6 @@ static void run_program(
 		}
 	}
 #endif
-	_exit(0);
 }
 
 int main(int argc, const char** argv)

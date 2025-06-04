@@ -308,15 +308,16 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 
 INSTRUCTION(RV32I_BC_AUIPC, rv32i_auipc)
 {
-	VIEW_INSTR();
+	VIEW_INSTR_AS(fi, FasterJtype);
 	// AUIPC using re-constructed PC
-	REG(instr.Utype.rd) = (pc - DECODER().block_bytes()) + instr.Utype.upper_imm();
+	//REG(instr.Utype.rd) = (pc - DECODER().block_bytes()) + instr.Utype.upper_imm();
+	REG(fi.rd) = (pc - DECODER().block_bytes()) + fi.upper_imm();
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_LUI, rv32i_lui)
 {
-	VIEW_INSTR();
-	REG(instr.Utype.rd) = instr.Utype.upper_imm();
+	VIEW_INSTR_AS(fi, FasterJtype);
+	REG(fi.rd) = fi.upper_imm();
 	NEXT_INSTR();
 }
 
@@ -568,19 +569,6 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 	NEXT_INSTR();
 }
 
-
-INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
-{
-	//printf("Slowpath: 0x%X  (instr: 0x%X)\n", uint32_t(pc), DECODER().instr);
-	CPU().execute(DECODER().m_handler, DECODER().instr);
-	NEXT_INSTR();
-}
-
-INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
-	VIEW_INSTR();
-	CPU().execute(DECODER().m_handler, DECODER().instr);
-	NEXT_BLOCK(instr.length(), true);
-}
 
 INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -846,4 +834,18 @@ INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
 		DECODER().set_invalid_handler();
 	}
 	EXECUTE_CURRENT();
+}
+
+
+INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
+{
+	//printf("Slowpath: 0x%X  (instr: 0x%X)\n", uint32_t(pc), DECODER().instr);
+	CPU().execute(DECODER().m_handler, DECODER().instr);
+	NEXT_INSTR();
+}
+
+INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
+	VIEW_INSTR();
+	CPU().execute(DECODER().m_handler, DECODER().instr);
+	NEXT_BLOCK(instr.length(), true);
 }

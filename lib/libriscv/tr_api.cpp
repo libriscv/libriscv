@@ -145,8 +145,8 @@ typedef union {
 // Thin variant of CPU for higher compilation speed
 __attribute__((aligned(RISCV_MACHINE_ALIGNMENT)))
 typedef struct {
-	addr_t  pc;
 	addr_t  r[32];
+	addr_t  pc;
 	uint32_t fcsr;
 	fp64reg fr[32];
 #ifdef RISCV_EXT_VECTOR

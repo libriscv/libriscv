@@ -109,7 +109,7 @@ namespace riscv
 
 		Registers() = default;
 		Registers(const Registers& other)
-			: pc    { other.pc }, m_reg { other.m_reg }, m_fcsr { other.m_fcsr }, m_regfl { other.m_regfl }
+			: m_reg { other.m_reg }, pc { other.pc }, m_fcsr { other.m_fcsr }, m_regfl { other.m_regfl }
 		{
 #ifdef RISCV_EXT_VECTOR
 			m_rvv = other.m_rvv;
@@ -134,10 +134,12 @@ namespace riscv
 			(void)opts;
 		}
 
-		address_t pc = 0;
 	private:
 		// General purpose registers
 		std::array<register_t, 32> m_reg {};
+	public:
+		address_t pc = 0;
+	private:
 		// FP control register
 		FCSR m_fcsr {};
 		// General FP registers

@@ -69,8 +69,8 @@ typedef union {
 } RISCVFloat;
 
 typedef struct {
-	uint64_t  pc;
 	uint64_t  r[32];
+	uint64_t  pc;
 	uint32_t  fcsr;
 	RISCVFloat fr[32];
 } RISCVRegisters;
