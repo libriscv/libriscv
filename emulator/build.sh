@@ -36,6 +36,8 @@ function usage()
      --no-64              disable RV64
      --128                enable RV128
      --no-128             disable RV128
+	 --assembly-dispatch  enable assembly dispatch (experimental feature)
+	 --no-assembly-dispatch disable assembly dispatch
      -b, --bintr          enable binary translation using system compiler
      -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation
@@ -81,6 +83,8 @@ while [[ "$#" -gt 0 ]]; do
 		--no-64) OPTS="$OPTS -DRISCV_64I=OFF" ;;
 		--128) OPTS="$OPTS -DRISCV_128I=ON" ;;
 		--no-128) OPTS="$OPTS -DRISCV_128I=OFF" ;;
+		--assembly-dispatch) OPTS="$OPTS -DRISCV_ASM_DISPATCH=ON" ;;
+		--no-assembly-dispatch) OPTS="$OPTS -DRISCV_ASM_DISPATCH=OFF" ;;
         -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
         -t|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
         --no-bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=OFF" ;;

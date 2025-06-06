@@ -21,14 +21,21 @@ namespace riscv
 		switch (bytecode)
 		{
 			case RV32I_BC_INVALID:
-			case RV32I_BC_LUI:
-			case RV32I_BC_AUIPC:
 			case RV32I_BC_NOP:
 			case RV32I_BC_FUNCTION:
 			case RV32I_BC_FUNCBLOCK:
 			case RV32I_BC_STOP:
 			case RV32I_BC_SYSTEM: {
 				// These bytecodes are already fast, no need to rewrite
+				return bytecode;
+			}
+			case RV32I_BC_LUI:
+			case RV32I_BC_AUIPC: {
+				FasterJtype rewritten;
+				rewritten.rd     = original.Utype.rd;
+				rewritten.offset = original.Utype.imm << 4;
+
+				instr.whole = rewritten.whole;
 				return bytecode;
 			}
 			case RV32I_BC_MV: {

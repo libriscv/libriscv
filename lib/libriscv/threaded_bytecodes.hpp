@@ -224,8 +224,8 @@ namespace riscv
 
 		struct
 		{
-			uint8_t rd;
 			uint8_t rs1;
+			uint8_t rd;
 		};
 
 		RISCV_ALWAYS_INLINE
@@ -250,6 +250,9 @@ namespace riscv
 
 		int32_t signed_imm() const noexcept {
 			return int32_t(offset << (32 - 24)) >> (32 - 24);
+		}
+		int32_t upper_imm() const noexcept {
+			return offset << 8;
 		}
 	};
 

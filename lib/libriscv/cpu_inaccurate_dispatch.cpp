@@ -70,7 +70,7 @@ namespace riscv
 #define PERFORM_FORWARD_BRANCH PERFORM_BRANCH
 
 #define OVERFLOW_CHECKED_JUMP()                                   \
-	if (LIKELY(pc - current_begin < current_end - current_begin)) \
+	if (LIKELY(pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())) \
 		goto continue_segment;                                    \
 	else                                                          \
 		goto new_execute_segment;
@@ -90,14 +90,11 @@ namespace riscv
 		machine().set_max_instructions(UINT64_MAX);
 
 		DecodedExecuteSegment<W> *exec = this->m_exec;
-		address_t current_begin = exec->exec_begin();
-		address_t current_end = exec->exec_end();
-
 		DecoderData<W> *exec_decoder = exec->decoder_cache();
 		DecoderData<W> *decoder;
 
 		// We need an execute segment matching current PC
-		if (UNLIKELY(!(pc >= current_begin && pc < current_end)))
+		if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end())))
 			goto new_execute_segment;
 
 #ifdef RISCV_BINARY_TRANSLATION
@@ -163,7 +160,7 @@ retry_translated_function:
 	auto bintr_results =
 		exec->unchecked_mapping_at(decoder->instr)(*this, 0, 1, pc);
 	pc = REGISTERS().pc;
-	if (LIKELY(bintr_results.max_counter != 0 && (pc - current_begin < current_end - current_begin)))
+	if (LIKELY(bintr_results.max_counter != 0 && (pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())))
 	{
 		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
@@ -219,7 +216,7 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 #endif
 
 	check_jump:
-		if (LIKELY(pc - current_begin < current_end - current_begin))
+		if (LIKELY(pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin()))
 			goto continue_segment;
 
 		// Change to a new execute segment
@@ -228,8 +225,6 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 		auto new_values = this->next_execute_segment(pc);
 		exec = new_values.exec;
 		pc = new_values.pc;
-		current_begin = exec->exec_begin();
-		current_end = exec->exec_end();
 		exec_decoder = exec->decoder_cache();
 	}
 		goto continue_segment;

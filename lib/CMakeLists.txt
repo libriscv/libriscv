@@ -57,6 +57,8 @@ if (RISCV_EXPERIMENTAL)
 	else()
 		unset(RISCV_ENCOMPASSING_ARENA_BITS CACHE)
 	endif()
+	# RISCV_ASM_DISPATCH enables a custom assembly dispatch
+	option(RISCV_ASM_DISPATCH        "Enable assembly dispatch" OFF)
 else()
 	unset(RISCV_ENCOMPASSING_ARENA CACHE)
 	unset(RISCV_ENCOMPASSING_ARENA_BITS CACHE)
@@ -116,7 +118,22 @@ elseif(UNIX)
 		libriscv/linux/system_calls.cpp
 	)
 endif()
-if (RISCV_THREADED OR RISCV_TAILCALL_DISPATCH)
+if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
+	# ASM_DISPATCH uses assembly to dispatch instructions.
+	# It is currently only available on the AMD64 (x86_64) Linux platform.
+	if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"
+	 OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")
+		message(STATUS "libriscv: Assembly dispatch enabled")
+		list(APPEND SOURCES
+			libriscv/amd64/asm_dispatch.cpp
+			libriscv/threaded_dispatch.cpp
+			#libriscv/amd64/accurate_dispatch_rv64gb.o
+			libriscv/amd64/inaccurate_dispatch_rv64gb.o
+		)
+	else()
+		message(FATAL_ERROR "libriscv: Assembly dispatch not supported on this platform")
+	endif()
+elseif (RISCV_THREADED OR RISCV_TAILCALL_DISPATCH)
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
 	 AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0
 	 AND RISCV_TAILCALL_DISPATCH)
@@ -185,6 +202,11 @@ endif()
 if (RISCV_EXPERIMENTAL AND RISCV_ENCOMPASSING_ARENA)
 	target_compile_definitions(riscv PUBLIC
 		RISCV_ENCOMPASSING_ARENA_BITS=${RISCV_ENCOMPASSING_ARENA_BITS}
+	)
+endif()
+if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
+	target_compile_definitions(riscv PUBLIC
+		RISCV_ASM_DISPATCH=1
 	)
 endif()
 
