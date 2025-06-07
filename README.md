@@ -63,7 +63,7 @@ Benchmark between [binary translated libriscv vs LuaJIT](https://gist.github.com
 
   ![Ryzen 7950X STREAM memory wasm3 vs  libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/4e23b2c8-71bb-4bd8-92e6-523a4e84dd32)
   ![Ryzen 6860Z STREAM memory wasm3 vs  libriscv](https://github.com/fwsGonzo/libriscv/assets/3758947/79f8d0a0-5bfa-44c8-932d-d41f4538f4be)
-  ![CoreMark 1 0 interpreters, Nov 2024 (Ryzen 7950X)](https://github.com/user-attachments/assets/3f03d5de-c17c-4cad-854f-0ce8f385d54b)
+  ![CoreMark 1 0 interpreters, Nov 2024 (Ryzen 7950X)](https://github.com/user-attachments/assets/55ee5cf8-2010-4d96-9e59-127eed35863b)
 
   We can see that _libriscv_ in interpreter mode is substantially faster than other interpreters.
 
