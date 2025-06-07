@@ -272,9 +272,7 @@ struct Emitter
 		// This is a performance optimization for libtcc, which allows direct access to the memory arena
 		// however, with it execute segments can no longer be shared between different machines.
 		// So, for a simple CLI tool, this is a good optimization. But not for a system of multiple machines.
-		// XXX: This is a workaround for a bug in libtcc, which doesn't handle 64-bit + 32- or higher -bit pointer arithmetic
-		constexpr bool avoid_codegen_bug = W > 4 || riscv::encompassing_Nbit_arena < 32;
-		if (libtcc_enabled && !tinfo.use_shared_execute_segments && avoid_codegen_bug) {
+		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
 					return "(" + m_arena_hex_address + " + (uint32_t)(" + address + "))";
