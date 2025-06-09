@@ -293,6 +293,14 @@ namespace riscv
 				if (entry.get_bytecode() == translator_op)
 					idxend = 0;
 			#endif
+				if (UNLIKELY(idxend == 65535)) {
+					// It's a long sequence of instructions, so end block here.
+					entry.set_bytecode(RV32I_BC_FUNCBLOCK);
+					entry.set_invalid_handler(); // Resolve lazily
+					entry.instr = instruction.whole;
+					idxend = 0;
+				}
+
 				// Ends at *one instruction before* the block ends
 				entry.idxend = idxend;
 				// Increment after, idx becomes block count - 1
