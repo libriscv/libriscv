@@ -38,7 +38,7 @@
 	EXECUTE_CURRENT()
 
 #define RETURN_VALUES()   \
-	{pc}
+	pc
 #define UNUSED_FUNCTION() \
 	cpu.trigger_exception(ILLEGAL_OPCODE);
 
@@ -112,7 +112,7 @@ namespace riscv
 	}
 
 	template <int W>
-	using TcoRet = std::tuple<address_type<W>>;
+	using TcoRet = address_type<W>;
 
 	template <int W>
 	using DecoderFunc = TcoRet<W>(*)(DecoderData<W>*, DecodedExecuteSegment<W>*, CPU<W> &, address_type<W> pc, InstrCounter& counter);
@@ -379,7 +379,7 @@ namespace riscv
 
 		BEGIN_BLOCK();
 
-		auto [new_pc] = EXECUTE_INSTR();
+		const addr_t new_pc = EXECUTE_INSTR();
 
 		cpu.registers().pc = new_pc;
 		MACHINE().set_instruction_counter(counter.value());
@@ -412,7 +412,7 @@ namespace riscv
 
 		BEGIN_BLOCK();
 
-		auto [new_pc] = EXECUTE_INSTR();
+		const addr_t new_pc = EXECUTE_INSTR();
 
 		cpu.registers().pc = new_pc;
 	}
