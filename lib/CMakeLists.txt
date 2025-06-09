@@ -127,6 +127,7 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 		list(APPEND SOURCES
 			libriscv/amd64/asm_dispatch.cpp
 			libriscv/threaded_dispatch.cpp
+			libriscv/threaded_inaccurate_dispatch.cpp
 			#libriscv/amd64/accurate_dispatch_rv64gb.o
 			libriscv/amd64/inaccurate_dispatch_rv64gb.o
 		)
@@ -146,6 +147,7 @@ elseif (RISCV_THREADED OR RISCV_TAILCALL_DISPATCH)
 		message(STATUS "libriscv: Threaded dispatch enabled")
 		list(APPEND SOURCES
 			libriscv/threaded_dispatch.cpp
+			libriscv/threaded_inaccurate_dispatch.cpp
 		)
 	endif()
 else()

@@ -20,15 +20,6 @@
 
 namespace riscv
 {
-	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-	static constexpr bool FUZZING = true;
-#else
-	static constexpr bool FUZZING = false;
-#endif
-
-#define EXECUTE_CURRENT() \
-	EXECUTE_INSTR()
 #define VIEW_INSTR() \
 	auto instr = *(rv32i_instruction *)&decoder->instr;
 #define VIEW_INSTR_AS(name, x) \

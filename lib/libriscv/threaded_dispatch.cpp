@@ -10,14 +10,22 @@
 			abort();         \
 	}                        \
 	goto *computed_opcode[decoder->get_bytecode()];
+#define EXECUTE_CURRENT() \
+	EXECUTE_INSTR()
 #define UNUSED_FUNCTION() \
 	RISCV_UNREACHABLE();
 
-#include "cpu_dispatch.cpp"
-
-#ifndef RISCV_ASM_DISPATCH
-#include "cpu_inaccurate_dispatch.cpp"
+namespace riscv
+{
+	static constexpr bool VERBOSE_JUMPS = riscv::verbose_branches_enabled;
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+	static constexpr bool FUZZING = true;
+#else
+	static constexpr bool FUZZING = false;
 #endif
+}
+
+#include "cpu_dispatch.cpp"
 
 namespace riscv
 {
