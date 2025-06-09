@@ -431,7 +431,7 @@ namespace riscv
 			}
 #endif // RISCV_BINARY_TRANSLATION
 
-			if (was_full_instruction) {
+			if (!compressed_enabled || was_full_instruction) {
 				// Cache the (modified) instruction bits
 				auto bytecode = CPU<W>::computed_index_for(instruction);
 				// Threaded rewrites are **always** enabled

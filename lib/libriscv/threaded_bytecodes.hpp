@@ -203,13 +203,12 @@ namespace riscv
 		struct
 		{
 			uint8_t  rd;
-			uint8_t  zeroes;
 			int16_t  imm;
 		};
 
 		RISCV_ALWAYS_INLINE
 		auto get_rd() const noexcept {
-			return whole & 0xFF;
+			return rd;
 		}
 
 		RISCV_ALWAYS_INLINE
