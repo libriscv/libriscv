@@ -55,6 +55,11 @@ struct GuestStdString {
 	{
 		this->set_string(machine, 0, str);
 	}
+	GuestStdString(machine_t& machine, gaddr_t self, std::string_view str = "")
+		: ptr(0), size(0), capacity(0)
+	{
+		this->set_string(machine, self, str);
+	}
 
 	bool empty() const noexcept { return size == 0; }
 
@@ -233,10 +238,15 @@ struct GuestStdVector {
 		this->ptr_end += sizeof(T);
 	}
 
-	// Specialization for std::string_view
+	// Specialization for std::string and std::string_view
 	void push_back(machine_t& machine, std::string_view value) {
 		static_assert(std::is_same_v<T, GuestStdString<W>>, "GuestStdVector: T must be a GuestStdString<W>");
-		this->push_back(machine, GuestStdString<W>(machine, value));
+		if (size_bytes() >= capacity_bytes())
+			this->increase_capacity(machine);
+		T* array = machine.memory.template memarray<T>(this->data(), size() + 1);
+		const gaddr_t address = this->ptr_begin + size() * sizeof(T);
+		new (&array[size()]) T(machine, address, value);
+		this->ptr_end += sizeof(T);
 	}
 	// Specialization for std::vector<U>
 	template <typename U>
