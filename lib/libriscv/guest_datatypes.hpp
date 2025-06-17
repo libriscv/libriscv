@@ -534,4 +534,9 @@ struct is_scoped_guest_stdvector : std::false_type {};
 template <int W, typename T>
 struct is_scoped_guest_stdvector<W, ScopedArenaObject<W, GuestStdVector<W, T>>> : std::true_type {};
 
+template <int W, typename T>
+using ScopedGuestStdVector = ScopedArenaObject<W, GuestStdVector<W, T>>;
+template <int W>
+using ScopedGuestStdString = ScopedArenaObject<W, GuestStdString<W>>;
+
 } // namespace riscv

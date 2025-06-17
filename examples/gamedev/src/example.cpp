@@ -7,13 +7,6 @@ using namespace riscv;
 template <unsigned SAMPLES = 2000>
 static void benchmark(std::string_view name, Script& script, std::function<void()> fn);
 
-using CppString = GuestStdString<Script::MARCH>;
-template <typename T>
-using CppVector = GuestStdVector<Script::MARCH, T>;
-using ScopedCppString = ScopedArenaObject<Script::MARCH, CppString>;
-template <typename T>
-using ScopedCppVector = ScopedArenaObject<Script::MARCH, CppVector<T>>;
-
 // ScriptCallable is a function that can be requested from the script
 using ScriptCallable = std::function<void(Script&)>;
 // A map of host functions that can be called from the script
@@ -105,7 +98,7 @@ int main(int argc, char** argv)
 	register_script_function(5, [](Script& script) {
 		auto [str] = script.machine().sysargs<GuestStdString<Script::MARCH>*>();
 
-		fmt::print("dyncall_string called: {}\n", str->to_string(script.machine()));
+		fmt::print("dyncall_string called: {}\n", str->to_view(script.machine()));
 	});
 
 	// Create a new script instance, loading and initializing the given program file
@@ -161,18 +154,24 @@ int main(int argc, char** argv)
 	// like std::string and std::vector wrappers.
 	if (script.address_of("test6"))
 	{
+		// A scoped guest object is a C++ object that is allocated and freed on the guest heap,
+		// with lifetime tied to the current scope.
+		using CppString       = ScopedGuestStdString<Script::MARCH>;
+		using CppVectorInt    = ScopedGuestStdVector<Script::MARCH, int>;
+		using CppVectorString = ScopedGuestStdVector<Script::MARCH, GuestStdString<Script::MARCH>>;
+
 		// Define the test6 function, which has a std::string& argument in the guest,
 		// and a std::vector<int>& and std::vector<std::string>&. The stack is writable,
 		// so the guest can choose whether or not to use const references.
-		Event<void(ScopedCppString&, ScopedCppVector<int>&, ScopedCppVector<CppString>&)> test6(script, "test6");
+		Event<void(CppString&, CppVectorInt&, CppVectorString&)> test6(script, "test6");
 
 		for (int i = 0; i < 1; i++) {
-			// Allocate a GuestStdString object with a string
-			ScopedCppString str(script.machine(), "C++ World ..SSO..");
-			// Allocate a GuestStdVector object with a vector of integers
-			ScopedCppVector<int> ivec(script.machine(), std::vector<int>{ 1, 2, 3, 4, 5 });
-			// Allocate a vector of strings (using CppString)
-			ScopedCppVector<CppString> svec(script.machine(),
+			// Create a GuestStdString on the guest heap
+			CppString str(script.machine(), "C++ World ..SSO..");
+			// Create a GuestStdVector of ints on the guest heap
+			CppVectorInt ivec(script.machine(), std::vector<int>{ 1, 2, 3, 4, 5 });
+			// Create a GuestStdVector of strings on the guest heap
+			CppVectorString svec(script.machine(),
 				std::vector<std::string>{ "Hello,", "World!", "This string is long :)" });
 
 			// Call the test6 function with all the objects
