@@ -544,6 +544,46 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			case RV32C_BC_LDW: {
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.LW
+					rewritten.rs1 = ci.CL.srd  + 8;
+					rewritten.rs2 = ci.CL.srs1 + 8;
+					rewritten.imm = ci.CL.offset();
+				}
+				else
+				{	// C.LWSP
+					rewritten.rs1 = ci.CI2.rd;
+					rewritten.rs2 = REG_SP;
+					rewritten.imm = ci.CI2.offset();
+				}
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_STW: {
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.SW
+					rewritten.rs1 = ci.CS.srs1 + 8;
+					rewritten.rs2 = ci.CS.srs2 + 8;
+					rewritten.imm = ci.CS.offset4();
+				}
+				else
+				{	// C.SWSP
+					rewritten.rs1 = REG_SP;
+					rewritten.rs2 = ci.CSS.rs2;
+					rewritten.imm = ci.CSS.offset(4);
+				}
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
 #endif // RISCV_EXT_COMPRESSED
 
 			case RV32I_BC_SYSCALL: {

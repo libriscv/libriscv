@@ -303,6 +303,19 @@ INSTRUCTION(RV32C_BC_STD, rv32c_std) {
 	}
 	else UNUSED_FUNCTION();
 }
+INSTRUCTION(RV32C_BC_LDW, rv32c_ldw) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = REG(fi.get_rs2()) + fi.signed_imm();
+	REG(fi.get_rs1()) =
+		(int32_t)CPU().memory().template read<uint32_t>(addr);
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_STW, rv32c_stw) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = REG(fi.get_rs1()) + fi.signed_imm();
+	CPU().memory().template write<uint32_t>(addr, REG(fi.get_rs2()));
+	NEXT_C_INSTR();
+}
 #endif // RISCV_EXT_COMPRESSED
 
 

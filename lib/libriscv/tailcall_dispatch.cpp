@@ -321,6 +321,8 @@ namespace riscv
 		[RV32C_BC_JALR]     = rv32c_jalr,
 		[RV32C_BC_LDD]      = rv32c_ldd,
 		[RV32C_BC_STD]      = rv32c_std,
+		[RV32C_BC_LDW]      = rv32c_ldw,
+		[RV32C_BC_STW]      = rv32c_stw,
 		[RV32C_BC_SRLI]     = rv32c_srli,
 		[RV32C_BC_ANDI]     = rv32c_andi,
 		[RV32C_BC_ADD]      = rv32c_add,
