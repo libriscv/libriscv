@@ -38,7 +38,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					return RV32C_BC_FUNCTION; // C.FLD
 				}
 				else if (ci.CL.funct3 == 0x2) {
-					return RV32C_BC_FUNCTION; // C.LW
+					return RV32C_BC_LDW; // C.LW
 				}
 				else if (ci.CL.funct3 == 0x3) {
 					if constexpr (sizeof(address_t) == 8) {
@@ -59,7 +59,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				case 5:
 					return RV32C_BC_FUNCTION; // C.FSD
 				case 6:
-					return RV32C_BC_FUNCTION; // C.SW
+					return RV32C_BC_STW; // C.SW
 				case 7: // C.SD / C.FSW
 					if constexpr (sizeof(address_t) == 8) {
 						return RV32C_BC_STD; // C.SD
@@ -111,7 +111,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					return RV32C_BC_FUNCTION; // C.FLDSP
 				}
 				else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
-					return RV32C_BC_FUNCTION; // C.LWSP
+					return RV32C_BC_LDW; // C.LWSP
 				}
 				else if (ci.CI2.funct3 == 0x3) {
 					if constexpr (sizeof(address_t) == 8) {
@@ -185,7 +185,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					return RV32C_BC_FUNCTION; // FSDSP
 				}
 				else if (ci.CSS.funct3 == 6) {
-					return RV32C_BC_FUNCTION; // SWSP
+					return RV32C_BC_STW; // SWSP
 				}
 				else if (ci.CSS.funct3 == 7) {
 					if constexpr (W == 8) {
