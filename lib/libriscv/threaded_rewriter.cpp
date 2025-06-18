@@ -21,7 +21,6 @@ namespace riscv
 		switch (bytecode)
 		{
 			case RV32I_BC_INVALID:
-			case RV32I_BC_NOP:
 			case RV32I_BC_FUNCTION:
 			case RV32I_BC_FUNCBLOCK:
 			case RV32I_BC_STOP:

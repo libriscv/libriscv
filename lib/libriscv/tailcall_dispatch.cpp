@@ -191,7 +191,7 @@ namespace riscv
 		NEXT_BLOCK(4, true);
 	}
 
-	INSTRUCTION(RV32I_BC_NOP, next_execute_segment) {
+	INSTRUCTION(0, next_execute_segment) {
 		// A helper function to change execute segment
 		exec = resolve_execute_segment<W>(cpu, pc);
 		d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
@@ -331,7 +331,6 @@ namespace riscv
 
 		[RV32I_BC_SYSCALL] = rv32i_syscall,
 		[RV32I_BC_STOP]    = rv32i_stop,
-		[RV32I_BC_NOP]     = rv32i_nop,
 
 		[RV32F_BC_FLW]     = rv32i_flw,
 		[RV32F_BC_FLD]     = rv32i_fld,

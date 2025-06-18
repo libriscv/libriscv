@@ -207,7 +207,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 		case RV32I_LOAD:
 			// XXX: Support dummy loads
 			if (instr.Itype.rd == 0)
-				return RV32I_BC_NOP; // TODO: BC_FUNCTION
+				return RV32I_BC_FUNCTION;
 			switch (instr.Itype.funct3) {
 			case 0x0: // LD.B
 				return RV32I_BC_LDB;
@@ -274,11 +274,11 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			}
 		case RV32I_LUI:
 			if (instr.Utype.rd == 0)
-				return RV32I_BC_NOP;
+				return RV32I_BC_FUNCTION;
 			return RV32I_BC_LUI;
 		case RV32I_AUIPC:
 			if (instr.Utype.rd == 0)
-				return RV32I_BC_NOP;
+				return RV32I_BC_FUNCTION;
 			return RV32I_BC_AUIPC;
 		case RV32I_JAL:
 			return RV32I_BC_JAL;
@@ -286,7 +286,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			return RV32I_BC_JALR;
 		case RV32I_OP_IMM:
 			if (instr.Itype.rd == 0)
-				return RV32I_BC_NOP;
+				return RV32I_BC_FUNCTION;
 			switch (instr.Itype.funct3)
 			{
 			case 0x0:
@@ -331,7 +331,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			}
 		case RV32I_OP:
 			if (instr.Itype.rd == 0)
-				return RV32I_BC_NOP;
+				return RV32I_BC_FUNCTION;
 			switch (instr.Rtype.jumptable_friendly_op())
 			{
 			case 0x0:
@@ -413,7 +413,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				return RV32I_BC_INVALID;
 
 			if (instr.Itype.rd == 0)
-				return RV32I_BC_NOP;
+				return RV32I_BC_FUNCTION;
 			switch (instr.Itype.funct3)
 			{
 			case 0x0:
@@ -444,7 +444,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			}
 			return RV32I_BC_SYSTEM;
 		case RV32I_FENCE:
-			return RV32I_BC_NOP;
+			return RV32I_BC_FUNCTION;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi{instr};
 			switch (fi.Itype.funct3) {

@@ -175,7 +175,6 @@ dispatch_table:
 
 	dd .bytecode_syscall ;; RV32I_BC_SYSCALL
 	dd .bytecode_stop ;; RV32I_BC_STOP
-	dd 0x00000000 ;; RV32I_BC_NOP
 
 	dd 0x00000000 ;; RV32F_BC_FLW
 	dd 0x00000000 ;; RV32F_BC_FLD

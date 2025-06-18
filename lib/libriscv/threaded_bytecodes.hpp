@@ -114,7 +114,6 @@ namespace riscv
 
 		RV32I_BC_SYSCALL,
 		RV32I_BC_STOP,
-		RV32I_BC_NOP,
 
 		RV32F_BC_FLW,
 		RV32F_BC_FLD,
