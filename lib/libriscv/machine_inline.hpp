@@ -178,7 +178,11 @@ inline void Machine<W>::set_result(Args... args) noexcept {
 	size_t f = 0;
 	([&] {
 		if constexpr (std::is_integral_v<Args>) {
-			cpu.registers().get(REG_ARG0 + i++) = args;
+			if constexpr (sizeof(Args) < W && !std::is_same_v<Args, bool>)
+				// Sign-extend all arguments smaller than the word size
+				cpu.registers().get(REG_ARG0 + i++) = (typename std::make_signed_t<Args>)args;
+			else
+				cpu.registers().get(REG_ARG0 + i++) = args;
 		}
 		else if constexpr (std::is_enum_v<Args>)
 			cpu.registers().get(REG_ARG0 + i++) = static_cast<int>(args);
