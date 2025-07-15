@@ -76,6 +76,8 @@ $ ./build.sh --help
      --no-static          build dynamic CLI executable
      --native             build with -march=native
      --no-native          disable -march=native
+     --lto                build with link-time optimization
+     --no-lto             disable link-time optimization
      --A                  enable atomic extension
      --no-A               disable atomic extension
      --C                  enable compressed extension
@@ -88,6 +90,8 @@ $ ./build.sh --help
      --no-64              disable RV64
      --128                enable RV128
      --no-128             disable RV128
+	 --assembly-dispatch  enable assembly dispatch (experimental feature)
+	 --no-assembly-dispatch disable assembly dispatch
      -b, --bintr          enable binary translation using system compiler
      -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation

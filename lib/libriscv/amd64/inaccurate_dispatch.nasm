@@ -35,8 +35,6 @@ extern riscv64gb_cpu_syscall_array
 	mov r15d, DWORD [dispatch_table + eax * 4] ; Relative address
 	jmp r15 ; Jump to the bytecode handler
 %endmacro
-%macro PREPARE_BYTECODE 0
-%endmacro
 %macro JUMP_PREPARED_BYTECODE 0
 	;; Load the next bytecode from the decoder cache
 	movzx r15d, byte [rdx + 8]  ; Load the bytecode index
@@ -76,10 +74,10 @@ extern riscv64gb_cpu_syscall_array
 	push r13
 	push r12
 	push rbx
-	push rax
+	;push rax
 %endmacro
 %macro POP_SYSV_REGS 0
-	pop rax
+	;pop rax
 	pop rbx
 	pop r12
 	pop r13
@@ -90,7 +88,7 @@ extern riscv64gb_cpu_syscall_array
 
 ;; Dispatch table contains 32-bit relative jump locations
 section .text
-align 4
+align 64
 dispatch_table:
 	dd 0x00000000 ;; RV32I_BC_INVALID
 	dd .bytecode_addi ;; RV32I_BC_ADDI
@@ -198,82 +196,72 @@ dispatch_table:
 ;; uint32_t instruction: instruction bits needed by the bytecode/handler
 
 ;; --== Bytecode handlers ==-
-.bytecode_stop:
-	;; Store current PC + 4 into CPU_PC
-	add rcx, 4          ; Move to the next instruction
-	mov [CPU_PC], rcx
-	;; End execution by returning to the caller
-	POP_SYSV_REGS
-	ret
+align 64
 .bytecode_addi:
-	PREPARE_BYTECODE
 	;; Add immediate value to a register
-	;; IMM is [rdx + 0x4] ;: first 16-bits of the instruction bits
-	;; RS1 is [rdx + 0x6] ;: second 8-bits of the instruction bits
-	;; RD  is [rdx + 0x7] ;: last 8-bits of the instruction bits
-	mov eax, dword [rdx + 0x4]   ; Load the entire 32-bit instruction bits
-	mov ebx, eax				 ; Copy the instruction bits to ebx
-	movsx rax, ax			     ; Create immediate value
-	shr ebx, 16                  ; Shift right to get the source register index
-	movzx r10d, bl				 ; Get the source register index
-	movzx ebx, bh                ; Get the destination register index
+	;; IMM is [rdx + 0x4] ;: first 16-bits
+	;; RS1 is [rdx + 0x6] ;: second 8-bits
+	;; RD  is [rdx + 0x7] ;: last 8-bits
+	movsx rax, word [rdx + 0x4]
+	movzx ebx,  byte [rdx + 0x6] ; Load the source register index
+	movzx r10d, byte [rdx + 0x7] ; Load the destination register index
 	add rax, [CPU_REG + r10 * 8] ; Add the immediate value to the source register
 	STORE_REG rbx, eax ; Store the result in the destination register
 	JUMP_PREPARED_BYTECODE
+align 16
 .bytecode_li:
-	PREPARE_BYTECODE
 	;; Load immediate value into a register
-	;; RD  is [rdx + 0x4] ;: first 8-bits of the instruction bits
-	;; IMM is [rdx + 0x6] ;: last 16-bits of the instruction bits
+	;; RD  is [rdx + 0x4] ;: first 8-bits
+	;; IMM is [rdx + 0x6] ;: last 16-bits
 	movzx eax, byte [rdx + 0x4]  ; Load the destination register index
 	movsx rbx, word [rdx + 0x6]  ; Load the *signed* immediate value
 	STORE_REG rax, rbx
 	JUMP_PREPARED_BYTECODE
+align 16
 .bytecode_mv:
-	PREPARE_BYTECODE
 	;; Move value from one register to another
-	;; RS1 is [rdx + 0x4] ;: first 8-bits of the instruction bits
-	;; RD  is [rdx + 0x5] ;: second 8-bits of the instruction bits
+	;; RS1 is [rdx + 0x4] ;: first 8-bits
+	;; RD  is [rdx + 0x5] ;: second 8-bits
 	;; Optimization: Load the entire instruction bits,
 	;; then extract the register indices
-	mov ax, word [rdx + 0x4]      ; Load 16-bit instruction bits
-	movzx r10d, al                ; Copy the lower 8 bits to r10d
-	movzx eax, ah                 ; Copy the upper 8 bits to eax
+	movzx ebx, byte [rdx + 0x4]      ; Load 16-bit instruction bits
+	movzx eax, byte [rdx + 0x5]      ; Load 16-bit instruction bits
+	movzx r10d, bl                ; Copy the lower 8 bits to r10d
 	FETCH_REG rbx, r10  ; Fetch the value from the source register
 	STORE_REG rax, rbx  ; Store the value in the destination register
 	JUMP_PREPARED_BYTECODE
+align 16
 .bytecode_add:
-	PREPARE_BYTECODE
 	;; Add two registers and store the result in a third register
-	;; RD  is [rdx + 0x4] ;: first 16-bits of the instruction bits
-	;; RS1 is [rdx + 0x5] ;: second 8-bits of the instruction bits
-	;; RS2 is [rdx + 0x6] ;: third 8-bits of the instruction bits
+	;; RD  is [rdx + 0x4] ;: first 16-bits
+	;; RS1 is [rdx + 0x5] ;: second 8-bits
+	;; RS2 is [rdx + 0x6] ;: third 8-bits
 	movzx eax, word [rdx + 0x4]  ; Load the destination register index
 	movzx ebx, byte [rdx + 0x6]  ; Load the first source register index
 	movzx r10, byte [rdx + 0x7]  ; Load the second source register index
 	;; Add the two values and store the result in the destination register
 	FETCH_REG rbx, rbx
-	FETCH_REG r10, r10 ; Fetch the values from the source registers
-	add rbx, r10
+	;FETCH_REG r10, r10 ; Fetch the values from the source registers
+	;add rbx, r10
+	add rbx, [rdi + r10 * 8]
 	STORE_REG rax, rbx ; Store the result in the destination register
 	JUMP_PREPARED_BYTECODE
+align 16
 .bytecode_lui:
-	PREPARE_BYTECODE
 	;; Load upper immediate value into a register
-	;; RD is [rdx + 0x4] ;: first 8-bits of the instruction bits
-	;; IMM is [rdx + 0x6] ;: last 16-bits of the instruction bits
-	mov ebx, dword [rdx + 0x4]   ; Load the entire 32-bit instruction bits
-	mov eax, ebx                 ; Get the destination register index
-	shr eax, 24                  ; Shift right to get the upper 8 bits
-	shl ebx, 8                   ; Push out the upper 8 bits
-	movsx rbx, ebx               ; Sign-extend the immediate value
+	;; IMM is [rdx + 0x4] ;: first 24-bits
+	;; RD is [rdx + 0x7]  ;: last 8-bits
+	mov ebx, dword [rdx + 0x4]
+	shl ebx, 8                   ; Push out upper 8 bits, make 32-bit value
+	movsx rax, byte [rdx + 0x7]
 	STORE_REG rax, rbx           ; Store the value in the destination register
 	JUMP_PREPARED_BYTECODE
+align 16
 .bytecode_beq:
 	;; Branch if equal
-	;; IMM is [rdx + 0x4] ;: first 16-bits of the instruction bits
-	;; RS1 is [rdx + 0x6] ;: third 8-bits of the instruction bits
-	;; RS2 is [rdx + 0x7] ;: fourth 8-bits of the instruction bits
+	;; IMM is [rdx + 0x4] ;: first 16-bits
+	;; RS1 is [rdx + 0x6] ;: third 8-bits
+	;; RS2 is [rdx + 0x7] ;: fourth 8-bits
 	movzx rax, word [rdx + 0x6]  ; Load the two source register indices
 	movzx ebx, ah
 	movzx eax, al
@@ -283,11 +271,12 @@ dispatch_table:
 	;; We have to perform a jump to the target address
 	movsx rax, word [rdx + 0x4]  ; Load the *signed* immediate value (offset)
 	NEXT_BLOCK_REG_BYTES rax
+align 16
 .bytecode_bne:
 	;; Branch if not equal
-	;; IMM is [rdx + 0x4] ;: first 16-bits of the instruction bits
-	;; RS1 is [rdx + 0x6] ;: third 8-bits of the instruction bits
-	;; RS2 is [rdx + 0x7] ;: fourth 8-bits of the instruction bits
+	;; IMM is [rdx + 0x4] ;: first 16-bits
+	;; RS1 is [rdx + 0x6] ;: third 8-bits
+	;; RS2 is [rdx + 0x7] ;: fourth 8-bits
 	movzx rax, byte [rdx + 0x6]  ; Load the first source register index
 	movzx rbx, byte [rdx + 0x7]  ; Load the second source register index
 	FETCH_REG rax, rax           ; Fetch the value from the first source register
@@ -298,14 +287,14 @@ dispatch_table:
 	NEXT_BLOCK_REG_BYTES rax
 .next_block:
 	NEXT_BLOCK 1
+align 16
 .bytecode_syscall:
 	;; Handle a system call in the emulator
 	;; All the system call arguments are already in the registers,
 	;; but we still have to realize PC, push regs and pop after
 	mov [CPU_PC], rcx     ; Store the current PC
-	;; Push function call registers to save the state
-	and rsp, -16          ; Align the stack to 16 bytes
-	PUSH_SYSV_REGS        ; Save function call registers
+	;; Push function call registers
+	PUSH_SYSV_REGS
 	;; Call the system call handler
 	mov eax, DWORD [rdi + 17 * 8]          ; Load the syscall number
 	shl eax, 3                             ; Multiply by 8 to get the function pointer offset
@@ -327,8 +316,12 @@ dispatch_table:
 	NEXT_BLOCK 1
 .machine_stopped:
 	;; This is the end of the machine execution.
-	POP_SYSV_REGS          ; Restore dispatch registers
-	ret                    ; Return to the caller
+	ret
+.bytecode_stop:
+	;; Store current PC + 4 into CPU_PC
+	add rcx, 4          ; Move to the next instruction
+	mov [CPU_PC], rcx
+	ret
 
 ;; Arguments:
 ;; rdi - cpu: CPU pointer (persistent emulator state)
@@ -338,9 +331,6 @@ dispatch_table:
 ;; r8  - current_begin: Lowest address of the current execute segment
 ;; r9  - current_end: Highest address of the current execute segment
 riscv64gb_inaccurate_dispatch:
-	;; Save the current state of the registers
-	PUSH_SYSV_REGS
-
 	;; Geronimo!
 	JUMP_BYTECODE
 ; End of riscv64gb_inaccurate_dispatch
