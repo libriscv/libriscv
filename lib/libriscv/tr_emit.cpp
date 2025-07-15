@@ -28,6 +28,7 @@
 	this->reload_all_registers(); \
   } else if (m_zero_insn_counter <= 1) \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+	code += "return (ReturnValues){0, 0};\n"; \
 }
 #define WELL_KNOWN_INSTRUCTION() { \
 	auto* handler = CPU<W>::decode(instr).handler; \
@@ -642,10 +643,12 @@ void Emitter<W>::emit()
 
 		if (this->instr.is_illegal()) {
 			this->m_zero_insn_counter ++;
-		} else if (this->m_zero_insn_counter >= 4) {
-			// After a ream of zero instructions, we predict a jump target
+		} else {
+			if (this->m_zero_insn_counter >= 4) {
+				// After a ream of zero instructions, we predict a jump target
+				mapping_labels.insert(i);
+			}
 			this->m_zero_insn_counter = 0;
-			mapping_labels.insert(i);
 		}
 
 		// If the address is a return address or a global JAL target
@@ -719,8 +722,12 @@ void Emitter<W>::emit()
 				if (tinfo.trace_instructions && compressed_instr != 0x0)
 					printf("Unexpanded instruction: 0x%04hx at PC 0x%lX (original 0x%x)\n", compressed_instr, long(this->pc()), original);
 				// When illegal opcode is encountered, reveal PC
-				if (m_zero_insn_counter <= 1 || compressed_instr != 0x0)
+				if (m_zero_insn_counter <= 1 || compressed_instr != 0x0) {
 					code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
+					if (libtcc_enabled) {
+						code += "return (ReturnValues){0, 0};\n";
+					}
+				}
 				continue;
 			}
 		}
@@ -1315,7 +1322,12 @@ void Emitter<W>::emit()
 					this->potentially_realize_register(instr.Itype.rs1);
 					// Zero funct3, unknown imm: Don't exit
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
-					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+					if (libtcc_enabled) {
+						code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
+						code += "  return (ReturnValues){0, 0};\n";
+					} else {
+						code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+					}
 					this->potentially_reload_register(instr.Itype.rd);
 					this->potentially_reload_register(instr.Itype.rs1);
 					break;
@@ -1330,7 +1342,12 @@ void Emitter<W>::emit()
 				if (!tinfo.ignore_instruction_limit)
 					code += "INS_COUNTER(cpu) = counter;\n"; // Reveal instruction counters
 				code += "MAX_COUNTER(cpu) = max_counter;\n";
-				code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+				if (libtcc_enabled) {
+					code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
+					code += "  return (ReturnValues){0, 0};\n";
+				} else {
+					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
+				}
 				this->potentially_reload_register(instr.Itype.rd);
 				this->potentially_reload_register(instr.Itype.rs1);
 			} break;
@@ -1488,8 +1505,9 @@ void Emitter<W>::emit()
 				break;
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VLE32
-				const rv32v_instruction vi { instr };
-				this->memory_load<VectorLane>(from_rvvreg(vi.VLS.vd), "VectorLane", vi.VLS.rs1, 0);
+				//const rv32v_instruction vi { instr };
+				//this->memory_load<VectorLane>(from_rvvreg(vi.VLS.vd), "VectorLane", vi.VLS.rs1, 0);
+				UNKNOWN_INSTRUCTION();
 				break;
 			}
 #endif

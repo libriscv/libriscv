@@ -167,7 +167,7 @@ static struct CallbackTable {
 	syscall_t* syscalls;
 	int  (*system_call)(CPU*, addr_t);
 	void (*unknown_syscall)(CPU*, addr_t);
-	void (*system)(CPU*, uint32_t);
+	int  (*system)(CPU*, uint32_t);
 	unsigned (*execute)(CPU*, uint32_t);
 	unsigned (*execute_handler)(CPU*, unsigned, uint32_t);
 	handler* handlers;

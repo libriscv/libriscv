@@ -852,6 +852,16 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 		// This allows for producing embeddable code without invoking the compiler
 		if (libtcc_enabled && options.translate_invoke_compiler) {
 			extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
+			// XXX: Debugging: write the compiled code to a file
+			if constexpr (false) {
+				std::ofstream ofs("libtcc_output.c", std::ios::out | std::ios::trunc);
+				if (ofs.is_open()) {
+					ofs << shared_library_code;
+					ofs.close();
+				} else {
+					fprintf(stderr, "libriscv: Failed to write libtcc output to file\n");
+				}
+			}
 			static std::mutex libtcc_mutex;
 			// libtcc uses global state, so we need to serialize compilation
 			std::lock_guard<std::mutex> lock(libtcc_mutex);
@@ -1179,21 +1189,18 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		.unknown_syscall = [] (CPU<W>& cpu, address_type<W> sysno) {
 			cpu.machine().on_unhandled_syscall(cpu.machine(), sysno);
 		},
-		.system = [] (CPU<W>& cpu, uint32_t instr) {
-#ifdef RISCV_LIBTCC
-			if (libtcc_enabled && cpu.current_execute_segment().is_libtcc()) {
-				try {
-					cpu.machine().system(rv32i_instruction{instr});
-				} catch (...) {
-					cpu.set_current_exception(std::current_exception());
-					cpu.machine().stop();
-				}
-			} else {
+		.system = [] (CPU<W>& cpu, uint32_t instr) -> int {
+			try {
 				cpu.machine().system(rv32i_instruction{instr});
-			}
+				return 0;
+			} catch (...) {
+#ifdef RISCV_LIBTCC
+				cpu.set_current_exception(std::current_exception());
+				return 1; // Indicate that an exception occurred
 #else
-			cpu.machine().system(rv32i_instruction{instr});
+				throw; // Re-throw the exception
 #endif
+			}
 		},
 		.execute = [] (CPU<W>& cpu, uint32_t instr) -> unsigned {
 			const rv32i_instruction rvi{instr};
