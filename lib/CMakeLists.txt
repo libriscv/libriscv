@@ -8,7 +8,7 @@ option(RISCV_DEBUG  "Enable extra checks in the RISC-V machine" OFF)
 # set extensions. Not recommended to disable any.
 option(RISCV_EXT_A  "Enable RISC-V atomic instructions" ON)
 option(RISCV_EXT_C  "Enable RISC-V compressed instructions" ON)
-option(RISCV_EXT_V  "Enable RISC-V vector instructions" ON)
+option(RISCV_EXT_V  "Enable RISC-V vector instructions" OFF)
 # Enable 32-, 64- and 128-bit architecture emulation
 option(RISCV_32I    "Enable 32-bit RISC-V" ON)
 option(RISCV_64I    "Enable 64-bit RISC-V" ON)
