@@ -318,17 +318,16 @@ static void syscall_sendto(Machine<W>& machine)
 		const size_t buffer_cnt =
 			machine.memory.gather_buffers_from_range(buffers.size(), buffers.data(), g_buf, buflen);
 
-		const struct msghdr hdr {
-			.msg_name = dest_addr,
-			.msg_namelen = static_cast<socklen_t>(dest_addrlen),
-			.msg_iov = (struct iovec *)buffers.data(),
-			.msg_iovlen = buffer_cnt,
-			.msg_control = nullptr,
-			.msg_controllen = 0,
-			.msg_flags = 0,
-		};
+		struct msghdr msg;
+		msg.msg_name = dest_addr;
+		msg.msg_namelen = static_cast<socklen_t>(dest_addrlen);
+		msg.msg_iov = (struct iovec *)buffers.data();
+		msg.msg_iovlen = buffer_cnt;
+		msg.msg_control = nullptr;
+		msg.msg_controllen = 0;
+		msg.msg_flags = 0;
 
-		const ssize_t res = sendmsg(real_fd, &hdr, flags);
+		const ssize_t res = sendmsg(real_fd, &msg, flags);
 #else
 		// XXX: Write me
 		(void)real_fd;
@@ -362,15 +361,14 @@ static void syscall_recvfrom(Machine<W>& machine)
 			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), g_buf, buflen);
 
 		alignas(16) char dest_addr[128];
-		struct msghdr hdr {
-			.msg_name = dest_addr,
-			.msg_namelen = sizeof(dest_addr),
-			.msg_iov = (struct iovec *)buffers.data(),
-			.msg_iovlen = buffer_cnt,
-			.msg_control = nullptr,
-			.msg_controllen = 0,
-			.msg_flags = 0,
-		};
+		struct msghdr hdr;
+		hdr.msg_name = dest_addr;
+		hdr.msg_namelen = sizeof(dest_addr);
+		hdr.msg_iov = (struct iovec *)buffers.data();
+		hdr.msg_iovlen = buffer_cnt;
+		hdr.msg_control = nullptr;
+		hdr.msg_controllen = 0;
+		hdr.msg_flags = 0;
 	#if 0
 		printf("recvfrom(buffers: %zu, total: %zu)\n", buffer_cnt, size_t(buflen));
 	#endif
@@ -433,15 +431,14 @@ static void syscall_recvmsg(Machine<W>& machine)
 	#endif
 
 		alignas(16) char dest_addr[128];
-		struct msghdr hdr {
-			.msg_name = dest_addr,
-			.msg_namelen = sizeof(dest_addr),
-			.msg_iov = (struct iovec *)buffers.data(),
-			.msg_iovlen = vec_cnt,
-			.msg_control = nullptr,
-			.msg_controllen = 0,
-			.msg_flags = msg.msg_flags,
-		};
+		struct msghdr hdr;
+		hdr.msg_name = dest_addr;
+		hdr.msg_namelen = sizeof(dest_addr);
+		hdr.msg_iov = (struct iovec *)buffers.data();
+		hdr.msg_iovlen = vec_cnt;
+		hdr.msg_control = nullptr;
+		hdr.msg_controllen = 0;
+		hdr.msg_flags = msg.msg_flags;
 
 		const ssize_t res = recvmsg(real_fd, &hdr, flags);
 		if (res >= 0) {
@@ -512,15 +509,14 @@ static void syscall_sendmmsg(Machine<W>& machine)
 				i, vec_cnt, entry.msg_name, entry.msg_namelen);
 		#endif
 
-			const struct msghdr hdr {
-				.msg_name = nullptr,
-				.msg_namelen = 0,
-				.msg_iov = (struct iovec *)buffers.data(),
-				.msg_iovlen = vec_cnt,
-				.msg_control = nullptr,
-				.msg_controllen = 0,
-				.msg_flags = entry.msg_flags,
-			};
+			struct msghdr hdr;
+			hdr.msg_name = nullptr;
+			hdr.msg_namelen = 0;
+			hdr.msg_iov = (struct iovec *)buffers.data();
+			hdr.msg_iovlen = vec_cnt;
+			hdr.msg_control = nullptr;
+			hdr.msg_controllen = 0;
+			hdr.msg_flags = entry.msg_flags;
 
 			const ssize_t res = sendmsg(real_fd, &hdr, flags);
 			if (res < 0) {
