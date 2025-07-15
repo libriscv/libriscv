@@ -267,9 +267,9 @@ static void syscall_pread64(Machine<W>& machine)
 		std::array<riscv::vBuffer, 512> buffers;
 		const size_t cnt =
 			machine.memory.gather_writable_buffers_from_range(buffers.size(), buffers.data(), address, len);
-#if defined(__linux__) && !defined(__ANDROID__)
+#if defined(__linux__) && defined(SYS_preadv)
 		const ssize_t res =
-			preadv64(real_fd, (const iovec *)&buffers[0], cnt, offset);
+			syscall(SYS_preadv, real_fd, (const iovec *)&buffers[0], cnt, offset);
 #elif defined(__wasm__)
 		const ssize_t res = -ENOSYS;
 #else
