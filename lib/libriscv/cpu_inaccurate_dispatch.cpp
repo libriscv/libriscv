@@ -158,7 +158,7 @@ INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function)
 retry_translated_function:
 	// Invoke translated code
 	auto bintr_results =
-		exec->unchecked_mapping_at(decoder->instr)(*this, 0, 1, pc);
+		exec->unchecked_mapping_at(decoder->instr)(*this, 0, ~0ULL, pc);
 	pc = REGISTERS().pc;
 	if (LIKELY(bintr_results.max_counter != 0 && (pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())))
 	{

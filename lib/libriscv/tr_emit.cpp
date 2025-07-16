@@ -26,9 +26,10 @@
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; \
 	this->reload_all_registers(); \
-  } else if (m_zero_insn_counter <= 1) \
+  } else if (m_zero_insn_counter <= 1) { \
     code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
 	code += "return (ReturnValues){0, 0};\n"; \
+  } \
 }
 #define WELL_KNOWN_INSTRUCTION() { \
 	auto* handler = CPU<W>::decode(instr).handler; \

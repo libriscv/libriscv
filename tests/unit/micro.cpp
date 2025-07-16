@@ -441,7 +441,7 @@ TEST_CASE("Crashing payload #5", "[Micro]")
 		fprintf(stderr, ">>> Exception: %s\n", e.what());
 		exception_thrown = true;
 	}
-	REQUIRE((exception_thrown || riscv::libtcc_enabled));
+	REQUIRE(exception_thrown);
 }
 
 TEST_CASE("Crashing payload #6", "[Micro]")
