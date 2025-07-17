@@ -16,34 +16,42 @@
 #define PCRELS(x) hex_address(PCRELA(x)) + "L"
 #define STRADDR(x) (hex_address(x) + "L")
 // Reveal PC on unknown instructions
-#ifdef RISCV_LIBTCC
 // libtcc always runs on the current machine, so we can use the handler index directly
 #define UNKNOWN_INSTRUCTION() { \
-  if (!instr.is_illegal()) { \
-    this->store_loaded_registers(); \
-	auto* handler = CPU<W>::decode(instr).handler; \
-	const auto index = DecoderData<W>::handler_index_for(handler); \
-	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
-		"  return (ReturnValues){0, 0};\n"; \
-	this->reload_all_registers(); \
-  } else if (m_zero_insn_counter <= 1) { \
-    code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
-	code += "return (ReturnValues){0, 0};\n"; \
+  if (tinfo.is_libtcc) { \
+	if (!instr.is_illegal()) { \
+		this->store_loaded_registers(); \
+		auto* handler = CPU<W>::decode(instr).handler; \
+		const auto index = DecoderData<W>::handler_index_for(handler); \
+		code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
+			"  return (ReturnValues){0, 0};\n"; \
+		this->reload_all_registers(); \
+	} else if (m_zero_insn_counter <= 1) { \
+		code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+		code += "return (ReturnValues){0, 0};\n"; \
+	} \
+  } else { \
+	if (!instr.is_illegal()) { \
+		this->store_loaded_registers(); \
+		code += "#ifdef __wasm__\n"; \
+		code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; \
+		code += "#else\n"; \
+		code += "{ static int handler_idx = 0;\n"; \
+		code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
+		code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
+		code += "#endif\n"; \
+		this->reload_all_registers(); \
+	} else if (m_zero_insn_counter <= 1) \
+		code += "api.exception(cpu, " + hex_address(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
   } \
 }
 #define WELL_KNOWN_INSTRUCTION() { \
+  if (tinfo.is_libtcc) { \
 	auto* handler = CPU<W>::decode(instr).handler; \
 	const auto index = DecoderData<W>::handler_index_for(handler); \
 	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; \
-}
-#else
-// Since it is possible to send a program to another machine, we don't exactly know
-// the order of intruction handlers, so we need to lazily get the handler index by
-// calling the execute function the first time.
-#define UNKNOWN_INSTRUCTION() { \
-  if (!instr.is_illegal()) { \
-    this->store_loaded_registers(); \
+  } else { \
 	code += "#ifdef __wasm__\n"; \
 	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; \
 	code += "#else\n"; \
@@ -51,20 +59,8 @@
     code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
     code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
 	code += "#endif\n"; \
-	this->reload_all_registers(); \
-  } else if (m_zero_insn_counter <= 1) \
-    code += "api.exception(cpu, " + hex_address(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
+  } \
 }
-#define WELL_KNOWN_INSTRUCTION() { \
-	code += "#ifdef __wasm__\n"; \
-	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; \
-	code += "#else\n"; \
-    code += "{ static int handler_idx = 0;\n"; \
-    code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n"; \
-    code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n"; \
-	code += "#endif\n"; \
-}
-#endif // RISCV_LIBTCC
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "LIKELY(counter < max_counter)";
@@ -274,7 +270,7 @@ struct Emitter
 		// This is a performance optimization for libtcc, which allows direct access to the memory arena
 		// however, with it execute segments can no longer be shared between different machines.
 		// So, for a simple CLI tool, this is a good optimization. But not for a system of multiple machines.
-		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
+		if (tinfo.is_libtcc && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
 					return "(" + m_arena_hex_address + " + (uint32_t)(" + address + "))";
@@ -294,7 +290,7 @@ struct Emitter
 	}
 
 	std::string arena_at_fixed(const std::string& type, address_t address) {
-		if (libtcc_enabled && !tinfo.use_shared_execute_segments) {
+		if (tinfo.is_libtcc && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
 				return "*(" + type + "*)" + hex_address(tinfo.arena_ptr + (address & address_t(get_Nbit_encompassing_arena_mask()))) + "";
 			} else {
@@ -725,7 +721,7 @@ void Emitter<W>::emit()
 				// When illegal opcode is encountered, reveal PC
 				if (m_zero_insn_counter <= 1 || compressed_instr != 0x0) {
 					code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
-					if (libtcc_enabled) {
+					if (tinfo.is_libtcc) {
 						code += "return (ReturnValues){0, 0};\n";
 					}
 				}
@@ -1323,7 +1319,7 @@ void Emitter<W>::emit()
 					this->potentially_realize_register(instr.Itype.rs1);
 					// Zero funct3, unknown imm: Don't exit
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
-					if (libtcc_enabled) {
+					if (tinfo.is_libtcc) {
 						code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
 						code += "  return (ReturnValues){0, 0};\n";
 					} else {
@@ -1343,7 +1339,7 @@ void Emitter<W>::emit()
 				if (!tinfo.ignore_instruction_limit)
 					code += "INS_COUNTER(cpu) = counter;\n"; // Reveal instruction counters
 				code += "MAX_COUNTER(cpu) = max_counter;\n";
-				if (libtcc_enabled) {
+				if (tinfo.is_libtcc) {
 					code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
 					code += "  return (ReturnValues){0, 0};\n";
 				} else {
