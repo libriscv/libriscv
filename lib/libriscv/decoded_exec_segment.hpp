@@ -85,6 +85,7 @@ namespace riscv
 #endif
 #else
 		bool is_binary_translated() const noexcept { return false; }
+		bool is_libtcc() const noexcept { return false; }
 #endif
 
 		bool is_execute_only() const noexcept { return m_is_execute_only; }
