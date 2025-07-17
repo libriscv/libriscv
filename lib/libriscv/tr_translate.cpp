@@ -397,6 +397,16 @@ void CPU<W>::binary_translate(const MachineOptions<W>& options, DecodedExecuteSe
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = options.verbose_loader;
 	const bool trace_instructions = options.translate_trace;
+	bool is_libtcc = libtcc_enabled;
+	if constexpr (libtcc_enabled) {
+		// If there is an embeddable code option, we can't enable libtcc
+		for (auto& cc : options.cross_compile) {
+			if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc)) {
+				is_libtcc = false;
+				break;
+			}
+		}
+	}
 
 	const address_t basepc    = exec.exec_begin();
 	const address_t endbasepc = exec.exec_end();
@@ -596,6 +606,7 @@ if constexpr (SCAN_FOR_GP) {
 				block, block_end,
 				basepc, endbasepc,
 				gp,
+				is_libtcc,
 				trace_instructions,
 				options.translate_ignore_instruction_limit,
 				options.use_shared_execute_segments,

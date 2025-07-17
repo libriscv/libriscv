@@ -27,6 +27,7 @@ namespace riscv
 		address_type<W> segment_basepc;
 		address_type<W> segment_endpc;
 		address_type<W> gp;
+		bool is_libtcc;
 		bool trace_instructions;
 		bool ignore_instruction_limit;
 		bool use_shared_execute_segments;
