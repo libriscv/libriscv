@@ -805,7 +805,30 @@ static void syscall_pipe2(Machine<W>& machine)
 template <int W>
 static void syscall_getrandom(Machine<W>& machine)
 {
-	machine.set_result(-ENOSYS);
+	const auto g_addr = machine.sysarg(0);
+	const auto g_len  = machine.sysarg(1);
+
+	std::array<uint8_t, 256> buffer;
+	if (g_len > buffer.size()) {
+		machine.set_result(-1);
+		return;
+	}
+	const size_t need = std::min((size_t)g_len, buffer.size());
+	for (size_t i = 0; i < need; ++i) {
+		buffer[i] ^= rand() & 0xFF; // XXX: Not secure
+	}
+	const ssize_t result = need;
+	if (result > 0) {
+		machine.copy_to_guest(g_addr, buffer.data(), result);
+		// getrandom() is a slow syscall, penalize it
+		machine.penalize(20'000 * result); // 20K insn per byte
+	}
+	machine.set_result(result);
+
+	if constexpr (verbose_syscalls) {
+		printf("SYSCALL getrandom(addr=0x%lX, len=%ld) = %ld\n",
+			(long)g_addr, (long)g_len, (long)machine.return_value());
+	}
 }
 
 #include "../linux/syscalls_mman.cpp"
