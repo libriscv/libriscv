@@ -923,7 +923,9 @@ void Emitter<W>::emit()
 				// Get the function name of the target block
 				auto target_funcaddr = this->find_block_base(dest_pc);
 				// Allow directly calling a function, as long as it's a forward jump
-				if (target_funcaddr != 0 && dest_pc > this->pc()) {
+				/// XXX: This forward call is buggy, and crashes on Windows with LIBTCC
+				/// Don't enable until it is fixed (or well understood)
+				if (false && target_funcaddr != 0 && dest_pc > this->pc()) {
 					//printf("Jump location OK (forward): 0x%lX for block 0x%lX -> 0x%lX\n", long(dest_pc),
 					//	long(this->begin_pc()), long(this->end_pc()));
 					already_exited = this->emit_function_call(target_funcaddr, dest_pc);
