@@ -93,20 +93,39 @@ namespace riscv
 	static EmbeddedTranslations<W> registered_embedded_translations;
 
 	template <int W>
+	static EmbeddedTranslation<W>* find_embedded_translation_by_hash(uint32_t hash)
+	{
+		for (size_t i = 0; i < registered_embedded_translations<W>.count; ++i) {
+			auto& translation = registered_embedded_translations<W>.translations[i];
+			if (translation.hash == hash) {
+				return &translation;
+			}
+		}
+		return nullptr;
+	}
+
+	template <int W>
 	static void register_translation(uint32_t hash, const Mapping<W>* mappings, uint32_t nmappings,
 		const bintr_block_func<W>* handlers, uint32_t nhandlers, binary_translation_init_func<W> init_func)
 	{
+		static std::mutex translation_mutex;
+		std::scoped_lock lock(translation_mutex);
+
 		EmbeddedTranslations<W>& translations = registered_embedded_translations<W>;
-		if (translations.count >= MAX_EMBEDDED) {
-			throw MachineException(INVALID_PROGRAM, "Too many embedded translations", MAX_EMBEDDED);
+		EmbeddedTranslation<W>* existing = find_embedded_translation_by_hash<W>(hash);
+		if (existing == nullptr) {
+			if (translations.count >= MAX_EMBEDDED) {
+				throw MachineException(INVALID_PROGRAM, "Too many embedded translations", MAX_EMBEDDED);
+			}
+			// We allow overwriting existing translations with the same hash
+			existing = &translations.translations[translations.count++];
 		}
-		EmbeddedTranslation<W>& translation = translations.translations[translations.count++];
-		translation.hash = hash;
-		translation.nmappings = nmappings;
-		translation.mappings  = mappings;
-		translation.nhandlers = nhandlers;
-		translation.handlers  = handlers;
-		translation.init_func = init_func;
+		existing->hash = hash;
+		existing->nmappings = nmappings;
+		existing->mappings  = mappings;
+		existing->nhandlers = nhandlers;
+		existing->handlers  = handlers;
+		existing->init_func = init_func;
 
 		if (getenv("VERBOSE")) {
 			printf("libriscv: Registered embedded translation for hash %08X, %u/%u mappings\n",
