@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include "types.hpp"
+#include <mutex>
 #include <unordered_set>
 
 namespace riscv
@@ -79,6 +80,9 @@ namespace riscv
 
 		void set_record_slowpaths(bool do_record) { m_do_record_slowpaths = do_record; }
 		bool is_recording_slowpaths() const noexcept { return m_do_record_slowpaths; }
+		std::mutex& background_compilation_mutex() noexcept { return m_background_compilation_mutex; }
+		bool is_background_compiling() const noexcept { return m_is_background_compiling; }
+		void set_background_compiling(bool is_bg) { m_is_background_compiling = is_bg; }
 #ifdef RISCV_DEBUG
 		void insert_slowpath_address(address_t addr) { m_slowpath_addresses.insert(addr); }
 		auto& slowpath_addresses() const noexcept { return m_slowpath_addresses; }
@@ -129,6 +133,8 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		bool m_do_record_slowpaths = false;
 		mutable bool m_is_libtcc = false;
+		bool m_is_background_compiling = false;
+		std::mutex m_background_compilation_mutex;
 #endif
 		// High-memory execute segments are likely to be JIT'd, and needs to
 		// be nuked when attempting to re-use the segment
@@ -180,6 +186,9 @@ namespace riscv
 		extern void  dylib_close(void* dylib, bool is_libtcc);
 		if (m_bintr_dl)
 			dylib_close(m_bintr_dl, m_is_libtcc);
+		m_bintr_dl = nullptr;
+		// Wait for any background compilation to finish
+		std::scoped_lock bg_lock(m_background_compilation_mutex);
 #endif
 	}
 

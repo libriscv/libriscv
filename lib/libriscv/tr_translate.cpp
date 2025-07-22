@@ -858,6 +858,14 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	[this, options, output = std::move(output), filename, live_patch, shared_segment = shared_segment] () mutable
 	{
 		auto* exec = shared_segment.get();
+		// The mutex is already locked when we enter this function
+		// but we need to unlock it when we are done, or an exception is thrown.
+		struct Unlock {
+			Unlock(DecodedExecuteSegment<W>& exec) : m_exec(exec) {}
+			~Unlock() { m_exec.background_compilation_mutex().unlock(); }
+		private:
+			DecodedExecuteSegment<W>& m_exec;
+		} unlock(*exec);
 
 		this->binary_translate(options, *exec, output);
 
@@ -892,9 +900,9 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 					fprintf(stderr, "libriscv: Failed to write libtcc output to file\n");
 				}
 			}
-			static std::mutex libtcc_mutex;
+			//static std::mutex libtcc_mutex;
 			// libtcc uses global state, so we need to serialize compilation
-			std::lock_guard<std::mutex> lock(libtcc_mutex);
+			//std::lock_guard<std::mutex> lock(libtcc_mutex);
 			dylib = libtcc_compile(shared_library_code, W, output.defines, "");
 		} else if (options.translate_invoke_compiler) {
 			extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
@@ -949,7 +957,9 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 		}
 	};
 
+	shared_segment->background_compilation_mutex().lock();
 	if (options.translate_background_callback) {
+		shared_segment->set_background_compiling(true);
 		// User-provided callback for background compilation
 		options.translate_background_callback(compilation_step);
 	} else {
@@ -975,6 +985,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 			dylib_close(dylib, is_libtcc);
 		}
 		exec.set_binary_translated(nullptr, false);
+		exec.set_background_compiling(false);
 		return;
 	}
 
@@ -1011,6 +1022,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
 	const unsigned nmappings = *no_mappings;
 	const unsigned unique_mappings = *no_handlers;
+	static constexpr bool enable_live_patching = false;
 
 	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
 	auto& exec_mappings = exec.create_mappings(unique_mappings + 1);
@@ -1036,6 +1048,25 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					// NOTE: If we don't use the patched decoder here, entries
 					// will trample each other in the patched decoder cache.
 					auto& entry = decoder_entry_at(patched_decoder, addr);
+					// If the entry is already the last one in the block,
+					// we can skip the processing entirely.
+					if (entry.block_bytes() == 0) {
+						entry.set_bytecode(RV32I_BC_TRANSLATOR);
+						entry.set_invalid_handler();
+						entry.instr = mapping_index;
+					#ifdef RISCV_EXT_C
+						entry.icount = 0;
+					#endif
+						entry.idxend = 0;
+						if constexpr (enable_live_patching) {
+							auto& original_entry = decoder_entry_at(exec.decoder_cache(), addr);
+							livepatch_bintr.push_back(&original_entry);
+						}
+						continue;
+					}
+					// The code below doesn't work, so we skip it
+					continue;
+
 					// 1. The last instruction will be the current entry
 					// 2. Later instructions will work as normal
 					// 3. Look back to find the beginning of the block
@@ -1046,8 +1077,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 						current--;
 						last_block_bytes = current->block_bytes();
 					}
+					int block_bytes = last_block_bytes - entry.block_bytes();
 
-					const auto block_begin_addr = addr - (compressed_enabled ? 2 : 4) * (last - current);
+					const auto block_begin_addr = addr - block_bytes;
 					if (block_begin_addr < exec.exec_begin() || block_begin_addr >= exec.exec_end()) {
 						if (options.verbose_loader)
 						fprintf(stderr, "libriscv: Patched address 0x%lX outside execute area 0x%lX-0x%lX\n",
@@ -1057,28 +1089,41 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 
 					// 4. Correct block_bytes() for all entries in the block
 					auto patched_addr = block_begin_addr;
+					if (current + block_bytes / (compressed_enabled ? 2 : 4) != last) {
+						throw MachineException(INVALID_PROGRAM, "Translation mapping block bytes mismatch");
+					}
 					for (auto* dd = current; dd < last; dd++) {
 						// Get the patched decoder entry
 						auto& p = decoder_entry_at(patched_decoder, patched_addr);
-						p.idxend = last - dd;
 					#ifdef RISCV_EXT_C
-						p.icount = 0; // TODO: Implement C-ext icount for live-patching
+						p.icount = block_bytes;
+						p.idxend = block_bytes / 2;
+					#else
+						p.idxend = last - dd;
 					#endif
-						patched_addr += (compressed_enabled) ? 2 : 4;
+						patched_addr += (compressed_enabled ? 2 : 4);
+						block_bytes -= (compressed_enabled ? 2 : 4);
+					}
+					if (compressed_enabled && block_bytes != 0) {
+						if (options.verbose_loader)
+							fprintf(stderr, "libriscv: Patched block bytes mismatch at 0x%lX: %u != 0\n",
+								(long)block_begin_addr, block_bytes);
+						throw MachineException(INVALID_PROGRAM, "Translation mapping block bytes mismatch");
 					}
 
 					// 5. The last instruction will be replaced with a binary translation
 					// function, which will be the last instruction in the block.
-					auto& p = decoder_entry_at(patched_decoder, addr);
-					p.set_bytecode(RV32I_BC_TRANSLATOR);
-					p.set_invalid_handler();
-					p.instr  = mapping_index;
-					p.idxend = 0;
+					entry.set_bytecode(RV32I_BC_TRANSLATOR);
+					entry.set_invalid_handler();
+					entry.instr  = mapping_index;
+					entry.idxend = 0;
 				#ifdef RISCV_EXT_C
-					p.icount = 0;
+					entry.icount = 0;
 				#endif
-					auto& original_entry = decoder_entry_at(exec.decoder_cache(), addr);
-					livepatch_bintr.push_back(&original_entry);
+					if constexpr (enable_live_patching) {
+						auto& original_entry = decoder_entry_at(exec.decoder_cache(), addr);
+						livepatch_bintr.push_back(&original_entry);
+					}
 				} else {
 					// Normal block-end hint that will be transformed into a translation
 					// bytecode if it passes a few more checks, later.
@@ -1103,7 +1148,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		// Set regular decoder cache to the patched decoder cache
 		exec.set_decoder(patched_decoder);
 
-		if constexpr (true)
+		if constexpr (enable_live_patching)
 		{
 			// Memory fence to ensure that the patched decoder is visible to all threads
 #ifndef __COSMOCC__
@@ -1116,6 +1161,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				dd->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 0);
 			}
 		}
+		exec.set_background_compiling(false);
 	}
 
 	if (options.translate_timing) {
@@ -1123,8 +1169,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		printf(">> Binary translation activation %ld ns\n", nanodiff(t11, t12));
 	}
 	if (options.verbose_loader) {
-		printf("libriscv: Activated %s binary translation with %u/%u mappings%s\n",
+		printf("libriscv: Activated %s binary translation with hash 0x%X, %u/%u mappings%s\n",
 			is_libtcc ? "libtcc" : "full",
+			exec.translation_hash(),
 			unique_mappings, nmappings,
 			live_patch ? ", live-patching enabled" : "");
 	}
