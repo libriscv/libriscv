@@ -191,10 +191,10 @@ INTERNAL static int32_t arena_offset;
 //#define ARENA_AT(cpu, x)  (arena_ptr + (x))
 #define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + arena_offset) + (x))
 
-INTERNAL static int32_t ins_counter_offset;
-INTERNAL static int32_t max_counter_offset;
-#define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + ins_counter_offset))
-#define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + max_counter_offset))
+INTERNAL static int32_t ic_offset;
+INTERNAL static int32_t max_ic_offset;
+#define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + ic_offset))
+#define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + max_ic_offset))
 
 static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t sysno)
 {
@@ -247,13 +247,13 @@ void init(struct CallbackTable* table, int32_t arena_off, int32_t ins_counter_of
 {
 	api = *table;
 	arena_offset = arena_off;
-	ins_counter_offset = ins_counter_off;
-	max_counter_offset = max_counter_off;
+	ic_offset = ins_counter_off;
+	max_ic_offset = max_counter_off;
 }
 
 typedef struct {
-	uint64_t counter;
-	uint64_t max_counter;
+	uint64_t ic;
+	uint64_t max_ic;
 } ReturnValues;
 )123";
 }

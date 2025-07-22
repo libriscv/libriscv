@@ -63,7 +63,7 @@
 }
 
 namespace riscv {
-static const std::string LOOP_EXPRESSION = "LIKELY(counter < max_counter)";
+static const std::string LOOP_EXPRESSION = "LIKELY(ic < max_ic)";
 static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
 static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
 
@@ -182,7 +182,7 @@ struct Emitter
 	void exit_function(const std::string& new_pc, bool add_bracket = false)
 	{
 		this->store_loaded_registers();
-		const char* return_code = (tinfo.ignore_instruction_limit) ? "return (ReturnValues){0, max_counter};" : "return (ReturnValues){counter, max_counter};";
+		const char* return_code = (tinfo.ignore_instruction_limit) ? "return (ReturnValues){0, max_ic};" : "return (ReturnValues){ic, max_ic};";
 		add_code(
 			(new_pc != "cpu->pc") ? "cpu->pc = " + new_pc + ";" : "",
 			return_code, (add_bracket) ? " }" : "");
@@ -407,7 +407,7 @@ struct Emitter
 	void increment_counter_so_far() {
 		auto icount = this->reset_and_get_icounter();
 		if (icount > 0 && !tinfo.ignore_instruction_limit)
-			code.append("counter += " + std::to_string(icount) + ";\n");
+			code.append("ic += " + std::to_string(icount) + ";\n");
 	}
 	void penalty(uint64_t cycles) {
 		this->m_instr_counter += cycles;
@@ -530,27 +530,27 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 	add_forward(target_func);
 	if (!tinfo.ignore_instruction_limit) {
 		// Call the function and get the return values
-		add_code("{ReturnValues rv = " + target_func + "(cpu, counter, max_counter, " + STRADDR(dest_pc) + ");");
+		add_code("{ReturnValues rv = " + target_func + "(cpu, ic, max_ic, " + STRADDR(dest_pc) + ");");
 		// Update the local counter registers
-		add_code("counter = rv.counter; max_counter = rv.max_counter;}");
+		add_code("ic = rv.ic; max_ic = rv.max_ic;}");
 	} else {
-		add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_counter, " + STRADDR(dest_pc) + ");");
-		add_code("max_counter = rv.max_counter;}");
+		add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_ic, " + STRADDR(dest_pc) + ");");
+		add_code("max_ic = rv.max_ic;}");
 	}
 
 	// Restore the registers
 	this->reload_all_registers();
 
 	if (tinfo.trace_instructions) {
-		code += "api.trace(cpu, \"" + this->func + "\", cpu->pc, max_counter);\n";
+		code += "api.trace(cpu, \"" + this->func + "\", cpu->pc, max_ic);\n";
 	}
 
 	// Hope and pray that the next PC is local to this block
 	if (!tinfo.ignore_instruction_limit) {
 		add_code("if (" + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
-		add_code("return (ReturnValues){counter, max_counter};");
+		add_code("return (ReturnValues){ic, max_ic};");
 	} else {
-		add_code("if (max_counter) { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
+		add_code("if (max_ic) { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
 		add_code("return (ReturnValues){0, 0};");
 	}
 	return true;
@@ -596,7 +596,7 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 	}
 	code += "cpu->pc = " + PCRELS(0) + ";\n";
 	if (!tinfo.ignore_instruction_limit) {
-		code += "if (UNLIKELY(do_syscall(cpu, counter, max_counter, " + syscall_reg + "))) {\n";
+		code += "if (UNLIKELY(do_syscall(cpu, ic, max_ic, " + syscall_reg + "))) {\n";
 		if (this->uses_register_caching() && !clobber_all)
 		{
 			// If we didn't clobber all registers, and the machine timed out,
@@ -606,13 +606,13 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 			code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
 			code += "}\n";
 		}
-		code += "  cpu->pc += 4; return (ReturnValues){counter, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
-		code += "counter = INS_COUNTER(cpu);\n"; // Restore instruction counter
+		code += "  cpu->pc += 4; return (ReturnValues){ic, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+		code += "ic = INS_COUNTER(cpu);\n"; // Restore instruction counter
 	} else {
-		code += "if (UNLIKELY(do_syscall(cpu, 0, max_counter, " + syscall_reg + "))) {\n";
+		code += "if (UNLIKELY(do_syscall(cpu, 0, max_ic, " + syscall_reg + "))) {\n";
 		code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 	}
-	code += "max_counter = MAX_COUNTER(cpu);\n"; // Restore max counter
+	code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
 	this->reload_syscall_registers();
 }
 
@@ -1310,7 +1310,7 @@ void Emitter<W>::emit()
 					this->emit_system_call(syscall_reg);
 					break;
 				} else if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
-					code += "max_counter = 0;\n"; // Immediate stop PC + 4
+					code += "max_ic = 0;\n"; // Immediate stop PC + 4
 					exit_function(PCRELS(4), false);
 					this->add_reentry_next();
 					break;
@@ -1339,8 +1339,8 @@ void Emitter<W>::emit()
 				this->potentially_realize_register(instr.Itype.rs1);
 				code += "cpu->pc = " + PCRELS(0) + ";\n";
 				if (!tinfo.ignore_instruction_limit)
-					code += "INS_COUNTER(cpu) = counter;\n"; // Reveal instruction counters
-				code += "MAX_COUNTER(cpu) = max_counter;\n";
+					code += "INS_COUNTER(cpu) = ic;\n"; // Reveal instruction counters
+				code += "MAX_COUNTER(cpu) = max_ic;\n";
 				if (tinfo.is_libtcc) {
 					code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
 					code += "  return (ReturnValues){0, 0};\n";
@@ -1885,7 +1885,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	}
 
 	// Function header
-	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t counter, uint64_t max_counter, addr_t pc) {\n";
+	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t ic, uint64_t max_ic, addr_t pc) {\n";
 
 	// Function GPRs
 	if (tinfo.use_register_caching) {
@@ -1940,7 +1940,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + ";\n";
 		}
 	}
-	code += "  cpu->pc = pc; return (ReturnValues){counter, max_counter};\n";
+	code += "  cpu->pc = pc; return (ReturnValues){ic, max_ic};\n";
 	code += "}\n";
 
 	// Function code
