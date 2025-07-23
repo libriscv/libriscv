@@ -900,9 +900,6 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 					fprintf(stderr, "libriscv: Failed to write libtcc output to file\n");
 				}
 			}
-			//static std::mutex libtcc_mutex;
-			// libtcc uses global state, so we need to serialize compilation
-			//std::lock_guard<std::mutex> lock(libtcc_mutex);
 			dylib = libtcc_compile(shared_library_code, W, output.defines, "");
 		} else if (options.translate_invoke_compiler) {
 			extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
@@ -1096,7 +1093,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 						// Get the patched decoder entry
 						auto& p = decoder_entry_at(patched_decoder, patched_addr);
 					#ifdef RISCV_EXT_C
-						p.icount = block_bytes;
+						p.icount = last - dd; // This is inexact, but works for now
 						p.idxend = block_bytes / 2;
 					#else
 						p.idxend = last - dd;
