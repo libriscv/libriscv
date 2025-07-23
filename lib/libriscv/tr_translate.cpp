@@ -1310,8 +1310,9 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 			const rv32i_instruction rvi{instr};
 			if constexpr (libtcc_enabled) {
 				try {
-					cpu.decode(rvi).handler(cpu, rvi);
-					return 0;
+					auto* handler = cpu.decode(rvi).handler;
+					handler(cpu, rvi);
+					return DecoderData<W>::handler_index_for(handler);
 				} catch (...) {
 #ifdef RISCV_LIBTCC
 					cpu.set_current_exception(std::current_exception());
@@ -1326,10 +1327,10 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				return DecoderData<W>::handler_index_for(handler);
 			}
 		},
-		.execute_handler = [] (CPU<W>& cpu, unsigned index, uint32_t instr) -> unsigned {
+		.execute_handler = [] (CPU<W>& cpu, uint32_t instr, void(*handler)(CPU<W>&, rv32i_instruction)) -> unsigned {
 			const rv32i_instruction rvi{instr};
 			try {
-				DecoderData<W>::get_handlers()[index](cpu, rvi);
+				handler(cpu, rvi);
 				return 0;
 			} catch (...) {
 #ifdef RISCV_LIBTCC

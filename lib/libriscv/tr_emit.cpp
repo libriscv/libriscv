@@ -21,9 +21,8 @@
   if (tinfo.is_libtcc) { \
 	if (!instr.is_illegal()) { \
 		this->store_loaded_registers(); \
-		auto* handler = CPU<W>::decode(instr).handler; \
-		const auto index = DecoderData<W>::handler_index_for(handler); \
-		code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
+		const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler; \
+		code += "if (api.execute_handler(cpu, " + std::to_string(instr.whole) + ", " + std::to_string(handler) + "))\n" \
 			"  return (ReturnValues){0, 0};\n"; \
 		this->reload_all_registers(); \
 	} else if (m_zero_insn_counter <= 1) { \
@@ -47,9 +46,8 @@
 }
 #define WELL_KNOWN_INSTRUCTION() { \
   if (tinfo.is_libtcc) { \
-	auto* handler = CPU<W>::decode(instr).handler; \
-	const auto index = DecoderData<W>::handler_index_for(handler); \
-	code += "if (api.execute_handler(cpu, " + std::to_string(index) + ", " + std::to_string(instr.whole) + "))\n" \
+	const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler; \
+	code += "if (api.execute_handler(cpu, " + std::to_string(instr.whole) + ", " + std::to_string(handler) + "))\n" \
 		"  return (ReturnValues){0, 0};\n"; \
   } else { \
 	code += "#ifdef __wasm__\n"; \
