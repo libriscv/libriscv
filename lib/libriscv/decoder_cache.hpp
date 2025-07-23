@@ -56,7 +56,7 @@ struct DecoderData {
 	RISCV_ALWAYS_INLINE
 	auto instruction_count() const noexcept {
 #ifdef RISCV_EXT_COMPRESSED
-		return idxend + 1 - icount;
+		return icount;
 #else
 		return idxend + 1;
 #endif

@@ -147,8 +147,8 @@ namespace riscv
 		const unsigned last_count = block_array[block_array_count - 1].count;
 		unsigned count = (current_pc - block_pc) >> 1;
 		count -= last_count;
-		//if (count > 255)
-		//	throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
+		if (count > 255)
+			throw MachineException(INVALID_PROGRAM, "Too many non-branching instructions in a row");
 
 		for (size_t i = 0; i < block_array_count; i++) {
 			const DecoderEntryAndCount<W>& tuple = block_array[i];
@@ -157,7 +157,7 @@ namespace riscv
 
 			// Ends at instruction *before* last PC
 			entry->idxend = count;
-			entry->icount = count + 1 - block_array_count + i;
+			entry->icount = block_array_count - i;
 
 			if constexpr (VERBOSE_DECODER) {
 				fprintf(stderr, "Block 0x%lX has %u instructions\n", block_pc, count);
