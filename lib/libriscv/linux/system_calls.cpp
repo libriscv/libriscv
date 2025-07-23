@@ -1226,7 +1226,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(67, syscall_pread64<W>);
 	install_syscall_handler(72, syscall_pselect<W>);
 #ifdef __wasm__
-	install_syscall_handler(73, syscall_stub_nosys<W>);
+	install_syscall_handler(73, syscall_stub_zero<W>);
 	install_syscall_handler(78, syscall_stub_nosys<W>);
 #else
 	install_syscall_handler(73, syscall_ppoll<W>);
