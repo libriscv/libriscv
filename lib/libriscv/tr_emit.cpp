@@ -62,7 +62,7 @@
 
 namespace riscv {
 static const std::string LOOP_EXPRESSION = "LIKELY(ic < max_ic)";
-static const std::string SIGNEXTW = "(saddr_t) (int32_t)";
+static const std::string SIGNEXTW = "(int32_t)";
 static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
 
 static std::string hex_address(uint64_t addr) {
@@ -304,11 +304,6 @@ struct Emitter
 	template <typename T>
 	void memory_load(std::string dst, std::string type, int reg, int32_t imm)
 	{
-		std::string cast;
-		if constexpr (std::is_signed_v<T>) {
-			cast = "(saddr_t)";
-		}
-
 		if (uses_flat_memory_arena()) {
 			address_t absolute_vaddr = 0;
 			if (reg == REG_GP && tinfo.gp != 0x0) {
@@ -317,7 +312,7 @@ struct Emitter
 			constexpr bool good = riscv::encompassing_Nbit_arena != 0;
 			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && (good || absolute_vaddr + sizeof(T) <= tinfo.arena_size)) {
 				add_code(
-					dst + " = " + cast + arena_at_fixed(type, absolute_vaddr) + ";"
+					dst + " = " + arena_at_fixed(type, absolute_vaddr) + ";"
 				);
 				return;
 			}
@@ -326,18 +321,26 @@ struct Emitter
 		const auto address = from_reg(reg) + " + " + from_imm(imm);
 		if (uses_Nbit_encompassing_arena())
 		{
-			add_code(dst + " = " + cast + "*(" + type + "*)" + arena_at(address) + ";");
+			add_code(dst + " = *(" + type + "*)" + arena_at(address) + ";");
 		}
 		else if (uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
-					dst + " = " + cast + "*(" + type + "*)" + arena_at(address) + ";",
-				"else {",
-					dst + " = " + cast + "(" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");",
+					dst + " = *(" + type + "*)" + arena_at(address) + ";",
+				"else {");
+			if ((W == 8 && (type == "int64_t" || type == "uint64_t"))
+				|| (W == 4 && (type == "int32_t" || type == "uint32_t"))) {
+				add_code(
+					dst + " = api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");",
 				"}");
+			} else {
+				add_code(
+					dst + " = (" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");",
+				"}");
+			}
 		} else {
 			add_code(
-				dst + " = " + cast + "(" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");"
+				dst + " = (" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");"
 			);
 		}
 	}
@@ -963,11 +966,11 @@ void Emitter<W>::emit()
 				switch (instr.Itype.imm) {
 				case 0b011000000100: // SEXT.B
 					add_code(
-						dst + " = (saddr_t)(int8_t)" + src + ";");
+						dst + " = (int8_t)" + src + ";");
 					break;
 				case 0b011000000101: // SEXT.H
 					add_code(
-						dst + " = (saddr_t)(int16_t)" + src + ";");
+						dst + " = (int16_t)" + src + ";");
 					break;
 				case 0b011000000000: // CLZ
 					if constexpr (W == 4)
