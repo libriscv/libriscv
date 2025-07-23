@@ -1061,8 +1061,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 						}
 						continue;
 					}
-					// The code below doesn't work, so we skip it
-					continue;
 
 					// 1. The last instruction will be the current entry
 					// 2. Later instructions will work as normal
@@ -1070,7 +1068,32 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					auto* last    = &entry;
 					auto* current = &entry;
 					auto last_block_bytes = entry.block_bytes();
-					while (current > decoder_begin && (current-1)->block_bytes() > last_block_bytes) {
+					while (current > decoder_begin) {
+						if ((current-1)->block_bytes() == 0) {
+							// We may have reached the middle of an instruction,
+							// which has an invalid entry. In order to validate this,
+							// we will step one more time back, if possible, and check
+							// if the previous entry matches exactly current block_bytes
+							// + 4 bytes.
+							if (current-1 == decoder_begin) {
+								// We are at the beginning of the decoder cache, so we can't
+								// step back any further.
+								break;
+							}
+							auto* prev = current-2;
+							if (prev->block_bytes() == last_block_bytes + 4) {
+								// We can step over the invalid entry
+								// and continue with the previous entry.
+								current = prev;
+								last_block_bytes = prev->block_bytes();
+								continue;
+							} else {
+								// We have reached the end of the block, so we can stop here.
+								break;
+							}
+						}
+						if ((current-1)->block_bytes() < last_block_bytes)
+							break; // We have reached another previous block
 						current--;
 						last_block_bytes = current->block_bytes();
 					}
@@ -1093,8 +1116,15 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 						// Get the patched decoder entry
 						auto& p = decoder_entry_at(patched_decoder, patched_addr);
 					#ifdef RISCV_EXT_C
-						p.icount = last - dd; // This is inexact, but works for now
-						p.idxend = block_bytes / 2;
+						if (p.get_bytecode() != 0) { // Avoid invalid entries
+							p.icount = last - dd + 1; // This is inexact, but works for now
+							p.idxend = block_bytes / 2;
+						} else {
+							// Setting icount and idxend to 0 on an invalid instruction will
+							// improve exception handling/information, if jumped to.
+							p.icount = 0; // Invalid entry, no instruction count
+							p.idxend = 0; // No index end
+						}
 					#else
 						p.idxend = last - dd;
 					#endif
