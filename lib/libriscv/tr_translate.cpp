@@ -487,7 +487,7 @@ if constexpr (SCAN_FOR_GP) {
 
 	// Code block and loop detection
 	TIME_POINT(t2);
-	static constexpr size_t ITS_TIME_TO_SPLIT = (libtcc_enabled) ? 150'000 : 1'250;
+	const size_t ITS_TIME_TO_SPLIT = (is_libtcc) ? 150'000 : 1'250;
 	size_t icounter = 0;
 	std::unordered_set<address_type<W>> global_jump_locations;
 	std::unordered_map<address_type<W>, address_type<W>> single_return_locations;
