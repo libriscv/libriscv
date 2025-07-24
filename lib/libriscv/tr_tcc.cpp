@@ -3,6 +3,11 @@
 #include <cstring>
 #include <libtcc.h>
 #include <libtcc1.h> // libtcc1_c and libtcc1_c_len
+#include <unordered_map>
+#ifdef __ANDROID__
+#include <lib-arm64.h> // lib_lib_arm64_c and lib_lib_arm64_c_len
+#include <android/log.h>
+#endif
 
 namespace riscv
 {
@@ -37,12 +42,25 @@ namespace riscv
 		tcc_add_include_path(state, "/usr/include/riscv64-linux-gnu");
 #endif
 
+#ifdef __ANDROID__
+		tcc_define_symbol(state, "__ANDROID__", "1");
+		tcc_set_error_func(state, nullptr, [](void*, const char* msg) {
+			// Android does not support stderr, so we use logcat
+			__android_log_print(ANDROID_LOG_ERROR, "libtcc", "%s", msg);
+		});
+#endif
+
 		tcc_add_symbol(state, "memset", (void*)memset);
 		tcc_add_symbol(state, "memcpy", (void*)memcpy);
 		tcc_add_symbol(state, "memcmp", (void*)memcmp);
 		tcc_add_symbol(state, "memmove", (void*)memmove);
 
-		std::string code1 = std::string((const char*)lib_libtcc1_c, lib_libtcc1_c_len) + code;
+		std::string code1;
+#ifdef __ANDROID__
+		code1 = std::string((const char*)lib_lib_arm64_c, lib_lib_arm64_c_len) + code;
+#else
+		code1 = std::string((const char*)lib_libtcc1_c, lib_libtcc1_c_len) + code;
+#endif
 
 		if (tcc_compile_string(state, code1.c_str()) < 0) {
 			tcc_delete(state);

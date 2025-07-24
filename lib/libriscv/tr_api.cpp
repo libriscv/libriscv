@@ -3,7 +3,7 @@
 namespace riscv {
 	extern const std::string bintr_code =
 		R"123(
-#if defined(__TINYC__) && defined(__FreeBSD__)
+#if (defined(__TINYC__) && defined(__FreeBSD__))
 #define int8_t   char
 #define uint8_t  unsigned char
 #define int16_t  short
@@ -23,6 +23,18 @@ namespace riscv {
 #define int64_t  long long
 #define uint64_t unsigned long long
 #define uintptr_t unsigned long long
+#elif defined(__TINYC__) && defined(__ANDROID__)
+#define uintptr_t unsigned long
+#elif defined(__TINYC__)
+#define int8_t   signed char
+#define uint8_t  unsigned char
+#define int16_t  short
+#define uint16_t unsigned short
+#define int32_t  int
+#define uint32_t unsigned int
+#define int64_t  long
+#define uint64_t unsigned long
+#define uintptr_t unsigned long
 #else
 #include <stdint.h>
 #endif

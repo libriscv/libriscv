@@ -1040,7 +1040,7 @@ void Emitter<W>::emit()
 					// ORC.B: Bitwise OR-combine
 					add_code(
 						"for (unsigned i = 0; i < sizeof(addr_t); i++)",
-						"	((char *)&" + dst + ")[i] = ((char *)&" + src + ")[i] ? 0xFF : 0x0;"
+						"	((int8_t *)&" + dst + ")[i] = ((int8_t *)&" + src + ")[i] ? 0xFF : 0x0;"
 					);
 				} else if (instr.Itype.is_rev8<sizeof(dst)>()) {
 					// REV8: Byte-reverse register
