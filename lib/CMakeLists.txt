@@ -260,6 +260,12 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 			TARGETOS_ANDROID=1
 			TCC_TARGET_ARM64=1
 		)
+	elseif (CMAKE_HOST_APPLE OR APPLE)
+		target_compile_definitions(riscv PRIVATE
+			TARGETOS_Darwin=1
+			TCC_TARGET_MACHO=1
+			TCC_TARGET_ARM64=1
+		)
 	elseif (CMAKE_HOST_WIN32 OR MINGW_TOOLCHAIN)
 		target_compile_definitions(riscv PRIVATE
 			TARGETOS_Windows=1
@@ -270,12 +276,6 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 		target_compile_definitions(riscv PRIVATE
 			TARGETOS_Linux=1
 			TCC_TARGET_X86_64=1
-		)
-	elseif (CMAKE_HOST_APPLE)
-		target_compile_definitions(riscv PRIVATE
-			TARGETOS_Darwin=1
-			TCC_TARGET_MACHO=1
-			TCC_TARGET_ARM64=1
 		)
 	endif()
 	target_include_directories(riscv PUBLIC
