@@ -168,7 +168,7 @@ namespace riscv
 	 * A fast-path is attempted to be created, which allows the function
 	 * to return by directly stopping the simulation and returning.
 	**/
-	template <int W, typename F, uint64_t IMAX = UINT64_MAX>
+	template <int W, typename F, uint64_t IMAX = UINT64_MAX, bool UseFastPath = false>
 	struct PreparedCall
 	{
 	public:
@@ -229,7 +229,11 @@ namespace riscv
 			this->m_machine = &m;
 			this->m_pc = pc;
 
-			return m.cpu.create_fast_path_function(pc);
+			if constexpr (UseFastPath) {
+				// Try to create a fast path function
+				return m.cpu.create_fast_path_function(pc);
+			}
+			return true; // No fast path, but prepared
 		}
 
 		void prepare(Machine<W>& m, const std::string& func)
@@ -242,13 +246,20 @@ namespace riscv
 			this->m_machine = &m;
 		}
 
-		PreparedCall(Machine<W>& m, const std::string& func)
+		PreparedCall(Machine<W>& m, const std::string& func, unsigned* stat = nullptr)
 		{
-			this->prepare(m, func);
+			bool is_fast = this->prepare(m, func);
+			if (stat && is_fast) {
+				*stat += 1; // Increment the fast-path stat
+			}
 		}
-		PreparedCall(Machine<W>& m, address_t call_addr)
+		PreparedCall(Machine<W>& m, address_t call_addr, unsigned* stat = nullptr)
+			: m_machine(&m), m_pc(0)
 		{
-			this->prepare(m, call_addr);
+			bool is_fast = this->prepare(m, call_addr);
+			if (stat && is_fast) {
+				*stat += 1; // Increment the fast-path stat
+			}
 		}
 		PreparedCall(const PreparedCall& other)
 			: m_machine(other.m_machine), m_pc(other.m_pc)
