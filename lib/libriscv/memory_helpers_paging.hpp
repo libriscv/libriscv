@@ -293,9 +293,15 @@ std::span<T> Memory<W>::memspan(address_t addr, size_t count, size_t maxlen) con
 	if (count == 0)
 		return {};
 
-	auto view = writable_memview(addr, count * sizeof(T), maxlen);
-	if (view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
-		return {(T *)view.data(), count};
+	if constexpr (std::is_const_v<T>) {
+		auto view = memview(addr, count * sizeof(T), maxlen);
+		if (view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
+			return {(const T *)view.data(), count};
+	} else {
+		auto view = writable_memview(addr, count * sizeof(T), maxlen);
+		if (view.size() == count * sizeof(T) && uintptr_t(view.data()) % alignof(T) == 0)
+			return {(T *)view.data(), count};
+	}
 
 	// It's too dangerous to return an empty span here
 	protection_fault(addr);
