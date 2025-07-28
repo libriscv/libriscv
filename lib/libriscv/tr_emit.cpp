@@ -600,6 +600,9 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 		code += "if (api.system_call(cpu, " + PCRELS(0) + ", ic, max_ic, " + syscall_reg + ")) {\n"
 			"  return (ReturnValues){0, MAX_COUNTER(cpu)};\n"
 			"}\n";
+		if (!tinfo.ignore_instruction_limit) {
+			code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
+		}
 	}
 	else
 	{
@@ -617,12 +620,12 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 			}
 			code += "  cpu->pc += 4; return (ReturnValues){ic, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
 			code += "ic = INS_COUNTER(cpu);\n"; // Restore instruction counter
+			code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
 		} else {
 			code += "if (UNLIKELY(do_syscall(cpu, 0, max_ic, " + syscall_reg + "))) {\n";
 			code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 		}
 	}
-	code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
 	this->reload_syscall_registers();
 }
 
