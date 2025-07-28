@@ -159,6 +159,15 @@ retry_translated_function:
 	// Invoke translated code
 	auto bintr_results =
 		exec->unchecked_mapping_at(decoder->instr)(*this, 0, ~0ULL, pc);
+	if (bintr_results.max_counter == 0) {
+#ifdef RISCV_LIBTCC
+		// We need to check if we have a current exception
+		if (UNLIKELY(CPU().has_current_exception()))
+			goto handle_rethrow_exception;
+#endif
+		return;
+	}
+
 	pc = REGISTERS().pc;
 	if (LIKELY(bintr_results.max_counter != 0 && (pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())))
 	{
@@ -171,9 +180,7 @@ retry_translated_function:
 			exec->insert_slowpath_address(pc);
 #endif
 		goto continue_segment;
-	} else if (bintr_results.max_counter == 0)
-		goto exit_check;
-	else
+	} else
 		goto check_jump;
 }
 #endif // RISCV_BINARY_TRANSLATION
@@ -228,16 +235,6 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 		exec_decoder = exec->decoder_cache();
 	}
 		goto continue_segment;
-
-#ifdef RISCV_BINARY_TRANSLATION
-	exit_check:
-#ifdef RISCV_LIBTCC
-		// We need to check if we have a current exception
-		if (UNLIKELY(CPU().has_current_exception()))
-			goto handle_rethrow_exception;
-#endif
-		return;
-#endif
 
 	execute_invalid:
 		// Calculate the current PC from the decoder pointer
