@@ -595,23 +595,32 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 	} else {
 		this->store_syscall_registers();
 	}
-	code += "cpu->pc = " + PCRELS(0) + ";\n";
-	if (!tinfo.ignore_instruction_limit) {
-		code += "if (UNLIKELY(do_syscall(cpu, ic, max_ic, " + syscall_reg + "))) {\n";
-		if (this->uses_register_caching() && !clobber_all)
-		{
-			// If we didn't clobber all registers, and the machine timed out,
-			// we need to store back the registers so that the timed out machine
-			// can resume from where it left off, if it is re-entered.
-			code += "if (INS_COUNTER(cpu) >= MAX_COUNTER(cpu)) {\n";
-			code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
-			code += "}\n";
+	if (tinfo.is_libtcc)
+	{
+		code += "if (api.system_call(cpu, " + PCRELS(0) + ", ic, max_ic, " + syscall_reg + ")) {\n"
+			"  return (ReturnValues){0, MAX_COUNTER(cpu)};\n"
+			"}\n";
+	}
+	else
+	{
+		code += "cpu->pc = " + PCRELS(0) + ";\n";
+		if (!tinfo.ignore_instruction_limit) {
+			code += "if (UNLIKELY(do_syscall(cpu, ic, max_ic, " + syscall_reg + "))) {\n";
+			if (this->uses_register_caching() && !clobber_all)
+			{
+				// If we didn't clobber all registers, and the machine timed out,
+				// we need to store back the registers so that the timed out machine
+				// can resume from where it left off, if it is re-entered.
+				code += "if (INS_COUNTER(cpu) >= MAX_COUNTER(cpu)) {\n";
+				code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
+				code += "}\n";
+			}
+			code += "  cpu->pc += 4; return (ReturnValues){ic, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+			code += "ic = INS_COUNTER(cpu);\n"; // Restore instruction counter
+		} else {
+			code += "if (UNLIKELY(do_syscall(cpu, 0, max_ic, " + syscall_reg + "))) {\n";
+			code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 		}
-		code += "  cpu->pc += 4; return (ReturnValues){ic, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
-		code += "ic = INS_COUNTER(cpu);\n"; // Restore instruction counter
-	} else {
-		code += "if (UNLIKELY(do_syscall(cpu, 0, max_ic, " + syscall_reg + "))) {\n";
-		code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 	}
 	code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
 	this->reload_syscall_registers();

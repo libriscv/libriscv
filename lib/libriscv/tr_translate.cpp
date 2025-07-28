@@ -1274,12 +1274,19 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 #endif
 		},
 		.syscalls = Machine<W>::syscall_handlers.data(),
-		.system_call = [] (CPU<W>& cpu, int sysno) -> int {
+		.system_call = [] (CPU<W>& cpu, address_type<W> pc, uint64_t ic, uint64_t max_ic, int sysno) -> int {
 			try {
+				cpu.machine().set_instruction_counter(ic);
+				cpu.machine().set_max_instructions(max_ic);
+				cpu.registers().pc = pc; // Set PC to the syscall instruction
 				const auto current_tp = cpu.reg(REG_TP);
 				const auto current_pc = cpu.registers().pc;
 				cpu.machine().system_call(sysno);
-				return cpu.registers().pc != current_pc || cpu.reg(REG_TP) != current_tp || cpu.machine().stopped();
+				if (cpu.registers().pc != current_pc || cpu.reg(REG_TP) != current_tp || cpu.machine().stopped()) {
+					cpu.registers().pc += 4; // Advance PC to the next instruction
+					return true;
+				}
+				return false; // No change in PC or TP, syscall did not alter execution flow
 			} catch (...) {
 #ifdef RISCV_LIBTCC
 				cpu.set_current_exception(std::current_exception());

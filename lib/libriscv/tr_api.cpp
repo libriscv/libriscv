@@ -177,7 +177,7 @@ static struct CallbackTable {
 	void (*vec_load)(const CPU*, int, addr_t);
 	void (*vec_store)(const CPU*, addr_t, int);
 	syscall_t* syscalls;
-	int  (*system_call)(CPU*, addr_t);
+	int  (*system_call)(CPU*, addr_t, uint64_t, uint64_t, int);
 	void (*unknown_syscall)(CPU*, addr_t);
 	int  (*system)(CPU*, uint32_t);
 	unsigned (*execute)(CPU*, uint32_t);
@@ -212,9 +212,6 @@ static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, a
 {
 	INS_COUNTER(cpu) = counter; // Reveal instruction counters
 	MAX_COUNTER(cpu) = max_counter;
-#ifdef __TINYC__
-	return api.system_call(cpu, sysno);
-#else
 	addr_t old_pc = cpu->pc;
 	if (LIKELY(sysno < RISCV_MAX_SYSCALLS))
 		api.syscalls[SPECSAFE(sysno)](cpu);
@@ -222,7 +219,6 @@ static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, a
 		api.unknown_syscall(cpu, sysno);
 	// Resume if the system call did not modify PC, or hit a limit
 	return (cpu->pc != old_pc || counter >= MAX_COUNTER(cpu));
-#endif
 }
 
 #define JUMP_TO(addr) \
