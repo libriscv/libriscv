@@ -165,9 +165,8 @@ namespace riscv
 	 * A prepared vmcall makes preparations for a given type of call
 	 * by recording the PC, max instructions, and enforcing a function type
 	 * 
-	 * When binary translation is enabled, the prepared call will attempt
-	 * to check if the function is binary translated, and if so, call the
-	 * function directly. Work in progress.
+	 * A fast-path is attempted to be created, which allows the function
+	 * to return by directly stopping the simulation and returning.
 	**/
 	template <int W, typename F, uint64_t IMAX = UINT64_MAX>
 	struct PreparedCall
@@ -182,36 +181,10 @@ namespace riscv
 			static_assert(std::is_invocable_v<F, Args...>,
 				"PreparedCall: Invalid argument types for function call");
 
-#if defined(RISCV_BINARY_TRANSLATION)
-			auto  exit_addr = m.memory.exit_address();
-#endif
 			m.cpu.reset_stack_pointer();
 			m.setup_call(std::forward<Args>(args)...);
+			m.simulate_with(IMAX, 0, m_pc);
 
-#if defined(RISCV_BINARY_TRANSLATION)
-			if (m_mapping != nullptr)
-			{
-				auto results = m_mapping(m.cpu, 0, IMAX, m_pc);
-				auto max = results.max_counter;
-				if (max == 0 || m.cpu.pc() == exit_addr)
-				{
-					[[likely]];
-					goto resolve_return_value;
-				}
-				else if (results.counter >= max) {
-					[[unlikely]];
-					throw MachineTimeoutException(MAX_INSTRUCTIONS_REACHED,
-						"PreparedCall: execution timeout", max);
-				}
-				// Continue with normal simulation
-				m.simulate_with(max, results.counter, m.cpu.pc());
-			} else {
-#endif
-				m.simulate_with(IMAX, 0, m_pc);
-#if defined(RISCV_BINARY_TRANSLATION)
-			}
-resolve_return_value:
-#endif
 			if constexpr (std::is_same_v<Ret, float>)
 				return m.cpu.registers().getfl(REG_RETVAL).f32[0];
 			else if constexpr (std::is_same_v<Ret, double>)
@@ -233,15 +206,13 @@ resolve_return_value:
 
 		constexpr uint64_t max_instructions() const noexcept { return IMAX; }
 
-		bool is_directly_translated() const noexcept {
-#if defined(RISCV_BINARY_TRANSLATION)
-			return m_mapping != nullptr;
-#else
-			return false;
-#endif
-		}
-
-		void prepare(Machine<W>& m, address_t call_addr)
+		/// @brief Prepare a call to a function at the given address.
+		/// @param m The machine to prepare the call for.
+		/// @param call_addr The address of the function to call.
+		/// @return True if the call turned into a fast-path call.
+		/// @note The function will throw an exception if unsuccessful. A 'false' return value
+		/// indicates that the function did not get a fast-path, but was still prepared.
+		bool prepare(Machine<W>& m, address_t call_addr)
 		{
 			if (call_addr == 0x0)
 				throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
@@ -258,28 +229,7 @@ resolve_return_value:
 			this->m_machine = &m;
 			this->m_pc = pc;
 
-#if defined(RISCV_BINARY_TRANSLATION)
-			auto& exec = m.cpu.current_execute_segment();
-			// We need an execute segment matching current PC
-			if (pc >= exec.exec_begin() && pc < exec.exec_end())
-			{
-				DecoderData<W>* exec_decoder = exec.decoder_cache();
-				auto* decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
-				// There's a very high chance that the (first) instruction is a translated function
-				if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
-				{
-					//printf("PreparedCall: Using direct translation for %s\n", m.memory.lookup(call_addr).name.c_str());
-					this->m_mapping = exec.mapping_at(decoder->instr);
-				} else {
-					//printf("PreparedCall: No direct translation for %s\n", m.memory.lookup(call_addr).name.c_str());
-					this->m_mapping = nullptr;
-				}
-			} else {
-				this->m_mapping = nullptr;
-			}
-#else
-			m.cpu.create_fast_path_function(pc);
-#endif
+			return m.cpu.create_fast_path_function(pc);
 		}
 
 		void prepare(Machine<W>& m, const std::string& func)
@@ -303,18 +253,12 @@ resolve_return_value:
 		PreparedCall(const PreparedCall& other)
 			: m_machine(other.m_machine), m_pc(other.m_pc)
 		{
-#if defined(RISCV_BINARY_TRANSLATION)
-			this->m_mapping = other.m_mapping;
-#endif
 		}
 		~PreparedCall() = default;
 
 	private:
 		Machine<W>* m_machine = nullptr;
 		address_t   m_pc = 0;
-#if defined(RISCV_BINARY_TRANSLATION)
-		bintr_block_func<W> m_mapping = nullptr;
-#endif
 	};
 
 } // riscv
