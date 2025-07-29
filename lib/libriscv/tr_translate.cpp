@@ -487,7 +487,7 @@ if constexpr (SCAN_FOR_GP) {
 
 	// Code block and loop detection
 	TIME_POINT(t2);
-	const size_t ITS_TIME_TO_SPLIT = (is_libtcc) ? 150'000 : 1'250;
+	const size_t ITS_TIME_TO_SPLIT = (is_libtcc) ? 5'000 : 1'250;
 	size_t icounter = 0;
 	std::unordered_set<address_type<W>> global_jump_locations;
 	std::unordered_map<address_type<W>, address_type<W>> single_return_locations;
@@ -726,6 +726,15 @@ VISIBLE const struct Mapping mappings[] = {
 	if (verbose) {
 		printf("libriscv: Emitted %zu accelerated instructions, %zu blocks and %zu functions. GP=0x%lX\n",
 			icounter, blocks.size(), dlmappings.size(), (long) gp);
+		std::vector<unsigned> entries;
+		entries.resize(blocks.size());
+		for (auto& mapping : dlmappings) {
+			const unsigned index = mapping_indices.at(mapping.symbol);
+			entries.at(index)++;
+		}
+		for (unsigned i = 0; i < entries.size(); ++i) {
+			printf("libriscv: %u mappings for %s\n", entries[i], handlers[i]->c_str());
+		}
 	}
 }
 

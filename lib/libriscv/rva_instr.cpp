@@ -337,10 +337,10 @@ namespace riscv
 			cpu.reg(instr.Atype.rd) = value;
 	},
 	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
-		const long addr = cpu.reg(instr.Atype.rs1);
+		const uint64_t addr = cpu.reg(instr.Atype.rs1);
 		return snprintf(buffer, len, "LR.%c [%s = 0x%" PRIX64 "], %s",
 				atomic_type[instr.Atype.funct3 & 7],
-				RISCV::regname(instr.Atype.rs1), uint64_t(addr),
+				RISCV::regname(instr.Atype.rs1), addr,
 				RISCV::regname(instr.Atype.rd));
 	});
 
