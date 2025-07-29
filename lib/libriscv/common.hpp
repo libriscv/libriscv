@@ -194,6 +194,10 @@ namespace riscv
 		/// @details This will allow the binary translator to use and-masked addresses
 		/// for all memory accesses, which can drastically improve performance.
 		bool translate_automatic_nbit_address_space = false;
+		/// @brief Enable unsafe removal of checks in the binary translator.
+		/// @details This will remove checks that prevent the program from crashing, such
+		/// as memory access checks, and other checks that sandboxes normally provide.
+		bool translate_unsafe_remove_checks = false;
 		/// @brief Enable recording of slowpaths to jump hints for the binary translator.
 		/// @note This option is only available when RISCV_DEBUG and the binary translator is enabled.
 		/// @details This will record slowpaths to the MachineOptions jump hints vector.

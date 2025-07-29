@@ -287,6 +287,13 @@ struct Emitter
 		}
 	}
 
+	std::string arena_at_unsafe(const std::string& address) {
+		if (tinfo.is_libtcc && !tinfo.use_shared_execute_segments) {
+			return "(" + m_arena_hex_address + " + " + address + ")";
+		}
+		return "ARENA_AT(cpu, " + address + ")";
+	}
+
 	std::string arena_at_fixed(const std::string& type, address_t address) {
 		if (tinfo.is_libtcc && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
@@ -322,6 +329,10 @@ struct Emitter
 		if (uses_Nbit_encompassing_arena())
 		{
 			add_code(dst + " = *(" + type + "*)" + arena_at(address) + ";");
+		}
+		else if (uses_flat_memory_arena() && tinfo.unsafe_remove_checks) {
+			// If unsafe remove checks is enabled, we can skip the check
+			add_code(dst + " = *(" + type + "*)" + arena_at_unsafe(address) + ";");
 		}
 		else if (uses_flat_memory_arena()) {
 			add_code(
@@ -362,6 +373,9 @@ struct Emitter
 		if (uses_Nbit_encompassing_arena())
 		{
 			add_code("*(" + type + "*)" + arena_at(address) + " = " + value + ";");
+		}
+		else if (tinfo.unsafe_remove_checks && uses_flat_memory_arena()) {
+			add_code("*(" + type + "*)" + arena_at_unsafe(address) + " = " + value + ";");
 		}
 		else if (uses_flat_memory_arena()) {
 			add_code(

@@ -289,6 +289,8 @@ static void run_program(
 		.translate_timing = cli_args.timing,
 		.translate_ignore_instruction_limit = !cli_args.accurate, // Press Ctrl+C to stop
 		.translate_use_register_caching = cli_args.translate_regcache,
+		.translate_automatic_nbit_address_space = false,
+		.translate_unsafe_remove_checks = cli_args.proxy_mode, // Proxy mode disabled sandboxing
 		.record_slowpaths_to_jump_hints = !cli_args.jump_hints_file.empty(),
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",
