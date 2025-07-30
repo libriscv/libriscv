@@ -93,6 +93,7 @@ struct Emitter
 {
 	static constexpr bool OPTIMIZE_SYSCALL_REGISTERS = true;
 	static constexpr unsigned XLEN = W * 8u;
+	static constexpr int CACHED_REGISTERS = 18; // Number of registers to cache
 	using address_t = address_type<W>;
 	using saddr_t = signed_address_type<W>;
 
@@ -126,20 +127,20 @@ struct Emitter
 	}
 	void load_register(int reg) {
 		if (uses_register_caching()) {
-			if (LIKELY(reg != 0))
+			if (LIKELY(reg != 0 && reg < CACHED_REGISTERS))
 				gpr_exists[reg] = true;
 		}
 	}
 	void potentially_reload_register(int reg) {
 		if (uses_register_caching()) {
-			if (reg != 0) {
+			if (reg != 0 && reg < CACHED_REGISTERS) {
 				add_code(loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];");
 			}
 		}
 	}
 	void potentially_realize_register(int reg) {
 		if (uses_register_caching()) {
-			if (reg != 0) {
+			if (reg != 0 && reg < CACHED_REGISTERS) {
 				add_code("cpu->r[" + std::to_string(reg) + "] = " + loaded_regname(reg) + ";");
 			}
 		}
@@ -147,7 +148,7 @@ struct Emitter
 	void potentially_realize_registers(int x0, int x1) {
 		if (uses_register_caching()) {
 			for (int reg = x0; reg < x1; reg++) {
-				if (reg != 0) {
+				if (reg != 0 && reg < CACHED_REGISTERS) {
 					add_code("cpu->r[" + std::to_string(reg) + "] = " + loaded_regname(reg) + ";");
 				}
 			}
@@ -190,7 +191,7 @@ struct Emitter
 		if (reg == 3 && tinfo.gp != 0)
 			return hex_address(tinfo.gp) + "L";
 		else if (reg != 0) {
-			if (uses_register_caching()) {
+			if (uses_register_caching() && reg < CACHED_REGISTERS) {
 				load_register(reg);
 				return loaded_regname(reg);
 			} else {
@@ -201,7 +202,7 @@ struct Emitter
 	}
 	std::string to_reg(int reg) {
 		if (reg != 0) {
-			if (uses_register_caching()) {
+			if (uses_register_caching() && reg < CACHED_REGISTERS) {
 				load_register(reg);
 				return loaded_regname(reg);
 			} else {
@@ -1863,14 +1864,14 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	// Create register push and pop macros
 	if (tinfo.use_register_caching) {
 		code += "#define STORE_REGS_" + e.get_func() + "() \\\n";
-		for (size_t reg = 1; reg < 32; reg++) {
+		for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 			}
 		}
 		code += "  ;\n";
 		code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
-		for (size_t reg = 1; reg < 32; reg++) {
+		for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
 			}
@@ -1890,7 +1891,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 				}
 			}
-			for (size_t reg = 18; reg < 32; reg++) {
+			for (size_t reg = 18; reg < e.CACHED_REGISTERS; reg++) {
 				if (e.gpr_exists_at(reg)) {
 					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 				}
@@ -1916,7 +1917,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	// Function GPRs
 	if (tinfo.use_register_caching) {
-		for (size_t reg = 1; reg < 32; reg++) {
+		for (size_t reg = 1; reg < 24; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "addr_t " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];\n";
 			}
@@ -1962,7 +1963,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	}
 	code += "default:\n";
 #endif
-	for (size_t reg = 1; reg < 32; reg++) {
+	for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 		if (e.gpr_exists_at(reg)) {
 			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + ";\n";
 		}
