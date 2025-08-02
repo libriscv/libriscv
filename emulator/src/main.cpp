@@ -35,7 +35,7 @@ struct Arguments {
 	bool sandbox = false;
 	bool execute_only = false;
 	bool ignore_text = false;
-	bool background = false; // Run binary translation in background thread
+	bool background = true; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
 	uint64_t max_memory = 0;
@@ -67,6 +67,7 @@ static const struct option long_options[] = {
 	{"no-translate-regcache", no_argument, 0, 1000},
 	{"jump-hints", required_argument, 0, 'J'},
 	{"background", no_argument, 0, 'B'},
+	{"no-background", no_argument, 0, 1001},
 	{"mingw", no_argument, 0, 'M'},
 	{"output", required_argument, 0, 'o'},
 	{"from-start", no_argument, 0, 'F'},
@@ -100,7 +101,8 @@ static void print_help(const char* name)
 		"  -R, --translate-regcache Enable register caching in binary translator\n"
 		"      --no-translate-regcache Disable register caching in binary translator\n"
 		"  -J, --jump-hints file  Load jump location hints from file, unless empty then record instead\n"
-		"  -B  --background   Run binary translation in background thread\n"
+		"  -B  --background   Run binary translation in background w/live-patching\n"
+		"      --no-background Disable background binary translation\n"
 		"  -M, --mingw        Cross-compile for Windows (MinGW)\n"
 		"  -o, --output file  Output embeddable binary translated code (C99)\n"
 		"  -F, --from-start   Start debugger from the beginning (_start)\n"
@@ -184,6 +186,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 'X': args.execute_only = true; break;
 			case 'I': args.ignore_text = true; break;
 			case 1000: args.translate_regcache = false; break;
+			case 1001: args.background = false; break;
 			case 'm': // --memory
 				if (optarg) {
 					char* endptr;

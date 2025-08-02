@@ -203,6 +203,14 @@ namespace riscv
 		/// @details This will record slowpaths to the MachineOptions jump hints vector.
 		/// From there the CLI can save the jump hints to a file after the program has run.
 		bool record_slowpaths_to_jump_hints = false;
+		/// @brief Enable live-patching a running instruction stream after background compilation.
+		/// @details This will allow the binary translator to patch the running instruction stream
+		/// with the newly compiled code, which allows it to switch to the newly compiled code
+		/// without stopping the program.
+		/// @warning This is an experimental feature and may not work correctly in all cases.
+		/// @note Disabling this option will not disable background compilation, it will just
+		/// not hot-reload the execution with the new binary translation when the emulator is running.
+		bool translate_live_patching = true;
 		/// @brief Prefix for the translation output file.
 		std::string translation_prefix = "/tmp/rvbintr-";
 		/// @brief Suffix for the translation output file. Eg. .dll or .so
