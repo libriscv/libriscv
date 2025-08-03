@@ -364,14 +364,6 @@ namespace riscv
 		static inline void (*on_unhandled_csr) (Machine&, int, int, int)
 			= [] (Machine<W>&, int, int, int) {};
 
-		// multiprocess() executes a single function with many machines,
-		// each of which uses memory pages from this machine. Using this
-		// we can partition workloads and work on them concurrently.
-		bool is_multiprocessing() const noexcept;
-		bool multiprocess(unsigned cpus, uint64_t maxi, address_t stack, address_t stksize,
-			std::function<void(Machine&)> per_machine_setup_cb = nullptr);
-		uint32_t multiprocess_wait();
-
 		// Returns true if this machine is forked from another, and thus
 		// dependent on the original machine to function properly.
 		bool is_forked() const noexcept { return memory.is_forked(); }
@@ -413,8 +405,6 @@ namespace riscv
 		// and real system fds. The destructor also closes all opened files.
 		const FileDescriptors& fds() const;
 		FileDescriptors& fds();
-		// Multiprocessing structure, lazily created
-		Multiprocessing<W>& smp(unsigned workers = 4);
 		// Signal structure, lazily created
 		Signals<W>& signals();
 		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
@@ -457,7 +447,6 @@ namespace riscv
 		std::unique_ptr<Arena> m_arena;
 		std::unique_ptr<MultiThreading<W>> m_mt = nullptr;
 		std::unique_ptr<FileDescriptors> m_fds = nullptr;
-		std::unique_ptr<Multiprocessing<W>> m_smp = nullptr;
 		std::unique_ptr<Signals<W>> m_signals = nullptr;
 		std::shared_ptr<MachineOptions<W>> m_options = nullptr;
 
