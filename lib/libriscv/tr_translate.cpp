@@ -861,7 +861,12 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	output.t0 = t0;
 
 	output.defines = create_defines_for(machine(), options);
-	const bool live_patch = options.translate_background_callback != nullptr;
+	// Live-patching is enabled if the user has provided a callback,
+	// and the program is big enough for live patching to be useful.
+	// This is a heuristic, but it should work well enough.
+	const bool live_patch =
+		options.translate_background_callback != nullptr
+		&& shared_segment->size_bytes() >= 24000;
 
 	// Compilation step
 	std::function<void()> compilation_step =
@@ -965,7 +970,7 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	};
 
 	shared_segment->background_compilation_mutex().lock();
-	if (options.translate_background_callback) {
+	if (live_patch) {
 		shared_segment->set_background_compiling(true);
 		// User-provided callback for background compilation
 		options.translate_background_callback(compilation_step);
