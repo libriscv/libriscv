@@ -152,7 +152,7 @@ namespace riscv
 		this->evict_execute_segments();
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
-#ifdef __linux__
+#if defined(__linux__) || defined(__FreeBSD__)
 			if constexpr (riscv::encompassing_Nbit_arena != 0)
 			{
 				// munmap() the entire address space
