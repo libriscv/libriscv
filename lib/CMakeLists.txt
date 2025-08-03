@@ -270,6 +270,11 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 			TCC_TARGET_PE=1
 			TCC_TARGET_X86_64=1
 		)
+	elseif (CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
+		target_compile_definitions(riscv PRIVATE
+			TARGETOS_FreeBSD=1
+			TCC_TARGET_X86_64=1
+		)
 	elseif (CMAKE_HOST_UNIX)
 		target_compile_definitions(riscv PRIVATE
 			TARGETOS_Linux=1
