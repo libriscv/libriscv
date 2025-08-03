@@ -346,7 +346,6 @@ namespace riscv
 
 
 	template <int W> struct MultiThreading;
-	template <int W> struct Multiprocessing;
 	template <int W> struct SerializedMachine;
 	struct Arena;
 

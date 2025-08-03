@@ -134,9 +134,6 @@ The Machine constructor has many options, and we will go through each one.
 > stack_size
 - Set the initial stack size for the main thread. This is a simple mmap allocation. Think of it as `stack = machine.memory.mmap_allocate(stack_size)`. It does not extend guest memory, nor does it touch memory.
 
-> cpu_id
-- A largely unused setting that sets the Machine's current CPU id. Used only by the experimental multi-processing feature.
-
 > load_program
 - When enabled, the binary provided to Machine will be loaded as an ELF program. Default: true.
 

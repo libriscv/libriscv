@@ -42,9 +42,6 @@ endif()
 option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
 
 if (RISCV_EXPERIMENTAL)
-	# MULTIPROCESS enables experimental features that allow
-	# executing RISC-V guest functions in parallel using a custom API.
-	option(RISCV_MULTIPROCESS        "Enable multiprocessing" OFF)
 	# RISCV_ENCOMPASSING_ARENA allows the memory arena to encompass
 	# the entire memory space, allowing for more efficient memory
 	# accesses, but is only available for 32-bit RISC-V.
@@ -83,7 +80,6 @@ set (SOURCES
 		libriscv/memory_elf.cpp
 		libriscv/memory_mmap.cpp
 		libriscv/memory_rw.cpp
-		libriscv/multiprocessing.cpp
 		libriscv/native_libc.cpp
 		libriscv/native_threads.cpp
 		libriscv/posix/minimal.cpp

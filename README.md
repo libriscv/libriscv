@@ -30,6 +30,7 @@ Goals:
 	- Pause and serialize VM, deserialize and resume on another host/platform
 - Just-in-time compilation for development usage
 	- [libtcc](#embedded-libtcc) can be used to instantly improve emulation of RISC-V programs
+	- This is currently enabled by default
 - High-performance binary translation on end-user systems through DLLs (eg. Windows)
 	- Cross-compile RISC-V programs to a [binary translated](#binary-translation) .dll executable in _libriscv_ on end-user systems (where shared libraries are allowed)
 - Maximum final-build performance on all platforms, including Consoles, Mobiles, production systems
@@ -106,7 +107,7 @@ Inside the container you have access to `rvlinux`, and the compilers `riscv64-li
 On Ubuntu and Linux distributions like it, you can install a 64-bit RISC-V GCC compiler for running Linux programs with a one-liner:
 
 ```
-sudo apt install gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu
+sudo apt install gcc-14-riscv64-linux-gnu g++-14-riscv64-linux-gnu
 ```
 
 Depending on your distro you may have access to GCC versions 10 to 14. Now you have a full Linux C/C++ compiler for 64-bit RISC-V.
@@ -346,7 +347,7 @@ The read-write arena simplifies memory operations immediately outside of the loa
 
 ### Embedded libtcc
 
-When binary translation is enabled with `RISCV_BINARY_TRANSLATION=ON`, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. It will give a handsome 2-5x performance boost compared to interpreter mode. It's currently known to work on both Linux and Windows.
+When binary translation is enabled with `RISCV_BINARY_TRANSLATION=ON`, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. It will give a handsome 2-5x performance boost compared to interpreter mode. It's currently known to work on Linux, FreeBSD, Windows, macOS and Android.
 
 ### Full binary translation as embeddable code
 
@@ -375,11 +376,6 @@ CoreMark 1.0 : 37034.750941 / GCC13.2.0 -O3 -DPERFORMANCE_RUN=1   / Static
 - Many files can be embedded allowing for dynamic executables to be embedded, with all their dependencies
 - The configuration settings of libriscv are added to the hash of the filename, so in order to use the generated code on other systems and platforms the configurations must match exactly
 - Embedded segments can be re-used by many emulators, for high scalability
-
-### Experimental multiprocessing
-
-There is multiprocessing support, but it is in its early stages. It is achieved by simultaneously calling a (C/SYSV ABI) function on many machines, each with a unique CPU ID. The input data to be processed should exist beforehand. It is not well tested, and potential page table races are not well understood. That said, it passes manual testing and there is a unit test for the basic cases.
-
 
 ### Experimental unbounded 32-bit addressing
 
