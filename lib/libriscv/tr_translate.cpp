@@ -872,104 +872,111 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	std::function<void()> compilation_step =
 	[this, options, output = std::move(output), filename, live_patch, shared_segment = shared_segment] () mutable
 	{
-		auto* exec = shared_segment.get();
-		// The mutex is already locked when we enter this function
-		// but we need to unlock it when we are done, or an exception is thrown.
-		struct Unlock {
-			Unlock(DecodedExecuteSegment<W>& exec) : m_exec(exec) {}
-			~Unlock() { m_exec.background_compilation_mutex().unlock(); }
-		private:
-			DecodedExecuteSegment<W>& m_exec;
-		} unlock(*exec);
+		try {
+			auto* exec = shared_segment.get();
 
-		this->binary_translate(options, *exec, output);
+			this->binary_translate(options, *exec, output);
 
-		//printf("*** Compiling translation from 0x%lX to 0x%lX ***\n",
-		//	long(shared_segment->exec_begin()), long(shared_segment->exec_end()));
+			//printf("*** Compiling translation from 0x%lX to 0x%lX ***\n",
+			//	long(shared_segment->exec_begin()), long(shared_segment->exec_end()));
 
-		for (auto& cc : options.cross_compile)
-		{
-			if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
-			{
-				auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
-				produce_embeddable_code(options, *shared_segment, output, embed);
-			}
-		}
-
-		void* dylib = nullptr;
-		// Final shared library loadable code w/footer
-		const std::string shared_library_code = *output.code + output.footer;
-
-		TIME_POINT(t9);
-		// If translate_invoke_compiler is disabled, do not compile
-		// This allows for producing embeddable code without invoking the compiler
-		if (libtcc_enabled && options.translate_invoke_compiler) {
-			extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
-			// XXX: Debugging: write the compiled code to a file
-			if constexpr (false) {
-				std::ofstream ofs("libtcc_output.c", std::ios::out | std::ios::trunc);
-				if (ofs.is_open()) {
-					ofs << shared_library_code;
-					ofs.close();
-				} else {
-					fprintf(stderr, "libriscv: Failed to write libtcc output to file\n");
-				}
-			}
-			dylib = libtcc_compile(shared_library_code, W, output.defines, "");
-		} else if (options.translate_invoke_compiler) {
-			extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
-			extern bool mingw_compile(const std::string&, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
-			const std::string cflags = defines_to_string(output.defines);
-
-			// If the binary translation has already been loaded, we can skip compilation
-			if (exec->is_binary_translated()) {
-				dylib = exec->binary_translation_so();
-			} else {
-				dylib = compile(shared_library_code, W, cflags, filename);
-			}
-
-			// Optionally produce cross-compiled binaries
 			for (auto& cc : options.cross_compile)
 			{
-				if (std::holds_alternative<MachineTranslationCrossOptions>(cc))
+				if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
 				{
-	#ifndef _MSC_VER
-					auto& mingw = std::get<MachineTranslationCrossOptions>(cc);
-					const uint32_t hash = exec->translation_hash();
-					const std::string cross_filename = options.translation_filename(
-						mingw.cross_prefix, hash, mingw.cross_suffix);
-					mingw_compile(shared_library_code, W, cflags, cross_filename, mingw);
-	#endif
+					auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
+					produce_embeddable_code(options, *shared_segment, output, embed);
 				}
 			}
-		}
 
-		if (options.translate_timing) {
-			TIME_POINT(t10);
-			printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
-		}
+			void* dylib = nullptr;
+			// Final shared library loadable code w/footer
+			const std::string shared_library_code = *output.code + output.footer;
 
-		// Check compilation result
-		if (dylib != nullptr) {
-			if (!exec->is_binary_translated()) {
-				activate_dylib(options, *exec, dylib, machine(), libtcc_enabled, live_patch);
-			}
+			TIME_POINT(t9);
+			// If translate_invoke_compiler is disabled, do not compile
+			// This allows for producing embeddable code without invoking the compiler
+			if (libtcc_enabled && options.translate_invoke_compiler) {
+				extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
+				// XXX: Debugging: write the compiled code to a file
+				if constexpr (false) {
+					std::ofstream ofs("libtcc_output.c", std::ios::out | std::ios::trunc);
+					if (ofs.is_open()) {
+						ofs << shared_library_code;
+						ofs.close();
+					} else {
+						fprintf(stderr, "libriscv: Failed to write libtcc output to file\n");
+					}
+				}
+				dylib = libtcc_compile(shared_library_code, W, output.defines, "");
+			} else if (options.translate_invoke_compiler) {
+				extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
+				extern bool mingw_compile(const std::string&, int arch, const std::string& cflags, const std::string&, const MachineTranslationCrossOptions&);
+				const std::string cflags = defines_to_string(output.defines);
 
-			if constexpr (!libtcc_enabled) {
-				if (!options.translation_cache) {
-					// Delete the shared object if it is unwanted
-					unlink(filename.c_str());
+				// If the binary translation has already been loaded, we can skip compilation
+				if (exec->is_binary_translated()) {
+					dylib = exec->binary_translation_so();
+				} else {
+					dylib = compile(shared_library_code, W, cflags, filename);
+				}
+
+				// Optionally produce cross-compiled binaries
+				for (auto& cc : options.cross_compile)
+				{
+					if (std::holds_alternative<MachineTranslationCrossOptions>(cc))
+					{
+		#ifndef _MSC_VER
+						auto& mingw = std::get<MachineTranslationCrossOptions>(cc);
+						const uint32_t hash = exec->translation_hash();
+						const std::string cross_filename = options.translation_filename(
+							mingw.cross_prefix, hash, mingw.cross_suffix);
+						mingw_compile(shared_library_code, W, cflags, cross_filename, mingw);
+		#endif
+					}
 				}
 			}
-		}
 
-		if (options.translate_timing) {
-			TIME_POINT(t12);
-			printf(">> Binary translation totals %.2f ms\n", nanodiff(output.t0, t12) / 1e6);
+			if (options.translate_timing) {
+				TIME_POINT(t10);
+				printf(">> Code compilation took %.2f ms\n", nanodiff(t9, t10) / 1e6);
+			}
+
+			// Check compilation result
+			if (dylib != nullptr) {
+				if (!exec->is_binary_translated()) {
+					activate_dylib(options, *exec, dylib, machine(), libtcc_enabled, live_patch);
+				}
+
+				if constexpr (!libtcc_enabled) {
+					if (!options.translation_cache) {
+						// Delete the shared object if it is unwanted
+						unlink(filename.c_str());
+					}
+				}
+			}
+
+			if (options.translate_timing) {
+				TIME_POINT(t12);
+				printf(">> Binary translation totals %.2f ms\n", nanodiff(output.t0, t12) / 1e6);
+			}
+
+			// Signal compilation completion
+			if (live_patch) {
+				exec->set_background_compiling(false);
+			}
+		} catch (const std::exception& e) {
+			if (options.verbose_loader) {
+				fprintf(stderr, "libriscv: Binary translation failed: %s\n", e.what());
+			}
+			// If we are live patching, we must signal that the compilation failed
+			if (live_patch) {
+				shared_segment->set_background_compiling(false);
+			}
+			throw; // Re-throw the exception
 		}
 	};
 
-	shared_segment->background_compilation_mutex().lock();
 	if (live_patch) {
 		shared_segment->set_background_compiling(true);
 		// User-provided callback for background compilation
@@ -1022,7 +1029,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	DecoderData<W>* decoder_begin   = nullptr;
 	std::vector<DecoderData<W>*> livepatch_bintr;
 	if (live_patch) {
-		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
+		patched_decoder_cache = std::make_unique_for_overwrite<DecoderCache<W>[]>(exec.decoder_cache_size());
 		// Copy the decoder cache to the patched decoder cache
 		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
 		// A horrible calculation to find the patched decoder
@@ -1206,7 +1213,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				printf("libriscv: Patched %zu instructions for live-patching\n", livepatch_bintr.size());
 			}
 		}
-		exec.set_background_compiling(false);
 	}
 
 	if (options.translate_timing) {
