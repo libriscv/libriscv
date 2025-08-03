@@ -1029,7 +1029,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
 	const unsigned nmappings = *no_mappings;
 	const unsigned unique_mappings = *no_handlers;
-	static constexpr bool enable_live_patching = false;
+	static constexpr bool enable_live_patching = true;
 
 	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
 	auto& exec_mappings = exec.create_mappings(unique_mappings + 1);
@@ -1185,7 +1185,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		// Set regular decoder cache to the patched decoder cache
 		exec.set_decoder(patched_decoder);
 
-		if constexpr (enable_live_patching)
+		if (options.translate_live_patching)
 		{
 			// Memory fence to ensure that the patched decoder is visible to all threads
 #ifndef __COSMOCC__
@@ -1196,6 +1196,9 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 			// It will swap out the current decoder with the patched one, and then continue.
 			for (auto* dd : livepatch_bintr) {
 				dd->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 0);
+			}
+			if (options.verbose_loader) {
+				printf("libriscv: Patched %zu instructions for live-patching\n", livepatch_bintr.size());
 			}
 		}
 		exec.set_background_compiling(false);

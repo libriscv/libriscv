@@ -23,7 +23,7 @@ option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
 option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
 # BINARY_TRANSLATION will make libriscv generate portable C-code,
 # and invoke a system compiler to execute a program much faster.
-option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" OFF)
+option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" ON)
 # FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
 # Memory before the heap and outside of the arena behaves like before.
 option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
@@ -65,7 +65,7 @@ else()
 endif()
 if (RISCV_BINARY_TRANSLATION)
 	# LIBTCC will embed the TCC compiler library, using it for binary translation.
-	option(RISCV_LIBTCC              "Enable binary translation with libtcc" OFF)
+	option(RISCV_LIBTCC              "Enable binary translation with libtcc" ON)
 endif()
 
 # Version information from git tags

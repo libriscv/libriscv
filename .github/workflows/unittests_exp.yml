@@ -35,7 +35,7 @@ jobs:
     - name: Configure
       env:
         CXX: ${{ matrix.compiler }}
-      run: cmake -B ${{github.workspace}}/build -DRISCV_TAILCALL_DISPATCH=ON -DRISCV_THREADED=OFF -DRISCV_EXPERIMENTAL=ON -DRISCV_FLAT_RW_ARENA=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DRISCV_TAILCALL_DISPATCH=ON -DRISCV_THREADED=OFF -DRISCV_BINARY_TRANSLATION=OFF -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build the unittests
       run: cmake --build ${{github.workspace}}/build --parallel 4
