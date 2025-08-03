@@ -12,7 +12,7 @@ __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 
 namespace riscv
 {
-	static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + Page::size();
+	[[maybe_unused]] static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + Page::size();
 
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
