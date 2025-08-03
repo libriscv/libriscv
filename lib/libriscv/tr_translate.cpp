@@ -1029,7 +1029,11 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	DecoderData<W>* decoder_begin   = nullptr;
 	std::vector<DecoderData<W>*> livepatch_bintr;
 	if (live_patch) {
+#ifdef __cpp_lib_smart_ptr_for_overwrite // C++20 feature
 		patched_decoder_cache = std::make_unique_for_overwrite<DecoderCache<W>[]>(exec.decoder_cache_size());
+#else
+		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
+#endif
 		// Copy the decoder cache to the patched decoder cache
 		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
 		// A horrible calculation to find the patched decoder
