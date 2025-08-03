@@ -3,9 +3,12 @@
 #include "decoder_cache.hpp"
 #include "internal_common.hpp"
 #include <inttypes.h>
-#if defined(__linux__) || defined(__wasm__)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__wasm__)
 #define DEMANGLE_ENABLED
 #include <sys/mman.h>
+#ifndef MAP_NORESERVE
+#define MAP_NORESERVE 0
+#endif
 extern "C" char *
 __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 #endif
@@ -32,7 +35,7 @@ namespace riscv
 
 			if (options.use_memory_arena)
 			{
-#ifdef __linux__
+#if defined(__linux__) || defined(__FreeBSD__)
 				if constexpr (encompassing_Nbit_arena != 0)
 				{
 					static_assert(flat_readwrite_arena || encompassing_Nbit_arena == 0,
