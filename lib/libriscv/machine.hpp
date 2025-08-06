@@ -44,9 +44,15 @@ namespace riscv
 		///
 		/// @brief Construct a machine with string_view pointing to a RISC-V binary
 		/// @param binary The RISC-V binary that must outlive the machine
-		/// See common.hpp for MachineOptions
+		/// @note See common.hpp for MachineOptions
 		Machine(std::string_view binary, const MachineOptions<W>& = {});
 		Machine(const std::vector<uint8_t>& binary, const MachineOptions<W>& = {});
+#if RISCV_SPAN_AVAILABLE
+		/// @brief Construct a machine with std::span pointing to a RISC-V binary
+		/// @param binary The RISC-V binary that must outlive the machine
+		/// @note See common.hpp for MachineOptions
+		Machine(std::span<const uint8_t> binary, const MachineOptions<W>& = {});
+#endif
 
 		/// @brief Create an empty RISC-V machine
 		/// @param opts Machine options

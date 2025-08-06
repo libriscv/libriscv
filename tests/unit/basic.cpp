@@ -54,6 +54,15 @@ TEST_CASE("Execute minimal machine", "[Minimal]")
 		[] (auto& machine) { machine.stop(); });
 	machine.simulate(10);
 	REQUIRE(machine.return_value<int>() == 666);
+
+#ifdef RISCV_SPAN_AVAILABLE
+	// Test span-based machine instantiation
+	riscv::Machine<RISCV64> machine_span { std::span<const uint8_t>(binary), { .memory_max = MAX_MEMORY } };
+	machine_span.install_syscall_handler(1,
+		[] (auto& machine) { machine.stop(); });
+	machine_span.simulate(10);
+	REQUIRE(machine_span.return_value<int>() == 666);
+#endif // RISCV_SPAN_AVAILABLE
 }
 
 TEST_CASE("Execution timeout", "[Minimal]")

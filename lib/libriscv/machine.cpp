@@ -43,7 +43,13 @@ namespace riscv
 
 	template <int W>
 	inline Machine<W>::Machine(const std::vector<uint8_t>& bin, const MachineOptions<W>& opts)
-		: Machine(std::string_view{(char*) bin.data(), bin.size()}, opts) {}
+		: Machine(std::string_view{(const char*) bin.data(), bin.size()}, opts) {}
+
+#if RISCV_SPAN_AVAILABLE
+	template <int W>
+	inline Machine<W>::Machine(std::span<const uint8_t> binary, const MachineOptions<W>& options)
+		: Machine(std::string_view{(const char*) binary.data(), binary.size()}, options) {}
+#endif
 
 	template <int W>
 	inline Machine<W>::Machine(const MachineOptions<W>& opts)
