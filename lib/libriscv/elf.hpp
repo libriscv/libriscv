@@ -189,42 +189,36 @@ namespace riscv
 		// Check if it is a 64-bit executable with an .interp section
 		if ((W == 4 && binary[4] == riscv::ELFCLASS32) || (W == 8 && binary[4] == riscv::ELFCLASS64))
 		{
-			if (hdr->e_shoff + hdr->e_shnum * sizeof(SectionHeader) > binary.size())
+			if (hdr->e_phnum == 0 || hdr->e_phentsize != sizeof(ProgramHeader))
 #if __cpp_exceptions
-				throw riscv::MachineException(riscv::INVALID_PROGRAM, "Invalid ELF section headers");
+				throw riscv::MachineException(riscv::INVALID_PROGRAM, "Invalid ELF header: no program headers");
 #else
 				return {false, ""};
 #endif
-			if (hdr->e_shstrndx == 0 || hdr->e_shstrndx >= hdr->e_shnum)
+			if (hdr->e_phoff + hdr->e_phnum * hdr->e_phentsize > binary.size()
+				|| hdr->e_phoff + hdr->e_phnum * hdr->e_phentsize < hdr->e_phoff)
 #if __cpp_exceptions
-				throw riscv::MachineException(riscv::INVALID_PROGRAM, "Invalid ELF section header string table index");
+				throw riscv::MachineException(riscv::INVALID_PROGRAM, "Invalid ELF header: program headers out of bounds");
 #else
 				return {false, ""};
 #endif
 			// If the .interp section is present, it is a dynamic executable
 			// This is not part of the sandbox, so just go for it
-			auto* sections = (SectionHeader *)(binary.data() + hdr->e_shoff);
-			auto* sections_end = sections + hdr->e_shnum;
+			auto* pheaders = (ProgramHeader *)(binary.data() + hdr->e_phoff);
+			auto* pheaders_end = pheaders + hdr->e_phnum;
+			static constexpr uint32_t PT_INTERP = 3; // PT_INTERP is 3 in the ELF spec
 
-			if (sections[hdr->e_shstrndx].sh_offset + sections[hdr->e_shstrndx].sh_size > binary.size())
-#if __cpp_exceptions
-				throw riscv::MachineException(riscv::INVALID_PROGRAM, "Invalid ELF section header string table");
-#else
-				return {false, ""};
-#endif
-			auto* shstrtab = (char *)(binary.data() + sections[hdr->e_shstrndx].sh_offset);
-			for (auto* s = sections; s < sections_end; s++)
+			for (auto* s = pheaders; s < pheaders_end; s++)
 			{
-				std::string_view name = &shstrtab[s->sh_name];
-				if (name == ".interp")
+				if (s->p_type == PT_INTERP)
 				{
-					if (s->sh_offset + s->sh_size > binary.size())
+					if (s->p_offset + s->p_filesz > binary.size() || s->p_offset + s->p_filesz < s->p_offset)
 #if __cpp_exceptions
 						throw riscv::MachineException(riscv::INVALID_PROGRAM, "Invalid ELF .interp section");
 #else
 						return {false, ""};
 #endif
-					return {true, std::string_view(binary.data() + s->sh_offset, s->sh_size)};
+					return {true, std::string_view(binary.data() + s->p_offset, s->p_filesz)};
 				}
 			}
 		}
