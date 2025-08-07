@@ -813,10 +813,14 @@ static void syscall_fstatat(Machine<W>& machine)
 		else
 			res = ::fstat(real_fd, &st);
 		if (res == 0) {
+#ifndef __riscv
 			// Convert to RISC-V structure
 			struct riscv_stat rst;
 			copy_stat_buffer(st, rst);
 			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
+#else // on RISC-V no conversion
+			machine.copy_to_guest(g_buf, &st, sizeof(st));
+#endif
 		}
 		machine.set_result_or_error(res);
 	} else {
@@ -857,11 +861,15 @@ static void syscall_fstat(Machine<W>& machine)
 		struct stat st;
 		const int res = ::fstat(real_fd, &st);
 		if (res == 0) {
+#ifndef __riscv
 			// Convert to RISC-V structure
 			struct riscv_stat rst;
 			std::memset(&rst, 0, sizeof(rst));
 			copy_stat_buffer(st, rst);
 			machine.copy_to_guest(g_buf, &rst, sizeof(rst));
+#else // on RISC-V no conversion
+			machine.copy_to_guest(g_buf, &st, sizeof(st));
+#endif
 		}
 		machine.set_result_or_error(res);
 	} else {
