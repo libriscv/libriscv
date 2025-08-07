@@ -1532,9 +1532,18 @@ void Emitter<W>::emit()
 				break;
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VLE32
-				//const rv32v_instruction vi { instr };
-				//this->memory_load<VectorLane>(from_rvvreg(vi.VLS.vd), "VectorLane", vi.VLS.rs1, 0);
-				UNKNOWN_INSTRUCTION();
+				if (tinfo.is_libtcc) {
+					// Vector load is not supported in libtcc
+					const rv32v_instruction vi { instr };
+					load_register(vi.VLS.rs1);
+					this->potentially_realize_register(vi.VLS.rs1);
+					WELL_KNOWN_INSTRUCTION();
+					this->potentially_reload_register(vi.VLS.rs1);
+				} else {
+					// VLE32: Load vector lane from memory
+					const rv32v_instruction vi { instr };
+					this->memory_load<VectorLane>(from_rvvreg(vi.VLS.vd), "VectorLane", vi.VLS.rs1, 0);
+				}
 				break;
 			}
 #endif
@@ -1554,8 +1563,17 @@ void Emitter<W>::emit()
 				break;
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VSE32
-				const rv32v_instruction vi { instr };
-				this->memory_store("VectorLane", vi.VLS.rs1, 0, from_rvvreg(vi.VLS.vd));
+				if (tinfo.is_libtcc) {
+					// Vector store is not supported in libtcc
+					const rv32v_instruction vi { instr };
+					load_register(vi.VLS.rs1);
+					this->potentially_realize_register(vi.VLS.rs1);
+					WELL_KNOWN_INSTRUCTION();
+					this->potentially_reload_register(vi.VLS.rs1);
+				} else {
+					const rv32v_instruction vi { instr };
+					this->memory_store("VectorLane", vi.VLS.rs1, 0, from_rvvreg(vi.VLS.vd));
+				}
 				break;
 			}
 #endif
