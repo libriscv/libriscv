@@ -25,10 +25,9 @@ namespace riscv
 	// A default empty execute segment used to enforce that the
 	// current CPU execute segment is never null.
 	template <int W>
-	static std::shared_ptr<DecodedExecuteSegment<W>> empty_shared = std::make_shared<DecodedExecuteSegment<W>>(0, 0, 0, 0);
-	template <int W>
 	std::shared_ptr<DecodedExecuteSegment<W>>& CPU<W>::empty_execute_segment() noexcept {
-		return empty_shared<W>;
+		static std::shared_ptr<DecodedExecuteSegment<W>> empty_shared = std::make_shared<DecodedExecuteSegment<W>>(0, 0, 0, 0);
+		return empty_shared;
 	}
 
 	// Instructions may be unaligned with C-extension
