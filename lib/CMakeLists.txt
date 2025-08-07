@@ -275,6 +275,11 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 			TARGETOS_FreeBSD=1
 			TCC_TARGET_X86_64=1
 		)
+	elseif (RISCV_TOOLCHAIN)
+		target_compile_definitions(riscv PRIVATE
+			TARGETOS_Linux=1
+			TCC_TARGET_RISCV64=1
+		)
 	elseif (CMAKE_HOST_UNIX)
 		target_compile_definitions(riscv PRIVATE
 			TARGETOS_Linux=1

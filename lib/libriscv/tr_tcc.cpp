@@ -3,7 +3,7 @@
 #include <cstring>
 #include <libtcc.h>
 #include <unordered_map>
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__riscv)
 #include <lib-arm64.h> // lib_lib_arm64_c and lib_lib_arm64_c_len
 #else
 #include <libtcc1.h> // libtcc1_c and libtcc1_c_len
@@ -59,7 +59,7 @@ namespace riscv
 		tcc_add_symbol(state, "memmove", (void*)memmove);
 
 		std::string code1;
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__riscv)
 		code1 = std::string((const char*)lib_lib_arm64_c, lib_lib_arm64_c_len) + code;
 #else
 		code1 = std::string((const char*)lib_libtcc1_c, lib_libtcc1_c_len) + code;
