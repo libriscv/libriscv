@@ -152,8 +152,10 @@ static void add_mman_syscalls()
 				(long)addr_g, (size_t)length, (long)result);
 	});
 	// mremap
-	Machine<W>::install_syscall_handler(163,
+	Machine<W>::install_syscall_handler(216,
 	[] (Machine<W>& machine) {
+		[[maybe_unused]] static constexpr int GNU_MREMAP_MAYMOVE = 0x0001;
+		[[maybe_unused]] static constexpr int GNU_MREMAP_FIXED   = 0x0002;
 		const auto old_addr = machine.sysarg(0);
 		const auto old_size = machine.sysarg(1);
 		const auto new_size = machine.sysarg(2);
@@ -163,7 +165,7 @@ static void add_mman_syscalls()
 		auto& nextfree = machine.memory.mmap_address();
 		// We allow the common case of reallocating the
 		// last mapping to a bigger one
-		if (old_addr + old_size == nextfree) {
+		if ((flags & GNU_MREMAP_FIXED) != 0 && old_addr + old_size == nextfree) {
 			nextfree = old_addr + new_size;
 			machine.set_result(old_addr);
 			return;
