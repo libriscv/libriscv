@@ -1066,7 +1066,8 @@ static void syscall_brk(Machine<W>& machine)
 	}
 
 	if constexpr (verbose_syscalls) {
-		printf("SYSCALL brk, new_end: 0x%lX\n", (long)new_end);
+		printf("SYSCALL brk, new_end: 0x%lX  mmap_start: 0x%lX\n",
+			(long)new_end, (long)machine.memory.mmap_start());
 	}
 	machine.set_result(new_end);
 }

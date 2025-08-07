@@ -2,6 +2,7 @@
 /// Works on all platforms
 #define LINUX_MAP_ANONYMOUS        0x20
 #define LINUX_MAP_NORESERVE     0x04000
+#define LINUX_MAP_FIXED         0x10
 
 template <int W>
 static void add_mman_syscalls()
@@ -110,19 +111,17 @@ static void add_mman_syscalls()
 			{
 				result = range.addr;
 			}
-		} else if (addr_g == nextfree) {
-			// Fixed mapping at current end of mmap arena
-			result = addr_g;
-			nextfree += length;
+		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g < machine.memory.mmap_start()) {
+			// A fixed range below the mmap arena start, we do nothing except return the address
+			result    = addr_g;
 		} else if (addr_g < machine.memory.mmap_start()) {
-			// v8 likes to modify ranges below ELF, ignore
+			// Non-fixed range below mmap start is not allowed, ignore and force to next free
 			result    = nextfree;
 			nextfree += length;
-			//flags  = 0;
-		} else if (addr_g >= machine.memory.mmap_start() && addr_g + length <= nextfree) {
+		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g >= machine.memory.mmap_start() && addr_g + length <= nextfree) {
 			// Fixed mapping inside mmap arena
 			result = addr_g;
-		} else if (addr_g > nextfree) {
+		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g > nextfree) {
 			// Fixed mapping after current end of mmap arena
 			// TODO: Evaluate if relaxation is counter-productive with the new cache
 			if constexpr (riscv::encompassing_Nbit_arena > 0) {
@@ -154,8 +153,8 @@ static void add_mman_syscalls()
 	// mremap
 	Machine<W>::install_syscall_handler(216,
 	[] (Machine<W>& machine) {
-		[[maybe_unused]] static constexpr int GNU_MREMAP_MAYMOVE = 0x0001;
-		[[maybe_unused]] static constexpr int GNU_MREMAP_FIXED   = 0x0002;
+		[[maybe_unused]] static constexpr int LINUX_MREMAP_MAYMOVE = 0x0001;
+		[[maybe_unused]] static constexpr int LINUX_MREMAP_FIXED   = 0x0002;
 		const auto old_addr = machine.sysarg(0);
 		const auto old_size = machine.sysarg(1);
 		const auto new_size = machine.sysarg(2);
@@ -165,7 +164,10 @@ static void add_mman_syscalls()
 		auto& nextfree = machine.memory.mmap_address();
 		// We allow the common case of reallocating the
 		// last mapping to a bigger one
-		if ((flags & GNU_MREMAP_FIXED) != 0 && old_addr + old_size == nextfree) {
+		if ((flags & LINUX_MREMAP_FIXED) != 0) {
+			// Not supported
+		}
+		else if (old_addr + old_size == nextfree) {
 			nextfree = old_addr + new_size;
 			machine.set_result(old_addr);
 			return;
