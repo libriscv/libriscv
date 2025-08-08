@@ -483,7 +483,7 @@ int dlclose( void *handle )
 }
 
 DLFCN_NOINLINE /* Needed for _ReturnAddress() */
-DLFCN_EXPORT
+DLFCN_EXPORT DLFCN_WEAK
 void *dlsym( void *handle, const char *name )
 {
     FARPROC symbol;
@@ -600,7 +600,7 @@ end:
     return *(void **) (&symbol);
 }
 
-DLFCN_EXPORT
+DLFCN_EXPORT DLFCN_WEAK
 char *dlerror( void )
 {
     /* If this is the second consecutive call to dlerror, return NULL */

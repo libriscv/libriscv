@@ -38,6 +38,19 @@ extern "C" {
 #   define DLFCN_EXPORT
 #endif
 
+/* Enable weak symbols to account for Godots own dlsym and dlerror
+ * implementations. This is needed to avoid linking errors when Godot
+ * is built with dlfcn-win32. Unfortunately, this doesn't work when
+ * building with -fPIC, so we need to account for that too.
+ */
+#if (defined(__MINGW32__) || defined(__MINGW64__)) && \
+	(defined(__GNUC__) || defined(__clang__)) && \
+	!defined(__PIC__) && !defined(__pic__)
+#define  DLFCN_WEAK __attribute__((weak))
+#else
+#define  DLFCN_WEAK
+#endif
+
 /* Relocations are performed when the object is loaded. */
 #define RTLD_NOW    0
 
@@ -79,10 +92,10 @@ DLFCN_EXPORT void *dlopen(const char *file, int mode);
 DLFCN_EXPORT int dlclose(void *handle);
 
 /* Get the address of a symbol from a symbol table handle. */
-DLFCN_EXPORT void *dlsym(void *handle, const char *name);
+DLFCN_EXPORT DLFCN_WEAK void *dlsym(void *handle, const char *name);
 
 /* Get diagnostic information. */
-DLFCN_EXPORT char *dlerror(void);
+DLFCN_EXPORT DLFCN_WEAK char *dlerror(void);
 
 /* Translate address to symbolic information (no POSIX standard) */
 DLFCN_EXPORT int dladdr(const void *addr, Dl_info *info);
