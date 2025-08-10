@@ -313,13 +313,13 @@ struct Emitter
 	std::string memory_load_type(const std::string& address)
 	{
 		if (std::is_same<T, int8_t>::value || std::is_same<T, uint8_t>::value) {
-			return "api.mem_ld8(cpu, " + address + ");";
+			return "rd8(cpu, " + address + ");";
 		} else if (std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value) {
-			return "api.mem_ld16(cpu, " + address + ");";
+			return "rd16(cpu, " + address + ");";
 		} else if (std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value) {
-			return "api.mem_ld32(cpu, " + address + ");";
+			return "rd32(cpu, " + address + ");";
 		} else if (std::is_same<T, int64_t>::value || std::is_same<T, uint64_t>::value) {
-			return "api.mem_ld64(cpu, " + address + ");";
+			return "rd64(cpu, " + address + ");";
 		} else {
 			throw MachineException(INVALID_PROGRAM, "Unsupported memory load type");
 		}
@@ -374,13 +374,13 @@ struct Emitter
 	std::string memory_store_type(const std::string& type, const std::string& address, const std::string& value)
 	{
 		if (type == "int8_t" || type == "uint8_t") {
-			return "api.mem_st8(cpu, " + address + ", " + value + ");";
+			return "wr8(cpu, " + address + ", " + value + ");";
 		} else if (type == "int16_t" || type == "uint16_t") {
-			return "api.mem_st16(cpu, " + address + ", " + value + ");";
+			return "wr16(cpu, " + address + ", " + value + ");";
 		} else if (type == "int32_t" || type == "uint32_t") {
-			return "api.mem_st32(cpu, " + address + ", " + value + ");";
+			return "wr32(cpu, " + address + ", " + value + ");";
 		} else if (type == "int64_t" || type == "uint64_t") {
-			return "api.mem_st64(cpu, " + address + ", " + value + ");";
+			return "wr64(cpu, " + address + ", " + value + ");";
 		} else {
 			throw MachineException(INVALID_PROGRAM, "Unsupported memory store type");
 		}

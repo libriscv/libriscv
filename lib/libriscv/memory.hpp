@@ -39,6 +39,9 @@ namespace riscv
 		template <typename T>
 		void write(address_t dst, T value);
 
+		template <typename T>
+		void write_paging(address_t dst, T value);
+
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
 		void memcpy(address_t dst, Machine<W>& srcm, address_t src, address_t len);
@@ -181,6 +184,14 @@ namespace riscv
 		static inline address_t page_number(const address_t address) noexcept {
 			return address / Page::size();
 		}
+		CachedPage<W, const PageData>& rdcache() const noexcept {
+			return m_rd_cache;
+		}
+		CachedPage<W, PageData>& wrcache() noexcept {
+			return m_wr_cache;
+		}
+		const PageData& cached_readable_page(address_t, size_t) const;
+		PageData& cached_writable_page(address_t);
 		// Page creation & destruction
 		template <typename... Args>
 		Page& allocate_page(address_t page, Args&& ...);
@@ -257,8 +268,6 @@ namespace riscv
 		void clear_all_pages();
 		void initial_paging();
 		[[noreturn]] static void protection_fault(address_t);
-		const PageData& cached_readable_page(address_t, size_t) const;
-		PageData& cached_writable_page(address_t);
 		// Helpers
 		template <typename T>
 		static void foreach_helper(T& mem, address_t addr, size_t len,

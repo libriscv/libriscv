@@ -128,6 +128,31 @@ void Memory<W>::write(address_t address, T value)
 }
 
 template <int W>
+template <typename T> inline
+void Memory<W>::write_paging(address_t address, T value)
+{
+	const auto offset = address & memory_align_mask<T>();
+	const auto pageno = page_number(address);
+	auto& entry = m_wr_cache;
+	if (entry.pageno == pageno) {
+		entry.page->template aligned_write<T>(offset, value);
+		return;
+	}
+
+	auto& page = create_writable_pageno(pageno);
+	if (LIKELY(page.attr.is_cacheable())) {
+		entry = {pageno, &page.page()};
+	} else if constexpr (memory_traps_enabled && sizeof(T) <= 16) {
+		if (UNLIKELY(page.has_trap())) {
+			page.trap(offset, sizeof(T) | TRAP_WRITE, value);
+			return;
+		}
+	}
+	page.page().template aligned_write<T>(offset, value);
+}
+
+
+template <int W>
 inline address_type<W> Memory<W>::resolve_address(std::string_view name) const
 {
 	auto* sym = resolve_symbol(name);
