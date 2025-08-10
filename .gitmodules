@@ -13,3 +13,6 @@
 [submodule "examples/wasm/program/LuaJIT"]
 	path = examples/wasm/program/LuaJIT
 	url = https://github.com/fwsGonzo/LuaJIT.git
+[submodule "lib/libriscv/tinycc"]
+	path = lib/libriscv/tinycc
+	url = https://github.com/fwsGonzo/tinycc.git
