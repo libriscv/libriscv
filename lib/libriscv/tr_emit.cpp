@@ -310,6 +310,21 @@ struct Emitter
 	}
 
 	template <typename T>
+	std::string memory_load_type(const std::string& address)
+	{
+		if (std::is_same<T, int8_t>::value || std::is_same<T, uint8_t>::value) {
+			return "api.mem_ld8(cpu, " + address + ");";
+		} else if (std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value) {
+			return "api.mem_ld16(cpu, " + address + ");";
+		} else if (std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value) {
+			return "api.mem_ld32(cpu, " + address + ");";
+		} else if (std::is_same<T, int64_t>::value || std::is_same<T, uint64_t>::value) {
+			return "api.mem_ld64(cpu, " + address + ");";
+		} else {
+			throw MachineException(INVALID_PROGRAM, "Unsupported memory load type");
+		}
+	}
+	template <typename T>
 	void memory_load(std::string dst, std::string type, int reg, int32_t imm)
 	{
 		if (uses_flat_memory_arena()) {
@@ -343,17 +358,31 @@ struct Emitter
 			if ((W == 8 && (type == "int64_t" || type == "uint64_t"))
 				|| (W == 4 && (type == "int32_t" || type == "uint32_t"))) {
 				add_code(
-					dst + " = api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");",
+					dst + " = " + memory_load_type<T>(address) + ";",
 				"}");
 			} else {
 				add_code(
-					dst + " = (" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");",
+					dst + " = (" + type + ")" + memory_load_type<T>(address) + ";",
 				"}");
 			}
 		} else {
 			add_code(
-				dst + " = (" + type + ")api.mem_ld(cpu, " + address + ", " + std::to_string(sizeof(T)) + ");"
+				dst + " = (" + type + ")" + memory_load_type<T>(address) + ";"
 			);
+		}
+	}
+	std::string memory_store_type(const std::string& type, const std::string& address, const std::string& value)
+	{
+		if (type == "int8_t" || type == "uint8_t") {
+			return "api.mem_st8(cpu, " + address + ", " + value + ");";
+		} else if (type == "int16_t" || type == "uint16_t") {
+			return "api.mem_st16(cpu, " + address + ", " + value + ");";
+		} else if (type == "int32_t" || type == "uint32_t") {
+			return "api.mem_st32(cpu, " + address + ", " + value + ");";
+		} else if (type == "int64_t" || type == "uint64_t") {
+			return "api.mem_st64(cpu, " + address + ", " + value + ");";
+		} else {
+			throw MachineException(INVALID_PROGRAM, "Unsupported memory store type");
 		}
 	}
 	void memory_store(std::string type, int reg, int32_t imm, std::string value)
@@ -383,11 +412,11 @@ struct Emitter
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
 				"  *(" + type + "*)" + arena_at(address) + " = " + value + ";",
 				"else {",
-				"  api.mem_st(cpu, " + address + ", " + value + ", sizeof(" + type + "));",
+				"  " + memory_store_type(type, address, value) + ";",
 				"}");
 		} else {
 			add_code(
-				"api.mem_st(cpu, " + address + ", " + value + ", sizeof(" + type + "));"
+				memory_store_type(type, address, value)
 			);
 		}
 	}

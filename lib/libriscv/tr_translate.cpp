@@ -1236,53 +1236,72 @@ template <int W>
 CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 {
 	return CallbackTable<W>{
-		.mem_read = [] (CPU<W>& cpu, address_type<W> addr, unsigned size) -> address_type<W> {
-			if constexpr (libtcc_enabled) {
-				try {
-					switch (size) {
-					case 1: return cpu.machine().memory.template read<uint8_t>(addr);
-					case 2: return cpu.machine().memory.template read<uint16_t>(addr);
-					case 4: return cpu.machine().memory.template read<uint32_t>(addr);
-					case 8: return cpu.machine().memory.template read<uint64_t>(addr);
-					default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory read size", size);
-					}
-				} catch (...) {
-					cpu.set_current_exception(std::current_exception());
-					cpu.machine().stop();
-					return 0;
-				}
-			} else {
-				switch (size) {
-				case 1: return cpu.machine().memory.template read<uint8_t>(addr);
-				case 2: return cpu.machine().memory.template read<uint16_t>(addr);
-				case 4: return cpu.machine().memory.template read<uint32_t>(addr);
-				case 8: return cpu.machine().memory.template read<uint64_t>(addr);
-				default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory read size", size);
-				}
+		.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
+			try {
+				return cpu.machine().memory.template read<uint8_t>(addr);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
+				return 0;
 			}
 		},
-		.mem_write = [] (CPU<W>& cpu, address_type<W> addr, address_type<W> value, unsigned size) -> void {
-			if constexpr (libtcc_enabled) {
-				try {
-					switch (size) {
-					case 1: cpu.machine().memory.template write<uint8_t>(addr, value); break;
-					case 2: cpu.machine().memory.template write<uint16_t>(addr, value); break;
-					case 4: cpu.machine().memory.template write<uint32_t>(addr, value); break;
-					case 8: cpu.machine().memory.template write<uint64_t>(addr, value); break;
-					default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory write size", size);
-					}
-				} catch (...) {
-					cpu.set_current_exception(std::current_exception());
-					cpu.machine().stop();
-				}
-			} else {
-				switch (size) {
-				case 1: cpu.machine().memory.template write<uint8_t>(addr, value); break;
-				case 2: cpu.machine().memory.template write<uint16_t>(addr, value); break;
-				case 4: cpu.machine().memory.template write<uint32_t>(addr, value); break;
-				case 8: cpu.machine().memory.template write<uint64_t>(addr, value); break;
-				default: throw MachineException(ILLEGAL_OPERATION, "Invalid memory write size", size);
-				}
+		.mem_read16 = [] (CPU<W>& cpu, address_type<W> addr) -> uint16_t {
+			try {
+				return cpu.machine().memory.template read<uint16_t>(addr);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
+				return 0;
+			}
+		},
+		.mem_read32 = [] (CPU<W>& cpu, address_type<W> addr) -> uint32_t {
+			try {
+				return cpu.machine().memory.template read<uint32_t>(addr);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
+				return 0;
+			}
+		},
+		.mem_read64 = [] (CPU<W>& cpu, address_type<W> addr) -> uint64_t {
+			try {
+				return cpu.machine().memory.template read<uint64_t>(addr);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
+				return 0;
+			}
+		},
+		.mem_write8 = [] (CPU<W>& cpu, address_type<W> addr, uint8_t value) -> void {
+			try {
+				cpu.machine().memory.template write<uint8_t>(addr, value);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
+			}
+		},
+		.mem_write16 = [] (CPU<W>& cpu, address_type<W> addr, uint16_t value) -> void {
+			try {
+				cpu.machine().memory.template write<uint16_t>(addr, value);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
+			}
+		},
+		.mem_write32 = [] (CPU<W>& cpu, address_type<W> addr, uint32_t value) -> void {
+			try {
+				cpu.machine().memory.template write<uint32_t>(addr, value);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
+			}
+		},
+		.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t value) -> void {
+			try {
+				cpu.machine().memory.template write<uint64_t>(addr, value);
+			} catch (...) {
+				cpu.set_current_exception(std::current_exception());
+				cpu.machine().stop();
 			}
 		},
 		.vec_load = [] (CPU<W>& cpu, int vd, address_type<W> addr) {

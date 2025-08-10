@@ -177,13 +177,11 @@ namespace riscv
 		// Retrieve default handler for unimplemented instructions (can be returned in on_unimplemented_instruction)
 		static const instruction_t& get_unimplemented_instruction() noexcept;
 
-#ifdef RISCV_LIBTCC
 		// Set current exception
 		void set_current_exception(std::exception_ptr&& ptr) noexcept { m_current_exception = std::move(ptr); }
 		void clear_current_exception() noexcept { m_current_exception = nullptr; }
 		bool has_current_exception() const noexcept { return m_current_exception != nullptr; }
 		auto& current_exception() const noexcept { return m_current_exception; }
-#endif
 
 	private:
 		Registers<W> m_regs;
@@ -192,10 +190,8 @@ namespace riscv
 		// ELF programs linear .text segment (initialized as empty segment)
 		DecodedExecuteSegment<W>* m_exec;
 
-#ifdef RISCV_LIBTCC
 		// The current exception (used by eg. TCC which doesn't create unwinding tables)
 		std::exception_ptr m_current_exception = nullptr;
-#endif
 
 		// The default execute fault simply triggers the exception
 		execute_fault_t m_fault = [] (auto& cpu, auto&) {
