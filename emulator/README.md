@@ -90,11 +90,12 @@ $ ./build.sh --help
      --no-64              disable RV64
      --128                enable RV128
      --no-128             disable RV128
-	 --assembly-dispatch  enable assembly dispatch (experimental feature)
-	 --no-assembly-dispatch disable assembly dispatch
+     --assembly-dispatch  enable assembly dispatch (experimental feature)
+     --no-assembly-dispatch disable assembly dispatch
      -b, --bintr          enable binary translation using system compiler
-     -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation
+     -t, --jit            jit-compile using tcc
+     --no-jit             disable jit-compile using tcc
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
      -N bits              enable N-bits of masked address space (experimental feature)
      --no-expr            disable experimental features

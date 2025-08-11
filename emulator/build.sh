@@ -36,11 +36,12 @@ function usage()
      --no-64              disable RV64
      --128                enable RV128
      --no-128             disable RV128
-	 --assembly-dispatch  enable assembly dispatch (experimental feature)
-	 --no-assembly-dispatch disable assembly dispatch
+     --assembly-dispatch  enable assembly dispatch (experimental feature)
+     --no-assembly-dispatch disable assembly dispatch
      -b, --bintr          enable binary translation using system compiler
-     -t, --tcc            jit-compile using tcc
      --no-bintr           disable binary translation
+     -t, --jit            jit-compile using tcc
+     --no-jit             disable jit-compile using tcc
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
      -N bits              enable N-bits of masked address space (experimental feature)
      --no-expr            disable experimental features
@@ -86,8 +87,9 @@ while [[ "$#" -gt 0 ]]; do
 		--assembly-dispatch) OPTS="$OPTS -DRISCV_ASM_DISPATCH=ON" ;;
 		--no-assembly-dispatch) OPTS="$OPTS -DRISCV_ASM_DISPATCH=OFF" ;;
         -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
-        -t|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
-        --no-bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=OFF" ;;
+		--no-bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=OFF" ;;
+		--jit|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
+		--no-jit|--no-tcc) OPTS="$OPTS -DRISCV_LIBTCC=OFF" ;;
         -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;
 		-N) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON -DRISCV_ENCOMPASSING_ARENA_BITS=$2"; shift ;;
         --no-expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=OFF" ;;

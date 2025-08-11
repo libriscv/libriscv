@@ -35,7 +35,7 @@ struct Arguments {
 	bool sandbox = false;
 	bool execute_only = false;
 	bool ignore_text = false;
-	bool background = true; // Run binary translation in background thread
+	bool background = riscv::libtcc_enabled; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
 	uint64_t max_memory = 0;
@@ -306,7 +306,7 @@ static void run_program(
 					compilation_step();
 				}).detach();
 			} : std::function<void(std::function<void()>&)>(nullptr),
-		.cross_compile = cc,
+		.cross_compile = std::move(cc),
 #endif
 #endif
 	});
