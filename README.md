@@ -357,7 +357,7 @@ In order to test this feature, follow these instructions:
 ```sh
 $ cd emulator
 $ ./build.sh -b
-$ ./rvlinux ~/github/coremark/coremark-rv32g_b -Qo coremark
+$ ./rvlinux ~/github/coremark/coremark-rv32g_b -Qno coremark
 $ ls *.cpp
 coremark9C111F55.cpp
 $ ./build.sh --embed coremark9C111F55.cpp
