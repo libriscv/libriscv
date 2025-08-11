@@ -177,7 +177,7 @@ namespace riscv
 	void Memory<W>::free_pages(address_t dst, size_t len)
 	{
 		address_t pageno = page_number(dst);
-		address_t end = pageno + (len /= Page::size());
+		address_t end = pageno + page_number((len + (Page::size() - 1)) & ~(Page::size() - 1));
 		while (pageno < end)
 		{
 			this->free_pageno(pageno);
