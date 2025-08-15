@@ -38,6 +38,8 @@ function usage()
      --no-128             disable RV128
      --assembly-dispatch  enable assembly dispatch (experimental feature)
      --no-assembly-dispatch disable assembly dispatch
+     --tailcall-dispatch  enable tailcall dispatch
+     --no-tailcall-dispatch disable tailcall dispatch
      -b, --bintr          enable binary translation using system compiler
      --no-bintr           disable binary translation
      -t, --jit            jit-compile using tcc
@@ -86,6 +88,8 @@ while [[ "$#" -gt 0 ]]; do
 		--no-128) OPTS="$OPTS -DRISCV_128I=OFF" ;;
 		--assembly-dispatch) OPTS="$OPTS -DRISCV_ASM_DISPATCH=ON" ;;
 		--no-assembly-dispatch) OPTS="$OPTS -DRISCV_ASM_DISPATCH=OFF" ;;
+		--tailcall-dispatch) OPTS="$OPTS -DRISCV_TAILCALL_DISPATCH=ON" ;;
+		--no-tailcall-dispatch) OPTS="$OPTS -DRISCV_TAILCALL_DISPATCH=OFF" ;;
         -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
 		--no-bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=OFF" ;;
 		--jit|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;

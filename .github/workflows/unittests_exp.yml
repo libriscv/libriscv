@@ -14,7 +14,7 @@ jobs:
         working-directory: ${{github.workspace}}/tests/unit
     strategy:
       matrix:
-        compiler: [clang++-17]
+        compiler: [clang++-20]
 
     steps:
     - uses: actions/checkout@v2
@@ -30,7 +30,7 @@ jobs:
       run: |
        wget https://apt.llvm.org/llvm.sh
        chmod +x ./llvm.sh
-       sudo ./llvm.sh 17
+       sudo ./llvm.sh 20
 
     - name: Configure
       env:

@@ -16,7 +16,7 @@
 #define MUNUSED  [[maybe_unused]]
 #define DISPATCH_MODE_TAILCALL
 #define INSTRUCTION(bytecode, name) \
-	template <int W>                \
+	template <int W> __attribute__((preserve_none)) \
 	static TcoRet<W> name(DecoderData<W>* d, MUNUSED DecodedExecuteSegment<W>* exec, MUNUSED CPU<W>& cpu, MUNUSED address_type<W> pc, MUNUSED InstrCounter& counter)
 #define addr_t  address_type<W>
 #define saddr_t signed_address_type<W>
@@ -115,7 +115,7 @@ namespace riscv
 	using TcoRet = address_type<W>;
 
 	template <int W>
-	using DecoderFunc = TcoRet<W>(*)(DecoderData<W>*, DecodedExecuteSegment<W>*, CPU<W> &, address_type<W> pc, InstrCounter& counter);
+	using DecoderFunc =  __attribute__((preserve_none)) TcoRet<W>(*)(DecoderData<W>*, DecodedExecuteSegment<W>*, CPU<W> &, address_type<W> pc, InstrCounter& counter);
 	namespace {
 		template <int W>
 		extern const DecoderFunc<W> computed_opcode[BYTECODES_MAX];
