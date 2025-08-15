@@ -1775,11 +1775,26 @@ void Emitter<W>::emit()
 				}
 				} break;
 			case RV32F__FCVT_W_SD: {
-				const std::string sign((fi.R4type.rs2 == 0x0) ? "(int32_t)" : "(uint32_t)");
 				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
+					const std::string sign = fi.R4type.rs2 == 0x0 ? "(int32_t)" : "(uint32_t)";
 					code += to_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
 				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
-					code += to_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f64;\n";
+					switch (fi.R4type.rs2) {
+					case 0: // FCVT.W.D
+						code += to_reg(fi.R4type.rd) + " = (int32_t)" + rs1 + ".f64;\n";
+						break;
+					case 1: // FCVT.W.U
+						code += to_reg(fi.R4type.rd) + " = (uint32_t)" + rs1 + ".f64;\n";
+						break;
+					case 2: // FCVT.W.L
+						code += to_reg(fi.R4type.rd) + " = (int64_t)" + rs1 + ".f64;\n";
+						break;
+					case 3: // FCVT.W.LU
+						code += to_reg(fi.R4type.rd) + " = (uint64_t)" + rs1 + ".f64;\n";
+						break;
+					default:
+						UNKNOWN_INSTRUCTION();
+					}
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}
