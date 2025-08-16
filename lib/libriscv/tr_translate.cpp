@@ -1334,7 +1334,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 #endif
 		},
 		.syscalls = Machine<W>::syscall_handlers.data(),
-		.system_call = [] (CPU<W>& cpu, address_type<W> pc, uint64_t ic, uint64_t max_ic, int sysno) -> int {
+		.system_call = [] (CPU<W>& cpu, address_type<W> pc, uint64_t ic, uint64_t max_ic, int sysno) -> uint64_t {
 			try {
 				cpu.machine().set_instruction_counter(ic);
 				cpu.machine().set_max_instructions(max_ic);
@@ -1344,9 +1344,9 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				cpu.machine().system_call(sysno);
 				if (cpu.registers().pc != current_pc || cpu.reg(REG_TP) != current_tp || cpu.machine().stopped()) {
 					cpu.registers().pc += 4; // Advance PC to the next instruction
-					return true;
+					return 0;
 				}
-				return false; // No change in PC or TP, syscall did not alter execution flow
+				return cpu.machine().max_instructions(); // No change in PC or TP, syscall did not alter execution flow
 			} catch (...) {
 #ifdef RISCV_LIBTCC
 				cpu.set_current_exception(std::current_exception());

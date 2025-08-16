@@ -359,7 +359,7 @@ struct Emitter
 			}
 			if (auto tracked_value = get_tracked_register(reg)) {
 				const address_t vaddr = *tracked_value + imm;
-				if (vaddr >= 0x1000 && vaddr + sizeof(T) < tinfo.arena_size) {
+				if (vaddr >= 0x1000 && vaddr + sizeof(T) <= tinfo.arena_size) {
 					add_code(dst + " = " + arena_at_fixed(type, vaddr) + ";");
 					return;
 				}
@@ -424,7 +424,7 @@ struct Emitter
 			}
 			if (auto tracked_value = get_tracked_register(reg)) {
 				const address_t vaddr = *tracked_value + imm;
-				if (vaddr >= tinfo.arena_roend && vaddr < tinfo.arena_size - 32) {
+				if (vaddr >= tinfo.arena_roend && vaddr <= tinfo.arena_size - 32) {
 					add_code("{" + type + "* t = &" + arena_at_fixed(type, vaddr) + "; *t = " + value + "; }");
 					return;
 				}
@@ -681,19 +681,34 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg, bool cl
 	}
 	if (tinfo.is_libtcc)
 	{
-		code += "if (api.system_call(cpu, " + PCRELS(0) + ", ic, max_ic, " + syscall_reg + ")) {\n";
+		code += "max_ic = api.system_call(cpu, " + PCRELS(0) + ", ic, max_ic, " + syscall_reg + ");\n";
+		if (!tinfo.ignore_instruction_limit) {
+			code += "ic = INS_COUNTER(cpu);\n";
+		}
+		code += "if (!max_ic) {\n";
 		if (this->uses_register_caching() && !clobber_all)
 		{
 			// Non-clobbering syscall, but we are about to leave, so
 			// restore all the remaining registers
-			code += "if (ic >= MAX_COUNTER(cpu)) {\n";
-			code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
-			code += "}\n";
+			if (!tinfo.ignore_instruction_limit) {
+				code += "max_ic = MAX_COUNTER(cpu);\n"
+						"if (ic >= max_ic) {\n"
+						"  STORE_NON_SYS_REGS_" + this->func + "();\n"
+						"}\n"
+						"  return (ReturnValues){ic, max_ic};\n"
+						"}\n";
+			} else {
+				code += "max_ic = MAX_COUNTER(cpu);\n"
+						"if (max_ic == 0) {\n"
+						"  STORE_NON_SYS_REGS_" + this->func + "();\n"
+						"}\n"
+						"  return (ReturnValues){0, max_ic};\n"
+						"}\n";
+			}
 		}
-		if (!tinfo.ignore_instruction_limit) {
-			code += "  return (ReturnValues){ic, MAX_COUNTER(cpu)};\n"
-					"}\n"
-					"max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
+		else if (!tinfo.ignore_instruction_limit) {
+			code += "  return (ReturnValues){INS_COUNTER(cpu), MAX_COUNTER(cpu)};\n"
+					"}\n";
 		} else {
 			code += "  return (ReturnValues){0, MAX_COUNTER(cpu)};\n"
 					"}\n";

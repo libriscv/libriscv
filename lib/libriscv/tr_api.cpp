@@ -183,7 +183,7 @@ static struct CallbackTable {
 	void (*vec_load)(const CPU*, int, addr_t);
 	void (*vec_store)(const CPU*, addr_t, int);
 	syscall_t* syscalls;
-	int  (*system_call)(CPU*, addr_t, uint64_t, uint64_t, int);
+	uint64_t (*system_call)(CPU*, addr_t, uint64_t, uint64_t, int);
 	void (*unknown_syscall)(CPU*, addr_t);
 	int  (*system)(CPU*, uint32_t);
 	unsigned (*execute)(CPU*, uint32_t);
