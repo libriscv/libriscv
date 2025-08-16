@@ -168,7 +168,7 @@ namespace riscv
 	 * A fast-path is attempted to be created, which allows the function
 	 * to return by directly stopping the simulation and returning.
 	**/
-	template <int W, typename F, uint64_t IMAX = UINT64_MAX, bool UseFastPath = false>
+	template <int W, typename F, uint64_t IMAX = UINT64_MAX, bool UseFastPath = true>
 	struct PreparedCall
 	{
 	public:
@@ -236,9 +236,9 @@ namespace riscv
 			return true; // No fast path, but prepared
 		}
 
-		void prepare(Machine<W>& m, const std::string& func)
+		bool prepare(Machine<W>& m, const std::string& func)
 		{
-			this->prepare(m, m.address_of(func));
+			return this->prepare(m, m.address_of(func));
 		}
 
 		void prepare(Machine<W>& m)

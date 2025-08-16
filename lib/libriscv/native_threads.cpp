@@ -12,6 +12,16 @@ void Machine<W>::setup_native_threads(const size_t syscall_base)
 	if (this->m_mt == nullptr)
 		this->m_mt.reset(new MultiThreading<W>(*this));
 
+	// Globally register a system call that clobbers all registers
+	Machine<W>::register_clobbering_syscall(syscall_base + 0); // microclone
+	Machine<W>::register_clobbering_syscall(syscall_base + 1); // exit
+	Machine<W>::register_clobbering_syscall(syscall_base + 2); // yield
+	Machine<W>::register_clobbering_syscall(syscall_base + 3); // yield_to
+	Machine<W>::register_clobbering_syscall(syscall_base + 4); // block
+	Machine<W>::register_clobbering_syscall(syscall_base + 5); // unblock
+	Machine<W>::register_clobbering_syscall(syscall_base + 6); // unblock_thread
+	Machine<W>::register_clobbering_syscall(syscall_base + 8); // clone threadcall
+
 	// 500: microclone
 	this->install_syscall_handler(syscall_base+0,
 	[] (Machine<W>& machine) {

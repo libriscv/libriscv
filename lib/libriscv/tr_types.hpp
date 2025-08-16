@@ -32,6 +32,7 @@ namespace riscv
 		bool ignore_instruction_limit;
 		bool use_shared_execute_segments;
 		bool use_register_caching;
+		bool use_syscall_clobbering_optimization;
 		bool use_automatic_nbit_address_space;
 		bool unsafe_remove_checks;
 		std::unordered_set<address_type<W>> jump_locations;

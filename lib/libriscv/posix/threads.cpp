@@ -59,6 +59,26 @@ void Machine<W>::setup_posix_threads()
 	if (this->m_mt == nullptr)
 		this->m_mt.reset(new MultiThreading<W>(*this));
 
+	static constexpr int SYSCALL_CLONE        = 220;
+	static constexpr int SYSCALL_CLONE3	      = 435;
+	static constexpr int SYSCALL_SCHED_YIELD  = 124;
+	static constexpr int SYSCALL_EXIT         = 93;
+	static constexpr int SYSCALL_EXIT_GROUP   = 94;
+	static constexpr int SYSCALL_FUTEX        = 98;
+	static constexpr int SYSCALL_FUTEX_TIME64 = 422;
+	static constexpr int SYSCALL_TKILL        = 130;
+	static constexpr int SYSCALL_TGKILL       = 131;
+	// There may be more, but these are known to clobber all registers
+	register_clobbering_syscall(SYSCALL_CLONE);
+	register_clobbering_syscall(SYSCALL_CLONE3);
+	register_clobbering_syscall(SYSCALL_SCHED_YIELD);
+	register_clobbering_syscall(SYSCALL_EXIT);
+	register_clobbering_syscall(SYSCALL_EXIT_GROUP);
+	register_clobbering_syscall(SYSCALL_FUTEX);
+	register_clobbering_syscall(SYSCALL_FUTEX_TIME64);
+	register_clobbering_syscall(SYSCALL_TKILL);
+	register_clobbering_syscall(SYSCALL_TGKILL);
+
 	// exit & exit_group
 	this->install_syscall_handler(93,
 	[] (Machine<W>& machine) {

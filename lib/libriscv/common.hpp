@@ -190,6 +190,7 @@ namespace riscv
 #else
 		bool translate_use_register_caching = false;
 #endif
+		bool translate_use_syscall_clobbering_optimization = false;
 		/// @brief Enable automatic n-bit address space for the binary translator by rounding down to the nearest power of 2.
 		/// @details This will allow the binary translator to use and-masked addresses
 		/// for all memory accesses, which can drastically improve performance.

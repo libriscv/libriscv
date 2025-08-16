@@ -402,6 +402,9 @@ namespace riscv
 		void setup_linux_syscalls(bool filesystem = true, bool sockets = true);
 		void setup_posix_threads();
 		void setup_native_threads(const size_t syscall_base);
+		// Globally register a system call that clobbers all registers
+		static void register_clobbering_syscall(size_t sysnum);
+		static bool is_clobbering_syscall(size_t sysnum) noexcept;
 		// Threads: Access to thread internal structures
 		const MultiThreading<W>& threads() const;
 		MultiThreading<W>& threads();

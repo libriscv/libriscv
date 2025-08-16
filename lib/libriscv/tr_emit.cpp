@@ -1,7 +1,9 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
+#include <array>
 #include <inttypes.h>
+#include <optional>
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include "tr_types.hpp"
@@ -237,7 +239,7 @@ struct Emitter
 
 	void emit_branch(const BranchInfo& binfo, const std::string& op);
 
-	void emit_system_call(const std::string& syscall_reg);
+	void emit_system_call(const std::string& syscall_reg, bool clobber_all);
 
 	// Returns true if the function call has exited/returned from the block
 	bool emit_function_call(address_t target, address_t dest_pc);
@@ -497,6 +499,33 @@ private:
 	static std::string speculation_safe(const address_t address) {
 		return "SPECSAFE(" + hex_address(address) + ")";
 	}
+	std::optional<address_t> get_tracked_register(int idx) const {
+		if (idx < 0 || idx >= 32) {
+			throw MachineException(INVALID_PROGRAM, "Invalid register index for tracking", idx);
+		}
+		if (this->m_is_tracked_register[idx]) {
+			return this->m_tracked_registers[idx];
+		}
+		return std::nullopt;
+	}
+	void track_register_value(int idx, address_t value) {
+		if (idx < 0 || idx >= 32) {
+			throw MachineException(INVALID_PROGRAM, "Invalid register index for tracking", idx);
+		}
+		else if (idx > 0) {
+			this->m_tracked_registers[idx] = value;
+			this->m_is_tracked_register[idx] = true;
+		}
+	}
+	void reset_tracked_register(int idx) {
+		if (idx < 0 || idx >= 32) {
+			throw MachineException(INVALID_PROGRAM, "Invalid register index for tracking", idx);
+		}
+		this->m_is_tracked_register[idx] = false;
+	}
+	void reset_all_tracked_registers() {
+		this->m_is_tracked_register.fill(false);
+	}
 
 	std::string code;
 	size_t m_idx = 0;
@@ -509,8 +538,8 @@ private:
 	bool m_used_store_syscalls = false;
 
 	std::array<bool, 32> gpr_exists {};
-	// Register tracking
-	std::array<std::variant<std::monostate, address_t>, 32> gpr_values {};
+	std::array<bool, 32> m_is_tracked_register {};
+	std::array<address_t, 32> m_tracked_registers {};
 
 	std::string func;
 	const TransInfo<W>& tinfo;
@@ -602,35 +631,16 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 }
 
 template <int W>
-inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
+inline void Emitter<W>::emit_system_call(const std::string& syscall_reg, bool clobber_all)
 {
-	bool clobber_all = false;
-	if (OPTIMIZE_SYSCALL_REGISTERS && this->uses_register_caching())
+	if (tinfo.use_syscall_clobbering_optimization && this->uses_register_caching() && !clobber_all)
 	{
-		// If we know the system call number, we can check against:
-		static constexpr int SYSCALL_CLONE        = 220;
-		static constexpr int SYSCALL_CLONE3	      = 435;
-		static constexpr int SYSCALL_SCHED_YIELD  = 124;
-		static constexpr int SYSCALL_EXIT         = 93;
-		static constexpr int SYSCALL_EXIT_GROUP   = 94;
-		static constexpr int SYSCALL_FUTEX        = 98;
-		static constexpr int SYSCALL_FUTEX_TIME64 = 422;
-		static constexpr int SYSCALL_TKILL        = 130;
-		static constexpr int SYSCALL_TGKILL       = 131;
-		// There may be more, but these are known to clobber all registers
-		[[maybe_unused]] static constexpr std::array<int, 9> clobbering_syscalls = {
-			SYSCALL_CLONE,
-			SYSCALL_CLONE3,
-			SYSCALL_SCHED_YIELD,
-			SYSCALL_EXIT,
-			SYSCALL_EXIT_GROUP,
-			SYSCALL_FUTEX,
-			SYSCALL_FUTEX_TIME64,
-			SYSCALL_TKILL,
-			SYSCALL_TGKILL,
-		};
-
 		clobber_all = true;
+		if (auto tracked_value = get_tracked_register(17); tracked_value) {
+			// Don't clobber when the value is known and it's not in the list
+			// of known system calls that clobber all registers
+			clobber_all = Machine<W>::is_clobbering_syscall(*tracked_value);
+		}
 	} else {
 		clobber_all = true;
 	}
@@ -641,11 +651,22 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 	}
 	if (tinfo.is_libtcc)
 	{
-		code += "if (api.system_call(cpu, " + PCRELS(0) + ", ic, max_ic, " + syscall_reg + ")) {\n"
-			"  return (ReturnValues){0, MAX_COUNTER(cpu)};\n"
-			"}\n";
+		code += "if (api.system_call(cpu, " + PCRELS(0) + ", ic, max_ic, " + syscall_reg + ")) {\n";
+		if (this->uses_register_caching() && !clobber_all)
+		{
+			// Non-clobbering syscall, but we are about to leave, so
+			// restore all the remaining registers
+			code += "if (ic >= MAX_COUNTER(cpu)) {\n";
+			code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
+			code += "}\n";
+		}
 		if (!tinfo.ignore_instruction_limit) {
-			code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
+			code += "  return (ReturnValues){ic, MAX_COUNTER(cpu)};\n"
+					"}\n"
+					"max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
+		} else {
+			code += "  return (ReturnValues){0, MAX_COUNTER(cpu)};\n"
+					"}\n";
 		}
 	}
 	else
@@ -658,17 +679,22 @@ inline void Emitter<W>::emit_system_call(const std::string& syscall_reg)
 				// If we didn't clobber all registers, and the machine timed out,
 				// we need to store back the registers so that the timed out machine
 				// can resume from where it left off, if it is re-entered.
-				code += "if (INS_COUNTER(cpu) >= MAX_COUNTER(cpu)) {\n";
+				code += "if (ic >= MAX_COUNTER(cpu)) {\n";
 				code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
 				code += "}\n";
 			}
 			code += "  cpu->pc += 4; return (ReturnValues){ic, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
-			code += "ic = INS_COUNTER(cpu);\n"; // Restore instruction counter
 			code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
 		} else {
 			code += "if (UNLIKELY(do_syscall(cpu, 0, max_ic, " + syscall_reg + "))) {\n";
 			code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
 		}
+	}
+	if (clobber_all) {
+		this->reset_all_tracked_registers();
+	} else {
+		this->reset_tracked_register(10);
+		this->reset_tracked_register(11);
 	}
 	this->reload_syscall_registers();
 }
@@ -713,17 +739,21 @@ void Emitter<W>::emit()
 			this->mappings.push_back({
 				this->pc(), this->func
 			});
+			// Since someone can jump here, we need to forget all tracked register values
+			this->reset_all_tracked_registers();
 		}
 		// known jump locations
 		else if (i > 0 && tinfo.jump_locations.count(this->pc())) {
 			this->increment_counter_so_far();
 			code.append(FUNCLABEL(this->pc()) + ":;\n");
+			// Since someone can jump here, we need to forget all tracked register values
+			this->reset_all_tracked_registers();
 		}
 
 		// With garbage instructions, it's possible that someone is trying to jump to
 		// the middle of an instruction. This technically allowed, so we need to check
 		// there's a jump label in the middle of this instruction.
-		if (compressed_enabled && this->m_instr_length == 4 && tinfo.jump_locations.count(this->pc() + 2)) {
+		if (UNLIKELY(compressed_enabled && this->m_instr_length == 4 && tinfo.jump_locations.count(this->pc() + 2))) {
 			// This occurence should be very rare, so we permit outselves to jump over it, so that
 			// we can trigger an exception for anyone trying to jump to the middle of an instruction.
 			// It is technically possible to create an endless loop without this, as we are not
@@ -732,6 +762,7 @@ void Emitter<W>::emit()
 			code.append(FUNCLABEL(this->pc() + 2) + ":;\n");
 			code.append("api.exception(cpu, " + STRADDR(this->pc() + 2) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n");
 			code.append(FUNCLABEL(this->pc() + 2) + "_skip:;\n");
+			this->reset_all_tracked_registers();
 		}
 
 		auto it = tinfo.single_return_locations.find(this->pc());
@@ -757,9 +788,7 @@ void Emitter<W>::emit()
 		}
 
 		if (tinfo.ebreak_locations->count(this->pc())) {
-			this->store_loaded_registers();
-			this->emit_system_call(std::to_string(SYSCALL_EBREAK));
-			this->reload_all_registers();
+			this->emit_system_call(std::to_string(SYSCALL_EBREAK), true);
 		}
 
 		// instruction generation
@@ -782,6 +811,7 @@ void Emitter<W>::emit()
 						code += "return (ReturnValues){0, 0};\n";
 					}
 				}
+				this->reset_all_tracked_registers();
 				continue;
 			}
 		}
@@ -816,6 +846,7 @@ void Emitter<W>::emit()
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
+			this->reset_tracked_register(instr.Itype.rd);
 			} else {
 				// We don't care about where we are in the page when rd=0
 				const auto temp = "tmp" + PCRELS(0);
@@ -892,9 +923,12 @@ void Emitter<W>::emit()
 			case 0x7: // GEU
 				emit_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
 				break;
-			} } break;
+			}
+			this->reset_all_tracked_registers(); // For now
+			} break;
 		case RV32I_JALR: {
 			// jump to register + immediate
+			this->reset_all_tracked_registers(); // For now
 			this->increment_counter_so_far();
 			if (instr.Itype.rd != 0 && instr.Itype.rd == instr.Itype.rs1) {
 				// NOTE: We need to remember RS1 because it is clobbered by RD
@@ -941,6 +975,7 @@ void Emitter<W>::emit()
 			this->add_reentry_next();
 			} break;
 		case RV32I_JAL: {
+			this->reset_all_tracked_registers(); // For now
 			this->increment_counter_so_far();
 			if (instr.Jtype.rd != 0) {
 				add_code(to_reg(instr.Jtype.rd) + " = " + PCRELS(m_instr_length) + ";\n");
@@ -1009,6 +1044,7 @@ void Emitter<W>::emit()
 
 			const auto dst = to_reg(instr.Itype.rd);
 			std::string src = from_reg(instr.Itype.rs1);
+
 			switch (instr.Itype.funct3) {
 			case 0x0: // ADDI
 				if (instr.Itype.signed_imm() == 0) {
@@ -1129,6 +1165,21 @@ void Emitter<W>::emit()
 				break;
 			default:
 				UNKNOWN_INSTRUCTION();
+			}
+			// Register tracking (mostly ADDI)
+			if (instr.Itype.funct3 == 0) {
+				// Track register value when rs1 == 0:
+				if (instr.Itype.rs1 == 0) {
+					this->track_register_value(instr.Itype.rd, instr.Itype.signed_imm());
+				} else {
+					if (auto tracked_value = get_tracked_register(instr.Itype.rs1)) {
+						this->track_register_value(instr.Itype.rd, instr.Itype.signed_imm() + *tracked_value);
+					} else {
+						this->reset_tracked_register(instr.Itype.rd);
+					}
+				}
+			} else {
+				this->reset_tracked_register(instr.Itype.rd);
 			}
 			} break;
 		case RV32I_OP:
@@ -1337,18 +1388,21 @@ void Emitter<W>::emit()
 				//		instr.Rtype.jumptable_friendly_op());
 				UNKNOWN_INSTRUCTION();
 			}
+			this->reset_tracked_register(instr.Rtype.rd);
 			break;
 		case RV32I_LUI:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
 			add_code(
 				to_reg(instr.Utype.rd) + " = " + from_imm(instr.Utype.upper_imm()) + ";");
+			this->track_register_value(instr.Utype.rd, instr.Utype.upper_imm());
 			break;
 		case RV32I_AUIPC:
 			if (UNLIKELY(instr.Utype.rd == 0))
 				break;
 			add_code(
 				to_reg(instr.Utype.rd) + " = " + PCRELS(instr.Utype.upper_imm()) + ";");
+			this->track_register_value(instr.Utype.rd, PCRELA(instr.Utype.upper_imm()));
 			break;
 		case RV32I_FENCE:
 			break;
@@ -1361,10 +1415,11 @@ void Emitter<W>::emit()
 					if (instr.Itype.imm == 0) {
 						// ECALL: System call
 						syscall_reg = this->from_reg(REG_ECALL);
+						this->emit_system_call(syscall_reg, false);
 					} else { // EBREAK
 						syscall_reg = std::to_string(SYSCALL_EBREAK);
+						this->emit_system_call(syscall_reg, true);
 					}
-					this->emit_system_call(syscall_reg);
 					break;
 				} else if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
 					code += "max_ic = 0;\n"; // Immediate stop PC + 4
@@ -1384,8 +1439,8 @@ void Emitter<W>::emit()
 					} else {
 						code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 					}
+					this->reset_tracked_register(instr.Itype.rd);
 					this->potentially_reload_register(instr.Itype.rd);
-					this->potentially_reload_register(instr.Itype.rs1);
 					break;
 				}
 			} else {
@@ -1404,8 +1459,8 @@ void Emitter<W>::emit()
 				} else {
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 				}
+				this->reset_tracked_register(instr.Itype.rd);
 				this->potentially_reload_register(instr.Itype.rd);
-				this->potentially_reload_register(instr.Itype.rs1);
 			} break;
 		case RV64I_OP_IMM32: {
 			if constexpr (W < 8) {
@@ -1416,6 +1471,16 @@ void Emitter<W>::emit()
 				break;
 			const auto dst = to_reg(instr.Itype.rd);
 			const auto src = "(uint32_t)" + from_reg(instr.Itype.rs1);
+			if (instr.Itype.funct3 == 0x0) {
+				// Track register value when rs1 == 0:
+				if (instr.Itype.rs1 == 0) {
+					this->track_register_value(instr.Itype.rd, (int32_t)instr.Itype.signed_imm());
+				} else {
+					this->reset_tracked_register(instr.Itype.rd);
+				}
+			} else {
+				this->reset_tracked_register(instr.Itype.rd);
+			}
 			switch (instr.Itype.funct3) {
 			case 0x0:
 				// ADDIW: Add sign-extended 12-bit immediate
@@ -1546,6 +1611,7 @@ void Emitter<W>::emit()
 			default:
 				UNKNOWN_INSTRUCTION();
 			}
+			this->reset_tracked_register(instr.Rtype.rd);
 			} break;
 		case RV32F_LOAD: {
 			const rv32f_instruction fi{instr};
@@ -1664,6 +1730,7 @@ void Emitter<W>::emit()
 				default:
 					UNKNOWN_INSTRUCTION();
 				}
+				this->reset_tracked_register(fi.R4type.rd);
 				break;
 			case RV32F__FMIN_MAX:
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
@@ -1798,6 +1865,7 @@ void Emitter<W>::emit()
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}
+				this->reset_tracked_register(fi.R4type.rd);
 				} break;
 			case RV32F__FMV_W_X:
 				if (fi.R4type.funct2 == 0x0) {
@@ -1819,6 +1887,7 @@ void Emitter<W>::emit()
 				} else { // FPCLASSIFY etc.
 					UNKNOWN_INSTRUCTION();
 				}
+				this->reset_tracked_register(fi.R4type.rd);
 				break;
 			} // fpfunc
 			} else UNKNOWN_INSTRUCTION();
@@ -1832,6 +1901,7 @@ void Emitter<W>::emit()
 			this->potentially_realize_register(instr.Atype.rs1);
 			this->potentially_realize_register(instr.Atype.rs2);
 			WELL_KNOWN_INSTRUCTION();
+			this->reset_tracked_register(instr.Atype.rd);
 			this->potentially_reload_register(instr.Atype.rd);
 			this->potentially_reload_register(instr.Atype.rs1);
 			this->potentially_reload_register(instr.Atype.rs2);
@@ -1905,6 +1975,8 @@ void Emitter<W>::emit()
 			WELL_KNOWN_INSTRUCTION();
 			// Reload registers A0-A1
 			reload_syscall_registers();
+			this->reset_tracked_register(10);
+			this->reset_tracked_register(11);
 			break;
 		default:
 			UNKNOWN_INSTRUCTION();

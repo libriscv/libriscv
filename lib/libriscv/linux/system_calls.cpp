@@ -1367,6 +1367,10 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 		if (sockets)
 			add_socket_syscalls(*this);
 	}
+
+	register_clobbering_syscall(130); // TKILL
+	register_clobbering_syscall(93);  // EXIT
+	register_clobbering_syscall(94);  // EXIT_GROUP
 }
 
 #ifdef RISCV_32I
