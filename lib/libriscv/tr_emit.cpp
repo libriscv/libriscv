@@ -1094,6 +1094,8 @@ void Emitter<W>::emit()
 			case 0x0: // ADDI
 				if (instr.Itype.signed_imm() == 0) {
 					add_code(dst + " = " + src + ";");
+				} else if (instr.Itype.rs1 == 0) {
+					add_code(dst + " = " + from_imm(instr.Itype.signed_imm()) + ";");
 				} else {
 					emit_op(" + ", " += ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				}
@@ -1232,7 +1234,12 @@ void Emitter<W>::emit()
 
 			switch (instr.Rtype.jumptable_friendly_op()) {
 			case 0x0: // ADD
-				emit_op(" + ", " += ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				if (instr.Rtype.rs2 == instr.Rtype.rd) {
+					// Make sure we can perform rd += rs1
+					emit_op(" + ", " += ", instr.Rtype.rd, instr.Rtype.rs2, from_reg(instr.Rtype.rs1));
+				} else {
+					emit_op(" + ", " += ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
+				}
 				break;
 			case 0x200: // SUB
 				emit_op(" - ", " -= ", instr.Rtype.rd, instr.Rtype.rs1, from_reg(instr.Rtype.rs2));
