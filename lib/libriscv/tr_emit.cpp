@@ -193,6 +193,22 @@ struct Emitter
 		if (reg == 3 && tinfo.gp != 0)
 			return hex_address(tinfo.gp) + "L";
 		else if (reg != 0) {
+			if (auto tracked_value = get_tracked_register(reg); tinfo.is_libtcc && tracked_value) {
+				return "(" + hex_address(*tracked_value) + "L)";
+			}
+			else if (uses_register_caching() && reg < CACHED_REGISTERS) {
+				load_register(reg);
+				return loaded_regname(reg);
+			} else {
+				return "cpu->r[" + std::to_string(reg) + "]";
+			}
+		}
+		return "(addr_t)0";
+	}
+	std::string from_untracked_reg(int reg) {
+		if (reg == 3 && tinfo.gp != 0)
+			return hex_address(tinfo.gp) + "L";
+		else if (reg != 0) {
 			if (uses_register_caching() && reg < CACHED_REGISTERS) {
 				load_register(reg);
 				return loaded_regname(reg);
@@ -341,9 +357,16 @@ struct Emitter
 				);
 				return;
 			}
+			if (auto tracked_value = get_tracked_register(reg)) {
+				const address_t vaddr = *tracked_value + imm;
+				if (vaddr >= 0x1000 && vaddr + sizeof(T) < tinfo.arena_size) {
+					add_code(dst + " = " + arena_at_fixed(type, vaddr) + ";");
+					return;
+				}
+			}
 		}
 
-		const auto address = from_reg(reg) + " + " + from_imm(imm);
+		const std::string address = from_untracked_reg(reg) + " + " + from_imm(imm);
 		if (uses_Nbit_encompassing_arena())
 		{
 			add_code(dst + " = *(" + type + "*)" + arena_at(address) + ";");
@@ -399,9 +422,16 @@ struct Emitter
 				add_code("{" + type + "* t = &" + arena_at_fixed(type, absolute_vaddr) + "; *t = " + value + "; }");
 				return;
 			}
+			if (auto tracked_value = get_tracked_register(reg)) {
+				const address_t vaddr = *tracked_value + imm;
+				if (vaddr >= tinfo.arena_roend && vaddr < tinfo.arena_size - 32) {
+					add_code("{" + type + "* t = &" + arena_at_fixed(type, vaddr) + "; *t = " + value + "; }");
+					return;
+				}
+			}
 		}
 
-		const auto address = from_reg(reg) + " + " + from_imm(imm);
+		const std::string address = from_untracked_reg(reg) + " + " + from_imm(imm);
 		if (uses_Nbit_encompassing_arena())
 		{
 			add_code("*(" + type + "*)" + arena_at(address) + " = " + value + ";");
@@ -954,7 +984,7 @@ void Emitter<W>::emit()
 					// If it is, we can jump directly to it
 					// Otherwise, we should immediately exit the function
 					//printf("Single return location: 0x%lX (pc=0x%lX) -> 0x%lX\n",
-					//	current_callable_pc, long(this->pc()), long(it->second));
+					//	long(current_callable_pc), long(this->pc()), long(it->second));
 					if (it->second >= this->begin_pc() && it->second < this->end_pc()) {
 						// Jump directly to the return location
 						add_code("if (" + from_reg(instr.Itype.rs1) + " == " + STRADDR(current_callable_pc) + ") goto " + FUNCLABEL(it->second) + ";");
