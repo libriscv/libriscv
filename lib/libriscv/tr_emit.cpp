@@ -673,7 +673,9 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_a
 		}
 
 		if (syscall_reg != std::to_string(SYSCALL_EBREAK)) {
-			syscall_reg = std::to_string(*tracked_value);
+			if constexpr (W != 16) { // No 128-bit to_string in C++
+				syscall_reg = std::to_string(*tracked_value);
+			}
 		}
 	} else {
 		clobber_all = true;
