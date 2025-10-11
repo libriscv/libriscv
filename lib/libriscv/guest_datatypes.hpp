@@ -84,7 +84,7 @@ struct GuestStdString {
 		return machine.memory.memview(ptr, size);
 	}
 
-	void set_string(machine_t& machine, gaddr_t self, const void* str, std::size_t len)
+	void set_string(machine_t& machine, gaddr_t self, const void* str, std::size_t len, bool use_memarray = true)
 	{
 		this->free(machine);
 
@@ -100,9 +100,17 @@ struct GuestStdString {
 			this->ptr = machine.arena().malloc(len+1);
 			this->size = len;
 			this->capacity = len;
-			char *dst = machine.memory.template memarray<char>(this->ptr, len + 1);
-			std::memcpy(dst, str, len);
-			dst[len] = '\0';
+			if (use_memarray)
+			{
+				char* dst = machine.memory.template memarray<char>(this->ptr, len + 1);
+				std::memcpy(dst, str, len);
+				dst[len] = '\0';
+			}
+			else
+			{
+				machine.memory.memcpy(this->ptr, str, len);
+				machine.memory.template write<uint8_t>(this->ptr + len, 0);
+			}
 		}
 	}
 	void set_string(machine_t& machine, gaddr_t self, std::string_view str)
