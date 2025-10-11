@@ -333,7 +333,8 @@ namespace riscv
 #endif
 
 		// Execute segments
-		std::vector<std::shared_ptr<DecodedExecuteSegment<W>>> m_exec;
+		std::shared_ptr<DecodedExecuteSegment<W>> m_main_exec_segment;
+		std::vector<std::shared_ptr<DecodedExecuteSegment<W>>> m_exec; // not including main_exec_segment
 		std::shared_ptr<DecodedExecuteSegment<W>>& next_execute_segment();
 
 		// Linear arena at start of memory (mmap-backed)

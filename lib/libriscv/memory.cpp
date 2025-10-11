@@ -524,6 +524,7 @@ namespace riscv
 		this->m_mmap_cache   = master.memory.m_mmap_cache;
 
 		// Reference the same execute segments
+		this->m_main_exec_segment = master.memory.m_main_exec_segment;
 		this->m_exec = master.memory.m_exec;
 
 		if (options.use_memory_arena) {

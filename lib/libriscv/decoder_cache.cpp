@@ -633,6 +633,9 @@ namespace riscv
 	template <int W>
 	std::shared_ptr<DecodedExecuteSegment<W>>& Memory<W>::next_execute_segment()
 	{
+		if (!m_main_exec_segment) {
+			return m_main_exec_segment;
+		}
 		if (LIKELY(m_exec.size() < RISCV_MAX_EXECUTE_SEGS)) {
 			m_exec.push_back(nullptr);
 			return m_exec.back();
@@ -651,6 +654,13 @@ namespace riscv
 	{
 		// destructor could throw, so let's invalidate early
 		machine().cpu.set_execute_segment(*CPU<W>::empty_execute_segment());
+
+		auto& main_segment = m_main_exec_segment;
+		if (main_segment) {
+			const SegmentKey key = SegmentKey::from(*main_segment, memory_arena_size());
+			main_segment = nullptr;
+			shared_execute_segments<W>.remove_if_unique(key);
+		}
 
 		while (!m_exec.empty()) {
 			try {

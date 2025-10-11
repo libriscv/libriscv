@@ -182,6 +182,8 @@ inline void Memory<W>::set_exit_address(address_t addr)
 template <int W>
 inline std::shared_ptr<DecodedExecuteSegment<W>>& Memory<W>::exec_segment_for(address_t vaddr)
 {
+	// Check main execute segment first, it's always present
+	if (m_main_exec_segment && m_main_exec_segment->is_within(vaddr)) return m_main_exec_segment;
 	for (auto& segment : m_exec) {
 		if (segment && segment->is_within(vaddr)) return segment;
 	}
