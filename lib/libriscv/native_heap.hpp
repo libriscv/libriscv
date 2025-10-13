@@ -462,6 +462,9 @@ inline void Arena::transfer(Arena& dest) const
 	dest.m_base_chunk = m_base_chunk;
 	dest.m_chunks.clear();
 	dest.m_free_chunks.clear();
+	dest.m_max_chunks = m_max_chunks;
+	dest.m_allocation_counter = m_allocation_counter;
+	dest.m_deallocation_counter = m_deallocation_counter;
 
 	ArenaChunk* last = &dest.m_base_chunk;
 
