@@ -15,8 +15,8 @@
 #endif
 
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
-#define PCRELS(x) hex_address(PCRELA(x)) + "L"
-#define STRADDR(x) (hex_address(x) + "L")
+#define PCRELS(x) hex_address(PCRELA(x)) + "LL"
+#define STRADDR(x) (hex_address(x) + "LL")
 // Reveal PC on unknown instructions
 // libtcc always runs on the current machine, so we can use the handler index directly
 #define UNKNOWN_INSTRUCTION() { \
@@ -191,10 +191,10 @@ struct Emitter
 
 	std::string from_reg(int reg) {
 		if (reg == 3 && tinfo.gp != 0)
-			return hex_address(tinfo.gp) + "L";
+			return hex_address(tinfo.gp) + "LL";
 		else if (reg != 0) {
 			if (auto tracked_value = get_tracked_register(reg); tinfo.is_libtcc && tracked_value) {
-				return "(" + hex_address(*tracked_value) + "L)";
+				return "(" + hex_address(*tracked_value) + "LL)";
 			}
 			else if (uses_register_caching() && reg < CACHED_REGISTERS) {
 				load_register(reg);
