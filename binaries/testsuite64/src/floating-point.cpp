@@ -74,3 +74,10 @@ float test_cosf(float val) {
 float test_tanf(float val) {
 	return std::tan(val);
 }
+
+float test_fmod(float a, float b) {
+	return std::fmod(a, b);
+}
+double test_dmod(double a, double b) {
+	return std::fmod(a, b);
+}

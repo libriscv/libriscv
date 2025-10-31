@@ -26,3 +26,6 @@ extern double test_dpow(double val, double);
 extern float test_sinf(float val);
 extern float test_cosf(float val);
 extern float test_tanf(float val);
+
+extern float test_fmod(float a, float b);
+extern double test_dmod(double a, double b);
