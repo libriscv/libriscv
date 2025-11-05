@@ -71,6 +71,27 @@ TEST_CASE("Trigger guard pages", "[Memory]")
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 }
 
+TEST_CASE("Test misaligned page attributes", "[Memory]")
+{
+	Machine<RISCV32> machine { empty };
+
+	machine.memory.memset(V, 0, VLEN);
+	machine.memory.set_page_attr(V + 4095, 2,
+		{.read = false, .write = false, .exec = false});
+	REQUIRE(machine.memory.get_page(V + 0).attr.read == false);
+	REQUIRE(machine.memory.get_page(V + 4095).attr.read == false);
+	REQUIRE(machine.memory.get_page(V + 4096).attr.read == false);
+	REQUIRE(machine.memory.get_page(V + 8191).attr.read == false);
+	REQUIRE(machine.memory.get_page(V + 8192).attr.read == true);
+	machine.memory.set_page_attr(V + 4095, 1,
+		{.read = true, .write = true, .exec = true});
+	REQUIRE(machine.memory.get_page(V + 0).attr.read == true);
+	REQUIRE(machine.memory.get_page(V + 4095).attr.read == true);
+	REQUIRE(machine.memory.get_page(V + 4096).attr.read == false);
+	REQUIRE(machine.memory.get_page(V + 8191).attr.read == false);
+	REQUIRE(machine.memory.get_page(V + 8192).attr.read == true);
+}
+
 TEST_CASE("Caches must be invalidated", "[Memory]")
 {
 	// Test not supported on flat read-write arena

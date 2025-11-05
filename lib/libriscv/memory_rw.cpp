@@ -300,7 +300,8 @@ namespace riscv
 		//printf("set_page_attr(0x%lX, %zu, prot=%X)\n", long(dst), len, attr.to_prot());
 		while (len > 0)
 		{
-			const size_t size = std::min(Page::size(), len);
+			const size_t offset = dst & (Page::size()-1); // offset within page
+			const size_t size = std::min(Page::size() - offset, len);
 			const address_t pageno = page_number(dst);
 			this->set_pageno_attr(pageno, attr);
 
