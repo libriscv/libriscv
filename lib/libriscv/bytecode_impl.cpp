@@ -836,6 +836,18 @@ INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
 		// Otherwise, leave the JALR instruction as is (NOTE: sets invalid handler)
 		DECODER().set_atomic_bytecode_and_handler(RV32I_BC_JALR, 0);
 	}	break;
+#ifdef RISCV_EXT_COMPRESSED
+	case 2: { // Live-patch C.JR -> STOP
+		// Check if RA == memory exit address
+		if (RISCV_SPECSAFE(REG(REG_RA) == MACHINE().memory.exit_address())) {
+			// Hot-swap the bytecode to a STOP
+			DECODER().set_bytecode(RV32I_BC_STOP);
+			EXECUTE_CURRENT();
+		}
+		// Otherwise, leave the JR instruction as is (NOTE: sets invalid handler)
+		DECODER().set_atomic_bytecode_and_handler(RV32C_BC_JR, 0);
+	}	break;
+#endif
 	default:
 		// Invalid handler
 		DECODER().set_bytecode(RV32I_BC_INVALID);

@@ -455,30 +455,46 @@ restart_precise_sim:
 			}
 			// Check if we're at the end of the function
 			auto bytecode = cache_entry->get_bytecode();
-			if (bytecode == RV32I_BC_JALR || bytecode == RV32I_BC_STOP) {
+			if (bytecode == RV32I_BC_JALR) {
 				const FasterItype instr { cache_entry->instr };
 
-				if (bytecode == RV32I_BC_JALR) {
-					// Check if it's a direct jump to REG_RA
-					if (instr.rs2 == REG_RA && instr.rs1 == 0 && instr.imm == 0) {
-						if (cache_entry->block_bytes() != 0)
-							throw MachineException(INVALID_PROGRAM,
-								"Function block ended but was not last instruction in block", block_pc);
-						// We found the (potential) end of the function
-						// Now rewrite it to a STOP instruction
-						cache_entry->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 1);
-						return true;
-					} else {
-						// Unconditional jump could be a tail call, in which
-						// case we can't confidently optimize this function
-						return false;
-					}
-				} else if (bytecode == RV32I_BC_STOP) {
-					// It's already a fast-path function
+				// Check if it's a direct jump to REG_RA
+				if (instr.rs2 == REG_RA && instr.rs1 == 0 && instr.imm == 0) {
+					if (cache_entry->block_bytes() != 0)
+						throw MachineException(INVALID_PROGRAM,
+							"Function block ended but was not last instruction in block", block_pc);
+					// We found the (potential) end of the function
+					// Now rewrite it to a speculative live-patch STOP instruction
+					cache_entry->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 1);
+					return true;
+				} else {
+					// Unconditional jump could be a tail call, in which
+					// case we can't confidently optimize this function
+					return false;
+				}
+			} else if (bytecode == RV32I_BC_STOP) {
+				// It's already a fast-path function
+				return true;
+			} else if (bytecode == RV32I_BC_LIVEPATCH) {
+				// It's already (potentially) a fast-path function
+				if (cache_entry->m_handler == 1 || cache_entry->m_handler == 2) {
 					return true;
 				}
-
-				// Which instructions end the function?
+#ifdef RISCV_EXT_COMPRESSED
+			} else if (bytecode == RV32C_BC_JR) {
+				const auto reg = cache_entry->instr;
+				if (reg == REG_RA) {
+					if (cache_entry->block_bytes() != 0)
+						throw MachineException(INVALID_PROGRAM,
+							"Function block ended but was not last instruction in block", block_pc);
+					// We found the (potential) end of the function
+					// Now rewrite it to a speculative live-patch STOP instruction
+					cache_entry->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 2);
+					return true;
+				} else {
+					return false;
+				}
+#endif
 			}
 
 			cache_entry++;
