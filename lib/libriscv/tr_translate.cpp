@@ -5,6 +5,7 @@
 # endif
 #endif
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <chrono>
 #include <fstream>
