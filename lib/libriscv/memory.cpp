@@ -507,11 +507,10 @@ namespace riscv
 	void Memory<W>::machine_loader(
 		const Machine<W>& master, const MachineOptions<W>& options)
 	{
-		// Some machines don't need custom PF handlers
-		this->m_page_fault_handler = master.memory.m_page_fault_handler;
-
 		if (options.minimal_fork == false)
 		{
+			this->m_page_fault_handler = master.memory.m_page_fault_handler;
+
 			// Hardly any pages are dont_fork, so we estimate that
 			// all master pages will be loaned.
 			m_pages.reserve(master.memory.pages().size());
