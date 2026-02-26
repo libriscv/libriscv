@@ -27,7 +27,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	[] (Machine<W>& machine)
 	{
 		const size_t len = machine.sysarg(0);
-		auto data = machine.arena().malloc(len);
+		const address_t data = machine.arena().malloc(len);
 		HPRINT("SYSCALL malloc(%zu) = 0x%lX\n", len, (long)data);
 		machine.set_result(data);
 		machine.penalize(COMPLEX_CALL_PENALTY);
@@ -39,7 +39,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 		const auto [count, size] =
 			machine.template sysargs<address_type<W>, address_type<W>> ();
 		const size_t len = count * size;
-		auto data = machine.arena().malloc(len);
+		const address_t data = machine.arena().malloc(len);
 		HPRINT("SYSCALL calloc(%zu, %zu) = 0x%lX\n",
 			(size_t)count, (size_t)size, (long)data);
 		if (data != 0) {
@@ -66,7 +66,7 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 			machine.memory.memcpy(data, machine, src, std::min(address_t(srclen), newlen));
 			machine.penalize(2 * srclen);
 		}
-		machine.set_result(data);
+		machine.set_result((address_t)data);
 		machine.penalize(COMPLEX_CALL_PENALTY);
 	});
 	// Free n+3

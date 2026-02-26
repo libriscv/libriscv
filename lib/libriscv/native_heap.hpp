@@ -28,7 +28,7 @@ struct ArenaChunk
 	bool   free = false;
 	PointerType data = 0;
 
-	ArenaChunk* find_used(PointerType ptr);
+	ArenaChunk* find_used(PointerType ptr) const;
 	ArenaChunk* find_free(size_t size);
 	void merge_next(Arena&);
 	void split_next(Arena&, size_t size);
@@ -71,7 +71,7 @@ struct Arena
 	/// @param src The pointer to the memory range.
 	/// @param allow_free Whether to allow querying the size of a free chunk.
 	/// @return The size of the memory range, or 0 if the pointer is invalid.
-	size_t      size(PointerType src, bool allow_free = false);
+	size_t      size(PointerType src, bool allow_free = false) const;
 
 	/// @brief Free a previous allocation.
 	/// @param src The pointer to the memory range.
@@ -93,6 +93,21 @@ struct Arena
 	size_t bytes_used() const;
 	size_t chunks_used() const noexcept { return m_chunks.size(); }
 
+	/// @brief Compute the highest address covered by any live (non-free) allocation.
+	/// Call once after master VM initialization and cache the result; each fork
+	/// uses the cached value to create a fresh arena starting at the watermark,
+	/// so no chunk-list copy is needed at fork time.
+	PointerType high_watermark() const {
+		PointerType hwm = m_base_chunk.data;
+		const ArenaChunk* ch = &m_base_chunk;
+		while (ch != nullptr) {
+			if (!ch->free)
+				hwm = std::max(hwm, ch->data + (PointerType)ch->size);
+			ch = ch->next;
+		}
+		return hwm;
+	}
+
 	void set_max_chunks(unsigned new_max) { this->m_max_chunks = new_max; }
 
 	unsigned allocation_counter() const noexcept { return m_allocation_counter; }
@@ -111,6 +126,9 @@ struct Arena
 	inline ArenaChunk& base_chunk() {
 		return m_base_chunk;
 	}
+	inline const ArenaChunk& base_chunk() const {
+		return m_base_chunk;
+	}
 	template <typename... Args>
 	ArenaChunk* new_chunk(Args&&... args);
 	void   free_chunk(ArenaChunk*);
@@ -126,7 +144,7 @@ struct Arena
 private:
 	void internal_free(ArenaChunk* ch);
 	void foreach(Function<void(const ArenaChunk&)>) const;
-	ArenaChunk* begin_find_used(PointerType ptr);
+	ArenaChunk* begin_find_used(PointerType ptr) const;
 
 	std::deque<ArenaChunk> m_chunks;
 	std::vector<ArenaChunk*> m_free_chunks;
@@ -145,7 +163,7 @@ private:
 	friend struct ArenaChunk;
 };
 
-inline ArenaChunk* Arena::begin_find_used(PointerType ptr)
+inline ArenaChunk* Arena::begin_find_used(PointerType ptr) const
 {
 #ifdef ENABLE_ARENA_CHUNK_MAP
 	auto it = m_used_chunk_map.find(ptr);
@@ -158,12 +176,12 @@ inline ArenaChunk* Arena::begin_find_used(PointerType ptr)
 }
 
 // find exact free chunk that matches ptr
-inline ArenaChunk* ArenaChunk::find_used(PointerType ptr)
+inline ArenaChunk* ArenaChunk::find_used(PointerType ptr) const
 {
-	ArenaChunk* ch = this;
+	const ArenaChunk* ch = this;
 	while (ch != nullptr) {
 		if (!ch->free && ch->data == ptr)
-			return ch;
+			return const_cast<ArenaChunk*>(ch);
 		ch = ch->next;
 	}
 	return nullptr;
@@ -401,7 +419,7 @@ inline Arena::ReallocResult
 	return {0x0, 0x0};
 }
 
-inline size_t Arena::size(PointerType ptr, bool allow_free)
+inline size_t Arena::size(PointerType ptr, bool allow_free) const
 {
 	ArenaChunk* ch = this->begin_find_used(ptr);
 	if (UNLIKELY(ch == nullptr || (ch->free && !allow_free)))
