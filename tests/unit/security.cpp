@@ -79,14 +79,14 @@ TEST_CASE("C2: Cross-page memory access correctness", "[Security]")
 	const auto binary = build_and_load(R"M(
 	#include <stdint.h>
 	#include <string.h>
+	#include <sys/mman.h>
 
 	// Place a buffer that we know will cross a page boundary.
 	// We'll write a known pattern at the page boundary and read it back.
 	int main() {
 		// Allocate memory that spans a page boundary
-		// sbrk to get heap, then find page boundary
-		extern void* sbrk(long);
-		char* base = (char*)sbrk(8192);
+		char* base = (char*)mmap(NULL, 8192, PROT_READ | PROT_WRITE,
+			MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 		if (base == (void*)-1)
 			return -1;
 
