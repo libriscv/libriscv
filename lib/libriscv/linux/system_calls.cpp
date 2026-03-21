@@ -643,8 +643,10 @@ static void syscall_ioctl(Machine<W>& machine)
 			return;
 		}
 
-		int res = ioctl(real_fd, req, arg1, arg2, arg3, arg4);
-		machine.set_result_or_error(res);
+		// Unknown ioctl request — deny rather than forwarding guest
+		// register values to host ioctl() where they may be interpreted
+		// as pointers.
+		machine.set_result(-ENOSYS);
 		return;
 	}
 	machine.set_result(-EBADF);
