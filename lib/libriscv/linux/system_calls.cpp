@@ -835,7 +835,7 @@ static void syscall_fstatat(Machine<W>& machine)
 template <int W>
 static void syscall_faccessat(Machine<W>& machine)
 {
-	const auto fd = AT_FDCWD;
+	const auto vfd    = machine.template sysarg<int>(0);
 	const auto g_path = machine.sysarg(1);
 	const auto mode   = machine.template sysarg<int>(2);
 	const auto flags  = machine.template sysarg<int>(3);
