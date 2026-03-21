@@ -843,10 +843,23 @@ static void syscall_faccessat(Machine<W>& machine)
 	const auto path = machine.memory.memstring(g_path);
 
 	SYSPRINT("SYSCALL faccessat, fd: %d path: %s)\n",
-			fd, path.c_str());
+			vfd, path.c_str());
 
-	const int res =
-		faccessat(fd, path.c_str(), mode, flags);
+	if (!machine.has_file_descriptors() || !machine.fds().permit_filesystem) {
+		machine.set_result(-ENOSYS);
+		return;
+	}
+
+	if (machine.fds().filter_open != nullptr) {
+		std::string mpath = path;
+		if (!machine.fds().filter_open(machine.template get_userdata<void>(), mpath)) {
+			machine.set_result(-EACCES);
+			return;
+		}
+	}
+
+	const int real_fd = (vfd == AT_FDCWD) ? AT_FDCWD : machine.fds().translate(vfd);
+	const int res = faccessat(real_fd, path.c_str(), mode, flags);
 	machine.set_result_or_error(res);
 }
 
