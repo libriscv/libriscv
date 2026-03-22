@@ -608,9 +608,6 @@ static void syscall_ioctl(Machine<W>& machine)
 	const int vfd = machine.template sysarg<int>(0);
 	const auto req = machine.template sysarg<uint64_t>(1);
 	const auto arg1 = machine.sysarg(2);
-	const auto arg2 = machine.sysarg(3);
-	const auto arg3 = machine.sysarg(4);
-	const auto arg4 = machine.sysarg(5);
 	SYSPRINT("SYSCALL ioctl, fd: %d  req: 0x%lX\n", vfd, req);
 
 	if (machine.has_file_descriptors()) {
@@ -1201,6 +1198,7 @@ void Machine<W>::setup_newlib_syscalls()
 	install_syscall_handler(93, syscall_exit<W>);
 	install_syscall_handler(169, syscall_gettimeofday<W>);
 	install_syscall_handler(214, syscall_brk<W>);
+	install_syscall_handler(403, syscall_clock_gettime64<W>);
 }
 template <int W>
 void Machine<W>::setup_newlib_syscalls(bool filesystem)
