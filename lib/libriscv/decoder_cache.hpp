@@ -10,6 +10,9 @@ template <int W>
 struct DecoderData {
 	using Handler = instruction_handler<W>;
 
+	static constexpr size_t DIVISOR = (compressed_enabled) ? 2 : 4;
+	static constexpr unsigned SHIFT = (compressed_enabled) ? 1 : 2;
+
 	uint8_t  m_bytecode;
 	uint8_t  m_handler;
 #ifdef RISCV_EXT_COMPRESSED
@@ -82,23 +85,6 @@ private:
 	static inline std::array<Handler, 256> instr_handlers;
 	static inline std::size_t handler_count = 0;
 	static inline std::unordered_map<Handler, size_t> handler_cache;
-};
-
-template <int W>
-struct DecoderCache
-{
-	static constexpr size_t DIVISOR = (compressed_enabled) ? 2 : 4;
-	static constexpr unsigned SHIFT = (compressed_enabled) ? 1 : 2;
-
-	inline auto& get(size_t idx) noexcept {
-		return cache[idx];
-	}
-
-	inline auto* get_base() noexcept {
-		return &cache[0];
-	}
-
-	std::array<DecoderData<W>, PageSize / DIVISOR> cache;
 };
 
 }

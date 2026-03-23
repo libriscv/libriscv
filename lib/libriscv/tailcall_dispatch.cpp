@@ -47,12 +47,12 @@
 	counter.increment_counter(d->instruction_count());
 #define NEXT_BLOCK(len, OF)              \
 	pc += len;                           \
-	d += len >> DecoderCache<W>::SHIFT;  \
+	d += len >> DecoderData<W>::SHIFT;  \
 	if constexpr (OF) {                  \
 		OVERFLOW_CHECK();                \
 	}									 \
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */          \
-	d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];  \
+	d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];  \
 	BEGIN_BLOCK()                        \
 	EXECUTE_CURRENT()
 
@@ -62,7 +62,7 @@
 
 #define UNCHECKED_JUMP()                                       \
 	QUICK_EXEC_CHECK()                                         \
-	d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];  \
+	d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];  \
 	BEGIN_BLOCK()                                              \
 	EXECUTE_CURRENT()
 #define OVERFLOW_CHECK()                            \
@@ -75,7 +75,7 @@
 			pc, pc + fi.signed_imm());  \
 	}                                   \
 	pc += fi.signed_imm();              \
-	d += fi.signed_imm() >> DecoderCache<W>::SHIFT; \
+	d += fi.signed_imm() >> DecoderData<W>::SHIFT; \
 	OVERFLOW_CHECK()                    \
 	BEGIN_BLOCK()                       \
 	EXECUTE_CURRENT()
@@ -154,7 +154,7 @@ namespace riscv
 		{
 			pc = cpu.registers().pc;
 			QUICK_EXEC_CHECK();
-			d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
+			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
 		}
 		NEXT_BLOCK(4, true);
 	}
@@ -196,7 +196,7 @@ namespace riscv
 		{
 			pc = cpu.registers().pc;
 			QUICK_EXEC_CHECK();
-			d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
+			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
 		}
 		// Overflow-check, next block
 		NEXT_BLOCK(4, true);
@@ -205,7 +205,7 @@ namespace riscv
 	INSTRUCTION(0, next_execute_segment) {
 		// A helper function to change execute segment
 		exec = resolve_execute_segment<W>(cpu, pc);
-		d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
+		d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
 		BEGIN_BLOCK();
 		EXECUTE_CURRENT();
 	}
@@ -213,7 +213,7 @@ namespace riscv
 	INSTRUCTION(RV32I_BC_INVALID, execute_invalid)
 	{
 		// Calculate the current PC (mid block)
-		pc = (d - exec->decoder_cache()) << DecoderCache<W>::SHIFT;
+		pc = (d - exec->decoder_cache()) << DecoderData<W>::SHIFT;
 		// Check if the instruction is still invalid
 		bool stale = false;
 		try {
@@ -224,7 +224,7 @@ namespace riscv
 		} catch (...) {}
 		if (stale) {
 			exec = resolve_execute_segment<W>(cpu, pc);
-			d = &exec->decoder_cache()[pc >> DecoderCache<W>::SHIFT];
+			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
 			NEXT_BLOCK(0, true);
 		}
 		cpu.registers().pc = pc;
@@ -386,7 +386,7 @@ namespace riscv
 		}
 
 		DecoderData<W>* exec_decoder = exec->decoder_cache();
-		auto* d = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		auto* d = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		auto& cpu = *this;
 
 		BEGIN_BLOCK();
@@ -419,7 +419,7 @@ namespace riscv
 		}
 
 		DecoderData<W>* exec_decoder = exec->decoder_cache();
-		auto* d = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		auto* d = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		auto& cpu = *this;
 
 		BEGIN_BLOCK();

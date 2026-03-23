@@ -18,7 +18,7 @@ namespace riscv {
 template <int W>
 void CPU<W>::simulate_inaccurate(address_t pc) {
 	if constexpr (W == 8) {
-		static_assert(DecoderCache<W>::SHIFT == 2,
+		static_assert(DecoderData<W>::SHIFT == 2,
 			"DecoderCache SHIFT must be 1 for assembly-based dispatch");
 		machine().set_instruction_counter(0);
 		machine().set_max_instructions(UINT64_MAX);
@@ -43,7 +43,7 @@ void CPU<W>::simulate_inaccurate(address_t pc) {
 			exec_decoder = exec->decoder_cache();
 		}
 
-		DecoderData<W> *decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		DecoderData<W> *decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		pc += decoder->block_bytes();
 
 		riscv64gb_inaccurate_dispatch(this, exec, decoder, pc, current_begin, current_end);

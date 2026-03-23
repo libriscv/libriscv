@@ -47,18 +47,18 @@ namespace riscv
 
 #define NEXT_BLOCK(len, OF)                                    \
 	pc += len;                                                 \
-	decoder += len >> DecoderCache<W>::SHIFT;                  \
+	decoder += len >> DecoderData<W>::SHIFT;                  \
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */          \
-		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT]; \
+		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT]; \
 	pc += decoder->block_bytes();                              \
 	EXECUTE_INSTR();
 
 #define SAFE_INSTR_NEXT(len)                  \
 	pc += len;                                \
-	decoder += len >> DecoderCache<W>::SHIFT;
+	decoder += len >> DecoderData<W>::SHIFT;
 
 #define NEXT_SEGMENT()                                       \
-	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];   \
+	decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];   \
 	pc += decoder->block_bytes();                            \
 	EXECUTE_INSTR();
 
@@ -99,13 +99,13 @@ namespace riscv
 
 #ifdef RISCV_BINARY_TRANSLATION
 		// There's a very high chance that the (first) instruction is a translated function
-		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
 			goto retry_translated_function;
 #endif
 
 	continue_segment:
-		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 
 		pc += decoder->block_bytes();
 
@@ -171,7 +171,7 @@ retry_translated_function:
 	pc = REGISTERS().pc;
 	if (LIKELY(bintr_results.max_counter != 0 && (pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())))
 	{
-		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			goto retry_translated_function;
 		}
@@ -238,7 +238,7 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 
 	execute_invalid:
 		// Calculate the current PC from the decoder pointer
-		pc = (decoder - exec_decoder) << DecoderCache<W>::SHIFT;
+		pc = (decoder - exec_decoder) << DecoderData<W>::SHIFT;
 		// Check if the instruction is still invalid
 		try {
 			if (decoder->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
