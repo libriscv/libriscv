@@ -81,7 +81,7 @@ static void fuzz_elf_loader(const uint8_t* data, size_t len)
 		}
 		machine.simulate(MAX_CYCLES);
 	} catch (const std::exception& e) {
-		//printf(">>> Exception: %s\n", e.what());
+		//printf(">>> Exception: %s  Length: %zu\n", e.what(), len);
 	}
 }
 
@@ -179,7 +179,7 @@ static void fuzz_syscall_helpers(const uint8_t* data, size_t len)
 						abort();
 				} catch (...) {}
 				try {
-					const auto buffer = m.memory.rvbuffer(a0, a1);
+					const auto buffer = m.memory.membuffer(a0, a1);
 				} catch (...) {}
 				try {
 					m.memory.strlen(a0);
