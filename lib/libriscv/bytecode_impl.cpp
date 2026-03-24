@@ -811,12 +811,12 @@ INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
 		pc = pc - DECODER().block_bytes();
 #  ifdef DISPATCH_MODE_TAILCALL
 		// 2. Find the correct decoder pointer in the patched decoder cache
-		auto* patched = &exec->patched_decoder_cache()[pc / DecoderCache<W>::DIVISOR];
+		auto* patched = &exec->patched_decoder_cache()[pc / DecoderData<W>::DIVISOR];
 		d = patched;
 #  else
 		// 2. Find the correct decoder pointer in the patched decoder cache
 		exec_decoder = exec->patched_decoder_cache();
-		decoder = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+		decoder = &exec_decoder[pc / DecoderData<W>::DIVISOR];
 #  endif
 		// 3. Execute the instruction
 		EXECUTE_CURRENT();

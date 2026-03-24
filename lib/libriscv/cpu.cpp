@@ -26,7 +26,7 @@ namespace riscv
 	// current CPU execute segment is never null.
 	template <int W>
 	std::shared_ptr<DecodedExecuteSegment<W>>& CPU<W>::empty_execute_segment() noexcept {
-		static std::shared_ptr<DecodedExecuteSegment<W>> empty_shared = std::make_shared<DecodedExecuteSegment<W>>(0, 0, 0, 0);
+		static std::shared_ptr<DecodedExecuteSegment<W>> empty_shared = std::make_shared<DecodedExecuteSegment<W>>(0, 0);
 		return empty_shared;
 	}
 
@@ -55,9 +55,8 @@ namespace riscv
 		// We can't jump if there's been no ELF loader
 		if (!current_execute_segment().empty()) {
 			const auto initial_pc = machine().memory.start_address();
-			// Check if the initial PC is executable, unless
-			// the execute segment is marked as execute-only.
-			if (!current_execute_segment().is_execute_only())
+			// Check if the initial PC is executable
+			if (!current_execute_segment().is_within(initial_pc))
 			{
 				const auto& page =
 					machine().memory.get_exec_pageno(initial_pc / riscv::Page::size());
@@ -352,9 +351,9 @@ restart_precise_sim:
 		}
 
 		auto* exec_decoder = exec.decoder_cache();
-		auto* decoder_begin = &exec_decoder[exec.exec_begin() / DecoderCache<W>::DIVISOR];
+		auto* decoder_begin = &exec_decoder[exec.exec_begin() / DecoderData<W>::DIVISOR];
 
-		auto& cache_entry = exec_decoder[addr / DecoderCache<W>::DIVISOR];
+		auto& cache_entry = exec_decoder[addr / DecoderData<W>::DIVISOR];
 
 		// The last instruction will be the current entry
 		// Later instructions will work as normal
@@ -378,7 +377,7 @@ restart_precise_sim:
 		auto patched_addr = block_begin_addr;
 		for (auto* dd = current; dd < last; dd++) {
 			// Get the patched decoder entry
-			auto& p = exec_decoder[patched_addr / DecoderCache<W>::DIVISOR];
+			auto& p = exec_decoder[patched_addr / DecoderData<W>::DIVISOR];
 			p.idxend = last - dd;
 		#ifdef RISCV_EXT_C
 			p.icount = 0; // TODO: Implement C-ext icount for breakpoints
@@ -439,14 +438,14 @@ restart_precise_sim:
 
 		auto* exec_decoder = exec.decoder_cache();
 		// The beginning of the function:
-		auto* cache_entry = &exec_decoder[block_pc / DecoderCache<W>::DIVISOR];
+		auto* cache_entry = &exec_decoder[block_pc / DecoderData<W>::DIVISOR];
 
 		const address_t current_end = exec.exec_end();
 		while (block_pc < current_end)
 		{
 			// Move to the end of the block
 			block_pc += cache_entry->block_bytes();
-			cache_entry += cache_entry->block_bytes() / DecoderCache<W>::DIVISOR;
+			cache_entry += cache_entry->block_bytes() / DecoderData<W>::DIVISOR;
 			// Check if we're still within the execute segment
 			if (UNLIKELY(block_pc >= current_end)) {
 				// TODO: Return false instead?

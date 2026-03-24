@@ -191,7 +191,7 @@ namespace riscv
 			while (pc < last_pc) {
 				size_t block_array_count = 0;
 				const address_type<W> block_pc = pc;
-				DecoderData<W>* entry = &exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				DecoderData<W>* entry = &exec_decoder[pc / DecoderData<W>::DIVISOR];
 				const AlignedLoad16* iptr  = (AlignedLoad16*)&exec_segment[pc];
 				const AlignedLoad16* iptr_begin = iptr;
 				while (true) {
@@ -282,7 +282,7 @@ namespace riscv
 			{
 				const rv32i_instruction instruction = read_instruction(
 					exec_segment, pc, last_pc);
-				DecoderData<W>& entry = exec_decoder[pc / DecoderCache<W>::DIVISOR];
+				DecoderData<W>& entry = exec_decoder[pc / DecoderData<W>::DIVISOR];
 				const unsigned opcode = instruction.opcode();
 
 				// All opcodes that can modify PC and stop the machine
@@ -334,34 +334,27 @@ namespace riscv
 		if (exec.exec_end() < exec.exec_begin())
 			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
 
-		const auto pbase = exec.pagedata_base();
 		const auto addr  = exec.exec_begin();
 		const auto len   = exec.exec_end() - exec.exec_begin();
-		constexpr size_t PMASK = Page::size()-1;
 		// We need to allocate room for at least one more decoder cache entry.
 		// This is because jump and branch instructions don't check PC after
 		// not branching. The last entry is an invalid instruction.
-		const size_t prelen  = addr - pbase;
-		const size_t midlen  = len + prelen + 4; // Extra entry
-		const size_t plen = (midlen + PMASK) & ~PMASK;
-		//printf("generate_decoder_cache: Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu TOTAL %zu\n",
-		//	addr, len, pbase, pbase + plen, prelen, midlen, plen);
+		const size_t plen  = len + sizeof(DecoderData<W>); // Extra entry
 
-		const size_t n_pages = plen / Page::size();
-		if (n_pages == 0) {
+		const size_t n_entries = plen / DecoderData<W>::DIVISOR;
+		if (n_entries == 0) {
 			throw MachineException(INVALID_PROGRAM,
 				"Program produced empty decoder cache");
 		}
-		// Here we allocate the decoder cache which is page-sized
+		// Allocate the flat decoder cache
 		auto* decoder_cache = exec.create_decoder_cache(
-			new DecoderCache<W> [n_pages], n_pages);
+			new DecoderData<W>[n_entries], n_entries);
 		// Clear the decoder cache! (technically only needed when binary translation is enabled)
-		std::memset(decoder_cache, 0, n_pages * sizeof(DecoderCache<W>));
+		std::memset(decoder_cache, 0, n_entries * sizeof(DecoderData<W>));
 		// Get a base address relative pointer to the decoder cache
-		// Eg. exec_decoder[pbase] is the first entry in the decoder cache
+		// Eg. exec_decoder[addr >> SHIFT] is the first valid entry
 		// so that PC with a simple shift can be used as a direct index.
-		auto* exec_decoder = 
-			decoder_cache[0].get_base() - pbase / DecoderCache<W>::DIVISOR;
+		auto* exec_decoder = decoder_cache - addr / DecoderData<W>::DIVISOR;
 		exec.set_decoder(exec_decoder);
 
 		DecoderData<W> invalid_op;
@@ -405,7 +398,7 @@ namespace riscv
 		const address_t end_addr = addr + len;
 		for (; dst < addr + len;)
 		{
-			auto& entry = exec_decoder[dst / DecoderCache<W>::DIVISOR];
+			auto& entry = exec_decoder[dst / DecoderData<W>::DIVISOR];
 			entry.m_handler = 0;
 			entry.idxend = 0;
 
@@ -472,7 +465,7 @@ namespace riscv
 		}
 		// Make sure the last entry is an invalid instruction
 		// This simplifies many other sub-systems
-		auto& entry = exec_decoder[(addr + len) / DecoderCache<W>::DIVISOR];
+		auto& entry = exec_decoder[(addr + len) / DecoderData<W>::DIVISOR];
 		entry.set_bytecode(0);
 		entry.m_handler = 0;
 		entry.idxend = 0;
@@ -544,38 +537,22 @@ namespace riscv
 		if (UNLIKELY(exlen % (compressed_enabled ? 2 : 4)))
 			throw MachineException(INVALID_PROGRAM, "Misaligned execute segment length");
 
-		constexpr address_t PMASK = Page::size()-1;
-		const address_t pbase = vaddr & ~PMASK;
-		const size_t prelen  = vaddr - pbase;
-		// Make 4 bytes of extra room to avoid having to validate 4-byte reads
-		// when reading at 2 bytes before the end of the execute segment.
-		const size_t midlen  = exlen + prelen + 2; // Extra room for reads
-		const size_t plen = (midlen + PMASK) & ~PMASK;
-		// Because postlen uses midlen, we end up zeroing the extra 4 bytes in the end
-		const size_t postlen = plen - midlen;
-		//printf("Addr 0x%X Len %zx becomes 0x%X->0x%X PRE %zx MIDDLE %zu POST %zu TOTAL %zu\n",
-		//	vaddr, exlen, pbase, pbase + plen, prelen, exlen, postlen, plen);
-		if (UNLIKELY(prelen > plen || prelen + exlen > plen)) {
-			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
-		}
 #ifdef _MSC_VER
-		if (UNLIKELY(pbase + plen < pbase))
-			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
+		if (UNLIKELY(vaddr + exlen < vaddr))
+			throw MachineException(INVALID_PROGRAM, "Segment virtual overflowed");
 #else
 		[[maybe_unused]] address_t pbase2;
-		if (UNLIKELY(__builtin_add_overflow(pbase, plen, &pbase2)))
-			throw MachineException(INVALID_PROGRAM, "Segment virtual base was bogus");
+		if (UNLIKELY(__builtin_add_overflow(vaddr, exlen, &pbase2)))
+			throw MachineException(INVALID_PROGRAM, "Segment virtual overflowed");
 #endif
 		// Create the whole executable memory range
-		auto current_exec = std::make_shared<DecodedExecuteSegment<W>>(pbase, plen, vaddr, exlen);
+		auto current_exec = std::make_shared<DecodedExecuteSegment<W>>(vaddr, exlen);
 
-		auto* exec_data = current_exec->exec_data(pbase);
-		// This is a zeroed prologue in order to be able to use whole pages
-		std::memset(&exec_data[0],      0,     prelen);
-		// This is the actual instruction bytes
-		std::memcpy(&exec_data[prelen], vdata, exlen);
-		// This memset() operation will end up zeroing the extra 4 bytes
-		std::memset(&exec_data[prelen + exlen], 0,   postlen);
+		auto* exec_data = current_exec->exec_data(vaddr);
+		std::memset(exec_data - sizeof(rv32i_instruction), 0, sizeof(rv32i_instruction));
+		// Copy the actual instruction bytes; padding on each side is already zero-initialized
+		std::memcpy(exec_data, vdata, exlen);
+		std::memset(exec_data + exlen, 0, sizeof(rv32i_instruction));
 
 		// Create CRC32-C hash of the execute segment
 		const uint32_t hash = crc32c(exec_data, current_exec->exec_end() - current_exec->exec_begin());

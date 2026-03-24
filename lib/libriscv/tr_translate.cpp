@@ -157,7 +157,7 @@ inline uint32_t opcode(const TransInstr<W>& ti) {
 
 template <int W>
 inline DecoderData<W>& decoder_entry_at(DecoderData<W>* cache, address_type<W> addr) {
-	return cache[addr / DecoderCache<W>::DIVISOR];
+	return cache[addr / DecoderData<W>::DIVISOR];
 }
 
 template <int W>
@@ -1040,20 +1040,20 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	exec.set_binary_translated(dylib, is_libtcc);
 
 	// Helper to rebuild decoder blocks
-	std::unique_ptr<DecoderCache<W>[]> patched_decoder_cache = nullptr;
+	std::unique_ptr<DecoderData<W>[]> patched_decoder_cache = nullptr;
 	DecoderData<W>* patched_decoder = nullptr;
 	DecoderData<W>* decoder_begin   = nullptr;
 	std::vector<DecoderData<W>*> livepatch_bintr;
 	if (live_patch) {
 #ifdef __cpp_lib_smart_ptr_for_overwrite // C++20 feature
-		patched_decoder_cache = std::make_unique_for_overwrite<DecoderCache<W>[]>(exec.decoder_cache_size());
+		patched_decoder_cache = std::make_unique_for_overwrite<DecoderData<W>[]>(exec.decoder_cache_size());
 #else
-		patched_decoder_cache = std::make_unique<DecoderCache<W>[]>(exec.decoder_cache_size());
+		patched_decoder_cache = std::make_unique<DecoderData<W>[]>(exec.decoder_cache_size());
 #endif
 		// Copy the decoder cache to the patched decoder cache
-		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderCache<W>));
-		// A horrible calculation to find the patched decoder
-		patched_decoder = patched_decoder_cache[0].get_base() - exec.pagedata_base() / DecoderCache<W>::DIVISOR;
+		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderData<W>));
+		// Base-address-relative pointer into the patched decoder cache
+		patched_decoder = patched_decoder_cache.get() - exec.exec_begin() / DecoderData<W>::DIVISOR;
 		decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
 		// Pre-allocate the livepatch_bintr vector
 		livepatch_bintr.reserve(*no_mappings);

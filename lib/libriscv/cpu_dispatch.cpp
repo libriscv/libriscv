@@ -36,9 +36,9 @@ namespace riscv
 
 #define NEXT_BLOCK(len, OF)                 \
 	pc += len;                              \
-	decoder += len >> DecoderCache<W>::SHIFT;              \
+	decoder += len >> DecoderData<W>::SHIFT;              \
 	if constexpr (FUZZING) /* Give OOB-aid to ASAN */      \
-	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT]; \
+	decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT]; \
 	if constexpr (OF) {						\
 		if (UNLIKELY(counter.overflowed())) \
 			goto check_jump;				\
@@ -49,11 +49,11 @@ namespace riscv
 
 #define SAFE_INSTR_NEXT(len)                  \
 	pc += len;                                \
-	decoder += len >> DecoderCache<W>::SHIFT; \
+	decoder += len >> DecoderData<W>::SHIFT; \
 	counter.increment_counter(1);
 
 #define NEXT_SEGMENT()                                       \
-	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];  \
+	decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];  \
 	pc += decoder->block_bytes();                            \
 	counter.increment_counter(decoder->instruction_count()); \
 	EXECUTE_INSTR();
@@ -100,13 +100,13 @@ bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 
 #  ifdef RISCV_BINARY_TRANSLATION
 	// There's a very high chance that the (first) instruction is a translated function
-	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+	decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 	if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
 		goto begin_translated_function;
 #  endif
 
 continue_segment:
-	decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+	decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 
 	pc += decoder->block_bytes();
 	counter.increment_counter(decoder->instruction_count());
@@ -167,7 +167,7 @@ retry_translated_function:
 	cnt = bintr_results.counter;
 	max = bintr_results.max_counter;
 	if (LIKELY(cnt < max && (pc - current_begin < current_end - current_begin))) {
-		decoder = &exec_decoder[pc >> DecoderCache<W>::SHIFT];
+		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			goto retry_translated_function;
 		}
@@ -251,7 +251,7 @@ new_execute_segment: {
 
 execute_invalid:
 	// Calculate the current PC from the decoder pointer
-	pc = (decoder - exec_decoder) << DecoderCache<W>::SHIFT;
+	pc = (decoder - exec_decoder) << DecoderData<W>::SHIFT;
 	// Check if the instruction is still invalid
 	try {
 		if (decoder->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
