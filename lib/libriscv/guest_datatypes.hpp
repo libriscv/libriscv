@@ -377,6 +377,18 @@ struct GuestStdVector {
 		this->ptr_end = this->ptr_begin + count * sizeof(T);
 	}
 
+	/// @brief Replace the contents of the vector with the given array,
+	/// by assuming ownership of the array memory (which must have been
+	/// allocated with guest_alloc and *must* be properly initialized
+	/// with the given values).
+	void assume_ownership(machine_t& machine, gaddr_t array, std::size_t count)
+	{
+		this->free(machine);
+		this->ptr_begin = array;
+		this->ptr_end = array + count * sizeof(T);
+		this->ptr_capacity = this->ptr_end;
+	}
+
 	void resize(machine_t& machine, std::size_t new_size)
 	{
 		if (new_size < size()) {
