@@ -529,27 +529,56 @@ namespace riscv
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		const auto rmm = fi.R4type.funct3; // RMM is encoded in funct3 field
 		auto& dst = cpu.reg(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // from float32
-			if (fi.R4type.rs2 == 0x0)
+			if (fi.R4type.rs2 == 0x0 && rmm == 0x1) // FCVT.W.S with RMM=RTZ
+				dst = int32_t(std::trunc(rs1.f32[0]));
+			else if (fi.R4type.rs2 == 0x0 && rmm == 0x2) // FCVT.W.S with RMM=RDN
+				dst = int32_t(std::floor(rs1.f32[0]));
+			else if (fi.R4type.rs2 == 0x0) // FCVT.W.S with RMM=...
 				dst = (int32_t) rs1.f32[0];
-			else
+			else if (fi.R4type.rs2 == 0x1 && rmm == 0x1) // FCVT.WU.S with RMM=RTZ
+				dst = uint32_t(std::trunc(rs1.f32[0]));
+			else if (fi.R4type.rs2 == 0x1 && rmm == 0x2) // FCVT.WU.S with RMM=RDN
+				dst = uint32_t(std::floor(rs1.f32[0]));
+			else if (fi.R4type.rs2 == 0x1) // FCVT.WU.S with RMM=...
 				dst = (uint32_t) rs1.f32[0];
 			return;
 		case 0x1: // from float64
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.W.D
-				dst = (int32_t) rs1.f64;
+				if (rmm == 0x1) // RMM=RTZ
+					dst = int32_t(std::trunc(rs1.f64));
+				else if (rmm == 0x2) // RMM=RDN
+					dst = int32_t(std::floor(rs1.f64));
+				else // RMM=...
+					dst = (int32_t) rs1.f64;
 				return;
 			case 0x1: // FCVT.WU.D
-				dst = (uint32_t) rs1.f64;
+				if (rmm == 0x1) // RMM=RTZ
+					dst = uint32_t(std::trunc(rs1.f64));
+				else if (rmm == 0x2) // RMM=RDN
+					dst = uint32_t(std::floor(rs1.f64));
+				else // RMM=...
+					dst = (uint32_t) rs1.f64;
 				return;
 			case 0x2: // FCVT.L.D
-				dst = (int64_t) rs1.f64;
+				if (rmm == 0x1) // RMM=RTZ
+					dst = int64_t(std::trunc(rs1.f64));
+				else if (rmm == 0x2) // RMM=RDN
+					dst = int64_t(std::floor(rs1.f64));
+				else // RMM=...
+					dst = (int64_t) rs1.f64;
 				return;
 			case 0x3: // FCVT.LU.D
-				dst = (uint64_t) rs1.f64;
+				if (rmm == 0x1) // RMM=RTZ
+					dst = uint64_t(std::trunc(rs1.f64));
+				else if (rmm == 0x2) // RMM=RDN
+					dst = uint64_t(std::floor(rs1.f64));
+				else // RMM=...
+					dst = (uint64_t) rs1.f64;
 				return;
 			}
 		}

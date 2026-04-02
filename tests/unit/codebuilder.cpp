@@ -73,11 +73,11 @@ std::vector<uint8_t> build_and_load(
 	if (cpp == false) {
 		auto cc = env_with_default("RCC", DEFAULT_C_COMPILER);
 		command = c_compile_command(cc,
-			args + " " + std::string(code_filename), bin_filename);
+			args + " " + std::string(code_filename) + " -lm", bin_filename);
 	} else {
 		auto cxx = env_with_default("RCXX", DEFAULT_CXX_COMPILER);
 		command = cpp_compile_command(cxx,
-			args + " " + std::string(code_filename), bin_filename);
+			args + " " + std::string(code_filename) + " -lm", bin_filename);
 	}
 	if constexpr (VERBOSE_COMPILER) {
 		printf("Command: %s\n", command.c_str());

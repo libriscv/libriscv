@@ -1961,26 +1961,68 @@ void Emitter<W>::emit()
 				}
 				} break;
 			case RV32F__FCVT_W_SD: {
+				const auto rmm = fi.R4type.funct3; // rounding mode in funct3
 				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
-					const std::string sign = fi.R4type.rs2 == 0x0 ? "(int32_t)" : "(uint32_t)";
-					code += to_reg(fi.R4type.rd) + " = " + sign + rs1 + ".f32[0];\n";
+					// from float32
+					const std::string src = rs1 + ".f32[0]";
+					std::string expr;
+					if (fi.R4type.rs2 == 0x0) { // FCVT.W.S (signed)
+						if (rmm == 0x1) // RTZ
+							expr = "(int32_t)truncf(" + src + ")";
+						else if (rmm == 0x2) // RDN
+							expr = "(int32_t)floorf(" + src + ")";
+						else
+							expr = "(int32_t)" + src;
+					} else { // FCVT.WU.S (unsigned)
+						if (rmm == 0x1) // RTZ
+							expr = "(uint32_t)truncf(" + src + ")";
+						else if (rmm == 0x2) // RDN
+							expr = "(uint32_t)floorf(" + src + ")";
+						else
+							expr = "(uint32_t)" + src;
+					}
+					code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
 				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
+					// from float64
+					const std::string src = rs1 + ".f64";
+					std::string expr;
 					switch (fi.R4type.rs2) {
-					case 0: // FCVT.W.D
-						code += to_reg(fi.R4type.rd) + " = (int32_t)" + rs1 + ".f64;\n";
+					case 0: // FCVT.W.D (int32)
+						if (rmm == 0x1)
+							expr = "(int32_t)trunc(" + src + ")";
+						else if (rmm == 0x2)
+							expr = "(int32_t)floor(" + src + ")";
+						else
+							expr = "(int32_t)" + src;
 						break;
-					case 1: // FCVT.W.U
-						code += to_reg(fi.R4type.rd) + " = (uint32_t)" + rs1 + ".f64;\n";
+					case 1: // FCVT.WU.D (uint32)
+						if (rmm == 0x1)
+							expr = "(uint32_t)trunc(" + src + ")";
+						else if (rmm == 0x2)
+							expr = "(uint32_t)floor(" + src + ")";
+						else
+							expr = "(uint32_t)" + src;
 						break;
-					case 2: // FCVT.W.L
-						code += to_reg(fi.R4type.rd) + " = (int64_t)" + rs1 + ".f64;\n";
+					case 2: // FCVT.L.D (int64)
+						if (rmm == 0x1)
+							expr = "(int64_t)trunc(" + src + ")";
+						else if (rmm == 0x2)
+							expr = "(int64_t)floor(" + src + ")";
+						else
+							expr = "(int64_t)" + src;
 						break;
-					case 3: // FCVT.W.LU
-						code += to_reg(fi.R4type.rd) + " = (uint64_t)" + rs1 + ".f64;\n";
+					case 3: // FCVT.LU.D (uint64)
+						if (rmm == 0x1)
+							expr = "(uint64_t)trunc(" + src + ")";
+						else if (rmm == 0x2)
+							expr = "(uint64_t)floor(" + src + ")";
+						else
+							expr = "(uint64_t)" + src;
 						break;
 					default:
 						UNKNOWN_INSTRUCTION();
 					}
+					code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}
