@@ -1800,17 +1800,28 @@ void Emitter<W>::emit()
 		case RV32F_FMSUB:
 		case RV32F_FNMADD:
 		case RV32F_FNMSUB: {
+			// RISC-V spec §11.6: FMA must round only once. Route through
+			// api.fmaf{32,64} (std::fma) so the generated C is correctly
+			// fused — TCC would otherwise compile `a*b+c` as two roundings.
+			//   FMADD  =  rs1*rs2 + rs3 →  fma(rs1, rs2,  rs3)
+			//   FMSUB  =  rs1*rs2 - rs3 →  fma(rs1, rs2, -rs3)
+			//   FNMADD = -rs1*rs2 - rs3 → -fma(rs1, rs2,  rs3)
+			//   FNMSUB = -rs1*rs2 + rs3 → -fma(rs1, rs2, -rs3)
 			const rv32f_instruction fi{instr};
 			const auto dst = from_fpreg(fi.R4type.rd);
 			const auto rs1 = from_fpreg(fi.R4type.rs1);
 			const auto rs2 = from_fpreg(fi.R4type.rs2);
 			const auto rs3 = from_fpreg(fi.R4type.rs3);
-			const std::string sign = (instr.opcode() == RV32F_FNMADD || instr.opcode() == RV32F_FNMSUB) ? "-" : "";
-			const std::string add = (instr.opcode() == RV32F_FMSUB || instr.opcode() == RV32F_FNMSUB) ? " - " : " + ";
+			const bool negateResult = (instr.opcode() == RV32F_FNMADD || instr.opcode() == RV32F_FNMSUB);
+			const bool subtractC    = (instr.opcode() == RV32F_FMSUB  || instr.opcode() == RV32F_FNMSUB);
+			const std::string resultSign = negateResult ? "-" : "";
+			const std::string cSign      = subtractC    ? "-" : "";
 			if (fi.R4type.funct2 == 0x0) { // float32
-				code += "set_fl(&" + dst + ", " + sign + "(" + rs1 + ".f32[0] * " + rs2 + ".f32[0]" + add + rs3 + ".f32[0]));\n";
+				code += "set_fl(&" + dst + ", " + resultSign + "api.fmaf32("
+				      + rs1 + ".f32[0], " + rs2 + ".f32[0], " + cSign + rs3 + ".f32[0]));\n";
 			} else if (fi.R4type.funct2 == 0x1) { // float64
-				code += "set_dbl(&" + dst + ", " + sign + "(" + rs1 + ".f64 * " + rs2 + ".f64" + add + rs3 + ".f64));\n";
+				code += "set_dbl(&" + dst + ", " + resultSign + "api.fmaf64("
+				      + rs1 + ".f64, " + rs2 + ".f64, " + cSign + rs3 + ".f64));\n";
 			} else {
 				UNKNOWN_INSTRUCTION();
 			}
@@ -1852,18 +1863,23 @@ void Emitter<W>::emit()
 				this->reset_tracked_register(fi.R4type.rd);
 				break;
 			case RV32F__FMIN_MAX:
+				// Route through api.{fmin,fmax}{32,64}_rv so the emitted
+				// C honors RISC-V's -0.0 < +0.0 convention for FMIN/FMAX
+				// (std::fmin/fmax leave the ±0 case implementation-
+				// defined; the host's fminf/fmaxf would otherwise return
+				// a sign that disagrees with the spec).
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FMIN.S
-					code += "set_fl(&" + dst + ", fminf(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "set_fl(&" + dst + ", api.fmin32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x1: // FMAX.S
-					code += "set_fl(&" + dst + ", fmaxf(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "set_fl(&" + dst + ", api.fmax32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x10: // FMIN.D
-					code += "set_dbl(&" + dst + ", fmin(" + rs1 + ".f64, " + rs2 + ".f64));\n";
+					code += "set_dbl(&" + dst + ", api.fmin64_rv(" + rs1 + ".f64, " + rs2 + ".f64));\n";
 					break;
 				case 0x11: // FMAX.D
-					code += "set_dbl(&" + dst + ", fmax(" + rs1 + ".f64, " + rs2 + ".f64));\n";
+					code += "set_dbl(&" + dst + ", api.fmax64_rv(" + rs1 + ".f64, " + rs2 + ".f64));\n";
 					break;
 				default:
 					UNKNOWN_INSTRUCTION();
