@@ -17,6 +17,7 @@ This document explains libriscv from fundamentals to production integration. lib
 11. [Production Integration Example](#production-integration-example)
 12. [Minimal Script Wrapper (End-to-End)](#minimal-script-wrapper-end-to-end)
 13. [Verifying VMCall Latency](#verifying-vmcall-latency)
+14. [RPC Between Same-Program Instances](#rpc-between-same-program-instances)
 
 ---
 
@@ -398,9 +399,9 @@ Once the heap is taken over, the host can allocate and free guest memory:
 gaddr_t ptr = machine.arena().malloc(1024);     // Allocate 1024 bytes
 machine.arena().free(ptr);                       // Free it
 
-// Scoped allocation (RAII)
-auto alloc = ScopedScriptAlloc(script, 4096);   // Freed on scope exit
-gaddr_t addr = alloc.address();
+// Scoped allocation (RAII) — wraps a typed object on the guest heap
+riscv::ScopedArenaObject<8, MyStruct> obj(machine, /* constructor args */);
+gaddr_t addr = obj.address();  // Freed on scope exit
 ```
 
 ### Guest Ownership of Host-Allocated Memory
@@ -455,9 +456,10 @@ With heap takeover, the host can construct and pass C++ standard library types t
 ### Type Aliases (typical project setup)
 
 ```cpp
-using CppString = riscv::GuestStdString<8>;        // Mirrors libstdc++ std::string
-using CppVector = riscv::GuestStdVector<8, T>;     // Mirrors std::vector<T>
-using CppStringVector = CppVector<CppString>;      // std::vector<std::string>
+using CppString = riscv::GuestStdString<8>;                  // Mirrors libstdc++ std::string
+template <typename T>
+using CppVector = riscv::GuestStdVector<8, T>;               // Mirrors std::vector<T>
+using CppStringVector = CppVector<CppString>;                // std::vector<std::string>
 ```
 
 ### GuestStdString
@@ -822,20 +824,20 @@ set(PYPROGRAM "${CMAKE_SOURCE_DIR}/generate.py")
 set(GEN_DIR   "${CMAKE_BINARY_DIR}/dyncalls")
 set(GEN_FILES "${GEN_DIR}/host_functions")
 
-# Generate .h and .cpp from JSON
+# Generate .h and .c from JSON
 file(MAKE_DIRECTORY ${GEN_DIR})
 add_custom_command(
-    OUTPUT ${GEN_FILES}.h ${GEN_FILES}.cpp
-    COMMAND python3 ${PYPROGRAM} --verbose --cpp -j ${JSON_FILE} -o ${GEN_FILES}
+    OUTPUT ${GEN_FILES}.h ${GEN_FILES}.c
+    COMMAND python3 ${PYPROGRAM} --verbose -j ${JSON_FILE} -o ${GEN_FILES}
     DEPENDS ${PYPROGRAM} ${JSON_FILE}
 )
-add_custom_target(generate_dyncalls ALL DEPENDS ${GEN_FILES}.h ${GEN_FILES}.cpp)
+add_custom_target(generate_dyncalls ALL DEPENDS ${GEN_FILES}.h ${GEN_FILES}.c)
 
 # Mark generated files so CMake doesn't complain about missing sources
-set_source_files_properties(${GEN_FILES}.h ${GEN_FILES}.cpp PROPERTIES GENERATED TRUE)
+set_source_files_properties(${GEN_FILES}.h ${GEN_FILES}.c PROPERTIES GENERATED TRUE)
 
 # Add to guest binary (assuming add_guest_binary is defined as shown earlier)
-add_guest_binary(guest program.cpp ${GEN_FILES}.cpp)
+add_guest_binary(guest program.cpp ${GEN_FILES}.c)
 add_dependencies(guest generate_dyncalls)
 target_include_directories(guest PRIVATE ${GEN_DIR})
 
@@ -1359,6 +1361,7 @@ struct Script {
 
     gaddr_t address_of(const std::string& name) const;
     auto& machine() { return *m_machine; }
+    const auto& machine() const { return *m_machine; }
     const auto& name() const noexcept { return m_name; }
 
     gaddr_t guest_alloc(gaddr_t bytes) { return machine().arena().malloc(bytes); }
@@ -1678,3 +1681,231 @@ For full integration and best results:
 7. **Don't let main() return**. Pause it with a meaningful host function to avoid global destructors getting called immediately after main() returns.
 8. **Track call depth**. Use vmcall at depth 1, preempt at depth 2+, reject at max depth.
 9. **Avoid C-like user-facing APIs**. Create proper classes and wrappers in the guest that lets users write normal code.
+
+---
+
+## RPC Between Same-Program Instances
+
+When two guest VMs run the exact same binary, their code segments are identical: every function lives at the same address, every template instantiation produces the same trampoline. This makes it possible to extract a C++ lambda's function pointer and capture storage from one VM, transfer the capture bytes to another VM, and call the same function there. The result is as-if the lambda executed in the original VM, except it runs on a different instance's state.
+
+### The Principle
+
+A C++ lambda with captures has two parts:
+1. A **function body** — compiled code at a fixed address in the binary
+2. **Capture storage** — a small struct holding the captured values, living on the stack
+
+A stateless lambda (no captures) converts to a plain function pointer via the unary `+` operator. By wrapping the captured lambda in a stateless trampoline that receives the capture storage through a `void*`, you separate the two parts:
+
+```cpp
+template <typename F>
+void invoke_remotely(F callback) {
+    sys_invoke_elsewhere(
+        +[](void* data) { (*(F*)data)(); },  // trampoline: same address in every VM
+        &callback,                             // capture storage: stack bytes
+        sizeof(callback));                     // capture size
+}
+```
+
+The trampoline is a template instantiation — its address is baked into the binary at compile time. Since both VMs loaded the same ELF, the address is valid in both. The capture bytes are plain data that can be copied between VMs without interpretation.
+
+### Constraints on Capture Storage
+
+The capture must be **self-contained binary data**:
+
+| Safe to capture | Unsafe to capture |
+|---|---|
+| Integers, floats, enums | Pointers to stack variables |
+| Small POD structs | `std::string` (contains a heap pointer) |
+| Fixed-size arrays | `std::vector` (contains a heap pointer) |
+| `constexpr` values | Non-const static references |
+
+The rule: if the bytes are meaningful without access to the original VM's heap or stack, they're safe to capture. If they contain pointers, those pointers are meaningless in the other VM. The `riscv::Function` class in `lib/libriscv/util/function.hpp` enforces these constraints at compile time — it requires callables to be trivially copyable, trivially destructible, and fit within `FunctionStorageSize` (24 bytes).
+
+### CaptureStorage Helper (Host Side)
+
+The host needs to copy capture bytes out of a guest VM and later copy them into another. A simple fixed-size buffer is enough:
+
+```cpp
+struct CaptureStorage
+{
+    static constexpr size_t MaxSize = 32;
+    using Array = std::array<uint8_t, MaxSize>;
+
+    static Array get(machine_t& machine, gaddr_t data, gaddr_t size)
+    {
+        Array capture{};
+        if (size > MaxSize)
+            throw std::runtime_error("Capture storage exceeds 32 bytes");
+        machine.memory.memcpy_out(capture.data(), data, size);
+        return capture;
+    }
+};
+```
+
+### Guest-Side Wrappers
+
+The guest provides two template wrappers. Both use the same trampoline pattern — only the generated host function differs. The RPC functions are defined in `host_functions.json` alongside all other host functions:
+
+```json
+{
+  "typedef": [
+    "typedef void (*rpc_callback_t)(void*)"
+  ],
+  "RPC::callback": "void sys_rpc_callback (rpc_callback_t, void*, size_t)",
+  "RPC::invoke": "long sys_rpc_invoke (rpc_callback_t, void*, size_t)"
+}
+```
+
+The guest calls `sys_rpc_callback` and `sys_rpc_invoke` like any other generated host function — no raw syscalls needed:
+
+```cpp
+// Store a lambda's capture and call it back on the same VM (local round-trip).
+template <typename F>
+static void store_and_callback(F callback) {
+    static_assert(sizeof(F) <= 24, "Capture too large for storage");
+    static_assert(std::is_trivially_copyable_v<F>, "Capture must be trivially copyable");
+    sys_rpc_callback(
+        +[](void* data) { (*(F*)data)(); },
+        (void*)&callback, sizeof(callback));
+}
+
+// Invoke a lambda on a different VM running the same binary (RPC).
+template <typename F>
+static long invoke_elsewhere(F callback) {
+    static_assert(sizeof(F) <= 24, "Capture too large for storage");
+    static_assert(std::is_trivially_copyable_v<F>, "Capture must be trivially copyable");
+    return sys_rpc_invoke(
+        +[](void* data) { (*(F*)data)(); },
+        (void*)&callback, sizeof(callback));
+}
+```
+
+The `+[]` converts the stateless lambda to a function pointer. The `static_assert` guards catch misuse at compile time.
+
+### Host-Side Function Handlers
+
+These are registered through the generated host function system (see [Generated Host Functions](#generated-host-functions)), not as raw syscalls.
+
+**RPC::callback — Local round-trip** stores the capture, then passes it directly as a vmcall argument. The vmcall pushes the capture bytes onto the guest stack and passes a pointer — no heap allocation needed:
+
+```cpp
+Script::set_host_function(
+    "RPC::callback",
+    "void sys_rpc_callback (rpc_callback_t, void*, size_t)",
+    [](Script& script) {
+        auto [func, data, size] =
+            script.machine().sysargs<gaddr_t, gaddr_t, gaddr_t>();
+
+        auto capture = CaptureStorage::get(script.machine(), data, size);
+
+        script.call(func, capture);
+    });
+```
+
+**RPC::invoke — Cross-VM call** does the same thing, but on a peer VM:
+
+```cpp
+Script::set_host_function(
+    "RPC::invoke",
+    "long sys_rpc_invoke (rpc_callback_t, void*, size_t)",
+    [](Script& script) {
+        auto [func, data, size] =
+            script.machine().sysargs<gaddr_t, gaddr_t, gaddr_t>();
+
+        if (!script.m_peer)
+            throw std::runtime_error("No peer script configured for RPC");
+
+        auto capture = CaptureStorage::get(script.machine(), data, size);
+
+        auto& peer = *script.m_peer;
+        auto result = peer.call(func, capture);
+
+        script.machine().set_result(result.value_or(0));
+    });
+```
+
+The key insight is that `capture` — a `std::array<uint8_t, 32>` — is passed directly as an argument to `call()`, which forwards it to `vmcall`. The vmcall pushes the array onto the guest stack and passes a pointer in the argument register. The capture bytes have call lifetime on the stack, which is exactly right since the trampoline only needs them for the duration of the call. No heap allocation, no free, no cleanup.
+
+`func` is a guest address that exists at the same location in both VMs because they loaded the same binary. The capture bytes were copied from the source VM's registers/stack into the peer VM's call stack, making them accessible when the trampoline dereferences the `void*`.
+
+### Wiring Up Peers
+
+The host connects two Script instances before RPC calls can happen:
+
+```cpp
+Script script_a("script_a", "guest.elf");
+Script script_b("script_b", "guest.elf");  // same binary
+
+script_a.set_peer(&script_b);
+script_b.set_peer(&script_a);
+```
+
+The `set_peer` method simply stores a pointer. In production, this could be a lookup table, a region-based routing system, or any mechanism that resolves "where should this RPC go."
+
+### Complete Example
+
+**Guest side** — a function that modifies a static counter via RPC:
+
+```cpp
+static int shared_counter = 0;
+
+PUBLIC(int test_rpc_invoke())
+{
+    int delta = 10;
+    invoke_elsewhere([delta]() {
+        shared_counter += delta;
+        printf("  Guest RPC target: shared_counter += %d, now = %d\n",
+            delta, shared_counter);
+    });
+    return 0;
+}
+
+PUBLIC(int get_shared_counter())
+{
+    return shared_counter;
+}
+```
+
+**Host side** — verifying that only the peer's state changed:
+
+```cpp
+Event<int()> get_counter_a(script_a, "get_shared_counter");
+Event<int()> get_counter_b(script_b, "get_shared_counter");
+
+printf("Before: a=%d, b=%d\n", *get_counter_a(), *get_counter_b());
+// Before: a=0, b=0
+
+Event<int()> rpc_test(script_a, "test_rpc_invoke");
+rpc_test();  // script_a's lambda executes on script_b
+
+printf("After: a=%d, b=%d\n", *get_counter_a(), *get_counter_b());
+// After: a=0, b=10
+```
+
+The lambda captured `delta = 10` by value. Those 4 bytes were copied from script_a and pushed onto script_b's call stack via vmcall. The trampoline at the same code address in script_b dereferenced them and incremented script_b's `shared_counter`. Script_a's counter was never touched.
+
+### Why This Works
+
+1. **Same binary** → identical code layout. Function pointers are portable between instances.
+2. **Trivially copyable captures** → the bytes are self-contained. No pointers to dereference, no destructors to run.
+3. **Stateless trampoline** → the `+[]` lambda compiles to a plain function in `.text`. Its address is a link-time constant.
+4. **Stack-pushed capture** → vmcall pushes the capture bytes onto the guest stack with call lifetime. The trampoline accesses them via the `void*` argument — no heap allocation needed.
+
+### Extending the Pattern
+
+The example uses `void()` lambdas, but the pattern generalizes to any signature. Pack extra arguments into the capture envelope:
+
+```cpp
+template <typename F>
+static long invoke_elsewhere_with(F callback, double arg1, int arg2) {
+    struct Envelope { F func; double a1; int a2; };
+    static_assert(sizeof(Envelope) <= 24);
+    Envelope env{callback, arg1, arg2};
+    return sys_rpc_invoke(
+        +[](void* data) {
+            auto& e = *(Envelope*)data;
+            e.func(e.a1, e.a2);
+        },
+        (void*)&env, sizeof(env));
+}
+```

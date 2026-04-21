@@ -11,7 +11,8 @@ emulator/*.dll
 **/libtcc1.a
 nodiverge
 tests/autotest/emulator/emulator
-binaries/crc32/clmul
+binaries/
+packages/
 fuzz/crash-*
 webapi/tests/binary
 .vscode/

@@ -1,0 +1,14 @@
+{
+  "typedef": [
+    "typedef void (*rpc_callback_t)(void*)"
+  ],
+  "initialization": ["Game::init_world"],
+
+  "Math::add": "int sys_math_add (int, int)",
+  "Math::multiply": "int sys_math_multiply (int, int)",
+  "IO::print": "void sys_io_print (const char*)",
+  "Game::get_time": "double sys_game_get_time ()",
+  "Game::init_world": "void sys_game_init_world (const char*)",
+  "RPC::callback": "void sys_rpc_callback (rpc_callback_t, void*, size_t)",
+  "RPC::invoke": "long sys_rpc_invoke (rpc_callback_t, void*, size_t)"
+}
