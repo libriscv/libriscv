@@ -2,8 +2,6 @@
  * Popular instructions
 */
 
-#include <cmath> // std::fma for spec-compliant FMA (rv32f_fmadd)
-
 #ifdef RISCV_EXT_COMPRESSED
 INSTRUCTION(RV32C_BC_ADDI, rv32c_addi) {
 	VIEW_INSTR_AS(fi, FasterItype);

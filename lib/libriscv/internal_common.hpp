@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath> // std::fma for spec-compliant FMA (rv32f_fmadd)
 
 #ifdef __APPLE__
 #include "TargetConditionals.h" // TARGET_* macros
