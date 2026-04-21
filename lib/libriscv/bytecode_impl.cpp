@@ -2,6 +2,8 @@
  * Popular instructions
 */
 
+#include <cmath> // std::fma for spec-compliant FMA (rv32f_fmadd)
+
 #ifdef RISCV_EXT_COMPRESSED
 INSTRUCTION(RV32C_BC_ADDI, rv32c_addi) {
 	VIEW_INSTR_AS(fi, FasterItype);
@@ -574,10 +576,30 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 		auto& rs2 = REGISTERS().getfl(fi.R4type.rs2); \
 		auto& rs3 = REGISTERS().getfl(fi.R4type.rs3);
 	FMAREGS();
+	// RISC-V spec §11.6: FMA must round only once. std::fma is the
+	// IEEE 754 fused multiply-add (single rounding). Prior code used
+	// `a * b + c`, which does two roundings — spec violation, visible
+	// as 1-ULP divergences in the fuzz oracle.
+	//
+	// Spec §11.3: any FP operation whose result is a NaN must produce
+	// the canonical qNaN (F32 0x7FC00000 / F64 0x7FF8000000000000), not
+	// a payload-propagating NaN. The FLOAT_INSTR fallback path does this
+	// via fsflags(); this fast-path skipped fsflags, so we canonicalize
+	// inline here too.
 	if (fi.R4type.funct2 == 0x0) { // float32
-		dst.set_float(rs1.f32[0] * rs2.f32[0] + rs3.f32[0]);
+		float r = std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]);
+		if (std::isnan(r)) {
+			dst.load_u32(0x7FC00000u);
+		} else {
+			dst.set_float(r);
+		}
 	} else if (fi.R4type.funct2 == 0x1) { // float64
-		dst.f64 = rs1.f64 * rs2.f64 + rs3.f64;
+		double r = std::fma(rs1.f64, rs2.f64, rs3.f64);
+		if (std::isnan(r)) {
+			dst.load_u64(0x7FF8000000000000ull);
+		} else {
+			dst.f64 = r;
+		}
 	}
 	NEXT_INSTR();
 }

@@ -28,6 +28,20 @@ namespace riscv {
 		void (*trace)(CPU<W>&, const char*, address_type<W>, uint32_t);
 		float  (*sqrtf32)(float);
 		double (*sqrtf64)(double);
+		// Fused multiply-add (single rounding) — required by RISC-V spec
+		// §11.6 for FMADD/FMSUB/FNMADD/FNMSUB. TCC compiles emitted
+		// `a*b+c` as two roundings; emitted code routes through these
+		// entries to std::fma for correct behavior. Must match the
+		// `static struct CallbackTable` in tr_api.cpp field-for-field.
+		float  (*fmaf32)(float, float, float);
+		double (*fmaf64)(double, double, double);
+		// FMIN/FMAX with RISC-V's -0.0 < +0.0 convention (std::fmin/fmax
+		// leaves the ±0 case implementation-defined; emitted code would
+		// otherwise return host-dependent signs).
+		float  (*fmin32_rv)(float, float);
+		float  (*fmax32_rv)(float, float);
+		double (*fmin64_rv)(double, double);
+		double (*fmax64_rv)(double, double);
 		int (*clz) (uint32_t);
 		int (*clzl) (uint64_t);
 		int (*ctz) (uint32_t);

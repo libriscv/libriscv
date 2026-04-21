@@ -1435,6 +1435,66 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		.sqrtf64 = [] (double d) -> double {
 			return std::sqrt(d);
 		},
+		// RISC-V spec §11.6 (fused, single rounding) + §11.3 (NaN
+		// outputs must be canonicalized to the canonical qNaN).
+		.fmaf32 = [] (float a, float b, float c) -> float {
+			float r = std::fma(a, b, c);
+			if (std::isnan(r)) {
+				uint32_t canon = 0x7FC00000u;
+				float out;
+				__builtin_memcpy(&out, &canon, 4);
+				return out;
+			}
+			return r;
+		},
+		.fmaf64 = [] (double a, double b, double c) -> double {
+			double r = std::fma(a, b, c);
+			if (std::isnan(r)) {
+				uint64_t canon = 0x7FF8000000000000ull;
+				double out;
+				__builtin_memcpy(&out, &canon, 8);
+				return out;
+			}
+			return r;
+		},
+		// FMIN/FMAX with RISC-V -0.0 < +0.0 convention. std::fmin/fmax
+		// leave the ±0 case implementation-defined.
+		.fmin32_rv = [] (float a, float b) -> float {
+			if (a == 0.0f && b == 0.0f) {
+				uint32_t ab, bb;
+				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);
+				uint32_t out = ((ab | bb) & 0x80000000u) ? 0x80000000u : 0x00000000u;
+				float r; __builtin_memcpy(&r, &out, 4); return r;
+			}
+			return std::fmin(a, b);
+		},
+		.fmax32_rv = [] (float a, float b) -> float {
+			if (a == 0.0f && b == 0.0f) {
+				uint32_t ab, bb;
+				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);
+				uint32_t out = (~(ab & bb) & 0x80000000u) ? 0x00000000u : 0x80000000u;
+				float r; __builtin_memcpy(&r, &out, 4); return r;
+			}
+			return std::fmax(a, b);
+		},
+		.fmin64_rv = [] (double a, double b) -> double {
+			if (a == 0.0 && b == 0.0) {
+				uint64_t ab, bb;
+				__builtin_memcpy(&ab, &a, 8); __builtin_memcpy(&bb, &b, 8);
+				uint64_t out = ((ab | bb) & 0x8000000000000000ull) ? 0x8000000000000000ull : 0x0ull;
+				double r; __builtin_memcpy(&r, &out, 8); return r;
+			}
+			return std::fmin(a, b);
+		},
+		.fmax64_rv = [] (double a, double b) -> double {
+			if (a == 0.0 && b == 0.0) {
+				uint64_t ab, bb;
+				__builtin_memcpy(&ab, &a, 8); __builtin_memcpy(&bb, &b, 8);
+				uint64_t out = (~(ab & bb) & 0x8000000000000000ull) ? 0x0ull : 0x8000000000000000ull;
+				double r; __builtin_memcpy(&r, &out, 8); return r;
+			}
+			return std::fmax(a, b);
+		},
 		.clz = [] (uint32_t x) -> int {
 #ifdef RISCV_HAS_BITOPS
 			return std::countl_zero(x);
