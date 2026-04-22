@@ -6,7 +6,11 @@
 #include <vector>
 
 using GuestString = riscv::GuestStdString<Script::MARCH>;
+template <typename T>
+using GuestVector = riscv::GuestStdVector<Script::MARCH, T>;
 using ScopedString = riscv::ScopedArenaObject<Script::MARCH, GuestString>;
+template <typename T>
+using ScopedVector = riscv::ScopedArenaObject<Script::MARCH, GuestVector<T>>;
 template <typename T>
 using ScopedArenaObject = riscv::ScopedArenaObject<Script::MARCH, T>;
 
@@ -21,9 +25,6 @@ int main(int argc, char** argv)
 	Script script("test", argv[1]);
 
 	// --- Two-Phase Host Function Resolution ---
-	printf("\n=== Phase 1: Resolve host functions (initialization=true) ===\n");
-	script.resolve_host_functions(/*initialization=*/true);
-
 	printf("\n=== Calling on_init (init-only functions available) ===\n");
 	Event<void()> on_init(script, "on_init");
 	if (!on_init()) {
@@ -97,17 +98,22 @@ int main(int argc, char** argv)
 	}
 
 	// --- Test: Host-allocate on guest heap, pass data ---
-	printf("\n=== Test: host-allocate array on guest heap, call sum_array ===\n");
+	printf("\n=== Test: host-allocate vector on guest heap, call sum_vector ===\n");
 	{
-		// Create a guest array on the guest heap, constructed with test data
-		ScopedArenaObject<std::array<int, 5>> guest_array(script.machine(),
-			std::array<int, 5>{100, 200, 300, 400, 500});
+		std::vector<int> data = {100, 200, 300, 400, 500};
+		// Create a C++ vector on the guest heap, constructed with test data
+		ScopedVector<int> guest_vec(script.machine(), data);
 
-		Event<int(Script::gaddr_t, int)> sum_array(script, "sum_array");
-		if (auto ret = sum_array(guest_array.address(), guest_array->size()))
+		Event<int(ScopedVector<int>&)> sum_vector(script, "sum_vector");
+		if (auto ret = sum_vector(guest_vec)) {
 			printf("Host got sum: %d\n", *ret);
-		else {
-			fprintf(stderr, "FAIL: sum_array() did not return\n");
+			const int total = std::accumulate(data.begin(), data.end(), 0);
+			if (*ret != total) {
+				fprintf(stderr, "FAIL: sum_vector returned wrong result, expected %d\n", total);
+				return 1;
+			}
+		} else {
+			fprintf(stderr, "FAIL: sum_vector() did not return\n");
 			return 1;
 		}
 	}

@@ -56,6 +56,7 @@ void Script::reset()
 
 void Script::initialize()
 {
+	this->resolve_host_functions(true);
 	try {
 		machine().simulate(MAX_BOOT_INSTR);
 	} catch (riscv::MachineTimeoutException& me) {
@@ -159,22 +160,23 @@ void Script::resolve_host_functions(bool initialization, bool client_side)
 
 	for (unsigned i = 0; i < count; i++) {
 		auto& entry = entries[i];
+		auto func_name = machine().memory.memstring(entry.strname);
 
 		if (entry.initialization_only && !initialization) {
-			m_host_function_array.push_back([](Script&) {
-				throw std::runtime_error("Init-only host function called at runtime");
+			m_host_function_array.push_back([func_name](Script&) {
+				throw std::runtime_error("Init-only host function '" + func_name + "' called at runtime");
 			});
 			continue;
 		}
 		if (entry.client_side_only && !client_side) {
-			m_host_function_array.push_back([](Script&) {
-				throw std::runtime_error("Client-only host function called on server");
+			m_host_function_array.push_back([func_name](Script&) {
+				throw std::runtime_error("Client-only host function '" + func_name + "' called on server");
 			});
 			continue;
 		}
 		if (entry.server_side_only && client_side) {
-			m_host_function_array.push_back([](Script&) {
-				throw std::runtime_error("Server-only host function called on client");
+			m_host_function_array.push_back([func_name](Script&) {
+				throw std::runtime_error("Server-only host function '" + func_name + "' called on client");
 			});
 			continue;
 		}
@@ -183,11 +185,10 @@ void Script::resolve_host_functions(bool initialization, bool client_side)
 		if (it != s_host_functions.end()) {
 			m_host_function_array.push_back(it->second.func);
 		} else {
-			auto func_name = machine().memory.memstring(entry.strname);
 			fprintf(stderr, "WARNING: Unimplemented host function '%s' (hash %08x)\n",
 				func_name.c_str(), entry.hash);
-			m_host_function_array.push_back([](Script&) {
-				throw std::runtime_error("Unimplemented host function");
+			m_host_function_array.push_back([func_name](Script&) {
+				throw std::runtime_error("Unimplemented host function: " + func_name);
 			});
 			unimplemented++;
 		}

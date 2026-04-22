@@ -5,116 +5,108 @@
 #include <type_traits>
 #include <vector>
 #include "host_functions.h"
+#include <fmt/core.h>
 
-extern "C" __attribute__((noreturn)) void fast_exit(int);
-
-#define PUBLIC(x) extern "C" __attribute__((used, retain)) x
+template <typename... Args>
+static inline void print(fmt::format_string<Args...> fmt_str, Args&&... args) {
+	char buffer[2048];
+	auto result = fmt::format_to_n(buffer, sizeof(buffer) - 1, fmt_str, std::forward<Args>(args)...);
+	sys_print(buffer, result.size);
+}
 
 int main()
 {
-	printf("Guest: Booting up...\n");
+	print("Guest: Booting up...");
 
 	std::string greeting = "Hello from the RISC-V guest!";
-	printf("Guest: %s\n", greeting.c_str());
+	print("Guest: {}", greeting);
 
 	std::vector<int> numbers = {10, 20, 30, 40, 50};
 	int sum = 0;
 	for (int n : numbers)
 		sum += n;
-	printf("Guest: sum of vector = %d\n", sum);
+	print("Guest: sum of vector = {}", sum);
 
-	printf("Guest: init complete, pausing.\n");
-	fflush(stdout);
+	print("Guest: init complete, pausing.");
 	fast_exit(0);
 }
 
 // --- Init-phase function (only callable during initialization) ---
 PUBLIC(void on_init())
 {
-	printf("Guest on_init: calling sys_game_init_world...\n");
+	print("Guest on_init: calling sys_game_init_world...");
 	sys_game_init_world("TestWorld");
-	printf("Guest on_init: world initialized.\n");
-	fflush(stdout);
+	print("Guest on_init: world initialized.");
 }
 
 // --- Runtime functions that exercise the generated host functions ---
 PUBLIC(int test_math())
 {
 	int sum = sys_math_add(17, 25);
-	printf("Guest: sys_math_add(17, 25) = %d\n", sum);
+	print("Guest: sys_math_add(17, 25) = {}", sum);
 
 	int product = sys_math_multiply(6, 7);
-	printf("Guest: sys_math_multiply(6, 7) = %d\n", product);
+	print("Guest: sys_math_multiply(6, 7) = {}", product);
 
-	fflush(stdout);
 	return sum + product;
 }
 
 PUBLIC(void test_io())
 {
-	sys_io_print("Hello from guest via IO::print!");
-	fflush(stdout);
+	print("Hello from guest via IO::print!");
 }
 
 PUBLIC(double test_get_time())
 {
 	double t = sys_game_get_time();
-	printf("Guest: sys_game_get_time() = %f\n", t);
-	fflush(stdout);
+	print("Guest: sys_game_get_time() = {:.2f}", t);
 	return t;
 }
 
 PUBLIC(void test_init_only_at_runtime())
 {
-	printf("Guest: attempting to call init-only function at runtime...\n");
-	fflush(stdout);
+	print("Guest: attempting to call init-only function at runtime...");
 	sys_game_init_world("ShouldFail");
 }
 
 // --- Direct call tests ---
 PUBLIC(int compute(int a, int b))
 {
-	printf("Guest compute(%d, %d) = %d\n", a, b, a + b);
-	fflush(stdout);
+	print("Guest compute({}, {}) = {}", a, b, a + b);
 	return a + b;
 }
 
 PUBLIC(void greet(const char* name))
 {
-	printf("Guest greet: Hello, %s! (via const char*)\n", name);
-	fflush(stdout);
+	print("Guest greet: Hello, {}! (via const char*)", name);
 }
 
 PUBLIC(void greet_string(const std::string& name))
 {
 	std::string result = "Hello, " + name + "! (via std::string&)";
-	printf("Guest greet_string: %s\n", result.c_str());
-	fflush(stdout);
+	print("Guest greet_string: {}", result);
 }
 
 static std::string stored_string;
 
 PUBLIC(void take_string(std::string& s))
 {
-	printf("Guest take_string: received '%s' (len=%zu)\n", s.c_str(), s.size());
+	print("Guest take_string: received '{}'", s);
 	stored_string = std::move(s);
-	printf("Guest take_string: moved into static, source now empty=%d\n", s.empty());
-	fflush(stdout);
+	print("Guest take_string: moved into static, source now empty={}", s.empty());
 }
 
 PUBLIC(void print_stored())
 {
-	printf("Guest print_stored: '%s'\n", stored_string.c_str());
-	fflush(stdout);
+	print("Guest print_stored: '{}'", stored_string);
 }
 
-PUBLIC(int sum_array(const int* data, int count))
+PUBLIC(int sum_vector(const std::vector<int>& data))
 {
 	int total = 0;
-	for (int i = 0; i < count; i++)
-		total += data[i];
-	printf("Guest sum_array(%d elements) = %d\n", count, total);
-	fflush(stdout);
+	for (auto i : data)
+		total += i;
+	print("Guest sum_vector({} elements) = {}", data.size(), total);
 	return total;
 }
 
@@ -154,10 +146,9 @@ PUBLIC(int test_local_callback())
 	int value3 = 123;
 	int value4 = 456;
 	store_and_callback([value1, value2, value3, value4]() {
-		printf("  Guest callback: captured values = %d, %d, %d, %d\n", value1, value2, value3, value4);
+		print("  Guest callback: captured values = {}, {}, {}, {}", value1, value2, value3, value4);
 	});
-	printf("Guest: local callback test complete\n");
-	fflush(stdout);
+	print("Guest: local callback test complete");
 	return value1 + value2 + value3 + value4;
 }
 
@@ -170,15 +161,13 @@ PUBLIC(int test_rpc_invoke())
 	float y = 2.718f;
 	invoke_elsewhere([delta, x, y]() {
 		if (x != 3.14f || y != 2.718f) {
-			fprintf(stderr, "FAIL: RPC callback captured wrong float values: x=%f, y=%f\n", x, y);
+			print("FAIL: RPC callback captured wrong float values: x={}, y={}", x, y);
 			exit(1);
 		}
 		shared_counter += delta;
-		printf("  Guest RPC target: shared_counter += %d, now = %d\n", delta, shared_counter);
-		fflush(stdout);
+		print("  Guest RPC target: shared_counter += {}, now = {}", delta, shared_counter);
 	});
-	printf("Guest: RPC invoke complete\n");
-	fflush(stdout);
+	print("Guest: RPC invoke complete");
 	return 0;
 }
 

@@ -101,7 +101,12 @@ extern "C" {
 for key in j:
 	if key == "typedef":
 		for typedef in j[key]:
-			header += typedef + ";\n"
+			# Replace \" with "
+			typedef = typedef.replace('\\"', '"')
+			if "#define" in typedef:
+				header += typedef + "\n"
+			else:
+				header += typedef + ";\n"
 header += "\n"
 
 source = '__asm__(".section .text\\n");\n\n'

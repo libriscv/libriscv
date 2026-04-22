@@ -35,10 +35,10 @@ void Script::register_host_functions()
 
 	set_host_function(
 		"IO::print",
-		"void sys_io_print (const char*)",
+		"void sys_print (const char*, size_t)",
 		[](Script& script) {
-			auto [msg] = script.machine().sysargs<std::string>();
-			printf("  [IO::print] %s\n", msg.c_str());
+			auto [msg] = script.machine().sysargs<std::string_view>();
+			printf("  [%s] %.*s\n", script.name().c_str(), (int)msg.size(), msg.data());
 		});
 
 	set_host_function(

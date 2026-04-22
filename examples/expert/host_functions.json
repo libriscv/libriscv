@@ -1,12 +1,14 @@
 {
   "typedef": [
+    "#define PUBLIC(x) extern \"C\" __attribute__((used, retain)) x",
+    "extern __attribute__((noreturn)) void fast_exit(int)",
     "typedef void (*rpc_callback_t)(void*)"
   ],
   "initialization": ["Game::init_world"],
 
   "Math::add": "int sys_math_add (int, int)",
   "Math::multiply": "int sys_math_multiply (int, int)",
-  "IO::print": "void sys_io_print (const char*)",
+  "IO::print": "void sys_print (const char*, size_t)",
   "Game::get_time": "double sys_game_get_time ()",
   "Game::init_world": "void sys_game_init_world (const char*)",
   "RPC::callback": "void sys_rpc_callback (rpc_callback_t, void*, size_t)",

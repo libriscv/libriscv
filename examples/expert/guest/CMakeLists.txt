@@ -15,6 +15,15 @@ set(PYPROGRAM "${CMAKE_CURRENT_SOURCE_DIR}/../generate.py")
 set(GEN_DIR   "${CMAKE_CURRENT_BINARY_DIR}/dyncalls")
 set(GEN_FILES "${GEN_DIR}/host_functions")
 
+# Lift fmtlib from github
+include(FetchContent)
+FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 12.1.0
+)
+FetchContent_MakeAvailable(fmt)
+
 file(MAKE_DIRECTORY ${GEN_DIR})
 add_custom_command(
     OUTPUT ${GEN_FILES}.h ${GEN_FILES}.c
@@ -29,7 +38,7 @@ function(add_guest_binary NAME)
     add_executable(${NAME} ${ARGN} env.cpp ${GEN_FILES}.c)
     add_dependencies(${NAME} generate_dyncalls)
     target_include_directories(${NAME} PRIVATE ${GEN_DIR})
-    target_link_libraries(${NAME} -static)
+    target_link_libraries(${NAME} -static fmt::fmt)
     target_link_libraries(${NAME} "-Wl,-Ttext-segment=0x400000")
     target_link_libraries(${NAME} "-Wl,--undefined=fast_exit")
     target_link_libraries(${NAME} "-Wl,--undefined=dyncall_table")
