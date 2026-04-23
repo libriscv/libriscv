@@ -27,6 +27,14 @@ option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" ON)
 # FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
 # Memory before the heap and outside of the arena behaves like before.
 option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
+# VIRTUAL_PAGING enables virtual paging with a page table. When disabled, all
+# memory access goes through the flat arena only, reducing attack surface.
+# Requires RISCV_FLAT_RW_ARENA to be enabled.
+if (RISCV_FLAT_RW_ARENA)
+	option(RISCV_VIRTUAL_PAGING "Enable virtual paging with page table" ON)
+else()
+	set(RISCV_VIRTUAL_PAGING ON CACHE BOOL "Enable virtual paging with page table" FORCE)
+endif()
 
 set(THREADED_IS_DEFAULT OFF)
 # Threaded simulation uses computed goto, and is not supported

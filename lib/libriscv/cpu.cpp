@@ -58,10 +58,17 @@ namespace riscv
 			// Check if the initial PC is executable
 			if (!current_execute_segment().is_within(initial_pc))
 			{
+#ifdef RISCV_VIRTUAL_PAGING
 				const auto& page =
 					machine().memory.get_exec_pageno(initial_pc / riscv::Page::size());
 				if (UNLIKELY(!page.attr.exec))
 					trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
+#else
+				// Without paging, check if PC is in any known execute segment
+				auto& seg = machine().memory.exec_segment_for(initial_pc);
+				if (UNLIKELY(seg->empty()))
+					trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, initial_pc);
+#endif
 			}
 			// This function will (at most) validate the execute segment
 			this->jump(initial_pc);
@@ -86,10 +93,6 @@ namespace riscv
 	template<int W> RISCV_NOINLINE
 	typename CPU<W>::NextExecuteReturn CPU<W>::next_execute_segment(address_t pc)
 	{
-		static constexpr int MAX_RESTARTS = 4;
-		int restarts = 0;
-restart_next_execute_segment:
-
 		// Find previously decoded execute segment
 		this->m_exec = machine().memory.exec_segment_for(pc).get();
 		if (LIKELY(!this->m_exec->empty() && !this->m_exec->is_stale())) {
@@ -99,6 +102,11 @@ restart_next_execute_segment:
 		// We absolutely need to write PC here because even read-fault handlers
 		// like get_pageno() slowpaths could be reading PC.
 		this->registers().pc = pc;
+
+#ifdef RISCV_VIRTUAL_PAGING
+		static constexpr int MAX_RESTARTS = 4;
+		int restarts = 0;
+restart_next_execute_segment:
 
 		// Immediately look at the page in order to
 		// verify execute and see if it has a trap handler
@@ -134,6 +142,7 @@ restart_next_execute_segment:
 				goto restart_next_execute_segment;
 			}
 		}
+#endif // RISCV_VIRTUAL_PAGING
 
 		// Evict stale execute segments
 		if (this->m_exec->is_stale()) {
@@ -148,6 +157,10 @@ restart_next_execute_segment:
 			return {this->m_exec, this->registers().pc};
 		}
 
+#ifndef RISCV_VIRTUAL_PAGING
+		// Without paging, execute segments must be pre-registered.
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, pc);
+#else
 		// Find the earliest execute page in new segment
 		const uint8_t* base_page_data = current_page.data();
 
@@ -197,11 +210,21 @@ restart_next_execute_segment:
 			// We can use the sequential execute segment directly
 			return {&this->init_execute_area(base_page_data, base_pageno * Page::size(), n_pages * Page::size(), is_likely_jit), pc};
 		}
+#endif // RISCV_VIRTUAL_PAGING
 	} // CPU::next_execute_segment
 
 	template <int W> RISCV_NOINLINE RISCV_INTERNAL
 	typename CPU<W>::format_t CPU<W>::read_next_instruction_slowpath() const
 	{
+#ifndef RISCV_VIRTUAL_PAGING
+		// Without paging, try to find the instruction in any execute segment
+		auto& seg = machine().memory.exec_segment_for(this->pc());
+		if (!seg->empty() && seg->is_within(this->pc())) {
+			auto* exd = seg->exec_data(this->pc());
+			return format_t { *(uint32_t*) exd };
+		}
+		trigger_exception(EXECUTION_SPACE_PROTECTION_FAULT, this->pc());
+#else
 		// Fallback: Read directly from page memory
 		const auto pageno = this->pc() / address_t(Page::size());
 		const auto& page = machine().memory.get_exec_pageno(pageno);
@@ -228,6 +251,7 @@ restart_next_execute_segment:
 		}
 
 		return instruction;
+#endif
 	}
 
 	template <int W>

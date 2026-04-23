@@ -49,13 +49,17 @@ namespace riscv
 		const size_t before = vec.size();
 
 		unsigned datapage_count = 0;
+		unsigned page_count = 0;
+#ifdef RISCV_VIRTUAL_PAGING
 		for (const auto& it : memory.pages()) {
 			if (!it.second.is_cow_page()) datapage_count++;
 		}
+		page_count = (unsigned) memory.pages().size();
+#endif
 
 		const SerializedMachine<W> header {
 			.magic    = MAGiC_V4LUE,
-			.n_pages  = (unsigned) memory.pages().size(),
+			.n_pages  = page_count,
 			.n_datapages = datapage_count,
 			.reg_size = sizeof(Registers<W>),
 			.page_size = Page::size(),
@@ -95,6 +99,7 @@ namespace riscv
 				FEATURE_DISABLED, "Serialize is incompatible with flat read-write arena");
 		}
 
+#ifdef RISCV_VIRTUAL_PAGING
 		const size_t est_page_bytes =
 			this->m_pages.size() * (sizeof(SerializedPage) + sizeof(PageData));
 		vec.reserve(vec.size() + est_page_bytes);
@@ -124,6 +129,7 @@ namespace riscv
 			// Serialize page data
 			vec.insert(vec.end(), page.data(), page.data() + sizeof(PageData));
 		}
+#endif // RISCV_VIRTUAL_PAGING
 
 		const size_t after = vec.size();
 		return after - before;
@@ -183,9 +189,12 @@ namespace riscv
 
 		// completely reset the paging system as
 		// all pages will be completely replaced
+#ifdef RISCV_VIRTUAL_PAGING
 		this->clear_all_pages();
+#endif
 		this->evict_execute_segments();
 
+#ifdef RISCV_VIRTUAL_PAGING
 		size_t off = state.mem_offset;
 		for (size_t p = 0; p < state.n_pages; p++)
 		{
@@ -229,6 +238,7 @@ namespace riscv
 		}
 		// page tables have been changed
 		this->invalidate_reset_cache();
+#endif // RISCV_VIRTUAL_PAGING
 	}
 
 	INSTANTIATE_32_IF_ENABLED(Machine);

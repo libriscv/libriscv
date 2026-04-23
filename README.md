@@ -345,6 +345,8 @@ When embedded libtcc is enabled, by setting the CMake option `RISCV_LIBTCC` to `
 
 The read-write arena simplifies memory operations immediately outside of the loaded ELF, leaving the heap unprotectable. If page protections are needed, pages can still be allocated outside of the arena memory area, and there page protections will apply as normal. It is default-enabled, providing a performance boost. Disabling the read-write arena enables full virtual paging.
 
+When the read-write arena is enabled, virtual paging can be fully disabled by setting the CMake option `RISCV_VIRTUAL_PAGING=OFF`. This removes the page table and all per-page data structures, so that every memory access goes through the flat arena only. The benefits are a smaller attack surface and lower memory overhead. The trade-off is that memory traps, shared pages, and page-level protections outside the arena become unavailable.
+
 ### Embedded libtcc
 
 When binary translation is enabled with `RISCV_BINARY_TRANSLATION=ON`, the option `RISCV_LIBTCC` is also available. libtcc will be embedded in the RISC-V emulator and used as a JIT-compiler. It will give a handsome 2-5x performance boost compared to interpreter mode. It's currently known to work on Linux, FreeBSD, Windows, macOS and Android.

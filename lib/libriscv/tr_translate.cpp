@@ -279,7 +279,11 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 					throw MachineException(INVALID_PROGRAM, "Invalid counter offsets in emulator");
 				}
 				const int32_t arena_offset = uintptr_t(&machine().memory.memory_arena_ptr_ref()) - uintptr_t(&m);
+#ifdef RISCV_VIRTUAL_PAGING
 				const int32_t rdcache_offset = uintptr_t(&machine().memory.rdcache()) - uintptr_t(&m);
+#else
+				const int32_t rdcache_offset = 0;
+#endif
 
 				translation.init_func(create_bintr_callback_table(exec),
 					arena_offset, ins_counter_offset, rdcache_offset);
@@ -1254,9 +1258,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 	return CallbackTable<W>{
 		.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
 			try {
-				const auto& pagedata = cpu.machine().memory.cached_readable_page(addr, sizeof(uint8_t));
-				const auto offset = addr & memory_align_mask<uint8_t>();
-				return pagedata.template aligned_read<uint8_t>(offset);
+				return cpu.machine().memory.template read<uint8_t>(addr);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1265,9 +1267,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		},
 		.mem_read16 = [] (CPU<W>& cpu, address_type<W> addr) -> uint16_t {
 			try {
-				const auto& pagedata = cpu.machine().memory.cached_readable_page(addr, sizeof(uint16_t));
-				const auto offset = addr & memory_align_mask<uint16_t>();
-				return pagedata.template aligned_read<uint16_t>(offset);
+				return cpu.machine().memory.template read<uint16_t>(addr);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1276,9 +1276,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		},
 		.mem_read32 = [] (CPU<W>& cpu, address_type<W> addr) -> uint32_t {
 			try {
-				const auto& pagedata = cpu.machine().memory.cached_readable_page(addr, sizeof(uint32_t));
-				const auto offset = addr & memory_align_mask<uint32_t>();
-				return pagedata.template aligned_read<uint32_t>(offset);
+				return cpu.machine().memory.template read<uint32_t>(addr);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1287,9 +1285,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		},
 		.mem_read64 = [] (CPU<W>& cpu, address_type<W> addr) -> uint64_t {
 			try {
-				const auto& pagedata = cpu.machine().memory.cached_readable_page(addr, sizeof(uint64_t));
-				const auto offset = addr & memory_align_mask<uint64_t>();
-				return pagedata.template aligned_read<uint64_t>(offset);
+				return cpu.machine().memory.template read<uint64_t>(addr);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1298,7 +1294,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		},
 		.mem_write8 = [] (CPU<W>& cpu, address_type<W> addr, uint8_t value) -> void {
 			try {
-				cpu.machine().memory.template write_paging<uint8_t>(addr, value);
+				cpu.machine().memory.template write<uint8_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1306,7 +1302,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		},
 		.mem_write16 = [] (CPU<W>& cpu, address_type<W> addr, uint16_t value) -> void {
 			try {
-				cpu.machine().memory.template write_paging<uint16_t>(addr, value);
+				cpu.machine().memory.template write<uint16_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1314,7 +1310,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		},
 		.mem_write32 = [] (CPU<W>& cpu, address_type<W> addr, uint32_t value) -> void {
 			try {
-				cpu.machine().memory.template write_paging<uint32_t>(addr, value);
+				cpu.machine().memory.template write<uint32_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1322,7 +1318,7 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		},
 		.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t value) -> void {
 			try {
-				cpu.machine().memory.template write_paging<uint64_t>(addr, value);
+				cpu.machine().memory.template write<uint64_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
@@ -1561,9 +1557,11 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void*
 		throw MachineException(INVALID_PROGRAM, "Invalid counter offsets in emulator");
 	}
 	const int32_t arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
-
-	auto& rdcache = machine.memory.rdcache();
-	const int32_t rdcache_offset = uintptr_t(&rdcache) - uintptr_t(&machine);
+#ifdef RISCV_VIRTUAL_PAGING
+	const int32_t rdcache_offset = uintptr_t(&machine.memory.rdcache()) - uintptr_t(&machine);
+#else
+	const int32_t rdcache_offset = 0;
+#endif
 
 	func(create_bintr_callback_table<W>(exec), arena_offset, ins_counter_offset, rdcache_offset);
 

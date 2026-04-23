@@ -1,4 +1,6 @@
 
+#ifdef RISCV_VIRTUAL_PAGING
+
 template <int W> inline
 const PageData& Memory<W>::cached_readable_page(address_t address, size_t len) const
 {
@@ -113,3 +115,5 @@ inline void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 	page.attr.cacheable = false;
 	page.set_trap(callback);
 }
+
+#endif // RISCV_VIRTUAL_PAGING

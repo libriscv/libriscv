@@ -1,6 +1,7 @@
 #include "machine.hpp"
 
 #include "internal_common.hpp"
+#include <cinttypes>
 #ifdef __linux__
 #include <sys/mman.h>
 static constexpr bool MADVISE_ENABLED = true;
@@ -11,6 +12,7 @@ static constexpr bool MADVISE_ENABLED = false;
 
 namespace riscv
 {
+#ifdef RISCV_VIRTUAL_PAGING
 	template <int W>
 	const Page& Memory<W>::get_readable_pageno(const address_t pageno) const
 	{
@@ -84,6 +86,48 @@ namespace riscv
 		attr.non_owning = true;
 		m_pages.try_emplace(pageno, attr, Page::cow_page().m_page.get());
 	}
+#endif // RISCV_VIRTUAL_PAGING
+
+	template <int W>
+	void Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes attr)
+	{
+		if constexpr (!virtual_paging_enabled) {
+			(void)dst; (void)len; (void)attr;
+			return;
+		}
+#ifdef RISCV_VIRTUAL_PAGING
+		while (len > 0)
+		{
+			const size_t offset = dst & (Page::size()-1); // offset within page
+			const size_t size = std::min(Page::size() - offset, len);
+			const address_t pageno = page_number(dst);
+			this->set_pageno_attr(pageno, attr);
+
+			dst += size;
+			len -= size;
+		}
+#endif
+	}
+
+	template <int W>
+	void Memory<W>::free_pages(address_t dst, size_t len)
+	{
+		if constexpr (!virtual_paging_enabled) {
+			(void)dst; (void)len;
+			return;
+		}
+#ifdef RISCV_VIRTUAL_PAGING
+		address_t pageno = page_number(dst);
+		address_t end = pageno + page_number((len + (Page::size() - 1)) & ~(Page::size() - 1));
+		while (pageno < end)
+		{
+			this->free_pageno(pageno);
+			pageno ++;
+		}
+		// TODO: This can be improved by invalidating matches only
+		this->invalidate_reset_cache();
+#endif
+	}
 
 	template <int W>
 	void Memory<W>::memdiscard(address_t dst, size_t len, bool ignore_protections)
@@ -91,6 +135,20 @@ namespace riscv
 #ifndef MADV_DONTNEED
 		static constexpr int MADV_DONTNEED = 0x4;
 #endif
+		if constexpr (!virtual_paging_enabled) {
+			(void)ignore_protections;
+			if (UNLIKELY(dst + len > memory_arena_size() || dst + len < dst))
+				protection_fault(dst);
+			if constexpr (MADVISE_ENABLED) {
+				auto* baseptr = &((uint8_t *)m_arena.data)[dst];
+				madvise(baseptr, len, MADV_DONTNEED);
+			} else {
+				std::memset(&((char*)m_arena.data)[dst], 0, len);
+			}
+			return;
+		}
+
+#ifdef RISCV_VIRTUAL_PAGING
 		while (len > 0)
 		{
 			const size_t offset = dst & (Page::size()-1); // offset within page
@@ -165,26 +223,14 @@ namespace riscv
 			dst += size;
 			len -= size;
 		}
+#endif // RISCV_VIRTUAL_PAGING
 	}
 
+#ifdef RISCV_VIRTUAL_PAGING
 	template <int W>
 	bool Memory<W>::free_pageno(address_t pageno)
 	{
 		return m_pages.erase(pageno) != 0;
-	}
-
-	template <int W>
-	void Memory<W>::free_pages(address_t dst, size_t len)
-	{
-		address_t pageno = page_number(dst);
-		address_t end = pageno + page_number((len + (Page::size() - 1)) & ~(Page::size() - 1));
-		while (pageno < end)
-		{
-			this->free_pageno(pageno);
-			pageno ++;
-		}
-		// TODO: This can be improved by invalidating matches only
-		this->invalidate_reset_cache();
 	}
 
 	template <int W>
@@ -202,6 +248,7 @@ namespace riscv
 		}
 		return Page::cow_page();
 	}
+#endif // RISCV_VIRTUAL_PAGING
 
 	// The zero-page and guarded page share backing
 	static const Page zeroed_page {
@@ -246,6 +293,7 @@ namespace riscv
 		return host_codepage; // host code page
 	}
 
+#ifdef RISCV_VIRTUAL_PAGING
 	template <int W>
 	Page& Memory<W>::install_shared_page(address_t pageno, const Page& shared_page)
 	{
@@ -293,28 +341,15 @@ namespace riscv
 		// TODO: Can be improved by invalidating more intelligently
 		this->invalidate_reset_cache();
 	}
-
-	template <int W> void
-	Memory<W>::set_page_attr(address_t dst, size_t len, PageAttributes attr)
-	{
-		//printf("set_page_attr(0x%lX, %zu, prot=%X)\n", long(dst), len, attr.to_prot());
-		while (len > 0)
-		{
-			const size_t offset = dst & (Page::size()-1); // offset within page
-			const size_t size = std::min(Page::size() - offset, len);
-			const address_t pageno = page_number(dst);
-			this->set_pageno_attr(pageno, attr);
-
-			dst += size;
-			len -= size;
-		}
-	}
+#endif // RISCV_VIRTUAL_PAGING
 
 	template <int W>
 	uint64_t Memory<W>::memory_usage_total() const noexcept
 	{
 		uint64_t total = 0;
 		total += sizeof(Machine<W>);
+
+#ifdef RISCV_VIRTUAL_PAGING
 		// Pages
 		for (const auto& it : m_pages) {
 			const auto page_number = it.first;
@@ -326,6 +361,9 @@ namespace riscv
 				(page.attr.non_owning && page_number < m_arena.pages))
 					total += Page::size();
 		}
+#else
+		total += memory_arena_size();
+#endif
 
 		for (const auto& exec : m_exec) {
 			if (exec)
@@ -333,6 +371,40 @@ namespace riscv
 		}
 
 		return total;
+	}
+
+	template <int W>
+	std::string Memory<W>::get_page_info(address_t addr) const
+	{
+		char buffer[1024];
+		int len;
+#ifdef RISCV_VIRTUAL_PAGING
+		if constexpr (W == 4) {
+			len = snprintf(buffer, sizeof(buffer),
+				"[0x%08" PRIX32 "] %s", addr, get_page(addr).to_string().c_str());
+		} else if constexpr (W == 8) {
+			len = snprintf(buffer, sizeof(buffer),
+				"[0x%016" PRIX64 "] %s", addr, get_page(addr).to_string().c_str());
+		} else if constexpr (W == 16) {
+			len = snprintf(buffer, sizeof(buffer),
+				"[0x%016" PRIX64 "] %s", (uint64_t)addr, get_page(addr).to_string().c_str());
+		}
+#else
+		const char* zone = "guard";
+		if (addr >= memory_arena_size())
+			zone = "out-of-bounds";
+		else if (addr >= initial_rodata_end())
+			zone = "read-write";
+		else if (addr >= RWREAD_BEGIN)
+			zone = "read-only";
+		if constexpr (W == 4)
+			len = snprintf(buffer, sizeof(buffer), "[0x%08" PRIX32 "] %s", addr, zone);
+		else if constexpr (W == 8)
+			len = snprintf(buffer, sizeof(buffer), "[0x%016" PRIX64 "] %s", addr, zone);
+		else
+			len = snprintf(buffer, sizeof(buffer), "[0x%016" PRIX64 "] %s", (uint64_t)addr, zone);
+#endif
+		return std::string(buffer, len);
 	}
 
 	INSTANTIATE_32_IF_ENABLED(Memory);

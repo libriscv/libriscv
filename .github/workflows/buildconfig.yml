@@ -80,3 +80,6 @@ jobs:
 
       - name: Binary translation off debug build
         run: bash ci.sh -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_DEBUG=ON
+
+      - name: Paging disabled build
+        run: bash ci.sh -DRISCV_VIRTUAL_PAGING=OFF
