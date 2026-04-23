@@ -1681,6 +1681,11 @@ For full integration and best results:
 7. **Don't let main() return**. Pause it with a meaningful host function to avoid global destructors getting called immediately after main() returns.
 8. **Track call depth**. Use vmcall at depth 1, preempt at depth 2+, reject at max depth.
 9. **Avoid C-like user-facing APIs**. Create proper classes and wrappers in the guest that lets users write normal code.
+10. **Disable unused features for low memory**. With `RISCV_VIRTUAL_PAGING=OFF`, `RISCV_BINARY_TRANSLATION=OFF`, and only the needed architecture enabled (`RISCV_64I=ON`, `RISCV_32I=OFF`), a full integration with two VM instances runs at ~8.6 MB RSS.
+
+### Reference Implementation
+
+The [`examples/expert`](examples/expert) project is a complete, buildable implementation of every pattern described in this document. It exercises generated host functions, two-phase init, guest datatypes, RPC between VMs, vmcall latency benchmarking, and RSS measurement. Run `./build.sh` under `examples/expert` to build and execute the full test suite.
 
 ---
 

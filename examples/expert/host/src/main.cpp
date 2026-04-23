@@ -222,5 +222,25 @@ int main(int argc, char** argv)
 	}
 
 	printf("\n=== All tests passed ===\n");
+	std::string rss = "";
+#ifdef __linux__
+	// Measure current RSS from /proc/self/statm (Linux-specific)
+	FILE* f = fopen("/proc/self/statm", "r");
+	if (f) {
+		unsigned long size, resident, share, text, lib, data, dt;
+		if (fscanf(f, "%lu %lu %lu %lu %lu %lu %lu",
+			&size, &resident, &share, &text, &lib, &data, &dt) == 7) {
+			const double rss_mb = resident * (sysconf(_SC_PAGESIZE) / (1024.0 * 1024.0));
+			char buffer[64];
+			snprintf(buffer, sizeof(buffer), "  RSS: %.2f MB", rss_mb);
+			rss = buffer;
+		}
+		fclose(f);
+	}
+#endif
+	const auto current_mmap = script.machine().memory.mmap_address();
+	const auto total_memory = Script::MAX_MEMORY;
+	printf("Current guest memory/mmap allocated: %.2f MB / %.2f MB%s\n",
+		current_mmap / (1024.0 * 1024.0), total_memory / (1024.0 * 1024.0), rss.c_str());
 	return 0;
 }

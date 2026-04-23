@@ -37,7 +37,7 @@
 #endif
 
 #ifndef RISCV_BRK_MEMORY_SIZE
-#define RISCV_BRK_MEMORY_SIZE  (16ull << 20) // 16MB
+#define RISCV_BRK_MEMORY_SIZE  (1ull << 20) // 1MB
 #endif
 
 #ifndef RISCV_MAX_EXECUTE_SEGS

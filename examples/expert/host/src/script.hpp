@@ -18,7 +18,7 @@ struct Script
 	using ghandler_t = std::function<void(Script&)>;
 
 	static constexpr gaddr_t  MAX_MEMORY     = 16ULL << 20;   // 16 MB
-	static constexpr gaddr_t  STACK_SIZE     = 2ULL << 20;    // 2 MB
+	static constexpr gaddr_t  STACK_SIZE     = 1ULL << 20;    // 1 MB
 	static constexpr gaddr_t  MAX_HEAP       = 8ULL << 20;    // 8 MB
 	static constexpr uint64_t MAX_BOOT_INSTR = 32'000'000ULL;
 	static constexpr uint64_t MAX_CALL_INSTR = 32'000'000ULL;

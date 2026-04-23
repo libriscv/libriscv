@@ -45,13 +45,10 @@ void Script::reset()
 	riscv::MachineOptions<MARCH> options {
 		.memory_max = MAX_MEMORY,
 		.stack_size = STACK_SIZE,
-		.use_memory_arena = true,
 		.default_exit_function = "fast_exit",
-		.translate_enabled = false,
 	};
 	m_machine = std::make_unique<machine_t>(m_binary, options);
 	this->machine_setup();
-	machine().setup_linux({name()}, {"LC_CTYPE=C", "LC_ALL=C", "USER=groot"});
 }
 
 void Script::initialize()
@@ -75,6 +72,7 @@ void Script::initialize()
 
 void Script::machine_setup()
 {
+	machine().setup_linux({name()}, {"LC_CTYPE=C", "LC_ALL=C", "USER=groot"});
 	machine().set_userdata<Script>(this);
 	machine().set_printer(
 		(machine_t::printer_func)[](const machine_t&, const char* p, size_t len) {
