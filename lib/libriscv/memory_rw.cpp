@@ -198,7 +198,7 @@ namespace riscv
 							const size_t new_size = new_dst - dst;
 
 							auto* baseptr = &((uint8_t *)m_arena.data)[dst];
-							madvise(baseptr, Page::size(), MADV_DONTNEED);
+							madvise(baseptr, new_size, MADV_DONTNEED);
 
 							dst += new_size;
 							len -= new_size;
