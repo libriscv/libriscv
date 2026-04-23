@@ -49,6 +49,8 @@ static void add_mman_syscalls()
 
 		auto& nextfree = machine.memory.mmap_address();
 		length = (length + PageMask) & ~address_type<W>(PageMask);
+		if (length == 0)
+			MMAP_HAS_FAILED();
 		address_type<W> result = address_type<W>(-1);
 
 		if (vfd != -1)
@@ -59,9 +61,13 @@ static void add_mman_syscalls()
 
 				address_type<W> dst = 0x0;
 				if (addr_g == 0x0) {
+					if (nextfree + length < nextfree)
+						MMAP_HAS_FAILED();
 					dst = nextfree;
 					nextfree += length;
 				} else {
+					if (addr_g + length < addr_g)
+						MMAP_HAS_FAILED();
 					dst = addr_g;
 				}
 				// Make the area read-write
@@ -104,6 +110,8 @@ static void add_mman_syscalls()
 			auto range = machine.memory.mmap_cache().find(length);
 			// Not found in cache, increment MM base address
 			if (range.empty()) {
+				if (nextfree + length < nextfree)
+					MMAP_HAS_FAILED();
 				result = nextfree;
 				nextfree += length;
 			}
@@ -116,9 +124,11 @@ static void add_mman_syscalls()
 			result    = addr_g;
 		} else if (addr_g < machine.memory.mmap_start()) {
 			// Non-fixed range below mmap start is not allowed, ignore and force to next free
+			if (nextfree + length < nextfree)
+				MMAP_HAS_FAILED();
 			result    = nextfree;
 			nextfree += length;
-		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g >= machine.memory.mmap_start() && addr_g + length <= nextfree) {
+		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g >= machine.memory.mmap_start() && addr_g + length > addr_g && addr_g + length <= nextfree) {
 			// Fixed mapping inside mmap arena
 			result = addr_g;
 		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g > nextfree) {
@@ -126,7 +136,7 @@ static void add_mman_syscalls()
 			// TODO: Evaluate if relaxation is counter-productive with the new cache
 			if constexpr (riscv::encompassing_Nbit_arena > 0) {
 				// We have to force the address to be within the arena
-				if (nextfree + length > riscv::encompassing_arena_mask)
+				if (nextfree + length < nextfree || nextfree + length > riscv::encompassing_arena_mask)
 					MMAP_HAS_FAILED();
 				result = nextfree;
 				nextfree += length;
@@ -167,7 +177,8 @@ static void add_mman_syscalls()
 		if ((flags & LINUX_MREMAP_FIXED) != 0) {
 			// Not supported
 		}
-		else if (old_addr + old_size == nextfree) {
+		else if (old_addr + old_size >= old_addr && old_addr + old_size == nextfree
+			&& old_addr + new_size >= old_addr) {
 			nextfree = old_addr + new_size;
 			machine.set_result(old_addr);
 			return;
