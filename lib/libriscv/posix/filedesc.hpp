@@ -78,7 +78,7 @@ inline FileDescriptors::real_fd_type FileDescriptors::translate(int virtfd)
 	auto it = translation.find(virtfd);
 	if (it != translation.end()) return it->second;
 	// Only allow direct access to standard pipes and errors
-	return (virtfd <= 2) ? virtfd : -1;
+	return (virtfd >= 0 && virtfd <= 2) ? virtfd : -1;
 }
 inline FileDescriptors::real_fd_type FileDescriptors::erase(int virtfd)
 {

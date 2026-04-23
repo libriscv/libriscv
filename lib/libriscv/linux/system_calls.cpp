@@ -668,7 +668,7 @@ void syscall_readlinkat(Machine<W>& machine)
 		return;
 	}
 
-	if (machine.has_file_descriptors()) {
+	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
 
 		if (machine.fds().filter_readlink != nullptr) {
 			std::string path = original_path;
@@ -794,7 +794,7 @@ static void syscall_fstatat(Machine<W>& machine)
 
 	std::string path = machine.memory.memstring(g_path);
 
-	if (machine.has_file_descriptors()) {
+	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
 
 		int real_fd = machine.fds().translate(vfd);
 
