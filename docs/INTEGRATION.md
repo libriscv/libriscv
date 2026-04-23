@@ -99,7 +99,10 @@ _libriscv_ is primarily configured using CMake options:
 - When RISCV_LIBTCC is enabled, an option to use libtcc from a distro package is available. When enabled, `libtcc.a` is used directly and must be in the search path. When disabled, a CMake version of libtcc is fetched from a remote Git repository.
 
 > RISCV_FLAT_RW_ARENA
-- Enable high-performance memory operations using a flat read-write arena. The guest address space is separated into 4 parts: 1. The area starting at zero up to the beginning of the ELF program is made invalid. 2. The area starting from the ELF to the end of .rodata is made read-only. The .data section and up to the end of the arena is made read+write. And finally, outside of the arena uses virtual paging, where page protections apply.
+- Enable high-performance memory operations using a flat read-write arena. The guest address space is separated into 4 parts: 1. The area starting at zero up to the beginning of the ELF program is made invalid. 2. The area starting from the ELF to the end of .rodata is made read-only. The .data section and up to the end of the arena is made read+write. And finally, outside of the arena uses virtual paging, where page protections apply (unless virtual paging is disabled).
+
+> RISCV_VIRTUAL_PAGING
+- Enable virtual paging with a page table. When disabled, all memory access goes through the flat arena only, removing the page table and related data structures. This reduces attack surface and memory overhead at the cost of flexibility: memory traps, shared pages, and page-level protections outside the arena are unavailable. Requires `RISCV_FLAT_RW_ARENA` to be enabled. Default: ON.
 
 > RISCV_THREADED
 - Enable threaded dispatch, using computed goto. Fastest dispatch method. When threaded and tailcall are both disabled, fall back to switch-based dispatch.

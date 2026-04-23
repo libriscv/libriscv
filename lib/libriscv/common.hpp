@@ -37,7 +37,7 @@
 #endif
 
 #ifndef RISCV_BRK_MEMORY_SIZE
-#define RISCV_BRK_MEMORY_SIZE  (16ull << 20) // 16MB
+#define RISCV_BRK_MEMORY_SIZE  (1ull << 20) // 1MB
 #endif
 
 #ifndef RISCV_MAX_EXECUTE_SEGS
@@ -199,7 +199,12 @@ namespace riscv
 		/// @details Disabling this will simplifiy memory accesses, allowing up to 8 nearby
 		/// accesses to use only a single bounds-check. However, accessing virtual pages
 		/// outside of the arena will throw a protection fault exception.
-		bool translate_use_virtual_paging_fallback = true;
+		bool translate_use_virtual_paging_fallback =
+#ifdef RISCV_VIRTUAL_PAGING
+			true;
+#else
+			false;
+#endif
 		/// @brief Enable unsafe removal of checks in the binary translator.
 		/// @details This will remove checks that prevent the program from crashing, such
 		/// as memory access checks, and other checks that sandboxes normally provide.
@@ -336,6 +341,11 @@ namespace riscv
 	static constexpr bool flat_readwrite_arena = true;
 #else
 	static constexpr bool flat_readwrite_arena = false;
+#endif
+#ifdef RISCV_VIRTUAL_PAGING
+	static constexpr bool virtual_paging_enabled = true;
+#else
+	static constexpr bool virtual_paging_enabled = false;
 #endif
 #ifdef RISCV_ENCOMPASSING_ARENA_BITS
 	static constexpr int encompassing_Nbit_arena = RISCV_ENCOMPASSING_ARENA_BITS;

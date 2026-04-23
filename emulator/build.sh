@@ -47,6 +47,7 @@ function usage()
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
      -N bits              enable N-bits of masked address space (experimental feature)
      --no-expr            disable experimental features
+     --no-paging          disable virtual paging (flat arena only, reduced attack surface)
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 
@@ -65,7 +66,7 @@ while [[ "$#" -gt 0 ]]; do
 		-h|--help ) usage; exit; ;;
 		--debug) OPTS="$OPTS -DCMAKE_BUILD_TYPE=Debug" ;;
 		--debinfo) OPTS="$OPTS -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
-		--defaults) OPTS="$OPTS -DCMAKE_BUILD_TYPE=Release -DRISCV_EXT_A=ON -DRISCV_EXT_C=ON -DRISCV_EXT_V=OFF -DRISCV_32I=ON -DRISCV_64I=ON -DRISCV_128I=OFF -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_LIBTCC=OFF -DRISCV_EXPERIMENTAL=OFF -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_LIBTCC=OFF -DLTO=OFF -DPERF=OFF -DSTATIC_BUILD=OFF -DNATIVE=OFF" ;;
+		--defaults) OPTS="$OPTS -DCMAKE_BUILD_TYPE=Release -DRISCV_EXT_A=ON -DRISCV_EXT_C=ON -DRISCV_EXT_V=OFF -DRISCV_32I=ON -DRISCV_64I=ON -DRISCV_128I=OFF -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_LIBTCC=OFF -DRISCV_EXPERIMENTAL=OFF -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_LIBTCC=OFF -DRISCV_VIRTUAL_PAGING=ON -DLTO=OFF -DPERF=OFF -DSTATIC_BUILD=OFF -DNATIVE=OFF" ;;
 		--perf) OPTS="$OPTS -DPERF=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo" ;;
 		--no-perf) OPTS="$OPTS -DPERF=OFF" ;;
 		--static) OPTS="$OPTS -DSTATIC_BUILD=ON" ;;
@@ -97,6 +98,7 @@ while [[ "$#" -gt 0 ]]; do
         -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;
 		-N) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON -DRISCV_ENCOMPASSING_ARENA_BITS=$2"; shift ;;
         --no-expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=OFF" ;;
+		--no-paging) OPTS="$OPTS -DRISCV_VIRTUAL_PAGING=OFF" ;;
 		--embed) EMBED_FILES="$EMBED_FILES;$2"; shift ;;
 		--embed-all) embed_all ;;
 		-v|--verbose ) set -x ;;

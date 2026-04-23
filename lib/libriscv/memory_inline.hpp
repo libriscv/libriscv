@@ -38,11 +38,18 @@ T Memory<W>::read(address_t address)
 #endif
 			return *(T *)&((const char*)m_arena.data)[RISCV_SPECSAFE(address)];
 		}
+#ifndef RISCV_VIRTUAL_PAGING
+		protection_fault(address);
+#endif
 		[[unlikely]];
 	}
 
+#ifdef RISCV_VIRTUAL_PAGING
 	const auto& pagedata = cached_readable_page(address, sizeof(T));
 	return pagedata.template aligned_read<T>(offset);
+#else
+	protection_fault(address);
+#endif
 
 	} // encompassing_Nbit_arena
 }
@@ -63,11 +70,18 @@ T& Memory<W>::writable_read(address_t address)
 		if (LIKELY(address - initial_rodata_end() < memory_arena_write_boundary())) {
 			return *(T *)&((char*)m_arena.data)[RISCV_SPECSAFE(address)];
 		}
+#ifndef RISCV_VIRTUAL_PAGING
+		protection_fault(address);
+#endif
 		[[unlikely]];
 	}
 
+#ifdef RISCV_VIRTUAL_PAGING
 	auto& pagedata = cached_writable_page(address);
 	return pagedata.template aligned_read<T>(address & memory_align_mask<T>());
+#else
+	protection_fault(address);
+#endif
 
 	} // encompassing_Nbit_arena
 }
@@ -106,6 +120,7 @@ void Memory<W>::write(address_t address, T value)
 		}
 	}
 
+#ifdef RISCV_VIRTUAL_PAGING
 	const auto pageno = page_number(address);
 	auto& entry = m_wr_cache;
 	if (entry.pageno == pageno) {
@@ -123,10 +138,15 @@ void Memory<W>::write(address_t address, T value)
 		}
 	}
 	page.page().template aligned_write<T>(offset, value);
+#else
+	(void)offset;
+	protection_fault(address);
+#endif
 
 	} // encompassing_Nbit_arena
 }
 
+#ifdef RISCV_VIRTUAL_PAGING
 template <int W>
 template <typename T> inline
 void Memory<W>::write_paging(address_t address, T value)
@@ -150,6 +170,7 @@ void Memory<W>::write_paging(address_t address, T value)
 	}
 	page.page().template aligned_write<T>(offset, value);
 }
+#endif // RISCV_VIRTUAL_PAGING
 
 
 template <int W>

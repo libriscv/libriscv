@@ -24,6 +24,10 @@ An example that uses _libriscv_ when installed on the system as a package.
 
 An example that builds a RISC-V programs with JIT-enabled LuaJIT inside, and then adds that to a WebAssembly program. The program is pre-built so that users can test immediately with `emrun`.
 
+## Expert example
+
+A complete production-style integration exercising every major feature: generated host functions, two-phase init, RPC between VMs, guest datatypes, and vmcall latency benchmarking. Built with paging disabled and binary translation off for ~8.6 MB RSS.
+
 ## WebAPI example
 
 An example that uses a WebServer and Varnish Cache to implement a RISC-V playground.

@@ -29,7 +29,7 @@ namespace riscv
 		static constexpr address_t BRK_MAX      = RISCV_BRK_MEMORY_SIZE; // Default BRK size
 		static constexpr address_t DYLINK_BASE  = 0x40000; // Dynamic link base address
 		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
-		static constexpr address_t OVERALLOCATE = 64; // Arena overalloc on both ends
+		static constexpr address_t OVERALLOCATE = PageSize; // Arena overalloc on both ends (must be page-aligned for madvise)
 
 		template <typename T>
 		T read(address_t src);
@@ -40,8 +40,10 @@ namespace riscv
 		template <typename T>
 		void write(address_t dst, T value);
 
+	#ifdef RISCV_VIRTUAL_PAGING
 		template <typename T>
 		void write_paging(address_t dst, T value);
+#endif
 
 		void memset(address_t dst, uint8_t value, size_t len);
 		void memcpy(address_t dst, const void* src, size_t);
@@ -169,6 +171,15 @@ namespace riscv
 		// Counts all the memory used by the machine, execute segments, pages, etc.
 		uint64_t memory_usage_total() const noexcept;
 		// Helpers for memory usage
+		static inline address_t page_number(const address_t address) noexcept {
+			return address / Page::size();
+		}
+
+		void  set_page_attr(address_t, size_t len, PageAttributes);
+		void  free_pages(address_t, size_t len);
+		std::string get_page_info(address_t addr) const;
+
+#ifdef RISCV_VIRTUAL_PAGING
 		size_t pages_active() const noexcept { return m_pages.size(); }
 		size_t owned_pages_active() const noexcept;
 		// Page handling
@@ -179,12 +190,7 @@ namespace riscv
 		const Page& get_pageno(address_t npage) const;
 		const Page& get_readable_pageno(address_t npage) const;
 		Page& create_writable_pageno(address_t npage, bool initialize = true);
-		void  set_page_attr(address_t, size_t len, PageAttributes);
 		void set_pageno_attr(address_t pageno, PageAttributes);
-		std::string get_page_info(address_t addr) const;
-		static inline address_t page_number(const address_t address) noexcept {
-			return address / Page::size();
-		}
 		CachedPage<W, const PageData>& rdcache() const noexcept {
 			return m_rd_cache;
 		}
@@ -198,7 +204,6 @@ namespace riscv
 		Page& allocate_page(address_t page, Args&& ...);
 		void  invalidate_cache(address_t pageno, Page*) const noexcept;
 		void  invalidate_reset_cache() const noexcept;
-		void  free_pages(address_t, size_t len);
 		bool  free_pageno(address_t pageno);
 
 		// Event for writing to unused/unknown memory
@@ -229,6 +234,12 @@ namespace riscv
 		// create pages for non-owned (shared) memory with given attributes
 		void insert_non_owned_memory(
 			address_t dst, void* src, size_t size, PageAttributes = {});
+#else
+		size_t pages_active() const noexcept { return 0; }
+		size_t owned_pages_active() const noexcept { return 0; }
+		void  invalidate_cache(address_t, Page*) const noexcept {}
+		void  invalidate_reset_cache() const noexcept {}
+#endif
 
 		// Custom execute segment, returns page base, final size and execute segment pointer
 		std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr);
@@ -266,8 +277,10 @@ namespace riscv
 		Memory(Machine<W>&, const Machine<W>&, MachineOptions<W>);
 		~Memory();
 	private:
+#ifdef RISCV_VIRTUAL_PAGING
 		void clear_all_pages();
 		void initial_paging();
+#endif
 		[[noreturn]] static void protection_fault(address_t);
 		// Helpers
 		template <typename T>
@@ -312,10 +325,12 @@ namespace riscv
 
 		Machine<W>& m_machine;
 
+#ifdef RISCV_VIRTUAL_PAGING
 		mutable CachedPage<W, const PageData> m_rd_cache;
 		mutable CachedPage<W, PageData> m_wr_cache;
 
 		std::unordered_map<address_t, Page> m_pages;
+#endif
 
 		const bool m_original_machine;
 		bool m_is_dynamic = false;
@@ -325,9 +340,11 @@ namespace riscv
 		// Memory map cache
 		MMapCache<W> m_mmap_cache;
 
+#ifdef RISCV_VIRTUAL_PAGING
 		page_fault_cb_t m_page_fault_handler = nullptr;
 		page_write_cb_t m_page_write_handler = default_page_write;
 		page_readf_cb_t m_page_readf_handler = default_page_read;
+#endif
 
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;

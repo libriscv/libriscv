@@ -60,6 +60,9 @@ TEST_CASE("Boundary buffer", "[Buffer]")
 		{"vmcall"},
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 
+	// Allocate until we leave the flat arena
+	while (auto addr = machine.memory.mmap_allocate(1) < MAX_MEMORY);
+	// Now we get virtual pages, which are often non-contiguous
 	auto origin = machine.memory.mmap_allocate(1);
 
 	static const char hello[] = "hello world!";

@@ -145,7 +145,11 @@ static void print_help(const char* name)
 		"-  Extra debugging features are enabled\n"
 #endif
 #ifdef RISCV_FLAT_RW_ARENA
+#ifndef RISCV_VIRTUAL_PAGING
+		"-  Flat sequential memory arena is enabled (virtual paging disabled)\n"
+#else
 		"-  Flat sequential memory arena is enabled\n"
+#endif
 #endif
 #ifdef RISCV_ENCOMPASSING_ARENA_BITS
 #define _STR(x) #x
