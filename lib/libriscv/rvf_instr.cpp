@@ -8,6 +8,27 @@ namespace riscv
 	static constexpr uint32_t CANONICAL_NAN_F32 = 0x7fc00000;
 	static constexpr uint64_t CANONICAL_NAN_F64 = 0x7ff8000000000000;
 
+	// Round a float/double per the RISC-V rounding mode (funct3 of the FCVT
+	// instruction) and convert to the destination integer type T. The plain
+	// C++ cast used previously only implements RTZ (truncation), which is wrong
+	// for the round-to-nearest modes used by e.g. std::lround/std::rint.
+	template <typename T, typename F>
+	static inline T fcvt_to_integer(F value, unsigned rm) {
+		switch (rm) {
+		case 0x1: // RTZ: round toward zero
+			return T(std::trunc(value));
+		case 0x2: // RDN: round down (toward -inf)
+			return T(std::floor(value));
+		case 0x3: // RUP: round up (toward +inf)
+			return T(std::ceil(value));
+		case 0x4: // RMM: round to nearest, ties away from zero
+			return T(std::round(value));
+		case 0x0: // RNE: round to nearest, ties to even
+		default:  // reserved/invalid modes: nearest-even as the default
+			return T(std::nearbyint(value));
+		}
+	}
+
 	template <typename T>
 	static bool is_signaling_nan(T t) {
 		if constexpr (sizeof(T) == 4)
@@ -572,58 +593,43 @@ namespace riscv
 	{
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
-		const auto rmm = fi.R4type.funct3; // RMM is encoded in funct3 field
+		auto rmm = fi.R4type.funct3; // rounding mode is encoded in funct3
+		if (rmm == 0x7) // DYN: use the dynamic mode from the fcsr CSR (frm field)
+			rmm = cpu.registers().fcsr().frm;
 		auto& dst = cpu.reg(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // from float32
-			if (fi.R4type.rs2 == 0x0 && rmm == 0x1) // FCVT.W.S with RMM=RTZ
-				dst = int32_t(std::trunc(rs1.f32[0]));
-			else if (fi.R4type.rs2 == 0x0 && rmm == 0x2) // FCVT.W.S with RMM=RDN
-				dst = int32_t(std::floor(rs1.f32[0]));
-			else if (fi.R4type.rs2 == 0x0) // FCVT.W.S with RMM=...
-				dst = (int32_t) rs1.f32[0];
-			else if (fi.R4type.rs2 == 0x1 && rmm == 0x1) // FCVT.WU.S with RMM=RTZ
-				dst = uint32_t(std::trunc(rs1.f32[0]));
-			else if (fi.R4type.rs2 == 0x1 && rmm == 0x2) // FCVT.WU.S with RMM=RDN
-				dst = uint32_t(std::floor(rs1.f32[0]));
-			else if (fi.R4type.rs2 == 0x1) // FCVT.WU.S with RMM=...
-				dst = (uint32_t) rs1.f32[0];
-			return;
+			switch (fi.R4type.rs2) {
+			case 0x0: // FCVT.W.S
+				dst = fcvt_to_integer<int32_t>(rs1.f32[0], rmm);
+				return;
+			case 0x1: // FCVT.WU.S (sign-extended 32-bit result)
+				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f32[0], rmm));
+				return;
+			case 0x2: // FCVT.L.S
+				dst = fcvt_to_integer<int64_t>(rs1.f32[0], rmm);
+				return;
+			case 0x3: // FCVT.LU.S
+				dst = fcvt_to_integer<uint64_t>(rs1.f32[0], rmm);
+				return;
+			}
+			break;
 		case 0x1: // from float64
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.W.D
-				if (rmm == 0x1) // RMM=RTZ
-					dst = int32_t(std::trunc(rs1.f64));
-				else if (rmm == 0x2) // RMM=RDN
-					dst = int32_t(std::floor(rs1.f64));
-				else // RMM=...
-					dst = (int32_t) rs1.f64;
+				dst = fcvt_to_integer<int32_t>(rs1.f64, rmm);
 				return;
-			case 0x1: // FCVT.WU.D
-				if (rmm == 0x1) // RMM=RTZ
-					dst = uint32_t(std::trunc(rs1.f64));
-				else if (rmm == 0x2) // RMM=RDN
-					dst = uint32_t(std::floor(rs1.f64));
-				else // RMM=...
-					dst = (uint32_t) rs1.f64;
+			case 0x1: // FCVT.WU.D (sign-extended 32-bit result)
+				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f64, rmm));
 				return;
 			case 0x2: // FCVT.L.D
-				if (rmm == 0x1) // RMM=RTZ
-					dst = int64_t(std::trunc(rs1.f64));
-				else if (rmm == 0x2) // RMM=RDN
-					dst = int64_t(std::floor(rs1.f64));
-				else // RMM=...
-					dst = (int64_t) rs1.f64;
+				dst = fcvt_to_integer<int64_t>(rs1.f64, rmm);
 				return;
 			case 0x3: // FCVT.LU.D
-				if (rmm == 0x1) // RMM=RTZ
-					dst = uint64_t(std::trunc(rs1.f64));
-				else if (rmm == 0x2) // RMM=RDN
-					dst = uint64_t(std::floor(rs1.f64));
-				else // RMM=...
-					dst = (uint64_t) rs1.f64;
+				dst = fcvt_to_integer<uint64_t>(rs1.f64, rmm);
 				return;
 			}
+			break;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},

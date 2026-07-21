@@ -1978,62 +1978,55 @@ void Emitter<W>::emit()
 				} break;
 			case RV32F__FCVT_W_SD: {
 				const auto rmm = fi.R4type.funct3; // rounding mode in funct3
-				if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
-					// from float32
-					const std::string src = rs1 + ".f32[0]";
-					std::string expr;
-					if (fi.R4type.rs2 == 0x0) { // FCVT.W.S (signed)
-						if (rmm == 0x1) // RTZ
-							expr = "(int32_t)truncf(" + src + ")";
-						else if (rmm == 0x2) // RDN
-							expr = "(int32_t)floorf(" + src + ")";
-						else
-							expr = "(int32_t)" + src;
-					} else { // FCVT.WU.S (unsigned)
-						if (rmm == 0x1) // RTZ
-							expr = "(uint32_t)truncf(" + src + ")";
-						else if (rmm == 0x2) // RDN
-							expr = "(uint32_t)floorf(" + src + ")";
-						else
-							expr = "(uint32_t)" + src;
+				if (fi.R4type.rd != 0 &&
+					(fi.R4type.funct2 == 0x0 || fi.R4type.funct2 == 0x1)) {
+					const bool from_float = (fi.R4type.funct2 == 0x0);
+					const std::string src =
+						from_float ? (rs1 + ".f32[0]") : (rs1 + ".f64");
+					// Round per the RISC-V rounding mode (funct3), matching the
+					// interpreter's fcvt_to_integer(). A bare cast is RTZ only,
+					// which is wrong for e.g. RMM (std::lround) and RDN (floor).
+					const char* trunc_fn = from_float ? "truncf" : "trunc"; // RTZ
+					const char* floor_fn = from_float ? "floorf" : "floor"; // RDN
+					const char* ceil_fn  = from_float ? "ceilf"  : "ceil";  // RUP
+					const char* round_fn = from_float ? "roundf" : "round"; // RMM
+					const char* near_fn  = from_float ? "nearbyintf" : "nearbyint"; // RNE
+					std::string rounded;
+					if (rmm == 0x7) {
+						// DYN: resolve the rounding mode from the fcsr CSR (frm
+						// field, bits [7:5]) at runtime. src has no side effects,
+						// so it is safe to repeat across the branches.
+						const std::string frm = "((cpu->fcsr >> 5) & 7)";
+						rounded =
+							"(" + frm + "==1?" + trunc_fn + "(" + src + "):"
+								+ frm + "==2?" + floor_fn + "(" + src + "):"
+								+ frm + "==3?" + ceil_fn  + "(" + src + "):"
+								+ frm + "==4?" + round_fn + "(" + src + "):"
+								+ near_fn + "(" + src + "))";
+					} else {
+						const char* rfn;
+						switch (rmm) {
+						case 0x1: rfn = trunc_fn; break; // RTZ
+						case 0x2: rfn = floor_fn; break; // RDN
+						case 0x3: rfn = ceil_fn;  break; // RUP
+						case 0x4: rfn = round_fn; break; // RMM
+						default:  rfn = near_fn;         // RNE
+						}
+						rounded = std::string(rfn) + "(" + src + ")";
 					}
-					code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
-				} else if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) {
-					// from float64
-					const std::string src = rs1 + ".f64";
 					std::string expr;
 					switch (fi.R4type.rs2) {
-					case 0: // FCVT.W.D (int32)
-						if (rmm == 0x1)
-							expr = "(int32_t)trunc(" + src + ")";
-						else if (rmm == 0x2)
-							expr = "(int32_t)floor(" + src + ")";
-						else
-							expr = "(int32_t)" + src;
+					case 0x0: // FCVT.W (int32, sign-extended)
+						expr = "(int32_t)" + rounded;
 						break;
-					case 1: // FCVT.WU.D (uint32)
-						if (rmm == 0x1)
-							expr = "(uint32_t)trunc(" + src + ")";
-						else if (rmm == 0x2)
-							expr = "(uint32_t)floor(" + src + ")";
-						else
-							expr = "(uint32_t)" + src;
+					case 0x1: // FCVT.WU (uint32 result, sign-extended to XLEN)
+						expr = "(int32_t)(uint32_t)" + rounded;
 						break;
-					case 2: // FCVT.L.D (int64)
-						if (rmm == 0x1)
-							expr = "(int64_t)trunc(" + src + ")";
-						else if (rmm == 0x2)
-							expr = "(int64_t)floor(" + src + ")";
-						else
-							expr = "(int64_t)" + src;
+					case 0x2: // FCVT.L (int64)
+						expr = "(int64_t)" + rounded;
 						break;
-					case 3: // FCVT.LU.D (uint64)
-						if (rmm == 0x1)
-							expr = "(uint64_t)trunc(" + src + ")";
-						else if (rmm == 0x2)
-							expr = "(uint64_t)floor(" + src + ")";
-						else
-							expr = "(uint64_t)" + src;
+					case 0x3: // FCVT.LU (uint64)
+						expr = "(uint64_t)" + rounded;
 						break;
 					default:
 						UNKNOWN_INSTRUCTION();

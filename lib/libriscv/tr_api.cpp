@@ -110,6 +110,50 @@ static inline double floor(double x) {
 	double t = trunc(x);
 	return (t > x) ? t - 1.0 : t;
 }
+static inline float ceilf(float x) {
+	float t = truncf(x);
+	return (t < x) ? t + 1.0f : t;
+}
+static inline double ceil(double x) {
+	double t = trunc(x);
+	return (t < x) ? t + 1.0 : t;
+}
+static inline float roundf(float x) { /* nearest, ties away from zero */
+	float t = truncf(x);
+	float d = x - t;
+	if (d >= 0.5f) return t + 1.0f;
+	if (d <= -0.5f) return t - 1.0f;
+	return t;
+}
+static inline double round(double x) {
+	double t = trunc(x);
+	double d = x - t;
+	if (d >= 0.5) return t + 1.0;
+	if (d <= -0.5) return t - 1.0;
+	return t;
+}
+static inline float nearbyintf(float x) { /* nearest, ties to even */
+	float t = truncf(x);
+	float d = x - t;
+	if (d > 0.5f) return t + 1.0f;
+	if (d < -0.5f) return t - 1.0f;
+	if (d == 0.5f || d == -0.5f) {
+		long long it = (long long)t;
+		if (it & 1LL) return t + ((d > 0.0f) ? 1.0f : -1.0f);
+	}
+	return t;
+}
+static inline double nearbyint(double x) {
+	double t = trunc(x);
+	double d = x - t;
+	if (d > 0.5) return t + 1.0;
+	if (d < -0.5) return t - 1.0;
+	if (d == 0.5 || d == -0.5) {
+		long long it = (long long)t;
+		if (it & 1LL) return t + ((d > 0.0) ? 1.0 : -1.0);
+	}
+	return t;
+}
 static inline uint32_t do_bswap32(uint32_t x) {
 	return (x << 24 | (x & 0xFF00) << 8 | (x & 0xFF0000) >> 8 | x >> 24);
 }
@@ -138,6 +182,12 @@ static inline uint32_t do_bswap32(uint32_t x) {
 #define trunc(x)  __builtin_trunc(x)
 #define floorf(x) __builtin_floorf(x)
 #define floor(x)  __builtin_floor(x)
+#define ceilf(x)  __builtin_ceilf(x)
+#define ceil(x)   __builtin_ceil(x)
+#define roundf(x) __builtin_roundf(x)
+#define round(x)  __builtin_round(x)
+#define nearbyintf(x) __builtin_nearbyintf(x)
+#define nearbyint(x)  __builtin_nearbyint(x)
 #endif
 
 #ifdef __HAVE_BUILTIN_SPECULATION_SAFE_VALUE
