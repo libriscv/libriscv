@@ -140,7 +140,14 @@ struct GuestStdString {
 };
 
 template <int W, typename T> struct GuestStdVector;
-template <int W, typename K, typename V> struct GuestStdUnorderedMap;
+template <int W, typename K> struct GuestStdHash;
+/// @brief See GuestStdUnorderedMap below. CacheHashCode must match the guest,
+/// which stores the hash code in every node only for slow hash functions. It
+/// defaults to what std::hash<K> would give, so a map that uses a custom hash
+/// function has to say so: GuestStdUnorderedMap<W, K, V, false>.
+template <int W, typename K, typename V,
+	bool CacheHashCode = GuestStdHash<W, K>::cache_hash_code>
+struct GuestStdUnorderedMap;
 template <int W, typename... Types> struct GuestStdVariant;
 
 template <int W, typename T>
@@ -152,8 +159,8 @@ struct is_guest_stdvector<W, GuestStdVector<W, T>> : std::true_type {};
 template <int W, typename T>
 struct is_guest_stdunordered_map : std::false_type {};
 
-template <int W, typename K, typename V>
-struct is_guest_stdunordered_map<W, GuestStdUnorderedMap<W, K, V>> : std::true_type {};
+template <int W, typename K, typename V, bool CacheHashCode>
+struct is_guest_stdunordered_map<W, GuestStdUnorderedMap<W, K, V, CacheHashCode>> : std::true_type {};
 
 template <int W, typename T>
 struct is_guest_stdvariant : std::false_type {};
@@ -989,7 +996,9 @@ struct GuestStdHash
 
 	/// @brief libstdc++ stores the hash code in every node when the hash
 	/// function is not considered fast (see __is_fast_hash), which changes
-	/// the node layout. This must match the guest exactly.
+	/// the node layout. This must match the guest exactly. It is only the
+	/// default for GuestStdUnorderedMap: a map that uses a hash function
+	/// other than std::hash<K> overrides it with the CacheHashCode argument.
 	static constexpr bool cache_hash_code = false;
 
 	static gaddr_t hash(const machine_t&, const K& key)
@@ -1101,7 +1110,15 @@ struct GuestHashNode<W, K, V, true> {
 //
 // NOTE: The map operations that can allocate need to know the address of the
 // map itself in guest memory, and it is passed to them as the self argument.
-template <int W, typename K, typename V>
+//
+// NOTE: libstdc++ decides the node layout from the hash function of the map:
+// the hash code of every key is stored in its node unless __is_fast_hash<H>,
+// which is true for every hash function except the ones the standard library
+// marks as slow (std::hash<std::string> among them). A map that uses a custom
+// hash function - even one that just forwards to std::hash - therefore does
+// *not* store hash codes, and must be given CacheHashCode = false in order to
+// match the guest. Getting it wrong shifts every key and value in the node.
+template <int W, typename K, typename V, bool CacheHashCode>
 struct GuestStdUnorderedMap
 {
 	using gaddr_t = riscv::address_type<W>;
@@ -1110,7 +1127,7 @@ struct GuestStdUnorderedMap
 	using mapped_type = V;
 	using hasher = GuestStdHash<W, K>;
 	/// @brief True when the guest stores the hash code of each key in its node
-	static constexpr bool cache_hash_code = hasher::cache_hash_code;
+	static constexpr bool cache_hash_code = CacheHashCode;
 	using node_type  = GuestHashNode<W, K, V, cache_hash_code>;
 	using value_type = GuestStdPair<K, V>;
 
@@ -1712,6 +1729,9 @@ static_assert(sizeof(GuestHashNode<4, int, int, false>) == 12, "_Hash_node<pair<
 static_assert(sizeof(GuestHashNode<8, int, int, false>) == 16, "_Hash_node<pair<int, int>>");
 static_assert(sizeof(GuestHashNode<4, GuestStdString<4>, int, true>) == 36, "_Hash_node<pair<string, int>>");
 static_assert(sizeof(GuestHashNode<8, GuestStdString<8>, int, true>) == 56, "_Hash_node<pair<string, int>>");
+// A string-keyed map with a custom hash function has no cached hash code
+static_assert(sizeof(GuestHashNode<4, GuestStdString<4>, int, false>) == 32, "_Hash_node<pair<string, int>>");
+static_assert(sizeof(GuestHashNode<8, GuestStdString<8>, int, false>) == 48, "_Hash_node<pair<string, int>>");
 static_assert(sizeof(GuestHashNode<4, GuestStdString<4>, GuestStdString<4>, true>) == 56, "_Hash_node<pair<string, string>>");
 static_assert(sizeof(GuestHashNode<8, GuestStdString<8>, GuestStdString<8>, true>) == 80, "_Hash_node<pair<string, string>>");
 
@@ -1857,8 +1877,8 @@ struct is_scoped_guest_stdvector<W, ScopedArenaObject<W, GuestStdVector<W, T>>> 
 template <int W, typename T>
 struct is_scoped_guest_stdunordered_map : std::false_type {};
 
-template <int W, typename K, typename V>
-struct is_scoped_guest_stdunordered_map<W, ScopedArenaObject<W, GuestStdUnorderedMap<W, K, V>>> : std::true_type {};
+template <int W, typename K, typename V, bool CacheHashCode>
+struct is_scoped_guest_stdunordered_map<W, ScopedArenaObject<W, GuestStdUnorderedMap<W, K, V, CacheHashCode>>> : std::true_type {};
 
 template <int W, typename T>
 struct is_scoped_guest_stdvariant : std::false_type {};
@@ -1870,8 +1890,9 @@ template <int W, typename T>
 using ScopedGuestStdVector = ScopedArenaObject<W, GuestStdVector<W, T>>;
 template <int W>
 using ScopedGuestStdString = ScopedArenaObject<W, GuestStdString<W>>;
-template <int W, typename K, typename V>
-using ScopedGuestStdUnorderedMap = ScopedArenaObject<W, GuestStdUnorderedMap<W, K, V>>;
+template <int W, typename K, typename V,
+	bool CacheHashCode = GuestStdHash<W, K>::cache_hash_code>
+using ScopedGuestStdUnorderedMap = ScopedArenaObject<W, GuestStdUnorderedMap<W, K, V, CacheHashCode>>;
 template <int W, typename... Types>
 using ScopedGuestStdVariant = ScopedArenaObject<W, GuestStdVariant<W, Types...>>;
 

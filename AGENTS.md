@@ -519,6 +519,15 @@ Because a bucket points at the element *before* the first element in that bucket
 
 Supported key types are integers, enums, floats and `GuestStdString`. Specialize `riscv::GuestStdHash<W, K>` for other keys.
 
+**A map with a custom hash function needs `CacheHashCode = false`.** libstdc++ stores the hash code of every key inside its node only when the hash function is one it marks as slow — `std::hash<std::string>` is, and a hash function written by the guest never is (`__is_fast_hash` defaults to true, even for one that just forwards to `std::hash`). The fourth template argument defaults to what `std::hash<K>` would give, so a map with its own hasher has to say otherwise, or every key and value in a node is read at the wrong offset:
+
+```cpp
+// guest: std::unordered_map<std::string, int, string_hash, std::equal_to<>>
+using CppFastHashMap = riscv::GuestStdUnorderedMap<8, CppString, int, false>;
+```
+
+The hash *values* are unaffected: a transparent hasher that forwards to `std::hash<std::string_view>` produces exactly what `GuestStdHash` computes, so only the node layout differs.
+
 ```cpp
 // Create a map for the guest, and fill it in
 riscv::ScopedGuestStdUnorderedMap<8, CppString, int> map(machine);

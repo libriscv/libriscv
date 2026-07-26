@@ -1293,3 +1293,203 @@ TEST_CASE("Vector of strings system call", "[Native]")
 	machine.simulate(MAX_INSTRUCTIONS);
 	REQUIRE(machine.return_value<int>() == 666);
 }
+
+// A map with a custom hash function: libstdc++ only stores the hash code of a
+// key in its node when the hash function is one it considers slow, so a map
+// that hashes with anything else has a different node layout (see the
+// CacheHashCode argument of GuestStdUnorderedMap).
+template <typename K, typename V>
+using CppFastHashMap = GuestStdUnorderedMap<RISCV64, K, V, false>;
+template <typename K, typename V>
+using ScopedCppFastHashMap = ScopedArenaObject<RISCV64, CppFastHashMap<K, V>>;
+
+static_assert(sizeof(CppMap<CppString, int>::node_type) == 56, "Cached hash code");
+static_assert(sizeof(CppFastHashMap<CppString, int>::node_type) == 48, "No cached hash code");
+
+TEST_CASE("VM calls with a custom hash function", "[Native]")
+{
+	if (is_zig()) // We don't support libc++ std::string yet
+		return;
+
+	const auto binary = build_and_load(R"M(
+	#include <string>
+	#include <string_view>
+	#include <unordered_map>
+	#include <variant>
+	#include <cassert>
+
+	void* operator new(size_t size) {
+		return malloc(size);
+	}
+	void operator delete(void* ptr) {
+		free(ptr);
+	}
+
+	// A transparent hash function, which allows looking up a std::string key
+	// with a std::string_view. libstdc++ considers every hash function fast
+	// except the ones it marks as slow itself, so this map does not store the
+	// hash code of its keys in its nodes.
+	struct string_hash {
+		using is_transparent = void;
+		size_t operator()(std::string_view str) const noexcept {
+			return std::hash<std::string_view>{}(str);
+		}
+	};
+	static_assert(!std::__cache_default<std::string, string_hash>::value,
+		"A custom hash function does not cache hash codes");
+	static_assert(std::__cache_default<std::string, std::hash<std::string>>::value,
+		"std::hash<std::string> caches hash codes");
+
+	struct Vec3 { float x, y, z; };
+	using Value = std::variant<bool, int, double, Vec3, std::string>;
+	using FastMap = std::unordered_map<std::string, int, string_hash, std::equal_to<>>;
+	using AttrMap = std::unordered_map<std::string, Value, string_hash, std::equal_to<>>;
+
+	template <typename Map>
+	static long check_buckets(Map& map) {
+		size_t counted = 0;
+		for (size_t b = 0; b < map.bucket_count(); b++) {
+			for (auto it = map.begin(b); it != map.end(b); ++it) {
+				if (map.bucket(it->first) != b)
+					return -1;
+				counted += 1;
+			}
+		}
+		if (counted != map.size())
+			return -3;
+		if ((size_t)std::distance(map.begin(), map.end()) != map.size())
+			return -4;
+		return (long)map.size();
+	}
+
+	extern "C" __attribute__((used, retain))
+	long test_fastmap(FastMap& map) {
+		if (check_buckets(map) != 3)
+			return -10;
+		assert(map.at("one") == 1);
+		assert(map.at("two") == 2);
+		assert(map.at("a long key that is not SSO") == 3);
+		assert(map.find("nope") == map.end());
+		// Heterogeneous lookup, which is the reason for the custom hash function
+		assert(map.find(std::string_view("two"))->second == 2);
+
+		map["four"] = 4;
+		map.erase("one");
+		return check_buckets(map);
+	}
+
+	// A std::unordered_map<std::string, std::variant<...>> with a custom hash
+	extern "C" __attribute__((used, retain))
+	long test_attrs(AttrMap& map) {
+		if (check_buckets(map) != 4)
+			return -10;
+		assert(std::get<bool>(map.at("flag")) == true);
+		assert(std::get<int>(map.at("count")) == 42);
+		assert(std::get<Vec3>(map.at("position")).y == 2.0f);
+		assert(std::get<std::string>(map.at("name")) == "a long name that is not SSO");
+		// Heterogeneous lookup, which is the reason for the custom hash function
+		assert(std::get<std::string>(map.find(std::string_view("name"))->second).size() == 27);
+
+		map["added"] = 3.5;
+		map.erase("flag");
+		return check_buckets(map);
+	}
+
+	// A map that is filled in entirely by the guest, and read by the host
+	extern "C" __attribute__((used, retain))
+	long build_fastmap(FastMap& map) {
+		for (int i = 0; i < 64; i++)
+			map.emplace("key" + std::to_string(i), i);
+		return check_buckets(map);
+	}
+
+	int main() {
+		return 666;
+	})M", // Heterogeneous lookup in unordered containers needs C++20
+		"-std=c++20 -O2 -static -x c " + cwd + "/include/native_libc.h -x c++ ", true);
+
+	riscv::Machine<RISCV64> machine { binary };
+	setup_native_system_calls(machine, 4UL << 20);
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"vmcall"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	machine.simulate(MAX_INSTRUCTIONS);
+	REQUIRE(machine.return_value<int>() == 666);
+
+	const unsigned allocs_before = machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter();
+
+	// std::unordered_map<std::string, int, string_hash, std::equal_to<>>
+	{
+		ScopedCppFastHashMap<CppString, int> map(machine);
+		map->insert_or_assign(machine, map.address(), "one", 1);
+		map->insert_or_assign(machine, map.address(), "two", 2);
+		map->insert_or_assign(machine, map.address(), "a long key that is not SSO", 3);
+		REQUIRE(map->size() == 3);
+		REQUIRE(map->at(machine, "two") == 2);
+
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("test_fastmap", map)) == 3);
+		// The guest added "four" and erased "one"
+		REQUIRE(map->size() == 3);
+		REQUIRE(map->at(machine, "four") == 4);
+		REQUIRE(!map->contains(machine, "one"));
+		REQUIRE(map->at(machine, "a long key that is not SSO") == 3);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+
+	// std::unordered_map<std::string, std::variant<...>, string_hash, ...>
+	{
+		ScopedCppFastHashMap<CppString, CppValue> map(machine);
+		const auto self = map.address();
+		map->insert_or_assign(machine, self, "flag", true);
+		map->insert_or_assign(machine, self, "count", 42);
+		map->insert_or_assign(machine, self, "position", Vec3{1, 2, 3});
+		map->insert_or_assign(machine, self, "name", "a long name that is not SSO");
+		REQUIRE(map->size() == 4);
+		REQUIRE(map->at(machine, "count").get<int>() == 42);
+
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("test_attrs", map)) == 4);
+		// The guest added "added" and erased "flag"
+		REQUIRE(map->size() == 4);
+		REQUIRE(map->at(machine, "added").get<double>() == 3.5);
+		REQUIRE(!map->contains(machine, "flag"));
+		REQUIRE(map->at(machine, "name").get<CppString>().to_string(machine)
+			== "a long name that is not SSO");
+
+		map->free(machine);
+		map->move(machine, self);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+
+	// The bucket growth must match libstdc++ exactly, and it does not depend
+	// on the hash function
+	{
+		ScopedCppFastHashMap<CppString, int> map(machine);
+		std::unordered_map<std::string, int> host_map;
+		for (int i = 0; i < 200; i++) {
+			map->insert_or_assign(machine, map.address(), std::to_string(i), i);
+			host_map.emplace(std::to_string(i), i);
+			REQUIRE(map->bucket_count() == host_map.bucket_count());
+		}
+		REQUIRE(map->to_map(machine) == host_map);
+	}
+
+	// A map the guest fills in, read by the host
+	{
+		ScopedCppFastHashMap<CppString, int> map(machine);
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("build_fastmap", map)) == 64);
+		REQUIRE(map->size() == 64);
+		const auto host_map = map->to_map(machine);
+		for (int i = 0; i < 64; i++)
+			REQUIRE(host_map.at("key" + std::to_string(i)) == i);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+}
