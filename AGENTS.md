@@ -460,6 +460,8 @@ using CppString = riscv::GuestStdString<8>;                  // Mirrors libstdc+
 template <typename T>
 using CppVector = riscv::GuestStdVector<8, T>;               // Mirrors std::vector<T>
 using CppStringVector = CppVector<CppString>;                // std::vector<std::string>
+template <typename K, typename V>
+using CppMap = riscv::GuestStdUnorderedMap<8, K, V>;         // Mirrors std::unordered_map<K, V>
 ```
 
 ### GuestStdString
@@ -502,6 +504,55 @@ CppStringVector strvec(machine, {"hello", "world"});
 // Free (recursively frees contained strings too)
 strvec.free(machine);
 vec.free(machine);
+```
+
+### GuestStdUnorderedMap
+
+Mirrors libstdc++'s `std::unordered_map<K, V>` layout: a bucket array plus a singly-linked list of every element. The hash function (`std::hash`), the bucket indexing and the bucket growth policy are all replicated exactly, so the guest can look up, insert and erase elements in a map the host created, and vice versa.
+
+Because a bucket points at the element *before* the first element in that bucket, a non-empty map contains a pointer back into itself. Two consequences:
+
+1. The map must live in guest memory (use `ScopedArenaObject`, or a pointer obtained from a system call argument). It cannot be built on the host stack.
+2. Operations that can allocate take the address of the map itself as the `self` argument, and `move()` must be called when a map is relocated (`ScopedArenaObject` and `GuestStdVector` do this for you).
+
+Supported key types are integers, enums, floats and `GuestStdString`. Specialize `riscv::GuestStdHash<W, K>` for other keys.
+
+```cpp
+// Create a map for the guest, and fill it in
+riscv::ScopedGuestStdUnorderedMap<8, CppString, int> map(machine);
+map->insert_or_assign(machine, map.address(), "one", 1);
+map->insert_or_assign(machine, map.address(), "two", 2);
+map->erase(machine, map.address(), "one");
+map->reserve(machine, map.address(), 100);
+
+// Or assign a whole host map at once
+map = std::unordered_map<std::string, int>{ {"one", 1}, {"two", 2} };
+
+// The guest sees a real std::unordered_map<std::string, int>&
+machine.vmcall<MAX>("function", map);
+
+// Read a map from guest memory
+int* value = map->find(machine, "two");        // Pointer into guest memory, or null
+int& v     = map->at(machine, "two");          // Throws std::out_of_range
+bool has   = map->contains(machine, "two");
+map->for_each(machine, [&] (const CppString& key, int& value) {
+    printf("%s = %d\n", key.to_string(machine).c_str(), value);
+});
+auto host_map = map->to_map(machine);          // Copy to a std::unordered_map
+
+// Free (recursively frees contained strings, vectors and maps)
+map->free(machine);
+```
+
+In a system call handler the address of the guests own map is needed as `self`:
+
+```cpp
+machine.install_syscall_handler(1, [] (auto& machine) {
+    const auto self = machine.template sysarg<riscv::address_type<8>>(0);
+    auto& map = *machine.memory.template memarray<CppMap<CppString, CppString>>(self, 1);
+    map.insert_or_assign(machine, self, "key", "value");
+    machine.set_result(0);
+});
 ```
 
 ### ScopedArenaObject (RAII wrapper)
