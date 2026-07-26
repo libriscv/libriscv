@@ -530,7 +530,7 @@ size_t Memory<W>::gather_buffers_from_range(
 #else
 	size_t index = 0;
 	vBuffer* last = nullptr;
-	while (len != 0 && index < cnt)
+	while (len != 0)
 	{
 		const size_t offset = addr & (Page::SIZE-1);
 		const size_t size = std::min(Page::SIZE - offset, len);
@@ -538,8 +538,12 @@ size_t Memory<W>::gather_buffers_from_range(
 
 		auto* ptr = (char*) &page.data()[offset];
 		if (last && ptr == last->ptr + last->len) {
+			// The next page continues the last buffer, which allows a
+			// single buffer to cover several (contiguous) pages
 			last->len += size;
 		} else {
+			if (index == cnt)
+				break;
 			last = &buffers[index];
 			last->ptr = ptr;
 			last->len = size;
@@ -570,7 +574,7 @@ size_t Memory<W>::gather_writable_buffers_from_range(
 #else
 	size_t index = 0;
 	vBuffer* last = nullptr;
-	while (len != 0 && index < cnt)
+	while (len != 0)
 	{
 		const size_t offset = addr & (Page::SIZE-1);
 		const size_t size = std::min(Page::SIZE - offset, len);
@@ -578,8 +582,12 @@ size_t Memory<W>::gather_writable_buffers_from_range(
 
 		auto* ptr = (char*) &page.data()[offset];
 		if (last && ptr == last->ptr + last->len) {
+			// The next page continues the last buffer, which allows a
+			// single buffer to cover several (contiguous) pages
 			last->len += size;
 		} else {
+			if (index == cnt)
+				break;
 			last = &buffers[index];
 			last->ptr = ptr;
 			last->len = size;
