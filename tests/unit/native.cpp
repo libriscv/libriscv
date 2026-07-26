@@ -29,6 +29,18 @@ template <typename T>
 using ScopedCppVector = ScopedArenaObject<RISCV64, CppVector<T>>;
 template <typename K, typename V>
 using ScopedCppMap = ScopedArenaObject<RISCV64, CppMap<K, V>>;
+template <typename... Types>
+using CppVariant = GuestStdVariant<RISCV64, Types...>;
+template <typename... Types>
+using ScopedCppVariant = ScopedArenaObject<RISCV64, CppVariant<Types...>>;
+
+// A mix of types, like a glm::vec3
+struct Vec3 {
+	float x, y, z;
+	bool operator==(const Vec3& o) const { return x == o.x && y == o.y && z == o.z; }
+};
+// The variant that the guest programs in this file use
+using CppValue = CppVariant<bool, int, double, Vec3, CppString>;
 
 template <int W>
 static void setup_native_system_calls(riscv::Machine<W>& machine, size_t heap_size = 65536)
@@ -396,6 +408,378 @@ TEST_CASE("Guest std::hash matches libstdc++", "[Native]")
 	static_assert(sizeof(CppMap<CppString, int>::node_type) == 56);
 	static_assert(sizeof(CppMap<CppString, CppString>::node_type) == 80);
 	static_assert(sizeof(CppMap<long, long>::node_type) == 24);
+}
+
+TEST_CASE("VM calls with std::variant", "[Native]")
+{
+	if (is_zig()) // We don't support libc++ std::string yet
+		return;
+
+	// The variant is the union of its alternatives, followed by the index
+	static_assert(sizeof(CppValue) == sizeof(CppString) + 8);
+	static_assert(alignof(CppValue) == 8);
+	static_assert(CppValue::index_of<bool>() == 0);
+	static_assert(CppValue::index_of<Vec3>() == 3);
+	static_assert(CppValue::index_of<CppString>() == 4);
+	// A map of variants stores the hash code of every key
+	static_assert(CppMap<CppString, CppValue>::cache_hash_code == true);
+	static_assert(sizeof(CppMap<CppString, CppValue>::node_type) == 88);
+
+	const auto binary = build_and_load(R"M(
+	#include <string>
+	#include <unordered_map>
+	#include <variant>
+	#include <vector>
+	#include <cassert>
+
+	void* operator new(size_t size) {
+		return malloc(size);
+	}
+	void operator delete(void* ptr) {
+		free(ptr);
+	}
+	void operator delete(void* ptr, size_t) {
+		free(ptr);
+	}
+
+	struct Vec3 { float x, y, z; };
+	using Value = std::variant<bool, int, double, Vec3, std::string>;
+	using ValueMap = std::unordered_map<std::string, Value>;
+
+	static_assert(sizeof(Value) == sizeof(std::string) + 8, "Variant layout");
+
+	// A variant that the host created, passed by reference
+	extern "C" __attribute__((used, retain))
+	long test_variant(Value& value) {
+		if (value.index() != 4)
+			return -1;
+		if (std::get<std::string>(value) != "a long string that is not SSO")
+			return -2;
+		// Replace the string with a Vec3, freeing the hosts allocation
+		value = Vec3 { 1.0f, 2.0f, 3.0f };
+		return 42;
+	}
+
+	// A variant that the host passed by value, on the guests own stack
+	extern "C" __attribute__((used, retain))
+	long test_variant_vec3(Value& value) {
+		if (!std::holds_alternative<Vec3>(value))
+			return -1;
+		const Vec3& v = std::get<Vec3>(value);
+		if (v.x != 4.0f || v.y != 5.0f || v.z != 6.0f)
+			return -2;
+		// Modify the copy that lives on the stack
+		value = 123;
+		return 42;
+	}
+
+	// A variant holding a small string, which points back into itself
+	extern "C" __attribute__((used, retain))
+	long test_variant_sso(Value& value) {
+		if (!std::holds_alternative<std::string>(value))
+			return -1;
+		if (std::get<std::string>(value) != "SSO string")
+			return -2;
+		if (std::get<std::string>(value).size() != 10)
+			return -3;
+		return 42;
+	}
+
+	// A map of variants that the host created
+	extern "C" __attribute__((used, retain))
+	long test_variant_map(ValueMap& map) {
+		if (map.size() != 5)
+			return -1;
+		if (std::get<bool>(map.at("flag")) != true)
+			return -2;
+		if (std::get<int>(map.at("count")) != 42)
+			return -3;
+		if (std::get<double>(map.at("ratio")) != 0.5)
+			return -4;
+		const Vec3& v = std::get<Vec3>(map.at("position"));
+		if (v.x != 1.0f || v.y != 2.0f || v.z != 3.0f)
+			return -5;
+		if (std::get<std::string>(map.at("name")) != "a long name that is not SSO")
+			return -6;
+		if (map.count("missing") != 0)
+			return -7;
+
+		// Modify the map, which the host verifies afterwards
+		map.at("count") = 43;
+		map.at("name") = std::string("another long name that is not SSO");
+		map["extra"] = Vec3 { 7.0f, 8.0f, 9.0f };
+		map.erase("flag");
+		return (long)map.size();
+	}
+
+	// A variant with alternatives that own memory of their own
+	using Nested = std::variant<bool, int, double, std::string,
+		std::vector<int>, std::unordered_map<std::string, int>>;
+	static_assert(sizeof(Nested) == sizeof(std::unordered_map<std::string, int>) + 8,
+		"Nested variant layout");
+
+	extern "C" __attribute__((used, retain))
+	long test_nested_variant(Nested& value) {
+		if (!std::holds_alternative<std::vector<int>>(value))
+			return -1;
+		const std::vector<int>& vec = std::get<std::vector<int>>(value);
+		if (vec.size() != 5)
+			return -2;
+		long sum = 0;
+		for (int v : vec)
+			sum += v;
+		// Replace the vector with a map, which frees the vector
+		value = std::unordered_map<std::string, int> { {"a", 1}, {"b", 2} };
+		return sum;
+	}
+
+	// A map of variants that the guest builds from scratch
+	extern "C" __attribute__((used, retain))
+	long build_variant_map(ValueMap& map) {
+		for (int i = 0; i < 64; i++) {
+			const std::string key = "key" + std::to_string(i);
+			switch (i % 4) {
+			case 0: map.emplace(key, i); break;
+			case 1: map.emplace(key, double(i)); break;
+			case 2: map.emplace(key, Vec3 { float(i), 0.0f, 0.0f }); break;
+			case 3: map.emplace(key, "a long variant value " + std::to_string(i)); break;
+			}
+		}
+		return (long)map.size();
+	}
+
+	int main() {
+		return 666;
+	})M", "-O2 -static -x c " + cwd + "/include/native_libc.h -x c++ ", true);
+
+	riscv::Machine<RISCV64> machine { binary };
+	// The maps in this test need a larger heap than the default
+	setup_native_system_calls(machine, 4UL << 20);
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"vmcall"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	machine.simulate(MAX_INSTRUCTIONS);
+	REQUIRE(machine.return_value<int>() == 666);
+
+	const unsigned allocs_before = machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter();
+
+	// A variant on the guest heap, holding each alternative in turn
+	{
+		ScopedCppVariant<bool, int, double, Vec3, CppString> value(machine);
+		// A default-constructed variant holds the first alternative
+		REQUIRE(value->index() == 0);
+		REQUIRE(value->holds_alternative<bool>());
+		REQUIRE(value->get<bool>() == false);
+		REQUIRE(value->get_if<int>() == nullptr);
+		REQUIRE_THROWS(value->get<int>());
+
+		value = true;
+		REQUIRE(value->get<bool>() == true);
+		value = 42;
+		REQUIRE(value->index() == 1);
+		REQUIRE(*value->get_if<int>() == 42);
+		value = 0.5;
+		REQUIRE(value->index() == 2);
+		REQUIRE(value->get<double>() == 0.5);
+		value = Vec3 { 1.0f, 2.0f, 3.0f };
+		REQUIRE(value->index() == 3);
+		REQUIRE((value->get<Vec3>() == Vec3 { 1.0f, 2.0f, 3.0f }));
+		// A float converts to the only alternative it fits in
+		value->set(machine, value.address(), 0.25f);
+		REQUIRE(value->get<double>() == 0.25);
+
+		// A string alternative, long enough to be heap-allocated
+		value = "a long string that is not SSO";
+		REQUIRE(value->index() == 4);
+		REQUIRE(value->get<CppString>().to_string(machine) == "a long string that is not SSO");
+
+		// The guest replaces the string with a Vec3, freeing the string
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("test_variant", value)) == 42);
+		REQUIRE(value->index() == 3);
+		REQUIRE((value->get<Vec3>() == Vec3 { 1.0f, 2.0f, 3.0f }));
+
+		// Reading the whole variant on the host
+		const auto host_value = value->to_variant(machine);
+		REQUIRE(std::holds_alternative<Vec3>(host_value));
+		REQUIRE((std::get<Vec3>(host_value) == Vec3 { 1.0f, 2.0f, 3.0f }));
+
+		// Freeing a variant leaves it valueless
+		value->free(machine);
+		REQUIRE(value->valueless_by_exception());
+		REQUIRE(value->index() == std::size_t(-1));
+		REQUIRE_THROWS(value->to_variant(machine));
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+
+	// A variant passed by value on the guest stack
+	{
+		CppValue value;
+		value.set(machine, 0, Vec3 { 4.0f, 5.0f, 6.0f });
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("test_variant_vec3", value)) == 42);
+		// The guest modified its own copy on the stack, so the host still
+		// sees the value that it passed in
+		REQUIRE(value.index() == 3);
+		value.free(machine);
+
+		// A small string points back into the variant, so the variant is
+		// told where on the stack it ends up (see Machine::setup_call)
+		value.set(machine, 0, "SSO string");
+		REQUIRE(value.get<CppString>().to_string(machine) == "SSO string");
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("test_variant_sso", value)) == 42);
+		value.free(machine);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+
+	// std::unordered_map<std::string, std::variant<...>>
+	{
+		ScopedCppMap<CppString, CppValue> map(machine);
+		const auto self = map.address();
+		map->insert_or_assign(machine, self, "flag", true);
+		map->insert_or_assign(machine, self, "count", 42);
+		map->insert_or_assign(machine, self, "ratio", 0.5);
+		map->insert_or_assign(machine, self, "position", Vec3 { 1.0f, 2.0f, 3.0f });
+		map->insert_or_assign(machine, self, "name", "a long name that is not SSO");
+		REQUIRE(map->size() == 5);
+		REQUIRE(map->at(machine, "count").get<int>() == 42);
+		REQUIRE(map->at(machine, "name").get<CppString>().to_string(machine)
+			== "a long name that is not SSO");
+
+		// Overwriting a string alternative frees the old string
+		map->insert_or_assign(machine, self, "name", "a temporary long value that is freed");
+		map->insert_or_assign(machine, self, "name", "a long name that is not SSO");
+		REQUIRE(map->size() == 5);
+
+		// A host std::variant selects the alternative at run-time
+		using HostValue = std::variant<bool, int, double, Vec3, std::string>;
+		map->insert_or_assign(machine, self, "temporary", HostValue { 3.5 });
+		REQUIRE(map->at(machine, "temporary").get<double>() == 3.5);
+		map->insert_or_assign(machine, self, "temporary",
+			HostValue { std::string("a long value from a host variant") });
+		REQUIRE(map->at(machine, "temporary").get<CppString>().to_string(machine)
+			== "a long value from a host variant");
+		REQUIRE(map->erase(machine, self, "temporary"));
+		REQUIRE(map->size() == 5);
+
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("test_variant_map", map)) == 5);
+
+		// The guest erased "flag", added "extra" and modified two values
+		REQUIRE(map->size() == 5);
+		REQUIRE(!map->contains(machine, "flag"));
+		REQUIRE(map->at(machine, "count").get<int>() == 43);
+		REQUIRE(map->at(machine, "name").get<CppString>().to_string(machine)
+			== "another long name that is not SSO");
+		REQUIRE((map->at(machine, "extra").get<Vec3>() == Vec3 { 7.0f, 8.0f, 9.0f }));
+
+		// Visiting every value in the map
+		std::size_t strings = 0, vec3s = 0, others = 0;
+		map->for_each(machine, [&] (const CppString& key, CppValue& value) {
+			REQUIRE(!key.to_view(machine).empty());
+			value.visit([&] (auto& alt) {
+				using T = std::decay_t<decltype(alt)>;
+				if constexpr (std::is_same_v<T, CppString>)
+					strings += !alt.to_view(machine).empty();
+				else if constexpr (std::is_same_v<T, Vec3>)
+					vec3s += 1;
+				else
+					others += 1;
+			});
+		});
+		REQUIRE(strings == 1);
+		REQUIRE(vec3s == 2);
+		REQUIRE(others == 2);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+
+	// A map of variants that the guest builds, read back by the host
+	{
+		ScopedCppMap<CppString, CppValue> map(machine);
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("build_variant_map", map)) == 64);
+		REQUIRE(map->size() == 64);
+
+		for (int i = 0; i < 64; i++) {
+			CppValue* value = map->find(machine, "key" + std::to_string(i));
+			REQUIRE(value != nullptr);
+			switch (i % 4) {
+			case 0:
+				REQUIRE(value->get<int>() == i);
+				break;
+			case 1:
+				REQUIRE(value->get<double>() == double(i));
+				break;
+			case 2:
+				REQUIRE((value->get<Vec3>() == Vec3 { float(i), 0.0f, 0.0f }));
+				break;
+			case 3:
+				REQUIRE(value->get<CppString>().to_string(machine)
+					== "a long variant value " + std::to_string(i));
+				break;
+			}
+		}
+		REQUIRE(map->find(machine, "key64") == nullptr);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+
+	// Variants inside a std::vector, which relocates them when it grows
+	{
+		ScopedCppVector<CppValue> vec(machine);
+		for (int i = 0; i < 16; i++) {
+			CppValue value;
+			// A long string is heap-allocated, so it does not need its own address
+			value.set(machine, 0, "a long string value " + std::to_string(i));
+			vec->push_back(machine, value);
+			// Growing the vector relocates every variant in it
+			vec->reserve(machine, 24 + i);
+			for (int j = 0; j <= i; j++) {
+				REQUIRE(vec->at(machine, j).get<CppString>().to_string(machine)
+					== "a long string value " + std::to_string(j));
+			}
+		}
+		REQUIRE(vec->size() == 16);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
+
+	// A variant with alternatives that own guest memory of their own,
+	// which is freed recursively
+	{
+		ScopedCppVariant<bool, int, double, CppString,
+			CppVector<int>, CppMap<CppString, int>> value(machine);
+		static_assert(sizeof(*value) == sizeof(CppMap<CppString, int>) + 8);
+
+		// The only std::vector alternative is selected for a host vector
+		value = std::vector<int> { 1, 2, 3, 4, 5 };
+		REQUIRE(value->index() == 4);
+		REQUIRE(value->get<CppVector<int>>().size() == 5);
+
+		// The guest reads the vector, and replaces it with a map
+		REQUIRE(int64_t(machine.vmcall<MAX_INSTRUCTIONS>("test_nested_variant", value)) == 15);
+		REQUIRE(value->index() == 5);
+		auto& map = value->get<CppMap<CppString, int>>();
+		REQUIRE(map.size() == 2);
+		REQUIRE(map.at(machine, "a") == 1);
+		REQUIRE(map.at(machine, "b") == 2);
+
+		// The only std::unordered_map alternative is selected for a host map
+		value = std::unordered_map<std::string, int> { {"x", 1}, {"y", 2}, {"z", 3} };
+		REQUIRE(value->index() == 5);
+		REQUIRE(value->get<CppMap<CppString, int>>().size() == 3);
+		REQUIRE(value->get<CppMap<CppString, int>>().at(machine, "z") == 3);
+	}
+
+	REQUIRE(machine.arena().allocation_counter()
+		- machine.arena().deallocation_counter() == allocs_before);
 }
 
 TEST_CASE("VM calls with std::unordered_map", "[Native]")

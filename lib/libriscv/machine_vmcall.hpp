@@ -20,9 +20,10 @@ inline void Machine<W>::setup_call(Args&&... args)
 			args.move(cpu.reg(REG_SP) - sizeof(Args)); // SSO-adjustment
 			cpu.reg(iarg++) = stack_push(&args, sizeof(Args));
 		}
-		else if constexpr (is_guest_stdunordered_map<W, remove_cvref<Args>>::value) {
-			// The map points back into itself, so it needs to know where
-			// on the stack it will end up (see Machine::stack_push)
+		else if constexpr (is_guest_stdunordered_map<W, remove_cvref<Args>>::value
+			|| is_guest_stdvariant<W, remove_cvref<Args>>::value) {
+			// The map and the variant can point back into themselves, so they
+			// need to know where on the stack they will end up (see stack_push)
 			args.move(*this, (cpu.reg(REG_SP) - sizeof(Args)) & ~address_t(W-1));
 			cpu.reg(iarg++) = stack_push(&args, sizeof(Args));
 		}

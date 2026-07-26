@@ -462,6 +462,8 @@ using CppVector = riscv::GuestStdVector<8, T>;               // Mirrors std::vec
 using CppStringVector = CppVector<CppString>;                // std::vector<std::string>
 template <typename K, typename V>
 using CppMap = riscv::GuestStdUnorderedMap<8, K, V>;         // Mirrors std::unordered_map<K, V>
+template <typename... Types>
+using CppVariant = riscv::GuestStdVariant<8, Types...>;      // Mirrors std::variant<Types...>
 ```
 
 ### GuestStdString
@@ -554,6 +556,64 @@ machine.install_syscall_handler(1, [] (auto& machine) {
     machine.set_result(0);
 });
 ```
+
+### GuestStdVariant
+
+Mirrors `std::variant<Types...>` layout: the union of every alternative, followed by the index of the active alternative. Host-side alternatives are the mirror types, so a guest `std::variant<bool, int, double, glm::vec3, std::string>` becomes `riscv::GuestStdVariant<8, bool, int, double, glm::vec3, CppString>`.
+
+Assigning a host value selects the alternative the same way the converting constructor of `std::variant` does: an exact match when there is one, a string alternative for strings, and otherwise the single alternative that the value converts to without narrowing. When no unique alternative matches, it is a compile error — use `emplace<T>()` to select one explicitly.
+
+Like the map, a variant that holds a self-referencing alternative (a `std::string` with SSO, or a nested map) points back into itself, so operations that can allocate take the address of the variant itself as the `self` argument. The alternative is stored at the very beginning of the variant, so it is the same address.
+
+```cpp
+template <typename... Types>
+using CppVariant = riscv::GuestStdVariant<8, Types...>;
+using CppValue = CppVariant<bool, int, double, glm::vec3, CppString>;
+
+riscv::ScopedGuestStdVariant<8, bool, int, double, glm::vec3, CppString> value(machine);
+value = true;                       // Selects the bool alternative
+value = 42;                         // int
+value = 0.5;                        // double
+value = glm::vec3(1, 2, 3);         // glm::vec3
+value = "a string value";           // CppString
+value->emplace<double>(machine, value.address(), 3.14);  // Explicit alternative
+value->set(machine, value.address(), host_variant);      // From a host std::variant
+
+// Reading a variant in guest memory
+if (value->holds_alternative<double>())
+    printf("%f\n", value->get<double>());
+if (int* i = value->get_if<int>())
+    printf("%d\n", *i);
+value->visit([&] (auto& alt) {
+    using T = std::decay_t<decltype(alt)>;
+    if constexpr (std::is_same_v<T, CppString>)
+        printf("%s\n", alt.to_string(machine).c_str());
+});
+auto host_value = value->to_variant(machine);  // Copy to a std::variant
+
+value->free(machine);   // Frees the active alternative, leaving it valueless
+```
+
+The intended use is a guest-side `std::unordered_map<std::string, std::variant<...>>`, which the host can create, fill in, read back and modify:
+
+```cpp
+riscv::ScopedGuestStdUnorderedMap<8, CppString, CppValue> map(machine);
+const auto self = map.address();
+map->insert_or_assign(machine, self, "flag", true);
+map->insert_or_assign(machine, self, "count", 42);
+map->insert_or_assign(machine, self, "position", glm::vec3(1, 2, 3));
+map->insert_or_assign(machine, self, "name", "a long name that is not SSO");
+
+// The guest sees a real std::unordered_map<std::string, std::variant<...>>&
+machine.vmcall<MAX>("function", map);
+
+printf("%d\n", map->at(machine, "count").get<int>());
+map->for_each(machine, [&] (const CppString& key, CppValue& value) {
+    value.visit([&] (auto& alt) { /* ... */ });
+});
+```
+
+Nested guest containers are supported as alternatives (`CppVector<int>`, `CppMap<K, V>`, another variant), and `free()` releases them recursively. Reading those must be done with `visit()`, as `to_variant()` only handles scalars and strings.
 
 ### ScopedArenaObject (RAII wrapper)
 
