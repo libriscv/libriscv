@@ -366,6 +366,142 @@ TEST_CASE("VM calls with std::string and std::vector", "[Native]")
 	REQUIRE(allocs_after3 == allocs_before);
 }
 
+// libstdc++ decides where a std::string lives by looking at _M_p, not at the
+// size: a string that was allocated large and then shrunk below the SSO limit
+// keeps its heap block, and its inline union then holds the capacity instead of
+// characters. Reading such a string must follow the pointer.
+TEST_CASE("Guest std::string storage states", "[Native]")
+{
+	if (is_zig()) // We don't support libc++ std::string yet
+		return;
+
+	static_assert(sizeof(CppString) == 32, "libstdc++ std::string layout");
+
+	const auto binary = build_and_load(R"M(
+	#include <string>
+	#define STRINGIFY_HELPER(x) #x
+	#define STRINGIFY(x) STRINGIFY_HELPER(x)
+
+	#define GENERATE_SYSCALL_WRAPPER(name, number) \
+		__asm__(".global " #name "\n" #name ":\n  li a7, " STRINGIFY(number) "\n  ecall\n  ret\n");
+	GENERATE_SYSCALL_WRAPPER(sys_strings, 1);
+	extern "C" int sys_strings(const std::string&, const std::string&, const std::string&,
+		const std::string&, const std::string&, const std::string&);
+
+	int main() {
+		// Inline from the start
+		std::string empty;
+		std::string sso = "short";
+		// Long enough to stay on the heap
+		std::string heap = "this string is far too long for the inline buffer";
+		// Heap-allocated, then resized below the SSO limit
+		std::string shrunk(64, 'x');
+		shrunk.resize(5);
+		// Heap-allocated, then assigned a short string (the capacity is kept)
+		std::string reassigned(64, 'y');
+		reassigned = "brief";
+		// Heap-allocated, then emptied
+		std::string cleared(64, 'z');
+		cleared.clear();
+
+		return sys_strings(empty, sso, heap, shrunk, reassigned, cleared);
+	})M", "-O2 -static -x c " + cwd + "/include/native_libc.h -x c++ ", true);
+
+	riscv::Machine<RISCV64> machine { binary };
+	setup_native_system_calls(machine);
+	machine.setup_linux_syscalls();
+	machine.setup_linux(
+		{"vmcall"},
+		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+
+	static bool syscall_was_called = false;
+	machine.install_syscall_handler(1,
+	[] (riscv::Machine<RISCV64>& machine) {
+		auto [empty, sso, heap, shrunk, reassigned, cleared] =
+			machine.sysargs<CppString*, CppString*, CppString*, CppString*, CppString*, CppString*>();
+
+		REQUIRE(empty->empty());
+		REQUIRE(empty->to_string(machine) == "");
+		REQUIRE(sso->size == 5);
+		REQUIRE(sso->to_string(machine) == "short");
+		REQUIRE(heap->to_string(machine) == "this string is far too long for the inline buffer");
+
+		// Short, but still on the heap, which is where the characters must be read
+		// from. The pointer check keeps the test honest: if the guest compiler ever
+		// turns these into inline strings, they stop covering anything.
+		INFO("The shrunk strings must still be heap-allocated in the guest");
+		const auto shrunk_addr = machine.sysarg<uint64_t>(3);
+		REQUIRE(shrunk->ptr != shrunk_addr + offsetof(CppString, data));
+		REQUIRE(shrunk->size == 5);
+		REQUIRE(shrunk->to_string(machine) == "xxxxx");
+		REQUIRE(shrunk->to_view(machine) == "xxxxx");
+
+		const auto reassigned_addr = machine.sysarg<uint64_t>(4);
+		REQUIRE(reassigned->ptr != reassigned_addr + offsetof(CppString, data));
+		REQUIRE(reassigned->to_string(machine) == "brief");
+
+		REQUIRE(cleared->empty());
+		REQUIRE(cleared->to_string(machine) == "");
+
+		// Cross-reference against the arena, which is the guest heap here (see
+		// setup_native_system_calls): every string we believe is heap-allocated
+		// must point at a live allocation large enough to hold its characters,
+		// and every inline one must not point at an allocation at all.
+		const auto& arena = machine.arena();
+		REQUIRE(arena.size(empty->ptr) == 0);
+		REQUIRE(arena.size(sso->ptr) == 0);
+		REQUIRE(arena.size(heap->ptr) >= heap->size + 1);
+		REQUIRE(arena.size(shrunk->ptr) >= 64 + 1);
+		REQUIRE(arena.size(reassigned->ptr) >= 64 + 1);
+		REQUIRE(arena.size(cleared->ptr) >= 64 + 1);
+
+		syscall_was_called = true;
+		machine.set_result(666);
+	});
+
+	machine.simulate(MAX_INSTRUCTIONS);
+	REQUIRE(machine.return_value<int>() == 666);
+	REQUIRE(syscall_was_called);
+
+	const unsigned live_allocs = machine.arena().allocation_counter() -
+		machine.arena().deallocation_counter();
+	{
+		// A host-built string is inline until it outgrows the buffer, and is always
+		// pointed at its own guest address
+		ScopedCppString str(machine, "inline");
+		REQUIRE(str->size == 6);
+		REQUIRE(str->ptr == str.address() + offsetof(CppString, data));
+		REQUIRE(str->to_string(machine) == "inline");
+		// Inline characters live inside the object, not in an allocation of their own
+		REQUIRE(machine.arena().size(str->ptr) == 0);
+
+		str = "a string too long for the inline buffer";
+		REQUIRE(str->ptr != str.address() + offsetof(CppString, data));
+		REQUIRE(str->to_string(machine) == "a string too long for the inline buffer");
+		REQUIRE(machine.arena().size(str->ptr) >= str->size + 1);
+
+		// And back down to an inline string, which returns the block to the arena
+		const auto heap_ptr = str->ptr;
+		str = "tiny";
+		REQUIRE(str->ptr == str.address() + offsetof(CppString, data));
+		REQUIRE(str->to_string(machine) == "tiny");
+		REQUIRE(machine.arena().size(heap_ptr) == 0);
+	}
+	// The string object itself is returned to the arena as well
+	REQUIRE(machine.arena().allocation_counter() -
+		machine.arena().deallocation_counter() == live_allocs);
+
+	// A host-side string with no guest address at all holds its characters inline
+	CppString unplaced(machine, "no address");
+	REQUIRE(unplaced.ptr == 0);
+	REQUIRE(unplaced.to_string(machine) == "no address");
+
+	// The length limit is checked before any guest memory is touched
+	CppString bogus;
+	bogus.size = 32768;
+	REQUIRE_THROWS(bogus.to_view(machine, 1024));
+}
+
 TEST_CASE("Guest std::hash matches libstdc++", "[Native]")
 {
 	// std::hash<std::string> is a MurmurHash2 variant, and the 64-bit variant
