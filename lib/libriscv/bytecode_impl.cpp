@@ -388,7 +388,9 @@ INSTRUCTION(RV32I_BC_OP_AND, rv32i_op_and) {
 }
 INSTRUCTION(RV32I_BC_OP_MUL, rv32i_op_mul) {
 	OP_INSTR();
-	dst = saddr_t(src1) * saddr_t(src2);
+	// MUL keeps the low XLEN bits, which is the same product either way, but
+	// only the unsigned multiplication is defined when it overflows
+	dst = addr_t(src1) * addr_t(src2);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_OP_SH1ADD, rv32i_op_sh1add) {
@@ -438,7 +440,7 @@ INSTRUCTION(RV64I_BC_OP_SUBW, rv64i_op_subw) {
 INSTRUCTION(RV64I_BC_OP_MULW, rv64i_op_mulw) {
 	if constexpr (W >= 8) {
 		OP_INSTR();
-		dst = int32_t(int32_t(src1) * int32_t(src2));
+		dst = int32_t(uint32_t(src1) * uint32_t(src2));
 		NEXT_INSTR();
 	}
 	else UNUSED_FUNCTION();

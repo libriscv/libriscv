@@ -1,0 +1,119 @@
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <stdexcept>
+#include <string>
+#include <unistd.h>
+#include <vector>
+#include "crc32.hpp"
+static constexpr bool VERBOSE_COMPILER = true;
+// The guest is a normal Linux program: it is statically linked against glibc
+// so that libriscv can load it directly, and it brings its own global
+// allocator that forwards to the host arena (see native_rust.cpp).
+static const std::string RUST_TARGET = "riscv64gc-unknown-linux-gnu";
+static const std::string DEFAULT_RUSTC = "rustc";
+static const std::string DEFAULT_RUST_LINKER = "riscv64-linux-gnu-gcc-12";
+
+// Both defined in codebuilder.cpp
+extern std::vector<uint8_t> load_file(const std::string& filename);
+extern std::string env_with_default(const char* var, const std::string& defval);
+
+static std::string command_output(const std::string& command)
+{
+	FILE* f = popen((command + " 2>/dev/null").c_str(), "r");
+	if (f == nullptr)
+		return {};
+
+	std::string output;
+	char buffer[512];
+	size_t len;
+	while ((len = fread(buffer, 1, sizeof(buffer), f)) > 0)
+		output.append(buffer, len);
+
+	if (pclose(f) != 0)
+		return {};
+	while (!output.empty() && (output.back() == '\n' || output.back() == '\r'))
+		output.pop_back();
+	return output;
+}
+
+static bool command_succeeds(const std::string& command)
+{
+	FILE* f = popen((command + " >/dev/null 2>&1").c_str(), "r");
+	if (f == nullptr)
+		return false;
+	return pclose(f) == 0;
+}
+
+/// @brief True when this machine can build the RISC-V Rust guest: a rustc
+/// that has the riscv64gc standard library installed, and a cross-linker.
+bool rust_toolchain_available()
+{
+	const auto rustc  = env_with_default("RUSTC", DEFAULT_RUSTC);
+	const auto linker = env_with_default("RUST_LINKER", DEFAULT_RUST_LINKER);
+
+	if (!command_succeeds(rustc + " --version"))
+		return false;
+	if (!command_succeeds("command -v " + linker))
+		return false;
+
+	// rustc prints the target library path whether or not it was installed,
+	// so the standard library itself is what decides
+	const auto libdir = command_output(
+		rustc + " --print target-libdir --target " + RUST_TARGET);
+	if (libdir.empty())
+		return false;
+	return command_succeeds("ls " + libdir + "/libstd-*.rlib");
+}
+
+std::vector<uint8_t> build_rust_and_load(
+	const std::string& code, const std::string& args)
+{
+	// Create a temporary source file. rustc wants the .rs extension, and it
+	// takes the crate name from the file name, which mkstemps does not make
+	// a valid Rust identifier - hence --crate-name below.
+	char code_filename[64];
+	strncpy(code_filename, "/tmp/rustbuilder-XXXXXX.rs", sizeof(code_filename));
+	const int code_fd = mkstemps(code_filename, 3);
+	if (code_fd < 0) {
+		throw std::runtime_error(
+			"Unable to create temporary file for code: " + std::string(code_filename));
+	}
+	const ssize_t code_len = write(code_fd, code.c_str(), code.size());
+	close(code_fd);
+	if (code_len < (ssize_t) code.size()) {
+		unlink(code_filename);
+		throw std::runtime_error("Unable to write to temporary file");
+	}
+
+	char bin_filename[256];
+	const uint32_t code_checksum = crc32((const uint8_t *)code.c_str(), code.size());
+	const uint32_t final_checksum = crc32(code_checksum, (const uint8_t *)args.c_str(), args.size());
+	(void)snprintf(bin_filename, sizeof(bin_filename),
+		"/tmp/rustbinary-%08X", final_checksum);
+
+	const auto rustc  = env_with_default("RUSTC", DEFAULT_RUSTC);
+	const auto linker = env_with_default("RUST_LINKER", DEFAULT_RUST_LINKER);
+
+	// --no-gc-sections keeps the exported functions in the binary even though
+	// nothing in the guest itself calls them
+	const std::string command =
+		rustc + " --edition 2021 --crate-name rust_guest --target " + RUST_TARGET
+		+ " -C target-feature=+crt-static"
+		+ " -C linker=" + linker
+		+ " -C link-args=-Wl,--no-gc-sections "
+		+ args + " -o " + bin_filename + " " + std::string(code_filename);
+
+	if constexpr (VERBOSE_COMPILER) {
+		printf("Command: %s\n", command.c_str());
+	}
+	FILE* f = popen(command.c_str(), "r");
+	if (f == nullptr) {
+		unlink(code_filename);
+		throw std::runtime_error("Unable to compile Rust code");
+	}
+	pclose(f);
+	unlink(code_filename);
+
+	return load_file(bin_filename);
+}

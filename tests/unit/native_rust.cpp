@@ -1,0 +1,1478 @@
+/**
+ * Rust guest collections, from both sides.
+ *
+ * The file is in two halves. The "Example:" tests near the top are the ones to
+ * read first: each shows a single way a Rust value crosses the boundary, and
+ * together they cover both directions - the host building a String or a Vec for
+ * the guest, the guest returning one to the host, the guest lending one out in
+ * a system call, and ownership passing either way. The tests below them are the
+ * exhaustive checks that keep the host mirrors honest: field order, RawVec
+ * growth, UTF-8 validation and allocation balance.
+ *
+ * The one thing that makes all of it work is at the top of the guest program:
+ * the guest installs a #[global_allocator] that forwards to the host arena, so
+ * both sides allocate out of the same heap.
+ */
+#include <catch2/catch_test_macros.hpp>
+
+#include <libriscv/machine.hpp>
+#include <libriscv/native_heap.hpp>
+#include <libriscv/guest/guest_rust_string.hpp>
+#include <libriscv/guest/guest_rust_vec.hpp>
+
+extern std::vector<uint8_t> build_rust_and_load(
+	const std::string& code, const std::string& args = "-C opt-level=2");
+extern bool rust_toolchain_available();
+
+using namespace riscv;
+
+static constexpr uint64_t MAX_INSTRUCTIONS = 100'000'000ul;
+static constexpr size_t   HEAP_SIZE = 4UL << 20;
+
+static constexpr int HEAP_SYSCALLS_BASE  = 470;
+static constexpr int SYSCALL_PAUSE       = 480;
+static constexpr int SYSCALL_FILL_STRING = 481;
+static constexpr int SYSCALL_FILL_VEC    = 482;
+static constexpr int SYSCALL_TAKE_STR    = 483;
+static constexpr int SYSCALL_TAKE_VEC    = 484;
+
+using RustString = GuestRustString<RISCV64>;
+using RustStr    = GuestRustStr<RISCV64>;
+template <typename T> using RustVec   = GuestRustVec<RISCV64, T>;
+template <typename T> using RustSlice = GuestRustSlice<RISCV64, T>;
+using ScopedRustString = ScopedGuestRustString<RISCV64>;
+template <typename T> using ScopedRustVec = ScopedGuestRustVec<RISCV64, T>;
+
+// What the host syscalls below write into the guests own collections
+static const std::string HOST_TEXT = "A string the host wrote into a guest-owned String";
+static const std::string GUEST_SUFFIX = " and the guest appended to it";
+
+// What the guest lends out to the host in the worked examples
+static const std::string LENT_TEXT = "A borrowed &str lent out by the guest";
+static const std::vector<std::string> LENT_NAMES { "alpha", "beta", "gamma" };
+
+// Where the syscall handlers below put what the guest lent them
+static std::string g_lent_str;
+static std::vector<std::string> g_lent_vec;
+
+/// @brief The FNV-1a that the guest computes over the same bytes, so that both
+/// sides can prove they are looking at the same string.
+static uint64_t fnv1a(std::string_view bytes)
+{
+	uint64_t hash = 0xcbf29ce484222325ull;
+	for (const unsigned char byte : bytes) {
+		hash ^= byte;
+		hash *= 0x100000001b3ull;
+	}
+	return hash;
+}
+
+// The guest program. It is a normal statically linked riscv64gc Linux program,
+// except that its global allocator is the host arena: every String and Vec it
+// makes is allocated with the same malloc() that GuestRustString uses, which is
+// what lets the two sides hand collections back and forth.
+static const std::string RUST_GUEST_PROGRAM = R"RUST(
+#![allow(improper_ctypes_definitions)]
+use core::alloc::{GlobalAlloc, Layout};
+use core::arch::asm;
+
+const HEAP_SYSCALLS_BASE: i32 = 470;
+const SYSCALL_PAUSE: i32 = 480;
+const SYSCALL_FILL_STRING: i32 = 481;
+const SYSCALL_FILL_VEC: i32 = 482;
+const SYSCALL_TAKE_STR: i32 = 483;
+const SYSCALL_TAKE_VEC: i32 = 484;
+
+// The arena hands out 16-byte aligned blocks, which covers every alignment
+// that the standard collections ask for.
+struct SysAllocator;
+
+unsafe impl GlobalAlloc for SysAllocator {
+	#[inline]
+	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+		let ret: *mut u8;
+		asm!("ecall", in("a7") HEAP_SYSCALLS_BASE + 0,
+			in("a0") layout.size(), in("a1") layout.align(), lateout("a0") ret);
+		ret
+	}
+	#[inline]
+	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+		let ret: *mut u8;
+		asm!("ecall", in("a7") HEAP_SYSCALLS_BASE + 1,
+			in("a0") 1, in("a1") layout.size(), lateout("a0") ret);
+		ret
+	}
+	#[inline]
+	unsafe fn realloc(&self, ptr: *mut u8, _layout: Layout, new_size: usize) -> *mut u8 {
+		let ret: *mut u8;
+		asm!("ecall", in("a7") HEAP_SYSCALLS_BASE + 2,
+			in("a0") ptr, in("a1") new_size, lateout("a0") ret);
+		ret
+	}
+	#[inline]
+	unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+		asm!("ecall", in("a7") HEAP_SYSCALLS_BASE + 3,
+			in("a0") ptr, lateout("a0") _);
+	}
+}
+
+#[global_allocator]
+static ALLOCATOR: SysAllocator = SysAllocator;
+
+/// The same FNV-1a that the host computes, so both sides can prove they are
+/// looking at the same bytes.
+fn fnv1a(bytes: &[u8]) -> u64 {
+	let mut hash: u64 = 0xcbf29ce484222325;
+	for b in bytes {
+		hash ^= *b as u64;
+		hash = hash.wrapping_mul(0x100000001b3);
+	}
+	hash
+}
+
+unsafe fn borrow<'a>(ptr: *const u8, len: usize) -> &'a str {
+	core::str::from_utf8(core::slice::from_raw_parts(ptr, len))
+		.expect("The host passed bytes that are not UTF-8")
+}
+
+// ---------------------------------------------------------------------------
+// The guest half of the worked examples. Everything below this block is the
+// guest half of the exhaustive tests further down in native_rust.cpp.
+// ---------------------------------------------------------------------------
+
+/// A String returned by value. It is too large for a register, so the caller
+/// allocates room for it and passes the address as a hidden first argument.
+#[no_mangle]
+pub extern "C" fn rust_make_greeting() -> String {
+	String::from("A String returned by value from the guest")
+}
+
+/// The same, but with an argument: the hidden pointer takes the first register,
+/// so `count` arrives in the second one.
+#[no_mangle]
+pub extern "C" fn rust_make_squares(count: usize) -> Vec<u32> {
+	(0..count as u32).map(|i| i * i).collect()
+}
+
+/// The guest lends the host a &str, which is two registers: address and length.
+#[no_mangle]
+pub extern "C" fn rust_lends_str() {
+	let text = String::from("A borrowed &str lent out by the guest");
+	unsafe {
+		asm!("ecall", in("a7") SYSCALL_TAKE_STR,
+			in("a0") text.as_ptr(), in("a1") text.len(), lateout("a0") _);
+	}
+	// Still owned here, and dropped at the end of the function
+}
+
+/// The guest lends the host a whole collection, which is one register holding
+/// the address of its three words.
+#[no_mangle]
+pub extern "C" fn rust_lends_vec() {
+	let names: Vec<String> = vec![
+		String::from("alpha"), String::from("beta"), String::from("gamma")];
+	unsafe {
+		asm!("ecall", in("a7") SYSCALL_TAKE_VEC,
+			in("a0") &names as *const Vec<String>, lateout("a0") _);
+	}
+}
+
+/// Collections nest: every element of the outer Vec is itself the three words
+/// of a Vec, which is exactly what the host pushes into it.
+#[no_mangle]
+pub extern "C" fn rust_nested_sum(vec: *const Vec<Vec<u32>>) -> u64 {
+	let vec: &Vec<Vec<u32>> = unsafe { &*vec };
+	vec.iter().map(|row| row.iter().map(|x| *x as u64).sum::<u64>()).sum()
+}
+
+// ---------------------------------------------------------------------------
+// Layout probe: the raw machine words of every collection, followed by what
+// the Rust API says they hold, so the host can prove the field order it uses.
+// ---------------------------------------------------------------------------
+
+#[no_mangle]
+pub extern "C" fn rust_probe_layout(out: *mut usize) {
+	let vec: Vec<u32> = vec![1, 2, 3];
+	let string = String::from("A string that is definitely heap allocated");
+	let slice: &[u32] = &vec[..];
+	let strref: &str = &string[..];
+	let empty_string = String::new();
+	let empty_vec: Vec<u32> = Vec::new();
+
+	unsafe {
+		let vw: [usize; 3] = core::mem::transmute_copy(&vec);
+		let sw: [usize; 3] = core::mem::transmute_copy(&string);
+		let slw: [usize; 2] = core::mem::transmute_copy(&slice);
+		let stw: [usize; 2] = core::mem::transmute_copy(&strref);
+		let ew: [usize; 3] = core::mem::transmute_copy(&empty_string);
+		let evw: [usize; 3] = core::mem::transmute_copy(&empty_vec);
+		let words: [usize; 26] = [
+			vw[0], vw[1], vw[2], vec.as_ptr() as usize, vec.len(), vec.capacity(),
+			sw[0], sw[1], sw[2], string.as_ptr() as usize, string.len(), string.capacity(),
+			slw[0], slw[1], slice.as_ptr() as usize, slice.len(),
+			stw[0], stw[1], strref.as_ptr() as usize, strref.len(),
+			ew[0], ew[1], ew[2],
+			evw[0], evw[1], evw[2],
+		];
+		core::ptr::copy_nonoverlapping(words.as_ptr(), out, words.len());
+	}
+}
+
+/// Forces the allocations that the runtime makes lazily on its first use of
+/// each collection, so that the host can take an allocation baseline which
+/// does not move underneath it afterwards.
+#[no_mangle]
+pub extern "C" fn rust_warmup() {
+	let mut string = String::from("warm");
+	string.push_str("up");
+	let mut vec: Vec<u32> = Vec::new();
+	vec.push(1);
+	let strings: Vec<String> = vec![String::from("warm"), String::from("up")];
+	let joined = strings.join(", ");
+	core::hint::black_box((&string, &vec, &strings, &joined));
+}
+
+/// The capacity that Rust's RawVec ends up with after pushing one element at
+/// a time. The host's reserve() has to arrive at the same number.
+#[no_mangle]
+pub extern "C" fn rust_vec_capacity_after(pushes: usize) -> usize {
+	let mut vec: Vec<u32> = Vec::new();
+	for i in 0..pushes {
+		vec.push(i as u32);
+	}
+	vec.capacity()
+}
+
+#[no_mangle]
+pub extern "C" fn rust_string_capacity_after(pushes: usize) -> usize {
+	let mut string = String::new();
+	for _ in 0..pushes {
+		string.push('x');
+	}
+	string.capacity()
+}
+
+// The smallest allocation RawVec makes depends on the size of the element:
+// 8 for a byte, 4 for anything up to 1024 bytes, and 1 above that. One
+// function per branch, so the host constant can be checked against each.
+
+#[no_mangle]
+pub extern "C" fn rust_u8vec_capacity_after(pushes: usize) -> usize {
+	let mut vec: Vec<u8> = Vec::new();
+	for i in 0..pushes {
+		vec.push(i as u8);
+	}
+	vec.capacity()
+}
+
+#[no_mangle]
+pub extern "C" fn rust_u64vec_capacity_after(pushes: usize) -> usize {
+	let mut vec: Vec<u64> = Vec::new();
+	for i in 0..pushes {
+		vec.push(i as u64);
+	}
+	vec.capacity()
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Big { pub data: [u8; 2048] }
+
+#[no_mangle]
+pub extern "C" fn rust_bigvec_capacity_after(pushes: usize) -> usize {
+	let mut vec: Vec<Big> = Vec::new();
+	for _ in 0..pushes {
+		vec.push(Big { data: [0u8; 2048] });
+	}
+	vec.capacity()
+}
+
+// ---------------------------------------------------------------------------
+// Strings
+// ---------------------------------------------------------------------------
+
+#[no_mangle]
+pub extern "C" fn rust_string_len(string: *const String) -> usize {
+	let string: &String = unsafe { &*string };
+	string.len()
+}
+
+#[no_mangle]
+pub extern "C" fn rust_string_checksum(string: *const String) -> u64 {
+	let string: &String = unsafe { &*string };
+	fnv1a(string.as_bytes())
+}
+
+#[no_mangle]
+pub extern "C" fn rust_string_is_utf8(ptr: *const u8, len: usize) -> i32 {
+	let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
+	core::str::from_utf8(bytes).is_ok() as i32
+}
+
+/// Append to a host-built string, which reallocates it in the arena.
+#[no_mangle]
+pub extern "C" fn rust_string_append(string: *mut String, ptr: *const u8, len: usize) {
+	let string: &mut String = unsafe { &mut *string };
+	string.push_str(unsafe { borrow(ptr, len) });
+}
+
+/// Build a string in the guest, at an address the host picked.
+#[no_mangle]
+pub extern "C" fn rust_string_make(out: *mut String, ptr: *const u8, len: usize) {
+	let mut string = String::from(unsafe { borrow(ptr, len) });
+	string.push_str(" (built by the guest)");
+	unsafe { core::ptr::write(out, string) };
+}
+
+/// Drop a host-built string in the guest, leaving an empty one behind.
+#[no_mangle]
+pub extern "C" fn rust_string_drop(string: *mut String) {
+	unsafe {
+		core::ptr::drop_in_place(string);
+		core::ptr::write(string, String::new());
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Ownership: the guest keeps a string the host allocated
+// ---------------------------------------------------------------------------
+
+static mut STORED: Option<String> = None;
+
+fn stored() -> &'static mut Option<String> {
+	unsafe { &mut *core::ptr::addr_of_mut!(STORED) }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_take_string(string: *mut String) {
+	let owned = unsafe { core::ptr::read(string) };
+	unsafe { core::ptr::write(string, String::new()) };
+	*stored() = Some(owned);
+}
+
+#[no_mangle]
+pub extern "C" fn rust_stored_checksum() -> u64 {
+	match stored() {
+		Some(string) => fnv1a(string.as_bytes()),
+		None => 0,
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn rust_release_stored() {
+	*stored() = None;
+}
+
+// ---------------------------------------------------------------------------
+// Vectors
+// ---------------------------------------------------------------------------
+
+#[no_mangle]
+pub extern "C" fn rust_vec_sum(vec: *const Vec<u32>) -> u64 {
+	let vec: &Vec<u32> = unsafe { &*vec };
+	vec.iter().map(|x| *x as u64).sum()
+}
+
+#[no_mangle]
+pub extern "C" fn rust_vec_push(vec: *mut Vec<u32>, value: u32) {
+	let vec: &mut Vec<u32> = unsafe { &mut *vec };
+	vec.push(value);
+}
+
+#[no_mangle]
+pub extern "C" fn rust_vec_make(out: *mut Vec<u32>, count: usize) {
+	let vec: Vec<u32> = (0..count as u32).map(|i| i * i).collect();
+	unsafe { core::ptr::write(out, vec) };
+}
+
+#[no_mangle]
+pub extern "C" fn rust_strvec_checksum(vec: *const Vec<String>) -> u64 {
+	let vec: &Vec<String> = unsafe { &*vec };
+	let mut hash = fnv1a(&[vec.len() as u8]);
+	for string in vec.iter() {
+		hash = hash.wrapping_add(fnv1a(string.as_bytes()));
+	}
+	hash
+}
+
+#[no_mangle]
+pub extern "C" fn rust_strvec_push(vec: *mut Vec<String>, ptr: *const u8, len: usize) {
+	let vec: &mut Vec<String> = unsafe { &mut *vec };
+	vec.push(String::from(unsafe { borrow(ptr, len) }));
+}
+
+#[no_mangle]
+pub extern "C" fn rust_strvec_join(vec: *const Vec<String>, out: *mut String) {
+	let vec: &Vec<String> = unsafe { &*vec };
+	let joined = vec.join(", ");
+	unsafe { core::ptr::write(out, joined) };
+}
+
+// ---------------------------------------------------------------------------
+// Borrowed slices. As arguments the two halves arrive in separate registers,
+// and stored in memory they are a { ptr, len } pair.
+// ---------------------------------------------------------------------------
+
+#[no_mangle]
+pub extern "C" fn rust_slice_sum(ptr: *const u32, len: usize) -> u64 {
+	let slice = unsafe { core::slice::from_raw_parts(ptr, len) };
+	slice.iter().map(|x| *x as u64).sum()
+}
+
+#[no_mangle]
+pub extern "C" fn rust_str_checksum(ptr: *const u8, len: usize) -> u64 {
+	fnv1a(unsafe { borrow(ptr, len) }.as_bytes())
+}
+
+#[repr(C)]
+pub struct FatPointer {
+	ptr: usize,
+	len: usize,
+}
+
+/// Store a &str and a &[u32] borrowed from guest collections, so the host can
+/// read them back as GuestRustStr and GuestRustSlice.
+#[no_mangle]
+pub extern "C" fn rust_borrow_into(string: *const String, vec: *const Vec<u32>, out: *mut FatPointer) {
+	let string: &String = unsafe { &*string };
+	let vec: &Vec<u32> = unsafe { &*vec };
+	unsafe {
+		let strref: &str = string.as_str();
+		let slice: &[u32] = vec.as_slice();
+		let stw: [usize; 2] = core::mem::transmute_copy(&strref);
+		let slw: [usize; 2] = core::mem::transmute_copy(&slice);
+		core::ptr::write(out.add(0), FatPointer { ptr: stw[0], len: stw[1] });
+		core::ptr::write(out.add(1), FatPointer { ptr: slw[0], len: slw[1] });
+	}
+}
+
+// ---------------------------------------------------------------------------
+// The host writing into collections the guest owns, through a system call
+// ---------------------------------------------------------------------------
+
+#[no_mangle]
+pub extern "C" fn rust_host_fills_string() -> u64 {
+	let mut string = String::new();
+	unsafe {
+		asm!("ecall", in("a7") SYSCALL_FILL_STRING,
+			in("a0") &mut string as *mut String, lateout("a0") _);
+	}
+	// The guest owns the bytes the host wrote: it can grow them and drop them
+	let mut hash = fnv1a(string.as_bytes());
+	string.push_str(" and the guest appended to it");
+	hash = hash.wrapping_add(fnv1a(string.as_bytes()));
+	hash
+}
+
+#[no_mangle]
+pub extern "C" fn rust_host_fills_vec() -> u64 {
+	let mut vec: Vec<u32> = Vec::new();
+	unsafe {
+		asm!("ecall", in("a7") SYSCALL_FILL_VEC,
+			in("a0") &mut vec as *mut Vec<u32>, lateout("a0") _);
+	}
+	let mut sum: u64 = vec.iter().map(|x| *x as u64).sum();
+	vec.push(1000);
+	sum += vec.len() as u64;
+	sum
+}
+
+fn main() {
+	println!("Rust guest is ready");
+	// Pause here with everything initialized, so that the host can make calls
+	unsafe {
+		asm!("ecall", in("a7") SYSCALL_PAUSE, lateout("a0") _);
+	}
+}
+)RUST";
+
+/// @brief The guest program, built once for the whole test binary.
+static const std::vector<uint8_t>& rust_guest_binary()
+{
+	static const std::vector<uint8_t> binary = build_rust_and_load(RUST_GUEST_PROGRAM);
+	return binary;
+}
+
+/// @brief A block of raw bytes in the guest arena. A vmcall string argument is
+/// zero-terminated, which is not what a Rust &str is, so the tests hand the
+/// guest an address and a length instead.
+struct GuestBytes {
+	GuestBytes(Machine<RISCV64>& machine, std::string_view bytes)
+		: m_machine(machine), m_len(bytes.size())
+	{
+		m_addr = machine.arena().malloc(bytes.size() + 1);
+		REQUIRE(m_addr != 0);
+		machine.copy_to_guest(m_addr, bytes.data(), bytes.size());
+	}
+	~GuestBytes() { m_machine.arena().free(m_addr); }
+
+	uint64_t address() const noexcept { return m_addr; }
+	uint64_t size() const noexcept { return m_len; }
+
+	Machine<RISCV64>& m_machine;
+	uint64_t m_addr;
+	uint64_t m_len;
+};
+
+/// @brief A booted Rust guest, paused inside main() with its runtime fully
+/// initialized and its heap taken over by the host arena.
+struct RustGuest {
+	Machine<RISCV64> machine;
+
+	RustGuest() : machine(rust_guest_binary())
+	{
+		const auto heap = machine.memory.mmap_allocate(HEAP_SIZE);
+		machine.setup_native_heap(HEAP_SYSCALLS_BASE, heap, HEAP_SIZE);
+		machine.setup_linux_syscalls();
+		// Rust's standard library locks with futexes even single-threaded
+		machine.setup_posix_threads();
+		machine.setup_linux({"rust_guest"}, {"LC_ALL=C", "USER=root"});
+
+		install_syscalls();
+
+		machine.simulate(MAX_INSTRUCTIONS);
+		// main() does not return: it stops the machine from inside the pause
+		// system call, with everything initialized and ready to be called into
+		REQUIRE(!machine.instruction_limit_reached());
+		REQUIRE(machine.stopped());
+	}
+
+	Machine<RISCV64>* operator->() { return &machine; }
+
+	/// @brief Run through every collection once, so that the lazy allocations
+	/// the runtime makes are not counted against the tests below
+	void warmup() { machine.vmcall("rust_warmup"); }
+
+	/// @brief Live guest allocations, to prove that a test leaks nothing
+	unsigned live_allocations() const {
+		return machine.arena().allocation_counter() - machine.arena().deallocation_counter();
+	}
+
+private:
+	static void install_syscalls()
+	{
+		// The system call handlers are static, so installing them once is
+		// enough, but doing it again is harmless
+		Machine<RISCV64>::install_syscall_handler(SYSCALL_PAUSE,
+		[] (Machine<RISCV64>& machine) {
+			machine.stop();
+		});
+
+		// The guest hands the host a String it owns, and the host fills it in
+		Machine<RISCV64>::install_syscall_handler(SYSCALL_FILL_STRING,
+		[] (Machine<RISCV64>& machine) {
+			const auto self = machine.sysarg(0);
+			auto& str = *machine.memory.memarray<RustString>(self, 1);
+			str.set_string(machine, HOST_TEXT);
+			machine.set_result(0);
+		});
+
+		// The same for a Vec<u32>
+		Machine<RISCV64>::install_syscall_handler(SYSCALL_FILL_VEC,
+		[] (Machine<RISCV64>& machine) {
+			const auto self = machine.sysarg(0);
+			auto& vec = *machine.memory.memarray<RustVec<uint32_t>>(self, 1);
+			for (uint32_t i = 1; i <= 10; i++)
+				vec.push_back(machine, i);
+			machine.set_result(0);
+		});
+
+		// The guest lends the host a &str: the address and the length are two
+		// separate registers, which is how Rust passes one
+		Machine<RISCV64>::install_syscall_handler(SYSCALL_TAKE_STR,
+		[] (Machine<RISCV64>& machine) {
+			const RustStr text(machine.sysarg(0), machine.sysarg(1));
+			g_lent_str = text.to_string(machine);
+			machine.set_result(0);
+		});
+
+		// The guest lends the host a whole Vec<String>, by address. The host
+		// only reads it: the guest still owns it and drops it afterwards
+		Machine<RISCV64>::install_syscall_handler(SYSCALL_TAKE_VEC,
+		[] (Machine<RISCV64>& machine) {
+			const auto self = machine.sysarg(0);
+			const auto& vec = *machine.memory.memarray<const RustVec<RustString>>(self, 1);
+			g_lent_vec = vec.to_string_vector(machine);
+			machine.set_result(0);
+		});
+	}
+};
+
+// ===========================================================================
+// Worked examples
+//
+// Five short tests, one per way of moving a Rust value across the boundary.
+// Read these first; everything after them is verification, not instruction.
+// ===========================================================================
+
+// The plainest case: the host builds a Rust String in its own arena and calls
+// the guest with it. A ScopedRustString owns the three words *and* the bytes
+// they point at, and passing it to vmcall() passes its guest address, which is
+// what a `&String` or a `*const String` parameter expects.
+TEST_CASE("Example: the host builds a String and a Vec for the guest", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	static const std::string TEXT = "Hello from the host";
+
+	// One warm-up call first: the Rust runtime allocates lazily, and the
+	// allocation balance at the end of the test would move underneath us
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		// fn rust_string_checksum(string: *const String) -> u64
+		ScopedRustString text(guest.machine, TEXT);
+		REQUIRE(guest->vmcall("rust_string_checksum", text) == fnv1a(TEXT));
+
+		// fn rust_vec_sum(vec: *const Vec<u32>) -> u64
+		ScopedRustVec<uint32_t> vec(guest.machine, std::vector<uint32_t>{ 1, 2, 3, 4 });
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 10);
+
+		// A borrowed &str is not the two-word struct: the RISC-V ABI hands the
+		// guest its address and its length in two separate registers, so it is
+		// two vmcall arguments
+		const RustStr borrowed = text->as_str();
+		REQUIRE(guest->vmcall("rust_str_checksum", borrowed.address(), borrowed.size())
+			== fnv1a(TEXT));
+	}
+	// Both scoped objects freed themselves, and their guest allocations
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// A String or a Vec is too large to come back in a register, so a Rust function
+// that returns one does not return it in a0: the caller allocates room for it
+// and passes the address as a hidden first argument. On the host that is the
+// same thing as handing vmcall() a scoped object first - the guest writes its
+// return value straight into it.
+TEST_CASE("Example: a Rust function that returns a String or a Vec", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		// fn rust_make_greeting() -> String
+		ScopedRustString greeting(guest.machine);
+		guest->vmcall("rust_make_greeting", greeting);
+		REQUIRE(greeting->to_string(guest.machine)
+			== "A String returned by value from the guest");
+
+		// fn rust_make_squares(count: usize) -> Vec<u32>
+		// The hidden pointer takes the first register, so the real argument
+		// `count` is the *second* vmcall argument
+		ScopedRustVec<uint32_t> squares(guest.machine);
+		guest->vmcall("rust_make_squares", squares, 5u);
+		REQUIRE(squares->to_vector(guest.machine)
+			== std::vector<uint32_t>{ 0, 1, 4, 9, 16 });
+	}
+	// Allocated by the guest, freed by the host, in the one shared arena
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The other direction: the guest decides to hand something to the host, in a
+// system call. Neither of these transfers ownership - the host reads the bytes
+// where they lie, and the guest drops them as usual on the way out.
+TEST_CASE("Example: the guest lends data to the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	// A &str, as an address and a length in two registers
+	g_lent_str.clear();
+	guest->vmcall("rust_lends_str");
+	REQUIRE(g_lent_str == LENT_TEXT);
+
+	// A whole Vec<String>, as the address of its three words
+	g_lent_vec.clear();
+	guest->vmcall("rust_lends_vec");
+	REQUIRE(g_lent_vec == LENT_NAMES);
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// Collections nest. An element of a Vec<Vec<u32>> is itself the three words of
+// a Vec, so the host builds the inner vectors exactly like any other element
+// and pushes them in. Freeing the outer one frees them all.
+TEST_CASE("Example: nested Rust collections", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		ScopedRustVec<RustVec<uint32_t>> rows(guest.machine);
+		for (uint32_t r = 0; r < 3; r++) {
+			// A shallow push: the row hands its allocation over to the array
+			RustVec<uint32_t> row(guest.machine, std::vector<uint32_t>{ r, r + 1, r + 2 });
+			rows->push_back(guest.machine, row);
+		}
+		REQUIRE(rows->size() == 3);
+		REQUIRE(rows->at(guest.machine, 2).to_vector(guest.machine)
+			== std::vector<uint32_t>{ 2, 3, 4 });
+
+		// fn rust_nested_sum(vec: *const Vec<Vec<u32>>) -> u64
+		REQUIRE(guest->vmcall("rust_nested_sum", rows) == (0+1+2) + (1+2+3) + (2+3+4));
+	}
+	// The outer vector freed the three inner ones along with itself
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// Ownership crosses in both directions, because both sides allocate out of the
+// same arena. Here the host hands over a raw block it filled in itself, and
+// afterwards the guest grows and frees it through its own global allocator.
+// (For the reverse, see "Rust String ownership moves to the guest" below.)
+TEST_CASE("Example: the guest takes ownership of a host buffer", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		ScopedRustVec<uint32_t> vec(guest.machine);
+
+		// A plain arena block, filled in by the host
+		const auto buffer = guest->arena().malloc(4 * sizeof(uint32_t));
+		REQUIRE(buffer != 0);
+		auto* values = guest->memory.memarray<uint32_t>(buffer, 4);
+		for (uint32_t i = 0; i < 4; i++)
+			values[i] = 10 * (i + 1);
+
+		// The vector adopts it, unchanged: no copy, and both the length and
+		// the capacity become the element count that was handed over
+		vec->assume_ownership(guest.machine, buffer, 4);
+		REQUIRE(vec->data() == buffer);
+		REQUIRE(vec->size() == 4);
+		REQUIRE(vec->capacity() == 4);
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 100);
+
+		// Pushing past the capacity makes the guest reallocate it through the
+		// global allocator, which is this same arena
+		guest->vmcall("rust_vec_push", vec, 50u);
+		REQUIRE(vec->size() == 5);
+		REQUIRE(vec->capacity() >= 5);
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 150);
+	}
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// ===========================================================================
+// Verification of the host mirrors
+// ===========================================================================
+
+// The layout of a Rust collection is not stabilized by the language: the
+// compiler is free to reorder the fields, and the host mirrors were written
+// from what it emits today. This test asks the guest itself, so that a future
+// Rust release that moves a field fails here instead of silently reading
+// garbage everywhere else.
+TEST_CASE("Rust collection layout matches the host mirrors", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+
+	// The length of the string that rust_probe_layout() builds
+	static constexpr uint64_t PROBE_STRING_LEN =
+		sizeof("A string that is definitely heap allocated") - 1;
+
+	// 26 words: 3 raw words + ptr/len/capacity for the Vec and the String,
+	// 2 raw words + ptr/len for the slice and the &str, and the raw words of
+	// an empty String and an empty Vec
+	const auto addr = guest->arena().malloc(26 * sizeof(uint64_t));
+	guest->vmcall("rust_probe_layout", addr);
+	const auto* w = guest->memory.memarray<const uint64_t>(addr, 26);
+
+	// Vec<u32> = { capacity, ptr, len }
+	REQUIRE(w[0] == w[5]);  // capacity comes first, ahead of the pointer
+	REQUIRE(w[1] == w[3]);  // then the pointer
+	REQUIRE(w[2] == w[4]);  // then the length
+	REQUIRE(w[4] == 3);
+	REQUIRE(w[5] >= 3);
+
+	// String = Vec<u8>, ie. the same three words
+	REQUIRE(w[6] == w[11]);
+	REQUIRE(w[7] == w[9]);
+	REQUIRE(w[8] == w[10]);
+	REQUIRE(w[10] == PROBE_STRING_LEN);
+
+	// &[u32] and &str = { ptr, len }
+	REQUIRE(w[12] == w[14]);
+	REQUIRE(w[13] == w[15]);
+	REQUIRE(w[15] == 3);
+	REQUIRE(w[16] == w[18]);
+	REQUIRE(w[17] == w[19]);
+	REQUIRE(w[19] == PROBE_STRING_LEN);
+
+	// Reading the raw words through the host mirrors has to agree with what
+	// the Rust API reported for the very same collection
+	RustVec<uint32_t> vec;
+	vec.cap = w[0]; vec.ptr = w[1]; vec.len = w[2];
+	REQUIRE(vec.capacity() == w[5]);
+	REQUIRE(vec.data() == w[3]);
+	REQUIRE(vec.size() == w[4]);
+
+	RustString str;
+	str.cap = w[6]; str.ptr = w[7]; str.len = w[8];
+	REQUIRE(str.capacity() == w[11]);
+	REQUIRE(str.data() == w[9]);
+	REQUIRE(str.size() == w[10]);
+
+	const RustStr strref(w[16], w[17]);
+	REQUIRE(strref.address() == w[18]);
+	REQUIRE(strref.size() == w[19]);
+
+	// An empty collection has a capacity of zero and a dangling, aligned,
+	// never null pointer (Rust holds a NonNull<T>)
+	REQUIRE(w[20] == 0);
+	REQUIRE(w[21] == RustString::DANGLING);
+	REQUIRE(w[22] == 0);
+	REQUIRE(w[23] == 0);
+	REQUIRE(w[24] == RustVec<uint32_t>::DANGLING);
+	REQUIRE(w[25] == 0);
+
+	guest->arena().free(addr);
+}
+
+// reserve() claims to grow exactly the way Rust's RawVec does. Both sides push
+// one element at a time and must end up with the same capacity, or a collection
+// the host builds will reallocate the moment the guest touches it.
+TEST_CASE("Rust RawVec growth matches the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+
+	for (const size_t pushes : {0u, 1u, 2u, 3u, 4u, 5u, 8u, 9u, 16u, 17u, 33u, 100u})
+	{
+		{
+			ScopedRustVec<uint32_t> vec(guest.machine);
+			for (size_t i = 0; i < pushes; i++)
+				vec->push_back(guest.machine, uint32_t(i));
+
+			const uint64_t guest_capacity =
+				guest->vmcall("rust_vec_capacity_after", pushes);
+			INFO("Vec<u32> after " << pushes << " pushes");
+			REQUIRE(vec->size() == pushes);
+			REQUIRE(vec->capacity() == guest_capacity);
+		}
+		{
+			ScopedRustString str(guest.machine);
+			for (size_t i = 0; i < pushes; i++)
+				str->append(guest.machine, "x");
+
+			const uint64_t guest_capacity =
+				guest->vmcall("rust_string_capacity_after", pushes);
+			INFO("String after " << pushes << " pushes");
+			REQUIRE(str->size() == pushes);
+			REQUIRE(str->capacity() == guest_capacity);
+		}
+	}
+
+	// The smallest allocation Rust makes: 8 bytes, 4 elements of 4 bytes
+	REQUIRE(RustString::MIN_CAPACITY == 8);
+	REQUIRE(RustVec<uint32_t>::MIN_CAPACITY == 4);
+}
+
+TEST_CASE("VM calls with a Rust String", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	static const std::string TEXT = "Hello from the host, Rust World!";
+	static const std::string APPENDED = " ...and some more text on the end";
+
+	// One warm-up call, as the guest runtime allocates lazily
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	for (int i = 0; i < 10; i++)
+	{
+		ScopedRustString str(guest.machine);
+		REQUIRE(str->empty());
+		REQUIRE(str->capacity() == 0);
+		REQUIRE(str->data() == RustString::DANGLING);
+
+		str = TEXT;
+		REQUIRE(str->size() == TEXT.size());
+		REQUIRE(str->to_view(guest.machine) == TEXT);
+		REQUIRE(str->to_string(guest.machine) == TEXT);
+
+		// The guest reads the string the host built
+		REQUIRE(guest->vmcall("rust_string_len", str) == TEXT.size());
+		REQUIRE(guest->vmcall("rust_string_checksum", str) == fnv1a(TEXT));
+
+		// The guest appends to it, which reallocates it in the arena
+		GuestBytes more(guest.machine, APPENDED);
+		guest->vmcall("rust_string_append", str, more.address(), more.size());
+		REQUIRE(str->to_view(guest.machine) == TEXT + APPENDED);
+		REQUIRE(str->capacity() >= TEXT.size() + APPENDED.size());
+
+		// A string passed by value ends up on the guest stack, and the guest
+		// receives a pointer to it, exactly like a &String argument
+		RustString onstack(guest.machine, TEXT);
+		REQUIRE(guest->vmcall("rust_string_checksum", onstack) == fnv1a(TEXT));
+		onstack.free(guest.machine);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("A Rust String the guest builds and the host frees", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	static const std::string TEXT = "A string that starts life on the host side";
+
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	for (int i = 0; i < 10; i++)
+	{
+		// The guest writes a String of its own into an address the host picked
+		ScopedRustString str(guest.machine);
+		GuestBytes text(guest.machine, TEXT);
+		guest->vmcall("rust_string_make", str, text.address(), text.size());
+
+		REQUIRE(str->to_view(guest.machine) == TEXT + " (built by the guest)");
+		REQUIRE(str->capacity() >= str->size());
+		// Freed by the ScopedArenaObject, with the guest's own allocation
+
+		// And the other way around: the guest drops a host-built string
+		ScopedRustString hostside(guest.machine, TEXT);
+		REQUIRE(hostside->capacity() != 0);
+		guest->vmcall("rust_string_drop", hostside);
+		REQUIRE(hostside->empty());
+		REQUIRE(hostside->capacity() == 0);
+		REQUIRE(hostside->data() == RustString::DANGLING);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The guest can take ownership of memory the host allocated, and keep it long
+// after the call returns. A moved-from string is left empty, so freeing it on
+// the host side releases nothing.
+TEST_CASE("Rust String ownership moves to the guest", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	static const std::string TEXT = "This string is heap-allocated and becomes guest-owned!";
+
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		ScopedRustString str(guest.machine, TEXT);
+		REQUIRE(str->to_view(guest.machine) == TEXT);
+
+		guest->vmcall("rust_take_string", str);
+
+		// The guest moved out of it, leaving an empty String behind
+		REQUIRE(str->empty());
+		REQUIRE(str->capacity() == 0);
+		REQUIRE(str->data() == RustString::DANGLING);
+
+		// ... and it still owns the bytes the host allocated
+		REQUIRE(guest->vmcall("rust_stored_checksum") == fnv1a(TEXT));
+	}
+	// The scoped string is gone, and the guest's copy is still valid
+	REQUIRE(guest->vmcall("rust_stored_checksum") == fnv1a(TEXT));
+	REQUIRE(guest.live_allocations() == allocs_before + 1);
+
+	// The guest drops it, which returns the host's allocation to the arena
+	guest->vmcall("rust_release_stored");
+	REQUIRE(guest->vmcall("rust_stored_checksum") == 0);
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("VM calls with a Rust Vec", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	for (int i = 0; i < 10; i++)
+	{
+		ScopedRustVec<uint32_t> vec(guest.machine, std::vector<uint32_t>{ 1, 2, 3, 4, 5 });
+		REQUIRE(vec->size() == 5);
+		REQUIRE(vec->to_vector(guest.machine) == std::vector<uint32_t>{ 1, 2, 3, 4, 5 });
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 15);
+
+		// The guest pushes, which reallocates the vector in the arena
+		for (uint32_t v = 6; v <= 20; v++)
+			guest->vmcall("rust_vec_push", vec, v);
+		REQUIRE(vec->size() == 20);
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 20 * 21 / 2);
+		REQUIRE(vec->at(guest.machine, 19) == 20);
+
+		// The host reads it back element by element
+		uint64_t sum = 0;
+		for (const uint32_t value : vec->to_vector(guest.machine))
+			sum += value;
+		REQUIRE(sum == 20 * 21 / 2);
+
+		// Shrinking keeps the allocation, like Rust's truncate()
+		const auto capacity = vec->capacity();
+		vec->resize(guest.machine, 3);
+		REQUIRE(vec->size() == 3);
+		REQUIRE(vec->capacity() == capacity);
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 6);
+
+		vec->clear(guest.machine);
+		REQUIRE(vec->empty());
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 0);
+
+		// A vector the guest builds at an address the host picked
+		ScopedRustVec<uint32_t> made(guest.machine);
+		guest->vmcall("rust_vec_make", made, 8u);
+		REQUIRE(made->size() == 8);
+		for (size_t k = 0; k < 8; k++)
+			REQUIRE(made->at(guest.machine, k) == k * k);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("VM calls with a Rust Vec<String>", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	static const std::vector<std::string> NAMES {
+		"one", "two", "three", "a name long enough to need its own allocation"
+	};
+
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	for (int i = 0; i < 10; i++)
+	{
+		ScopedRustVec<RustString> names(guest.machine, NAMES);
+		REQUIRE(names->size() == NAMES.size());
+		REQUIRE(names->to_string_vector(guest.machine) == NAMES);
+
+		auto expected = [] (const std::vector<std::string>& strings) {
+			const uint8_t count = uint8_t(strings.size());
+			uint64_t hash = fnv1a(std::string_view((const char *)&count, 1));
+			for (const auto& string : strings)
+				hash += fnv1a(string);
+			return hash;
+		};
+		REQUIRE(guest->vmcall("rust_strvec_checksum", names) == expected(NAMES));
+
+		// The guest pushes a String of its own into the host's vector
+		static const std::string EXTRA = "an element the guest pushed on the end";
+		GuestBytes extra(guest.machine, EXTRA);
+		guest->vmcall("rust_strvec_push", names, extra.address(), extra.size());
+
+		auto all = NAMES;
+		all.push_back(EXTRA);
+		REQUIRE(names->size() == all.size());
+		REQUIRE(names->to_string_vector(guest.machine) == all);
+		REQUIRE(guest->vmcall("rust_strvec_checksum", names) == expected(all));
+
+		// And joins them into a String at an address the host picked
+		ScopedRustString joined(guest.machine);
+		guest->vmcall("rust_strvec_join", names, joined);
+
+		std::string host_joined;
+		for (size_t k = 0; k < all.size(); k++)
+			host_joined += (k ? ", " : "") + all[k];
+		REQUIRE(joined->to_view(guest.machine) == host_joined);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// A &str or a &[T] argument is not the two-word struct: the RISC-V ABI hands
+// the guest the address and the length in separate registers.
+TEST_CASE("Borrowed Rust &str and &[T]", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	static const std::string TEXT = "Borrowed by the guest, owned by the host";
+
+	ScopedRustString str(guest.machine, TEXT);
+	ScopedRustVec<uint32_t> vec(guest.machine, std::vector<uint32_t>{ 10, 20, 30, 40 });
+
+	// As arguments: two registers, not a pointer to a fat pointer
+	const RustStr borrowed = str->as_str();
+	REQUIRE(borrowed.size() == TEXT.size());
+	REQUIRE(borrowed.to_view(guest.machine) == TEXT);
+	REQUIRE(guest->vmcall("rust_str_checksum", borrowed.address(), borrowed.size())
+		== fnv1a(TEXT));
+
+	const RustSlice<uint32_t> slice = vec->as_slice();
+	REQUIRE(slice.size() == 4);
+	REQUIRE(slice.as_array(guest.machine)[2] == 30);
+	REQUIRE(guest->vmcall("rust_slice_sum", slice.address(), slice.size()) == 100);
+
+	// Stored in memory they are { ptr, len }, which is what the guest writes
+	// out here, and what the host mirrors read back
+	const auto addr = guest->arena().malloc(2 * sizeof(RustStr));
+	guest->vmcall("rust_borrow_into", str, vec, addr);
+
+	const auto& guest_str = *guest->memory.memarray<const RustStr>(addr, 1);
+	REQUIRE(guest_str.address() == str->data());
+	REQUIRE(guest_str.size() == TEXT.size());
+	REQUIRE(guest_str.to_view(guest.machine) == TEXT);
+
+	const auto& guest_slice =
+		*guest->memory.memarray<const RustSlice<uint32_t>>(addr + sizeof(RustStr), 1);
+	REQUIRE(guest_slice.address() == vec->data());
+	REQUIRE(guest_slice.size() == 4);
+	REQUIRE(guest_slice.as_array(guest.machine)[3] == 40);
+
+	// An empty borrow is a dangling pointer and a zero length
+	const RustStr empty;
+	REQUIRE(empty.empty());
+	REQUIRE(empty.address() == RustString::DANGLING);
+	REQUIRE(empty.to_view(guest.machine).empty());
+
+	guest->arena().free(addr);
+}
+
+// The other direction of the same trick: the guest owns the collection, and
+// hands the host the address of it in a system call.
+TEST_CASE("Host fills in guest-owned Rust collections", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	for (int i = 0; i < 10; i++)
+	{
+		const uint64_t expected_string =
+			fnv1a(HOST_TEXT) + fnv1a(HOST_TEXT + GUEST_SUFFIX);
+		REQUIRE(guest->vmcall("rust_host_fills_string") == expected_string);
+
+		// 1..10 summed, plus the length after the guest pushed one more
+		REQUIRE(guest->vmcall("rust_host_fills_vec") == 55 + 11);
+	}
+
+	// Every collection was dropped by the guest, releasing the host's memory
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// Rust is allowed to assume that the bytes of a String are valid UTF-8, and the
+// host writes into those bytes unchecked. is_valid_utf8() is the check to do
+// beforehand, so it has to agree with Rust's own on every edge case.
+TEST_CASE("Rust UTF-8 validation matches the guest", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+
+	static const std::vector<std::string> CASES {
+		"",                          // empty
+		"Hello, World!",             // plain ASCII
+		std::string("a\0b", 3),      // an embedded zero is just a character
+		"\x7F",                      // last single byte
+		"\xC2\x80",                  // U+0080, the first two-byte sequence
+		"\xDF\xBF",                  // U+07FF, the last one
+		"\xE0\xA0\x80",              // U+0800, the first three-byte sequence
+		"\xEF\xBF\xBF",              // U+FFFF
+		"\xF0\x90\x80\x80",          // U+10000, the first four-byte sequence
+		"\xF4\x8F\xBF\xBF",          // U+10FFFF, the last code point
+		"\xF0\x9F\x98\x80 smile",    // an emoji
+		"\x80",                      // a lone continuation byte
+		"\xC0\xAF",                  // an overlong '/'
+		"\xC1\xBF",                  // an overlong sequence
+		"\xE0\x9F\xBF",              // an overlong three-byte sequence
+		"\xF0\x8F\xBF\xBF",          // an overlong four-byte sequence
+		"\xED\xA0\x80",              // U+D800, a surrogate half
+		"\xED\xBF\xBF",              // U+DFFF, the other end
+		"\xF4\x90\x80\x80",          // beyond U+10FFFF
+		"\xF5\x80\x80\x80",          // beyond the four-byte range entirely
+		"\xFE",                      // never valid
+		"\xFF",                      // never valid
+		"\xE2\x82",                  // truncated three-byte sequence
+		"\xF0\x9F\x98",              // truncated four-byte sequence
+		"ok\xE2\x82",                // truncated at the very end
+	};
+
+	for (const auto& bytes : CASES)
+	{
+		GuestBytes buffer(guest.machine, bytes);
+		const bool guest_says =
+			guest->vmcall("rust_string_is_utf8", buffer.address(), buffer.size()) != 0;
+
+		INFO("Case of " << bytes.size() << " bytes, index "
+			<< (&bytes - CASES.data()));
+		REQUIRE(RustString::is_valid_utf8(bytes) == guest_says);
+	}
+}
+
+// GuestRustMinCapacity has three branches - 8 for a single byte, 4 for an
+// element up to 1024 bytes, and 1 above that - and the growth test above only
+// reaches the first two, through String and Vec<u32>.
+TEST_CASE("Rust RawVec minimum capacity per element size", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	struct Big { uint8_t data[2048]; };
+
+	REQUIRE(RustVec<uint8_t>::MIN_CAPACITY == 8);
+	REQUIRE(RustVec<uint64_t>::MIN_CAPACITY == 4);
+	REQUIRE(RustVec<Big>::MIN_CAPACITY == 1);
+
+	for (const size_t pushes : {1u, 2u, 3u, 5u, 9u, 17u})
+	{
+		INFO("After " << pushes << " pushes");
+		{
+			ScopedRustVec<uint8_t> vec(guest.machine);
+			for (size_t i = 0; i < pushes; i++)
+				vec->push_back(guest.machine, uint8_t(i));
+			REQUIRE(vec->capacity()
+				== guest->vmcall("rust_u8vec_capacity_after", pushes));
+		}
+		{
+			ScopedRustVec<uint64_t> vec(guest.machine);
+			for (size_t i = 0; i < pushes; i++)
+				vec->push_back(guest.machine, uint64_t(i));
+			REQUIRE(vec->capacity()
+				== guest->vmcall("rust_u64vec_capacity_after", pushes));
+		}
+	}
+
+	// A large element gets no minimum at all, so the first push allocates one
+	for (const size_t pushes : {1u, 2u, 3u})
+	{
+		INFO("After " << pushes << " large pushes");
+		ScopedRustVec<Big> vec(guest.machine);
+		for (size_t i = 0; i < pushes; i++)
+			vec->push_back(guest.machine, Big{});
+		REQUIRE(vec->capacity()
+			== guest->vmcall("rust_bigvec_capacity_after", pushes));
+	}
+}
+
+// The remaining GuestRustVec operations, checked against the guest where it
+// can see them, and against the arena where it cannot.
+TEST_CASE("Rust Vec host API surface", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		// The count constructor value-initializes its elements
+		ScopedRustVec<uint32_t> vec(guest.machine, size_t(4));
+		REQUIRE(vec->size() == 4);
+		REQUIRE(vec->capacity() >= 4);
+		REQUIRE(vec->to_vector(guest.machine) == std::vector<uint32_t>{ 0, 0, 0, 0 });
+		REQUIRE(vec->size_bytes() == 4 * sizeof(uint32_t));
+		REQUIRE(vec->capacity_bytes() == vec->capacity() * sizeof(uint32_t));
+
+		// assign() replaces the contents, reusing the allocation when it fits
+		const auto data = vec->data();
+		vec->assign(guest.machine, std::vector<uint32_t>{ 5, 6, 7 });
+		REQUIRE(vec->size() == 3);
+		REQUIRE(vec->data() == data);
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 18);
+
+		// address_at() and at() are the guest address, and the element itself
+		REQUIRE(vec->address_at(0) == vec->data());
+		REQUIRE(vec->address_at(2) == vec->data() + 2 * sizeof(uint32_t));
+		REQUIRE(vec->at(guest.machine, 1) == 6);
+		REQUIRE_THROWS(vec->address_at(3));
+		REQUIRE_THROWS(vec->at(guest.machine, 3));
+
+		// Iterating reads the elements straight out of guest memory
+		uint64_t sum = 0;
+		for (auto it = vec->begin(guest.machine); it != vec->end(guest.machine); ++it)
+			sum += *it;
+		REQUIRE(sum == 18);
+#ifdef RISCV_SPAN_AVAILABLE
+		REQUIRE(vec->to_span(guest.machine).size() == 3);
+		REQUIRE(vec->to_span(guest.machine)[2] == 7);
+#endif
+
+		// pop_back() drops the last element and keeps the allocation
+		const auto capacity = vec->capacity();
+		vec->pop_back(guest.machine);
+		REQUIRE(vec->size() == 2);
+		REQUIRE(vec->capacity() == capacity);
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 11);
+
+		// resize() growing value-initializes what it adds
+		vec->resize(guest.machine, 5);
+		REQUIRE(vec->to_vector(guest.machine) == std::vector<uint32_t>{ 5, 6, 0, 0, 0 });
+		REQUIRE(guest->vmcall("rust_vec_sum", vec) == 11);
+
+		// reserve() only ever grows
+		vec->reserve(guest.machine, 64);
+		REQUIRE(vec->capacity() >= 64);
+		const auto grown = vec->capacity();
+		vec->reserve(guest.machine, 2);
+		REQUIRE(vec->capacity() == grown);
+		REQUIRE(vec->size() == 5);
+
+		// An empty vector has nothing left to pop
+		vec->clear(guest.machine);
+		REQUIRE(vec->empty());
+		REQUIRE_THROWS(vec->pop_back(guest.machine));
+
+		// A slice of the whole vector, and the empty borrows: dangling but
+		// never null, like the collections themselves
+		vec->assign(guest.machine, std::vector<uint32_t>{ 1, 2 });
+		REQUIRE(vec->as_slice().size() == 2);
+		const RustSlice<uint32_t> empty_slice;
+		REQUIRE(empty_slice.empty());
+		REQUIRE(empty_slice.address() == RustVec<uint32_t>::DANGLING);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The remaining GuestRustString operations. The capacity is what says whether
+// an allocation is being reused or replaced, as the length alone cannot.
+TEST_CASE("Rust String host API surface", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		ScopedRustString str(guest.machine, "initial");
+		REQUIRE(str->size() == 7);
+		REQUIRE(str->length() == str->size());
+
+		// set_string() reuses the allocation when the new text fits in it
+		const auto capacity = str->capacity();
+		const auto data = str->data();
+		str->set_string(guest.machine, "short");
+		REQUIRE(str->to_view(guest.machine) == "short");
+		REQUIRE(str->capacity() == capacity);
+		REQUIRE(str->data() == data);
+
+		// clear() drops the characters and keeps the allocation, so the guest
+		// sees an empty string that still owns its bytes
+		str->clear(guest.machine);
+		REQUIRE(str->empty());
+		REQUIRE(str->capacity() == capacity);
+		REQUIRE(str->data() == data);
+		REQUIRE(guest->vmcall("rust_string_len", str) == 0);
+
+		// ... and it can be filled again without allocating anything new
+		str->append(guest.machine, "back");
+		REQUIRE(str->to_view(guest.machine) == "back");
+		REQUIRE(str->data() == data);
+
+		// reserve() only ever grows
+		str->reserve(guest.machine, 256);
+		REQUIRE(str->capacity() >= 256);
+		const auto grown = str->capacity();
+		str->reserve(guest.machine, 1);
+		REQUIRE(str->capacity() == grown);
+		REQUIRE(str->to_view(guest.machine) == "back");
+		REQUIRE(guest->vmcall("rust_string_checksum", str) == fnv1a("back"));
+
+		// A borrowed &str can be copied out as an owned std::string, and an
+		// empty borrow is dangling rather than null
+		const RustStr borrowed = str->as_str();
+		REQUIRE(borrowed.to_string(guest.machine) == "back");
+		const RustStr empty_str;
+		REQUIRE(empty_str.empty());
+		REQUIRE(empty_str.address() == RustString::DANGLING);
+		REQUIRE(empty_str.to_string(guest.machine).empty());
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// Every element of a Vec<String> owns a guest allocation of its own, so each
+// operation that removes one has to release it. A Vec<u32> cannot catch a
+// mistake here, because dropping an u32 does nothing at all.
+TEST_CASE("Rust Vec<String> releases the elements it drops", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	static const std::vector<std::string> NAMES {
+		"a string long enough to need its own allocation",
+		"and another one just like it",
+		"and a third",
+	};
+
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		ScopedRustVec<RustString> names(guest.machine, NAMES);
+		// The scoped object itself, the element array, and one per string
+		REQUIRE(guest.live_allocations() == allocs_before + 2 + NAMES.size());
+
+		// pop_back() releases the last element's bytes
+		names->pop_back(guest.machine);
+		REQUIRE(names->size() == 2);
+		REQUIRE(guest.live_allocations() == allocs_before + 4);
+
+		// resize() shrinking releases everything it drops
+		names->resize(guest.machine, 1);
+		REQUIRE(guest.live_allocations() == allocs_before + 3);
+
+		// resize() growing leaves empty Strings, which own nothing yet
+		names->resize(guest.machine, 3);
+		REQUIRE(names->size() == 3);
+		REQUIRE(guest.live_allocations() == allocs_before + 3);
+		REQUIRE(names->at(guest.machine, 2).empty());
+		REQUIRE(names->at(guest.machine, 2).data() == RustString::DANGLING);
+		REQUIRE(names->to_string_vector(guest.machine)
+			== std::vector<std::string>{ NAMES[0], "", "" });
+
+		// clear() releases them all, and keeps the array
+		names->clear(guest.machine);
+		REQUIRE(names->empty());
+		REQUIRE(guest.live_allocations() == allocs_before + 2);
+
+		// assign() replaces the contents, releasing the old elements
+		names->assign(guest.machine, NAMES);
+		REQUIRE(names->to_string_vector(guest.machine) == NAMES);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}

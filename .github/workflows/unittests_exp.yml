@@ -26,6 +26,9 @@ jobs:
         git submodule update --init ${{github.workspace}}/tests/Catch2
         git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
 
+    - name: Install the RISC-V Rust standard library
+      run: rustup target add riscv64gc-unknown-linux-gnu
+
     - name: Install newer Clang
       run: |
        wget https://apt.llvm.org/llvm.sh

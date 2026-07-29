@@ -13,10 +13,10 @@ This document explains libriscv from fundamentals to production integration. lib
 7. [Heap Takeover](#heap-takeover)
 8. [Guest Datatypes](#guest-datatypes)
 9. [Generated Host Functions](#generated-host-functions)
-10. [Advanced: Zero-Copy Structures](#advanced-zero-copy-structures)
-11. [Production Integration Example](#production-integration-example)
-12. [Minimal Script Wrapper (End-to-End)](#minimal-script-wrapper-end-to-end)
-13. [Verifying VMCall Latency](#verifying-vmcall-latency)
+10. [Zero-Copy Structures](#zero-copy-structures)
+11. [Production Integration](#production-integration)
+12. [Verifying VMCall Latency](#verifying-vmcall-latency)
+13. [Summary of Integration Requirements](#summary-of-integration-requirements)
 14. [RPC Between Same-Program Instances](#rpc-between-same-program-instances)
 
 ---
@@ -332,45 +332,31 @@ This installs syscall handlers at consecutive numbers:
 
 ### Override (Guest Side)
 
-The guest program must override `malloc`, `free`, `memcpy`, etc. to use these syscalls instead of the default implementations. With newlib (used by `riscv64-unknown-elf-g++`), this requires two pieces:
-
-**1. Linker flags** using `--wrap` to redirect calls:
+The guest must route `malloc`, `free`, `memcpy` and friends to those syscalls. With newlib (`riscv64-unknown-elf-g++`) that takes two pieces. First, `--wrap` linker flags, which resolve `malloc` → `__wrap_malloc` (the original becomes `__real_malloc`):
 
 ```cmake
-# In CMakeLists.txt for the guest binary
 target_link_libraries(${NAME} "-Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc")
 target_link_libraries(${NAME} "-Wl,--wrap=memcpy,--wrap=memset,--wrap=memcmp,--wrap=memmove")
 target_link_libraries(${NAME} "-Wl,--wrap=strlen,--wrap=strcmp,--wrap=strncmp")
 ```
 
-The `--wrap=malloc` flag causes the linker to resolve `malloc` → `__wrap_malloc`, and the original becomes `__real_malloc`.
-
-**2. Assembly stubs** in a guest source file (e.g., `env.cpp`). For malloc/free/calloc/realloc, pure asm stubs are sufficient:
+Second, the stubs themselves in a guest source file (`env.cpp`). malloc/free/calloc/realloc are pure asm:
 
 ```cpp
-#define STRINGIFY_HELPER(x) #x
-#define STRINGIFY(x) STRINGIFY_HELPER(x)
-
-#define HEAP_SYSCALLS_BASE  490
-#define SYSCALL_MALLOC  (HEAP_SYSCALLS_BASE+0)
-#define SYSCALL_FREE    (HEAP_SYSCALLS_BASE+3)
-
 #define GENERATE_SYSCALL_WRAPPER(name, number) \
     asm(".global " #name "\n" #name ":\n  li a7, " STRINGIFY(number) "\n  ecall\n  ret\n");
 
 asm(".pushsection .text, \"ax\", @progbits\n");
-GENERATE_SYSCALL_WRAPPER(__wrap_malloc,  SYSCALL_MALLOC);
-GENERATE_SYSCALL_WRAPPER(__wrap_free,    SYSCALL_FREE);
+GENERATE_SYSCALL_WRAPPER(__wrap_malloc,  HEAP_SYSCALLS_BASE+0);
+GENERATE_SYSCALL_WRAPPER(__wrap_free,    HEAP_SYSCALLS_BASE+3);
 // ... similarly for calloc, realloc
 asm(".popsection\n");
 ```
 
-For memcpy/memset, inline asm with proper clobber constraints is needed so the compiler can reason about memory effects:
+memcpy/memset need inline asm with real memory constraints, so the compiler knows what they touch:
 
 ```cpp
-#define MEMORY_SYSCALLS_BASE 495
 #define memcpy __wrap_memcpy
-
 extern "C" void* memcpy(void* vdest, const void* vsrc, size_t size)
 {
     register char*       a0 asm("a0") = (char*)vdest;
@@ -387,9 +373,9 @@ extern "C" void* memcpy(void* vdest, const void* vsrc, size_t size)
 }
 ```
 
-See the `examples/gamedev/cpp_program/env.cpp` file for the complete set of overrides.
+Copy [`examples/gamedev/cpp_program/env.cpp`](examples/gamedev/cpp_program/env.cpp) for the complete set. A Rust guest does not need any of this — see [Heap takeover in a Rust guest](#heap-takeover-in-a-rust-guest).
 
-**Verification**: Use `objdump -d program.elf | grep -A4 '__wrap_malloc'` to confirm the override is a 3-instruction syscall stub (`li a7, N; ecall; ret`). If you see a large function body instead, the takeover failed.
+**Verification**: `objdump -d program.elf | grep -A4 '__wrap_malloc'` must show a 3-instruction stub (`li a7, N; ecall; ret`). A large function body means the takeover failed.
 
 ### Host Allocation on Behalf of Guest
 
@@ -451,7 +437,25 @@ This works because `ScopedArenaObject`'s destructor calls `GuestStdString::free(
 
 ## Guest Datatypes
 
-With heap takeover, the host can construct and pass C++ standard library types that the guest understands.
+With heap takeover, the host can construct and pass standard library types that the guest understands, both C++ and Rust.
+
+`<libriscv/guest_datatypes.hpp>` includes all of them. Each container also has its own header under `libriscv/guest/`, so you can include only what you use:
+
+| Header | Contents |
+| --- | --- |
+| `guest/guest_common.hpp` | The traits and dispatch every container shares |
+| `guest/guest_arena_object.hpp` | `ScopedArenaObject`: an owned object in the arena |
+| `guest/guest_cpp_string.hpp` | `GuestStdString` |
+| `guest/guest_cpp_vector.hpp` | `GuestStdVector` |
+| `guest/guest_cpp_hash.hpp` | `GuestStdHash`, the replica of the guests `std::hash` |
+| `guest/guest_cpp_unordered_map.hpp` | `GuestStdUnorderedMap` |
+| `guest/guest_cpp_variant.hpp` | `GuestStdVariant` |
+| `guest/guest_rust_string.hpp` | `GuestRustString`, `GuestRustStr` |
+| `guest/guest_rust_vec.hpp` | `GuestRustVec`, `GuestRustSlice` |
+
+A container is registered with the shared machinery by specializing three traits in `guest_common.hpp`: `is_guest_datatype` (it owns guest memory, `free()` releases it), `is_self_referencing_guest_object` (it points back into itself, so it needs `move()`), and `guest_object_needs_self_address` (its constructors take `(machine, self, ...)`). Everything else — vectors of it, variant alternatives, map keys and values, `ScopedArenaObject`, and passing it to `vmcall()` — then works without further changes.
+
+[`examples/attribute_bench`](examples/attribute_bench) is a complete, buildable program that uses `GuestStdUnorderedMap`, `GuestStdVariant` and `GuestStdString` to move a tree of named attributes across the boundary in both directions, benchmarked against a hand-serialized flat form and checked for leaks. `tests/unit/native.cpp` and `tests/unit/native_rust.cpp` exercise every container against a real guest.
 
 ### Type Aliases (typical project setup)
 
@@ -464,6 +468,10 @@ template <typename K, typename V>
 using CppMap = riscv::GuestStdUnorderedMap<8, K, V>;         // Mirrors std::unordered_map<K, V>
 template <typename... Types>
 using CppVariant = riscv::GuestStdVariant<8, Types...>;      // Mirrors std::variant<Types...>
+
+using RustString = riscv::GuestRustString<8>;                // Mirrors Rust String
+template <typename T>
+using RustVec = riscv::GuestRustVec<8, T>;                   // Mirrors Rust Vec<T>
 ```
 
 ### GuestStdString
@@ -566,6 +574,8 @@ machine.install_syscall_handler(1, [] (auto& machine) {
 });
 ```
 
+See [`examples/attribute_bench`](examples/attribute_bench) for this pattern in full, including the custom-hasher case and recursive freeing of a nested tree.
+
 ### GuestStdVariant
 
 Mirrors `std::variant<Types...>` layout: the union of every alternative, followed by the index of the active alternative. Host-side alternatives are the mirror types, so a guest `std::variant<bool, int, double, glm::vec3, std::string>` becomes `riscv::GuestStdVariant<8, bool, int, double, glm::vec3, CppString>`.
@@ -624,6 +634,56 @@ map->for_each(machine, [&] (const CppString& key, CppValue& value) {
 
 Nested guest containers are supported as alternatives (`CppVector<int>`, `CppMap<K, V>`, another variant), and `free()` releases them recursively. Reading those must be done with `visit()`, as `to_variant()` only handles scalars and strings.
 
+### GuestRustString and GuestRustVec
+
+Rust's `String` is a `Vec<u8>` of UTF-8 bytes, and both are three machine words laid out as `{ capacity, ptr, len }`. There is no small-string optimization and no terminating zero, and neither points back into itself, so they can be moved around freely — no `move()` call is ever needed.
+
+```cpp
+RustString str(machine);
+str.set_string(machine, "Hello");
+str.append(machine, ", Rust World!");     // Rust's push_str
+std::string_view view = str.to_view(machine);
+str.free(machine);                        // Or use ScopedGuestRustString<8>
+
+RustVec<uint32_t> vec(machine);
+for (uint32_t i = 0; i < 10; i++)
+    vec.push_back(machine, i);
+auto host_vec = vec.to_vector(machine);
+vec.free(machine);
+
+// A Vec<String>
+ScopedGuestRustVec<8, RustString> names(machine,
+    std::vector<std::string>{ "one", "two", "three" });
+```
+
+`reserve()` grows the allocation exactly the way Rust's `RawVec` does, so a collection built here and one built by the guest end up with the same capacity. An empty collection holds a dangling (never null) pointer equal to `alignof(T)`, matching Rust's `NonNull<T>`.
+
+`GuestRustStr` and `GuestRustSlice<T>` are the non-owning `&str` / `&[T]` fat pointers, `{ ptr, len }`. Note that this is the layout of a slice *stored in memory*; as a function argument the RISC-V ABI passes the two halves in separate registers, so a guest `fn(s: &str)` takes an address and a length as two integer arguments.
+
+> **NOTE:** Rust does not stabilize the layout of its collections — the compiler reorders the fields, which is why the capacity comes first. The order above was verified by transmuting the collections to `[usize; N]` in a `riscv64gc-unknown-linux-gnu` program (rustc 1.93). Re-check it when a new Rust release lands. Only the slice layout is guaranteed by the language. `tests/unit/native_rust.cpp` asks the guest for those words on every run, so a future release that moves a field fails there.
+
+#### Heap takeover in a Rust guest
+
+A Rust guest takes over its heap with a `#[global_allocator]` that ecalls the native heap syscalls — no `--wrap` linker flags needed, because every `String` and `Vec` allocation goes through it:
+
+```rust
+struct SysAllocator;
+unsafe impl GlobalAlloc for SysAllocator {
+	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+		let ret: *mut u8;
+		asm!("ecall", in("a7") HEAP_SYSCALLS_BASE + 0,
+			in("a0") layout.size(), in("a1") layout.align(), lateout("a0") ret);
+		ret
+	}
+	// alloc_zeroed = +1 (calloc), realloc = +2, dealloc = +3
+}
+
+#[global_allocator]
+static ALLOCATOR: SysAllocator = SysAllocator;
+```
+
+The arena always returns 16-byte aligned blocks, which covers every alignment the standard collections ask for. Build with `-C target-feature=+crt-static` so the ELF is statically linked, and keep exported `#[no_mangle]` functions from being collected with `-C link-args=-Wl,--no-gc-sections`. Rust's standard library locks with futexes even in a single-threaded program, so the host needs `machine.setup_posix_threads()` in addition to `setup_linux_syscalls()`.
+
 ### ScopedArenaObject (RAII wrapper)
 
 ```cpp
@@ -647,6 +707,10 @@ machine.vmcall<MAX>(func, str);        // passes str.address() automatically
 | `std::string` or `const char*` | Pushes null-terminated C string to guest stack, passes pointer in register | `const char*` |
 | `GuestStdString<W>` | SSO-adjusts and pushes full string object to guest stack | `const std::string&` |
 | `ScopedArenaObject<W, GuestStdString<W>>&` | Passes the guest heap address directly | `const std::string&` |
+| `GuestRustString<W>` | Pushes the three words to the guest stack | `&String` / `*mut String` |
+| `ScopedArenaObject<W, GuestRustString<W>>&` | Passes the guest heap address directly | `&String` / `*mut String` |
+
+Any container registered as a guest datatype follows the same two rules: by value it is pushed to the stack (and told where it landed, so a self-referencing one stays valid), and in a `ScopedArenaObject` its arena address is passed. A Rust `&str` or `&[T]` argument is the exception — the ABI splits it into an address and a length in two registers, so pass `str.data(), str.size()`.
 
 **Common mistake**: Passing `std::string("hello")` via vmcall and having the guest receive it as `const std::string&`. This silently produces garbage because the guest gets a C string pointer where it expects a `std::string` object layout. If the guest function takes `const std::string&`, use `ScopedArenaObject<W, GuestStdString<W>>` on the host side.
 
@@ -731,263 +795,9 @@ Create a `host_functions.json` that lists every callable function with its C sig
 
 ### Step 2: Generate Guest Stubs
 
-The `generate.py` script (shipped in the libriscv repository) reads the JSON and produces:
+[`examples/expert/generate.py`](examples/expert/generate.py) is a complete, working generator — copy it as-is. It reads the JSON and writes two files that get compiled into the guest binary: a header with `extern` prototypes and typedefs, and a C source with the assembly stubs and the `dyncall_table`. The guest then calls the functions like any C API.
 
-1. **A C header** (`host_functions.h`) with `extern` prototypes and any typedefs.
-2. **A C source** (`host_functions.c`) with assembly stubs and the `dyncall_table`.
-
-The guest program uses these by including the header and calling the functions as normal C calls. The generated `.c` must be compiled into the guest binary.
-
-Here is a fully working host-function generator:
-```py
-import binascii
-import json
-from array import array
-
-from argparse import ArgumentParser
-parser = ArgumentParser()
-parser.add_argument("-j", "--json", dest="jsonfile", default="dyncalls.json",
-                    help="read JSON from FILE", metavar="FILE")
-parser.add_argument("-o", "--output", dest="output", required=True,
-                    help="write generated prototypes to FILE", metavar="FILE")
-parser.add_argument("-v", "--verbose",
-                    action="store_true", dest="verbose", default=False,
-                    help="print status messages to stdout")
-parser.add_argument('--dyncall', dest='dyncall', action='store', default=504,
-                   help='set the dyncall system call number')
-
-args = parser.parse_args()
-
-# Use system call number 504 (instead of custom instruction)
-use_syscall = False
-# this is the plain CRC32 polynomial
-poly = 0xEDB88320
-# we need to be able to calculate CRC32 using any poly
-table = array('L')
-for byte in range(256):
-    crc = 0
-    for bit in range(8):
-        if (byte ^ crc) & 1:
-            crc = (crc >> 1) ^ poly
-        else:
-            crc >>= 1
-        byte >>= 1
-    table.append(crc)
-
-def crc32(string):
-    value = 0xffffffff
-    for ch in string:
-        value = table[(ord(ch) ^ value) & 0xff] ^ (value >> 8)
-
-    return -1 - value
-
-def is_type(string):
-	keywords = ["unsigned", "char", "short", "int", "long", "float", "double", "size_t", "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t", "int64_t", "uint64_t"]
-	conventions = ("_callback", "_t")
-	return ("*" in string) or string in keywords or string.endswith(conventions)
-
-def find_arguments(string):
-	sfront = string.split('(', 1)
-	retval = [sfront[0].split(' ')[0]]
-	strargs = sfront[1].split(')')[0]
-	# [retval, arg0, arg1, '']
-	fargs = retval + strargs.split(", ")
-	# Remove parameter names
-	for (idx, arg) in enumerate(fargs):
-		symbols = arg.split(" ")
-		if len(symbols) > 1:
-			last = symbols[-1]
-			if not is_type(last):
-				symbols.pop()
-				fargs[idx] = " ".join(symbols)
-	# Remove empty argument lists
-	if fargs[-1] == "":
-		fargs.pop()
-	return fargs
-
-# load JSON
-j = {}
-with open(args.jsonfile) as f:
-	j = json.load(f)
-
-# List of client-side only dyncalls
-client_side = []
-if "clientside" in j:
-	for key in j["clientside"]:
-		client_side.append(key)
-
-# List of server-side only dyncalls
-server_side = []
-if "serverside" in j:
-	for key in j["serverside"]:
-		server_side.append(key)
-
-# List of initialization-only dyncalls
-initialization = []
-if "initialization" in j:
-	for key in j["initialization"]:
-		initialization.append(key)
-
-header = """
-#pragma once
-#include <stddef.h>
-#include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-""";
-
-# iterate typedefs first
-for key in j:
-	if key == "typedef":
-		for typedef in j[key]:
-			header += typedef + ";\n"
-header += "\n"
-
-source = '__asm__(".section .text\\n");\n\n'
-dyncallindex = 0
-
-dyncall = ""
-
-# create dyncall prototypes and assembly
-for key in j:
-	if key == "typedef" or key == "clientside" or key == "serverside" or key == "initialization":
-		continue
-	else:
-		asmdef  = " ".join(j[key].split())
-		asmname = asmdef.split(' ')[1]
-
-		fargs = find_arguments(asmdef)
-
-		crcval = crc32(asmdef) & 0xffffffff
-		crc = '%08x' % crcval
-
-		header += "// " + key + ": 0x" + crc + "\n"
-		header += "extern " + asmdef + ";\n"
-
-		if args.verbose:
-			print("Dynamic call: " + key + ", hash 0x" + crc)
-
-		# Each dynamic call has a table index where the name and hash is stored
-		dyncall += '  .long 0x' + crc + '\\n\\\n'
-		dyncall += '  .long ' + str(0) + '\\n\\\n'
-		dyncall += '  .long ' + asmname + '_str\\n\\\n'
-
-		# Flags (one byte each for client-side, server-side, initialization, and padding)
-		is_client_side = key in client_side
-		is_server_side = key in server_side
-		is_initialization = key in initialization
-		dyncall += '  .byte ' + str(int(is_initialization)) + '\\n\\\n'
-		dyncall += '  .byte ' + str(int(is_client_side)) + '\\n\\\n'
-		dyncall += '  .byte ' + str(int(is_server_side)) + '\\n\\\n'
-		dyncall += '  .byte 0\\n\\\n'
-
-		# These dynamic calls use the table indexed variant
-		# Each dynamic call has a table index where the name and hash is stored
-		# and at run-time this value is lazily resolved
-		source += '__asm__("\\n\\\n'
-		source += '.global ' + asmname + '\\n\\\n'
-		source += '.func ' + asmname + '\\n\\\n'
-		source += asmname + ':\\n\\\n'
-		if use_syscall:
-			source += '  li t0, ' + str(dyncallindex) + '\\n\\\n'
-			source += '  li a7, ' + str(args.dyncall) + '\\n\\\n'
-			source += '  ecall\\n\\\n'
-		else:
-			source += '  .insn i 0b1011011, 0, x0, x0, ' + str(dyncallindex) + '\\n\\\n'
-		source += '  ret\\n\\\n'
-		source += '.endfunc\\n\\\n'
-		source += '.pushsection .rodata\\n\\\n'
-		source += asmname + '_str:\\n\\\n'
-		source += '.asciz \\\"' + key + '\\\"\\n\\\n'
-		source += '.popsection\\n\\\n'
-		source += '");\n\n'
-
-		dyncallindex += 1
-
-header += """
-#ifdef __cplusplus
-}
-#endif
-"""
-
-dyncall_header =  '__asm__("\\n\\\n'
-dyncall_header += '.pushsection .rodata\\n\\\n'
-dyncall_header += '.align 8\\n\\\n'
-dyncall_header += '.global dyncall_table\\n\\\n'
-dyncall_header += 'dyncall_table:\\n\\\n'
-dyncall_header += '  .long ' + str(dyncallindex) + '\\n\\\n'
-
-dyncall = dyncall_header + dyncall
-dyncall += '.popsection\\n\\\n'
-dyncall += '");\n\n'
-
-source += dyncall
-
-if (args.verbose):
-	print("* There are " + str(dyncallindex) + " dynamic calls")
-
-with open(args.output + ".h", "w") as hdrfile:
-	hdrfile.write(header)
-with open(args.output + ".c", "w") as srcfile:
-	srcfile.write(source)
-```
-
-**CMake integration for the guest build:**
-
-```cmake
-# Path to the shared JSON and the generator script
-set(JSON_FILE "${CMAKE_SOURCE_DIR}/host_functions.json")
-set(PYPROGRAM "${CMAKE_SOURCE_DIR}/generate.py")
-set(GEN_DIR   "${CMAKE_BINARY_DIR}/dyncalls")
-set(GEN_FILES "${GEN_DIR}/host_functions")
-
-# Generate .h and .c from JSON
-file(MAKE_DIRECTORY ${GEN_DIR})
-add_custom_command(
-    OUTPUT ${GEN_FILES}.h ${GEN_FILES}.c
-    COMMAND python3 ${PYPROGRAM} --verbose -j ${JSON_FILE} -o ${GEN_FILES}
-    DEPENDS ${PYPROGRAM} ${JSON_FILE}
-)
-add_custom_target(generate_dyncalls ALL DEPENDS ${GEN_FILES}.h ${GEN_FILES}.c)
-
-# Mark generated files so CMake doesn't complain about missing sources
-set_source_files_properties(${GEN_FILES}.h ${GEN_FILES}.c PROPERTIES GENERATED TRUE)
-
-# Add to guest binary (assuming add_guest_binary is defined as shown earlier)
-add_guest_binary(guest program.cpp ${GEN_FILES}.c)
-add_dependencies(guest generate_dyncalls)
-target_include_directories(guest PRIVATE ${GEN_DIR})
-
-# The dyncall_table symbol in rodata can be garbage-collected by the linker.
-# This flag prevents that:
-target_link_libraries(guest "-Wl,--undefined=dyncall_table")
-```
-
-After building, the guest code uses the generated functions like any C API:
-
-```cpp
-// Guest program.cpp
-#include "host_functions.h"
-
-PUBLIC(void on_init())
-{
-    sys_block_new("dirt", "terrain/dirt");
-    sys_recipe_new("pickaxe", 7);
-}
-
-PUBLIC(void on_update())
-{
-    double t = sys_game_get_time();
-    // ...
-}
-```
-
-#### What the Generator Produces
-
-Each function becomes a 2-instruction assembly stub — a custom RISC-V instruction encoding the table index, then `ret`:
+Each function becomes a 2-instruction stub — a custom RISC-V instruction encoding the table index, then `ret`:
 
 ```asm
 .global sys_timer_periodic
@@ -996,65 +806,50 @@ sys_timer_periodic:
   ret
 ```
 
-The `.insn i 0b1011011` is a custom RISC-V instruction. The emulator does not recognize it as a standard instruction, so it traps to a host callback. The table index is encoded in the 12-bit immediate field (supporting up to 2048 host functions). This is faster than ECALL because the index is in the instruction itself — no register setup, no syscall dispatch table.
+The emulator does not recognize opcode `0b1011011`, so it traps to a host callback. The index is in the instruction's 12-bit immediate (up to 2048 host functions), which is faster than ECALL: no register setup, no syscall dispatch table.
 
-The generator also emits a `dyncall_table` symbol in the guest's `.rodata` section. This table is what the host reads at init to match functions:
+The `dyncall_table` in `.rodata` is what the host reads at init — a count followed by 16-byte entries of `{ crc32, reserved, strname, init_only, client_only, server_only, pad }`. `strname` is a *guest-space* address of a null-terminated name in `.rodata`, read with `machine().memory.memstring()`.
 
+**CMake integration for the guest build:**
+
+```cmake
+set(JSON_FILE "${CMAKE_SOURCE_DIR}/host_functions.json")
+set(PYPROGRAM "${CMAKE_SOURCE_DIR}/generate.py")
+set(GEN_DIR   "${CMAKE_BINARY_DIR}/dyncalls")
+set(GEN_FILES "${GEN_DIR}/host_functions")
+
+file(MAKE_DIRECTORY ${GEN_DIR})
+add_custom_command(
+    OUTPUT ${GEN_FILES}.h ${GEN_FILES}.c
+    COMMAND python3 ${PYPROGRAM} --verbose -j ${JSON_FILE} -o ${GEN_FILES}
+    DEPENDS ${PYPROGRAM} ${JSON_FILE}
+)
+add_custom_target(generate_dyncalls ALL DEPENDS ${GEN_FILES}.h ${GEN_FILES}.c)
+set_source_files_properties(${GEN_FILES}.h ${GEN_FILES}.c PROPERTIES GENERATED TRUE)
+
+add_guest_binary(guest program.cpp ${GEN_FILES}.c)
+add_dependencies(guest generate_dyncalls)
+target_include_directories(guest PRIVATE ${GEN_DIR})
+
+# dyncall_table lives in rodata and would otherwise be garbage-collected
+target_link_libraries(guest "-Wl,--undefined=dyncall_table")
 ```
-dyncall_table:
-  .long <count>                    # Number of entries
-  # Entry 0:
-  .long 0xABCD1234                 # CRC32 of "int sys_timer_periodic (float, float, ...)"
-  .long 0                          # Reserved
-  .long sys_timer_periodic_str     # Pointer to name string in rodata ("Timer::periodic")
-  .byte 0                          # initialization_only flag
-  .byte 0                          # client_side_only flag
-  .byte 0                          # server_side_only flag
-  .byte 0                          # padding
-  # Entry 1: ...
-```
-
-Each entry is 16 bytes. The `strname` field is a guest-space address pointing to a null-terminated string in `.rodata` — it is not a host pointer. The host reads it with `machine().memory.memstring(entry.strname)`.
 
 ### Step 3: Host-Side Registration
 
-The host registers handlers by name and signature. The signature is CRC32-hashed to match against the guest's table.
-
-**Required include:**
-
-```cpp
-#include <libriscv/util/crc32.hpp>
-```
-
-**The host function registry and registration:**
+The host registers handlers by name and signature; the signature is CRC32-hashed (`#include <libriscv/util/crc32.hpp>`) to match the guest's table. **Whitespace normalization is critical** — the generator hashes `" ".join(s.split())`, so the host must collapse runs of spaces the same way or nothing matches.
 
 ```cpp
 using ghandler_t = std::function<void(Script&)>;
+struct HostFunction { std::string name, signature; ghandler_t func; };
 
-struct HostFunction {
-    std::string name;
-    std::string signature;
-    ghandler_t  func;
-};
-
-// Static map shared across all Script instances: CRC32(signature) -> handler
+// Static, shared across all Script instances: CRC32(signature) -> handler
 static std::map<uint32_t, HostFunction> m_host_functions;
-```
-
-**Whitespace normalization** is critical. The generator normalizes signatures to single-spaced strings before hashing (`" ".join(s.split())` in Python). The host must do the same, or hashes won't match:
-
-```cpp
-static std::string single_spaced(std::string s) {
-    size_t pos = 0;
-    while ((pos = s.find("  ", pos)) != std::string::npos)
-        s.replace(pos, 2, " ");
-    return s;
-}
 
 void Script::set_host_function(
     std::string name, std::string signature, ghandler_t handler)
 {
-    signature = single_spaced(signature);
+    signature = single_spaced(std::move(signature));
     const uint32_t hash = riscv::crc32(signature.c_str());
 
     auto it = m_host_functions.find(hash);
@@ -1065,128 +860,77 @@ void Script::set_host_function(
 }
 ```
 
-**Registration** — the signature string must match the JSON (whitespace is normalized, so minor spacing differences are OK):
+Registration uses the same signature string as the JSON:
 
 ```cpp
 Script::set_host_function(
     "Timer::periodic",
     "int sys_timer_periodic (float, float, timer_callback, void*, size_t)",
     [](Script& script) {
-        auto& machine = script.machine();
         auto [interval, duration, callback, data, size] =
-            machine.sysargs<float, float, gaddr_t, gaddr_t, gaddr_t>();
+            script.machine().sysargs<float, float, gaddr_t, gaddr_t, gaddr_t>();
         // ... create timer ...
-        machine.set_result(timer_id);
-    });
-
-Script::set_host_function(
-    "Game::get_time",
-    "double sys_game_get_time ()",
-    [](Script& script) {
-        script.machine().set_result(game_time());
+        script.machine().set_result(timer_id);
     });
 ```
 
 ### Step 4: Resolution at Init
 
-When a guest program is loaded, the host reads the `dyncall_table` from guest rodata, looks up each entry by CRC32 hash, and builds a flat dispatch array. This is called once (or twice for two-phase init).
-
-**The table entry layout** must match what `generate.py` emits (16 bytes per entry):
+At load time the host reads `dyncall_table` from guest rodata and builds a flat dispatch array — once, or twice for two-phase init. The entry layout must match what `generate.py` emits:
 
 ```cpp
 struct HostFunctionDesc {
     uint32_t hash;
     uint32_t reserved;
     uint32_t strname;       // Guest-space address of the name string in .rodata
-    bool initialization_only;
-    bool client_side_only;
-    bool server_side_only;
-    bool padding;
+    bool initialization_only, client_side_only, server_side_only, padding;
 };
 static_assert(sizeof(HostFunctionDesc) == 16);
 ```
 
-**The dispatch array** is a `std::vector` on the Script instance:
-
-```cpp
-// In script.hpp, add to the Script class:
-std::vector<ghandler_t> m_host_function_array;
-gaddr_t m_g_host_function_table = 0;
-
-static std::size_t host_function_count() noexcept {
-    return m_host_functions.size();
-}
-```
-
-**Resolution logic:**
-
 ```cpp
 void Script::resolve_host_functions(bool initialization, bool client_side)
 {
-    // Find the dyncall_table symbol in the guest ELF
     m_g_host_function_table = machine().address_of("dyncall_table");
     if (m_g_host_function_table == 0x0)
         throw std::runtime_error(name() + ": dyncall_table not found in guest ELF");
 
-    // First 4 bytes are the entry count
+    // The first 4 bytes are the entry count, then the entries, viewed
+    // directly out of guest rodata (zero-copy, flat arena)
     const uint32_t count = machine().memory.read<uint32_t>(m_g_host_function_table);
     if (count > 2048)
         throw std::runtime_error(name() + ": dyncall_table has bogus entry count");
-
-    // View the entries directly from guest rodata (zero-copy, flat arena)
     auto entries = machine().memory.memspan<const HostFunctionDesc>(
         m_g_host_function_table + 4, count);
 
     m_host_function_array.clear();
     m_host_function_array.reserve(count);
-    std::size_t unimplemented = 0;
 
-    for (unsigned i = 0; i < count; i++) {
-        auto& entry = entries[i];
+    for (auto& entry : entries) {
+        // A function that is out of phase, or on the wrong side, becomes a
+        // stub that throws if the guest calls it anyway
+        const bool allowed =
+            !(entry.initialization_only && !initialization) &&
+            !(entry.client_side_only && !client_side) &&
+            !(entry.server_side_only && client_side);
 
-        // Phase restriction: init-only functions get stubbed out after init
-        if (entry.initialization_only && !initialization) {
-            m_host_function_array.push_back([](auto&) {
-                throw std::runtime_error("Init-only host function called at runtime");
-            });
-            continue;
-        }
-        // Client/server restrictions
-        if (entry.client_side_only && !client_side) {
-            m_host_function_array.push_back([](auto&) {
-                throw std::runtime_error("Client-only host function called on server");
-            });
-            continue;
-        }
-        if (entry.server_side_only && client_side) {
-            m_host_function_array.push_back([](auto&) {
-                throw std::runtime_error("Server-only host function called on client");
-            });
-            continue;
-        }
-
-        // Match by CRC32 hash
         auto it = m_host_functions.find(entry.hash);
-        if (it != m_host_functions.end()) {
+        if (allowed && it != m_host_functions.end()) {
             m_host_function_array.push_back(it->second.func);
         } else {
-            // Guest wants a function the host doesn't have
+            // The guest wants a function this host does not provide
             auto func_name = machine().memory.memstring(entry.strname);
-            fprintf(stderr, "WARNING: Unimplemented host function '%s' (hash %08x)\n",
+            fprintf(stderr, "WARNING: Unresolved host function '%s' (hash %08x)\n",
                 func_name.c_str(), entry.hash);
             m_host_function_array.push_back([](auto&) {
-                throw std::runtime_error("Unimplemented host function");
+                throw std::runtime_error("Unresolved host function");
             });
-            unimplemented++;
         }
     }
-
-    fprintf(stderr, "Resolved %u host functions for '%s' (%zu unimplemented)\n",
-        count, name().c_str(), unimplemented);
 }
 ```
 
-`memstring(addr)` reads a null-terminated string from guest memory at the given guest-space address. The `strname` field in each entry points to a name string that `generate.py` placed in `.rodata` alongside the stubs.
+`memstring(addr)` reads a null-terminated string from guest memory — `strname` points at the name that `generate.py` placed in `.rodata` next to the stubs.
 
 ### Step 5: Custom Instruction Dispatch
 
@@ -1249,201 +993,55 @@ void Script::second_stage_init(bool is_client_side) {
 
 ---
 
-## Advanced: Zero-Copy Structures
+## Zero-Copy Structures
 
-With the flat arena, you can view complex guest structures directly without copying.
-
-### Guest-Side Structure
-
-The guest defines a `Dialogue` struct using normal C++ types (`std::string`, `std::vector`):
+With the flat arena, a whole guest structure can be viewed in place. The guest defines it with normal C++ types, and the host defines a mirror struct with the same layout:
 
 ```cpp
-// Guest code
-struct Dialogue {
-    std::string name;
-    std::string portrait;
-    std::string voice;
-    std::vector<DialogueText> texts;
-    bool cancellable;
-    std::vector<DialogueChoice> choices;
-    // ...
-};
+// Guest                                  // Host mirror
+struct Dialogue {                         struct GuestDialogue {
+    std::string name;                         CppString name;
+    std::string portrait;                     CppString portrait;
+    std::vector<DialogueText> texts;          CppVector<GuestText> texts;
+    bool cancellable;                         bool cancellable;
+    std::vector<DialogueChoice> choices;      CppVector<GuestChoice> choices;
+};                                        };
 
-// Guest passes it to host
+// Guest hands over the address
 sys_npc_do_dialogue(entity_uid, &dialogue, sizeof(dialogue));
-```
-
-### Host-Side Zero-Copy View
-
-The host defines a mirror struct using `GuestStdString` and `GuestStdVector`:
-
-```cpp
-// Host code - mirrors the guest struct layout exactly
-struct GuestDialogue {
-    CppString name;
-    CppString portrait;
-    CppString voice;
-    CppVector<GuestText> texts;
-    bool cancellable;
-    CppVector<GuestChoice> choices;
-    // ... more fields
-};
 ```
 
 In the host function handler:
 
 ```cpp
 auto [uid, g_view, g_size] = script.machine().sysargs<uint32_t, GuestDialogue*, gaddr_t>();
+if (g_size != sizeof(GuestDialogue)) { /* layout mismatch */ }
 
-// Validate size matches
-if (g_size != sizeof(GuestDialogue)) { /* error */ }
+auto& dialogue = *g_view;                                  // no copy
+std::string_view name = dialogue.name.to_view(machine);    // no copy
 
-// Direct access - no copy, no serialization
-auto& guestDialogue = *g_view;
-
-// View strings zero-copy
-std::string_view name = guestDialogue.name.to_view(machine);
-
-// Iterate over guest vector zero-copy
-std::span<const GuestText> texts = guestDialogue.texts.to_span(machine);
-for (auto& text : texts) {
-    std::string content = text.text.to_string(machine);
-    // Process text...
-}
-
-// Access nested vectors
-for (auto& choice : guestDialogue.choices.to_span(machine)) {
-    std::string choiceText = choice.text.to_string(machine);
-    // Process choice...
-}
+for (auto& text : dialogue.texts.to_span(machine))         // no copy
+    std::string content = text.text.to_string(machine);    // copies just this one
 ```
 
-The `GuestDialogue*` returned by `sysargs` is a direct pointer into guest memory (flat arena). The `CppString` and `CppVector` fields are read in-place. String data is accessed through `to_string()` (copy) or `to_view()` (zero-copy view). Vector elements are accessed through `to_span()` (zero-copy span).
+The `sizeof` check is the version guard: a field added on either side is caught at the boundary instead of misreading every field after it.
 
-**This only works with the flat arena.** With virtual paging, the structure might span page boundaries and the pointer would be invalid.
+**This only works with the flat arena.** With virtual paging the structure may span page boundaries and the pointer would be invalid.
 
-### Creating Guest Events from Host-Viewed Data
-
-The dialogue handler also demonstrates creating `Event` objects from guest function addresses found in the viewed structure:
+A guest function pointer found inside such a structure can be turned into a callable directly:
 
 ```cpp
-struct GuestDialogueEvent {
-    gaddr_t address;         // Guest function pointer
-    CppStringVector args;    // Arguments to pass
-};
-
-// In handler:
-if (guestDialogue.nextScriptFunction.address) {
-    Event<void(int)> event(script, guestDialogue.nextScriptFunction.address);
-    // This Event can now be called later to trigger the next dialogue step
+if (dialogue.nextScriptFunction.address) {
+    Event<void(int)> event(script, dialogue.nextScriptFunction.address);
+    // Call it later to trigger the next dialogue step
 }
 ```
 
 ---
 
-## Production Integration Example
+## Production Integration
 
-Here we will demonstrate a complete production integration. Key components:
-
-### Script Wrapper
-
-A `Script` class wraps `Machine<8>` and adds:
-- **Call depth tracking** via `ScriptDepthMeter` (max 8 levels)
-- **Scoped calls** that set a `Scope*` context pointer for the duration
-- **Guest heap allocation** via `guest_alloc()` / `guest_free()`
-- **Per-thread forking** via `get_fork()` for thread safety
-- **Host function resolution** with init/client/server filtering
-- **Error handling** with backtraces and optional GDB remote debugging
-
-### Event System
-
-`Event<F, Usage>` wraps a `PreparedCall` with a type-enforced function signature:
-
-```cpp
-// Create an event pointing to a guest function
-Event<void(uint32_t, float)> on_damage("game_script", "on_entity_damage");
-
-// Call it - type-checked at compile time
-on_damage.call(entity_uid, damage_amount);
-```
-
-`Event` supports two usage patterns:
-- `SharedScript`: Always uses the same script instance
-- `PerThread`: Automatically selects the current thread's fork
-
-### Machine Configuration
-
-```cpp
-auto options = riscv::MachineOptions<8>{
-    .memory_max = 28ULL << 20,   // 28 MB
-    .stack_size = 1ULL << 20,    // 1 MB (0x100000)
-    .default_exit_function = "fast_exit",
-    // JIT disabled for production sandboxing
-    .translate_enabled = false,
-};
-
-machine = std::make_unique<machine_t>(binary, options);
-machine->set_userdata<Script>(this);
-
-// Setup syscalls and native helpers
-machine->setup_argv({name()});
-machine->setup_newlib_syscalls();
-
-// Heap takeover
-gaddr_t heap_base = machine->memory.mmap_allocate(MAX_HEAP);
-machine->setup_native_heap(570, heap_base, MAX_HEAP);
-machine->setup_native_memory(575);
-machine->setup_native_threads(590);
-machine->arena().set_max_chunks(32000);
-```
-
-### Boot Sequence
-
-```
-1. Construct Machine with ELF binary + options
-2. Install syscall handlers (api_write, api_dyncall, api_game_on_init, etc.)
-3. Install native heap/memory/threads
-4. machine.simulate(MAX_BOOT_INSTR)     -- runs main() until it pauses
-5. resolve_host_functions(init=true)    -- all host functions available
-6. call(on_init_addr)                   -- guest registers blocks, items, NPCs
-7. resolve_host_functions(init=false)   -- lock out init-only functions
-8. Machine is ready for vmcalls
-```
-
-### Request Handling
-
-```
-Host event occurs (player clicks, timer fires, NPC update, etc.)
-  -> Look up Event<F> for this event type
-  -> event.call(args...)
-    -> ScriptDepthMeter increments depth
-    -> If depth == 1: machine.vmcall<MAX>(addr, args)
-    -> If depth > 1: machine.preempt(MAX, addr, args)
-    -> Guest function executes
-      -> May call host functions (HOSTCALL instruction)
-        -> Host handler reads args via sysargs<>
-        -> Host handler may call back into guest (depth increases)
-        -> Host handler sets result via set_result()
-      -> Guest function returns
-    -> ScriptDepthMeter decrements depth
-  -> Return value available
-```
-
-### Thread Safety
-
-Each thread gets its own fork of the script via `Script::get_fork()`. Forks share the read-only binary and host function table but have independent registers, stack, and heap. This avoids locking during execution.
-
-```cpp
-// Automatically creates or reuses a fork for the current thread
-Script& fork = original_script.get_fork();
-fork.call("on_update", delta_time);
-```
-
----
-
-## Minimal Script Wrapper (End-to-End)
-
-This section shows a complete, minimal Script wrapper that ties together flat arena, heap takeover, call depth tracking, and the Event system. Use this as a starting point.
+A production wrapper puts a `Script` class around `Machine<8>`: call-depth tracking, a cached symbol lookup, guest heap allocation, per-thread forks, host function resolution, and error handling with backtraces. [`examples/expert`](examples/expert) is a complete buildable version of everything below; run its `build.sh`.
 
 ### Script Header (script.hpp)
 
@@ -1473,24 +1071,19 @@ struct Script {
 
     Script(const std::string& name, const std::string& filename);
 
-    // Call a guest function by name or address, with depth tracking
     template <typename... Args>
     std::optional<sgaddr_t> call(const std::string& func, Args&&... args);
     template <typename... Args>
     std::optional<sgaddr_t> call(gaddr_t addr, Args&&... args);
 
-    gaddr_t address_of(const std::string& name) const;
+    gaddr_t address_of(const std::string& name) const; // cached lookup
     auto& machine() { return *m_machine; }
-    const auto& machine() const { return *m_machine; }
     const auto& name() const noexcept { return m_name; }
 
     gaddr_t guest_alloc(gaddr_t bytes) { return machine().arena().malloc(bytes); }
     bool guest_free(gaddr_t addr) { return machine().arena().free(addr) == 0x0; }
 
 private:
-    void machine_setup();
-    static void setup_syscall_interface();
-
     std::unique_ptr<machine_t> m_machine;
     std::vector<uint8_t> m_binary;
     std::string m_name;
@@ -1499,17 +1092,7 @@ private:
     mutable std::unordered_map<std::string, gaddr_t> m_lookup_cache;
 };
 
-// RAII depth tracker — prevents recursive call loops
-struct ScriptDepthMeter {
-    ScriptDepthMeter(uint8_t& val) : m_val(++val) {}
-    ~ScriptDepthMeter() { m_val--; }
-    bool is_one() const noexcept { return m_val == 1; }
-    uint8_t get() const noexcept { return m_val; }
-private:
-    uint8_t& m_val;
-};
-
-// Inline: call with depth tracking (vmcall at depth 1, preempt at 2+)
+// vmcall at depth 1 (owns CPU state), preempt at depth 2+, reject at max
 template <typename... Args>
 inline std::optional<Script::sgaddr_t> Script::call(gaddr_t address, Args&&... args) {
     ScriptDepthMeter meter(this->m_call_depth);
@@ -1524,14 +1107,7 @@ inline std::optional<Script::sgaddr_t> Script::call(gaddr_t address, Args&&... a
     return std::nullopt;
 }
 
-template <typename... Args>
-inline std::optional<Script::sgaddr_t> Script::call(const std::string& func, Args&&... args) {
-    const auto addr = address_of(func);
-    if (addr == 0x0) return std::nullopt;
-    return call(addr, std::forward<Args>(args)...);
-}
-
-// Type-safe event wrapper for calling guest functions
+// Type-safe wrapper for a guest function, resolved once
 template <typename F = void()>
 struct Event {
     Event(Script& s, const std::string& func) : m_script(&s), m_addr(s.address_of(func)) {}
@@ -1555,12 +1131,11 @@ private:
 };
 ```
 
+`Event` can also select the current thread's fork instead of a fixed instance — each thread gets its own via `Script::get_fork()`, sharing the read-only binary and host function table but with independent registers, stack and heap. No locking during execution.
+
 ### Script Implementation (script.cpp)
 
 ```cpp
-#include "script.hpp"
-#include <fstream>
-
 Script::Script(const std::string& name, const std::string& filename) : m_name(name) {
     std::ifstream f(filename, std::ios::binary);
     m_binary = {std::istreambuf_iterator<char>(f), {}};
@@ -1574,12 +1149,7 @@ Script::Script(const std::string& name, const std::string& filename) : m_name(na
 
     static bool init = false;
     if (!init) { init = true; setup_syscall_interface(); }
-    machine_setup();
-    machine().setup_linux({name}, {"LC_CTYPE=C"});
-    machine().simulate(MAX_BOOT_INSTR);     // runs main() until fast_exit pauses it
-}
 
-void Script::machine_setup() {
     machine().set_userdata<Script>(this);
     machine().set_printer([](const machine_t&, const char* p, size_t len) {
         printf("%.*s", (int)len, p);
@@ -1588,58 +1158,47 @@ void Script::machine_setup() {
     machine().setup_linux_syscalls(false, false); // no fs, no sockets
     machine().setup_native_heap(HEAP_SYSCALLS_BASE, m_heap_area, MAX_HEAP);
     machine().setup_native_memory(MEMORY_SYSCALLS_BASE);
-}
 
-void Script::setup_syscall_interface() {
-    // Register your custom host functions here
-    machine_t::install_syscall_handler(510, [](machine_t& machine) {
-        auto [name] = machine.sysargs<std::string_view>();
-        printf("Host received: %.*s\n", (int)name.size(), name.data());
-        machine.set_result(0);
-    });
+    machine().setup_linux({name}, {"LC_CTYPE=C"});
+    machine().simulate(MAX_BOOT_INSTR);     // runs main() until fast_exit pauses it
 }
+```
 
-Script::gaddr_t Script::address_of(const std::string& name) const {
-    auto it = m_lookup_cache.find(name);
-    if (it != m_lookup_cache.end()) return it->second;
-    auto addr = machine().address_of(name.c_str());
-    m_lookup_cache.try_emplace(name, addr);
-    return addr;
-}
+### Boot Sequence
+
+```
+1. Construct Machine with ELF binary + options
+2. Install syscall handlers, native heap/memory/threads
+3. machine.simulate(MAX_BOOT_INSTR)     -- runs main() until it pauses
+4. resolve_host_functions(init=true)    -- all host functions available
+5. call(on_init_addr)                   -- guest registers blocks, items, NPCs
+6. resolve_host_functions(init=false)   -- lock out init-only functions
+7. Machine is ready for vmcalls
 ```
 
 ### Host main.cpp
 
 ```cpp
-#include "script.hpp"
-#include <libriscv/guest_datatypes.hpp>
+Script script("myscript", "guest.elf");
 
-int main() {
-    Script script("myscript", "guest.elf");
+Event<int(int, int)> compute(script, "compute");
+if (auto ret = compute(17, 25))
+    printf("Result: %d\n", *ret);
 
-    // Call guest function with integers
-    Event<int(int, int)> compute(script, "compute");
-    if (auto ret = compute(17, 25))
-        printf("Result: %d\n", *ret);
+// Guest receives const char*
+Event<void(std::string)> greet(script, "greet");
+greet("World");
 
-    // Pass string (guest receives const char*)
-    Event<void(std::string)> greet(script, "greet");
-    greet("World");
-
-    // Pass std::string& via ScopedArenaObject (guest receives const std::string&)
-    using ScopedStr = riscv::ScopedArenaObject<8, riscv::GuestStdString<8>>;
-    ScopedStr str(script.machine(), "Arena World");
-    Event<void(ScopedStr&)> greet_str(script, "greet_str");
-    greet_str(str);
-}
+// Guest receives const std::string&
+using ScopedStr = riscv::ScopedArenaObject<8, riscv::GuestStdString<8>>;
+ScopedStr str(script.machine(), "Arena World");
+Event<void(ScopedStr&)> greet_str(script, "greet_str");
+greet_str(str);
 ```
 
 ### Guest CMakeLists.txt
 
 ```cmake
-cmake_minimum_required(VERSION 3.14)
-project(guest LANGUAGES CXX)
-
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++20 -fno-threadsafe-statics -fno-stack-protector -O2")
 
 function(add_guest_binary NAME)
@@ -1655,24 +1214,11 @@ endfunction()
 add_guest_binary(guest program.cpp)
 ```
 
-Cross-compile with: `cmake -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_BUILD_TYPE=Release ..`
+Cross-compile with `-DCMAKE_TOOLCHAIN_FILE=toolchain.cmake`, where the toolchain file sets `CMAKE_SYSTEM_NAME Linux`, `CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY` and `CMAKE_CXX_COMPILER riscv64-unknown-elf-g++`.
 
-Where `toolchain.cmake` contains:
-```cmake
-SET(CMAKE_SYSTEM_NAME Linux)
-SET(CMAKE_CROSSCOMPILING 1)
-set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
-set(GCC_TRIPLE "riscv64-unknown-elf")
-set(CMAKE_CXX_COMPILER "${GCC_TRIPLE}-g++")
-```
-
-The guest's `env.cpp` must provide `__wrap_malloc`, `__wrap_free`, `__wrap_memcpy`, etc. as ecall stubs. See the Override (Guest Side) section above, or copy `examples/gamedev/cpp_program/env.cpp` directly.
-
-The guest's `program.cpp` may call `fast_exit(0)` instead of returning from `main()`, avoiding global destructors getting called (which closes stdout and clears many containers). And should expose callable (unreferenced) functions with `extern "C" __attribute__((used, retain))`. Referenced functions (eg. callbacks passed to host functions) will not get culled by the linker, and doesn't need this treatment.
+The guest's `env.cpp` provides the `__wrap_*` ecall stubs and `fast_exit` — copy [`examples/gamedev/cpp_program/env.cpp`](examples/gamedev/cpp_program/env.cpp). `program.cpp` should call `fast_exit(0)` instead of returning from `main()`, and expose unreferenced callables with `extern "C" __attribute__((used, retain))`.
 
 ### Verification
-
-After building the guest ELF, verify that heap and memory operations are syscall stubs:
 
 ```
 $ riscv64-unknown-elf-objdump -d guest.elf | grep -A4 '__wrap_malloc'
@@ -1680,75 +1226,32 @@ $ riscv64-unknown-elf-objdump -d guest.elf | grep -A4 '__wrap_malloc'
   400c90:   1ea00893   li   a7,490
   400c94:   00000073   ecall
   400c98:   00008067   ret
-
-$ riscv64-unknown-elf-objdump -d guest.elf | grep -A4 '__wrap_memcpy'
-0000000000401a84 <__wrap_memcpy>:
-  401a84:   1ef00893   li   a7,495
-  401a88:   00000073   ecall
-  401a8c:   00008067   ret
 ```
 
-If either shows a large function body instead of `li/ecall/ret`, the override failed — check your `--wrap` linker flags and that `env.cpp` is compiled into the binary.
+A large function body instead of `li/ecall/ret` means the override failed — check the `--wrap` flags and that `env.cpp` is in the binary.
 
 ---
 
 ## Verifying VMCall Latency
 
-libriscv is designed for ultra-low-latency scripting. A properly configured setup achieves single-digit to low-teens nanosecond per vmcall overhead — the lowest of any known interpreter. This section shows how to measure it and explains the mechanism that makes it possible.
-
-### Benchmark Guest Function
-
-Add an empty function to the guest program. It does no work — the measured time is pure vmcall overhead:
+A properly configured setup reaches single-digit nanosecond vmcall overhead. To measure it, add an empty guest function and time batches of it:
 
 ```cpp
-PUBLIC(void empty_function())
-{
-}
+PUBLIC(void empty_function()) {}   // guest
 ```
 
-### Benchmark Host Code
-
-Use `clock_gettime(CLOCK_MONOTONIC)` around batches of 10,000 vmcalls. Run 100 rounds and take the median to eliminate noise:
-
 ```cpp
-#include <algorithm>
-#include <time.h>
-#include <vector>
-
-static constexpr int CALLS_PER_ROUND = 10'000;
-static constexpr int ROUNDS = 100;
-
+// host: 100 rounds of 10'000 calls with clock_gettime(CLOCK_MONOTONIC),
+// dividing each round by CALLS_PER_ROUND and taking the median
 Event<void()> bench(script, "empty_function");
-
-std::vector<double> round_times_ns(ROUNDS);
-
-for (int r = 0; r < ROUNDS; r++) {
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-
-    for (int i = 0; i < CALLS_PER_ROUND; i++)
-        bench();
-
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-
-    double elapsed_ns = (t1.tv_sec - t0.tv_sec) * 1e9
-        + (t1.tv_nsec - t0.tv_nsec);
-    round_times_ns[r] = elapsed_ns / CALLS_PER_ROUND;
-}
-
-std::sort(round_times_ns.begin(), round_times_ns.end());
-double median_ns = round_times_ns[ROUNDS / 2];
-printf("Per-call latency: median=%.1f ns\n", median_ns);
 ```
-
-Expected output on modern hardware:
 
 | Mode | Median | Notes |
 |---|---|---|
 | Interpreted (`translate_enabled = false`) | ~5.7 ns | Lowest call overhead |
-| Binary translation (JIT) | ~13.5 ns | JIT entry/exit overhead dominates for trivial calls |
+| Binary translation (JIT) | ~13.5 ns | JIT entry/exit dominates for trivial calls |
 
-Binary translation improves throughput for compute-heavy guest functions but adds overhead to the vmcall entry/exit path. If your hot path is many short calls (event dispatching, property getters), keep `translate_enabled = false`. Enable JIT when guest functions do significant work.
+Binary translation improves throughput for compute-heavy guest functions but adds overhead to the vmcall entry/exit path. If the hot path is many short calls (event dispatch, property getters), keep `translate_enabled = false`.
 
 ### The Exit Function: Dual Purpose
 
@@ -1793,11 +1296,11 @@ The linker flag `--undefined=fast_exit` in the guest CMakeLists.txt prevents the
 For full integration and best results:
 
 1. **Use the flat arena** (default). Without it, you copy memory instead of viewing it.
-2. **Take over the guest heap**. Without it, you cannot construct or read C++ types.
-3. **Override malloc/free/memcpy in the guest**. Verify with objdump.
+2. **Take over the guest heap**. Without it, you cannot construct or read the guest's own container types.
+3. **Override malloc/free/memcpy in the guest** (a `#[global_allocator]` in Rust). Verify with objdump.
 4. **Use PreparedCall for repeated calls**. Symbol lookup on every call is wasteful.
 5. **Use sysargs with typed pointers** in host functions. `sysargs<MyStruct*>()` gives you a direct pointer.
-6. **Use GuestStdString/GuestStdVector** for complex types. They mirror the exact libstdc++ memory layout.
+6. **Use the guest datatypes** for complex types. They mirror the exact libstdc++ and Rust memory layouts.
 7. **Don't let main() return**. Pause it with a meaningful host function to avoid global destructors getting called immediately after main() returns.
 8. **Track call depth**. Use vmcall at depth 1, preempt at depth 2+, reject at max depth.
 9. **Avoid C-like user-facing APIs**. Create proper classes and wrappers in the guest that lets users write normal code.
@@ -1805,37 +1308,49 @@ For full integration and best results:
 
 ### Reference Implementation
 
-The [`examples/expert`](examples/expert) project is a complete, buildable implementation of every pattern described in this document. It exercises generated host functions, two-phase init, guest datatypes, RPC between VMs, vmcall latency benchmarking, and RSS measurement. Run `./build.sh` under `examples/expert` to build and execute the full test suite.
+[`examples/expert`](examples/expert) is a complete, buildable implementation of every pattern in this document: generated host functions, two-phase init, guest datatypes, RPC between VMs, vmcall latency benchmarking and RSS measurement. Run its `build.sh`.
+
+Two more places worth reading:
+
+| Where | What it shows |
+| --- | --- |
+| [`examples/attribute_bench`](examples/attribute_bench) | `GuestStdUnorderedMap` / `GuestStdVariant` / `GuestStdString` moving a tree of attributes both ways, benchmarked against a hand-serialized form, with leak accounting |
+| `tests/unit/native.cpp`, `tests/unit/native_rust.cpp` | Every guest datatype exercised against a real C++ and Rust guest, including the layout probes |
 
 ---
 
 ## RPC Between Same-Program Instances
 
-When two guest VMs run the exact same binary, their code segments are identical: every function lives at the same address, every template instantiation produces the same trampoline. This makes it possible to extract a C++ lambda's function pointer and capture storage from one VM, transfer the capture bytes to another VM, and call the same function there. The result is as-if the lambda executed in the original VM, except it runs on a different instance's state.
+Two VMs running the exact same binary have identical code segments: every function, including every template instantiation, lives at the same address. That makes it possible to take a C++ lambda's function pointer and capture bytes from one VM and call it on another — as if the lambda ran in the first VM, but against the second one's state.
 
 ### The Principle
 
-A C++ lambda with captures has two parts:
-1. A **function body** — compiled code at a fixed address in the binary
-2. **Capture storage** — a small struct holding the captured values, living on the stack
-
-A stateless lambda (no captures) converts to a plain function pointer via the unary `+` operator. By wrapping the captured lambda in a stateless trampoline that receives the capture storage through a `void*`, you separate the two parts:
+A captured lambda is a function body at a fixed address plus a small capture struct on the stack. A stateless lambda converts to a plain function pointer with unary `+`, so wrapping the captured one in a stateless trampoline that takes the capture through a `void*` separates the two:
 
 ```cpp
 template <typename F>
-void invoke_remotely(F callback) {
-    sys_invoke_elsewhere(
+static long invoke_elsewhere(F callback) {
+    static_assert(sizeof(F) <= 24, "Capture too large for storage");
+    static_assert(std::is_trivially_copyable_v<F>, "Capture must be trivially copyable");
+    return sys_rpc_invoke(
         +[](void* data) { (*(F*)data)(); },  // trampoline: same address in every VM
-        &callback,                             // capture storage: stack bytes
-        sizeof(callback));                     // capture size
+        (void*)&callback, sizeof(callback)); // capture storage: stack bytes
 }
 ```
 
-The trampoline is a template instantiation — its address is baked into the binary at compile time. Since both VMs loaded the same ELF, the address is valid in both. The capture bytes are plain data that can be copied between VMs without interpretation.
+The RPC entry points are ordinary generated host functions:
+
+```json
+{
+  "typedef": ["typedef void (*rpc_callback_t)(void*)"],
+  "RPC::callback": "void sys_rpc_callback (rpc_callback_t, void*, size_t)",
+  "RPC::invoke": "long sys_rpc_invoke (rpc_callback_t, void*, size_t)"
+}
+```
 
 ### Constraints on Capture Storage
 
-The capture must be **self-contained binary data**:
+The capture must be self-contained binary data — meaningful without the original VM's heap or stack:
 
 | Safe to capture | Unsafe to capture |
 |---|---|
@@ -1844,90 +1359,11 @@ The capture must be **self-contained binary data**:
 | Fixed-size arrays | `std::vector` (contains a heap pointer) |
 | `constexpr` values | Non-const static references |
 
-The rule: if the bytes are meaningful without access to the original VM's heap or stack, they're safe to capture. If they contain pointers, those pointers are meaningless in the other VM. The `riscv::Function` class in `lib/libriscv/util/function.hpp` enforces these constraints at compile time — it requires callables to be trivially copyable, trivially destructible, and fit within `FunctionStorageSize` (24 bytes).
+`riscv::Function` in `lib/libriscv/util/function.hpp` enforces this at compile time: trivially copyable, trivially destructible, and at most `FunctionStorageSize` (24) bytes.
 
-### CaptureStorage Helper (Host Side)
+### Host-Side Handler
 
-The host needs to copy capture bytes out of a guest VM and later copy them into another. A simple fixed-size buffer is enough:
-
-```cpp
-struct CaptureStorage
-{
-    static constexpr size_t MaxSize = 32;
-    using Array = std::array<uint8_t, MaxSize>;
-
-    static Array get(machine_t& machine, gaddr_t data, gaddr_t size)
-    {
-        Array capture{};
-        if (size > MaxSize)
-            throw std::runtime_error("Capture storage exceeds 32 bytes");
-        machine.memory.memcpy_out(capture.data(), data, size);
-        return capture;
-    }
-};
-```
-
-### Guest-Side Wrappers
-
-The guest provides two template wrappers. Both use the same trampoline pattern — only the generated host function differs. The RPC functions are defined in `host_functions.json` alongside all other host functions:
-
-```json
-{
-  "typedef": [
-    "typedef void (*rpc_callback_t)(void*)"
-  ],
-  "RPC::callback": "void sys_rpc_callback (rpc_callback_t, void*, size_t)",
-  "RPC::invoke": "long sys_rpc_invoke (rpc_callback_t, void*, size_t)"
-}
-```
-
-The guest calls `sys_rpc_callback` and `sys_rpc_invoke` like any other generated host function — no raw syscalls needed:
-
-```cpp
-// Store a lambda's capture and call it back on the same VM (local round-trip).
-template <typename F>
-static void store_and_callback(F callback) {
-    static_assert(sizeof(F) <= 24, "Capture too large for storage");
-    static_assert(std::is_trivially_copyable_v<F>, "Capture must be trivially copyable");
-    sys_rpc_callback(
-        +[](void* data) { (*(F*)data)(); },
-        (void*)&callback, sizeof(callback));
-}
-
-// Invoke a lambda on a different VM running the same binary (RPC).
-template <typename F>
-static long invoke_elsewhere(F callback) {
-    static_assert(sizeof(F) <= 24, "Capture too large for storage");
-    static_assert(std::is_trivially_copyable_v<F>, "Capture must be trivially copyable");
-    return sys_rpc_invoke(
-        +[](void* data) { (*(F*)data)(); },
-        (void*)&callback, sizeof(callback));
-}
-```
-
-The `+[]` converts the stateless lambda to a function pointer. The `static_assert` guards catch misuse at compile time.
-
-### Host-Side Function Handlers
-
-These are registered through the generated host function system (see [Generated Host Functions](#generated-host-functions)), not as raw syscalls.
-
-**RPC::callback — Local round-trip** stores the capture, then passes it directly as a vmcall argument. The vmcall pushes the capture bytes onto the guest stack and passes a pointer — no heap allocation needed:
-
-```cpp
-Script::set_host_function(
-    "RPC::callback",
-    "void sys_rpc_callback (rpc_callback_t, void*, size_t)",
-    [](Script& script) {
-        auto [func, data, size] =
-            script.machine().sysargs<gaddr_t, gaddr_t, gaddr_t>();
-
-        auto capture = CaptureStorage::get(script.machine(), data, size);
-
-        script.call(func, capture);
-    });
-```
-
-**RPC::invoke — Cross-VM call** does the same thing, but on a peer VM:
+The host copies the capture bytes out of the calling VM and passes the array straight to `call()` on the peer. `vmcall` pushes it onto the peer's stack and hands the trampoline a pointer — call lifetime, no heap allocation, no cleanup:
 
 ```cpp
 Script::set_host_function(
@@ -1936,89 +1372,48 @@ Script::set_host_function(
     [](Script& script) {
         auto [func, data, size] =
             script.machine().sysargs<gaddr_t, gaddr_t, gaddr_t>();
-
         if (!script.m_peer)
             throw std::runtime_error("No peer script configured for RPC");
 
-        auto capture = CaptureStorage::get(script.machine(), data, size);
+        std::array<uint8_t, 32> capture{};
+        if (size > capture.size())
+            throw std::runtime_error("Capture storage exceeds 32 bytes");
+        script.machine().memory.memcpy_out(capture.data(), data, size);
 
-        auto& peer = *script.m_peer;
-        auto result = peer.call(func, capture);
-
+        auto result = script.m_peer->call(func, capture);
         script.machine().set_result(result.value_or(0));
     });
 ```
 
-The key insight is that `capture` — a `std::array<uint8_t, 32>` — is passed directly as an argument to `call()`, which forwards it to `vmcall`. The vmcall pushes the array onto the guest stack and passes a pointer in the argument register. The capture bytes have call lifetime on the stack, which is exactly right since the trampoline only needs them for the duration of the call. No heap allocation, no free, no cleanup.
+`RPC::callback` is the same handler without the peer — a local round-trip through the host.
 
-`func` is a guest address that exists at the same location in both VMs because they loaded the same binary. The capture bytes were copied from the source VM's registers/stack into the peer VM's call stack, making them accessible when the trampoline dereferences the `void*`.
-
-### Wiring Up Peers
-
-The host connects two Script instances before RPC calls can happen:
+### End to End
 
 ```cpp
+// Host: wire two instances of the same binary together
 Script script_a("script_a", "guest.elf");
-Script script_b("script_b", "guest.elf");  // same binary
-
+Script script_b("script_b", "guest.elf");
 script_a.set_peer(&script_b);
 script_b.set_peer(&script_a);
 ```
 
-The `set_peer` method simply stores a pointer. In production, this could be a lookup table, a region-based routing system, or any mechanism that resolves "where should this RPC go."
-
-### Complete Example
-
-**Guest side** — a function that modifies a static counter via RPC:
-
 ```cpp
+// Guest
 static int shared_counter = 0;
 
-PUBLIC(int test_rpc_invoke())
-{
+PUBLIC(int test_rpc_invoke()) {
     int delta = 10;
-    invoke_elsewhere([delta]() {
-        shared_counter += delta;
-        printf("  Guest RPC target: shared_counter += %d, now = %d\n",
-            delta, shared_counter);
-    });
+    invoke_elsewhere([delta]() { shared_counter += delta; });
     return 0;
 }
-
-PUBLIC(int get_shared_counter())
-{
-    return shared_counter;
-}
+PUBLIC(int get_shared_counter()) { return shared_counter; }
 ```
 
-**Host side** — verifying that only the peer's state changed:
-
-```cpp
-Event<int()> get_counter_a(script_a, "get_shared_counter");
-Event<int()> get_counter_b(script_b, "get_shared_counter");
-
-printf("Before: a=%d, b=%d\n", *get_counter_a(), *get_counter_b());
-// Before: a=0, b=0
-
-Event<int()> rpc_test(script_a, "test_rpc_invoke");
-rpc_test();  // script_a's lambda executes on script_b
-
-printf("After: a=%d, b=%d\n", *get_counter_a(), *get_counter_b());
-// After: a=0, b=10
-```
-
-The lambda captured `delta = 10` by value. Those 4 bytes were copied from script_a and pushed onto script_b's call stack via vmcall. The trampoline at the same code address in script_b dereferenced them and incremented script_b's `shared_counter`. Script_a's counter was never touched.
-
-### Why This Works
-
-1. **Same binary** → identical code layout. Function pointers are portable between instances.
-2. **Trivially copyable captures** → the bytes are self-contained. No pointers to dereference, no destructors to run.
-3. **Stateless trampoline** → the `+[]` lambda compiles to a plain function in `.text`. Its address is a link-time constant.
-4. **Stack-pushed capture** → vmcall pushes the capture bytes onto the guest stack with call lifetime. The trampoline accesses them via the `void*` argument — no heap allocation needed.
+Calling `test_rpc_invoke` on `script_a` leaves `a=0, b=10`: the 4 captured bytes were copied from a's registers onto b's call stack, and the trampoline at the same code address incremented b's counter.
 
 ### Extending the Pattern
 
-The example uses `void()` lambdas, but the pattern generalizes to any signature. Pack extra arguments into the capture envelope:
+Extra arguments go into the capture envelope, so any signature works:
 
 ```cpp
 template <typename F>
@@ -2027,10 +1422,7 @@ static long invoke_elsewhere_with(F callback, double arg1, int arg2) {
     static_assert(sizeof(Envelope) <= 24);
     Envelope env{callback, arg1, arg2};
     return sys_rpc_invoke(
-        +[](void* data) {
-            auto& e = *(Envelope*)data;
-            e.func(e.a1, e.a2);
-        },
+        +[](void* data) { auto& e = *(Envelope*)data; e.func(e.a1, e.a2); },
         (void*)&env, sizeof(env));
 }
 ```

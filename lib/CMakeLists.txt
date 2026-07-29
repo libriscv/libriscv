@@ -343,6 +343,21 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		DESTINATION include/${PROJECT_NAME}
 	)
 	install(FILES
+		libriscv/guest/guest_arena_object.hpp
+		libriscv/guest/guest_common.hpp
+		libriscv/guest/guest_cpp_common.hpp
+		libriscv/guest/guest_cpp_hash.hpp
+		libriscv/guest/guest_cpp_string.hpp
+		libriscv/guest/guest_cpp_unordered_map.hpp
+		libriscv/guest/guest_cpp_variant.hpp
+		libriscv/guest/guest_cpp_vector.hpp
+		libriscv/guest/guest_rust_common.hpp
+		libriscv/guest/guest_rust_string.hpp
+		libriscv/guest/guest_rust_vec.hpp
+
+		DESTINATION include/${PROJECT_NAME}/guest
+	)
+	install(FILES
 		libriscv/linux/rsp_server.hpp
 
 		DESTINATION include/${PROJECT_NAME}/linux

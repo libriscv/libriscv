@@ -23,6 +23,9 @@ jobs:
         git submodule update --init ${{github.workspace}}/tests/Catch2
         git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
 
+    - name: Install the RISC-V Rust standard library
+      run: rustup target add riscv64gc-unknown-linux-gnu
+
     - name: Configure
       run: cmake -B ${{github.workspace}}/build -DRISCV_THREADED=OFF -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_FLAT_RW_ARENA=OFF -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
