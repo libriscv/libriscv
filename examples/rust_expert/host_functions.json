@@ -1,0 +1,28 @@
+{
+  "typedef": [
+    "typedef void (*rpc_callback_t) (void*)",
+    "typedef struct rust_string rust_string_t",
+    "typedef struct rust_vec_u32 rust_vec_u32_t"
+  ],
+
+  "rust": {
+    "prelude": [],
+    "types": {
+      "rpc_callback_t": "extern \"C\" fn(*mut c_void)",
+      "rust_string_t": "String",
+      "rust_vec_u32_t": "Vec<u32>"
+    }
+  },
+
+  "initialization": ["Game::init_world"],
+
+  "Math::add": "int sys_math_add (int a, int b)",
+  "Math::multiply": "int sys_math_multiply (int a, int b)",
+  "IO::print": "void sys_print (const char* text, size_t len)",
+  "Game::get_time": "double sys_game_get_time ()",
+  "Game::init_world": "void sys_game_init_world (const char* world)",
+  "Data::fill_string": "void sys_data_fill_string (rust_string_t* out)",
+  "Data::fill_vector": "void sys_data_fill_vector (rust_vec_u32_t* out)",
+  "RPC::callback": "void sys_rpc_callback (rpc_callback_t func, void* data, size_t size)",
+  "RPC::invoke": "long sys_rpc_invoke (rpc_callback_t func, void* data, size_t size)"
+}

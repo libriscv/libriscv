@@ -684,6 +684,8 @@ static ALLOCATOR: SysAllocator = SysAllocator;
 
 The arena always returns 16-byte aligned blocks, which covers every alignment the standard collections ask for. Build with `-C target-feature=+crt-static` so the ELF is statically linked, and keep exported `#[no_mangle]` functions from being collected with `-C link-args=-Wl,--no-gc-sections`. Rust's standard library locks with futexes even in a single-threaded program, so the host needs `machine.setup_posix_threads()` in addition to `setup_linux_syscalls()`.
 
+[`examples/rust_expert`](examples/rust_expert) is a complete, buildable Rust guest with all of this wired up: the shared allocator, generated host functions emitted as Rust, `String` and `Vec` moving in both directions, closures called back through the host, and RPC between two VMs. It shares `host_functions.json` and the entire host with [`examples/expert`](examples/expert). Run its `build.sh`.
+
 ### ScopedArenaObject (RAII wrapper)
 
 ```cpp

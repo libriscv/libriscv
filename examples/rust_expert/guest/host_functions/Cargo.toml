@@ -1,0 +1,8 @@
+[package]
+name = "host_functions"
+description = "The host API, generated from host_functions.json at build time"
+version.workspace = true
+edition.workspace = true
+build = "build.rs"
+
+[dependencies]

@@ -1,0 +1,8 @@
+[package]
+name = "program"
+description = "A regular Rust program that calls the host through host_functions"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+host_functions = { path = "../host_functions" }

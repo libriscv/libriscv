@@ -1,0 +1,16 @@
+[build]
+target = "riscv64gc-unknown-linux-gnu"
+
+[target.riscv64gc-unknown-linux-gnu]
+# Override with CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_LINKER if your
+# cross-toolchain is named differently
+linker = "riscv64-linux-gnu-gcc-12"
+rustflags = [
+    # libriscv loads a static ELF: no interpreter, no shared libraries
+    "-C", "target-feature=+crt-static",
+    # The exported guest functions and the dyncall_table have no callers
+    # inside the guest, and would otherwise be collected
+    "-C", "link-arg=-Wl,--no-gc-sections",
+    "-C", "link-arg=-Wl,--undefined=dyncall_table",
+    "-C", "link-arg=-Wl,--undefined=fast_exit",
+]

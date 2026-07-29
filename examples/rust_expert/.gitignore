@@ -1,0 +1,3 @@
+guest/target/
+guest/Cargo.lock
+host/.build/

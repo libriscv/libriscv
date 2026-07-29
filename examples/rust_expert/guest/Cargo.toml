@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["host_functions", "program"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+opt-level = 2
+# The guest never unwinds across the host boundary: a panic is a hard stop
+panic = "abort"
+# The host looks guest functions up by name in .symtab, so the symbols stay
+strip = false
