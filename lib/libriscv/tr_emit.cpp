@@ -1688,6 +1688,7 @@ void Emitter<W>::emit()
 				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
 				dst + " = " + SIGNEXTW + " (" + src1 + " / " + src2 + ");");
+				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = (addr_t)(int32_t)-1;");
 				break;
 			case 0x16: // REMW
 				add_code(
@@ -1699,6 +1700,7 @@ void Emitter<W>::emit()
 				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
 				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
+				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = " + SIGNEXTW + " (" + src1 + ");");
 				break;
 			case 0x40: // ADD.UW
 				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + " + src1 + ";");
