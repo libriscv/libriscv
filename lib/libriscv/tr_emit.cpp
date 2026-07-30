@@ -1423,7 +1423,7 @@ void Emitter<W>::emit()
 			case 0x52: // CLMULR
 				add_code(
 					"{ addr_t result = 0;",
-					"for (unsigned i = 0; i < XLEN-1; i++)",
+					"for (unsigned i = 0; i < XLEN; i++)",
 					"  if ((" + from_reg(instr.Rtype.rs2) + " >> i) & 1)",
 					"    result ^= (" + from_reg(instr.Rtype.rs1) + " >> (XLEN - i - 1));",
 					to_reg(instr.Rtype.rd) + " = result; }");

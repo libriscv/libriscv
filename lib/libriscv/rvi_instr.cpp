@@ -720,7 +720,7 @@ static inline uint64_t MUL128(
 			} return;
 		case 0x52: { // CLMULR
 			auto result = 0;
-			for (unsigned i = 0; i < RVXLEN(cpu)-1; i++)
+			for (unsigned i = 0; i < RVXLEN(cpu); i++)
 				if ((src2 >> i) & 1)
 					result ^= (src1 >> (RVXLEN(cpu) - i - 1));
 			dst = result;
