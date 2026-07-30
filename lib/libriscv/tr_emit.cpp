@@ -1609,7 +1609,7 @@ void Emitter<W>::emit()
 				if (instr.Itype.high_bits() == 0x000) {
 					add_code(dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
 				} else if (instr.Itype.high_bits() == 0x080) {
-					// SLLI.UW
+					// SLLI.UW (full 6-bit RV64 shamt)
 					add_code(dst + " = ((addr_t)" + src + " << " + from_imm(instr.Itype.shift64_imm()) + ");");
 				} else {
 					switch (instr.Itype.imm) {

@@ -712,21 +712,21 @@ static inline uint64_t MUL128(
 			dst = uint16_t(src1);
 			return;
 		case 0x51: { // CLMUL
-			auto result = 0;
+			RVREGTYPE(cpu) result = 0;
 			for (unsigned i = 0; i < RVXLEN(cpu); i++)
 				if ((src2 >> i) & 1)
 					result ^= (src1 << i);
 			dst = result;
 			} return;
 		case 0x52: { // CLMULR
-			auto result = 0;
+			RVREGTYPE(cpu) result = 0;
 			for (unsigned i = 0; i < RVXLEN(cpu); i++)
 				if ((src2 >> i) & 1)
 					result ^= (src1 >> (RVXLEN(cpu) - i - 1));
 			dst = result;
 			} return;
 		case 0x53: { // CLMULH
-			auto result = 0;
+			RVREGTYPE(cpu) result = 0;
 			for (unsigned i = 1; i < RVXLEN(cpu); i++)
 				if ((src2 >> i) & 1)
 					result ^= (src1 >> (RVXLEN(cpu) - i));
@@ -1016,6 +1016,7 @@ static inline uint64_t MUL128(
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const uint32_t src = cpu.reg(instr.Itype.rs1);
 		// SLLI.UW: Shift-left Unsigned Word (Immediate)
+		// The shift amount is a full 6-bit RV64 shamt, not the 5-bit *W shamt
 		dst = RVREGTYPE(cpu)(src) << instr.Itype.shift64_imm();
 	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 

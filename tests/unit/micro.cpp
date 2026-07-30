@@ -493,3 +493,59 @@ TEST_CASE("Crashing payload #6", "[Micro]")
 	}
 	REQUIRE(exception_thrown);
 }
+
+TEST_CASE("RV64 Zba/Zbc edge cases", "[Micro]")
+{
+	static constexpr auto itype = [] (uint32_t opcode, uint32_t f3, uint32_t rd, uint32_t rs1, uint32_t imm) {
+		return opcode | (rd << 7) | (f3 << 12) | (rs1 << 15) | (imm << 20);
+	};
+	static constexpr auto rtype = [] (uint32_t opcode, uint32_t f3, uint32_t f7, uint32_t rd, uint32_t rs1, uint32_t rs2) {
+		return opcode | (rd << 7) | (f3 << 12) | (rs1 << 15) | (rs2 << 20) | (f7 << 25);
+	};
+	static constexpr uint32_t OP_IMM32 = 0x1B;
+	static constexpr uint32_t OP = 0x33;
+	static constexpr uint32_t CLMUL_F7 = 0x05;
+
+	const std::array<uint32_t, 5> program {
+		// SLLI.UW A1, A0, 32: the shift amount is a 6-bit RV64 shamt (issue #322)
+		itype(OP_IMM32, 0x1, REG_ARG1, REG_ARG0, 0x080 | 32),
+		// CLMULR A3, A0, A2: the bit XLEN-1 of A2 contributes (issue #323)
+		rtype(OP, 0x2, CLMUL_F7, REG_ARG3, REG_ARG0, REG_ARG2),
+		// CLMUL A6, A4, A5 and CLMULH A7, A4, A4: results are full-width
+		rtype(OP, 0x1, CLMUL_F7, REG_ARG6, REG_ARG4, REG_ARG5),
+		rtype(OP, 0x3, CLMUL_F7, REG_ARG7, REG_ARG4, REG_ARG4),
+		0x0000006F, // J . (spin here once the test instructions are done)
+	};
+
+	constexpr uint32_t V = 0x2000;
+
+	riscv::Machine<RISCV64> machine { empty };
+	machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+	machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+
+	auto setup = [&] {
+		machine.cpu.registers() = {};
+		machine.cpu.reg(REG_ARG0) = 1;
+		machine.cpu.reg(REG_ARG2) = uint64_t(1) << 63;
+		machine.cpu.reg(REG_ARG4) = uint64_t(1) << 40;
+		machine.cpu.reg(REG_ARG5) = uint64_t(1) << 8;
+		machine.cpu.jump(V);
+	};
+	auto verify = [&] {
+		REQUIRE(machine.cpu.reg(REG_ARG1) == uint64_t(1) << 32);
+		REQUIRE(machine.cpu.reg(REG_ARG3) == 1);
+		REQUIRE(machine.cpu.reg(REG_ARG6) == uint64_t(1) << 48);
+		REQUIRE(machine.cpu.reg(REG_ARG7) == uint64_t(1) << 16);
+	};
+
+	// Bytecode interpreter
+	setup();
+	machine.simulate<false>(MAX_CYCLES, 0u);
+	verify();
+
+	// Precise/stepped interpreter
+	setup();
+	DebugMachine debugger { machine };
+	debugger.simulate(program.size() - 1);
+	verify();
+}
