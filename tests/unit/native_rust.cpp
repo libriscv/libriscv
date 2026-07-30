@@ -33,6 +33,7 @@ static constexpr uint64_t MAX_INSTRUCTIONS = 100'000'000ul;
 static constexpr size_t   HEAP_SIZE = 4UL << 20;
 
 static constexpr int HEAP_SYSCALLS_BASE  = 470;
+static constexpr int MEMORY_SYSCALLS_BASE= 475;
 static constexpr int SYSCALL_PAUSE       = 480;
 static constexpr int SYSCALL_FILL_STRING = 481;
 static constexpr int SYSCALL_FILL_VEC    = 482;
@@ -131,6 +132,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::arch::asm;
 
 const HEAP_SYSCALLS_BASE: i32 = 470;
+const MEMORY_SYSCALLS_BASE: i32 = 475;
 const SYSCALL_PAUSE: i32 = 480;
 const SYSCALL_FILL_STRING: i32 = 481;
 const SYSCALL_FILL_VEC: i32 = 482;
@@ -174,6 +176,61 @@ unsafe impl GlobalAlloc for SysAllocator {
 
 #[global_allocator]
 static ALLOCATOR: SysAllocator = SysAllocator;
+
+// The block memory operations, handed to the host the same way the heap is.
+// The link step passes --wrap=memcpy and friends, which rewrites every
+// reference to memcpy in the program - Rust's own and the ones inside glibc -
+// to __wrap_memcpy, so these four take over without any calling code knowing.
+// The host then copies with a native memcpy instead of emulating the loop.
+//
+// The bodies are pure inline assembly on purpose: a hand-written byte loop
+// here would be recognised by LLVM as a memcpy and turned back into a call to
+// this very function.
+
+#[no_mangle]
+pub unsafe extern "C" fn __wrap_memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+	asm!("ecall", in("a7") MEMORY_SYSCALLS_BASE + 0,
+		in("a0") dest, in("a1") src, in("a2") n, lateout("a0") _);
+	dest
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn __wrap_memset(dest: *mut u8, value: i32, n: usize) -> *mut u8 {
+	asm!("ecall", in("a7") MEMORY_SYSCALLS_BASE + 1,
+		in("a0") dest, in("a1") value, in("a2") n, lateout("a0") _);
+	dest
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn __wrap_memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+	asm!("ecall", in("a7") MEMORY_SYSCALLS_BASE + 2,
+		in("a0") dest, in("a1") src, in("a2") n, lateout("a0") _);
+	dest
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn __wrap_memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
+	let result: i32;
+	asm!("ecall", in("a7") MEMORY_SYSCALLS_BASE + 3,
+		in("a0") s1, in("a1") s2, in("a2") n, lateout("a0") result);
+	result
+}
+
+// Comparing two slices with == does not call memcmp: LLVM knows the caller
+// only wants to know whether they differ, and emits the equality-only entry
+// point instead - __memcmpeq on a current toolchain, bcmp on an older one.
+// Both are satisfied by a memcmp result, since all either one promises is
+// zero or non-zero.
+
+#[no_mangle]
+pub unsafe extern "C" fn __wrap___memcmpeq(s1: *const u8, s2: *const u8, n: usize) -> i32 {
+	__wrap_memcmp(s1, s2, n)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn __wrap_bcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
+	__wrap_memcmp(s1, s2, n)
+}
 
 /// The same FNV-1a that the host computes, so both sides can prove they are
 /// looking at the same bytes.
@@ -803,6 +860,88 @@ pub extern "C" fn rust_probe_enum_layout(out: *mut usize) {
 	unsafe { core::ptr::copy_nonoverlapping(words.as_ptr(), out, words.len()) };
 }
 
+// ---------------------------------------------------------------------------
+// The block memory operations, from the guest side.
+//
+// Every length here comes in as an argument, which is what keeps LLVM from
+// expanding the operation inline: a runtime length has to become a call, and
+// the call is what --wrap redirects into the host. Each function returns a
+// checksum of the bytes the host produced, so a copy that lands in the wrong
+// place cannot pass.
+// ---------------------------------------------------------------------------
+
+/// fill() on a byte slice is a memset.
+#[no_mangle]
+pub extern "C" fn rust_memset_fill(len: usize, byte: u8) -> u64 {
+	let mut buffer = vec![0u8; len];
+	buffer.fill(byte);
+	fnv1a(&buffer)
+}
+
+/// copy_from_slice() between two buffers that cannot overlap is a memcpy.
+#[no_mangle]
+pub extern "C" fn rust_memcpy_roundtrip(len: usize) -> u64 {
+	let source: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+	let mut dest = vec![0u8; len];
+	dest.copy_from_slice(&source);
+	fnv1a(&dest)
+}
+
+/// copy_within() overlaps, so it is a memmove. Which way it shifts decides
+/// which of the host's two paths runs: forwards when the destination is below
+/// the source, backwards when it is above.
+#[no_mangle]
+pub extern "C" fn rust_memmove_overlap(len: usize, shift: usize, downwards: bool) -> u64 {
+	let mut buffer: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+	if downwards {
+		buffer.copy_within(shift.., 0);
+	} else {
+		buffer.copy_within(..len - shift, shift);
+	}
+	fnv1a(&buffer)
+}
+
+/// Comparing two byte slices of a runtime length is a memcmp, and the sign of
+/// what the host returns is what Ord turns into Less, Equal or Greater.
+#[no_mangle]
+pub extern "C" fn rust_memcmp_order(len: usize, index: usize, value: u8) -> i64 {
+	let left: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+	let mut right = left.clone();
+	if index < len {
+		right[index] = value;
+	}
+	match left.cmp(&right) {
+		core::cmp::Ordering::Less => -1,
+		core::cmp::Ordering::Equal => 0,
+		core::cmp::Ordering::Greater => 1,
+	}
+}
+
+/// Slice equality, which is the common case and does *not* go to memcmp:
+/// LLVM emits the equality-only entry point for it, so this only reaches the
+/// host if __memcmpeq (or bcmp on an older toolchain) is wrapped as well.
+#[no_mangle]
+pub extern "C" fn rust_memcmp_equality(len: usize, index: usize, value: u8) -> u64 {
+	let left: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+	let mut right = left.clone();
+	if index < len {
+		right[index] = value;
+	}
+	if left == right { 1 } else { 0 }
+}
+
+/// A String built out of parts, which is what the collections do all day: the
+/// reserve is a realloc into the host arena and the append is a memcpy.
+#[no_mangle]
+pub extern "C" fn rust_memops_build_string(repeats: usize) -> String {
+	let piece = "The guest appends this through the host's memcpy. ";
+	let mut text = String::with_capacity(piece.len() * repeats);
+	for _ in 0..repeats {
+		text.push_str(piece);
+	}
+	text
+}
+
 fn main() {
 	println!("Rust guest is ready");
 	// Pause here with everything initialized, so that the host can make calls
@@ -891,11 +1030,77 @@ static void host_build_attrs(Machine<RISCV64>& machine, RustAttrs& attrs)
 }
 
 /// @brief The guest program, built once for the whole test binary.
+///
+/// --wrap makes the linker rewrite every reference to memcpy, memset, memmove
+/// and memcmp - Rust's own and the ones inside glibc - to the __wrap_* stubs
+/// at the top of the guest, which turn them into the host's memory syscalls.
 static const std::vector<uint8_t>& rust_guest_binary()
 {
-	static const std::vector<uint8_t> binary = build_rust_and_load(RUST_GUEST_PROGRAM);
+	static const std::string RUST_ARGS = "-C opt-level=2"
+		" -C link-arg=-Wl,--wrap=memcpy"
+		" -C link-arg=-Wl,--wrap=memset"
+		" -C link-arg=-Wl,--wrap=memmove"
+		" -C link-arg=-Wl,--wrap=memcmp"
+		// Slice equality goes to the equality-only entry point, not to memcmp
+		" -C link-arg=-Wl,--wrap=__memcmpeq"
+		" -C link-arg=-Wl,--wrap=bcmp";
+	static const std::vector<uint8_t> binary =
+		build_rust_and_load(RUST_GUEST_PROGRAM, RUST_ARGS);
 	return binary;
 }
+
+// ---------------------------------------------------------------------------
+// Counting the block memory operations.
+//
+// libriscv installs plain function pointers, so counting the calls means
+// keeping the originals and chaining onto them. Without this a test could only
+// see that the bytes came out right, which a guest-local memcpy would also
+// manage: the counters are what prove the work happened on the host.
+// ---------------------------------------------------------------------------
+
+enum MemoryOp { MEMCPY = 0, MEMSET = 1, MEMMOVE = 2, MEMCMP = 3, MEMOP_COUNT = 4 };
+
+static std::array<uint64_t, MEMOP_COUNT> g_memop_counts {};
+static std::array<Machine<RISCV64>::syscall_t, MEMOP_COUNT> g_memop_originals {};
+
+template <size_t Index>
+static void counting_memory_syscall(Machine<RISCV64>& machine)
+{
+	g_memop_counts[Index] ++;
+	g_memop_originals[Index](machine);
+}
+
+/// @brief Install the native memory syscalls with a counter chained onto each.
+/// Installing twice would chain the counters onto themselves, so it is done
+/// exactly once for the whole test binary.
+static void install_counted_memory_syscalls()
+{
+	static bool installed = false;
+	if (installed)
+		return;
+	installed = true;
+
+	Machine<RISCV64>::setup_native_memory(MEMORY_SYSCALLS_BASE);
+	for (int op = 0; op < MEMOP_COUNT; op++)
+		g_memop_originals[op] = Machine<RISCV64>::syscall_handlers.at(MEMORY_SYSCALLS_BASE + op);
+
+	Machine<RISCV64>::install_syscall_handlers({
+		{MEMORY_SYSCALLS_BASE + MEMCPY,  counting_memory_syscall<MEMCPY>},
+		{MEMORY_SYSCALLS_BASE + MEMSET,  counting_memory_syscall<MEMSET>},
+		{MEMORY_SYSCALLS_BASE + MEMMOVE, counting_memory_syscall<MEMMOVE>},
+		{MEMORY_SYSCALLS_BASE + MEMCMP,  counting_memory_syscall<MEMCMP>},
+	});
+}
+
+/// @brief A baseline of the counters, so a test can say how many of each
+/// operation its own guest call made.
+struct MemoryOpCounter {
+	MemoryOpCounter() : m_baseline(g_memop_counts) {}
+	uint64_t operator[](int op) const { return g_memop_counts[op] - m_baseline[op]; }
+	void reset() { m_baseline = g_memop_counts; }
+private:
+	std::array<uint64_t, MEMOP_COUNT> m_baseline;
+};
 
 /// @brief A block of raw bytes in the guest arena. A vmcall string argument is
 /// zero-terminated, which is not what a Rust &str is, so the tests hand the
@@ -927,6 +1132,10 @@ struct RustGuest {
 	{
 		const auto heap = machine.memory.mmap_allocate(HEAP_SIZE);
 		machine.setup_native_heap(HEAP_SYSCALLS_BASE, heap, HEAP_SIZE);
+		// memcpy, memset, memmove and memcmp, done natively by the host. The
+		// guest is linked with --wrap, so every one of them arrives here
+		// instead of being emulated one instruction at a time.
+		install_counted_memory_syscalls();
 		machine.setup_linux_syscalls();
 		// Rust's standard library locks with futexes even single-threaded
 		machine.setup_posix_threads();
@@ -2409,6 +2618,275 @@ TEST_CASE("A flat Rust attribute map can be copied to the host", "[RustNative]")
 		REQUIRE(std::get<double>(map.at("ratio")) == 0.25);
 		REQUIRE(std::get<std::string>(map.at("label")) == "a label");
 		REQUIRE(std::holds_alternative<std::monostate>(map.at("nothing")));
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// ===========================================================================
+// Block memory operations
+//
+// The guest is linked with --wrap=memcpy and friends, so a Rust program that
+// never mentions memcpy still ends up in the host for every bulk copy it makes
+// - and it makes a great many, because that is where Vec growth, slice copies
+// and String appends all end up.
+//
+// Two things are checked for each of them: that the bytes the host produced
+// are the right bytes, and that the operation reached the host at all. The
+// second one matters, because a guest that quietly kept its own memcpy would
+// pass every correctness check in this file while emulating the whole loop.
+// ===========================================================================
+
+/// @brief The byte pattern the guest fills its buffers with, so the host can
+/// build the same bytes and check the checksum of what came back.
+static std::string memop_pattern(size_t len)
+{
+	std::string bytes(len, '\0');
+	for (size_t i = 0; i < len; i++)
+		bytes[i] = char(i % 251);
+	return bytes;
+}
+
+TEST_CASE("Booting a Rust guest goes through the host memory syscalls", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	MemoryOpCounter ops;
+	RustGuest guest;
+
+	// glibc's startup and the Rust runtime both copy and zero a great deal
+	// before main() is reached, and --wrap catches all of it
+	INFO("boot: memcpy=" << ops[MEMCPY] << " memset=" << ops[MEMSET]
+		<< " memmove=" << ops[MEMMOVE] << " memcmp=" << ops[MEMCMP]);
+	REQUIRE(ops[MEMCPY] > 0);
+	REQUIRE(ops[MEMSET] > 0);
+}
+
+TEST_CASE("Rust memset runs on the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	for (const size_t len : {1u, 15u, 64u, 4096u, 256u * 1024u})
+	{
+		MemoryOpCounter ops;
+		const uint64_t checksum = guest->vmcall("rust_memset_fill", len, uint8_t(0xA5));
+
+		INFO("memset of " << len << " bytes");
+		REQUIRE(checksum == fnv1a(std::string(len, char(0xA5))));
+		REQUIRE(ops[MEMSET] > 0);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("Rust memcpy runs on the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	for (const size_t len : {1u, 15u, 64u, 4096u, 256u * 1024u})
+	{
+		MemoryOpCounter ops;
+		const uint64_t checksum = guest->vmcall("rust_memcpy_roundtrip", len);
+
+		INFO("memcpy of " << len << " bytes");
+		REQUIRE(checksum == fnv1a(memop_pattern(len)));
+		REQUIRE(ops[MEMCPY] > 0);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("Rust memmove runs on the host, both directions", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	// The host has one path for a destination below the source and another
+	// for a destination above it, and only the second one has to copy
+	// backwards. Both are exercised, with an overlap that is not a multiple
+	// of the word size as well as one that is.
+	for (const size_t len : {64u, 4096u, 256u * 1024u})
+	{
+		for (const size_t shift : {1u, 7u, 8u, 32u})
+		{
+			for (const bool downwards : {true, false})
+			{
+				MemoryOpCounter ops;
+				const uint64_t checksum =
+					guest->vmcall("rust_memmove_overlap", len, shift, downwards);
+
+				std::string expected = memop_pattern(len);
+				if (downwards) // copy_within(shift.., 0)
+					expected.replace(0, len - shift, expected.substr(shift));
+				else           // copy_within(..len - shift, shift)
+					expected.replace(shift, len - shift, expected.substr(0, len - shift));
+
+				INFO("memmove of " << len << " bytes shifted " << shift
+					<< (downwards ? " down" : " up"));
+				REQUIRE(checksum == fnv1a(expected));
+				REQUIRE(ops[MEMMOVE] > 0);
+			}
+		}
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("Rust memcmp runs on the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	const size_t len = 4096;
+	const std::string pattern = memop_pattern(len);
+
+	// An index past the end leaves the two buffers equal; otherwise the byte
+	// at that index decides the order, and the host has to return a value of
+	// the right sign for Ord to agree with the host's own comparison
+	struct { size_t index; uint8_t value; int expected; } cases[] {
+		{ len,      0x00, 0 },   // untouched: the two are equal
+		{ 0,        0xFF, -1 },  // right is larger at the very first byte
+		{ 0,        0x00, 0 },   // pattern[0] is already 0
+		{ len - 1,  0xFF, -1 },  // and at the very last one
+		{ len - 1,  0x00, 1 },   // pattern[len-1] is non-zero, so left wins
+		{ len / 2,  0xFF, -1 },
+	};
+
+	for (const auto& c : cases)
+	{
+		MemoryOpCounter ops;
+		const int64_t order = guest->vmcall("rust_memcmp_order", len, c.index, c.value);
+
+		INFO("memcmp with byte " << c.index << " set to " << int(c.value));
+		REQUIRE(order == c.expected);
+		REQUIRE(ops[MEMCMP] > 0);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("Rust slice equality runs on the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	// `a == b` does not compile to memcmp: LLVM emits the equality-only entry
+	// point, __memcmpeq, because the caller never looks at the sign. It has to
+	// be wrapped separately, and this is the test that says so - wrapping only
+	// memcmp leaves the ordinary case emulated while every other test here
+	// still passes.
+	const size_t len = 4096;
+
+	for (const size_t len_case : {1u, 64u, 4096u})
+	{
+		MemoryOpCounter ops;
+		INFO("equal slices of " << len_case << " bytes");
+		// index == len leaves the two buffers identical
+		REQUIRE(uint64_t(guest->vmcall("rust_memcmp_equality",
+			len_case, len_case, uint8_t(0))) == 1);
+		REQUIRE(ops[MEMCMP] > 0);
+	}
+
+	// And a difference at either end has to be found
+	for (const size_t index : {size_t(0), len / 2, len - 1})
+	{
+		MemoryOpCounter ops;
+		INFO("slices differing at byte " << index);
+		REQUIRE(uint64_t(guest->vmcall("rust_memcmp_equality",
+			len, index, uint8_t(0xFF))) == 0);
+		REQUIRE(ops[MEMCMP] > 0);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("Rust block memory operations handle the edges", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	// A zero length has to be accepted and do nothing. Rust may or may not
+	// make the call at all, so only the result is checked here.
+	REQUIRE(uint64_t(guest->vmcall("rust_memset_fill", 0u, uint8_t(0xA5)))
+		== fnv1a(""));
+	REQUIRE(uint64_t(guest->vmcall("rust_memcpy_roundtrip", 0u)) == fnv1a(""));
+
+	// An overlap of the whole buffer: source and destination are the same
+	// address, which is the degenerate case of the backwards path
+	const size_t len = 1024;
+	for (const bool downwards : {true, false}) {
+		INFO("memmove onto itself, " << (downwards ? "down" : "up"));
+		REQUIRE(uint64_t(guest->vmcall("rust_memmove_overlap", len, 0u, downwards))
+			== fnv1a(memop_pattern(len)));
+	}
+
+	// A one-byte overlap, where the copy is almost the whole buffer
+	std::string expected = memop_pattern(len);
+	expected.replace(0, len - 1, expected.substr(1));
+	REQUIRE(uint64_t(guest->vmcall("rust_memmove_overlap", len, 1u, true))
+		== fnv1a(expected));
+
+	// Two empty slices compare equal
+	REQUIRE(int64_t(guest->vmcall("rust_memcmp_order", 0u, 0u, uint8_t(0))) == 0);
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+TEST_CASE("A Rust String grown through the host memcpy", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const unsigned allocs_before = guest.live_allocations();
+
+	{
+		// The ordinary case, and the reason this matters at all: a Rust
+		// program that never mentions memcpy still spends most of its bulk
+		// memory work inside one. The String is built in the shared arena and
+		// read back by the host without a copy.
+		const size_t repeats = 64;
+		const std::string piece = "The guest appends this through the host's memcpy. ";
+
+		MemoryOpCounter ops;
+		ScopedRustString text(guest.machine);
+		guest->vmcall("rust_memops_build_string", text, repeats);
+
+		std::string expected;
+		for (size_t i = 0; i < repeats; i++)
+			expected += piece;
+
+		INFO("String append: memcpy=" << ops[MEMCPY]);
+		REQUIRE(text->to_string(guest.machine) == expected);
+		REQUIRE(ops[MEMCPY] >= repeats);
 	}
 
 	REQUIRE(guest.live_allocations() == allocs_before);

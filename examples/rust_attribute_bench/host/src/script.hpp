@@ -29,11 +29,13 @@ struct Script
 	static constexpr uint64_t MAX_CALL_INSTR = 2'000'000'000ULL;
 
 	// Host functions, as syscall numbers. The native heap owns 490..503, and
-	// guest/src/env.rs allocates through it.
+	// guest/src/env.rs allocates through it. The block memory operations sit
+	// inside that range at 495, where the guest's wrapped memcpy sends them.
 	static constexpr size_t SYSCALL_OUT_FLAT = 480;
 	static constexpr size_t SYSCALL_OUT_OBJ  = 481;
 	static constexpr size_t SYSCALL_PRINT    = 482;
-	static constexpr size_t HEAP_SYSCALLS_BASE = 490;
+	static constexpr size_t HEAP_SYSCALLS_BASE   = 490;
+	static constexpr size_t MEMORY_SYSCALLS_BASE = 495;
 
 	Script(const std::string& name, const std::string& filename);
 

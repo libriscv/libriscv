@@ -87,6 +87,10 @@ void Script::machine_setup()
 	// side usable, growable and freeable on the other.
 	m_heap_area = machine().memory.mmap_allocate(MAX_HEAP);
 	machine().setup_native_heap(HEAP_SYSCALLS_BASE, m_heap_area, MAX_HEAP);
+	// memcpy, memset, memmove and memcmp, done natively by the host instead of
+	// emulated one instruction at a time. The guest's linker sends every call
+	// to the stubs in env.rs, which end up here.
+	machine().setup_native_memory(MEMORY_SYSCALLS_BASE);
 
 	machine().setup_linux_syscalls();
 	// The Rust standard library locks with futexes even when single-threaded

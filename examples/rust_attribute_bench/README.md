@@ -85,15 +85,15 @@ Bare vmcall baseline: 5 ns  (2000 iterations x 7 rounds, median)
 
  guest -> host (the script sends attributes to the engine)
                               ns/op guest instr/op  guest allocs
-  flat nodes                   8233          27562           6.0
-  zero-copy                    3408              4           0.0
-  zero-copy wins by           2.42x       6884.48x          none
+  flat nodes                   8225          27562           6.0
+  zero-copy                    3475              4           0.0
+  zero-copy wins by           2.37x       6884.48x          none
 
  host -> guest (the engine hands attributes to a script)
                               ns/op guest instr/op  guest allocs
-  flat nodes                  60263         506144         155.0
-  zero-copy                   34023         182717          81.0
-  zero-copy wins by           1.77x          2.77x         1.91x
+  flat nodes                  53980         502060         155.0
+  zero-copy                   33733         182717          81.0
+  zero-copy wins by           1.60x          2.75x         1.91x
 ```
 
 **Going out, the guest stops working entirely.** Handing over the address of its
@@ -128,6 +128,14 @@ table or libstdc++'s hash-caching rule having to be mirrored.
   and dropped by the guest. It is also why `Box::from_raw` on a host allocation is
   sound rather than merely convenient — the block really did come from the
   allocator that will release it.
+- **The accelerated `memcpy` is on, as it is for the C++ guest.** The guest links
+  with `--wrap=memcpy,memset,memmove,memcmp` and the stubs in `guest/src/env.rs`
+  hand each one to the host, matching what `examples/attribute_bench` has always
+  done. It moves these numbers by well under a percent — the strings here are 12
+  to 48 bytes, small enough that LLVM inlines most of the copying before a call is
+  ever emitted — but it removes a difference between the two guests that would
+  otherwise sit underneath every comparison. Note that slice `==` compiles to
+  `__memcmpeq`, not `memcmp`, so that one has to be wrapped by name as well.
 - **The variant order is the ABI.** The host mirror in `rustattrs.hpp` lists the
   same ten types in the same order as the guest's `enum Value`. A change on either
   side is caught by the checksum.

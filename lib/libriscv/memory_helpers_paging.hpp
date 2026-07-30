@@ -392,6 +392,19 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 		protection_fault(p2);
 	return std::memcmp(&((const char*)m_arena.data)[p1], &((const char*)m_arena.data)[p2], len);
 #else
+	// A flat readwrite arena can compare both ranges where they lie, no matter
+	// how many pages they span. Without this, anything crossing a page boundary
+	// ends up in the byte-at-a-time path below, which looks up two pages per
+	// byte compared - slower than letting the guest emulate the comparison.
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(p1 + len - RWREAD_BEGIN < memory_arena_read_boundary()
+			&& p2 + len - RWREAD_BEGIN < memory_arena_read_boundary()
+			&& p1 < p1 + len && p2 < p2 + len)) {
+			const char* s1 = &((const char *)m_arena.data)[RISCV_SPECSAFE(p1)];
+			const char* s2 = &((const char *)m_arena.data)[RISCV_SPECSAFE(p2)];
+			return std::memcmp(s1, s2, len);
+		}
+	}
 	// NOTE: fast implementation if no pointer crosses page boundary
 	const auto pageno1 = this->page_number(p1);
 	const auto pageno2 = this->page_number(p2);
@@ -437,6 +450,14 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	return std::memcmp(ptr1, &((const char*)m_arena.data)[p2], len);
 #else
 	const char* s1 = (const char*) ptr1;
+	// The same flat-arena fast path as the two-address overload above
+	if constexpr (flat_readwrite_arena) {
+		if (LIKELY(p2 + len - RWREAD_BEGIN < memory_arena_read_boundary()
+			&& p2 < p2 + len)) {
+			const char* s2 = &((const char *)m_arena.data)[RISCV_SPECSAFE(p2)];
+			return std::memcmp(s1, s2, len);
+		}
+	}
 	// NOTE: fast implementation if no pointer crosses page boundary
 	const auto pageno2 = this->page_number(p2);
 	if (pageno2 == ((p2 + len-1) / Page::size())) {

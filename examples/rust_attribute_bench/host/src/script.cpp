@@ -54,6 +54,10 @@ void Script::machine_setup()
 	// the host -- which is what lets either side own what the other built
 	m_heap_area = machine().memory.mmap_allocate(MAX_HEAP);
 	machine().setup_native_heap(HEAP_SYSCALLS_BASE, m_heap_area, MAX_HEAP);
+	// memcpy, memset, memmove and memcmp, done natively by the host instead of
+	// emulated. The C++ guest in examples/attribute_bench has always had these,
+	// so the Rust guest needs them for the comparison to mean anything.
+	machine().setup_native_memory(MEMORY_SYSCALLS_BASE);
 
 	machine().setup_linux_syscalls();
 	// The Rust standard library locks with futexes even when single-threaded

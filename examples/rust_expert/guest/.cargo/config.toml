@@ -13,4 +13,13 @@ rustflags = [
     "-C", "link-arg=-Wl,--no-gc-sections",
     "-C", "link-arg=-Wl,--undefined=dyncall_table",
     "-C", "link-arg=-Wl,--undefined=fast_exit",
+    # Send every call to memcpy and friends - Rust's own and glibc's - to the
+    # __wrap_* system call stubs in env.rs, which let the host do the copying
+    "-C", "link-arg=-Wl,--wrap=memcpy",
+    "-C", "link-arg=-Wl,--wrap=memset",
+    "-C", "link-arg=-Wl,--wrap=memmove",
+    "-C", "link-arg=-Wl,--wrap=memcmp",
+    # Slice equality goes to the equality-only entry point, not to memcmp
+    "-C", "link-arg=-Wl,--wrap=__memcmpeq",
+    "-C", "link-arg=-Wl,--wrap=bcmp",
 ]

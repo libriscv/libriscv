@@ -2,11 +2,12 @@
 /**
  * The host side of the Rust expert example.
  *
- * This is the same Script wrapper as examples/expert, with the three changes a
+ * This is the same Script wrapper as examples/expert, with the two changes a
  * Rust guest needs: a larger arena (a statically linked Rust program is a few
- * megabytes of ELF before it allocates anything), POSIX thread support because
- * the Rust standard library locks with futexes even single-threaded, and no
- * wrapped memcpy/strlen syscalls, which are a C runtime thing.
+ * megabytes of ELF before it allocates anything), and POSIX thread support,
+ * because the Rust standard library locks with futexes even single-threaded.
+ * The accelerated heap and memory syscalls are set up exactly as they are for
+ * a C++ guest: --wrap works the same on a Rust link.
  *
  * Everything about the host function machinery - the JSON, the CRC32 hashes,
  * the dyncall_table, the custom instruction - is identical. The guest being
@@ -40,6 +41,10 @@ struct Script
 	/// Must match HEAP_SYSCALLS_BASE in the guest's env.rs: this is where the
 	/// Rust #[global_allocator] sends every String and Vec allocation
 	static constexpr int HEAP_SYSCALLS_BASE = 490;
+
+	/// Must match MEMORY_SYSCALLS_BASE in the guest's env.rs: where the wrapped
+	/// memcpy, memset, memmove and memcmp end up
+	static constexpr int MEMORY_SYSCALLS_BASE = 495;
 
 	struct HostFunctionDesc {
 		uint32_t hash;

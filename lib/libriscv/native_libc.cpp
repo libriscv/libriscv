@@ -149,6 +149,11 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		auto [dst, src, len] =
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memcpy(%#lX, %#lX, %zu)\n", (long)dst, (long)src, (size_t)len);
+		// A zero-length operation touches no memory, and the addresses do not
+		// have to be valid: a Rust guest hands out a dangling pointer for
+		// every empty slice, and libc is expected to leave it alone
+		if (UNLIKELY(len == 0))
+			return;
 		m.memory.memcpy(dst, m, src, len);
 		m.penalize(2 * len);
 	}}, {syscall_base+1, [] (Machine<W>& m) {
@@ -158,6 +163,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		MPRINT("SYSCALL memset(%#lX, %#X, %zu)\n", (long)dst, value, (size_t)len);
 		if (UNLIKELY(len > MEMCPY_MAX))
 			throw MachineException(SYSTEM_CALL_FAILED, "memset length too large", len);
+		if (UNLIKELY(len == 0))
+			return;
 		m.memory.memset(dst, value, len);
 		m.penalize(len);
 	}}, {syscall_base+2, [] (Machine<W>& m) {
@@ -166,6 +173,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			m.sysargs<address_type<W>, address_type<W>, address_type<W>> ();
 		MPRINT("SYSCALL memmove(%#lX, %#lX, %zu)\n",
 			(long) dst, (long) src, (size_t)len);
+		if (UNLIKELY(len == 0))
+			return;
 		// If we have a flat readwrite arena, we can use memmove
 		if constexpr (riscv::flat_readwrite_arena) {
 			if (m.memory.try_memmove(dst, src, len)) {
@@ -213,6 +222,10 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		MPRINT("SYSCALL memcmp(%#lX, %#lX, %zu)\n", (long)p1, (long)p2, (size_t)len);
 		if (UNLIKELY(len > MEMCPY_MAX))
 			throw MachineException(SYSTEM_CALL_FAILED, "memcmp length too large", len);
+		if (UNLIKELY(len == 0)) {
+			m.set_result(0);
+			return;
+		}
 		m.penalize(2 * len);
 		m.set_result(m.memory.memcmp(p1, p2, len));
 	}}, {syscall_base+5, [] (Machine<W>& m) {
