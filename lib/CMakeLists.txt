@@ -351,7 +351,10 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/guest/guest_cpp_unordered_map.hpp
 		libriscv/guest/guest_cpp_variant.hpp
 		libriscv/guest/guest_cpp_vector.hpp
+		libriscv/guest/guest_rust_attributes.hpp
+		libriscv/guest/guest_rust_box.hpp
 		libriscv/guest/guest_rust_common.hpp
+		libriscv/guest/guest_rust_enum.hpp
 		libriscv/guest/guest_rust_string.hpp
 		libriscv/guest/guest_rust_vec.hpp
 
