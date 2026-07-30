@@ -10,38 +10,38 @@ std::span<const Attributes::HostAttr> Attributes::createHostAttr() const
 		HostAttr& node = nodes[i++];
 		switch (value.index()) {
 		case INT64:
-			new (&node) HostAttr(key.c_str(), std::get<int64_t>(value));
+			new (&node) HostAttr(key, std::get<int64_t>(value));
 			break;
 		case FLOAT:
-			new (&node) HostAttr(key.c_str(), std::get<double>(value));
+			new (&node) HostAttr(key, std::get<double>(value));
 			break;
 		case VEC3:
-			new (&node) HostAttr(key.c_str(), std::get<vec3>(value));
+			new (&node) HostAttr(key, std::get<vec3>(value));
 			break;
 		case VEC4:
-			new (&node) HostAttr(key.c_str(), std::get<vec4>(value));
+			new (&node) HostAttr(key, std::get<vec4>(value));
 			break;
 		case DVEC3:
-			new (&node) HostAttr(key.c_str(), std::get<dvec3>(value));
+			new (&node) HostAttr(key, std::get<dvec3>(value));
 			break;
 		case DVEC2:
-			new (&node) HostAttr(key.c_str(), std::get<dvec2>(value));
+			new (&node) HostAttr(key, std::get<dvec2>(value));
 			break;
 		case STRING:
-			new (&node) HostAttr(key.c_str(), std::string_view(std::get<std::string>(value)));
+			new (&node) HostAttr(key, std::string_view(std::get<std::string>(value)));
 			break;
 		case BOOL:
-			new (&node) HostAttr(key.c_str(), std::get<bool>(value));
+			new (&node) HostAttr(key, std::get<bool>(value));
 			break;
 		case GROUP: {
 			const auto group = std::get<AttributesPtr>(value)->createHostAttr();
-			new (&node) HostAttr(key.c_str(), group.data(), unsigned(group.size()));
+			new (&node) HostAttr(key, group.data(), unsigned(group.size()));
 			break;
 		}
 		case LIST: {
 			const auto& listPtr = std::get<AttributeListPtr>(value);
 			if (!listPtr || listPtr->empty()) {
-				new (&node) HostAttr(key.c_str(), (const HostAttr*)nullptr, 0u, true);
+				new (&node) HostAttr(key, (const HostAttr*)nullptr, 0u, true);
 				break;
 			}
 			const auto& list = *listPtr;
@@ -50,12 +50,12 @@ std::span<const Attributes::HostAttr> Attributes::createHostAttr() const
 				std::visit([elements, j] (const auto& v) {
 					using T = std::decay_t<decltype(v)>;
 					if constexpr (std::is_same_v<T, std::string>)
-						new (&elements[j]) HostAttr(nullptr, std::string_view(v));
+						new (&elements[j]) HostAttr(std::string_view(), std::string_view(v));
 					else
-						new (&elements[j]) HostAttr(nullptr, v);
+						new (&elements[j]) HostAttr(std::string_view(), v);
 				}, list[j]);
 			}
-			new (&node) HostAttr(key.c_str(), elements, unsigned(list.size()), true);
+			new (&node) HostAttr(key, elements, unsigned(list.size()), true);
 			break;
 		}
 		default:
@@ -74,34 +74,38 @@ Attributes Attributes::fromGuestAttributes(std::span<const HostAttr> nodes, bool
 	attrs.getAllAttributes().reserve(nodes.size());
 
 	for (const HostAttr& node : nodes) {
+		// The node carries the key's length, so this is one allocation and one
+		// copy -- no strlen over a string the sender already knew the size of
+		const std::string key(node.key, node.klen);
+
 		switch (node.type) {
 		case INT64:
-			attrs.set(node.key, node.ival);
+			attrs.set(key, node.ival);
 			break;
 		case FLOAT:
-			attrs.set(node.key, node.fval);
+			attrs.set(key, node.fval);
 			break;
 		case VEC3:
-			attrs.set(node.key, node.vecval);
+			attrs.set(key, node.vecval);
 			break;
 		case VEC4:
-			attrs.set(node.key, node.vec4val);
+			attrs.set(key, node.vec4val);
 			break;
 		case DVEC3:
-			attrs.set(node.key, dvec3{node.dvec3val[0], node.dvec3val[1], node.dvec3val[2]});
+			attrs.set(key, dvec3{node.dvec3val[0], node.dvec3val[1], node.dvec3val[2]});
 			break;
 		case DVEC2:
-			attrs.set(node.key, dvec2{node.dvec2val[0], node.dvec2val[1]});
+			attrs.set(key, dvec2{node.dvec2val[0], node.dvec2val[1]});
 			break;
 		case STRING:
-			attrs.set(node.key, std::string(node.strval, node.slen));
+			attrs.set(key, std::string(node.strval, node.slen));
 			std::free((void*)node.strval);
 			break;
 		case BOOL:
-			attrs.set(node.key, node.bval);
+			attrs.set(key, node.bval);
 			break;
 		case GROUP: {
-			attrs.set(node.key,
+			attrs.set(key,
 				fromGuestAttributes({node.group_nodes, node.group_count}, false));
 			std::free((void*)node.group_nodes);
 			break;
@@ -128,7 +132,7 @@ Attributes Attributes::fromGuestAttributes(std::span<const HostAttr> nodes, bool
 			}
 			if (node.list_nodes != nullptr)
 				std::free((void*)node.list_nodes);
-			attrs.setList(node.key, std::move(list));
+			attrs.setList(key, std::move(list));
 			break;
 		}
 		default:

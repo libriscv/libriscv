@@ -763,6 +763,8 @@ A tree type must be a struct deriving from the enum, because the value type need
 
 Scripts are adversarial input, so `validate(machine, max_entries)` checks the shape before a walk and `is_sorted(machine)` reports keys out of order. Neither can corrupt host memory — the vector bounds every access, and a binary search that misses only fails to find.
 
+[`examples/rust_attribute_bench`](examples/rust_attribute_bench) is a complete, buildable program built on this type: the same benchmark as `examples/attribute_bench`, both directions, three workload shapes, checked against a flat serialized form with checksums and leak accounting. It also shows the layout probe worth having in production — the guest reports its own sizes, discriminants and payload offsets, and the host compares them against the mirror before reading through it.
+
 #### Heap takeover in a Rust guest
 
 A Rust guest takes over its heap with a `#[global_allocator]` that ecalls the native heap syscalls — no `--wrap` linker flags needed, because every `String` and `Vec` allocation goes through it:
@@ -1418,6 +1420,7 @@ Two more places worth reading:
 | Where | What it shows |
 | --- | --- |
 | [`examples/attribute_bench`](examples/attribute_bench) | `GuestStdUnorderedMap` / `GuestStdVariant` / `GuestStdString` moving a tree of attributes both ways, benchmarked against a hand-serialized form, with leak accounting |
+| [`examples/rust_attribute_bench`](examples/rust_attribute_bench) | The same benchmark with a Rust guest: `GuestRustAttributes` / `GuestRustEnum` / `GuestRustString`, plus a layout probe that checks the `#[repr(C, u64)]` ABI before measuring |
 | `tests/unit/native.cpp`, `tests/unit/native_rust.cpp` | Every guest datatype exercised against a real C++ and Rust guest, including the layout probes |
 
 ---

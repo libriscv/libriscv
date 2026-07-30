@@ -1,0 +1,16 @@
+[package]
+name = "attrbench"
+description = "The guest half of the Rust attribute marshalling benchmark"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "guest"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 2
+# The guest never unwinds across the host boundary: a panic is a hard stop
+panic = "abort"
+# The host looks guest functions up by name in .symtab, so the symbols stay
+strip = false

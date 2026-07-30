@@ -54,22 +54,22 @@ Bare vmcall baseline: 5 ns  (2000 iterations x 7 rounds, median)
 
  guest -> host (the script sends attributes to the engine)
                               ns/op guest instr/op  guest allocs
-  flat HostAttr                7109          26460           6.0
-  zero-copy                    3553              7           0.0
-  zero-copy wins by           2.00x       3775.96x          none
+  flat HostAttr                7427          26637           6.0
+  zero-copy                    3638              7           0.0
+  zero-copy wins by           2.04x       3801.22x          none
 
  host -> guest (the engine hands attributes to a script)
                               ns/op guest instr/op  guest allocs
-  flat HostAttr               70719         511827         155.0
-  zero-copy                   34763         179630          81.0
-  zero-copy wins by           2.03x          2.85x         1.91x
+  flat HostAttr               68819         510341         155.0
+  zero-copy                   35792         179630          81.0
+  zero-copy wins by           1.92x          2.84x         1.91x
 ```
 
 Roughly a 2x wall-clock win in both directions across all three shapes, but the
 interesting columns are the other two.
 
 **Going out, the guest stops working entirely.** Handing over an address is seven
-instructions no matter how big the tree is, against 4.3k-26k for building the
+instructions no matter how big the tree is, against 4.4k-27k for building the
 flat array -- and the flat array's cost is emulated code, which is where guest
 instructions are 10-50x more expensive than the host's. What time remains is the
 host's own walk, which it would have had to do either way.
@@ -101,3 +101,12 @@ copying string bytes.
   `free()` on the map.
 - The host-side container is a plain vector of entries rather than a hash map, to
   keep the host's own bookkeeping identical and cheap for both paths.
+- Keys in the flat form travel as **(pointer, length)**, like the string values
+  already did, and the length lives in what used to be padding ahead of the union
+  -- so the node is still 40 bytes. The map's key is a `std::string`, so its
+  `size()` is already there for the taking, and passing it means the receiver
+  needs one bounded `memview` instead of a `memstring` scanning guest memory for a
+  terminator -- and the guest, coming the other way, skips the `strlen` hidden in
+  `set(const char*)`. It is worth doing for the bound rather than for the speed:
+  the keys here are two characters, so it moves the instruction counts by a
+  fraction of a percent and the wall clock by less than the run-to-run noise.

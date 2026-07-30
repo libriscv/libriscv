@@ -4,11 +4,15 @@
  * self-describing nodes, one per key.
  *
  * Going out, the guest builds the array (one heap allocation per group and per
- * list) and the host reads it node by node, scanning guest memory for each
- * NUL-terminated key. Coming in, the host builds the array in guest memory --
- * allocating a key string per entry, a value string per string, and an array per
- * group and list -- and the guest re-inserts every key into a fresh map and frees
- * the whole scaffolding again.
+ * list) and the host reads it node by node. Coming in, the host builds the array
+ * in guest memory -- allocating a key per entry, a byte block per string value,
+ * and an array per group and list -- and the guest re-inserts every key into a
+ * fresh map and frees the whole scaffolding again.
+ *
+ * Keys travel as (address, length), like the string values: the guest's key is a
+ * std::string, so its size() is already there, and passing it means neither side
+ * has to walk the bytes looking for a terminator. The length sits in what would
+ * otherwise be padding ahead of the union, so the node is 40 bytes either way.
  */
 #include "attributes.hpp"
 #include "script.hpp"
@@ -19,8 +23,8 @@ namespace bench {
 /// so the layout must match guest/attributes.hpp exactly.
 struct GuestAttribute {
 	Script::gaddr_t namePtr;
+	uint32_t nameLen;
 	int32_t type;
-	int32_t padding;
 	union {
 		struct { Script::gaddr_t valuePtr; uint32_t valueSize; };
 		int64_t i;

@@ -1,5 +1,6 @@
 #include "flat.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace bench {
@@ -19,9 +20,9 @@ void readFlatAttributes(Script& script, Script::gaddr_t nodes, std::size_t count
 
 	for (std::size_t i = 0; i < count; i++) {
 		const GuestAttribute& node = array[i];
-		// The key is a NUL-terminated string somewhere in guest memory, so every
-		// single key costs a scan across (potentially unmapped) guest pages
-		std::string key = memory.memstring(node.namePtr);
+		// The node carries the key's length, so this is one bounded view and one
+		// copy, rather than a scan across (potentially unmapped) guest pages
+		std::string key(memory.memview(node.namePtr, node.nameLen));
 
 		switch (node.type) {
 		case INT64:  out.set(std::move(key), node.i); break;
@@ -73,25 +74,27 @@ void readFlatAttributes(Script& script, Script::gaddr_t nodes, std::size_t count
 	}
 }
 
-/// @brief Copy a string onto the guest heap, NUL-terminated (data()[size()] is
-/// always the terminator). The guest frees it as it consumes the array.
+/// @brief Copy a run of bytes onto the guest heap. No terminator: every node that
+/// points at one of these carries its length. The guest frees it as it consumes
+/// the array, so an empty string still gets a block of its own.
 static Script::gaddr_t push_string(Script& script, const std::string& str)
 {
-	const Script::gaddr_t addr = script.guest_alloc(str.size() + 1);
+	const Script::gaddr_t addr = script.guest_alloc(std::max<std::size_t>(str.size(), 1));
 	if (addr == 0)
 		throw std::bad_alloc();
-	script.machine().copy_to_guest(addr, str.data(), str.size() + 1);
+	script.machine().copy_to_guest(addr, str.data(), str.size());
 	return addr;
 }
 
 /// @brief Fill one node. Every allocation this entry needs has already been made,
 /// so the view of the array is taken once and stays valid.
 static void write_node(GuestAttribute& node, const HostAttributes::Attribute& value,
-	Script::gaddr_t namePtr, Script::gaddr_t indirect, uint32_t indirectSize)
+	Script::gaddr_t namePtr, uint32_t nameLen,
+	Script::gaddr_t indirect, uint32_t indirectSize)
 {
 	node.namePtr = namePtr;
+	node.nameLen = nameLen;
 	node.type = int32_t(value.index());
-	node.padding = 0;
 
 	switch (value.index()) {
 	case INT64: node.i = std::get<int64_t>(value); break;
@@ -178,7 +181,7 @@ std::pair<Script::gaddr_t, std::size_t> writeFlatAttributes(
 				GuestAttribute& element = script.machine().memory
 					.memarray<GuestAttribute>(listAddr, list.size())[j];
 				element.namePtr = 0;
-				element.padding = 0;
+				element.nameLen = 0;
 				element.type = int32_t(list[j].index());
 				std::visit([&] (const auto& v) {
 					using T = std::decay_t<decltype(v)>;
@@ -204,7 +207,7 @@ std::pair<Script::gaddr_t, std::size_t> writeFlatAttributes(
 
 		GuestAttribute& node = script.machine().memory
 			.memarray<GuestAttribute>(alloc, entries.size())[i];
-		write_node(node, value, namePtr, indirect, indirectSize);
+		write_node(node, value, namePtr, uint32_t(key.size()), indirect, indirectSize);
 	}
 	return {alloc, entries.size()};
 }
