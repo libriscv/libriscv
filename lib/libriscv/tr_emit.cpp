@@ -1718,7 +1718,8 @@ void Emitter<W>::emit()
 			case 0x301: // ROLW: Rotate left 32-bit
 				add_code(
 				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & 31;\n",
-					dst + " = (int32_t)(" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> (32 - shift)); }"
+					"const uint32_t word = (uint32_t)" + from_reg(instr.Rtype.rs1) + ";\n",
+					dst + " = (int32_t)((word << shift) | (word >> ((32 - shift) & 31))); }"
 				);
 				break;
 			case 0x305: // RORW: Rotate right (32-bit)
