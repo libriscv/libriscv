@@ -80,14 +80,13 @@ struct GuestStdVariant
 		return this->index_of_alternative == npos;
 	}
 
+	/// @brief Which alternative a host value belongs to (guest_common.hpp)
+	using selector = detail::guest_alternatives<W, Types...>;
+
 	/// @brief The index of the alternative T, or alternatives when not found.
 	template <typename T>
 	static constexpr std::size_t index_of() noexcept {
-		constexpr bool matches[alternatives] { std::is_same_v<T, Types>... };
-		std::size_t result = alternatives;
-		for (std::size_t i = alternatives; i > 0; i--)
-			if (matches[i - 1]) result = i - 1;
-		return result;
+		return selector::template index_of<T>();
 	}
 
 	template <typename T>
@@ -260,75 +259,10 @@ private:
 			? (callback(this->template alternative_ref<alternative_t<I>>()), true) : false));
 	}
 
-	template <typename U>
-	struct one_element_array { U value[1]; };
-
-	/// @brief True when the array declaration "U x[] = { a }" is valid, which
-	/// is how the converting constructor of std::variant builds the set of
-	/// alternatives to choose between. It rejects narrowing conversions.
-	template <typename A, typename U, typename = void>
-	struct is_array_initializable : std::false_type {};
-	template <typename A, typename U>
-	struct is_array_initializable<A, U,
-		std::void_t<decltype(one_element_array<U>{{std::declval<const A&>()}})>>
-		: std::true_type {};
-
-	/// @brief True when a host value can be converted to the alternative U.
-	/// The array form alone would also accept the aggregate initialization of
-	/// an alternative from a single value, eg. a glm::vec3 from a float, which
-	/// the overload resolution of std::variant rejects.
-	template <typename A, typename U>
-	struct is_alternative_convertible : std::bool_constant<
-		is_array_initializable<A, U>::value && std::is_convertible_v<const A&, U>> {};
-
-	/// @brief True for a host container with keys and mapped values,
-	/// eg. a std::unordered_map or a std::map.
-	template <typename A, typename = void>
-	struct is_host_map : std::false_type {};
-	template <typename A>
-	struct is_host_map<A, std::void_t<typename A::key_type, typename A::mapped_type>>
-		: std::true_type {};
-
-	/// @brief The index of the only alternative that matches, or alternatives
-	/// when there is no match, or more than one.
-	static constexpr std::size_t only_match(const bool (&matches)[alternatives]) noexcept
-	{
-		std::size_t result = alternatives;
-		std::size_t count = 0;
-		for (std::size_t i = alternatives; i > 0; i--) {
-			if (matches[i - 1]) { result = i - 1; count += 1; }
-		}
-		return count == 1 ? result : alternatives;
-	}
-
 	/// @brief The alternative that a host value should be converted to
 	template <typename Arg>
-	static constexpr std::size_t index_for_arg() noexcept
-	{
-		using A = std::decay_t<Arg>;
-		constexpr bool is_string_like = is_stdstring<A>::value
-			|| is_string<A>::value || std::is_same_v<A, std::string_view>;
-
-		if constexpr (index_of<A>() < alternatives) {
-			// An exact match always wins
-			return index_of<A>();
-		} else if constexpr (is_string_like) {
-			// The only string alternative, if there is exactly one
-			constexpr bool matches[alternatives] { is_guest_string<W, Types>::value... };
-			return only_match(matches);
-		} else if constexpr (is_stdvector<A>::value) {
-			// The only vector alternative, if there is exactly one
-			constexpr bool matches[alternatives] { is_guest_vector<W, Types>::value... };
-			return only_match(matches);
-		} else if constexpr (is_host_map<A>::value) {
-			// The only map alternative, if there is exactly one
-			constexpr bool matches[alternatives] { is_guest_map<W, Types>::value... };
-			return only_match(matches);
-		} else {
-			// The only alternative that the value converts to
-			constexpr bool matches[alternatives] { is_alternative_convertible<A, Types>::value... };
-			return only_match(matches);
-		}
+	static constexpr std::size_t index_for_arg() noexcept {
+		return selector::template index_for_arg<Arg>();
 	}
 };
 

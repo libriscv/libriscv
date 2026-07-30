@@ -19,6 +19,9 @@
 #include <libriscv/native_heap.hpp>
 #include <libriscv/guest/guest_rust_string.hpp>
 #include <libriscv/guest/guest_rust_vec.hpp>
+#include <libriscv/guest/guest_rust_box.hpp>
+#include <libriscv/guest/guest_rust_enum.hpp>
+#include <libriscv/guest/guest_rust_attributes.hpp>
 
 extern std::vector<uint8_t> build_rust_and_load(
 	const std::string& code, const std::string& args = "-C opt-level=2");
@@ -35,13 +38,56 @@ static constexpr int SYSCALL_FILL_STRING = 481;
 static constexpr int SYSCALL_FILL_VEC    = 482;
 static constexpr int SYSCALL_TAKE_STR    = 483;
 static constexpr int SYSCALL_TAKE_VEC    = 484;
+static constexpr int SYSCALL_TAKE_ATTRS  = 485;
+static constexpr int SYSCALL_FILL_ATTRS  = 486;
 
 using RustString = GuestRustString<RISCV64>;
 using RustStr    = GuestRustStr<RISCV64>;
 template <typename T> using RustVec   = GuestRustVec<RISCV64, T>;
 template <typename T> using RustSlice = GuestRustSlice<RISCV64, T>;
+template <typename T> using RustBox   = GuestRustBox<RISCV64, T>;
+template <typename T> using RustBoxedSlice = GuestRustBoxedSlice<RISCV64, T>;
+using RustBoxedStr = GuestRustBoxedStr<RISCV64>;
 using ScopedRustString = ScopedGuestRustString<RISCV64>;
 template <typename T> using ScopedRustVec = ScopedGuestRustVec<RISCV64, T>;
+template <typename T> using ScopedRustBox = ScopedGuestRustBox<RISCV64, T>;
+
+// ---------------------------------------------------------------------------
+// The host mirror of the guest's attribute tree.
+//
+// The value type has to name itself - a group is a Box<Attributes>, and
+// Attributes holds entries of values - so it is declared as a struct deriving
+// from the enum, and registered with one line. The variant order and the tag
+// width ARE the ABI: they must match the guest's #[repr(C, u64)] enum, and the
+// layout probe further down checks that they do.
+// ---------------------------------------------------------------------------
+
+struct RustValue;
+using RustAttrs = GuestRustAttributes<RISCV64, RustValue>;
+using RustGroup = RustBox<RustAttrs>;
+using RustList  = RustBox<RustVec<RustValue>>;
+
+struct RustValue : GuestRustEnum<RISCV64, uint64_t,
+	std::monostate,    // Nil
+	int64_t,           // Int(i64)
+	double,            // Float(f64)
+	bool,              // Bool(bool)
+	RustString,        // Str(String)
+	RustGroup,         // Group(Box<Attributes>)
+	RustList>          // List(Box<Vec<Value>>)
+{
+	using GuestRustEnum::GuestRustEnum;
+};
+RISCV_REGISTER_GUEST_RUST_ENUM(RISCV64, RustValue);
+
+using ScopedRustAttrs = ScopedArenaObject<RISCV64, RustAttrs>;
+
+// The whole point of the layout being requested rather than discovered: the
+// host mirror is the same size as what the guest declared
+static_assert(sizeof(RustValue) == 8 + sizeof(RustString), "tag + the widest variant");
+static_assert(sizeof(GuestRustAttr<RISCV64, RustValue>)
+	== sizeof(RustString) + sizeof(RustValue), "Attr is a String and a Value");
+static_assert(sizeof(RustAttrs) == sizeof(RustVec<int>), "Attributes is a Vec of entries");
 
 // What the host syscalls below write into the guests own collections
 static const std::string HOST_TEXT = "A string the host wrote into a guest-owned String";
@@ -54,6 +100,14 @@ static const std::vector<std::string> LENT_NAMES { "alpha", "beta", "gamma" };
 // Where the syscall handlers below put what the guest lent them
 static std::string g_lent_str;
 static std::vector<std::string> g_lent_vec;
+
+// What the guest's rust_attrs_build() puts in the tree it lends to the host
+static const std::string GUEST_BETA = "a string the guest allocated";
+static const std::string GUEST_NESTED = "inside the group";
+
+// Where the attribute system calls below leave what the guest lent them
+static uint64_t g_lent_attrs_checksum = 0;
+static std::size_t g_lent_attrs_size = 0;
 
 /// @brief The FNV-1a that the guest computes over the same bytes, so that both
 /// sides can prove they are looking at the same string.
@@ -82,6 +136,8 @@ const SYSCALL_FILL_STRING: i32 = 481;
 const SYSCALL_FILL_VEC: i32 = 482;
 const SYSCALL_TAKE_STR: i32 = 483;
 const SYSCALL_TAKE_VEC: i32 = 484;
+const SYSCALL_TAKE_ATTRS: i32 = 485;
+const SYSCALL_FILL_ATTRS: i32 = 486;
 
 // The arena hands out 16-byte aligned blocks, which covers every alignment
 // that the standard collections ask for.
@@ -477,6 +533,276 @@ pub extern "C" fn rust_host_fills_vec() -> u64 {
 	sum
 }
 
+// ---------------------------------------------------------------------------
+// Box: the one Rust smart pointer with a guaranteed layout. A Box the host
+// allocated really did come from this program's global allocator, so
+// Box::from_raw() on it is sound and not merely convenient - and then the
+// ordinary drop at the end of the scope returns it to the host arena.
+// ---------------------------------------------------------------------------
+
+/// Take a Box<i64> the host built, and let it drop
+#[no_mangle]
+pub extern "C" fn rust_box_take_i64(ptr: *mut i64) -> i64 {
+	let boxed: Box<i64> = unsafe { Box::from_raw(ptr) };
+	*boxed
+}
+
+/// Build a Box<i64> and hand ownership to the host
+#[no_mangle]
+pub extern "C" fn rust_box_make_i64(value: i64) -> *mut i64 {
+	Box::into_raw(Box::new(value * 2))
+}
+
+/// A struct of the two unsized boxes, so the host can build them in place.
+#[repr(C)]
+pub struct Boxes {
+	pub numbers: Box<[u32]>,
+	pub name: Box<str>,
+}
+
+/// Take a Box<Boxes> the host built. Dropping it frees three allocations: the
+/// struct, the boxed slice and the boxed str, all through the drop glue.
+#[no_mangle]
+pub extern "C" fn rust_boxes_take(ptr: *mut Boxes) -> u64 {
+	let boxes: Box<Boxes> = unsafe { Box::from_raw(ptr) };
+	let mut hash = fnv1a(boxes.name.as_bytes());
+	for n in boxes.numbers.iter() {
+		hash = hash.wrapping_mul(131).wrapping_add(*n as u64);
+	}
+	hash
+}
+
+// ---------------------------------------------------------------------------
+// The attribute tree.
+//
+// Ordinary Rust, with two attributes on it. #[repr(C, u64)] asks for the
+// tagged-union layout that the host mirrors - a plain #[repr(Rust)] enum would
+// be reordered and niche-packed - and #[repr(C)] does the same for the entry
+// struct, which a tuple could not promise.
+//
+// The entries are kept sorted by key, so a lookup is a binary search. That is
+// not a marshalling compromise: it is one allocation for the whole map instead
+// of a node per key, it needs no hasher that both sides have to agree on, and
+// std::HashMap is one .collect() away for a guest that wants one.
+// ---------------------------------------------------------------------------
+
+#[repr(C, u64)]
+pub enum Value {
+	Nil,
+	Int(i64),
+	Float(f64),
+	Bool(bool),
+	Str(String),
+	Group(Box<Attributes>),
+	List(Box<Vec<Value>>),
+}
+
+#[repr(C)]
+pub struct Attr {
+	pub key: String,
+	pub value: Value,
+}
+
+#[repr(C)]
+pub struct Attributes {
+	entries: Vec<Attr>,
+}
+
+impl Attributes {
+	pub fn new() -> Self {
+		Attributes { entries: Vec::new() }
+	}
+
+	pub fn get(&self, key: &str) -> Option<&Value> {
+		self.entries
+			.binary_search_by(|a| a.key.as_str().cmp(key))
+			.ok()
+			.map(|i| &self.entries[i].value)
+	}
+
+	pub fn set(&mut self, key: &str, value: Value) {
+		match self.entries.binary_search_by(|a| a.key.as_str().cmp(key)) {
+			Ok(i) => self.entries[i].value = value,
+			Err(i) => self.entries.insert(i, Attr { key: key.to_string(), value }),
+		}
+	}
+
+	pub fn len(&self) -> usize {
+		self.entries.len()
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = (&str, &Value)> {
+		self.entries.iter().map(|a| (a.key.as_str(), &a.value))
+	}
+}
+
+/// The checksum the host computes over the same tree, with the same operations
+/// in the same (sorted) order, so that both sides can prove they are looking at
+/// the same thing.
+fn checksum_value(value: &Value) -> u64 {
+	match value {
+		Value::Nil => 1,
+		Value::Int(i) => 2u64.wrapping_mul(*i as u64).wrapping_add(0x10),
+		Value::Float(f) => 3u64.wrapping_mul(f.to_bits()).wrapping_add(0x20),
+		Value::Bool(b) => if *b { 4 } else { 5 },
+		Value::Str(s) => fnv1a(s.as_bytes()),
+		Value::Group(g) => checksum_attrs(g).wrapping_mul(31),
+		Value::List(l) => l
+			.iter()
+			.fold(7u64, |acc, v| acc.wrapping_mul(131).wrapping_add(checksum_value(v))),
+	}
+}
+
+fn checksum_attrs(attrs: &Attributes) -> u64 {
+	let mut hash = attrs.len() as u64;
+	for (key, value) in attrs.iter() {
+		hash = hash.wrapping_mul(0x100000001b3);
+		hash ^= fnv1a(key.as_bytes());
+		hash = hash.wrapping_add(checksum_value(value));
+	}
+	hash
+}
+
+/// The host built a tree on the guest heap and handed over the pointer. The
+/// guest takes the whole thing with one from_raw, and drops it on the way out:
+/// no rebuilding, and no host-side teardown function either, because the drop
+/// glue walks the tree.
+#[no_mangle]
+pub extern "C" fn rust_attrs_take(ptr: *mut Attributes) -> u64 {
+	let attrs: Box<Attributes> = unsafe { Box::from_raw(ptr) };
+	checksum_attrs(&attrs)
+}
+
+/// The host owns the tree and only lends it out for the duration of the call,
+/// which is the shape an engine handing attributes to a script every frame
+/// wants: nothing is allocated, nothing is freed.
+#[no_mangle]
+pub extern "C" fn rust_attrs_borrow(ptr: *const Attributes) -> u64 {
+	checksum_attrs(unsafe { &*ptr })
+}
+
+/// The guest builds a tree of its own and lends it to the host, which walks it
+/// in place. Seven instructions of guest work, whatever the size of the tree.
+#[no_mangle]
+pub extern "C" fn rust_attrs_build() -> u64 {
+	let mut attrs = Attributes::new();
+	attrs.set("alpha", Value::Int(-1234));
+	attrs.set("beta", Value::Str(String::from("a string the guest allocated")));
+	attrs.set("gamma", Value::Float(2.5));
+	attrs.set("delta", Value::Bool(true));
+	attrs.set("epsilon", Value::Nil);
+
+	let mut group = Attributes::new();
+	group.set("nested_int", Value::Int(77));
+	group.set("nested_str", Value::Str(String::from("inside the group")));
+	attrs.set("zeta", Value::Group(Box::new(group)));
+
+	attrs.set("eta", Value::List(Box::new(vec![
+		Value::Int(1), Value::Int(2), Value::Str(String::from("three"))])));
+
+	let checksum = checksum_attrs(&attrs);
+	unsafe {
+		asm!("ecall", in("a7") SYSCALL_TAKE_ATTRS,
+			in("a0") &attrs as *const Attributes, lateout("a0") _);
+	}
+	checksum
+	// The guest still owns it, and drops the whole tree here
+}
+
+/// The host fills in a tree the guest owns, through a system call, and the
+/// guest then uses it as its own - including growing it.
+#[no_mangle]
+pub extern "C" fn rust_attrs_host_fills() -> u64 {
+	let mut attrs = Attributes::new();
+	unsafe {
+		asm!("ecall", in("a7") SYSCALL_FILL_ATTRS,
+			in("a0") &mut attrs as *mut Attributes, lateout("a0") _);
+	}
+	let mut hash = checksum_attrs(&attrs);
+	// The entries the host allocated are the guest's now: it can insert into
+	// the same vector, and it drops all of it at the end of the function
+	attrs.set("guest_added", Value::Int(999));
+	hash = hash.wrapping_add(checksum_attrs(&attrs));
+	hash
+}
+
+/// A guest that would rather have a real HashMap gets one for the price of a
+/// collect(). The tree is the interchange shape, not a cage.
+#[no_mangle]
+pub extern "C" fn rust_attrs_into_hashmap(ptr: *mut Attributes) -> u64 {
+	let attrs: Box<Attributes> = unsafe { Box::from_raw(ptr) };
+	let map: std::collections::HashMap<String, Value> =
+		attrs.entries.into_iter().map(|a| (a.key, a.value)).collect();
+
+	let mut total = map.len() as u64;
+	for key in ["alpha", "beta", "gamma"] {
+		if let Some(value) = map.get(key) {
+			total = total.wrapping_add(checksum_value(value));
+		}
+	}
+	total
+}
+
+// ---------------------------------------------------------------------------
+// Layout probe for the enum and the entry struct, so that a rustc release
+// which lays out #[repr(C, u64)] differently fails here instead of silently
+// reading garbage everywhere else.
+// ---------------------------------------------------------------------------
+
+/// The offset of the payload of a variant, measured against the enum itself
+macro_rules! payload_offset {
+	($value:expr, $pattern:pat => $field:expr) => {{
+		let value = $value;
+		let base = &value as *const Value as usize;
+		match &value {
+			$pattern => ($field as *const _ as usize) - base,
+			#[allow(unreachable_patterns)]
+			_ => usize::MAX,
+		}
+	}};
+}
+
+/// The discriminant of a variant, read as the first bytes of the enum
+fn tag_of(value: &Value) -> usize {
+	unsafe { *(value as *const Value as *const u64) as usize }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_probe_enum_layout(out: *mut usize) {
+	let attr = Attr { key: String::from("k"), value: Value::Int(1) };
+	let attr_base = &attr as *const Attr as usize;
+	let empty = Attributes::new();
+
+	let words: [usize; 21] = [
+		core::mem::size_of::<Value>(),
+		core::mem::align_of::<Value>(),
+		// The discriminants, which must be the declaration order 0..n
+		tag_of(&Value::Nil),
+		tag_of(&Value::Int(0)),
+		tag_of(&Value::Float(0.0)),
+		tag_of(&Value::Bool(false)),
+		tag_of(&Value::Str(String::new())),
+		tag_of(&Value::Group(Box::new(Attributes::new()))),
+		tag_of(&Value::List(Box::new(Vec::new()))),
+		// The payload offsets, which must all be sizeof(tag)
+		payload_offset!(Value::Int(1), Value::Int(x) => x),
+		payload_offset!(Value::Float(1.0), Value::Float(x) => x),
+		payload_offset!(Value::Bool(true), Value::Bool(x) => x),
+		payload_offset!(Value::Str(String::new()), Value::Str(x) => x),
+		payload_offset!(Value::Group(Box::new(Attributes::new())), Value::Group(x) => x),
+		payload_offset!(Value::List(Box::new(Vec::new())), Value::List(x) => x),
+		// The entry struct: a String followed by a Value, in that order
+		core::mem::size_of::<Attr>(),
+		(&attr.key as *const String as usize) - attr_base,
+		(&attr.value as *const Value as usize) - attr_base,
+		// Attributes is a newtype over the Vec, so it is the same three words
+		core::mem::size_of::<Attributes>(),
+		core::mem::size_of::<Box<Attributes>>(),
+		empty.len(),
+	];
+	unsafe { core::ptr::copy_nonoverlapping(words.as_ptr(), out, words.len()) };
+}
+
 fn main() {
 	println!("Rust guest is ready");
 	// Pause here with everything initialized, so that the host can make calls
@@ -485,6 +811,84 @@ fn main() {
 	}
 }
 )RUST";
+
+// ===========================================================================
+// The host half of the attribute tree: the same checksum the guest computes,
+// and the same tree built from the host side.
+//
+// Both walks are written against the mirrors in guest_rust_attributes.hpp, and
+// neither of them serializes anything: reading uses string views straight out
+// of guest memory, and writing allocates the entries in their final shape on
+// the guest heap, which is the host's own arena.
+// ===========================================================================
+
+static uint64_t host_checksum_attrs(const Machine<RISCV64>& machine, const RustAttrs& attrs);
+
+static uint64_t host_checksum_value(const Machine<RISCV64>& machine, const RustValue& value)
+{
+	uint64_t result = 0;
+	const bool ok = value.visit([&] (const auto& alt) {
+		using T = std::decay_t<decltype(alt)>;
+		if constexpr (std::is_same_v<T, std::monostate>) {
+			result = 1;
+		} else if constexpr (std::is_same_v<T, int64_t>) {
+			result = 2 * uint64_t(alt) + 0x10;
+		} else if constexpr (std::is_same_v<T, double>) {
+			uint64_t bits;
+			std::memcpy(&bits, &alt, sizeof(bits));
+			result = 3 * bits + 0x20;
+		} else if constexpr (std::is_same_v<T, bool>) {
+			result = alt ? 4 : 5;
+		} else if constexpr (std::is_same_v<T, RustString>) {
+			result = fnv1a(alt.to_view(machine));
+		} else if constexpr (std::is_same_v<T, RustGroup>) {
+			result = host_checksum_attrs(machine, alt.get(machine)) * 31;
+		} else if constexpr (std::is_same_v<T, RustList>) {
+			const auto& list = alt.get(machine);
+			result = 7;
+			for (std::size_t i = 0; i < list.size(); i++)
+				result = result * 131 + host_checksum_value(machine, list.at(machine, i));
+		} else {
+			static_assert(sizeof(T) == 0, "Unhandled attribute variant");
+		}
+	});
+	REQUIRE(ok);
+	return result;
+}
+
+static uint64_t host_checksum_attrs(const Machine<RISCV64>& machine, const RustAttrs& attrs)
+{
+	uint64_t hash = attrs.size();
+	attrs.for_each(machine, [&] (std::string_view key, const RustValue& value) {
+		hash = hash * 0x100000001b3ull;
+		hash ^= fnv1a(key);
+		hash += host_checksum_value(machine, value);
+	});
+	return hash;
+}
+
+/// @brief Build the same tree the guest's rust_attrs_build() builds, directly
+/// on the guest heap. Nothing is copied afterwards: this is the final shape.
+static void host_build_attrs(Machine<RISCV64>& machine, RustAttrs& attrs)
+{
+	attrs.insert_or_assign(machine, "alpha", int64_t(-1234));
+	attrs.insert_or_assign(machine, "beta", GUEST_BETA);
+	attrs.insert_or_assign(machine, "gamma", 2.5);
+	attrs.insert_or_assign(machine, "delta", true);
+	attrs.emplace<std::monostate>(machine, "epsilon");
+
+	// A nested group: one Box holding an Attributes of its own
+	auto& group = attrs.emplace<RustGroup>(machine, "zeta").get(machine);
+	group.insert_or_assign(machine, "nested_int", int64_t(77));
+	group.insert_or_assign(machine, "nested_str", GUEST_NESTED);
+
+	// A list: one Box holding a Vec of values
+	auto& list = attrs.emplace<RustList>(machine, "eta").get(machine);
+	list.resize(machine, 3);
+	list.at(machine, 0).set(machine, int64_t(1));
+	list.at(machine, 1).set(machine, int64_t(2));
+	list.at(machine, 2).set(machine, std::string_view("three"));
+}
 
 /// @brief The guest program, built once for the whole test binary.
 static const std::vector<uint8_t>& rust_guest_binary()
@@ -593,6 +997,51 @@ private:
 			const auto self = machine.sysarg(0);
 			const auto& vec = *machine.memory.memarray<const RustVec<RustString>>(self, 1);
 			g_lent_vec = vec.to_string_vector(machine);
+			machine.set_result(0);
+		});
+
+		// The guest lends the host its whole attribute tree, by address. The
+		// host walks it in place: no marshalling, and no guest work beyond
+		// handing over the address of its own three words.
+		Machine<RISCV64>::install_syscall_handler(SYSCALL_TAKE_ATTRS,
+		[] (Machine<RISCV64>& machine) {
+			const auto self = machine.sysarg(0);
+			const auto& attrs = *machine.memory.memarray<const RustAttrs>(self, 1);
+			// A script is adversarial input, so the shape is checked first
+			attrs.validate(machine);
+			REQUIRE(attrs.is_sorted(machine));
+
+			g_lent_attrs_size = attrs.size();
+			g_lent_attrs_checksum = host_checksum_attrs(machine, attrs);
+
+			// Reading individual keys goes through the same guest memory
+			REQUIRE(attrs.at(machine, "alpha").get<int64_t>() == -1234);
+			REQUIRE(attrs.at(machine, "beta").get<RustString>().to_string(machine) == GUEST_BETA);
+			REQUIRE(attrs.at(machine, "gamma").get<double>() == 2.5);
+			REQUIRE(attrs.at(machine, "delta").get<bool>() == true);
+			REQUIRE(attrs.at(machine, "epsilon").holds_alternative<std::monostate>());
+			REQUIRE(attrs.find(machine, "missing") == nullptr);
+
+			const auto& group = attrs.at(machine, "zeta").get<RustGroup>().get(machine);
+			REQUIRE(group.size() == 2);
+			REQUIRE(group.at(machine, "nested_int").get<int64_t>() == 77);
+			REQUIRE(group.at(machine, "nested_str").get<RustString>().to_string(machine) == GUEST_NESTED);
+
+			const auto& list = attrs.at(machine, "eta").get<RustList>().get(machine);
+			REQUIRE(list.size() == 3);
+			REQUIRE(list.at(machine, 2).get<RustString>().to_string(machine) == "three");
+
+			machine.set_result(0);
+		});
+
+		// The guest hands the host an attribute tree it owns, and the host
+		// builds the whole thing into it. Every entry is allocated in its
+		// final position on the guest heap, so the guest has nothing to do.
+		Machine<RISCV64>::install_syscall_handler(SYSCALL_FILL_ATTRS,
+		[] (Machine<RISCV64>& machine) {
+			const auto self = machine.sysarg(0);
+			auto& attrs = *machine.memory.memarray<RustAttrs>(self, 1);
+			host_build_attrs(machine, attrs);
 			machine.set_result(0);
 		});
 	}
@@ -1472,6 +1921,494 @@ TEST_CASE("Rust Vec<String> releases the elements it drops", "[RustNative]")
 		// assign() replaces the contents, releasing the old elements
 		names->assign(guest.machine, NAMES);
 		REQUIRE(names->to_string_vector(guest.machine) == NAMES);
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// ===========================================================================
+// Box, the guest Rust enum, and the attribute tree
+//
+// The examples come first again: each shows one way a structured value crosses
+// the boundary. What makes all of it work is that the guest's global allocator
+// is the host arena, so a tree the host builds is a tree the guest owns.
+// ===========================================================================
+
+// Box<T> is the only Rust smart pointer with a guaranteed layout: one non-null
+// pointer, ABI-compatible with *mut T. Because the block the host allocates
+// really did come from the guest's global allocator, Box::from_raw() on it is
+// sound rather than merely convenient - and the guest's ordinary drop returns
+// it to the arena, which the allocation balance below proves.
+TEST_CASE("Example: a Box crosses the boundary in both directions", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	// The host builds a Box<i64> and gives it away. release() hands over
+	// ownership without freeing: from here on it is the guest's to drop.
+	RustBox<int64_t> boxed(guest.machine, int64_t(4321));
+	REQUIRE(!boxed.empty());
+	REQUIRE(boxed.get(guest.machine) == 4321);
+	REQUIRE(guest.live_allocations() == allocs_before + 1);
+
+	REQUIRE(guest->vmcall("rust_box_take_i64", boxed.release()) == 4321);
+	// The guest dropped it, so the arena is back where it started
+	REQUIRE(guest.live_allocations() == allocs_before);
+
+	// And the other way: the guest allocates, the host takes ownership
+	const auto addr = guest->vmcall("rust_box_make_i64", int64_t(21));
+	REQUIRE(guest.live_allocations() == allocs_before + 1);
+
+	RustBox<int64_t> from_guest;
+	from_guest.assume_ownership(guest.machine, addr);
+	REQUIRE(from_guest.get(guest.machine) == 42);
+	from_guest.free(guest.machine);
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The two unsized boxes, Box<[T]> and Box<str>, are the same fat pointers as a
+// slice and a &str, with ownership. The host builds a struct of both, hands
+// over the one pointer, and the guest's drop glue frees all three allocations.
+TEST_CASE("Example: the host builds a Box<[T]> and a Box<str>", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	static const std::vector<uint32_t> NUMBERS { 5, 10, 15, 20 };
+	static const std::string NAME = "a boxed str the host allocated";
+
+	// #[repr(C)] struct Boxes { numbers: Box<[u32]>, name: Box<str> }
+	struct HostBoxes {
+		RustBoxedSlice<uint32_t> numbers;
+		RustBoxedStr name;
+	};
+	static_assert(sizeof(HostBoxes) == 4 * sizeof(uint64_t), "Two fat pointers");
+
+	const auto addr = guest->arena().malloc(sizeof(HostBoxes));
+	REQUIRE(addr != 0);
+	auto& boxes = *guest->memory.memarray<HostBoxes>(addr, 1);
+	new (&boxes) HostBoxes();
+	boxes.numbers.assign(guest.machine, NUMBERS);
+	boxes.name.set_string(guest.machine, NAME);
+
+	REQUIRE(boxes.numbers.size() == NUMBERS.size());
+	REQUIRE(boxes.numbers.to_vector(guest.machine) == NUMBERS);
+	REQUIRE(boxes.name.to_string(guest.machine) == NAME);
+	// The struct itself, the boxed slice and the boxed str
+	REQUIRE(guest.live_allocations() == allocs_before + 3);
+
+	uint64_t expected = fnv1a(NAME);
+	for (const uint32_t n : NUMBERS)
+		expected = expected * 131 + n;
+
+	REQUIRE(guest->vmcall("rust_boxes_take", addr) == expected);
+	// One from_raw and one drop released all three
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The attribute tree, host to guest. The host builds the whole thing on the
+// guest heap in its final shape - one allocation for all the entries of a map,
+// not a node per key - and the guest takes it with a single from_raw. There is
+// no rebuilding on arrival, and no host-side teardown function either: the
+// guest's drop glue walks the tree, including the nested group and list.
+TEST_CASE("Example: the host builds an attribute tree and the guest takes it", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	// A Box<Attributes>: the object the guest will call from_raw() on
+	RustGroup root;
+	RustAttrs& attrs = root.emplace(guest.machine);
+	host_build_attrs(guest.machine, attrs);
+
+	REQUIRE(attrs.size() == 7);
+	REQUIRE(attrs.is_sorted(guest.machine));
+	const uint64_t expected = host_checksum_attrs(guest.machine, attrs);
+
+	// The guest computes the same checksum over the same bytes, and drops the
+	// tree on its way out
+	REQUIRE(guest->vmcall("rust_attrs_take", root.release()) == expected);
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The same tree, but the host keeps it and only lends it out for the call. This
+// is the shape an engine handing attributes to a script every frame wants:
+// build once, pass the same address every time, allocate nothing per call.
+TEST_CASE("Example: the guest borrows a host-owned attribute tree", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	{
+		ScopedRustAttrs attrs(guest.machine);
+		host_build_attrs(guest.machine, *attrs);
+		const uint64_t expected = host_checksum_attrs(guest.machine, *attrs);
+
+		// Called twice with the same address: nothing is allocated or freed
+		const auto allocs_built = guest.live_allocations();
+		REQUIRE(guest->vmcall("rust_attrs_borrow", attrs.address()) == expected);
+		REQUIRE(guest->vmcall("rust_attrs_borrow", attrs.address()) == expected);
+		REQUIRE(guest.live_allocations() == allocs_built);
+	}
+	// The ScopedArenaObject freed the tree, recursively
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The guest builds a tree of its own and lends it to the host, which walks it
+// in place. Handing over the address of its own three words is all the guest
+// does, no matter how big the tree is.
+TEST_CASE("Example: the guest lends its attribute tree to the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	g_lent_attrs_checksum = 0;
+	g_lent_attrs_size = 0;
+
+	// The guest returns the checksum it computed over its own tree, and the
+	// system call handler stored the one the host computed over the same bytes
+	const auto guest_checksum = guest->vmcall("rust_attrs_build");
+	REQUIRE(g_lent_attrs_size == 7);
+	REQUIRE(g_lent_attrs_checksum == guest_checksum);
+
+	// The guest still owned it and dropped it at the end of the function
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// The host filling in a tree the guest owns, which is the same direction as
+// GuestRustString::set_string() but for a whole tree. What the guest gets back
+// is its own Attributes: it can insert into it and it drops all of it.
+TEST_CASE("Example: the host fills in a guest-owned attribute tree", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	// The guest checksums what arrived, inserts one more entry, and checksums
+	// again - so a non-zero result means the host-built entries survived the
+	// guest growing the same vector
+	const auto result = guest->vmcall("rust_attrs_host_fills");
+	REQUIRE(result != 0);
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// A guest that would rather have a real std::HashMap gets one for the price of
+// a collect(). Mirroring hashbrown would mean betting on a #[repr(Rust)] table
+// layout and a per-process hash seed; a sorted Vec needs neither, and the guest
+// keeps the choice of what to turn it into.
+TEST_CASE("The guest can collect the tree into a HashMap", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	RustGroup root;
+	RustAttrs& attrs = root.emplace(guest.machine);
+	host_build_attrs(guest.machine, attrs);
+
+	uint64_t expected = attrs.size();
+	for (const char* key : { "alpha", "beta", "gamma" })
+		expected += host_checksum_value(guest.machine, attrs.at(guest.machine, key));
+
+	REQUIRE(guest->vmcall("rust_attrs_into_hashmap", root.release()) == expected);
+	// The HashMap the guest built owns the keys and values now, and dropping
+	// it released everything the host allocated
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// ===========================================================================
+// Verification of the new host mirrors
+// ===========================================================================
+
+// A #[repr(C, u64)] enum is a layout the guest requests, not one the host had
+// to discover - but only rustc can say whether it delivered it. This asks the
+// guest for the tag values, the payload offsets and the sizes, so that a
+// release which lays the enum out differently fails here.
+TEST_CASE("Rust enum layout matches the host mirror", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+
+	static constexpr std::size_t WORDS = 21;
+	const auto addr = guest->arena().malloc(WORDS * sizeof(uint64_t));
+	guest->vmcall("rust_probe_enum_layout", addr);
+	const auto* w = guest->memory.memarray<const uint64_t>(addr, WORDS);
+
+	// The enum is the tag plus the widest variant, aligned like the payload
+	REQUIRE(w[0] == sizeof(RustValue));
+	REQUIRE(w[1] == alignof(RustValue));
+
+	// The discriminants are the declaration order, which is what the order of
+	// the host's variant list assumes
+	REQUIRE(w[2] == RustValue::index_of<std::monostate>());
+	REQUIRE(w[3] == RustValue::index_of<int64_t>());
+	REQUIRE(w[4] == RustValue::index_of<double>());
+	REQUIRE(w[5] == RustValue::index_of<bool>());
+	REQUIRE(w[6] == RustValue::index_of<RustString>());
+	REQUIRE(w[7] == RustValue::index_of<RustGroup>());
+	REQUIRE(w[8] == RustValue::index_of<RustList>());
+
+	// Every payload starts at the same offset, right after the tag. This is
+	// the reading that a tag as wide as the payload alignment guarantees: a
+	// narrower tag would leave it ambiguous whether Bool sits at offset 1.
+	REQUIRE(w[9]  == offsetof(RustValue, payload));
+	REQUIRE(w[10] == offsetof(RustValue, payload));
+	REQUIRE(w[11] == offsetof(RustValue, payload));
+	REQUIRE(w[12] == offsetof(RustValue, payload));
+	REQUIRE(w[13] == offsetof(RustValue, payload));
+	REQUIRE(w[14] == offsetof(RustValue, payload));
+	REQUIRE(w[9] == sizeof(RustValue::tag_type));
+
+	// The entry struct is a String followed by a Value, in declaration order,
+	// which #[repr(C)] promises and a tuple would not have
+	using HostAttr = GuestRustAttr<RISCV64, RustValue>;
+	REQUIRE(w[15] == sizeof(HostAttr));
+	REQUIRE(w[16] == offsetof(HostAttr, key));
+	REQUIRE(w[17] == offsetof(HostAttr, value));
+
+	// Attributes is a newtype over the Vec of entries, and a Box is one word
+	REQUIRE(w[18] == sizeof(RustAttrs));
+	REQUIRE(w[19] == sizeof(RustGroup));
+	REQUIRE(w[20] == 0);
+
+	guest->arena().free(addr);
+}
+
+// The host side of the map on its own: sorted insertion, lookup, overwrite and
+// erase, with the allocation balance checked after every step. None of this
+// needs the guest, but all of it happens in guest memory.
+TEST_CASE("Rust attributes: insertion, lookup and erase", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	{
+		ScopedRustAttrs attrs(guest.machine);
+		REQUIRE(attrs->empty());
+		REQUIRE(attrs->find(guest.machine, "nothing") == nullptr);
+
+		// Inserted out of order, and kept in key order
+		attrs->insert_or_assign(guest.machine, "gamma", int64_t(3));
+		attrs->insert_or_assign(guest.machine, "alpha", int64_t(1));
+		attrs->insert_or_assign(guest.machine, "beta", int64_t(2));
+		REQUIRE(attrs->size() == 3);
+		REQUIRE(attrs->is_sorted(guest.machine));
+
+		std::vector<std::string> keys;
+		attrs->for_each(guest.machine, [&] (std::string_view key, const RustValue&) {
+			keys.emplace_back(key);
+		});
+		REQUIRE(keys == std::vector<std::string>{ "alpha", "beta", "gamma" });
+
+		// The value type picks the variant from the host value, the way the
+		// converting constructor of std::variant does
+		REQUIRE(attrs->at(guest.machine, "alpha").holds_alternative<int64_t>());
+		attrs->insert_or_assign(guest.machine, "alpha", std::string("now a string"));
+		REQUIRE(attrs->at(guest.machine, "alpha").holds_alternative<RustString>());
+		REQUIRE(attrs->at(guest.machine, "alpha").get<RustString>().to_string(guest.machine)
+			== "now a string");
+		REQUIRE(attrs->size() == 3);
+
+		// Overwriting releases what the old variant owned
+		const auto allocs_with_string = guest.live_allocations();
+		attrs->insert_or_assign(guest.machine, "alpha", 1.5);
+		REQUIRE(guest.live_allocations() == allocs_with_string - 1);
+		REQUIRE(attrs->at(guest.machine, "alpha").get<double>() == 1.5);
+
+		// Erase closes the gap and keeps the order
+		REQUIRE(attrs->erase(guest.machine, "beta"));
+		REQUIRE(!attrs->erase(guest.machine, "beta"));
+		REQUIRE(attrs->size() == 2);
+		REQUIRE(attrs->is_sorted(guest.machine));
+		REQUIRE(attrs->contains(guest.machine, "alpha"));
+		REQUIRE(attrs->contains(guest.machine, "gamma"));
+		REQUIRE_THROWS_AS(attrs->at(guest.machine, "beta"), std::out_of_range);
+
+		// A whole host map at once, in one allocation for the entries
+		const std::map<std::string, int64_t> HOST_MAP {
+			{ "one", 1 }, { "two", 2 }, { "three", 3 } };
+		attrs->assign(guest.machine, HOST_MAP);
+		REQUIRE(attrs->size() == 3);
+		REQUIRE(attrs->is_sorted(guest.machine));
+		REQUIRE(attrs->at(guest.machine, "two").get<int64_t>() == 2);
+
+		attrs->clear(guest.machine);
+		REQUIRE(attrs->empty());
+	}
+
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// free() on a tree walks it: the group, the list, every string in both. This is
+// the host-side counterpart of the guest's drop glue, and the reason there is
+// no hand-written teardown function anywhere in this file.
+TEST_CASE("Rust attributes free the whole tree recursively", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	RustAttrs attrs;
+	host_build_attrs(guest.machine, attrs);
+	REQUIRE(guest.live_allocations() > allocs_before);
+
+	// One call, and the entries, the keys, the strings, the nested group and
+	// the list are all gone
+	attrs.free(guest.machine);
+	REQUIRE(guest.live_allocations() == allocs_before);
+	REQUIRE(attrs.empty());
+
+	// A freed map is a valid empty one, so freeing twice is not a double free
+	attrs.free(guest.machine);
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// A Rust enum has no valueless state: free() has to leave something the guest
+// can still drop, which is the first variant in its default state.
+TEST_CASE("A freed Rust enum holds its first variant", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	RustValue value;
+	REQUIRE(value.holds_alternative<std::monostate>());
+	REQUIRE(value.valid());
+
+	value.set(guest.machine, std::string("a heap allocated string"));
+	REQUIRE(value.holds_alternative<RustString>());
+	REQUIRE(guest.live_allocations() == allocs_before + 1);
+
+	value.free(guest.machine);
+	// Back to Nil, which owns nothing, so a second free changes nothing
+	REQUIRE(value.holds_alternative<std::monostate>());
+	REQUIRE(guest.live_allocations() == allocs_before);
+	value.free(guest.machine);
+	REQUIRE(guest.live_allocations() == allocs_before);
+
+	// Every variant can be selected explicitly, and to_variant() is only
+	// available when no variant is a nested container
+	value.emplace<int64_t>(guest.machine, int64_t(-5));
+	REQUIRE(value.get<int64_t>() == -5);
+	REQUIRE(value.get_if<double>() == nullptr);
+	REQUIRE_THROWS_AS(value.get<double>(), std::runtime_error);
+	REQUIRE(value.index() == RustValue::index_of<int64_t>());
+}
+
+// A guest is adversarial input: it can hand over a map whose length exceeds its
+// capacity, or whose keys are out of order. Neither may corrupt the host, and
+// neither may go unnoticed.
+TEST_CASE("Rust attributes reject a malformed guest map", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	RustAttrs attrs;
+	attrs.insert_or_assign(guest.machine, "alpha", int64_t(1));
+	attrs.insert_or_assign(guest.machine, "beta", int64_t(2));
+	attrs.validate(guest.machine);
+	REQUIRE(attrs.is_sorted(guest.machine));
+
+	// A length beyond the capacity is caught before anything is read
+	const auto real_len = attrs.entries.len;
+	attrs.entries.len = attrs.entries.cap + 1;
+	REQUIRE_THROWS_AS(attrs.validate(guest.machine), std::runtime_error);
+	attrs.entries.len = real_len;
+
+	// So is a map that claims more entries than the caller allows
+	REQUIRE_THROWS_AS(attrs.validate(guest.machine, 1), std::runtime_error);
+	attrs.validate(guest.machine, 2);
+
+	// Keys out of order cannot corrupt anything - a binary search that misses
+	// only fails to find - but is_sorted() reports it
+	auto* array = attrs.entries.as_array(guest.machine);
+	std::swap(array[0], array[1]);
+	REQUIRE(!attrs.is_sorted(guest.machine));
+
+	attrs.free(guest.machine);
+	REQUIRE(guest.live_allocations() == allocs_before);
+}
+
+// An attribute map whose values are all plain values or strings can be copied
+// to the host in one call. A tree with nested groups cannot - to_variant() is
+// compiled out for those, so for_each() is the only way in - which is what
+// keeps a nested read from silently returning a pointer as an integer.
+TEST_CASE("A flat Rust attribute map can be copied to the host", "[RustNative]")
+{
+	if (!rust_toolchain_available())
+		SKIP("No riscv64gc-unknown-linux-gnu Rust toolchain available");
+
+	RustGuest guest;
+	guest.warmup();
+	const auto allocs_before = guest.live_allocations();
+
+	using FlatValue = GuestRustEnum<RISCV64, uint64_t,
+		std::monostate, int64_t, double, RustString>;
+	using FlatAttrs = GuestRustAttributes<RISCV64, FlatValue>;
+	// The same shape as the recursive value, minus the two boxed variants
+	static_assert(sizeof(FlatValue) == 8 + sizeof(RustString), "tag + String");
+
+	{
+		ScopedArenaObject<RISCV64, FlatAttrs> attrs(guest.machine);
+		attrs->insert_or_assign(guest.machine, "count", int64_t(7));
+		attrs->insert_or_assign(guest.machine, "ratio", 0.25);
+		attrs->insert_or_assign(guest.machine, "label", std::string("a label"));
+		attrs->emplace<std::monostate>(guest.machine, "nothing");
+
+		// A single variant on its own
+		const auto value = attrs->at(guest.machine, "count").to_variant(guest.machine);
+		REQUIRE(std::holds_alternative<int64_t>(value));
+		REQUIRE(std::get<int64_t>(value) == 7);
+
+		// And the whole map at once, with the guest strings copied out
+		const auto map = attrs->to_map(guest.machine);
+		REQUIRE(map.size() == 4);
+		REQUIRE(std::get<int64_t>(map.at("count")) == 7);
+		REQUIRE(std::get<double>(map.at("ratio")) == 0.25);
+		REQUIRE(std::get<std::string>(map.at("label")) == "a label");
+		REQUIRE(std::holds_alternative<std::monostate>(map.at("nothing")));
 	}
 
 	REQUIRE(guest.live_allocations() == allocs_before);

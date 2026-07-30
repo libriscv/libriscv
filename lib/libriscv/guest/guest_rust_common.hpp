@@ -32,6 +32,12 @@ template <int W> struct GuestRustString;
 template <int W> struct GuestRustStr;
 template <int W, typename T> struct GuestRustVec;
 template <int W, typename T> struct GuestRustSlice;
+template <int W, typename T> struct GuestRustBox;
+template <int W, typename T> struct GuestRustBoxedSlice;
+template <int W> struct GuestRustBoxedStr;
+template <int W, typename Tag, typename... Types> struct GuestRustEnum;
+template <int W, typename Value> struct GuestRustAttr;
+template <int W, typename Value> struct GuestRustAttributes;
 
 template <int W, typename T>
 struct is_guest_ruststring : std::false_type {};
@@ -45,23 +51,64 @@ struct is_guest_rustvec : std::false_type {};
 template <int W, typename T>
 struct is_guest_rustvec<W, GuestRustVec<W, T>> : std::true_type {};
 
+template <int W, typename T>
+struct is_guest_rustbox : std::false_type {};
+
+template <int W, typename T>
+struct is_guest_rustbox<W, GuestRustBox<W, T>> : std::true_type {};
+
+template <int W, typename T>
+struct is_guest_rustenum : std::false_type {};
+
+template <int W, typename Tag, typename... Types>
+struct is_guest_rustenum<W, GuestRustEnum<W, Tag, Types...>> : std::true_type {};
+
+template <int W, typename T>
+struct is_guest_rustattributes : std::false_type {};
+
+template <int W, typename Value>
+struct is_guest_rustattributes<W, GuestRustAttributes<W, Value>> : std::true_type {};
+
 // Register the containers with the generic machinery in guest_common.hpp.
 // None of them are self-referencing, and none of them need to know their own
-// address in guest memory, which is why only the ownership trait is set.
+// address in guest memory, which is why only the ownership trait is set. That
+// is a property of the language, not of these mirrors: a Rust move is always a
+// memcpy, so nothing may point back into itself.
 
 template <int W>
 struct is_guest_datatype<W, GuestRustString<W>> : std::true_type {};
 template <int W, typename T>
 struct is_guest_datatype<W, GuestRustVec<W, T>> : std::true_type {};
+template <int W, typename T>
+struct is_guest_datatype<W, GuestRustBox<W, T>> : std::true_type {};
+template <int W, typename T>
+struct is_guest_datatype<W, GuestRustBoxedSlice<W, T>> : std::true_type {};
+template <int W>
+struct is_guest_datatype<W, GuestRustBoxedStr<W>> : std::true_type {};
+template <int W, typename Tag, typename... Types>
+struct is_guest_datatype<W, GuestRustEnum<W, Tag, Types...>> : std::true_type {};
+template <int W, typename Value>
+struct is_guest_datatype<W, GuestRustAttr<W, Value>> : std::true_type {};
+template <int W, typename Value>
+struct is_guest_datatype<W, GuestRustAttributes<W, Value>> : std::true_type {};
 
 template <int W>
 struct is_guest_string<W, GuestRustString<W>> : std::true_type {};
+template <int W>
+struct is_guest_string<W, GuestRustBoxedStr<W>> : std::true_type {};
 template <int W, typename T>
 struct is_guest_vector<W, GuestRustVec<W, T>> : std::true_type {};
+template <int W, typename T>
+struct is_guest_vector<W, GuestRustBoxedSlice<W, T>> : std::true_type {};
+template <int W, typename Value>
+struct is_guest_map<W, GuestRustAttributes<W, Value>> : std::true_type {};
 
 /// @brief A guest Rust String is copied to the host as a std::string
 template <int W>
 struct guest_host_type<W, GuestRustString<W>> { using type = std::string; };
+/// @brief And so is a Box<str>
+template <int W>
+struct guest_host_type<W, GuestRustBoxedStr<W>> { using type = std::string; };
 
 /// @brief The pointer that Rust uses for a collection that has not allocated
 /// anything yet: a dangling but correctly aligned address. A null pointer is

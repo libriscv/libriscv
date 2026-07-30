@@ -122,6 +122,101 @@ namespace detail {
 	struct has_to_string<W, T, std::void_t<decltype(
 		std::declval<const T&>().to_string(std::declval<const Machine<W>&>()))>>
 		: std::true_type {};
+
+	/// @brief Picks which alternative of a sum type a host value belongs to.
+	/// Shared by GuestStdVariant and GuestRustEnum, which select the same way
+	/// and only differ in where they keep the tag.
+	template <int W, typename... Types>
+	struct guest_alternatives
+	{
+		static constexpr std::size_t count = sizeof...(Types);
+
+		/// @brief The index of the alternative T, or count when not found.
+		template <typename T>
+		static constexpr std::size_t index_of() noexcept
+		{
+			constexpr bool matches[count] { std::is_same_v<T, Types>... };
+			std::size_t result = count;
+			for (std::size_t i = count; i > 0; i--)
+				if (matches[i - 1]) result = i - 1;
+			return result;
+		}
+
+		/// @brief The alternative that a host value should be converted to, or
+		/// count when there is no match, or more than one. Mirrors the converting
+		/// constructor of std::variant, except that the container categories
+		/// (string, vector, map) take precedence over plain conversions, so that
+		/// eg. a host std::string picks the one string alternative rather than
+		/// matching every alternative it converts to.
+		template <typename Arg>
+		static constexpr std::size_t index_for_arg() noexcept
+		{
+			using A = std::decay_t<Arg>;
+			constexpr bool is_string_like = is_stdstring<A>::value
+				|| is_string<A>::value || std::is_same_v<A, std::string_view>;
+
+			if constexpr (index_of<A>() < count) {
+				// An exact match always wins
+				return index_of<A>();
+			} else if constexpr (is_string_like) {
+				// The only string alternative, if there is exactly one
+				constexpr bool matches[count] { is_guest_string<W, Types>::value... };
+				return only_match(matches);
+			} else if constexpr (is_stdvector<A>::value) {
+				// The only vector alternative, if there is exactly one
+				constexpr bool matches[count] { is_guest_vector<W, Types>::value... };
+				return only_match(matches);
+			} else if constexpr (is_host_map<A>::value) {
+				// The only map alternative, if there is exactly one
+				constexpr bool matches[count] { is_guest_map<W, Types>::value... };
+				return only_match(matches);
+			} else {
+				// The only alternative that the value converts to
+				constexpr bool matches[count] { is_alternative_convertible<A, Types>::value... };
+				return only_match(matches);
+			}
+		}
+
+	private:
+		template <typename U>
+		struct one_element_array { U value[1]; };
+
+		/// @brief True when the declaration "U x[] = { a }" is valid, which is how
+		/// std::variant builds its overload set. It rejects narrowing.
+		template <typename A, typename U, typename = void>
+		struct is_array_initializable : std::false_type {};
+		template <typename A, typename U>
+		struct is_array_initializable<A, U,
+			std::void_t<decltype(one_element_array<U>{{std::declval<const A&>()}})>>
+			: std::true_type {};
+
+		/// @brief True when a host value can be converted to the alternative U.
+		/// The array form alone would also accept aggregate initialization from a
+		/// single value, eg. a glm::vec3 from a float, which std::variant rejects.
+		template <typename A, typename U>
+		struct is_alternative_convertible : std::bool_constant<
+			is_array_initializable<A, U>::value && std::is_convertible_v<const A&, U>> {};
+
+		/// @brief True for a host container with keys and mapped values,
+		/// eg. a std::unordered_map or a std::map.
+		template <typename A, typename = void>
+		struct is_host_map : std::false_type {};
+		template <typename A>
+		struct is_host_map<A, std::void_t<typename A::key_type, typename A::mapped_type>>
+			: std::true_type {};
+
+		/// @brief The index of the only alternative that matches, or count
+		/// when there is no match, or more than one.
+		static constexpr std::size_t only_match(const bool (&matches)[count]) noexcept
+		{
+			std::size_t result = count;
+			std::size_t found = 0;
+			for (std::size_t i = count; i > 0; i--) {
+				if (matches[i - 1]) { result = i - 1; found += 1; }
+			}
+			return found == 1 ? result : count;
+		}
+	};
 } // detail
 
 /// @brief True when a guest value can be copied to the host on its own: it

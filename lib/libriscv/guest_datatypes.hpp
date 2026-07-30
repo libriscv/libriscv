@@ -19,6 +19,9 @@
  *   guest_rust_common.hpp     Forward declarations of the Rust containers
  *   guest_rust_string.hpp     GuestRustString, GuestRustStr
  *   guest_rust_vec.hpp        GuestRustVec, GuestRustSlice
+ *   guest_rust_box.hpp        GuestRustBox, GuestRustBoxedSlice, GuestRustBoxedStr
+ *   guest_rust_enum.hpp       GuestRustEnum, the #[repr(C, uN)] enum
+ *   guest_rust_attributes.hpp GuestRustAttr, GuestRustAttributes
  *
  * A container owns real guest memory, and it is not released by a destructor:
  * call free(machine) when you are done with it, or hold it in a
@@ -35,3 +38,6 @@
 
 #include "guest/guest_rust_string.hpp"
 #include "guest/guest_rust_vec.hpp"
+#include "guest/guest_rust_box.hpp"
+#include "guest/guest_rust_enum.hpp"
+#include "guest/guest_rust_attributes.hpp"

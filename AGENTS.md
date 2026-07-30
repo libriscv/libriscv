@@ -452,6 +452,9 @@ With heap takeover, the host can construct and pass standard library types that 
 | `guest/guest_cpp_variant.hpp` | `GuestStdVariant` |
 | `guest/guest_rust_string.hpp` | `GuestRustString`, `GuestRustStr` |
 | `guest/guest_rust_vec.hpp` | `GuestRustVec`, `GuestRustSlice` |
+| `guest/guest_rust_box.hpp` | `GuestRustBox`, `GuestRustBoxedSlice`, `GuestRustBoxedStr` |
+| `guest/guest_rust_enum.hpp` | `GuestRustEnum`, the `#[repr(C, uN)]` enum |
+| `guest/guest_rust_attributes.hpp` | `GuestRustAttr`, `GuestRustAttributes` |
 
 A container is registered with the shared machinery by specializing three traits in `guest_common.hpp`: `is_guest_datatype` (it owns guest memory, `free()` releases it), `is_self_referencing_guest_object` (it points back into itself, so it needs `move()`), and `guest_object_needs_self_address` (its constructors take `(machine, self, ...)`). Everything else — vectors of it, variant alternatives, map keys and values, `ScopedArenaObject`, and passing it to `vmcall()` — then works without further changes.
 
@@ -472,6 +475,10 @@ using CppVariant = riscv::GuestStdVariant<8, Types...>;      // Mirrors std::var
 using RustString = riscv::GuestRustString<8>;                // Mirrors Rust String
 template <typename T>
 using RustVec = riscv::GuestRustVec<8, T>;                   // Mirrors Rust Vec<T>
+template <typename T>
+using RustBox = riscv::GuestRustBox<8, T>;                   // Mirrors Rust Box<T>
+template <typename... Types>
+using RustEnum = riscv::GuestRustEnum<8, uint64_t, Types...>; // #[repr(C, u64)] enum
 ```
 
 ### GuestStdString
@@ -661,6 +668,100 @@ ScopedGuestRustVec<8, RustString> names(machine,
 `GuestRustStr` and `GuestRustSlice<T>` are the non-owning `&str` / `&[T]` fat pointers, `{ ptr, len }`. Note that this is the layout of a slice *stored in memory*; as a function argument the RISC-V ABI passes the two halves in separate registers, so a guest `fn(s: &str)` takes an address and a length as two integer arguments.
 
 > **NOTE:** Rust does not stabilize the layout of its collections — the compiler reorders the fields, which is why the capacity comes first. The order above was verified by transmuting the collections to `[usize; N]` in a `riscv64gc-unknown-linux-gnu` program (rustc 1.93). Re-check it when a new Rust release lands. Only the slice layout is guaranteed by the language. `tests/unit/native_rust.cpp` asks the guest for those words on every run, so a future release that moves a field fails there.
+
+### GuestRustBox
+
+`Box<T>` is the only Rust smart pointer whose layout the language guarantees: for a sized `T` a single non-null pointer, ABI-compatible with `*mut T` and valid through `extern "C"`. The two unsized forms are the slice and `&str` fat pointers, with ownership.
+
+```cpp
+RustBox<int64_t> boxed(machine, int64_t(4321));   // Box::new(4321) on the guest heap
+gaddr_t addr = boxed.release();                   // Box::into_raw - the guest owns it now
+machine.vmcall<MAX>("take_box", addr);            // guest calls Box::from_raw and drops it
+
+RustBox<int64_t> taken;
+taken.assume_ownership(machine, guest_addr);      // Box::from_raw, host side
+int64_t value = taken.get(machine);
+taken.free(machine);                              // drops the value, then the block
+
+GuestRustBoxedSlice<8, uint32_t> numbers(machine, std::vector<uint32_t>{1, 2, 3});  // Box<[u32]>
+GuestRustBoxedStr<8> name(machine, "a boxed str");                                  // Box<str>
+```
+
+`Box::from_raw()` on a host allocation is *sound*, not merely convenient: the arena is the guest's global allocator, so the block really did come from the allocator that will release it. It is 16-byte aligned and does not need the size back, so Rust's `Layout` argument to `dealloc()` is ignored.
+
+An empty or freed box is `ptr == 0`, ie. `Option<Box<T>>::None` — the one `Option` whose null representation the language documents. Do not extend that to `Option<String>` or `Option<Vec<T>>`: their niche is the *capacity* word (`None` is `0x8000000000000000` there), so a mirror testing the pointer would read `None` as an empty string. `Box<dyn Trait>` is `(data, vtable)` and is not mirrored.
+
+### GuestRustEnum
+
+The Rust answer to `std::variant`. The layout is not discovered but *requested*: `#[repr(C, uN)]` is the tag first, then the union of the variants. A plain `#[repr(Rust)]` enum cannot be mirrored — the compiler reorders the fields and hides the tag in a niche of one of them.
+
+```rust
+#[repr(C, u64)]          // u32 on a 32-bit guest
+pub enum Value {
+    Nil,                 // a unit variant is std::monostate on the host
+    Int(i64),
+    Float(f64),
+    Str(String),
+}
+```
+
+```cpp
+using RustValue = riscv::GuestRustEnum<8, uint64_t,
+    std::monostate, int64_t, double, RustString>;   // the order IS the ABI
+
+RustValue value;
+value.set(machine, std::string("hello"));           // picks the String variant
+if (auto* s = value.get_if<RustString>()) { ... }
+value.visit([&] (auto& alt) { ... });                // the general read
+auto host = value.to_variant(machine);               // std::variant, scalars/strings only
+value.free(machine);
+```
+
+The tag must be at least as wide as the alignment of the widest variant, which a `static_assert` enforces. RFC 2195 reads `repr(C, uN)` as a union of structs that each begin with the tag, putting a `bool` payload at offset 1 behind a `u8` tag; rustc emits a tag plus one uniformly aligned payload, putting it at offset 8. The two only differ when the tag is narrower than the payload alignment, so `#[repr(C, u64)]` removes the ambiguity for free — the padding after a `u8` tag would have been there anyway.
+
+A Rust enum always holds one of its variants, so `free()` leaves the first variant in its default state. Declare a unit variant first and freeing twice is a no-op, not a double free.
+
+Nothing takes a `self` address, so `emplace()` and `set()` are one argument shorter than the `GuestStdVariant` equivalents, and a `static_assert` rejects the C++ containers as variants.
+
+### GuestRustAttributes
+
+A bag of named, dynamically typed attributes — the Rust counterpart of the `unordered_map<string, variant>` tree in [`examples/attribute_bench`](examples/attribute_bench) — zero-copy in both directions:
+
+```rust
+#[repr(C)] pub struct Attr { pub key: String, pub value: Value }
+#[repr(C)] pub struct Attributes { entries: Vec<Attr> }   // sorted by key
+```
+
+A sorted vector rather than a `HashMap`, on purpose. `std::HashMap` is hashbrown, whose table layout is `#[repr(Rust)]` and whose default hasher is seeded per process, so mirroring it would mean betting on both. A sorted `Vec` is ordinary Rust — `binary_search_by` for lookups — and faster here: one allocation for all the entries instead of a node per key, and no hasher to agree on. A guest wanting a real `HashMap` is one `.collect()` away. Keys compare as bytes, like Rust's `Ord for str`, so host and guest order agree. A tuple would have done for the entry, but its layout is unspecified and `#[repr(C)]` costs nothing.
+
+```cpp
+struct RustValue;                                        // must name itself
+using RustAttrs = riscv::GuestRustAttributes<8, RustValue>;
+struct RustValue : riscv::GuestRustEnum<8, uint64_t,
+    std::monostate, int64_t, double, bool, RustString,
+    riscv::GuestRustBox<8, RustAttrs>,                   // Group(Box<Attributes>)
+    riscv::GuestRustBox<8, riscv::GuestRustVec<8, RustValue>>>   // List(Box<Vec<Value>>)
+{
+    using GuestRustEnum::GuestRustEnum;
+};
+RISCV_REGISTER_GUEST_RUST_ENUM(8, RustValue);            // one line, at namespace scope
+
+RustAttrs attrs;
+attrs.insert_or_assign(machine, "hp", int64_t(100));
+attrs.insert_or_assign(machine, "name", std::string("player"));
+auto& group = attrs.emplace<riscv::GuestRustBox<8, RustAttrs>>(machine, "stats").get(machine);
+group.insert_or_assign(machine, "level", int64_t(7));
+
+attrs.for_each(machine, [&] (std::string_view key, const RustValue& v) { ... });
+int64_t hp = attrs.at(machine, "hp").get<int64_t>();
+attrs.free(machine);        // frees the tree recursively, groups and lists included
+```
+
+A tree type must be a struct deriving from the enum, because the value type needs to name itself and only a class can be forward declared. `RISCV_REGISTER_GUEST_RUST_ENUM` registers it with the trait machinery and `static_assert`s that it adds no members.
+
+`free()` walks the whole tree through the `free_guest_object` dispatch — the host-side counterpart of Rust's drop glue, and why there is no hand-written teardown like the C++ tree's `destroyGuestAttributes`. In the other direction the guest takes a host-built tree with one `Box::from_raw` and drops it normally.
+
+Scripts are adversarial input, so `validate(machine, max_entries)` checks the shape before a walk and `is_sorted(machine)` reports keys out of order. Neither can corrupt host memory — the vector bounds every access, and a binary search that misses only fails to find.
 
 #### Heap takeover in a Rust guest
 
