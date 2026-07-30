@@ -19,9 +19,12 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y cmake wget xz-utils ninja-build
+        sudo apt install -y cmake wget xz-utils ninja-build gcc-12-riscv64-linux-gnu
         git submodule update --init ${{github.workspace}}/tests/Catch2
         git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
+
+    - name: Install the RISC-V Rust standard library
+      run: rustup target add riscv64gc-unknown-linux-gnu
 
     - name: Configure
       run: cmake -B ${{github.workspace}}/build -G Ninja -DRISCV_THREADED=ON -DRISCV_FLAT_RW_ARENA=ON -DRISCV_BINARY_TRANSLATION=OFF -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
