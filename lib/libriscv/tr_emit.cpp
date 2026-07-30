@@ -1349,7 +1349,10 @@ void Emitter<W>::emit()
 				add_code(
 					(W == 4) ?
 					to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"MUL128(&" + to_reg(instr.Rtype.rd) + ", " + from_reg(instr.Rtype.rs1) + ", " + from_reg(instr.Rtype.rs2) + ");"
+					"{ addr_t lhs = " + from_reg(instr.Rtype.rs1) + "; addr_t rhs = " + from_reg(instr.Rtype.rs2) + ";",
+					"MUL128(&" + to_reg(instr.Rtype.rd) + ", lhs, rhs);",
+					"if ((saddr_t)lhs < 0) " + to_reg(instr.Rtype.rd) + " -= rhs;",
+					"if ((saddr_t)rhs < 0) " + to_reg(instr.Rtype.rd) + " -= lhs; }"
 				);
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
