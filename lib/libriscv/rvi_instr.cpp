@@ -1016,7 +1016,7 @@ static inline uint64_t MUL128(
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const uint32_t src = cpu.reg(instr.Itype.rs1);
 		// SLLI.UW: Shift-left Unsigned Word (Immediate)
-		dst = RVREGTYPE(cpu)(src) << instr.Itype.shift_imm();
+		dst = RVREGTYPE(cpu)(src) << instr.Itype.shift64_imm();
 	}, DECODED_INSTR(OP_IMM32_ADDIW).printer);
 
 	INSTRUCTION(OP_IMM32,

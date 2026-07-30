@@ -1610,7 +1610,7 @@ void Emitter<W>::emit()
 					add_code(dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
 				} else if (instr.Itype.high_bits() == 0x080) {
 					// SLLI.UW
-					add_code(dst + " = ((addr_t)" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
+					add_code(dst + " = ((addr_t)" + src + " << " + from_imm(instr.Itype.shift64_imm()) + ");");
 				} else {
 					switch (instr.Itype.imm) {
 					case 0b011000000000: // CLZ.W
