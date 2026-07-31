@@ -20,6 +20,7 @@
 // Reveal PC on unknown instructions
 // libtcc always runs on the current machine, so we can use the handler index directly
 #define UNKNOWN_INSTRUCTION() { \
+  this->invalidate_all_bounds_checks(); \
   if (tinfo.is_libtcc) { \
 	if (!instr.is_illegal()) { \
 		this->store_loaded_registers(); \
@@ -46,7 +47,10 @@
 		code += "api.exception(cpu, " + hex_address(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
   } \
 }
+// NOTE: The handler is arbitrary emulator code that can write any register,
+// so every bounds-check window dies here.
 #define WELL_KNOWN_INSTRUCTION() { \
+  this->invalidate_all_bounds_checks(); \
   if (tinfo.is_libtcc) { \
 	const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler; \
 	code += "if (api.execute_handler(cpu, " + std::to_string(instr.whole) + ", " + std::to_string(handler) + "))\n" \
@@ -134,6 +138,9 @@ struct Emitter
 		}
 	}
 	void potentially_reload_register(int reg) {
+		// The value came back from memory and may differ from what we checked,
+		// regardless of whether register caching made this emit anything.
+		this->invalidate_bounds_checks(reg);
 		if (uses_register_caching()) {
 			if (reg != 0 && reg < CACHED_REGISTERS) {
 				add_code(loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];");
@@ -158,6 +165,9 @@ struct Emitter
 	}
 
 	void reload_all_registers() {
+		// Anything that forces a full reload ran code we don't model, so every
+		// register value -- and with it every bounds-check window -- is suspect.
+		this->invalidate_all_bounds_checks();
 		// Use the LOAD_REGS macro to restore the registers
 		if (uses_register_caching())
 			add_code("LOAD_REGS_" + this->func + "();");
@@ -168,6 +178,9 @@ struct Emitter
 			add_code("STORE_REGS_" + this->func + "();");
 	}
 	void reload_syscall_registers() {
+		// A non-clobbering system call only writes back A0/A1
+		this->invalidate_bounds_checks(10);
+		this->invalidate_bounds_checks(11);
 		// Use the LOAD_SYS_REGS macro to restore registers modified by a syscall
 		if (uses_register_caching())
 			add_code("LOAD_SYS_REGS_" + this->func + "();");
@@ -218,8 +231,12 @@ struct Emitter
 		}
 		return "(addr_t)0";
 	}
+	// NOTE: to_reg() is only ever used to name a *destination*, so it is the one
+	// choke point every GPR write passes through. Invalidating here means a new
+	// instruction cannot silently keep a stale bounds-check window alive.
 	std::string to_reg(int reg) {
 		if (reg != 0) {
+			this->invalidate_bounds_checks(reg);
 			if (uses_register_caching() && reg < CACHED_REGISTERS) {
 				load_register(reg);
 				return loaded_regname(reg);
@@ -326,8 +343,29 @@ struct Emitter
 		}
 	}
 
-	static bool offset_is_within_overallocation(int64_t old_offset, int64_t new_offset, size_t size) {
-		return std::abs(new_offset - old_offset) <= int64_t(Memory<W>::OVERALLOCATE - size);
+	// A bounds check on `base + anchor` proves that address lies inside the arena.
+	// The arena is over-allocated by OVERALLOCATE bytes on both ends, so any access
+	// through the same base register at an offset within that window of the anchor
+	// is also guaranteed to land in mapped memory, and needs no check of its own.
+	static bool offset_is_within_overallocation(int64_t anchor, int64_t offset, size_t size) {
+		if (UNLIKELY(size > Memory<W>::OVERALLOCATE))
+			return false;
+		return std::abs(offset - anchor) <= int64_t(Memory<W>::OVERALLOCATE - size);
+	}
+
+	// The window stays live until the base register is written, or until control
+	// flow can join from somewhere we haven't proven anything about (a label, a
+	// call that clobbers registers). Falling through a not-taken branch changes no
+	// register, so the window deliberately survives that.
+	void invalidate_bounds_checks(int reg) {
+		if (reg > 0 && reg < 32) {
+			this->m_read_checked[reg].valid = false;
+			this->m_write_checked[reg].valid = false;
+		}
+	}
+	void invalidate_all_bounds_checks() {
+		for (auto& entry : this->m_read_checked) entry.valid = false;
+		for (auto& entry : this->m_write_checked) entry.valid = false;
 	}
 
 	bool skip_load_bounds_check(int reg, int64_t offset, size_t size) {
@@ -335,46 +373,31 @@ struct Emitter
 			|| uses_Nbit_encompassing_arena()) return true; // No bounds check
 		if (tinfo.use_virtual_paging_fallback) return false; // Always check
 
-		if (last_read_check_pc == m_last_pc
-			&& last_read_check_register == reg
-			&& offset_is_within_overallocation(last_read_check_offset, offset, size)) {
-			// Skip bounds check, but continue (same register, same original bounds-checked offset)
-			last_read_check_pc = pc();
+		if (m_read_checked[reg].valid
+			&& offset_is_within_overallocation(m_read_checked[reg].anchor, offset, size))
 			return true;
-		} else if (last_write_check_pc == m_last_pc
-			&& last_write_check_register == reg
-			&& offset_is_within_overallocation(last_write_check_offset, offset, size)) {
-			// Previous was a write check for same register + offset range
-			// The arena is divided into unreadable, readable and writable regions,
-			// and any region that is writable is also readable, so we inherit the check:
-			last_read_check_pc = pc();
-			last_read_check_register = reg;
-			last_read_check_offset = offset;
+		// The arena is divided into unreadable, readable and writable regions,
+		// and any region that is writable is also readable, so we inherit the check:
+		if (m_write_checked[reg].valid
+			&& offset_is_within_overallocation(m_write_checked[reg].anchor, offset, size))
 			return true;
-		} else {
-			last_read_check_pc = pc();
-			last_read_check_register = reg;
-			last_read_check_offset = offset;
-			return false;
-		}
+
+		m_read_checked[reg] = { true, offset };
+		return false;
 	}
 	bool skip_store_bounds_check(int reg, int64_t offset, size_t size) {
 		if (tinfo.unsafe_remove_checks
 			|| uses_Nbit_encompassing_arena()) return true; // No bounds check
 		if (tinfo.use_virtual_paging_fallback) return false; // Always check
 
-		if (last_write_check_pc == m_last_pc
-			&& last_write_check_register == reg
-			&& offset_is_within_overallocation(last_write_check_offset, offset, size)) {
-			// Skip bounds check
-			last_write_check_pc = pc();
+		// NOTE: A live read check does *not* cover a write: the readable region
+		// includes read-only data, which the writable region excludes.
+		if (m_write_checked[reg].valid
+			&& offset_is_within_overallocation(m_write_checked[reg].anchor, offset, size))
 			return true;
-		} else {
-			last_write_check_pc = pc();
-			last_write_check_register = reg;
-			last_write_check_offset = offset;
-			return false;
-		}
+
+		m_write_checked[reg] = { true, offset };
+		return false;
 	}
 
 	template <typename T>
@@ -461,7 +484,9 @@ struct Emitter
 			throw MachineException(INVALID_PROGRAM, "Unsupported memory store type");
 		}
 	}
-	void memory_store(std::string type, int reg, int32_t imm, std::string value)
+	// NOTE: `size` is the width of the access, and must be passed explicitly --
+	// it used to be derived as sizeof(type), which is sizeof(std::string).
+	void memory_store(std::string type, size_t size, int reg, int32_t imm, std::string value)
 	{
 		if (uses_flat_memory_arena()) {
 			address_t absolute_vaddr = 0;
@@ -483,7 +508,7 @@ struct Emitter
 		}
 
 		const std::string address = from_untracked_reg(reg) + " + " + from_imm(imm);
-		if (skip_store_bounds_check(reg, imm, sizeof(type)))
+		if (skip_store_bounds_check(reg, imm, size))
 		{
 			add_code("*(" + type + "*)" + arena_at(address) + " = " + value + ";");
 		}
@@ -605,11 +630,17 @@ private:
 			throw MachineException(INVALID_PROGRAM, "Invalid register index for tracking", idx);
 		}
 		this->m_is_tracked_register[idx] = false;
+		this->invalidate_bounds_checks(idx);
+	}
+	// Forgets tracked constants only. The caller must decide separately whether the
+	// bounds-check windows also die: they survive a not-taken branch, but not a
+	// label, a call, or anything else that can change registers behind our back.
+	void reset_all_tracked_constants() {
+		this->m_is_tracked_register.fill(false);
 	}
 	void reset_all_tracked_registers() {
-		this->m_is_tracked_register.fill(false);
-		this->last_read_check_pc = 0;
-		this->last_write_check_pc = 0;
+		this->reset_all_tracked_constants();
+		this->invalidate_all_bounds_checks();
 	}
 
 	std::string code;
@@ -621,13 +652,15 @@ private:
 	uint64_t m_instr_counter = 0;
 	uint32_t m_zero_insn_counter = 0;
 	address_t m_encompassing_arena_mask = 0;
-	address_t last_read_check_pc = 0;
-	address_t last_write_check_pc = 0;
-	int last_read_check_register = 0;
-	int last_read_check_offset = 0;
-	int last_write_check_register = 0;
-	int last_write_check_offset = 0;
 	bool m_used_store_syscalls = false;
+
+	// Per-register live bounds-check window (see offset_is_within_overallocation)
+	struct BoundsCheck {
+		bool    valid  = false;
+		int64_t anchor = 0;
+	};
+	std::array<BoundsCheck, 32> m_read_checked {};
+	std::array<BoundsCheck, 32> m_write_checked {};
 
 	std::array<bool, 32> gpr_exists {};
 	std::array<bool, 32> m_is_tracked_register {};
@@ -689,6 +722,8 @@ inline void Emitter<W>::emit_branch(const BranchInfo& binfo, const std::string& 
 template <int W>
 inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t dest_pc)
 {
+	// The callee may write any register
+	this->invalidate_all_bounds_checks();
 	// Store the registers
 	this->store_loaded_registers();
 
@@ -976,16 +1011,16 @@ void Emitter<W>::emit()
 			load_register(instr.Stype.rs1);
 			switch (instr.Stype.funct3) {
 			case 0x0: // I8
-				this->memory_store("int8_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
+				this->memory_store("int8_t", sizeof(int8_t), instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			case 0x1: // I16
-				this->memory_store("int16_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
+				this->memory_store("int16_t", sizeof(int16_t), instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			case 0x2: // I32
-				this->memory_store("int32_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
+				this->memory_store("int32_t", sizeof(int32_t), instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			case 0x3: // I64
-				this->memory_store("int64_t", instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
+				this->memory_store("int64_t", sizeof(int64_t), instr.Stype.rs1, instr.Stype.signed_imm(), from_reg(instr.Stype.rs2));
 				break;
 			default:
 				UNKNOWN_INSTRUCTION();
@@ -1042,7 +1077,11 @@ void Emitter<W>::emit()
 				emit_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
 				break;
 			}
-			this->reset_all_tracked_registers(); // For now
+			// Only the code after this branch falls through here, and a not-taken
+			// branch writes no register -- so the bounds-check windows survive it.
+			// (The taken side always leaves via goto/return, and every place it can
+			// land emits a label, where the windows are invalidated anyway.)
+			this->reset_all_tracked_constants(); // For now
 			} break;
 		case RV32I_JALR: {
 			// jump to register + immediate
@@ -1579,6 +1618,8 @@ void Emitter<W>::emit()
 					this->load_register(instr.Itype.rs1);
 					this->potentially_realize_register(instr.Itype.rs1);
 					// Zero funct3, unknown imm: Don't exit
+					// The system handler is opaque and may write any register
+					this->invalidate_all_bounds_checks();
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
 					if (tinfo.is_libtcc) {
 						code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
@@ -1596,6 +1637,8 @@ void Emitter<W>::emit()
 				this->potentially_realize_register(instr.Itype.rd);
 				this->load_register(instr.Itype.rs1);
 				this->potentially_realize_register(instr.Itype.rs1);
+				// The system handler is opaque and may write any register
+				this->invalidate_all_bounds_checks();
 				code += "cpu->pc = " + PCRELS(0) + ";\n";
 				if (!tinfo.ignore_instruction_limit)
 					code += "INS_COUNTER(cpu) = ic;\n"; // Reveal instruction counters
@@ -1811,10 +1854,10 @@ void Emitter<W>::emit()
 			const rv32f_instruction fi{instr};
 			switch (fi.Itype.funct3) {
 			case 0x2: // FSW
-				this->memory_store("int32_t", fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i32[0]");
+				this->memory_store("int32_t", sizeof(int32_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i32[0]");
 				break;
 			case 0x3: // FSD
-				this->memory_store("int64_t", fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
+				this->memory_store("int64_t", sizeof(int64_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VSE32
@@ -1828,7 +1871,7 @@ void Emitter<W>::emit()
 					this->potentially_reload_register(vi.VLS.rs1);
 				} else {
 					const rv32v_instruction vi { instr };
-					this->memory_store("VectorLane", vi.VLS.rs1, 0, from_rvvreg(vi.VLS.vd));
+					this->memory_store("VectorLane", sizeof(VectorLane), vi.VLS.rs1, 0, from_rvvreg(vi.VLS.vd));
 				}
 				break;
 			}

@@ -69,6 +69,7 @@ namespace riscv
 		return option;
 	}
 
+
 	template <int W>
 	using binary_translation_init_func = void (*)(const CallbackTable<W>&, int32_t, int32_t, int32_t);
 	template <int W>
@@ -162,6 +163,29 @@ namespace riscv
 		return defstr;
 	}
 
+	// Set BINTR_DUMP=<path> to write the emitted C to a file, regardless of which
+	// backend compiles it. With libtcc there is no temporary file to inspect (and
+	// KEEPCODE only applies to the system-compiler path), so this is the only way
+	// to see the code emitter's output in the fastest-iterating configuration.
+	// The defines are written as a leading comment so the dump can be recompiled
+	// standalone with the same flags the translator used.
+	static void dump_generated_code(const std::string& code,
+		const std::unordered_map<std::string, std::string>& defines)
+	{
+		const char* path = getenv("BINTR_DUMP");
+		if (path == nullptr)
+			return;
+		std::ofstream ofs(path, std::ios::out | std::ios::trunc);
+		if (!ofs.is_open()) {
+			fprintf(stderr, "libriscv: Failed to write generated code to %s\n", path);
+			return;
+		}
+		ofs << "/* cc -O2 -std=c99 -fPIC -shared -x c" << defines_to_string(defines) << " */\n";
+		ofs << code;
+		if (getenv("VERBOSE"))
+			printf("libriscv: Wrote %zu bytes of generated code to %s\n", code.size(), path);
+	}
+
 template <int W>
 inline uint32_t opcode(const TransInstr<W>& ti) {
 	return rv32i_instruction{ti.instr}.opcode();
@@ -187,6 +211,15 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	defines.emplace("RISCV_TRANSLATION_DYLIB", std::to_string(W));
 	defines.emplace("RISCV_MAX_SYSCALLS", std::to_string(RISCV_SYSCALLS_MAX));
 	defines.emplace("RISCV_MACHINE_ALIGNMENT", std::to_string(RISCV_MACHINE_ALIGNMENT));
+	// Bake the arena pointer's offset into the translation. It is a fixed offset
+	// into Machine<W>, so making it a constant turns every arena access from
+	// "load the offset global, then load the pointer" into a single load, and lets
+	// the compiler hoist the pointer far more freely. init() still receives the
+	// offset and asserts it matches, so a layout change can never go unnoticed.
+	// The offset is part of the defines, hence of the translation hash, so cached
+	// and embedded translations from a differently-laid-out build are rejected.
+	defines.emplace("RISCV_ARENA_OFFSET",
+		std::to_string(uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine)));
 	if constexpr (W == 16) {
 		defines.emplace("RISCV_ARENA_END", std::to_string(uint64_t(arena_end)));
 		defines.emplace("RISCV_ARENA_ROEND", std::to_string(uint64_t(initial_rodata_end)));
@@ -926,21 +959,13 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 			// Final shared library loadable code w/footer
 			const std::string shared_library_code = *output.code + output.footer;
 
+			dump_generated_code(shared_library_code, output.defines);
+
 			TIME_POINT(t9);
 			// If translate_invoke_compiler is disabled, do not compile
 			// This allows for producing embeddable code without invoking the compiler
 			if (libtcc_enabled && options.translate_invoke_compiler) {
 				extern void* libtcc_compile(const std::string&, int arch, const std::unordered_map<std::string, std::string>& defines, const std::string&);
-				// XXX: Debugging: write the compiled code to a file
-				if constexpr (false) {
-					std::ofstream ofs("libtcc_output.c", std::ios::out | std::ios::trunc);
-					if (ofs.is_open()) {
-						ofs << shared_library_code;
-						ofs.close();
-					} else {
-						fprintf(stderr, "libriscv: Failed to write libtcc output to file\n");
-					}
-				}
 				dylib = libtcc_compile(shared_library_code, W, output.defines, "");
 			} else if (options.translate_invoke_compiler) {
 				extern void* compile(const std::string&, int arch, const std::string& cflags, const std::string&);
@@ -1610,6 +1635,16 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void*
 		throw MachineException(INVALID_PROGRAM, "Invalid counter offsets in emulator");
 	}
 	const int32_t arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
+
+	// Translations bake the arena offset in as a constant (RISCV_ARENA_OFFSET). It
+	// is covered by the translation hash, so a mismatch should be impossible -- but
+	// getting it wrong would mean every guest memory access reads a bogus pointer,
+	// so refuse the translation instead of taking the chance.
+	if (const auto* baked = (const int32_t *)dylib_lookup(dylib, "arena_offset_constant", is_libtcc);
+		baked != nullptr && *baked != arena_offset) {
+		return false;
+	}
+
 #ifdef RISCV_VIRTUAL_PAGING
 	const int32_t rdcache_offset = uintptr_t(&machine.memory.rdcache()) - uintptr_t(&machine);
 #else

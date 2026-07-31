@@ -302,7 +302,18 @@ static struct CallbackTable {
 
 INTERNAL static int32_t arena_offset;
 //#define ARENA_AT(cpu, x)  (arena_ptr + (x))
+#ifdef RISCV_ARENA_OFFSET
+// The offset of the arena pointer inside the machine is fixed, so the translator
+// hands it to us as a constant. That removes a load of the offset global from
+// every arena access, and shortens the address dependency chain by one step.
+// The offset is part of the translation hash, so a cached or embedded object
+// built against a different machine layout is already rejected by hash; this
+// symbol lets the loader verify it directly rather than rely on that.
+VISIBLE const int32_t arena_offset_constant = RISCV_ARENA_OFFSET;
+#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFFSET) + (x))
+#else
 #define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + arena_offset) + (x))
+#endif
 
 INTERNAL static int32_t ic_offset;
 #define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + ic_offset))
