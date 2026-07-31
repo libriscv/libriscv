@@ -491,7 +491,10 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 		if constexpr (fcsr_emulation) {
-			if (is_signaling_nan(rs1.f32[0]) || is_signaling_nan(rs2.f32[0]))
+			const bool snan = fi.R4type.funct2 == 0x0
+				? (is_signaling_nan(rs1.f32[0]) || is_signaling_nan(rs2.f32[0]))
+				: (is_signaling_nan(rs1.f64) || is_signaling_nan(rs2.f64));
+			if (snan)
 				cpu.registers().fcsr().fflags = 16;
 			else
 				cpu.registers().fcsr().fflags = 0;
