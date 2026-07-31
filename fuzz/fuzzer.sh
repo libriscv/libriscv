@@ -1,4 +1,6 @@
 export ASAN_OPTIONS=disable_coredump=0::unmap_shadow_on_exit=1::handle_segv=0::handle_sigfpe=0
+# Keep llvm-symbolizer from stalling on debuginfod lookups. See do_fuzz.sh.
+export DEBUGINFOD_URLS=
 export CC=clang-18
 export CXX=clang++-18
 
@@ -9,4 +11,4 @@ cmake .. -DRISCV_128I=ON -DRISCV_BINARY_TRANSLATION=OFF
 make -j4
 popd
 
-echo "Example: ./build/vmfuzzer32 -fork=1 -handle_fpe=0"
+echo "Example: ./do_fuzz.sh vmfuzzer32"

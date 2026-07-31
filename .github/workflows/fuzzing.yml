@@ -1,0 +1,101 @@
+name: Fuzzing
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: 'Seconds to fuzz per target'
+        required: false
+        default: '30'
+
+env:
+  # Seconds spent on each fuzzer target.
+  FUZZ_SECONDS: ${{ github.event.inputs.seconds || '30' }}
+  # llvm-symbolizer's debuginfod client can hang, which makes libFuzzer block
+  # forever with no output. We only symbolize our own binary, so disable it.
+  DEBUGINFOD_URLS: ''
+  ASAN_OPTIONS: 'disable_coredump=0:unmap_shadow_on_exit=1:handle_segv=0:handle_sigfpe=0'
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y clang-18 lld-18
+
+    - name: Configure
+      env:
+        CC: clang-18
+        CXX: clang++-18
+      run: cmake -B ${{github.workspace}}/fuzz/build -S ${{github.workspace}}/fuzz -DRISCV_128I=ON -DRISCV_BINARY_TRANSLATION=OFF
+
+    - name: Build the fuzzers
+      run: cmake --build ${{github.workspace}}/fuzz/build --parallel 4
+
+    # The ELF loader fuzzers spend the whole run failing header validation if
+    # they start from an empty corpus (cov ~990 vs ~9400 seeded). Seed them with
+    # the real RISC-V binaries the unit tests use, split by ELF class: byte 4 of
+    # the ident is 1 for ELFCLASS32 and 2 for ELFCLASS64. Nothing seeds
+    # elffuzzer128, which requires the ELFCLASS128 libriscv extension.
+    - name: Collect ELF seeds
+      working-directory: ${{github.workspace}}/fuzz
+      run: |
+        set -e
+        mkdir -p seeds/32 seeds/64
+        for f in ../tests/unit/elf/*; do
+          [ -f "$f" ] || continue
+          case "$(od -An -tu1 -j4 -N1 "$f" | tr -d ' ')" in
+            1) cp "$f" seeds/32/ ;;
+            2) cp "$f" seeds/64/ ;;
+          esac
+        done
+        echo "rv32 seeds: $(ls seeds/32 | wc -l), rv64 seeds: $(ls seeds/64 | wc -l)"
+
+    - name: Fuzz
+      working-directory: ${{github.workspace}}/fuzz
+      run: |
+        set -e
+        mkdir -p artifacts
+        status=0
+        for target in \
+          vmfuzzer32 vmfuzzer64 vmfuzzer128 \
+          elffuzzer32 elffuzzer64 elffuzzer128 \
+          natsysfuzzer32 natsysfuzzer64 \
+          syshelperfuzzer32 syshelperfuzzer64
+        do
+          # Read-only seed dir, if we have one for this target's ELF class.
+          case "$target" in
+            elffuzzer32) seeds=seeds/32 ;;
+            elffuzzer64) seeds=seeds/64 ;;
+            *)           seeds= ;;
+          esac
+          # Fresh writable corpus per target, so libFuzzer never writes into seeds/.
+          rm -rf corpus/$target && mkdir -p corpus/$target
+          echo "::group::$target (${FUZZ_SECONDS}s)"
+          ./build/$target \
+            -handle_fpe=0 \
+            -max_total_time="$FUZZ_SECONDS" \
+            -print_final_stats=1 \
+            -artifact_prefix=artifacts/$target- \
+            corpus/$target $seeds \
+            || { echo "::error::$target found a crash"; status=1; }
+          echo "::endgroup::"
+        done
+        exit $status
+
+    - name: Upload crash artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-artifacts
+        path: fuzz/artifacts/
+        if-no-files-found: ignore

@@ -1,1 +1,4 @@
 corpus-*/
+corpus/
+seeds/
+artifacts/
