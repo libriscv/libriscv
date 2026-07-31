@@ -760,25 +760,17 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FCLASS.S
-			dst = 0;
-			if (rs1.f32[0] == -std::numeric_limits<float>::infinity())
-				dst |= 1U << 0;
-			if (rs1.f32[0] < 0)
-				dst |= 1U << 1;
-			if (rs1.f32[0] == -std::numeric_limits<float>::denorm_min())
-				dst |= 1U << 2;
-			if (rs1.f32[0] == -0.0)
-				dst |= 1U << 3;
-			if (rs1.f32[0] == +0.0)
-				dst |= 1U << 4;
-			if (rs1.f32[0] == std::numeric_limits<float>::denorm_min())
-				dst |= 1U << 5;
-			if (rs1.f32[0] >= std::numeric_limits<float>::epsilon())
-				dst |= 1U << 6;
-			if (rs1.f32[0] == std::numeric_limits<float>::infinity())
-				dst |= 1U << 7;
-			if (std::isnan(rs1.f32[0]))
-				dst |= 3U << 8;
+			{ const uint32_t bits = rs1.i32[0];
+			  const bool sign = bits >> 31;
+			  const uint32_t exponent = (bits >> 23) & 0xff;
+			  const uint32_t fraction = bits & 0x7fffff;
+			  if (exponent == 0xff) {
+				if (fraction == 0) dst = sign ? (1U << 0) : (1U << 7);
+				else dst = (fraction & 0x400000) ? (1U << 9) : (1U << 8);
+			  } else if (exponent == 0) {
+				if (fraction == 0) dst = sign ? (1U << 3) : (1U << 4);
+				else dst = sign ? (1U << 2) : (1U << 5);
+			  } else dst = sign ? (1U << 1) : (1U << 6); }
 			return;
 		case 0x1: // FCLASS.D
 			dst = 0;
