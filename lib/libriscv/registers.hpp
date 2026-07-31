@@ -26,23 +26,18 @@ namespace riscv
 		} usign;
 
 		inline void nanbox() {
-			if constexpr (fcsr_emulation)
-				this->i32[1] = ~0;
-			else
-				this->i32[1] = 0;
+			this->i32[1] = ~0;
 		}
 		void set_float(float f) {
 			this->f32[0] = f;
-			if constexpr (nanboxing)
-				this->nanbox();
+			this->nanbox();
 		}
 		void set_double(double d) {
 			this->f64 = d;
 		}
 		void load_u32(uint32_t val) {
 			this->i32[0] = val;
-			if constexpr (nanboxing)
-				this->nanbox();
+			this->nanbox();
 		}
 		void load_u64(uint64_t val) {
 			this->i64 = val;

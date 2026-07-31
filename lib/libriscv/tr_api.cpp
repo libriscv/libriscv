@@ -226,13 +226,13 @@ typedef union {
 #ifdef RISCV_NANBOXING
 #define load_fl(reg, iv) \
 	(reg)->i32[0] = (iv);
-	(reg)->i32[1] = 0;
+	(reg)->i32[1] = ~0u;
 #define set_fl(reg, fv) \
 	(reg)->f32[0] = (fv);
-	(reg)->i32[1] = 0;
+	(reg)->i32[1] = ~0u;
 #else
-#define load_fl(reg, fv) (reg)->i32[0] = (fv)
-#define set_fl(reg, fv)  (reg)->f32[0] = (fv)
+#define load_fl(reg, iv) do { (reg)->i32[0] = (iv); (reg)->i32[1] = ~0u; } while (0)
+#define set_fl(reg, fv)  do { (reg)->f32[0] = (fv); (reg)->i32[1] = ~0u; } while (0)
 #endif
 
 #define load_dbl(reg, dv) (reg)->i64 = (dv)
