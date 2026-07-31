@@ -1230,7 +1230,7 @@ void Emitter<W>::emit()
 				break;
 			case 0x3: // SLTU:
 				add_code(
-					dst + " = (" + src + " < (unsigned) " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
+					dst + " = (" + src + " < (addr_t) " + from_imm(instr.Itype.signed_imm()) + ") ? 1 : 0;");
 				break;
 			case 0x4: // XORI:
 				emit_op(" ^ ", " ^= ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
