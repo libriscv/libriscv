@@ -2036,9 +2036,13 @@ void Emitter<W>::emit()
 				} break;
 			case RV32F__FCVT_SD_W: {
 				if (fi.R4type.funct2 == 0x0) {
-					// FCVT.S.W && FCVT.S.WU
-					const std::string sign((fi.R4type.rs2 == 0x0) ? "(int32_t)" : "(uint32_t)");
-					code += "set_fl(&" + dst + ", " + sign + from_reg(fi.R4type.rs1) + ");\n";
+					switch (fi.R4type.rs2) {
+					case 0x0: code += "set_fl(&" + dst + ", (int32_t)" + from_reg(fi.R4type.rs1) + ");\n"; break;
+					case 0x1: code += "set_fl(&" + dst + ", (uint32_t)" + from_reg(fi.R4type.rs1) + ");\n"; break;
+					case 0x2: code += "set_fl(&" + dst + ", (int64_t)" + from_reg(fi.R4type.rs1) + ");\n"; break;
+					case 0x3: code += "set_fl(&" + dst + ", (uint64_t)" + from_reg(fi.R4type.rs1) + ");\n"; break;
+					default: UNKNOWN_INSTRUCTION();
+					}
 				} else if (fi.R4type.funct2 == 0x1) {
 					// FCVT.D.[LWU]
 					switch (fi.R4type.rs2) {
