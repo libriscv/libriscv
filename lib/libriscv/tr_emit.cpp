@@ -1644,8 +1644,9 @@ void Emitter<W>::emit()
 						dst + " = (int32_t)" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ";");
 				} else if (instr.Itype.high_bits() == 0x600) { // RORIW
 					add_code(
-					"{const unsigned shift = " + from_imm(instr.Itype.imm) + " & 31;\n",
-						dst + " = (int32_t)(" + src + " >> shift) | (" + src + " << (32 - shift)); }"
+						"{const unsigned shift = " + from_imm(instr.Itype.imm) + " & 31;\n",
+						"const uint32_t word = " + src + ";\n",
+						dst + " = (int32_t)((word >> shift) | (word << ((32 - shift) & 31))); }"
 					);
 				} else {
 					UNKNOWN_INSTRUCTION();
