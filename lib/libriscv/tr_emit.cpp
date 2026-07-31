@@ -266,6 +266,12 @@ struct Emitter
 	bool uses_flat_memory_arena() noexcept {
 		return riscv::flat_readwrite_arena && tinfo.arena_ptr != 0;
 	}
+	// A whole vector lane can only be moved by an inlined arena access. The slow
+	// paths (rd8..rd64 / wr8..wr64) top out at 64 bits, so when an access may have
+	// to fall back to virtual paging, vector loads/stores must be interpreted.
+	bool can_inline_vector_memory() noexcept {
+		return uses_flat_memory_arena() && !tinfo.use_virtual_paging_fallback;
+	}
 	bool uses_Nbit_encompassing_arena() noexcept {
 		if (riscv::encompassing_Nbit_arena != 0 && tinfo.arena_ptr != 0)
 			return true;
@@ -1240,7 +1246,7 @@ void Emitter<W>::emit()
 					// RORI: Rotate right immediate
 					add_code(
 					"{const unsigned shift = " + from_imm(instr.Itype.imm & (XLEN-1)) + ";\n",
-						dst + " = (" + src + " >> shift) | (" + src + " << (XLEN - shift)); }"
+						dst + " = (" + src + " >> shift) | (" + src + " << ((XLEN - shift) & (XLEN-1))); }"
 					);
 				} else if (instr.Itype.imm == 0x287) {
 					// ORC.B: Bitwise OR-combine
@@ -1346,23 +1352,29 @@ void Emitter<W>::emit()
 					to_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(instr.Rtype.rs1) + " * (saddr_t)" + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x11: // MULH (signed x signed)
-				add_code(
-					(W == 4) ?
-					to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"{ addr_t lhs = " + from_reg(instr.Rtype.rs1) + "; addr_t rhs = " + from_reg(instr.Rtype.rs2) + ";",
-					"MUL128(&" + to_reg(instr.Rtype.rd) + ", lhs, rhs);",
-					"if ((saddr_t)lhs < 0) " + to_reg(instr.Rtype.rd) + " -= rhs;",
-					"if ((saddr_t)rhs < 0) " + to_reg(instr.Rtype.rd) + " -= lhs; }"
-				);
+				if constexpr (W == 4) {
+					add_code(
+						to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (int64_t)(saddr_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;");
+				} else {
+					add_code(
+						"{ addr_t lhs = " + from_reg(instr.Rtype.rs1) + "; addr_t rhs = " + from_reg(instr.Rtype.rs2) + ";",
+						"MUL128(&" + to_reg(instr.Rtype.rd) + ", lhs, rhs);",
+						"if ((saddr_t)lhs < 0) " + to_reg(instr.Rtype.rd) + " -= rhs;",
+						"if ((saddr_t)rhs < 0) " + to_reg(instr.Rtype.rd) + " -= lhs; }"
+					);
+				}
 				break;
 			case 0x12: // MULHSU (signed x unsigned)
-				add_code(
-					(W == 4) ?
-					to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;" :
-					"{ addr_t lhs = " + from_reg(instr.Rtype.rs1) + "; addr_t rhs = " + from_reg(instr.Rtype.rs2) + ";",
-					"MUL128(&" + to_reg(instr.Rtype.rd) + ", lhs, rhs);",
-					"if ((saddr_t)lhs < 0) " + to_reg(instr.Rtype.rd) + " -= rhs; }"
-				);
+				if constexpr (W == 4) {
+					add_code(
+						to_reg(instr.Rtype.rd) + " = (uint64_t)((int64_t)(saddr_t)" + from_reg(instr.Rtype.rs1) + " * (uint64_t)" + from_reg(instr.Rtype.rs2) + ") >> 32u;");
+				} else {
+					add_code(
+						"{ addr_t lhs = " + from_reg(instr.Rtype.rs1) + "; addr_t rhs = " + from_reg(instr.Rtype.rs2) + ";",
+						"MUL128(&" + to_reg(instr.Rtype.rd) + ", lhs, rhs);",
+						"if ((saddr_t)lhs < 0) " + to_reg(instr.Rtype.rd) + " -= rhs; }"
+					);
+				}
 				break;
 			case 0x13: // MULHU (unsigned x unsigned)
 				add_code(
@@ -1372,21 +1384,23 @@ void Emitter<W>::emit()
 				);
 				break;
 			case 0x14: // DIV
-				// division by zero is not an exception
+				// Division by zero is not an exception: rd = -1
+				// Signed overflow is not an exception either: rd = the dividend
 				if constexpr (W == 8) {
 					add_code(
 						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
-						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))"
+						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))",
 						"		" + to_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " / (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
-						"}");
+						"	else " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";",
+						"} else " + to_reg(instr.Rtype.rd) + " = (addr_t)-1;");
 				} else {
 					add_code(
 						"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 						"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
 						"		" + to_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
-						"}");
+						"	else " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";",
+						"} else " + to_reg(instr.Rtype.rd) + " = (addr_t)-1;");
 				}
-				add_code("if (UNLIKELY(" + from_reg(instr.Rtype.rs2) + " == 0)) " + to_reg(instr.Rtype.rd) + " = (addr_t)-1;");
 				break;
 			case 0x15: // DIVU
 				add_code(
@@ -1396,20 +1410,23 @@ void Emitter<W>::emit()
 				);
 				break;
 			case 0x16: // REM
+				// Division by zero is not an exception: rd = the dividend
+				// Signed overflow is not an exception either: rd = 0
 				if constexpr (W == 8) {
 					add_code(
 					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == -9223372036854775808ull && " + from_reg(instr.Rtype.rs2) + " == -1ull)))",
 					"		" + to_reg(instr.Rtype.rd) + " = (int64_t)" + from_reg(instr.Rtype.rs1) + " % (int64_t)" + from_reg(instr.Rtype.rs2) + ";",
-					"}");
+					"	else " + to_reg(instr.Rtype.rd) + " = 0;",
+					"} else " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";");
 				} else {
 					add_code(
 					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0)) {",
 					"	if (LIKELY(!(" + from_reg(instr.Rtype.rs1) + " == 2147483648 && " + from_reg(instr.Rtype.rs2) + " == 4294967295)))",
 					"		" + to_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " % (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
-					"}");
+					"	else " + to_reg(instr.Rtype.rd) + " = 0;",
+					"} else " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";");
 				}
-				add_code("if (UNLIKELY(" + from_reg(instr.Rtype.rs2) + " == 0)) " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";");
 				break;
 			case 0x17: // REMU
 				add_code(
@@ -1496,16 +1513,18 @@ void Emitter<W>::emit()
 				// dst = (src2 != 0) ? 0 : src1;
 				add_code(to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs2) + " != 0) ? 0 : " + from_reg(instr.Rtype.rs1) + ";");
 				break;
+			// The complementary shift count is masked, as a zero rotate would
+			// otherwise shift by the full register width
 			case 0x301: // ROL: Rotate left
 				add_code(
 				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
-					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> (XLEN - shift)); }"
+					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " << shift) | (" + from_reg(instr.Rtype.rs1) + " >> ((XLEN - shift) & (XLEN-1))); }"
 				);
 				break;
 			case 0x305: // ROR: Rotate right
 				add_code(
 				"{const unsigned shift = " + from_reg(instr.Rtype.rs2) + " & (XLEN-1);\n",
-					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << (XLEN - shift)); }"
+					to_reg(instr.Rtype.rd) + " = (" + from_reg(instr.Rtype.rs1) + " >> shift) | (" + from_reg(instr.Rtype.rs1) + " << ((XLEN - shift) & (XLEN-1))); }"
 				);
 				break;
 			case 0x341: // BINV
@@ -1688,31 +1707,36 @@ void Emitter<W>::emit()
 				add_code(dst + " = " + SIGNEXTW + "(" + src1 + " * " + src2 + ");");
 				break;
 			case 0x14: // DIVW
-				// division by zero is not an exception
+				// Division by zero is not an exception: rd = -1
+				// Signed overflow is not an exception either: rd = the dividend
 				add_code(
-				"if (LIKELY(" + src2 + " != 0))",
-				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
-				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " / (int32_t)" + src2 + ");");
-				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = (addr_t)(int32_t)-1;");
+				"if (LIKELY(" + src2 + " != 0)) {",
+				"	if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
+				"		" + dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " / (int32_t)" + src2 + ");",
+				"	else " + dst + " = " + SIGNEXTW + " (" + src1 + ");",
+				"} else " + dst + " = (addr_t)(int32_t)-1;");
 				break;
 			case 0x15: // DIVUW
 				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
-				dst + " = " + SIGNEXTW + " (" + src1 + " / " + src2 + ");");
-				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = (addr_t)(int32_t)-1;");
+				dst + " = " + SIGNEXTW + " (" + src1 + " / " + src2 + ");",
+				"else " + dst + " = (addr_t)(int32_t)-1;");
 				break;
 			case 0x16: // REMW
+				// Division by zero is not an exception: rd = the dividend
+				// Signed overflow is not an exception either: rd = 0
 				add_code(
-				"if (LIKELY(" + src2 + " != 0))",
-				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
-				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " % (int32_t)" + src2 + ");");
-				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = " + SIGNEXTW + " (" + src1 + ");");
+				"if (LIKELY(" + src2 + " != 0)) {",
+				"	if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
+				"		" + dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " % (int32_t)" + src2 + ");",
+				"	else " + dst + " = 0;",
+				"} else " + dst + " = " + SIGNEXTW + " (" + src1 + ");");
 				break;
 			case 0x17: // REMUW
 				add_code(
 				"if (LIKELY(" + src2 + " != 0))",
-				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");");
-				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = " + SIGNEXTW + " (" + src1 + ");");
+				dst + " = " + SIGNEXTW + " (" + src1 + " % " + src2 + ");",
+				"else " + dst + " = " + SIGNEXTW + " (" + src1 + ");");
 				break;
 			case 0x40: // ADD.UW
 				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + " + src1 + ";");
@@ -1762,8 +1786,9 @@ void Emitter<W>::emit()
 				break;
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VLE32
-				if (tinfo.is_libtcc) {
-					// Vector load is not supported in libtcc
+				if (tinfo.is_libtcc || !can_inline_vector_memory()) {
+					// Vector load is not supported in libtcc, and cannot be
+					// expressed by the virtual paging fallback either
 					const rv32v_instruction vi { instr };
 					load_register(vi.VLS.rs1);
 					this->potentially_realize_register(vi.VLS.rs1);
@@ -1793,8 +1818,9 @@ void Emitter<W>::emit()
 				break;
 #ifdef RISCV_EXT_VECTOR
 			case 0x6: { // VSE32
-				if (tinfo.is_libtcc) {
-					// Vector store is not supported in libtcc
+				if (tinfo.is_libtcc || !can_inline_vector_memory()) {
+					// Vector store is not supported in libtcc, and cannot be
+					// expressed by the virtual paging fallback either
 					const rv32v_instruction vi { instr };
 					load_register(vi.VLS.rs1);
 					this->potentially_realize_register(vi.VLS.rs1);
@@ -2045,9 +2071,12 @@ void Emitter<W>::emit()
 						expr = "(uint64_t)" + rounded;
 						break;
 					default:
-						UNKNOWN_INSTRUCTION();
+						break; // Reserved rs2 encoding: no expression
 					}
-					code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
+					if (!expr.empty())
+						code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
+					else
+						UNKNOWN_INSTRUCTION();
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}

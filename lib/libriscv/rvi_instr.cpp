@@ -27,7 +27,7 @@ namespace riscv
 #endif
 # if defined(__SIZEOF_INT128__) // GCC/Clang 64-bit
 #  define mulhi64(a, b)  (__int128_t(int64_t(a)) * __int128_t(int64_t(b))) >> 64u;
-#  define mulhu64(a, b)  (__int128_t(a) * __int128_t(b)) >> 64u;
+#  define mulhu64(a, b)  (__uint128_t(a) * __uint128_t(b)) >> 64u;
 #  define mulhsu64(a, b) (__int128_t(int64_t(a)) * __int128_t(b)) >> 64u;
 # else
 // https://stackoverflow.com/questions/28868367/getting-the-high-part-of-64-bit-integer-multiplication
@@ -473,9 +473,10 @@ static inline uint64_t MUL128(
 				return;
 			}
 			else if (instr.Itype.is_rori()) {
-				// RORI: Rotate right
+				// RORI: Rotate right. Mask the complementary count, as a
+				// zero rotate would otherwise shift by the full width
 				const auto shift = instr.Itype.imm & (RVXLEN(cpu) - 1);
-				dst = (src >> shift) | (src << (RVXLEN(cpu) - shift));
+				dst = (src >> shift) | (src << ((RVXLEN(cpu) - shift) & (RVXLEN(cpu) - 1)));
 				return;
 			}
 			else if (instr.Itype.high_bits() == 0x480) {
@@ -630,7 +631,9 @@ static inline uint64_t MUL128(
 			return;
 		// extension RV32M / RV64M
 		case 0x10: // MUL
-			dst = RVTOSIGNED(src1) * RVTOSIGNED(src2);
+			// MUL keeps the low XLEN bits, which is the same product either
+			// way, but only the unsigned multiplication is defined on overflow
+			dst = RVREGTYPE(cpu)(src1) * RVREGTYPE(cpu)(src2);
 			return;
 		case 0x11: // MULH (signed x signed)
 			if constexpr (RVIS32BIT(cpu)) {
@@ -660,18 +663,23 @@ static inline uint64_t MUL128(
 			}
 			return;
 		case 0x14: // DIV
-			// division by zero is not an exception
+			// Division by zero is not an exception: rd = -1
+			// Signed overflow is not an exception either: rd = the dividend
 			if (LIKELY(RVTOSIGNED(src2) != 0)) {
 				if constexpr (RVIS64BIT(cpu)) {
 					// vi_instr.cpp:444:2: runtime error:
 					// division of -9223372036854775808 by -1 cannot be represented in type 'long'
 					if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
 						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
+					else
+						dst = src1;
 				} else {
 					// rv32i_instr.cpp:301:2: runtime error:
 					// division of -2147483648 by -1 cannot be represented in type 'int'
 					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
+					else
+						dst = src1;
 				}
 			} else {
 				dst = (RVREGTYPE(cpu)) -1;
@@ -685,10 +693,14 @@ static inline uint64_t MUL128(
 			}
 			return;
 		case 0x16: // REM
+			// Division by zero is not an exception: rd = the dividend
+			// Signed overflow is not an exception either: rd = 0
 			if (LIKELY(src2 != 0)) {
 				if constexpr(RVIS32BIT(cpu)) {
 					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
 						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
+					else
+						dst = 0;
 				} else if constexpr (RVIS64BIT(cpu)) {
 					if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
 						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
@@ -780,13 +792,15 @@ static inline uint64_t MUL128(
 		case 0x245: // BEXT
 			dst = (src1 >> (src2 & (RVXLEN(cpu)-1))) & 1;
 			return;
+		// The complementary shift count is masked, as a zero rotate would
+		// otherwise shift by the full register width
 		case 0x301: { // ROL: Rotate left
 			const auto shift = src2 & (RVXLEN(cpu) - 1);
-			dst = (src1 << shift) | (src1 >> (RVXLEN(cpu) - shift));
+			dst = (src1 << shift) | (src1 >> ((RVXLEN(cpu) - shift) & (RVXLEN(cpu) - 1)));
 			} return;
 		case 0x305: { // ROR: Rotate right
 			const auto shift = src2 & (RVXLEN(cpu) - 1);
-			dst = (src1 >> shift) | (src1 << (RVXLEN(cpu) - shift));
+			dst = (src1 >> shift) | (src1 << ((RVXLEN(cpu) - shift) & (RVXLEN(cpu) - 1)));
 			} return;
 		case 0x341: // BINV
 			dst = src1 ^ (RVREGTYPE(cpu)(1) << (src2 & (RVXLEN(cpu)-1)));
@@ -1055,7 +1069,7 @@ static inline uint64_t MUL128(
 			if (instr.Itype.high_bits() == 0x600) // RORIW
 			{
 				const auto shift = instr.Itype.imm & 31;
-				dst = (int32_t) ((src >> shift) | (src << (32 - shift)));
+				dst = (int32_t) ((src >> shift) | (src << ((32 - shift) & 31)));
 				return;
 			}
 			break;
@@ -1078,14 +1092,17 @@ static inline uint64_t MUL128(
 			return;
 		// M-extension
 		case 0x10: // MULW (signed 32-bit multiply, sign-extended)
-			dst = (int32_t) ((int32_t)src1 * (int32_t)src2);
+			dst = (int32_t) (src1 * src2);
 			return;
 		case 0x14: // DIVW
-			// division by zero is not an exception
+			// Division by zero is not an exception: rd = -1
+			// Signed overflow is not an exception either: rd = the dividend
 			if (LIKELY(src2 != 0)) {
 				// division of -2147483648 by -1 cannot be represented in type 'int'
 				if (LIKELY(!((int32_t)src1 == -2147483648 && (int32_t)src2 == -1))) {
 					dst = (int32_t) ((int32_t)src1 / (int32_t)src2);
+				} else {
+					dst = (int32_t) src1;
 				}
 			} else {
 				dst = (RVREGTYPE(cpu)) -1;
@@ -1099,9 +1116,13 @@ static inline uint64_t MUL128(
 			}
 			return;
 		case 0x16: // REMW
+			// Division by zero is not an exception: rd = the dividend
+			// Signed overflow is not an exception either: rd = 0
 			if (LIKELY(src2 != 0)) {
 				if (LIKELY(!((int32_t)src1 == -2147483648 && (int32_t)src2 == -1))) {
 					dst = (int32_t) ((int32_t)src1 % (int32_t)src2);
+				} else {
+					dst = 0;
 				}
 			} else {
 				dst = int32_t(src1);
@@ -1138,12 +1159,12 @@ static inline uint64_t MUL128(
 		case 0x301: {
 			// ROLW: Rotate left 32-bit
 			const auto shift = src2 & 31;
-			dst = (int32_t) ((src1 << shift) | (src1 >> (32 - shift)));
+			dst = (int32_t) ((src1 << shift) | (src1 >> ((32 - shift) & 31)));
 			} return;
 		case 0x305: {
 			// RORW: Rotate right 32-bit
 			const auto shift = src2 & 31;
-			dst = (int32_t) ((src1 >> shift) | (src1 << (32 - shift)));
+			dst = (int32_t) ((src1 >> shift) | (src1 << ((32 - shift) & 31)));
 			} return;
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);

@@ -549,3 +549,308 @@ TEST_CASE("RV64 Zba/Zbc edge cases", "[Micro]")
 	debugger.simulate(program.size() - 1);
 	verify();
 }
+
+// Instruction encoders shared by the RV64 edge-case tests below
+static constexpr auto enc_itype = [] (uint32_t opcode, uint32_t f3, uint32_t rd, uint32_t rs1, uint32_t imm) {
+	return opcode | (rd << 7) | (f3 << 12) | (rs1 << 15) | ((imm & 0xFFF) << 20);
+};
+static constexpr auto enc_rtype = [] (uint32_t opcode, uint32_t f3, uint32_t f7, uint32_t rd, uint32_t rs1, uint32_t rs2) {
+	return opcode | (rd << 7) | (f3 << 12) | (rs1 << 15) | (rs2 << 20) | (f7 << 25);
+};
+static constexpr uint32_t ENC_OP_IMM   = 0x13;
+static constexpr uint32_t ENC_OP_IMM32 = 0x1B;
+static constexpr uint32_t ENC_OP       = 0x33;
+static constexpr uint32_t ENC_OP32     = 0x3B;
+static constexpr uint32_t ENC_OP_FP    = 0x53;
+static constexpr uint32_t ENC_F7_M     = 0x01; // RV32M/RV64M
+static constexpr uint32_t ENC_F7_ROT   = 0x30; // Zbb rotates
+static constexpr uint32_t ENC_JSELF    = 0x0000006F; // J . (spin)
+
+TEST_CASE("RV64 M-extension divide-by-zero and overflow", "[Micro]")
+{
+	// The RISC-V unprivileged spec mandates a defined result for both a zero
+	// divisor and signed overflow -- neither traps, both must write rd.
+	//   DIV[W]/DIVU[W] by zero   -> all bits set
+	//   REM[W]/REMU[W] by zero   -> the dividend
+	//   DIV[W] on -2^(L-1) / -1  -> the dividend (i.e. -2^(L-1))
+	//   REM[W] on -2^(L-1) / -1  -> zero
+	static constexpr uint32_t RD_DIV   = REG_ARG2;
+	static constexpr uint32_t RD_DIVU  = REG_ARG3;
+	static constexpr uint32_t RD_REM   = REG_ARG4;
+	static constexpr uint32_t RD_REMU  = REG_ARG5;
+	static constexpr uint32_t RD_DIVW  = REG_ARG6;
+	static constexpr uint32_t RD_DIVUW = REG_ARG7;
+	static constexpr uint32_t RD_REMW  = REG_T0;
+	static constexpr uint32_t RD_REMUW = REG_T1;
+
+	const std::array<uint32_t, 9> program {
+		enc_rtype(ENC_OP,   0x4, ENC_F7_M, RD_DIV,   REG_ARG0, REG_ARG1), // DIV
+		enc_rtype(ENC_OP,   0x5, ENC_F7_M, RD_DIVU,  REG_ARG0, REG_ARG1), // DIVU
+		enc_rtype(ENC_OP,   0x6, ENC_F7_M, RD_REM,   REG_ARG0, REG_ARG1), // REM
+		enc_rtype(ENC_OP,   0x7, ENC_F7_M, RD_REMU,  REG_ARG0, REG_ARG1), // REMU
+		enc_rtype(ENC_OP32, 0x4, ENC_F7_M, RD_DIVW,  REG_ARG0, REG_ARG1), // DIVW
+		enc_rtype(ENC_OP32, 0x5, ENC_F7_M, RD_DIVUW, REG_ARG0, REG_ARG1), // DIVUW
+		enc_rtype(ENC_OP32, 0x6, ENC_F7_M, RD_REMW,  REG_ARG0, REG_ARG1), // REMW
+		enc_rtype(ENC_OP32, 0x7, ENC_F7_M, RD_REMUW, REG_ARG0, REG_ARG1), // REMUW
+		ENC_JSELF,
+	};
+
+	struct DivCase {
+		uint64_t dividend;
+		uint64_t divisor;
+		uint64_t div, divu, rem, remu;
+		uint64_t divw, divuw, remw, remuw;
+	};
+	static const std::array<DivCase, 4> cases {
+		DivCase{ // Divide by zero
+			17, 0,
+			~uint64_t(0), ~uint64_t(0), 17, 17,
+			~uint64_t(0), ~uint64_t(0), 17, 17,
+		},
+		DivCase{ // 64-bit signed overflow: INT64_MIN / -1
+			uint64_t(1) << 63, ~uint64_t(0),
+			uint64_t(1) << 63, 0, 0, uint64_t(1) << 63,
+			0, 0, 0, 0, // the low word is zero, so the word ops are ordinary
+		},
+		DivCase{ // 32-bit signed overflow: INT32_MIN / -1 in the low word
+			0x80000000ull, ~uint64_t(0),
+			0xFFFFFFFF80000000ull, 0, 0, 0x80000000ull,
+			0xFFFFFFFF80000000ull, 0, 0, 0xFFFFFFFF80000000ull,
+		},
+		DivCase{ // Ordinary signed division, to catch over-eager fixups
+			uint64_t(-7), 2,
+			uint64_t(-3), 0x7FFFFFFFFFFFFFFCull, uint64_t(-1), 1,
+			uint64_t(-3), 0x7FFFFFFCull, uint64_t(-1), 1,
+		},
+	};
+
+	constexpr uint32_t V = 0x2000;
+	riscv::Machine<RISCV64> machine { empty };
+	machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+	machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+
+	for (const auto& c : cases)
+	{
+		auto setup = [&] {
+			machine.cpu.registers() = {};
+			machine.cpu.reg(REG_ARG0) = c.dividend;
+			machine.cpu.reg(REG_ARG1) = c.divisor;
+			machine.cpu.jump(V);
+		};
+		auto verify = [&] {
+			REQUIRE(machine.cpu.reg(RD_DIV)   == c.div);
+			REQUIRE(machine.cpu.reg(RD_DIVU)  == c.divu);
+			REQUIRE(machine.cpu.reg(RD_REM)   == c.rem);
+			REQUIRE(machine.cpu.reg(RD_REMU)  == c.remu);
+			REQUIRE(machine.cpu.reg(RD_DIVW)  == c.divw);
+			REQUIRE(machine.cpu.reg(RD_DIVUW) == c.divuw);
+			REQUIRE(machine.cpu.reg(RD_REMW)  == c.remw);
+			REQUIRE(machine.cpu.reg(RD_REMUW) == c.remuw);
+		};
+
+		// Bytecode interpreter (or binary translation, when enabled)
+		setup();
+		machine.simulate<false>(MAX_CYCLES, 0u);
+		verify();
+
+		// Precise/stepped interpreter
+		setup();
+		DebugMachine debugger { machine };
+		debugger.simulate(program.size() - 1);
+		verify();
+	}
+}
+
+TEST_CASE("RV64 MULH/MULHSU signed high-half products", "[Micro]")
+{
+	// MULH and MULHSU need the signed correction applied to the unsigned
+	// 128-bit high half, which is easy to lose in a portable lowering.
+	const std::array<uint32_t, 5> program {
+		enc_rtype(ENC_OP, 0x0, ENC_F7_M, REG_ARG2, REG_ARG0, REG_ARG1), // MUL
+		enc_rtype(ENC_OP, 0x1, ENC_F7_M, REG_ARG3, REG_ARG0, REG_ARG1), // MULH
+		enc_rtype(ENC_OP, 0x2, ENC_F7_M, REG_ARG4, REG_ARG0, REG_ARG1), // MULHSU
+		enc_rtype(ENC_OP, 0x3, ENC_F7_M, REG_ARG5, REG_ARG0, REG_ARG1), // MULHU
+		ENC_JSELF,
+	};
+
+	struct MulCase {
+		uint64_t lhs, rhs;
+		uint64_t mul, mulh, mulhsu, mulhu;
+	};
+	static const std::array<MulCase, 4> cases {
+		// -3 * 5: negative lhs only
+		MulCase{ uint64_t(-3), 5, uint64_t(-15), ~uint64_t(0), ~uint64_t(0), 4 },
+		// -1 * -1: negative on both sides
+		MulCase{ ~uint64_t(0), ~uint64_t(0), 1, 0, ~uint64_t(0), 0xFFFFFFFFFFFFFFFEull },
+		// 2^62 * 4: unsigned carry into the high half, no signed correction
+		MulCase{ uint64_t(1) << 62, 4, 0, 1, 1, 1 },
+		// 5 * -3: negative rhs only
+		MulCase{ 5, uint64_t(-3), uint64_t(-15), ~uint64_t(0), 4, 4 },
+	};
+
+	constexpr uint32_t V = 0x2000;
+	riscv::Machine<RISCV64> machine { empty };
+	machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+	machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+
+	for (const auto& c : cases)
+	{
+		auto setup = [&] {
+			machine.cpu.registers() = {};
+			machine.cpu.reg(REG_ARG0) = c.lhs;
+			machine.cpu.reg(REG_ARG1) = c.rhs;
+			machine.cpu.jump(V);
+		};
+		auto verify = [&] {
+			REQUIRE(machine.cpu.reg(REG_ARG2) == c.mul);
+			REQUIRE(machine.cpu.reg(REG_ARG3) == c.mulh);
+			REQUIRE(machine.cpu.reg(REG_ARG4) == c.mulhsu);
+			REQUIRE(machine.cpu.reg(REG_ARG5) == c.mulhu);
+		};
+
+		setup();
+		machine.simulate<false>(MAX_CYCLES, 0u);
+		verify();
+
+		setup();
+		DebugMachine debugger { machine };
+		debugger.simulate(program.size() - 1);
+		verify();
+	}
+}
+
+TEST_CASE("RV64 rotates and SLTIU immediates", "[Micro]")
+{
+	// ROLW/RORW/RORIW operate on the low 32 bits and sign-extend the result,
+	// and a zero rotate must not shift by the full width -- neither for the
+	// word rotates nor for the XLEN-wide ROL/ROR/RORI. SLTIU compares against
+	// an XLEN-wide sign-extended immediate.
+	static constexpr uint32_t RS_VAL  = REG_ARG0; // 0x1234567880000001
+	static constexpr uint32_t RS_SH1  = REG_ARG1; // 1
+	static constexpr uint32_t RS_SH31 = REG_ARG2; // 31
+	static constexpr uint32_t RS_BIG  = REG_ARG3; // 0x100000000
+
+	const std::array<uint32_t, 16> program {
+		enc_itype(ENC_OP_IMM32, 0x5, REG_ARG4, RS_VAL, 0x600 | 1),        // RORIW rd, val, 1
+		enc_rtype(ENC_OP32, 0x1, ENC_F7_ROT, REG_ARG5, RS_VAL, RS_SH1),   // ROLW  rd, val, 1
+		enc_rtype(ENC_OP32, 0x5, ENC_F7_ROT, REG_ARG6, RS_VAL, RS_SH1),   // RORW  rd, val, 1
+		enc_itype(ENC_OP_IMM32, 0x5, REG_ARG7, RS_VAL, 0x600 | 0),        // RORIW rd, val, 0
+		enc_rtype(ENC_OP32, 0x1, ENC_F7_ROT, REG_T0, RS_VAL, REG_ZERO),   // ROLW  rd, val, 0
+		enc_rtype(ENC_OP32, 0x5, ENC_F7_ROT, REG_T1, RS_VAL, REG_ZERO),   // RORW  rd, val, 0
+		enc_rtype(ENC_OP32, 0x1, ENC_F7_ROT, 7, RS_VAL, RS_SH31),         // ROLW  t2, val, 31
+		enc_rtype(ENC_OP, 0x1, ENC_F7_ROT, 20, RS_VAL, RS_SH1),           // ROL   s4, val, 1
+		enc_rtype(ENC_OP, 0x5, ENC_F7_ROT, 21, RS_VAL, RS_SH1),           // ROR   s5, val, 1
+		enc_rtype(ENC_OP, 0x1, ENC_F7_ROT, 22, RS_VAL, REG_ZERO),         // ROL   s6, val, 0
+		enc_rtype(ENC_OP, 0x5, ENC_F7_ROT, 23, RS_VAL, REG_ZERO),         // ROR   s7, val, 0
+		enc_itype(ENC_OP_IMM, 0x5, 24, RS_VAL, 0x600 | 0),                // RORI  s8, val, 0
+		enc_itype(ENC_OP_IMM, 0x5, 25, RS_VAL, 0x600 | 4),                // RORI  s9, val, 4
+		enc_itype(ENC_OP_IMM, 0x3, 18, RS_BIG, 0xFFF),                    // SLTIU s2, big, -1
+		enc_itype(ENC_OP_IMM, 0x3, 19, RS_BIG, 1),                        // SLTIU s3, big, 1
+		ENC_JSELF,
+	};
+
+	constexpr uint32_t V = 0x2000;
+	riscv::Machine<RISCV64> machine { empty };
+	machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+	machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+
+	auto setup = [&] {
+		machine.cpu.registers() = {};
+		machine.cpu.reg(RS_VAL)  = 0x1234567880000001ull; // high bits must not leak in
+		machine.cpu.reg(RS_SH1)  = 1;
+		machine.cpu.reg(RS_SH31) = 31;
+		machine.cpu.reg(RS_BIG)  = 0x100000000ull; // above UINT32_MAX
+		machine.cpu.jump(V);
+	};
+	auto verify = [&] {
+		// word 0x80000001 rotated right by 1 is 0xC0000000, sign-extended
+		REQUIRE(machine.cpu.reg(REG_ARG4) == 0xFFFFFFFFC0000000ull);
+		// rotated left by 1 is 0x00000003
+		REQUIRE(machine.cpu.reg(REG_ARG5) == 0x3ull);
+		REQUIRE(machine.cpu.reg(REG_ARG6) == 0xFFFFFFFFC0000000ull);
+		// a zero rotate is the identity on the word, still sign-extended
+		REQUIRE(machine.cpu.reg(REG_ARG7) == 0xFFFFFFFF80000001ull);
+		REQUIRE(machine.cpu.reg(REG_T0)   == 0xFFFFFFFF80000001ull);
+		REQUIRE(machine.cpu.reg(REG_T1)   == 0xFFFFFFFF80000001ull);
+		// rotated left by 31 is 0xC0000000, sign-extended
+		REQUIRE(machine.cpu.reg(7)  == 0xFFFFFFFFC0000000ull);
+		// the XLEN-wide rotates use the whole register
+		REQUIRE(machine.cpu.reg(20) == 0x2468ACF100000002ull);
+		REQUIRE(machine.cpu.reg(21) == 0x891A2B3C40000000ull);
+		// a zero rotate is the identity here too
+		REQUIRE(machine.cpu.reg(22) == 0x1234567880000001ull);
+		REQUIRE(machine.cpu.reg(23) == 0x1234567880000001ull);
+		REQUIRE(machine.cpu.reg(24) == 0x1234567880000001ull);
+		REQUIRE(machine.cpu.reg(25) == 0x1123456788000000ull);
+		// 0x100000000 < (uint64_t)-1, but not < 1
+		REQUIRE(machine.cpu.reg(18) == 1);
+		REQUIRE(machine.cpu.reg(19) == 0);
+	};
+
+	setup();
+	machine.simulate<false>(MAX_CYCLES, 0u);
+	verify();
+
+	setup();
+	DebugMachine debugger { machine };
+	debugger.simulate(program.size() - 1);
+	verify();
+}
+
+TEST_CASE("FCLASS.S and FCLASS.D classify by raw bits", "[Micro]")
+{
+	// FCLASS sets exactly one bit. Host float comparisons cannot tell a
+	// subnormal from a normal, nor a signaling NaN from a quiet one.
+	const std::array<uint32_t, 3> program {
+		enc_rtype(ENC_OP_FP, 0x1, 0x70, REG_ARG0, 0, 0), // FCLASS.S a0, f0
+		enc_rtype(ENC_OP_FP, 0x1, 0x71, REG_ARG1, 1, 0), // FCLASS.D a1, f1
+		ENC_JSELF,
+	};
+
+	struct ClassCase {
+		uint32_t f32bits;
+		uint64_t f64bits;
+		uint64_t expected;
+	};
+	static const std::array<ClassCase, 11> cases {
+		ClassCase{ 0xFF800000, 0xFFF0000000000000ull, 1U << 0 }, // -infinity
+		ClassCase{ 0xBF800000, 0xBFF0000000000000ull, 1U << 1 }, // -1.0, negative normal
+		ClassCase{ 0x80000001, 0x8000000000000001ull, 1U << 2 }, // negative subnormal
+		ClassCase{ 0x80000000, 0x8000000000000000ull, 1U << 3 }, // -0.0
+		ClassCase{ 0x00000000, 0x0000000000000000ull, 1U << 4 }, // +0.0
+		ClassCase{ 0x00000001, 0x0000000000000001ull, 1U << 5 }, // positive subnormal
+		ClassCase{ 0x00800000, 0x0010000000000000ull, 1U << 6 }, // smallest positive normal
+		ClassCase{ 0x3F800000, 0x3FF0000000000000ull, 1U << 6 }, // +1.0, positive normal
+		ClassCase{ 0x7F800000, 0x7FF0000000000000ull, 1U << 7 }, // +infinity
+		ClassCase{ 0x7F800001, 0x7FF0000000000001ull, 1U << 8 }, // signaling NaN
+		ClassCase{ 0x7FC00000, 0x7FF8000000000000ull, 1U << 9 }, // quiet NaN
+	};
+
+	constexpr uint32_t V = 0x2000;
+	riscv::Machine<RISCV64> machine { empty };
+	machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+	machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+
+	for (const auto& c : cases)
+	{
+		auto setup = [&] {
+			machine.cpu.registers() = {};
+			machine.cpu.registers().getfl(0).load_u32(c.f32bits);
+			machine.cpu.registers().getfl(1).load_u64(c.f64bits);
+			machine.cpu.jump(V);
+		};
+		auto verify = [&] {
+			REQUIRE(machine.cpu.reg(REG_ARG0) == c.expected);
+			REQUIRE(machine.cpu.reg(REG_ARG1) == c.expected);
+		};
+
+		setup();
+		machine.simulate<false>(MAX_CYCLES, 0u);
+		verify();
+
+		setup();
+		DebugMachine debugger { machine };
+		debugger.simulate(program.size() - 1);
+		verify();
+	}
+}

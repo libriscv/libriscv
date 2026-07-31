@@ -57,6 +57,18 @@ namespace riscv
 	extern void  dylib_close(void* dylib, bool is_libtcc);
 	extern void* dylib_lookup(void* dylib, const char*, bool is_libtcc);
 
+	// Environment override for the binary translation cache (eg. /tmp/rvbintr-*).
+	// Set BINTR_CACHE=0 to neither reuse nor keep cached shared objects. A cached
+	// translation is dlopen'ed before we consider compiling, so without this an
+	// object produced by an older code emitter is silently reused, which hides
+	// emitter changes while iterating on the binary translator.
+	static bool translation_cache_enabled(bool option)
+	{
+		if (const char* env = getenv("BINTR_CACHE"); env != nullptr)
+			return env[0] != '0';
+		return option;
+	}
+
 	template <int W>
 	using binary_translation_init_func = void (*)(const CallbackTable<W>&, int32_t, int32_t, int32_t);
 	template <int W>
@@ -327,6 +339,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		return (has_cross_compile) ? 1 : -1;
 
 	void* dylib = nullptr;
+	if (translation_cache_enabled(options.translation_cache))
 	{
 		TIME_POINT(t7);
 		// Probably not needed, but on Windows there might be some issues
@@ -969,7 +982,7 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 				}
 
 				if constexpr (!libtcc_enabled) {
-					if (!options.translation_cache) {
+					if (!translation_cache_enabled(options.translation_cache)) {
 						// Delete the shared object if it is unwanted
 						unlink(filename.c_str());
 					}
@@ -1256,7 +1269,16 @@ template <int W>
 CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 {
 	return CallbackTable<W>{
+		// Memory exceptions: fully translated code is compiled with -fexceptions,
+		// so the exception simply unwinds through the generated C with its
+		// original stack intact, all the way out of the dispatch loop. Catching
+		// it here only to re-throw would unwind those frames first and hide the
+		// fault site, so it is left alone.
+		// libtcc-generated code has no unwind information at all, so there the
+		// exception has to be stored in the CPU and re-thrown by dispatch once we
+		// are back in C++ frames (see handle_rethrow_exception).
 		.mem_read8 = [] (CPU<W>& cpu, address_type<W> addr) -> uint8_t {
+#ifdef RISCV_LIBTCC
 			try {
 				return cpu.machine().memory.template read<uint8_t>(addr);
 			} catch (...) {
@@ -1264,8 +1286,12 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				cpu.machine().stop();
 				return 0;
 			}
+#else
+			return cpu.machine().memory.template read<uint8_t>(addr);
+#endif
 		},
 		.mem_read16 = [] (CPU<W>& cpu, address_type<W> addr) -> uint16_t {
+#ifdef RISCV_LIBTCC
 			try {
 				return cpu.machine().memory.template read<uint16_t>(addr);
 			} catch (...) {
@@ -1273,8 +1299,12 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				cpu.machine().stop();
 				return 0;
 			}
+#else
+			return cpu.machine().memory.template read<uint16_t>(addr);
+#endif
 		},
 		.mem_read32 = [] (CPU<W>& cpu, address_type<W> addr) -> uint32_t {
+#ifdef RISCV_LIBTCC
 			try {
 				return cpu.machine().memory.template read<uint32_t>(addr);
 			} catch (...) {
@@ -1282,8 +1312,12 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				cpu.machine().stop();
 				return 0;
 			}
+#else
+			return cpu.machine().memory.template read<uint32_t>(addr);
+#endif
 		},
 		.mem_read64 = [] (CPU<W>& cpu, address_type<W> addr) -> uint64_t {
+#ifdef RISCV_LIBTCC
 			try {
 				return cpu.machine().memory.template read<uint64_t>(addr);
 			} catch (...) {
@@ -1291,38 +1325,57 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 				cpu.machine().stop();
 				return 0;
 			}
+#else
+			return cpu.machine().memory.template read<uint64_t>(addr);
+#endif
 		},
 		.mem_write8 = [] (CPU<W>& cpu, address_type<W> addr, uint8_t value) -> void {
+#ifdef RISCV_LIBTCC
 			try {
 				cpu.machine().memory.template write<uint8_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
 			}
+#else
+			cpu.machine().memory.template write<uint8_t>(addr, value);
+#endif
 		},
 		.mem_write16 = [] (CPU<W>& cpu, address_type<W> addr, uint16_t value) -> void {
+#ifdef RISCV_LIBTCC
 			try {
 				cpu.machine().memory.template write<uint16_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
 			}
+#else
+			cpu.machine().memory.template write<uint16_t>(addr, value);
+#endif
 		},
 		.mem_write32 = [] (CPU<W>& cpu, address_type<W> addr, uint32_t value) -> void {
+#ifdef RISCV_LIBTCC
 			try {
 				cpu.machine().memory.template write<uint32_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
 			}
+#else
+			cpu.machine().memory.template write<uint32_t>(addr, value);
+#endif
 		},
 		.mem_write64 = [] (CPU<W>& cpu, address_type<W> addr, uint64_t value) -> void {
+#ifdef RISCV_LIBTCC
 			try {
 				cpu.machine().memory.template write<uint64_t>(addr, value);
 			} catch (...) {
 				cpu.set_current_exception(std::current_exception());
 				cpu.machine().stop();
 			}
+#else
+			cpu.machine().memory.template write<uint64_t>(addr, value);
+#endif
 		},
 		.vec_load = [] (CPU<W>& cpu, int vd, address_type<W> addr) {
 #ifdef RISCV_EXT_VECTOR

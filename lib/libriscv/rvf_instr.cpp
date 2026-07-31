@@ -758,41 +758,37 @@ namespace riscv
 		const rv32f_instruction fi { instr };
 		auto& dst = cpu.reg(fi.R4type.rd);
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		// FCLASS sets exactly one bit, derived from the raw sign/exponent/fraction
+		// fields. Host floating-point comparisons cannot be used here, as they
+		// don't distinguish subnormals from normals, or sNaN from qNaN.
+		static constexpr auto classify =
+			[] (bool sign, bool exp_max, bool exp_zero, bool frac_zero, bool frac_quiet) -> uint32_t
+		{
+			if (exp_max) {
+				if (frac_zero) return sign ? (1U << 0) : (1U << 7); // -inf / +inf
+				return frac_quiet ? (1U << 9) : (1U << 8);          // qNaN / sNaN
+			}
+			if (exp_zero) {
+				if (frac_zero) return sign ? (1U << 3) : (1U << 4); // -0.0 / +0.0
+				return sign ? (1U << 2) : (1U << 5);                // -subnormal / +subnormal
+			}
+			return sign ? (1U << 1) : (1U << 6);                    // -normal / +normal
+		};
 		switch (fi.R4type.funct2) {
-		case 0x0: // FCLASS.S
-			{ const uint32_t bits = rs1.i32[0];
-			  const bool sign = bits >> 31;
-			  const uint32_t exponent = (bits >> 23) & 0xff;
-			  const uint32_t fraction = bits & 0x7fffff;
-			  if (exponent == 0xff) {
-				if (fraction == 0) dst = sign ? (1U << 0) : (1U << 7);
-				else dst = (fraction & 0x400000) ? (1U << 9) : (1U << 8);
-			  } else if (exponent == 0) {
-				if (fraction == 0) dst = sign ? (1U << 3) : (1U << 4);
-				else dst = sign ? (1U << 2) : (1U << 5);
-			  } else dst = sign ? (1U << 1) : (1U << 6); }
-			return;
-		case 0x1: // FCLASS.D
-			dst = 0;
-			if (rs1.f64 == -std::numeric_limits<double>::infinity())
-				dst |= 1U << 0;
-			if (rs1.f64 < 0)
-				dst |= 1U << 1;
-			if (rs1.f64 == -std::numeric_limits<double>::denorm_min())
-				dst |= 1U << 2;
-			if (rs1.f64 == -0.0)
-				dst |= 1U << 3;
-			if (rs1.f64 == +0.0)
-				dst |= 1U << 4;
-			if (rs1.f64 == std::numeric_limits<double>::denorm_min())
-				dst |= 1U << 5;
-			if (rs1.f64 >= std::numeric_limits<double>::epsilon())
-				dst |= 1U << 6;
-			if (rs1.f64 == std::numeric_limits<double>::infinity())
-				dst |= 1U << 7;
-			if (std::isnan(rs1.f64))
-				dst |= 3U << 8;
-			return;
+		case 0x0: { // FCLASS.S
+			const uint32_t bits = rs1.i32[0];
+			const uint32_t exponent = (bits >> 23) & 0xff;
+			const uint32_t fraction = bits & 0x7fffff;
+			dst = classify(bits >> 31, exponent == 0xff, exponent == 0,
+				fraction == 0, (fraction & 0x400000) != 0);
+			} return;
+		case 0x1: { // FCLASS.D
+			const uint64_t bits = rs1.i64;
+			const uint64_t exponent = (bits >> 52) & 0x7ff;
+			const uint64_t fraction = bits & 0xfffffffffffffULL;
+			dst = classify(bits >> 63, exponent == 0x7ff, exponent == 0,
+				fraction == 0, (fraction & 0x8000000000000ULL) != 0);
+			} return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
