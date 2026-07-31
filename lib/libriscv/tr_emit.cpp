@@ -1693,6 +1693,7 @@ void Emitter<W>::emit()
 				"if (LIKELY(" + src2 + " != 0))",
 				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
 				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " / (int32_t)" + src2 + ");");
+				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = (addr_t)(int32_t)-1;");
 				break;
 			case 0x15: // DIVUW
 				add_code(
@@ -1705,6 +1706,7 @@ void Emitter<W>::emit()
 				"if (LIKELY(" + src2 + " != 0))",
 				"if (LIKELY(!((int32_t)" + src1 + " == -2147483648 && (int32_t)" + src2 + " == -1)))",
 				dst + " = " + SIGNEXTW + " ((int32_t)" + src1 + " % (int32_t)" + src2 + ");");
+				add_code("if (UNLIKELY(" + src2 + " == 0)) " + dst + " = " + SIGNEXTW + " (" + src1 + ");");
 				break;
 			case 0x17: // REMUW
 				add_code(
