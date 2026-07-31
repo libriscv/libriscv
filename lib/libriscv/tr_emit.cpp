@@ -1992,10 +1992,10 @@ void Emitter<W>::emit()
 				break;
 			case RV32F__FSQRT:
 				if (fi.R4type.funct2 == 0x0) { // fp32
-					code += "set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
+					code += "if (" + rs1 + ".f32[0] < 0.0f) { " + dst + ".i32[0] = 0x7fc00000u; " + dst + ".i32[1] = ~0u; cpu->fcsr |= 0x10; } else set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
 					this->penalty(10); // sqrtf is a slow operation
 				} else { // fp64
-					code += "set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
+					code += "if (" + rs1 + ".f64 < 0.0) { " + dst + ".i64 = 0x7ff8000000000000ull; cpu->fcsr |= 0x10; } else set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
 					this->penalty(15); // sqrtd is a slow operation
 				}
 				break;
