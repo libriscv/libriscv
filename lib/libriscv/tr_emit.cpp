@@ -1386,11 +1386,13 @@ void Emitter<W>::emit()
 						"		" + to_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " / (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
 						"}");
 				}
+				add_code("if (UNLIKELY(" + from_reg(instr.Rtype.rs2) + " == 0)) " + to_reg(instr.Rtype.rd) + " = (addr_t)-1;");
 				break;
 			case 0x15: // DIVU
 				add_code(
 					"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
-					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " / " + from_reg(instr.Rtype.rs2) + ";"
+					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " / " + from_reg(instr.Rtype.rs2) + ";",
+					"else " + to_reg(instr.Rtype.rd) + " = (addr_t)-1;"
 				);
 				break;
 			case 0x16: // REM
@@ -1407,11 +1409,13 @@ void Emitter<W>::emit()
 					"		" + to_reg(instr.Rtype.rd) + " = (int32_t)" + from_reg(instr.Rtype.rs1) + " % (int32_t)" + from_reg(instr.Rtype.rs2) + ";",
 					"}");
 				}
+				add_code("if (UNLIKELY(" + from_reg(instr.Rtype.rs2) + " == 0)) " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";");
 				break;
 			case 0x17: // REMU
 				add_code(
 				"if (LIKELY(" + from_reg(instr.Rtype.rs2) + " != 0))",
-					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " % " + from_reg(instr.Rtype.rs2) + ";"
+					to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + " % " + from_reg(instr.Rtype.rs2) + ";",
+					"else " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";"
 				);
 				break;
 			case 0x44: // ZEXT.H: Zero-extend 16-bit
