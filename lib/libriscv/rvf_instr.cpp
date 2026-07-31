@@ -32,7 +32,7 @@ namespace riscv
 	template <typename T>
 	static bool is_signaling_nan(T t) {
 		if constexpr (sizeof(T) == 4)
-			return (*(uint32_t*)&t & 0x7fa00000) == 0x7f800000;
+			return (*(uint32_t*)&t & 0x7fc00000) == 0x7f800000;
 		else
 			return (*(uint64_t*)&t & 0x7ffe000000000000) == 0x7ff0000000000000;
 	}
