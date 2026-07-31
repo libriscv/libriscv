@@ -2028,9 +2028,9 @@ void Emitter<W>::emit()
 				} break;
 			case RV32F__FCVT_SD_DS:
 				if (fi.R4type.funct2 == 0x0) {
-					code += "set_fl(&" + dst + ", " + rs1 + ".f64);\n";
+					code += "if (" + rs1 + ".f64 != " + rs1 + ".f64) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", " + rs1 + ".f64);\n";
 				} else if (fi.R4type.funct2 == 0x1) {
-					code += "set_dbl(&" + dst + ", " + rs1 + ".f32[0]);\n";
+					code += "if (" + rs1 + ".f32[0] != " + rs1 + ".f32[0]) load_dbl(&" + dst + ", 0x7ff8000000000000ull); else set_dbl(&" + dst + ", " + rs1 + ".f32[0]);\n";
 				} else {
 					UNKNOWN_INSTRUCTION();
 				} break;

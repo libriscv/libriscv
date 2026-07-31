@@ -580,10 +580,16 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FCVT.S.D (64 -> 32)
-			dst.set_float(rs1.f64);
+			if (std::isnan(rs1.f64))
+				dst.load_u32(CANONICAL_NAN_F32);
+			else
+				dst.set_float(rs1.f64);
 			break;
 		case 0x1: // FCVT.D.S (32 -> 64)
-			dst.f64 = rs1.f32[0];
+			if (std::isnan(rs1.f32[0]))
+				dst.load_u64(CANONICAL_NAN_F64);
+			else
+				dst.f64 = rs1.f32[0];
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);
