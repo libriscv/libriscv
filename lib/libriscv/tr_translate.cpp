@@ -1541,6 +1541,14 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		// FMIN/FMAX with RISC-V -0.0 < +0.0 convention. std::fmin/fmax
 		// leave the ±0 case implementation-defined.
 		.fmin32_rv = [] (float a, float b) -> float {
+			if (std::isnan(a) && std::isnan(b)) {
+				uint32_t bits = 0x7fc00000u;
+				float result;
+				__builtin_memcpy(&result, &bits, sizeof(result));
+				return result;
+			}
+			if (std::isnan(a)) return b;
+			if (std::isnan(b)) return a;
 			if (a == 0.0f && b == 0.0f) {
 				uint32_t ab, bb;
 				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);
@@ -1550,6 +1558,8 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 			return std::fmin(a, b);
 		},
 		.fmax32_rv = [] (float a, float b) -> float {
+			if (std::isnan(a)) return b;
+			if (std::isnan(b)) return a;
 			if (a == 0.0f && b == 0.0f) {
 				uint32_t ab, bb;
 				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);

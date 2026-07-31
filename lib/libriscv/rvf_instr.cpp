@@ -460,6 +460,10 @@ namespace riscv
 			if constexpr (fcsr_emulation) {
 				if (std::isnan(rs1.f32[0]) && std::isnan(rs2.f32[0]))
 					dst.load_u32(CANONICAL_NAN_F32);
+				else if (std::isnan(rs1.f32[0]))
+					dst.load_u32(rs2.i32[0]);
+				else if (std::isnan(rs2.f32[0]))
+					dst.load_u32(rs1.i32[0]);
 				else
 					dst.load_u32(fmin32(rs1.i32[0], rs2.i32[0]));
 			} else {
@@ -470,6 +474,10 @@ namespace riscv
 			if constexpr (fcsr_emulation) {
 				if (std::isnan(rs1.f32[0]) && std::isnan(rs2.f32[0]))
 					dst.load_u32(CANONICAL_NAN_F32);
+				else if (std::isnan(rs1.f32[0]))
+					dst.load_u32(rs2.i32[0]);
+				else if (std::isnan(rs2.f32[0]))
+					dst.load_u32(rs1.i32[0]);
 				else
 					dst.load_u32(fmax32(rs1.i32[0], rs2.i32[0]));
 			} else {
