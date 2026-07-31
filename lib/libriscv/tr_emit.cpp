@@ -2039,7 +2039,7 @@ void Emitter<W>::emit()
 					// FCVT.S.[LWU]
 					switch (fi.R4type.rs2) {
 					case 0x0: // FCVT.S.W
-						code += "set_fl(&" + dst + ", (int32_t)" + from_reg(fi.R4type.rs1) + ");\n";
+						code += "{ int32_t v = (int32_t)" + from_reg(fi.R4type.rs1) + "; uint32_t m = v < 0 ? 0u - (uint32_t)v : (uint32_t)v; unsigned b = m ? 32u - api.clz(m) : 0; if (b > 24u && (m & ((1u << (b - 24u)) - 1))) cpu->fcsr |= 1; set_fl(&" + dst + ", v); }\n";
 						break;
 					case 0x1: // FCVT.S.WU
 						code += "set_fl(&" + dst + ", (uint32_t)" + from_reg(fi.R4type.rs1) + ");\n";
@@ -2063,7 +2063,7 @@ void Emitter<W>::emit()
 						code += "set_dbl(&" + dst + ", (uint32_t)" + from_reg(fi.R4type.rs1) + ");\n";
 						break;
 					case 0x2: // FCVT.D.L
-						code += "set_dbl(&" + dst + ", (int64_t)" + from_reg(fi.R4type.rs1) + ");\n";
+						code += "{ int64_t v = (int64_t)" + from_reg(fi.R4type.rs1) + "; uint64_t m = v < 0 ? 0ull - (uint64_t)v : (uint64_t)v; unsigned b = m ? 64u - api.clzl(m) : 0; if (b > 53u && (m & ((1ull << (b - 53u)) - 1))) cpu->fcsr |= 1; set_dbl(&" + dst + ", v); }\n";
 						break;
 					case 0x3: // FCVT.D.LU
 						code += "set_dbl(&" + dst + ", (uint64_t)" + from_reg(fi.R4type.rs1) + ");\n";

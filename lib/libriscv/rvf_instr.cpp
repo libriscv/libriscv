@@ -669,9 +669,17 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 		case 0x0: // to float32
 			switch (fi.R4type.rs2) {
-			case 0x0: // FCVT.S.W
-				dst.set_float((int32_t)rs1);
+			case 0x0: { // FCVT.S.W
+				const int32_t value = rs1;
+				dst.set_float(value);
+				const uint32_t magnitude = value < 0 ? 0u - (uint32_t)value : (uint32_t)value;
+				if constexpr (fcsr_emulation) {
+					unsigned bits = 0;
+					for (uint32_t n = magnitude; n != 0; n >>= 1) ++bits;
+					if (bits > 24 && (magnitude & ((1u << (bits - 24)) - 1))) cpu.registers().fcsr().fflags |= 1;
+				}
 				return;
+			}
 			case 0x1: // FCVT.S.WU
 				dst.set_float((uint32_t)rs1);
 				return;
@@ -692,7 +700,13 @@ namespace riscv
 				dst.f64 = (uint32_t)rs1;
 				return;
 			case 0x2: // FCVT.D.L
-				dst.f64 = (int64_t)rs1;
+				{ const int64_t value = rs1; dst.f64 = value;
+				const uint64_t magnitude = value < 0 ? 0ull - (uint64_t)value : (uint64_t)value;
+				if constexpr (fcsr_emulation) {
+					unsigned bits = 0;
+					for (uint64_t n = magnitude; n != 0; n >>= 1) ++bits;
+					if (bits > 53 && (magnitude & ((1ull << (bits - 53)) - 1))) cpu.registers().fcsr().fflags |= 1;
+				} }
 				return;
 			case 0x3: // FCVT.D.LU
 				dst.f64 = (uint64_t)rs1;
