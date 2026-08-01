@@ -452,12 +452,10 @@ typedef struct {
 	uint64_t max_ic;
 } ReturnValues;
 
-/* Every exit point returns through the function-local `retvals` instead of a
-   compound literal. TCC gives each compound literal its own stack slot and
-   never reuses it, so a translated function with hundreds of exit points ends
-   up with a frame of tens of kilobytes. On Windows that frame is claimed by a
-   bare `sub rsp, N` (the fork disables __chkstk), which steps over the stack
-   guard page and faults. */
+/* NOTE: Exit through the function-local `retvals`, never a compound literal:
+   TCC gives each literal its own stack slot and never reuses it, so hundreds of
+   exit points meant a frame of tens of kilobytes. On Windows that frame is taken
+   by a bare sub rsp (no __chkstk), stepping over the stack guard page. */
 #define RETURN_VALUES(a, b) do { retvals.ic = (a); retvals.max_ic = (b); return retvals; } while (0)
 )123";
 }

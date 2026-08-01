@@ -484,6 +484,15 @@ struct Emitter
 			throw MachineException(INVALID_PROGRAM, "Unsupported memory store type");
 		}
 	}
+	// NOTE: TCC truncates a 64-bit absolute store address to a 32-bit displacement,
+	// so the pointer must be materialized first. It goes in one function-scope
+	// scratch, as TCC never reuses the stack slot of a block-scope local.
+	void fixed_store(const std::string& type, address_t address, const std::string& value)
+	{
+		this->m_used_fixed_store = true;
+		add_code("mstore = (char*)&" + arena_at_fixed(type, address) + ";",
+			"*(" + type + "*)mstore = " + value + ";");
+	}
 	// NOTE: `size` is the width of the access, and must be passed explicitly --
 	// it used to be derived as sizeof(type), which is sizeof(std::string).
 	void memory_store(std::string type, size_t size, int reg, int32_t imm, std::string value)
@@ -495,13 +504,13 @@ struct Emitter
 			}
 			constexpr bool good = riscv::encompassing_Nbit_arena != 0;
 			if (absolute_vaddr != 0 && absolute_vaddr >= tinfo.arena_roend && (good || absolute_vaddr < tinfo.arena_size)) {
-				add_code("{" + type + "* t = &" + arena_at_fixed(type, absolute_vaddr) + "; *t = " + value + "; }");
+				fixed_store(type, absolute_vaddr, value);
 				return;
 			}
 			if (auto tracked_value = get_tracked_register(reg)) {
 				const address_t vaddr = *tracked_value + imm;
 				if (vaddr >= tinfo.arena_roend && vaddr <= tinfo.arena_size - 32) {
-					add_code("{" + type + "* t = &" + arena_at_fixed(type, vaddr) + "; *t = " + value + "; }");
+					fixed_store(type, vaddr, value);
 					return;
 				}
 			}
@@ -595,6 +604,7 @@ struct Emitter
 		return addr >= this->tinfo.segment_basepc && addr < this->tinfo.segment_endpc;
 	}
 	bool used_store_syscalls() const noexcept { return this->m_used_store_syscalls; }
+	bool used_fixed_store() const noexcept { return this->m_used_fixed_store; }
 
 	const std::string get_func() const noexcept { return this->func; }
 	void emit();
@@ -653,6 +663,7 @@ private:
 	uint32_t m_zero_insn_counter = 0;
 	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
+	bool m_used_fixed_store = false;
 
 	// Per-register live bounds-check window (see offset_is_within_overallocation)
 	struct BoundsCheck {
@@ -1089,10 +1100,11 @@ void Emitter<W>::emit()
 			this->increment_counter_so_far();
 			if (instr.Itype.rd != 0 && instr.Itype.rd == instr.Itype.rs1) {
 				// NOTE: We need to remember RS1 because it is clobbered by RD
+				const auto src = from_reg(instr.Itype.rs1);
+				const auto dst = to_reg(instr.Itype.rd);
 				add_code(
-					"{addr_t rs1 = " + from_reg(instr.Itype.rs1) + ";",
-					to_reg(instr.Itype.rd) + " = " + PCRELS(m_instr_length) + ";",
-					"JUMP_TO(rs1 + " + from_imm(instr.Itype.signed_imm()) + "); }"
+					"JUMP_TO(" + src + " + " + from_imm(instr.Itype.signed_imm()) + ");",
+					dst + " = " + PCRELS(m_instr_length) + ";"
 				);
 			} else if (instr.Itype.rd != 0) {
 				add_code(
@@ -2320,8 +2332,10 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	// Function header
 	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t ic, uint64_t max_ic, addr_t pc) {\n";
-	// Single scratch object shared by every exit point (see RETURN_VALUES)
+	// NOTE: Scratch shared by every exit point, see RETURN_VALUES
 	code += "ReturnValues retvals;\n";
+	if (e.used_fixed_store())
+		code += "char* mstore;\n";
 
 	// Function GPRs
 	if (tinfo.use_register_caching) {
