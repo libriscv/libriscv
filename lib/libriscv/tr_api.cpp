@@ -223,20 +223,19 @@ typedef union {
 	} usign;
 } fp64reg;
 
+// Each of these is a single expression in every configuration, so that emitted
+// code such as "if (x) load_fl(...); else set_fl(...);" compiles identically
+// with and without NaN-boxing.
 #ifdef RISCV_NANBOXING
-#define load_fl(reg, iv) \
-	(reg)->i32[0] = (iv);
-	(reg)->i32[1] = ~0u;
-#define set_fl(reg, fv) \
-	(reg)->f32[0] = (fv);
-	(reg)->i32[1] = ~0u;
+#define load_fl(reg, iv) ((reg)->i32[0] = (iv), (reg)->i32[1] = ~0)
+#define set_fl(reg, fv)  ((reg)->f32[0] = (fv), (reg)->i32[1] = ~0)
 #else
-#define load_fl(reg, iv) do { (reg)->i32[0] = (iv); (reg)->i32[1] = ~0u; } while (0)
-#define set_fl(reg, fv)  do { (reg)->f32[0] = (fv); (reg)->i32[1] = ~0u; } while (0)
+#define load_fl(reg, iv) ((reg)->i32[0] = (iv))
+#define set_fl(reg, fv)  ((reg)->f32[0] = (fv))
 #endif
 
-#define load_dbl(reg, dv) (reg)->i64 = (dv)
-#define set_dbl(reg, dv)  (reg)->f64 = (dv)
+#define load_dbl(reg, dv) ((reg)->i64 = (dv))
+#define set_dbl(reg, dv)  ((reg)->f64 = (dv))
 
 // Thin variant of CPU for higher compilation speed
 __attribute__((aligned(RISCV_MACHINE_ALIGNMENT)))

@@ -239,6 +239,13 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	if constexpr (nanboxing) {
 		defines.emplace("RISCV_NANBOXING", "1");
 	}
+	// The emitter varies what it produces on fcsr_emulation, and the translation
+	// hash is built from the defines rather than the emitted code, so this has to
+	// be a define in order for cached translations from an FCSR-less build (and
+	// vice versa) to be rejected instead of silently reused.
+	if constexpr (fcsr_emulation) {
+		defines.emplace("RISCV_FCSR", "1");
+	}
 	if (options.translate_trace) {
 		// Adding this as a define will change the hash of the translation,
 		// so it will be recompiled if the trace option is toggled.

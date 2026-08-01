@@ -48,6 +48,9 @@ function usage()
      -N bits              enable N-bits of masked address space (experimental feature)
      --no-expr            disable experimental features
      --no-paging          disable virtual paging (flat arena only, reduced attack surface)
+     --paging             enable virtual paging
+	 --correct            enable correctness (FCSR, NaN-boxing, etc.)
+	 --fast               enable the default fast mode (disable correctness features)
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 
@@ -99,6 +102,9 @@ while [[ "$#" -gt 0 ]]; do
 		-N) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON -DRISCV_ENCOMPASSING_ARENA_BITS=$2"; shift ;;
         --no-expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=OFF" ;;
 		--no-paging) OPTS="$OPTS -DRISCV_VIRTUAL_PAGING=OFF" ;;
+		--paging) OPTS="$OPTS -DRISCV_VIRTUAL_PAGING=ON" ;;
+		--correct) OPTS="$OPTS -DRISCV_FCSR=ON" ;;
+		--fast) OPTS="$OPTS -DRISCV_FCSR=OFF" ;;
 		--embed) EMBED_FILES="$EMBED_FILES;$2"; shift ;;
 		--embed-all) embed_all ;;
 		-v|--verbose ) set -x ;;

@@ -29,12 +29,21 @@ namespace riscv
 		}
 	}
 
+	// A signaling NaN has an all-ones exponent, a clear quiet bit and a non-zero
+	// payload. The payload check is what separates it from an infinity, and the
+	// quiet bit must be masked at bit 22 (f32) / bit 51 (f64), not one below.
 	template <typename T>
 	static bool is_signaling_nan(T t) {
-		if constexpr (sizeof(T) == 4)
-			return (*(uint32_t*)&t & 0x7fc00000) == 0x7f800000;
-		else
-			return (*(uint64_t*)&t & 0x7ffe000000000000) == 0x7ff0000000000000;
+		if constexpr (sizeof(T) == 4) {
+			uint32_t bits;
+			__builtin_memcpy(&bits, &t, 4);
+			return (bits & 0x7fc00000) == 0x7f800000 && (bits & 0x003fffff) != 0;
+		} else {
+			uint64_t bits;
+			__builtin_memcpy(&bits, &t, 8);
+			return (bits & 0x7ff8000000000000ull) == 0x7ff0000000000000ull
+				&& (bits & 0x0007ffffffffffffull) != 0;
+		}
 	}
 
 #ifdef RISCV_FCSR
@@ -491,13 +500,12 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 		if constexpr (fcsr_emulation) {
-			const bool snan = fi.R4type.funct2 == 0x0
+			// funct2 selects the operand precision, so a .D operand has to be
+			// classified as a double rather than through its low 32 bits.
+			const bool snan = (fi.R4type.funct2 == 0x0)
 				? (is_signaling_nan(rs1.f32[0]) || is_signaling_nan(rs2.f32[0]))
 				: (is_signaling_nan(rs1.f64) || is_signaling_nan(rs2.f64));
-			if (snan)
-				cpu.registers().fcsr().fflags = 16;
-			else
-				cpu.registers().fcsr().fflags = 0;
+			cpu.registers().fcsr().fflags = snan ? 16 : 0;
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
@@ -655,10 +663,18 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 		case 0x0: // to float32
 			switch (fi.R4type.rs2) {
-			case 0x0: dst.set_float((int32_t)rs1); return; // FCVT.S.W
-			case 0x1: dst.set_float((uint32_t)rs1); return; // FCVT.S.WU
-			case 0x2: dst.set_float((int64_t)rs1); return; // FCVT.S.L
-			case 0x3: dst.set_float((uint64_t)rs1); return; // FCVT.S.LU
+			case 0x0: // FCVT.S.W
+				dst.set_float((int32_t)rs1);
+				return;
+			case 0x1: // FCVT.S.WU
+				dst.set_float((uint32_t)rs1);
+				return;
+			case 0x2: // FCVT.S.L
+				dst.set_float((int64_t)rs1);
+				return;
+			case 0x3: // FCVT.S.LU
+				dst.set_float((uint64_t)rs1);
+				return;
 			}
 			break;
 		case 0x1: // to float64

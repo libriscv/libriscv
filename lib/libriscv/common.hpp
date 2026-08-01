@@ -291,16 +291,10 @@ namespace riscv
 	static constexpr bool memory_alignment_check = true;
 	static constexpr bool verbose_branches_enabled = false;
 	static constexpr bool unaligned_memory_slowpaths = true;
-	static constexpr bool nanboxing = true;
 #else
 	static constexpr bool memory_alignment_check = false;
 	static constexpr bool verbose_branches_enabled = false;
 	static constexpr bool unaligned_memory_slowpaths = false;
-#ifdef RISCV_ALWAYS_NANBOXING // In order to override the default
-	static constexpr bool nanboxing = true;
-#else
-	static constexpr bool nanboxing = false;
-#endif
 #endif
 
 #ifdef RISCV_EXT_A
@@ -331,6 +325,15 @@ namespace riscv
 	static constexpr bool fcsr_emulation = true;
 #else
 	static constexpr bool fcsr_emulation = false;
+#endif
+// NaN-boxing is a correctness feature, not a functional one: scripting guests
+// never observe the upper 32 bits of a single-precision f-register unless they
+// deliberately go looking. It costs a store on every FP32 write, so it rides
+// along with FCSR emulation instead of being a knob of its own.
+#if defined(RISCV_FCSR) || defined(RISCV_DEBUG) || defined(RISCV_ALWAYS_NANBOXING)
+	static constexpr bool nanboxing = true;
+#else
+	static constexpr bool nanboxing = false;
 #endif
 #ifdef RISCV_BINARY_TRANSLATION
 	static constexpr bool binary_translation_enabled = true;
