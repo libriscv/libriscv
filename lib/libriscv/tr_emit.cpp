@@ -26,11 +26,11 @@
 		this->store_loaded_registers(); \
 		const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler; \
 		code += "if (api.execute_handler(cpu, " + std::to_string(instr.whole) + ", " + std::to_string(handler) + "))\n" \
-			"  return (ReturnValues){0, 0};\n"; \
+			"  RETURN_VALUES(0, 0);\n"; \
 		this->reload_all_registers(); \
 	} else if (m_zero_insn_counter <= 1) { \
 		code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
-		code += "return (ReturnValues){0, 0};\n"; \
+		code += "RETURN_VALUES(0, 0);\n"; \
 	} \
   } else { \
 	if (!instr.is_illegal()) { \
@@ -54,7 +54,7 @@
   if (tinfo.is_libtcc) { \
 	const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler; \
 	code += "if (api.execute_handler(cpu, " + std::to_string(instr.whole) + ", " + std::to_string(handler) + "))\n" \
-		"  return (ReturnValues){0, 0};\n"; \
+		"  RETURN_VALUES(0, 0);\n"; \
   } else { \
 	code += "#ifdef __wasm__\n"; \
 	code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n"; \
@@ -196,7 +196,7 @@ struct Emitter
 	void exit_function(const std::string& new_pc, bool add_bracket = false)
 	{
 		this->store_loaded_registers();
-		const char* return_code = (tinfo.ignore_instruction_limit) ? "return (ReturnValues){0, max_ic};" : "return (ReturnValues){ic, max_ic};";
+		const char* return_code = (tinfo.ignore_instruction_limit) ? "RETURN_VALUES(0, max_ic);" : "RETURN_VALUES(ic, max_ic);";
 		add_code(
 			(new_pc != "cpu->pc") ? "cpu->pc = " + new_pc + ";" : "",
 			return_code, (add_bracket) ? " }" : "");
@@ -690,7 +690,7 @@ inline void Emitter<W>::emit_branch(const BranchInfo& binfo, const std::string& 
 	if (UNLIKELY(PCRELA(instr.Btype.signed_imm()) & ALIGN_MASK))
 	{
 		// TODO: Make exception a helper function, as return values are implementation detail
-		code += "\n  { api.exception(cpu, " + PCRELS(0) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0}; }\n";
+		code += "\n  { api.exception(cpu, " + PCRELS(0) + ", MISALIGNED_INSTRUCTION); RETURN_VALUES(0, 0); }\n";
 		return;
 	}
 
@@ -731,12 +731,12 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 	add_forward(target_func);
 	if (!tinfo.ignore_instruction_limit) {
 		// Call the function and get the return values
-		add_code("{ReturnValues rv = " + target_func + "(cpu, ic, max_ic, " + STRADDR(dest_pc) + ");");
+		add_code("retvals = " + target_func + "(cpu, ic, max_ic, " + STRADDR(dest_pc) + ");");
 		// Update the local counter registers
-		add_code("ic = rv.ic; max_ic = rv.max_ic;}");
+		add_code("ic = retvals.ic; max_ic = retvals.max_ic;");
 	} else {
-		add_code("{ReturnValues rv = " + target_func + "(cpu, 0, max_ic, " + STRADDR(dest_pc) + ");");
-		add_code("max_ic = rv.max_ic;}");
+		add_code("retvals = " + target_func + "(cpu, 0, max_ic, " + STRADDR(dest_pc) + ");");
+		add_code("max_ic = retvals.max_ic;");
 	}
 
 	// Restore the registers
@@ -749,10 +749,10 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 	// Hope and pray that the next PC is local to this block
 	if (!tinfo.ignore_instruction_limit) {
 		add_code("if (" + LOOP_EXPRESSION + ") { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
-		add_code("return (ReturnValues){ic, max_ic};");
+		add_code("RETURN_VALUES(ic, max_ic);");
 	} else {
 		add_code("if (max_ic) { pc = cpu->pc; goto " + this->func + "_jumptbl; }");
-		add_code("return (ReturnValues){0, 0};");
+		add_code("RETURN_VALUES(0, 0);");
 	}
 	return true;
 }
@@ -800,22 +800,22 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_a
 						"if (ic >= max_ic) {\n"
 						"  STORE_NON_SYS_REGS_" + this->func + "();\n"
 						"}\n"
-						"  return (ReturnValues){ic, max_ic};\n"
+						"  RETURN_VALUES(ic, max_ic);\n"
 						"}\n";
 			} else {
 				code += "max_ic = MAX_COUNTER(cpu);\n"
 						"if (max_ic == 0) {\n"
 						"  STORE_NON_SYS_REGS_" + this->func + "();\n"
 						"}\n"
-						"  return (ReturnValues){0, max_ic};\n"
+						"  RETURN_VALUES(0, max_ic);\n"
 						"}\n";
 			}
 		}
 		else if (!tinfo.ignore_instruction_limit) {
-			code += "  return (ReturnValues){ic, MAX_COUNTER(cpu)};\n"
+			code += "  RETURN_VALUES(ic, MAX_COUNTER(cpu));\n"
 					"}\n";
 		} else {
-			code += "  return (ReturnValues){0, MAX_COUNTER(cpu)};\n"
+			code += "  RETURN_VALUES(0, MAX_COUNTER(cpu));\n"
 					"}\n";
 		}
 	}
@@ -833,11 +833,11 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_a
 				code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
 				code += "}\n";
 			}
-			code += "  cpu->pc += 4; return (ReturnValues){ic, MAX_COUNTER(cpu)};}\n"; // Correct for +4 expectation outside of bintr
+			code += "  cpu->pc += 4; RETURN_VALUES(ic, MAX_COUNTER(cpu));}\n"; // Correct for +4 expectation outside of bintr
 			code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
 		} else {
 			code += "if (UNLIKELY(do_syscall(cpu, 0, max_ic, " + syscall_reg + "))) {\n";
-			code += "  cpu->pc += 4; return (ReturnValues){0, MAX_COUNTER(cpu)};}\n";
+			code += "  cpu->pc += 4; RETURN_VALUES(0, MAX_COUNTER(cpu));}\n";
 		}
 	}
 	if (clobber_all) {
@@ -913,7 +913,7 @@ void Emitter<W>::emit()
 			// counting instructions correctly for this case.
 			code.append("goto " + FUNCLABEL(this->pc() + 2) + "_skip;\n");
 			code.append(FUNCLABEL(this->pc() + 2) + ":;\n");
-			code.append("api.exception(cpu, " + STRADDR(this->pc() + 2) + ", MISALIGNED_INSTRUCTION); return (ReturnValues){0, 0};\n");
+			code.append("api.exception(cpu, " + STRADDR(this->pc() + 2) + ", MISALIGNED_INSTRUCTION); RETURN_VALUES(0, 0);\n");
 			code.append(FUNCLABEL(this->pc() + 2) + "_skip:;\n");
 			this->reset_all_tracked_registers();
 		}
@@ -961,7 +961,7 @@ void Emitter<W>::emit()
 				if (m_zero_insn_counter <= 1 || compressed_instr != 0x0) {
 					code += "api.exception(cpu, " + STRADDR(this->pc()) + ", ILLEGAL_OPCODE);\n";
 					if (tinfo.is_libtcc) {
-						code += "return (ReturnValues){0, 0};\n";
+						code += "RETURN_VALUES(0, 0);\n";
 					}
 				}
 				this->reset_all_tracked_registers();
@@ -1623,7 +1623,7 @@ void Emitter<W>::emit()
 					code += "cpu->pc = " + PCRELS(0) + ";\n";
 					if (tinfo.is_libtcc) {
 						code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
-						code += "  return (ReturnValues){0, 0};\n";
+						code += "  RETURN_VALUES(0, 0);\n";
 					} else {
 						code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 					}
@@ -1645,7 +1645,7 @@ void Emitter<W>::emit()
 				code += "MAX_COUNTER(cpu) = max_ic;\n";
 				if (tinfo.is_libtcc) {
 					code += "if (api.system(cpu, " + std::to_string(instr.whole) +"))\n";
-					code += "  return (ReturnValues){0, 0};\n";
+					code += "  RETURN_VALUES(0, 0);\n";
 				} else {
 					code += "api.system(cpu, " + std::to_string(instr.whole) +");\n";
 				}
@@ -2320,6 +2320,8 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	// Function header
 	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t ic, uint64_t max_ic, addr_t pc) {\n";
+	// Single scratch object shared by every exit point (see RETURN_VALUES)
+	code += "ReturnValues retvals;\n";
 
 	// Function GPRs
 	if (tinfo.use_register_caching) {
@@ -2375,7 +2377,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + ";\n";
 		}
 	}
-	code += "  cpu->pc = pc; return (ReturnValues){ic, max_ic};\n";
+	code += "  cpu->pc = pc; RETURN_VALUES(ic, max_ic);\n";
 	code += "}\n";
 
 	// Function code
