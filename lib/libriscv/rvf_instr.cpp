@@ -362,8 +362,17 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // fp32
+			const bool divide_by_zero = (rs1.i32[0] & 0x7fffffffu) != 0
+				&& (rs1.i32[0] & 0x7f800000u) != 0x7f800000u
+				&& (rs2.i32[0] & 0x7fffffffu) == 0;
 			dst.set_float(rs1.f32[0] / rs2.f32[0]);
 			fsflags(cpu, (double)(rs1.f32[0]) / (double)(rs2.f32[0]), dst.f32[0]);
+#ifdef RISCV_FCSR
+			if constexpr (fcsr_emulation) {
+				if (divide_by_zero)
+					cpu.registers().fcsr().fflags |= 8;
+			}
+#endif
 		} else if (fi.R4type.funct2 == 0x1) { // fp64
 			dst.f64 = rs1.f64 / rs2.f64;
 			fsflags(cpu, (long double)(rs1.f64) / (long double)(rs2.f64), dst.f64);

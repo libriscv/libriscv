@@ -560,7 +560,14 @@ INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
+		const bool divide_by_zero = (rs1.i32[0] & 0x7fffffffu) != 0
+			&& (rs1.i32[0] & 0x7f800000u) != 0x7f800000u
+			&& (rs2.i32[0] & 0x7fffffffu) == 0;
 		dst.set_float(rs1.f32[0] / rs2.f32[0]);
+		if constexpr (fcsr_emulation) {
+			if (divide_by_zero)
+				CPU().registers().fcsr().fflags |= 8;
+		}
 	}
 	else
 	{ // float64

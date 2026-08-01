@@ -1983,7 +1983,10 @@ void Emitter<W>::emit()
 				} break;
 			case RV32F__FDIV:
 				if (fi.R4type.funct2 == 0x0) { // fp32
-					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0] / " + rs2 + ".f32[0]);\n";
+					const std::string a = rs1 + ".i32[0]";
+					const std::string b = rs2 + ".i32[0]";
+					const std::string dz = "(((" + a + " & 0x7fffffffu) != 0) && ((" + a + " & 0x7f800000u) != 0x7f800000u) && ((" + b + " & 0x7fffffffu) == 0))";
+					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0] / " + rs2 + ".f32[0]); if (" + dz + ") cpu->fcsr |= 8;\n";
 					this->penalty(10); // divf is a slow operation
 				} else { // fp64
 					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 / " + rs2 + ".f64);\n";
