@@ -1970,6 +1970,16 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FADD:
+				if (fi.R4type.funct2 == 0x0) {
+					const std::string a = rs1 + ".i32[0]";
+					const std::string b = rs2 + ".i32[0]";
+					const std::string qnan = "(((" + a + " & 0x7fc00000u) == 0x7fc00000u) || ((" + b + " & 0x7fc00000u) == 0x7fc00000u))";
+					const std::string snan = "((((" + a + " & 0x7fc00000u) == 0x7f800000u) && ((" + a + " & 0x003fffffu) != 0)) || (((" + b + " & 0x7fc00000u) == 0x7f800000u) && ((" + b + " & 0x003fffffu) != 0)))";
+					code += "if (" + qnan + " && !" + snan + ") load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", " + rs1 + ".f32[0] + " + rs2 + ".f32[0]);\n";
+				} else {
+					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 + " + rs2 + ".f64);\n";
+				}
+				break;
 			case RV32F__FSUB:
 			case RV32F__FMUL: {
 				std::string fop = " + ";

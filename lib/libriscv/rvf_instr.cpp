@@ -278,8 +278,13 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			dst.set_float(rs1.f32[0] + rs2.f32[0]);
-			fsflags(cpu, (double)(rs1.f32[0]) + (double)(rs2.f32[0]), dst.f32[0]);
+			if ((std::isnan(rs1.f32[0]) || std::isnan(rs2.f32[0]))
+				&& !is_signaling_nan(rs1.f32[0]) && !is_signaling_nan(rs2.f32[0])) {
+				dst.load_u32(CANONICAL_NAN_F32);
+			} else {
+				dst.set_float(rs1.f32[0] + rs2.f32[0]);
+				fsflags(cpu, (double)(rs1.f32[0]) + (double)(rs2.f32[0]), dst.f32[0]);
+			}
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 + rs2.f64;
 			fsflags(cpu, (long double)(rs1.f64) + (long double)(rs2.f64), dst.f64);
