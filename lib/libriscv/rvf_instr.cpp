@@ -9,24 +9,28 @@ namespace riscv
 	static constexpr uint64_t CANONICAL_NAN_F64 = 0x7ff8000000000000;
 
 	// Round a float/double per the RISC-V rounding mode (funct3 of the FCVT
-	// instruction) and convert to the destination integer type T. The plain
-	// C++ cast used previously only implements RTZ (truncation), which is wrong
-	// for the round-to-nearest modes used by e.g. std::lround/std::rint.
-	template <typename T, typename F>
-	static inline T fcvt_to_integer(F value, unsigned rm) {
+	// instruction).
+	template <typename F>
+	static inline F fcvt_round(F value, unsigned rm) {
 		switch (rm) {
 		case 0x1: // RTZ: round toward zero
-			return T(std::trunc(value));
+			return std::trunc(value);
 		case 0x2: // RDN: round down (toward -inf)
-			return T(std::floor(value));
+			return std::floor(value);
 		case 0x3: // RUP: round up (toward +inf)
-			return T(std::ceil(value));
+			return std::ceil(value);
 		case 0x4: // RMM: round to nearest, ties away from zero
-			return T(std::round(value));
+			return std::round(value);
 		case 0x0: // RNE: round to nearest, ties to even
 		default:  // reserved/invalid modes: nearest-even as the default
-			return T(std::nearbyint(value));
+			return std::nearbyint(value);
 		}
+	}
+
+	// Convert a rounded floating-point value to the destination integer type.
+	template <typename T, typename F>
+	static inline T fcvt_to_integer(F value, unsigned rm) {
+		return T(fcvt_round(value, rm));
 	}
 
 	// A signaling NaN has an all-ones exponent, a clear quiet bit and a non-zero
@@ -633,9 +637,20 @@ namespace riscv
 			break;
 		case 0x1: // from float64
 			switch (fi.R4type.rs2) {
-			case 0x0: // FCVT.W.D
-				dst = fcvt_to_integer<int32_t>(rs1.f64, rmm);
+			case 0x0: { // FCVT.W.D
+				const double rounded = fcvt_round(rs1.f64, rmm);
+				if (std::isnan(rounded) || rounded < -2147483648.0 || rounded > 2147483647.0) {
+					dst = (std::isnan(rounded) || rounded > 2147483647.0)
+						? int32_t(2147483647) : int32_t(-2147483647 - 1);
+#ifdef RISCV_FCSR
+					if constexpr (fcsr_emulation)
+						cpu.registers().fcsr().fflags |= 16;
+#endif
+				} else {
+					dst = int32_t(rounded);
+				}
 				return;
+			}
 			case 0x1: // FCVT.WU.D (sign-extended 32-bit result)
 				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f64, rmm));
 				return;
