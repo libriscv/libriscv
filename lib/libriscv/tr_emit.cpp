@@ -1940,7 +1940,7 @@ void Emitter<W>::emit()
 					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x1: // FLT.S
-					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += "if ((((" + rs1 + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x007fffffu)) || ((" + rs2 + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + rs2 + ".i32[0] & 0x007fffffu)))) cpu->fcsr |= 0x10; " + to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x2: // FEQ.S
 					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] == " + rs2 + ".f32[0]) ? 1 : 0;\n";
