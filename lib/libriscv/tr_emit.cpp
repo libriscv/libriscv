@@ -2004,10 +2004,10 @@ void Emitter<W>::emit()
 				break;
 			case RV32F__FSQRT:
 				if (fi.R4type.funct2 == 0x0) { // fp32
-					code += "if ((" + rs1 + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x007fffffu)) { " + dst + ".i32[0] = 0x7fc00000u; " + dst + ".i32[1] = ~0u; if (!(" + rs1 + ".i32[0] & 0x00400000u)) cpu->fcsr |= 0x10; } else set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
+					code += "if ((" + rs1 + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x007fffffu)) { " + dst + ".i32[0] = 0x7fc00000u; " + dst + ".i32[1] = ~0u; if (!(" + rs1 + ".i32[0] & 0x00400000u)) cpu->fcsr |= 0x10; } else if (" + rs1 + ".f32[0] < 0.0f) { " + dst + ".i32[0] = 0x7fc00000u; " + dst + ".i32[1] = ~0u; cpu->fcsr |= 0x10; } else set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
 					this->penalty(10); // sqrtf is a slow operation
 				} else { // fp64
-					code += "if ((" + rs1 + ".i64 & 0x7ff0000000000000ull) == 0x7ff0000000000000ull && (" + rs1 + ".i64 & 0x000fffffffffffffull)) { " + dst + ".i64 = 0x7ff8000000000000ull; if (!(" + rs1 + ".i64 & 0x0008000000000000ull)) cpu->fcsr |= 0x10; } else set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
+					code += "if ((" + rs1 + ".i64 & 0x7ff0000000000000ull) == 0x7ff0000000000000ull && (" + rs1 + ".i64 & 0x000fffffffffffffull)) { " + dst + ".i64 = 0x7ff8000000000000ull; if (!(" + rs1 + ".i64 & 0x0008000000000000ull)) cpu->fcsr |= 0x10; } else if (" + rs1 + ".f64 < 0.0) { " + dst + ".i64 = 0x7ff8000000000000ull; cpu->fcsr |= 0x10; } else set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
 					this->penalty(15); // sqrtd is a slow operation
 				}
 				break;
