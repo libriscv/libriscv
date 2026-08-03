@@ -1928,6 +1928,40 @@ void Emitter<W>::emit()
 			const auto dst = from_fpreg(fi.R4type.rd);
 			const auto rs1 = from_fpreg(fi.R4type.rs1);
 			const auto rs2 = from_fpreg(fi.R4type.rs2);
+			const bool f32 = (fi.R4type.funct2 == 0x0);
+			// Operand predicates for the fcsr flag code below. A NaN has an
+			// all-ones exponent and a non-zero payload; a signaling NaN also has
+			// the quiet bit clear. Everything that uses these is emitted only
+			// under fcsr_emulation: a scripting guest that never reads fflags
+			// should not pay for the tests on every FP instruction.
+			auto is_nan = [] (const std::string& r, bool is_f32) -> std::string {
+				if (is_f32)
+					return "((" + r + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + r + ".i32[0] & 0x007fffffu) != 0)";
+				return "((" + r + ".i64 & 0x7ff0000000000000ull) == 0x7ff0000000000000ull && (" + r + ".i64 & 0x000fffffffffffffull) != 0)";
+			};
+			auto is_snan = [] (const std::string& r, bool is_f32) -> std::string {
+				if (is_f32)
+					return "((" + r + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + r + ".i32[0] & 0x003fffffu) != 0)";
+				return "((" + r + ".i64 & 0x7ff8000000000000ull) == 0x7ff0000000000000ull && (" + r + ".i64 & 0x0007ffffffffffffull) != 0)";
+			};
+			auto raise_nv = [] (const std::string& cond) -> std::string {
+				return "if (" + cond + ") cpu->fcsr |= 0x10;\n";
+			};
+			// Emit `dst = <expr>`. Spec §11.3 wants a NaN result to be the
+			// canonical quiet NaN rather than the payload-propagating one the
+			// host FPU produces, which again is only worth a branch when the
+			// guest is looking at the FCSR.
+			auto emit_arith = [&] (const std::string& expr, bool is_f32) -> std::string {
+				if constexpr (fcsr_emulation) {
+					if (is_f32)
+						return "{ const float fr = " + expr + "; if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr); }\n";
+					return "{ const double dr = " + expr + "; if (dr != dr) load_dbl(&" + dst + ", 0x7ff8000000000000ull); else set_dbl(&" + dst + ", dr); }\n";
+				} else {
+					if (is_f32)
+						return "set_fl(&" + dst + ", " + expr + ");\n";
+					return "set_dbl(&" + dst + ", " + expr + ");\n";
+				}
+			};
 			if (fi.R4type.funct2 < 0x2) { // fp32 / fp64
 			switch (instr.fpfunc()) {
 			case RV32F__FEQ_LT_LE:
@@ -1935,12 +1969,22 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 					break;
 				}
+				// FLE/FLT are signaling compares: any NaN operand raises NV. FEQ is
+				// a quiet compare and only raises NV for a signaling NaN. All of
+				// them already yield 0 for unordered operands in plain C.
+				if constexpr (fcsr_emulation) {
+					const unsigned op = fi.R4type.funct3 | (fi.R4type.funct2 << 4);
+					if (op == 0x2 || op == 0x12) // FEQ.S / FEQ.D
+						code += raise_nv(is_snan(rs1, f32) + " || " + is_snan(rs2, f32));
+					else if (op <= 0x1 || (op >= 0x10 && op <= 0x11))
+						code += raise_nv(is_nan(rs1, f32) + " || " + is_nan(rs2, f32));
+				}
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FLE.S
 					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] <= " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x1: // FLT.S
-					code += "if ((((" + rs1 + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x007fffffu)) || ((" + rs2 + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + rs2 + ".i32[0] & 0x007fffffu)))) cpu->fcsr |= 0x10; " + to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
+					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] < " + rs2 + ".f32[0]) ? 1 : 0;\n";
 					break;
 				case 0x2: // FEQ.S
 					code += to_reg(fi.R4type.rd) + " = (" + rs1 + ".f32[0] == " + rs2 + ".f32[0]) ? 1 : 0;\n";
@@ -1965,12 +2009,20 @@ void Emitter<W>::emit()
 				// (std::fmin/fmax leave the ±0 case implementation-
 				// defined; the host's fminf/fmaxf would otherwise return
 				// a sign that disagrees with the spec).
+				// A signaling NaN operand raises NV; a quiet one does not. The
+				// api callbacks below already return the finite operand, or the
+				// canonical qNaN when both are NaN.
+				if constexpr (fcsr_emulation) {
+					const unsigned op = fi.R4type.funct3 | (fi.R4type.funct2 << 4);
+					if (op <= 0x1 || (op >= 0x10 && op <= 0x11))
+						code += raise_nv(is_snan(rs1, f32) + " || " + is_snan(rs2, f32));
+				}
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FMIN.S
-					code += "if ((((" + rs1 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x003fffffu)) || ((" + rs2 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs2 + ".i32[0] & 0x003fffffu))) cpu->fcsr |= 0x10; set_fl(&" + dst + ", api.fmin32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "set_fl(&" + dst + ", api.fmin32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x1: // FMAX.S
-					code += "if ((((" + rs1 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x003fffffu)) || ((" + rs2 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs2 + ".i32[0] & 0x003fffffu))) cpu->fcsr |= 0x10; set_fl(&" + dst + ", api.fmax32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "set_fl(&" + dst + ", api.fmax32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x10: // FMIN.D
 					code += "set_dbl(&" + dst + ", api.fmin64_rv(" + rs1 + ".f64, " + rs2 + ".f64));\n";
@@ -1982,56 +2034,80 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FADD:
-				if (fi.R4type.funct2 == 0x0) {
-					const std::string a = rs1 + ".i32[0]";
-					const std::string b = rs2 + ".i32[0]";
-					const std::string qnan = "(((" + a + " & 0x7fc00000u) == 0x7fc00000u) || ((" + b + " & 0x7fc00000u) == 0x7fc00000u))";
-					const std::string snan = "((((" + a + " & 0x7fc00000u) == 0x7f800000u) && ((" + a + " & 0x003fffffu) != 0)) || (((" + b + " & 0x7fc00000u) == 0x7f800000u) && ((" + b + " & 0x003fffffu) != 0)))";
-					code += "if (" + qnan + " && !" + snan + ") load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", " + rs1 + ".f32[0] + " + rs2 + ".f32[0]);\n";
-				} else {
-					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 + " + rs2 + ".f64);\n";
-				}
-				break;
 			case RV32F__FSUB: {
-				std::string fop = " + ";
-				if (instr.fpfunc() == RV32F__FSUB) fop = " - ";
-				if (fi.R4type.funct2 == 0x0) { // fp32
-					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0]" + fop + rs2 + ".f32[0]);\n";
-				} else { // fp64
-					code += "set_dbl(&" + dst + ", " + rs1 + ".f64" + fop + rs2 + ".f64);\n";
-				}
+				const std::string fop = (instr.fpfunc() == RV32F__FSUB) ? " - " : " + ";
+				if (f32)
+					code += emit_arith(rs1 + ".f32[0]" + fop + rs2 + ".f32[0]", true);
+				else
+					code += emit_arith(rs1 + ".f64" + fop + rs2 + ".f64", false);
 				} break;
 			case RV32F__FMUL:
-				if (fi.R4type.funct2 == 0x0) {
-					const std::string a = rs1 + ".i32[0]";
-					const std::string b = rs2 + ".i32[0]";
-					const std::string result = dst + ".i32[0]";
-					const std::string finite = "(((" + a + " & 0x7f800000u) != 0x7f800000u) && ((" + b + " & 0x7f800000u) != 0x7f800000u))";
-					code += "{ const float result = " + rs1 + ".f32[0] * " + rs2 + ".f32[0]; set_fl(&" + dst + ", result); if (" + finite + ") { if (((" + result + " & 0x7fffffffu) & 0x7f800000u) == 0x7f800000u && ((" + result + " & 0x007fffffu) == 0)) cpu->fcsr |= 5; else if ((" + result + " & 0x7fffffffu) < 0x00800000u && (double)" + rs1 + ".f32[0] * (double)" + rs2 + ".f32[0] != result) cpu->fcsr |= 3; } }\n";
-				} else {
-					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 * " + rs2 + ".f64);\n";
+				// Finite operands that produce an infinity overflowed; finite
+				// operands that produce an inexact subnormal underflowed. Both
+				// imply NX. The operands are read into locals first, because rd
+				// is allowed to alias rs1/rs2.
+				if constexpr (fcsr_emulation) {
+					if (f32) {
+						code += "{ const uint32_t ia = " + rs1 + ".i32[0], ib = " + rs2 + ".i32[0];"
+							" const float fa = " + rs1 + ".f32[0], fb = " + rs2 + ".f32[0];"
+							" const float fr = fa * fb;"
+							" if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr);"
+							" if ((ia & 0x7f800000u) != 0x7f800000u && (ib & 0x7f800000u) != 0x7f800000u) {"
+							" const uint32_t ir = " + dst + ".i32[0] & 0x7fffffffu;"
+							" if (ir == 0x7f800000u) cpu->fcsr |= 5;"
+							" else if (ir < 0x00800000u && (double)fa * (double)fb != fr) cpu->fcsr |= 3; } }\n";
+						break;
+					}
 				}
+				code += emit_arith(f32 ? (rs1 + ".f32[0] * " + rs2 + ".f32[0]")
+									   : (rs1 + ".f64 * " + rs2 + ".f64"), f32);
 				break;
 			case RV32F__FDIV:
-				if (fi.R4type.funct2 == 0x0) { // fp32
-					const std::string a = rs1 + ".i32[0]";
-					const std::string b = rs2 + ".i32[0]";
-					const std::string dz = "(((" + a + " & 0x7fffffffu) != 0) && ((" + a + " & 0x7f800000u) != 0x7f800000u) && ((" + b + " & 0x7fffffffu) == 0))";
-					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0] / " + rs2 + ".f32[0]); if (" + dz + ") cpu->fcsr |= 8;\n";
-					this->penalty(10); // divf is a slow operation
-				} else { // fp64
-					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 / " + rs2 + ".f64);\n";
-					this->penalty(15); // divd is a slow operation
+				// DZ is only for a finite non-zero numerator over zero: 0/0 is
+				// NV and inf/0 is exact.
+				if constexpr (fcsr_emulation) {
+					if (f32) {
+						code += "{ const uint32_t ia = " + rs1 + ".i32[0], ib = " + rs2 + ".i32[0];"
+							" const float fr = " + rs1 + ".f32[0] / " + rs2 + ".f32[0];"
+							" if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr);"
+							" if ((ia & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u"
+							" && (ib & 0x7fffffffu) == 0) cpu->fcsr |= 8; }\n";
+					} else {
+						code += "{ const uint64_t ia = " + rs1 + ".i64, ib = " + rs2 + ".i64;"
+							" const double dr = " + rs1 + ".f64 / " + rs2 + ".f64;"
+							" if (dr != dr) load_dbl(&" + dst + ", 0x7ff8000000000000ull); else set_dbl(&" + dst + ", dr);"
+							" if ((ia & 0x7fffffffffffffffull) != 0 && (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull"
+							" && (ib & 0x7fffffffffffffffull) == 0) cpu->fcsr |= 8; }\n";
+					}
+				} else {
+					code += emit_arith(f32 ? (rs1 + ".f32[0] / " + rs2 + ".f32[0]")
+										   : (rs1 + ".f64 / " + rs2 + ".f64"), f32);
 				}
+				this->penalty(f32 ? 10 : 15); // division is a slow operation
 				break;
 			case RV32F__FSQRT:
-				if (fi.R4type.funct2 == 0x0) { // fp32
-					code += "if ((" + rs1 + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x007fffffu)) { " + dst + ".i32[0] = 0x7fc00000u; " + dst + ".i32[1] = ~0u; if (!(" + rs1 + ".i32[0] & 0x00400000u)) cpu->fcsr |= 0x10; } else if (" + rs1 + ".f32[0] < 0.0f) { " + dst + ".i32[0] = 0x7fc00000u; " + dst + ".i32[1] = ~0u; cpu->fcsr |= 0x10; } else set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
-					this->penalty(10); // sqrtf is a slow operation
-				} else { // fp64
-					code += "if ((" + rs1 + ".i64 & 0x7ff0000000000000ull) == 0x7ff0000000000000ull && (" + rs1 + ".i64 & 0x000fffffffffffffull)) { " + dst + ".i64 = 0x7ff8000000000000ull; if (!(" + rs1 + ".i64 & 0x0008000000000000ull)) cpu->fcsr |= 0x10; } else if (" + rs1 + ".f64 < 0.0) { " + dst + ".i64 = 0x7ff8000000000000ull; cpu->fcsr |= 0x10; } else set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
-					this->penalty(15); // sqrtd is a slow operation
+				// sqrt of a NaN or of a negative number is the canonical qNaN.
+				// It is an invalid operation for a negative input or a signaling
+				// NaN, but *not* for a quiet NaN. The invalid-flag condition is
+				// evaluated before the store, since rd may alias rs1.
+				if constexpr (fcsr_emulation) {
+					if (f32) {
+						code += "{ const int inv = " + is_snan(rs1, true) + " || " + rs1 + ".f32[0] < 0.0f;"
+							" if (" + is_nan(rs1, true) + " || " + rs1 + ".f32[0] < 0.0f)"
+							" { load_fl(&" + dst + ", 0x7fc00000u); if (inv) cpu->fcsr |= 0x10; }"
+							" else set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0])); }\n";
+					} else {
+						code += "{ const int inv = " + is_snan(rs1, false) + " || " + rs1 + ".f64 < 0.0;"
+							" if (" + is_nan(rs1, false) + " || " + rs1 + ".f64 < 0.0)"
+							" { load_dbl(&" + dst + ", 0x7ff8000000000000ull); if (inv) cpu->fcsr |= 0x10; }"
+							" else set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64)); }\n";
+					}
+				} else if (f32) {
+					code += "set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
+				} else {
+					code += "set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
 				}
+				this->penalty(f32 ? 10 : 15); // sqrt is a slow operation
 				break;
 			case RV32F__FSGNJ_NX:
 				switch (fi.R4type.funct3) {
@@ -2069,41 +2145,26 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FCVT_SD_W: {
-				if (fi.R4type.funct2 == 0x0) {
-					// FCVT.S.[LWU]
-					switch (fi.R4type.rs2) {
-					case 0x0: // FCVT.S.W
-						code += "{ int32_t v = (int32_t)" + from_reg(fi.R4type.rs1) + "; uint32_t m = v < 0 ? 0u - (uint32_t)v : (uint32_t)v; unsigned b = m ? 32u - api.clz(m) : 0; if (b > 24u && (m & ((1u << (b - 24u)) - 1))) cpu->fcsr |= 1; set_fl(&" + dst + ", v); }\n";
-						break;
-					case 0x1: // FCVT.S.WU
-						code += "set_fl(&" + dst + ", (uint32_t)" + from_reg(fi.R4type.rs1) + ");\n";
-						break;
-					case 0x2: // FCVT.S.L
-						code += "set_fl(&" + dst + ", (int64_t)" + from_reg(fi.R4type.rs1) + ");\n";
-						break;
-					case 0x3: // FCVT.S.LU
-						code += "set_fl(&" + dst + ", (uint64_t)" + from_reg(fi.R4type.rs1) + ");\n";
-						break;
-					default:
-						UNKNOWN_INSTRUCTION();
-					}
-				} else if (fi.R4type.funct2 == 0x1) {
-					// FCVT.D.[LWU]
-					switch (fi.R4type.rs2) {
-					case 0x0: // FCVT.D.W
-						code += "set_dbl(&" + dst + ", (int32_t)" + from_reg(fi.R4type.rs1) + ");\n";
-						break;
-					case 0x1: // FCVT.D.WU
-						code += "set_dbl(&" + dst + ", (uint32_t)" + from_reg(fi.R4type.rs1) + ");\n";
-						break;
-					case 0x2: // FCVT.D.L
-						code += "{ int64_t v = (int64_t)" + from_reg(fi.R4type.rs1) + "; uint64_t m = v < 0 ? 0ull - (uint64_t)v : (uint64_t)v; unsigned b = m ? 64u - api.clzl(m) : 0; if (b > 53u && (m & ((1ull << (b - 53u)) - 1))) cpu->fcsr |= 1; set_dbl(&" + dst + ", v); }\n";
-						break;
-					case 0x3: // FCVT.D.LU
-						code += "set_dbl(&" + dst + ", (uint64_t)" + from_reg(fi.R4type.rs1) + ");\n";
-						break;
-					default:
-						UNKNOWN_INSTRUCTION();
+				if (fi.R4type.funct2 < 0x2 && fi.R4type.rs2 < 0x4) {
+					// FCVT.{S,D}.[LWU]
+					static const std::array<const char*, 4> int_type {
+						"int32_t", "uint32_t", "int64_t", "uint64_t"
+					};
+					const std::string itype = int_type[fi.R4type.rs2];
+					const std::string value =
+						"(" + itype + ")" + from_reg(fi.R4type.rs1);
+					const std::string setter = f32 ? "set_fl" : "set_dbl";
+					if constexpr (fcsr_emulation) {
+						// NX when the destination mantissa was too narrow for the
+						// integer. long double is exact for any 64-bit integer
+						// where it is an 80- or 128-bit format; where it is only
+						// double, the 64-bit sources just never report NX.
+						code += "{ const " + itype + " iv = " + value + ";"
+							" const " + (f32 ? "float" : "double") + " fv = iv;"
+							" if ((long double)fv != (long double)iv) cpu->fcsr |= 1;"
+							" " + setter + "(&" + dst + ", fv); }\n";
+					} else {
+						code += setter + "(&" + dst + ", " + value + ");\n";
 					}
 				} else {
 					UNKNOWN_INSTRUCTION();
@@ -2147,36 +2208,49 @@ void Emitter<W>::emit()
 						}
 						rounded = std::string(rfn) + "(" + src + ")";
 					}
-					std::string expr;
+					// Converting an out-of-range float to an integer is undefined
+					// behavior in C, and this code is handed to a C compiler, so
+					// the range check is not optional. RISC-V pins the result to
+					// the destination's extreme (NaN and positive overflow give
+					// the maximum, negative overflow the minimum) and raises NV.
+					// The bounds are powers of two, hence exactly representable.
+					const char *lower = "0.0", *upper = "0.0";
+					const char *maxval = "0", *minval = "0", *cast = "";
 					switch (fi.R4type.rs2) {
 					case 0x0: // FCVT.W (int32, sign-extended)
-						if (from_float) {
-							code += "{ const float rounded = " + rounded + "; if (rounded != rounded || rounded < -2147483648.0f || rounded >= 2147483648.0f) { " + to_reg(fi.R4type.rd) + " = (rounded != rounded || rounded >= 2147483648.0f) ? 2147483647 : (-2147483647 - 1); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)rounded; }\n";
-						} else {
-							code += "{ const double rounded = " + rounded + "; if (rounded != rounded || rounded < -2147483648.0 || rounded > 2147483647.0) { " + to_reg(fi.R4type.rd) + " = (rounded != rounded || rounded > 2147483647.0) ? 2147483647 : (-2147483647 - 1); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)rounded; }\n";
-						}
+						lower = "-2147483648.0"; upper = "2147483648.0";
+						maxval = "(int32_t)2147483647"; minval = "(int32_t)(-2147483647 - 1)";
+						cast = "(int32_t)";
 						break;
 					case 0x1: // FCVT.WU (uint32 result, sign-extended to XLEN)
-						if (from_float) {
-							code += "{ const float rounded = " + rounded + "; if (rounded != rounded || rounded < 0.0f || rounded >= 4294967296.0f) { " + to_reg(fi.R4type.rd) + " = (int32_t)((rounded != rounded || rounded >= 4294967296.0f) ? 0xffffffffu : 0u); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)(uint32_t)rounded; }\n";
-						} else {
-							expr = "(int32_t)(uint32_t)" + rounded;
-						}
+						lower = "0.0"; upper = "4294967296.0";
+						maxval = "(int32_t)0xffffffffu"; minval = "(int32_t)0";
+						cast = "(int32_t)(uint32_t)";
 						break;
 					case 0x2: // FCVT.L (int64)
-						expr = "(int64_t)" + rounded;
+						lower = "-9223372036854775808.0"; upper = "9223372036854775808.0";
+						maxval = "(int64_t)9223372036854775807ll";
+						minval = "(int64_t)(-9223372036854775807ll - 1)";
+						cast = "(int64_t)";
 						break;
 					case 0x3: // FCVT.LU (uint64)
-						expr = "(uint64_t)" + rounded;
+						lower = "0.0"; upper = "18446744073709551616.0";
+						maxval = "(uint64_t)18446744073709551615ull"; minval = "(uint64_t)0";
+						cast = "(uint64_t)";
 						break;
-					default:
-						break; // Reserved rs2 encoding: no expression
-					}
-					if (!expr.empty())
-						code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
-					// FCVT.W (both widths) and FCVT.WU.S emit their own code above
-					else if (fi.R4type.rs2 != 0 && !(from_float && fi.R4type.rs2 == 1))
+					default: // Reserved rs2 encoding
 						UNKNOWN_INSTRUCTION();
+						break;
+					}
+					if (fi.R4type.rs2 < 0x4) {
+						const std::string reg = to_reg(fi.R4type.rd);
+						code += "{ const double fcvt_r = " + rounded + ";"
+							" if (!(fcvt_r >= " + lower + " && fcvt_r < " + upper + ")) {"
+							" " + reg + " = (fcvt_r != fcvt_r || fcvt_r >= " + upper + ") ? "
+							+ maxval + " : " + minval + ";"
+							+ (fcsr_emulation ? " cpu->fcsr |= 16;" : "")
+							+ " } else " + reg + " = " + cast + "fcvt_r; }\n";
+					}
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}

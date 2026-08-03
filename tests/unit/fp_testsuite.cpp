@@ -261,3 +261,209 @@ TEST_CASE("Compute PI slowly", "[Verification]")
 
 	REQUIRE(machine.return_value() == 0);
 }
+
+TEST_CASE("FCVT clamps out-of-range conversions", "[Verification]")
+{
+	// Converting an out-of-range float to an integer is undefined behavior in
+	// C++, so both the interpreter and the code emitter have to range-check
+	// before the cast. RISC-V pins the result to the destination's extreme:
+	// NaN and positive overflow give the maximum, negative overflow the
+	// minimum, and an unsigned destination gives 0 for anything negative.
+	const auto binary = build_and_load(R"M(
+	#define CVT(name, insn, ctype, ftype) \
+		ctype name(ftype x) { ctype r; \
+			__asm__ volatile(insn " %0, %1, rtz" : "=r"(r) : "f"(x)); return r; }
+
+	CVT(w_s,  "fcvt.w.s",  int,           float)
+	CVT(wu_s, "fcvt.wu.s", unsigned,      float)
+	CVT(l_s,  "fcvt.l.s",  long,          float)
+	CVT(lu_s, "fcvt.lu.s", unsigned long, float)
+	CVT(w_d,  "fcvt.w.d",  int,           double)
+	CVT(wu_d, "fcvt.wu.d", unsigned,      double)
+	CVT(l_d,  "fcvt.l.d",  long,          double)
+	CVT(lu_d, "fcvt.lu.d", unsigned long, double)
+
+	int main() { return 0; }
+	)M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls();
+	machine.setup_linux({"fcvt"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	machine.simulate(MAX_INSTRUCTIONS);
+	REQUIRE(machine.return_value() == 0);
+
+	const float  fnan = __builtin_nanf("");
+	const double dnan = __builtin_nan("");
+
+	// float32 sources
+	for (float x : { 1e30f, __builtin_inff(), fnan }) {
+		machine.vmcall("w_s", x);
+		REQUIRE(machine.return_value<int32_t>() == INT32_MAX);
+		machine.vmcall("l_s", x);
+		REQUIRE(machine.return_value<int64_t>() == INT64_MAX);
+		machine.vmcall("wu_s", x);
+		REQUIRE(machine.return_value<uint32_t>() == UINT32_MAX);
+		machine.vmcall("lu_s", x);
+		REQUIRE(machine.return_value<uint64_t>() == UINT64_MAX);
+	}
+	for (float x : { -1e30f, -__builtin_inff() }) {
+		machine.vmcall("w_s", x);
+		REQUIRE(machine.return_value<int32_t>() == INT32_MIN);
+		machine.vmcall("l_s", x);
+		REQUIRE(machine.return_value<int64_t>() == INT64_MIN);
+		machine.vmcall("wu_s", x);
+		REQUIRE(machine.return_value<uint32_t>() == 0u);
+		machine.vmcall("lu_s", x);
+		REQUIRE(machine.return_value<uint64_t>() == 0u);
+	}
+	// float64 sources
+	for (double x : { 1e300, __builtin_inf(), dnan }) {
+		machine.vmcall("w_d", x);
+		REQUIRE(machine.return_value<int32_t>() == INT32_MAX);
+		machine.vmcall("l_d", x);
+		REQUIRE(machine.return_value<int64_t>() == INT64_MAX);
+		machine.vmcall("wu_d", x);
+		REQUIRE(machine.return_value<uint32_t>() == UINT32_MAX);
+		machine.vmcall("lu_d", x);
+		REQUIRE(machine.return_value<uint64_t>() == UINT64_MAX);
+	}
+	for (double x : { -1e300, -__builtin_inf() }) {
+		machine.vmcall("w_d", x);
+		REQUIRE(machine.return_value<int32_t>() == INT32_MIN);
+		machine.vmcall("l_d", x);
+		REQUIRE(machine.return_value<int64_t>() == INT64_MIN);
+		machine.vmcall("wu_d", x);
+		REQUIRE(machine.return_value<uint32_t>() == 0u);
+		machine.vmcall("lu_d", x);
+		REQUIRE(machine.return_value<uint64_t>() == 0u);
+	}
+	// In-range values still convert normally.
+	machine.vmcall("w_s", -2.7f);
+	REQUIRE(machine.return_value<int32_t>() == -2);
+	machine.vmcall("lu_d", 2.7);
+	REQUIRE(machine.return_value<uint64_t>() == 2u);
+}
+
+TEST_CASE("FCSR exception flags and canonical NaNs", "[Verification]")
+{
+	// Everything here is behavior we only promise when built with RISCV_FCSR:
+	// a scripting guest that never reads fflags should not pay for the checks,
+	// so without FCSR emulation NaN payloads and flags are left to the host.
+	if constexpr (!riscv::fcsr_emulation) {
+		SUCCEED("FCSR emulation is disabled in this build");
+		return;
+	}
+
+	static constexpr uint32_t QNAN = 0x7fc00000u; // canonical quiet NaN
+	static constexpr uint32_t SNAN = 0x7f800001u; // signaling NaN
+	static constexpr uint32_t ONE  = 0x3f800000u; // 1.0f
+	static constexpr uint32_t MONE = 0xbf800000u; // -1.0f
+	static constexpr uint32_t NV = 16, DZ = 8, NX = 1;
+
+	// Operands are passed as raw bits so the values survive the host->guest
+	// argument path exactly. Every sequence clears fflags first, since the
+	// flags are accrued.
+	const auto binary = build_and_load(R"M(
+	#define BITS_TO_F(var, bits) float var; __builtin_memcpy(&var, &bits, 4)
+	#define F_TO_BITS(bits, var) unsigned bits; __builtin_memcpy(&bits, &var, 4)
+
+	#define BINOP(name, insn) \
+		unsigned name##_bits(unsigned ab, unsigned bb) { \
+			BITS_TO_F(a, ab); BITS_TO_F(b, bb); float r; \
+			__asm__ volatile(insn " %0, %1, %2" : "=f"(r) : "f"(a), "f"(b)); \
+			F_TO_BITS(rb, r); return rb; } \
+		unsigned name##_flags(unsigned ab, unsigned bb) { \
+			BITS_TO_F(a, ab); BITS_TO_F(b, bb); float r; unsigned f; \
+			__asm__ volatile("csrwi fflags, 0\n\t" insn " %1, %2, %3\n\tcsrr %0, fflags" \
+				: "=r"(f), "=f"(r) : "f"(a), "f"(b)); \
+			return f; }
+
+	BINOP(fadd, "fadd.s")
+	BINOP(fmul, "fmul.s")
+	BINOP(fdiv, "fdiv.s")
+	BINOP(fmin, "fmin.s")
+	BINOP(fmax, "fmax.s")
+
+	unsigned fsqrt_bits(unsigned ab) {
+		BITS_TO_F(a, ab); float r;
+		__asm__ volatile("fsqrt.s %0, %1" : "=f"(r) : "f"(a));
+		F_TO_BITS(rb, r); return rb; }
+	unsigned fsqrt_flags(unsigned ab) {
+		BITS_TO_F(a, ab); float r; unsigned f;
+		__asm__ volatile("csrwi fflags, 0\n\tfsqrt.s %1, %2\n\tcsrr %0, fflags"
+			: "=r"(f), "=f"(r) : "f"(a));
+		return f; }
+	unsigned flt_flags(unsigned ab, unsigned bb) {
+		BITS_TO_F(a, ab); BITS_TO_F(b, bb); long r; unsigned f;
+		__asm__ volatile("csrwi fflags, 0\n\tflt.s %1, %2, %3\n\tcsrr %0, fflags"
+			: "=r"(f), "=r"(r) : "f"(a), "f"(b));
+		return f; }
+	unsigned fcvt_ws_flags(unsigned ab) {
+		BITS_TO_F(a, ab); long r; unsigned f;
+		__asm__ volatile("csrwi fflags, 0\n\tfcvt.w.s %1, %2, rtz\n\tcsrr %0, fflags"
+			: "=r"(f), "=r"(r) : "f"(a));
+		return f; }
+	unsigned fcvt_sl_flags(long v) {
+		float r; unsigned f;
+		__asm__ volatile("csrwi fflags, 0\n\tfcvt.s.l %1, %2\n\tcsrr %0, fflags"
+			: "=r"(f), "=f"(r) : "r"(v));
+		return f; }
+
+	int main() { return 0; }
+	)M");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls();
+	machine.setup_linux({"fcsr"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	machine.simulate(MAX_INSTRUCTIONS);
+	REQUIRE(machine.return_value() == 0);
+
+	auto call = [&] (const char* fn, uint32_t a, uint32_t b) {
+		machine.vmcall(fn, a, b);
+		return machine.return_value<uint32_t>();
+	};
+	auto call1 = [&] (const char* fn, uint32_t a) {
+		machine.vmcall(fn, a);
+		return machine.return_value<uint32_t>();
+	};
+
+	// Spec 11.3: a NaN result is the canonical quiet NaN, never a propagated
+	// payload. A quiet NaN operand is not an invalid operation.
+	REQUIRE(call("fadd_bits", QNAN, ONE) == QNAN);
+	REQUIRE(call("fmul_bits", QNAN, ONE) == QNAN);
+	REQUIRE(call("fdiv_bits", QNAN, ONE) == QNAN);
+	REQUIRE(call("fadd_bits", SNAN, ONE) == QNAN);
+
+	// FMIN/FMAX return the non-NaN operand, and the canonical NaN when both
+	// operands are NaN. A signaling operand raises NV, a quiet one does not.
+	REQUIRE(call("fmin_bits", QNAN, ONE) == ONE);
+	REQUIRE(call("fmax_bits", QNAN, MONE) == MONE);
+	REQUIRE(call("fmin_bits", QNAN, QNAN) == QNAN);
+	REQUIRE((call("fmin_flags", SNAN, ONE) & NV) == NV);
+	REQUIRE((call("fmin_flags", QNAN, ONE) & NV) == 0);
+
+	// sqrt of a negative number is invalid; sqrt of a quiet NaN is not.
+	REQUIRE(call1("fsqrt_bits", MONE) == QNAN);
+	REQUIRE((call1("fsqrt_flags", MONE) & NV) == NV);
+	REQUIRE(call1("fsqrt_bits", QNAN) == QNAN);
+	REQUIRE((call1("fsqrt_flags", QNAN) & NV) == 0);
+	REQUIRE((call1("fsqrt_flags", SNAN) & NV) == NV);
+
+	// Division of a finite non-zero value by zero raises DZ.
+	REQUIRE((call("fdiv_flags", ONE, 0u) & DZ) == DZ);
+	REQUIRE((call("fdiv_flags", 0u, 0u) & DZ) == 0);
+	REQUIRE((call("fdiv_flags", ONE, ONE) & DZ) == 0);
+
+	// FLT is a signaling compare: any NaN operand raises NV.
+	REQUIRE((call("flt_flags", QNAN, ONE) & NV) == NV);
+	REQUIRE((call("flt_flags", ONE, ONE) & NV) == 0);
+
+	// Out-of-range float->int is invalid, and an integer too wide for the
+	// destination mantissa is inexact.
+	REQUIRE((call1("fcvt_ws_flags", 0x71c37937u /* 1e30f */) & NV) == NV);
+	REQUIRE((call1("fcvt_ws_flags", ONE) & NV) == 0);
+	machine.vmcall("fcvt_sl_flags", int64_t((1ll << 62) + 1));
+	REQUIRE((machine.return_value<uint32_t>() & NX) == NX);
+	machine.vmcall("fcvt_sl_flags", int64_t(3));
+	REQUIRE((machine.return_value<uint32_t>() & NX) == 0);
+}

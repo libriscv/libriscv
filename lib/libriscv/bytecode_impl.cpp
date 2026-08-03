@@ -512,6 +512,29 @@ INSTRUCTION(RV32F_BC_FSD, rv32i_fsd) {
 	CPU().memory().template write<uint64_t> (addr, src.i64);
 	NEXT_INSTR();
 }
+// Spec §11.3: an FP operation that produces a NaN must deliver the canonical
+// quiet NaN, not the payload-propagating one a host FPU hands us. Guests that
+// care are the ones that also want fflags, so the canonicalization rides along
+// with FCSR emulation: without it a scripting guest would have to read the raw
+// bits back as an integer to tell the difference, and the branch is not worth
+// paying for on every single FP instruction.
+#define SET_FLOAT_CANON(dst, expr) \
+	if constexpr (fcsr_emulation) { \
+		const float fcanon_r = (expr); \
+		if (UNLIKELY(std::isnan(fcanon_r))) dst.load_u32(0x7FC00000u); \
+		else dst.set_float(fcanon_r); \
+	} else { \
+		dst.set_float(expr); \
+	}
+#define SET_DOUBLE_CANON(dst, expr) \
+	if constexpr (fcsr_emulation) { \
+		const double dcanon_r = (expr); \
+		if (UNLIKELY(std::isnan(dcanon_r))) dst.load_u64(0x7FF8000000000000ull); \
+		else dst.f64 = dcanon_r; \
+	} else { \
+		dst.f64 = (expr); \
+	}
+
 INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 	VIEW_INSTR_AS(fi, FasterFloatType);
 	#define FLREGS() \
@@ -521,23 +544,11 @@ INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
-		const uint32_t a = rs1.i32[0];
-		const uint32_t b = rs2.i32[0];
-		const bool qnan = ((a & 0x7fc00000u) == 0x7fc00000u)
-			|| ((b & 0x7fc00000u) == 0x7fc00000u);
-		const bool snan = (((a & 0x7fc00000u) == 0x7f800000u)
-			&& (a & 0x003fffffu) != 0)
-			|| (((b & 0x7fc00000u) == 0x7f800000u)
-			&& (b & 0x003fffffu) != 0);
-		if (qnan && !snan) {
-			dst.load_u32(0x7fc00000u);
-		} else {
-			dst.set_float(rs1.f32[0] + rs2.f32[0]);
-		}
+		SET_FLOAT_CANON(dst, rs1.f32[0] + rs2.f32[0]);
 	}
 	else
 	{ // float64
-		dst.f64 = rs1.f64 + rs2.f64;
+		SET_DOUBLE_CANON(dst, rs1.f64 + rs2.f64);
 	}
 	NEXT_INSTR();
 }
@@ -546,11 +557,11 @@ INSTRUCTION(RV32F_BC_FSUB, rv32f_fsub) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
-		dst.set_float(rs1.f32[0] - rs2.f32[0]);
+		SET_FLOAT_CANON(dst, rs1.f32[0] - rs2.f32[0]);
 	}
 	else
 	{ // float64
-		dst.f64 = rs1.f64 - rs2.f64;
+		SET_DOUBLE_CANON(dst, rs1.f64 - rs2.f64);
 	}
 	NEXT_INSTR();
 }
@@ -559,22 +570,30 @@ INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
-		const bool finite_inputs = (rs1.i32[0] & 0x7f800000u) != 0x7f800000u
-			&& (rs2.i32[0] & 0x7f800000u) != 0x7f800000u;
-		dst.set_float(rs1.f32[0] * rs2.f32[0]);
 		if constexpr (fcsr_emulation) {
-			const uint32_t result = dst.i32[0] & 0x7fffffffu;
-			if (finite_inputs && (result & 0x7f800000u) == 0x7f800000u
-				&& (result & 0x007fffffu) == 0)
-				CPU().registers().fcsr().fflags |= 5;
-			else if (finite_inputs && result < 0x00800000u
-				&& (double)rs1.f32[0] * (double)rs2.f32[0] != dst.f32[0])
-				CPU().registers().fcsr().fflags |= 3;
+			// The operands are read out before the store, because rd is
+			// allowed to alias rs1 or rs2.
+			const uint32_t ia = rs1.i32[0], ib = rs2.i32[0];
+			const float fa = rs1.f32[0], fb = rs2.f32[0];
+			SET_FLOAT_CANON(dst, fa * fb);
+			// Finite inputs that produce an infinity overflowed; finite inputs
+			// that produce an inexact subnormal underflowed. Both imply NX.
+			if ((ia & 0x7f800000u) != 0x7f800000u
+				&& (ib & 0x7f800000u) != 0x7f800000u) {
+				const uint32_t result = dst.i32[0] & 0x7fffffffu;
+				if (result == 0x7f800000u)
+					CPU().registers().fcsr().fflags |= 5; // OF | NX
+				else if (result < 0x00800000u
+					&& (double)fa * (double)fb != dst.f32[0])
+					CPU().registers().fcsr().fflags |= 3; // UF | NX
+			}
+		} else {
+			dst.set_float(rs1.f32[0] * rs2.f32[0]);
 		}
 	}
 	else
 	{ // float64
-		dst.f64 = rs1.f64 * rs2.f64;
+		SET_DOUBLE_CANON(dst, rs1.f64 * rs2.f64);
 	}
 	NEXT_INSTR();
 }
@@ -583,18 +602,31 @@ INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
-		const bool divide_by_zero = (rs1.i32[0] & 0x7fffffffu) != 0
-			&& (rs1.i32[0] & 0x7f800000u) != 0x7f800000u
-			&& (rs2.i32[0] & 0x7fffffffu) == 0;
-		dst.set_float(rs1.f32[0] / rs2.f32[0]);
 		if constexpr (fcsr_emulation) {
-			if (divide_by_zero)
-				CPU().registers().fcsr().fflags |= 8;
+			// Operands read out before the store: rd may alias rs1 or rs2.
+			// DZ is only for a finite non-zero numerator over zero: 0/0 is NV
+			// and inf/0 is exact.
+			const uint32_t ia = rs1.i32[0], ib = rs2.i32[0];
+			SET_FLOAT_CANON(dst, rs1.f32[0] / rs2.f32[0]);
+			if ((ia & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u
+				&& (ib & 0x7fffffffu) == 0)
+				CPU().registers().fcsr().fflags |= 8; // DZ
+		} else {
+			dst.set_float(rs1.f32[0] / rs2.f32[0]);
 		}
 	}
 	else
 	{ // float64
-		dst.f64 = rs1.f64 / rs2.f64;
+		if constexpr (fcsr_emulation) {
+			const uint64_t ia = rs1.i64, ib = rs2.i64;
+			SET_DOUBLE_CANON(dst, rs1.f64 / rs2.f64);
+			if ((ia & 0x7fffffffffffffffull) != 0
+				&& (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull
+				&& (ib & 0x7fffffffffffffffull) == 0)
+				CPU().registers().fcsr().fflags |= 8; // DZ
+		} else {
+			dst.f64 = rs1.f64 / rs2.f64;
+		}
 	}
 	NEXT_INSTR();
 }
@@ -611,25 +643,12 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 	// `a * b + c`, which does two roundings — spec violation, visible
 	// as 1-ULP divergences in the fuzz oracle.
 	//
-	// Spec §11.3: any FP operation whose result is a NaN must produce
-	// the canonical qNaN (F32 0x7FC00000 / F64 0x7FF8000000000000), not
-	// a payload-propagating NaN. The FLOAT_INSTR fallback path does this
-	// via fsflags(); this fast-path skipped fsflags, so we canonicalize
-	// inline here too.
+	// Spec §11.3: a NaN result must be the canonical qNaN. Only under FCSR
+	// emulation, same as the other arithmetic bytecodes.
 	if (fi.R4type.funct2 == 0x0) { // float32
-		float r = std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]);
-		if (std::isnan(r)) {
-			dst.load_u32(0x7FC00000u);
-		} else {
-			dst.set_float(r);
-		}
+		SET_FLOAT_CANON(dst, std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]));
 	} else if (fi.R4type.funct2 == 0x1) { // float64
-		double r = std::fma(rs1.f64, rs2.f64, rs3.f64);
-		if (std::isnan(r)) {
-			dst.load_u64(0x7FF8000000000000ull);
-		} else {
-			dst.f64 = r;
-		}
+		SET_DOUBLE_CANON(dst, std::fma(rs1.f64, rs2.f64, rs3.f64));
 	}
 	NEXT_INSTR();
 }

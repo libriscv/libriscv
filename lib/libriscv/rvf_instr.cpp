@@ -1,6 +1,8 @@
 #include "rvfd.hpp"
 #include "instr_helpers.hpp"
 #include <cmath>
+#include <limits>
+#include <type_traits>
 
 namespace riscv
 {
@@ -27,10 +29,46 @@ namespace riscv
 		}
 	}
 
-	// Convert a rounded floating-point value to the destination integer type.
+	// Round per the RISC-V rounding mode, then convert to the destination
+	// integer type T. The range check is *not* optional: converting an
+	// out-of-range float to an integer is undefined behavior in C++, so a
+	// guest could otherwise trip UBSan or produce host-dependent garbage.
+	// RISC-V pins an out-of-range result to the nearest representable extreme
+	// (NaN and positive overflow → maximum, negative overflow → minimum) and
+	// raises NV, which is where the FCSR-only part starts: `invalid` is only
+	// ever read under fcsr_emulation.
+	template <typename T, typename F>
+	static inline T fcvt_to_integer(F value, unsigned rm, bool& invalid) {
+		const F rounded = fcvt_round(value, rm);
+		// Both bounds are powers of two, and thus exactly representable.
+		constexpr F upper = std::is_signed<T>::value
+			? F(uint64_t(1) << (sizeof(T) * 8 - 1))
+			: F(uint64_t(1) << (sizeof(T) * 8 - 1)) * F(2);
+		constexpr F lower = std::is_signed<T>::value ? -upper : F(0);
+		if (UNLIKELY(!(rounded >= lower && rounded < upper))) { // NaN-safe
+			invalid = true;
+			return (std::isnan(rounded) || rounded >= upper)
+				? std::numeric_limits<T>::max() : std::numeric_limits<T>::min();
+		}
+		return T(rounded);
+	}
 	template <typename T, typename F>
 	static inline T fcvt_to_integer(F value, unsigned rm) {
-		return T(fcvt_round(value, rm));
+		bool invalid = false;
+		return fcvt_to_integer<T>(value, rm, invalid);
+	}
+
+	// Convert an integer to float/double, reporting NX when the destination
+	// mantissa was too narrow to hold it. long double is exact for every 64-bit
+	// integer wherever it is an 80- or 128-bit format; where it is merely double
+	// (MSVC), the 64-bit sources simply do not report NX. Only compiled in under
+	// FCSR emulation — the comparison is not free.
+	template <typename F, typename T>
+	static inline F fcvt_from_integer(T value, bool& inexact) {
+		const F converted = F(value);
+		if constexpr (fcsr_emulation)
+			inexact = (long double)converted != (long double)value;
+		return converted;
 	}
 
 	// A signaling NaN has an all-ones exponent, a clear quiet bit and a non-zero
@@ -282,13 +320,20 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			if ((std::isnan(rs1.f32[0]) || std::isnan(rs2.f32[0]))
-				&& !is_signaling_nan(rs1.f32[0]) && !is_signaling_nan(rs2.f32[0])) {
-				dst.load_u32(CANONICAL_NAN_F32);
-			} else {
-				dst.set_float(rs1.f32[0] + rs2.f32[0]);
-				fsflags(cpu, (double)(rs1.f32[0]) + (double)(rs2.f32[0]), dst.f32[0]);
+			// A quiet NaN operand propagates as the canonical qNaN without
+			// raising NV — only a signaling NaN, or an invalid operation such
+			// as inf + -inf, is invalid. fsflags() cannot tell those apart
+			// because it only sees the result, so handle it up front.
+			if constexpr (fcsr_emulation) {
+				if ((std::isnan(rs1.f32[0]) || std::isnan(rs2.f32[0]))
+					&& !is_signaling_nan(rs1.f32[0]) && !is_signaling_nan(rs2.f32[0])) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					cpu.registers().fcsr().fflags = 0;
+					return;
+				}
 			}
+			dst.set_float(rs1.f32[0] + rs2.f32[0]);
+			fsflags(cpu, (double)(rs1.f32[0]) + (double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 + rs2.f64;
 			fsflags(cpu, (long double)(rs1.f64) + (long double)(rs2.f64), dst.f64);
@@ -343,21 +388,26 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
-			const bool finite_inputs = (rs1.i32[0] & 0x7f800000u) != 0x7f800000u
-				&& (rs2.i32[0] & 0x7f800000u) != 0x7f800000u;
-			dst.set_float(rs1.f32[0] * rs2.f32[0]);
-			fsflags(cpu, (double)(rs1.f32[0]) * (double)(rs2.f32[0]), dst.f32[0]);
-#ifdef RISCV_FCSR
+			// Operands are read out before the store, because rd is allowed to
+			// alias rs1 or rs2.
+			const uint32_t ia = rs1.i32[0], ib = rs2.i32[0];
+			const float fa = rs1.f32[0], fb = rs2.f32[0];
+			dst.set_float(fa * fb);
+			fsflags(cpu, (double)fa * (double)fb, dst.f32[0]);
 			if constexpr (fcsr_emulation) {
-				const uint32_t result = dst.i32[0] & 0x7fffffffu;
-				if (finite_inputs && (result & 0x7f800000u) == 0x7f800000u
-					&& (result & 0x007fffffu) == 0)
-					cpu.registers().fcsr().fflags |= 4;
-				else if (finite_inputs && result < 0x00800000u
-					&& (double)rs1.f32[0] * (double)rs2.f32[0] != dst.f32[0])
-					cpu.registers().fcsr().fflags |= 2;
+				// Finite inputs that produce an infinity overflowed; finite
+				// inputs that produce an inexact subnormal underflowed.
+				// fsflags() already raised NX for both.
+				if ((ia & 0x7f800000u) != 0x7f800000u
+					&& (ib & 0x7f800000u) != 0x7f800000u) {
+					const uint32_t result = dst.i32[0] & 0x7fffffffu;
+					if (result == 0x7f800000u)
+						cpu.registers().fcsr().fflags |= 4; // OF
+					else if (result < 0x00800000u
+						&& (double)fa * (double)fb != dst.f32[0])
+						cpu.registers().fcsr().fflags |= 2; // UF
+				}
 			}
-#endif
 		} else if (fi.R4type.funct2 == 0x1) { // float64
 			dst.f64 = rs1.f64 * rs2.f64;
 			fsflags(cpu, (long double)(rs1.f64) * (long double)(rs2.f64), dst.f64);
@@ -384,20 +434,29 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // fp32
-			const bool divide_by_zero = (rs1.i32[0] & 0x7fffffffu) != 0
-				&& (rs1.i32[0] & 0x7f800000u) != 0x7f800000u
-				&& (rs2.i32[0] & 0x7fffffffu) == 0;
-			dst.set_float(rs1.f32[0] / rs2.f32[0]);
-			fsflags(cpu, (double)(rs1.f32[0]) / (double)(rs2.f32[0]), dst.f32[0]);
-#ifdef RISCV_FCSR
+			// Operands read out before the store: rd may alias rs1 or rs2. DZ
+			// is only for a finite non-zero numerator over zero: 0/0 is NV and
+			// inf/0 is exact.
+			const uint32_t ia = rs1.i32[0], ib = rs2.i32[0];
+			const float fa = rs1.f32[0], fb = rs2.f32[0];
+			dst.set_float(fa / fb);
+			fsflags(cpu, (double)fa / (double)fb, dst.f32[0]);
 			if constexpr (fcsr_emulation) {
-				if (divide_by_zero)
-					cpu.registers().fcsr().fflags |= 8;
+				if ((ia & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u
+					&& (ib & 0x7fffffffu) == 0)
+					cpu.registers().fcsr().fflags |= 8; // DZ
 			}
-#endif
 		} else if (fi.R4type.funct2 == 0x1) { // fp64
-			dst.f64 = rs1.f64 / rs2.f64;
-			fsflags(cpu, (long double)(rs1.f64) / (long double)(rs2.f64), dst.f64);
+			const uint64_t ia = rs1.i64, ib = rs2.i64;
+			const double da = rs1.f64, db = rs2.f64;
+			dst.f64 = da / db;
+			fsflags(cpu, (long double)da / (long double)db, dst.f64);
+			if constexpr (fcsr_emulation) {
+				if ((ia & 0x7fffffffffffffffull) != 0
+					&& (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull
+					&& (ib & 0x7fffffffffffffffull) == 0)
+					cpu.registers().fcsr().fflags |= 8; // DZ
+			}
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -421,26 +480,32 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FSQRT.S
-			if (std::isnan(rs1.f32[0])) {
-				dst.load_u32(CANONICAL_NAN_F32);
-				if constexpr (fcsr_emulation) {
-					if ((rs1.i32[0] & 0x7fc00000u) == 0x7f800000u) cpu.registers().fcsr().fflags |= 16;
+			// sqrt(qNaN) is the canonical qNaN and is *not* an invalid
+			// operation; only a signaling NaN input raises NV. fsflags() would
+			// raise it for both, so quiet NaNs are handled before we get there.
+			if constexpr (fcsr_emulation) {
+				if (UNLIKELY(std::isnan(rs1.f32[0]))) {
+					// Classified before the store, as rd may alias rs1.
+					const bool snan = is_signaling_nan(rs1.f32[0]);
+					dst.load_u32(CANONICAL_NAN_F32);
+					cpu.registers().fcsr().fflags = snan ? 16 : 0;
+					return;
 				}
-			} else {
-				dst.set_float(sqrtf(rs1.f32[0]));
-				fsflags(cpu, std::sqrt((double)(rs1.f32[0])), dst.f32[0]);
 			}
+			dst.set_float(sqrtf(rs1.f32[0]));
+			fsflags(cpu, std::sqrt((double)(rs1.f32[0])), dst.f32[0]);
 			break;
 		case 0x1: // FSQRT.D
-			if (std::isnan(rs1.f64)) {
-				dst.load_u64(CANONICAL_NAN_F64);
-				if constexpr (fcsr_emulation) {
-					if (is_signaling_nan(rs1.f64)) cpu.registers().fcsr().fflags |= 16;
+			if constexpr (fcsr_emulation) {
+				if (UNLIKELY(std::isnan(rs1.f64))) {
+					const bool snan = is_signaling_nan(rs1.f64);
+					dst.load_u64(CANONICAL_NAN_F64);
+					cpu.registers().fcsr().fflags = snan ? 16 : 0;
+					return;
 				}
-			} else {
-				dst.f64 = sqrt(rs1.f64);
-				fsflags(cpu, std::sqrt((long double)(rs1.f64)), dst.f64);
 			}
+			dst.f64 = sqrt(rs1.f64);
+			fsflags(cpu, std::sqrt((long double)(rs1.f64)), dst.f64);
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -499,6 +564,13 @@ namespace riscv
 			double r = std::fmax(a, b); uint64_t rb; __builtin_memcpy(&rb, &r, 8); return rb;
 		};
 
+		// A signaling NaN operand raises NV; a quiet one does not. Classified
+		// before the result is stored, because rd may alias rs1 or rs2, and by
+		// funct2 (the operand precision) rather than through the low 32 bits.
+		const bool snan = !fcsr_emulation ? false : (fi.R4type.funct2 == 0x0)
+			? (is_signaling_nan(rs1.f32[0]) || is_signaling_nan(rs2.f32[0]))
+			: (is_signaling_nan(rs1.f64) || is_signaling_nan(rs2.f64));
+
 		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
 		{
 		case 0x0: // FMIN.S
@@ -553,11 +625,6 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 		if constexpr (fcsr_emulation) {
-			// funct2 selects the operand precision, so a .D operand has to be
-			// classified as a double rather than through its low 32 bits.
-			const bool snan = (fi.R4type.funct2 == 0x0)
-				? (is_signaling_nan(rs1.f32[0]) || is_signaling_nan(rs2.f32[0]))
-				: (is_signaling_nan(rs1.f64) || is_signaling_nan(rs2.f64));
 			cpu.registers().fcsr().fflags = snan ? 16 : 0;
 		}
 	},
@@ -667,74 +734,52 @@ namespace riscv
 		if (rmm == 0x7) // DYN: use the dynamic mode from the fcsr CSR (frm field)
 			rmm = cpu.registers().fcsr().frm;
 		auto& dst = cpu.reg(fi.R4type.rd);
+		bool invalid = false;
 		switch (fi.R4type.funct2) {
 		case 0x0: // from float32
 			switch (fi.R4type.rs2) {
-			case 0x0: { // FCVT.W.S
-				const float rounded = fcvt_round(rs1.f32[0], rmm);
-				if (std::isnan(rounded) || rounded < -2147483648.0f || rounded >= 2147483648.0f) {
-					dst = (std::isnan(rounded) || rounded >= 2147483648.0f)
-						? int32_t(2147483647) : int32_t(-2147483647 - 1);
-#ifdef RISCV_FCSR
-					if constexpr (fcsr_emulation)
-						cpu.registers().fcsr().fflags |= 16;
-#endif
-				} else {
-					dst = int32_t(rounded);
-				}
-				return;
-			}
-			case 0x1: { // FCVT.WU.S (sign-extended 32-bit result)
-				const float rounded = fcvt_round(rs1.f32[0], rmm);
-				if (std::isnan(rounded) || rounded < 0.0f || rounded >= 4294967296.0f) {
-					dst = int32_t((std::isnan(rounded) || rounded >= 4294967296.0f)
-						? 0xffffffffu : 0u);
-#ifdef RISCV_FCSR
-					if constexpr (fcsr_emulation)
-						cpu.registers().fcsr().fflags |= 16;
-#endif
-				} else {
-					dst = int32_t(uint32_t(rounded));
-				}
-				return;
-			}
+			case 0x0: // FCVT.W.S (sign-extended 32-bit result)
+				dst = fcvt_to_integer<int32_t>(rs1.f32[0], rmm, invalid);
+				break;
+			case 0x1: // FCVT.WU.S (sign-extended 32-bit result)
+				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f32[0], rmm, invalid));
+				break;
 			case 0x2: // FCVT.L.S
-				dst = fcvt_to_integer<int64_t>(rs1.f32[0], rmm);
-				return;
+				dst = fcvt_to_integer<int64_t>(rs1.f32[0], rmm, invalid);
+				break;
 			case 0x3: // FCVT.LU.S
-				dst = fcvt_to_integer<uint64_t>(rs1.f32[0], rmm);
-				return;
+				dst = fcvt_to_integer<uint64_t>(rs1.f32[0], rmm, invalid);
+				break;
+			default:
+				cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
 			break;
 		case 0x1: // from float64
 			switch (fi.R4type.rs2) {
-			case 0x0: { // FCVT.W.D
-				const double rounded = fcvt_round(rs1.f64, rmm);
-				if (std::isnan(rounded) || rounded < -2147483648.0 || rounded > 2147483647.0) {
-					dst = (std::isnan(rounded) || rounded > 2147483647.0)
-						? int32_t(2147483647) : int32_t(-2147483647 - 1);
-#ifdef RISCV_FCSR
-					if constexpr (fcsr_emulation)
-						cpu.registers().fcsr().fflags |= 16;
-#endif
-				} else {
-					dst = int32_t(rounded);
-				}
-				return;
-			}
+			case 0x0: // FCVT.W.D (sign-extended 32-bit result)
+				dst = fcvt_to_integer<int32_t>(rs1.f64, rmm, invalid);
+				break;
 			case 0x1: // FCVT.WU.D (sign-extended 32-bit result)
-				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f64, rmm));
-				return;
+				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f64, rmm, invalid));
+				break;
 			case 0x2: // FCVT.L.D
-				dst = fcvt_to_integer<int64_t>(rs1.f64, rmm);
-				return;
+				dst = fcvt_to_integer<int64_t>(rs1.f64, rmm, invalid);
+				break;
 			case 0x3: // FCVT.LU.D
-				dst = fcvt_to_integer<uint64_t>(rs1.f64, rmm);
-				return;
+				dst = fcvt_to_integer<uint64_t>(rs1.f64, rmm, invalid);
+				break;
+			default:
+				cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
 			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
+			return;
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		if constexpr (fcsr_emulation) {
+			if (invalid)
+				cpu.registers().fcsr().fflags |= 16; // NV
+		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32f_instruction fi { instr };
@@ -752,54 +797,52 @@ namespace riscv
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		bool inexact = false;
 		switch (fi.R4type.funct2) {
 		case 0x0: // to float32
 			switch (fi.R4type.rs2) {
-			case 0x0: { // FCVT.S.W
-				const int32_t value = rs1;
-				dst.set_float(value);
-				const uint32_t magnitude = value < 0 ? 0u - (uint32_t)value : (uint32_t)value;
-				if constexpr (fcsr_emulation) {
-					unsigned bits = 0;
-					for (uint32_t n = magnitude; n != 0; n >>= 1) ++bits;
-					if (bits > 24 && (magnitude & ((1u << (bits - 24)) - 1))) cpu.registers().fcsr().fflags |= 1;
-				}
-				return;
-			}
+			case 0x0: // FCVT.S.W
+				dst.set_float(fcvt_from_integer<float>((int32_t)rs1, inexact));
+				break;
 			case 0x1: // FCVT.S.WU
-				dst.set_float((uint32_t)rs1);
-				return;
+				dst.set_float(fcvt_from_integer<float>((uint32_t)rs1, inexact));
+				break;
 			case 0x2: // FCVT.S.L
-				dst.set_float((int64_t)rs1);
-				return;
+				dst.set_float(fcvt_from_integer<float>((int64_t)rs1, inexact));
+				break;
 			case 0x3: // FCVT.S.LU
-				dst.set_float((uint64_t)rs1);
-				return;
+				dst.set_float(fcvt_from_integer<float>((uint64_t)rs1, inexact));
+				break;
+			default:
+				cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
 			break;
 		case 0x1: // to float64
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.D.W
-				dst.f64 = (int32_t)rs1;
-				return;
+				dst.f64 = fcvt_from_integer<double>((int32_t)rs1, inexact);
+				break;
 			case 0x1: // FCVT.D.WU
-				dst.f64 = (uint32_t)rs1;
-				return;
+				dst.f64 = fcvt_from_integer<double>((uint32_t)rs1, inexact);
+				break;
 			case 0x2: // FCVT.D.L
-				{ const int64_t value = rs1; dst.f64 = value;
-				const uint64_t magnitude = value < 0 ? 0ull - (uint64_t)value : (uint64_t)value;
-				if constexpr (fcsr_emulation) {
-					unsigned bits = 0;
-					for (uint64_t n = magnitude; n != 0; n >>= 1) ++bits;
-					if (bits > 53 && (magnitude & ((1ull << (bits - 53)) - 1))) cpu.registers().fcsr().fflags |= 1;
-				} }
-				return;
+				dst.f64 = fcvt_from_integer<double>((int64_t)rs1, inexact);
+				break;
 			case 0x3: // FCVT.D.LU
-				dst.f64 = (uint64_t)rs1;
-				return;
+				dst.f64 = fcvt_from_integer<double>((uint64_t)rs1, inexact);
+				break;
+			default:
+				cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
+			return;
 		}
-		cpu.trigger_exception(ILLEGAL_OPERATION);
+		if constexpr (fcsr_emulation) {
+			if (inexact)
+				cpu.registers().fcsr().fflags |= 1; // NX
+		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		const rv32f_instruction fi { instr };
