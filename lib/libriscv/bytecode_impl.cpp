@@ -559,7 +559,18 @@ INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
+		const bool finite_inputs = (rs1.i32[0] & 0x7f800000u) != 0x7f800000u
+			&& (rs2.i32[0] & 0x7f800000u) != 0x7f800000u;
 		dst.set_float(rs1.f32[0] * rs2.f32[0]);
+		if constexpr (fcsr_emulation) {
+			const uint32_t result = dst.i32[0] & 0x7fffffffu;
+			if (finite_inputs && (result & 0x7f800000u) == 0x7f800000u
+				&& (result & 0x007fffffu) == 0)
+				CPU().registers().fcsr().fflags |= 5;
+			else if (finite_inputs && result < 0x00800000u
+				&& (double)rs1.f32[0] * (double)rs2.f32[0] != dst.f32[0])
+				CPU().registers().fcsr().fflags |= 3;
+		}
 	}
 	else
 	{ // float64

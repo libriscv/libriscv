@@ -1992,17 +1992,26 @@ void Emitter<W>::emit()
 					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 + " + rs2 + ".f64);\n";
 				}
 				break;
-			case RV32F__FSUB:
-			case RV32F__FMUL: {
+			case RV32F__FSUB: {
 				std::string fop = " + ";
 				if (instr.fpfunc() == RV32F__FSUB) fop = " - ";
-				else if (instr.fpfunc() == RV32F__FMUL) fop = " * ";
 				if (fi.R4type.funct2 == 0x0) { // fp32
 					code += "set_fl(&" + dst + ", " + rs1 + ".f32[0]" + fop + rs2 + ".f32[0]);\n";
 				} else { // fp64
 					code += "set_dbl(&" + dst + ", " + rs1 + ".f64" + fop + rs2 + ".f64);\n";
 				}
 				} break;
+			case RV32F__FMUL:
+				if (fi.R4type.funct2 == 0x0) {
+					const std::string a = rs1 + ".i32[0]";
+					const std::string b = rs2 + ".i32[0]";
+					const std::string result = dst + ".i32[0]";
+					const std::string finite = "(((" + a + " & 0x7f800000u) != 0x7f800000u) && ((" + b + " & 0x7f800000u) != 0x7f800000u))";
+					code += "{ const float result = " + rs1 + ".f32[0] * " + rs2 + ".f32[0]; set_fl(&" + dst + ", result); if (" + finite + ") { if (((" + result + " & 0x7fffffffu) & 0x7f800000u) == 0x7f800000u && ((" + result + " & 0x007fffffu) == 0)) cpu->fcsr |= 5; else if ((" + result + " & 0x7fffffffu) < 0x00800000u && (double)" + rs1 + ".f32[0] * (double)" + rs2 + ".f32[0] != result) cpu->fcsr |= 3; } }\n";
+				} else {
+					code += "set_dbl(&" + dst + ", " + rs1 + ".f64 * " + rs2 + ".f64);\n";
+				}
+				break;
 			case RV32F__FDIV:
 				if (fi.R4type.funct2 == 0x0) { // fp32
 					const std::string a = rs1 + ".i32[0]";
