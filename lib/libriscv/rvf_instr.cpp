@@ -390,12 +390,26 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FSQRT.S
-			dst.set_float(sqrtf(rs1.f32[0]));
-			fsflags(cpu, std::sqrt((double)(rs1.f32[0])), dst.f32[0]);
+			if (std::isnan(rs1.f32[0])) {
+				dst.load_u32(CANONICAL_NAN_F32);
+				if constexpr (fcsr_emulation) {
+					if ((rs1.i32[0] & 0x7fc00000u) == 0x7f800000u) cpu.registers().fcsr().fflags |= 16;
+				}
+			} else {
+				dst.set_float(sqrtf(rs1.f32[0]));
+				fsflags(cpu, std::sqrt((double)(rs1.f32[0])), dst.f32[0]);
+			}
 			break;
 		case 0x1: // FSQRT.D
-			dst.f64 = sqrt(rs1.f64);
-			fsflags(cpu, std::sqrt((long double)(rs1.f64)), dst.f64);
+			if (std::isnan(rs1.f64)) {
+				dst.load_u64(CANONICAL_NAN_F64);
+				if constexpr (fcsr_emulation) {
+					if (is_signaling_nan(rs1.f64)) cpu.registers().fcsr().fflags |= 16;
+				}
+			} else {
+				dst.f64 = sqrt(rs1.f64);
+				fsflags(cpu, std::sqrt((long double)(rs1.f64)), dst.f64);
+			}
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);
