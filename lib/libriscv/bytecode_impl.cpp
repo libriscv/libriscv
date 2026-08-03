@@ -521,7 +521,19 @@ INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
-		dst.set_float(rs1.f32[0] + rs2.f32[0]);
+		const uint32_t a = rs1.i32[0];
+		const uint32_t b = rs2.i32[0];
+		const bool qnan = ((a & 0x7fc00000u) == 0x7fc00000u)
+			|| ((b & 0x7fc00000u) == 0x7fc00000u);
+		const bool snan = (((a & 0x7fc00000u) == 0x7f800000u)
+			&& (a & 0x003fffffu) != 0)
+			|| (((b & 0x7fc00000u) == 0x7f800000u)
+			&& (b & 0x003fffffu) != 0);
+		if (qnan && !snan) {
+			dst.load_u32(0x7fc00000u);
+		} else {
+			dst.set_float(rs1.f32[0] + rs2.f32[0]);
+		}
 	}
 	else
 	{ // float64
