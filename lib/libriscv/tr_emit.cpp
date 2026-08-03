@@ -2150,7 +2150,11 @@ void Emitter<W>::emit()
 					std::string expr;
 					switch (fi.R4type.rs2) {
 					case 0x0: // FCVT.W (int32, sign-extended)
-						expr = "(int32_t)" + rounded;
+						if (!from_float) {
+							code += "{ const double rounded = " + rounded + "; if (rounded != rounded || rounded < -2147483648.0 || rounded > 2147483647.0) { " + to_reg(fi.R4type.rd) + " = (rounded != rounded || rounded > 2147483647.0) ? 2147483647 : (-2147483647 - 1); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)rounded; }\n";
+						} else {
+							expr = "(int32_t)" + rounded;
+						}
 						break;
 					case 0x1: // FCVT.WU (uint32 result, sign-extended to XLEN)
 						expr = "(int32_t)(uint32_t)" + rounded;
@@ -2166,7 +2170,7 @@ void Emitter<W>::emit()
 					}
 					if (!expr.empty())
 						code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
-					else
+					else if (from_float || fi.R4type.rs2 != 0)
 						UNKNOWN_INSTRUCTION();
 				} else {
 					UNKNOWN_INSTRUCTION();
