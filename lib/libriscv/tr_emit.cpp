@@ -2150,14 +2150,18 @@ void Emitter<W>::emit()
 					std::string expr;
 					switch (fi.R4type.rs2) {
 					case 0x0: // FCVT.W (int32, sign-extended)
-						if (!from_float) {
-							code += "{ const double rounded = " + rounded + "; if (rounded != rounded || rounded < -2147483648.0 || rounded > 2147483647.0) { " + to_reg(fi.R4type.rd) + " = (rounded != rounded || rounded > 2147483647.0) ? 2147483647 : (-2147483647 - 1); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)rounded; }\n";
+						if (from_float) {
+							code += "{ const float rounded = " + rounded + "; if (rounded != rounded || rounded < -2147483648.0f || rounded >= 2147483648.0f) { " + to_reg(fi.R4type.rd) + " = (rounded != rounded || rounded >= 2147483648.0f) ? 2147483647 : (-2147483647 - 1); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)rounded; }\n";
 						} else {
-							expr = "(int32_t)" + rounded;
+							code += "{ const double rounded = " + rounded + "; if (rounded != rounded || rounded < -2147483648.0 || rounded > 2147483647.0) { " + to_reg(fi.R4type.rd) + " = (rounded != rounded || rounded > 2147483647.0) ? 2147483647 : (-2147483647 - 1); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)rounded; }\n";
 						}
 						break;
 					case 0x1: // FCVT.WU (uint32 result, sign-extended to XLEN)
-						expr = "(int32_t)(uint32_t)" + rounded;
+						if (from_float) {
+							code += "{ const float rounded = " + rounded + "; if (rounded != rounded || rounded < 0.0f || rounded >= 4294967296.0f) { " + to_reg(fi.R4type.rd) + " = (int32_t)((rounded != rounded || rounded >= 4294967296.0f) ? 0xffffffffu : 0u); cpu->fcsr |= 16; } else " + to_reg(fi.R4type.rd) + " = (int32_t)(uint32_t)rounded; }\n";
+						} else {
+							expr = "(int32_t)(uint32_t)" + rounded;
+						}
 						break;
 					case 0x2: // FCVT.L (int64)
 						expr = "(int64_t)" + rounded;
@@ -2170,7 +2174,8 @@ void Emitter<W>::emit()
 					}
 					if (!expr.empty())
 						code += to_reg(fi.R4type.rd) + " = " + expr + ";\n";
-					else if (from_float || fi.R4type.rs2 != 0)
+					// FCVT.W (both widths) and FCVT.WU.S emit their own code above
+					else if (fi.R4type.rs2 != 0 && !(from_float && fi.R4type.rs2 == 1))
 						UNKNOWN_INSTRUCTION();
 				} else {
 					UNKNOWN_INSTRUCTION();

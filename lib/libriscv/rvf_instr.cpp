@@ -670,12 +670,34 @@ namespace riscv
 		switch (fi.R4type.funct2) {
 		case 0x0: // from float32
 			switch (fi.R4type.rs2) {
-			case 0x0: // FCVT.W.S
-				dst = fcvt_to_integer<int32_t>(rs1.f32[0], rmm);
+			case 0x0: { // FCVT.W.S
+				const float rounded = fcvt_round(rs1.f32[0], rmm);
+				if (std::isnan(rounded) || rounded < -2147483648.0f || rounded >= 2147483648.0f) {
+					dst = (std::isnan(rounded) || rounded >= 2147483648.0f)
+						? int32_t(2147483647) : int32_t(-2147483647 - 1);
+#ifdef RISCV_FCSR
+					if constexpr (fcsr_emulation)
+						cpu.registers().fcsr().fflags |= 16;
+#endif
+				} else {
+					dst = int32_t(rounded);
+				}
 				return;
-			case 0x1: // FCVT.WU.S (sign-extended 32-bit result)
-				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f32[0], rmm));
+			}
+			case 0x1: { // FCVT.WU.S (sign-extended 32-bit result)
+				const float rounded = fcvt_round(rs1.f32[0], rmm);
+				if (std::isnan(rounded) || rounded < 0.0f || rounded >= 4294967296.0f) {
+					dst = int32_t((std::isnan(rounded) || rounded >= 4294967296.0f)
+						? 0xffffffffu : 0u);
+#ifdef RISCV_FCSR
+					if constexpr (fcsr_emulation)
+						cpu.registers().fcsr().fflags |= 16;
+#endif
+				} else {
+					dst = int32_t(uint32_t(rounded));
+				}
 				return;
+			}
 			case 0x2: // FCVT.L.S
 				dst = fcvt_to_integer<int64_t>(rs1.f32[0], rmm);
 				return;
