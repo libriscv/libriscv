@@ -1967,10 +1967,10 @@ void Emitter<W>::emit()
 				// a sign that disagrees with the spec).
 				switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4)) {
 				case 0x0: // FMIN.S
-					code += "set_fl(&" + dst + ", api.fmin32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "if ((((" + rs1 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x003fffffu)) || ((" + rs2 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs2 + ".i32[0] & 0x003fffffu))) cpu->fcsr |= 0x10; set_fl(&" + dst + ", api.fmin32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x1: // FMAX.S
-					code += "set_fl(&" + dst + ", api.fmax32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
+					code += "if ((((" + rs1 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs1 + ".i32[0] & 0x003fffffu)) || ((" + rs2 + ".i32[0] & 0x7fc00000u) == 0x7f800000u && (" + rs2 + ".i32[0] & 0x003fffffu))) cpu->fcsr |= 0x10; set_fl(&" + dst + ", api.fmax32_rv(" + rs1 + ".f32[0], " + rs2 + ".f32[0]));\n";
 					break;
 				case 0x10: // FMIN.D
 					code += "set_dbl(&" + dst + ", api.fmin64_rv(" + rs1 + ".f64, " + rs2 + ".f64));\n";
