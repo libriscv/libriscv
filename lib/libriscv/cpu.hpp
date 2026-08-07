@@ -126,6 +126,11 @@ namespace riscv
 		int  load_translation(const MachineOptions<W>&, std::string* filename, DecodedExecuteSegment<W>&) const;
 		void try_translate(const MachineOptions<W>&, const std::string&, std::shared_ptr<DecodedExecuteSegment<W>>&) const;
 
+#ifdef RISCV_ASMJIT
+		// asmjit native code generation (independent of binary translation)
+		void asmjit_translate(const MachineOptions<W>&, DecodedExecuteSegment<W>&) const;
+#endif
+
 		void reset();
 		void reset_stack_pointer() noexcept;
 

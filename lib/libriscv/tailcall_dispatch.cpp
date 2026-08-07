@@ -188,6 +188,27 @@ namespace riscv
 	}
 #endif
 
+#ifdef RISCV_ASMJIT
+	INSTRUCTION(RV32I_BC_ASMJIT, asmjit_function) {
+		AjState<W> state { counter.value() - d->instruction_count(), counter.max(), pc };
+		do {
+			exec->unchecked_asmjit_mapping_at(d->instr)(cpu, &state);
+			if (UNLIKELY(cpu.has_current_exception())) {
+				const auto except = cpu.current_exception();
+				cpu.clear_current_exception();
+				std::rethrow_exception(except);
+			}
+			pc = state.pc;
+			if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end())))
+				break;
+			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
+		} while (state.counter < state.max_counter && d->get_bytecode() == RV32I_BC_ASMJIT);
+		counter.set_counters(state.counter, state.max_counter);
+		OVERFLOW_CHECK();
+		UNCHECKED_JUMP();
+	}
+#endif
+
 	INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 		VIEW_INSTR();
 		// Make the current PC visible
@@ -363,6 +384,9 @@ namespace riscv
 		[RV32I_BC_FUNCBLOCK] = execute_function_block,
 #ifdef RISCV_BINARY_TRANSLATION
 		[RV32I_BC_TRANSLATOR] = translated_function,
+#endif
+#ifdef RISCV_ASMJIT
+		[RV32I_BC_ASMJIT] = asmjit_function,
 #endif
 		[RV32I_BC_LIVEPATCH] = execute_livepatch,
 		[RV32I_BC_SYSTEM]  = rv32i_system,
