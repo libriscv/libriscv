@@ -128,6 +128,9 @@ static constexpr void *computed_opcode[] = {
 #ifdef RISCV_BINARY_TRANSLATION
 	[RV32I_BC_TRANSLATOR] = &&translated_function,
 #endif
+#ifdef RISCV_ASMJIT
+	[RV32I_BC_ASMJIT] = &&asmjit_function,
+#endif
 	[RV32I_BC_LIVEPATCH]  = &&execute_livepatch,
 	[RV32I_BC_SYSTEM] = &&rv32i_system,
 };

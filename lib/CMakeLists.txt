@@ -24,6 +24,10 @@ option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
 # BINARY_TRANSLATION will make libriscv generate portable C-code,
 # and invoke a system compiler to execute a program much faster.
 option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" ON)
+# ASMJIT enables an experimental native code generator using asmjit.
+# It is completely independent of RISCV_BINARY_TRANSLATION and can be
+# enabled alongside it for runtime A/B comparison.
+option(RISCV_ASMJIT "Enable exp. native code generation with asmjit" OFF)
 # FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
 # Memory before the heap and outside of the arena behaves like before.
 option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
@@ -175,6 +179,13 @@ if (RISCV_BINARY_TRANSLATION)
 		endif()
 	endif()
 endif()
+if (RISCV_ASMJIT)
+	list(APPEND SOURCES
+		libriscv/asmjit/aj_api.cpp
+		libriscv/asmjit/aj_translate.cpp
+		libriscv/asmjit/aj_emit_x64.cpp
+	)
+endif()
 
 # Generate the settings header
 # RISCV_VERSION_MAJOR and RISCV_VERSION_MINOR are required by libriscv_settings.h.in
@@ -297,6 +308,21 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 	target_include_directories(riscv PUBLIC
 		"${CMAKE_CURRENT_BINARY_DIR}"
 	)
+endif()
+
+if (RISCV_ASMJIT)
+	include(FetchContent)
+	set(ASMJIT_STATIC ON CACHE BOOL "" FORCE)
+	set(ASMJIT_NO_DEPRECATED ON CACHE BOOL "" FORCE)
+	set(ASMJIT_TEST OFF CACHE BOOL "" FORCE)
+	FetchContent_Declare(asmjit
+		GIT_REPOSITORY https://github.com/asmjit/asmjit.git
+		GIT_TAG        master
+	)
+	FetchContent_MakeAvailable(asmjit)
+	# NOTE: Do not set ASMJIT_NO_COMPILER: the Compiler API provides the
+	# register allocator and the ABI handling that the emitter relies on.
+	target_link_libraries(riscv PRIVATE asmjit::asmjit)
 endif()
 
 if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")

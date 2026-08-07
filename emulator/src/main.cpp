@@ -318,6 +318,12 @@ static void run_program(
 		.cross_compile = std::move(cc),
 #endif
 #endif
+#ifdef RISCV_ASMJIT
+		.asmjit_enabled = !cli_args.no_translate,
+		.asmjit_override_bintr = false,
+		.asmjit_verbose = cli_args.trace,
+		.asmjit_timing = cli_args.timing,
+#endif
 	});
 
 	// Create a RISC-V machine with the binary as input program

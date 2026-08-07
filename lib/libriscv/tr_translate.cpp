@@ -1129,6 +1129,17 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		const auto addr = mappings[i].addr;
 
 		if (exec.is_within(addr)) {
+		#ifdef RISCV_ASMJIT
+			// The asmjit backend ran first (asmjit_override_bintr) and already
+			// owns this decoder entry, so binary translation must not claim it.
+			{
+				const auto& claimed = decoder_entry_at(exec.decoder_cache(), addr);
+				if (claimed.get_bytecode() == RV32I_BC_ASMJIT
+					&& claimed.is_invalid_handler()
+					&& claimed.instr < exec.asmjit_mappings())
+					continue;
+			}
+		#endif
 			auto* handler = handlers[mapping_index];
 			if (handler != nullptr)
 			{

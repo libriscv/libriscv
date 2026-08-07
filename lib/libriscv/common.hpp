@@ -268,6 +268,29 @@ namespace riscv
 		std::string libtcc1_location {};
 #endif
 #endif
+
+		// NOTE: emulator/src/main.cpp uses designated initializers, so the asmjit
+		// fields must stay declared (and assigned) after every bintr field.
+#ifdef RISCV_ASMJIT
+		/// @brief Enable the asmjit native code generator.
+		bool asmjit_enabled = true;
+		/// @brief Let asmjit claim execute segments before binary translation does.
+		/// @details Only meaningful when both backends are compiled in. Used to
+		/// A/B compare the two backends on the same program.
+		bool asmjit_override_bintr = false;
+		/// @brief Print the emitted machine code and region layout.
+		bool asmjit_verbose = false;
+		/// @brief Print timing information for the asmjit translation phase.
+		bool asmjit_timing = false;
+		/// @brief Maximum number of emitted regions per execute segment.
+		unsigned asmjit_blocks_max = 16384;
+		/// @brief Maximum number of RISC-V instructions emitted per execute segment.
+		unsigned asmjit_instr_max = 500'000;
+		/// @brief Maximum number of RISC-V instructions in a single region.
+		/// @details Regions start at every basic-block leader and overlap, so their
+		/// tails are duplicated. This is what bounds that duplication.
+		unsigned asmjit_region_instr_max = 128;
+#endif
 	};
 
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
@@ -361,6 +384,11 @@ namespace riscv
 	static constexpr bool libtcc_enabled = true;
 #else
 	static constexpr bool libtcc_enabled = false;
+#endif
+#ifdef RISCV_ASMJIT
+	static constexpr bool asmjit_enabled = true;
+#else
+	static constexpr bool asmjit_enabled = false;
 #endif
 
 

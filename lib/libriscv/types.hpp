@@ -110,4 +110,23 @@ namespace riscv
 	template <int W>
 	using bintr_block_func = bintr_block_returns<W> (*)(CPU<W>&, uint64_t, uint64_t, address_type<W>);
 #endif
+
+#ifdef RISCV_ASMJIT
+	// Opaque holder for all machine code emitted for one execute segment.
+	// Defined in asmjit/aj_runtime.hpp. std::shared_ptr type-erases the deleter
+	// at construction time, so an incomplete type is fine for the users here.
+	struct AjCode;
+
+	// The ABI between dispatch and asmjit-generated code. Standard-layout, so
+	// the emitter can obtain field displacements with offsetof().
+	template <int W>
+	struct AjState {
+		uint64_t counter;
+		uint64_t max_counter;
+		address_type<W> pc;
+	};
+
+	template <int W>
+	using aj_block_func = void (*)(CPU<W>&, AjState<W>*);
+#endif
 }

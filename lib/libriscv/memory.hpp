@@ -266,6 +266,12 @@ namespace riscv
 		address_t memory_arena_read_boundary() const noexcept { return this->m_arena.read_boundary; }
 		address_t memory_arena_write_boundary() const noexcept { return this->m_arena.write_boundary; }
 		address_t initial_rodata_end() const noexcept { return this->m_arena.initial_rodata_end; }
+		// Native code generators bake the displacement of these into the emitted
+		// bounds checks and read the values at run time, so that generated code
+		// stays valid for any machine the execute segment is shared with.
+		const address_t& memory_arena_read_boundary_ref() const noexcept { return this->m_arena.read_boundary; }
+		const address_t& memory_arena_write_boundary_ref() const noexcept { return this->m_arena.write_boundary; }
+		const address_t& initial_rodata_end_ref() const noexcept { return this->m_arena.initial_rodata_end; }
 
 		// Serializes the current memory state to an existing vector
 		// Returns the final size of the serialized state

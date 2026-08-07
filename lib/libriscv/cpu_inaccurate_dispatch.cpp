@@ -103,6 +103,11 @@ namespace riscv
 		if (LIKELY(decoder->get_bytecode() == RV32I_BC_TRANSLATOR))
 			goto retry_translated_function;
 #endif
+#ifdef RISCV_ASMJIT
+		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
+		if (LIKELY(decoder->get_bytecode() == RV32I_BC_ASMJIT))
+			goto begin_asmjit_function;
+#endif
 
 	continue_segment:
 		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
@@ -185,6 +190,30 @@ retry_translated_function:
 }
 #endif // RISCV_BINARY_TRANSLATION
 
+#ifdef RISCV_ASMJIT
+INSTRUCTION(RV32I_BC_ASMJIT, asmjit_function)
+{
+begin_asmjit_function:
+	// The inaccurate dispatch does not count instructions, so the region only
+	// ever exits on control flow it cannot handle, or when a helper faults.
+	AjState<W> state { 0, ~0ULL, pc };
+retry_asmjit_function:
+	exec->unchecked_asmjit_mapping_at(decoder->instr)(*this, &state);
+	if (UNLIKELY(CPU().has_current_exception()))
+		goto handle_rethrow_exception;
+	if (UNLIKELY(state.max_counter == 0))
+		return;
+	pc = state.pc;
+	if (LIKELY(pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())) {
+		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
+		if (decoder->get_bytecode() == RV32I_BC_ASMJIT)
+			goto retry_asmjit_function;
+		goto continue_segment;
+	}
+	goto check_jump;
+}
+#endif // RISCV_ASMJIT
+
 INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
 {
 	// Make the current PC visible
@@ -249,7 +278,7 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 		registers().pc = pc;
 		trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 
-#if defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)
+#if (defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)) || defined(RISCV_ASMJIT)
 	handle_rethrow_exception:
 		// We have an exception, so we need to rethrow it
 		const auto except = CPU().current_exception();

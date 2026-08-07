@@ -175,6 +175,9 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		const auto translator_op = RV32I_BC_TRANSLATOR;
 #endif
+#ifdef RISCV_ASMJIT
+		const auto asmjit_op = RV32I_BC_ASMJIT;
+#endif
 
 		if constexpr (compressed_enabled)
 		{
@@ -235,6 +238,10 @@ namespace riscv
 					if (entry->get_bytecode() == translator_op)
 						break;
 				#endif
+				#ifdef RISCV_ASMJIT
+					if (entry->get_bytecode() == asmjit_op)
+						break;
+				#endif
 
 					// A last test for the last instruction, which should have been a block-ending
 					// instruction. Since it wasn't we must force-end the block here.
@@ -291,6 +298,10 @@ namespace riscv
 					idxend = 0;
 			#ifdef RISCV_BINARY_TRANSLATION
 				if (entry.get_bytecode() == translator_op)
+					idxend = 0;
+			#endif
+			#ifdef RISCV_ASMJIT
+				if (entry.get_bytecode() == asmjit_op)
 					idxend = 0;
 			#endif
 				if (UNLIKELY(idxend == 65535)) {
@@ -368,6 +379,28 @@ namespace riscv
 		auto* exec_segment = exec.exec_data();
 		TIME_POINT(t1);
 
+#ifdef RISCV_ASMJIT
+		// asmjit is entirely independent of binary translation. The only place the
+		// two subsystems know about each other is this ordering decision: whichever
+		// runs first claims decoder entries, and the other one skips those.
+		bool allow_asmjit = options.asmjit_enabled && !exec.is_likely_jit();
+	#ifdef RISCV_BINARY_TRANSLATION
+		// Background binary translation live-patches by installing a *copy* of the
+		// decoder cache and pointing the segment at it, on another thread, while we
+		// are still filling this one in. asmjit claims entries in the segment's
+		// current cache, so a claim racing that swap lands in a cache nobody fills,
+		// and every claimed entry reads back as an invalid instruction. There is no
+		// point at which asmjit could safely claim, so it steps aside entirely and
+		// leaves the segment to bintr and the interpreter, which are both correct
+		// without it. Use --no-background (or asmjit_override_bintr) to A/B compare.
+		if (options.translate_background_callback != nullptr)
+			allow_asmjit = false;
+	#endif
+		if (allow_asmjit && options.asmjit_override_bintr) {
+			machine().cpu.asmjit_translate(options, exec);
+		}
+	#endif
+
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
 		// Also, avoid binary translation for execute segments that are likely JIT-compiled
@@ -383,6 +416,12 @@ namespace riscv
 				machine().cpu.try_translate(
 					options, bintr_filename, shared_segment);
 			}
+		}
+	#endif
+
+#ifdef RISCV_ASMJIT
+		if (allow_asmjit && !options.asmjit_override_bintr) {
+			machine().cpu.asmjit_translate(options, exec);
 		}
 	#endif
 
@@ -407,10 +446,21 @@ namespace riscv
 				exec_segment, dst, end_addr);
 			rv32i_instruction rewritten = instruction;
 
-#ifdef RISCV_BINARY_TRANSLATION
-			// Translator activation uses a special bytecode
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+			// Native code activation uses a special bytecode
 			// but we must still validate the mapping index.
-			if (entry.get_bytecode() == RV32I_BC_TRANSLATOR && entry.is_invalid_handler() && entry.instr < exec.translator_mappings()) {
+			const auto claimed_bc = entry.get_bytecode();
+			const bool claimed =
+	#ifdef RISCV_BINARY_TRANSLATION
+				(claimed_bc == RV32I_BC_TRANSLATOR && entry.is_invalid_handler()
+				 && entry.instr < exec.translator_mappings()) ||
+	#endif
+	#ifdef RISCV_ASMJIT
+				(claimed_bc == RV32I_BC_ASMJIT && entry.is_invalid_handler()
+				 && entry.instr < exec.asmjit_mappings()) ||
+	#endif
+				false;
+			if (claimed) {
 				if constexpr (compressed_enabled) {
 					dst += 2;
 					if (was_full_instruction) {

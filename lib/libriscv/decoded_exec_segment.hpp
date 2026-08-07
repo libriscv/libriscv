@@ -100,6 +100,17 @@ namespace riscv
 		bool is_libtcc() const noexcept { return false; }
 #endif
 
+#ifdef RISCV_ASMJIT
+		bool is_asmjit_translated() const noexcept { return !m_asmjit_mappings.empty(); }
+		auto& create_asmjit_mappings(size_t n) { m_asmjit_mappings.resize(n); return m_asmjit_mappings; }
+		void set_asmjit_mapping(unsigned i, aj_block_func<W> f) { m_asmjit_mappings.at(i) = f; }
+		aj_block_func<W> unchecked_asmjit_mapping_at(unsigned i) const { return m_asmjit_mappings[i]; }
+		size_t asmjit_mappings() const noexcept { return m_asmjit_mappings.size(); }
+		void set_asmjit_code(std::shared_ptr<AjCode> code) { m_asmjit_code = std::move(code); }
+#else
+		bool is_asmjit_translated() const noexcept { return false; }
+#endif
+
 		bool is_execute_only() const noexcept { return m_is_execute_only; }
 		void set_execute_only(bool is_xo) { m_is_execute_only = is_xo; }
 
@@ -133,6 +144,12 @@ namespace riscv
 		std::unordered_set<address_t> m_slowpath_addresses;
 #endif
 		uint32_t m_bintr_hash = 0x0; // CRC32-C of the execute segment + compiler options
+#endif
+#ifdef RISCV_ASMJIT
+		std::vector<aj_block_func<W>> m_asmjit_mappings;
+		// Releases the JitRuntime (and every function in it) when the last
+		// execute segment referencing it goes away.
+		std::shared_ptr<AjCode> m_asmjit_code;
 #endif
 		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment
 		bool m_is_execute_only = false;
@@ -182,6 +199,10 @@ namespace riscv
 		m_is_libtcc = other.m_is_libtcc;
 		m_patched_decoder_cache = std::move(other.m_patched_decoder_cache);
 		m_patched_exec_decoder = other.m_patched_exec_decoder;
+#endif
+#ifdef RISCV_ASMJIT
+		m_asmjit_mappings = std::move(other.m_asmjit_mappings);
+		m_asmjit_code     = std::move(other.m_asmjit_code);
 #endif
 	}
 
