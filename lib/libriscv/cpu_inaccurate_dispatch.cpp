@@ -1,3 +1,4 @@
+#include "internal_common.hpp"
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "threaded_bytecodes.hpp"

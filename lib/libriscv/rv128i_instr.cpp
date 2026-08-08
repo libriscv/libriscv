@@ -1,3 +1,4 @@
+#include "internal_common.hpp"
 #include "instr_helpers.hpp"
 #include <inttypes.h>
 
@@ -56,13 +57,7 @@ namespace riscv
 			dst = (int64_t) ((int64_t)src1 * (int64_t)src2);
 			return;
 		case 0x14: // DIV.D
-			// division by zero is not an exception
-			if (LIKELY(src2 != 0)) {
-				if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-					dst = (int64_t) ((int64_t)src1 / (int64_t)src2);
-			} else {
-				dst = (RVREGTYPE(cpu)) -1;
-			}
+			dst = (int64_t) rv_div<uint64_t>(src1, src2);
 			return;
 		case 0x15: // DIVU.D
 			if (LIKELY(src2 != 0)) {
@@ -72,12 +67,7 @@ namespace riscv
 			}
 			return;
 		case 0x16: // REM.D
-			if (LIKELY(src2 != 0)) {
-				if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-					dst = (int64_t) ((int64_t)src1 % (int64_t)src2);
-			} else {
-				dst = (RVREGTYPE(cpu)) -1;
-			}
+			dst = (int64_t) rv_rem<uint64_t>(src1, src2);
 			return;
 		case 0x17: // REMU.D
 			if (LIKELY(src2 != 0)) {

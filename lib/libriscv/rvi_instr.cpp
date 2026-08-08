@@ -1,4 +1,5 @@
 #include "instr_helpers.hpp"
+#include "internal_common.hpp"
 #include "rvc.hpp"
 #include <atomic>
 #if __has_include(<bit>)
@@ -663,27 +664,7 @@ static inline uint64_t MUL128(
 			}
 			return;
 		case 0x14: // DIV
-			// Division by zero is not an exception: rd = -1
-			// Signed overflow is not an exception either: rd = the dividend
-			if (LIKELY(RVTOSIGNED(src2) != 0)) {
-				if constexpr (RVIS64BIT(cpu)) {
-					// vi_instr.cpp:444:2: runtime error:
-					// division of -9223372036854775808 by -1 cannot be represented in type 'long'
-					if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
-					else
-						dst = src1;
-				} else {
-					// rv32i_instr.cpp:301:2: runtime error:
-					// division of -2147483648 by -1 cannot be represented in type 'int'
-					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-						dst = RVTOSIGNED(src1) / RVTOSIGNED(src2);
-					else
-						dst = src1;
-				}
-			} else {
-				dst = (RVREGTYPE(cpu)) -1;
-			}
+			dst = rv_div<RVREGTYPE(cpu)>(src1, src2);
 			return;
 		case 0x15: // DIVU
 			if (LIKELY(src2 != 0)) {
@@ -693,25 +674,7 @@ static inline uint64_t MUL128(
 			}
 			return;
 		case 0x16: // REM
-			// Division by zero is not an exception: rd = the dividend
-			// Signed overflow is not an exception either: rd = 0
-			if (LIKELY(src2 != 0)) {
-				if constexpr(RVIS32BIT(cpu)) {
-					if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-					else
-						dst = 0;
-				} else if constexpr (RVIS64BIT(cpu)) {
-					if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-						dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-					else
-						dst = 0;
-				} else {
-					dst = RVTOSIGNED(src1) % RVTOSIGNED(src2);
-				}
-			} else {
-				dst = src1;
-			}
+			dst = rv_rem<RVREGTYPE(cpu)>(src1, src2);
 			return;
 		case 0x17: // REMU
 			if (LIKELY(src2 != 0)) {
@@ -1095,18 +1058,7 @@ static inline uint64_t MUL128(
 			dst = (int32_t) (src1 * src2);
 			return;
 		case 0x14: // DIVW
-			// Division by zero is not an exception: rd = -1
-			// Signed overflow is not an exception either: rd = the dividend
-			if (LIKELY(src2 != 0)) {
-				// division of -2147483648 by -1 cannot be represented in type 'int'
-				if (LIKELY(!((int32_t)src1 == -2147483648 && (int32_t)src2 == -1))) {
-					dst = (int32_t) ((int32_t)src1 / (int32_t)src2);
-				} else {
-					dst = (int32_t) src1;
-				}
-			} else {
-				dst = (RVREGTYPE(cpu)) -1;
-			}
+			dst = (int32_t) rv_div<uint32_t>(src1, src2);
 			return;
 		case 0x15: // DIVUW
 			if (LIKELY(src2 != 0)) {
@@ -1116,17 +1068,7 @@ static inline uint64_t MUL128(
 			}
 			return;
 		case 0x16: // REMW
-			// Division by zero is not an exception: rd = the dividend
-			// Signed overflow is not an exception either: rd = 0
-			if (LIKELY(src2 != 0)) {
-				if (LIKELY(!((int32_t)src1 == -2147483648 && (int32_t)src2 == -1))) {
-					dst = (int32_t) ((int32_t)src1 % (int32_t)src2);
-				} else {
-					dst = 0;
-				}
-			} else {
-				dst = int32_t(src1);
-			}
+			dst = (int32_t) rv_rem<uint32_t>(src1, src2);
 			return;
 		case 0x17: // REMUW
 			if (LIKELY(src2 != 0)) {

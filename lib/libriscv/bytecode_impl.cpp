@@ -703,27 +703,7 @@ INSTRUCTION(RV64I_BC_OP_SH2ADD_UW, rv64i_op_sh2add_uw) {
 
 INSTRUCTION(RV32I_BC_OP_DIV, rv32i_op_div) {
 	OP_INSTR();
-	// Division by zero is not an exception: rd = -1
-	// Signed overflow is not an exception either: rd = the dividend
-	if (LIKELY(saddr_t(src2) != 0)) {
-		if constexpr (W == 8) {
-			// vi_instr.cpp:444:2: runtime error:
-			// division of -9223372036854775808 by -1 cannot be represented in type 'long'
-			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-				dst = saddr_t(src1) / saddr_t(src2);
-			else
-				dst = src1;
-		} else {
-			// rv32i_instr.cpp:301:2: runtime error:
-			// division of -2147483648 by -1 cannot be represented in type 'int'
-			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-				dst = saddr_t(src1) / saddr_t(src2);
-			else
-				dst = src1;
-		}
-	} else {
-		dst = addr_t(-1);
-	}
+	dst = rv_div<addr_t>(src1, src2);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_OP_DIVU, rv32i_op_divu) {
@@ -737,25 +717,7 @@ INSTRUCTION(RV32I_BC_OP_DIVU, rv32i_op_divu) {
 }
 INSTRUCTION(RV32I_BC_OP_REM, rv32i_op_rem) {
 	OP_INSTR();
-	// Division by zero is not an exception: rd = the dividend
-	// Signed overflow is not an exception either: rd = 0
-	if (LIKELY(src2 != 0)) {
-		if constexpr(W == 4) {
-			if (LIKELY(!(src1 == 2147483648 && src2 == 4294967295)))
-				dst = saddr_t(src1) % saddr_t(src2);
-			else
-				dst = 0;
-		} else if constexpr (W == 8) {
-			if (LIKELY(!((int64_t)src1 == INT64_MIN && (int64_t)src2 == -1ll)))
-				dst = saddr_t(src1) % saddr_t(src2);
-			else
-				dst = 0;
-		} else {
-			dst = saddr_t(src1) % saddr_t(src2);
-		}
-	} else {
-		dst = src1;
-	}
+	dst = rv_rem<addr_t>(src1, src2);
 	NEXT_INSTR();
 }
 INSTRUCTION(RV32I_BC_OP_REMU, rv32i_op_remu) {
