@@ -54,7 +54,7 @@ namespace riscv
 				// targets: without the address *after* a call, a returning function
 				// would land in the middle of a region and fall back to the
 				// interpreter for the rest of its caller.
-				if (aj_is_emittable(d)) {
+				if (aj_is_emittable<W>(d)) {
 					switch (d.instr.opcode()) {
 					case RV32I_JAL:
 						candidates.push_back(pc + d.instr.Jtype.jump_offset());
@@ -105,7 +105,7 @@ namespace riscv
 			if (seen.size() >= max_instructions)
 				continue;   // capped: anything left over becomes a region exit
 			const auto d = aj_decode<W>(seg, pc, map.end);
-			if (!aj_is_emittable(d))
+			if (!aj_is_emittable<W>(d))
 				continue;
 			seen.insert(pc);
 
@@ -151,9 +151,10 @@ namespace riscv
 		return info;
 	}
 
-	// v1: RV32 on x86-64 only. Everything else falls back to the interpreter.
+	// RV32 and RV64. RV128 and hosts without a code generator fall back to the
+	// interpreter.
 	template <int W>
-	static void aj_translate_rv32(const CPU<W>& cpu,
+	static void aj_translate_segment(const CPU<W>& cpu,
 		const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec)
 	{
 		using address_t = address_type<W>;
@@ -248,13 +249,13 @@ namespace riscv
 	void CPU<W>::asmjit_translate(const MachineOptions<W>& options,
 		DecodedExecuteSegment<W>& exec) const
 	{
-#if defined(__x86_64__) || defined(_M_X64)
-		if constexpr (W == 4) {
-			aj_translate_rv32<W>(*this, options, exec);
+#if RISCV_ASMJIT_HAS_BACKEND
+		if constexpr (W == 4 || W == 8) {
+			aj_translate_segment<W>(*this, options, exec);
 			return;
 		}
 #endif
-		// v1: RV32 on x86-64 only. Everything else falls back to the interpreter.
+		// RV128, and hosts asmjit has no code generator for, stay interpreted.
 		(void)options; (void)exec;
 	}
 

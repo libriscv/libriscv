@@ -30,10 +30,14 @@ namespace riscv
 		addr_t (*load_i16)(CPU<W>&, AjState<W>*, addr_t addr, addr_t pc) noexcept;
 		addr_t (*load_u16)(CPU<W>&, AjState<W>*, addr_t addr, addr_t pc) noexcept;
 		addr_t (*load_i32)(CPU<W>&, AjState<W>*, addr_t addr, addr_t pc) noexcept;
+		// RV64 only: LWU zero-extends where LW sign-extends, and LD is full width.
+		addr_t (*load_u32)(CPU<W>&, AjState<W>*, addr_t addr, addr_t pc) noexcept;
+		addr_t (*load_i64)(CPU<W>&, AjState<W>*, addr_t addr, addr_t pc) noexcept;
 
 		void (*store_8) (CPU<W>&, AjState<W>*, addr_t addr, addr_t value, addr_t pc) noexcept;
 		void (*store_16)(CPU<W>&, AjState<W>*, addr_t addr, addr_t value, addr_t pc) noexcept;
 		void (*store_32)(CPU<W>&, AjState<W>*, addr_t addr, addr_t value, addr_t pc) noexcept;
+		void (*store_64)(CPU<W>&, AjState<W>*, addr_t addr, addr_t value, addr_t pc) noexcept;   // RV64 only
 	};
 
 	template <int W>

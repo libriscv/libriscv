@@ -38,6 +38,10 @@ namespace riscv
 	AJ_LOAD_HELPER(aj_load_i16, uint16_t, int16_t)
 	AJ_LOAD_HELPER(aj_load_u16, uint16_t, uint16_t)
 	AJ_LOAD_HELPER(aj_load_i32, uint32_t, int32_t)
+	// Only ever emitted for W == 8; on RV32 the result would not fit a register,
+	// but the entries exist so that the callback table has one shape.
+	AJ_LOAD_HELPER(aj_load_u32, uint32_t, uint32_t)
+	AJ_LOAD_HELPER(aj_load_i64, uint64_t, int64_t)
 
 #define AJ_STORE_HELPER(name, type)                                               \
 	template <int W>                                                              \
@@ -55,6 +59,7 @@ namespace riscv
 	AJ_STORE_HELPER(aj_store_8,  uint8_t)
 	AJ_STORE_HELPER(aj_store_16, uint16_t)
 	AJ_STORE_HELPER(aj_store_32, uint32_t)
+	AJ_STORE_HELPER(aj_store_64, uint64_t)   // RV64 only
 
 	template <int W>
 	const AjCallbacks<W>& aj_callbacks() noexcept
@@ -62,9 +67,10 @@ namespace riscv
 		static const AjCallbacks<W> table {
 			.load_i8  = aj_load_i8<W>,  .load_u8  = aj_load_u8<W>,
 			.load_i16 = aj_load_i16<W>, .load_u16 = aj_load_u16<W>,
-			.load_i32 = aj_load_i32<W>,
+			.load_i32 = aj_load_i32<W>, .load_u32 = aj_load_u32<W>,
+			.load_i64 = aj_load_i64<W>,
 			.store_8  = aj_store_8<W>,  .store_16 = aj_store_16<W>,
-			.store_32 = aj_store_32<W>,
+			.store_32 = aj_store_32<W>, .store_64 = aj_store_64<W>,
 		};
 		return table;
 	}

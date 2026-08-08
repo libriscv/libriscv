@@ -42,8 +42,10 @@ function usage()
      --no-tailcall-dispatch disable tailcall dispatch
      -b, --bintr          enable binary translation using system compiler
      --no-bintr           disable binary translation
-     -t, --jit            jit-compile using tcc
-     --no-jit             disable jit-compile using tcc
+     -t, --tcc            jit-compile using tcc
+     --no-tcc             disable jit-compilation with tcc
+     --asmjit, --jit      jit-compile using asmjit
+     --no-jit             disable all jit-compilation (asmjit and tcc)
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
      -N bits              enable N-bits of masked address space (experimental feature)
      --no-expr            disable experimental features
@@ -51,8 +53,8 @@ function usage()
      --paging             enable virtual paging
      --syscall-verbose    compile in system call logging (--verbose-syscalls at run-time)
      --no-syscall-verbose disable system call logging
-	 --correct            enable correctness (FCSR, NaN-boxing, etc.)
-	 --fast               enable the default fast mode (disable correctness features)
+     --correct            enable correctness (FCSR, NaN-boxing, etc.)
+     --fast               enable the default fast mode (disable correctness features)
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 

@@ -5,7 +5,7 @@
 
 namespace riscv
 {
-	/// @brief One guest instruction, normalized into 32-bit RV32I form.
+	/// @brief One guest instruction, normalized into 32-bit base-ISA form.
 	/// @details Compressed instructions are expanded to the equivalent base
 	/// instruction, so that everything downstream of aj_decode() only ever deals
 	/// with 32-bit encodings. `length` remains the *guest* length, because it is
@@ -17,13 +17,20 @@ namespace riscv
 		bool     valid  = false;   ///< false: not expressible as a base instruction
 	};
 
-	/// @brief Expands one compressed instruction into its RV32I equivalent.
-	/// @details Mirrors the interpreter's decoding of the RV32C quadrants. Only
-	/// the encodings that map onto the base integer set are expanded; the F/D
-	/// forms, the reserved encodings and C.ILLEGAL come back invalid, which makes
-	/// them region terminators just like any other unsupported instruction.
+	/// @brief Expands one compressed instruction into its RV32I/RV64I equivalent.
+	/// @details Mirrors the interpreter's decoding of the RVC quadrants. Only the
+	/// encodings that map onto the base integer set are expanded; the F/D forms,
+	/// the reserved encodings and C.ILLEGAL come back invalid, which makes them
+	/// region terminators just like any other unsupported instruction.
+	/// @tparam W The guest register width. RV32C and RV64C reuse several
+	/// encodings for different instructions (C.JAL vs C.ADDIW, C.FLW vs C.LD,
+	/// 5- vs 6-bit shift amounts), so the expansion is width-dependent.
+	template <int W>
 	inline AjDecoded aj_expand_rvc(uint16_t whole) noexcept
 	{
+		static_assert(W == 4 || W == 8, "RVC expansion supports RV32 and RV64");
+		constexpr bool RV64 = (W == 8);
+
 		const rv32c_instruction ci { whole };
 		AjDecoded d;
 		d.length = 2;
@@ -31,6 +38,13 @@ namespace riscv
 
 		const auto addi = [&] (unsigned rd, unsigned rs1, int32_t imm) {
 			instr.Itype.opcode = RV32I_OP_IMM;
+			instr.Itype.funct3 = 0b000;
+			instr.Itype.rd = rd; instr.Itype.rs1 = rs1;
+			instr.Itype.imm = imm;
+			d.valid = true;
+		};
+		const auto addiw = [&] (unsigned rd, unsigned rs1, int32_t imm) {
+			instr.Itype.opcode = RV64I_OP_IMM32;
 			instr.Itype.funct3 = 0b000;
 			instr.Itype.rd = rd; instr.Itype.rs1 = rs1;
 			instr.Itype.imm = imm;
@@ -45,6 +59,12 @@ namespace riscv
 		};
 		const auto op = [&] (unsigned funct3, unsigned funct7, unsigned rd, unsigned rs1, unsigned rs2) {
 			instr.Rtype.opcode = RV32I_OP;
+			instr.Rtype.funct3 = funct3; instr.Rtype.funct7 = funct7;
+			instr.Rtype.rd = rd; instr.Rtype.rs1 = rs1; instr.Rtype.rs2 = rs2;
+			d.valid = true;
+		};
+		const auto op32 = [&] (unsigned funct3, unsigned funct7, unsigned rd, unsigned rs1, unsigned rs2) {
+			instr.Rtype.opcode = RV64I_OP32;
 			instr.Rtype.funct3 = funct3; instr.Rtype.funct7 = funct7;
 			instr.Rtype.rd = rd; instr.Rtype.rs1 = rs1; instr.Rtype.rs2 = rs2;
 			d.valid = true;
@@ -95,16 +115,29 @@ namespace riscv
 		case RISCV_CI_CODE(0b010, 0b00):   // C.LW
 			load(0b010, ci.CL.srd + 8, ci.CL.srs1 + 8, ci.CL.offset());
 			break;
+		case RISCV_CI_CODE(0b011, 0b00):   // C.LD (RV64) / C.FLW (RV32)
+			if constexpr (RV64)
+				load(0b011, ci.CL.srd + 8, ci.CL.srs1 + 8, ci.CSD.offset8());
+			break;
 		case RISCV_CI_CODE(0b110, 0b00):   // C.SW
 			store(0b010, ci.CS.srs1 + 8, ci.CS.srs2 + 8, ci.CS.offset4());
+			break;
+		case RISCV_CI_CODE(0b111, 0b00):   // C.SD (RV64) / C.FSW (RV32)
+			if constexpr (RV64)
+				store(0b011, ci.CSD.srs1 + 8, ci.CSD.srs2 + 8, ci.CSD.offset8());
 			break;
 
 		// --- Quadrant 1 ---
 		case RISCV_CI_CODE(0b000, 0b01):   // C.NOP / C.ADDI
 			addi(ci.CI.rd, ci.CI.rd, ci.CI.signed_imm());
 			break;
-		case RISCV_CI_CODE(0b001, 0b01):   // C.JAL (RV32 only)
-			jal(1, ci.CJ.signed_imm());
+		case RISCV_CI_CODE(0b001, 0b01):   // C.ADDIW (RV64) / C.JAL (RV32)
+			if constexpr (RV64) {
+				if (ci.CI.rd != 0)     // rd == 0 is reserved
+					addiw(ci.CI.rd, ci.CI.rd, ci.CI.signed_imm());
+			} else {
+				jal(1, ci.CJ.signed_imm());
+			}
 			break;
 		case RISCV_CI_CODE(0b010, 0b01):   // C.LI
 			addi(ci.CI.rd, 0, ci.CI.signed_imm());
@@ -123,10 +156,12 @@ namespace riscv
 		case RISCV_CI_CODE(0b100, 0b01):
 			switch (ci.CA.funct6 & 0x3) {
 			case 0:   // C.SRLI
-				shift_or_logic_imm(0b101, ci.CA.srd + 8, ci.CA.srd + 8, ci.CAB.shift_imm());
+				shift_or_logic_imm(0b101, ci.CA.srd + 8, ci.CA.srd + 8,
+					RV64 ? ci.CAB.shift64_imm() : ci.CAB.shift_imm());
 				break;
 			case 1:   // C.SRAI
-				shift_or_logic_imm(0b101, ci.CA.srd + 8, ci.CA.srd + 8, ci.CAB.shift_imm() | 0x400);
+				shift_or_logic_imm(0b101, ci.CA.srd + 8, ci.CA.srd + 8,
+					(RV64 ? ci.CAB.shift64_imm() : ci.CAB.shift_imm()) | 0x400);
 				break;
 			case 2:   // C.ANDI
 				shift_or_logic_imm(0b111, ci.CA.srd + 8, ci.CA.srd + 8, ci.CAB.signed_imm());
@@ -137,7 +172,15 @@ namespace riscv
 				case 1: op(0b100, 0x00, ci.CA.srd + 8, ci.CA.srd + 8, ci.CA.srs2 + 8); break; // C.XOR
 				case 2: op(0b110, 0x00, ci.CA.srd + 8, ci.CA.srd + 8, ci.CA.srs2 + 8); break; // C.OR
 				case 3: op(0b111, 0x00, ci.CA.srd + 8, ci.CA.srd + 8, ci.CA.srs2 + 8); break; // C.AND
-				default: break;   // C.SUBW / C.ADDW / reserved: RV64 only
+				case 4: // C.SUBW (RV64 only)
+					if constexpr (RV64)
+						op32(0b000, 0x20, ci.CA.srd + 8, ci.CA.srd + 8, ci.CA.srs2 + 8);
+					break;
+				case 5: // C.ADDW (RV64 only)
+					if constexpr (RV64)
+						op32(0b000, 0x00, ci.CA.srd + 8, ci.CA.srd + 8, ci.CA.srs2 + 8);
+					break;
+				default: break;   // reserved
 				}
 				break;
 			}
@@ -155,11 +198,18 @@ namespace riscv
 		// --- Quadrant 2 ---
 		case RISCV_CI_CODE(0b000, 0b10):   // C.SLLI
 			if (ci.CI.rd != 0)
-				shift_or_logic_imm(0b001, ci.CI.rd, ci.CI.rd, ci.CI.shift_imm());
+				shift_or_logic_imm(0b001, ci.CI.rd, ci.CI.rd,
+					RV64 ? ci.CI.shift64_imm() : ci.CI.shift_imm());
 			break;
 		case RISCV_CI_CODE(0b010, 0b10):   // C.LWSP
 			if (ci.CI2.rd != 0)
 				load(0b010, ci.CI2.rd, 2, ci.CI2.offset());
+			break;
+		case RISCV_CI_CODE(0b011, 0b10):   // C.LDSP (RV64) / C.FLWSP (RV32)
+			if constexpr (RV64) {
+				if (ci.CIFLD.rd != 0)
+					load(0b011, ci.CIFLD.rd, 2, ci.CIFLD.offset());
+			}
 			break;
 		case RISCV_CI_CODE(0b100, 0b10): {
 			const bool topbit = ci.whole & (1 << 12);
@@ -181,16 +231,20 @@ namespace riscv
 		case RISCV_CI_CODE(0b110, 0b10):   // C.SWSP
 			store(0b010, 2, ci.CSS.rs2, ci.CSS.offset(4));
 			break;
+		case RISCV_CI_CODE(0b111, 0b10):   // C.SDSP (RV64) / C.FSWSP (RV32)
+			if constexpr (RV64)
+				store(0b011, 2, ci.CSFSD.rs2, ci.CSFSD.offset());
+			break;
 
 		default:
-			// C.FLD/C.FLW/C.FSD/C.FSW and their SP-relative forms, plus every
-			// reserved encoding: not part of the base integer set.
+			// C.FLD/C.FSD and their SP-relative forms, the RV32-only float forms,
+			// plus every reserved encoding: not part of the base integer set.
 			break;
 		}
 		return d;
 	}
 
-	/// @brief Reads one guest instruction and normalizes it to 32-bit RV32I form.
+	/// @brief Reads one guest instruction and normalizes it to 32-bit form.
 	template <int W>
 	inline AjDecoded aj_decode(const uint8_t* seg, address_type<W> pc, address_type<W> seg_end) noexcept
 	{
@@ -203,7 +257,7 @@ namespace riscv
 		if (pc + 2 > seg_end)
 			return {};
 #ifdef RISCV_EXT_C
-		return aj_expand_rvc(raw.half[0]);
+		return aj_expand_rvc<W>(raw.half[0]);
 #else
 		return {};
 #endif
