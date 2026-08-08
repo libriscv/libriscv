@@ -1,12 +1,18 @@
 #pragma once
 #include "../types.hpp"
 
-#if defined(__x86_64__) || defined(_M_X64)
+#include <asmjit/core.h>
+#if !defined(ASMJIT_NO_UJIT)
+#  include <asmjit/ujit.h>
+#endif
+
+// The emitter is written against asmjit's universal compiler (ujit), which
+// covers x86-64 and AArch64 from a single source. asmjit defines exactly one
+// of these two when it has a code generator for the host it is built on.
+#if defined(ASMJIT_UJIT_X86) || defined(ASMJIT_UJIT_AARCH64)
 #  define RISCV_ASMJIT_HAS_BACKEND 1
-#  include <asmjit/x86.h>
 #else
 #  define RISCV_ASMJIT_HAS_BACKEND 0
-#  include <asmjit/core.h>
 #endif
 
 namespace riscv

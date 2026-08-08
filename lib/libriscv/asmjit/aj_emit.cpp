@@ -5,9 +5,10 @@
 #include "../memory.hpp"
 
 #include <algorithm>
+#include <array>
+#include <bitset>
 #include <cstddef>
 #include <cstdio>
-#include <bitset>
 #include <functional>
 #include <set>
 #include <unordered_map>
@@ -18,28 +19,58 @@ namespace riscv
 #if RISCV_ASMJIT_HAS_BACKEND
 
 using namespace asmjit;
+using namespace asmjit::ujit;
+
+// --- host escapes ---------------------------------------------------------
+// Everything else in this file is emitted through asmjit's universal compiler,
+// which serves x86-64 and AArch64 from one source. These two operations have no
+// universal spelling, and together they are the entire host-specific surface.
+
+/// @brief A full memory barrier, matching what the interpreter gives FENCE.
+static inline void host_fence(BackendCompiler& cc)
+{
+#if defined(ASMJIT_UJIT_X86)
+	cc.mfence();
+#else
+	cc.dmb(a64::Predicate::DB::kSY);
+#endif
+}
+
+/// @brief dst = sign_extend_32_to_64(src).
+/// @details RV64 defines every *W instruction as a 32-bit operation whose
+/// result is sign-extended into the full destination register.
+static inline void host_sign_extend_word(BackendCompiler& cc, const Gp& dst, const Gp& src)
+{
+#if defined(ASMJIT_UJIT_X86)
+	cc.movsxd(dst, src);
+#else
+	cc.sxtw(dst, src);
+#endif
+}
 
 template <int W>
 struct AjEmitter
 {
 	using address_t = address_type<W>;
-	static_assert(W == 4, "The asmjit backend is RV32-only in v1");
-	static constexpr int RVLEN = sizeof(address_t);
+	static_assert(W == 4 || W == 8, "The asmjit backend supports RV32 and RV64");
+	static constexpr int  RVLEN = sizeof(address_t);
+	static constexpr bool RV64  = (W == 8);
 
-	x86::Compiler& cc;
+	UniCompiler& uc;
+	BackendCompiler& cc;  // == *uc.cc, used only by the host escapes above
 	const uint8_t* seg;   // PC-relative pointer to the execute segment
 	address_t entry;      // the guest address this function is entered at
 	const std::vector<address_t>& instrs;   // reachable addresses, ascending
 	address_t seg_end;    // execute segment end, for instruction reads
 	const AjInfo<W>& info;
 
-	x86::Gp cpu;          // arg0: CPU<W>*
-	x86::Gp st;           // arg1: AjState<W>*
-	x86::Gp counter;      // live instruction counter
-	x86::Gp zero;         // a constant zero, standing in for x0
-	x86::Gp arena;        // base of the flat memory arena, when inlining
+	Gp cpu;               // arg0: CPU<W>*
+	Gp st;                // arg1: AjState<W>*
+	Gp counter;           // live instruction counter, always 64-bit
+	Gp zero;              // a constant zero, standing in for x0
+	Gp arena;             // base of the flat memory arena, when inlining
 
-	std::array<x86::Gp, 32> vreg {};
+	std::array<Gp, 32> vreg {};
 	std::bitset<32> writeset;   // static: every rd the region writes
 	std::bitset<32> readset;    // static: writeset + every rs1/rs2 it reads
 	bool needs_zero = false;
@@ -54,9 +85,9 @@ struct AjEmitter
 	// live where it branched off, because `pending` has moved on by then.
 	std::vector<std::function<void()>> deferred;
 
-	AjEmitter(x86::Compiler& c, const uint8_t* s, address_t en,
+	AjEmitter(UniCompiler& u, const uint8_t* s, address_t en,
 		const std::vector<address_t>& list, address_t se, const AjInfo<W>& in)
-		: cc(c), seg(s), entry(en), instrs(list), seg_end(se), info(in) {}
+		: uc(u), cc(*u.cc), seg(s), entry(en), instrs(list), seg_end(se), info(in) {}
 
 	// A region is entered at `entry`, but emitted in address order. The two differ
 	// whenever a back-edge reaches below the entry, which is the normal shape of a
@@ -70,9 +101,29 @@ struct AjEmitter
 	}
 	Label label_at(address_t pc) { return labels.at(pc); }
 
-	x86::Mem reg_mem(unsigned i) const {
-		return x86::ptr(cpu, info.reg_offset + int32_t(i * RVLEN), RVLEN);
+	// --- width-parametric primitives ---
+	// A guest register is a host register of exactly the guest width, so that
+	// every operation on it carries RISC-V wrapping and shift-masking semantics
+	// for free, on both 32- and 64-bit guests.
+	Gp new_ireg(const char* name) {
+		if constexpr (RV64) return uc.new_gp64(name); else return uc.new_gp32(name);
 	}
+	Gp new_ireg(const char* fmt, unsigned i) {
+		if constexpr (RV64) return uc.new_gp64(fmt, i); else return uc.new_gp32(fmt, i);
+	}
+	/// @brief A full-width guest constant: an address, a link target, LUI's result.
+	static Imm rvimm(address_t v) {
+		if constexpr (RV64) return Imm(uint64_t(v)); else return Imm(uint32_t(v));
+	}
+	/// @brief A sign-extended constant, which is what every I-type immediate is.
+	static Imm sximm(int32_t v) { return Imm(int64_t(v)); }
+
+	Mem reg_mem(unsigned i) const {
+		return mem_ptr(cpu, info.reg_offset + int32_t(i * RVLEN));
+	}
+	static constexpr int32_t off_counter() { return int32_t(offsetof(AjState<W>, counter)); }
+	static constexpr int32_t off_max()     { return int32_t(offsetof(AjState<W>, max_counter)); }
+	static constexpr int32_t off_pc()      { return int32_t(offsetof(AjState<W>, pc)); }
 
 	// --- register cache ---
 	// Registers are preloaded eagerly in the prologue, NOT lazily on first use.
@@ -81,25 +132,25 @@ struct AjEmitter
 	// value with stale memory. Preloading puts every load ahead of every label.
 	void emit_prologue_loads() {
 		if (needs_zero) {
-			zero = cc.new_gp32("zero");
-			cc.xor_(zero, zero);
+			zero = new_ireg("zero");
+			uc.mov(zero, Imm(0));
 		}
 		if (needs_arena) {
-			arena = cc.new_gpz("arena");
-			cc.mov(arena, x86::qword_ptr(cpu, info.arena_ptr));
+			arena = uc.new_gp_ptr("arena");
+			uc.load(arena, mem_ptr(cpu, info.arena_ptr));
 		}
 		for (unsigned i = 1; i < 32; i++) {
 			if (!readset[i]) continue;
-			vreg[i] = cc.new_gp32("x%u", i);
-			cc.mov(vreg[i], reg_mem(i));
+			vreg[i] = new_ireg("x%u", i);
+			uc.load(vreg[i], reg_mem(i));
 		}
 	}
-	x86::Gp get(unsigned i) {          // source register
+	Gp get(unsigned i) {               // source register
 		if (i == 0) return zero;       // never written, so it can be shared
 		return vreg[i];                // guaranteed loaded by the prologue
 	}
-	x86::Gp def(unsigned i) {          // destination register
-		if (i == 0) return cc.new_gp32("sink"); // writes to x0 are discarded
+	Gp def(unsigned i) {               // destination register
+		if (i == 0) return new_ireg("sink"); // writes to x0 are discarded
 		return vreg[i];                // in writeset, so the prologue loaded it
 	}
 
@@ -112,7 +163,7 @@ struct AjEmitter
 	//   2. immediately before emitting a BRANCH, JAL or JALR
 	// Both sit on linear control flow, so flushing never diverges between paths.
 	void flush_counter() {
-		if (pending) { cc.add(counter, imm(pending)); pending = 0; }
+		if (pending) { uc.add(counter, counter, Imm(pending)); pending = 0; }
 	}
 
 	// --- exits ---
@@ -122,16 +173,21 @@ struct AjEmitter
 	// execute. Exits are cold, so the extra stores cost nothing.
 	void flush_regs() {
 		for (unsigned i = 1; i < 32; i++)
-			if (writeset[i]) cc.mov(reg_mem(i), vreg[i]);
+			if (writeset[i]) uc.store(reg_mem(i), vreg[i]);
 	}
 	void store_counter(uint32_t pend) {
 		if (pend == 0) {
-			cc.mov(x86::qword_ptr(st, offsetof(AjState<W>, counter)), counter);
+			uc.store(mem_ptr(st, off_counter()), counter);
 		} else {
-			auto total = cc.new_gp64("total");
-			cc.lea(total, x86::ptr(counter, int32_t(pend)));
-			cc.mov(x86::qword_ptr(st, offsetof(AjState<W>, counter)), total);
+			Gp total = uc.new_gp64("total");
+			uc.add(total, counter, Imm(pend));
+			uc.store(mem_ptr(st, off_counter()), total);
 		}
+	}
+	void store_pc(address_t next_pc) {
+		Gp t = new_ireg("nextpc");
+		uc.mov(t, rvimm(next_pc));
+		uc.store(mem_ptr(st, off_pc()), t);
 	}
 	// Writes back registers, counter and PC, then returns to dispatch.
 	// Must not mutate `counter` or `pending`: an exit is emitted on one side of a
@@ -139,126 +195,122 @@ struct AjEmitter
 	void emit_exit(address_t next_pc, uint32_t pend) {
 		flush_regs();
 		store_counter(pend);
-		cc.mov(x86::dword_ptr(st, offsetof(AjState<W>, pc)), imm(uint32_t(next_pc)));
-		cc.ret();
+		store_pc(next_pc);
+		uc.ret();
 	}
 	// The JALR form: the next PC is only known at run time.
-	void emit_exit_reg(const x86::Gp& next_pc, uint32_t pend) {
+	void emit_exit_reg(const Gp& next_pc, uint32_t pend) {
 		flush_regs();
 		store_counter(pend);
-		cc.mov(x86::dword_ptr(st, offsetof(AjState<W>, pc)), next_pc);
-		cc.ret();
+		uc.store(mem_ptr(st, off_pc()), next_pc);
+		uc.ret();
 	}
 	// Emitted on the taken path of a backward branch, after flush_counter().
 	// Reloads max from memory on every check so that a faulting helper (which
 	// zeroes it) breaks the loop rather than spinning to the instruction limit.
 	void emit_backedge_check(address_t target) {
-		Label ok = cc.new_label();
-		cc.cmp(counter, x86::qword_ptr(st, offsetof(AjState<W>, max_counter)));
-		cc.jb(ok);
+		Label ok = uc.new_label();
+		uc.j(ok, ucmp_lt(counter, mem_ptr(st, off_max())));
 		emit_exit(target, 0);
-		cc.bind(ok);
+		uc.bind(ok);
 	}
 
 	// --- ALU helpers ---
+	// The universal compiler takes three operands and resolves dst/src aliasing
+	// itself, so RISC-V's two-address forms map straight onto it. In particular
+	// `and rd, rs1, rd` -- a destination that is also the second source -- needs
+	// nothing from the emitter.
 	enum Op { OP_ADD, OP_SUB, OP_AND, OP_OR, OP_XOR };
 
-	void alu_rr(Op op, const x86::Gp& d, const x86::Gp& s) {
+	void alu_rr(Op op, const Gp& d, const Gp& a, const Gp& b) {
 		switch (op) {
-		case OP_ADD: cc.add (d, s); break;
-		case OP_SUB: cc.sub (d, s); break;
-		case OP_AND: cc.and_(d, s); break;
-		case OP_OR:  cc.or_ (d, s); break;
-		case OP_XOR: cc.xor_(d, s); break;
+		case OP_ADD: uc.add (d, a, b); break;
+		case OP_SUB: uc.sub (d, a, b); break;
+		case OP_AND: uc.and_(d, a, b); break;
+		case OP_OR:  uc.or_ (d, a, b); break;
+		case OP_XOR: uc.xor_(d, a, b); break;
 		}
 	}
-	void alu_ri(Op op, const x86::Gp& d, int32_t v) {
+	void alu_ri(Op op, const Gp& d, const Gp& a, int32_t v) {
 		// Identity immediates: ADDI/ORI/XORI with 0 (which is how MV is encoded)
-		// and ANDI with -1 leave the destination alone.
+		// and ANDI with -1 are pure moves.
 		if ((v == 0 && (op == OP_ADD || op == OP_SUB || op == OP_OR || op == OP_XOR))
-			|| (v == -1 && op == OP_AND))
+			|| (v == -1 && op == OP_AND)) {
+			if (d.id() != a.id()) uc.mov(d, a);
 			return;
+		}
 		switch (op) {
-		case OP_ADD: cc.add (d, imm(v)); break;
-		case OP_SUB: cc.sub (d, imm(v)); break;
-		case OP_AND: cc.and_(d, imm(v)); break;
-		case OP_OR:  cc.or_ (d, imm(v)); break;
-		case OP_XOR: cc.xor_(d, imm(v)); break;
+		case OP_ADD: uc.add (d, a, sximm(v)); break;
+		case OP_SUB: uc.sub (d, a, sximm(v)); break;
+		case OP_AND: uc.and_(d, a, sximm(v)); break;
+		case OP_OR:  uc.or_ (d, a, sximm(v)); break;
+		case OP_XOR: uc.xor_(d, a, sximm(v)); break;
 		}
 	}
-	// rd = rs1 <op> rs2, taking care of the case where the destination virtual
-	// register is the same one as a source that is still needed.
-	void binop_rr(Op op, bool commutative, unsigned rd, unsigned rs1, unsigned rs2) {
-		const auto a = get(rs1), b = get(rs2);
-		const auto d = def(rd);
-		if (d.id() == b.id()) {
-			if (commutative) { alu_rr(op, d, a); return; }
-			auto t = cc.new_gp32("tmp");
-			cc.mov(t, a);
-			alu_rr(op, t, b);
-			cc.mov(d, t);
-			return;
-		}
-		if (d.id() != a.id()) cc.mov(d, a);
-		alu_rr(op, d, b);
-	}
-	void binop_ri(Op op, unsigned rd, unsigned rs1, int32_t v) {
-		const auto a = get(rs1);
-		const auto d = def(rd);
-		if (d.id() != a.id()) cc.mov(d, a);
-		alu_ri(op, d, v);
-	}
-	// 0 = shl, 1 = shr, 2 = sar. x86 masks the count by 0x1F for 32-bit
-	// operands, which is exactly the RISC-V rule for RV32.
-	void shift_rr(int kind, unsigned rd, unsigned rs1, unsigned rs2) {
-		const auto a = get(rs1), b = get(rs2);
-		const auto d = def(rd);
-		auto c = cc.new_gp32("shcnt");
-		cc.mov(c, b);                          // copy first: d may alias b
-		if (d.id() != a.id()) cc.mov(d, a);
+	// 0 = shift left, 1 = shift right logical, 2 = shift right arithmetic.
+	// Both hosts mask a register shift count by the operand width minus one,
+	// which is exactly the RISC-V rule for the matching XLEN.
+	void shift_rr(int kind, const Gp& d, const Gp& a, const Gp& b) {
 		switch (kind) {
-		case 0: cc.shl(d, c.r8()); break;
-		case 1: cc.shr(d, c.r8()); break;
-		case 2: cc.sar(d, c.r8()); break;
+		case 0: uc.shl(d, a, b); break;
+		case 1: uc.shr(d, a, b); break;
+		case 2: uc.sar(d, a, b); break;
 		}
 	}
-	void shift_ri(int kind, unsigned rd, unsigned rs1, uint32_t shamt) {
-		const auto a = get(rs1);
-		const auto d = def(rd);
-		if (d.id() != a.id()) cc.mov(d, a);
+	void shift_ri(int kind, const Gp& d, const Gp& a, uint32_t shamt) {
 		switch (kind) {
-		case 0: cc.shl(d, imm(shamt)); break;
-		case 1: cc.shr(d, imm(shamt)); break;
-		case 2: cc.sar(d, imm(shamt)); break;
+		case 0: uc.shl(d, a, Imm(shamt)); break;
+		case 1: uc.shr(d, a, Imm(shamt)); break;
+		case 2: uc.sar(d, a, Imm(shamt)); break;
 		}
 	}
 	void setcc_rr(bool is_unsigned, unsigned rd, unsigned rs1, unsigned rs2) {
-		auto t = cc.new_gp8("cmp");
-		cc.cmp(get(rs1), get(rs2));
-		if (is_unsigned) cc.setb(t); else cc.setl(t);
-		cc.movzx(def(rd).r32(), t.r8());
+		const Gp a = get(rs1), b = get(rs2);
+		uc.select(def(rd), Imm(1), Imm(0),
+			is_unsigned ? ucmp_lt(a, b) : scmp_lt(a, b));
 	}
 	void setcc_ri(bool is_unsigned, unsigned rd, unsigned rs1, int32_t v) {
-		auto t = cc.new_gp8("cmp");
-		cc.cmp(get(rs1), imm(v));
-		if (is_unsigned) cc.setb(t); else cc.setl(t);
-		cc.movzx(def(rd).r32(), t.r8());
+		const Gp a = get(rs1);
+		// SLTIU compares against the *sign-extended* immediate, unsigned.
+		uc.select(def(rd), Imm(1), Imm(0),
+			is_unsigned ? ucmp_lt(a, sximm(v)) : scmp_lt(a, sximm(v)));
+	}
+
+	// --- RV64 word operations ---
+	// Every *W instruction computes on the low 32 bits and sign-extends the
+	// result, so it is emitted as a 32-bit operation into a scratch register
+	// followed by one widening move.
+	Gp word_of(unsigned reg) { return get(reg).r32(); }
+	void finish_word(unsigned rd, const Gp& tmp32) {
+		host_sign_extend_word(cc, def(rd), tmp32);
 	}
 
 	// --- memory ---
-	// The effective address lives in a 64-bit virtual register that is only ever
-	// written through its 32-bit half, so the upper half is implicitly zeroed and
-	// the register can be used directly as an index into the arena.
-	x86::Gp address_of(unsigned rs1, int32_t simm) {
-		auto a = cc.new_gp64("addr");
-		if (rs1 == 0) {
-			cc.mov(a.r32(), imm(uint32_t(simm)));
+	// The effective address lives in a host pointer-sized register. On RV32 it is
+	// only ever written through its 32-bit half, so the upper half is implicitly
+	// zeroed and the register can be used directly as an index into the arena.
+	Gp address_of(unsigned rs1, int32_t simm) {
+		Gp a = uc.new_gp_ptr("addr");
+		if constexpr (RV64) {
+			if (rs1 == 0)        uc.mov(a, rvimm(address_t(int64_t(simm))));
+			else if (simm == 0)  uc.mov(a, get(rs1));
+			else                 uc.add(a, get(rs1), sximm(simm));
 		} else {
-			cc.mov(a.r32(), get(rs1));
-			if (simm != 0) cc.add(a.r32(), imm(simm));
+			if (rs1 == 0) {
+				uc.mov(a.r32(), Imm(uint32_t(simm)));
+			} else {
+				uc.mov(a.r32(), get(rs1));
+				if (simm != 0) uc.add(a.r32(), a.r32(), sximm(simm));
+			}
 		}
 		return a;
 	}
+	/// @brief The guest-width view of an address register, for bounds arithmetic
+	/// and for passing the address to a helper.
+	static Gp addr_value(const Gp& a) {
+		if constexpr (RV64) return a; else return a.r32();
+	}
+
 	static FuncSignature load_signature() {
 		return FuncSignature::build<address_t, void*, void*, address_t, address_t>();
 	}
@@ -269,14 +321,15 @@ struct AjEmitter
 	// region right there rather than running on with a half-executed instruction.
 	// `pend` excludes the faulting instruction, which never retired.
 	void emit_fault_check(address_t pc, uint32_t pend) {
-		Label ok = cc.new_label();
-		cc.cmp(x86::qword_ptr(st, offsetof(AjState<W>, max_counter)), imm(0));
-		cc.jne(ok);
+		Label ok = uc.new_label();
+		Gp maxc = uc.new_gp64("maxc");
+		uc.load(maxc, mem_ptr(st, off_max()));
+		uc.j(ok, test_nz(maxc));
 		emit_exit(pc, pend);
-		cc.bind(ok);
+		uc.bind(ok);
 	}
-	void call_load_helper(address_t pc, unsigned funct3, const x86::Gp& dst,
-		const x86::Gp& addr, uint32_t pend)
+	void call_load_helper(address_t pc, unsigned funct3, const Gp& dst,
+		const Gp& addr, uint32_t pend)
 	{
 		const auto* cb = info.cb;
 		uint64_t fn = 0;
@@ -284,20 +337,22 @@ struct AjEmitter
 		case 0x0: fn = uint64_t(uintptr_t(cb->load_i8));  break;
 		case 0x1: fn = uint64_t(uintptr_t(cb->load_i16)); break;
 		case 0x2: fn = uint64_t(uintptr_t(cb->load_i32)); break;
+		case 0x3: fn = uint64_t(uintptr_t(cb->load_i64)); break;  // RV64: LD
 		case 0x4: fn = uint64_t(uintptr_t(cb->load_u8));  break;
 		case 0x5: fn = uint64_t(uintptr_t(cb->load_u16)); break;
+		case 0x6: fn = uint64_t(uintptr_t(cb->load_u32)); break;  // RV64: LWU
 		}
 		InvokeNode* node;
 		cc.invoke(Out(node), fn, load_signature());
 		node->set_arg(0, cpu);
 		node->set_arg(1, st);
-		node->set_arg(2, addr.r32());
-		node->set_arg(3, imm(uint32_t(pc)));
+		node->set_arg(2, addr_value(addr));
+		node->set_arg(3, rvimm(pc));
 		node->set_ret(0, dst);
 		emit_fault_check(pc, pend);
 	}
-	void call_store_helper(address_t pc, unsigned funct3, const x86::Gp& value,
-		const x86::Gp& addr, uint32_t pend)
+	void call_store_helper(address_t pc, unsigned funct3, const Gp& value,
+		const Gp& addr, uint32_t pend)
 	{
 		const auto* cb = info.cb;
 		uint64_t fn = 0;
@@ -305,73 +360,78 @@ struct AjEmitter
 		case 0x0: fn = uint64_t(uintptr_t(cb->store_8));  break;
 		case 0x1: fn = uint64_t(uintptr_t(cb->store_16)); break;
 		case 0x2: fn = uint64_t(uintptr_t(cb->store_32)); break;
+		case 0x3: fn = uint64_t(uintptr_t(cb->store_64)); break;  // RV64: SD
 		}
 		InvokeNode* node;
 		cc.invoke(Out(node), fn, store_signature());
 		node->set_arg(0, cpu);
 		node->set_arg(1, st);
-		node->set_arg(2, addr.r32());
+		node->set_arg(2, addr_value(addr));
 		node->set_arg(3, value);
-		node->set_arg(4, imm(uint32_t(pc)));
+		node->set_arg(4, rvimm(pc));
 		emit_fault_check(pc, pend);
 	}
 	// (addr - RWREAD_BEGIN) < read_boundary, the same single-sided check the
 	// interpreter uses. Both bounds are read from the machine rather than baked
 	// in, so the code stays valid for every machine sharing this execute segment.
-	void emit_arena_check(const x86::Gp& addr, bool is_write, const Label& slow) {
-		auto t = cc.new_gp32("bchk");
-		cc.mov(t, addr.r32());
+	void emit_arena_check(const Gp& addr, bool is_write, const Label& slow) {
+		const Gp a = addr_value(addr);
+		Gp t = new_ireg("bchk");
 		if (is_write)
-			cc.sub(t, x86::dword_ptr(cpu, info.arena_roend));
+			uc.sub(t, a, mem_ptr(cpu, info.arena_roend));
 		else
-			cc.sub(t, imm(uint32_t(Memory<W>::RWREAD_BEGIN)));
-		cc.cmp(t, x86::dword_ptr(cpu, is_write ? info.arena_wrbound : info.arena_rdbound));
-		cc.jae(slow);
+			uc.sub(t, a, rvimm(address_t(Memory<W>::RWREAD_BEGIN)));
+		uc.j(slow, ucmp_ge(t, mem_ptr(cpu, is_write ? info.arena_wrbound : info.arena_rdbound)));
 	}
 	void emit_load(address_t pc, unsigned funct3, unsigned rd, unsigned rs1, int32_t simm)
 	{
 		auto addr = address_of(rs1, simm);
-		const auto dst = def(rd);
+		const Gp dst = def(rd);
 		if (!info.inline_memory) {
 			call_load_helper(pc, funct3, dst, addr, pending - 1);
 			return;
 		}
-		Label slow = cc.new_label(), done = cc.new_label();
+		Label slow = uc.new_label(), done = uc.new_label();
 		emit_arena_check(addr, false, slow);
+		const Mem m = mem_ptr(arena, addr);
 		switch (funct3) {
-		case 0x0: cc.movsx(dst, x86::byte_ptr(arena, addr));  break; // LB
-		case 0x1: cc.movsx(dst, x86::word_ptr(arena, addr));  break; // LH
-		case 0x2: cc.mov  (dst, x86::dword_ptr(arena, addr)); break; // LW
-		case 0x4: cc.movzx(dst, x86::byte_ptr(arena, addr));  break; // LBU
-		case 0x5: cc.movzx(dst, x86::word_ptr(arena, addr));  break; // LHU
+		case 0x0: uc.load_i8 (dst, m); break;                        // LB
+		case 0x1: uc.load_i16(dst, m); break;                        // LH
+		case 0x2: uc.load_i32(dst, m); break;                        // LW (widens on RV64)
+		case 0x3: if constexpr (RV64) uc.load_i64(dst, m); break;    // LD
+		case 0x4: uc.load_u8 (dst, m); break;                        // LBU
+		case 0x5: uc.load_u16(dst, m); break;                        // LHU
+		case 0x6: if constexpr (RV64) uc.load_u32(dst, m); break;    // LWU
 		}
-		cc.bind(done);
+		uc.bind(done);
 		deferred.push_back([=, this, pend = pending - 1] {
-			cc.bind(slow);
+			uc.bind(slow);
 			call_load_helper(pc, funct3, dst, addr, pend);
-			cc.jmp(done);
+			uc.j(done);
 		});
 	}
 	void emit_store(address_t pc, unsigned funct3, unsigned rs1, unsigned rs2, int32_t simm)
 	{
 		auto addr = address_of(rs1, simm);
-		const auto src = get(rs2);
+		const Gp src = get(rs2);
 		if (!info.inline_memory) {
 			call_store_helper(pc, funct3, src, addr, pending - 1);
 			return;
 		}
-		Label slow = cc.new_label(), done = cc.new_label();
+		Label slow = uc.new_label(), done = uc.new_label();
 		emit_arena_check(addr, true, slow);
+		const Mem m = mem_ptr(arena, addr);
 		switch (funct3) {
-		case 0x0: cc.mov(x86::byte_ptr(arena, addr),  src.r8());  break; // SB
-		case 0x1: cc.mov(x86::word_ptr(arena, addr),  src.r16()); break; // SH
-		case 0x2: cc.mov(x86::dword_ptr(arena, addr), src);       break; // SW
+		case 0x0: uc.store_u8 (m, src); break;                        // SB
+		case 0x1: uc.store_u16(m, src); break;                        // SH
+		case 0x2: uc.store_u32(m, src); break;                        // SW
+		case 0x3: if constexpr (RV64) uc.store_u64(m, src); break;    // SD
 		}
-		cc.bind(done);
+		uc.bind(done);
 		deferred.push_back([=, this, pend = pending - 1] {
-			cc.bind(slow);
+			uc.bind(slow);
 			call_store_helper(pc, funct3, src, addr, pend);
-			cc.jmp(done);
+			uc.j(done);
 		});
 	}
 
@@ -393,7 +453,12 @@ struct AjEmitter
 					readset.set(i.Itype.rs1);
 				writeset.set(i.Itype.rd);
 				break;
+			case RV64I_OP_IMM32:
+				readset.set(i.Itype.rs1);
+				writeset.set(i.Itype.rd);
+				break;
 			case RV32I_OP:
+			case RV64I_OP32:
 				readset.set(i.Rtype.rs1);
 				readset.set(i.Rtype.rs2);
 				writeset.set(i.Rtype.rd);
@@ -442,7 +507,7 @@ struct AjEmitter
 			branch_targets.insert(entry);
 
 		for (const address_t t : branch_targets)
-			labels.emplace(t, cc.new_label());
+			labels.emplace(t, uc.new_label());
 	}
 
 	// --- emission ---
@@ -458,7 +523,7 @@ struct AjEmitter
 		// when the previous instruction did not fall through at all. The prologue
 		// falls into the first emitted address only when that is also the entry.
 		if (!entry_is_first())
-			cc.jmp(label_at(entry));
+			uc.j(label_at(entry));
 		address_t fallthrough_pc = entry_is_first() ? instrs.front() : 0;
 		for (const address_t pc : instrs)
 		{
@@ -466,7 +531,7 @@ struct AjEmitter
 			if (is_target) {   // merge point: settle the counter first
 				if (pc == fallthrough_pc) flush_counter();
 				else pending = 0;   // only reachable through the label
-				cc.bind(label_at(pc));
+				uc.bind(label_at(pc));
 			} else if (pc != fallthrough_pc) {
 				// Discovery only produces addresses reachable from the entry, so an
 				// address that neither falls through nor carries a label cannot exist.
@@ -483,36 +548,38 @@ struct AjEmitter
 			switch (i.opcode())
 			{
 			case RV32I_LUI:
-				cc.mov(def(i.Utype.rd), imm(uint32_t(i.Utype.upper_imm())));
+				// The 20-bit upper immediate is sign-extended to the register width.
+				uc.mov(def(i.Utype.rd), rvimm(address_t(int64_t(i.Utype.upper_imm()))));
 				break;
 
 			case RV32I_AUIPC:
-				cc.mov(def(i.Utype.rd), imm(uint32_t(pc + i.Utype.upper_imm())));
+				uc.mov(def(i.Utype.rd), rvimm(address_t(pc + address_t(int64_t(i.Utype.upper_imm())))));
 				break;
 
 			case RV32I_FENCE:
 				// The interpreter makes every FENCE form a full barrier; match it
-				// rather than reason about which guest orderings x86-TSO covers.
-				cc.mfence();
+				// rather than reason about which guest orderings the host covers.
+				host_fence(cc);
 				break;
 
 			case RV32I_OP_IMM: {
 				const unsigned rd = i.Itype.rd, rs1 = i.Itype.rs1;
 				const int32_t simm = i.Itype.signed_imm();
+				const uint32_t shamt = RV64 ? i.Itype.shift64_imm() : i.Itype.shift_imm();
 				switch (i.Itype.funct3) {
 				case 0x0: // ADDI
-					if (rs1 == 0) cc.mov(def(rd), imm(uint32_t(simm)));
-					else          binop_ri(OP_ADD, rd, rs1, simm);
+					if (rs1 == 0) uc.mov(def(rd), rvimm(address_t(int64_t(simm))));
+					else          alu_ri(OP_ADD, def(rd), get(rs1), simm);
 					break;
-				case 0x1: shift_ri(0, rd, rs1, i.Itype.shift_imm()); break; // SLLI
+				case 0x1: shift_ri(0, def(rd), get(rs1), shamt); break;     // SLLI
 				case 0x2: setcc_ri(false, rd, rs1, simm); break;            // SLTI
 				case 0x3: setcc_ri(true,  rd, rs1, simm); break;            // SLTIU
-				case 0x4: binop_ri(OP_XOR, rd, rs1, simm); break;           // XORI
+				case 0x4: alu_ri(OP_XOR, def(rd), get(rs1), simm); break;   // XORI
 				case 0x5: // SRLI / SRAI
-					shift_ri((i.Itype.imm & 0xFE0) == 0x400 ? 2 : 1, rd, rs1, i.Itype.shift_imm());
+					shift_ri((i.Itype.imm & 0x400) ? 2 : 1, def(rd), get(rs1), shamt);
 					break;
-				case 0x6: binop_ri(OP_OR,  rd, rs1, simm); break;           // ORI
-				case 0x7: binop_ri(OP_AND, rd, rs1, simm); break;           // ANDI
+				case 0x6: alu_ri(OP_OR,  def(rd), get(rs1), simm); break;   // ORI
+				case 0x7: alu_ri(OP_AND, def(rd), get(rs1), simm); break;   // ANDI
 				}
 				} break;
 
@@ -521,17 +588,51 @@ struct AjEmitter
 				const bool alt = (i.Rtype.funct7 == 0b0100000);
 				switch (i.Rtype.funct3) {
 				case 0x0: // ADD / SUB
-					if (alt) binop_rr(OP_SUB, false, rd, rs1, rs2);
-					else     binop_rr(OP_ADD, true,  rd, rs1, rs2);
+					alu_rr(alt ? OP_SUB : OP_ADD, def(rd), get(rs1), get(rs2));
 					break;
-				case 0x1: shift_rr(0, rd, rs1, rs2); break;              // SLL
-				case 0x2: setcc_rr(false, rd, rs1, rs2); break;          // SLT
-				case 0x3: setcc_rr(true,  rd, rs1, rs2); break;          // SLTU
-				case 0x4: binop_rr(OP_XOR, true, rd, rs1, rs2); break;   // XOR
-				case 0x5: shift_rr(alt ? 2 : 1, rd, rs1, rs2); break;    // SRL / SRA
-				case 0x6: binop_rr(OP_OR,  true, rd, rs1, rs2); break;   // OR
-				case 0x7: binop_rr(OP_AND, true, rd, rs1, rs2); break;   // AND
+				case 0x1: shift_rr(0, def(rd), get(rs1), get(rs2)); break;         // SLL
+				case 0x2: setcc_rr(false, rd, rs1, rs2); break;                    // SLT
+				case 0x3: setcc_rr(true,  rd, rs1, rs2); break;                    // SLTU
+				case 0x4: alu_rr(OP_XOR, def(rd), get(rs1), get(rs2)); break;      // XOR
+				case 0x5: shift_rr(alt ? 2 : 1, def(rd), get(rs1), get(rs2)); break; // SRL / SRA
+				case 0x6: alu_rr(OP_OR,  def(rd), get(rs1), get(rs2)); break;      // OR
+				case 0x7: alu_rr(OP_AND, def(rd), get(rs1), get(rs2)); break;      // AND
 				}
+				} break;
+
+			case RV64I_OP_IMM32: if constexpr (RV64) {
+				const unsigned rd = i.Itype.rd, rs1 = i.Itype.rs1;
+				Gp t = uc.new_gp32("w");
+				switch (i.Itype.funct3) {
+				case 0x0: // ADDIW
+					alu_ri(OP_ADD, t, word_of(rs1), i.Itype.signed_imm());
+					break;
+				case 0x1: // SLLIW
+					shift_ri(0, t, word_of(rs1), i.Itype.shift_imm());
+					break;
+				case 0x5: // SRLIW / SRAIW
+					shift_ri((i.Itype.imm & 0x400) ? 2 : 1, t, word_of(rs1), i.Itype.shift_imm());
+					break;
+				}
+				finish_word(rd, t);
+				} break;
+
+			case RV64I_OP32: if constexpr (RV64) {
+				const unsigned rd = i.Rtype.rd, rs1 = i.Rtype.rs1, rs2 = i.Rtype.rs2;
+				const bool alt = (i.Rtype.funct7 == 0b0100000);
+				Gp t = uc.new_gp32("w");
+				switch (i.Rtype.funct3) {
+				case 0x0: // ADDW / SUBW
+					alu_rr(alt ? OP_SUB : OP_ADD, t, word_of(rs1), word_of(rs2));
+					break;
+				case 0x1: // SLLW
+					shift_rr(0, t, word_of(rs1), word_of(rs2));
+					break;
+				case 0x5: // SRLW / SRAW
+					shift_rr(alt ? 2 : 1, t, word_of(rs1), word_of(rs2));
+					break;
+				}
+				finish_word(rd, t);
 				} break;
 
 			case RV32I_LOAD:
@@ -545,37 +646,43 @@ struct AjEmitter
 			case RV32I_BRANCH: {
 				const address_t target = pc + i.Btype.signed_imm();
 				flush_counter();                 // settle before control flow splits
-				Label notaken = cc.new_label();
-				if (i.Btype.rs2 == 0)
-					cc.cmp(get(i.Btype.rs1), imm(0));
-				else
-					cc.cmp(get(i.Btype.rs1), get(i.Btype.rs2));
-				// Jump *around* the taken path, so the taken path stays inline.
+				Label notaken = uc.new_label();
+				const Gp a = get(i.Btype.rs1);
+				const bool vs_zero = (i.Btype.rs2 == 0);
+				const Gp b = vs_zero ? a : get(i.Btype.rs2);   // unused when vs_zero
+				// Jump *around* the taken path with the inverted condition, so the
+				// taken path stays inline.
 				switch (i.Btype.funct3) {
-				case 0x0: cc.jne(notaken); break;   // BEQ
-				case 0x1: cc.je (notaken); break;   // BNE
-				case 0x4: cc.jge(notaken); break;   // BLT
-				case 0x5: cc.jl (notaken); break;   // BGE
-				case 0x6: cc.jae(notaken); break;   // BLTU
-				case 0x7: cc.jb (notaken); break;   // BGEU
+				case 0x0: // BEQ
+					uc.j(notaken, vs_zero ? cmp_ne(a, Imm(0)) : cmp_ne(a, b)); break;
+				case 0x1: // BNE
+					uc.j(notaken, vs_zero ? cmp_eq(a, Imm(0)) : cmp_eq(a, b)); break;
+				case 0x4: // BLT
+					uc.j(notaken, vs_zero ? scmp_ge(a, Imm(0)) : scmp_ge(a, b)); break;
+				case 0x5: // BGE
+					uc.j(notaken, vs_zero ? scmp_lt(a, Imm(0)) : scmp_lt(a, b)); break;
+				case 0x6: // BLTU
+					uc.j(notaken, vs_zero ? ucmp_ge(a, Imm(0)) : ucmp_ge(a, b)); break;
+				case 0x7: // BGEU
+					uc.j(notaken, vs_zero ? ucmp_lt(a, Imm(0)) : ucmp_lt(a, b)); break;
 				}
 				if (in_region(target)) {
 					if (target <= pc) emit_backedge_check(target); // bound the loop
-					cc.jmp(label_at(target));   // vregs stay live across the back-edge
+					uc.j(label_at(target));   // vregs stay live across the back-edge
 				} else {
 					emit_exit(target, 0);
 				}
-				cc.bind(notaken);
+				uc.bind(notaken);
 				} break;
 
 			case RV32I_JAL: {
 				const address_t target = pc + i.Jtype.jump_offset();
 				if (i.Jtype.rd != 0)
-					cc.mov(def(i.Jtype.rd), imm(uint32_t(next)));
+					uc.mov(def(i.Jtype.rd), rvimm(next));
 				flush_counter();
 				if (in_region(target)) {
 					if (target <= pc) emit_backedge_check(target);
-					cc.jmp(label_at(target));
+					uc.j(label_at(target));
 				} else {
 					emit_exit(target, 0);
 				}
@@ -585,17 +692,16 @@ struct AjEmitter
 			case RV32I_JALR: {
 				// Read rs1 into a temporary before writing rd: they may be the same
 				// register, and RISC-V takes the old value of rs1 as the target.
-				auto target = cc.new_gp32("jalr");
+				Gp target = new_ireg("jalr");
 				const int32_t simm = i.Itype.signed_imm();
 				if (i.Itype.rs1 == 0) {
-					cc.mov(target, imm(uint32_t(simm) & ~uint32_t(1)));
+					uc.mov(target, rvimm(address_t(int64_t(simm)) & ~address_t(1)));
 				} else {
-					cc.mov(target, get(i.Itype.rs1));
-					if (simm != 0) cc.add(target, imm(simm));
-					cc.and_(target, imm(~uint32_t(1)));
+					alu_ri(OP_ADD, target, get(i.Itype.rs1), simm);
+					uc.and_(target, target, sximm(-2));
 				}
 				if (i.Itype.rd != 0)
-					cc.mov(def(i.Itype.rd), imm(uint32_t(next)));
+					uc.mov(def(i.Itype.rd), rvimm(next));
 				flush_counter();
 				emit_exit_reg(target, 0);
 				fallthrough_pc = 0;
@@ -642,20 +748,22 @@ aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options
 	if (options.asmjit_verbose)
 		code.set_logger(&logger);
 
-	x86::Compiler cc(&code);
+	BackendCompiler bc(&code);
+	UniCompiler cc(&bc, ajcode.rt.cpu_features(), ajcode.rt.cpu_hints());
+
 	FuncNode* fn = cc.add_func(FuncSignature::build<void, void*, void*>());
 	if (fn == nullptr)
 		return nullptr;
 
 	AjEmitter<W> e { cc, exec.exec_data(), entry, instrs, exec.exec_end(), info };
-	e.cpu     = cc.new_gpz("cpu");
-	e.st      = cc.new_gpz("state");
+	e.cpu     = cc.new_gp_ptr("cpu");
+	e.st      = cc.new_gp_ptr("state");
 	e.counter = cc.new_gp64("counter");
 	fn->set_arg(0, e.cpu);
 	fn->set_arg(1, e.st);
 
 	e.prepass();
-	cc.mov(e.counter, x86::qword_ptr(e.st, offsetof(AjState<W>, counter)));
+	cc.load(e.counter, mem_ptr(e.st, AjEmitter<W>::off_counter()));
 	e.emit_prologue_loads();   // every load lands here, ahead of every label
 	e.emit_body();
 	if (e.failed)
@@ -683,7 +791,7 @@ aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 	const DecodedExecuteSegment<W>&, const AjInfo<W>&,
 	address_type<W>, const std::vector<address_type<W>>&)
 {
-	return nullptr;   // v1 targets x86-64 only
+	return nullptr;   // no code generator for this host
 }
 
 #endif
@@ -692,5 +800,10 @@ aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 	template aj_block_func<4> aj_emit_region<4>(AjCode&, const MachineOptions<4>&,
 		const DecodedExecuteSegment<4>&, const AjInfo<4>&,
 		address_type<4>, const std::vector<address_type<4>>&);
+#endif
+#ifdef RISCV_64I
+	template aj_block_func<8> aj_emit_region<8>(AjCode&, const MachineOptions<8>&,
+		const DecodedExecuteSegment<8>&, const AjInfo<8>&,
+		address_type<8>, const std::vector<address_type<8>>&);
 #endif
 } // riscv
