@@ -48,6 +48,61 @@ static inline void host_sign_extend_word(BackendCompiler& cc, const Gp& dst, con
 #endif
 }
 
+/// @brief dst = the high half of the 2*XLEN-bit product of `a` and `b`.
+/// @details MULH and MULHU want the part of the product that a three-operand
+/// multiply throws away, which no universal op exposes.
+static inline void host_mul_hi(UniCompiler& uc, const Gp& dst, const Gp& a, const Gp& b, bool is_signed)
+{
+	BackendCompiler& cc = *uc.cc;
+#if defined(ASMJIT_UJIT_X86)
+	// xDX:xAX <- xAX * src. Both halves are virtual registers; the allocator
+	// pins them to the physical pair the instruction requires.
+	Gp lo = uc.new_similar_reg(dst, "mullo");
+	Gp hi = uc.new_similar_reg(dst, "mulhi");
+	cc.mov(lo, a);
+	if (is_signed) cc.imul(hi, lo, b); else cc.mul(hi, lo, b);
+	cc.mov(dst, hi);
+#else
+	if (dst.size() == 8) {
+		if (is_signed) cc.smulh(dst, a, b); else cc.umulh(dst, a, b);
+	} else {
+		// AArch64 has no 32-bit multiply-high, but it does have a widening
+		// 32x32 -> 64 multiply, whose upper half is the same thing.
+		Gp t = uc.new_gp64("mulw");
+		if (is_signed) cc.smull(t, a, b); else cc.umull(t, a, b);
+		uc.shr(t, t, Imm(32));
+		uc.mov(dst, t.r32());
+	}
+#endif
+}
+
+/// @brief dst = a / b, signed, or a % b when `want_rem`.
+/// @details The caller has already taken b == 0 and b == -1 off this path:
+/// they are exactly the two inputs x86's idiv faults on, and exactly the two
+/// RISC-V defines a result for instead.
+static inline void host_sdiv(UniCompiler& uc, const Gp& dst, const Gp& a, const Gp& b, bool want_rem)
+{
+	BackendCompiler& cc = *uc.cc;
+#if defined(ASMJIT_UJIT_X86)
+	// idiv divides xDX:xAX, so the dividend has to be sign-extended into the
+	// upper half first.
+	Gp quot = uc.new_similar_reg(dst, "quot");
+	Gp rem  = uc.new_similar_reg(dst, "rem");
+	cc.mov(quot, a);
+	if (quot.size() == 8) cc.cqo(rem, quot); else cc.cdq(rem, quot);
+	cc.idiv(rem, quot, b);
+	cc.mov(dst, want_rem ? rem : quot);
+#else
+	if (!want_rem) {
+		cc.sdiv(dst, a, b);
+	} else {
+		Gp quot = uc.new_similar_reg(dst, "quot");
+		cc.sdiv(quot, a, b);
+		cc.msub(dst, quot, b, a);   // dst = a - quot * b
+	}
+#endif
+}
+
 template <int W>
 struct AjEmitter
 {
@@ -274,6 +329,67 @@ struct AjEmitter
 		// SLTIU compares against the *sign-extended* immediate, unsigned.
 		uc.select(def(rd), Imm(1), Imm(0),
 			is_unsigned ? ucmp_lt(a, sximm(v)) : scmp_lt(a, sximm(v)));
+	}
+
+	// --- M extension ---
+	// Neither division-by-zero nor signed overflow traps in RISC-V; both have a
+	// defined result. `b + 1 <= 1` unsigned holds for exactly b == 0 and
+	// b == -1, so a single test moves both off the hot path -- and that pair is
+	// also exactly what x86's idiv faults on.
+	void emit_div(const Gp& d, const Gp& a, const Gp& b, bool want_rem, bool is_signed)
+	{
+		Label slow = uc.new_label(), done = uc.new_label();
+		if (is_signed) {
+			Gp guard = uc.new_similar_reg(d, "divguard");
+			uc.add(guard, b, Imm(1));
+			uc.j(slow, ucmp_le(guard, Imm(1)));
+			host_sdiv(uc, d, a, b, want_rem);
+		} else {
+			uc.j(slow, cmp_eq(b, Imm(0)));
+			if (want_rem) uc.umod(d, a, b); else uc.udiv(d, a, b);
+		}
+		uc.j(done);
+
+		uc.bind(slow);
+		if (is_signed) {
+			Label divzero = uc.new_label();
+			uc.j(divzero, cmp_eq(b, Imm(0)));
+			// b == -1. a / -1 is -a, which is also the defined result of the
+			// only overflowing division, MIN / -1 == MIN. a % -1 is zero.
+			if (want_rem) uc.mov(d, Imm(0));
+			else          uc.neg(d, a);
+			uc.j(done);
+			uc.bind(divzero);
+		}
+		// Division by zero: the quotient is all ones, the remainder is the dividend.
+		if (want_rem) { if (d.id() != a.id()) uc.mov(d, a); }
+		else          uc.mov(d, sximm(-1));
+		uc.bind(done);
+	}
+	/// @brief The eight M-extension forms of OP, and the five of OP-32.
+	/// @details `d`, `a` and `b` are already the right width for the caller:
+	/// full guest width for OP, 32 bits for the *W forms.
+	void emit_muldiv(unsigned funct3, const Gp& d, const Gp& a, const Gp& b)
+	{
+		switch (funct3) {
+		case 0x0: uc.mul(d, a, b); break;                      // MUL / MULW
+		case 0x1: host_mul_hi(uc, d, a, b, true);  break;      // MULH
+		case 0x2: {                                            // MULHSU
+			// Reading `a` as signed subtracts one whole `b` from the high half
+			// when `a` is negative: high(a*b) - (a < 0 ? b : 0). The adjustment
+			// is computed first because the product may land in `a` or `b`.
+			Gp adj = uc.new_similar_reg(d, "hsu");
+			uc.sar(adj, a, Imm(d.size() * 8 - 1));   // 0 or ~0
+			uc.and_(adj, adj, b);
+			host_mul_hi(uc, d, a, b, false);
+			uc.sub(d, d, adj);
+			} break;
+		case 0x3: host_mul_hi(uc, d, a, b, false); break;      // MULHU
+		case 0x4: emit_div(d, a, b, false, true);  break;      // DIV  / DIVW
+		case 0x5: emit_div(d, a, b, false, false); break;      // DIVU / DIVUW
+		case 0x6: emit_div(d, a, b, true,  true);  break;      // REM  / REMW
+		case 0x7: emit_div(d, a, b, true,  false); break;      // REMU / REMUW
+		}
 	}
 
 	// --- RV64 word operations ---
@@ -586,6 +702,10 @@ struct AjEmitter
 			case RV32I_OP: {
 				const unsigned rd = i.Rtype.rd, rs1 = i.Rtype.rs1, rs2 = i.Rtype.rs2;
 				const bool alt = (i.Rtype.funct7 == 0b0100000);
+				if (i.Rtype.funct7 == 0b0000001) {   // RV32M / RV64M
+					emit_muldiv(i.Rtype.funct3, def(rd), get(rs1), get(rs2));
+					break;
+				}
 				switch (i.Rtype.funct3) {
 				case 0x0: // ADD / SUB
 					alu_rr(alt ? OP_SUB : OP_ADD, def(rd), get(rs1), get(rs2));
@@ -621,6 +741,11 @@ struct AjEmitter
 				const unsigned rd = i.Rtype.rd, rs1 = i.Rtype.rs1, rs2 = i.Rtype.rs2;
 				const bool alt = (i.Rtype.funct7 == 0b0100000);
 				Gp t = uc.new_gp32("w");
+				if (i.Rtype.funct7 == 0b0000001) {   // MULW DIVW DIVUW REMW REMUW
+					emit_muldiv(i.Rtype.funct3, t, word_of(rs1), word_of(rs2));
+					finish_word(rd, t);
+					break;
+				}
 				switch (i.Rtype.funct3) {
 				case 0x0: // ADDW / SUBW
 					alu_rr(alt ? OP_SUB : OP_ADD, t, word_of(rs1), word_of(rs2));

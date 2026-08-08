@@ -86,7 +86,9 @@ namespace riscv
 				return true;  // ADD SLL SLT SLTU XOR SRL OR AND
 			if (i.Rtype.funct7 == 0b0100000)
 				return i.Rtype.funct3 == 0x0 || i.Rtype.funct3 == 0x5; // SUB, SRA
-			return false;     // M-extension and the bit-manipulation encodings
+			if (i.Rtype.funct7 == 0b0000001)
+				return true;  // M: MUL MULH MULHSU MULHU DIV DIVU REM REMU
+			return false;     // the bit-manipulation encodings
 		case RV64I_OP_IMM32:
 			if constexpr (W == 8) {
 				switch (i.Itype.funct3) {
@@ -111,8 +113,11 @@ namespace riscv
 				if (i.Rtype.funct7 == 0b0100000)
 					return i.Rtype.funct3 == 0x0    // SUBW
 						|| i.Rtype.funct3 == 0x5;   // SRAW
+				if (i.Rtype.funct7 == 0b0000001)
+					return i.Rtype.funct3 == 0x0    // MULW
+						|| i.Rtype.funct3 >= 0x4;   // DIVW DIVUW REMW REMUW
 			}
-			return false;     // MULW/DIVW and the bit-manipulation encodings
+			return false;     // the bit-manipulation encodings
 		default:
 			// SYSTEM (ECALL/EBREAK/CSR) and the F/D/A/V opcodes all terminate the
 			// region: the interpreter picks them up at the address we exit with.
