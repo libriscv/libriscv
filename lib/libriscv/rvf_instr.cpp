@@ -1,62 +1,15 @@
 #include "rvfd.hpp"
 #include "instr_helpers.hpp"
+#include "rvfd_util.hpp"
 #include <cmath>
 #include <limits>
 #include <type_traits>
 
 namespace riscv
 {
-	// RISC-V Canonical NaNs
-	static constexpr uint32_t CANONICAL_NAN_F32 = 0x7fc00000;
-	static constexpr uint64_t CANONICAL_NAN_F64 = 0x7ff8000000000000;
-
-	// Round a float/double per the RISC-V rounding mode (funct3 of the FCVT
-	// instruction).
-	template <typename F>
-	static inline F fcvt_round(F value, unsigned rm) {
-		switch (rm) {
-		case 0x1: // RTZ: round toward zero
-			return std::trunc(value);
-		case 0x2: // RDN: round down (toward -inf)
-			return std::floor(value);
-		case 0x3: // RUP: round up (toward +inf)
-			return std::ceil(value);
-		case 0x4: // RMM: round to nearest, ties away from zero
-			return std::round(value);
-		case 0x0: // RNE: round to nearest, ties to even
-		default:  // reserved/invalid modes: nearest-even as the default
-			return std::nearbyint(value);
-		}
-	}
-
-	// Round per the RISC-V rounding mode, then convert to the destination
-	// integer type T. The range check is *not* optional: converting an
-	// out-of-range float to an integer is undefined behavior in C++, so a
-	// guest could otherwise trip UBSan or produce host-dependent garbage.
-	// RISC-V pins an out-of-range result to the nearest representable extreme
-	// (NaN and positive overflow → maximum, negative overflow → minimum) and
-	// raises NV, which is where the FCSR-only part starts: `invalid` is only
-	// ever read under fcsr_emulation.
-	template <typename T, typename F>
-	static inline T fcvt_to_integer(F value, unsigned rm, bool& invalid) {
-		const F rounded = fcvt_round(value, rm);
-		// Both bounds are powers of two, and thus exactly representable.
-		constexpr F upper = std::is_signed<T>::value
-			? F(uint64_t(1) << (sizeof(T) * 8 - 1))
-			: F(uint64_t(1) << (sizeof(T) * 8 - 1)) * F(2);
-		constexpr F lower = std::is_signed<T>::value ? -upper : F(0);
-		if (UNLIKELY(!(rounded >= lower && rounded < upper))) { // NaN-safe
-			invalid = true;
-			return (std::isnan(rounded) || rounded >= upper)
-				? std::numeric_limits<T>::max() : std::numeric_limits<T>::min();
-		}
-		return T(rounded);
-	}
-	template <typename T, typename F>
-	static inline T fcvt_to_integer(F value, unsigned rm) {
-		bool invalid = false;
-		return fcvt_to_integer<T>(value, rm, invalid);
-	}
+	// The canonical NaNs, the rounding modes, fcvt_to_integer() and the FMIN/
+	// FMAX and FCLASS rules all live in rvfd_util.hpp, because the asmjit
+	// backend's host helpers must implement exactly the same semantics.
 
 	// Convert an integer to float/double, reporting NX when the destination
 	// mantissa was too narrow to hold it. long double is exact for every 64-bit
@@ -530,38 +483,27 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 
 		// RISC-V spec §11.6 FMIN/FMAX: treat -0.0 < +0.0 (IEEE 754
-		// fmin/fmax leave ±0 ordering implementation-defined). We
-		// disambiguate by inspecting sign bits whenever both operands
-		// compare equal to zero.
-		auto fmin32 = [&](uint32_t ab, uint32_t bb) -> uint32_t {
+		// fmin/fmax leave ±0 ordering implementation-defined). The rules
+		// live in rvfd_util.hpp; these wrappers only move bits in and out,
+		// as an f-register holds a raw pattern rather than a host float.
+		// rv_fmin/rv_fmax canonicalize two-NaN operands themselves, which
+		// the non-FCSR paths below deliberately keep, as it is the only
+		// result a program can meaningfully use.
+		auto fmin32 = [](uint32_t ab, uint32_t bb) -> uint32_t {
 			float a, b; __builtin_memcpy(&a, &ab, 4); __builtin_memcpy(&b, &bb, 4);
-			if (a == 0.0f && b == 0.0f) {
-				// -0 < +0 → return -0 if either is negative.
-				return ((ab | bb) & 0x80000000u) ? 0x80000000u : 0x00000000u;
-			}
-			float r = std::fmin(a, b); uint32_t rb; __builtin_memcpy(&rb, &r, 4); return rb;
+			float r = rv_fmin32(a, b); uint32_t rb; __builtin_memcpy(&rb, &r, 4); return rb;
 		};
-		auto fmax32 = [&](uint32_t ab, uint32_t bb) -> uint32_t {
+		auto fmax32 = [](uint32_t ab, uint32_t bb) -> uint32_t {
 			float a, b; __builtin_memcpy(&a, &ab, 4); __builtin_memcpy(&b, &bb, 4);
-			if (a == 0.0f && b == 0.0f) {
-				// -0 < +0 → return +0 if either is non-negative.
-				return (~(ab & bb) & 0x80000000u) ? 0x00000000u : 0x80000000u;
-			}
-			float r = std::fmax(a, b); uint32_t rb; __builtin_memcpy(&rb, &r, 4); return rb;
+			float r = rv_fmax32(a, b); uint32_t rb; __builtin_memcpy(&rb, &r, 4); return rb;
 		};
-		auto fmin64 = [&](uint64_t ab, uint64_t bb) -> uint64_t {
+		auto fmin64 = [](uint64_t ab, uint64_t bb) -> uint64_t {
 			double a, b; __builtin_memcpy(&a, &ab, 8); __builtin_memcpy(&b, &bb, 8);
-			if (a == 0.0 && b == 0.0) {
-				return ((ab | bb) & 0x8000000000000000ull) ? 0x8000000000000000ull : 0x0ull;
-			}
-			double r = std::fmin(a, b); uint64_t rb; __builtin_memcpy(&rb, &r, 8); return rb;
+			double r = rv_fmin64(a, b); uint64_t rb; __builtin_memcpy(&rb, &r, 8); return rb;
 		};
-		auto fmax64 = [&](uint64_t ab, uint64_t bb) -> uint64_t {
+		auto fmax64 = [](uint64_t ab, uint64_t bb) -> uint64_t {
 			double a, b; __builtin_memcpy(&a, &ab, 8); __builtin_memcpy(&b, &bb, 8);
-			if (a == 0.0 && b == 0.0) {
-				return (~(ab & bb) & 0x8000000000000000ull) ? 0x0ull : 0x8000000000000000ull;
-			}
-			double r = std::fmax(a, b); uint64_t rb; __builtin_memcpy(&rb, &r, 8); return rb;
+			double r = rv_fmax64(a, b); uint64_t rb; __builtin_memcpy(&rb, &r, 8); return rb;
 		};
 
 		// A signaling NaN operand raises NV; a quiet one does not. Classified
@@ -931,34 +873,13 @@ namespace riscv
 		// FCLASS sets exactly one bit, derived from the raw sign/exponent/fraction
 		// fields. Host floating-point comparisons cannot be used here, as they
 		// don't distinguish subnormals from normals, or sNaN from qNaN.
-		static constexpr auto classify =
-			[] (bool sign, bool exp_max, bool exp_zero, bool frac_zero, bool frac_quiet) -> uint32_t
-		{
-			if (exp_max) {
-				if (frac_zero) return sign ? (1U << 0) : (1U << 7); // -inf / +inf
-				return frac_quiet ? (1U << 9) : (1U << 8);          // qNaN / sNaN
-			}
-			if (exp_zero) {
-				if (frac_zero) return sign ? (1U << 3) : (1U << 4); // -0.0 / +0.0
-				return sign ? (1U << 2) : (1U << 5);                // -subnormal / +subnormal
-			}
-			return sign ? (1U << 1) : (1U << 6);                    // -normal / +normal
-		};
 		switch (fi.R4type.funct2) {
-		case 0x0: { // FCLASS.S
-			const uint32_t bits = rs1.i32[0];
-			const uint32_t exponent = (bits >> 23) & 0xff;
-			const uint32_t fraction = bits & 0x7fffff;
-			dst = classify(bits >> 31, exponent == 0xff, exponent == 0,
-				fraction == 0, (fraction & 0x400000) != 0);
-			} return;
-		case 0x1: { // FCLASS.D
-			const uint64_t bits = rs1.i64;
-			const uint64_t exponent = (bits >> 52) & 0x7ff;
-			const uint64_t fraction = bits & 0xfffffffffffffULL;
-			dst = classify(bits >> 63, exponent == 0x7ff, exponent == 0,
-				fraction == 0, (fraction & 0x8000000000000ULL) != 0);
-			} return;
+		case 0x0: // FCLASS.S
+			dst = rv_fclass32(rs1.i32[0]);
+			return;
+		case 0x1: // FCLASS.D
+			dst = rv_fclass64(rs1.i64);
+			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},

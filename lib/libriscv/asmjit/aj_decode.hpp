@@ -17,10 +17,10 @@ namespace riscv
 		bool     valid  = false;   ///< false: not expressible as a base instruction
 	};
 
-	/// @brief Expands one compressed instruction into its RV32I/RV64I equivalent.
-	/// @details Mirrors the interpreter's decoding of the RVC quadrants. Only the
-	/// encodings that map onto the base integer set are expanded; the F/D forms,
-	/// the reserved encodings and C.ILLEGAL come back invalid, which makes them
+	/// @brief Expands one compressed instruction into its 32-bit equivalent.
+	/// @details Mirrors the interpreter's decoding of the RVC quadrants. The base
+	/// integer set and the compressed F/D loads and stores are expanded; the
+	/// reserved encodings and C.ILLEGAL come back invalid, which makes them
 	/// region terminators just like any other unsupported instruction.
 	/// @tparam W The guest register width. RV32C and RV64C reuse several
 	/// encodings for different instructions (C.JAL vs C.ADDIW, C.FLW vs C.LD,
@@ -84,6 +84,23 @@ namespace riscv
 			instr.Stype.imm2 = (imm >> 5) & 0x7F;
 			d.valid = true;
 		};
+		// The F/D forms differ from the integer ones only in the opcode, but
+		// they name f-registers, so they cannot share load()/store().
+		const auto fload = [&] (unsigned funct3, unsigned rd, unsigned rs1, uint32_t imm) {
+			instr.Itype.opcode = RV32F_LOAD;
+			instr.Itype.funct3 = funct3;
+			instr.Itype.rd = rd; instr.Itype.rs1 = rs1;
+			instr.Itype.imm = imm;
+			d.valid = true;
+		};
+		const auto fstore = [&] (unsigned funct3, unsigned rs1, unsigned rs2, uint32_t imm) {
+			instr.Stype.opcode = RV32F_STORE;
+			instr.Stype.funct3 = funct3;
+			instr.Stype.rs1 = rs1; instr.Stype.rs2 = rs2;
+			instr.Stype.imm1 = imm & 0x1F;
+			instr.Stype.imm2 = (imm >> 5) & 0x7F;
+			d.valid = true;
+		};
 		const auto jal = [&] (unsigned rd, int32_t imm) {
 			instr.Jtype.opcode = RV32I_JAL;
 			instr.Jtype.rd = rd;
@@ -112,12 +129,20 @@ namespace riscv
 			if (ci.whole != 0 && ci.CIW.offset() != 0)
 				addi(ci.CIW.srd + 8, 2, ci.CIW.offset());
 			break;
+		case RISCV_CI_CODE(0b001, 0b00):   // C.FLD (RV32D and RV64D)
+			fload(0b011, ci.CL.srd + 8, ci.CL.srs1 + 8, ci.CSD.offset8());
+			break;
 		case RISCV_CI_CODE(0b010, 0b00):   // C.LW
 			load(0b010, ci.CL.srd + 8, ci.CL.srs1 + 8, ci.CL.offset());
 			break;
 		case RISCV_CI_CODE(0b011, 0b00):   // C.LD (RV64) / C.FLW (RV32)
 			if constexpr (RV64)
 				load(0b011, ci.CL.srd + 8, ci.CL.srs1 + 8, ci.CSD.offset8());
+			else
+				fload(0b010, ci.CL.srd + 8, ci.CL.srs1 + 8, ci.CL.offset());
+			break;
+		case RISCV_CI_CODE(0b101, 0b00):   // C.FSD (RV32D and RV64D)
+			fstore(0b011, ci.CSD.srs1 + 8, ci.CSD.srs2 + 8, ci.CSD.offset8());
 			break;
 		case RISCV_CI_CODE(0b110, 0b00):   // C.SW
 			store(0b010, ci.CS.srs1 + 8, ci.CS.srs2 + 8, ci.CS.offset4());
@@ -125,6 +150,8 @@ namespace riscv
 		case RISCV_CI_CODE(0b111, 0b00):   // C.SD (RV64) / C.FSW (RV32)
 			if constexpr (RV64)
 				store(0b011, ci.CSD.srs1 + 8, ci.CSD.srs2 + 8, ci.CSD.offset8());
+			else
+				fstore(0b010, ci.CS.srs1 + 8, ci.CS.srs2 + 8, ci.CS.offset4());
 			break;
 
 		// --- Quadrant 1 ---
@@ -201,6 +228,9 @@ namespace riscv
 				shift_or_logic_imm(0b001, ci.CI.rd, ci.CI.rd,
 					RV64 ? ci.CI.shift64_imm() : ci.CI.shift_imm());
 			break;
+		case RISCV_CI_CODE(0b001, 0b10):   // C.FLDSP (RV32D and RV64D)
+			fload(0b011, ci.CIFLD.rd, 2, ci.CIFLD.offset());
+			break;
 		case RISCV_CI_CODE(0b010, 0b10):   // C.LWSP
 			if (ci.CI2.rd != 0)
 				load(0b010, ci.CI2.rd, 2, ci.CI2.offset());
@@ -209,6 +239,8 @@ namespace riscv
 			if constexpr (RV64) {
 				if (ci.CIFLD.rd != 0)
 					load(0b011, ci.CIFLD.rd, 2, ci.CIFLD.offset());
+			} else {
+				fload(0b010, ci.CI2.rd, 2, ci.CI2.offset());
 			}
 			break;
 		case RISCV_CI_CODE(0b100, 0b10): {
@@ -228,17 +260,22 @@ namespace riscv
 				op(0b000, 0x00, ci.CR.rd, ci.CR.rd, ci.CR.rs2);
 			// C.EBREAK and the hint encodings stay invalid: they end the region.
 			} break;
+		case RISCV_CI_CODE(0b101, 0b10):   // C.FSDSP (RV32D and RV64D)
+			fstore(0b011, 2, ci.CSFSD.rs2, ci.CSFSD.offset());
+			break;
 		case RISCV_CI_CODE(0b110, 0b10):   // C.SWSP
 			store(0b010, 2, ci.CSS.rs2, ci.CSS.offset(4));
 			break;
 		case RISCV_CI_CODE(0b111, 0b10):   // C.SDSP (RV64) / C.FSWSP (RV32)
 			if constexpr (RV64)
 				store(0b011, 2, ci.CSFSD.rs2, ci.CSFSD.offset());
+			else
+				fstore(0b010, 2, ci.CSS.rs2, ci.CSS.offset(4));
 			break;
 
 		default:
-			// C.FLD/C.FSD and their SP-relative forms, the RV32-only float forms,
-			// plus every reserved encoding: not part of the base integer set.
+			// C.LQ/C.SQ and every reserved encoding: not expressible as a
+			// 32-bit base or F/D instruction.
 			break;
 		}
 		return d;

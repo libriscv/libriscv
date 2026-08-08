@@ -2,6 +2,7 @@
 #include "../common.hpp"
 #include "../instruction_list.hpp"
 #include "../rv32i_instr.hpp"
+#include "../rvfd.hpp"
 #include "../types.hpp"
 #include "aj_api.hpp"
 #include "aj_decode.hpp"
@@ -21,6 +22,7 @@ namespace riscv
 	struct AjInfo
 	{
 		int32_t reg_offset      = 0;   ///< &cpu.registers().get(0) - &cpu
+		int32_t fpreg_offset    = 0;   ///< &cpu.registers().getfl(0) - &cpu
 		int32_t arena_ptr       = 0;   ///< &memory.m_arena.data    - &cpu
 		int32_t arena_rdbound   = 0;   ///< &memory.m_arena.read_boundary  - &cpu
 		int32_t arena_wrbound   = 0;   ///< &memory.m_arena.write_boundary - &cpu
@@ -30,13 +32,28 @@ namespace riscv
 		const AjCallbacks<W>* cb = nullptr;
 	};
 
+	/// @brief True when the F/D extension may be emitted as native code.
+	/// @details FCSR emulation tracks the exception flags of every arithmetic
+	/// operation by recomputing it in a wider type and comparing, which no host
+	/// instruction sequence reproduces. Under that build every FP instruction
+	/// stays with the interpreter, and only ends a region.
+	static constexpr bool aj_fpu_emittable = !riscv::fcsr_emulation;
+
+	/// @brief True when this host can compute a fused multiply-add.
+	/// @details RISC-V requires FMADD and its three siblings to round once. A
+	/// separate multiply and add rounds twice, so on a host without FMA those
+	/// four opcodes end the region and the interpreter's std::fma runs instead.
+	/// Defined in aj_emit.cpp, where the asmjit headers are available.
+	bool aj_host_has_fma() noexcept;
+
 	/// @brief True if the instruction can be emitted by the asmjit backend.
 	/// Anything that is false terminates the region.
 	/// @details This predicate is shared between region discovery and emission,
 	/// so that the two can never disagree about where a region ends. It must
 	/// stay an exact mirror of the opcodes handled in aj_emit.cpp.
 	/// @tparam W The guest register width. RV64 adds LD/LWU/SD and the *W
-	/// opcodes, and widens the shift amount that a shift-immediate may carry.
+	/// opcodes, widens the shift amount that a shift-immediate may carry, and
+	/// is the only width with the 64-bit FCVT forms and FMV.X.D/FMV.D.X.
 	template <int W>
 	inline bool aj_is_emittable(rv32i_instruction i) noexcept
 	{
@@ -118,8 +135,62 @@ namespace riscv
 						|| i.Rtype.funct3 >= 0x4;   // DIVW DIVUW REMW REMUW
 			}
 			return false;     // the bit-manipulation encodings
+
+		// --- F/D extension ---
+		case RV32F_LOAD:   // FLW, FLD
+		case RV32F_STORE:  // FSW, FSD
+			// funct3 is the access width, in the same bits either way. Both
+			// widths carry FLD/FSD: RV32D moves doubles through a machine
+			// whose integer registers are half that size.
+			return aj_fpu_emittable
+				&& (i.Itype.funct3 == 0x2 || i.Itype.funct3 == 0x3);
+		case RV32F_FMADD:
+		case RV32F_FMSUB:
+		case RV32F_FNMADD:
+		case RV32F_FNMSUB:
+			// funct2 is the precision: 0 is single, 1 is double, and the
+			// half- and quad-precision encodings are not implemented at all.
+			return aj_fpu_emittable && aj_host_has_fma()
+				&& rv32f_instruction(i).R4type.funct2 <= 0x1;
+		case RV32F_FPFUNC: {
+			if (!aj_fpu_emittable)
+				return false;
+			const rv32f_instruction fi { i };
+			if (fi.R4type.funct2 > 0x1)
+				return false;
+			const bool is_double = (fi.R4type.funct2 == 0x1);
+			switch (i.fpfunc()) {
+			case RV32F__FADD: case RV32F__FSUB:
+			case RV32F__FMUL: case RV32F__FDIV:
+			case RV32F__FSQRT:
+			case RV32F__FCVT_SD_DS:
+				return true;
+			case RV32F__FSGNJ_NX:
+				return fi.R4type.funct3 <= 0x2;
+			case RV32F__FMIN_MAX:
+				return fi.R4type.funct3 <= 0x1;
+			case RV32F__FEQ_LT_LE:
+				return fi.R4type.funct3 <= 0x2;
+			case RV32F__FCVT_W_SD:   // FCVT.{W,WU,L,LU}.{S,D}
+			case RV32F__FCVT_SD_W:   // FCVT.{S,D}.{W,WU,L,LU}
+				// The 64-bit integer forms only exist on RV64.
+				return fi.R4type.rs2 <= (W == 8 ? 0x3u : 0x1u);
+			case RV32F__FMV_X_W:
+				// funct3 0 is FMV.X.W / FMV.X.D, funct3 1 is FCLASS. Only the
+				// move of a whole double into an integer register needs RV64;
+				// FCLASS reads the bit fields and fits a 32-bit result.
+				if (fi.R4type.funct3 == 0x1)
+					return true;
+				return fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
+			case RV32F__FMV_W_X:
+				return fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
+			default:
+				return false;
+			}
+		}
+
 		default:
-			// SYSTEM (ECALL/EBREAK/CSR) and the F/D/A/V opcodes all terminate the
+			// SYSTEM (ECALL/EBREAK/CSR) and the A/V opcodes all terminate the
 			// region: the interpreter picks them up at the address we exit with.
 			return false;
 		}

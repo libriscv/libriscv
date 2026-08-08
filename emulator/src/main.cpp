@@ -136,7 +136,9 @@ static void print_help(const char* name)
 #ifdef RISCV_EXT_V
 		"-  V: Vector extension is enabled\n"
 #endif
-#if defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)
+#if defined(RISCV_ASMJIT)
+		"-  asmjit JIT is enabled\n"
+#elif defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)
 		"-  Binary translation is enabled (libtcc)\n"
 #elif defined(RISCV_BINARY_TRANSLATION)
 		"-  Binary translation is enabled\n"

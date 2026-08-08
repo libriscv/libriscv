@@ -3,6 +3,7 @@
 #include "../cpu.hpp"
 #include "../decoded_exec_segment.hpp"
 #include "../memory.hpp"
+#include "../rvfd_util.hpp"
 
 #include <algorithm>
 #include <array>
@@ -76,6 +77,21 @@ static inline void host_mul_hi(UniCompiler& uc, const Gp& dst, const Gp& a, cons
 #endif
 }
 
+/// @brief True when the host can compute a fused multiply-add.
+/// @details RISC-V requires FMADD and friends to round once, which a separate
+/// multiply and add does not. asmjit will happily emit the two-instruction
+/// fallback, so the FMA opcodes are only claimed when the host has the real
+/// thing; elsewhere they end the region and the interpreter's std::fma runs.
+static inline bool host_has_fma(const UniCompiler& uc)
+{
+#if defined(ASMJIT_UJIT_X86)
+	return uc.has_fma();
+#else
+	(void)uc;
+	return true;   // AArch64 has FMADD/FMSUB in the base ISA
+#endif
+}
+
 /// @brief dst = a / b, signed, or a % b when `want_rem`.
 /// @details The caller has already taken b == 0 and b == -1 off this path:
 /// they are exactly the two inputs x86's idiv faults on, and exactly the two
@@ -101,6 +117,22 @@ static inline void host_sdiv(UniCompiler& uc, const Gp& dst, const Gp& a, const 
 		cc.msub(dst, quot, b, a);   // dst = a - quot * b
 	}
 #endif
+}
+
+bool aj_host_has_fma() noexcept
+{
+	// The JitRuntime derives its features from the host the same way, so this
+	// answers the same question the emitter's UniCompiler would.
+	static const bool has_fma = [] {
+		const CpuFeatures& f = CpuInfo::host().features();
+#if defined(ASMJIT_UJIT_X86)
+		return f.x86().has_fma();
+#else
+		(void)f;
+		return true;
+#endif
+	}();
+	return has_fma;
 }
 
 template <int W>
@@ -130,6 +162,16 @@ struct AjEmitter
 	std::bitset<32> readset;    // static: writeset + every rs1/rs2 it reads
 	bool needs_zero = false;
 	bool needs_arena = false;
+
+	// The f-registers get exactly the same treatment as the integer ones: a
+	// virtual register each, preloaded in the prologue and stored back at every
+	// exit. There is no x0 equivalent here -- f0 is an ordinary register.
+	std::array<Vec, 32> fvreg {};
+	std::bitset<32> fp_writeset;
+	std::bitset<32> fp_readset;
+	Vec canon32, canon64;       // the canonical NaNs, when a conversion needs them
+	bool needs_canon32 = false;
+	bool needs_canon64 = false;
 
 	std::set<address_t> branch_targets;         // in-region targets
 	std::unordered_map<address_t, Label> labels;
@@ -176,6 +218,11 @@ struct AjEmitter
 	Mem reg_mem(unsigned i) const {
 		return mem_ptr(cpu, info.reg_offset + int32_t(i * RVLEN));
 	}
+	/// @brief An f-register is 64 bits wide on both guest widths: RV32D moves
+	/// doubles through a machine whose integer registers are half that size.
+	Mem freg_mem(unsigned i) const {
+		return mem_ptr(cpu, info.fpreg_offset + int32_t(i * 8));
+	}
 	static constexpr int32_t off_counter() { return int32_t(offsetof(AjState<W>, counter)); }
 	static constexpr int32_t off_max()     { return int32_t(offsetof(AjState<W>, max_counter)); }
 	static constexpr int32_t off_pc()      { return int32_t(offsetof(AjState<W>, pc)); }
@@ -194,10 +241,29 @@ struct AjEmitter
 			arena = uc.new_gp_ptr("arena");
 			uc.load(arena, mem_ptr(cpu, info.arena_ptr));
 		}
+		// The canonical NaNs are loop-invariant, so they are materialized here
+		// rather than at each conversion that needs one.
+		if (needs_canon32) {
+			Gp t = uc.new_gp32("canon32i");
+			uc.mov(t, Imm(CANONICAL_NAN_F32));
+			canon32 = uc.new_vec128("canon32");
+			uc.s_mov_u32(canon32, t);
+		}
+		if (needs_canon64) {
+			Gp t = uc.new_gp64("canon64i");
+			uc.mov(t, Imm(CANONICAL_NAN_F64));
+			canon64 = uc.new_vec128("canon64");
+			uc.s_mov_u64(canon64, t);
+		}
 		for (unsigned i = 1; i < 32; i++) {
 			if (!readset[i]) continue;
 			vreg[i] = new_ireg("x%u", i);
 			uc.load(vreg[i], reg_mem(i));
+		}
+		for (unsigned i = 0; i < 32; i++) {
+			if (!fp_readset[i]) continue;
+			fvreg[i] = uc.new_vec128("f%u", i);
+			uc.v_loadu64_u64(fvreg[i], freg_mem(i));
 		}
 	}
 	Gp get(unsigned i) {               // source register
@@ -208,6 +274,10 @@ struct AjEmitter
 		if (i == 0) return new_ireg("sink"); // writes to x0 are discarded
 		return vreg[i];                // in writeset, so the prologue loaded it
 	}
+	// f-registers need no x0 special case, so source and destination are the
+	// same lookup; both names exist to keep the emission code readable.
+	Vec fget(unsigned i) { return fvreg[i]; }
+	Vec fdef(unsigned i) { return fvreg[i]; }
 
 	// --- counter accounting ---
 	// `pending` is a compile-time count of instructions retired since the last
@@ -229,6 +299,8 @@ struct AjEmitter
 	void flush_regs() {
 		for (unsigned i = 1; i < 32; i++)
 			if (writeset[i]) uc.store(reg_mem(i), vreg[i]);
+		for (unsigned i = 0; i < 32; i++)
+			if (fp_writeset[i]) uc.v_storeu64_u64(freg_mem(i), fvreg[i]);
 	}
 	void store_counter(uint32_t pend) {
 		if (pend == 0) {
@@ -551,6 +623,436 @@ struct AjEmitter
 		});
 	}
 
+	// --- F/D extension -----------------------------------------------------
+	// f-registers live in vector registers of the host, one guest register per
+	// virtual register, and every operation works on the low 32 or 64 bits of
+	// one. The upper half of an f-register written by a single-precision
+	// operation is architecturally NaN-boxed; libriscv only pays for that under
+	// `nanboxing`, and otherwise leaves it as whatever the host op produced,
+	// which is the same contract the interpreter documents for `set_float()`.
+
+	/// @brief Fill the upper half of an f-register with ones, so that reading a
+	/// single-precision value back as a double yields a NaN, as on hardware.
+	void nanbox(const Vec& d) {
+		if constexpr (riscv::nanboxing)
+			uc.v_or_f64(d, d, uc.simd_const(&uc.ct().p_FFFFFFFF00000000, Bcst::k64, d));
+	}
+	/// @brief Finish a result of the given precision: single-precision results
+	/// are the only ones that leave the upper half of the register undefined.
+	void fp_result(const Vec& d, bool is_double) {
+		if (!is_double) nanbox(d);
+	}
+
+	// Bitwise operations have no precision of their own, but keeping them in
+	// the same domain as the surrounding arithmetic avoids the bypass penalty
+	// x86 charges for moving a value between the float and double pipelines.
+	void v_and_fp(bool dbl, const Vec& d, const Vec& a, const Operand& b) {
+		if (dbl) uc.v_and_f64(d, a, b); else uc.v_and_f32(d, a, b);
+	}
+	void v_andn_fp(bool dbl, const Vec& d, const Vec& a, const Operand& b) {
+		if (dbl) uc.v_andn_f64(d, a, b); else uc.v_andn_f32(d, a, b);
+	}
+	void v_or_fp(bool dbl, const Vec& d, const Vec& a, const Operand& b) {
+		if (dbl) uc.v_or_f64(d, a, b); else uc.v_or_f32(d, a, b);
+	}
+	void v_xor_fp(bool dbl, const Vec& d, const Vec& a, const Operand& b) {
+		if (dbl) uc.v_xor_f64(d, a, b); else uc.v_xor_f32(d, a, b);
+	}
+	/// @brief dst = mask ? if_set : if_clear, where `mask` came out of a scalar
+	/// compare and is therefore all-ones or all-zeros in the low lane.
+	void select_masked(bool dbl, const Vec& dst, const Vec& mask,
+		const Vec& if_set, const Vec& if_clear)
+	{
+		Vec a = uc.new_vec128("selA");
+		Vec b = uc.new_vec128("selB");
+		v_andn_fp(dbl, a, mask, if_clear);   // a = ~mask & if_clear
+		v_and_fp(dbl, b, mask, if_set);
+		v_or_fp(dbl, dst, a, b);
+	}
+
+	// FLD and FSD are 64-bit accesses on both guest widths, so the FP helpers
+	// carry a uint64_t payload rather than an address_t one.
+	static FuncSignature fp_load_signature() {
+		return FuncSignature::build<uint64_t, void*, void*, address_t, address_t>();
+	}
+	static FuncSignature fp_store_signature() {
+		return FuncSignature::build<void, void*, void*, address_t, uint64_t, address_t>();
+	}
+	void call_fp_load_helper(address_t pc, bool is_double, const Vec& dst,
+		const Gp& addr, uint32_t pend)
+	{
+		const uint64_t fn = uint64_t(uintptr_t(
+			is_double ? info.cb->load_dbl : info.cb->load_fl));
+		Gp bits = uc.new_gp64("fbits");
+		InvokeNode* node;
+		cc.invoke(Out(node), fn, fp_load_signature());
+		node->set_arg(0, cpu);
+		node->set_arg(1, st);
+		node->set_arg(2, addr_value(addr));
+		node->set_arg(3, rvimm(pc));
+		node->set_ret(0, bits);
+		uc.s_mov_u64(dst, bits);
+		emit_fault_check(pc, pend);
+	}
+	void call_fp_store_helper(address_t pc, bool is_double, const Vec& value,
+		const Gp& addr, uint32_t pend)
+	{
+		const uint64_t fn = uint64_t(uintptr_t(
+			is_double ? info.cb->store_dbl : info.cb->store_fl));
+		Gp bits = uc.new_gp64("fbits");
+		uc.s_mov_u64(bits, value);   // the helper narrows a single-precision store
+		InvokeNode* node;
+		cc.invoke(Out(node), fn, fp_store_signature());
+		node->set_arg(0, cpu);
+		node->set_arg(1, st);
+		node->set_arg(2, addr_value(addr));
+		node->set_arg(3, bits);
+		node->set_arg(4, rvimm(pc));
+		emit_fault_check(pc, pend);
+	}
+	void emit_fp_load(address_t pc, unsigned funct3, unsigned rd, unsigned rs1, int32_t simm)
+	{
+		const bool is_double = (funct3 == 0x3);
+		auto addr = address_of(rs1, simm);
+		const Vec dst = fdef(rd);
+		if (!info.inline_memory) {
+			call_fp_load_helper(pc, is_double, dst, addr, pending - 1);
+			fp_result(dst, is_double);
+			return;
+		}
+		Label slow = uc.new_label(), done = uc.new_label();
+		emit_arena_check(addr, false, slow);
+		const Mem m = mem_ptr(arena, addr);
+		if (is_double) uc.v_loadu64_u64(dst, m);   // FLD
+		else           uc.v_loadu32_u32(dst, m);   // FLW
+		uc.bind(done);
+		deferred.push_back([=, this, pend = pending - 1] {
+			uc.bind(slow);
+			call_fp_load_helper(pc, is_double, dst, addr, pend);
+			uc.j(done);
+		});
+		// Emitted after the merge point, so it covers both paths.
+		fp_result(dst, is_double);
+	}
+	void emit_fp_store(address_t pc, unsigned funct3, unsigned rs1, unsigned rs2, int32_t simm)
+	{
+		const bool is_double = (funct3 == 0x3);
+		auto addr = address_of(rs1, simm);
+		const Vec src = fget(rs2);
+		if (!info.inline_memory) {
+			call_fp_store_helper(pc, is_double, src, addr, pending - 1);
+			return;
+		}
+		Label slow = uc.new_label(), done = uc.new_label();
+		emit_arena_check(addr, true, slow);
+		const Mem m = mem_ptr(arena, addr);
+		if (is_double) uc.v_storeu64_u64(m, src);  // FSD
+		else           uc.v_storeu32_u32(m, src);  // FSW
+		uc.bind(done);
+		deferred.push_back([=, this, pend = pending - 1] {
+			uc.bind(slow);
+			call_fp_store_helper(pc, is_double, src, addr, pend);
+			uc.j(done);
+		});
+	}
+
+	/// @brief Move a 32-bit result into a guest register, widening it on RV64.
+	/// @details Every FP instruction that writes an integer register produces
+	/// either a sign-extended word (FMV.X.W) or a small positive number
+	/// (FEQ/FLT/FLE, FCLASS), so one sign-extending path serves all of them.
+	void set_word_result(unsigned rd, const Gp& t32) {
+		if constexpr (RV64) host_sign_extend_word(cc, def(rd), t32);
+		else                uc.mov(def(rd), t32);
+	}
+
+	/// @brief The four fused multiply-add opcodes.
+	/// @details asmjit has all four shapes built in, but its negated forms
+	/// negate a different operand than the interpreter's std::fma() calls do.
+	/// The arithmetic is identical either way; the NaN that comes out is not,
+	/// because a hardware FMA propagates a NaN operand unchanged and so records
+	/// which operand was negated on the way in. Spelling every form as an
+	/// explicit sign flip plus a plain multiply-add costs one xor and keeps the
+	/// two backends bit-identical.
+	void emit_fmadd(rv32i_instruction i)
+	{
+		const rv32f_instruction fi { i };
+		const bool dbl = (fi.R4type.funct2 == 0x1);
+		const Vec a = fget(fi.R4type.rs1), b = fget(fi.R4type.rs2);
+		const Vec c = fget(fi.R4type.rs3), d = fdef(fi.R4type.rd);
+
+		const auto negated = [&] (const Vec& src) {
+			Vec t = uc.new_vec128("fneg");
+			if (dbl) uc.s_neg_f64(t, src); else uc.s_neg_f32(t, src);
+			return t;
+		};
+		const auto madd = [&] (const Vec& dst, const Vec& x, const Vec& y, const Vec& z) {
+			if (dbl) uc.s_madd_f64(dst, x, y, z); else uc.s_madd_f32(dst, x, y, z);
+		};
+		switch (i.opcode()) {
+		case RV32F_FMADD:                        // fma(rs1, rs2, rs3)
+			madd(d, a, b, c);
+			break;
+		case RV32F_FMSUB:                        // fma(rs1, rs2, -rs3)
+			madd(d, a, b, negated(c));
+			break;
+		case RV32F_FNMSUB:                       // fma(-rs1, rs2, rs3)
+			madd(d, negated(a), b, c);
+			break;
+		case RV32F_FNMADD: {                     // -fma(rs1, rs2, rs3)
+			Vec t = uc.new_vec128("fnmadd");
+			madd(t, a, b, c);
+			if (dbl) uc.s_neg_f64(d, t); else uc.s_neg_f32(d, t);
+			} break;
+		}
+		fp_result(d, dbl);
+	}
+
+	/// @brief FMIN/FMAX, which no host instruction implements: RISC-V orders
+	/// -0.0 below +0.0 and canonicalizes a pair of NaN operands.
+	void emit_fminmax(const rv32f_instruction& fi, bool dbl)
+	{
+		const bool is_max = (fi.R4type.funct3 == 0x1);
+		const void* fn = dbl
+			? (is_max ? (const void*)info.cb->fmax64 : (const void*)info.cb->fmin64)
+			: (is_max ? (const void*)info.cb->fmax32 : (const void*)info.cb->fmin32);
+		InvokeNode* node;
+		cc.invoke(Out(node), uint64_t(uintptr_t(fn)),
+			dbl ? FuncSignature::build<double, double, double>()
+				: FuncSignature::build<float, float, float>());
+		node->set_arg(0, fget(fi.R4type.rs1));
+		node->set_arg(1, fget(fi.R4type.rs2));
+		node->set_ret(0, fdef(fi.R4type.rd));
+		fp_result(fdef(fi.R4type.rd), dbl);
+	}
+
+	/// @brief FSGNJ, FSGNJN and FSGNJX: rs1's magnitude with a sign derived
+	/// from rs2. This is also how a compiler spells FMV, FNEG and FABS.
+	void emit_fsgnj(const rv32f_instruction& fi, bool dbl)
+	{
+		const Vec a = fget(fi.R4type.rs1), b = fget(fi.R4type.rs2);
+		const Vec d = fdef(fi.R4type.rd);
+		const Operand sign = dbl
+			? uc.simd_const(&uc.ct().p_8000000000000000, Bcst::k64, d)
+			: uc.simd_const(&uc.ct().p_8000000080000000, Bcst::k32, d);
+		const Operand magnitude = dbl
+			? uc.simd_const(&uc.ct().p_7FFFFFFFFFFFFFFF, Bcst::k64, d)
+			: uc.simd_const(&uc.ct().p_7FFFFFFF7FFFFFFF, Bcst::k32, d);
+
+		Vec sbit = uc.new_vec128("fsgnj");
+		switch (fi.R4type.funct3) {
+		case 0x0: // FSGNJ: rs2's sign
+			v_and_fp(dbl, sbit, b, sign);
+			break;
+		case 0x1: // FSGNJN: rs2's sign, inverted
+			v_andn_fp(dbl, sbit, b, sign);
+			break;
+		case 0x2: // FSGNJX: the two signs, xored
+			v_xor_fp(dbl, sbit, a, b);
+			v_and_fp(dbl, sbit, sbit, sign);
+			break;
+		}
+		Vec mag = uc.new_vec128("fsgnjm");
+		v_and_fp(dbl, mag, a, magnitude);
+		v_or_fp(dbl, d, mag, sbit);
+		fp_result(d, dbl);
+	}
+
+	/// @brief FEQ, FLT and FLE, whose result is an integer 0 or 1.
+	/// @details All three are ordered comparisons: a NaN operand makes them
+	/// false, which is exactly what the host's scalar compare already answers.
+	void emit_fcmp(const rv32f_instruction& fi, bool dbl)
+	{
+		const Vec a = fget(fi.R4type.rs1), b = fget(fi.R4type.rs2);
+		Vec m = uc.new_vec128("fcmp");
+		switch (fi.R4type.funct3) {
+		case 0x0: if (dbl) uc.s_cmp_le_f64(m, a, b); else uc.s_cmp_le_f32(m, a, b); break;
+		case 0x1: if (dbl) uc.s_cmp_lt_f64(m, a, b); else uc.s_cmp_lt_f32(m, a, b); break;
+		case 0x2: if (dbl) uc.s_cmp_eq_f64(m, a, b); else uc.s_cmp_eq_f32(m, a, b); break;
+		}
+		// The low lane is all ones or all zeros; one bit of it is the result.
+		Gp t = uc.new_gp32("fcmpr");
+		uc.s_extract_u32(t, m, 0);
+		uc.and_(t, t, Imm(1));
+		set_word_result(fi.R4type.rd, t);
+	}
+
+	/// @brief FCVT.S.D and FCVT.D.S.
+	/// @details A NaN operand must come out as the destination format's
+	/// canonical NaN, which the host conversion does not do -- it carries the
+	/// payload across. Selecting the canonical NaN of the *source* format
+	/// before converting gets there in one fewer domain: the two canonical NaNs
+	/// convert into each other exactly.
+	void emit_fcvt_sd_ds(const rv32f_instruction& fi, bool to_double)
+	{
+		const Vec a = fget(fi.R4type.rs1);
+		const Vec d = fdef(fi.R4type.rd);
+		Vec m = uc.new_vec128("fnan");
+		Vec t = uc.new_vec128("fcvt");
+		if (to_double) {                      // FCVT.D.S
+			uc.s_cmp_unord_f32(m, a, a);
+			select_masked(false, t, m, canon32, a);
+			uc.s_cvt_f32_to_f64(d, t);
+		} else {                              // FCVT.S.D
+			uc.s_cmp_unord_f64(m, a, a);
+			select_masked(true, t, m, canon64, a);
+			uc.s_cvt_f64_to_f32(d, t);
+			nanbox(d);
+		}
+	}
+
+	/// @brief FCVT.{W,WU,L,LU}.{S,D}, all of them helper calls.
+	/// @details Every host conversion instruction disagrees with RISC-V about
+	/// NaN and about overflow -- x86 answers the integer indefinite for both,
+	/// where RISC-V clips to the nearest representable extreme -- and the
+	/// rounding mode is part of the instruction rather than of the register
+	/// file, so there is little of the sequence left to inline.
+	void emit_fcvt_to_int(const rv32f_instruction& fi, bool dbl)
+	{
+		const auto* cb = info.cb;
+		const void* fn = nullptr;
+		switch (fi.R4type.rs2) {
+		case 0x0: fn = dbl ? (const void*)cb->fcvt_w_d  : (const void*)cb->fcvt_w_s;  break;
+		case 0x1: fn = dbl ? (const void*)cb->fcvt_wu_d : (const void*)cb->fcvt_wu_s; break;
+		case 0x2: fn = dbl ? (const void*)cb->fcvt_l_d  : (const void*)cb->fcvt_l_s;  break;
+		case 0x3: fn = dbl ? (const void*)cb->fcvt_lu_d : (const void*)cb->fcvt_lu_s; break;
+		}
+		Gp rm = uc.new_gp32("frm");
+		uc.mov(rm, Imm(fi.R4type.funct3));
+		InvokeNode* node;
+		cc.invoke(Out(node), uint64_t(uintptr_t(fn)),
+			dbl ? FuncSignature::build<address_t, void*, double, uint32_t>()
+				: FuncSignature::build<address_t, void*, float, uint32_t>());
+		node->set_arg(0, cpu);
+		node->set_arg(1, fget(fi.R4type.rs1));
+		node->set_arg(2, rm);
+		node->set_ret(0, def(fi.R4type.rd));
+	}
+
+	/// @brief FCVT.{S,D}.{W,WU,L,LU}.
+	/// @details Without FCSR emulation these carry no inexactness reporting, so
+	/// the signed forms are a single host instruction. Only a 64-bit unsigned
+	/// source needs a helper: no host has an instruction for it.
+	void emit_fcvt_from_int(const rv32f_instruction& fi, bool dbl)
+	{
+		const Vec d = fdef(fi.R4type.rd);
+		const Gp src = get(fi.R4type.rs1);
+		switch (fi.R4type.rs2) {
+		case 0x0: // FCVT.{S,D}.W
+			if (dbl) uc.s_cvt_int_to_f64(d, src.r32());
+			else     uc.s_cvt_int_to_f32(d, src.r32());
+			break;
+		case 0x1: { // FCVT.{S,D}.WU -- widening to a signed 64-bit source is exact
+			Gp z = uc.new_gp64("fzx");
+			uc.mov(z.r32(), src.r32());   // writing the low half clears the upper
+			if (dbl) uc.s_cvt_int_to_f64(d, z);
+			else     uc.s_cvt_int_to_f32(d, z);
+			} break;
+		case 0x2: // FCVT.{S,D}.L
+			if (dbl) uc.s_cvt_int_to_f64(d, src);
+			else     uc.s_cvt_int_to_f32(d, src);
+			break;
+		case 0x3: { // FCVT.{S,D}.LU
+			const void* fn = dbl ? (const void*)info.cb->fcvt_d_lu
+								 : (const void*)info.cb->fcvt_s_lu;
+			InvokeNode* node;
+			cc.invoke(Out(node), uint64_t(uintptr_t(fn)),
+				dbl ? FuncSignature::build<double, uint64_t>()
+					: FuncSignature::build<float, uint64_t>());
+			node->set_arg(0, src);
+			node->set_ret(0, d);
+			} break;
+		}
+		fp_result(d, dbl);
+	}
+
+	/// @brief The OP-FP opcode, which carries every FP instruction that is not
+	/// a load, a store or a fused multiply-add.
+	void emit_fpfunc(rv32i_instruction i)
+	{
+		const rv32f_instruction fi { i };
+		const unsigned rd = fi.R4type.rd, rs1 = fi.R4type.rs1, rs2 = fi.R4type.rs2;
+		const bool dbl = (fi.R4type.funct2 == 0x1);
+
+		switch (i.fpfunc())
+		{
+		case RV32F__FADD:
+			if (dbl) uc.s_add_f64(fdef(rd), fget(rs1), fget(rs2));
+			else     uc.s_add_f32(fdef(rd), fget(rs1), fget(rs2));
+			fp_result(fdef(rd), dbl);
+			break;
+		case RV32F__FSUB:
+			if (dbl) uc.s_sub_f64(fdef(rd), fget(rs1), fget(rs2));
+			else     uc.s_sub_f32(fdef(rd), fget(rs1), fget(rs2));
+			fp_result(fdef(rd), dbl);
+			break;
+		case RV32F__FMUL:
+			if (dbl) uc.s_mul_f64(fdef(rd), fget(rs1), fget(rs2));
+			else     uc.s_mul_f32(fdef(rd), fget(rs1), fget(rs2));
+			fp_result(fdef(rd), dbl);
+			break;
+		case RV32F__FDIV:
+			if (dbl) uc.s_div_f64(fdef(rd), fget(rs1), fget(rs2));
+			else     uc.s_div_f32(fdef(rd), fget(rs1), fget(rs2));
+			fp_result(fdef(rd), dbl);
+			break;
+		case RV32F__FSQRT:
+			if (dbl) uc.s_sqrt_f64(fdef(rd), fget(rs1));
+			else     uc.s_sqrt_f32(fdef(rd), fget(rs1));
+			fp_result(fdef(rd), dbl);
+			break;
+		case RV32F__FSGNJ_NX:
+			emit_fsgnj(fi, dbl);
+			break;
+		case RV32F__FMIN_MAX:
+			emit_fminmax(fi, dbl);
+			break;
+		case RV32F__FEQ_LT_LE:
+			emit_fcmp(fi, dbl);
+			break;
+		case RV32F__FCVT_SD_DS:
+			// funct2 names the *destination* format here, not the source.
+			emit_fcvt_sd_ds(fi, dbl);
+			break;
+		case RV32F__FCVT_W_SD:
+			emit_fcvt_to_int(fi, dbl);
+			break;
+		case RV32F__FCVT_SD_W:
+			emit_fcvt_from_int(fi, dbl);
+			break;
+		case RV32F__FMV_X_W:
+			if (fi.R4type.funct3 == 0x0) {
+				if (dbl) {                       // FMV.X.D, RV64 only
+					if constexpr (RV64) uc.s_mov_u64(def(rd), fget(rs1));
+				} else {                         // FMV.X.W
+					Gp t = uc.new_gp32("fmvx");
+					uc.s_extract_u32(t, fget(rs1), 0);
+					set_word_result(rd, t);
+				}
+			} else {                             // FCLASS
+				Gp bits = dbl ? uc.new_gp64("fcls") : uc.new_gp32("fcls");
+				if (dbl) uc.s_mov_u64(bits, fget(rs1));
+				else     uc.s_extract_u32(bits, fget(rs1), 0);
+				InvokeNode* node;
+				cc.invoke(Out(node), uint64_t(uintptr_t(dbl
+						? (const void*)info.cb->fclass64
+						: (const void*)info.cb->fclass32)),
+					dbl ? FuncSignature::build<address_t, uint64_t>()
+						: FuncSignature::build<address_t, uint32_t>());
+				node->set_arg(0, bits);
+				node->set_ret(0, def(rd));
+			}
+			break;
+		case RV32F__FMV_W_X:
+			if (dbl) {                           // FMV.D.X, RV64 only
+				if constexpr (RV64) uc.s_mov_u64(fdef(rd), get(rs1));
+			} else {                             // FMV.W.X
+				uc.s_mov_u32(fdef(rd), get(rs1).r32());
+				nanbox(fdef(rd));
+			}
+			break;
+		}
+	}
+
 	// --- pre-pass ---
 	// Collects the read set, the write set and the in-region branch targets in a
 	// single walk, so the emission loop is free of path-dependent state.
@@ -606,6 +1108,65 @@ struct AjEmitter
 				const address_t t = pc + i.Jtype.jump_offset();
 				if (in_region(t)) branch_targets.insert(t);
 				} break;
+
+			case RV32F_LOAD:               // FLW, FLD
+				readset.set(i.Itype.rs1);
+				fp_writeset.set(i.Itype.rd);
+				needs_arena |= info.inline_memory;
+				break;
+			case RV32F_STORE:              // FSW, FSD
+				readset.set(i.Stype.rs1);
+				fp_readset.set(i.Stype.rs2);
+				needs_arena |= info.inline_memory;
+				break;
+			case RV32F_FMADD:
+			case RV32F_FMSUB:
+			case RV32F_FNMADD:
+			case RV32F_FNMSUB: {
+				const rv32f_instruction fi { i };
+				fp_readset.set(fi.R4type.rs1);
+				fp_readset.set(fi.R4type.rs2);
+				fp_readset.set(fi.R4type.rs3);
+				fp_writeset.set(fi.R4type.rd);
+				} break;
+			case RV32F_FPFUNC: {
+				const rv32f_instruction fi { i };
+				const unsigned rd = fi.R4type.rd, rs1 = fi.R4type.rs1, rs2 = fi.R4type.rs2;
+				const bool dbl = (fi.R4type.funct2 == 0x1);
+				switch (i.fpfunc()) {
+				case RV32F__FADD: case RV32F__FSUB:
+				case RV32F__FMUL: case RV32F__FDIV:
+				case RV32F__FSGNJ_NX: case RV32F__FMIN_MAX:
+					fp_readset.set(rs1); fp_readset.set(rs2); fp_writeset.set(rd);
+					break;
+				case RV32F__FSQRT:
+					fp_readset.set(rs1); fp_writeset.set(rd);
+					break;
+				case RV32F__FCVT_SD_DS:
+					fp_readset.set(rs1); fp_writeset.set(rd);
+					// The canonical NaN is selected in the *source* format.
+					if (dbl) needs_canon32 = true; else needs_canon64 = true;
+					break;
+				case RV32F__FEQ_LT_LE:
+					fp_readset.set(rs1); fp_readset.set(rs2); writeset.set(rd);
+					break;
+				case RV32F__FCVT_W_SD:
+					fp_readset.set(rs1); writeset.set(rd);
+					break;
+				case RV32F__FCVT_SD_W:
+					readset.set(rs1); fp_writeset.set(rd);
+					break;
+				case RV32F__FMV_X_W:   // and FCLASS
+					fp_readset.set(rs1); writeset.set(rd);
+					break;
+				case RV32F__FMV_W_X:
+					readset.set(rs1); fp_writeset.set(rd);
+					break;
+				default:
+					break;
+				}
+				} break;
+
 			default:
 				break;
 			}
@@ -616,6 +1177,8 @@ struct AjEmitter
 		needs_zero = readset[0];
 		readset.reset(0);
 		writeset.reset(0);
+		// f0 is an ordinary register, so the f-register sets keep every bit.
+		fp_readset |= fp_writeset;
 
 		// When the entry is not the lowest address, the prologue has to jump to it,
 		// which makes it a label like any other branch target.
@@ -768,6 +1331,25 @@ struct AjEmitter
 				emit_store(pc, i.Stype.funct3, i.Stype.rs1, i.Stype.rs2, i.Stype.signed_imm());
 				break;
 
+			case RV32F_LOAD:
+				emit_fp_load(pc, i.Itype.funct3, i.Itype.rd, i.Itype.rs1, i.Itype.signed_imm());
+				break;
+
+			case RV32F_STORE:
+				emit_fp_store(pc, i.Stype.funct3, i.Stype.rs1, i.Stype.rs2, i.Stype.signed_imm());
+				break;
+
+			case RV32F_FMADD:
+			case RV32F_FMSUB:
+			case RV32F_FNMADD:
+			case RV32F_FNMSUB:
+				emit_fmadd(i);
+				break;
+
+			case RV32F_FPFUNC:
+				emit_fpfunc(i);
+				break;
+
 			case RV32I_BRANCH: {
 				const address_t target = pc + i.Btype.signed_imm();
 				flush_counter();                 // settle before control flow splits
@@ -910,6 +1492,11 @@ aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options
 }
 
 #else // !RISCV_ASMJIT_HAS_BACKEND
+
+bool aj_host_has_fma() noexcept
+{
+	return false;   // nothing is emitted on this host anyway
+}
 
 template <int W>
 aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
