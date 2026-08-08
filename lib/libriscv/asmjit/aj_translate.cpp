@@ -137,6 +137,7 @@ namespace riscv
 
 		AjInfo<W> info;
 		info.reg_offset    = int32_t(uintptr_t(&cpu.registers().get(0)) - cpu_addr);
+		info.fpreg_offset  = int32_t(uintptr_t(&cpu.registers().getfl(0)) - cpu_addr);
 		info.arena_ptr     = int32_t(uintptr_t(&mem.memory_arena_ptr_ref()) - cpu_addr);
 		info.arena_rdbound = int32_t(uintptr_t(&mem.memory_arena_read_boundary_ref()) - cpu_addr);
 		info.arena_wrbound = int32_t(uintptr_t(&mem.memory_arena_write_boundary_ref()) - cpu_addr);

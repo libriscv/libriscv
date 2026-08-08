@@ -30,6 +30,7 @@ extern "C" int unlink(const char* path);
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
 #include "internal_common.hpp"
+#include "rvfd_util.hpp"
 #include "safe_instr_loader.hpp"
 #include "threaded_bytecodes.hpp"
 #include "tr_api.hpp"
@@ -1661,89 +1662,14 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		.vfmaf32 = host_has_fma() ? hw_fmaf32 : libm_fmaf32,
 		.vfmaf64 = host_has_fma() ? hw_fmaf64 : libm_fmaf64,
 		// FMIN/FMAX with RISC-V -0.0 < +0.0 convention. std::fmin/fmax
-		// leave the ±0 case implementation-defined.
-		.fmin32_rv = [] (float a, float b) -> float {
-			// Two NaN operands produce the canonical qNaN. A single NaN operand
-			// must yield the other one, which std::fmin/fmax do not reliably
-			// do: glibc returns a quieted copy of a signaling NaN instead.
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint32_t bits = 0x7fc00000u;
-					float result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				// A single NaN operand must yield the other operand. glibc's
-				// std::fmin/fmax return a quieted copy of a signaling NaN
-				// instead, so handle this case explicitly.
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0f && b == 0.0f) {
-				uint32_t ab, bb;
-				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);
-				uint32_t out = ((ab | bb) & 0x80000000u) ? 0x80000000u : 0x00000000u;
-				float r; __builtin_memcpy(&r, &out, 4); return r;
-			}
-			return std::fmin(a, b);
-		},
-		.fmax32_rv = [] (float a, float b) -> float {
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint32_t bits = 0x7fc00000u;
-					float result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0f && b == 0.0f) {
-				uint32_t ab, bb;
-				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);
-				uint32_t out = (~(ab & bb) & 0x80000000u) ? 0x00000000u : 0x80000000u;
-				float r; __builtin_memcpy(&r, &out, 4); return r;
-			}
-			return std::fmax(a, b);
-		},
-		.fmin64_rv = [] (double a, double b) -> double {
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint64_t bits = 0x7ff8000000000000ull;
-					double result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0 && b == 0.0) {
-				uint64_t ab, bb;
-				__builtin_memcpy(&ab, &a, 8); __builtin_memcpy(&bb, &b, 8);
-				uint64_t out = ((ab | bb) & 0x8000000000000000ull) ? 0x8000000000000000ull : 0x0ull;
-				double r; __builtin_memcpy(&r, &out, 8); return r;
-			}
-			return std::fmin(a, b);
-		},
-		.fmax64_rv = [] (double a, double b) -> double {
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint64_t bits = 0x7ff8000000000000ull;
-					double result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0 && b == 0.0) {
-				uint64_t ab, bb;
-				__builtin_memcpy(&ab, &a, 8); __builtin_memcpy(&bb, &b, 8);
-				uint64_t out = (~(ab & bb) & 0x8000000000000000ull) ? 0x0ull : 0x8000000000000000ull;
-				double r; __builtin_memcpy(&r, &out, 8); return r;
-			}
-			return std::fmax(a, b);
-		},
+		// leave the ±0 case implementation-defined, and two NaN operands must
+		// produce the canonical qNaN. The rules live in rvfd_util.hpp, shared
+		// with the interpreter and the asmjit backend so that all three answer
+		// the same thing.
+		.fmin32_rv = rv_fmin32,
+		.fmax32_rv = rv_fmax32,
+		.fmin64_rv = rv_fmin64,
+		.fmax64_rv = rv_fmax64,
 		.clz = [] (uint32_t x) -> int {
 #ifdef RISCV_HAS_BITOPS
 			return std::countl_zero(x);
