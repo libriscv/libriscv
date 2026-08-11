@@ -394,6 +394,9 @@ namespace riscv
 		if (UNLIKELY(elf->e_phoff + program_headers * sizeof(typename Elf::ProgramHeader) > m_binary.size())) {
 			throw MachineException(INVALID_PROGRAM, "ELF program-headers are outside the binary");
 		}
+		if (UNLIKELY(elf->e_phoff % alignof(typename Elf::ProgramHeader) != 0)) {
+			throw MachineException(INVALID_PROGRAM, "ELF program-headers are not aligned");
+		}
 
 		// Load program segments
 		const auto* phdr = (typename Elf::ProgramHeader*) (m_binary.data() + elf->e_phoff);
