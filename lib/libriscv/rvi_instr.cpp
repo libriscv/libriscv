@@ -1153,7 +1153,9 @@ static inline uint64_t MUL128(
 	}, DECODED_INSTR(OP32).printer);
 
 	INSTRUCTION(FENCE,
-	[] (auto&, rv32i_instruction /* instr */) RVINSTR_COLDATTR {
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR {
+		if (instr.Itype.funct3 == 0x1)
+			cpu.machine().memory.mark_execute_segments_stale();
 		// Do a full barrier, for now
 		std::atomic_thread_fence(std::memory_order_seq_cst);
 	},

@@ -1603,6 +1603,11 @@ void Emitter<W>::emit()
 			this->track_register_value(instr.Utype.rd, PCRELA(instr.Utype.upper_imm()));
 			break;
 		case RV32I_FENCE:
+			if (instr.Itype.funct3 == 0x1) {
+				WELL_KNOWN_INSTRUCTION();
+				exit_function(PCRELS(4), false);
+				this->add_reentry_next();
+			}
 			break;
 		case RV32I_SYSTEM:
 			if (instr.Itype.funct3 == 0x0) {
