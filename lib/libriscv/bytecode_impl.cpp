@@ -544,6 +544,13 @@ INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
+		if constexpr (W >= 8 && nanboxing) {
+			if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+				|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				dst.load_u32(0x7FC00000u);
+				NEXT_INSTR();
+			}
+		}
 		SET_FLOAT_CANON(dst, rs1.f32[0] + rs2.f32[0]);
 	}
 	else
