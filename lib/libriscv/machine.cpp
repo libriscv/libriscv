@@ -314,6 +314,9 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole = cpu.reg(instr.Itype.rs1) & 0xFF;
 				return;
+			case 0xC01: // CSR RDTIME (lower) is read-only
+				cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
+				return;
 			}
 			[[fallthrough]];
 		}
@@ -350,6 +353,10 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter() >> 32u;
 				return;
 			case 0xC01: // CSR RDTIME (lower)
+				if (instr.Itype.rs1 != 0) {
+					cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
+					return;
+				}
 				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this);
 				return;
 			case 0xC81: // CSR RDTIME (upper)
@@ -388,6 +395,13 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole &= ~(cpu.reg(instr.Itype.rs1) & 0xFF);
 				return;
+			case 0xC01: // CSR RDTIME (lower)
+				if (instr.Itype.rs1 != 0) {
+					cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
+					return;
+				}
+				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this);
+				return;
 			}
 			break;
 		}
@@ -407,6 +421,9 @@ namespace riscv
 			case 0x003: // fcsr: control and status register
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole = imm & 0xFF;
+				return;
+			case 0xC01: // CSR RDTIME (lower) is read-only
+				cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
 				return;
 			default:
 				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
@@ -429,6 +446,13 @@ namespace riscv
 			case 0x003: // fcsr: control and status register
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole &= ~(imm & 0xFF);
+				return;
+			case 0xC01: // CSR RDTIME (lower)
+				if (imm != 0) {
+					cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
+					return;
+				}
+				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this);
 				return;
 			default:
 				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
