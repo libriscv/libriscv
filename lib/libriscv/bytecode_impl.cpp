@@ -155,12 +155,13 @@ INSTRUCTION(RV32C_BC_JR, rv32c_jr) {
 }
 INSTRUCTION(RV32C_BC_JALR, rv32c_jalr) {
 	VIEW_INSTR();
+	const auto target = REG(instr.whole);
 	if constexpr (VERBOSE_JUMPS) {
 		fprintf(stderr, "C.JALR from 0x%lX to 0x%lX\n",
 			long(pc), long(REG(instr.whole)));
 	}
 	REG(REG_RA) = pc + 2;
-	pc = REG(instr.whole) & ~addr_t(1);
+	pc = target & ~addr_t(1);
 	OVERFLOW_CHECKED_JUMP();
 }
 #endif // RISCV_EXT_COMPRESSED
