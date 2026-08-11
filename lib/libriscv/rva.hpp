@@ -15,6 +15,7 @@ namespace riscv
 				return false;
 
 			m_reservation = addr;
+			m_reservation_valid = true;
 			return true;
 		}
 
@@ -25,10 +26,11 @@ namespace riscv
 			if (!check_alignment(size, addr))
 				return false;
 
-			bool result = m_reservation == addr;
+			bool result = m_reservation_valid && m_reservation == addr;
 			// Regardless of success or failure, executing an SC.W
 			// instruction invalidates any reservation held by this hart.
 			m_reservation = 0x0;
+			m_reservation_valid = false;
 			return result;
 		}
 
@@ -39,5 +41,6 @@ namespace riscv
 		}
 
 		address_t m_reservation = 0x0;
+		bool m_reservation_valid = false;
 	};
 }
