@@ -419,12 +419,12 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			case 0x0:
 				return RV64I_BC_ADDIW;
 			case 0x1: // SLLIW
-				if (instr.Itype.high_bits() == 0x000) {
+				if (instr.Itype.high_bits() == 0x000 && (instr.Itype.imm & 0x20) == 0) {
 					return RV64I_BC_SLLIW;
 				}
 				return RV32I_BC_FUNCTION;
 			case 0x5: // SRLIW / SRAIW
-				if (instr.Itype.high_bits() == 0x000) {
+				if (instr.Itype.high_bits() == 0x000 && (instr.Itype.imm & 0x20) == 0) {
 					return RV64I_BC_SRLIW;
 				}
 				return RV32I_BC_FUNCTION;

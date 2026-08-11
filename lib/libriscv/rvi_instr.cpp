@@ -1029,7 +1029,7 @@ static inline uint64_t MUL128(
 			}
 			break;
 		case 0x5:
-			if (instr.Itype.high_bits() == 0x600) // RORIW
+			if (instr.Itype.high_bits() == 0x600 && (instr.Itype.imm & 0x20) == 0) // RORIW
 			{
 				const auto shift = instr.Itype.imm & 31;
 				dst = (int32_t) ((src >> shift) | (src << ((32 - shift) & 31)));
