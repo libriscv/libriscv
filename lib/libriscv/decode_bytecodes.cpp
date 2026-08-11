@@ -27,7 +27,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 		{
 			case CI_CODE(0b000, 0b00):
 				// if all bits are zero, it's an illegal instruction
-				if (ci.whole != 0x0) {
+				// C.ADDI4SPN is valid only when nzuimm != 0; the code
+				// points with nzuimm = 0 are reserved (insn:c-addi4spn_rsv).
+				if (ci.whole != 0x0 && ci.CIW.offset() != 0) {
 					return RV32C_BC_ADDI; // C.ADDI4SPN
 				}
 				return RV32I_BC_INVALID;
@@ -81,15 +83,28 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				return RV32C_BC_FUNCTION; // C.NOP
 			case CI_CODE(0b011, 0b01):
 				if (ci.CI.rd == 2) {
-					return RV32C_BC_ADDI; // C.ADDI16SP
+					// C.ADDI16SP is valid only when nzimm != 0
+					// (insn:c-addi16sp_rsv).
+					if (ci.CI16.signed_imm() != 0) {
+						return RV32C_BC_ADDI; // C.ADDI16SP
+					}
 				}
 				else if (ci.CI.rd != 0) {
-					return RV32C_BC_FUNCTION; // C.LUI
+					// C.LUI is valid only when rd != x2 and imm != 0
+					// (insn:c-lui_rsv).
+					if (ci.CI.upper_imm() != 0) {
+						return RV32C_BC_FUNCTION; // C.LUI
+					}
 				}
 				return RV32C_BC_FUNCTION; // ILLEGAL
 			case CI_CODE(0b001, 0b01):
 				if constexpr (W >= 8) {
-					return RV32C_BC_JAL_ADDIW; // C.ADDIW
+					// C.ADDIW is valid only when rd != x0
+					// (insn:c-addiw_rsv); rd = x0 is reserved.
+					if (ci.CI.rd != 0) {
+						return RV32C_BC_JAL_ADDIW; // C.ADDIW
+					}
+					return RV32I_BC_INVALID;
 				} else {
 					return RV32C_BC_JAL_ADDIW; // C.JAL
 				}

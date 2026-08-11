@@ -428,7 +428,10 @@
 				// Quadrant 0
 				case CI_CODE(0b000, 0b00):
 					// if all bits are zero, it's an illegal instruction
-					if (ci.whole != 0x0) {
+					// C.ADDI4SPN is valid only when nzuimm != 0; the code
+					// points with nzuimm = 0 are reserved (RISC-V unpriv spec,
+					// insn:c-addi4spn_rsv).
+					if (ci.whole != 0x0 && ci.CIW.offset() != 0) {
 						DECODER(DECODED_COMPR(C0_ADDI4SPN));
 					}
 					DECODER(DECODED_INSTR(ILLEGAL));
@@ -479,7 +482,9 @@
 						if (ci.CI.rd != 0) {
 							DECODER(DECODED_COMPR(C1_ADDIW));
 						}
-						DECODER(DECODED_INSTR(NOP));
+						// insn:c-addiw_rsv: C.ADDIW is valid only when
+						// rd != x0; the code points with rd = x0 are reserved.
+						DECODER(DECODED_INSTR(ILLEGAL));
 					} else {
 						DECODER(DECODED_COMPR(C1_JAL));
 					}
@@ -490,10 +495,20 @@
 					DECODER(DECODED_INSTR(NOP));
 				case CI_CODE(0b011, 0b01):
 					if (ci.CI.rd == 2) {
-						DECODER(DECODED_COMPR(C1_ADDI16SP));
+						// insn:c-addi16sp_rsv: C.ADDI16SP is valid only when
+						// nzimm != 0; the code point with nzimm = 0 is
+						// reserved.
+						if (ci.CI16.signed_imm() != 0) {
+							DECODER(DECODED_COMPR(C1_ADDI16SP));
+						}
 					}
 					else if (ci.CI.rd != 0) {
-						DECODER(DECODED_COMPR(C1_LUI));
+						// insn:c-lui_rsv: C.LUI is valid only when rd != x2
+						// and the immediate is not equal to zero; code points
+						// with imm = 0 are reserved.
+						if (ci.CI.upper_imm() != 0) {
+							DECODER(DECODED_COMPR(C1_LUI));
+						}
 					}
 					DECODER(DECODED_INSTR(ILLEGAL));
 				case CI_CODE(0b100, 0b01):
