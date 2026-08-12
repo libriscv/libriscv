@@ -8,7 +8,9 @@ rv32i_instruction Emitter<W>::emit_rvc()
 	switch (ci.opcode())
 	{
 		case CI_CODE(0b000, 0b00): // C.ADDI4SPN
-			if (ci.whole != 0) {
+			// C.ADDI4SPN is valid only when nzuimm != 0 (insn:c-addi4spn_rsv);
+			// leave the instruction unexpanded so it raises ILLEGAL_OPCODE.
+			if (ci.whole != 0 && ci.CIW.offset() != 0) {
 				instr.Itype.opcode = RV32I_OP_IMM;
 				instr.Itype.funct3 = 0b000; // ADDI
 				instr.Itype.rd = ci.CIW.srd + 8;
@@ -130,14 +132,16 @@ rv32i_instruction Emitter<W>::emit_rvc()
 			}
 			break;
 		case CI_CODE(0b011, 0b01): // C.ADDI16SP & C.LUI
-			if (ci.CI.rd == 2) { // C.ADDI16SP
+			if (ci.CI.rd == 2 && ci.CI16.signed_imm() != 0) { // C.ADDI16SP
+				// nzimm = 0 is reserved (insn:c-addi16sp_rsv).
 				instr.Itype.opcode = RV32I_OP_IMM;
 				instr.Itype.funct3 = 0b000; // ADDI
 				instr.Itype.rd = 2; // sp
 				instr.Itype.rs1 = 2; // sp
 				instr.Itype.imm = ci.CI16.signed_imm();
 			}
-			else if (ci.CI.rd != 0) { // C.LUI
+			else if (ci.CI.rd != 0 && ci.CI.upper_imm() != 0) { // C.LUI
+				// imm = 0 is reserved (insn:c-lui_rsv).
 				instr.Utype.opcode = RV32I_LUI;
 				instr.Utype.rd = ci.CI.rd;
 				instr.Utype.imm = ci.CI.signed_imm();
@@ -156,11 +160,15 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				if (instr.Jtype.jump_offset() != imm)
 					throw MachineException(INVALID_PROGRAM, "Failed to sign-extend C.JAL immediate");
 			} else { // C.ADDIW
-				instr.Itype.opcode = RV64I_OP_IMM32;
-				instr.Itype.funct3 = 0b000; // ADDIW
-				instr.Itype.rd = ci.CI.rd;
-				instr.Itype.rs1 = ci.CI.rd;
-				instr.Itype.imm = ci.CI.signed_imm();
+				// C.ADDIW is valid only when rd != x0 (insn:c-addiw_rsv);
+				// rd = x0 is reserved. Leave unexpanded -> ILLEGAL_OPCODE.
+				if (ci.CI.rd != 0) {
+					instr.Itype.opcode = RV64I_OP_IMM32;
+					instr.Itype.funct3 = 0b000; // ADDIW
+					instr.Itype.rd = ci.CI.rd;
+					instr.Itype.rs1 = ci.CI.rd;
+					instr.Itype.imm = ci.CI.signed_imm();
+				}
 			}
 			break;
 		case CI_CODE(0b100, 0b01): { // Compressed ALU OPS
