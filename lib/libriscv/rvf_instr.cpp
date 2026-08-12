@@ -320,6 +320,15 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			// A quiet NaN operand propagates as the canonical qNaN without
 			// raising NV — only a signaling NaN, or an invalid operation such
 			// as inf + -inf, is invalid. fsflags() cannot tell those apart

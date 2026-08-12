@@ -2036,8 +2036,15 @@ void Emitter<W>::emit()
 			case RV32F__FADD:
 			case RV32F__FSUB: {
 				const std::string fop = (instr.fpfunc() == RV32F__FSUB) ? " - " : " + ";
-				if (f32)
+				if (f32) {
+					if constexpr (nanboxing && W == 8) {
+						if (instr.fpfunc() == RV32F__FADD) {
+							code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+							code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+						}
+					}
 					code += emit_arith(rs1 + ".f32[0]" + fop + rs2 + ".f32[0]", true);
+				}
 				else
 					code += emit_arith(rs1 + ".f64" + fop + rs2 + ".f64", false);
 				} break;
