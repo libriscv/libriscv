@@ -30,6 +30,11 @@ namespace riscv
 		static constexpr address_t DYLINK_BASE  = 0x40000; // Dynamic link base address
 		static constexpr address_t RWREAD_BEGIN = 0x1000; // Default rw-arena rodata start
 		static constexpr address_t OVERALLOCATE = PageSize; // Arena overalloc on both ends (must be page-aligned for madvise)
+		// Guests routinely map more address space than they have memory for, and
+		// attribute-only pages hold no page data. A page table entry still costs
+		// ~64-88 bytes on the host, so the page table is bounded by this multiple
+		// of the memory limit in pages, keeping the host cost proportional.
+		static constexpr size_t PAGE_TABLE_OVERCOMMIT = 64;
 
 		template <typename T>
 		T read(address_t src);
@@ -182,6 +187,10 @@ namespace riscv
 #ifdef RISCV_VIRTUAL_PAGING
 		size_t pages_active() const noexcept { return m_pages.size(); }
 		size_t owned_pages_active() const noexcept;
+		// Upper bound on entries in the page table, derived from memory_max.
+		// Owned pages are bounded by the page fault handler, while attribute-
+		// only pages (eg. from mmap and mprotect) are bounded by this limit.
+		size_t pages_max() const noexcept { return m_pages_max; }
 		// Page handling
 		const auto& pages() const noexcept { return m_pages; }
 		auto& pages() noexcept { return m_pages; }
@@ -343,6 +352,7 @@ namespace riscv
 		mutable CachedPage<W, PageData> m_wr_cache;
 
 		std::unordered_map<address_t, Page> m_pages;
+		size_t m_pages_max = size_t(-1);
 #endif
 
 		const bool m_original_machine;

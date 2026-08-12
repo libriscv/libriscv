@@ -78,6 +78,12 @@ namespace riscv
 		if (is_default)
 			return;
 
+		// These pages are not created by the page fault handler, so they
+		// have to be bounded here, otherwise a guest can exhaust host memory
+		// by giving mmap() or mprotect() an enormous length.
+		if (UNLIKELY(m_pages.size() >= this->m_pages_max))
+			throw MachineException(OUT_OF_MEMORY, "Out of memory (page attributes)", this->m_pages_max);
+
 		// Writable: Create a non-owning copy-on-write zero-page
 		// Read-only: Create a non-owning zero-page
 		// Unmapped: Create hidden non-owning zero-page, which can become copy-on-write
@@ -119,10 +125,25 @@ namespace riscv
 #ifdef RISCV_VIRTUAL_PAGING
 		address_t pageno = page_number(dst);
 		address_t end = pageno + page_number((len + (Page::size() - 1)) & ~(Page::size() - 1));
-		while (pageno < end)
+		// A guest can free an enormous range, so when the range is larger
+		// than the page table it's cheaper to iterate the page table instead
+		if (size_t(end - pageno) > m_pages.size())
 		{
-			this->free_pageno(pageno);
-			pageno ++;
+			for (auto it = m_pages.begin(); it != m_pages.end(); )
+			{
+				if (it->first >= pageno && it->first < end)
+					it = m_pages.erase(it);
+				else
+					++it;
+			}
+		}
+		else
+		{
+			while (pageno < end)
+			{
+				this->free_pageno(pageno);
+				pageno ++;
+			}
 		}
 		// TODO: This can be improved by invalidating matches only
 		this->invalidate_reset_cache();

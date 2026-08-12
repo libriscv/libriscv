@@ -192,6 +192,18 @@ static void add_mman_syscalls()
 		const auto addr = machine.sysarg(0);
 		const auto len  = machine.sysarg(1);
 		const int  prot = machine.template sysarg<int> (2);
+		if (addr % Page::size() != 0) {
+			machine.set_result(-EINVAL);
+			SYSPRINT(">>> mprotect(0x%lX, len=%zu, prot=%x) => %d\n",
+				(long)addr, (size_t)len, prot, (int)machine.return_value());
+			return;
+		}
+		if (addr + len < addr) {
+			machine.set_result(-ENOMEM);
+			SYSPRINT(">>> mprotect(0x%lX, len=%zu, prot=%x) => %d\n",
+				(long)addr, (size_t)len, prot, (int)machine.return_value());
+			return;
+		}
 		machine.memory.set_page_attr(addr, len, {
 			.read  = (prot & 1) != 0,
 			.write = (prot & 2) != 0,

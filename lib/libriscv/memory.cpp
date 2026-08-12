@@ -25,6 +25,15 @@ namespace riscv
 		  m_binary {bin}
 	{
 #ifdef RISCV_VIRTUAL_PAGING
+		// Bound the page table, including attribute-only pages that are
+		// created outside of the page fault handler (eg. mmap, mprotect)
+		if (options.memory_max != 0)
+		{
+			const size_t pgmax = std::max(size_t(1), size_t(options.memory_max / Page::size()));
+			this->m_pages_max = (pgmax <= size_t(-1) / PAGE_TABLE_OVERCOMMIT)
+				? pgmax * PAGE_TABLE_OVERCOMMIT : size_t(-1);
+		}
+
 		if (options.page_fault_handler != nullptr)
 		{
 			this->m_page_fault_handler = std::move(options.page_fault_handler);
@@ -529,6 +538,8 @@ namespace riscv
 		const Machine<W>& master, const MachineOptions<W>& options)
 	{
 #ifdef RISCV_VIRTUAL_PAGING
+		this->m_pages_max = master.memory.m_pages_max;
+
 		if (options.minimal_fork == false)
 		{
 			this->m_page_fault_handler = master.memory.m_page_fault_handler;
