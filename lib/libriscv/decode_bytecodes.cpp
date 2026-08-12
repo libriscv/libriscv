@@ -96,6 +96,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 						return RV32C_BC_FUNCTION; // C.LUI
 					}
 				}
+				else if (ci.CI.rd == 0 && ci.CI.upper_imm() != 0) {
+					return RV32C_BC_FUNCTION; // C.LUI hint
+				}
 				return RV32C_BC_FUNCTION; // ILLEGAL
 			case CI_CODE(0b001, 0b01):
 				if constexpr (W >= 8) {

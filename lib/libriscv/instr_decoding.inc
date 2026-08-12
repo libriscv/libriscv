@@ -510,6 +510,9 @@
 							DECODER(DECODED_COMPR(C1_LUI));
 						}
 					}
+					else if (ci.CI.rd == 0 && ci.CI.upper_imm() != 0) {
+						DECODER(DECODED_INSTR(NOP));
+					}
 					DECODER(DECODED_INSTR(ILLEGAL));
 				case CI_CODE(0b100, 0b01):
 					DECODER(DECODED_COMPR(C1_ALU_OPS));

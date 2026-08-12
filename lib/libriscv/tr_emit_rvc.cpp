@@ -146,6 +146,9 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				instr.Utype.rd = ci.CI.rd;
 				instr.Utype.imm = ci.CI.signed_imm();
 			}
+			else if (ci.CI.rd == 0 && ci.CI.upper_imm() != 0) { // C.LUI hint
+				instr.whole = 0x00000013; // ADDI x0, x0, 0
+			}
 			break; // C.ILLEGAL?
 		case CI_CODE(0b001, 0b01):
 			if constexpr (W == 4) {
