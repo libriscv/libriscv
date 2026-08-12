@@ -919,12 +919,44 @@ INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
 INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
 {
 	//printf("Slowpath: 0x%X  (instr: 0x%X)\n", uint32_t(pc), DECODER().instr);
+#ifdef DISPATCH_MODE_TAILCALL
+	const auto function_pc = (d - exec->decoder_cache()) << DecoderData<W>::SHIFT;
+#else
+	const auto function_pc = (decoder - exec_decoder) << DecoderData<W>::SHIFT;
+#endif
 	CPU().execute(DECODER().m_handler, DECODER().instr);
+	if (UNLIKELY(exec->is_stale())) {
+		pc = function_pc + 4;
+#ifdef DISPATCH_MODE_TAILCALL
+		exec = resolve_execute_segment<W>(cpu, pc);
+		d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
+		BEGIN_BLOCK();
+		EXECUTE_CURRENT();
+#else
+		goto check_jump;
+#endif
+	}
 	NEXT_INSTR();
 }
 
 INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 	VIEW_INSTR();
+#ifdef DISPATCH_MODE_TAILCALL
+	const auto function_pc = (d - exec->decoder_cache()) << DecoderData<W>::SHIFT;
+#else
+	const auto function_pc = (decoder - exec_decoder) << DecoderData<W>::SHIFT;
+#endif
 	CPU().execute(DECODER().m_handler, DECODER().instr);
+	if (UNLIKELY(exec->is_stale())) {
+		pc = function_pc + instr.length();
+#ifdef DISPATCH_MODE_TAILCALL
+		exec = resolve_execute_segment<W>(cpu, pc);
+		d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
+		BEGIN_BLOCK();
+		EXECUTE_CURRENT();
+#else
+		goto check_jump;
+#endif
+	}
 	NEXT_BLOCK(instr.length(), true);
 }

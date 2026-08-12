@@ -657,9 +657,25 @@ namespace riscv
 	}
 
 	template <int W>
+	void Memory<W>::mark_execute_segments_stale() noexcept
+	{
+		if (m_main_exec_segment)
+			m_main_exec_segment->set_stale(true);
+		for (auto& segment : m_exec) {
+			if (segment)
+				segment->set_stale(true);
+		}
+	}
+
+	template <int W>
 	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
 	{
 		const SegmentKey key = SegmentKey::from(segment, memory_arena_size());
+		if (m_main_exec_segment.get() == &segment) {
+			m_main_exec_segment = nullptr;
+			shared_execute_segments<W>.remove_if_unique(key);
+			return;
+		}
 		for (auto& seg : m_exec) {
 			if (seg.get() == &segment) {
 				seg = nullptr;

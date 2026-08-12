@@ -167,7 +167,7 @@ retry_translated_function:
 	pc = REGISTERS().pc;
 	cnt = bintr_results.counter;
 	max = bintr_results.max_counter;
-	if (LIKELY(cnt < max && (pc - current_begin < current_end - current_begin))) {
+	if (LIKELY(!exec->is_stale() && cnt < max && (pc - current_begin < current_end - current_begin))) {
 		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			goto retry_translated_function;
@@ -221,7 +221,7 @@ check_jump:
 	if (UNLIKELY(counter.overflowed()))
 		goto counter_overflow;
 
-	if (LIKELY(pc - current_begin < current_end - current_begin))
+	if (LIKELY(!exec->is_stale() && pc - current_begin < current_end - current_begin))
 		goto continue_segment;
 	else
 		goto new_execute_segment;
