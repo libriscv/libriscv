@@ -676,7 +676,12 @@ INSTRUCTION(RV32I_BC_JALR, rv32i_jalr) {
 			fi.rs2, fi.signed_imm(), fi.rs1, long(pc), long(address));
 	}
 	static constexpr addr_t ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
-	pc = address & ~ALIGN_MASK;
+	const auto target = address & ~addr_t(1);
+	if constexpr (!compressed_enabled) {
+		if (UNLIKELY(target & ALIGN_MASK))
+			CPU().trigger_exception(MISALIGNED_INSTRUCTION, target);
+	}
+	pc = target;
 	OVERFLOW_CHECKED_JUMP();
 }
 
