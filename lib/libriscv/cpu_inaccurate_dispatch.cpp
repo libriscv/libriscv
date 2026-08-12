@@ -131,8 +131,10 @@ namespace riscv
 #define REGISTERS() registers()
 #define VECTORS() registers().rvv()
 #define MACHINE() machine()
+#define RECONSTRUCT_PC() ((decoder - exec_decoder) << DecoderData<W>::SHIFT)
+#define ENTER_NEW_EXECUTE_SEGMENT() goto new_execute_segment
 
-				/** Instruction handlers **/
+/** Instruction handlers **/
 
 #include "bytecode_impl.cpp"
 
@@ -172,6 +174,8 @@ retry_translated_function:
 	pc = REGISTERS().pc;
 	if (LIKELY(bintr_results.max_counter != 0 && (pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())))
 	{
+		if (UNLIKELY(exec->is_stale()))
+			goto new_execute_segment;
 		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			goto retry_translated_function;

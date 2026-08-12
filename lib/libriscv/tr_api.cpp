@@ -408,12 +408,15 @@ static inline int do_syscall(CPU* cpu, uint64_t counter, uint64_t max_counter, a
 	return (cpu->pc != old_pc || counter >= MAX_COUNTER(cpu));
 }
 
+/* JALR clears bit 0 unconditionally; with C disabled a target that still has bit
+   1 set is an instruction-address-misaligned trap. RISCV_ALIGN_MASK is 1 when C
+   is enabled, so the test folds away to nothing there. Exits through RETURN_VALUES
+   (see the note on that macro) rather than a compound literal. */
 #define JUMP_TO(addr) do { \
-	const addr_t target = (addr); \
-	const addr_t aligned = target & ~(addr_t)1; \
+	const addr_t aligned = (addr) & ~(addr_t)1; \
 	if (UNLIKELY(aligned & (addr_t)RISCV_ALIGN_MASK)) { \
 		api.exception(cpu, aligned, MISALIGNED_INSTRUCTION); \
-		return (ReturnValues){0, 0}; \
+		RETURN_VALUES(0, 0); \
 	} \
 	pc = aligned; \
 } while (0)

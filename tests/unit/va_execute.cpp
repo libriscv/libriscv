@@ -187,3 +187,101 @@ TEST_CASE("Calculate fib(50) on high-memory page", "[VA]")
 		REQUIRE(machine.return_value<int>() == -298632863);
 	}
 }
+
+// FENCE.I makes earlier stores to instruction memory visible to later fetches.
+// Following the witness in issue #386: mmap an RWX page, hand-assemble
+// `addi a0, x0, N; ret` into it, call it, rewrite the immediate, fence and call
+// it again. Without segment invalidation the second call re-runs the bytecode
+// decoded for the first one and still returns 1.
+static const std::string SELFMOD_GUEST = R"M(
+#define uintptr_t __UINTPTR_TYPE__
+typedef int (*retfunc)(void);
+
+static long syscall(long n, long arg0);
+static long syscall6(long n, long a, long b, long c, long d, long e, long f);
+
+int main()
+{
+	// mmap(NULL, 4096, PROT_READ|PROT_WRITE|PROT_EXEC,
+	//      MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+	long page = syscall6(222, 0, 4096, 7, 34, -1, 0);
+	if (page <= 0)
+		syscall(93, 0);
+
+	volatile unsigned *code = (volatile unsigned *)(uintptr_t)page;
+	code[0] = 0x00100513; // addi a0, x0, 1
+	code[1] = 0x00008067; // jalr x0, 0(ra)  == ret
+	__asm__ volatile ("fence.i" ::: "memory");
+
+	retfunc fn = (retfunc)(uintptr_t)page;
+	int first = fn();
+
+	code[0] = 0x00200513; // addi a0, x0, 2
+	__asm__ volatile ("fence.i" ::: "memory");
+	int second = fn();
+
+	code[0] = 0x00300513; // addi a0, x0, 3
+	__asm__ volatile ("fence.i" ::: "memory");
+	int third = fn();
+
+	// 1, 2, 3 => 123 on success. A stale decoder cache yields 111.
+	syscall(93, first * 100 + second * 10 + third);
+}
+
+long syscall(long n, long arg0) {
+	register long a0 __asm__("a0") = arg0;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+
+	return a0;
+}
+long syscall6(long n, long a, long b, long c, long d, long e, long f) {
+	register long a0 __asm__("a0") = a;
+	register long a1 __asm__("a1") = b;
+	register long a2 __asm__("a2") = c;
+	register long a3 __asm__("a3") = d;
+	register long a4 __asm__("a4") = e;
+	register long a5 __asm__("a5") = f;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0)
+		: "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(syscall_id));
+
+	return a0;
+})M";
+
+TEST_CASE("FENCE.I observes stores to instruction memory", "[SelfModify]")
+{
+	const auto binary = build_and_load(SELFMOD_GUEST);
+
+	// Bytecode dispatch (threaded/switch/tailcall, plus binary translation
+	// when it is compiled in)
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"selfmod"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.simulate(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 123L);
+	}
+	// Step-by-step simulation shares the decoder cache but not the dispatch loop
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"selfmod"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.set_max_instructions(MAX_INSTRUCTIONS);
+		machine.cpu.simulate_precise();
+
+		REQUIRE(machine.return_value<long>() == 123L);
+	}
+	// Inaccurate dispatch (no instruction counting)
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"selfmod"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.simulate<false>(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 123L);
+	}
+}

@@ -130,6 +130,8 @@ while (true) {
 #define REGISTERS() registers()
 #define VECTORS()   registers().rvv()
 #define MACHINE()   machine()
+#define RECONSTRUCT_PC() ((decoder - exec_decoder) << DecoderData<W>::SHIFT)
+#define ENTER_NEW_EXECUTE_SEGMENT() goto new_execute_segment
 
 	/** Instruction handlers **/
 
@@ -167,7 +169,13 @@ retry_translated_function:
 	pc = REGISTERS().pc;
 	cnt = bintr_results.counter;
 	max = bintr_results.max_counter;
-	if (LIKELY(!exec->is_stale() && cnt < max && (pc - current_begin < current_end - current_begin))) {
+
+	if (LIKELY(cnt < max && (pc - current_begin < current_end - current_begin))) {
+		if (UNLIKELY(exec->is_stale())) {
+			// check_jump would send us back into the segment we just invalidated
+			counter.set_counters(cnt, max);
+			goto new_execute_segment;
+		}
 		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];
 		if (decoder->get_bytecode() == RV32I_BC_TRANSLATOR) {
 			goto retry_translated_function;
@@ -221,7 +229,7 @@ check_jump:
 	if (UNLIKELY(counter.overflowed()))
 		goto counter_overflow;
 
-	if (LIKELY(!exec->is_stale() && pc - current_begin < current_end - current_begin))
+	if (LIKELY(pc - current_begin < current_end - current_begin))
 		goto continue_segment;
 	else
 		goto new_execute_segment;

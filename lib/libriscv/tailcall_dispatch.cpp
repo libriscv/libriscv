@@ -127,6 +127,12 @@ namespace riscv
 #define REGISTERS() cpu.registers()
 #define VECTORS()   cpu.registers().rvv()
 #define MACHINE()   cpu.machine()
+#define RECONSTRUCT_PC() ((d - exec->decoder_cache()) << DecoderData<W>::SHIFT)
+#define ENTER_NEW_EXECUTE_SEGMENT()                            \
+	exec = resolve_execute_segment<W>(cpu, pc);                \
+	d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];   \
+	BEGIN_BLOCK();                                             \
+	EXECUTE_CURRENT();
 
 
 #include "bytecode_impl.cpp"
