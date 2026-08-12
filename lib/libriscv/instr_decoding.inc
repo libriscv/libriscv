@@ -167,7 +167,7 @@
 						case 0x0: // ADDIW
 							DECODER(DECODED_INSTR(OP_IMM32_ADDIW));
 						case 0x1: // SLLIW
-							if (instruction.Itype.high_bits() == 0x000) {
+							if (instruction.Itype.high_bits() == 0x000 && (instruction.Itype.imm & 0x20) == 0) {
 								DECODER(DECODED_INSTR(OP_IMM32_SLLIW));
 							} else if (instruction.Itype.high_bits() == 0x080) {
 								DECODER(DECODED_INSTR(OP_IMM32_SLLI_UW));
@@ -175,9 +175,9 @@
 								DECODER(DECODED_INSTR(OP_IMM32));
 							}
 						case 0x5: // SRLIW / SRAIW
-							if (instruction.Itype.high_bits() == 0x000) {
+							if (instruction.Itype.high_bits() == 0x000 && (instruction.Itype.imm & 0x20) == 0) {
 								DECODER(DECODED_INSTR(OP_IMM32_SRLIW));
-							} else if (instruction.Itype.high_bits() == 0x400) {
+							} else if (instruction.Itype.high_bits() == 0x400 && (instruction.Itype.imm & 0x20) == 0) {
 								DECODER(DECODED_INSTR(OP_IMM32_SRAIW));
 							} else {
 								DECODER(DECODED_INSTR(OP_IMM32));

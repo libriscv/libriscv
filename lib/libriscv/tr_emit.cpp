@@ -1689,7 +1689,7 @@ void Emitter<W>::emit()
 				add_code(dst + " = " + SIGNEXTW + " (" + src + " + " + from_imm(instr.Itype.signed_imm()) + ");");
 				break;
 			case 0x1: // SLLI.W / SLLI.UW:
-				if (instr.Itype.high_bits() == 0x000) {
+				if (instr.Itype.high_bits() == 0x000 && (instr.Itype.imm & 0x20) == 0) {
 					add_code(dst + " = " + SIGNEXTW + " (" + src + " << " + from_imm(instr.Itype.shift_imm()) + ");");
 				} else if (instr.Itype.high_bits() == 0x080) {
 					// SLLI.UW (full 6-bit RV64 shamt)
@@ -1711,12 +1711,12 @@ void Emitter<W>::emit()
 				}
 				break;
 			case 0x5: // SRLIW / SRAIW:
-				if (instr.Itype.high_bits() == 0x0) { // SRLIW
+				if (instr.Itype.high_bits() == 0x0 && (instr.Itype.imm & 0x20) == 0) { // SRLIW
 					add_code(dst + " = " + SIGNEXTW + " (" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ");");
-				} else if (instr.Itype.high_bits() == 0x400) { // SRAIW: preserve the sign bit
+				} else if (instr.Itype.high_bits() == 0x400 && (instr.Itype.imm & 0x20) == 0) { // SRAIW: preserve the sign bit
 					add_code(
 						dst + " = (int32_t)" + src + " >> " + from_imm(instr.Itype.shift_imm()) + ";");
-				} else if (instr.Itype.high_bits() == 0x600) { // RORIW
+				} else if (instr.Itype.high_bits() == 0x600 && (instr.Itype.imm & 0x20) == 0) { // RORIW
 					add_code(
 						"{const unsigned shift = " + from_imm(instr.Itype.imm) + " & 31;\n",
 						"const uint32_t word = " + src + ";\n",
