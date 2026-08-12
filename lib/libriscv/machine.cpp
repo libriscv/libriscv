@@ -413,6 +413,28 @@ namespace riscv
 				return;
 			}
 		} // CSRWI
+		case 0x6: { // CSRRSI: Atomically read and set bit mask using immediate
+			const bool rd = instr.Itype.rd != 0;
+			const uint32_t imm = instr.Itype.rs1;
+			switch (instr.Itype.imm)
+			{
+			case 0x001: // fflags (accrued exceptions)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().fflags;
+				cpu.registers().fcsr().fflags |= imm;
+				return;
+			case 0x002: // frm (rounding-mode)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().frm;
+				cpu.registers().fcsr().frm |= imm;
+				return;
+			case 0x003: // fcsr (control and status register)
+				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
+				cpu.registers().fcsr().whole |= imm & 0xFF;
+				return;
+			default:
+				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				return;
+			}
+		} // CSRRSI
 		case 0x7: { // CSRRCI: Atomically read and clear CSR using immediate
 			const bool rd = instr.Itype.rd != 0;
 			const uint32_t imm = instr.Itype.rs1;
