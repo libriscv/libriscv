@@ -1486,8 +1486,14 @@ void Emitter<W>::emit()
 					"else " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";"
 				);
 				break;
-			case 0x44: // ZEXT.H: Zero-extend 16-bit
-				add_code(to_reg(instr.Rtype.rd) + " = (uint16_t)" + from_reg(instr.Rtype.rs1) + ";");
+			case 0x44: // ZEXT.H / PACK
+				if (instr.Rtype.rs2 == 0) {
+					add_code(to_reg(instr.Rtype.rd) + " = (uint16_t)" + from_reg(instr.Rtype.rs1) + ";");
+				} else if constexpr (W == 4) {
+					add_code(to_reg(instr.Rtype.rd) + " = (addr_t)(uint16_t)(" + from_reg(instr.Rtype.rs1) + ") | ((addr_t)(uint16_t)(" + from_reg(instr.Rtype.rs2) + ") << 16);");
+				} else {
+					add_code(to_reg(instr.Rtype.rd) + " = (addr_t)(uint32_t)(" + from_reg(instr.Rtype.rs1) + ") | ((addr_t)(uint32_t)(" + from_reg(instr.Rtype.rs2) + ") << 32);");
+				}
 				break;
 			case 0x51: // CLMUL
 				add_code(
@@ -1801,8 +1807,12 @@ void Emitter<W>::emit()
 			case 0x40: // ADD.UW
 				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + " + src1 + ";");
 				break;
-			case 0x44: // ZEXT.H (imm=0x40):
-				add_code(dst + " = (uint16_t)(" + src1 + ");");
+			case 0x44: // ZEXT.H / PACKW
+				if (instr.Rtype.rs2 == 0) {
+					add_code(dst + " = (uint16_t)(" + src1 + ");");
+				} else {
+					add_code(dst + " = (int32_t)((uint16_t)(" + src1 + ") | ((uint32_t)(uint16_t)(" + src2 + ") << 16));");
+				}
 				break;
 			case 0x102: // SH1ADD.UW
 				add_code(dst + " = " + from_reg(instr.Rtype.rs2) + " + ((addr_t)" + src1 + " << 1);");
