@@ -278,6 +278,16 @@ namespace riscv
 	}
 
 	template <int W>
+	static void handle_unhandled_csr(Machine<W>& machine, uint32_t csr, int rd, int rs1)
+	{
+		if ((csr & 0x300) != 0) {
+			machine.cpu.trigger_exception(ILLEGAL_OPERATION, csr);
+			return;
+		}
+		Machine<W>::on_unhandled_csr(machine, csr, rd, rs1);
+	}
+
+	template <int W>
 	void Machine<W>::system(union rv32i_instruction instr)
 	{
 		switch (instr.Itype.funct3) {
@@ -375,7 +385,7 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.cpu_id();
 				return;
 			default:
-				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				handle_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
 			}
 			} break;
@@ -426,7 +436,7 @@ namespace riscv
 				cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
 				return;
 			default:
-				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				handle_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
 			}
 		} // CSRWI
@@ -448,7 +458,7 @@ namespace riscv
 				cpu.registers().fcsr().whole |= imm & 0xFF;
 				return;
 			default:
-				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				handle_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
 			}
 		} // CSRRSI
@@ -477,7 +487,7 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this);
 				return;
 			default:
-				on_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
+				handle_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
 			}
 			break;
