@@ -380,8 +380,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				return RV32I_BC_OP_REM;
 			case 0x17:
 				return RV32I_BC_OP_REMU;
-			case 0x44: // ZEXT.H
-				return RV32I_BC_OP_ZEXT_H;
+			case 0x44: // ZEXT.H / PACK
+				return (instr.Rtype.rs2 == 0) ? RV32I_BC_OP_ZEXT_H : RV32I_BC_FUNCTION;
 			case 0x102:
 				return RV32I_BC_OP_SH1ADD;
 			case 0x104:
@@ -421,8 +421,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				return RV64I_BC_OP_MULW;
 			case 0x40: // ADD.UW
 				return RV64I_BC_OP_ADD_UW;
-			case 0x44: // ZEXT.H
-				return RV32I_BC_OP_ZEXT_H;
+			case 0x44: // ZEXT.H / PACKW
+				return (instr.Rtype.rs2 == 0) ? RV32I_BC_OP_ZEXT_H : RV32I_BC_FUNCTION;
 			default:
 				return RV32I_BC_FUNCTION;
 			}

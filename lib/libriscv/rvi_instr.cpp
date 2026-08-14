@@ -683,8 +683,16 @@ static inline uint64_t MUL128(
 				dst = src1;
 			}
 			return;
-		case 0x44: // ZEXT.H
-			dst = uint16_t(src1);
+		case 0x44: // ZEXT.H / PACK
+			if (instr.Rtype.rs2 == 0) {
+				dst = uint16_t(src1);
+			} else if constexpr (RVIS32BIT(cpu)) {
+				dst = RVREGTYPE(cpu)(uint16_t(src1))
+					| (RVREGTYPE(cpu)(uint16_t(src2)) << 16);
+			} else {
+				dst = RVREGTYPE(cpu)(uint32_t(src1))
+					| (RVREGTYPE(cpu)(uint32_t(src2)) << 32);
+			}
 			return;
 		case 0x51: { // CLMUL
 			RVREGTYPE(cpu) result = 0;
@@ -1080,8 +1088,12 @@ static inline uint64_t MUL128(
 		case 0x40: // ADD.UW
 			dst = cpu.reg(instr.Rtype.rs2) + RVREGTYPE(cpu)(src1);
 			return;
-		case 0x44: // ZEXT.H (imm=0x40):
-			dst = uint16_t(src1);
+		case 0x44: // ZEXT.H / PACKW
+			if (instr.Rtype.rs2 == 0) {
+				dst = uint16_t(src1);
+			} else {
+				dst = int32_t(uint16_t(src1) | (uint32_t(uint16_t(src2)) << 16));
+			}
 			return;
 		case 0x102: // SH1ADD.UW
 			dst = cpu.reg(instr.Rtype.rs2) + (RVREGTYPE(cpu)(src1) << 1);
