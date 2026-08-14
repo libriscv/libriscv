@@ -69,6 +69,7 @@ static RISCVPageAttributes convert_to_c(const PageAttributes& attr) {
 	return c;
 }
 
+#ifdef RISCV_VIRTUAL_PAGING
 struct ParentPageInfo {
 	PageData* data;
 	PageAttributes attr;
@@ -90,6 +91,7 @@ static ParentPageInfo get_parent_page_readonly(
 	}
 	return {Page::cow_page().m_page.get(), Page::cow_page().attr};
 }
+#endif // RISCV_VIRTUAL_PAGING
 
 extern "C"
 void libriscv_set_defaults(RISCVOptions *options)
@@ -533,6 +535,8 @@ int libriscv_load_binary_file(const char *filename, char **data)
 
 /*** Fast-fork API ***/
 
+#ifdef RISCV_VIRTUAL_PAGING
+
 extern "C"
 RISCVMachine *libriscv_fast_fork(const RISCVMachine *parent, RISCVOptions *opts)
 {
@@ -670,6 +674,32 @@ const void *libriscv_get_parent_page_data(
 		return NULL;
 	}
 }
+
+#else // RISCV_VIRTUAL_PAGING
+
+extern "C"
+RISCVMachine *libriscv_fast_fork(const RISCVMachine *, RISCVOptions *opts)
+{
+	if (opts && opts->error)
+		opts->error(opts->opaque, RISCV_ERROR_TYPE_GENERAL_EXCEPTION,
+			"Forking requires enabling virtual paging", 0);
+	return NULL;
+}
+
+extern "C"
+int libriscv_is_forked(const RISCVMachine *)
+{
+	return 0;
+}
+
+extern "C"
+const void *libriscv_get_parent_page_data(
+	const RISCVMachine *, uint64_t, RISCVPageAttributes *)
+{
+	return NULL;
+}
+
+#endif // RISCV_VIRTUAL_PAGING
 
 
 /*** Arena management ***/
@@ -830,6 +860,12 @@ int libriscv_insert_non_owned_memory(
 	RISCVMachine *m, uint64_t dst, void *src, uint64_t size,
 	const RISCVPageAttributes *attr)
 {
+#ifndef RISCV_VIRTUAL_PAGING
+	(void)dst; (void)src; (void)size; (void)attr;
+	ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION,
+		"Non-owned memory requires enabling virtual paging", 0);
+	return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
+#else
 	try {
 		PageAttributes cpp_attr;
 		if (attr) {
@@ -844,6 +880,7 @@ int libriscv_insert_non_owned_memory(
 		ERROR_CALLBACK(MACHINE(m), RISCV_ERROR_TYPE_GENERAL_EXCEPTION, e.what(), 0);
 		return RISCV_ERROR_TYPE_GENERAL_EXCEPTION;
 	}
+#endif // RISCV_VIRTUAL_PAGING
 }
 
 
