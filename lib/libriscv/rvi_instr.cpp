@@ -401,6 +401,7 @@ static inline uint64_t MUL128(
 	{
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
+		const bool rv32_shamt_legal = !RVIS32BIT(cpu) || (instr.Itype.imm & 0x20) == 0;
 		switch (instr.Itype.funct3) {
 		case 0x1: // *NOT* SLLI, SEXT.B, SEXT.H, CTZ, CLZ, CPOP
 			switch (instr.Itype.imm) {
@@ -441,17 +442,17 @@ static inline uint64_t MUL128(
 #endif
 				return;
 			default:
-				if (instr.Itype.high_bits() == 0x280) {
+				if (instr.Itype.high_bits() == 0x280 && rv32_shamt_legal) {
 					// BSETI: Bit-set immediate
 					dst = src | (RVREGTYPE(cpu)(1) << (instr.Itype.imm & (RVXLEN(cpu)-1)));
 					return;
 				}
-				else if (instr.Itype.high_bits() == 0x480) {
+				else if (instr.Itype.high_bits() == 0x480 && rv32_shamt_legal) {
 					// BCLRI: Bit-clear immediate
 					dst = src & ~(RVREGTYPE(cpu)(1) << (instr.Itype.imm & (RVXLEN(cpu)-1)));
 					return;
 				}
-				else if (instr.Itype.high_bits() == 0x680) {
+				else if (instr.Itype.high_bits() == 0x680 && rv32_shamt_legal) {
 					// BINVI: Bit-invert immediate
 					dst = src ^ (RVREGTYPE(cpu)(1) << (instr.Itype.imm & (RVXLEN(cpu)-1)));
 					return;
@@ -468,19 +469,19 @@ static inline uint64_t MUL128(
 			dst = src ^ RVIMM(cpu, instr.Itype);
 			return;
 		case 0x5: // SRLI / SRAI / RORI / ORC.B
-			if (instr.Itype.is_srai()) {
+			if (instr.Itype.is_srai() && rv32_shamt_legal) {
 				// SRAI: Preserve the sign bit
 				dst = (RVSIGNTYPE(cpu))src >> (instr.Itype.imm & (RVXLEN(cpu)-1));
 				return;
 			}
-			else if (instr.Itype.is_rori()) {
+			else if (instr.Itype.is_rori() && rv32_shamt_legal) {
 				// RORI: Rotate right. Mask the complementary count, as a
 				// zero rotate would otherwise shift by the full width
 				const auto shift = instr.Itype.imm & (RVXLEN(cpu) - 1);
 				dst = (src >> shift) | (src << ((RVXLEN(cpu) - shift) & (RVXLEN(cpu) - 1)));
 				return;
 			}
-			else if (instr.Itype.high_bits() == 0x480) {
+			else if (instr.Itype.high_bits() == 0x480 && rv32_shamt_legal) {
 				// BEXTI: Single-bit Extract
 				dst = (src >> (instr.Itype.imm & (RVXLEN(cpu)-1))) & 1;
 				return;
@@ -580,6 +581,12 @@ static inline uint64_t MUL128(
 
 	INSTRUCTION(OP_IMM_SLLI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		if constexpr (RVIS32BIT(cpu)) {
+			if (instr.Itype.imm & 0x20) {
+				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
+				return;
+			}
+		}
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// SLLI: Logical left-shift 5/6/7-bit immediate
@@ -588,6 +595,12 @@ static inline uint64_t MUL128(
 
 	INSTRUCTION(OP_IMM_SRLI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		if constexpr (RVIS32BIT(cpu)) {
+			if (instr.Itype.imm & 0x20) {
+				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
+				return;
+			}
+		}
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// SRLI: Shift-right logical 5/6/7-bit immediate
