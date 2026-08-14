@@ -154,7 +154,7 @@ RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_length, const RISC
 		if (options->native_syscall_base > 0) {
 			const unsigned base = options->native_syscall_base;
 			Machine<RISCV_ARCH>::setup_native_memory(base + 5);
-			m->setup_native_heap(base, m->memory.heap_address(), options->arena_size);
+			m->setup_native_heap(base, m->memory.mmap_allocate(options->arena_size), options->arena_size);
 			u->arena_syscall_base = base;
 			u->arena_total_size = options->arena_size;
 		}
