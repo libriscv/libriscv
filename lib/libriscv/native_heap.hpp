@@ -164,6 +164,9 @@ struct Arena
 	void     free_chunk(uint32_t idx);
 
 	static size_t word_align(size_t size) {
+		// Adding the alignment must not be allowed to overflow
+		if (UNLIKELY(size > SIZE_MAX - (ALIGNMENT-1)))
+			return size;
 		return (size + (ALIGNMENT-1)) & ~(ALIGNMENT-1);
 	}
 	static size_t fixup_size(size_t size) {

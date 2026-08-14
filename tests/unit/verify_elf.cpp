@@ -7,6 +7,8 @@ static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 static const std::string cwd {SRCDIR};
 using namespace riscv;
 
+// Requires paging: the Go runtime maps sparse address space far beyond the arena
+#ifdef RISCV_VIRTUAL_PAGING
 TEST_CASE("Golang Hello World", "[Verify]")
 {
 	const auto binary = load_file(cwd + "/elf/golang-riscv64-hello-world");
@@ -43,6 +45,7 @@ TEST_CASE("Golang Hello World", "[Verify]")
 	REQUIRE(machine.return_value() == 0);
 	REQUIRE(state.output_is_hello_world);
 }
+#endif
 
 TEST_CASE("Zig Hello World", "[Verify]")
 {
@@ -188,6 +191,8 @@ TEST_CASE("TinyCC dynamic fib", "[Verify]")
 	REQUIRE(machine.return_value() == 75025); // fib(25)
 }
 
+// Requires paging: enforce_exec_only needs page attributes
+#ifdef RISCV_VIRTUAL_PAGING
 TEST_CASE("RV32 Execute-Only Hello World", "[Verify]")
 {
 	const auto binary = load_file(cwd + "/elf/riscv32gb-execute-only");
@@ -225,6 +230,8 @@ TEST_CASE("RV32 Execute-Only Hello World", "[Verify]")
 	REQUIRE(machine.return_value() == 123);
 	REQUIRE(state.text == "Hello, World!");
 }
+
+#endif
 
 // Returns the file offset of the named section's header within the ELF.
 static size_t section_header_offset(const std::vector<uint8_t>& elf, const char* section)

@@ -158,6 +158,8 @@ TEST_CASE("VM call enum values", "[VMCall]")
 	REQUIRE(machine.return_value<MyEnum>() == MyEnum::World);
 }
 
+// Requires paging: the forking constructor does not support a flat arena
+#ifdef RISCV_VIRTUAL_PAGING
 TEST_CASE("VM function call in fork", "[VMCall]")
 {
 	// The global variable 'value' should get
@@ -285,6 +287,7 @@ TEST_CASE("VM function call in fork", "[VMCall]")
 			return;
 	}
 }
+#endif
 
 TEST_CASE("VM call and preemption", "[VMCall]")
 {

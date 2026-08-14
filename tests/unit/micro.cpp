@@ -9,6 +9,8 @@ static constexpr uint32_t MAX_CYCLES = 5'000;
 static const std::vector<uint8_t> empty;
 using namespace riscv;
 
+// Requires paging: relies on page attributes (exec-only)
+#ifdef RISCV_VIRTUAL_PAGING
 TEST_CASE("Run exactly X instructions", "[Micro]")
 {
 	Machine<RISCV32> machine;
@@ -59,6 +61,7 @@ TEST_CASE("Run exactly X instructions", "[Micro]")
 	REQUIRE(machine.instruction_counter() == 5);
 	REQUIRE(machine.cpu.reg(REG_ARG7) == 93);
 }
+#endif
 
 TEST_CASE("Crashing payload #1", "[Micro]")
 {
@@ -147,6 +150,8 @@ TEST_CASE("Crashing payload #3", "[Micro]")
 	REQUIRE(exception_thrown);
 }
 
+// Requires paging: the payload jumps to sparse addresses outside the arena
+#ifdef RISCV_VIRTUAL_PAGING
 TEST_CASE("Crashing payload #4", "[Micro]")
 {
 	static const uint8_t crash[] = {
@@ -405,6 +410,7 @@ TEST_CASE("Crashing payload #4", "[Micro]")
 
 	REQUIRE(exception_thrown);
 }
+#endif
 
 TEST_CASE("Crashing payload #5", "[Micro]")
 {

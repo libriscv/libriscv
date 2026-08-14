@@ -2,8 +2,13 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <libriscv/machine.hpp>
+#include <chrono>
+#include <fcntl.h>
+#include <unistd.h>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
+extern std::vector<uint8_t> load_file(const std::string& filename);
+static const std::string cwd {SRCDIR};
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
@@ -197,6 +202,145 @@ TEST_CASE("C3: faccessat should respect permission checks", "[Security]")
 		machine.simulate(MAX_INSTRUCTIONS);
 		REQUIRE(machine.return_value<int>() == 42);
 	}
+}
+
+// =============================================================================
+// C4: Missing tail guard page in the flat read-write arena
+//
+// The arena mapping is over-allocated by one page on each side. The fast-path
+// accessors (Memory::read<T>/write<T>, used by guest LD/SD) bounds-check only
+// the first byte of an access, so a multi-byte access at the last guest
+// address (arena_size - 1) extends past the end of the guest address space.
+// The tail guard page must absorb that overshoot, or the host takes an
+// out-of-bounds read/write past its mapping.
+// =============================================================================
+
+TEST_CASE("C4: arena tail guard absorbs multi-byte access at last address", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+
+	const auto arena_size = machine.memory.memory_arena_size();
+	REQUIRE(arena_size > Page::size());
+
+	// Locate the host pointer for guest address 0x1000
+	auto v = machine.memory.memview(0x1000, 16);
+	REQUIRE(v.size() == 16);
+	const uint8_t* arena_data = (const uint8_t*)v.data() - 0x1000;
+
+	// The 8 bytes at the end of the guest address space must be backed by
+	// host memory. Probing with write() turns a missing tail guard into
+	// EFAULT instead of a crash.
+	const int fd = open("/dev/null", O_WRONLY);
+	REQUIRE(fd >= 0);
+	const ssize_t probe = write(fd, arena_data + arena_size - 8, 8);
+	close(fd);
+	REQUIRE(probe == 8);
+
+	// The fast path must survive an 8-byte access at the last guest
+	// address (the overshoot lands in the tail guard page)
+	REQUIRE_NOTHROW(machine.memory.read<uint64_t>(arena_size - 1));
+	REQUIRE_NOTHROW(machine.memory.write<uint64_t>(arena_size - 1, 0x4141414141414141u));
+
+	// The bulk APIs check addr+len and must still reject the same access
+	REQUIRE_THROWS_AS(machine.memory.memview(arena_size - 1, 8), riscv::MachineException);
+#ifndef RISCV_VIRTUAL_PAGING
+	// Without paging there is no on-demand page table: an aligned access
+	// starting at the arena end is fully outside guest memory and must fault
+	REQUIRE_THROWS_AS(machine.memory.read<uint64_t>(arena_size), riscv::MachineException);
+#endif
+}
+
+// =============================================================================
+// C5: Unbounded nanosleep blocks the host thread
+//
+// syscall 101 (nanosleep) passed the guest-controlled tv_sec straight to the
+// host nanosleep(), so a guest could block the host thread for years while
+// the instruction counter stood still, violating the termination guarantee.
+// The duration must be clamped and the instruction counter penalized in
+// proportion to the requested time.
+// =============================================================================
+
+TEST_CASE("C5: nanosleep is clamped and penalized", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+
+	const auto ts_addr = machine.memory.mmap_allocate(4096);
+	REQUIRE(ts_addr != 0);
+
+	// Request a 2-second sleep; it must be clamped to ~1 second
+	struct kernel_timespec { int64_t tv_sec; int64_t tv_nsec; };
+	const kernel_timespec ts { .tv_sec = 2, .tv_nsec = 0 };
+	machine.memory.memcpy(ts_addr, &ts, sizeof(ts));
+
+	auto& cpu = machine.cpu;
+	cpu.reg(riscv::REG_ARG0) = ts_addr;
+	cpu.reg(riscv::REG_ARG1) = 0x0; // rem = NULL
+
+	const auto t0 = std::chrono::steady_clock::now();
+	machine.system_call(101); // nanosleep
+	const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - t0).count();
+
+	REQUIRE(machine.return_value<long>() == 0);
+	// Clamped: strictly less than the requested 2 seconds
+	REQUIRE(elapsed < 1900);
+	// Penalized: 2 seconds requested = 2,000,000 instructions
+	REQUIRE(machine.instruction_counter() >= 2'000'000);
+
+	// Negative durations must be rejected without sleeping
+	const kernel_timespec bad { .tv_sec = 0, .tv_nsec = -1 };
+	machine.memory.memcpy(ts_addr, &bad, sizeof(bad));
+	cpu.reg(riscv::REG_ARG0) = ts_addr;
+	cpu.reg(riscv::REG_ARG1) = 0x0;
+	machine.system_call(101);
+	REQUIRE(machine.return_value<int>() == -22); // -EINVAL
+}
+
+// =============================================================================
+// C6: getcwd throws a machine exception when file descriptors are disabled
+//
+// syscall_getcwd dereferenced machine.fds() unconditionally. With
+// setup_linux_syscalls(false, false) a guest calling getcwd() aborted the
+// simulation with a C++ exception instead of an error return.
+// =============================================================================
+
+TEST_CASE("C6: getcwd returns -EBADF without file descriptors", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+
+	const auto buf = machine.memory.mmap_allocate(4096);
+	auto& cpu = machine.cpu;
+	cpu.reg(riscv::REG_ARG0) = buf;
+	cpu.reg(riscv::REG_ARG1) = 4096;
+
+	REQUIRE_NOTHROW(machine.system_call(17)); // getcwd
+	REQUIRE(machine.return_value<int>() == -9); // -EBADF
+}
+
+// =============================================================================
+// C7: pselect throws a machine exception when file descriptors are disabled
+//
+// syscall_pselect threw SYSTEM_CALL_FAILED unconditionally, letting a guest
+// abort the simulation with a single call.
+// =============================================================================
+
+TEST_CASE("C7: pselect returns 0 without file descriptors", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+
+	REQUIRE_NOTHROW(machine.system_call(72)); // pselect6
+	REQUIRE(machine.return_value<int>() == 0);
 }
 
 

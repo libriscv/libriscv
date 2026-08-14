@@ -99,7 +99,12 @@ static void syscall_exit(Machine<W>& machine)
 template <int W>
 static void syscall_ebreak(riscv::Machine<W>& machine)
 {
-	printf("\n>>> EBREAK at %#lX\n", (long) machine.cpu.pc());
+	char buffer[64];
+	const int len = snprintf(buffer, sizeof(buffer),
+		"\n>>> EBREAK at %#lX\n", (long) machine.cpu.pc());
+	// Use the machine printer so that guests cannot bypass it
+	if (len > 0)
+		machine.print(buffer, len);
 	throw MachineException(UNHANDLED_SYSCALL, "EBREAK instruction");
 }
 
@@ -338,7 +343,42 @@ static void syscall_readv(Machine<W>& machine)
 	}
 
 	int real_fd = -1;
-	if (vfd == 1 || vfd == 2) {
+	if (vfd == 0) {
+		// Special stdin handling, matching read(): the stdin_read
+		// callback is the only path to host standard input
+		const size_t iov_size = sizeof(guest_iovec<W>) * count;
+
+		// Retrieve the guest IO vec
+		std::array<guest_iovec<W>, 128> g_vec;
+		machine.copy_from_guest(g_vec.data(), iov_g, iov_size);
+
+		// Convert each iovec buffer to host buffers
+		std::array<riscv::vBuffer, 64> buffers;
+		size_t vec_cnt = 0;
+
+		for (int i = 0; i < count; i++) {
+			// The host buffers come directly from guest memory
+			vec_cnt += machine.memory.gather_writable_buffers_from_range(
+				buffers.size() - vec_cnt, &buffers[vec_cnt], g_vec[i].iov_base, g_vec[i].iov_len);
+		}
+
+		ssize_t res = 0;
+		for (size_t i = 0; i < vec_cnt; i++) {
+			// Arbitrary maximum read length
+			if (buffers[i].len > 1024 * 1024 * 16) {
+				machine.set_result(-ENOMEM);
+				return;
+			}
+			long r = machine.stdin_read(buffers[i].ptr, buffers[i].len);
+			if (r <= 0) break;
+			res += r;
+			if ((size_t)r < buffers[i].len) break;
+		}
+		machine.set_result_or_error(res);
+		SYSPRINT("SYSCALL readv(vfd: 0 iov: 0x%lX cnt: %d) = %ld\n",
+			(long)iov_g, count, (long)machine.return_value());
+		return;
+	} else if (vfd == 1 || vfd == 2) {
 		real_fd = -1;
 	} else if (machine.has_file_descriptors()) {
 		real_fd = machine.fds().translate(vfd);
@@ -773,6 +813,13 @@ static void syscall_getcwd(Machine<W>& machine)
 	const auto g_buf = machine.sysarg(0);
 	[[maybe_unused]] const auto size = machine.sysarg(1);
 
+	if (UNLIKELY(!machine.has_file_descriptors())) {
+		machine.set_result(-EBADF);
+		SYSPRINT("SYSCALL getcwd, buffer: 0x%lX size: %ld => -EBADF\n",
+			(long)g_buf, (long)size);
+		return;
+	}
+
 	auto& cwd = machine.fds().cwd;
 	if (!cwd.empty()) {
 		machine.copy_to_guest(g_buf, cwd.c_str(), cwd.size()+1);
@@ -952,6 +999,24 @@ static void syscall_clock_gettime64(Machine<W>& machine)
 	}
 	machine.set_result_or_error(res);
 }
+static constexpr time_t NANOSLEEP_MAX_SECONDS = 1;
+
+template <int W>
+static void nanosleep_clamp_and_penalize(Machine<W>& machine, struct timespec& ts_req)
+{
+	// A guest must not be able to block the host thread for arbitrarily
+	// long, and sleeping does not advance the instruction counter. Clamp
+	// the duration, and penalize the counter proportionally to the
+	// requested time so that repeated sleeps eventually reach the
+	// instruction limit.
+	const uint64_t requested_ns =
+		uint64_t(ts_req.tv_sec) * 1'000'000'000ull + uint64_t(ts_req.tv_nsec);
+	if (ts_req.tv_sec > NANOSLEEP_MAX_SECONDS)
+		ts_req.tv_sec = NANOSLEEP_MAX_SECONDS;
+	// One instruction per microsecond requested
+	machine.penalize(requested_ns / 1000);
+}
+
 template <int W>
 static void syscall_nanosleep(Machine<W>& machine)
 {
@@ -962,8 +1027,13 @@ static void syscall_nanosleep(Machine<W>& machine)
 
 	struct timespec ts_req;
 	machine.copy_from_guest(&ts_req, g_req, sizeof(ts_req));
+	if (UNLIKELY(ts_req.tv_sec < 0 || ts_req.tv_nsec < 0)) {
+		machine.set_result(-EINVAL);
+		return;
+	}
 	if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
 		ts_req.tv_nsec &= ANTI_FINGERPRINTING_MASK_NANOS();
+	nanosleep_clamp_and_penalize(machine, ts_req);
 
 	struct timespec ts_rem;
 	if (g_rem)
@@ -986,8 +1056,13 @@ static void syscall_clock_nanosleep(Machine<W>& machine)
 	struct timespec ts_req;
 	struct timespec ts_rem;
 	machine.copy_from_guest(&ts_req, g_request, sizeof(ts_req));
+	if (UNLIKELY(ts_req.tv_sec < 0 || ts_req.tv_nsec < 0)) {
+		machine.set_result(-EINVAL);
+		return;
+	}
 	if (!(machine.has_file_descriptors() && machine.fds().proxy_mode))
 		ts_req.tv_nsec &= ANTI_FINGERPRINTING_MASK_NANOS();
+	nanosleep_clamp_and_penalize(machine, ts_req);
 
 	const int res = nanosleep(&ts_req, &ts_rem);
 	if (res >= 0 && g_remain != 0x0) {

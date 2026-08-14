@@ -277,6 +277,10 @@ T* Memory<W>::memarray(address_t addr, size_t count, size_t maxbytes) const
 	if (count != 0 && addr % alignof(T) != 0)
 		protection_fault(addr);
 
+	// The multiplication must not be allowed to overflow
+	if (UNLIKELY(count > maxbytes / sizeof(T)))
+		protection_fault(addr);
+
 	std::string_view view;
 	// When T* is const, we can use plain memview
 	if constexpr (std::is_const_v<T>) {
@@ -297,9 +301,11 @@ T* Memory<W>::try_memarray(address_t addr, size_t count, size_t maxbytes) const
 	if (count == 0)
 		return nullptr;
 
-	const size_t len = count * sizeof(T);
-	if (UNLIKELY(len > maxbytes))
+	// The multiplication must not be allowed to overflow
+	if (UNLIKELY(count > maxbytes / sizeof(T)))
 		protection_fault(addr);
+
+	const size_t len = count * sizeof(T);
 
 	if (addr % alignof(T) != 0)
 		protection_fault(addr);
@@ -331,6 +337,10 @@ std::span<T> Memory<W>::memspan(address_t addr, size_t count, size_t maxlen) con
 
 	if (count == 0)
 		return {};
+
+	// The multiplication must not be allowed to overflow
+	if (UNLIKELY(count > maxlen / sizeof(T)))
+		protection_fault(addr);
 
 	if constexpr (std::is_const_v<T>) {
 		auto view = memview(addr, count * sizeof(T), maxlen);

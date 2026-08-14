@@ -100,10 +100,12 @@ static void add_mman_syscalls()
 				machine.set_result(dst);
 				return;
 			}
-			else
-			{
-				throw MachineException(FEATURE_DISABLED, "mmap() with fd, but file descriptors disabled");
-			}
+		else
+		{
+			// File descriptors are disabled: report failure like the
+			// kernel would, instead of throwing a machine exception
+			MMAP_HAS_FAILED();
+		}
 		}
 		else if (addr_g == 0)
 		{

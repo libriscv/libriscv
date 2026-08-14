@@ -45,6 +45,8 @@ TEST_CASE("Sequential buffer", "[Buffer]")
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
 }
 
+// Requires paging: allocates past the flat arena to get non-contiguous pages
+#ifdef RISCV_VIRTUAL_PAGING
 TEST_CASE("Boundary buffer", "[Buffer]")
 {
 	const auto binary = build_and_load(R"M(
@@ -81,3 +83,4 @@ TEST_CASE("Boundary buffer", "[Buffer]")
 		REQUIRE(std::string(buffer) == "hello world!");
 	}
 }
+#endif

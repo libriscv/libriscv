@@ -106,7 +106,7 @@ namespace riscv
 	}
 
 	template <int W>
-	void Machine<W>::penalize(uint32_t val)
+	void Machine<W>::penalize(uint64_t val)
 	{
 		m_counter += val;
 	}

@@ -15,7 +15,11 @@ __cxa_demangle(const char *name, char *buf, size_t *n, int *status);
 
 namespace riscv
 {
-	[[maybe_unused]] static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + Page::size();
+	// The arena data pointer is offset OVERALLOCATE into the mapping, so the
+	// mapping needs one extra page on each side of the guest address space in
+	// order to absorb the tail of multi-byte accesses at the last guest
+	// address without bounds-checking the access size on every access.
+	[[maybe_unused]] static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + 2 * Page::size();
 
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
@@ -70,10 +74,12 @@ namespace riscv
 					this->m_arena.data = (PageData *)(base_ptr + Memory::OVERALLOCATE);
 					this->m_arena.pages = (1ULL << encompassing_Nbit_arena) / Page::size();
 				} else {
-					// Over-allocate by 1 page in order to avoid bounds-checking with size
-					// The extra page also provides over-allocation on both sides
-					const size_t len = (pages_max + 1) * Page::size();
-					auto* base_ptr = (uint8_t *)mmap(NULL, len, PROT_READ | PROT_WRITE,
+				// Over-allocate by one page on each side in order to avoid
+				// bounds-checking with size: the front page absorbs accesses
+				// before the arena, and the tail page absorbs the tail of
+				// multi-byte accesses at the last guest address.
+				const size_t len = (pages_max + 2) * Page::size();
+				auto* base_ptr = (uint8_t *)mmap(NULL, len, PROT_READ | PROT_WRITE,
 						MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
 					this->m_arena.pages = pages_max;
 					// mmap() returns MAP_FAILED (-1) when mapping fails
@@ -97,13 +103,13 @@ namespace riscv
 					this->m_arena.data = (PageData *)(base_ptr + Memory::OVERALLOCATE);
 					this->m_arena.pages = (1ULL << encompassing_Nbit_arena) / Page::size();
 				} else {
-					// TODO: XXX: Investigate if this is a time sink
-					auto* base_ptr = (uint8_t *)new PageData[pages_max + 1];
-					// Adjust pointer forward by OVERALLOCATE to provide over-allocation on both sides
-					// while keeping arena at same logical address (relative to zero)
-					this->m_arena.data = (PageData *)(base_ptr + Memory::OVERALLOCATE);
-					this->m_arena.pages = pages_max;
-				}
+				// TODO: XXX: Investigate if this is a time sink
+				auto* base_ptr = (uint8_t *)new PageData[pages_max + 2];
+				// Adjust pointer forward by OVERALLOCATE to provide over-allocation on both sides
+				// while keeping arena at same logical address (relative to zero)
+				this->m_arena.data = (PageData *)(base_ptr + Memory::OVERALLOCATE);
+				this->m_arena.pages = pages_max;
+			}
 #endif
 			}
 
@@ -198,7 +204,7 @@ namespace riscv
 				// munmap() the entire address space
 				munmap(base_ptr, UNBOUNDED_ARENA_SIZE);
 			} else {
-				munmap(base_ptr, (this->m_arena.pages + 1) * Page::size());
+				munmap(base_ptr, (this->m_arena.pages + 2) * Page::size());
 			}
 #else
 			// Adjust back to the original base pointer (subtract OVERALLOCATE)

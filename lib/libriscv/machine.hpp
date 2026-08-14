@@ -150,7 +150,7 @@ namespace riscv
 		/// the same effect as if the guest program executed that many
 		/// instructions.
 		/// @param val The value to add to the instruction counter.
-		void     penalize(uint32_t val);
+		void     penalize(uint64_t val);
 
 		CPU<W>    cpu;
 		Memory<W> memory;

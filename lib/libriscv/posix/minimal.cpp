@@ -21,7 +21,12 @@ namespace riscv
 	template <int W>
 	static void syscall_ebreak(riscv::Machine<W>& machine)
 	{
-		printf("\n>>> EBREAK at %#lX\n", (long)machine.cpu.pc());
+		char buffer[64];
+		const int len = snprintf(buffer, sizeof(buffer),
+			"\n>>> EBREAK at %#lX\n", (long)machine.cpu.pc());
+		// Use the machine printer so that guests cannot bypass it
+		if (len > 0)
+			machine.print(buffer, len);
 		throw MachineException(UNHANDLED_SYSCALL, "EBREAK instruction");
 	}
 

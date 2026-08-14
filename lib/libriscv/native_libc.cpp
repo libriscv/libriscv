@@ -38,7 +38,13 @@ void Machine<W>::setup_native_heap_internal(const size_t syscall_base)
 	{
 		const auto [count, size] =
 			machine.template sysargs<address_type<W>, address_type<W>> ();
-		const size_t len = count * size;
+		// The multiplication must not be allowed to overflow
+		const size_t len = size_t(count) * size_t(size);
+		if (UNLIKELY(count != 0 && size != 0 && len / size_t(count) != size_t(size))) {
+			machine.set_result(0);
+			machine.penalize(COMPLEX_CALL_PENALTY);
+			return;
+		}
 		const address_t data = machine.arena().malloc(len);
 		HPRINT("SYSCALL calloc(%zu, %zu) = 0x%lX\n",
 			(size_t)count, (size_t)size, (long)data);
@@ -154,6 +160,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		// every empty slice, and libc is expected to leave it alone
 		if (UNLIKELY(len == 0))
 			return;
+		if (UNLIKELY(len > MEMCPY_MAX))
+			throw MachineException(SYSTEM_CALL_FAILED, "memcpy length too large", len);
 		m.memory.memcpy(dst, m, src, len);
 		m.penalize(2 * len);
 	}}, {syscall_base+1, [] (Machine<W>& m) {
@@ -175,6 +183,8 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 			(long) dst, (long) src, (size_t)len);
 		if (UNLIKELY(len == 0))
 			return;
+		if (UNLIKELY(len > MEMCPY_MAX))
+			throw MachineException(SYSTEM_CALL_FAILED, "memmove length too large", len);
 		// If we have a flat readwrite arena, we can use memmove
 		if constexpr (riscv::flat_readwrite_arena) {
 			if (m.memory.try_memmove(dst, src, len)) {
@@ -194,8 +204,6 @@ void Machine<W>::setup_native_memory(const size_t syscall_base)
 		}
 		else if (len > 0)
 		{
-			if (UNLIKELY(len > MEMCPY_MAX))
-				throw MachineException(SYSTEM_CALL_FAILED, "memmove length too large", len);
 			constexpr size_t wordsize = sizeof(address_type<W>);
 			if (dst % wordsize == 0 && src % wordsize == 0 && len % wordsize == 0)
 			{
