@@ -154,6 +154,31 @@ static inline double nearbyint(double x) {
 	}
 	return t;
 }
+#ifndef __builtin_inff
+#define __builtin_inff() (1.0f / 0.0f)
+#define __builtin_inf() (1.0 / 0.0)
+#endif
+#ifndef __builtin_fabsl
+#define __builtin_fabsl(x) ((x) < 0.0L ? -(x) : (x))
+#endif
+static inline float nextafterf(float x, float y) {
+	if (x == y) return y;
+	union { float f; uint32_t u; } v = { x };
+	if (v.u == 0x80000000u) v.u = 0;
+	uint32_t sign = v.u & 0x80000000u;
+	if (((y > x) != 0) ^ (sign != 0)) v.u++;
+	else v.u--;
+	return v.f;
+}
+static inline double nextafter(double x, double y) {
+	if (x == y) return y;
+	union { double f; uint64_t u; } v = { x };
+	if (v.u == 0x8000000000000000ull) v.u = 0;
+	uint64_t sign = v.u & 0x8000000000000000ull;
+	if (((y > x) != 0) ^ (sign != 0)) v.u++;
+	else v.u--;
+	return v.f;
+}
 static inline uint32_t do_bswap32(uint32_t x) {
 	return (x << 24 | (x & 0xFF00) << 8 | (x & 0xFF0000) >> 8 | x >> 24);
 }
@@ -188,6 +213,8 @@ static inline uint32_t do_bswap32(uint32_t x) {
 #define round(x)  __builtin_round(x)
 #define nearbyintf(x) __builtin_nearbyintf(x)
 #define nearbyint(x)  __builtin_nearbyint(x)
+#define nextafterf(x, y) __builtin_nextafterf(x, y)
+#define nextafter(x, y)  __builtin_nextafter(x, y)
 #endif
 
 #ifdef __HAVE_BUILTIN_SPECULATION_SAFE_VALUE
