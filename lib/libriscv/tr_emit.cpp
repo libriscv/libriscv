@@ -1929,6 +1929,11 @@ void Emitter<W>::emit()
 			const std::string resultSign = negateResult ? "-" : "";
 			const std::string cSign      = subtractC    ? "-" : "";
 			if (fi.R4type.funct2 == 0x0) { // float32
+				if constexpr (nanboxing && W == 8) {
+					code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu"
+						" || (uint32_t)" + rs3 + ".i32[1] != 0xFFFFFFFFu) ";
+					code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+				}
 				code += "set_fl(&" + dst + ", " + resultSign + "api.fmaf32("
 				      + rs1 + ".f32[0], " + rs2 + ".f32[0], " + cSign + rs3 + ".f32[0]));\n";
 			} else if (fi.R4type.funct2 == 0x1) { // float64
@@ -1987,6 +1992,29 @@ void Emitter<W>::emit()
 				// FLE/FLT are signaling compares: any NaN operand raises NV. FEQ is
 				// a quiet compare and only raises NV for a signaling NaN. All of
 				// them already yield 0 for unordered operands in plain C.
+				// A non-NaN-boxed single-precision operand is read as the
+				// canonical quiet NaN. FLE/FLT are signaling compares, so a
+				// NaN operand (quiet or signaling) raises NV and the compare
+				// is false; FEQ is quiet and raises NV only for sNaN. The
+				// FLE/FLT NV is added in the fcsr_emulation block below via
+				// the is_nan() test (a non-boxed operand is a NaN), so here
+				// only the false result is forced.
+				if constexpr (nanboxing && W == 8) {
+					if (f32) {
+						// A non-NaN-boxed operand is read as the canonical
+						// quiet NaN: the compare is false and FLE/FLT raise
+						// NV (signaling compare). The comparison and the
+						// normal NV logic run in the else branch.
+						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) { ";
+						code += to_reg(fi.R4type.rd) + " = 0;";
+						if constexpr (fcsr_emulation) {
+							const unsigned op = fi.R4type.funct3 | (fi.R4type.funct2 << 4);
+							if (op != 0x2 && op != 0x12) // FLE/FLT only
+								code += " cpu->fcsr |= 0x10;";
+						}
+						code += " }\nelse { ";
+					}
+				}
 				if constexpr (fcsr_emulation) {
 					const unsigned op = fi.R4type.funct3 | (fi.R4type.funct2 << 4);
 					if (op == 0x2 || op == 0x12) // FEQ.S / FEQ.D
@@ -2016,6 +2044,9 @@ void Emitter<W>::emit()
 				default:
 					UNKNOWN_INSTRUCTION();
 				}
+				if constexpr (nanboxing && W == 8) {
+					if (f32) code += " }\n";
+				}
 				this->reset_tracked_register(fi.R4type.rd);
 				break;
 			case RV32F__FMIN_MAX:
@@ -2027,6 +2058,20 @@ void Emitter<W>::emit()
 				// A signaling NaN operand raises NV; a quiet one does not. The
 				// api callbacks below already return the finite operand, or the
 				// canonical qNaN when both are NaN.
+				// A non-NaN-boxed single-precision operand is read as the
+				// canonical quiet NaN: FMIN/FMAX then return the other
+				// operand, or the canonical qNaN when both are non-boxed,
+				// and no NV is raised.
+				if constexpr (nanboxing && W == 8) {
+					if (f32) {
+						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+						code += "{ const bool nb1 = (uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu;"
+							" const bool nb2 = (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu;"
+							" if (nb1 && nb2) load_fl(&" + dst + ", 0x7fc00000u);"
+							" else if (nb1) set_fl(&" + dst + ", " + rs2 + ".f32[0]);"
+							" else set_fl(&" + dst + ", " + rs1 + ".f32[0]); }\nelse ";
+					}
+				}
 				if constexpr (fcsr_emulation) {
 					const unsigned op = fi.R4type.funct3 | (fi.R4type.funct2 << 4);
 					if (op <= 0x1 || (op >= 0x10 && op <= 0x11))
@@ -2053,10 +2098,8 @@ void Emitter<W>::emit()
 				const std::string fop = (instr.fpfunc() == RV32F__FSUB) ? " - " : " + ";
 				if (f32) {
 					if constexpr (nanboxing && W == 8) {
-						if (instr.fpfunc() == RV32F__FADD) {
-							code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
-							code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
-						}
+						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+						code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
 					}
 					code += emit_arith(rs1 + ".f32[0]" + fop + rs2 + ".f32[0]", true);
 				}
@@ -2070,6 +2113,10 @@ void Emitter<W>::emit()
 				// is allowed to alias rs1/rs2.
 				if constexpr (fcsr_emulation) {
 					if (f32) {
+						if constexpr (nanboxing && W == 8) {
+							code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+							code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+						}
 						code += "{ const uint32_t ia = " + rs1 + ".i32[0], ib = " + rs2 + ".i32[0];"
 							" const float fa = " + rs1 + ".f32[0], fb = " + rs2 + ".f32[0];"
 							" const float fr = fa * fb;"
@@ -2081,6 +2128,12 @@ void Emitter<W>::emit()
 						break;
 					}
 				}
+				if constexpr (nanboxing && W == 8) {
+					if (f32) {
+						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+						code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+					}
+				}
 				code += emit_arith(f32 ? (rs1 + ".f32[0] * " + rs2 + ".f32[0]")
 									   : (rs1 + ".f64 * " + rs2 + ".f64"), f32);
 				break;
@@ -2089,6 +2142,10 @@ void Emitter<W>::emit()
 				// NV and inf/0 is exact.
 				if constexpr (fcsr_emulation) {
 					if (f32) {
+						if constexpr (nanboxing && W == 8) {
+							code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+							code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+						}
 						code += "{ const uint32_t ia = " + rs1 + ".i32[0], ib = " + rs2 + ".i32[0];"
 							" const float fr = " + rs1 + ".f32[0] / " + rs2 + ".f32[0];"
 							" if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr);"
@@ -2102,6 +2159,12 @@ void Emitter<W>::emit()
 							" && (ib & 0x7fffffffffffffffull) == 0) cpu->fcsr |= 8; }\n";
 					}
 				} else {
+					if constexpr (nanboxing && W == 8) {
+						if (f32) {
+							code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+							code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+						}
+					}
 					code += emit_arith(f32 ? (rs1 + ".f32[0] / " + rs2 + ".f32[0]")
 										   : (rs1 + ".f64 / " + rs2 + ".f64"), f32);
 				}
@@ -2114,6 +2177,10 @@ void Emitter<W>::emit()
 				// evaluated before the store, since rd may alias rs1.
 				if constexpr (fcsr_emulation) {
 					if (f32) {
+						if constexpr (nanboxing && W == 8) {
+							code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu) ";
+							code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+						}
 						code += "{ const int inv = " + is_snan(rs1, true) + " || " + rs1 + ".f32[0] < 0.0f;"
 							" if (" + is_nan(rs1, true) + " || " + rs1 + ".f32[0] < 0.0f)"
 							" { load_fl(&" + dst + ", 0x7fc00000u); if (inv) cpu->fcsr |= 0x10; }"
@@ -2125,6 +2192,10 @@ void Emitter<W>::emit()
 							" else set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64)); }\n";
 					}
 				} else if (f32) {
+					if constexpr (nanboxing && W == 8) {
+						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu) ";
+						code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
+					}
 					code += "set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
 				} else {
 					code += "set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64));\n";
@@ -2132,6 +2203,16 @@ void Emitter<W>::emit()
 				this->penalty(f32 ? 10 : 15); // sqrt is a slow operation
 				break;
 			case RV32F__FSGNJ_NX:
+				// A non-NaN-boxed single-precision operand is read as the
+				// canonical quiet NaN; either non-boxed source makes the
+				// whole result NaN. FSGNJN additionally inverts the sign bit
+				// of the NaN result (RISC-V §11.6).
+				if constexpr (nanboxing && W == 8) {
+					if (fi.R4type.funct2 == 0x0) {
+						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
+						code += "load_fl(&" + dst + ", " + (fi.R4type.funct3 == 0x1 ? "0xFFC00000u" : "0x7FC00000u") + ");\nelse ";
+					}
+				}
 				switch (fi.R4type.funct3) {
 				case 0x0: // FSGNJ
 					// FMV rd, rs1
@@ -2162,6 +2243,10 @@ void Emitter<W>::emit()
 				if (fi.R4type.funct2 == 0x0) {
 					code += "if (" + rs1 + ".f64 != " + rs1 + ".f64) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", " + rs1 + ".f64);\n";
 				} else if (fi.R4type.funct2 == 0x1) {
+					if constexpr (nanboxing && W == 8) {
+						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu) ";
+						code += "load_dbl(&" + dst + ", 0x7ff8000000000000ull);\nelse ";
+					}
 					code += "if (" + rs1 + ".f32[0] != " + rs1 + ".f32[0]) load_dbl(&" + dst + ", 0x7ff8000000000000ull); else set_dbl(&" + dst + ", " + rs1 + ".f32[0]);\n";
 				} else {
 					UNKNOWN_INSTRUCTION();
@@ -2197,6 +2282,17 @@ void Emitter<W>::emit()
 				if (fi.R4type.rd != 0 &&
 					(fi.R4type.funct2 == 0x0 || fi.R4type.funct2 == 0x1)) {
 					const bool from_float = (fi.R4type.funct2 == 0x0);
+					// A non-NaN-boxed single-precision source is read as the
+					// canonical quiet NaN, which converts to the maximum
+					// value with NV below.
+					const std::string src0 =
+						from_float ? (rs1 + ".f32[0]") : (rs1 + ".f64");
+					if constexpr (nanboxing && W == 8) {
+						if (from_float) {
+							code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu) ";
+							code += rs1 + ".i32[1] = 0xFFFFFFFFu, " + rs1 + ".i32[0] = 0x7fc00000u;\n";
+						}
+					}
 					const std::string src =
 						from_float ? (rs1 + ".f32[0]") : (rs1 + ".f64");
 					// Round per the RISC-V rounding mode (funct3), matching the
