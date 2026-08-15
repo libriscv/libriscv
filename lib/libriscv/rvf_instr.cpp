@@ -38,8 +38,9 @@ namespace riscv
 	// raises NV, which is where the FCSR-only part starts: `invalid` is only
 	// ever read under fcsr_emulation.
 	template <typename T, typename F>
-	static inline T fcvt_to_integer(F value, unsigned rm, bool& invalid) {
+	static inline T fcvt_to_integer(F value, unsigned rm, bool& invalid, bool& inexact) {
 		const F rounded = fcvt_round(value, rm);
+		inexact = !std::isnan(value) && (rounded != value);
 		// Both bounds are powers of two, and thus exactly representable.
 		constexpr F upper = std::is_signed<T>::value
 			? F(uint64_t(1) << (sizeof(T) * 8 - 1))
@@ -54,8 +55,8 @@ namespace riscv
 	}
 	template <typename T, typename F>
 	static inline T fcvt_to_integer(F value, unsigned rm) {
-		bool invalid = false;
-		return fcvt_to_integer<T>(value, rm, invalid);
+		bool invalid = false, inexact = false;
+		return fcvt_to_integer<T>(value, rm, invalid, inexact);
 	}
 
 	// Convert an integer to float/double, reporting NX when the destination
@@ -743,21 +744,21 @@ namespace riscv
 		if (rmm == 0x7) // DYN: use the dynamic mode from the fcsr CSR (frm field)
 			rmm = cpu.registers().fcsr().frm;
 		auto& dst = cpu.reg(fi.R4type.rd);
-		bool invalid = false;
+		bool invalid = false, inexact = false;
 		switch (fi.R4type.funct2) {
 		case 0x0: // from float32
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.W.S (sign-extended 32-bit result)
-				dst = fcvt_to_integer<int32_t>(rs1.f32[0], rmm, invalid);
+				dst = fcvt_to_integer<int32_t>(rs1.f32[0], rmm, invalid, inexact);
 				break;
 			case 0x1: // FCVT.WU.S (sign-extended 32-bit result)
-				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f32[0], rmm, invalid));
+				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f32[0], rmm, invalid, inexact));
 				break;
 			case 0x2: // FCVT.L.S
-				dst = fcvt_to_integer<int64_t>(rs1.f32[0], rmm, invalid);
+				dst = fcvt_to_integer<int64_t>(rs1.f32[0], rmm, invalid, inexact);
 				break;
 			case 0x3: // FCVT.LU.S
-				dst = fcvt_to_integer<uint64_t>(rs1.f32[0], rmm, invalid);
+				dst = fcvt_to_integer<uint64_t>(rs1.f32[0], rmm, invalid, inexact);
 				break;
 			default:
 				cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -766,16 +767,16 @@ namespace riscv
 		case 0x1: // from float64
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.W.D (sign-extended 32-bit result)
-				dst = fcvt_to_integer<int32_t>(rs1.f64, rmm, invalid);
+				dst = fcvt_to_integer<int32_t>(rs1.f64, rmm, invalid, inexact);
 				break;
 			case 0x1: // FCVT.WU.D (sign-extended 32-bit result)
-				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f64, rmm, invalid));
+				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f64, rmm, invalid, inexact));
 				break;
 			case 0x2: // FCVT.L.D
-				dst = fcvt_to_integer<int64_t>(rs1.f64, rmm, invalid);
+				dst = fcvt_to_integer<int64_t>(rs1.f64, rmm, invalid, inexact);
 				break;
 			case 0x3: // FCVT.LU.D
-				dst = fcvt_to_integer<uint64_t>(rs1.f64, rmm, invalid);
+				dst = fcvt_to_integer<uint64_t>(rs1.f64, rmm, invalid, inexact);
 				break;
 			default:
 				cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -788,6 +789,8 @@ namespace riscv
 		if constexpr (fcsr_emulation) {
 			if (invalid)
 				cpu.registers().fcsr().fflags |= 16; // NV
+			else if (inexact)
+				cpu.registers().fcsr().fflags |= 1; // NX
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
