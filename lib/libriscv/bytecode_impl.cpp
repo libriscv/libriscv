@@ -589,8 +589,14 @@ INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
 			if ((ia & 0x7f800000u) != 0x7f800000u
 				&& (ib & 0x7f800000u) != 0x7f800000u) {
 				const uint32_t result = dst.i32[0] & 0x7fffffffu;
-				if (result == 0x7f800000u)
+				if (result == 0x7f800000u) {
 					CPU().registers().fcsr().fflags |= 5; // OF | NX
+					// Overflow value depends on the rounding mode: RTZ and
+					// RDN saturate to the largest finite number.
+					const unsigned rm = CPU().registers().fcsr().frm;
+					if (rm == 0x1 || rm == 0x2)
+						dst.i32[0] = (dst.i32[0] & 0x80000000u) | 0x7F7FFFFFu;
+				}
 				else if (result < 0x00800000u
 					&& (double)fa * (double)fb != dst.f32[0])
 					CPU().registers().fcsr().fflags |= 3; // UF | NX
