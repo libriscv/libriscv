@@ -457,6 +457,31 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = cpu.registers().fcsr().whole;
 				cpu.registers().fcsr().whole |= imm & 0xFF;
 				return;
+			case 0xC00: // CSR RDCYCLE (lower)
+			case 0xC02: // RDINSTRET (lower)
+				if (rd) {
+					cpu.reg(instr.Itype.rd) = this->instruction_counter();
+					return;
+				} else {
+					if (imm == 0) // UNIMP instruction
+						cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.Itype.imm);
+					else // CYCLE is not writable
+						cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
+				}
+			case 0xC80: // CSR RDCYCLE (upper)
+			case 0xC82: // RDINSTRET (upper)
+				if (rd) cpu.reg(instr.Itype.rd) = this->instruction_counter() >> 32u;
+				return;
+			case 0xC01: // CSR RDTIME (lower)
+				if (imm != 0) {
+					cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
+					return;
+				}
+				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this);
+				return;
+			case 0xC81: // CSR RDTIME (upper)
+				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this) >> 32u;
+				return;
 			default:
 				handle_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
 				return;
