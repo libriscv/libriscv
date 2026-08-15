@@ -2086,20 +2086,36 @@ void Emitter<W>::emit()
 				break;
 			case RV32F__FDIV:
 				// DZ is only for a finite non-zero numerator over zero: 0/0 is
-				// NV and inf/0 is exact.
+				// NV and inf/0 is exact. NV/NX/OF/UF are also required.
 				if constexpr (fcsr_emulation) {
 					if (f32) {
 						code += "{ const uint32_t ia = " + rs1 + ".i32[0], ib = " + rs2 + ".i32[0];"
-							" const float fr = " + rs1 + ".f32[0] / " + rs2 + ".f32[0];"
-							" if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr);"
+							" const float fa = " + rs1 + ".f32[0], fb = " + rs2 + ".f32[0];"
+							" const float fr = fa / fb;"
+							" if (fr != fr) { load_fl(&" + dst + ", 0x7fc00000u);"
+							" if ((ia & 0x7fffffffu) == 0 && (ib & 0x7fffffffu) == 0) cpu->fcsr |= 0x10;"
+							" else if ((ia & 0x7f800000u) == 0x7f800000u && (ib & 0x7f800000u) == 0x7f800000u) cpu->fcsr |= 0x10; }"
+							" else { set_fl(&" + dst + ", fr);"
 							" if ((ia & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u"
-							" && (ib & 0x7fffffffu) == 0) cpu->fcsr |= 8; }\n";
+							" && (ib & 0x7fffffffu) == 0) cpu->fcsr |= 8;"
+							" if ((double)fr != (double)fa / (double)fb) cpu->fcsr |= 1;"
+							" const uint32_t ir = " + dst + ".i32[0] & 0x7fffffffu;"
+							" if ((ib & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u && ir == 0x7f800000u) cpu->fcsr |= 5;"
+							" else if (ir < 0x00800000u && (double)fr != (double)fa / (double)fb) cpu->fcsr |= 3; } }\n";
 					} else {
 						code += "{ const uint64_t ia = " + rs1 + ".i64, ib = " + rs2 + ".i64;"
-							" const double dr = " + rs1 + ".f64 / " + rs2 + ".f64;"
-							" if (dr != dr) load_dbl(&" + dst + ", 0x7ff8000000000000ull); else set_dbl(&" + dst + ", dr);"
+							" const double fa = " + rs1 + ".f64, fb = " + rs2 + ".f64;"
+							" const double dr = fa / fb;"
+							" if (dr != dr) { load_dbl(&" + dst + ", 0x7ff8000000000000ull);"
+							" if ((ia & 0x7fffffffffffffffull) == 0 && (ib & 0x7fffffffffffffffull) == 0) cpu->fcsr |= 0x10;"
+							" else if ((ia & 0x7ff0000000000000ull) == 0x7ff0000000000000ull && (ib & 0x7ff0000000000000ull) == 0x7ff0000000000000ull) cpu->fcsr |= 0x10; }"
+							" else { set_dbl(&" + dst + ", dr);"
 							" if ((ia & 0x7fffffffffffffffull) != 0 && (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull"
-							" && (ib & 0x7fffffffffffffffull) == 0) cpu->fcsr |= 8; }\n";
+							" && (ib & 0x7fffffffffffffffull) == 0) cpu->fcsr |= 8;"
+							" if ((long double)dr != (long double)fa / (long double)fb) cpu->fcsr |= 1;"
+							" const uint64_t ir = " + dst + ".i64 & 0x7fffffffffffffffull;"
+							" if ((ib & 0x7fffffffffffffffull) != 0 && (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull && ir == 0x7ff0000000000000ull) cpu->fcsr |= 5;"
+							" else if (ir < 0x0010000000000000ull && (long double)dr != (long double)fa / (long double)fb) cpu->fcsr |= 3; } }\n";
 					}
 				} else {
 					code += emit_arith(f32 ? (rs1 + ".f32[0] / " + rs2 + ".f32[0]")
