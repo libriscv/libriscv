@@ -373,16 +373,19 @@ namespace riscv
 				if (rd) cpu.reg(instr.Itype.rd) = m_rdtime(*this) >> 32u;
 				return;
 			case 0xF11: // CSR marchid
-				if (rd) cpu.reg(instr.Itype.rd) = 0;
+				// Machine-level CSRs are not accessible to the U-mode guest
+				// this emulator models; matching the handle_unhandled_csr
+				// privilege gate, accessing them must raise illegal-operation.
+				cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
 				return;
 			case 0xF12: // CSR mvendorid
-				if (rd) cpu.reg(instr.Itype.rd) = 0;
+				cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
 				return;
 			case 0xF13: // CSR mimpid
-				if (rd) cpu.reg(instr.Itype.rd) = 1;
+				cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
 				return;
 			case 0xF14: // CSR mhartid
-				if (rd) cpu.reg(instr.Itype.rd) = cpu.cpu_id();
+				cpu.trigger_exception(ILLEGAL_OPERATION, instr.Itype.imm);
 				return;
 			default:
 				handle_unhandled_csr(*this, instr.Itype.imm, instr.Itype.rd, instr.Itype.rs1);
