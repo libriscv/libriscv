@@ -2117,12 +2117,14 @@ void Emitter<W>::emit()
 						code += "{ const int inv = " + is_snan(rs1, true) + " || " + rs1 + ".f32[0] < 0.0f;"
 							" if (" + is_nan(rs1, true) + " || " + rs1 + ".f32[0] < 0.0f)"
 							" { load_fl(&" + dst + ", 0x7fc00000u); if (inv) cpu->fcsr |= 0x10; }"
-							" else set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0])); }\n";
+							" else { const float sq = api.sqrtf32(" + rs1 + ".f32[0]); set_fl(&" + dst + ", sq);"
+							" if ((double)sq * (double)sq != (double)" + rs1 + ".f32[0]) cpu->fcsr |= 1; } }\n";
 					} else {
 						code += "{ const int inv = " + is_snan(rs1, false) + " || " + rs1 + ".f64 < 0.0;"
 							" if (" + is_nan(rs1, false) + " || " + rs1 + ".f64 < 0.0)"
 							" { load_dbl(&" + dst + ", 0x7ff8000000000000ull); if (inv) cpu->fcsr |= 0x10; }"
-							" else set_dbl(&" + dst + ", api.sqrtf64(" + rs1 + ".f64)); }\n";
+							" else { const double sq = api.sqrtf64(" + rs1 + ".f64); set_dbl(&" + dst + ", sq);"
+							" if (sq * sq != " + rs1 + ".f64) cpu->fcsr |= 1; } }\n";
 					}
 				} else if (f32) {
 					code += "set_fl(&" + dst + ", api.sqrtf32(" + rs1 + ".f32[0]));\n";
