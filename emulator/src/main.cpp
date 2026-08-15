@@ -260,7 +260,8 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 #endif
 
 template <int W>
-static void run_sighandler(riscv::Machine<W>&);
+static void run_sighandler(riscv::Machine<W>&, int signal);
+static int signal_for_exception(int type);
 
 template <int W>
 static void run_program(
@@ -609,7 +610,7 @@ static void run_program(
 		if (cli_args.debug)
 			debug.print_and_pause();
 		else
-			run_sighandler(machine);
+			run_sighandler(machine, signal_for_exception(me.type()));
 	} catch (std::exception& e) {
 		printf(">>> Exception: %s\n", e.what());
 		machine.memory.print_backtrace(
@@ -619,7 +620,7 @@ static void run_program(
 		if (cli_args.debug)
 			debug.print_and_pause();
 		else
-			run_sighandler(machine);
+			run_sighandler(machine, 11);
 	}
 
 	auto t1 = std::chrono::high_resolution_clock::now();
@@ -792,25 +793,52 @@ int main(int argc, const char** argv)
 }
 
 template <int W>
-void run_sighandler(riscv::Machine<W>& machine)
+void run_sighandler(riscv::Machine<W>& machine, int signal)
 {
 	constexpr int SIG_SEGV = 11;
-	auto& action = machine.sigaction(SIG_SEGV);
-	if (action.is_unset())
-		return;
+	constexpr int SIG_ILL = 4;
+	auto& action = machine.sigaction(signal);
+	if (action.is_unset()) {
+		// The guest did not install a handler for the architectural signal;
+		// fall back to the previous behavior (SIGSEGV) only if the guest
+		// handles that one instead.
+		if (signal != SIG_SEGV) {
+			auto& segv = machine.sigaction(SIG_SEGV);
+			if (segv.is_unset()) return;
+			action = segv;
+			signal = SIG_SEGV;
+		} else {
+			return;
+		}
+	}
 
 	auto handler = action.handler;
 	action.handler = 0x0; // Avoid re-triggering(?)
 
 	machine.stack_push(machine.cpu.reg(riscv::REG_RA));
 	machine.cpu.reg(riscv::REG_RA) = machine.cpu.pc();
-	machine.cpu.reg(riscv::REG_ARG0) = 11; /* SIGSEGV */
+	machine.cpu.reg(riscv::REG_ARG0) = signal;
 	try {
 		machine.cpu.jump(handler);
 		machine.simulate(60'000);
 	} catch (...) {}
 
 	action.handler = handler;
+}
+
+static int signal_for_exception(int type)
+{
+	switch (type) {
+	case riscv::ILLEGAL_OPCODE:
+	case riscv::ILLEGAL_OPERATION:
+	case riscv::UNIMPLEMENTED_INSTRUCTION:
+	case riscv::UNIMPLEMENTED_INSTRUCTION_LENGTH:
+	case riscv::MISALIGNED_INSTRUCTION:
+	case riscv::INVALID_ALIGNMENT:
+		return 4; // SIGILL
+	default:
+		return 11; // SIGSEGV
+	}
 }
 
 #include <stdexcept>
