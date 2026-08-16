@@ -1542,7 +1542,8 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		// leave the ±0 case implementation-defined.
 		.fmin32_rv = [] (float a, float b) -> float {
 			// Two NaN operands produce the canonical qNaN. A single NaN operand
-			// needs no help: std::fmin/fmax already return the other one.
+			// must yield the other one, which std::fmin/fmax do not reliably
+			// do: glibc returns a quieted copy of a signaling NaN instead.
 			if constexpr (fcsr_emulation) {
 				if (std::isnan(a) && std::isnan(b)) {
 					uint32_t bits = 0x7fc00000u;

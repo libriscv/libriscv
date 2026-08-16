@@ -35,12 +35,14 @@ namespace riscv
 	// guest could otherwise trip UBSan or produce host-dependent garbage.
 	// RISC-V pins an out-of-range result to the nearest representable extreme
 	// (NaN and positive overflow → maximum, negative overflow → minimum) and
-	// raises NV, which is where the FCSR-only part starts: `invalid` is only
-	// ever read under fcsr_emulation.
+	// raises NV, which is where the FCSR-only part starts: `invalid` and
+	// `inexact` are only ever read under fcsr_emulation, and the NX test costs
+	// an extra compare, so it is compiled out entirely when FCSR is off.
 	template <typename T, typename F>
 	static inline T fcvt_to_integer(F value, unsigned rm, bool& invalid, bool& inexact) {
 		const F rounded = fcvt_round(value, rm);
-		inexact = !std::isnan(value) && (rounded != value);
+		if constexpr (fcsr_emulation)
+			inexact = !std::isnan(value) && (rounded != value);
 		// Both bounds are powers of two, and thus exactly representable.
 		constexpr F upper = std::is_signed<T>::value
 			? F(uint64_t(1) << (sizeof(T) * 8 - 1))
