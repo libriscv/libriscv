@@ -63,6 +63,8 @@ namespace riscv
 		bool vill() const noexcept { return m_vill; }
 		// Current SEW in bits (8, 16, 32 or 64).
 		unsigned sew() const noexcept { return 8u << m_vsew; }
+		// ... and as vtype encodes it: log2(SEW / 8).
+		unsigned encoded_sew() const noexcept { return m_vsew; }
 		// log2(LMUL). Negative values are fractional LMULs.
 		int lmul_shift() const noexcept { return m_lmul; }
 		// Number of registers in a vector register group (0 when fractional).
@@ -129,6 +131,9 @@ namespace riscv
 			}
 			return !m_vill;
 		}
+
+		// Verifies the C mirror in tr_api.cpp against the offsets below.
+		friend struct VectorLayoutProbe;
 
 	private:
 		static int lmul_shift_for(uint32_t vlmul) noexcept {

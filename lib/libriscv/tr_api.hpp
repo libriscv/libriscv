@@ -35,6 +35,10 @@ namespace riscv {
 		// `static struct CallbackTable` in tr_api.cpp field-for-field.
 		float  (*fmaf32)(float, float, float);
 		double (*fmaf64)(double, double, double);
+		// The same without NaN canonicalization, matching the vector FMA
+		// handlers in rvv_instr.cpp, which go straight to std::fma.
+		float  (*vfmaf32)(float, float, float);
+		double (*vfmaf64)(double, double, double);
 		// FMIN/FMAX with RISC-V's -0.0 < +0.0 convention (std::fmin/fmax
 		// leaves the ±0 case implementation-defined; emitted code would
 		// otherwise return host-dependent signs).

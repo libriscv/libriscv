@@ -70,6 +70,89 @@ namespace riscv
 	}
 
 
+#ifdef RISCV_EXT_VECTOR
+	// Emitted code reaches the vector state through the C struct RVV in
+	// tr_api.cpp, a hand-written mirror of VectorRegisters<W>. A wrong
+	// offset does not crash: the inline guard simply never holds, and every
+	// vector instruction quietly falls back to the interpreter. So hand the
+	// C compiler the real offsets and let it check the mirror.
+	struct VectorLayoutProbe
+	{
+		template <int W>
+		static std::string layout_checks()
+		{
+			using RVVRegs = VectorRegisters<W>;
+			// Offsets within the register file are measured on a live
+			// instance: Registers<W> is not standard-layout, so offsetof
+			// is not portable there.
+			const Registers<W> regs {};
+			const auto reg_offset = [&] (const void* field) {
+				return uintptr_t(field) - uintptr_t(&regs);
+			};
+
+			// An embedded translation is compiled as C++, where the C11
+			// spelling is not accepted, and the JIT compiles the same text
+			// as C99. Compilers without either spelling skip the check
+			// rather than failing to build.
+			std::string checks = "\n/* Generated: RVV mirror vs. VectorRegisters<"
+				+ std::to_string(W) + "> */\n"
+				"#if defined(__cplusplus)\n"
+				"#  define RVV_LAYOUT_ASSERT(cond, msg) static_assert(cond, msg)\n"
+				"#elif defined(__TINYC__) || defined(__GNUC__) || defined(__clang__)\n"
+				"#  define RVV_LAYOUT_ASSERT(cond, msg) _Static_assert(cond, msg)\n"
+				"#else\n"
+				"#  define RVV_LAYOUT_ASSERT(cond, msg) /* unsupported */\n"
+				"#endif\n";
+			const auto check = [&] (const std::string& expr, size_t value) {
+				checks += "RVV_LAYOUT_ASSERT(" + expr + " == " + std::to_string(value)
+					+ ", \"Stale RVV mirror in tr_api.cpp: " + expr + "\");\n";
+			};
+			const auto field = [&] (const char* name, size_t offset) {
+				check("__builtin_offsetof(RVV, " + std::string(name) + ")", offset);
+			};
+			field("lane",   offsetof(RVVRegs, m_vec));
+			field("vl",     offsetof(RVVRegs, m_vl));
+			field("vstart", offsetof(RVVRegs, m_vstart));
+			field("vsew",   offsetof(RVVRegs, m_vsew));
+			field("vtype",  offsetof(RVVRegs, m_vtype));
+			field("lmul",   offsetof(RVVRegs, m_lmul));
+			field("vxrm",   offsetof(RVVRegs, m_vxrm));
+			field("vxsat",  offsetof(RVVRegs, m_vxsat));
+			field("vta",    offsetof(RVVRegs, m_vta));
+			field("vma",    offsetof(RVVRegs, m_vma));
+			field("vill",   offsetof(RVVRegs, m_vill));
+			check("sizeof(RVV)", sizeof(RVVRegs));
+			check("__builtin_offsetof(CPU, rvv)", reg_offset(&regs.rvv()));
+			// The CPU mirror itself, while we are at it
+			check("__builtin_offsetof(CPU, r)",  reg_offset(regs.get().data()));
+			check("__builtin_offsetof(CPU, pc)", reg_offset(&regs.pc));
+			check("__builtin_offsetof(CPU, fr)", reg_offset(&regs.getfl(0)));
+			check("sizeof(CPU)", sizeof(Registers<W>));
+			return checks;
+		}
+	};
+#endif
+
+	// Fused multiply-add for the vector FMA family. std::fma is a libm call
+	// where the compiler cannot assume an FMA instruction, and inlined
+	// vfmadd emits one per element, so bind the entry once to a version
+	// compiled for the CPU we actually run on.
+	static float  libm_fmaf32(float a, float b, float c) { return std::fma(a, b, c); }
+	static double libm_fmaf64(double a, double b, double c) { return std::fma(a, b, c); }
+#if defined(__x86_64__) && !defined(__FMA__) && (defined(__GNUC__) || defined(__clang__))
+	__attribute__((target("fma")))
+	static float  hw_fmaf32(float a, float b, float c) { return __builtin_fmaf(a, b, c); }
+	__attribute__((target("fma")))
+	static double hw_fmaf64(double a, double b, double c) { return __builtin_fma(a, b, c); }
+	static bool host_has_fma() { return __builtin_cpu_supports("fma"); }
+#else
+	// Either the FMA is already inline (aarch64, -mfma, ...) or we have no
+	// way of asking, in which case libm is the portable answer.
+	static constexpr auto hw_fmaf32 = libm_fmaf32;
+	static constexpr auto hw_fmaf64 = libm_fmaf64;
+	static bool host_has_fma() { return false; }
+#endif
+
 	template <int W>
 	using binary_translation_init_func = void (*)(const CallbackTable<W>&, int32_t, int32_t, int32_t);
 	template <int W>
@@ -734,6 +817,9 @@ if constexpr (SCAN_FOR_GP) {
 	auto& dlmappings = output.mappings;
 	extern const std::string bintr_code;
 	output.code = std::make_shared<std::string>(bintr_code);
+#ifdef RISCV_EXT_VECTOR
+	*output.code += VectorLayoutProbe::layout_checks<W>();
+#endif
 
 	for (auto& block : blocks)
 	{
@@ -1538,6 +1624,10 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 			}
 			return r;
 		},
+		// The vector FMA family rounds once like the scalar one, but leaves
+		// a NaN result as std::fma produced it, matching rvv_instr.cpp.
+		.vfmaf32 = host_has_fma() ? hw_fmaf32 : libm_fmaf32,
+		.vfmaf64 = host_has_fma() ? hw_fmaf64 : libm_fmaf64,
 		// FMIN/FMAX with RISC-V -0.0 < +0.0 convention. std::fmin/fmax
 		// leave the ±0 case implementation-defined.
 		.fmin32_rv = [] (float a, float b) -> float {

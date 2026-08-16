@@ -251,21 +251,52 @@ struct Emitter
 	std::string from_rvvreg(int reg) {
 		return "cpu->rvv.lane[" + std::to_string(reg) + "]";
 	}
-	// Condition for addressing one full register: e32, m1, vl == VLMAX
-	// and a valid vtype. Matches the whole-group fast path in
-	// unit_stride_load/store (rvv_instr.cpp), and is the only case where
-	// every element is active and there is no tail.
-	std::string rvv_full_lane_condition() const {
-		return "cpu->rvv.vl == " + std::to_string(VectorLane::size() / 4)
-			+ " && cpu->rvv.vsew == 2 && cpu->rvv.lmul == 0 && !cpu->rvv.vill";
+	// Elements in one full register at this SEW, ie. VLMAX at LMUL=1.
+	static constexpr unsigned rvv_full_vl(unsigned vsew) noexcept {
+		return VectorLane::size() >> vsew;
 	}
-	const std::string& rvv_guard()
+	// Condition for addressing exactly one full register: the given SEW,
+	// m1, vl == VLMAX and a valid vtype. Matches the whole-group fast path
+	// in unit_stride_load/store (rvv_instr.cpp), and is the only case where
+	// every element is active and there is no tail. A vsetvli earlier in
+	// this block may already have proven SEW/LMUL/vill, leaving only vl.
+	std::string rvv_full_lane_condition(unsigned vsew) const {
+		// An inlined vsetvli leaves vl in a C local, sparing us a reload.
+		std::string cond = (m_vl_local.empty() ? "cpu->rvv.vl" : m_vl_local)
+			+ " == " + std::to_string(rvv_full_vl(vsew));
+		if (m_vtype.known)
+			return cond;
+		return cond + " && cpu->rvv.vsew == " + std::to_string(vsew)
+			+ " && cpu->rvv.lmul == 0 && !cpu->rvv.vill";
+	}
+	// The condition as a live C local, computed once per block and shared by
+	// every vector instruction in it. Always emitted at statement level, so
+	// that the bodies opened below can all see it.
+	const std::string& rvv_guard(unsigned vsew)
 	{
-		if (m_rvv_guard.empty()) {
-			m_rvv_guard = "vok" + PCRELS(0);
-			add_code("const int " + m_rvv_guard + " = " + rvv_full_lane_condition() + ";");
+		auto& guard = m_rvv_guard.at(vsew);
+		if (guard.empty()) {
+			// With vl known too the guard folds to a constant, and the C
+			// compiler drops either the body or the fallback entirely.
+			if (m_vtype.known && m_vl_known)
+				guard = (m_vl == rvv_full_vl(vsew)) ? "1" : "0";
+			else {
+				guard = "vok" + PCRELS(0) + "_" + std::to_string(vsew);
+				// Declared and assigned separately: an embedded translation
+				// is compiled as C++, where a goto may not jump over an
+				// initialization, and labels land between vector blocks.
+				add_code("int " + guard + "; " + guard + " = "
+					+ rvv_full_lane_condition(vsew) + ";");
+			}
 		}
-		return m_rvv_guard;
+		return guard;
+	}
+	// vl and vtype are about to change, or may have changed behind our back.
+	void reset_vector_config() {
+		this->m_vtype = {};
+		this->m_vl_known = false;
+		this->m_vl_local.clear();
+		for (auto& guard : this->m_rvv_guard) guard.clear();
 	}
 	// Call the interpreter's instruction handler (non-libtcc slow path)
 	void emit_vector_handler_call(const rv32i_instruction& instr) {
@@ -370,10 +401,8 @@ struct Emitter
 	// reloading only the integer registers the handler names.
 	void emit_vector_slowpath()
 	{
-		// Inlined instructions don't touch vl/vtype; any other handler
-		// might be a vsetvl, so drop the cached guard.
 		if (!this->vector_is_guarded_inlinable(instr))
-			this->m_rvv_guard.clear();
+			this->reset_vector_config();
 		const auto use = vector_scalar_use(this->instr);
 		this->realize_vector_scalar_reads(use);
 		this->emit_vector_handler_invoke();
@@ -399,24 +428,74 @@ struct Emitter
 		default:       return nullptr;
 		}
 	}
+	// True for the eight fused multiply-add encodings shared by OPFVV and
+	// OPFVF. They read the destination as their third operand.
+	static bool vector_is_float_fma(const rv32i_instruction& vinstr)
+	{
+		if (vinstr.vwidth() != 0x1 && vinstr.vwidth() != 0x5) // OPF.VV / OPF.VF
+			return false;
+		if (!rv32v_instruction{vinstr}.OPVV.vm)
+			return false; // Masked: element activity depends on v0 at runtime
+		return (rv32v_instruction{vinstr}.OPVV.funct6 & 0b111000) == 0b101000;
+	}
+	// log2(EEW/8) for a unit-stride access width, or -1 for the widths that
+	// are not one of the plain 8/16/32/64-bit element forms.
+	static int vector_unit_stride_sew(uint32_t width) noexcept
+	{
+		switch (width) {
+		case 0b000: return 0; // VLE8  / VSE8
+		case 0b101: return 1; // VLE16 / VSE16
+		case 0b110: return 2; // VLE32 / VSE32
+		case 0b111: return 3; // VLE64 / VSE64
+		default:    return -1;
+		}
+	}
 	// True when this instruction is inlined under the vl/vtype guard.
 	bool vector_is_guarded_inlinable(const rv32i_instruction& vinstr)
 	{
+		return !this->vector_inlinable_sews(vinstr).empty();
+	}
+	// The SEWs this instruction can be inlined at. A unit-stride access
+	// carries its own EEW, so it has at most one. Float arithmetic follows
+	// vtype's SEW, known statically only after an inlined vsetvli. Empty
+	// means "hand it to the interpreter".
+	std::vector<unsigned> vector_inlinable_sews(const rv32i_instruction& vinstr)
+	{
 		const rv32v_instruction vi { vinstr };
+		int sew = -1;
 		switch (vinstr.opcode()) {
-		case RV32F_LOAD:  // Plain unmasked unit-stride VLE32
-			return vi.VL.width == 0x6 && uses_flat_memory_arena()
-				&& !vi.VL.mew && vi.VL.nf == 0 && vi.VL.mop == 0
-				&& vi.VL.lumop == 0 && vi.VL.vm;
-		case RV32F_STORE: // ... and VSE32
-			return vi.VS.width == 0x6 && uses_flat_memory_arena()
-				&& !vi.VS.mew && vi.VS.nf == 0 && vi.VS.mop == 0
-				&& vi.VS.sumop == 0 && vi.VS.vm;
+		case RV32F_LOAD:  // Plain unmasked unit-stride VLE
+			if (uses_flat_memory_arena() && !vi.VL.mew && vi.VL.nf == 0
+				&& vi.VL.mop == 0 && vi.VL.lumop == 0 && vi.VL.vm)
+				sew = vector_unit_stride_sew(vi.VL.width);
+			break;
+		case RV32F_STORE: // ... and VSE
+			if (uses_flat_memory_arena() && !vi.VS.mew && vi.VS.nf == 0
+				&& vi.VS.mop == 0 && vi.VS.sumop == 0 && vi.VS.vm)
+				sew = vector_unit_stride_sew(vi.VS.width);
+			break;
 		case RV32V_OP:
-			return vector_float_operator(vinstr) != nullptr;
+			if (vector_float_operator(vinstr) == nullptr && !vector_is_float_fma(vinstr))
+				break;
+			// Both float widths are inlinable: a known vtype selects one,
+			// otherwise both bodies are emitted behind their own guard.
+			if (m_vtype.known)
+				sew = int(m_vtype.vsew);
+			else
+				return { 2, 3 };
+			break;
 		default:
-			return false;
+			break;
 		}
+		if (sew < 0)
+			return {};
+		// An inline body is only reachable at the SEW and LMUL it was
+		// written for, so a known vtype decides it here, not at runtime.
+		if (m_vtype.known && (m_vtype.vill || m_vtype.vsew != unsigned(sew) || m_vtype.lmul != 0))
+			return {};
+		if (sew < 2 && vinstr.opcode() == RV32V_OP)
+			return {}; // No 8/16-bit floats
+		return { unsigned(sew) };
 	}
 	// Inline a unit-stride load/store as a whole-lane arena move. The
 	// caller has established the vl/vtype guard; the address is tested
@@ -453,46 +532,177 @@ struct Emitter
 		}
 		add_code("}");
 	}
-	// Inline float arithmetic as straight-line code. The vl/vtype guard
-	// pins a full e32/m1 register: every element active, no tail.
-	void emit_vector_float_arith_body()
+	// One fused multiply-add element, exactly as the OPFVV/OPFVF handlers
+	// compute it: a is vs1 (or the scalar), b is vs2, c is the old value of
+	// the destination. The product is unrounded, hence the api.fma call.
+	static std::string vector_fma_expression(unsigned funct6, const std::string& fma,
+		const std::string& a, const std::string& b, const std::string& c)
 	{
-		const rv32v_instruction vi { instr };
-		const char* const op = vector_float_operator(instr);
-		const bool is_scalar = instr.vwidth() == 0x5; // OPF.VF takes f[rs1]
-		std::string rhs;
-		if (is_scalar) {
-			// The guard pins SEW to 32, so the scalar is the low float.
-			rhs = "vscalar" + PCRELS(0);
-			add_code("  const float " + rhs + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];");
-		}
-		for (unsigned i = 0; i < VectorLane::size() / sizeof(float); i++) {
-			const std::string e = ".f32[" + std::to_string(i) + "]";
-			add_code("  " + from_rvvreg(vi.OPVV.vd) + e + " = " + from_rvvreg(vi.OPVV.vs2) + e
-				+ op + (is_scalar ? rhs : from_rvvreg(vi.OPVV.vs1) + e) + ";");
+		const std::string call = fma + "(";
+		switch (funct6) {
+		case 0b101000: return       call +       a + ", " + c + ", " + b + ")"; // VFMADD
+		case 0b101001: return "-" + call +       a + ", " + c + ", " + b + ")"; // VFNMADD
+		case 0b101010: return       call +       a + ", " + c + ", -" + b + ")"; // VFMSUB
+		case 0b101011: return       call + "-" + a + ", " + c + ", " + b + ")"; // VFNMSUB
+		case 0b101100: return       call +       a + ", " + b + ", " + c + ")"; // VFMACC
+		case 0b101101: return "-" + call +       a + ", " + b + ", " + c + ")"; // VFNMACC
+		case 0b101110: return       call +       a + ", " + b + ", -" + c + ")"; // VFMSAC
+		default:       return       call + "-" + a + ", " + b + ", " + c + ")"; // VFNMSAC
 		}
 	}
-	void emit_vector_inline_body()
+	// Inline float arithmetic as straight-line code. The vl/vtype guard
+	// pins a full m1 register at this SEW: every element active, no tail.
+	void emit_vector_float_arith_body(unsigned vsew)
+	{
+		const rv32v_instruction vi { instr };
+		const bool dbl = (vsew == 3);
+		const bool is_scalar = instr.vwidth() == 0x5; // OPF.VF takes f[rs1]
+		const char* const elem = dbl ? ".f64[" : ".f32[";
+		std::string rhs;
+		if (is_scalar) {
+			// The guard pins SEW, so the scalar is the low element.
+			rhs = "vscalar" + PCRELS(0) + "_" + std::to_string(vsew);
+			add_code(std::string("  const ") + (dbl ? "double " : "float ") + rhs + " = "
+				+ from_fpreg(vi.OPVV.vs1) + (dbl ? ".f64;" : ".f32[0];"));
+		}
+		const char* const op = vector_float_operator(instr);
+		const std::string fma = dbl ? "api.vfmaf64" : "api.vfmaf32";
+		const unsigned elements = VectorLane::size() >> vsew;
+		for (unsigned i = 0; i < elements; i++) {
+			const std::string e = elem + std::to_string(i) + "]";
+			const std::string a = is_scalar ? rhs : from_rvvreg(vi.OPVV.vs1) + e;
+			const std::string b = from_rvvreg(vi.OPVV.vs2) + e;
+			const std::string d = from_rvvreg(vi.OPVV.vd) + e;
+			add_code("  " + d + " = " + (op != nullptr
+				? b + op + a
+				: vector_fma_expression(vi.OPVV.funct6, fma, a, b, d)) + ";");
+		}
+	}
+	void emit_vector_inline_body(unsigned vsew)
 	{
 		switch (instr.opcode()) {
 		case RV32F_LOAD:  this->emit_vector_unit_stride_body(false); break;
 		case RV32F_STORE: this->emit_vector_unit_stride_body(true); break;
-		default:          this->emit_vector_float_arith_body(); break;
+		default:          this->emit_vector_float_arith_body(vsew); break;
+		}
+	}
+	// True for the two configuration forms with an immediate vtype, which is
+	// what compilers emit. VSETVL takes it from a register instead, so its
+	// vtype is only known at runtime.
+	bool vector_is_inlinable_setvl(const rv32i_instruction& vinstr) const noexcept
+	{
+		if (vinstr.opcode() != RV32V_OP || vinstr.vwidth() != 0x7)
+			return false;
+		const auto func = vinstr.vsetfunc();
+		return func == 0x0 || func == 0x1 || func == 0x3;
+	}
+	// Inline vsetvli/vsetivli. Strip-mined loops execute one per iteration,
+	// and as a handler call it would realize and reload the cached integer
+	// registers every time, which is most of what it costs. Inlined it is
+	// a compare and a few stores, and the block gets a known vtype.
+	void emit_vector_setvl()
+	{
+		const rv32v_instruction vi { instr };
+		const bool imm_avl = instr.vsetfunc() == 0x3; // VSETIVLI
+		// vsetivli's vtype is ten bits. The two above it mark the form.
+		const uint32_t vtypei = imm_avl ? (vi.IVLI.zimm & 0x3FF) : vi.VLI.zimm;
+		const int rd  = imm_avl ? vi.IVLI.rd : vi.VLI.rd;
+		const int rs1 = imm_avl ? 0 : int(vi.VLI.rs1);
+
+		// Decode with the interpreter's own code, so the two can never
+		// disagree about what is legal or how large VLMAX is.
+		VectorRegisters<W> newtype;
+		const bool legal = newtype.set_vtype(vtypei);
+		const uint64_t vlmax = newtype.vlmax();
+
+		this->reset_vector_config();
+		if (!legal) {
+			// Unsupported vtype: vl = 0 and vtype reads back as vill alone.
+			// vsew/lmul keep their old values, as set_vtype leaves them.
+			add_code("cpu->rvv.vta = " + std::to_string(newtype.vta()) + ";",
+				"cpu->rvv.vma = " + std::to_string(newtype.vma()) + ";",
+				"cpu->rvv.vill = 1;", "cpu->rvv.vl = 0;");
+			if (rd != 0)
+				add_code(to_reg(rd) + " = 0;");
+			this->m_vtype = { true, true, 0, 0 };
+			this->m_vl_known = true;
+			this->m_vl = 0;
+			return;
+		}
+		// A strip-mined loop sets the same vtype every iteration, and only
+		// vl changes. The raw encoding decides every other field, so when it
+		// is already in place, and not disowned by vill, the configuration
+		// is a no-op worth branching over.
+		add_code("if (UNLIKELY(cpu->rvv.vtype != " + std::to_string(vtypei)
+			+ " || cpu->rvv.vill)) {",
+			"  cpu->rvv.vill = 0;",
+			"  cpu->rvv.vta = " + std::to_string(newtype.vta()) + ";",
+			"  cpu->rvv.vma = " + std::to_string(newtype.vma()) + ";",
+			"  cpu->rvv.vsew = " + std::to_string(newtype.encoded_sew()) + ";",
+			"  cpu->rvv.lmul = " + std::to_string(newtype.lmul_shift()) + ";",
+			"  cpu->rvv.vtype = " + std::to_string(vtypei) + ";",
+			"}");
+
+		// AVL: the immediate, x[rs1], VLMAX when rs1 is x0 but rd is not,
+		// and otherwise the current vl clamped to the new VLMAX.
+		const std::string vl = "cpu->rvv.vl";
+		const std::string newvl = "vnewvl" + PCRELS(0);
+		if (imm_avl || rs1 == 0) {
+			const uint64_t avl = imm_avl ? vi.IVLI.uimm : (rd != 0 ? vlmax : 0);
+			if (imm_avl || rd != 0) {
+				add_code(vl + " = " + std::to_string(std::min(avl, vlmax)) + ";");
+				this->m_vl_known = true;
+				this->m_vl = std::min(avl, vlmax);
+			} else {
+				add_code("if (" + vl + " > " + std::to_string(vlmax) + ") "
+					+ vl + " = " + std::to_string(vlmax) + ";");
+			}
+		} else {
+			// Downstream reads vl from this local, not from the field.
+			const std::string avl = "vavl" + PCRELS(0);
+			this->load_register(rs1);
+			add_code("addr_t " + avl + "; " + avl + " = " + from_untracked_reg(rs1) + ";",
+				"addr_t " + newvl + "; " + newvl + " = (" + avl + " < "
+				+ std::to_string(vlmax) + ") ? " + avl + " : "
+				+ std::to_string(vlmax) + ";",
+				vl + " = " + newvl + ";");
+			this->m_vl_local = newvl;
+		}
+		this->m_vtype = { true, false, newtype.encoded_sew(), newtype.lmul_shift() };
+		if (rd != 0) {
+			// Writes the cached register directly: no realize, no reload.
+			this->reset_tracked_register(rd);
+			if (this->m_vl_known)
+				this->track_register_value(rd, this->m_vl);
+			add_code(to_reg(rd) + " = " + (m_vl_local.empty() ? vl : m_vl_local) + ";");
 		}
 	}
 	// Emit one vector instruction: inlined under the vl/vtype guard when
 	// the encoding allows it, otherwise straight to the handler.
 	void emit_vector_instruction()
 	{
-		if (!this->vector_is_guarded_inlinable(instr)) {
+		if (this->vector_is_inlinable_setvl(instr)) {
+			this->emit_vector_setvl();
+			return;
+		}
+		const auto sews = this->vector_inlinable_sews(instr);
+		if (sews.empty()) {
 			this->emit_vector_slowpath();
 			return;
 		}
-		add_code("if (LIKELY(" + rvv_guard() + ")) {");
-		this->emit_vector_inline_body();
-		add_code("} else {");
+		// Materialize every guard first: they are C locals, and the bodies
+		// below open scopes a later declaration could not escape.
+		for (const unsigned vsew : sews)
+			(void)this->rvv_guard(vsew);
+
+		for (const unsigned vsew : sews) {
+			add_code("if (LIKELY(" + rvv_guard(vsew) + ")) {");
+			this->emit_vector_inline_body(vsew);
+			add_code("} else {");
+		}
 		this->emit_vector_slowpath();
-		add_code("}");
+		for (size_t i = 0; i < sews.size(); i++)
+			add_code("}");
 	}
 #endif
 	std::string from_imm(int64_t imm) {
@@ -602,8 +812,7 @@ struct Emitter
 		for (auto& entry : this->m_read_checked) entry.valid = false;
 		for (auto& entry : this->m_write_checked) entry.valid = false;
 #ifdef RISCV_EXT_VECTOR
-		// A vsetvl may have run; drop the cached vl/vtype test.
-		this->m_rvv_guard.clear();
+		this->reset_vector_config();
 #endif
 	}
 
@@ -901,8 +1110,22 @@ private:
 	uint64_t m_instr_counter = 0;
 	uint32_t m_zero_insn_counter = 0;
 #ifdef RISCV_EXT_VECTOR
-	// Live C local holding the vl/vtype fast-path test, see rvv_guard()
-	std::string m_rvv_guard;
+	// vtype as proven by an inlined vsetvli earlier in this block. Dropped
+	// where control flow joins, or where a handler may reconfigure it.
+	struct KnownVtype {
+		bool     known = false;
+		bool     vill  = false;
+		unsigned vsew  = 0;  // log2(SEW / 8)
+		int      lmul  = 0;  // log2(LMUL)
+	};
+	KnownVtype m_vtype;
+	// vl when the vsetvli that produced it had a compile-time AVL
+	bool     m_vl_known = false;
+	uint64_t m_vl = 0;
+	// C local holding the live vl, when an inlined vsetvli computed one
+	std::string m_vl_local;
+	// Live C local holding the vl/vtype fast-path test per SEW, see rvv_guard()
+	std::array<std::string, 4> m_rvv_guard;
 #endif
 	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
@@ -1100,6 +1323,9 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_a
 		this->reset_tracked_register(10);
 		this->reset_tracked_register(11);
 	}
+#ifdef RISCV_EXT_VECTOR
+	this->reset_vector_config();
+#endif
 	this->reload_syscall_registers();
 }
 
@@ -2108,12 +2334,14 @@ void Emitter<W>::emit()
 				this->memory_load<uint64_t>(from_fpreg(fi.Itype.rd) + ".i64", "uint64_t", fi.Itype.rs1, fi.Itype.signed_imm());
 				break;
 #ifdef RISCV_EXT_VECTOR
-		case 0x6: // Vector loads (VLE*)
+		// Vector loads. funct3 is the element width here: 0 for 8-bit and
+		// 5/6/7 for 16/32/64-bit, none of which collide with the scalar
+		// FLH/FLW/FLD/FLQ encodings above.
+		case 0x0: case 0x5: case 0x6: case 0x7:
 			// Only a plain unmasked unit-stride load of a full register
-			// (e32, m1, vl == VLMAX) at an arena address is inlined; the
-			// decision is made at runtime. Everything else goes to the
-			// handler, which only reads x[rs1] and writes no integer
-			// register, so the cached registers stay live.
+			// (EEW == SEW, m1, vl == VLMAX) at an arena address is inlined.
+			// Everything else goes to the handler, which only reads x[rs1]
+			// and writes no integer register: cached registers stay live.
 			this->emit_vector_instruction();
 			break;
 #endif
@@ -2132,7 +2360,8 @@ void Emitter<W>::emit()
 				this->memory_store("int64_t", sizeof(int64_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
 #ifdef RISCV_EXT_VECTOR
-		case 0x6: // Vector stores (VSE*): like the load case above
+		// Vector stores (VSE*): like the load case above
+		case 0x0: case 0x5: case 0x6: case 0x7:
 			this->emit_vector_instruction();
 			break;
 #endif

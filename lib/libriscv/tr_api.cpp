@@ -269,12 +269,17 @@ typedef struct {
 	uint8_t b[RISCV_EXT_VECTOR];
 } VectorLaneBytes;
 
+/* Mirror of VectorRegisters<W> (rvv_registers.hpp), field for field. The
+   translator emits _Static_asserts on every offset, so a stale mirror is a
+   compile error instead of a silently disabled inline fast path. */
 typedef struct {
 	VectorLane  lane[32];
 	addr_t      vl;      /* active vector length */
+	addr_t      vstart;  /* first active element */
 	uint32_t    vsew;    /* log2(SEW / 8) */
+	uint32_t    vtype;   /* the raw vtype encoding */
 	int32_t     lmul;    /* log2(LMUL) */
-	uint8_t     vta, vma, vill;
+	uint8_t     vxrm, vxsat, vta, vma, vill;
 } RVV __attribute__ ((aligned (RISCV_EXT_VECTOR)));
 #endif
 
@@ -353,6 +358,9 @@ static struct CallbackTable {
 	// these api entries to std::fma for correct behavior.
 	float  (*fmaf32)(float, float, float);
 	double (*fmaf64)(double, double, double);
+	// The same for the vector FMA family, which does not canonicalize NaNs.
+	float  (*vfmaf32)(float, float, float);
+	double (*vfmaf64)(double, double, double);
 	// FMIN/FMAX with RISC-V's -0.0 < +0.0 convention.
 	float  (*fmin32_rv)(float, float);
 	float  (*fmax32_rv)(float, float);
