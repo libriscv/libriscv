@@ -27,8 +27,8 @@ REG_PATTERNS = [
 # zero, small, all-ones, both sides of the sign boundary, an alternating pattern.
 IMM_SAMPLES = [0, 1, 0x7FF, 0x800, 0xFFF, 0x555, 0xAAA, 0x20, 0x3F, 0x40]
 
-RV64GC = "rv64gcv_zcb_zba_zbb_zbc_zbs_zicond_zicbom_zicboz_zifencei_zfa_zbkb"
-RV32GC = "rv32gcv_zcb_zba_zbb_zbc_zbs_zicond_zicbom_zicboz_zifencei_zfa_zbkb"
+RV64GC = "rv64gcv_zcb_zba_zbb_zbc_zbs_zicond_zicbom_zicboz_zifencei_zfa_zbkb_zvbb_zvkb"
+RV32GC = "rv32gcv_zcb_zba_zbb_zbc_zbs_zicond_zicbom_zicboz_zifencei_zfa_zbkb_zvbb_zvkb"
 
 
 def r_type(opcode, rd, funct3, rs1, rs2, funct7):

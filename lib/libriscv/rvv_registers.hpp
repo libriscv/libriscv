@@ -72,6 +72,33 @@ namespace riscv
 		bool vta() const noexcept { return m_vta; }
 		bool vma() const noexcept { return m_vma; }
 
+		// VLEN in bytes, as the vlenb CSR reports it.
+		static constexpr unsigned vlenb() noexcept { return VectorLane::VSIZE; }
+
+		// The vtype CSR: the encoding vsetvl was given, with vill in the
+		// top bit. An illegal vtype reads back as vill alone.
+		register_t vtype() const noexcept {
+			constexpr register_t vill_bit = register_t(1) << (8 * sizeof(register_t) - 1);
+			return m_vill ? vill_bit : m_vtype;
+		}
+
+		// Fixed-point rounding mode (vxrm) and the saturation flag (vxsat),
+		// both also reachable through vcsr.
+		unsigned vxrm() const noexcept { return m_vxrm; }
+		void set_vxrm(unsigned value) noexcept { m_vxrm = value & 3; }
+		bool vxsat() const noexcept { return m_vxsat; }
+		void set_vxsat(bool value) noexcept { m_vxsat = value; }
+		// vcsr packs vxsat in bit 0 and vxrm in bits 2:1.
+		unsigned vcsr() const noexcept { return (m_vxrm << 1) | (m_vxsat ? 1u : 0u); }
+		void set_vcsr(unsigned value) noexcept {
+			m_vxsat = value & 1;
+			m_vxrm  = (value >> 1) & 3;
+		}
+		// vstart is written by trapping implementations only; this one always
+		// completes an instruction, so it reads back as zero.
+		register_t vstart() const noexcept { return m_vstart; }
+		void set_vstart(register_t value) noexcept { m_vstart = value; }
+
 		// VLMAX = LMUL * VLEN / SEW, at least 1.
 		uint64_t vlmax() const noexcept {
 			// Elements per register group = VLEN/SEW * LMUL, at least 1.
@@ -98,6 +125,7 @@ namespace riscv
 			} else {
 				m_vsew = vsew;
 				m_lmul = lmul_shift_for(vlmul);
+				m_vtype = vtypei;
 			}
 			return !m_vill;
 		}
@@ -117,8 +145,12 @@ namespace riscv
 
 		std::array<VectorLane, 32> m_vec {};
 		register_t m_vl = 0;
+		register_t m_vstart = 0;
 		uint32_t m_vsew = 0;   // encoded SEW (0=8b .. 3=64b)
+		uint32_t m_vtype = 0;  // the raw encoding, for the vtype CSR
 		int      m_lmul = 0;   // log2(LMUL)
+		uint8_t  m_vxrm = 0;   // fixed-point rounding mode
+		bool m_vxsat = false;  // fixed-point saturation flag
 		bool m_vta = false;
 		bool m_vma = false;
 		bool m_vill = true;    // invalid until first vsetvli

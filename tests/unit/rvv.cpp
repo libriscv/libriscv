@@ -9,7 +9,7 @@ extern std::vector<uint8_t> build_and_load(const std::string& code,
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
 static const uint64_t MAX_INSTRUCTIONS = 16'000'000ul;
 /* Result slots in the guest's out[] array. */
-static const unsigned RESULTS = 96;
+static const unsigned RESULTS = 224;
 
 static std::vector<uint8_t> build_rvv(const std::string& code)
 {
@@ -39,7 +39,7 @@ static const char *GUEST = R"M(
 typedef unsigned long ulong;
 
 /* Result words, checked by the host. */
-volatile ulong out[96];
+volatile ulong out[224];
 static ulong idx = 0;
 static void put(ulong v) { out[idx++] = v; }
 
@@ -386,6 +386,257 @@ static void t_vlsu_edges(void)
 	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
 }
 
+/* 11. The vector CSRs. vl, vtype and vlenb are read-only -- only vsetvl
+   writes them -- while vxrm, vxsat, vstart and vcsr are writable. */
+static void t_csrs(void)
+{
+	ulong v, bad;
+	asm volatile("csrwi vxsat, 0");
+	asm volatile("csrwi vxrm, 0");
+	asm volatile("vsetivli zero, 7, e32, m1, ta, ma");
+	asm volatile("csrr %0, vl" : "=r"(v)); put(v);
+	asm volatile("csrr %0, vtype" : "=r"(v)); put(v);
+	asm volatile("csrr %0, vlenb" : "=r"(v)); put(v);
+	asm volatile("csrwi vxrm, 3");
+	asm volatile("csrr %0, vxrm" : "=r"(v)); put(v);
+	asm volatile("csrr %0, vcsr" : "=r"(v)); put(v);
+	asm volatile("csrwi vxrm, 0");
+	asm volatile("csrr %0, vstart" : "=r"(v)); put(v);
+	/* A reserved vtype reads back as vill alone, and zeroes vl. */
+	bad = 4; /* vlmul = 100 */
+	asm volatile("vsetvl zero, zero, %0" :: "r"(bad));
+	asm volatile("csrr %0, vtype" : "=r"(v)); put(v >> 63);
+	asm volatile("csrr %0, vl" : "=r"(v)); put(v);
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+}
+
+/* 12. The multiply family. Its eight code points sit next to each other
+   and differ only in which operand is signed and which term is negated,
+   so each one is checked against an answer the others cannot produce. */
+static unsigned int mout[8];
+static void t_multiply(void)
+{
+	static const int mA[8] = {2, -3, 0x40000000, 6, 0, 0, 0, 0};
+	static const int mB[8] = {5, -7, 4, 7, 0, 0, 0, 0};
+	ulong hundred = 100;
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+	asm volatile("vle32.v v1, (%0)" :: "r"(mA));
+	asm volatile("vle32.v v2, (%0)" :: "r"(mB));
+
+	asm volatile("vmul.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]); put(mout[2]); put(mout[3]);
+	asm volatile("vmulh.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[1]); put(mout[2]);
+	asm volatile("vmulhu.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[1]);
+	asm volatile("vmulhsu.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[1]);
+
+	/* The four accumulating forms, all with vd = 100, vs1 = 5, vs2 = 2. */
+	asm volatile("vmv.v.x v4, %0" :: "r"(hundred));
+	asm volatile("vmacc.vv v4, v2, v1");
+	asm volatile("vse32.v v4, (%0)" :: "r"(mout) : "memory"); put(mout[0]);
+	asm volatile("vmv.v.x v4, %0" :: "r"(hundred));
+	asm volatile("vnmsac.vv v4, v2, v1");
+	asm volatile("vse32.v v4, (%0)" :: "r"(mout) : "memory"); put(mout[0]);
+	asm volatile("vmv.v.x v4, %0" :: "r"(hundred));
+	asm volatile("vmadd.vv v4, v2, v1");
+	asm volatile("vse32.v v4, (%0)" :: "r"(mout) : "memory"); put(mout[0]);
+	asm volatile("vmv.v.x v4, %0" :: "r"(hundred));
+	asm volatile("vnmsub.vv v4, v2, v1");
+	asm volatile("vse32.v v4, (%0)" :: "r"(mout) : "memory"); put(mout[0]);
+}
+
+/* 13. Integer divide, including the answers the ISA defines for division
+   by zero and for the one signed overflow. */
+static void t_divide(void)
+{
+	static const int dA[8] = {100, -100, 7, (int)0x80000000, 5, 0, 13, 1};
+	static const int dB[8] = {7, 7, 0, -1, 0, 0, 4, 1};
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+	asm volatile("vle32.v v1, (%0)" :: "r"(dA));
+	asm volatile("vle32.v v2, (%0)" :: "r"(dB));
+	asm volatile("vdivu.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]); put(mout[2]); put(mout[3]);
+	asm volatile("vdiv.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]); put(mout[2]); put(mout[3]);
+	asm volatile("vremu.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[1]); put(mout[2]);
+	asm volatile("vrem.vv v3, v1, v2");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[1]); put(mout[2]); put(mout[3]);
+}
+
+/* 14. Index generation, prefix count, compress, and the three mask scans
+   -- which differ from one another only around the first set bit. */
+static void t_permute2(void)
+{
+	ulong v, two = 2;
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+	asm volatile("vle32.v v1, (%0)" :: "r"(isrc1));    /* 1..8 */
+	asm volatile("vmsgtu.vx v0, v1, %0" :: "r"(two));  /* bits 2..7 set */
+
+	asm volatile("vid.v v2");
+	asm volatile("vse32.v v2, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[7]);
+
+	asm volatile("viota.m v3, v0");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[2]); put(mout[3]); put(mout[7]);
+
+	asm volatile("vmv.v.i v4, 0");
+	asm volatile("vcompress.vm v4, v1, v0");
+	asm volatile("vse32.v v4, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[5]);
+
+	/* Each scan is read back through a zeroed register, so only the bits
+	   it writes are visible. */
+	asm volatile("vmv.v.i v5, 0"); asm volatile("vmsbf.m v5, v0");
+	asm volatile("vmv.x.s %0, v5" : "=r"(v)); put(v);
+	asm volatile("vmv.v.i v6, 0"); asm volatile("vmsof.m v6, v0");
+	asm volatile("vmv.x.s %0, v6" : "=r"(v)); put(v);
+	asm volatile("vmv.v.i v7, 0"); asm volatile("vmsif.m v7, v0");
+	asm volatile("vmv.x.s %0, v7" : "=r"(v)); put(v);
+}
+
+/* 15. The addressing modes beyond unit-stride: strided, indexed,
+   segmented, whole-register, the mask transfers and fault-only-first. */
+static void t_addressing(void)
+{
+	static const unsigned int src16[16] =
+		{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+	static const unsigned int pairs[16] =
+		{10,11,20,21,30,31,40,41,50,51,60,61,70,71,80,81};
+	static const unsigned int ix[8] = {28,24,20,16,12,8,4,0}; /* byte offsets */
+	static const unsigned char mbits[8] = {0xA5,0,0,0,0,0,0,0};
+	static unsigned char mask_out[8];
+	static unsigned int dst16[16];
+	ulong v, stride = 8;
+	int i;
+
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+
+	/* Strided load: every other word. */
+	asm volatile("vlse32.v v1, (%0), %1" :: "r"(src16), "r"(stride));
+	asm volatile("vse32.v v1, (%0)" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[1]); put(dst16[7]);
+
+	/* Strided store scatters the same vector back out. */
+	for (i = 0; i < 16; i++) dst16[i] = 0xFF;
+	asm volatile("vsse32.v v1, (%0), %1" :: "r"(dst16), "r"(stride) : "memory");
+	put(dst16[0]); put(dst16[1]); put(dst16[2]);
+
+	/* Indexed load, whose offsets reverse the source. */
+	asm volatile("vle32.v v2, (%0)" :: "r"(ix));
+	asm volatile("vluxei32.v v3, (%0), v2" :: "r"(src16));
+	asm volatile("vse32.v v3, (%0)" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[7]);
+
+	/* Indexed store, which reverses it back. */
+	for (i = 0; i < 16; i++) dst16[i] = 0xEE;
+	asm volatile("vsoxei32.v v3, (%0), v2" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[7]);
+
+	/* Two-field segments: the load deinterleaves, the store reinterleaves. */
+	asm volatile("vlseg2e32.v v4, (%0)" :: "r"(pairs));
+	asm volatile("vse32.v v4, (%0)" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[7]);
+	asm volatile("vse32.v v5, (%0)" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[7]);
+	asm volatile("vmv1r.v v6, v4");
+	asm volatile("vmv1r.v v4, v5");
+	asm volatile("vmv1r.v v5, v6");
+	asm volatile("vsseg2e32.v v4, (%0)" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[1]);
+
+	/* Whole-register transfers ignore vl, so both are done at vl=1. */
+	asm volatile("vle32.v v7, (%0)" :: "r"(src16));
+	asm volatile("vsetivli zero, 1, e32, m1, ta, ma");
+	asm volatile("vs1r.v v7, (%0)" :: "r"(dst16) : "memory");
+	asm volatile("vl1re32.v v8, (%0)" :: "r"(src16 + 8));
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+	put(dst16[0]); put(dst16[7]);
+	asm volatile("vse32.v v8, (%0)" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[7]);
+
+	/* The mask transfers move ceil(vl/8) bytes. */
+	asm volatile("vlm.v v9, (%0)" :: "r"(mbits));
+	asm volatile("vsm.v v9, (%0)" :: "r"(mask_out) : "memory");
+	put(mask_out[0]);
+
+	/* Fault-only-first, with nothing to fault on: a plain load that
+	   must leave vl alone. */
+	asm volatile("vle32ff.v v10, (%0)" :: "r"(src16));
+	asm volatile("vse32.v v10, (%0)" :: "r"(dst16) : "memory");
+	put(dst16[0]); put(dst16[7]);
+	asm volatile("csrr %0, vl" : "=r"(v)); put(v);
+}
+
+/* 16. Sign injection, classification, the widening float arithmetic and
+   the two reciprocal estimates, whose results the ISA pins down exactly. */
+static void t_float2(void)
+{
+	static const float fs[8] =
+		{1.5f, -2.5f, 3.0f, -4.0f, 0.0f, -0.0f, 8.0f, -16.0f};
+	static const float fneg[8] =
+		{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+	static const float fone[8] = {1.0f, 2.0f, 4.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+	static double dd[8];
+
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+	asm volatile("vle32.v v1, (%0)" :: "r"(fs));
+	asm volatile("vle32.v v2, (%0)" :: "r"(fneg));
+
+	/* vfsgnjx of a value with itself is fabs: the two signs cancel. */
+	asm volatile("vfsgnjx.vv v3, v1, v1");
+	asm volatile("vse32.v v3, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]);
+	asm volatile("vfsgnj.vv v4, v1, v2");
+	asm volatile("vse32.v v4, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]);
+	asm volatile("vfsgnjn.vv v5, v1, v2");
+	asm volatile("vse32.v v5, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]);
+
+	/* vfclass writes a ten-bit value per element, not a mask. */
+	asm volatile("vfclass.v v6, v1");
+	asm volatile("vse32.v v6, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]); put(mout[4]); put(mout[5]);
+
+	/* Widening float: the sources are single precision, the result double,
+	   so the destination is an aligned pair. */
+	asm volatile("vfwadd.vv v8, v1, v1");
+	asm volatile("vsetivli zero, 8, e64, m2, ta, ma");
+	asm volatile("vse64.v v8, (%0)" :: "r"(dd) : "memory");
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+	put((ulong)dd[6]);                       /* 8 + 8 */
+	asm volatile("vfwmul.vv v10, v1, v1");
+	asm volatile("vsetivli zero, 8, e64, m2, ta, ma");
+	asm volatile("vse64.v v10, (%0)" :: "r"(dd) : "memory");
+	asm volatile("vsetivli zero, 8, e32, m1, ta, ma");
+	put((ulong)dd[6]);                       /* 8 * 8 */
+	/* and back down again */
+	asm volatile("vfncvt.f.f.w v12, v10");
+	asm volatile("vse32.v v12, (%0)" :: "r"(mout) : "memory");
+	put(mout[6]);
+
+	/* The estimates are defined by table lookup, so these are exact. */
+	asm volatile("vle32.v v13, (%0)" :: "r"(fone));
+	asm volatile("vfrec7.v v14, v13");
+	asm volatile("vse32.v v14, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[1]);
+	asm volatile("vfrsqrt7.v v15, v13");
+	asm volatile("vse32.v v15, (%0)" :: "r"(mout) : "memory");
+	put(mout[0]); put(mout[2]);
+}
+
 void _start(void)
 {
 	t_vsetvli();
@@ -398,6 +649,12 @@ void _start(void)
 	t_float();
 	t_misc();
 	t_vlsu_edges();
+	t_csrs();
+	t_multiply();
+	t_divide();
+	t_permute2();
+	t_addressing();
+	t_float2();
 	asm volatile("li a7, 93; li a0, 0; ecall");
 	__builtin_unreachable();
 }
@@ -543,6 +800,103 @@ TEST_CASE("RVV 1.0 basics", "[rvv]")
 	REQUIRE(r[n++] == fbits(9.0f));        /* masked vfmul.vf, inactive element */
 	REQUIRE(r[n++] == 8);             /* e64 vfadd */
 	REQUIRE(r[n++] == 16);            /* e64 vfmul */
+
+	/* t_csrs */
+	REQUIRE(r[n++] == 7);      /* vl after vsetivli 7 */
+	REQUIRE(r[n++] == 0xD0);   /* vtype: e32 (vsew=2), m1, ta, ma */
+	REQUIRE(r[n++] == 32);     /* vlenb: VLEN=256 bits */
+	REQUIRE(r[n++] == 3);      /* vxrm after csrwi 3 */
+	REQUIRE(r[n++] == 6);      /* vcsr packs vxrm in bits 2:1, vxsat in bit 0 */
+	REQUIRE(r[n++] == 0);      /* vstart: this emulator never traps mid-instruction */
+	REQUIRE(r[n++] == 1);      /* vill set by the reserved vlmul */
+	REQUIRE(r[n++] == 0);      /* ... which also zeroes vl */
+
+	/* t_multiply: vd=100, vs1=5, vs2=2 for the accumulating forms */
+	REQUIRE(r[n++] == 10);          /* vmul   2*5 */
+	REQUIRE(r[n++] == 21);          /* vmul   -3*-7 */
+	REQUIRE(r[n++] == 0);           /* vmul   2^30*4 keeps the low 32 bits */
+	REQUIRE(r[n++] == 42);          /* vmul   6*7 */
+	REQUIRE(r[n++] == 0);           /* vmulh  high half of 21 */
+	REQUIRE(r[n++] == 1);           /* vmulh  high half of 2^32 */
+	REQUIRE(r[n++] == 4294967286ul);/* vmulhu both operands unsigned */
+	REQUIRE(r[n++] == 4294967293ul);/* vmulhsu vs2 signed, vs1 unsigned */
+	REQUIRE(r[n++] == 110);         /* vmacc   5*2 + 100 */
+	REQUIRE(r[n++] == 90);          /* vnmsac  100 - 5*2 */
+	REQUIRE(r[n++] == 502);         /* vmadd   5*100 + 2 */
+	REQUIRE(r[n++] == 4294966798ul);/* vnmsub  2 - 5*100 */
+
+	/* t_divide */
+	REQUIRE(r[n++] == 14);           /* vdivu 100/7 */
+	REQUIRE(r[n++] == 613566742ul);  /* vdivu (2^32-100)/7 */
+	REQUIRE(r[n++] == 4294967295ul); /* vdivu by zero: all ones */
+	REQUIRE(r[n++] == 0);            /* vdivu 2^31 / (2^32-1) */
+	REQUIRE(r[n++] == 14);           /* vdiv 100/7 */
+	REQUIRE(r[n++] == 4294967282ul); /* vdiv -100/7 truncates toward zero */
+	REQUIRE(r[n++] == 4294967295ul); /* vdiv by zero: -1 */
+	REQUIRE(r[n++] == 2147483648ul); /* vdiv INT_MIN/-1 wraps */
+	REQUIRE(r[n++] == 2);            /* vremu (2^32-100)%7 */
+	REQUIRE(r[n++] == 7);            /* vremu by zero: the dividend */
+	REQUIRE(r[n++] == 4294967294ul); /* vrem -100%7 = -2 */
+	REQUIRE(r[n++] == 7);            /* vrem by zero: the dividend */
+	REQUIRE(r[n++] == 0);            /* vrem INT_MIN%-1 */
+
+	/* t_permute2: the mask has bits 2..7 set */
+	REQUIRE(r[n++] == 0);      /* vid[0] */
+	REQUIRE(r[n++] == 7);      /* vid[7] */
+	REQUIRE(r[n++] == 0);      /* viota[0]: no set bits below it */
+	REQUIRE(r[n++] == 0);      /* viota[2]: still none */
+	REQUIRE(r[n++] == 1);      /* viota[3]: bit 2 counted */
+	REQUIRE(r[n++] == 5);      /* viota[7] */
+	REQUIRE(r[n++] == 3);      /* vcompress packs element 2 down to 0 */
+	REQUIRE(r[n++] == 8);      /* ... and element 7 to 5 */
+	REQUIRE(r[n++] == 3);      /* vmsbf: bits 0,1 -- before the first set bit */
+	REQUIRE(r[n++] == 4);      /* vmsof: bit 2 alone */
+	REQUIRE(r[n++] == 7);      /* vmsif: bits 0,1,2 -- up to and including it */
+
+	/* t_addressing */
+	REQUIRE(r[n++] == 0);      /* vlse32 stride 8: elements 0, 2, .. 14 */
+	REQUIRE(r[n++] == 2);
+	REQUIRE(r[n++] == 14);
+	REQUIRE(r[n++] == 0);      /* vsse32 writes every other word ... */
+	REQUIRE(r[n++] == 0xFF);   /* ... leaving the ones between alone */
+	REQUIRE(r[n++] == 2);
+	REQUIRE(r[n++] == 7);      /* vluxei32 with reversing offsets */
+	REQUIRE(r[n++] == 0);
+	REQUIRE(r[n++] == 0);      /* vsoxei32 reverses it back */
+	REQUIRE(r[n++] == 7);
+	REQUIRE(r[n++] == 10);     /* vlseg2e32 field 0 */
+	REQUIRE(r[n++] == 80);
+	REQUIRE(r[n++] == 11);     /* vlseg2e32 field 1 */
+	REQUIRE(r[n++] == 81);
+	REQUIRE(r[n++] == 11);     /* vsseg2e32 with the fields swapped */
+	REQUIRE(r[n++] == 10);
+	REQUIRE(r[n++] == 0);      /* vs1r.v moved the register despite vl=1 */
+	REQUIRE(r[n++] == 7);
+	REQUIRE(r[n++] == 8);      /* vl1re32.v likewise */
+	REQUIRE(r[n++] == 15);
+	REQUIRE(r[n++] == 0xA5);   /* vlm.v/vsm.v round-trip one mask byte */
+	REQUIRE(r[n++] == 0);      /* vle32ff.v with nothing to fault on */
+	REQUIRE(r[n++] == 7);
+	REQUIRE(r[n++] == 8);      /* ... and vl is left alone */
+
+	/* t_float2 */
+	REQUIRE(r[n++] == fbits(1.5f));   /* vfsgnjx v,v clears the sign */
+	REQUIRE(r[n++] == fbits(2.5f));
+	REQUIRE(r[n++] == fbits(-1.5f));  /* vfsgnj takes the negative sign */
+	REQUIRE(r[n++] == fbits(-2.5f));
+	REQUIRE(r[n++] == fbits(1.5f));   /* vfsgnjn takes its complement */
+	REQUIRE(r[n++] == fbits(2.5f));
+	REQUIRE(r[n++] == 1u << 6);       /* vfclass +normal */
+	REQUIRE(r[n++] == 1u << 1);       /* vfclass -normal */
+	REQUIRE(r[n++] == 1u << 4);       /* vfclass +0 */
+	REQUIRE(r[n++] == 1u << 3);       /* vfclass -0 */
+	REQUIRE(r[n++] == 16);            /* vfwadd 8.0 + 8.0 */
+	REQUIRE(r[n++] == 64);            /* vfwmul 8.0 * 8.0 */
+	REQUIRE(r[n++] == fbits(64.0f));  /* vfncvt.f.f.w back to single */
+	REQUIRE(r[n++] == 0x3F7F0000ul);  /* vfrec7(1.0): the 7-bit estimate */
+	REQUIRE(r[n++] == 0x3EFF0000ul);  /* vfrec7(2.0) */
+	REQUIRE(r[n++] == 0x3F7F0000ul);  /* vfrsqrt7(1.0) */
+	REQUIRE(r[n++] == 0x3EFF0000ul);  /* vfrsqrt7(4.0) */
 
 	REQUIRE(n <= RESULTS);
 }

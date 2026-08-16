@@ -60,13 +60,54 @@ namespace
 			cpu.trigger_exception(ILLEGAL_OPCODE);
 	}
 
+	// Registers in a group. A fractional EMUL still occupies one.
+	constexpr unsigned group_size(const int emul) noexcept
+	{
+		return emul > 0 ? (1u << emul) : 1u;
+	}
+
+	// A register group must be aligned to its own size and fit in v0-v31.
+	template <typename CPU_t>
+	RISCV_ALWAYS_INLINE void check_group(CPU_t& cpu, const unsigned vreg, const unsigned regs)
+	{
+		if (UNLIKELY(regs > 1 && ((vreg % regs) != 0 || vreg + regs > 32)))
+			cpu.trigger_exception(ILLEGAL_OPCODE);
+	}
+
 	// A register group operand must be aligned and in bounds when LMUL > 1.
 	template <typename CPU_t>
 	RISCV_ALWAYS_INLINE void check_register_group(CPU_t& cpu, const unsigned vreg)
 	{
-		const unsigned regs = cpu.registers().rvv().group_regs();
-		if (UNLIKELY(regs > 1 && ((vreg % regs) != 0 || vreg + regs > 32)))
+		check_group(cpu, vreg, cpu.registers().rvv().group_regs());
+	}
+
+	// The same, for the 2*SEW operand of a widening or narrowing
+	// instruction. Doubling EMUL is a step along the LMUL scale, not a
+	// doubling of the register count: at LMUL=1/2 the wide group is still
+	// a single register, and so still has no alignment to meet.
+	template <typename CPU_t>
+	RISCV_ALWAYS_INLINE void check_wide_group(CPU_t& cpu, const unsigned vreg)
+	{
+		const int emul = cpu.registers().rvv().lmul_shift() + 1;
+		// Eight registers is as large as a group gets, so there is nowhere
+		// to put a widened result at LMUL=8.
+		if (UNLIKELY(emul > 3))
 			cpu.trigger_exception(ILLEGAL_OPCODE);
+		check_group(cpu, vreg, group_size(emul));
+	}
+
+	// The EMUL of a register group holding elements of eew bytes, as a
+	// log2. Traps when the encoding asks for a group the architecture does
+	// not have (EMUL outside 1/8 .. 8).
+	template <typename CPU_t>
+	static int emul_shift_for(CPU_t& cpu, const unsigned eew_bytes)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const int emul = rvv.lmul_shift()
+			+ (int)bits_of(eew_bytes) - (int)bits_of(rvv.sew() / 8);
+		if (UNLIKELY(emul < -3 || emul > 3))
+			cpu.trigger_exception(ILLEGAL_OPCODE);
+		return emul;
 	}
 
 	// Element *i* of the register group starting at *vreg*. T is the
@@ -155,6 +196,74 @@ namespace
 		element_at<T>(rvv, vd, 0) = acc;
 	}
 
+	// The next wider integer type. ELEN is 64, so there is deliberately no
+	// entry for a 64-bit source: a widening instruction at SEW=64 has no
+	// destination element to write, and is reserved.
+	template <typename T> struct widen_type;
+	template <> struct widen_type<int8_t>   { using type = int16_t;  };
+	template <> struct widen_type<int16_t>  { using type = int32_t;  };
+	template <> struct widen_type<int32_t>  { using type = int64_t;  };
+	template <> struct widen_type<uint8_t>  { using type = uint16_t; };
+	template <> struct widen_type<uint16_t> { using type = uint32_t; };
+	template <> struct widen_type<uint32_t> { using type = uint64_t; };
+	template <typename T> using widen_t = typename widen_type<T>::type;
+
+	// Dispatch a lambda over the SEWs a widening or narrowing integer
+	// instruction is defined for.
+	template <typename CPU_t, typename F>
+	static void widen_sew_dispatch(CPU_t& cpu, F&& body)
+	{
+		switch (cpu.registers().rvv().sew()) {
+			case 8:  body(int8_t{});  break;
+			case 16: body(int16_t{}); break;
+			case 32: body(int32_t{}); break;
+			default: cpu.trigger_exception(ILLEGAL_OPCODE);
+		}
+	}
+
+	// The rounding right shift that the scaling shifts, the clips and
+	// vsmul share: `value >> shift` plus an increment picked by vxrm. The
+	// shift is arithmetic exactly when T is signed, which is the whole
+	// difference between vssra and vssrl.
+	// U is spelled out rather than deduced so that the 128-bit intermediate
+	// the averaging and saturating multiplies need can name its own
+	// unsigned type, which std::make_unsigned need not cover.
+	template <typename T, typename U = std::make_unsigned_t<T>>
+	static T roundoff(const T value, const unsigned shift, const unsigned vxrm)
+	{
+		if (shift == 0)
+			return value;
+		const T shifted = T(value >> shift);
+		const U bits = (U)value;
+		// The last bit shifted out, and whether anything below it was set.
+		const U lsb = U(bits >> (shift - 1)) & 1;
+		const bool rest = shift > 1
+			&& (bits & U((U(1) << (shift - 1)) - 1)) != 0;
+		switch (vxrm) {
+		case 0: return T(shifted + lsb);                         // rnu
+		case 1: // rne: a tie rounds to the even result
+			return T(shifted + ((lsb && (rest || (shifted & 1))) ? 1 : 0));
+		case 2: return shifted;                                  // rdn
+		default: // rod: force an odd result unless the shift was exact
+			return (lsb || rest) ? T(shifted | 1) : shifted;
+		}
+	}
+
+	// Clamp a wide value into the range of E, latching vxsat when it does
+	// not fit. This is what makes vnclip a clip rather than a truncation.
+	template <typename E, typename WT, typename RVV_t>
+	static E saturate_to(RVV_t& rvv, const WT value)
+	{
+		constexpr WT lo = std::is_signed_v<E>
+			? WT(-(WT(1) << (8 * sizeof(E) - 1))) : WT(0);
+		constexpr WT hi = std::is_signed_v<E>
+			? WT((WT(1) << (8 * sizeof(E) - 1)) - 1)
+			: WT((WT(1) << (8 * sizeof(E))) - 1);
+		if (value < lo) { rvv.set_vxsat(true); return (E)lo; }
+		if (value > hi) { rvv.set_vxsat(true); return (E)hi; }
+		return (E)value;
+	}
+
 	// Saturate an already-rounded value to the range of E.
 	template <typename E>
 	static E f2i_saturate(const long double v)
@@ -200,6 +309,76 @@ namespace
 		return f2i_saturate<E>(v);
 	}
 
+	// ---- binary16, for Zvfhmin ------------------------------------------
+	//
+	// The profile mandates the *conversions* to and from half precision,
+	// not arithmetic on it, so a pair of bit-twiddling converters is the
+	// whole of what f16 needs here -- no host _Float16 required.
+
+	static float f16_to_f32(const uint16_t h) noexcept
+	{
+		const uint32_t sign = uint32_t(h & 0x8000) << 16;
+		uint32_t exp  = (h >> 10) & 0x1F;
+		uint32_t sig  = h & 0x3FF;
+		uint32_t bits;
+		if (exp == 0x1F) {
+			// Infinity and NaN keep their payload, shifted into place.
+			bits = sign | 0x7F800000u | (sig << 13);
+		} else if (exp == 0) {
+			if (sig == 0) {
+				bits = sign;
+			} else {
+				// Subnormal: renormalise into f32's much wider range.
+				exp = 1;
+				while ((sig & 0x400) == 0) { sig <<= 1; exp--; }
+				sig &= 0x3FF;
+				bits = sign | ((exp + (127 - 15)) << 23) | (sig << 13);
+			}
+		} else {
+			bits = sign | ((exp + (127 - 15)) << 23) | (sig << 13);
+		}
+		float out;
+		__builtin_memcpy(&out, &bits, sizeof(out));
+		return out;
+	}
+
+	static uint16_t f32_to_f16(const float value) noexcept
+	{
+		uint32_t bits;
+		__builtin_memcpy(&bits, &value, sizeof(bits));
+		const uint16_t sign = uint16_t((bits >> 16) & 0x8000);
+		const int32_t  exp  = int32_t((bits >> 23) & 0xFF) - 127 + 15;
+		const uint32_t sig  = bits & 0x7FFFFF;
+
+		if (((bits >> 23) & 0xFF) == 0xFF) {
+			// A NaN must stay a NaN even when its payload does not fit.
+			if (sig != 0)
+				return uint16_t(sign | 0x7E00);
+			return uint16_t(sign | 0x7C00);
+		}
+		if (exp >= 0x1F)               // overflows to infinity
+			return uint16_t(sign | 0x7C00);
+		if (exp <= 0) {
+			// Subnormal or zero: shift the hidden bit back in and round to
+			// nearest-even at the new position.
+			if (exp < -10)
+				return sign;
+			const uint32_t full = sig | 0x800000;
+			const unsigned shift = unsigned(14 - exp);
+			uint32_t out = full >> shift;
+			const uint32_t rem = full & ((1u << shift) - 1);
+			const uint32_t half = 1u << (shift - 1);
+			if (rem > half || (rem == half && (out & 1)))
+				out++;
+			return uint16_t(sign | out);
+		}
+		uint32_t out = (uint32_t(exp) << 10) | (sig >> 13);
+		const uint32_t rem = sig & 0x1FFF;
+		if (rem > 0x1000 || (rem == 0x1000 && (out & 1)))
+			out++;  // carrying into the exponent is exactly what we want
+		return uint16_t(sign | out);
+	}
+
 	// IEEE-754 classification mask for vfclass (bit 9 = qNaN down to
 	// bit 0 = -infinity).
 	template <typename F>
@@ -219,17 +398,87 @@ namespace
 		return neg ? (1u << 2) : (1u << 5); // subnormal
 	}
 
-	// vfwcvt (sel 8-15) / vfncvt (sel 16-23) conversions: the destination
-	// element is SEW-sized, the source SEW/2 (widening) or 2*SEW
-	// (narrowing). FP16 forms are not implemented.
+	/**
+	 * The vfwcvt (sel 8-15) and vfncvt (sel 16-23) conversions.
+	 *
+	 * In both families SEW names the *narrow* side: a widening conversion
+	 * reads SEW and writes 2*SEW, a narrowing one reads 2*SEW and writes
+	 * SEW. Half precision appears here as a bit pattern in a 16-bit
+	 * element rather than as a type, because Zvfhmin supplies the
+	 * conversions to and from binary16 without any arithmetic on it.
+	 */
 	template <typename CPU_t>
 	static void fp_widen_narrow(CPU_t& cpu, const unsigned vd,
 		const unsigned vs2, const bool vm, const unsigned sel)
 	{
 		auto& rvv = cpu.registers().rvv();
 		const unsigned frm = cpu.registers().fcsr().frm;
+
+		if (sel < 16) {
+			// Widening: SEW is the source, 2*SEW the destination.
+			switch (rvv.sew()) {
+			case 16: // binary16 or a 16-bit integer, out to 32 bits
+				switch (sel) {
+				case 8: vector_element_loop<uint32_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_frm_sat<uint32_t>(
+							f16_to_f32(element_at<uint16_t>(rvv, vs2, i)), frm); });
+					return;
+				case 9: vector_element_loop<int32_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_frm_sat<int32_t>(
+							f16_to_f32(element_at<uint16_t>(rvv, vs2, i)), frm); });
+					return;
+				case 10: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
+						return (float)element_at<uint16_t>(rvv, vs2, i); });
+					return;
+				case 11: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
+						return (float)element_at<int16_t>(rvv, vs2, i); });
+					return;
+				case 12: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
+						return f16_to_f32(element_at<uint16_t>(rvv, vs2, i)); });
+					return;
+				case 14: vector_element_loop<uint32_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_sat<uint32_t>(
+							f16_to_f32(element_at<uint16_t>(rvv, vs2, i)), true); });
+					return;
+				case 15: vector_element_loop<int32_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_sat<int32_t>(
+							f16_to_f32(element_at<uint16_t>(rvv, vs2, i)), true); });
+					return;
+				}
+				break;
+			case 32: // single precision or a 32-bit integer, out to 64 bits
+				switch (sel) {
+				case 8: vector_element_loop<uint64_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_frm_sat<uint64_t>(element_at<float>(rvv, vs2, i), frm); });
+					return;
+				case 9: vector_element_loop<int64_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_frm_sat<int64_t>(element_at<float>(rvv, vs2, i), frm); });
+					return;
+				case 10: vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
+						return (double)element_at<uint32_t>(rvv, vs2, i); });
+					return;
+				case 11: vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
+						return (double)element_at<int32_t>(rvv, vs2, i); });
+					return;
+				case 12: vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
+						return (double)element_at<float>(rvv, vs2, i); });
+					return;
+				case 14: vector_element_loop<uint64_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_sat<uint64_t>(element_at<float>(rvv, vs2, i), true); });
+					return;
+				case 15: vector_element_loop<int64_t>(cpu, vd, vm, [&] (uint64_t i) {
+						return f2i_sat<int64_t>(element_at<float>(rvv, vs2, i), true); });
+					return;
+				}
+				break;
+			}
+			// SEW=8 would widen into binary16, which needs Zvfh.
+			cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+		}
+
+		// Narrowing: 2*SEW is the source, SEW the destination.
 		switch (rvv.sew()) {
-		case 16: // narrowing: f32 -> i16/u16
+		case 16: // single precision or a 32-bit integer, down to 16 bits
 			switch (sel) {
 			case 16: vector_element_loop<uint16_t>(cpu, vd, vm, [&] (uint64_t i) {
 					return f2i_frm_sat<uint16_t>(element_at<float>(rvv, vs2, i), frm); });
@@ -237,89 +486,70 @@ namespace
 			case 17: vector_element_loop<int16_t>(cpu, vd, vm, [&] (uint64_t i) {
 					return f2i_frm_sat<int16_t>(element_at<float>(rvv, vs2, i), frm); });
 				return;
+			case 18: vector_element_loop<uint16_t>(cpu, vd, vm, [&] (uint64_t i) {
+					return f32_to_f16((float)element_at<uint32_t>(rvv, vs2, i)); });
+				return;
+			case 19: vector_element_loop<uint16_t>(cpu, vd, vm, [&] (uint64_t i) {
+					return f32_to_f16((float)element_at<int32_t>(rvv, vs2, i)); });
+				return;
+			case 20: vector_element_loop<uint16_t>(cpu, vd, vm, [&] (uint64_t i) {
+					return f32_to_f16(element_at<float>(rvv, vs2, i)); });
+				return;
+			case 21: // vfncvt.rod.f.f.w: round to odd
+				vector_element_loop<uint16_t>(cpu, vd, vm, [&] (uint64_t i) {
+					const float v = element_at<float>(rvv, vs2, i);
+					uint16_t r = f32_to_f16(v);
+					// Round-to-odd exists so a second narrowing step
+					// cannot double-round; it only bites when the first
+					// one was inexact.
+					if (f16_to_f32(r) != v)
+						r |= 1;
+					return r;
+				});
+				return;
 			case 22: vector_element_loop<uint16_t>(cpu, vd, vm, [&] (uint64_t i) {
 					return f2i_sat<uint16_t>(element_at<float>(rvv, vs2, i), true); });
 				return;
 			case 23: vector_element_loop<int16_t>(cpu, vd, vm, [&] (uint64_t i) {
 					return f2i_sat<int16_t>(element_at<float>(rvv, vs2, i), true); });
 				return;
-			default: // f16 destination: unsupported
-				break;
 			}
 			break;
-		case 32:
-			if (sel >= 16) { // narrowing: f64/i64/u64 -> SEW
-				switch (sel) {
-				case 16: vector_element_loop<uint32_t>(cpu, vd, vm, [&] (uint64_t i) {
-						return f2i_frm_sat<uint32_t>(element_at<double>(rvv, vs2, i), frm); });
-					return;
-				case 17: vector_element_loop<int32_t>(cpu, vd, vm, [&] (uint64_t i) {
-						return f2i_frm_sat<int32_t>(element_at<double>(rvv, vs2, i), frm); });
-					return;
-				case 18: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
-						return (float)element_at<uint64_t>(rvv, vs2, i); });
-					return;
-				case 19: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
-						return (float)element_at<int64_t>(rvv, vs2, i); });
-					return;
-				case 20: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
-						return (float)element_at<double>(rvv, vs2, i); });
-					return;
-				case 21: { // vfncvt.rod.f.f.w: round to odd
-					using bits_t = uint32_t;
-					vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
-						const double v = element_at<double>(rvv, vs2, i);
-						float r = (float)v;
-						if ((double)r != v) {
-							bits_t b;
-							__builtin_memcpy(&b, &r, sizeof(b));
-							b |= 1;
-							__builtin_memcpy(&r, &b, sizeof(r));
-						}
-						return r;
-					});
-					return; }
-				case 22: vector_element_loop<uint32_t>(cpu, vd, vm, [&] (uint64_t i) {
-						return f2i_sat<uint32_t>(element_at<double>(rvv, vs2, i), true); });
-					return;
-				case 23: vector_element_loop<int32_t>(cpu, vd, vm, [&] (uint64_t i) {
-						return f2i_sat<int32_t>(element_at<double>(rvv, vs2, i), true); });
-					return;
-				}
-				break;
-			}
-			// widening: i16/u16 -> f32 (float sources would be f16)
+		case 32: // double precision or a 64-bit integer, down to 32 bits
 			switch (sel) {
-			case 10: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
-					return (float)element_at<uint16_t>(rvv, vs2, i); });
+			case 16: vector_element_loop<uint32_t>(cpu, vd, vm, [&] (uint64_t i) {
+					return f2i_frm_sat<uint32_t>(element_at<double>(rvv, vs2, i), frm); });
 				return;
-			case 11: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
-					return (float)element_at<int16_t>(rvv, vs2, i); });
+			case 17: vector_element_loop<int32_t>(cpu, vd, vm, [&] (uint64_t i) {
+					return f2i_frm_sat<int32_t>(element_at<double>(rvv, vs2, i), frm); });
 				return;
-			}
-			break;
-		case 64: // widening: f32/u32/i32 -> SEW
-			switch (sel) {
-			case 8: vector_element_loop<uint64_t>(cpu, vd, vm, [&] (uint64_t i) {
-					return f2i_frm_sat<uint64_t>(element_at<float>(rvv, vs2, i), frm); });
+			case 18: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
+					return (float)element_at<uint64_t>(rvv, vs2, i); });
 				return;
-			case 9: vector_element_loop<int64_t>(cpu, vd, vm, [&] (uint64_t i) {
-					return f2i_frm_sat<int64_t>(element_at<float>(rvv, vs2, i), frm); });
+			case 19: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
+					return (float)element_at<int64_t>(rvv, vs2, i); });
 				return;
-			case 10: vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
-					return (double)element_at<uint32_t>(rvv, vs2, i); });
+			case 20: vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
+					return (float)element_at<double>(rvv, vs2, i); });
 				return;
-			case 11: vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
-					return (double)element_at<int32_t>(rvv, vs2, i); });
+			case 21: { // vfncvt.rod.f.f.w: round to odd
+				vector_element_loop<float>(cpu, vd, vm, [&] (uint64_t i) {
+					const double v = element_at<double>(rvv, vs2, i);
+					float r = (float)v;
+					if ((double)r != v) {
+						uint32_t b;
+						__builtin_memcpy(&b, &r, sizeof(b));
+						b |= 1;
+						__builtin_memcpy(&r, &b, sizeof(r));
+					}
+					return r;
+				});
+				return; }
+			case 22: vector_element_loop<uint32_t>(cpu, vd, vm, [&] (uint64_t i) {
+					return f2i_sat<uint32_t>(element_at<double>(rvv, vs2, i), true); });
 				return;
-			case 12: vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
-					return (double)element_at<float>(rvv, vs2, i); });
-				return;
-			case 14: vector_element_loop<uint64_t>(cpu, vd, vm, [&] (uint64_t i) {
-					return f2i_sat<uint64_t>(element_at<float>(rvv, vs2, i), true); });
-				return;
-			case 15: vector_element_loop<int64_t>(cpu, vd, vm, [&] (uint64_t i) {
-					return f2i_sat<int64_t>(element_at<float>(rvv, vs2, i), true); });
+			case 23: vector_element_loop<int32_t>(cpu, vd, vm, [&] (uint64_t i) {
+					return f2i_sat<int32_t>(element_at<double>(rvv, vs2, i), true); });
 				return;
 			}
 			break;
@@ -377,6 +607,686 @@ namespace
 		}
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	}
+
+	/**
+	 * The integer code points whose second source is read the same way in
+	 * all three forms, but whose arithmetic is not plain wraparound: the
+	 * fixed-point multiply, the two scaling shifts, and the four narrowing
+	 * ones. Returns false for a funct6 that is none of them, so the caller
+	 * can carry on with its own switch.
+	 *
+	 * `scalar` is the .vx or .vi operand, already extended; the .vv form
+	 * passes is_vv and the operand comes out of vs1 per element instead.
+	 * The shifts want it unsigned and the multiply wants it signed, which
+	 * is why it arrives as a bit pattern rather than a value.
+	 */
+	template <typename CPU_t>
+	static bool integer_fixedpoint(CPU_t& cpu, const rv32v_instruction& vi,
+		const bool is_vv, const uint64_t scalar)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		const unsigned funct6 = vi.OPVV.funct6;
+		const unsigned vxrm = rvv.vxrm();
+
+		switch (funct6) {
+		case 0b100111: // VSMUL: signed multiply of two fractions
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				constexpr unsigned bits = 8 * sizeof(E);
+				// Both operands are fractions with SEW-1 bits after the
+				// point, so the 2*SEW product is shifted back down by that
+				// much. Only the most negative square overflows.
+				constexpr E emin = E(std::make_unsigned_t<E>(1) << (bits - 1));
+				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+					const E a = element_at<E>(rvv, vs2, i);
+					const E b = is_vv ? element_at<E>(rvv, vs1, i) : (E)scalar;
+					const __int128_t prod = (__int128_t)a * (__int128_t)b;
+					const __int128_t r =
+						roundoff<__int128_t, __uint128_t>(prod, bits - 1, vxrm);
+					if (r > (__int128_t)(E)~emin) {
+						rvv.set_vxsat(true);
+						return (E)~emin;
+					}
+					return (E)r;
+				});
+			});
+			return true;
+		case 0b101010: // VSSRL: scaling shift right, logical
+		case 0b101011: // VSSRA: scaling shift right, arithmetic
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				using U = std::make_unsigned_t<E>;
+				constexpr unsigned shamt_mask = 8 * sizeof(E) - 1;
+				const bool arith = funct6 == 0b101011;
+				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+					const unsigned sh = unsigned(is_vv
+						? (U)element_at<E>(rvv, vs1, i) : scalar) & shamt_mask;
+					const E a = element_at<E>(rvv, vs2, i);
+					return arith ? roundoff<E>(a, sh, vxrm)
+						: (E)roundoff<U>((U)a, sh, vxrm);
+				});
+			});
+			return true;
+		case 0b101100: // VNSRL: narrowing shift right, logical
+		case 0b101101: // VNSRA: narrowing shift right, arithmetic
+		case 0b101110: // VNCLIPU: narrow, round and saturate, unsigned
+		case 0b101111: // VNCLIP: ... signed
+			widen_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);              // signed SEW
+				using U = std::make_unsigned_t<E>;
+				using W = widen_t<E>;                 // signed 2*SEW
+				using WU = std::make_unsigned_t<W>;
+				// vs2 is the wide operand here, so it is the one that has
+				// to be an aligned 2*LMUL group.
+				check_wide_group(cpu, vs2);
+				// The shift amount comes from a SEW-wide element even
+				// though it indexes into a 2*SEW value.
+				constexpr unsigned shamt_mask = 2 * 8 * sizeof(E) - 1;
+				const bool sign = (funct6 & 1) != 0;  // VNSRA and VNCLIP
+				// Only the two clips round and saturate. VNSRL and VNSRA
+				// are plain shifts that keep the low SEW bits of what they
+				// shift out, which is what makes them the narrowing cast a
+				// compiler reaches for.
+				const bool clip = funct6 >= 0b101110;
+				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+					const unsigned sh = unsigned(is_vv
+						? (U)element_at<E>(rvv, vs1, i) : scalar) & shamt_mask;
+					if (sign) {
+						const W a = element_at<W>(rvv, vs2, i);
+						if (!clip)
+							return (E)(a >> sh);
+						return saturate_to<E, W>(rvv, roundoff<W>(a, sh, vxrm));
+					}
+					const WU a = element_at<WU>(rvv, vs2, i);
+					if (!clip)
+						return (E)(a >> sh);
+					return (E)saturate_to<U, WU>(rvv, roundoff<WU>(a, sh, vxrm));
+				});
+			});
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * The widening integer arithmetic, which writes a 2*SEW destination
+	 * group. Three shapes share the space: the add/subtract family, whose
+	 * `.w` forms already have a wide vs2 and only widen the other operand;
+	 * the widening multiplies; and the widening multiply-accumulates,
+	 * which also read vd.
+	 *
+	 * The operands differ only in whether each side is sign- or
+	 * zero-extended, so each code point is reduced to that pair of
+	 * decisions and then run through one loop.
+	 */
+	template <typename CPU_t>
+	static bool integer_widening(CPU_t& cpu, const rv32v_instruction& vi,
+		const bool is_vv, const uint64_t scalar)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		const unsigned funct6 = vi.OPVV.funct6;
+		if (funct6 < 0b110000 || funct6 == 0b111001)
+			return false;
+
+		widen_sew_dispatch(cpu, [&] (auto tag) {
+			using E = decltype(tag);              // signed SEW
+			using U = std::make_unsigned_t<E>;
+			using W = widen_t<E>;                 // signed 2*SEW
+			using WU = std::make_unsigned_t<W>;
+			check_wide_group(cpu, vd);
+			if (is_vv) check_register_group(cpu, vs1);
+
+			// The add/subtract family: bit 0 of funct6 picks signed over
+			// unsigned, bit 1 subtract over add, and bit 2 the `.w` forms
+			// whose vs2 is already 2*SEW.
+			if (funct6 < 0b111000) {
+				const bool sign = (funct6 & 1) != 0;
+				const bool sub  = (funct6 & 0b10) != 0;
+				const bool wide_vs2 = (funct6 & 0b100) != 0;
+				if (wide_vs2) check_wide_group(cpu, vs2);
+				else          check_register_group(cpu, vs2);
+				vector_element_loop<W>(cpu, vd, vm, [&] (uint64_t i) {
+					// vs1/rs1 is always narrow; vs2 is wide in the `.w`
+					// forms and narrow otherwise.
+					const E b_narrow = is_vv
+						? element_at<E>(rvv, vs1, i) : (E)scalar;
+					const W b = sign ? (W)b_narrow : (W)(WU)(U)b_narrow;
+					const W a = wide_vs2
+						? (sign ? element_at<W>(rvv, vs2, i)
+						        : (W)element_at<WU>(rvv, vs2, i))
+						: (sign ? (W)element_at<E>(rvv, vs2, i)
+						        : (W)(WU)(U)element_at<E>(rvv, vs2, i));
+					return sub ? (W)((WU)a - (WU)b) : (W)((WU)a + (WU)b);
+				});
+				return;
+			}
+			check_register_group(cpu, vs2);
+
+			// The multiplies and multiply-accumulates. Each names which of
+			// its two operands is signed; `us` is the one code point that
+			// reverses the roles, and exists only in the .vx form.
+			const bool accumulate = funct6 >= 0b111100;
+			bool vs2_signed, other_signed;
+			switch (funct6) {
+			case 0b111000: vs2_signed = false; other_signed = false; break; // vwmulu
+			case 0b111010: vs2_signed = true;  other_signed = false; break; // vwmulsu
+			case 0b111011: vs2_signed = true;  other_signed = true;  break; // vwmul
+			case 0b111100: vs2_signed = false; other_signed = false; break; // vwmaccu
+			case 0b111101: vs2_signed = true;  other_signed = true;  break; // vwmacc
+			case 0b111110: vs2_signed = true;  other_signed = false; break; // vwmaccus
+			default:       vs2_signed = false; other_signed = true;  break; // vwmaccsu
+			}
+			if (funct6 == 0b111110 && is_vv) { // vwmaccus is .vx only
+				cpu.trigger_exception(ILLEGAL_OPCODE);
+				return;
+			}
+			vector_element_loop<W>(cpu, vd, vm, [&] (uint64_t i) {
+				const E a_narrow = element_at<E>(rvv, vs2, i);
+				const E b_narrow = is_vv
+					? element_at<E>(rvv, vs1, i) : (E)scalar;
+				const W a = vs2_signed
+					? (W)a_narrow : (W)(WU)(U)a_narrow;
+				const W b = other_signed
+					? (W)b_narrow : (W)(WU)(U)b_narrow;
+				const WU prod = (WU)a * (WU)b;
+				if (!accumulate)
+					return (W)prod;
+				return (W)(prod + (WU)element_at<W>(rvv, vd, i));
+			});
+		});
+		return true;
+	}
+
+	/**
+	 * The averaging add and subtract. The sum is exact in SEW+1 bits and
+	 * then shifted back down with vxrm rounding, so the intermediate is
+	 * always one bit wider than the element -- 128-bit arithmetic covers
+	 * SEW=64, where there is no wider element type to borrow.
+	 */
+	template <typename CPU_t>
+	static void integer_averaging(CPU_t& cpu, const rv32v_instruction& vi,
+		const bool is_vv, const uint64_t scalar)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		const unsigned funct6 = vi.OPVV.funct6;
+		const unsigned vxrm = rvv.vxrm();
+
+		int_sew_dispatch(cpu, [&] (auto tag) {
+			using E = decltype(tag);
+			using U = std::make_unsigned_t<E>;
+			const bool sign = (funct6 & 1) != 0;   // VAADD and VASUB
+			const bool sub  = (funct6 & 0b10) != 0;
+			vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+				const E a = element_at<E>(rvv, vs2, i);
+				const E b = is_vv ? element_at<E>(rvv, vs1, i) : (E)scalar;
+				if (sign) {
+					const __int128_t s = sub
+						? (__int128_t)a - (__int128_t)b
+						: (__int128_t)a + (__int128_t)b;
+					return (E)roundoff<__int128_t, __uint128_t>(s, 1, vxrm);
+				}
+				const __uint128_t s = sub
+					? (__uint128_t)(U)a - (__uint128_t)(U)b
+					: (__uint128_t)(U)a + (__uint128_t)(U)b;
+				return (E)(U)roundoff<__uint128_t, __uint128_t>(s, 1, vxrm);
+			});
+		});
+	}
+
+	/// The integer divides, which return the RISC-V values for division by
+	/// zero (all ones, and the dividend) rather than trapping, and handle
+	/// the one signed overflow the same way the scalar M extension does.
+	template <typename CPU_t>
+	static void integer_divide(CPU_t& cpu, const rv32v_instruction& vi,
+		const bool is_vv, const uint64_t scalar)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		const unsigned funct6 = vi.OPVV.funct6;
+
+		int_sew_dispatch(cpu, [&] (auto tag) {
+			using E = decltype(tag);
+			using U = std::make_unsigned_t<E>;
+			constexpr E emin = E(U(1) << (8 * sizeof(E) - 1));
+			const bool sign = (funct6 & 1) != 0;   // VDIV and VREM
+			const bool rem  = (funct6 & 0b10) != 0;
+			vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+				const E a = element_at<E>(rvv, vs2, i);   // dividend
+				const E b = is_vv ? element_at<E>(rvv, vs1, i) : (E)scalar;
+				if (b == 0)
+					return rem ? a : (E)~E(0);
+				if (sign) {
+					// The most negative value divided by -1 overflows;
+					// the quotient is defined to wrap and the remainder
+					// to be zero.
+					if (a == emin && b == (E)-1)
+						return rem ? E(0) : emin;
+					return rem ? (E)(a % b) : (E)(a / b);
+				}
+				return rem ? (E)((U)a % (U)b) : (E)((U)a / (U)b);
+			});
+		});
+	}
+
+	// ---- Zvbb ------------------------------------------------------------
+	//
+	// RVA23 mandates the vector bit-manipulation extension, and GCC emits
+	// it from ordinary C, so these live with the rest of the arithmetic
+	// rather than behind a switch of their own. Everything outside the
+	// VXUNARY0 group sits in the OP-I space, where the code points were
+	// unassigned in the base V extension.
+
+	template <typename U> static U bits_reverse(U v) noexcept
+	{
+		U r = 0;
+		for (unsigned b = 0; b < 8 * sizeof(U); b++) { r = U(r << 1) | (v & 1); v = U(v >> 1); }
+		return r;
+	}
+	template <typename U> static U bytes_reverse(U v) noexcept
+	{
+		U r = 0;
+		for (unsigned b = 0; b < sizeof(U); b++) { r = U(r << 8) | (v & 0xFF); v = U(v >> 8); }
+		return r;
+	}
+	/// Reverse the bits within each byte, leaving the bytes where they are.
+	template <typename U> static U bits_reverse_in_bytes(U v) noexcept
+	{
+		U r = 0;
+		for (unsigned b = 0; b < sizeof(U); b++) {
+			uint8_t x = (uint8_t)(v >> (8 * b)), y = 0;
+			for (int k = 0; k < 8; k++) { y = (uint8_t)((y << 1) | (x & 1)); x >>= 1; }
+			r |= (U)y << (8 * b);
+		}
+		return r;
+	}
+	template <typename U> static unsigned count_leading_zeros(const U v) noexcept
+	{
+		unsigned n = 0;
+		for (int b = int(8 * sizeof(U)) - 1; b >= 0; b--) {
+			if ((v >> b) & 1) break;
+			n++;
+		}
+		return n;
+	}
+	template <typename U> static unsigned count_trailing_zeros(const U v) noexcept
+	{
+		unsigned n = 0;
+		for (unsigned b = 0; b < 8 * sizeof(U); b++) {
+			if ((v >> b) & 1) break;
+			n++;
+		}
+		return n;
+	}
+	template <typename U> static unsigned count_ones(const U v) noexcept
+	{
+		unsigned n = 0;
+		for (unsigned b = 0; b < 8 * sizeof(U); b++) n += unsigned((v >> b) & 1);
+		return n;
+	}
+
+	/// VROL and VROR. The rotate amount is taken modulo SEW, so the .vi
+	/// form's six-bit immediate reaches every distance at SEW=64.
+	template <typename CPU_t>
+	static void vector_rotate(CPU_t& cpu, const rv32v_instruction& vi,
+		const bool is_vv, const uint64_t scalar, const bool right)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		int_sew_dispatch(cpu, [&] (auto tag) {
+			using E = decltype(tag);
+			using U = std::make_unsigned_t<E>;
+			constexpr unsigned bits = 8 * sizeof(E);
+			vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+				const unsigned sh = unsigned(is_vv
+					? (uint64_t)(U)element_at<E>(rvv, vs1, i) : scalar) & (bits - 1);
+				const U a = (U)element_at<E>(rvv, vs2, i);
+				if (sh == 0)
+					return (E)a;
+				return (E)(right ? U((a >> sh) | U(a << (bits - sh)))
+				                 : U(U(a << sh) | (a >> (bits - sh))));
+			});
+		});
+	}
+
+	/// VWSLL: a shift left whose destination is 2*SEW, so nothing is lost
+	/// off the top. The amount is masked to the *destination* width.
+	template <typename CPU_t>
+	static void vector_wide_shift(CPU_t& cpu, const rv32v_instruction& vi,
+		const bool is_vv, const uint64_t scalar)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		widen_sew_dispatch(cpu, [&] (auto tag) {
+			using E = decltype(tag);
+			using U = std::make_unsigned_t<E>;
+			using W = widen_t<E>;
+			using WU = std::make_unsigned_t<W>;
+			check_wide_group(cpu, vd);
+			check_register_group(cpu, vs2);
+			constexpr unsigned bits = 8 * sizeof(W);
+			vector_element_loop<W>(cpu, vd, vm, [&] (uint64_t i) {
+				const unsigned sh = unsigned(is_vv
+					? (uint64_t)(U)element_at<E>(rvv, vs1, i) : scalar) & (bits - 1);
+				return (W)WU(WU((U)element_at<E>(rvv, vs2, i)) << sh);
+			});
+		});
+	}
+
+	/// The Zvbb per-element bit operations, which share the VXUNARY0 group
+	/// with the integer extensions. Returns false for a source field that
+	/// selects none of them.
+	template <typename CPU_t>
+	static bool zvbb_unary(CPU_t& cpu, const rv32v_instruction& vi, const unsigned sel)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		switch (sel) {
+		case 0b01000: // VBREV8.V: reverse the bits within each byte
+		case 0b01001: // VREV8.V:  reverse the bytes within each element
+		case 0b01010: // VBREV.V:  reverse every bit of the element
+		case 0b01100: // VCLZ.V
+		case 0b01101: // VCTZ.V
+		case 0b01110: // VCPOP.V
+			break;
+		default:
+			return false;
+		}
+		check_register_group(cpu, vd);
+		check_register_group(cpu, vs2);
+		int_sew_dispatch(cpu, [&] (auto tag) {
+			using E = decltype(tag);
+			using U = std::make_unsigned_t<E>;
+			vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+				const U a = (U)element_at<E>(rvv, vs2, i);
+				switch (sel) {
+					case 0b01000: return (E)bits_reverse_in_bytes(a);
+					case 0b01001: return (E)bytes_reverse(a);
+					case 0b01010: return (E)bits_reverse(a);
+					case 0b01100: return (E)count_leading_zeros(a);
+					case 0b01101: return (E)count_trailing_zeros(a);
+					default:      return (E)count_ones(a);
+				}
+			});
+		});
+		return true;
+	}
+
+	/**
+	 * The widening floating-point arithmetic. The base profile has no
+	 * half-precision *arithmetic*, so the only widening step available is
+	 * f32 to f64 and these exist at SEW=32 alone. As in the integer case,
+	 * the `.w` forms already have a double-precision vs2 and widen only
+	 * their other operand.
+	 */
+	template <typename CPU_t>
+	static bool float_widening(CPU_t& cpu, const rv32v_instruction& vi,
+		const bool is_vv, const float scalar)
+	{
+		auto& rvv = cpu.registers().rvv();
+		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+		const bool vm = vi.OPVV.vm;
+		const unsigned funct6 = vi.OPVV.funct6;
+		if (funct6 < 0b110000)
+			return false;
+		if (UNLIKELY(rvv.sew() != 32))
+			cpu.trigger_exception(ILLEGAL_OPCODE);
+		check_register_group(cpu, vs2);
+		// The reductions are the exception to the shape everything else
+		// here has: their vd and vs1 are single registers holding one
+		// double-precision element, not groups.
+		const bool reduction = funct6 == 0b110001 || funct6 == 0b110011;
+		if (!reduction) {
+			check_wide_group(cpu, vd);
+			if (is_vv) check_register_group(cpu, vs1);
+		}
+
+		// The second source, widened. It is the only place the .vv and .vf
+		// forms differ.
+		const auto second = [&] (uint64_t i) -> double {
+			return is_vv ? (double)element_at<float>(rvv, vs1, i) : (double)scalar;
+		};
+
+		switch (funct6) {
+		case 0b110000: // VFWADD.VV/VF
+		case 0b110010: // VFWSUB.VV/VF
+		case 0b110100: // VFWADD.WV/WF
+		case 0b110110: { // VFWSUB.WV/WF
+			const bool sub = (funct6 & 0b010) != 0;
+			const bool wide_vs2 = (funct6 & 0b100) != 0;
+			if (wide_vs2) check_wide_group(cpu, vs2);
+			vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
+				const double a = wide_vs2
+					? element_at<double>(rvv, vs2, i)
+					: (double)element_at<float>(rvv, vs2, i);
+				return sub ? a - second(i) : a + second(i);
+			});
+			return true; }
+		case 0b111000: // VFWMUL.VV/VF
+			vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
+				return (double)element_at<float>(rvv, vs2, i) * second(i);
+			});
+			return true;
+		case 0b110001:   // VFWREDUSUM.VS
+		case 0b110011: { // VFWREDOSUM.VS
+			// The accumulator in vs1[0] is already double precision, and
+			// the .vs forms have no scalar variant.
+			if (!is_vv)
+				break;
+			const uint64_t vl = rvv.vl();
+			if (vl == 0)
+				return true;
+			double acc = element_at<double>(rvv, vs1, 0);
+			for (uint64_t i = 0; i < vl; i++) {
+				if (element_active(rvv, vm, i))
+					acc += (double)element_at<float>(rvv, vs2, i);
+			}
+			element_at<double>(rvv, vd, 0) = acc;
+			return true; }
+		case 0b111100: // VFWMACC:  vd = +(vs1 * vs2) + vd
+		case 0b111101: // VFWNMACC: vd = -(vs1 * vs2) - vd
+		case 0b111110: // VFWMSAC:  vd = +(vs1 * vs2) - vd
+		case 0b111111: // VFWNMSAC: vd = -(vs1 * vs2) + vd
+			vector_element_loop<double>(cpu, vd, vm, [&] (uint64_t i) {
+				const double p = (double)element_at<float>(rvv, vs2, i) * second(i);
+				const double c = element_at<double>(rvv, vd, i);
+				switch (funct6) {
+					case 0b111100: return  p + c;
+					case 0b111101: return -p - c;
+					case 0b111110: return  p - c;
+					default:       return -p + c;
+				}
+			});
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * VFRSQRT7 and VFREC7: seven-bit approximations of 1/sqrt(x) and 1/x,
+	 * meant as the seed for a Newton-Raphson refinement. The spec defines
+	 * them by table lookup rather than by accuracy bound, so the tables are
+	 * reproduced exactly -- an "approximately right" answer here would put
+	 * the refinement on a different trajectory than real hardware.
+	 *
+	 * Both index their table with the leading significand bits; vfrsqrt7
+	 * also takes the exponent's low bit, because the halved exponent
+	 * depends on its parity.
+	 */
+	static const uint8_t VFRSQRT7_TABLE[128] = {
+		52, 51, 50, 48, 47, 46, 44, 43, 42, 41, 40, 39, 38, 36, 35, 34,
+		33, 32, 31, 30, 30, 29, 28, 27, 26, 25, 24, 23, 23, 22, 21, 20,
+		19, 19, 18, 17, 16, 16, 15, 14, 14, 13, 12, 12, 11, 10, 10,  9,
+		 9,  8,  7,  7,  6,  6,  5,  4,  4,  3,  3,  2,  2,  1,  1,  0,
+		127,125,123,121,119,118,116,114,113,111,109,108,106,105,103,102,
+		100, 99, 97, 96, 95, 93, 92, 91, 90, 88, 87, 86, 85, 84, 83, 82,
+		 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 70, 69, 68, 67, 66,
+		 65, 64, 63, 63, 62, 61, 60, 59, 59, 58, 57, 56, 56, 55, 54, 53,
+	};
+	static const uint8_t VFREC7_TABLE[128] = {
+		127,125,123,121,119,117,116,114,112,110,109,107,105,104,102,100,
+		 99, 97, 96, 94, 93, 91, 90, 88, 87, 85, 84, 83, 81, 80, 79, 77,
+		 76, 75, 74, 72, 71, 70, 69, 68, 66, 65, 64, 63, 62, 61, 60, 59,
+		 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43,
+		 42, 41, 40, 40, 39, 38, 37, 36, 35, 35, 34, 33, 32, 31, 31, 30,
+		 29, 28, 28, 27, 26, 25, 25, 24, 23, 23, 22, 21, 21, 20, 19, 19,
+		 18, 17, 17, 16, 15, 15, 14, 14, 13, 12, 12, 11, 11, 10,  9,  9,
+		  8,  8,  7,  7,  6,  5,  5,  4,  4,  3,  3,  2,  2,  1,  1,  0,
+	};
+
+	/// The IEEE fields of an F, as the two estimates need to take them
+	/// apart and put them back together.
+	template <typename F> struct fp_traits;
+	template <> struct fp_traits<float> {
+		using bits_t = uint32_t;
+		static constexpr unsigned sig_bits = 23;
+		static constexpr unsigned exp_bits = 8;
+		static constexpr int bias = 127;
+	};
+	template <> struct fp_traits<double> {
+		using bits_t = uint64_t;
+		static constexpr unsigned sig_bits = 52;
+		static constexpr unsigned exp_bits = 11;
+		static constexpr int bias = 1023;
+	};
+
+	template <typename F>
+	static F fp_from_bits(const typename fp_traits<F>::bits_t bits) noexcept
+	{
+		F out;
+		__builtin_memcpy(&out, &bits, sizeof(out));
+		return out;
+	}
+
+	/// The canonical quiet NaN of an F, which both estimates return for
+	/// every input they cannot answer for.
+	template <typename F>
+	static F fp_canonical_nan() noexcept
+	{
+		using T = fp_traits<F>;
+		using B = typename T::bits_t;
+		constexpr B exp_max = (B(1) << T::exp_bits) - 1;
+		return fp_from_bits<F>((exp_max << T::sig_bits) | (B(1) << (T::sig_bits - 1)));
+	}
+
+	/// Normalise a subnormal significand in place, returning how far it had
+	/// to shift. The leading one is shifted out, leaving the significand in
+	/// the same form a normal value has.
+	template <typename F, typename B>
+	static int fp_normalize(B& sig) noexcept
+	{
+		using T = fp_traits<F>;
+		constexpr B sig_mask = (B(1) << T::sig_bits) - 1;
+		int shift = 0;
+		while ((sig & (B(1) << (T::sig_bits - 1))) == 0) {
+			sig <<= 1;
+			shift++;
+		}
+		sig = (sig << 1) & sig_mask;
+		return shift;
+	}
+
+	template <typename F>
+	static F vfrsqrt7(const F value) noexcept
+	{
+		using T = fp_traits<F>;
+		using B = typename T::bits_t;
+		constexpr B sig_mask = (B(1) << T::sig_bits) - 1;
+		constexpr B exp_max = (B(1) << T::exp_bits) - 1;
+
+		B bits;
+		__builtin_memcpy(&bits, &value, sizeof(bits));
+		const B sign = bits >> (T::sig_bits + T::exp_bits);
+		int exp = int((bits >> T::sig_bits) & exp_max);
+		B sig = bits & sig_mask;
+
+		if (exp == 0 && sig == 0)  // +-0 gives an infinity of the same sign
+			return fp_from_bits<F>((sign << (T::sig_bits + T::exp_bits))
+				| (exp_max << T::sig_bits));
+		if (exp == int(exp_max) && sig == 0 && sign == 0)
+			return F(0);           // +inf gives +0
+		// Everything else negative, and every NaN, is invalid.
+		if (sign != 0 || (exp == int(exp_max) && sig != 0))
+			return fp_canonical_nan<F>();
+
+		// A subnormal is normalised first, so that the table is always
+		// indexed by a significand whose leading one is in a known place.
+		// The exponent goes negative, which the halving below expects.
+		if (exp == 0)
+			exp = -fp_normalize<F, B>(sig);
+
+		const unsigned index = unsigned(((exp & 1) << 6)
+			| ((sig >> (T::sig_bits - 6)) & 0x3F));
+		const B out_sig = B(VFRSQRT7_TABLE[index]) << (T::sig_bits - 7);
+		// The exponent of 1/sqrt(x) is -exp/2, which in biased form is
+		// (3*bias - 1 - exp) / 2. It can never leave the normal range.
+		const B out_exp = B((3 * T::bias - 1 - exp) / 2);
+		return fp_from_bits<F>((out_exp << T::sig_bits) | out_sig);
+	}
+
+	template <typename F>
+	static F vfrec7(const F value, const unsigned frm) noexcept
+	{
+		using T = fp_traits<F>;
+		using B = typename T::bits_t;
+		constexpr B sig_mask = (B(1) << T::sig_bits) - 1;
+		constexpr B exp_max = (B(1) << T::exp_bits) - 1;
+
+		B bits;
+		__builtin_memcpy(&bits, &value, sizeof(bits));
+		const B sign = bits >> (T::sig_bits + T::exp_bits);
+		const B sign_bit = sign << (T::sig_bits + T::exp_bits);
+		int exp = int((bits >> T::sig_bits) & exp_max);
+		B sig = bits & sig_mask;
+
+		if (exp == int(exp_max)) {
+			if (sig != 0)
+				return fp_canonical_nan<F>();
+			return fp_from_bits<F>(sign_bit);       // +-inf gives a signed zero
+		}
+		if (exp == 0 && sig == 0)                   // +-0 gives an infinity
+			return fp_from_bits<F>(sign_bit | (exp_max << T::sig_bits));
+
+		if (exp == 0) {
+			const int shift = fp_normalize<F, B>(sig);
+			exp = -shift;
+			// Normalising by two or more places puts the reciprocal past
+			// the largest finite value. Which of infinity and that value
+			// is returned depends on the rounding mode and the sign.
+			if (shift >= 2) {
+				const bool to_max =
+					frm == 1                            // RTZ
+					|| (frm == 2 && sign == 0)          // RDN, positive
+					|| (frm == 3 && sign != 0);         // RUP, negative
+				if (to_max)
+					return fp_from_bits<F>(sign_bit
+						| ((exp_max - 1) << T::sig_bits) | sig_mask);
+				return fp_from_bits<F>(sign_bit | (exp_max << T::sig_bits));
+			}
+		}
+
+		const unsigned index = unsigned((sig >> (T::sig_bits - 7)) & 0x7F);
+		B out_sig = B(VFREC7_TABLE[index]) << (T::sig_bits - 7);
+		int out_exp = 2 * T::bias - 1 - exp;
+		if (out_exp == 0 || out_exp == -1) {
+			// The result is subnormal, so the implicit leading one has to
+			// become explicit; an exponent of -1 needs one shift more.
+			out_sig = (out_sig >> 1) | (B(1) << (T::sig_bits - 1));
+			if (out_exp == -1)
+				out_sig >>= 1;
+			out_exp = 0;
+		}
+		return fp_from_bits<F>(sign_bit | (B(out_exp) << T::sig_bits) | out_sig);
+	}
 } // anonymous namespace
 
 	VECTOR_INSTR(VSETVLI,
@@ -411,8 +1321,10 @@ namespace
 		const rv32v_instruction vi { instr };
 		auto& rvv = cpu.registers().rvv();
 		const bool rd_is_x0 = vi.IVLI.rd == 0;
-		const uint64_t avl   = vi.IVLI.uimm;         // 5-bit unsigned AVL
-		const uint32_t vtype = vi.IVLI.zimm & 0x3F;  // vlmul+vsew only
+		const uint64_t avl   = vi.IVLI.uimm;          // 5-bit unsigned AVL
+		// vtype is ten bits here; the two above it are the marker that
+		// tells vsetivli apart from the other two configuration forms.
+		const uint32_t vtype = vi.IVLI.zimm & 0x3FF;
 
 		if (!rvv.set_vtype(vtype)) {
 			rvv.set_vl(0);
@@ -460,84 +1372,194 @@ namespace
 
 	namespace
 	{
-		// Validation for unit-stride loads/stores; returns the EMUL
-		// shift for the instruction's EEW, or traps.
-		template <typename CPU_t>
-		static int check_unit_stride(CPU_t& cpu, const rv32v_instruction& vi,
-			const unsigned eew_bytes, const unsigned vreg)
+		// One element between guest memory and a vector register group. The
+		// element type only has to be the right *width*: loads and stores
+		// move bits, and the sign of what they move is the consumer's
+		// business.
+		template <bool IsStore, typename CPU_t>
+		RISCV_ALWAYS_INLINE static void mem_element(CPU_t& cpu, const unsigned eew,
+			const unsigned vreg, const uint64_t i, const typename CPU_t::address_t addr)
 		{
-			require_valid_vtype(cpu);
 			auto& rvv = cpu.registers().rvv();
-			// Unit-stride only: mop=00, umop=0 (01000 is the
-			// whole-register form), no segments, no MEW.
-			if (vi.VL.mew || vi.VL.nf != 0 || vi.VL.mop != 0 || vi.VL.lumop != 0)
+			auto& memory = cpu.machine().memory;
+			// Vector accesses have no alignment requirement, so every one of
+			// these goes through memcpy rather than a typed load.
+			const auto move = [&] (auto& slot) {
+				if constexpr (IsStore)
+					memory.memcpy(addr, &slot, sizeof(slot));
+				else
+					memory.memcpy_out(&slot, addr, sizeof(slot));
+			};
+			switch (eew) {
+				case 1: move(element_at<uint8_t> (rvv, vreg, i)); return;
+				case 2: move(element_at<uint16_t>(rvv, vreg, i)); return;
+				case 4: move(element_at<uint32_t>(rvv, vreg, i)); return;
+				default: move(element_at<uint64_t>(rvv, vreg, i)); return;
+			}
+		}
+
+		// The i'th offset out of an index vector, zero-extended from the
+		// index width the encoding names.
+		template <typename RVV_t>
+		static uint64_t index_offset(RVV_t& rvv, const unsigned eew,
+			const unsigned vs2, const uint64_t i)
+		{
+			switch (eew) {
+				case 1: return element_at<uint8_t> (rvv, vs2, i);
+				case 2: return element_at<uint16_t>(rvv, vs2, i);
+				case 4: return element_at<uint32_t>(rvv, vs2, i);
+				default: return element_at<uint64_t>(rvv, vs2, i);
+			}
+		}
+
+		/**
+		 * Every vector load and store, in one place: the four addressing
+		 * modes crossed with segments, plus the three transfers that ignore
+		 * vtype entirely (whole-register, mask, and the whole-register
+		 * store's byte-only form).
+		 *
+		 * The mnemonics differ far more than the work does. What actually
+		 * varies is where each element's address comes from -- a running
+		 * stride, a register stride, or an index vector -- and how many
+		 * fields share that address, so the modes are decoded into a stride
+		 * and a field count and then driven by one loop.
+		 */
+		template <bool IsStore, typename CPU_t>
+		static void vector_memory(CPU_t& cpu, const rv32v_instruction vi)
+		{
+			using address_t = typename CPU_t::address_t;
+			auto& rvv = cpu.registers().rvv();
+			auto& memory = cpu.machine().memory;
+
+			const unsigned nf = vi.VL.nf + 1;   // fields per segment
+			const unsigned vdata = vi.VL.vd;    // vs3 in a store
+			const bool vm = vi.VL.vm;
+			const address_t base = cpu.reg(vi.VL.rs1);
+
+			// MEW would take the element past 64 bits, which no profile
+			// defines and no toolchain emits.
+			if (UNLIKELY(vi.VL.mew))
 				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
-
-			const int emul = rvv.lmul_shift()
-				+ (int)(bits_of(eew_bytes) - bits_of(rvv.sew() / 8));
-			if (emul < 0 || emul > 3)
+			const unsigned width_log2 = bits_lookup(vi.VL.width);
+			if (UNLIKELY(width_log2 > 3))
 				cpu.trigger_exception(ILLEGAL_OPCODE);
+			// For an indexed access this is the width of the *index*; for
+			// every other mode it is the width of the data.
+			const unsigned encoded_eew = 1u << width_log2;
 
-			const unsigned regs = 1u << emul;
-			if (regs > 1 && ((vreg % regs) != 0 || vreg + regs > 32))
-				cpu.trigger_exception(ILLEGAL_OPCODE);
-
-			const uint64_t group_vlmax =
-				(uint64_t(VectorLane::size()) / eew_bytes) << emul;
-			if (rvv.vl() > group_vlmax)
-				cpu.trigger_exception(ILLEGAL_OPCODE);
-			return emul;
-		}
-
-		// Unit-stride load for one EEW, honoring vl and mask. memcpy-based:
-		// vector memory accesses have no alignment requirement.
-		template <typename T, typename CPU_t>
-		static void unit_stride_load(CPU_t& cpu, const unsigned vd, const bool vm,
-			const typename CPU_t::address_t base, const int emul)
-		{
-			auto& rvv = cpu.registers().rvv();
-			auto& memory = cpu.machine().memory;
-			const uint64_t vl = rvv.vl();
-			const unsigned regs = 1u << emul;
-			constexpr unsigned per_reg = VectorLane::size() / sizeof(T);
-
-			if (vm && vl == per_reg * (uint64_t)regs) {
-				for (unsigned r = 0; r < regs; r++)
-					memory.memcpy_out(&rvv.get(vd + r),
-						base + r * VectorLane::size(), VectorLane::size());
-				return;
-			}
-			for (uint64_t i = 0; i < vl; i++) {
-				if (element_active(rvv, vm, i)) {
-					T value;
-					memory.memcpy_out(&value, base + i * sizeof(T), sizeof(T));
-					element_at<T>(rvv, vd, i) = value;
+			if (vi.VL.mop == 0b00) {
+				switch (vi.VL.lumop) {
+				case 0b01000: {
+					// vl<n>re<eew>.v / vs<n>r.v: a raw copy of whole
+					// registers that reads neither vl nor vtype, with the
+					// segment field carrying the register count instead.
+					if (UNLIKELY(!vm || (nf != 1 && nf != 2 && nf != 4 && nf != 8)))
+						cpu.trigger_exception(ILLEGAL_OPCODE);
+					check_group(cpu, vdata, nf);
+					for (unsigned r = 0; r < nf; r++) {
+						const address_t at = base + r * VectorLane::size();
+						if constexpr (IsStore)
+							memory.memcpy(at, &rvv.get(vdata + r), VectorLane::size());
+						else
+							memory.memcpy_out(&rvv.get(vdata + r), at, VectorLane::size());
+					}
+					return; }
+				case 0b01011: {
+					// vlm.v / vsm.v: ceil(vl/8) bytes of mask, always EEW=8
+					// with EMUL=1, and never masked.
+					if (UNLIKELY(!vm || nf != 1 || vi.VL.width != 0))
+						cpu.trigger_exception(ILLEGAL_OPCODE);
+					require_valid_vtype(cpu);
+					const uint64_t bytes = (rvv.vl() + 7) / 8;
+					for (uint64_t b = 0; b < bytes; b++) {
+						if constexpr (IsStore)
+							memory.memcpy(base + b, &rvv.get(vdata).u8[b], 1);
+						else
+							memory.memcpy_out(&rvv.get(vdata).u8[b], base + b, 1);
+					}
+					return; }
+				case 0b00000:
+				case 0b10000:  // fault-only-first, handled below
+					break;
+				default:
+					cpu.trigger_exception(ILLEGAL_OPCODE);
 				}
 			}
-		}
+			require_valid_vtype(cpu);
 
-		// Unit-stride store for one EEW, honoring vl and mask.
-		template <typename T, typename CPU_t>
-		static void unit_stride_store(CPU_t& cpu, const unsigned vs3, const bool vm,
-			const typename CPU_t::address_t base, const int emul)
-		{
-			auto& rvv = cpu.registers().rvv();
-			auto& memory = cpu.machine().memory;
+			const bool indexed = (vi.VL.mop & 1) != 0; // 01 unordered, 11 ordered
+			const bool strided = vi.VL.mop == 0b10;
+			// Fault-only-first exists in the load direction only.
+			const bool fault_first = !IsStore
+				&& vi.VL.mop == 0b00 && vi.VL.lumop == 0b10000;
+			if (UNLIKELY(IsStore && vi.VL.mop == 0b00 && vi.VL.lumop == 0b10000))
+				cpu.trigger_exception(ILLEGAL_OPCODE);
+
+			// An indexed access carries the data width in vtype and the
+			// index width in the encoding; every other mode does the
+			// reverse and has no index vector at all.
+			const unsigned sew_bytes = rvv.sew() / 8;
+			const unsigned data_eew = indexed ? sew_bytes : encoded_eew;
+			const int demul = indexed
+				? cpu.registers().rvv().lmul_shift() : emul_shift_for(cpu, data_eew);
+			const unsigned dregs = group_size(demul);
+
+			// NFIELDS * EMUL is what the segment forms actually consume.
+			if (UNLIKELY(nf * dregs > 8 || vdata + nf * dregs > 32))
+				cpu.trigger_exception(ILLEGAL_OPCODE);
+			for (unsigned f = 0; f < nf; f++)
+				check_group(cpu, vdata + f * dregs, dregs);
+
+			if (indexed) {
+				// The index group is sized by the index width against SEW.
+				const int iemul = emul_shift_for(cpu, encoded_eew);
+				check_group(cpu, vi.VLX.vs2, group_size(iemul));
+			}
+
 			const uint64_t vl = rvv.vl();
-			const unsigned regs = 1u << emul;
-			constexpr unsigned per_reg = VectorLane::size() / sizeof(T);
+			// Unit-stride walks one whole segment per element.
+			const address_t stride = strided
+				? (address_t)cpu.reg(vi.VLS.rs2) : (address_t)(data_eew * nf);
 
-			if (vm && vl == per_reg * (uint64_t)regs) {
-				for (unsigned r = 0; r < regs; r++)
-					memory.memcpy(base + r * VectorLane::size(),
-						&rvv.get(vs3 + r), VectorLane::size());
+			// The common case -- a full, unmasked, single-field unit-stride
+			// transfer -- is a straight block copy of the register group.
+			if (!indexed && !strided && !fault_first && vm && nf == 1
+				&& vl == (uint64_t(VectorLane::size()) / data_eew) * dregs)
+			{
+				for (unsigned r = 0; r < dregs; r++) {
+					const address_t at = base + r * VectorLane::size();
+					if constexpr (IsStore)
+						memory.memcpy(at, &rvv.get(vdata + r), VectorLane::size());
+					else
+						memory.memcpy_out(&rvv.get(vdata + r), at, VectorLane::size());
+				}
 				return;
 			}
+
 			for (uint64_t i = 0; i < vl; i++) {
-				if (element_active(rvv, vm, i)) {
-					const T value = element_at<T>(rvv, vs3, i);
-					memory.memcpy(base + i * sizeof(T), &value, sizeof(T));
+				if (!element_active(rvv, vm, i))
+					continue;
+				const address_t at = indexed
+					? address_t(base + index_offset(rvv, encoded_eew, vi.VLX.vs2, i))
+					: address_t(base + i * stride);
+				if (fault_first && i != 0) {
+					// Past the first element a fault is not reported: the
+					// load stops there and shortens vl, which is what lets
+					// a strlen-shaped loop read up to a page boundary
+					// without knowing where the string ends.
+					try {
+						for (unsigned f = 0; f < nf; f++)
+							mem_element<IsStore>(cpu, data_eew,
+								vdata + f * dregs, i, at + f * data_eew);
+					} catch (const MachineException&) {
+						rvv.set_vl(i);
+						return;
+					}
+					continue;
 				}
+				for (unsigned f = 0; f < nf; f++)
+					mem_element<IsStore>(cpu, data_eew,
+						vdata + f * dregs, i, at + f * data_eew);
 			}
 		}
 	}
@@ -545,36 +1567,14 @@ namespace
 	VECTOR_INSTR(VLE32,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
-		const rv32v_instruction vi { instr };
-		const unsigned eew_bytes = 1u << bits_lookup(vi.VL.width);
-		const int emul = check_unit_stride(cpu, vi, eew_bytes, vi.VL.vd);
-		const auto base = cpu.reg(vi.VL.rs1);
-
-		switch (eew_bytes) {
-			case 1: unit_stride_load<uint8_t> (cpu, vi.VL.vd, vi.VL.vm, base, emul); break;
-			case 2: unit_stride_load<uint16_t>(cpu, vi.VL.vd, vi.VL.vm, base, emul); break;
-			case 4: unit_stride_load<uint32_t>(cpu, vi.VL.vd, vi.VL.vm, base, emul); break;
-			case 8: unit_stride_load<uint64_t>(cpu, vi.VL.vd, vi.VL.vm, base, emul); break;
-			default: cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
-		}
+		vector_memory<false>(cpu, rv32v_instruction { instr });
 	},
 	VECTOR_MEM_PRINTER(false));
 
 	VECTOR_INSTR(VSE32,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
-		const rv32v_instruction vi { instr };
-		const unsigned eew_bytes = 1u << bits_lookup(vi.VS.width);
-		const int emul = check_unit_stride(cpu, vi, eew_bytes, vi.VS.vs3);
-		const auto base = cpu.reg(vi.VS.rs1);
-
-		switch (eew_bytes) {
-			case 1: unit_stride_store<uint8_t> (cpu, vi.VS.vs3, vi.VS.vm, base, emul); break;
-			case 2: unit_stride_store<uint16_t>(cpu, vi.VS.vs3, vi.VS.vm, base, emul); break;
-			case 4: unit_stride_store<uint32_t>(cpu, vi.VS.vs3, vi.VS.vm, base, emul); break;
-			case 8: unit_stride_store<uint64_t>(cpu, vi.VS.vs3, vi.VS.vm, base, emul); break;
-			default: cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
-		}
+		vector_memory<true>(cpu, rv32v_instruction { instr });
 	},
 	VECTOR_MEM_PRINTER(true));
 
@@ -587,9 +1587,24 @@ namespace
 		auto& rvv = cpu.registers().rvv();
 		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
 		const bool vm = vi.OPVV.vm;
-		check_register_group(cpu, vd);
-		check_register_group(cpu, vs1);
-		check_register_group(cpu, vs2);
+		{
+			// Most code points here take three LMUL-sized groups, and each
+			// has to be aligned to the group size. The ones that do not are
+			// checked individually further down: the compares and
+			// carry-outs write a single mask register rather than a group,
+			// the narrowing shifts have a 2*SEW vs2, the widening
+			// reductions have a single-register vd and vs1, and
+			// vrgatherei16 sizes its index vector by EEW=16 instead of SEW.
+			const unsigned f6 = vi.OPVV.funct6;
+			const bool mask_dest = (f6 >= 0b011000 && f6 <= 0b011111)
+				|| f6 == 0b010001 || f6 == 0b010011;
+			if (f6 < 0b101100 && f6 != 0b001110) {
+				if (!mask_dest)
+					check_register_group(cpu, vd);
+				check_register_group(cpu, vs1);
+				check_register_group(cpu, vs2);
+			}
+		}
 
 		switch (vi.OPVV.funct6) {
 		case 0b000000: // VADD.VV
@@ -599,6 +1614,23 @@ namespace
 					return element_at<E>(rvv, vs2, i) + element_at<E>(rvv, vs1, i);
 				});
 			});
+			return;
+		case 0b000001: // VANDN.VV (Zvbb): vd = vs2 & ~vs1
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+					return E(element_at<E>(rvv, vs2, i) & ~element_at<E>(rvv, vs1, i));
+				});
+			});
+			return;
+		case 0b010100: // VROR.VV (Zvbb)
+			vector_rotate(cpu, vi, true, 0, true);
+			return;
+		case 0b010101: // VROL.VV (Zvbb)
+			vector_rotate(cpu, vi, true, 0, false);
+			return;
+		case 0b110101: // VWSLL.VV (Zvbb)
+			vector_wide_shift(cpu, vi, true, 0);
 			return;
 		case 0b000010: // VSUB.VV
 			int_sew_dispatch(cpu, [&] (auto tag) {
@@ -652,19 +1684,31 @@ namespace
 				});
 			});
 			return;
-		case 0b010000: // VADC.VVM: vd = vs2 + vs1 + v0 (masked encoding)
-			if (!vm) {
-				int_sew_dispatch(cpu, [&] (auto tag) {
-					using E = decltype(tag);
-					using U = std::make_unsigned_t<E>;
-					vector_element_loop<E>(cpu, vd, true, [&] (uint64_t i) {
-						return (E)((U)element_at<E>(rvv, vs2, i)
-								+ (U)element_at<E>(rvv, vs1, i)
-								+ rvv.get(0).mask(i));
-					});
+		case 0b001110: // VRGATHEREI16.VV
+			// The same gather, but the index vector is 16-bit whatever SEW
+			// is, so one index register covers up to eight data registers.
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				const uint64_t vlmax = rvv.vlmax();
+				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+					const uint64_t idx = element_at<uint16_t>(rvv, vs1, i);
+					return idx < vlmax ? element_at<E>(rvv, vs2, idx) : E(0);
 				});
-			}
-			break; // vm=1 is reserved
+			});
+			return;
+		case 0b010000: // VADC.VVM: vd = vs2 + vs1 + v0 (masked encoding)
+			if (vm)
+				break; // vm=1 is reserved: v0 is the carry, not a mask
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				using U = std::make_unsigned_t<E>;
+				vector_element_loop<E>(cpu, vd, true, [&] (uint64_t i) {
+					return (E)((U)element_at<E>(rvv, vs2, i)
+							+ (U)element_at<E>(rvv, vs1, i)
+							+ rvv.get(0).mask(i));
+				});
+			});
+			return;
 		case 0b010001: // VMADC.VVM (carry-in) / VMADC.VV
 			// No masked form: all elements are written; vm selects
 			// whether v0 is the carry input.
@@ -680,18 +1724,18 @@ namespace
 			});
 			return;
 		case 0b010010: // VSBC.VVM: vd = vs2 - vs1 - v0 (masked encoding)
-			if (!vm) {
-				int_sew_dispatch(cpu, [&] (auto tag) {
-					using E = decltype(tag);
-					using U = std::make_unsigned_t<E>;
-					vector_element_loop<E>(cpu, vd, true, [&] (uint64_t i) {
-						return (E)((U)element_at<E>(rvv, vs2, i)
-								- (U)element_at<E>(rvv, vs1, i)
-								- rvv.get(0).mask(i));
-					});
+			if (vm)
+				break; // vm=1 is reserved, as for VADC
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				using U = std::make_unsigned_t<E>;
+				vector_element_loop<E>(cpu, vd, true, [&] (uint64_t i) {
+					return (E)((U)element_at<E>(rvv, vs2, i)
+							- (U)element_at<E>(rvv, vs1, i)
+							- rvv.get(0).mask(i));
 				});
-			}
-			break; // vm=1 is reserved
+			});
+			return;
 		case 0b010011: // VMSBC.VVM (borrow-in) / VMSBC.VV
 			// VMSBC has no masked form (see VMADC above).
 			int_sew_dispatch(cpu, [&] (auto tag) {
@@ -813,7 +1857,35 @@ namespace
 				});
 			});
 			return;
+		case 0b110000: // VWREDSUMU.VS
+		case 0b110001: // VWREDSUM.VS
+			// A reduction whose accumulator is 2*SEW: the scalar in vs1[0]
+			// is already wide, and each SEW source element is extended
+			// into it.
+			widen_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				using U = std::make_unsigned_t<E>;
+				using W = widen_t<E>;
+				using WU = std::make_unsigned_t<W>;
+				const bool sign = vi.OPVV.funct6 == 0b110001;
+				const uint64_t vl = rvv.vl();
+				if (vl == 0)
+					return;
+				W acc = element_at<W>(rvv, vs1, 0);
+				for (uint64_t i = 0; i < vl; i++) {
+					if (element_active(rvv, vm, i)) {
+						const E x = element_at<E>(rvv, vs2, i);
+						acc = (W)((WU)acc + (WU)(sign ? (W)x : (W)(WU)(U)x));
+					}
+				}
+				element_at<W>(rvv, vd, 0) = acc;
+			});
+			return;
 		} // switch
+		// The fixed-point and narrowing shifts, which read their second
+		// source out of vs1 just like everything above.
+		if (integer_fixedpoint(cpu, vi, true, 0))
+			return;
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	VECTOR_PRINTER("OPIVV", 1u << 0b000));
@@ -830,8 +1902,19 @@ namespace
 		const unsigned vd = vi.OPVI.vd, vs2 = vi.OPVI.vs2;
 		const bool vm = vi.OPVI.vm;
 		const bool is_vx = instr.Itype.funct3 == 0b100;
-		check_register_group(cpu, vd);
-		check_register_group(cpu, vs2);
+		{
+			// As in the .vv handler: only the code points whose operands
+			// really are LMUL-sized groups are checked here. See there for
+			// which ones are not.
+			const unsigned f6 = vi.OPVI.funct6;
+			const bool mask_dest = (f6 >= 0b011000 && f6 <= 0b011111)
+				|| f6 == 0b010001 || f6 == 0b010011;
+			if (f6 < 0b100111) {
+				if (!mask_dest)
+					check_register_group(cpu, vd);
+				check_register_group(cpu, vs2);
+			}
+		}
 
 		// Scalar immediates: sign-extended (arith/cmp) and zero-extended
 		// (shifts, unsigned compares). For OPIVX the x register value
@@ -849,6 +1932,31 @@ namespace
 					return element_at<E>(rvv, vs2, i) + (E)simm;
 				});
 			});
+			return;
+		case 0b000001: // VANDN.VX (Zvbb): vd = vs2 & ~x[rs1]
+			if (!is_vx)
+				break;      // there is no .vi form
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
+					return E(element_at<E>(rvv, vs2, i) & ~(E)zimm);
+				});
+			});
+			return;
+		case 0b010100: // VROR.VX, or VROR.VI with the high immediate bit clear
+		case 0b010101: // VROL.VX, or VROR.VI with it set
+			// The .vi rotate needs six bits of immediate, and borrows the
+			// low bit of funct6 for the sixth. That leaves the .vx forms
+			// to tell rotate-left from rotate-right by the same bit.
+			if (is_vx) {
+				vector_rotate(cpu, vi, false, zimm, vi.OPVI.funct6 == 0b010100);
+			} else {
+				const uint64_t amount = ((vi.OPVI.funct6 & 1) << 5) | imm5;
+				vector_rotate(cpu, vi, false, amount, true);
+			}
+			return;
+		case 0b110101: // VWSLL.VX / VWSLL.VI (Zvbb)
+			vector_wide_shift(cpu, vi, false, zimm);
 			return;
 		case 0b000011: // VRSUB.VI / VRSUB.VX: vd = imm - vs2
 			int_sew_dispatch(cpu, [&] (auto tag) {
@@ -1024,12 +2132,15 @@ namespace
 				});
 			});
 			return;
-		case 0b100111: { // VMV<nr>R.V: whole vector register move
+		case 0b100111: { // VMV<nr>R.V in the .vi form; the .vx form is VSMUL
+			if (is_vx)
+				break;
 			// Copies nregs whole registers, ignoring vl, vtype and mask.
-			if (is_vx || !vm) break;
+			if (!vm)
+				cpu.trigger_exception(ILLEGAL_OPCODE);
 			const unsigned nregs = imm5 + 1;
 			if (nregs != 1 && nregs != 2 && nregs != 4 && nregs != 8)
-				break;
+				cpu.trigger_exception(ILLEGAL_OPCODE);
 			if ((vd % nregs) != 0 || (vs2 % nregs) != 0
 				|| vd + nregs > 32 || vs2 + nregs > 32)
 				cpu.trigger_exception(ILLEGAL_OPCODE);
@@ -1038,20 +2149,12 @@ namespace
 					rvv.get(vd + r) = rvv.get(vs2 + r);
 			}
 			return; }
-		case 0b101100: { // VNCVT.X.X.W (OPIVX with rs1=x0)
-			// vd[i] = low SEW bits of the 2*SEW source element
-			if (is_vx && imm5 == 0) {
-				switch (rvv.sew()) {
-				case 16: vector_element_loop<uint16_t>(cpu, vd, vm, [&] (uint64_t i) {
-						return (uint16_t)element_at<uint32_t>(rvv, vs2, i); });
-					return;
-				case 32: vector_element_loop<uint32_t>(cpu, vd, vm, [&] (uint64_t i) {
-						return (uint32_t)element_at<uint64_t>(rvv, vs2, i); });
-					return;
-				}
-			}
-			break; } // the .vi form and SEW=64 are reserved
 		} // switch
+		// VSMUL, the scaling shifts and the narrowing shifts and clips.
+		// The shift amount is unsigned in every one of them, and VNCVT.X.X.W
+		// is just VNSRL.WX with a zero shift, so it needs no case of its own.
+		if (integer_fixedpoint(cpu, vi, false, zimm))
+			return;
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		},
 	VECTOR_PRINTER("OPIVI/OPIVX", (1u << 0b011) | (1u << 0b100)));
@@ -1066,7 +2169,10 @@ namespace
 		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
 		const bool vm = vi.OPVV.vm;
 		const bool is_vx = instr.Itype.funct3 == 0b110;
-		check_register_group(cpu, vs2);
+		// vs2 is only a register *group* in the arithmetic code points; the
+		// scalar moves, the mask logic and vcompress all name single
+		// registers, so the alignment check belongs with each of them
+		// rather than out here.
 
 		switch (vi.OPVV.funct6) {
 		case 0b000000: // VREDSUM.VS
@@ -1078,6 +2184,7 @@ namespace
 		case 0b000110: // VREDMAXU.VS
 		case 0b000111: // VREDMAX.VS
 			if (is_vx) break;
+			check_register_group(cpu, vs2);
 			int_sew_dispatch(cpu, [&] (auto tag) {
 				using E = decltype(tag);
 				using U = std::make_unsigned_t<E>;
@@ -1096,13 +2203,24 @@ namespace
 				});
 			});
 			return;
-		case 0b010010: { // VZEXT/VSEXT.vfN (integer extension)
-			if (is_vx) break;
+		case 0b001000: // VAADDU: averaging add, unsigned
+		case 0b001001: // VAADD:  ... signed
+		case 0b001010: // VASUBU: averaging subtract, unsigned
+		case 0b001011: // VASUB:  ... signed
 			check_register_group(cpu, vd);
+			check_register_group(cpu, vs2);
+			if (!is_vx) check_register_group(cpu, vs1);
+			integer_averaging(cpu, vi, !is_vx, (uint64_t)cpu.reg(vs1));
+			return;
+		case 0b010010: { // VZEXT/VSEXT.vfN, and the Zvbb bit operations
+			if (is_vx) break;
 			if (vs1 >= 0b00010 && vs1 <= 0b00111) {
+				check_register_group(cpu, vd);
 				int_extension(cpu, rvv, vd, vs2, vm, vs1);
 				return;
 			}
+			if (zvbb_unary(cpu, vi, vs1))
+				return;
 			break; }
 		case 0b001110: { // VSLIDE1UP.VX
 			if (!is_vx) break;
@@ -1173,30 +2291,89 @@ namespace
 				return; }
 			}
 			break;
-		case 0b010100: { // VMSBF / VMSOF / VMSIF
+		case 0b010100: { // the mask scans, plus VIOTA and VID
 			if (is_vx) break;
-			check_register_group(cpu, vd);
 			const uint64_t vl = rvv.vl();
-			bool seen_set = false;
-			auto& src = rvv.get(vs2);
-			auto& dest = rvv.get(vd);
-			for (uint64_t i = 0; i < vl; i++) {
-				if (element_active(rvv, vm, i)) {
+			switch (vs1) {
+			case 0b00001:   // VMSBF.M: set before the first set bit
+			case 0b00010:   // VMSOF.M: set only the first set bit
+			case 0b00011: { // VMSIF.M: set up to and including it
+				bool seen_set = false;
+				auto& src = rvv.get(vs2);
+				auto& dest = rvv.get(vd);
+				for (uint64_t i = 0; i < vl; i++) {
+					if (!element_active(rvv, vm, i))
+						continue;
+					bool bit;
 					if (seen_set) {
-						dest.set_mask(i, false);
+						bit = false;
 					} else if (src.mask(i)) {
-						dest.set_mask(i, vs1 != 0b00001); // SOF/SIF include it
+						// VMSBF stops short of the first set bit; the
+						// other two include it.
+						bit = vs1 != 0b00001;
 						seen_set = true;
 					} else {
-						dest.set_mask(i, true);
+						// Before it, only VMSOF is still writing zeroes.
+						bit = vs1 != 0b00010;
 					}
+					dest.set_mask(i, bit);
 				}
+				return; }
+			case 0b10000: { // VIOTA.M: prefix sum of the source mask
+				check_register_group(cpu, vd);
+				auto& src = rvv.get(vs2);
+				uint64_t count = 0;
+				int_sew_dispatch(cpu, [&] (auto tag) {
+					using E = decltype(tag);
+					for (uint64_t i = 0; i < vl; i++) {
+						// Inactive elements are neither written nor
+						// counted.
+						if (!element_active(rvv, vm, i))
+							continue;
+						// Each element gets the count of set bits *below*
+						// it, so the write comes before the increment.
+						element_at<E>(rvv, vd, i) = (E)count;
+						count += src.mask(i) ? 1 : 0;
+					}
+				});
+				return; }
+			case 0b10001: // VID.V: the element index itself
+				if (vs2 != 0)
+					break;
+				check_register_group(cpu, vd);
+				int_sew_dispatch(cpu, [&] (auto tag) {
+					using E = decltype(tag);
+					vector_element_loop<E>(cpu, vd, vm, [] (uint64_t i) {
+						return (E)i;
+					});
+				});
+				return;
 			}
+			break; }
+		case 0b010111: { // VCOMPRESS.VM: pack the selected elements down
+			if (is_vx || !vm)
+				break;
+			// The selector is vs1, not v0, and there is no masked form:
+			// element j of the result is the j'th source element whose
+			// selector bit is set, and the rest of vd is undisturbed.
+			check_register_group(cpu, vd);
+			check_register_group(cpu, vs2);
+			const uint64_t vl = rvv.vl();
+			auto& sel = rvv.get(vs1);
+			int_sew_dispatch(cpu, [&] (auto tag) {
+				using E = decltype(tag);
+				uint64_t j = 0;
+				for (uint64_t i = 0; i < vl; i++) {
+					if (sel.mask(i))
+						element_at<E>(rvv, vd, j++) = element_at<E>(rvv, vs2, i);
+				}
+			});
 			return; }
 		case 0b011000: // VMANDN:  vd = vs2 & ~vs1
 		case 0b011001: // VMAND:   vd = vs2 & vs1
 		case 0b011010: // VMOR:    vd = vs2 | vs1
 		case 0b011011: // VMXOR:   vd = vs2 ^ vs1
+		case 0b011100: // VMORN:   vd = vs2 | ~vs1
 		case 0b011101: // VMNAND:  vd = ~(vs2 & vs1)
 		case 0b011110: // VMNOR:   vd = ~(vs2 | vs1)
 		case 0b011111: // VMXNOR:  vd = ~(vs2 ^ vs1)
@@ -1210,6 +2387,7 @@ namespace
 					case 0b011001: r = a & c;   break;
 					case 0b011010: r = a | c;   break;
 					case 0b011011: r = a ^ c;   break;
+					case 0b011100: r = a | ~c;  break;
 					case 0b011101: r = ~(a & c); break;
 					case 0b011110: r = ~(a | c); break;
 					default:        r = ~(a ^ c); break;
@@ -1217,15 +2395,25 @@ namespace
 				rvv.get(vd).u8[b] = r;
 			}
 			return;
-		case 0b100101: // VMUL.VV/VX (lower SEW bits)
-		case 0b100110: // VMULH (signed * signed, high half)
-		case 0b100111: // VMULHU (unsigned, high half)
-		case 0b101001: // VMULHSU (vs2 signed, vs1 unsigned)
-		case 0b101011: // VMACC: vd = +(vs1 * vs2) + vd
-		case 0b101100: // VNMSAC: vd = -(vs1 * vs2) + vd
-		case 0b101101: // VMADD: vd = +(vs1 * vd) + vs2
-		case 0b101110: // VNMSUB: vd = -(vs1 * vd) + vs2
+		case 0b100000: // VDIVU
+		case 0b100001: // VDIV
+		case 0b100010: // VREMU
+		case 0b100011: // VREM
 			check_register_group(cpu, vd);
+			check_register_group(cpu, vs2);
+			if (!is_vx) check_register_group(cpu, vs1);
+			integer_divide(cpu, vi, !is_vx, (uint64_t)cpu.reg(vs1));
+			return;
+		case 0b100100: // VMULHU: high half, unsigned * unsigned
+		case 0b100101: // VMUL:   the low SEW bits of the product
+		case 0b100110: // VMULHSU: high half, signed vs2 * unsigned vs1
+		case 0b100111: // VMULH:  high half, signed * signed
+		case 0b101001: // VMADD:  vd = +(vs1 * vd) + vs2
+		case 0b101011: // VNMSUB: vd = -(vs1 * vd) + vs2
+		case 0b101101: // VMACC:  vd = +(vs1 * vs2) + vd
+		case 0b101111: // VNMSAC: vd = -(vs1 * vs2) + vd
+			check_register_group(cpu, vd);
+			check_register_group(cpu, vs2);
 			if (!is_vx) check_register_group(cpu, vs1);
 			int_sew_dispatch(cpu, [&] (auto tag) {
 				using E = decltype(tag);
@@ -1233,24 +2421,33 @@ namespace
 				constexpr unsigned bits = 8 * sizeof(E);
 				const unsigned funct6 = vi.OPVV.funct6;
 				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
-					const U a = element_at<E>(rvv, vs2, i);
-					const U b = is_vx ? (U)(E)cpu.reg(vs1)
-					                  : (U)element_at<E>(rvv, vs1, i);
+					const E a = element_at<E>(rvv, vs2, i);
+					const E b = is_vx ? (E)cpu.reg(vs1)
+					                  : element_at<E>(rvv, vs1, i);
 					const U c = element_at<E>(rvv, vd, i);
 					switch (funct6) {
-						case 0b100101: return (E)(U(a) * U(b));
-						case 0b100110: return (E)((__int128_t(E(a)) * __int128_t(E(b))) >> bits);
-						case 0b100111: return (E)((__uint128_t(U(a)) * __uint128_t(U(b))) >> bits);
-						case 0b101001: return (E)((__int128_t(E(a)) * __uint128_t(U(b))) >> bits);
-						case 0b101011: return (E)(U(a) * U(b) + c);
-						case 0b101100: return (E)(c - U(a) * U(b));
-						case 0b101101: return (E)(U(b) * c + a);
-						default:        return (E)(a - U(b) * c);
+						case 0b100100:
+							return (E)(((__uint128_t)(U)a * (__uint128_t)(U)b) >> bits);
+						case 0b100101: return (E)((U)a * (U)b);
+						case 0b100110:
+							// Only vs2 is signed, so the unsigned operand is
+							// widened first and the product stays signed.
+							return (E)(((__int128_t)a * (__int128_t)(U)b) >> bits);
+						case 0b100111:
+							return (E)(((__int128_t)a * (__int128_t)b) >> bits);
+						case 0b101001: return (E)((U)b * c + (U)a);
+						case 0b101011: return (E)((U)a - (U)b * c);
+						case 0b101101: return (E)((U)a * (U)b + c);
+						default:       return (E)(c - (U)a * (U)b);
 					}
 				});
 			});
 			return;
 		} // switch
+		// The widening arithmetic, which occupies the whole top quarter of
+		// the table.
+		if (integer_widening(cpu, vi, !is_vx, (uint64_t)cpu.reg(vs1)))
+			return;
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	VECTOR_PRINTER("OPMVV/OPMVX", (1u << 0b010) | (1u << 0b110)));
@@ -1264,9 +2461,22 @@ namespace
 		auto& rvv = cpu.registers().rvv();
 		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
 		const bool vm = vi.OPVV.vm;
-		check_register_group(cpu, vd);
-		check_register_group(cpu, vs1);
-		check_register_group(cpu, vs2);
+		{
+			// Only the plain element-wise arithmetic has three LMUL-sized
+			// groups. The reductions have a single-register vd and vs1, the
+			// compares write a mask register, the unary group covers the
+			// scalar moves and the widening conversions, and everything from
+			// funct6 110000 up is widening.
+			const unsigned f6 = vi.OPVV.funct6;
+			const bool reduce = f6 < 0b001000 && (f6 & 1);
+			const bool mask_dest = f6 >= 0b011000 && f6 <= 0b011111;
+			const bool unary = f6 == 0b010000 || f6 == 0b010010 || f6 == 0b010011;
+			if (f6 < 0b110000 && !reduce && !mask_dest && !unary) {
+				check_register_group(cpu, vd);
+				check_register_group(cpu, vs1);
+				check_register_group(cpu, vs2);
+			}
+		}
 
 		switch (vi.OPVV.funct6) {
 		case 0b000000: // VFADD.VV
@@ -1327,13 +2537,14 @@ namespace
 				using B = std::conditional_t<sizeof(F) == 4, uint32_t, uint64_t>;
 				constexpr B sign_bit = B(1) << (8 * sizeof(B) - 1);
 				const unsigned funct6 = vi.OPVV.funct6;
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					B a = (B)element_at<F>(rvv, vs2, i);
-					const B b = (B)element_at<F>(rvv, vs1, i);
-					if (funct6 == 0b001000) a = (a & ~sign_bit) | (b & sign_bit);
-					else if (funct6 == 0b001001) a = (a & ~sign_bit) | ((~b) & sign_bit);
-					else a = a ^ (b & sign_bit);
-					return (F)a;
+				// Sign injection moves bits, not values, so the elements
+				// are read and written as raw patterns of the same width.
+				vector_element_loop<B>(cpu, vd, vm, [&] (uint64_t i) {
+					const B a = element_at<B>(rvv, vs2, i);
+					const B b = element_at<B>(rvv, vs1, i);
+					if (funct6 == 0b001000) return B((a & ~sign_bit) | (b & sign_bit));
+					if (funct6 == 0b001001) return B((a & ~sign_bit) | (~b & sign_bit));
+					return B(a ^ (b & sign_bit));
 				});
 			});
 			return;
@@ -1350,7 +2561,7 @@ namespace
 				return;
 			}
 			break;
-		case 0b010011: // VFSQRT.V (vs1=0), VFCLASS.V (vs1=10000)
+		case 0b010011: // VFSQRT.V and the two estimates, plus VFCLASS.V
 			if (vs1 == 0b00000) {
 				fp_sew_dispatch(cpu, [&] (auto tag) {
 					using F = decltype(tag);
@@ -1359,11 +2570,32 @@ namespace
 					});
 				});
 				return;
-			} else if (vs1 == 0b10000) {
+			} else if (vs1 == 0b00100) { // VFRSQRT7.V
 				fp_sew_dispatch(cpu, [&] (auto tag) {
 					using F = decltype(tag);
-					mask_dest_loop(cpu, vd, vm, [&] (uint64_t i) {
-						return fp_class_mask(element_at<F>(rvv, vs2, i));
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						return vfrsqrt7(element_at<F>(rvv, vs2, i));
+					});
+				});
+				return;
+			} else if (vs1 == 0b00101) { // VFREC7.V
+				const unsigned frm = cpu.registers().fcsr().frm;
+				fp_sew_dispatch(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						return vfrec7(element_at<F>(rvv, vs2, i), frm);
+					});
+				});
+				return;
+			} else if (vs1 == 0b10000) { // VFCLASS.V
+				// The classification is a ten-bit value written to an
+				// SEW-wide element, exactly like the scalar fclass writes
+				// an integer register -- not a mask.
+				fp_sew_dispatch(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					using B = std::conditional_t<sizeof(F) == 4, uint32_t, uint64_t>;
+					vector_element_loop<B>(cpu, vd, vm, [&] (uint64_t i) {
+						return (B)fp_class_mask(element_at<F>(rvv, vs2, i));
 					});
 				});
 				return;
@@ -1466,20 +2698,28 @@ namespace
 					const F a = element_at<F>(rvv, vs1, i);
 					const F b = element_at<F>(rvv, vs2, i);
 					const F c = element_at<F>(rvv, vd, i);
+					// These are fused: the product is not rounded before
+					// the addition, so they go through std::fma just like
+					// the scalar FMADD family does. The four `n` forms
+					// negate the whole expression, which is the same as
+					// negating one factor and the addend.
 					switch (funct6) {
-						case 0b101000: return a * c + b;
-						case 0b101001: return -(a * c) - b;
-						case 0b101010: return a * c - b;
-						case 0b101011: return -(a * c) + b;
-						case 0b101100: return a * b + c;
-						case 0b101101: return -(a * b) - c;
-						case 0b101110: return a * b - c;
-						default:        return -(a * b) + c;
+						case 0b101000: return  std::fma(a, c, b);
+						case 0b101001: return -std::fma(a, c, b);
+						case 0b101010: return  std::fma(a, c, -b);
+						case 0b101011: return  std::fma(-a, c, b);
+						case 0b101100: return  std::fma(a, b, c);
+						case 0b101101: return -std::fma(a, b, c);
+						case 0b101110: return  std::fma(a, b, -c);
+						default:       return  std::fma(-a, b, c);
 					}
 				});
 			});
 			return;
 		} // switch
+		// The widening arithmetic and the two widening reductions.
+		if (float_widening(cpu, vi, true, 0.0f))
+			return;
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	VECTOR_PRINTER("OPFVV", 1u << 0b001));
@@ -1493,8 +2733,17 @@ namespace
 		auto& rvv = cpu.registers().rvv();
 		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
 		const bool vm = vi.OPVV.vm;
-		check_register_group(cpu, vd);
-		check_register_group(cpu, vs2);
+		{
+			// The second source is an f register here, so only vd and vs2
+			// can be groups -- and not for the compares, which write a mask,
+			// nor for vfmv.s.f, whose destination is one element.
+			const unsigned f6 = vi.OPVV.funct6;
+			const bool mask_dest = f6 >= 0b011000 && f6 <= 0b011111;
+			if (f6 < 0b110000 && !mask_dest && f6 != 0b010000) {
+				check_register_group(cpu, vd);
+				check_register_group(cpu, vs2);
+			}
+		}
 
 		float  scalar_f = 0.0f;
 		double scalar_d = 0.0;
@@ -1555,13 +2804,15 @@ namespace
 				constexpr B sign_bit = B(1) << (8 * sizeof(B) - 1);
 				const F sf = sizeof(F) == 4 ? (F)scalar_f : (F)scalar_d;
 				const unsigned funct6 = vi.OPVV.funct6;
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					B a = (B)element_at<F>(rvv, vs2, i);
-					const B b = (B)sf;
-					if (funct6 == 0b001000) a = (a & ~sign_bit) | (b & sign_bit);
-					else if (funct6 == 0b001001) a = (a & ~sign_bit) | ((~b) & sign_bit);
-					else a = a ^ (b & sign_bit);
-					return (F)a;
+				// As in the .vv form, these move bit patterns; only the
+				// scalar's sign bit is actually used.
+				B b;
+				__builtin_memcpy(&b, &sf, sizeof(b));
+				vector_element_loop<B>(cpu, vd, vm, [&] (uint64_t i) {
+					const B a = element_at<B>(rvv, vs2, i);
+					if (funct6 == 0b001000) return B((a & ~sign_bit) | (b & sign_bit));
+					if (funct6 == 0b001001) return B((a & ~sign_bit) | (~b & sign_bit));
+					return B(a ^ (b & sign_bit));
 				});
 			});
 			return;
@@ -1687,20 +2938,25 @@ namespace
 				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
 					const F b = element_at<F>(rvv, vs2, i);
 					const F c = element_at<F>(rvv, vd, i);
+					// Fused, as in the .vv forms above.
 					switch (funct6) {
-						case 0b101000: return s * c + b;
-						case 0b101001: return -(s * c) - b;
-						case 0b101010: return s * c - b;
-						case 0b101011: return -(s * c) + b;
-						case 0b101100: return s * b + c;
-						case 0b101101: return -(s * b) - c;
-						case 0b101110: return s * b - c;
-						default:        return -(s * b) + c;
+						case 0b101000: return  std::fma(s, c, b);
+						case 0b101001: return -std::fma(s, c, b);
+						case 0b101010: return  std::fma(s, c, -b);
+						case 0b101011: return  std::fma(-s, c, b);
+						case 0b101100: return  std::fma(s, b, c);
+						case 0b101101: return -std::fma(s, b, c);
+						case 0b101110: return  std::fma(s, b, -c);
+						default:       return  std::fma(-s, b, c);
 					}
 				});
 			});
 			return;
 		} // switch
+		// The widening arithmetic. Its sources are single precision, so it
+		// takes the f32 scalar whatever SEW says.
+		if (float_widening(cpu, vi, false, scalar_f))
+			return;
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
 	VECTOR_PRINTER("OPFVF", 1u << 0b101));

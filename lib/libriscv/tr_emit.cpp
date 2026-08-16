@@ -321,9 +321,14 @@ struct Emitter
 			break;
 		case RV32F_LOAD:  // Vector loads address memory through x[rs1]
 			use.reads[0] = vi.VL.rs1;
+			// A strided access takes its byte stride from x[rs2] too.
+			if (vi.VL.mop == 0b10)
+				use.reads[1] = vi.VLS.rs2;
 			break;
 		case RV32F_STORE: // x[rs1] likewise
 			use.reads[0] = vi.VS.rs1;
+			if (vi.VS.mop == 0b10)
+				use.reads[1] = vi.VSS.rs2;
 			break;
 		default:
 			break;

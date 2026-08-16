@@ -156,7 +156,7 @@ namespace riscv
 		{
 			static const Entry table[64] = {
 			/* 00 */ { "vadd",       AS_VV|AS_VX|AS_VI, SH_ARITH },
-			/* 01 */ { nullptr,      0,                 SH_ARITH },
+			/* 01 */ { "vandn",     AS_VV|AS_VX,       SH_ARITH }, // Zvbb
 			/* 02 */ { "vsub",       AS_VV|AS_VX,       SH_ARITH },
 			/* 03 */ { "vrsub",            AS_VX|AS_VI, SH_ARITH },
 			/* 04 */ { "vminu",      AS_VV|AS_VX,       SH_ARITH },
@@ -175,8 +175,8 @@ namespace riscv
 			/* 17 */ { "vmadc",      AS_VV|AS_VX|AS_VI, SH_MCARRY },
 			/* 18 */ { "vsbc",       AS_VV|AS_VX,       SH_CARRY },
 			/* 19 */ { "vmsbc",      AS_VV|AS_VX,       SH_MCARRY },
-			/* 20 */ { nullptr,      0,                 SH_ARITH },
-			/* 21 */ { nullptr,      0,                 SH_ARITH },
+			/* 20 */ { "vror",       AS_VV|AS_VX,       SH_SHIFT }, // Zvbb; .vi below
+			/* 21 */ { "vrol",       AS_VV|AS_VX,       SH_SHIFT }, // Zvbb
 			/* 22 */ { nullptr,      0,                 SH_ARITH },
 			/* 23 */ { nullptr,      0,                 SH_ARITH }, // VMERGE / VMV.V.*
 			/* 24 */ { "vmseq",      AS_VV|AS_VX|AS_VI, SH_ARITH },
@@ -205,6 +205,10 @@ namespace riscv
 			/* 47 */ { "vnclip",     AS_VV|AS_VX|AS_VI, SH_WIDE },
 			/* 48 */ { "vwredsumu",  AS_VV,             SH_REDUCE },
 			/* 49 */ { "vwredsum",   AS_VV,             SH_REDUCE },
+			/* 50 */ { nullptr,      0,                 SH_ARITH },
+			/* 51 */ { nullptr,      0,                 SH_ARITH },
+			/* 52 */ { nullptr,      0,                 SH_ARITH },
+			/* 53 */ { "vwsll",      AS_VV|AS_VX|AS_VI, SH_SHIFT }, // Zvbb
 			};
 
 			const rv32v_instruction v { i };
@@ -234,6 +238,15 @@ namespace riscv
 					return bad(b, n, i);
 				return snprintf(b, n, "vmv%ur.v\t%s,%s", nregs,
 					RVPRINT::vreg(vd), RVPRINT::vreg(vs2));
+			}
+			// VROR.VI needs six bits of rotate amount and borrows the low
+			// bit of funct6 for the sixth, so its two halves are a pair of
+			// code points rather than one. Rotate-left has no .vi form: it
+			// is the same instruction with the amount negated.
+			if ((f6 & 0b111110) == 0b010100 && form == AS_VI) {
+				return snprintf(b, n, "vror.vi\t%s,%s,%u%s",
+					RVPRINT::vreg(vd), RVPRINT::vreg(vs2),
+					((f6 & 1) << 5) | field, vmask(vm));
 			}
 			// VRGATHEREI16 shares VSLIDEUP's code point, in the .vv form only.
 			if (f6 == 0b001110 && form == AS_VV) {
@@ -344,13 +357,16 @@ namespace riscv
 						RVPRINT::reg(vd), RVPRINT::vreg(vs2), vmask(vm));
 				return bad(b, n, i);
 			case 0b010010: {
-				// The integer extensions: the source field spells the factor,
-				// and its low bit picks sign- over zero-extension.
-				static const char* const names[8] = {
+				// The integer extensions, whose source field spells the
+				// factor with its low bit picking sign- over zero-extension,
+				// plus the Zvbb bit operations that share the group.
+				static const char* const names[16] = {
 					nullptr, nullptr, "vzext.vf8", "vsext.vf8",
 					"vzext.vf4", "vsext.vf4", "vzext.vf2", "vsext.vf2",
+					"vbrev8.v", "vrev8.v", "vbrev.v", nullptr,
+					"vclz.v", "vctz.v", "vcpop.v", nullptr,
 				};
-				if (form != AS_VV || field >= 8 || names[field] == nullptr)
+				if (form != AS_VV || field >= 16 || names[field] == nullptr)
 					return bad(b, n, i);
 				return unary(b, n, names[field], i);
 			}

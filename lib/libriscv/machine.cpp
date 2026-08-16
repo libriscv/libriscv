@@ -287,9 +287,91 @@ namespace riscv
 		Machine<W>::on_unhandled_csr(machine, csr, rd, rs1);
 	}
 
+#ifdef RISCV_EXT_VECTOR
+	/**
+	 * The vector CSRs, which all six CSR instructions reach the same way:
+	 * read the old value into rd, then write back the value the operation
+	 * computes from it. Returns false for a CSR that is not one of ours, so
+	 * the caller can carry on with its own table.
+	 *
+	 * vl, vtype and vlenb are read-only -- only vsetvl writes them -- so a
+	 * CSR instruction that would write one raises illegal-operation. The
+	 * set/clear forms only count as a write when their source is nonzero,
+	 * which is what makes `csrr rd, vl` (a CSRRS with rs1=x0) legal.
+	 */
+	template <int W>
+	static bool handle_vector_csr(Machine<W>& machine, union rv32i_instruction instr)
+	{
+		const uint32_t csr = instr.Itype.imm;
+		switch (csr) {
+			case 0x008: case 0x009: case 0x00A: case 0x00F:
+			case 0xC20: case 0xC21: case 0xC22:
+				break;
+			default:
+				return false;
+		}
+		auto& cpu = machine.cpu;
+		auto& rvv = cpu.registers().rvv();
+		using register_t = typename Machine<W>::address_t;
+
+		const unsigned funct3 = instr.Itype.funct3;
+		const bool immediate = funct3 >= 0x5;
+		// CSRRWI and friends take a 5-bit unsigned immediate where the
+		// register forms take rs1.
+		const register_t src = immediate
+			? register_t(instr.Itype.rs1) : cpu.reg(instr.Itype.rs1);
+		// A swap always writes; set and clear only when they have bits to
+		// set or clear, which is how a plain read is spelled. Both forms
+		// name their source in rs1, so one test covers them.
+		const bool writes = (funct3 == 0x1 || funct3 == 0x5)
+			|| instr.Itype.rs1 != 0;
+
+		register_t old;
+		switch (csr) {
+			case 0x008: old = rvv.vstart(); break;
+			case 0x009: old = rvv.vxsat();  break;
+			case 0x00A: old = rvv.vxrm();   break;
+			case 0x00F: old = rvv.vcsr();   break;
+			case 0xC20: old = rvv.vl();     break;
+			case 0xC21: old = rvv.vtype();  break;
+			default:    old = rvv.vlenb();  break; // 0xC22
+		}
+
+		if (writes && csr >= 0xC20) {
+			cpu.trigger_exception(ILLEGAL_OPERATION, csr);
+			return true;
+		}
+		if (instr.Itype.rd != 0)
+			cpu.reg(instr.Itype.rd) = old;
+		if (!writes)
+			return true;
+
+		const register_t value =
+			(funct3 == 0x1 || funct3 == 0x5) ? src :
+			(funct3 == 0x2 || funct3 == 0x6) ? register_t(old | src) :
+			register_t(old & ~src);
+
+		switch (csr) {
+			case 0x008: rvv.set_vstart(value); break;
+			case 0x009: rvv.set_vxsat(value & 1); break;
+			case 0x00A: rvv.set_vxrm((unsigned)value); break;
+			default:    rvv.set_vcsr((unsigned)value); break; // 0x00F
+		}
+		return true;
+	}
+#endif
+
 	template <int W>
 	void Machine<W>::system(union rv32i_instruction instr)
 	{
+#ifdef RISCV_EXT_VECTOR
+		// The vector CSRs are shared by all six CSR instructions, so they
+		// are handled once here rather than in each of the tables below.
+		if (instr.Itype.funct3 != 0x0 && instr.Itype.funct3 != 0x4) {
+			if (handle_vector_csr(*this, instr))
+				return;
+		}
+#endif
 		switch (instr.Itype.funct3) {
 		case 0x0: // SYSTEM functions
 			switch (instr.Itype.imm)
