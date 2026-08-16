@@ -21,3 +21,4 @@ callgraph.svg
 *.o
 *.os
 .DS_Store
+__pycache__/

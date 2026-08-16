@@ -1,8 +1,31 @@
 #include "rvv.hpp"
 #include "instr_helpers.hpp"
+#include "rvv_printer.hpp"
 #include <cmath>
 #include <cstdint>
 #include <type_traits>
+
+/// Printer for one OP-V family. The funct3 values the decoder routes here are
+/// spelled out as a bitmask, so a mis-routed encoding says so rather than
+/// quietly disassembling as whatever else lives at that funct6.
+#define VECTOR_PRINTER(family, accepted) \
+	[] (char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) RVPRINTR_ATTR { \
+		return riscv::RVVDISASM::expect(buffer, len, instr, family, accepted); \
+	}
+
+/// The same, for the three configuration instructions: they share funct3, and
+/// the top two bits of the encoding are what tells them apart.
+#define VSETVL_PRINTER(family, accepted) \
+	[] (char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) RVPRINTR_ATTR { \
+		return riscv::RVVDISASM::expect_config(buffer, len, instr, family, accepted); \
+	}
+
+/// Printer for the vector unit-stride, strided, indexed and whole-register
+/// loads and stores, all of which share one decoder entry per direction.
+#define VECTOR_MEM_PRINTER(is_store) \
+	[] (char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) RVPRINTR_ATTR { \
+		return riscv::RVVDISASM::op_memory(buffer, len, instr, is_store); \
+	}
 
 namespace riscv
 {
@@ -380,19 +403,7 @@ namespace
 		rvv.set_vl(vl);
 		if (!rd_is_x0) cpu.reg(vi.VLI.rd) = rvv.vl();
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		const uint32_t lmul = vi.VLI.zimm & 0x7;
-		static const char lmul_str[8][8] = {
-			"1", "2", "4", "8", "?", "1/8", "1/4", "1/2"};
-		return snprintf(buffer, len, "VSETVLI %s, %s, e%u, m%s, t%s, m%s",
-						RISCV::regname(vi.VLI.rd),
-						RISCV::regname(vi.VLI.rs1),
-						8u << ((vi.VLI.zimm >> 3) & 0x7),
-						lmul_str[lmul],
-						(vi.VLI.zimm & 0x40) ? "a" : "u",
-						(vi.VLI.zimm & 0x80) ? "a" : "u");
-	});
+	VSETVL_PRINTER("vsetvli", (1u << 0b00) | (1u << 0b01)));
 
 	VECTOR_INSTR(VSETIVLI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
@@ -413,17 +424,7 @@ namespace
 		rvv.set_vl(vl);
 		if (!rd_is_x0) cpu.reg(vi.IVLI.rd) = rvv.vl();
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		const uint32_t lmul = vi.IVLI.zimm & 0x7;
-		static const char lmul_str[8][8] = {
-			"1", "2", "4", "8", "?", "1/8", "1/4", "1/2"};
-		return snprintf(buffer, len, "VSETIVLI %s, 0x%X, e%u, m%s",
-						RISCV::regname(vi.IVLI.rd),
-						vi.IVLI.uimm,
-						8u << ((vi.IVLI.zimm >> 3) & 0x7),
-						lmul_str[lmul]);
-	});
+	VSETVL_PRINTER("vsetivli", 1u << 0b11));
 
 	VECTOR_INSTR(VSETVL,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
@@ -455,13 +456,7 @@ namespace
 		rvv.set_vl(vl);
 		if (!rd_is_x0) cpu.reg(vi.VSETVL.rd) = rvv.vl();
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		return snprintf(buffer, len, "VSETVL %s, %s, %s",
-						RISCV::regname(vi.VSETVL.rd),
-						RISCV::regname(vi.VSETVL.rs1),
-						RISCV::regname(vi.VSETVL.rs2));
-	});
+	VSETVL_PRINTER("vsetvl", 1u << 0b10));
 
 	namespace
 	{
@@ -563,12 +558,7 @@ namespace
 			default: cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		return snprintf(buffer, len, "VLE%d.V v%u, (%s)",
-						8 << bits_lookup(vi.VL.width),
-						vi.VL.vd, RISCV::regname(vi.VL.rs1));
-	});
+	VECTOR_MEM_PRINTER(false));
 
 	VECTOR_INSTR(VSE32,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
@@ -586,40 +576,7 @@ namespace
 			default: cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		return snprintf(buffer, len, "VSE%d.V v%u, (%s)",
-						8 << bits_lookup(vi.VS.width),
-						vi.VS.vs3, RISCV::regname(vi.VS.rs1));
-	});
-
- 	static const char *OPINAMES[64] = {
-		"VADD", "???", "VSUB", "VRSUB", "VMINU", "VMIN", "VMAXU", "VMAX",
-		"???", "VAND", "VOR", "VXOR", "VRGATHER", "???", "VSLIDE1UP", "VSLIDE1DOWN",
-		"VADC", "VMADC", "VSBC", "VMSBC", "???", "???", "???", "VMERGE",
-		"VMSEQ", "VMSNE", "VMSLTU", "VMSLT", "VMSLEU", "VMSLE", "VMSGTU", "VMSGT",
-		"VSADDU", "VSADD", "VSSUBU", "VSSUB", "???", "VSLL", "???", "VMVNR",
-		"VSRL", "VSRA", "???", "???", "???", "???", "???", "???",
-		"???", "???", "???", "???", "???", "???", "???", "???",
-		"???", "???", "???", "???", "???", "???", "???", "???"};
-	static const char *OPMNAMES[64] = {
-		"VREDSUM", "VREDAND", "VREDOR", "VREDXOR", "VREDMINU", "VREDMIN", "VREDMAXU", "VREDMAX",
-		"???", "???", "???", "???", "???", "???", "???", "???",
-		"VMV.X.S", "???", "???", "???", "VMSBF", "???", "VMSOF", "VMSIF",
-		"VMANDN", "VMAND", "VMOR", "VMXOR", "???", "VMNAND", "VMNOR", "VMXNOR",
-		"???", "???", "???", "???", "???", "VMUL", "VMULH", "VMULHU",
-		"???", "VMULHSU", "???", "VMACC", "VNMSAC", "VMADD", "VNMSUB", "???",
-		"???", "???", "???", "???", "???", "???", "???", "???",
-		"???", "???", "???", "???", "???", "???", "???", "???"};
-	static const char *OPFNAMES[64] = {
-		"VFADD", "VFREDUSUM", "VFSUB", "VFREDOSUM", "VFMIN", "VFREDMIN", "VFMAX", "VFREDMAX",
-		"VFSGNJ", "VFSGNJN", "VFSGNJX", "???", "???", "???", "VFSLIDE1UP", "VFSLIDE1DOWN",
-		"VFMV.F.S", "???", "VFCVT", "VFSQRT", "???", "???", "???", "???",
-		"VMFEQ", "VMFLE", "VMFLT", "???", "VMFNE", "VMFGT", "VMFGE", "???",
-		"VFDIV", "VFRDIV", "???", "???", "VFMUL", "???", "???", "VFRSUB",
-		"VFMADD", "VFNMADD", "VFMSUB", "VFNMSUB", "VFMACC", "VFNMACC", "VFMSAC", "VFNMSAC",
-		"???", "???", "???", "???", "???", "???", "???", "???",
-		"???", "???", "???", "???", "???", "???", "???", "???"};
+	VECTOR_MEM_PRINTER(true));
 
 	/* OPIVV: vd = vs2 OP vs1 */
 	VECTOR_INSTR(VOPI_VV,
@@ -859,12 +816,7 @@ namespace
 		} // switch
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		return snprintf(buffer, len, "%s.VV v%u, v%u, v%u",
-						OPINAMES[vi.OPVV.funct6],
-						vi.OPVV.vd, vi.OPVV.vs2, vi.OPVV.vs1);
-	});
+	VECTOR_PRINTER("OPIVV", 1u << 0b000));
 
 	/* OPIVI / OPIVX: vd = vs2 OP imm / x[rs1].
 	 * OPIVX (funct3=100) shares this slot; the scalar then comes from
@@ -1102,18 +1054,7 @@ namespace
 		} // switch
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 		},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		if (instr.Itype.funct3 == 0b100) {
-			return snprintf(buffer, len, "%s.VX v%u, v%u, %s",
-							OPINAMES[vi.OPVI.funct6],
-							vi.OPVI.vd, vi.OPVI.vs2,
-							RISCV::regname(vi.OPVI.imm));
-		}
-		return snprintf(buffer, len, "%s.VI v%u, v%u, 0x%X",
-						OPINAMES[vi.OPVI.funct6],
-						vi.OPVI.vd, vi.OPVI.vs2, vi.OPVI.imm);
-	});
+	VECTOR_PRINTER("OPIVI/OPIVX", (1u << 0b011) | (1u << 0b100)));
 
 	/* OPMVV / OPMVX: reductions, mask operations, scalar moves, slide1 */
 	VECTOR_INSTR(VOPM_VV,
@@ -1312,18 +1253,7 @@ namespace
 		} // switch
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		if (instr.Itype.funct3 == 0b110) {
-			return snprintf(buffer, len, "%s.VX v%u, v%u, %s",
-							OPMNAMES[vi.OPVV.funct6],
-							vi.OPVV.vd, vi.OPVV.vs2,
-							RISCV::regname(vi.OPVV.vs1));
-		}
-		return snprintf(buffer, len, "%s.VS/MM v%u, v%u, v%u",
-						OPMNAMES[vi.OPVV.funct6],
-						vi.OPVV.vd, vi.OPVV.vs2, vi.OPVV.vs1);
-	});
+	VECTOR_PRINTER("OPMVV/OPMVX", (1u << 0b010) | (1u << 0b110)));
 
 	/* OPFVV: vd = vs2 OP vs1 */
 	VECTOR_INSTR(VOPF_VV,
@@ -1552,12 +1482,7 @@ namespace
 		} // switch
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		return snprintf(buffer, len, "%s.VV v%u, v%u, v%u",
-						OPFNAMES[vi.OPVV.funct6],
-						vi.OPVV.vd, vi.OPVV.vs2, vi.OPVV.vs1);
-	});
+	VECTOR_PRINTER("OPFVV", 1u << 0b001));
 
 	/* OPFVF: vd = vs2 OP f[rs1] */
 	VECTOR_INSTR(VOPF_VF,
@@ -1778,10 +1703,5 @@ namespace
 		} // switch
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32v_instruction vi { instr };
-		return snprintf(buffer, len, "%s.VF v%u, v%u, f%u",
-						OPFNAMES[vi.OPVV.funct6],
-						vi.OPVV.vd, vi.OPVV.vs2, vi.OPVV.vs1);
-	});
+	VECTOR_PRINTER("OPFVF", 1u << 0b101));
 } // riscv
