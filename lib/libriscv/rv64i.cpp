@@ -2,6 +2,7 @@
 
 #include "decoder_cache.hpp"
 #include "rv32i_instr.hpp"
+#include "rv_disassembly.hpp"
 
 #define INSTRUCTION(x, ...) \
 	static const CPU<8>::instruction_t instr64i_##x { __VA_ARGS__ }
@@ -69,26 +70,28 @@ namespace riscv
 	}
 
 	template <> RISCV_COLD_PATH()
+	std::string CPU<8>::disassemble(instruction_format format) const
+	{
+		char ibuffer[256];
+		const int len = decode(format).printer(ibuffer, sizeof(ibuffer), *this, format);
+		return std::string(ibuffer, len < 0 ? 0 : len);
+	}
+
+	template <> RISCV_COLD_PATH()
 	std::string CPU<8>::to_string(instruction_format format, const instruction_t& instr) const
 	{
-		char buffer[256];
-		char ibuffer[128];
-		int  ibuflen = instr.printer(ibuffer, sizeof(ibuffer), *this, format);
-		int  len = 0;
-		if (format.length() == 4) {
-			len = snprintf(buffer, sizeof(buffer),
-					"[0x%" PRIX64 "] %08" PRIx32 " %.*s",
-					this->pc(), format.whole, ibuflen, ibuffer);
-		}
-		else if (format.length() == 2) {
-			len = snprintf(buffer, sizeof(buffer),
-					"[0x%" PRIX64 "]     %04" PRIx16 " %.*s",
-					this->pc(), (uint16_t)format.whole, ibuflen, ibuffer);
-		}
-		else {
+		char buffer[512];
+		char ibuffer[256];
+		const int ibuflen = instr.printer(ibuffer, sizeof(ibuffer), *this, format);
+		if (format.length() != 4 && format.length() != 2) {
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION_LENGTH,
 				"Unimplemented instruction format length", format.length());
 		}
+		int len = rv_frame_instruction(buffer, sizeof(buffer),
+			this->pc(), format.whole, format.length(), ibuffer, ibuflen);
+		if (len < 0 || size_t(len) >= sizeof(buffer))
+			len = int(sizeof(buffer)) - 1;
+		len += rv_annotate_registers(buffer + len, sizeof(buffer) - len, *this, ibuffer);
 		return std::string(buffer, len);
 	}
 }

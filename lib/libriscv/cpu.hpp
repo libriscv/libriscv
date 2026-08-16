@@ -99,6 +99,11 @@ namespace riscv
 		std::string to_string(format_t format) const;
 		std::string to_string(format_t format, const instruction_t &instr) const;
 
+		/// @brief Disassemble one instruction (identical to binutils)
+		/// @param format The instruction bits to disassemble
+		/// @return Canonical mnemonic and operands, separated by a tab
+		std::string disassemble(format_t format) const;
+
 		/// @brief Pretty-print the current instruction
 		/// @return Returns a formatted string of the current instruction
 		std::string current_instruction_to_string() const;

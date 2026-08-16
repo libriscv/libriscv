@@ -2,6 +2,7 @@
 
 #include "decoder_cache.hpp"
 #include "rv32i_instr.hpp"
+#include "rv_disassembly.hpp"
 #undef RISCV_EXT_COMPRESSED
 #define RISCV_128BIT_ISA_INSTRUCTIONS
 
@@ -97,6 +98,14 @@ namespace riscv
 	}
 
 	template <> RISCV_COLD_PATH()
+	std::string CPU<16>::disassemble(instruction_format format) const
+	{
+		char ibuffer[256];
+		const int len = decode(format).printer(ibuffer, sizeof(ibuffer), *this, format);
+		return std::string(ibuffer, len < 0 ? 0 : len);
+	}
+
+	template <> RISCV_COLD_PATH()
 	std::string CPU<16>::to_string(instruction_format format, const Instruction<16>& instr) const
 	{
 		char buffer[512];
@@ -119,6 +128,9 @@ namespace riscv
 			throw MachineException(UNIMPLEMENTED_INSTRUCTION_LENGTH,
 				"Unimplemented instruction format length", format.length());
 		}
+		if (len < 0 || size_t(len) >= sizeof(buffer))
+			len = int(sizeof(buffer)) - 1;
+		len += rv_annotate_registers(buffer + len, sizeof(buffer) - len, *this, ibuffer);
 		return std::string(buffer, len);
 	}
 }

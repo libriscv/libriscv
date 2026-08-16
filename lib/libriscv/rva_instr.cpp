@@ -7,12 +7,19 @@
 #else
 #define USE_ATOMIC_OPS 0
 #endif
+#include "rv_printer.hpp"
 #include <cstdint>
 #include <inttypes.h>
-static const char atomic_type[] { '?', '?', 'W', 'D', 'Q', '?', '?', '?' };
-static const char* atomic_name2[] {
-	"AMOADD", "AMOXOR", "AMOOR", "AMOAND", "AMOMIN", "AMOMAX", "AMOMINU", "AMOMAXU"
-};
+
+/// Printer for one AMO instruction. The mnemonic is baked in per instruction
+/// rather than read back out of funct5, so that if the decoder ever routes an
+/// encoding to the wrong handler the disassembly says so.
+#define AMO_PRINTER(mnemonic) \
+	[] (char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) RVPRINTR_ATTR { \
+		return riscv::RVPRINT::amo(buffer, len, mnemonic, instr.Atype.funct3, \
+			(instr.Atype.aq << 1) | instr.Atype.rl, instr.Atype.rd, instr.Atype.rs1, instr.Atype.rs2); \
+	}
+
 #define AMOSIZE_W   0x2
 #define AMOSIZE_D   0x3
 #define AMOSIZE_Q   0x4
@@ -61,14 +68,7 @@ namespace riscv
 #endif
 		});
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		return snprintf(buffer, len, "%s.%c [%s] %s, %s",
-						atomic_name2[instr.Atype.funct5 >> 2],
-						atomic_type[instr.Atype.funct3 & 7],
-                        RISCV::regname(instr.Atype.rs1),
-                        RISCV::regname(instr.Atype.rs2),
-                        RISCV::regname(instr.Atype.rd));
-	});
+	AMO_PRINTER("amoadd"));
 
 	ATOMIC_INSTR(AMOXOR_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -83,7 +83,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amoxor"));
 
 	ATOMIC_INSTR(AMOOR_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -98,7 +98,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amoor"));
 
 	ATOMIC_INSTR(AMOAND_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -113,7 +113,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amoand"));
 
 	ATOMIC_INSTR(AMOMAX_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -124,7 +124,7 @@ namespace riscv
 			value = std::max(value, (int32_t)cpu.reg(rs2));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amomax"));
 
 	ATOMIC_INSTR(AMOMIN_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -135,7 +135,7 @@ namespace riscv
 			value = std::min(value, (int32_t)cpu.reg(rs2));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amomin"));
 
 	ATOMIC_INSTR(AMOMAXU_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -146,7 +146,7 @@ namespace riscv
 			value = std::max(value, (uint32_t)cpu.reg(rs2));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amomaxu"));
 
 	ATOMIC_INSTR(AMOMINU_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -157,7 +157,7 @@ namespace riscv
 			value = std::min(value, (uint32_t)cpu.reg(rs2));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amominu"));
 
 	ATOMIC_INSTR(AMOADD_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -172,7 +172,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amoadd"));
 
 	ATOMIC_INSTR(AMOXOR_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -187,7 +187,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amoxor"));
 
 	ATOMIC_INSTR(AMOOR_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -202,7 +202,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amoor"));
 
 	ATOMIC_INSTR(AMOAND_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -217,7 +217,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amoand"));
 
 	ATOMIC_INSTR(AMOMAX_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -228,7 +228,7 @@ namespace riscv
 			value = std::max(value, int64_t(cpu.reg(rs2)));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amomax"));
 
 	ATOMIC_INSTR(AMOMIN_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -239,7 +239,7 @@ namespace riscv
 			value = std::min(value, int64_t(cpu.reg(rs2)));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amomin"));
 
 	ATOMIC_INSTR(AMOMAXU_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -250,7 +250,7 @@ namespace riscv
 			value = std::max(value, (uint64_t)cpu.reg(rs2));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amomaxu"));
 
 	ATOMIC_INSTR(AMOMINU_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -261,7 +261,7 @@ namespace riscv
 			value = std::min(value, (uint64_t)cpu.reg(rs2));
 			return old_val;
 		});
-	}, DECODED_ATOMIC(AMOADD_W).printer);
+	}, AMO_PRINTER("amominu"));
 
 	ATOMIC_INSTR(AMOSWAP_W,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -277,13 +277,7 @@ namespace riscv
 #endif
 		});
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		return snprintf(buffer, len, "AMOSWAP.%c [%s] %s, %s",
-						atomic_type[instr.Atype.funct3 & 7],
-                        RISCV::regname(instr.Atype.rs1),
-                        RISCV::regname(instr.Atype.rs2),
-                        RISCV::regname(instr.Atype.rd));
-	});
+	AMO_PRINTER("amoswap"));
 
 	ATOMIC_INSTR(AMOSWAP_D,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -298,7 +292,7 @@ namespace riscv
 			return old_value;
 #endif
 		});
-	}, DECODED_ATOMIC(AMOSWAP_W).printer);
+	}, AMO_PRINTER("amoswap"));
 
     ATOMIC_INSTR(LOAD_RESV,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
@@ -336,12 +330,11 @@ namespace riscv
 		if (instr.Atype.rd != 0)
 			cpu.reg(instr.Atype.rd) = value;
 	},
-	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
-		const uint64_t addr = cpu.reg(instr.Atype.rs1);
-		return snprintf(buffer, len, "LR.%c [%s = 0x%" PRIX64 "], %s",
-				atomic_type[instr.Atype.funct3 & 7],
-				RISCV::regname(instr.Atype.rs1), addr,
-				RISCV::regname(instr.Atype.rd));
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		return snprintf(buffer, len, "lr.%s%s\t%s,(%s)",
+				RVPRINT::amo_width(instr.Atype.funct3),
+				RVPRINT::amo_ordering((instr.Atype.aq << 1) | instr.Atype.rl),
+				RVPRINT::reg(instr.Atype.rd), RVPRINT::reg(instr.Atype.rs1));
 	});
 
 	ATOMIC_INSTR(STORE_COND,
@@ -384,10 +377,7 @@ namespace riscv
 			cpu.reg(instr.Atype.rd) = !resv;
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		return snprintf(buffer, len, "SC.%c [%s], %s res=%s",
-				atomic_type[instr.Atype.funct3 & 7],
-				RISCV::regname(instr.Atype.rs1),
-				RISCV::regname(instr.Atype.rs2),
-				RISCV::regname(instr.Atype.rd));
+		return RVPRINT::amo(buffer, len, "sc", instr.Atype.funct3,
+			(instr.Atype.aq << 1) | instr.Atype.rl, instr.Atype.rd, instr.Atype.rs1, instr.Atype.rs2);
 	});
 }

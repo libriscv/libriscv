@@ -176,15 +176,8 @@ namespace riscv
 		dst.load_u32(cpu.machine().memory.template read<uint32_t> (addr));
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 8> insn {
-			"???", "FLH", "FLW", "FLD", "FLQ", "???", "???", "???"
-		};
-		return snprintf(buffer, len, "%s %s, [%s%+d]",
-						insn[fi.Itype.funct3],
-						RISCV::flpname(fi.Itype.rd),
-						RISCV::regname(fi.Stype.rs1),
-						fi.Itype.signed_imm());
+		return rv_expect_mnemonic(buffer, len, "flw",
+			RVFDISASM::op_load(buffer, len, instr));
 	});
 	FLOAT_INSTR(FLD,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
@@ -193,7 +186,11 @@ namespace riscv
 		auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
 		auto& dst = cpu.registers().getfl(fi.Itype.rd);
 		dst.load_u64(cpu.machine().memory.template read<uint64_t> (addr));
-	}, DECODED_FLOAT(FLW).printer);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fld",
+			RVFDISASM::op_load(buffer, len, instr));
+	});
 
 	FLOAT_INSTR(FSW,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
@@ -204,15 +201,8 @@ namespace riscv
 		cpu.machine().memory.template write<uint32_t> (addr, src.i32[0]);
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 8> insn {
-			"???", "FSH", "FSW", "FSD", "FSQ", "???", "???", "???"
-		};
-		return snprintf(buffer, len, "%s [%s%+d], %s",
-						insn[fi.Stype.funct3],
-						RISCV::regname(fi.Stype.rs1),
-						fi.Stype.signed_imm(),
-						RISCV::flpname(fi.Stype.rs2));
+		return rv_expect_mnemonic(buffer, len, "fsw",
+			RVFDISASM::op_store(buffer, len, instr));
 	});
 	FLOAT_INSTR(FSD,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
@@ -221,7 +211,11 @@ namespace riscv
 		const auto& src = cpu.registers().getfl(fi.Stype.rs2);
 		auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
 		cpu.machine().memory.template write<uint64_t> (addr, src.i64);
-	}, DECODED_FLOAT(FSW).printer);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fsd",
+			RVFDISASM::op_store(buffer, len, instr));
+	});
 
 	FLOAT_INSTR(FMADD,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
@@ -254,15 +248,8 @@ namespace riscv
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FMADD.S", "FMADD.D", "???", "FMADD.Q"
-		};
-		return snprintf(buffer, len, "%s %s * %s + %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rs3),
-						RISCV::flpname(fi.R4type.rd));
+		return rv_expect_mnemonic(buffer, len, "fmadd",
+			RVFDISASM::op_fused(buffer, len, instr));
 	});
 
 	FLOAT_INSTR(FMSUB,
@@ -296,15 +283,8 @@ namespace riscv
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FMSUB.S", "FMSUB.D", "???", "FMSUB.Q"
-		};
-		return snprintf(buffer, len, "%s %s * %s - %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rs3),
-						RISCV::flpname(fi.R4type.rd));
+		return rv_expect_mnemonic(buffer, len, "fmsub",
+			RVFDISASM::op_fused(buffer, len, instr));
 	});
 
 	FLOAT_INSTR(FNMADD,
@@ -338,14 +318,8 @@ namespace riscv
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FMADD.S", "FMADD.D", "???", "FMADD.Q"
-		};
-		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rd));
+		return rv_expect_mnemonic(buffer, len, "fnmadd",
+			RVFDISASM::op_fused(buffer, len, instr));
 	});
 
 	FLOAT_INSTR(FNMSUB,
@@ -379,16 +353,8 @@ namespace riscv
 		}
 	},
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FNMSUB.S", "FNMSUB.D", "???", "FNMSUB.Q"
-		};
-		return snprintf(buffer, len, "%s -(%s * %s) + %s, %s",
-						f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rs3),
-						RISCV::flpname(fi.R4type.rd));
+		return rv_expect_mnemonic(buffer, len, "fnmsub",
+			RVFDISASM::op_fused(buffer, len, instr));
 	});
 
 	FLOAT_INSTR(FADD,
@@ -429,15 +395,9 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FADD.S", "FADD.D", "???", "FADD.Q"
-		};
-		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fadd",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FSUB,
@@ -466,15 +426,9 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FSUB.S", "FSUB.D", "???", "FSUB.Q"
-		};
-		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fsub",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FMUL,
@@ -532,15 +486,9 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FMUL.S", "FMUL.D", "???", "FMUL.Q"
-		};
-		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fmul",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FDIV,
@@ -587,15 +535,9 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FDIV.S", "FDIV.D", "???", "FDIV.Q"
-		};
-		return snprintf(buffer, len, "%s %s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fdiv",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FSQRT,
@@ -645,14 +587,9 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FSQRT.S", "FSQRT.D", "???", "FSQRT.Q"
-		};
-		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fsqrt",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FMIN_FMAX,
@@ -785,17 +722,8 @@ namespace riscv
 			cpu.registers().fcsr().fflags = snan ? 16 : 0;
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 8> insn {
-			"FMIN", "FMAX", "???", "???", "???", "???", "???", "???"
-		};
-		return snprintf(buffer, len, "%s.%c %s %s, %s",
-						insn[fi.R4type.funct3],
-						RISCV::flpsize(fi.R4type.funct2),
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::regname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu));
 	});
 
 	FLOAT_INSTR(FEQ_FLT_FLE,
@@ -859,17 +787,8 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> insn {
-			"FLE", "FLT", "FEQ", "F???"
-		};
-		return snprintf(buffer, len, "%s.%c %s %s, %s",
-						insn[fi.R4type.funct3],
-						RISCV::flpsize(fi.R4type.funct2),
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::regname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu));
 	});
 
 	FLOAT_INSTR(FCVT_SD_DS,
@@ -903,14 +822,9 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FCVT.S.D", "FCVT.D.S", "???", "???"
-		};
-		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fcvt",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FCVT_W_SD,
@@ -982,14 +896,9 @@ namespace riscv
 				cpu.registers().fcsr().fflags |= 1; // NX
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FCVT.W.S", "FCVT.W.D", "???", "FCVT.W.Q"
-		};
-		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::regname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fcvt",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FCVT_SD_W,
@@ -1048,14 +957,9 @@ namespace riscv
 				cpu.registers().fcsr().fflags |= 1; // NX
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FCVT.S.W", "FCVT.D.W", "???", "FCVT.Q.W"
-		};
-		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
-						RISCV::regname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fcvt",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FSGNJ_NX,
@@ -1119,24 +1023,8 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-
-		if (fi.R4type.rs1 == fi.R4type.rs2) {
-			static const char* insn[4] = {"FMV", "FNEG", "FABS", "???"};
-			return snprintf(buffer, len, "%s.%c %s, %s",
-							insn[fi.R4type.funct3],
-							RISCV::flpsize(fi.R4type.funct2),
-							RISCV::flpname(fi.R4type.rs1),
-							RISCV::flpname(fi.R4type.rd));
-		}
-		static const char* insn[4] = {"FSGNJ", "FSGNJN", "FSGNJX", "???"};
-		return snprintf(buffer, len, "%s.%c %s %s, %s",
-						insn[fi.R4type.funct3],
-						RISCV::flpsize(fi.R4type.funct2),
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu));
 	});
 
 	FLOAT_INSTR(FCLASS, // 1110 f3 = 0x1
@@ -1179,14 +1067,9 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FCLASS.S", "FCLASS.D", "???", "FCLASS.Q"
-		};
-		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::regname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fclass",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FMV_X_W, // 1110 f3 = 0x0
@@ -1212,14 +1095,9 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FMV.X.W", "FMV.X.D", "???", "FMV.X.Q"
-		};
-		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::regname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fmv",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FMV_W_X, // 1111
@@ -1241,14 +1119,9 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		static const std::array<const char*, 4> f2 {
-			"FMV.W.X", "FMV.D.X", "???", "FMV.Q.X"
-		};
-		return snprintf(buffer, len, "%s %s, %s", f2[fi.R4type.funct2],
-						RISCV::regname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rd));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fmv",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	static constexpr uint32_t FLI_TABLE_S[32] = {
@@ -1295,12 +1168,9 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		return snprintf(buffer, len, "FLI.%c %s, #%u",
-						RISCV::flpsize(fi.R4type.funct2),
-						RISCV::flpname(fi.R4type.rd),
-						fi.R4type.rs1);
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fli",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FMINM_FMAXM,
@@ -1369,14 +1239,8 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		return snprintf(buffer, len, "%s.%c %s, %s, %s",
-						(fi.R4type.funct3 & 1) ? "FMAXM" : "FMINM",
-						RISCV::flpsize(fi.R4type.funct2),
-						RISCV::flpname(fi.R4type.rd),
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu));
 	});
 
 	FLOAT_INSTR(FROUND,
@@ -1428,13 +1292,8 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		return snprintf(buffer, len, "%s.%c %s, %s",
-						(fi.R4type.rs2 == 0x5) ? "FROUNDNX" : "FROUND",
-						RISCV::flpsize(fi.R4type.funct2),
-						RISCV::flpname(fi.R4type.rd),
-						RISCV::flpname(fi.R4type.rs1));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu));
 	});
 
 	FLOAT_INSTR(FCVTMOD_W_D,
@@ -1467,11 +1326,9 @@ namespace riscv
 				fcsr.fflags |= 1;
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		return snprintf(buffer, len, "FCVTMOD.W.D %s, %s",
-						RISCV::regname(fi.R4type.rd),
-						RISCV::flpname(fi.R4type.rs1));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fcvtmod",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FLEQ_FLTQ,
@@ -1515,14 +1372,8 @@ namespace riscv
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		return snprintf(buffer, len, "%s.%c %s, %s, %s",
-						(fi.R4type.funct3 == 0x4) ? "FLEQ" : "FLTQ",
-						RISCV::flpsize(fi.R4type.funct2),
-						RISCV::regname(fi.R4type.rd),
-						RISCV::flpname(fi.R4type.rs1),
-						RISCV::flpname(fi.R4type.rs2));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu));
 	});
 
 	FLOAT_INSTR(FMVH_X_D,
@@ -1537,11 +1388,9 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		return snprintf(buffer, len, "FMVH.X.D %s, %s",
-						RISCV::regname(fi.R4type.rd),
-						RISCV::flpname(fi.R4type.rs1));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fmvh",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 
 	FLOAT_INSTR(FMVP_D_X,
@@ -1558,11 +1407,8 @@ namespace riscv
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
-	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
-		const rv32f_instruction fi { instr };
-		return snprintf(buffer, len, "FMVP.D.X %s, %s, %s",
-						RISCV::flpname(fi.R4type.rd),
-						RISCV::regname(fi.R4type.rs1),
-						RISCV::regname(fi.R4type.rs2));
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fmvp",
+			RVFDISASM::op_fp(buffer, len, instr, RVISGE64BIT(cpu)));
 	});
 }

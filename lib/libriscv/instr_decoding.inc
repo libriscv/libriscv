@@ -163,7 +163,11 @@
 						DECODER(DECODED_INSTR(NOP));
 					}
 				case RV64I_OP_IMM32:
-					if (LIKELY(instruction.Itype.rd != 0))
+					// The *W instructions only exist from RV64 up.
+					if constexpr (sizeof(address_t) < 8) {
+						DECODER(DECODED_INSTR(ILLEGAL));
+					}
+					else if (LIKELY(instruction.Itype.rd != 0))
 					{
 						switch (instruction.Itype.funct3) {
 						case 0x0: // ADDIW
@@ -191,7 +195,11 @@
 						DECODER(DECODED_INSTR(NOP));
 					}
 				case RV64I_OP32:
-					if (LIKELY(instruction.Rtype.rd != 0))
+					// The *W instructions only exist from RV64 up.
+					if constexpr (sizeof(address_t) < 8) {
+						DECODER(DECODED_INSTR(ILLEGAL));
+					}
+					else if (LIKELY(instruction.Rtype.rd != 0))
 					{
 						switch (instruction.Rtype.jumptable_friendly_op()) {
 						case 0x0: // ADDW
@@ -561,6 +569,13 @@
 					}
 					DECODER(DECODED_INSTR(ILLEGAL));
 				case CI_CODE(0b100, 0b01):
+					if constexpr (sizeof(address_t) == 4) {
+						// insn:c-srli_rsv, insn:c-srai_rsv: on RV32 the shift
+						// amount is five bits and the encodings with shamt[5]
+						// set are reserved.
+						if ((ci.CAB.funct2 & 2) == 0 && (ci.whole & (1 << 12)))
+							DECODER(DECODED_INSTR(ILLEGAL));
+					}
 					DECODER(DECODED_COMPR(C1_ALU_OPS));
 				case CI_CODE(0b101, 0b01):
 					DECODER(DECODED_COMPR(C1_JUMP));
@@ -573,6 +588,13 @@
 				case CI_CODE(0b001, 0b10):
 				case CI_CODE(0b010, 0b10):
 				case CI_CODE(0b011, 0b10):
+					if constexpr (sizeof(address_t) == 4) {
+						// insn:c-slli_rsv: as for C.SRLI, shamt[5] is reserved
+						// on RV32. This holds for the rd = x0 HINT encodings
+						// too, so it has to be checked before them.
+						if (ci.CI.funct3 == 0x0 && (ci.whole & (1 << 12)))
+							DECODER(DECODED_INSTR(ILLEGAL));
+					}
 					if (ci.CI.funct3 == 0x0 && ci.CI.rd != 0) {
 						// C.SLLI
 						DECODER(DECODED_COMPR(C2_SLLI));
@@ -622,6 +644,12 @@
 					else if (topbit && ci.CR.rd == 0 && ci.CR.rs2 == 0)
 					{	// EBREAK
 						DECODER(DECODED_COMPR(C2_EBREAK));
+					}
+					else if (ci.CR.rs2 != 0)
+					{	// C.MV and C.ADD with rd = x0 are HINT encodings
+						// (insn:c-mv_hint, insn:c-add_hint). The spec requires
+						// them to execute as a no-op, not to trap.
+						DECODER(DECODED_INSTR(NOP));
 					}
 					DECODER(DECODED_COMPR(UNIMPLEMENTED));
 				}
