@@ -161,6 +161,9 @@ static inline double nearbyint(double x) {
 #ifndef __builtin_fabsl
 #define __builtin_fabsl(x) ((x) < 0.0L ? -(x) : (x))
 #endif
+/* Minimal nextafter for the TinyCC path. Only ever called on a finite
+   non-zero x by the FCVT int->float rounding-mode correction, so the
+   zero-crossing and NaN/inf edge cases are deliberately not handled. */
 static inline float nextafterf(float x, float y) {
 	if (x == y) return y;
 	union { float f; uint32_t u; } v = { x };

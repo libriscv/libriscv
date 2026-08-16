@@ -90,12 +90,19 @@ namespace riscv
 				case 0x3: // RUP: toward +inf
 					if (cld < exact) return std::nextafter(converted, F(INFINITY));
 					break;
-				case 0x4: // RMM: ties away from zero
-					if (fabsl(cld) < fabsl(exact))
-						return cld < 0.0L
-							? -std::nextafter(-converted, F(-INFINITY))
-							: std::nextafter(converted, F(INFINITY));
+				case 0x4: { // RMM: ties away from zero
+					// RMM differs from RNE *only* at an exact halfway point,
+					// where it takes the larger magnitude instead of the even
+					// significand. Everywhere else nearest is nearest, so the
+					// host cast is already right.
+					if (fabsl(cld) < fabsl(exact)) {
+						const F away = std::nextafter(converted,
+							converted < F(0.0) ? F(-INFINITY) : F(INFINITY));
+						if (fabsl((long double)away - exact) == fabsl(exact - cld))
+							return away;
+					}
 					break;
+				}
 				default: break; // RNE (0)
 				}
 			}

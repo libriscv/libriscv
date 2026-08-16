@@ -2220,18 +2220,24 @@ void Emitter<W>::emit()
 						// The host cast is round-to-nearest-even; the other
 						// RISC-V rounding modes need a nextafter adjustment on
 						// the float grid (see the interpreter counterpart).
-						const std::string nafn = f32 ? "nextafterf" : "nextafter";
+						const std::string nafn  = f32 ? "nextafterf" : "nextafter";
+						const std::string ftype = f32 ? "float" : "double";
+						const std::string inf   = f32 ? "__builtin_inff()" : "__builtin_inf()";
 						code += "{ const " + itype + " iv = " + value + ";"
 							" const long double iex = (long double)iv;"
-							" const " + (f32 ? "float" : "double") + " fv = (" + (f32 ? "float" : "double") + ")iv;"
+							" const " + ftype + " fv = (" + ftype + ")iv;"
 							" const long double cld = (long double)fv;"
-							" " + (f32 ? "float" : "double") + " out = fv;"
+							" " + ftype + " out = fv;"
 							" if (cld != iex) { cpu->fcsr |= 1;"
 							" const unsigned rm = (" + std::to_string((int)fi.R4type.funct3) + " == 0x7) ? ((cpu->fcsr >> 5) & 7) : " + std::to_string((int)fi.R4type.funct3) + ";"
-							" if (rm == 1) { if (iex > 0.0L && cld > iex) out = " + nafn + "(out, (" + (f32 ? "float" : "double") + ")0); else if (iex < 0.0L && cld < iex) out = " + nafn + "(out, (" + (f32 ? "float" : "double") + ")0); }"
-							" else if (rm == 2) { if (cld > iex) out = " + nafn + "(out, -(__builtin_inf" + (f32 ? "f" : "") + "())); }"
-							" else if (rm == 3) { if (cld < iex) out = " + nafn + "(out, __builtin_inf" + (f32 ? "f" : "") + "()); }"
-							" else if (rm == 4) { if (__builtin_fabsl(cld) < __builtin_fabsl(iex)) out = cld < 0.0L ? -" + nafn + "(-out, -__builtin_inf" + (f32 ? "f" : "") + "()) : " + nafn + "(out, __builtin_inf" + (f32 ? "f" : "") + "()); } }"
+							" if (rm == 1) { if ((iex > 0.0L && cld > iex) || (iex < 0.0L && cld < iex)) out = " + nafn + "(out, (" + ftype + ")0); }"
+							" else if (rm == 2) { if (cld > iex) out = " + nafn + "(out, -" + inf + "); }"
+							" else if (rm == 3) { if (cld < iex) out = " + nafn + "(out, " + inf + "); }"
+							// RMM differs from RNE only at an exact halfway
+							// point, where it takes the larger magnitude.
+							" else if (rm == 4) { if (__builtin_fabsl(cld) < __builtin_fabsl(iex)) {"
+							" const " + ftype + " away = " + nafn + "(out, out < (" + ftype + ")0 ? -" + inf + " : " + inf + ");"
+							" if (__builtin_fabsl((long double)away - iex) == __builtin_fabsl(iex - cld)) out = away; } } }"
 							" " + setter + "(&" + dst + ", out); }\n";
 					} else {
 						code += setter + "(&" + dst + ", " + value + ");\n";
