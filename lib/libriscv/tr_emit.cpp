@@ -2273,7 +2273,9 @@ void Emitter<W>::emit()
 							" " + reg + " = (fcvt_r != fcvt_r || fcvt_r >= " + upper + ") ? "
 							+ maxval + " : " + minval + ";"
 							+ (fcsr_emulation ? " cpu->fcsr |= 16;" : "")
-							+ " } else " + reg + " = " + cast + "fcvt_r; }\n";
+							+ " } else { " + reg + " = " + cast + "fcvt_r;"
+							+ (fcsr_emulation ? " if (fcvt_r != (double)(" + src + ")) cpu->fcsr |= 1;" : "")
+							+ " } }\n";
 					}
 				} else {
 					UNKNOWN_INSTRUCTION();
