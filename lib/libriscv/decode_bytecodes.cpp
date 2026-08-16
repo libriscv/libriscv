@@ -315,13 +315,13 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				else
 					return RV32I_BC_ADDI;
 			case 0x1: // SLLI, ...
-				if (instr.Itype.high_bits() == 0x0)
+				if (instr.Itype.high_bits() == 0x0 && (W != 4 || (instr.Itype.imm & 0x20) == 0))
 					return RV32I_BC_SLLI;
 				else if (instr.Itype.imm == 0b011000000100) // SEXT.B
 					return RV32I_BC_SEXT_B;
 				else if (instr.Itype.imm == 0b011000000101) // SEXT.H
 					return RV32I_BC_SEXT_H;
-				else if (instr.Itype.high_bits() == 0x280) // BSETI
+				else if (instr.Itype.high_bits() == 0x280 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) // BSETI
 					return RV32I_BC_BSETI;
 				else
 					return RV32I_BC_FUNCTION;
@@ -332,11 +332,11 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			case 0x4: // XORI
 				return RV32I_BC_XORI;
 			case 0x5:
-				if (instr.Itype.high_bits() == 0x0)
+				if (instr.Itype.high_bits() == 0x0 && (W != 4 || (instr.Itype.imm & 0x20) == 0))
 					return RV32I_BC_SRLI;
-				else if (instr.Itype.is_srai())
+				else if (instr.Itype.is_srai() && (W != 4 || (instr.Itype.imm & 0x20) == 0))
 					return RV32I_BC_SRAI;
-				else if (instr.Itype.high_bits() == 0x480) // BEXTI
+				else if (instr.Itype.high_bits() == 0x480 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) // BEXTI
 					return RV32I_BC_BEXTI;
 				else
 					return RV32I_BC_FUNCTION;

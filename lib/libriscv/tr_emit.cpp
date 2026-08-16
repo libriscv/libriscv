@@ -1260,19 +1260,19 @@ void Emitter<W>::emit()
 							dst + " = do_cpopl(" + src + ");");
 					break;
 				default:
-					if (instr.Itype.high_bits() == 0) {
+					if (instr.Itype.high_bits() == 0 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 						// SLLI: Logical left-shift immediate
 						emit_op(" << ", " <<= ", instr.Itype.rd, instr.Itype.rs1,
 							std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
-					} else if (instr.Itype.high_bits() == 0x280) {
+					} else if (instr.Itype.high_bits() == 0x280 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 						// BSETI: Bit-set immediate
 						add_code(dst + " = " + src + " | ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					}
-					else if (instr.Itype.high_bits() == 0x480) {
+					else if (instr.Itype.high_bits() == 0x480 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 						// BCLRI: Bit-clear immediate
 						add_code(dst + " = " + src + " & ~((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					}
-					else if (instr.Itype.high_bits() == 0x680) {
+					else if (instr.Itype.high_bits() == 0x680 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 						// BINVI: Bit-invert immediate
 						add_code(dst + " = " + src + " ^ ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
 					} else {
@@ -1293,7 +1293,7 @@ void Emitter<W>::emit()
 				emit_op(" ^ ", " ^= ", instr.Itype.rd, instr.Itype.rs1, from_imm(instr.Itype.signed_imm()));
 				break;
 			case 0x5: // SRLI / SRAI / ORC.B:
-				if (instr.Itype.is_rori()) {
+				if (instr.Itype.is_rori() && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 					// RORI: Rotate right immediate
 					add_code(
 					"{const unsigned shift = " + from_imm(instr.Itype.imm & (XLEN-1)) + ";\n",
@@ -1311,15 +1311,15 @@ void Emitter<W>::emit()
 						add_code(dst + " = do_bswap32(" + src + ");");
 					else
 						add_code(dst + " = do_bswap64(" + src + ");");
-				} else if (instr.Itype.high_bits() == 0x0) {
+				} else if (instr.Itype.high_bits() == 0x0 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 					// SRLI: Logical right-shift immediate
 					emit_op(" >> ", " >>= ", instr.Itype.rd, instr.Itype.rs1,
 						std::to_string(instr.Itype.shift64_imm() & (XLEN-1)));
-				} else if (instr.Itype.high_bits() == 0x400) {
+				} else if (instr.Itype.high_bits() == 0x400 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 					// SRAI: Arithmetic right-shift immediate
 					add_code(
 						dst + " = (saddr_t)" + src + " >> " + std::to_string(instr.Itype.imm & (XLEN-1)) + ";");
-				} else if (instr.Itype.high_bits() == 0x480) { // BEXTI: Bit-extract immediate
+				} else if (instr.Itype.high_bits() == 0x480 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) { // BEXTI: Bit-extract immediate
 					add_code(
 						dst + " = (" + src + " >> (" + std::to_string(instr.Itype.imm & (XLEN-1)) + ")) & 1;");
 				} else {
