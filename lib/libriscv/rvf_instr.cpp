@@ -234,6 +234,16 @@ namespace riscv
 		// RISC-V spec §11.6: FMA must round only once (fused).
 		// std::fma is IEEE 754 fused multiply-add.
 		if (fi.R4type.funct2 == 0x0) { // float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs3.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			dst.set_float(std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]));
 			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
@@ -266,6 +276,16 @@ namespace riscv
 		// RISC-V spec §11.6: FMA must round only once (fused).
 		// FMSUB = rs1*rs2 - rs3 = fma(rs1, rs2, -rs3).
 		if (fi.R4type.funct2 == 0x0) { // float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs3.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			dst.set_float(std::fma(rs1.f32[0], rs2.f32[0], -rs3.f32[0]));
 			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
@@ -298,6 +318,16 @@ namespace riscv
 		// RISC-V spec §11.6: FMA must round only once (fused).
 		// FNMADD = -(rs1*rs2) - rs3 = -fma(rs1, rs2, rs3).
 		if (fi.R4type.funct2 == 0x0) { // float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs3.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			dst.set_float(-std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]));
 			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
@@ -329,6 +359,16 @@ namespace riscv
 		// RISC-V spec §11.6: FMA must round only once (fused).
 		// FNMSUB = -(rs1*rs2) + rs3 = fma(-rs1, rs2, rs3).
 		if (fi.R4type.funct2 == 0x0) { // float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs3.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			dst.set_float(std::fma(-rs1.f32[0], rs2.f32[0], rs3.f32[0]));
 			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
@@ -408,6 +448,15 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			dst.set_float(rs1.f32[0] - rs2.f32[0]);
 			fsflags(cpu, (double)(rs1.f32[0]) - (double)(rs2.f32[0]), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
@@ -436,6 +485,15 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			// Operands are read out before the store, because rd is allowed to
 			// alias rs1 or rs2.
 			const uint32_t ia = rs1.i32[0], ib = rs2.i32[0];
@@ -493,6 +551,15 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		if (fi.R4type.funct2 == 0x0) { // fp32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			// Operands read out before the store: rd may alias rs1 or rs2. DZ
 			// is only for a finite non-zero numerator over zero: 0/0 is NV and
 			// inf/0 is exact.
@@ -539,6 +606,14 @@ namespace riscv
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		switch (fi.R4type.funct2) {
 		case 0x0: // FSQRT.S
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u32(CANONICAL_NAN_F32);
+					return;
+				}
+			}
 			// sqrt(qNaN) is the canonical qNaN and is *not* an invalid
 			// operation; only a signaling NaN input raises NV. fsflags() would
 			// raise it for both, so quiet NaNs are handled before we get there.
@@ -587,6 +662,29 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+
+		// RV64 NaN-boxing: an operand whose upper 32 bits are not all ones
+		// is read as the canonical quiet NaN, not as its low word. That also
+		// makes the FMIN/FMAX NaN-propagation agree with the spec: a single
+		// non-boxed operand yields the other operand, and a quiet NaN never
+		// raises NV.
+		if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+			if (fi.R4type.funct2 == 0x0
+				&& UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				const bool nb1 = static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu;
+				const bool nb2 = static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu;
+				if (nb1 && nb2)
+					dst.load_u32(CANONICAL_NAN_F32);
+				else if (nb1)
+					dst.load_u32(rs2.i32[0]);
+				else
+					dst.load_u32(rs1.i32[0]);
+				if constexpr (fcsr_emulation)
+					cpu.registers().fcsr().fflags = 0;
+				return;
+			}
+		}
 
 		// RISC-V spec §11.6 FMIN/FMAX: treat -0.0 < +0.0 (IEEE 754
 		// fmin/fmax leave ±0 ordering implementation-defined). We
@@ -708,6 +806,29 @@ namespace riscv
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& dst = cpu.reg(fi.R4type.rd);
 
+		// RV64 NaN-boxing: an operand whose upper 32 bits are not all ones
+		// is read as the canonical quiet NaN, not as its low word. All
+		// compares then return false; a quiet NaN input does not raise NV,
+		// so clear the flags the same way feqflags would.
+		if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+			if (fi.R4type.funct2 == 0x0
+				&& UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				dst = 0;
+				if constexpr (fcsr_emulation) {
+					// FLE/FLT are signaling compares: any NaN operand
+					// (including the canonical qNaN a non-boxed operand is
+					// read as) raises NV. FEQ is quiet: only sNaN raises NV.
+					const unsigned op = fi.R4type.funct3 | (fi.R4type.funct2 << 4);
+					if (op == 0x0 || op == 0x1 || op == 0x10 || op == 0x11)
+						cpu.registers().fcsr().fflags = 16; // NV
+					else
+						cpu.registers().fcsr().fflags = 0;
+				}
+				return;
+			}
+		}
+
 		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
 		{
 		case 0x0: // FLE.S
@@ -765,6 +886,14 @@ namespace riscv
 				dst.set_float(rs1.f64);
 			break;
 		case 0x1: // FCVT.D.S (32 -> 64)
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu)) {
+					dst.load_u64(CANONICAL_NAN_F64);
+					break;
+				}
+			}
 			if (std::isnan(rs1.f32[0]))
 				dst.load_u64(CANONICAL_NAN_F64);
 			else
@@ -795,24 +924,35 @@ namespace riscv
 		auto& dst = cpu.reg(fi.R4type.rd);
 		bool invalid = false, inexact = false;
 		switch (fi.R4type.funct2) {
-		case 0x0: // from float32
+		case 0x0: { // from float32
+			// RV64 NaN-boxing: an operand whose upper 32 bits are not all
+			// ones is read as the canonical quiet NaN, not as its low word.
+			// A NaN operand converts to the maximum value and raises NV,
+			// which fcvt_to_integer() below already does for qNaN. The source
+			// register itself must not be modified, so substitute a local.
+			float src = rs1.f32[0];
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu))
+					__builtin_memcpy(&src, &CANONICAL_NAN_F32, sizeof(src));
+			}
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.W.S (sign-extended 32-bit result)
-				dst = fcvt_to_integer<int32_t>(rs1.f32[0], rmm, invalid, inexact);
+				dst = fcvt_to_integer<int32_t>(src, rmm, invalid, inexact);
 				break;
 			case 0x1: // FCVT.WU.S (sign-extended 32-bit result)
-				dst = int32_t(fcvt_to_integer<uint32_t>(rs1.f32[0], rmm, invalid, inexact));
+				dst = int32_t(fcvt_to_integer<uint32_t>(src, rmm, invalid, inexact));
 				break;
 			case 0x2: // FCVT.L.S
-				dst = fcvt_to_integer<int64_t>(rs1.f32[0], rmm, invalid, inexact);
+				dst = fcvt_to_integer<int64_t>(src, rmm, invalid, inexact);
 				break;
 			case 0x3: // FCVT.LU.S
-				dst = fcvt_to_integer<uint64_t>(rs1.f32[0], rmm, invalid, inexact);
+				dst = fcvt_to_integer<uint64_t>(src, rmm, invalid, inexact);
 				break;
 			default:
 				cpu.trigger_exception(ILLEGAL_OPERATION);
 			}
 			break;
+		}
 		case 0x1: // from float64
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.W.D (sign-extended 32-bit result)
@@ -925,6 +1065,19 @@ namespace riscv
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		// RV64 NaN-boxing: an operand whose upper 32 bits are not all ones
+		// is read as the canonical quiet NaN, not as its low word. Both
+		// source registers are checked: the sign-selecting operand rs2 is
+		// read as a NaN too, so any non-boxed input makes the result NaN.
+		if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+			if (fi.R4type.funct2 == 0x0
+				&& UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				// FSGNJN inverts the sign bit of the NaN result (§11.6).
+				dst.load_u32(fi.R4type.funct3 == 0x1 ? 0xFFC00000u : CANONICAL_NAN_F32);
+				return;
+			}
+		}
 		switch (fi.R4type.funct3) {
 		case 0x0: // FSGNJ
 			switch (fi.R4type.funct2) {

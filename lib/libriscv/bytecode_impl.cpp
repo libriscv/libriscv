@@ -576,6 +576,13 @@ INSTRUCTION(RV32F_BC_FSUB, rv32f_fsub) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
+		if constexpr (W >= 8 && nanboxing) {
+			if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+				|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				dst.load_u32(0x7FC00000u);
+				NEXT_INSTR();
+			}
+		}
 		if constexpr (fcsr_emulation) {
 			// Operands read out before the store: rd may alias rs1 or rs2.
 			const float fa = rs1.f32[0], fb = rs2.f32[0];
@@ -597,6 +604,13 @@ INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
+		if constexpr (W >= 8 && nanboxing) {
+			if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+				|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				dst.load_u32(0x7FC00000u);
+				NEXT_INSTR();
+			}
+		}
 		if constexpr (fcsr_emulation) {
 			// The operands are read out before the store, because rd is
 			// allowed to alias rs1 or rs2.
@@ -638,6 +652,13 @@ INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
+		if constexpr (W >= 8 && nanboxing) {
+			if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+				|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				dst.load_u32(0x7FC00000u);
+				NEXT_INSTR();
+			}
+		}
 		if constexpr (fcsr_emulation) {
 			// Operands read out before the store: rd may alias rs1 or rs2.
 			// DZ is only for a finite non-zero numerator over zero: 0/0 is NV
@@ -722,6 +743,14 @@ INSTRUCTION(RV32F_BC_FMADD, rv32f_fmadd) {
 	// Spec §11.3: a NaN result must be the canonical qNaN. Only under FCSR
 	// emulation, same as the other arithmetic bytecodes.
 	if (fi.R4type.funct2 == 0x0) { // float32
+		if constexpr (W >= 8 && nanboxing) {
+			if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+				|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu
+				|| static_cast<uint32_t>(rs3.i32[1]) != 0xFFFFFFFFu)) {
+				dst.load_u32(0x7FC00000u);
+				NEXT_INSTR();
+			}
+		}
 		SET_FLOAT_CANON(dst, std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]));
 	} else if (fi.R4type.funct2 == 0x1) { // float64
 		SET_DOUBLE_CANON(dst, std::fma(rs1.f64, rs2.f64, rs3.f64));
