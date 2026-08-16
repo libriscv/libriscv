@@ -2090,7 +2090,9 @@ void Emitter<W>::emit()
 							" if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr);"
 							" if ((ia & 0x7f800000u) != 0x7f800000u && (ib & 0x7f800000u) != 0x7f800000u) {"
 							" const uint32_t ir = " + dst + ".i32[0] & 0x7fffffffu;"
-							" if (ir == 0x7f800000u) cpu->fcsr |= 5;"
+							" if (ir == 0x7f800000u) { cpu->fcsr |= 5;"
+							" const unsigned rm = (cpu->fcsr >> 5) & 7;"
+							" if (rm == 1 || rm == 2) " + dst + ".i32[0] = (" + dst + ".i32[0] & 0x80000000u) | 0x7F7FFFFFu; }"
 							" else if (ir < 0x00800000u && (double)fa * (double)fb != fr) cpu->fcsr |= 3; } }\n";
 						break;
 					}
