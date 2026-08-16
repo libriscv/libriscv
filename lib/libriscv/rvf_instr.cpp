@@ -67,10 +67,39 @@ namespace riscv
 	// (MSVC), the 64-bit sources simply do not report NX. Only compiled in under
 	// FCSR emulation — the comparison is not free.
 	template <typename F, typename T>
-	static inline F fcvt_from_integer(T value, bool& inexact) {
+	static inline F fcvt_from_integer(T value, unsigned rm, bool& inexact) {
 		const F converted = F(value);
-		if constexpr (fcsr_emulation)
-			inexact = (long double)converted != (long double)value;
+		if constexpr (fcsr_emulation) {
+			const long double exact = (long double)value;
+			inexact = (long double)converted != exact;
+			if (inexact) {
+				// The host cast is round-to-nearest-even; adjust the result
+				// for the other RISC-V rounding modes using the float grid.
+				const long double cld = (long double)converted;
+				switch (rm) {
+				case 0x1: // RTZ: toward zero
+					// Adjust only when the RNE result moved away from zero
+					// (|cld| > |exact|); when it already rounded toward zero
+					// (|cld| < |exact|) the RNE result is the RTZ result.
+					if (exact > 0.0L && cld > exact) return std::nextafter(converted, F(0.0f));
+					if (exact < 0.0L && cld < exact) return std::nextafter(converted, F(0.0f));
+					break;
+				case 0x2: // RDN: toward -inf
+					if (cld > exact) return std::nextafter(converted, F(-INFINITY));
+					break;
+				case 0x3: // RUP: toward +inf
+					if (cld < exact) return std::nextafter(converted, F(INFINITY));
+					break;
+				case 0x4: // RMM: ties away from zero
+					if (fabsl(cld) < fabsl(exact))
+						return cld < 0.0L
+							? -std::nextafter(-converted, F(-INFINITY))
+							: std::nextafter(converted, F(INFINITY));
+					break;
+				default: break; // RNE (0)
+				}
+			}
+		}
 		return converted;
 	}
 
@@ -823,20 +852,23 @@ namespace riscv
 		auto& rs1 = cpu.reg(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
 		bool inexact = false;
+		auto rmm = fi.R4type.funct3; // rounding mode is encoded in funct3
+		if (rmm == 0x7) // DYN: use the dynamic mode from the fcsr CSR (frm field)
+			rmm = cpu.registers().fcsr().frm;
 		switch (fi.R4type.funct2) {
 		case 0x0: // to float32
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.S.W
-				dst.set_float(fcvt_from_integer<float>((int32_t)rs1, inexact));
+				dst.set_float(fcvt_from_integer<float>((int32_t)rs1, rmm, inexact));
 				break;
 			case 0x1: // FCVT.S.WU
-				dst.set_float(fcvt_from_integer<float>((uint32_t)rs1, inexact));
+				dst.set_float(fcvt_from_integer<float>((uint32_t)rs1, rmm, inexact));
 				break;
 			case 0x2: // FCVT.S.L
-				dst.set_float(fcvt_from_integer<float>((int64_t)rs1, inexact));
+				dst.set_float(fcvt_from_integer<float>((int64_t)rs1, rmm, inexact));
 				break;
 			case 0x3: // FCVT.S.LU
-				dst.set_float(fcvt_from_integer<float>((uint64_t)rs1, inexact));
+				dst.set_float(fcvt_from_integer<float>((uint64_t)rs1, rmm, inexact));
 				break;
 			default:
 				cpu.trigger_exception(ILLEGAL_OPERATION);
@@ -845,16 +877,16 @@ namespace riscv
 		case 0x1: // to float64
 			switch (fi.R4type.rs2) {
 			case 0x0: // FCVT.D.W
-				dst.f64 = fcvt_from_integer<double>((int32_t)rs1, inexact);
+				dst.f64 = fcvt_from_integer<double>((int32_t)rs1, rmm, inexact);
 				break;
 			case 0x1: // FCVT.D.WU
-				dst.f64 = fcvt_from_integer<double>((uint32_t)rs1, inexact);
+				dst.f64 = fcvt_from_integer<double>((uint32_t)rs1, rmm, inexact);
 				break;
 			case 0x2: // FCVT.D.L
-				dst.f64 = fcvt_from_integer<double>((int64_t)rs1, inexact);
+				dst.f64 = fcvt_from_integer<double>((int64_t)rs1, rmm, inexact);
 				break;
 			case 0x3: // FCVT.D.LU
-				dst.f64 = fcvt_from_integer<double>((uint64_t)rs1, inexact);
+				dst.f64 = fcvt_from_integer<double>((uint64_t)rs1, rmm, inexact);
 				break;
 			default:
 				cpu.trigger_exception(ILLEGAL_OPERATION);

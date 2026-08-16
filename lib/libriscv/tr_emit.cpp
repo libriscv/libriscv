@@ -2217,10 +2217,22 @@ void Emitter<W>::emit()
 						// integer. long double is exact for any 64-bit integer
 						// where it is an 80- or 128-bit format; where it is only
 						// double, the 64-bit sources just never report NX.
+						// The host cast is round-to-nearest-even; the other
+						// RISC-V rounding modes need a nextafter adjustment on
+						// the float grid (see the interpreter counterpart).
+						const std::string nafn = f32 ? "nextafterf" : "nextafter";
 						code += "{ const " + itype + " iv = " + value + ";"
-							" const " + (f32 ? "float" : "double") + " fv = iv;"
-							" if ((long double)fv != (long double)iv) cpu->fcsr |= 1;"
-							" " + setter + "(&" + dst + ", fv); }\n";
+							" const long double iex = (long double)iv;"
+							" const " + (f32 ? "float" : "double") + " fv = (" + (f32 ? "float" : "double") + ")iv;"
+							" const long double cld = (long double)fv;"
+							" " + (f32 ? "float" : "double") + " out = fv;"
+							" if (cld != iex) { cpu->fcsr |= 1;"
+							" const unsigned rm = (" + std::to_string((int)fi.R4type.funct3) + " == 0x7) ? ((cpu->fcsr >> 5) & 7) : " + std::to_string((int)fi.R4type.funct3) + ";"
+							" if (rm == 1) { if (iex > 0.0L && cld > iex) out = " + nafn + "(out, (" + (f32 ? "float" : "double") + ")0); else if (iex < 0.0L && cld < iex) out = " + nafn + "(out, (" + (f32 ? "float" : "double") + ")0); }"
+							" else if (rm == 2) { if (cld > iex) out = " + nafn + "(out, -(__builtin_inf" + (f32 ? "f" : "") + "())); }"
+							" else if (rm == 3) { if (cld < iex) out = " + nafn + "(out, __builtin_inf" + (f32 ? "f" : "") + "()); }"
+							" else if (rm == 4) { if (__builtin_fabsl(cld) < __builtin_fabsl(iex)) out = cld < 0.0L ? -" + nafn + "(-out, -__builtin_inf" + (f32 ? "f" : "") + "()) : " + nafn + "(out, __builtin_inf" + (f32 ? "f" : "") + "()); } }"
+							" " + setter + "(&" + dst + ", out); }\n";
 					} else {
 						code += setter + "(&" + dst + ", " + value + ");\n";
 					}
