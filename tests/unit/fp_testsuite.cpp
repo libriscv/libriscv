@@ -467,3 +467,24 @@ TEST_CASE("FCSR exception flags and canonical NaNs", "[Verification]")
 	machine.vmcall("fcvt_sl_flags", int64_t(3));
 	REQUIRE((machine.return_value<uint32_t>() & NX) == 0);
 }
+
+TEST_CASE("FCSR regressions from the accuracy patches", "[Verification]")
+{
+	// Same deal as above: these are FCSR-only promises. Each assertion in
+	// fcsr_flags.c failed on at least one execution lane before the fix.
+	if constexpr (!riscv::fcsr_emulation) {
+		SUCCEED("FCSR emulation is disabled in this build");
+		return;
+	}
+
+	const auto binary = build_and_load(R"M(
+	#include "fptest/fcsr_flags.c"
+)M", "-O2 -static -I" + cwd);
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls();
+	machine.setup_linux({"fcsr_flags"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+	machine.simulate(MAX_INSTRUCTIONS);
+
+	REQUIRE(machine.return_value() == 0);
+}
