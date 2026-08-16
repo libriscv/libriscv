@@ -553,6 +553,10 @@ INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 			}
 		}
 		SET_FLOAT_CANON(dst, rs1.f32[0] + rs2.f32[0]);
+		if constexpr (fcsr_emulation) {
+			const double exact = (double)rs1.f32[0] + (double)rs2.f32[0];
+			if ((double)(rs1.f32[0] + rs2.f32[0]) != exact) REGISTERS().fcsr().fflags |= 1;
+		}
 	}
 	else
 	{ // float64
@@ -566,6 +570,10 @@ INSTRUCTION(RV32F_BC_FSUB, rv32f_fsub) {
 	if (fi.func == 0x0)
 	{ // float32
 		SET_FLOAT_CANON(dst, rs1.f32[0] - rs2.f32[0]);
+		if constexpr (fcsr_emulation) {
+			const double exact = (double)rs1.f32[0] - (double)rs2.f32[0];
+			if ((double)(rs1.f32[0] - rs2.f32[0]) != exact) REGISTERS().fcsr().fflags |= 1;
+		}
 	}
 	else
 	{ // float64

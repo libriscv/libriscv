@@ -1969,7 +1969,7 @@ void Emitter<W>::emit()
 			auto emit_arith = [&] (const std::string& expr, bool is_f32) -> std::string {
 				if constexpr (fcsr_emulation) {
 					if (is_f32)
-						return "{ const float fr = " + expr + "; if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr); }\n";
+						return "{ const double exact = (double)(" + expr + "); const float fr = (float)exact; if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else { set_fl(&" + dst + ", fr); if ((double)fr != exact) cpu->fcsr |= 1; } }\n";
 					return "{ const double dr = " + expr + "; if (dr != dr) load_dbl(&" + dst + ", 0x7ff8000000000000ull); else set_dbl(&" + dst + ", dr); }\n";
 				} else {
 					if (is_f32)
@@ -2058,7 +2058,16 @@ void Emitter<W>::emit()
 							code += "load_fl(&" + dst + ", 0x7FC00000u);\nelse ";
 						}
 					}
-					code += emit_arith(rs1 + ".f32[0]" + fop + rs2 + ".f32[0]", true);
+					if constexpr (fcsr_emulation) {
+						// NX when the exact (double-precision) result does not
+						// round-trip to the single-precision result.
+						code += "{ const double exact = (double)" + rs1 + ".f32[0]" + fop + "(double)" + rs2 + ".f32[0];"
+							" const float fr = (float)exact;"
+							" if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u);"
+							" else { set_fl(&" + dst + ", fr); if ((double)fr != exact) cpu->fcsr |= 1; } }\n";
+					} else {
+						code += emit_arith(rs1 + ".f32[0]" + fop + rs2 + ".f32[0]", true);
+					}
 				}
 				else
 					code += emit_arith(rs1 + ".f64" + fop + rs2 + ".f64", false);
