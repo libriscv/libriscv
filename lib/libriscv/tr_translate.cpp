@@ -1550,6 +1550,11 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 					__builtin_memcpy(&result, &bits, sizeof(result));
 					return result;
 				}
+				// A single NaN operand must yield the other operand. glibc's
+				// std::fmin/fmax return a quieted copy of a signaling NaN
+				// instead, so handle this case explicitly.
+				if (std::isnan(a)) return b;
+				if (std::isnan(b)) return a;
 			}
 			if (a == 0.0f && b == 0.0f) {
 				uint32_t ab, bb;
@@ -1567,6 +1572,8 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 					__builtin_memcpy(&result, &bits, sizeof(result));
 					return result;
 				}
+				if (std::isnan(a)) return b;
+				if (std::isnan(b)) return a;
 			}
 			if (a == 0.0f && b == 0.0f) {
 				uint32_t ab, bb;
@@ -1584,6 +1591,8 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 					__builtin_memcpy(&result, &bits, sizeof(result));
 					return result;
 				}
+				if (std::isnan(a)) return b;
+				if (std::isnan(b)) return a;
 			}
 			if (a == 0.0 && b == 0.0) {
 				uint64_t ab, bb;
@@ -1601,6 +1610,8 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 					__builtin_memcpy(&result, &bits, sizeof(result));
 					return result;
 				}
+				if (std::isnan(a)) return b;
+				if (std::isnan(b)) return a;
 			}
 			if (a == 0.0 && b == 0.0) {
 				uint64_t ab, bb;
