@@ -12,7 +12,15 @@ static constexpr bool VERBOSE_COMPILER = true;
 // allocator that forwards to the host arena (see native_rust.cpp).
 static const std::string RUST_TARGET = "riscv64gc-unknown-linux-gnu";
 static const std::string DEFAULT_RUSTC = "rustc";
-static const std::string DEFAULT_RUST_LINKER = "riscv64-linux-gnu-gcc-12";
+// Newest first: rustc only needs a cross-gcc to drive the link, so any of
+// these will do, but the list should stay in sync with the compilers that
+// codebuilder.cpp uses for the C and C++ guests
+static const std::vector<std::string> RUST_LINKER_CANDIDATES {
+	"riscv64-linux-gnu-gcc-14",
+	"riscv64-linux-gnu-gcc-13",
+	"riscv64-linux-gnu-gcc-12",
+	"riscv64-linux-gnu-gcc",
+};
 
 // Both defined in codebuilder.cpp
 extern std::vector<uint8_t> load_file(const std::string& filename);
@@ -45,16 +53,30 @@ static bool command_succeeds(const std::string& command)
 	return pclose(f) == 0;
 }
 
+/// @brief The cross-gcc that rustc will use to link the guest, or an empty
+/// string when this machine has none of them.
+static std::string rust_linker()
+{
+	if (const char* envval = getenv("RUST_LINKER"); envval)
+		return std::string(envval);
+
+	for (const auto& candidate : RUST_LINKER_CANDIDATES) {
+		if (command_succeeds("command -v " + candidate))
+			return candidate;
+	}
+	return {};
+}
+
 /// @brief True when this machine can build the RISC-V Rust guest: a rustc
 /// that has the riscv64gc standard library installed, and a cross-linker.
 bool rust_toolchain_available()
 {
 	const auto rustc  = env_with_default("RUSTC", DEFAULT_RUSTC);
-	const auto linker = env_with_default("RUST_LINKER", DEFAULT_RUST_LINKER);
+	const auto linker = rust_linker();
 
 	if (!command_succeeds(rustc + " --version"))
 		return false;
-	if (!command_succeeds("command -v " + linker))
+	if (linker.empty() || !command_succeeds("command -v " + linker))
 		return false;
 
 	// rustc prints the target library path whether or not it was installed,
@@ -93,7 +115,7 @@ std::vector<uint8_t> build_rust_and_load(
 		"/tmp/rustbinary-%08X", final_checksum);
 
 	const auto rustc  = env_with_default("RUSTC", DEFAULT_RUSTC);
-	const auto linker = env_with_default("RUST_LINKER", DEFAULT_RUST_LINKER);
+	const auto linker = rust_linker();
 
 	// --no-gc-sections keeps the exported functions in the binary even though
 	// nothing in the guest itself calls them

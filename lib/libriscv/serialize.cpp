@@ -34,6 +34,7 @@ namespace riscv
 		address_t mmap_address  = 0;
 		address_t heap_address  = 0;
 		address_t exit_address  = 0;
+		address_t brk_address   = 0;
 	};
 	struct SerializedPage
 	{
@@ -77,6 +78,7 @@ namespace riscv
 			.mmap_address  = memory.mmap_address(),
 			.heap_address  = memory.heap_address(),
 			.exit_address  = memory.exit_address(),
+			.brk_address   = memory.brk_address(),
 		};
 		const auto* hptr = (const uint8_t*) &header;
 		vec.insert(vec.end(), hptr, hptr + sizeof(header));
@@ -175,6 +177,7 @@ namespace riscv
 		this->m_mmap_address  = state.mmap_address;
 		this->m_heap_address  = state.heap_address;
 		this->m_exit_address  = state.exit_address;
+		this->m_brk_address   = state.brk_address;
 
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = {};

@@ -471,6 +471,7 @@ namespace riscv
 		// TODO: We should check if the heap starts too close to the end
 		// of the address space now, and move it around if necessary.
 		this->m_mmap_address = m_heap_address + BRK_MAX;
+		this->m_brk_address  = m_heap_address;
 
 		// Default stack
 		this->m_stack_address = mmap_allocate(options.stack_size) + options.stack_size;
@@ -579,6 +580,7 @@ namespace riscv
 		this->m_stack_address = master.memory.m_stack_address;
 		this->m_exit_address = master.memory.m_exit_address;
 		this->m_heap_address = master.memory.m_heap_address;
+		this->m_brk_address  = master.memory.m_brk_address;
 		this->m_mmap_address = master.memory.m_mmap_address;
 		this->m_mmap_cache   = master.memory.m_mmap_cache;
 

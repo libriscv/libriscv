@@ -203,7 +203,15 @@ typedef union {
 } VectorLane __attribute__ ((aligned (RISCV_EXT_VECTOR)));
 
 typedef struct {
+	uint8_t b[RISCV_EXT_VECTOR];
+} VectorLaneBytes;
+
+typedef struct {
 	VectorLane  lane[32];
+	addr_t      vl;      /* active vector length */
+	uint32_t    vsew;    /* log2(SEW / 8) */
+	int32_t     lmul;    /* log2(LMUL) */
+	uint8_t     vta, vma, vill;
 } RVV __attribute__ ((aligned (RISCV_EXT_VECTOR)));
 #endif
 

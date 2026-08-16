@@ -829,36 +829,7 @@ INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func) {
 #endif
 
 #ifdef RISCV_EXT_VECTOR
-INSTRUCTION(RV32V_BC_VLE32, rv32v_vle32) {
-	VIEW_INSTR_AS(vi, FasterMove);
-	const auto& addr = REG(vi.rs1);
-	VECTORS().get(vi.rd) =
-		CPU().memory().template read<VectorLane> (addr);
-	NEXT_INSTR();
-}
-INSTRUCTION(RV32V_BC_VSE32, rv32v_vse32) {
-	VIEW_INSTR_AS(vi, FasterMove);
-	const auto& addr = REG(vi.rs1);
-	auto& value = VECTORS().get(vi.rd);
-	CPU().memory().template write<VectorLane> (addr, value);
-	NEXT_INSTR();
-}
-INSTRUCTION(RV32V_BC_VFADD_VV, rv32v_vfadd_vv) {
-	VIEW_INSTR_AS(vi, FasterOpType);
-	auto& rvv = VECTORS();
-	for (size_t i = 0; i < rvv.f32(0).size(); i++) {
-		rvv.f32(vi.rd)[i] = rvv.f32(vi.rs1)[i] + rvv.f32(vi.rs2)[i];
-	}
-	NEXT_INSTR();
-}
-INSTRUCTION(RV32V_BC_VFMUL_VF, rv32v_vfmul_vf) {
-	VIEW_INSTR_AS(vi, FasterOpType);
-	auto& rvv = VECTORS();
-	for (size_t i = 0; i < rvv.f32(0).size(); i++) {
-		rvv.f32(vi.rd)[i] = rvv.f32(vi.rs2)[i] * REGISTERS().getfl(vi.rs1).f32[0];
-	}
-	NEXT_INSTR();
-}
+// All vector instructions execute through RV32I_BC_FUNCTION.
 #endif // RISCV_EXT_VECTOR
 
 INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {

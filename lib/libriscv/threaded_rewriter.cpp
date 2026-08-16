@@ -308,30 +308,8 @@ namespace riscv
 				// It's unclear how to optimize this instruction
 				return bytecode;
 			}
-			/** Vector instructions **/
-#ifdef RISCV_EXT_VECTOR
-			case RV32V_BC_VLE32:
-			case RV32V_BC_VSE32: {
-				const rv32v_instruction vi{instr};
-				FasterMove rewritten;
-				rewritten.rd  = vi.VLS.vd;
-				rewritten.rs1 = vi.VLS.rs1;
-
-				instr.whole = rewritten.whole;
-				return bytecode;
-			}
-			case RV32V_BC_VFADD_VV:
-			case RV32V_BC_VFMUL_VF: {
-				const rv32v_instruction vi{instr};
-				FasterOpType rewritten;
-				rewritten.rd  = vi.OPVV.vd;
-				rewritten.rs1 = vi.OPVV.vs1;
-				rewritten.rs2 = vi.OPVV.vs2;
-
-				instr.whole = rewritten.whole;
-				return bytecode;
-			}
-#endif
+			/** Vector instructions execute through the general
+			 ** instruction handlers. **/
 			/** Compressed instructions **/
 #ifdef RISCV_EXT_COMPRESSED
 			case RV32C_BC_FUNCTION: {
