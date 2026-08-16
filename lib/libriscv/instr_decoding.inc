@@ -219,7 +219,17 @@
 					}
 #endif
 				case RV32I_FENCE:
-					DECODER(DECODED_INSTR(FENCE));
+					switch (instruction.Itype.funct3) {
+					case 0x0:
+					case 0x1:
+						DECODER(DECODED_INSTR(FENCE));
+					case RV32I_CBO_FUNCT3:
+						if (instruction.Itype.rd == 0)
+							DECODER(DECODED_INSTR(CBO));
+						[[fallthrough]];
+					default:
+						DECODER(DECODED_INSTR(ILLEGAL));
+					}
 
 				// RV32F & RV32D - Floating-point instructions
 				case RV32F_LOAD: {
@@ -280,24 +290,46 @@
 						case 0b00100:
 							DECODER(DECODED_FLOAT(FSGNJ_NX));
 						case 0b00101:
+							if (rv32f_instruction { instruction }.R4type.funct3 == 0x2
+								|| rv32f_instruction { instruction }.R4type.funct3 == 0x3)
+								DECODER(DECODED_FLOAT(FMINM_FMAXM));
 							DECODER(DECODED_FLOAT(FMIN_FMAX));
 						case 0b01011:
 							DECODER(DECODED_FLOAT(FSQRT));
 						case 0b10100:
-							if (rv32f_instruction { instruction }.R4type.rd != 0)
+							if (rv32f_instruction { instruction }.R4type.rd != 0) {
+								if (rv32f_instruction { instruction }.R4type.funct3 == 0x4
+									|| rv32f_instruction { instruction }.R4type.funct3 == 0x5)
+									DECODER(DECODED_FLOAT(FLEQ_FLTQ));
 								DECODER(DECODED_FLOAT(FEQ_FLT_FLE));
+							}
 							DECODER(DECODED_INSTR(NOP));
 						case 0b01000:
+							if (rv32f_instruction { instruction }.R4type.rs2 == 0x4
+								|| rv32f_instruction { instruction }.R4type.rs2 == 0x5)
+								DECODER(DECODED_FLOAT(FROUND));
 							DECODER(DECODED_FLOAT(FCVT_SD_DS));
+						case RV32F__FMVP_D_X:
+							if constexpr (sizeof(address_t) == 4) {
+								DECODER(DECODED_FLOAT(FMVP_D_X));
+							}
+							break;
 						case 0b11000:
-							if (rv32f_instruction { instruction }.R4type.rd != 0)
+							if (rv32f_instruction { instruction }.R4type.rd != 0) {
+								if (rv32f_instruction { instruction }.R4type.rs2 == 0x8)
+									DECODER(DECODED_FLOAT(FCVTMOD_W_D));
 								DECODER(DECODED_FLOAT(FCVT_W_SD));
+							}
 							DECODER(DECODED_INSTR(NOP));
 						case 0b11010:
 							DECODER(DECODED_FLOAT(FCVT_SD_W));
 						case 0b11100:
 							if (rv32f_instruction { instruction }.R4type.rd != 0) {
 								if (rv32f_instruction { instruction }.R4type.funct3 == 0) {
+									if constexpr (sizeof(address_t) == 4) {
+										if (rv32f_instruction { instruction }.R4type.rs2 == 0x1)
+											DECODER(DECODED_FLOAT(FMVH_X_D));
+									}
 									DECODER(DECODED_FLOAT(FMV_X_W));
 								} else {
 									DECODER(DECODED_FLOAT(FCLASS));
@@ -305,6 +337,9 @@
 							}
 							DECODER(DECODED_INSTR(NOP));
 						case 0b11110:
+							if (rv32f_instruction { instruction }.R4type.rs2 == 0x1
+								&& rv32f_instruction { instruction }.R4type.funct3 == 0x0)
+								DECODER(DECODED_FLOAT(FLI));
 							DECODER(DECODED_FLOAT(FMV_W_X));
 					}
 					break;

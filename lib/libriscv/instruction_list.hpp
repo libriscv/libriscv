@@ -38,6 +38,14 @@
 #define RV32F__FCVT_SD_W  0b11010
 #define RV32F__FMV_X_W    0b11100
 #define RV32F__FMV_W_X    0b11110
+#define RV32F__FMVP_D_X   0b10110
+
+#define RV32I_CBO_FUNCT3  0b010
+#define RV32I_CBO_INVAL   0x0
+#define RV32I_CBO_CLEAN   0x1
+#define RV32I_CBO_FLUSH   0x2
+#define RV32I_CBO_ZERO    0x4
+#define RV32I_CBO_BLOCK   64
 
 #define RV32V_OP        0b1010111
 

@@ -381,7 +381,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			case 0x17:
 				return RV32I_BC_OP_REMU;
 			case 0x44: // ZEXT.H / PACK
-				return (instr.Rtype.rs2 == 0) ? RV32I_BC_OP_ZEXT_H : RV32I_BC_FUNCTION;
+				return (W == 4 && instr.Rtype.rs2 == 0) ? RV32I_BC_OP_ZEXT_H : RV32I_BC_FUNCTION;
 			case 0x102:
 				return RV32I_BC_OP_SH1ADD;
 			case 0x104:

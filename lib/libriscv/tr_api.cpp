@@ -185,7 +185,7 @@ static inline double nextafter(double x, double y) {
 static inline uint32_t do_bswap32(uint32_t x) {
 	return (x << 24 | (x & 0xFF00) << 8 | (x & 0xFF0000) >> 8 | x >> 24);
 }
-#define do_bswap64(x) (do_bswap32((x) >> 32) | ((uint64_t)do_bswap32((x) >> 32) << 32))
+#define do_bswap64(x) ((uint64_t)do_bswap32((uint64_t)(x) >> 32) | ((uint64_t)do_bswap32((uint32_t)(x)) << 32))
 #define do_clz(x) api.clz(x)
 #define do_clzl(x) api.clzl(x)
 #define do_ctz(x) api.ctz(x)
@@ -219,6 +219,39 @@ static inline uint32_t do_bswap32(uint32_t x) {
 #define nextafterf(x, y) __builtin_nextafterf(x, y)
 #define nextafter(x, y)  __builtin_nextafter(x, y)
 #endif
+
+static inline uint64_t do_brev8(uint64_t x) {
+	x = ((x & 0xF0F0F0F0F0F0F0F0ull) >> 4) | ((x & 0x0F0F0F0F0F0F0F0Full) << 4);
+	x = ((x & 0xCCCCCCCCCCCCCCCCull) >> 2) | ((x & 0x3333333333333333ull) << 2);
+	x = ((x & 0xAAAAAAAAAAAAAAAAull) >> 1) | ((x & 0x5555555555555555ull) << 1);
+	return x;
+}
+static inline uint32_t do_zip32(uint32_t x) {
+	uint32_t lo = x & 0xFFFF;
+	uint32_t hi = x >> 16;
+	lo = (lo | (lo << 8)) & 0x00FF00FF;
+	lo = (lo | (lo << 4)) & 0x0F0F0F0F;
+	lo = (lo | (lo << 2)) & 0x33333333;
+	lo = (lo | (lo << 1)) & 0x55555555;
+	hi = (hi | (hi << 8)) & 0x00FF00FF;
+	hi = (hi | (hi << 4)) & 0x0F0F0F0F;
+	hi = (hi | (hi << 2)) & 0x33333333;
+	hi = (hi | (hi << 1)) & 0x55555555;
+	return lo | (hi << 1);
+}
+static inline uint32_t do_unzip32(uint32_t x) {
+	uint32_t lo = x & 0x55555555;
+	uint32_t hi = (x >> 1) & 0x55555555;
+	lo = (lo | (lo >> 1)) & 0x33333333;
+	lo = (lo | (lo >> 2)) & 0x0F0F0F0F;
+	lo = (lo | (lo >> 4)) & 0x00FF00FF;
+	lo = (lo | (lo >> 8)) & 0x0000FFFF;
+	hi = (hi | (hi >> 1)) & 0x33333333;
+	hi = (hi | (hi >> 2)) & 0x0F0F0F0F;
+	hi = (hi | (hi >> 4)) & 0x00FF00FF;
+	hi = (hi | (hi >> 8)) & 0x0000FFFF;
+	return lo | (hi << 16);
+}
 
 #ifdef __HAVE_BUILTIN_SPECULATION_SAFE_VALUE
 #define SPECSAFE(x) __builtin_speculation_safe_value(x)

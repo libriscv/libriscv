@@ -1250,4 +1250,319 @@ namespace riscv
 						RISCV::regname(fi.R4type.rs1),
 						RISCV::flpname(fi.R4type.rd));
 	});
+
+	static constexpr uint32_t FLI_TABLE_S[32] = {
+		0xBF800000u, 0x00800000u, 0x37800000u, 0x38000000u,
+		0x3B800000u, 0x3C000000u, 0x3D800000u, 0x3E000000u,
+		0x3E800000u, 0x3EA00000u, 0x3EC00000u, 0x3EE00000u,
+		0x3F000000u, 0x3F200000u, 0x3F400000u, 0x3F600000u,
+		0x3F800000u, 0x3FA00000u, 0x3FC00000u, 0x3FE00000u,
+		0x40000000u, 0x40200000u, 0x40400000u, 0x40800000u,
+		0x41000000u, 0x41800000u, 0x43000000u, 0x43800000u,
+		0x47000000u, 0x47800000u, 0x7F800000u, 0x7FC00000u
+	};
+	static constexpr uint64_t FLI_TABLE_D[32] = {
+		0xBFF0000000000000ull, 0x0010000000000000ull,
+		0x3EF0000000000000ull, 0x3F00000000000000ull,
+		0x3F70000000000000ull, 0x3F80000000000000ull,
+		0x3FB0000000000000ull, 0x3FC0000000000000ull,
+		0x3FD0000000000000ull, 0x3FD4000000000000ull,
+		0x3FD8000000000000ull, 0x3FDC000000000000ull,
+		0x3FE0000000000000ull, 0x3FE4000000000000ull,
+		0x3FE8000000000000ull, 0x3FEC000000000000ull,
+		0x3FF0000000000000ull, 0x3FF4000000000000ull,
+		0x3FF8000000000000ull, 0x3FFC000000000000ull,
+		0x4000000000000000ull, 0x4004000000000000ull,
+		0x4008000000000000ull, 0x4010000000000000ull,
+		0x4020000000000000ull, 0x4030000000000000ull,
+		0x4060000000000000ull, 0x4070000000000000ull,
+		0x40E0000000000000ull, 0x40F0000000000000ull,
+		0x7FF0000000000000ull, 0x7FF8000000000000ull
+	};
+
+	FLOAT_INSTR(FLI,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
+	{
+		const rv32f_instruction fi { instr };
+		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		switch (fi.R4type.funct2) {
+		case 0x0:
+			dst.load_u32(FLI_TABLE_S[fi.R4type.rs1]);
+			return;
+		case 0x1:
+			dst.load_u64(FLI_TABLE_D[fi.R4type.rs1]);
+			return;
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		return snprintf(buffer, len, "FLI.%c %s, #%u",
+						RISCV::flpsize(fi.R4type.funct2),
+						RISCV::flpname(fi.R4type.rd),
+						fi.R4type.rs1);
+	});
+
+	FLOAT_INSTR(FMINM_FMAXM,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
+	{
+		const rv32f_instruction fi { instr };
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		const bool is_max = (fi.R4type.funct3 & 1) != 0;
+
+		switch (fi.R4type.funct2) {
+		case 0x0: {
+			uint32_t ab = rs1.i32[0];
+			uint32_t bb = rs2.i32[0];
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu))
+					ab = CANONICAL_NAN_F32;
+				if (UNLIKELY(static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu))
+					bb = CANONICAL_NAN_F32;
+			}
+			float a, b;
+			__builtin_memcpy(&a, &ab, 4);
+			__builtin_memcpy(&b, &bb, 4);
+			const bool snan = !fcsr_emulation ? false
+				: (is_signaling_nan(a) || is_signaling_nan(b));
+			uint32_t rb;
+			if (std::isnan(a) || std::isnan(b)) {
+				rb = CANONICAL_NAN_F32;
+			} else if (a == 0.0f && b == 0.0f) {
+				rb = is_max
+					? (((ab & bb) & 0x80000000u) ? 0x80000000u : 0x00000000u)
+					: (((ab | bb) & 0x80000000u) ? 0x80000000u : 0x00000000u);
+			} else {
+				const float r = is_max ? std::fmax(a, b) : std::fmin(a, b);
+				__builtin_memcpy(&rb, &r, 4);
+			}
+			dst.load_u32(rb);
+			if constexpr (fcsr_emulation)
+				cpu.registers().fcsr().fflags = snan ? 16 : 0;
+			return;
+		}
+		case 0x1: {
+			const uint64_t ab = rs1.i64;
+			const uint64_t bb = rs2.i64;
+			const double a = rs1.f64;
+			const double b = rs2.f64;
+			const bool snan = !fcsr_emulation ? false
+				: (is_signaling_nan(a) || is_signaling_nan(b));
+			uint64_t rb;
+			if (std::isnan(a) || std::isnan(b)) {
+				rb = CANONICAL_NAN_F64;
+			} else if (a == 0.0 && b == 0.0) {
+				rb = is_max
+					? (((ab & bb) & 0x8000000000000000ull) ? 0x8000000000000000ull : 0x0ull)
+					: (((ab | bb) & 0x8000000000000000ull) ? 0x8000000000000000ull : 0x0ull);
+			} else {
+				const double r = is_max ? std::fmax(a, b) : std::fmin(a, b);
+				__builtin_memcpy(&rb, &r, 8);
+			}
+			dst.load_u64(rb);
+			if constexpr (fcsr_emulation)
+				cpu.registers().fcsr().fflags = snan ? 16 : 0;
+			return;
+		}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		return snprintf(buffer, len, "%s.%c %s, %s, %s",
+						(fi.R4type.funct3 & 1) ? "FMAXM" : "FMINM",
+						RISCV::flpsize(fi.R4type.funct2),
+						RISCV::flpname(fi.R4type.rd),
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2));
+	});
+
+	FLOAT_INSTR(FROUND,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
+	{
+		const rv32f_instruction fi { instr };
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		auto rmm = fi.R4type.funct3;
+		if (rmm == 0x7)
+			rmm = cpu.registers().fcsr().frm;
+		const bool signal_inexact = (fi.R4type.rs2 == 0x5);
+
+		switch (fi.R4type.funct2) {
+		case 0x0: {
+			float src = rs1.f32[0];
+			if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+				if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu))
+					__builtin_memcpy(&src, &CANONICAL_NAN_F32, sizeof(src));
+			}
+			if (UNLIKELY(std::isnan(src))) {
+				if constexpr (fcsr_emulation)
+					cpu.registers().fcsr().fflags = is_signaling_nan(src) ? 16 : 0;
+				dst.load_u32(CANONICAL_NAN_F32);
+				return;
+			}
+			const float result = fcvt_round(src, rmm);
+			if constexpr (fcsr_emulation)
+				cpu.registers().fcsr().fflags =
+					(signal_inexact && result != src) ? 1 : 0;
+			dst.set_float(result);
+			return;
+		}
+		case 0x1: {
+			const double src = rs1.f64;
+			if (UNLIKELY(std::isnan(src))) {
+				if constexpr (fcsr_emulation)
+					cpu.registers().fcsr().fflags = is_signaling_nan(src) ? 16 : 0;
+				dst.load_u64(CANONICAL_NAN_F64);
+				return;
+			}
+			const double result = fcvt_round(src, rmm);
+			if constexpr (fcsr_emulation)
+				cpu.registers().fcsr().fflags =
+					(signal_inexact && result != src) ? 1 : 0;
+			dst.set_double(result);
+			return;
+		}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		return snprintf(buffer, len, "%s.%c %s, %s",
+						(fi.R4type.rs2 == 0x5) ? "FROUNDNX" : "FROUND",
+						RISCV::flpsize(fi.R4type.funct2),
+						RISCV::flpname(fi.R4type.rd),
+						RISCV::flpname(fi.R4type.rs1));
+	});
+
+	FLOAT_INSTR(FCVTMOD_W_D,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
+	{
+		const rv32f_instruction fi { instr };
+		const double src = cpu.registers().getfl(fi.R4type.rs1).f64;
+		auto& dst = cpu.reg(fi.R4type.rd);
+		bool invalid = false, inexact = false;
+		int32_t result = 0;
+
+		if (UNLIKELY(std::isnan(src) || std::isinf(src))) {
+			invalid = true;
+		} else {
+			const double trunced = std::trunc(src);
+			if (!(trunced >= -2147483648.0 && trunced < 2147483648.0))
+				invalid = true;
+			else if constexpr (fcsr_emulation)
+				inexact = (trunced != src);
+			const double wrapped = std::fmod(trunced, 4294967296.0);
+			result = int32_t(uint32_t(int64_t(wrapped)));
+		}
+		dst = RVSIGNTYPE(cpu)(result);
+		if constexpr (fcsr_emulation) {
+			auto& fcsr = cpu.registers().fcsr();
+			fcsr.fflags = 0;
+			if (invalid)
+				fcsr.fflags |= 16;
+			else if (inexact)
+				fcsr.fflags |= 1;
+		}
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		return snprintf(buffer, len, "FCVTMOD.W.D %s, %s",
+						RISCV::regname(fi.R4type.rd),
+						RISCV::flpname(fi.R4type.rs1));
+	});
+
+	FLOAT_INSTR(FLEQ_FLTQ,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
+	{
+		const rv32f_instruction fi { instr };
+		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
+		auto& rs2 = cpu.registers().getfl(fi.R4type.rs2);
+		auto& dst = cpu.reg(fi.R4type.rd);
+
+		if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+			if (fi.R4type.funct2 == 0x0
+				&& UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu
+					|| static_cast<uint32_t>(rs2.i32[1]) != 0xFFFFFFFFu)) {
+				dst = 0;
+				if constexpr (fcsr_emulation)
+					cpu.registers().fcsr().fflags = 0;
+				return;
+			}
+		}
+
+		switch (fi.R4type.funct3 | (fi.R4type.funct2 << 4))
+		{
+		case 0x4: // FLEQ.S
+			dst = (rs1.f32[0] <= rs2.f32[0]) ? 1 : 0;
+			feqflags<false>(cpu, rs1.f32[0], rs2.f32[0], dst);
+			break;
+		case 0x5: // FLTQ.S
+			dst = (rs1.f32[0] < rs2.f32[0]) ? 1 : 0;
+			feqflags<false>(cpu, rs1.f32[0], rs2.f32[0], dst);
+			break;
+		case 0x14: // FLEQ.D
+			dst = (rs1.f64 <= rs2.f64) ? 1 : 0;
+			feqflags<false>(cpu, rs1.f64, rs2.f64, dst);
+			break;
+		case 0x15: // FLTQ.D
+			dst = (rs1.f64 < rs2.f64) ? 1 : 0;
+			feqflags<false>(cpu, rs1.f64, rs2.f64, dst);
+			break;
+		default:
+			cpu.trigger_exception(ILLEGAL_OPERATION);
+		}
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		return snprintf(buffer, len, "%s.%c %s, %s, %s",
+						(fi.R4type.funct3 == 0x4) ? "FLEQ" : "FLTQ",
+						RISCV::flpsize(fi.R4type.funct2),
+						RISCV::regname(fi.R4type.rd),
+						RISCV::flpname(fi.R4type.rs1),
+						RISCV::flpname(fi.R4type.rs2));
+	});
+
+	FLOAT_INSTR(FMVH_X_D,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
+	{
+		const rv32f_instruction fi { instr };
+		if constexpr (RVIS32BIT(cpu)) {
+			if (fi.R4type.funct2 == 0x1) {
+				cpu.reg(fi.R4type.rd) = cpu.registers().getfl(fi.R4type.rs1).i32[1];
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		return snprintf(buffer, len, "FMVH.X.D %s, %s",
+						RISCV::regname(fi.R4type.rd),
+						RISCV::flpname(fi.R4type.rs1));
+	});
+
+	FLOAT_INSTR(FMVP_D_X,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR
+	{
+		const rv32f_instruction fi { instr };
+		if constexpr (RVIS32BIT(cpu)) {
+			if (fi.R4type.funct2 == 0x1 && fi.R4type.funct3 == 0x0) {
+				const uint64_t lower = uint32_t(cpu.reg(fi.R4type.rs1));
+				const uint64_t upper = uint32_t(cpu.reg(fi.R4type.rs2));
+				cpu.registers().getfl(fi.R4type.rd).load_u64((upper << 32) | lower);
+				return;
+			}
+		}
+		cpu.trigger_exception(ILLEGAL_OPERATION);
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const rv32f_instruction fi { instr };
+		return snprintf(buffer, len, "FMVP.D.X %s, %s, %s",
+						RISCV::flpname(fi.R4type.rd),
+						RISCV::regname(fi.R4type.rs1),
+						RISCV::regname(fi.R4type.rs2));
+	});
 }

@@ -1513,6 +1513,9 @@ void Emitter<W>::emit()
 					else if (instr.Itype.high_bits() == 0x680 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) {
 						// BINVI: Bit-invert immediate
 						add_code(dst + " = " + src + " ^ ((addr_t)1 << (" + std::to_string(instr.Itype.imm & (XLEN-1)) + "));");
+					}
+					else if (W == 4 && instr.Itype.imm == 0b000010001111) {
+						add_code(dst + " = do_zip32(" + src + ");");
 					} else {
 						UNKNOWN_INSTRUCTION();
 					}
@@ -1560,6 +1563,10 @@ void Emitter<W>::emit()
 				} else if (instr.Itype.high_bits() == 0x480 && (W != 4 || (instr.Itype.imm & 0x20) == 0)) { // BEXTI: Bit-extract immediate
 					add_code(
 						dst + " = (" + src + " >> (" + std::to_string(instr.Itype.imm & (XLEN-1)) + ")) & 1;");
+				} else if (instr.Itype.imm == 0b011010000111) {
+					add_code(dst + " = do_brev8(" + src + ");");
+				} else if (W == 4 && instr.Itype.imm == 0b000010001111) {
+					add_code(dst + " = do_unzip32(" + src + ");");
 				} else {
 					UNKNOWN_INSTRUCTION();
 				}
@@ -1724,14 +1731,15 @@ void Emitter<W>::emit()
 					"else " + to_reg(instr.Rtype.rd) + " = " + from_reg(instr.Rtype.rs1) + ";"
 				);
 				break;
-			case 0x44: // ZEXT.H / PACK
-				if (instr.Rtype.rs2 == 0) {
-					add_code(to_reg(instr.Rtype.rd) + " = (uint16_t)" + from_reg(instr.Rtype.rs1) + ";");
-				} else if constexpr (W == 4) {
+			case 0x44: // PACK (ZEXT.H on RV32 when rs2 == 0)
+				if constexpr (W == 4) {
 					add_code(to_reg(instr.Rtype.rd) + " = (addr_t)(uint16_t)(" + from_reg(instr.Rtype.rs1) + ") | ((addr_t)(uint16_t)(" + from_reg(instr.Rtype.rs2) + ") << 16);");
 				} else {
 					add_code(to_reg(instr.Rtype.rd) + " = (addr_t)(uint32_t)(" + from_reg(instr.Rtype.rs1) + ") | ((addr_t)(uint32_t)(" + from_reg(instr.Rtype.rs2) + ") << 32);");
 				}
+				break;
+			case 0x47: // PACKH
+				add_code(to_reg(instr.Rtype.rd) + " = (addr_t)(uint8_t)(" + from_reg(instr.Rtype.rs1) + ") | ((addr_t)(uint8_t)(" + from_reg(instr.Rtype.rs2) + ") << 8);");
 				break;
 			case 0x51: // CLMUL
 				add_code(
@@ -1851,6 +1859,8 @@ void Emitter<W>::emit()
 				WELL_KNOWN_INSTRUCTION();
 				exit_function(PCRELS(4), false);
 				this->add_reentry_next();
+			} else if (instr.Itype.funct3 != 0x0) {
+				UNKNOWN_INSTRUCTION();
 			}
 			break;
 		case RV32I_SYSTEM:
@@ -2494,7 +2504,9 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FCVT_SD_DS:
-				if (fi.R4type.funct2 == 0x0) {
+				if (fi.R4type.rs2 >= 0x4) {
+					UNKNOWN_INSTRUCTION();
+				} else if (fi.R4type.funct2 == 0x0) {
 					code += "if (" + rs1 + ".f64 != " + rs1 + ".f64) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", " + rs1 + ".f64);\n";
 				} else if (fi.R4type.funct2 == 0x1) {
 					if constexpr (nanboxing && W == 8) {
@@ -2649,7 +2661,9 @@ void Emitter<W>::emit()
 				this->reset_tracked_register(fi.R4type.rd);
 				} break;
 			case RV32F__FMV_W_X:
-				if (fi.R4type.funct2 == 0x0) {
+				if (fi.R4type.rs2 != 0x0) {
+					UNKNOWN_INSTRUCTION();
+				} else if (fi.R4type.funct2 == 0x0) {
 					code += "load_fl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
 				} else if (W == 8 && fi.R4type.funct2 == 0x1) {
 					code += "load_dbl(&" + dst + ", " + from_reg(fi.R4type.rs1) + ");\n";
@@ -2657,7 +2671,7 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FMV_X_W:
-				if (fi.R4type.funct3 == 0x0) {
+				if (fi.R4type.funct3 == 0x0 && fi.R4type.rs2 == 0x0) {
 					if (fi.R4type.rd != 0 && fi.R4type.funct2 == 0x0) {
 						code += to_reg(fi.R4type.rd) + " = " + rs1 + ".i32[0];\n";
 					} else if (W == 8 && fi.R4type.rd != 0 && fi.R4type.funct2 == 0x1) { // 64-bit only
@@ -2669,6 +2683,9 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				}
 				this->reset_tracked_register(fi.R4type.rd);
+				break;
+			default:
+				UNKNOWN_INSTRUCTION();
 				break;
 			} // fpfunc
 			} else UNKNOWN_INSTRUCTION();

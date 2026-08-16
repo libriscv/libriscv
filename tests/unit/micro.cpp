@@ -570,6 +570,11 @@ static constexpr uint32_t ENC_OP32     = 0x3B;
 static constexpr uint32_t ENC_OP_FP    = 0x53;
 static constexpr uint32_t ENC_F7_M     = 0x01; // RV32M/RV64M
 static constexpr uint32_t ENC_F7_ROT   = 0x30; // Zbb rotates
+static constexpr uint32_t ENC_F7_PACK  = 0x04; // Zbkb packing
+static constexpr uint32_t ENC_IMM_BREV8 = 0x687;
+static constexpr uint32_t ENC_IMM_ZIP   = 0x08F;
+static constexpr uint32_t ENC_IMM_REV8_32 = 0x698;
+static constexpr uint32_t ENC_IMM_REV8_64 = 0x6B8;
 static constexpr uint32_t ENC_JSELF    = 0x0000006F; // J . (spin)
 
 TEST_CASE("RV64 M-extension divide-by-zero and overflow", "[Micro]")
@@ -859,4 +864,100 @@ TEST_CASE("FCLASS.S and FCLASS.D classify by raw bits", "[Micro]")
 		debugger.simulate(program.size() - 1);
 		verify();
 	}
+}
+
+TEST_CASE("RV64 Zbkb packing and bit-reversal", "[Micro]")
+{
+	static constexpr uint32_t RS_VAL = REG_ARG0;
+	static constexpr uint32_t RS_R2  = REG_ARG1;
+
+	const std::array<uint32_t, 9> program {
+		enc_rtype(ENC_OP,   0x4, ENC_F7_PACK, REG_ARG2, RS_VAL, RS_R2),
+		enc_rtype(ENC_OP,   0x7, ENC_F7_PACK, REG_ARG3, RS_VAL, RS_R2),
+		enc_rtype(ENC_OP32, 0x4, ENC_F7_PACK, REG_ARG4, RS_VAL, RS_R2),
+		enc_rtype(ENC_OP,   0x4, ENC_F7_PACK, REG_ARG5, RS_VAL, REG_ZERO),
+		enc_rtype(ENC_OP32, 0x4, ENC_F7_PACK, REG_ARG6, RS_VAL, REG_ZERO),
+		enc_itype(ENC_OP_IMM, 0x5, REG_ARG7, RS_VAL, ENC_IMM_BREV8),
+		enc_itype(ENC_OP_IMM, 0x5, REG_T0,   RS_VAL, ENC_IMM_REV8_64),
+		enc_rtype(ENC_OP,   0x7, ENC_F7_PACK, REG_T1, RS_R2, RS_VAL),
+		ENC_JSELF,
+	};
+
+	constexpr uint32_t V = 0x2000;
+	riscv::Machine<RISCV64> machine { empty };
+	machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+	machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+
+	auto setup = [&] {
+		machine.cpu.registers() = {};
+		machine.cpu.reg(RS_VAL) = 0x0123456789ABCDEFull;
+		machine.cpu.reg(RS_R2)  = 0xFEDCBA9876543210ull;
+		machine.cpu.jump(V);
+	};
+	auto verify = [&] {
+		REQUIRE(machine.cpu.reg(REG_ARG2) == 0x7654321089ABCDEFull);
+		REQUIRE(machine.cpu.reg(REG_ARG3) == 0x00000000000010EFull);
+		REQUIRE(machine.cpu.reg(REG_ARG4) == 0x000000003210CDEFull);
+		REQUIRE(machine.cpu.reg(REG_ARG5) == 0x0000000089ABCDEFull);
+		REQUIRE(machine.cpu.reg(REG_ARG6) == 0x000000000000CDEFull);
+		REQUIRE(machine.cpu.reg(REG_ARG7) == 0x80C4A2E691D5B3F7ull);
+		REQUIRE(machine.cpu.reg(REG_T0)   == 0xEFCDAB8967452301ull);
+		REQUIRE(machine.cpu.reg(REG_T1)   == 0x000000000000EF10ull);
+	};
+
+	setup();
+	machine.simulate<false>(MAX_CYCLES, 0u);
+	verify();
+
+	setup();
+	DebugMachine debugger { machine };
+	debugger.simulate(program.size() - 1);
+	verify();
+}
+
+TEST_CASE("RV32 Zbkb packing, zip and unzip", "[Micro]")
+{
+	static constexpr uint32_t RS_VAL = REG_ARG0;
+	static constexpr uint32_t RS_R2  = REG_ARG1;
+
+	const std::array<uint32_t, 8> program {
+		enc_rtype(ENC_OP, 0x4, ENC_F7_PACK, REG_ARG2, RS_VAL, RS_R2),
+		enc_rtype(ENC_OP, 0x7, ENC_F7_PACK, REG_ARG3, RS_VAL, RS_R2),
+		enc_rtype(ENC_OP, 0x4, ENC_F7_PACK, REG_ARG4, RS_VAL, REG_ZERO),
+		enc_itype(ENC_OP_IMM, 0x5, REG_ARG5, RS_VAL, ENC_IMM_BREV8),
+		enc_itype(ENC_OP_IMM, 0x1, REG_ARG6, RS_VAL, ENC_IMM_ZIP),
+		enc_itype(ENC_OP_IMM, 0x5, REG_ARG7, RS_VAL, ENC_IMM_ZIP),
+		enc_itype(ENC_OP_IMM, 0x5, REG_T0,   RS_VAL, ENC_IMM_REV8_32),
+		ENC_JSELF,
+	};
+
+	constexpr uint32_t V = 0x2000;
+	riscv::Machine<RISCV32> machine { empty };
+	machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+	machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+
+	auto setup = [&] {
+		machine.cpu.registers() = {};
+		machine.cpu.reg(RS_VAL) = 0x89ABCDEFu;
+		machine.cpu.reg(RS_R2)  = 0x76543210u;
+		machine.cpu.jump(V);
+	};
+	auto verify = [&] {
+		REQUIRE(machine.cpu.reg(REG_ARG2) == 0x3210CDEFu);
+		REQUIRE(machine.cpu.reg(REG_ARG3) == 0x000010EFu);
+		REQUIRE(machine.cpu.reg(REG_ARG4) == 0x0000CDEFu);
+		REQUIRE(machine.cpu.reg(REG_ARG5) == 0x91D5B3F7u);
+		REQUIRE(machine.cpu.reg(REG_ARG6) == 0xD0D3DCDFu);
+		REQUIRE(machine.cpu.reg(REG_ARG7) == 0xAFAF11BBu);
+		REQUIRE(machine.cpu.reg(REG_T0)   == 0xEFCDAB89u);
+	};
+
+	setup();
+	machine.simulate<false>(MAX_CYCLES, 0u);
+	verify();
+
+	setup();
+	DebugMachine debugger { machine };
+	debugger.simulate(program.size() - 1);
+	verify();
 }

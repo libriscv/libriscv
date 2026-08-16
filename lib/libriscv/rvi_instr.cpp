@@ -1,4 +1,5 @@
 #include "instr_helpers.hpp"
+#include "instruction_list.hpp"
 #include "internal_common.hpp"
 #include "rvc.hpp"
 #include <atomic>
@@ -57,6 +58,50 @@ static inline uint64_t MUL128(
 #  define mulhsu64(a, b) mulhi64(a, b)
 # endif // sizeof long == 8
 #endif // _MSC_VER
+
+	template <typename T>
+	static inline T rv_brev8(T value) noexcept
+	{
+		T result = 0;
+		for (size_t i = 0; i < sizeof(T); i++) {
+			uint8_t b = uint8_t(value >> (i * 8));
+			b = uint8_t(((b & 0xF0) >> 4) | ((b & 0x0F) << 4));
+			b = uint8_t(((b & 0xCC) >> 2) | ((b & 0x33) << 2));
+			b = uint8_t(((b & 0xAA) >> 1) | ((b & 0x55) << 1));
+			result |= T(b) << (i * 8);
+		}
+		return result;
+	}
+
+	static inline uint32_t rv_zip32(uint32_t value) noexcept
+	{
+		uint32_t lo = value & 0xFFFF;
+		uint32_t hi = value >> 16;
+		lo = (lo | (lo << 8)) & 0x00FF00FF;
+		lo = (lo | (lo << 4)) & 0x0F0F0F0F;
+		lo = (lo | (lo << 2)) & 0x33333333;
+		lo = (lo | (lo << 1)) & 0x55555555;
+		hi = (hi | (hi << 8)) & 0x00FF00FF;
+		hi = (hi | (hi << 4)) & 0x0F0F0F0F;
+		hi = (hi | (hi << 2)) & 0x33333333;
+		hi = (hi | (hi << 1)) & 0x55555555;
+		return lo | (hi << 1);
+	}
+
+	static inline uint32_t rv_unzip32(uint32_t value) noexcept
+	{
+		uint32_t lo = value & 0x55555555;
+		uint32_t hi = (value >> 1) & 0x55555555;
+		lo = (lo | (lo >> 1)) & 0x33333333;
+		lo = (lo | (lo >> 2)) & 0x0F0F0F0F;
+		lo = (lo | (lo >> 4)) & 0x00FF00FF;
+		lo = (lo | (lo >> 8)) & 0x0000FFFF;
+		hi = (hi | (hi >> 1)) & 0x33333333;
+		hi = (hi | (hi >> 2)) & 0x0F0F0F0F;
+		hi = (hi | (hi >> 4)) & 0x00FF00FF;
+		hi = (hi | (hi >> 8)) & 0x0000FFFF;
+		return lo | (hi << 16);
+	}
 
 	INSTRUCTION(NOP,
 	[] (auto& /* cpu */, rv32i_instruction /* instr */) RVINSTR_COLDATTR {
@@ -441,6 +486,12 @@ static inline uint64_t MUL128(
 					dst = __builtin_popcountl(src);
 #endif
 				return;
+			case 0b000010001111:
+				if constexpr (RVIS32BIT(cpu)) {
+					dst = rv_zip32(uint32_t(src));
+					return;
+				}
+				break;
 			default:
 				if (instr.Itype.high_bits() == 0x280 && rv32_shamt_legal) {
 					// BSETI: Bit-set immediate
@@ -501,6 +552,16 @@ static inline uint64_t MUL128(
 				else
 					dst = bswap64(src);
 				return;
+			}
+			else if (instr.Itype.imm == 0b011010000111) {
+				dst = rv_brev8(RVREGTYPE(cpu)(src));
+				return;
+			}
+			else if (instr.Itype.imm == 0b000010001111) {
+				if constexpr (RVIS32BIT(cpu)) {
+					dst = rv_unzip32(uint32_t(src));
+					return;
+				}
 			}
 			break;
 		case 0x6: // ORI: Or sign-extended 12-bit immediate
@@ -688,16 +749,14 @@ static inline uint64_t MUL128(
 				dst = src1;
 			}
 			return;
-		case 0x44: // ZEXT.H / PACK
-			if (instr.Rtype.rs2 == 0) {
-				dst = uint16_t(src1);
-			} else if constexpr (RVIS32BIT(cpu)) {
-				dst = RVREGTYPE(cpu)(uint16_t(src1))
-					| (RVREGTYPE(cpu)(uint16_t(src2)) << 16);
-			} else {
-				dst = RVREGTYPE(cpu)(uint32_t(src1))
-					| (RVREGTYPE(cpu)(uint32_t(src2)) << 32);
-			}
+		case 0x44: { // PACK (ZEXT.H on RV32 when rs2 == 0)
+			constexpr auto half = RVXLEN(cpu) / 2;
+			const RVREGTYPE(cpu) mask = (RVREGTYPE(cpu)(1) << half) - 1;
+			dst = (src1 & mask) | ((src2 & mask) << half);
+			} return;
+		case 0x47: // PACKH
+			dst = RVREGTYPE(cpu)(uint8_t(src1))
+				| (RVREGTYPE(cpu)(uint8_t(src2)) << 8);
 			return;
 		case 0x51: { // CLMUL
 			RVREGTYPE(cpu) result = 0;
@@ -804,7 +863,11 @@ static inline uint64_t MUL128(
 			case 0x15: strop = "DIVU"; break;
 			case 0x16: strop = "REM"; break;
 			case 0x17: strop = "REMU"; break;
-			case 0x44: strop = "ZEXT.H"; break;
+			case 0x44: strop = (instr.Rtype.rs2 == 0 && RVIS32BIT(cpu)) ? "ZEXT.H" : "PACK"; break;
+			case 0x47: strop = "PACKH"; break;
+			case 0x51: strop = "CLMUL"; break;
+			case 0x52: strop = "CLMULR"; break;
+			case 0x53: strop = "CLMULH"; break;
 			case 0x54: strop = "MIN"; break;
 			case 0x55: strop = "MINU"; break;
 			case 0x56: strop = "MAX"; break;
@@ -1143,7 +1206,7 @@ static inline uint64_t MUL128(
 				if (instr.Rtype.rs2 == 0) strop = "ZEXT.W";
 				else                      strop = "ADD.UW";
 				break;
-			case 0x44: strop = "ZEXT.H"; break;
+			case 0x44: strop = (instr.Rtype.rs2 == 0) ? "ZEXT.H" : "PACK.W"; break;
 			case 0x102: strop = "SH1ADD.UW"; break;
 			case 0x104: strop = "SH2ADD.UW"; break;
 			case 0x106: strop = "SH3ADD.UW"; break;
@@ -1179,5 +1242,37 @@ static inline uint64_t MUL128(
 	[] (char* buffer, size_t len, auto&, rv32i_instruction) RVPRINTR_ATTR {
 		// printer
 		return snprintf(buffer, len, "FENCE");
+	});
+
+	INSTRUCTION(CBO,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_COLDATTR {
+		switch (instr.Itype.imm) {
+		case RV32I_CBO_INVAL:
+		case RV32I_CBO_CLEAN:
+		case RV32I_CBO_FLUSH:
+			return;
+		case RV32I_CBO_ZERO: {
+			const auto addr = cpu.reg(instr.Itype.rs1)
+				& ~RVREGTYPE(cpu)(RV32I_CBO_BLOCK - 1);
+			auto& memory = cpu.machine().memory;
+			for (unsigned i = 0; i < RV32I_CBO_BLOCK; i += 8)
+				memory.template write<uint64_t> (addr + i, 0);
+			return;
+		}
+		default:
+			cpu.trigger_exception(ILLEGAL_OPCODE, instr.whole);
+		}
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		const char* op;
+		switch (instr.Itype.imm) {
+		case RV32I_CBO_INVAL: op = "CBO.INVAL"; break;
+		case RV32I_CBO_CLEAN: op = "CBO.CLEAN"; break;
+		case RV32I_CBO_FLUSH: op = "CBO.FLUSH"; break;
+		case RV32I_CBO_ZERO:  op = "CBO.ZERO"; break;
+		default: op = "CBO.???";
+		}
+		return snprintf(buffer, len, "%s [%s]", op,
+						RISCV::regname(instr.Itype.rs1));
 	});
 }
