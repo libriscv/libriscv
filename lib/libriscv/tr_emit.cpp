@@ -1969,7 +1969,7 @@ void Emitter<W>::emit()
 			auto emit_arith = [&] (const std::string& expr, bool is_f32) -> std::string {
 				if constexpr (fcsr_emulation) {
 					if (is_f32)
-						return "{ const double exact = (double)(" + expr + "); const float fr = (float)exact; if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else { set_fl(&" + dst + ", fr); if ((double)fr != exact) cpu->fcsr |= 1; } }\n";
+						return "{ const float fr = " + expr + "; if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", fr); }\n";
 					return "{ const double dr = " + expr + "; if (dr != dr) load_dbl(&" + dst + ", 0x7ff8000000000000ull); else set_dbl(&" + dst + ", dr); }\n";
 				} else {
 					if (is_f32)
@@ -2060,9 +2060,14 @@ void Emitter<W>::emit()
 					}
 					if constexpr (fcsr_emulation) {
 						// NX when the exact (double-precision) result does not
-						// round-trip to the single-precision result.
-						code += "{ const double exact = (double)" + rs1 + ".f32[0]" + fop + "(double)" + rs2 + ".f32[0];"
-							" const float fr = (float)exact;"
+						// round-trip to the single-precision result. The
+						// operands are widened *before* the operation, which is
+						// what makes the comparison meaningful; the double sum
+						// is exact unless the operand exponents are more than
+						// ~29 apart, so a handful of extreme cases under-report.
+						code += "{ const float fa = " + rs1 + ".f32[0], fb = " + rs2 + ".f32[0];"
+							" const double exact = (double)fa" + fop + "(double)fb;"
+							" const float fr = fa" + fop + "fb;"
 							" if (fr != fr) load_fl(&" + dst + ", 0x7fc00000u);"
 							" else { set_fl(&" + dst + ", fr); if ((double)fr != exact) cpu->fcsr |= 1; } }\n";
 					} else {

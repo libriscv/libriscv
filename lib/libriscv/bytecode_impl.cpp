@@ -552,10 +552,17 @@ INSTRUCTION(RV32F_BC_FADD, rv32f_fadd) {
 				NEXT_INSTR();
 			}
 		}
-		SET_FLOAT_CANON(dst, rs1.f32[0] + rs2.f32[0]);
 		if constexpr (fcsr_emulation) {
-			const double exact = (double)rs1.f32[0] + (double)rs2.f32[0];
-			if ((double)(rs1.f32[0] + rs2.f32[0]) != exact) REGISTERS().fcsr().fflags |= 1;
+			// The operands are read out before the store, because rd is
+			// allowed to alias rs1 or rs2. NX when the exact sum (computed on
+			// operands widened to double) does not round-trip to the single-
+			// precision result.
+			const float fa = rs1.f32[0], fb = rs2.f32[0];
+			const double exact = (double)fa + (double)fb;
+			SET_FLOAT_CANON(dst, fa + fb);
+			if ((double)(fa + fb) != exact) REGISTERS().fcsr().fflags |= 1;
+		} else {
+			SET_FLOAT_CANON(dst, rs1.f32[0] + rs2.f32[0]);
 		}
 	}
 	else
@@ -569,10 +576,14 @@ INSTRUCTION(RV32F_BC_FSUB, rv32f_fsub) {
 	FLREGS();
 	if (fi.func == 0x0)
 	{ // float32
-		SET_FLOAT_CANON(dst, rs1.f32[0] - rs2.f32[0]);
 		if constexpr (fcsr_emulation) {
-			const double exact = (double)rs1.f32[0] - (double)rs2.f32[0];
-			if ((double)(rs1.f32[0] - rs2.f32[0]) != exact) REGISTERS().fcsr().fflags |= 1;
+			// Operands read out before the store: rd may alias rs1 or rs2.
+			const float fa = rs1.f32[0], fb = rs2.f32[0];
+			const double exact = (double)fa - (double)fb;
+			SET_FLOAT_CANON(dst, fa - fb);
+			if ((double)(fa - fb) != exact) REGISTERS().fcsr().fflags |= 1;
+		} else {
+			SET_FLOAT_CANON(dst, rs1.f32[0] - rs2.f32[0]);
 		}
 	}
 	else
