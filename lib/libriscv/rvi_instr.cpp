@@ -579,28 +579,20 @@ static inline uint64_t MUL128(
 		cpu.reg(instr.Itype.rd) = cpu.reg(instr.Itype.rs1);
 	}, DECODED_INSTR(OP_IMM).printer);
 
+	// The reserved RV32 imm[5]=1 encodings never reach here: the decoder
+	// (instr_decoding.inc) routes them to the generic OP_IMM handler, which
+	// rejects them. Keep this handler free of the extra branch.
 	INSTRUCTION(OP_IMM_SLLI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
-		if constexpr (RVIS32BIT(cpu)) {
-			if (instr.Itype.imm & 0x20) {
-				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
-				return;
-			}
-		}
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// SLLI: Logical left-shift 5/6/7-bit immediate
 		dst = src << (instr.Itype.imm & (RVXLEN(cpu)-1));
 	}, DECODED_INSTR(OP_IMM).printer);
 
+	// See OP_IMM_SLLI above: reserved RV32 encodings are filtered at decode.
 	INSTRUCTION(OP_IMM_SRLI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
-		if constexpr (RVIS32BIT(cpu)) {
-			if (instr.Itype.imm & 0x20) {
-				cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION, instr.whole);
-				return;
-			}
-		}
 		auto& dst = cpu.reg(instr.Itype.rd);
 		const auto src = cpu.reg(instr.Itype.rs1);
 		// SRLI: Shift-right logical 5/6/7-bit immediate
