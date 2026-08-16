@@ -610,10 +610,13 @@ INSTRUCTION(RV32F_BC_FMUL, rv32f_fmul) {
 				const uint32_t result = dst.i32[0] & 0x7fffffffu;
 				if (result == 0x7f800000u) {
 					CPU().registers().fcsr().fflags |= 5; // OF | NX
-					// Overflow value depends on the rounding mode: RTZ and
-					// RDN saturate to the largest finite number.
+					// The overflow value depends on the rounding mode (IEEE 754
+					// §7.4): RTZ saturates to the largest finite number for
+					// either sign, RDN only for a positive result and RUP only
+					// for a negative one. RNE and RMM keep the host infinity.
 					const unsigned rm = CPU().registers().fcsr().frm;
-					if (rm == 0x1 || rm == 0x2)
+					const bool neg = (dst.i32[0] & 0x80000000u) != 0;
+					if (rm == 0x1 || (rm == 0x2 && !neg) || (rm == 0x3 && neg))
 						dst.i32[0] = (dst.i32[0] & 0x80000000u) | 0x7F7FFFFFu;
 				}
 				else if (result < 0x00800000u

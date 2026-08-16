@@ -2092,7 +2092,9 @@ void Emitter<W>::emit()
 							" const uint32_t ir = " + dst + ".i32[0] & 0x7fffffffu;"
 							" if (ir == 0x7f800000u) { cpu->fcsr |= 5;"
 							" const unsigned rm = (cpu->fcsr >> 5) & 7;"
-							" if (rm == 1 || rm == 2) " + dst + ".i32[0] = (" + dst + ".i32[0] & 0x80000000u) | 0x7F7FFFFFu; }"
+							" const int neg = (" + dst + ".i32[0] & 0x80000000u) != 0;"
+							" if (rm == 1 || (rm == 2 && !neg) || (rm == 3 && neg))"
+							" " + dst + ".i32[0] = (" + dst + ".i32[0] & 0x80000000u) | 0x7F7FFFFFu; }"
 							" else if (ir < 0x00800000u && (double)fa * (double)fb != fr) cpu->fcsr |= 3; } }\n";
 						break;
 					}
