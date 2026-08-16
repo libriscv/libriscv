@@ -470,12 +470,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				return RV32F_BC_FLW;
 			case 0x3: // FLD
 				return RV32F_BC_FLD;
-#ifdef RISCV_EXT_VECTOR
-			case 0x6: // VLE32
-				return RV32V_BC_VLE32;
-#endif
 			default:
-				return RV32I_BC_INVALID;
+				return RV32I_BC_FUNCTION;
 			}
 		}
 		case RV32F_STORE: {
@@ -485,12 +481,8 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				return RV32F_BC_FSW;
 			case 0x3: // FSD
 				return RV32F_BC_FSD;
-#ifdef RISCV_EXT_VECTOR
-			case 0x6: // VSE32
-				return RV32V_BC_VSE32;
-#endif
 			default:
-				return RV32I_BC_INVALID;
+				return RV32I_BC_FUNCTION;
 			}
 		}
 		case RV32F_FMADD:
@@ -516,27 +508,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					return RV32I_BC_FUNCTION;
 				}
 #ifdef RISCV_EXT_VECTOR
-		case RV32V_OP: {
-			const rv32v_instruction vi{instr};
-			switch (instr.vwidth())
-			{
-			case 0x1: // OPF.VV
-				switch (vi.OPVV.funct6)
-				{
-				case 0b000000: // VFADD.VV
-					return RV32V_BC_VFADD_VV;
-				}
-				break;
-			case 0x5: // OPF.VF
-				switch (vi.OPVV.funct6)
-				{
-				case 0b100100: // VFMUL.VF
-					return RV32V_BC_VFMUL_VF;
-				}
-				break;
-			}
+		case RV32V_OP:
+			// All vector instructions go through the general instruction
+			// handlers (full vl/vtype/mask semantics).
 			return RV32I_BC_FUNCTION;
-		}
 #endif
 #ifdef RISCV_EXT_ATOMICS
 		case RV32A_ATOMIC:

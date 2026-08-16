@@ -165,8 +165,6 @@ struct Emitter
 	}
 
 	void reload_all_registers() {
-		// Anything that forces a full reload ran code we don't model, so every
-		// register value -- and with it every bounds-check window -- is suspect.
 		this->invalidate_all_bounds_checks();
 		// Use the LOAD_REGS macro to restore the registers
 		if (uses_register_caching())
@@ -253,6 +251,244 @@ struct Emitter
 	std::string from_rvvreg(int reg) {
 		return "cpu->rvv.lane[" + std::to_string(reg) + "]";
 	}
+	// Condition for addressing one full register: e32, m1, vl == VLMAX
+	// and a valid vtype. Matches the whole-group fast path in
+	// unit_stride_load/store (rvv_instr.cpp), and is the only case where
+	// every element is active and there is no tail.
+	std::string rvv_full_lane_condition() const {
+		return "cpu->rvv.vl == " + std::to_string(VectorLane::size() / 4)
+			+ " && cpu->rvv.vsew == 2 && cpu->rvv.lmul == 0 && !cpu->rvv.vill";
+	}
+	const std::string& rvv_guard()
+	{
+		if (m_rvv_guard.empty()) {
+			m_rvv_guard = "vok" + PCRELS(0);
+			add_code("const int " + m_rvv_guard + " = " + rvv_full_lane_condition() + ";");
+		}
+		return m_rvv_guard;
+	}
+	// Call the interpreter's instruction handler (non-libtcc slow path)
+	void emit_vector_handler_call(const rv32i_instruction& instr) {
+		code += "#ifdef __wasm__\n";
+		code += "api.execute(cpu, " + std::to_string(instr.whole) + ");\n";
+		code += "#else\n";
+		code += "{ static int handler_idx = 0;\n";
+		code += "if (handler_idx) api.handlers[handler_idx](cpu, " + std::to_string(instr.whole) + ");\n";
+		code += "else handler_idx = api.execute(cpu, " + std::to_string(instr.whole) + "); }\n";
+		code += "#endif\n";
+	}
+
+	// The integer registers potentially used by a vector instruction handler
+	struct VectorScalarUse {
+		int reads[2] { -1, -1 };
+		int writes { -1 };
+	};
+	static VectorScalarUse vector_scalar_use(const rv32i_instruction& vinstr)
+	{
+		const rv32v_instruction vi { vinstr };
+		VectorScalarUse use;
+		switch (vinstr.opcode()) {
+		case RV32V_OP:
+			switch (vinstr.vwidth()) {
+			case 0x4: // OPI.VX: scalar operand from x[rs1]
+				use.reads[0] = vi.OPVI.imm;
+				break;
+			case 0x6: // OPM.VX: scalar operand from x[rs1] (VMV.S.X, VSLIDE1*.VX, ...)
+				use.reads[0] = vi.OPVV.vs1;
+				break;
+			case 0x2: // OPM.VV: VWXUNARY0 (VMV.X.S, VCPOP.M, VFIRST.M) writes x[rd]
+				if (vi.OPVV.funct6 == 0b010000)
+					use.writes = vi.OPVV.vd;
+				break;
+			case 0x7: // Vector configuration: AVL from x[rs1], resulting vl into x[rd]
+				switch (vinstr.vsetfunc()) {
+				case 0x0:
+				case 0x1: // VSETVLI
+					use.reads[0] = vi.VLI.rs1;
+					break;
+				case 0x2: // VSETVL: new vtype comes from x[rs2] as well
+					use.reads[0] = vi.VSETVL.rs1;
+					use.reads[1] = vi.VSETVL.rs2;
+					break;
+				default: // VSETIVLI: the AVL is a 5-bit immediate
+					break;
+				}
+				use.writes = vi.VLI.rd;
+				break;
+			default: // OPI.VV, OPI.VI, OPF.VV, OPF.VF: vector and fp registers only
+				break;
+			}
+			break;
+		case RV32F_LOAD:  // Vector loads address memory through x[rs1]
+			use.reads[0] = vi.VL.rs1;
+			break;
+		case RV32F_STORE: // x[rs1] likewise
+			use.reads[0] = vi.VS.rs1;
+			break;
+		default:
+			break;
+		}
+		return use;
+	}
+	// Realize the integer registers the handler reads.
+	void realize_vector_scalar_reads(const VectorScalarUse& use) {
+		for (const int reg : use.reads) {
+			if (reg > 0) {
+				this->load_register(reg);
+				this->potentially_realize_register(reg);
+			}
+		}
+	}
+	// Reload the one integer register the handler may have written.
+	void reload_vector_scalar_writes(const VectorScalarUse& use) {
+		if (use.writes > 0) {
+			this->reset_tracked_register(use.writes);
+			this->potentially_reload_register(use.writes);
+		}
+	}
+	// Hand one vector instruction to the interpreter handler. Callers
+	// realize/reload the integer registers around it. The libtcc exception
+	// path returns from the block, so cached registers are stored first.
+	void emit_vector_handler_invoke()
+	{
+		if (tinfo.is_libtcc) {
+			const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler;
+			code += "if (UNLIKELY(api.execute_handler(cpu, " + std::to_string(instr.whole)
+				+ ", " + std::to_string(handler) + "))) {\n";
+			this->store_loaded_registers();
+			code += "RETURN_VALUES(0, 0);\n}\n";
+		} else {
+			this->emit_vector_handler_call(instr);
+		}
+	}
+	// Run one vector instruction in the interpreter, realizing and
+	// reloading only the integer registers the handler names.
+	void emit_vector_slowpath()
+	{
+		// Inlined instructions don't touch vl/vtype; any other handler
+		// might be a vsetvl, so drop the cached guard.
+		if (!this->vector_is_guarded_inlinable(instr))
+			this->m_rvv_guard.clear();
+		const auto use = vector_scalar_use(this->instr);
+		this->realize_vector_scalar_reads(use);
+		this->emit_vector_handler_invoke();
+		this->reload_vector_scalar_writes(use);
+	}
+	// Whether an arena bounds check is needed at runtime.
+	bool vector_memory_needs_bounds_check() noexcept {
+		return !tinfo.unsafe_remove_checks && !uses_Nbit_encompassing_arena();
+	}
+	// The element-wise float operator this encoding computes, or nullptr
+	// when it is not translated directly.
+	static const char* vector_float_operator(const rv32i_instruction& vinstr)
+	{
+		if (vinstr.vwidth() != 0x1 && vinstr.vwidth() != 0x5) // OPF.VV / OPF.VF
+			return nullptr;
+		if (!rv32v_instruction{vinstr}.OPVV.vm)
+			return nullptr; // Masked: element activity depends on v0 at runtime
+		switch (rv32v_instruction{vinstr}.OPVV.funct6) {
+		case 0b000000: return " + "; // VFADD
+		case 0b000010: return " - "; // VFSUB
+		case 0b100000: return " / "; // VFDIV
+		case 0b100100: return " * "; // VFMUL
+		default:       return nullptr;
+		}
+	}
+	// True when this instruction is inlined under the vl/vtype guard.
+	bool vector_is_guarded_inlinable(const rv32i_instruction& vinstr)
+	{
+		const rv32v_instruction vi { vinstr };
+		switch (vinstr.opcode()) {
+		case RV32F_LOAD:  // Plain unmasked unit-stride VLE32
+			return vi.VL.width == 0x6 && uses_flat_memory_arena()
+				&& !vi.VL.mew && vi.VL.nf == 0 && vi.VL.mop == 0
+				&& vi.VL.lumop == 0 && vi.VL.vm;
+		case RV32F_STORE: // ... and VSE32
+			return vi.VS.width == 0x6 && uses_flat_memory_arena()
+				&& !vi.VS.mew && vi.VS.nf == 0 && vi.VS.mop == 0
+				&& vi.VS.sumop == 0 && vi.VS.vm;
+		case RV32V_OP:
+			return vector_float_operator(vinstr) != nullptr;
+		default:
+			return false;
+		}
+	}
+	// Inline a unit-stride load/store as a whole-lane arena move. The
+	// caller has established the vl/vtype guard; the address is tested
+	// here, and outside the arena drops to the interpreter handler.
+	void emit_vector_unit_stride_body(bool is_store)
+	{
+		const rv32v_instruction vi { instr };
+		const int rs1 = is_store ? vi.VS.rs1 : vi.VL.rs1;
+		const int vreg = is_store ? vi.VS.vs3 : vi.VL.vd;
+		this->load_register(rs1);
+
+		const std::string addr = "vaddr" + PCRELS(0);
+		add_code("{ const addr_t " + addr + " = " + from_untracked_reg(rs1) + ";");
+
+		const bool checked = vector_memory_needs_bounds_check();
+		if (checked) {
+			// A lane fits within the arena over-allocation, so a
+			// readable/writable start address covers the whole move.
+			static_assert(VectorLane::size() <= Memory<W>::OVERALLOCATE,
+				"A vector lane must fit within the arena over-allocation");
+			add_code(std::string("if (LIKELY(")
+				+ (is_store ? "ARENA_WRITABLE(" : "ARENA_READABLE(") + addr + "))) {");
+		}
+		const std::string lane = "*(VectorLaneBytes *)&" + from_rvvreg(vreg);
+		const std::string mem  = "*(VectorLaneBytes *)" + arena_at(addr);
+		add_code(is_store ? "  " + mem + " = " + lane + ";"
+		                  : "  " + lane + " = " + mem + ";");
+		if (checked) {
+			add_code("} else {");
+			// rs1 is the handler's only integer input, and it writes none.
+			this->potentially_realize_register(rs1);
+			this->emit_vector_handler_invoke();
+			add_code("}");
+		}
+		add_code("}");
+	}
+	// Inline float arithmetic as straight-line code. The vl/vtype guard
+	// pins a full e32/m1 register: every element active, no tail.
+	void emit_vector_float_arith_body()
+	{
+		const rv32v_instruction vi { instr };
+		const char* const op = vector_float_operator(instr);
+		const bool is_scalar = instr.vwidth() == 0x5; // OPF.VF takes f[rs1]
+		std::string rhs;
+		if (is_scalar) {
+			// The guard pins SEW to 32, so the scalar is the low float.
+			rhs = "vscalar" + PCRELS(0);
+			add_code("  const float " + rhs + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];");
+		}
+		for (unsigned i = 0; i < VectorLane::size() / sizeof(float); i++) {
+			const std::string e = ".f32[" + std::to_string(i) + "]";
+			add_code("  " + from_rvvreg(vi.OPVV.vd) + e + " = " + from_rvvreg(vi.OPVV.vs2) + e
+				+ op + (is_scalar ? rhs : from_rvvreg(vi.OPVV.vs1) + e) + ";");
+		}
+	}
+	void emit_vector_inline_body()
+	{
+		switch (instr.opcode()) {
+		case RV32F_LOAD:  this->emit_vector_unit_stride_body(false); break;
+		case RV32F_STORE: this->emit_vector_unit_stride_body(true); break;
+		default:          this->emit_vector_float_arith_body(); break;
+		}
+	}
+	// Emit one vector instruction: inlined under the vl/vtype guard when
+	// the encoding allows it, otherwise straight to the handler.
+	void emit_vector_instruction()
+	{
+		if (!this->vector_is_guarded_inlinable(instr)) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		add_code("if (LIKELY(" + rvv_guard() + ")) {");
+		this->emit_vector_inline_body();
+		add_code("} else {");
+		this->emit_vector_slowpath();
+		add_code("}");
+	}
 #endif
 	std::string from_imm(int64_t imm) {
 		return std::to_string(imm);
@@ -282,12 +518,6 @@ struct Emitter
 
 	bool uses_flat_memory_arena() noexcept {
 		return riscv::flat_readwrite_arena && tinfo.arena_ptr != 0;
-	}
-	// A whole vector lane can only be moved by an inlined arena access. The slow
-	// paths (rd8..rd64 / wr8..wr64) top out at 64 bits, so when an access may have
-	// to fall back to virtual paging, vector loads/stores must be interpreted.
-	bool can_inline_vector_memory() noexcept {
-		return uses_flat_memory_arena() && !tinfo.use_virtual_paging_fallback;
 	}
 	bool uses_Nbit_encompassing_arena() noexcept {
 		if (riscv::encompassing_Nbit_arena != 0 && tinfo.arena_ptr != 0)
@@ -366,6 +596,10 @@ struct Emitter
 	void invalidate_all_bounds_checks() {
 		for (auto& entry : this->m_read_checked) entry.valid = false;
 		for (auto& entry : this->m_write_checked) entry.valid = false;
+#ifdef RISCV_EXT_VECTOR
+		// A vsetvl may have run; drop the cached vl/vtype test.
+		this->m_rvv_guard.clear();
+#endif
 	}
 
 	bool skip_load_bounds_check(int reg, int64_t offset, size_t size) {
@@ -661,6 +895,10 @@ private:
 	unsigned m_instr_length = 0;
 	uint64_t m_instr_counter = 0;
 	uint32_t m_zero_insn_counter = 0;
+#ifdef RISCV_EXT_VECTOR
+	// Live C local holding the vl/vtype fast-path test, see rvv_guard()
+	std::string m_rvv_guard;
+#endif
 	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
 	bool m_used_fixed_store = false;
@@ -1855,22 +2093,14 @@ void Emitter<W>::emit()
 				this->memory_load<uint64_t>(from_fpreg(fi.Itype.rd) + ".i64", "uint64_t", fi.Itype.rs1, fi.Itype.signed_imm());
 				break;
 #ifdef RISCV_EXT_VECTOR
-			case 0x6: { // VLE32
-				if (tinfo.is_libtcc || !can_inline_vector_memory()) {
-					// Vector load is not supported in libtcc, and cannot be
-					// expressed by the virtual paging fallback either
-					const rv32v_instruction vi { instr };
-					load_register(vi.VLS.rs1);
-					this->potentially_realize_register(vi.VLS.rs1);
-					WELL_KNOWN_INSTRUCTION();
-					this->potentially_reload_register(vi.VLS.rs1);
-				} else {
-					// VLE32: Load vector lane from memory
-					const rv32v_instruction vi { instr };
-					this->memory_load<VectorLane>(from_rvvreg(vi.VLS.vd), "VectorLane", vi.VLS.rs1, 0);
-				}
-				break;
-			}
+		case 0x6: // Vector loads (VLE*)
+			// Only a plain unmasked unit-stride load of a full register
+			// (e32, m1, vl == VLMAX) at an arena address is inlined; the
+			// decision is made at runtime. Everything else goes to the
+			// handler, which only reads x[rs1] and writes no integer
+			// register, so the cached registers stay live.
+			this->emit_vector_instruction();
+			break;
 #endif
 			default:
 				UNKNOWN_INSTRUCTION();
@@ -1887,21 +2117,9 @@ void Emitter<W>::emit()
 				this->memory_store("int64_t", sizeof(int64_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
 #ifdef RISCV_EXT_VECTOR
-			case 0x6: { // VSE32
-				if (tinfo.is_libtcc || !can_inline_vector_memory()) {
-					// Vector store is not supported in libtcc, and cannot be
-					// expressed by the virtual paging fallback either
-					const rv32v_instruction vi { instr };
-					load_register(vi.VLS.rs1);
-					this->potentially_realize_register(vi.VLS.rs1);
-					WELL_KNOWN_INSTRUCTION();
-					this->potentially_reload_register(vi.VLS.rs1);
-				} else {
-					const rv32v_instruction vi { instr };
-					this->memory_store("VectorLane", sizeof(VectorLane), vi.VLS.rs1, 0, from_rvvreg(vi.VLS.vd));
-				}
-				break;
-			}
+		case 0x6: // Vector stores (VSE*): like the load case above
+			this->emit_vector_instruction();
+			break;
 #endif
 			default:
 				UNKNOWN_INSTRUCTION();
@@ -2469,64 +2687,16 @@ void Emitter<W>::emit()
 			this->potentially_reload_register(instr.Atype.rs1);
 			this->potentially_reload_register(instr.Atype.rs2);
 			break;
-		case RV32V_OP: {   // General handler for vector instructions
+		case RV32V_OP:
+			// Handlers in rvv_instr.cpp implement the full vl/vtype/mask
+			// semantics. Only element-wise float arithmetic is translated
+			// directly, with the handler as its runtime fallback.
 #ifdef RISCV_EXT_VECTOR
-			const rv32v_instruction vi{instr};
-			const unsigned vlen = RISCV_EXT_VECTOR / 4;
-			switch (instr.vwidth()) {
-			case 0x1: // OPF.VV
-				switch (vi.OPVV.funct6)
-				{
-				case 0b000000: // VFADD.VV
-					for (unsigned i = 0; i < vlen; i++) {
-						const std::string f32 = ".f32[" + std::to_string(i) + "]";
-						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs1) + f32 + " + " + from_rvvreg(vi.OPVV.vs2) + f32 + ";\n";
-					}
-					break;
-				case 0b100100: // VFMUL.VV
-					for (unsigned i = 0; i < vlen; i++) {
-						const std::string f32 = ".f32[" + std::to_string(i) + "]";
-						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs1) + f32 + " * " + from_rvvreg(vi.OPVV.vs2) + f32 + ";\n";
-					}
-					break;
-				default:
-					UNKNOWN_INSTRUCTION();
-				}
-				break;
-			case 0x5: { // OPF.VF
-				const std::string scalar = "scalar" + PCRELS(0);
-				switch (vi.OPVV.funct6)
-				{
-				case 0b000000: // VFADD.VF
-					code += "{ const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
-					for (unsigned i = 0; i < vlen; i++) {
-						const std::string f32 = ".f32[" + std::to_string(i) + "]";
-						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs2) + f32 + " + " + scalar + ";\n";
-					}
-					code += "}\n";
-					break;
-				case 0b100100: // VFMUL.VF
-					code += "{ const float " + scalar + " = " + from_fpreg(vi.OPVV.vs1) + ".f32[0];\n";
-					for (unsigned i = 0; i < vlen; i++) {
-						const std::string f32 = ".f32[" + std::to_string(i) + "]";
-						code += from_rvvreg(vi.OPVV.vd) + f32 + " = " + from_rvvreg(vi.OPVV.vs2) + f32 + " * " + scalar + ";\n";
-					}
-					code += "}\n";
-					break;
-				default:
-					UNKNOWN_INSTRUCTION();
-				}
-				break;
-			}
-			default:
-				UNKNOWN_INSTRUCTION();
-			}
-			break;
+			this->emit_vector_instruction();
 #else
 			UNKNOWN_INSTRUCTION();
-			break;
 #endif
-		}
+			break;
 		case 0b1011011: // Dynamic call custom-2 instruction
 			// Assumption: Dynamic calls are like regular function calls
 			// Note: This behavior can be turned off by disabling register_caching

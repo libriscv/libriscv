@@ -230,7 +230,10 @@
 					case 0x3: // FLD
 						DECODER(DECODED_FLOAT(FLD));
 #ifdef RISCV_EXT_VECTOR
+					case 0x0: // VLE8
+					case 0x5: // VLE16
 					case 0x6: // VLE32
+					case 0x7: // VLE64
 						DECODER(DECODED_VECTOR(VLE32));
 #endif
 					default:
@@ -245,7 +248,10 @@
 					case 0x3: // FSD
 						DECODER(DECODED_FLOAT(FSD));
 #ifdef RISCV_EXT_VECTOR
+					case 0x0: // VSE8
+					case 0x5: // VSE16
 					case 0x6: // VSE32
+					case 0x7: // VSE64
 						DECODER(DECODED_VECTOR(VSE32));
 #endif
 					default:
@@ -313,9 +319,12 @@
 					case 0x2: // OPM.VV
 						DECODER(DECODED_VECTOR(VOPM_VV));
 					case 0x3: // OPI.VI
+					case 0x4: // OPI.VX
 						DECODER(DECODED_VECTOR(VOPI_VI));
 					case 0x5: // OPF.VF
 						DECODER(DECODED_VECTOR(VOPF_VF));
+					case 0x6: // OPM.VX
+						DECODER(DECODED_VECTOR(VOPM_VV));
 					case 0x7: // Vector Configuration
 						switch (instruction.vsetfunc()) {
 						case 0x0:

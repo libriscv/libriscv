@@ -130,6 +130,9 @@ namespace riscv
 		void      set_exit_address(address_t new_exit);
 		// The initial heap address (*not* the current heap maximum)
 		address_t heap_address() const noexcept { return this->m_heap_address; }
+		// The current program break, as moved by the brk() system call.
+		address_t brk_address() const noexcept { return this->m_brk_address; }
+		void set_brk_address(address_t addr) noexcept { this->m_brk_address = addr; }
 		// Simple memory mapping implementation
 		auto& mmap_cache() noexcept { return m_mmap_cache; }
 		address_t mmap_start() const noexcept { return this->m_heap_address + BRK_MAX; }
@@ -344,6 +347,7 @@ namespace riscv
 		address_t m_exit_address  = 0;
 		address_t m_mmap_address  = 0;
 		address_t m_heap_address  = 0;
+		address_t m_brk_address   = 0;
 
 		Machine<W>& m_machine;
 

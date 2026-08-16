@@ -1156,9 +1156,11 @@ static void syscall_brk(Machine<W>& machine)
 	auto new_end = machine.sysarg(0);
 	if (new_end > machine.memory.heap_address() + Memory<W>::BRK_MAX) {
 		new_end = machine.memory.heap_address() + Memory<W>::BRK_MAX;
-	} else if (new_end < machine.memory.heap_address()) {
-		new_end = machine.memory.heap_address();
 	}
+	// Static glibc puts the TLS block at the first break.
+	if (new_end >= machine.memory.heap_address())
+		machine.memory.set_brk_address(new_end);
+	new_end = machine.memory.brk_address();
 
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL brk, new_end: 0x%lX  mmap_start: 0x%lX\n",

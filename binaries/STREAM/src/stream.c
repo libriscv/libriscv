@@ -557,13 +557,14 @@ void checkSTREAMresults ()
 #endif
 }
 
-#define VLOAD(elem, vec) asm("vle32.v "#vec", %1" : : "r"(&elem), "m"(elem))
-#define VSTORE(elem, vec) asm("vse32.v "#vec", (%1)" : "=m"(elem) : "r"(&elem))
-#define FLOAD(reg, scalar) asm("fmv.s.x "#reg", %0" : : "r"(scalar) : #reg)
+#define VSETUP() asm volatile("vsetivli zero, 8, e32, m1, ta, ma")
+#define VLOAD(elem, vec) asm volatile("vle32.v "#vec", %1" : : "r"(&(elem)), "m"(elem))
+#define VSTORE(elem, vec) asm volatile("vse32.v "#vec", (%1)" : "=m"(elem) : "r"(&(elem)))
 #ifdef TUNED
 
 void tuned_STREAM_Copy()
 {
+	VSETUP();
 	ssize_t j;
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
 		float* ap = &a[j];
@@ -583,7 +584,7 @@ void tuned_STREAM_Copy()
 
 void tuned_STREAM_Scale(STREAM_TYPE scalar)
 {
-	FLOAD(fa0, scalar);
+	VSETUP();
 	ssize_t j;
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
 	    //b[j] = scalar*c[j];
@@ -594,10 +595,10 @@ void tuned_STREAM_Scale(STREAM_TYPE scalar)
 		VLOAD(cp[16], v3);
 		VLOAD(cp[24], v4);
 
-		asm("vfmul.vf v1, v1, fa0");
-		asm("vfmul.vf v2, v2, fa0");
-		asm("vfmul.vf v3, v3, fa0");
-		asm("vfmul.vf v4, v4, fa0");
+		asm volatile("vfmul.vf v1, v1, %0" : : "f"(scalar));
+		asm volatile("vfmul.vf v2, v2, %0" : : "f"(scalar));
+		asm volatile("vfmul.vf v3, v3, %0" : : "f"(scalar));
+		asm volatile("vfmul.vf v4, v4, %0" : : "f"(scalar));
 
 		float* bp = &b[j];
 		VSTORE(bp[ 0], v1);
@@ -609,60 +610,37 @@ void tuned_STREAM_Scale(STREAM_TYPE scalar)
 
 void tuned_STREAM_Add()
 {
+	VSETUP();
 	ssize_t j;
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
 		float* ap = &a[j];
 		float* bp = &b[j];
 
-		asm("vle32.v v1, %1"
-			:
-			: "r"(&ap[0]), "m"(ap[0]));
-		asm("vle32.v v2, %1"
-			:
-			: "r"(&ap[8]), "m"(ap[8]));
-		asm("vle32.v v3, %1"
-			:
-			: "r"(&ap[16]), "m"(ap[16]));
-		asm("vle32.v v4, %1"
-			:
-			: "r"(&ap[24]), "m"(ap[24]));
-		asm("vle32.v v5, %1"
-			:
-			: "r"(&bp[0]), "m"(bp[0]));
-		asm("vle32.v v6, %1"
-			:
-			: "r"(&bp[8]), "m"(bp[8]));
-		asm("vle32.v v7, %1"
-			:
-			: "r"(&bp[16]), "m"(bp[16]));
-		asm("vle32.v v8, %1"
-			:
-			: "r"(&bp[24]), "m"(bp[24]));
+		VLOAD(ap[ 0], v1);
+		VLOAD(ap[ 8], v2);
+		VLOAD(ap[16], v3);
+		VLOAD(ap[24], v4);
+		VLOAD(bp[ 0], v5);
+		VLOAD(bp[ 8], v6);
+		VLOAD(bp[16], v7);
+		VLOAD(bp[24], v8);
 
-		asm("vfadd.vv v1, v1, v5");
-		asm("vfadd.vv v2, v2, v6");
-		asm("vfadd.vv v3, v3, v7");
-		asm("vfadd.vv v4, v4, v8");
+		asm volatile("vfadd.vv v1, v1, v5");
+		asm volatile("vfadd.vv v2, v2, v6");
+		asm volatile("vfadd.vv v3, v3, v7");
+		asm volatile("vfadd.vv v4, v4, v8");
 
 		float* cp = &c[j];
-		asm("vse32.v v1, (%1)"
-			: "=m"(cp[0])
-			: "r"(&cp[0]));
-		asm("vse32.v v2, (%1)"
-			: "=m"(cp[8])
-			: "r"(&cp[8]));
-		asm("vse32.v v3, (%1)"
-			: "=m"(cp[16])
-			: "r"(&cp[16]));
-		asm("vse32.v v4, (%1)"
-			: "=m"(cp[24])
-			: "r"(&cp[24]));
+		VSTORE(cp[ 0], v1);
+		VSTORE(cp[ 8], v2);
+		VSTORE(cp[16], v3);
+		VSTORE(cp[24], v4);
 	}
 }
 
 void tuned_STREAM_Triad(STREAM_TYPE scalar)
 {
-	FLOAD(fa0, scalar);
+	VSETUP();
 	ssize_t j;
 	for (j=0; j<STREAM_ARRAY_SIZE; j += 32) {
 		float* bp = &b[j];
@@ -679,15 +657,15 @@ void tuned_STREAM_Triad(STREAM_TYPE scalar)
 		VLOAD(bp[24], v4);
 
 	    // a[j] = b[j]+scalar*c[j];
-		asm("vfmul.vf v5, v5, fa0\n"
-			"vfmul.vf v6, v6, fa0\n"
-			"vfmul.vf v7, v7, fa0\n"
-			"vfmul.vf v8, v8, fa0\n"
+		asm volatile("vfmul.vf v5, v5, %0" : : "f"(scalar));
+		asm volatile("vfmul.vf v6, v6, %0" : : "f"(scalar));
+		asm volatile("vfmul.vf v7, v7, %0" : : "f"(scalar));
+		asm volatile("vfmul.vf v8, v8, %0" : : "f"(scalar));
 
-			"vfadd.vv v1, v1, v5\n"
-			"vfadd.vv v2, v2, v6\n"
-			"vfadd.vv v3, v3, v7\n"
-			"vfadd.vv v4, v4, v8\n");
+		asm volatile("vfadd.vv v1, v1, v5");
+		asm volatile("vfadd.vv v2, v2, v6");
+		asm volatile("vfadd.vv v3, v3, v7");
+		asm volatile("vfadd.vv v4, v4, v8");
 
 		float* ap = &a[j];
 		VSTORE(ap[ 0], v1);

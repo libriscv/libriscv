@@ -1,4 +1,16 @@
-if command -v "riscv64-linux-gnu-gcc-12" &> /dev/null
+if command -v "riscv64-linux-gnu-gcc-14" &> /dev/null
+then
+    echo "Found RISC-V compiler: GCC 14"
+    export RCC="riscv64-linux-gnu-gcc-14"
+    export RCXX="riscv64-linux-gnu-g++-14"
+
+elif command -v "riscv64-linux-gnu-gcc-13" &> /dev/null
+then
+    echo "Found RISC-V compiler: GCC 13"
+    export RCC="riscv64-linux-gnu-gcc-13"
+    export RCXX="riscv64-linux-gnu-g++-13"
+
+elif command -v "riscv64-linux-gnu-gcc-12" &> /dev/null
 then
     echo "Found RISC-V compiler: GCC 12"
     export RCC="riscv64-linux-gnu-gcc-12"
