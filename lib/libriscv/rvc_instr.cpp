@@ -120,6 +120,75 @@ namespace riscv
 			RVISGE64BIT(cpu), cpu.pc()));
 	});
 
+	/* Zcb: the byte and halfword loads and stores. These reach the same
+	 * memory as their uncompressed counterparts, but only from the eight
+	 * compressed registers and with a two-bit offset. */
+
+	COMPRESSED_INSTR(C0_LBU,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		const rv32c_instruction ci { instr };
+		const auto address = cpu.cireg(ci.CZB.srs1) + ci.CZB.byte_offset();
+		cpu.cireg(ci.CZB.srd) =
+			cpu.machine().memory.template read<uint8_t> (address);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVCDISASM::as(buffer, len, "c.lbu",
+			RVCDISASM::any(buffer, len, rv32c_instruction { instr },
+			RVISGE64BIT(cpu), cpu.pc()));
+	});
+
+	COMPRESSED_INSTR(C0_LHU,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		const rv32c_instruction ci { instr };
+		const auto address = cpu.cireg(ci.CZB.srs1) + ci.CZB.half_offset();
+		cpu.cireg(ci.CZB.srd) =
+			cpu.machine().memory.template read<uint16_t> (address);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVCDISASM::as(buffer, len, "c.lhu",
+			RVCDISASM::any(buffer, len, rv32c_instruction { instr },
+			RVISGE64BIT(cpu), cpu.pc()));
+	});
+
+	COMPRESSED_INSTR(C0_LH,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		const rv32c_instruction ci { instr };
+		const auto address = cpu.cireg(ci.CZB.srs1) + ci.CZB.half_offset();
+		cpu.cireg(ci.CZB.srd) = (int16_t)
+			cpu.machine().memory.template read<uint16_t> (address);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVCDISASM::as(buffer, len, "c.lh",
+			RVCDISASM::any(buffer, len, rv32c_instruction { instr },
+			RVISGE64BIT(cpu), cpu.pc()));
+	});
+
+	COMPRESSED_INSTR(C0_SB,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		const rv32c_instruction ci { instr };
+		const auto address = cpu.cireg(ci.CZB.srs1) + ci.CZB.byte_offset();
+		const auto value   = cpu.cireg(ci.CZB.srd);
+		cpu.machine().memory.template write<uint8_t> (address, value);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVCDISASM::as(buffer, len, "c.sb",
+			RVCDISASM::any(buffer, len, rv32c_instruction { instr },
+			RVISGE64BIT(cpu), cpu.pc()));
+	});
+
+	COMPRESSED_INSTR(C0_SH,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
+		const rv32c_instruction ci { instr };
+		const auto address = cpu.cireg(ci.CZB.srs1) + ci.CZB.half_offset();
+		const auto value   = cpu.cireg(ci.CZB.srd);
+		cpu.machine().memory.template write<uint16_t> (address, value);
+	},
+	[] (char* buffer, size_t len, auto& cpu, rv32i_instruction instr) RVPRINTR_ATTR {
+		return RVCDISASM::as(buffer, len, "c.sh",
+			RVCDISASM::any(buffer, len, rv32c_instruction { instr },
+			RVISGE64BIT(cpu), cpu.pc()));
+	});
+
 	COMPRESSED_INSTR(C1_ADDI,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR {
 		const rv32c_instruction ci { instr };
@@ -245,6 +314,37 @@ namespace riscv
 						dst = (int32_t) ((uint32_t)dst + (uint32_t)src);
 						return;
 					}
+						break;
+					case 6: // Zcb: C.MUL
+						dst = RVREGTYPE(cpu)(dst * src);
+						return;
+					case 7: // Zcb: unary ops, selected by the source field
+						switch (ci.CA.srs2)
+						{
+							case 0: // C.ZEXT.B
+								dst = dst & 0xFF;
+								return;
+							case 1: // C.SEXT.B
+								dst = (RVSIGNTYPE(cpu)) (int8_t) dst;
+								return;
+							case 2: // C.ZEXT.H
+								dst = dst & 0xFFFF;
+								return;
+							case 3: // C.SEXT.H
+								dst = (RVSIGNTYPE(cpu)) (int16_t) dst;
+								return;
+							case 4: // C.ZEXT.W (RV64 and up)
+							if constexpr (RVISGE64BIT(cpu)) {
+								dst = dst & 0xFFFFFFFF;
+								return;
+							}
+								break;
+							case 5: // C.NOT
+								dst = ~dst;
+								return;
+							default: // 6 and 7 are reserved
+								break;
+						}
 						break;
 					default:
 						break;

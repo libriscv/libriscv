@@ -506,7 +506,24 @@
 						}
 					}
 					DECODER(DECODED_INSTR(ILLEGAL));
-				// RESERVED: 0b100, 0b00
+				// Reserved in the base compressed extension; Zcb fills it
+				// with the byte and halfword loads and stores.
+				case CI_CODE(0b100, 0b00):
+					switch (ci.CZB.subf3) {
+					case 0b000: // C.LBU
+						DECODER(DECODED_COMPR(C0_LBU));
+					case 0b001: // bit 6 picks C.LH over C.LHU
+						if (ci.CZB.half_signed())
+							DECODER(DECODED_COMPR(C0_LH));
+						DECODER(DECODED_COMPR(C0_LHU));
+					case 0b010: // C.SB
+						DECODER(DECODED_COMPR(C0_SB));
+					case 0b011: // C.SH, which has no second form
+						if (!ci.CZB.half_signed())
+							DECODER(DECODED_COMPR(C0_SH));
+						DECODER(DECODED_INSTR(ILLEGAL));
+					}
+					DECODER(DECODED_INSTR(ILLEGAL));
 				case CI_CODE(0b101, 0b00):
 				case CI_CODE(0b110, 0b00):
 				case CI_CODE(0b111, 0b00):

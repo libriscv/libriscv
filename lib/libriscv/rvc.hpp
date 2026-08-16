@@ -174,6 +174,33 @@ namespace riscv
 			uint16_t srd    : 3;
 			uint16_t funct6 : 6;
 		} CA;
+		// Zcb byte and halfword load/store format. Quadrant 0 funct3 = 100 is
+		// reserved in the base compressed extension, and Zcb fills it with
+		// five instructions told apart by a second three-bit field.
+		struct {
+			uint16_t opcode : 2;
+			uint16_t srd    : 3;   // rd' when loading, rs2' when storing
+			uint16_t ub5    : 1;   // offset bit 1
+			uint16_t ub6    : 1;   // offset bit 0, or the c.lh/c.lhu selector
+			uint16_t srs1   : 3;
+			uint16_t subf3  : 3;   // 000 LBU, 001 LHU/LH, 010 SB, 011 SH
+			uint16_t funct3 : 3;
+
+			// c.lbu and c.sb address a byte, so both offset bits count.
+			uint32_t byte_offset() const noexcept {
+				return ub6 | (ub5 << 1);
+			}
+			// The halfword forms have a single offset bit, scaled by two;
+			// the other bit is an opcode bit (see half_signed).
+			uint32_t half_offset() const noexcept {
+				return ub5 << 1;
+			}
+			// Picks c.lh over c.lhu. Must be zero for c.sh, which has no
+			// second form and reserves the encoding instead.
+			bool half_signed() const noexcept {
+				return ub6;
+			}
+		} CZB;
 		struct {
 			uint16_t opcode : 2;
 			uint16_t imm04  : 5;

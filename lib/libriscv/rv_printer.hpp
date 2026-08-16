@@ -1020,6 +1020,29 @@ namespace riscv
 							c.CSD.offset8(), RVPRINT::creg(c.CL.srs1));
 					return mem(b, n, "c.flw", RVPRINT::cfreg(c.CL.srd),
 						c.CL.offset(), RVPRINT::creg(c.CL.srs1));
+				case 4:
+					// Zcb: five instructions in what the base compressed
+					// extension leaves reserved.
+					switch (c.CZB.subf3) {
+					case 0b000:
+						return mem(b, n, "c.lbu", RVPRINT::creg(c.CZB.srd),
+							c.CZB.byte_offset(), RVPRINT::creg(c.CZB.srs1));
+					case 0b001:
+						return mem(b, n, c.CZB.half_signed() ? "c.lh" : "c.lhu",
+							RVPRINT::creg(c.CZB.srd), c.CZB.half_offset(),
+							RVPRINT::creg(c.CZB.srs1));
+					case 0b010:
+						return mem(b, n, "c.sb", RVPRINT::creg(c.CZB.srd),
+							c.CZB.byte_offset(), RVPRINT::creg(c.CZB.srs1));
+					case 0b011:
+						// c.sh has no signed counterpart, so the bit that
+						// would select one is reserved.
+						if (c.CZB.half_signed())
+							return bad(b, n, c);
+						return mem(b, n, "c.sh", RVPRINT::creg(c.CZB.srd),
+							c.CZB.half_offset(), RVPRINT::creg(c.CZB.srs1));
+					}
+					return bad(b, n, c);
 				case 5:
 					return mem(b, n, "c.fsd", RVPRINT::cfreg(c.CSD.srs2),
 						c.CSD.offset8(), RVPRINT::creg(c.CSD.srs1));
@@ -1081,14 +1104,29 @@ namespace riscv
 						return snprintf(b, n, "c.andi\t%s,%d",
 							RVPRINT::creg(c.CAB.srd), c.CAB.signed_imm());
 					default: {
-						// Bit 12 selects the word-width forms.
+						// Bit 12 selects the word-width forms. Zcb adds c.mul
+						// alongside them, plus a row of unary operations whose
+						// source field is an opcode extension, not a register.
 						static const char* const word[4] =
-							{ "c.subw", "c.addw", nullptr, nullptr };
+							{ "c.subw", "c.addw", "c.mul", nullptr };
 						static const char* const full[4] =
 							{ "c.sub", "c.xor", "c.or", "c.and" };
 						const bool is_word = (c.whole & (1 << 12)) != 0;
+						if (is_word && c.CA.funct2 == 3) {
+							static const char* const unary[8] = {
+								"c.zext.b", "c.sext.b", "c.zext.h", "c.sext.h",
+								"c.zext.w", "c.not",    nullptr,    nullptr,
+							};
+							const char* m = unary[c.CA.srs2];
+							// c.zext.w is the only one needing a wide register.
+							if (m == nullptr || (c.CA.srs2 == 4 && !is64))
+								return bad(b, n, c);
+							return snprintf(b, n, "%s\t%s", m, RVPRINT::creg(c.CA.srd));
+						}
 						const char* m = is_word ? word[c.CA.funct2] : full[c.CA.funct2];
-						if (m == nullptr || (is_word && !is64))
+						// Only the word-width arithmetic is RV64-only; c.mul
+						// exists on RV32 as well.
+						if (m == nullptr || (is_word && !is64 && c.CA.funct2 < 2))
 							return bad(b, n, c);
 						return snprintf(b, n, "%s\t%s,%s", m,
 							RVPRINT::creg(c.CA.srd), RVPRINT::creg(c.CA.srs2));
