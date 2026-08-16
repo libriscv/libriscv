@@ -644,9 +644,27 @@ INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv) {
 			// and inf/0 is exact.
 			const uint32_t ia = rs1.i32[0], ib = rs2.i32[0];
 			SET_FLOAT_CANON(dst, rs1.f32[0] / rs2.f32[0]);
-			if ((ia & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u
-				&& (ib & 0x7fffffffu) == 0)
-				CPU().registers().fcsr().fflags |= 8; // DZ
+			const float fr = dst.f32[0];
+			if (fr != fr) {
+				if ((ia & 0x7fffffffu) == 0 && (ib & 0x7fffffffu) == 0)
+					CPU().registers().fcsr().fflags |= 16; // NV
+				else if ((ia & 0x7f800000u) == 0x7f800000u
+					&& (ib & 0x7f800000u) == 0x7f800000u)
+					CPU().registers().fcsr().fflags |= 16; // NV
+			} else {
+				if ((ia & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u
+					&& (ib & 0x7fffffffu) == 0)
+					CPU().registers().fcsr().fflags |= 8; // DZ
+				if ((double)fr != (double)rs1.f32[0] / (double)rs2.f32[0])
+					CPU().registers().fcsr().fflags |= 1; // NX
+				const uint32_t ir = dst.i32[0] & 0x7fffffffu;
+				if ((ib & 0x7fffffffu) != 0 && (ia & 0x7f800000u) != 0x7f800000u
+					&& ir == 0x7f800000u)
+					CPU().registers().fcsr().fflags |= 5; // OF | NX
+				else if (ir < 0x00800000u
+					&& (double)fr != (double)rs1.f32[0] / (double)rs2.f32[0])
+					CPU().registers().fcsr().fflags |= 3; // UF | NX
+			}
 		} else {
 			dst.set_float(rs1.f32[0] / rs2.f32[0]);
 		}
@@ -656,10 +674,29 @@ INSTRUCTION(RV32F_BC_FDIV, rv32f_fdiv) {
 		if constexpr (fcsr_emulation) {
 			const uint64_t ia = rs1.i64, ib = rs2.i64;
 			SET_DOUBLE_CANON(dst, rs1.f64 / rs2.f64);
-			if ((ia & 0x7fffffffffffffffull) != 0
-				&& (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull
-				&& (ib & 0x7fffffffffffffffull) == 0)
-				CPU().registers().fcsr().fflags |= 8; // DZ
+			const double dr = dst.f64;
+			if (dr != dr) {
+				if ((ia & 0x7fffffffffffffffull) == 0 && (ib & 0x7fffffffffffffffull) == 0)
+					CPU().registers().fcsr().fflags |= 16; // NV
+				else if ((ia & 0x7ff0000000000000ull) == 0x7ff0000000000000ull
+					&& (ib & 0x7ff0000000000000ull) == 0x7ff0000000000000ull)
+					CPU().registers().fcsr().fflags |= 16; // NV
+			} else {
+				if ((ia & 0x7fffffffffffffffull) != 0
+					&& (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull
+					&& (ib & 0x7fffffffffffffffull) == 0)
+					CPU().registers().fcsr().fflags |= 8; // DZ
+				if ((long double)dr != (long double)rs1.f64 / (long double)rs2.f64)
+					CPU().registers().fcsr().fflags |= 1; // NX
+				const uint64_t ir = dst.i64 & 0x7fffffffffffffffull;
+				if ((ib & 0x7fffffffffffffffull) != 0
+					&& (ia & 0x7ff0000000000000ull) != 0x7ff0000000000000ull
+					&& ir == 0x7ff0000000000000ull)
+					CPU().registers().fcsr().fflags |= 5; // OF | NX
+				else if (ir < 0x0010000000000000ull
+					&& (long double)dr != (long double)rs1.f64 / (long double)rs2.f64)
+					CPU().registers().fcsr().fflags |= 3; // UF | NX
+			}
 		} else {
 			dst.f64 = rs1.f64 / rs2.f64;
 		}
