@@ -6,6 +6,7 @@
 namespace riscv {
 
 template <int W> struct MultiThreading;
+static const int MAIN_THREAD_TID = 1;
 static const uint32_t PARENT_SETTID  = 0x00100000; /* set the TID in the parent */
 static const uint32_t CHILD_CLEARTID = 0x00200000; /* clear the TID in the child */
 static const uint32_t CHILD_SETTID   = 0x01000000; /* set the TID in the child */
@@ -13,8 +14,8 @@ static const uint32_t CHILD_SETTID   = 0x01000000; /* set the TID in the child *
 //#define THREADS_DEBUG 1
 #ifdef THREADS_DEBUG
 #define THPRINT(machine, fmt, ...) \
-	{ char thrpbuf[1024]; machine.print(thrpbuf, \
-		snprintf(thrpbuf, sizeof(thrpbuf), fmt, ##__VA_ARGS__)); }
+	do { if (riscv::verbose_syscalls_enabled) { char thrpbuf[1024]; machine.print(thrpbuf, \
+		snprintf(thrpbuf, sizeof(thrpbuf), fmt, ##__VA_ARGS__)); } } while (0)
 #else
 #define THPRINT(fmt, ...) /* fmt */
 #endif
@@ -80,7 +81,7 @@ struct MultiThreading
 	std::vector<thread_t*> m_blocked;
 	std::vector<thread_t*> m_suspended;
 	std::unordered_map<int, thread_t> m_threads;
-	unsigned   m_thread_counter = 0;
+	unsigned   m_thread_counter = MAIN_THREAD_TID;
 	unsigned   m_max_threads = 50;
 	thread_t*  m_current = nullptr;
 };
@@ -95,7 +96,8 @@ inline MultiThreading<W>::MultiThreading(Machine<W>& mach)
 	const address_t base = 0x1000;
 	const address_t size = mach.memory.stack_initial() - base;
 	// Create the main thread
-	auto it = m_threads.try_emplace(0, *this, 0, 0x0, mach.cpu.reg(REG_SP), base, size);
+	auto it = m_threads.try_emplace(MAIN_THREAD_TID, *this,
+		MAIN_THREAD_TID, 0x0, mach.cpu.reg(REG_SP), base, size);
 	m_current = &it.first->second;
 }
 
@@ -205,8 +207,8 @@ inline void MultiThreading<W>::wakeup_next()
 		// resume next thread
 		next->resume();
 	} else {
-		THPRINT(machine, "No more threads to resume. Fallback to tid=0 (*ERROR*)\n");
-		auto* next = get_thread(0);
+		THPRINT(machine, "No more threads to resume. Fallback to main thread (*ERROR*)\n");
+		auto* next = get_thread(MAIN_THREAD_TID);
 		next->resume();
 	}
 }
@@ -256,7 +258,7 @@ inline bool Thread<W>::exit()
 			template write<address_type<W>> (this->clear_tid, 0);
 	}
 	// Delete this thread (except main thread)
-	if (tid != 0) {
+	if (tid != MAIN_THREAD_TID) {
 		threading.erase_thread(tid);
 
 		// Resume next thread in suspended list
@@ -266,8 +268,8 @@ inline bool Thread<W>::exit()
 		}
 	}
 
-	// tid == 0: Main thread exited
-	return (tid == 0);
+	// The main thread exiting is a process exit
+	return (tid == MAIN_THREAD_TID);
 }
 
 template <int W>

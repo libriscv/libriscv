@@ -79,6 +79,11 @@ bool DebugMachine<W>::execute_commands()
 {
 	auto& cpu = machine.cpu;
 
+	if (this->non_interactive) {
+		// Behave as if Enter was pressed: continue single-stepping.
+		return false;
+	}
+
 	this->dprintf("Enter = cont, help, quit: ");
 	std::string text;
 	while (true)

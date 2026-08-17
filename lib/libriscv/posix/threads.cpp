@@ -134,6 +134,15 @@ void Machine<W>::setup_posix_threads()
 		const int sig = machine.template sysarg<int> (2);
 		THPRINT(machine,
 			">>> tgkill on tid=%d signal=%d\n", tid, sig);
+#ifdef THREADS_DEBUG
+		if (riscv::verbose_syscalls_enabled
+			&& (sig == 4 || sig == 6 || sig == 8 || sig == 11)) {
+			machine.memory.print_backtrace([&machine] (std::string_view line) {
+				machine.print(line.data(), line.size());
+				machine.print("\n", 1);
+			});
+		}
+#endif
 		auto* thread = machine.threads().get_thread(tid);
 		if (thread != nullptr) {
 			// If the signal is unhandled, exit the thread
@@ -290,7 +299,7 @@ template <int W>
 int Machine<W>::gettid() const noexcept
 {
 	if (m_mt) return m_mt->get_tid();
-	return 0;
+	return MAIN_THREAD_TID;
 }
 
 #ifdef RISCV_32I

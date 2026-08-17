@@ -78,7 +78,8 @@ static void syscall_ppoll(Machine<W>& machine)
 	if (res < 0) info = "error";
 	else if (res == 0) info = "timeout";
 	else info = "good";
-	printf("SYSCALL ppoll, nfds: %u = %ld (%s)\n",
-		   nfds, res, info);
+	if (riscv::verbose_syscalls_enabled)
+		printf("SYSCALL ppoll, nfds: %u = %ld (%s)\n",
+			   nfds, res, info);
 #endif
 }

@@ -2,7 +2,8 @@
 
 //#define SOCKETCALL_VERBOSE 1
 #ifdef SOCKETCALL_VERBOSE
-#define SYSPRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define SYSPRINT(fmt, ...) \
+	do { if (riscv::verbose_syscalls_enabled) printf(fmt, ##__VA_ARGS__); } while (0)
 #else
 #define SYSPRINT(fmt, ...) /* fmt */
 #endif

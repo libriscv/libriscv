@@ -15,13 +15,14 @@
 static inline std::vector<uint8_t> load_file(const std::string &);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
-//#define NODEJS_WORKAROUND
 
 struct Arguments {
 	bool verbose = false;
 	bool quit = false;
 	bool accurate = false;
 	bool debug = false;
+	bool non_interactive = false; // Debugger runs without reading stdin
+	bool verbose_syscalls = false;
 	bool singlestep = false;
 	bool gdb = false;
 	bool silent = false;
@@ -41,6 +42,7 @@ struct Arguments {
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
 	uint64_t max_memory = 0;
 	std::vector<std::string> allowed_files;
+	std::vector<std::string> ebreak_locations;
 	std::string output_file;
 	std::string call_function;
 	std::string jump_hints_file;
@@ -79,6 +81,9 @@ static const struct option long_options[] = {
 	{"ignore-text", no_argument, 0, 'I'},
 	{"call", required_argument, 0, 'c'},
 	{"no-virtual", no_argument, 0, 1002},
+	{"non-interactive", no_argument, 0, 1003},
+	{"verbose-syscalls", no_argument, 0, 1004},
+	{"ebreak", required_argument, 0, 1005},
 	{0, 0, 0, 0}
 };
 
@@ -91,6 +96,9 @@ static void print_help(const char* name)
 		"  -Q, --quit         Quit after loading the program (to produce eg. binary translations)\n"
 		"  -a, --accurate     Accurate instruction counting\n"
 		"  -d, --debug        Enable CLI debugger\n"
+		"      --non-interactive  Never read stdin in the debugger, auto-continue instead\n"
+		"      --verbose-syscalls Log every system call, futex and thread operation\n"
+		"      --ebreak sym|addr  Trap at a symbol or 0x-address (repeatable)\n"
 		"  -1, --single-step  One instruction at a time, enabling exact exceptions\n"
 		"  -f, --fuel amt     Set max instructions until program halts\n"
 		"  -m, --memory amt   Set max memory size in MiB (default: 4096 MiB)\n"
@@ -195,6 +203,9 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 1000: args.translate_regcache = false; break;
 			case 1001: args.background = false; break;
 			case 1002: args.full_virtual = false; break;
+			case 1003: args.non_interactive = true; break;
+			case 1004: args.verbose_syscalls = true; break;
+			case 1005: args.ebreak_locations.push_back(optarg); break;
 			case 'm': // --memory
 				if (optarg) {
 					char* endptr;
@@ -275,6 +286,17 @@ static void run_program(
 		exit(1);
 	}
 
+	// Turn --ebreak arguments into either an address or a symbol name to resolve
+	std::vector<std::variant<riscv::address_type<W>, std::string>> ebreaks;
+	for (const auto& loc : cli_args.ebreak_locations) {
+		char* endptr = nullptr;
+		const auto addr = strtoull(loc.c_str(), &endptr, 0);
+		if (endptr != loc.c_str() && *endptr == '\0')
+			ebreaks.push_back(riscv::address_type<W>(addr));
+		else
+			ebreaks.push_back(loc);
+	}
+
 	std::vector<riscv::MachineTranslationOptions> cc;
 	if (cli_args.mingw) {
 		cc.push_back(riscv::MachineTranslationCrossOptions{});
@@ -289,11 +311,7 @@ static void run_program(
 		.ignore_text_section = cli_args.ignore_text,
 		.verbose_loader = cli_args.verbose,
 		.use_shared_execute_segments = false, // We are only creating one machine, disabling this can enable some optimizations
-#ifdef NODEJS_WORKAROUND
-		.ebreak_locations = {
-			"pthread_rwlock_rdlock", "pthread_rwlock_wrlock" // Live-patch locations
-		},
-#endif
+		.ebreak_locations = std::move(ebreaks),
 #ifdef RISCV_BINARY_TRANSLATION
 		.translate_enabled = !cli_args.no_translate,
 		.translate_future_segments = cli_args.translate_future,
@@ -505,6 +523,7 @@ static void run_program(
 
 	// A CLI debugger used with --debug or DEBUG=1
 	riscv::DebugMachine debug { machine };
+	debug.non_interactive = cli_args.non_interactive;
 
 	if (cli_args.debug)
 	{
@@ -560,31 +579,6 @@ static void run_program(
 			machine.set_max_instructions(~0ULL);
 			machine.cpu.simulate_precise();
 		} else {
-#ifdef NODEJS_WORKAROUND
-			// In order to get NodeJS to work we need to live-patch deadlocked rwlocks
-			// This is a temporary workaround until the issue is found and fixed.
-			static const auto rw_rdlock = machine.address_of("pthread_rwlock_rdlock");
-			static const auto rw_wrlock = machine.address_of("pthread_rwlock_wrlock");
-			machine.install_syscall_handler(riscv::SYSCALL_EBREAK,
-			[] (auto& machine)
-			{
-				auto& cpu = machine.cpu;
-				if (cpu.pc() == rw_rdlock || cpu.pc() == rw_wrlock) {
-					// Execute 2 instruction and step over them
-					cpu.step_one(false);
-					cpu.step_one(false);
-					// Check for deadlock
-					if (cpu.reg(14) == cpu.reg(15)) {
-						// Deadlock detected, avoid branch (beq a4, a5) and reset the lock
-						cpu.reg(14) = 0xFF;
-						machine.memory.template write<uint32_t>(cpu.reg(10), 0);
-					}
-				} else {
-					throw riscv::MachineException(riscv::UNHANDLED_SYSCALL, "EBREAK instruction", cpu.pc());
-				}
-			});
-#endif // NODEJS_WORKAROUND
-
 			// Normal RISC-V simulation
 			if (cli_args.accurate)
 				machine.simulate(cli_args.fuel);
@@ -702,6 +696,14 @@ int main(int argc, const char** argv)
 	cli_args.mingw = getenv("MINGW") != nullptr;
 	cli_args.from_start = getenv("FROM_START") != nullptr;
 
+#endif
+
+	// Syscall logging is compiled in with -DRISCV_VERBOSE_SYSCALLS=ON,
+	// but stays quiet until asked for.
+	riscv::verbose_syscalls_enabled = cli_args.verbose_syscalls;
+#ifndef SYSCALL_VERBOSE
+	if (cli_args.verbose_syscalls)
+		fprintf(stderr, "Warning: --verbose-syscalls needs a build with -DRISCV_VERBOSE_SYSCALLS=ON\n");
 #endif
 
 	std::vector<std::string> args;

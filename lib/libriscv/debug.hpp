@@ -27,6 +27,7 @@ namespace riscv
 		bool verbose_jumps = false;
 		bool verbose_registers = false;
 		bool verbose_fp_registers = false;
+		bool non_interactive = false; // Auto-continue/step
 
 		void breakpoint(address_t address, breakpoint_t = default_pausepoint);
 		void erase_breakpoint(address_t address) { breakpoint(address, nullptr); }

@@ -494,6 +494,7 @@ namespace riscv
 		{
 			auto host_page = this->mmap_allocate(Page::size());
 			this->m_exit_address = host_page;
+			this->m_sigreturn_address = host_page + SIGRETURN_OFFSET;
 #ifdef RISCV_VIRTUAL_PAGING
 			// Insert host code page, with exit function, enabling VM calls.
 			this->install_shared_page(page_number(host_page), Page::host_page());
@@ -501,6 +502,10 @@ namespace riscv
 			// Write exit code directly into the arena
 			static constexpr uint8_t exit_code[] = {
 				0x73, 0x00, 0xf0, 0x7f, // STOP: 0x7ff00073
+				0x6f, 0xf0, 0xdf, 0xff, // JMP -4: 0xffdff06f
+				// Signal trampoline, at Memory::SIGRETURN_OFFSET
+				0x93, 0x08, 0xb0, 0x08, // LI a7, 139 (rt_sigreturn)
+				0x73, 0x00, 0x00, 0x00, // ECALL
 				0x6f, 0xf0, 0xdf, 0xff, // JMP -4: 0xffdff06f
 			};
 			if (host_page + sizeof(exit_code) <= memory_arena_size()) {
@@ -579,6 +584,7 @@ namespace riscv
 		this->m_start_address = master.memory.m_start_address;
 		this->m_stack_address = master.memory.m_stack_address;
 		this->m_exit_address = master.memory.m_exit_address;
+		this->m_sigreturn_address = master.memory.m_sigreturn_address;
 		this->m_heap_address = master.memory.m_heap_address;
 		this->m_brk_address  = master.memory.m_brk_address;
 		this->m_mmap_address = master.memory.m_mmap_address;

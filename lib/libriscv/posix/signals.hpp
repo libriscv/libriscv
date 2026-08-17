@@ -39,7 +39,10 @@ struct SignalPerThread {
 template <int W>
 struct Signals {
 	SignalAction<W>& get(int sig);
+	/// @brief Deliver a signal: build a signal frame and jump to the handler
 	void enter(Machine<W>&, int sig);
+	/// @brief Return from a signal handler, restoring the interrupted state
+	void leave(Machine<W>&);
 
 	// TODO: Lock this in the future, for multiproessing
 	auto& per_thread(int tid) { return m_per_thread[tid]; }

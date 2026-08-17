@@ -128,6 +128,12 @@ namespace riscv
 		// Returns the address used for exiting (returning from) a vmcall()
 		address_t exit_address() const noexcept;
 		void      set_exit_address(address_t new_exit);
+		// The offset of the signal trampoline inside the host code page
+		static constexpr address_t SIGRETURN_OFFSET = 8;
+		// The address of a trampoline that invokes rt_sigreturn, used as the
+		// return address of signal handlers. Zero when there is no host code
+		// page, eg. when the program provided its own exit function.
+		address_t sigreturn_address() const noexcept { return this->m_sigreturn_address; }
 		// The initial heap address (*not* the current heap maximum)
 		address_t heap_address() const noexcept { return this->m_heap_address; }
 		// The current program break, as moved by the brk() system call.
@@ -345,6 +351,7 @@ namespace riscv
 		address_t m_start_address = 0;
 		address_t m_stack_address = 0;
 		address_t m_exit_address  = 0;
+		address_t m_sigreturn_address = 0;
 		address_t m_mmap_address  = 0;
 		address_t m_heap_address  = 0;
 		address_t m_brk_address   = 0;

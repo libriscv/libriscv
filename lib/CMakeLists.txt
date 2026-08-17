@@ -15,6 +15,8 @@ option(RISCV_64I    "Enable 64-bit RISC-V" ON)
 option(RISCV_128I   "Enable 128-bit RISC-V" OFF)
 # Enable Floating-point Control and Status Register emulation
 option(RISCV_FCSR   "Enable FCSR emulation" OFF)
+# Enable logging of system calls, multi-threading and sockets
+option(RISCV_VERBOSE_SYSCALLS "Enable verbose system call logging" OFF)
 # EXPERIMENTAL enables some high-performance interpreter
 # features that may be unstable.
 option(RISCV_EXPERIMENTAL  "Enable experimental features" OFF)
@@ -213,6 +215,14 @@ endif()
 if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	target_compile_definitions(riscv PUBLIC
 		RISCV_ASM_DISPATCH=1
+	)
+endif()
+if (RISCV_VERBOSE_SYSCALLS)
+	message(STATUS "libriscv: Verbose system calls enabled")
+	target_compile_definitions(riscv PUBLIC
+		SYSCALL_VERBOSE=1
+		THREADS_DEBUG=1
+		SOCKETCALL_VERBOSE=1
 	)
 endif()
 

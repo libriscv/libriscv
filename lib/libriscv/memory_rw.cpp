@@ -301,6 +301,15 @@ namespace riscv
 			0x73, 0x00, 0xf0, 0x7f,
 			// JMP -4 (jump back to STOP): 0xffdff06f
 			0x6f, 0xf0, 0xdf, 0xff,
+			// Signal trampoline, at Memory::SIGRETURN_OFFSET.
+			// Linux points the return address of a signal handler at a
+			// trampoline like this one, instead of at the interrupted code.
+			// LI a7, 139 (rt_sigreturn): 0x08b00893
+			0x93, 0x08, 0xb0, 0x08,
+			// ECALL: 0x00000073
+			0x73, 0x00, 0x00, 0x00,
+			// JMP -4 (a sigreturn never returns here): 0xffdff06f
+			0x6f, 0xf0, 0xdf, 0xff,
 			0x0
 		}
 	};

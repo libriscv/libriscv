@@ -107,8 +107,12 @@ static void add_mman_syscalls()
 			MMAP_HAS_FAILED();
 		}
 		}
-		else if (addr_g == 0)
+		else if (addr_g == 0 || (flags & LINUX_MAP_FIXED) == 0)
 		{
+			// Without MAP_FIXED the address is only a hint that the kernel is
+			// free to ignore, so always allocate inside the mmap arena instead.
+			// Guest hints regularly point outside of it, eg. V8 hints at
+			// randomized addresses spread over the whole 64-bit address space.
 			auto range = machine.memory.mmap_cache().find(length);
 			// Not found in cache, increment MM base address
 			if (range.empty()) {
@@ -121,29 +125,29 @@ static void add_mman_syscalls()
 			{
 				result = range.addr;
 			}
-		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g < machine.memory.mmap_start()) {
+		} else if (addr_g < machine.memory.mmap_start()) {
 			// A fixed range below the mmap arena start, we do nothing except return the address
 			result    = addr_g;
-		} else if (addr_g < machine.memory.mmap_start()) {
-			// Non-fixed range below mmap start is not allowed, ignore and force to next free
-			if (nextfree + length < nextfree)
-				MMAP_HAS_FAILED();
-			result    = nextfree;
-			nextfree += length;
-		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g >= machine.memory.mmap_start() && addr_g + length > addr_g && addr_g + length <= nextfree) {
+		} else if (addr_g + length > addr_g && addr_g + length <= nextfree) {
 			// Fixed mapping inside mmap arena
 			result = addr_g;
-		} else if ((flags & LINUX_MAP_FIXED) != 0 && addr_g > nextfree) {
-			// Fixed mapping after current end of mmap arena
+		} else if (addr_g + length > addr_g) {
+			// Fixed mapping ending after the current end of the mmap arena
 			// TODO: Evaluate if relaxation is counter-productive with the new cache
 			if constexpr (riscv::encompassing_Nbit_arena > 0) {
 				// We have to force the address to be within the arena
-				if (nextfree + length < nextfree || nextfree + length > riscv::encompassing_arena_mask)
-					MMAP_HAS_FAILED();
-				result = nextfree;
-				nextfree += length;
+				if (addr_g + length > riscv::encompassing_arena_mask) {
+					if (nextfree + length < nextfree || nextfree + length > riscv::encompassing_arena_mask)
+						MMAP_HAS_FAILED();
+					result = nextfree;
+					nextfree += length;
+				} else {
+					result = addr_g;
+					nextfree = addr_g + length;
+				}
 			} else {
 				result = addr_g;
+				nextfree = std::max(nextfree, address_type<W>(addr_g + length));
 			}
 		} else {
 			MMAP_HAS_FAILED();

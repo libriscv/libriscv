@@ -6,8 +6,8 @@
 //#define SYSCALL_VERBOSE 1
 #ifdef SYSCALL_VERBOSE
 #define SYSPRINT(fmt, ...) \
-	{ char syspbuf[1024]; machine.print(syspbuf, \
-		snprintf(syspbuf, sizeof(syspbuf), fmt, ##__VA_ARGS__)); }
+	do { if (riscv::verbose_syscalls_enabled) { char syspbuf[1024]; machine.print(syspbuf, \
+		snprintf(syspbuf, sizeof(syspbuf), fmt, ##__VA_ARGS__)); } } while (0)
 static constexpr bool verbose_syscalls = true;
 #else
 #define SYSPRINT(fmt, ...) /* fmt */
@@ -78,6 +78,19 @@ template <int W>
 static void syscall_stub_zero(Machine<W>& machine) {
 	SYSPRINT("SYSCALL stubbed (zero): %d\n", (int)machine.cpu.reg(17));
 	machine.set_result(0);
+}
+
+template <int W>
+static void syscall_rt_sigreturn(Machine<W>& machine) {
+	SYSPRINT("SYSCALL rt_sigreturn, sp: 0x%lX\n", (long)machine.cpu.reg(REG_SP));
+	machine.signals().leave(machine);
+}
+
+template <int W>
+static void syscall_getpid(Machine<W>& machine) {
+	// The process ID is the TID of the main thread, and is never zero
+	machine.set_result(MAIN_THREAD_TID);
+	SYSPRINT("SYSCALL getpid() = %d\n", (int)machine.return_value());
 }
 
 template <int W>
@@ -416,7 +429,7 @@ static void syscall_writev(Machine<W>& machine)
 	const int  vfd    = machine.template sysarg<int>(0);
 	const auto iov_g  = machine.sysarg(1);
 	const auto count  = machine.template sysarg<int>(2);
-	if constexpr (verbose_syscalls) {
+	if constexpr (verbose_syscalls) if (riscv::verbose_syscalls_enabled) {
 		printf("SYSCALL writev, iov: 0x%lX  cnt: %d\n", (long)iov_g, count);
 	}
 	if (count < 0 || count > 256) {
@@ -464,7 +477,7 @@ static void syscall_writev(Machine<W>& machine)
 		}
 		machine.set_result_or_error(res);
 	}
-	if constexpr (verbose_syscalls) {
+	if constexpr (verbose_syscalls) if (riscv::verbose_syscalls_enabled) {
 		printf("SYSCALL writev, vfd: %d real_fd: %d -> %ld\n",
 			vfd, real_fd, long(machine.return_value()));
 	}
@@ -476,11 +489,13 @@ static void syscall_openat(Machine<W>& machine)
 	const int dir_fd = machine.template sysarg<int>(0);
 	const auto g_path = machine.sysarg(1);
 	const int flags  = machine.template sysarg<int>(2);
+	// The mode is only used with O_CREAT and O_TMPFILE, and ignored otherwise
+	const unsigned mode = machine.template sysarg<unsigned>(3);
 	// We do it this way to prevent accessing memory out of bounds
 	std::string path = machine.memory.memstring(g_path);
 
-	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X\n",
-		dir_fd, path.c_str(), flags);
+	SYSPRINT("SYSCALL openat, dir_fd: %d path: %s flags: %X mode: %o\n",
+		dir_fd, path.c_str(), flags, mode);
 
 	if (machine.has_file_descriptors() && machine.fds().permit_filesystem) {
 
@@ -493,8 +508,8 @@ static void syscall_openat(Machine<W>& machine)
 				return;
 			}
 		}
-		int real_fd = openat(machine.fds().translate(dir_fd), path.c_str(), flags);
-		if (real_fd > 0) {
+		int real_fd = openat(machine.fds().translate(dir_fd), path.c_str(), flags, mode);
+		if (real_fd >= 0) {
 			const int vfd = machine.fds().assign_file(real_fd);
 			machine.set_result(vfd);
 		} else {
@@ -1015,6 +1030,27 @@ static void nanosleep_clamp_and_penalize(Machine<W>& machine, struct timespec& t
 		ts_req.tv_sec = NANOSLEEP_MAX_SECONDS;
 	// One instruction per microsecond requested
 	machine.penalize(requested_ns / 1000);
+
+	// Cooperative threading: sleeping on the host blocks every guest thread,
+	// not just this one. When another thread is runnable, sleep only briefly
+	// and let the yield below hand the time over to it instead.
+	if (machine.has_threads() && !machine.threads().suspended_threads().empty()) {
+		static constexpr long SHARED_SLEEP_MAX_NS = 1'000'000L; // 1ms
+		if (ts_req.tv_sec > 0 || ts_req.tv_nsec > SHARED_SLEEP_MAX_NS) {
+			ts_req.tv_sec  = 0;
+			ts_req.tv_nsec = SHARED_SLEEP_MAX_NS;
+		}
+	}
+}
+
+/// @brief Hand over to the other guest threads after sleeping.
+/// @details Green threads only run when the running one gives way, so a
+/// thread that goes to sleep has to yield, or it starves all the others.
+template <int W>
+static void nanosleep_yield(Machine<W>& machine, long result)
+{
+	if (machine.has_threads())
+		machine.threads().suspend_and_yield(result);
 }
 
 template <int W>
@@ -1046,6 +1082,7 @@ static void syscall_nanosleep(Machine<W>& machine)
 			machine.copy_to_guest(g_rem, &ts_rem, sizeof(ts_rem));
 	}
 	machine.set_result_or_error(res);
+	nanosleep_yield(machine, machine.template return_value<long>());
 }
 template <int W>
 static void syscall_clock_nanosleep(Machine<W>& machine)
@@ -1072,6 +1109,7 @@ static void syscall_clock_nanosleep(Machine<W>& machine)
 
 	SYSPRINT("SYSCALL clock_nanosleep, req: 0x%lX rem: 0x%lX = %ld\n",
 		(long)g_request, (long)g_remain, (long)machine.return_value());
+	nanosleep_yield(machine, machine.template return_value<long>());
 }
 
 template <int W>
@@ -1162,7 +1200,7 @@ static void syscall_brk(Machine<W>& machine)
 		machine.memory.set_brk_address(new_end);
 	new_end = machine.memory.brk_address();
 
-	if constexpr (verbose_syscalls) {
+	if constexpr (verbose_syscalls) if (riscv::verbose_syscalls_enabled) {
 		printf("SYSCALL brk, new_end: 0x%lX  mmap_start: 0x%lX\n",
 			(long)new_end, (long)machine.memory.mmap_start());
 	}
@@ -1210,7 +1248,7 @@ static void syscall_getrandom(Machine<W>& machine)
 	}
 	machine.set_result(result);
 
-	if constexpr (verbose_syscalls) {
+	if constexpr (verbose_syscalls) if (riscv::verbose_syscalls_enabled) {
 		printf("SYSCALL getrandom(addr=0x%lX, len=%ld) = %ld\n",
 			(long)g_addr, (long)g_len, (long)machine.return_value());
 	}
@@ -1410,6 +1448,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(134, syscall_sigaction<W>);
 	// rt_sigprocmask
 	install_syscall_handler(135, syscall_stub_zero<W>);
+	// rt_sigreturn
+	install_syscall_handler(139, syscall_rt_sigreturn<W>);
 	// uname
 	install_syscall_handler(160, syscall_uname<W>);
 	// prctl
@@ -1417,7 +1457,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// gettimeofday
 	install_syscall_handler(169, syscall_gettimeofday<W>);
 	// getpid
-	install_syscall_handler(172, syscall_stub_zero<W>);
+	install_syscall_handler(172, syscall_getpid<W>);
 	// getuid
 	install_syscall_handler(174, syscall_stub_zero<W>);
 	// geteuid

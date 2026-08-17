@@ -272,6 +272,10 @@ namespace riscv
 
 	static constexpr int SYSCALL_EBREAK = RISCV_SYSCALL_EBREAK_NR;
 
+	/// @brief Runtime toggle for verbose system call, threading and socket logging.
+	/// @details Takes effect when libriscv is built with RISCV_VERBOSE_SYSCALLS=ON.
+	inline bool verbose_syscalls_enabled = true;
+
 	static constexpr size_t PageSize = RISCV_PAGE_SIZE;
 	static constexpr size_t PageMask = RISCV_PAGE_SIZE-1;
 
