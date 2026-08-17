@@ -29,8 +29,8 @@ then
     export RCXX="riscv64-linux-gnu-g++-10"
 fi
 
-export RCC="riscv64-unknown-linux-gnu-gcc"
-export RCXX="riscv64-unknown-linux-gnu-g++"
+#export RCC="riscv64-unknown-linux-gnu-gcc"
+#export RCXX="riscv64-unknown-linux-gnu-g++"
 
 #export RCC="zig cc -target riscv64-linux-musl -mcpu=baseline_rv64+rva22u64"
 #export RCXX="zig c++ -target riscv64-linux-musl -mcpu=baseline_rv64+rva22u64"

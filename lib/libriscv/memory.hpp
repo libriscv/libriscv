@@ -196,6 +196,8 @@ namespace riscv
 #ifdef RISCV_VIRTUAL_PAGING
 		size_t pages_active() const noexcept { return m_pages.size(); }
 		size_t owned_pages_active() const noexcept;
+		// Amortized scan of owned pages below a given limit. Returns true if the number of owned pages is definitely below the limit
+		bool owned_pages_below(size_t limit) noexcept;
 		// Upper bound on entries in the page table, derived from memory_max.
 		// Owned pages are bounded by the page fault handler, while attribute-
 		// only pages (eg. from mmap and mprotect) are bounded by this limit.
@@ -255,6 +257,7 @@ namespace riscv
 #else
 		size_t pages_active() const noexcept { return 0; }
 		size_t owned_pages_active() const noexcept { return 0; }
+		bool owned_pages_below(size_t) noexcept { return true; }
 		void  invalidate_cache(address_t, Page*) const noexcept {}
 		void  invalidate_reset_cache() const noexcept {}
 #endif
@@ -364,6 +367,9 @@ namespace riscv
 
 		std::unordered_map<address_t, Page> m_pages;
 		size_t m_pages_max = size_t(-1);
+		size_t m_owned_pages_limit = 0;
+		size_t m_owned_pages_amortized_scans = 0;
+		static constexpr size_t OWNED_PAGES_SCAN_LIMIT = 1024;
 #endif
 
 		const bool m_original_machine;

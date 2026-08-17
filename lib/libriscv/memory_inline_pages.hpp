@@ -104,6 +104,20 @@ inline size_t Memory<W>::owned_pages_active() const noexcept
 }
 
 template <int W>
+inline bool Memory<W>::owned_pages_below(size_t limit) noexcept
+{
+	if (limit == m_owned_pages_limit && m_owned_pages_amortized_scans > 0) {
+		m_owned_pages_amortized_scans--;
+		return true;
+	}
+	const size_t owned = this->owned_pages_active();
+	m_owned_pages_limit = limit;
+	m_owned_pages_amortized_scans =
+		(owned < limit) ? std::min<size_t>(limit - owned, OWNED_PAGES_SCAN_LIMIT) : 0;
+	return owned < limit;
+}
+
+template <int W>
 inline void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 {
 	// This can probably be improved, but this will force-create
