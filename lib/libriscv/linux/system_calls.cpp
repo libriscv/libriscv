@@ -24,6 +24,7 @@ static constexpr bool verbose_syscalls = false;
 #include <sys/random.h>
 #endif
 extern "C" int dup3(int oldfd, int newfd, int flags);
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -84,6 +85,59 @@ template <int W>
 static void syscall_rt_sigreturn(Machine<W>& machine) {
 	SYSPRINT("SYSCALL rt_sigreturn, sp: 0x%lX\n", (long)machine.cpu.reg(REG_SP));
 	machine.signals().leave(machine);
+}
+
+template <int W>
+static void syscall_getrusage(Machine<W>& machine)
+{
+	const int who = machine.template sysarg<int>(0);
+	const auto g_usage = machine.sysarg(1);
+
+	struct {
+		address_type<W> ru_utime_sec, ru_utime_usec;
+		address_type<W> ru_stime_sec, ru_stime_usec;
+		address_type<W> ru_maxrss;
+		address_type<W> ru_rest[13];
+	} usage {};
+
+	static constexpr int GUEST_RUSAGE_SELF     = 0;
+	static constexpr int GUEST_RUSAGE_CHILDREN = -1;
+	static constexpr int GUEST_RUSAGE_THREAD   = 1;
+	if (who != GUEST_RUSAGE_SELF && who != GUEST_RUSAGE_CHILDREN
+		&& who != GUEST_RUSAGE_THREAD) {
+		machine.set_result(-EINVAL);
+		SYSPRINT("SYSCALL getrusage, who: %d => %d\n",
+			who, (int)machine.return_value());
+		return;
+	}
+
+	if (machine.has_file_descriptors() && machine.fds().proxy_mode) {
+		struct rusage host_usage {};
+		const int res = getrusage(
+			who == GUEST_RUSAGE_CHILDREN ? RUSAGE_CHILDREN : RUSAGE_SELF, &host_usage);
+		if (res < 0) {
+			machine.set_result_or_error(res);
+			return;
+		}
+		usage.ru_utime_sec  = host_usage.ru_utime.tv_sec;
+		usage.ru_utime_usec = host_usage.ru_utime.tv_usec;
+		usage.ru_stime_sec  = host_usage.ru_stime.tv_sec;
+		usage.ru_stime_usec = host_usage.ru_stime.tv_usec;
+		usage.ru_maxrss     = host_usage.ru_maxrss;
+	} else {
+		// Report some deterministic progress, sandbox-safe/sanitized
+		const uint64_t micros = machine.instruction_counter() / 1000;
+		usage.ru_utime_sec  = micros / 1000000;
+		usage.ru_utime_usec = micros % 1000000;
+		usage.ru_maxrss =
+			(machine.memory.pages_active() * riscv::Page::size()) / 1024;
+	}
+
+	if (g_usage != 0x0)
+		machine.copy_to_guest(g_usage, &usage, sizeof(usage));
+	machine.set_result(0);
+	SYSPRINT("SYSCALL getrusage, who: %d usage: 0x%lX => %d\n",
+		who, (long)g_usage, (int)machine.return_value());
 }
 
 template <int W>
@@ -1456,6 +1510,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(167, syscall_stub_nosys<W>);
 	// gettimeofday
 	install_syscall_handler(169, syscall_gettimeofday<W>);
+	// getrusage
+	install_syscall_handler(165, syscall_getrusage<W>);
 	// getpid
 	install_syscall_handler(172, syscall_getpid<W>);
 	// getuid
