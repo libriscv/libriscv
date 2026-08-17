@@ -201,8 +201,7 @@ namespace riscv
 		if (UNLIKELY(pc != cpu.registers().pc))
 		{
 			pc = cpu.registers().pc;
-			QUICK_EXEC_CHECK();
-			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
+			OVERFLOW_CHECKED_JUMP();
 		}
 		// Overflow-check, next block
 		NEXT_BLOCK(4, true);
