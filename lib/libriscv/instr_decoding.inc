@@ -248,10 +248,26 @@
 					case 0x3: // FLD
 						DECODER(DECODED_FLOAT(FLD));
 #ifdef RISCV_EXT_VECTOR
+					// The unmasked, single-field, unit-stride loads: nf, mew,
+					// mop and lumop all zero with vm set. Every one of those
+					// is static, so recognising the form here leaves the
+					// handler with only what vtype decides. EEW comes along
+					// as a template argument for the same reason.
 					case 0x0: // VLE8
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VLE8_UNIT));
+						DECODER(DECODED_VECTOR(VLE32));
 					case 0x5: // VLE16
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VLE16_UNIT));
+						DECODER(DECODED_VECTOR(VLE32));
 					case 0x6: // VLE32
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VLE32_UNIT));
+						DECODER(DECODED_VECTOR(VLE32));
 					case 0x7: // VLE64
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VLE64_UNIT));
 						DECODER(DECODED_VECTOR(VLE32));
 #endif
 					default:
@@ -266,10 +282,22 @@
 					case 0x3: // FSD
 						DECODER(DECODED_FLOAT(FSD));
 #ifdef RISCV_EXT_VECTOR
+					// The store direction of the same, see above.
 					case 0x0: // VSE8
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VSE8_UNIT));
+						DECODER(DECODED_VECTOR(VSE32));
 					case 0x5: // VSE16
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VSE16_UNIT));
+						DECODER(DECODED_VECTOR(VSE32));
 					case 0x6: // VSE32
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VSE32_UNIT));
+						DECODER(DECODED_VECTOR(VSE32));
 					case 0x7: // VSE64
+						if (RVV_IS_UNIT_STRIDE(instruction))
+							DECODER(DECODED_VECTOR(VSE64_UNIT));
 						DECODER(DECODED_VECTOR(VSE32));
 #endif
 					default:
@@ -358,6 +386,8 @@
 					case 0x0: // OPI.VV
 						DECODER(DECODED_VECTOR(VOPI_VV));
 					case 0x1: // OPF.VV
+						if (RVV_IS_OPFVV_ARITH(instruction.whole >> 26))
+							DECODER(DECODED_VECTOR(VOPF_VV_ARITH));
 						DECODER(DECODED_VECTOR(VOPF_VV));
 					case 0x2: // OPM.VV
 						DECODER(DECODED_VECTOR(VOPM_VV));

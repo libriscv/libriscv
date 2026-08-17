@@ -101,30 +101,27 @@ namespace riscv
 		register_t vstart() const noexcept { return m_vstart; }
 		void set_vstart(register_t value) noexcept { m_vstart = value; }
 
-		// VLMAX = LMUL * VLEN / SEW, at least 1.
+		// VLMAX = LMUL * VLEN / SEW, at least 1. Every vsetvl computes it, so
+		// it is spelled as one shift: log2(VLMAX) is log2(VLEN/SEW) plus
+		// log2(LMUL), and a fractional LMUL that shifts it below one element
+		// clamps rather than branching.
 		uint64_t vlmax() const noexcept {
-			// Elements per register group = VLEN/SEW * LMUL, at least 1.
-			uint64_t vlmax = uint64_t(VectorLane::VSIZE) >> m_vsew;
-			if (m_lmul >= 0)
-				vlmax <<= m_lmul;
-			else
-				vlmax >>= -m_lmul;
-			return vlmax ? vlmax : 1;
+			constexpr int vlen_log2 = bits_of(VectorLane::VSIZE);
+			const int shift = vlen_log2 - int(m_vsew) + m_lmul;
+			return shift > 0 ? (uint64_t(1) << shift) : 1;
 		}
 
 		// Set vtype from the vtypei encoding bits. Returns false if the
 		// encoding is reserved or unsupported, in which case vill is set.
 		bool set_vtype(uint32_t vtypei) noexcept {
-			m_vill = false;
 			const uint32_t vlmul = vtypei & 0x7;
 			const uint32_t vsew  = (vtypei >> 3) & 0x7;
 			m_vta = vtypei & 0x40;
 			m_vma = vtypei & 0x80;
 			// Bits above vma/vta are reserved, as is vlmul==100.
 			// SEW is limited to the widths this emulator implements.
-			if (vtypei >> 8 || vlmul == 0b100 || vsew > 0b011) {
-				m_vill = true;
-			} else {
+			m_vill = (vtypei >> 8) || vlmul == 0b100 || vsew > 0b011;
+			if (LIKELY(!m_vill)) {
 				m_vsew = vsew;
 				m_lmul = lmul_shift_for(vlmul);
 				m_vtype = vtypei;
@@ -136,16 +133,16 @@ namespace riscv
 		friend struct VectorLayoutProbe;
 
 	private:
+		// log2 of a power of two.
+		static constexpr int bits_of(unsigned value) noexcept {
+			int bits = 0;
+			while (value > 1) { value >>= 1; bits++; }
+			return bits;
+		}
+		// vlmul is log2(LMUL) as a three-bit signed field: 000..011 are LMUL
+		// 1 to 8, 101..111 are the fractional 1/8 to 1/2
 		static int lmul_shift_for(uint32_t vlmul) noexcept {
-			switch (vlmul) {
-				case 0b000: return 0;   // LMUL=1
-				case 0b001: return 1;   // LMUL=2
-				case 0b010: return 2;   // LMUL=4
-				case 0b011: return 3;   // LMUL=8
-				case 0b101: return -3;  // LMUL=1/8
-				case 0b110: return -2;  // LMUL=1/4
-			}
-			return -1;                  // LMUL=1/2
+			return int(vlmul) - int((vlmul & 0b100) << 1);
 		}
 
 		std::array<VectorLane, 32> m_vec {};

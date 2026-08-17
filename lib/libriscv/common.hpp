@@ -423,16 +423,19 @@ namespace riscv
 #define RISCV_HOT_PATH() __attribute__((hot))
 #endif
 #define RISCV_ALWAYS_INLINE __attribute__((always_inline))
+#define RISCV_NOINLINE      __attribute__((noinline))
 #else
 #define LIKELY(x)   (x)
 #define UNLIKELY(x) (x)
 #define RISCV_COLD_PATH() /* */
 #define RISCV_HOT_PATH()  /* */
 #define RISCV_ALWAYS_INLINE /* */
+#define RISCV_NOINLINE      /* */
 #endif
 
 #ifdef _MSC_VER
 #undef RISCV_ALWAYS_INLINE
+#undef RISCV_NOINLINE
 #define RISCV_ALWAYS_INLINE __forceinline
 #define RISCV_NOINLINE      __declspec(noinline)
 #endif

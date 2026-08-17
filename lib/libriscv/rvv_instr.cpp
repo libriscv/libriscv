@@ -5,23 +5,14 @@
 #include <cstdint>
 #include <type_traits>
 
-/// Printer for one OP-V family. The funct3 values the decoder routes here are
-/// spelled out as a bitmask, so a mis-routed encoding says so rather than
-/// quietly disassembling as whatever else lives at that funct6.
 #define VECTOR_PRINTER(family, accepted) \
 	[] (char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) RVPRINTR_ATTR { \
 		return riscv::RVVDISASM::expect(buffer, len, instr, family, accepted); \
 	}
-
-/// The same, for the three configuration instructions: they share funct3, and
-/// the top two bits of the encoding are what tells them apart.
 #define VSETVL_PRINTER(family, accepted) \
 	[] (char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) RVPRINTR_ATTR { \
 		return riscv::RVVDISASM::expect_config(buffer, len, instr, family, accepted); \
 	}
-
-/// Printer for the vector unit-stride, strided, indexed and whole-register
-/// loads and stores, all of which share one decoder entry per direction.
 #define VECTOR_MEM_PRINTER(is_store) \
 	[] (char* buffer, size_t len, auto&, riscv::rv32i_instruction instr) RVPRINTR_ATTR { \
 		return riscv::RVVDISASM::op_memory(buffer, len, instr, is_store); \
@@ -116,7 +107,9 @@ namespace
 	RISCV_ALWAYS_INLINE T& element_at(RVV_t& rvv, const unsigned vreg, const uint64_t i)
 	{
 		constexpr unsigned per_reg = VectorLane::size() / sizeof(T);
-		return rvv.get(vreg + i / per_reg).template elem<T>(i % per_reg);
+		constexpr uint64_t elements = 32ull * per_reg;
+		auto* flat = reinterpret_cast<T*>(&rvv.get(0));
+		return flat[(uint64_t(vreg) * per_reg + i) & (elements - 1)];
 	}
 
 	template <typename RVV_t>
@@ -149,6 +142,16 @@ namespace
 		}
 	}
 
+	template <typename CPU_t, typename F>
+	RISCV_ALWAYS_INLINE static void fp_sew_dispatch_inline(CPU_t& cpu, F&& body)
+	{
+		switch (cpu.registers().rvv().sew()) {
+			case 32: body(float{});  break;
+			case 64: body(double{}); break;
+			default: cpu.trigger_exception(ILLEGAL_OPCODE);
+		}
+	}
+
 	// Masked element-wise write into vd. The lambda returns the new value
 	// of element *i* and must read its sources for *i* first (vd may alias
 	// vs1/vs2).
@@ -157,8 +160,27 @@ namespace
 	{
 		auto& rvv = cpu.registers().rvv();
 		const uint64_t vl = rvv.vl();
+		if (LIKELY(vm)) {
+			// One whole register at LMUL=1 -- what a vectorised loop runs at
+			// for all but its last pass. Spelling the trip count out as a
+			// constant is what pays here: the host compiler can then see that
+			// no index can leave the group, drop the wrap in element_at(),
+			// and do the whole register in a SIMD instruction or two.
+			constexpr unsigned per_reg = VectorLane::size() / sizeof(T);
+			if (LIKELY(vl == per_reg)) {
+				for (unsigned i = 0; i < per_reg; i++) {
+					element_at<T>(rvv, vd, i) = compute(i);
+				}
+				return;
+			}
+			for (uint64_t i = 0; i < vl; i++) {
+				element_at<T>(rvv, vd, i) = compute(i);
+			}
+			return;
+		}
+		const auto& mask = rvv.get(0);
 		for (uint64_t i = 0; i < vl; i++) {
-			if (element_active(rvv, vm, i)) {
+			if (mask.mask(i)) {
 				element_at<T>(rvv, vd, i) = compute(i);
 			}
 		}
@@ -223,11 +245,7 @@ namespace
 
 	// The rounding right shift that the scaling shifts, the clips and
 	// vsmul share: `value >> shift` plus an increment picked by vxrm. The
-	// shift is arithmetic exactly when T is signed, which is the whole
-	// difference between vssra and vssrl.
-	// U is spelled out rather than deduced so that the 128-bit intermediate
-	// the averaging and saturating multiplies need can name its own
-	// unsigned type, which std::make_unsigned need not cover.
+	// shift is arithmetic when T is signed, the difference between vssra and vssrl.
 	template <typename T, typename U = std::make_unsigned_t<T>>
 	static T roundoff(const T value, const unsigned shift, const unsigned vxrm)
 	{
@@ -1302,6 +1320,17 @@ namespace
 			!rd_is_x0  ? ~uint64_t(0) :
 			(uint64_t)rvv.vl();
 
+		// A loop reissues the same vsetvli on every pass, so vtype is very
+		// nearly always already what it is being set to -- and then the whole
+		// of the work is clamping AVL. (An equal vtype also rules out vill,
+		// which reads back with its top bit set.)
+		if (LIKELY(rvv.vtype() == vi.VLI.zimm)) {
+			const uint64_t vlmax = rvv.vlmax();
+			rvv.set_vl(avl < vlmax ? avl : vlmax);
+			if (!rd_is_x0) cpu.reg(vi.VLI.rd) = rvv.vl();
+			return;
+		}
+
 		if (!rvv.set_vtype(vi.VLI.zimm)) {
 			// Unsupported vtype: vl=0, vtype.vill=1.
 			rvv.set_vl(0);
@@ -1325,6 +1354,14 @@ namespace
 		// vtype is ten bits here; the two above it are the marker that
 		// tells vsetivli apart from the other two configuration forms.
 		const uint32_t vtype = vi.IVLI.zimm & 0x3FF;
+
+		// Already configured this way, as in a loop: see VSETVLI above.
+		if (LIKELY(rvv.vtype() == vtype)) {
+			const uint64_t vlmax = rvv.vlmax();
+			rvv.set_vl(avl < vlmax ? avl : vlmax);
+			if (!rd_is_x0) cpu.reg(vi.IVLI.rd) = rvv.vl();
+			return;
+		}
 
 		if (!rvv.set_vtype(vtype)) {
 			rvv.set_vl(0);
@@ -1398,6 +1435,73 @@ namespace
 			}
 		}
 
+		/**
+		 * The unmasked, single-field, unit-stride load and store, which is
+		 * the shape a vectorising compiler emits for a flat loop -- and the
+		 * one whose whole transfer is a single contiguous run of bytes at
+		 * both ends: unit-stride walks guest memory element by element, and
+		 * the lanes behind a register group are contiguous too. So it is one
+		 * block copy of vl*EEW bytes, tail included; copying only that many
+		 * is what leaves the tail undisturbed.
+		 *
+		 * The decoder has already read every static field this needs -- nf,
+		 * mew, mop, lumop and vm are all fixed by the opcode it routed here,
+		 * and EEW arrives as the template argument -- so what is left is the
+		 * part that vtype decides. Returns false for the cases vtype makes
+		 * awkward, which the general handler then decodes properly, and for
+		 * the ones that have to trap.
+		 */
+		template <bool IsStore, unsigned EewLog2, typename CPU_t>
+		RISCV_ALWAYS_INLINE static bool unit_stride_transfer(CPU_t& cpu, const rv32v_instruction vi)
+		{
+			auto& rvv = cpu.registers().rvv();
+			if (UNLIKELY(rvv.vill()))
+				return false;
+
+			// EMUL = LMUL * EEW / SEW, as a count of registers. A group of
+			// one needs no alignment, which is the case worth branching for:
+			// it covers every EEW at LMUL <= 1.
+			const int emul = rvv.lmul_shift() + int(EewLog2) - int(rvv.encoded_sew());
+			const unsigned vdata = vi.VL.vd;
+			unsigned dregs = 1;
+			if (UNLIKELY(emul > 0)) {
+				if (UNLIKELY(emul > 3))
+					return false;
+				dregs = 1u << emul;
+				if (UNLIKELY((vdata & (dregs - 1)) != 0 || vdata + dregs > 32))
+					return false;
+			} else if (UNLIKELY(emul < -3)) {
+				return false;
+			}
+
+			// vl is left alone when vtype changes under it, so a vl that no
+			// longer fits its group goes the long way round.
+			const uint64_t bytes = uint64_t(rvv.vl()) << EewLog2;
+			if (UNLIKELY(bytes > uint64_t(dregs) * VectorLane::size()))
+				return false;
+			// An empty transfer touches no memory, and so cannot fault.
+			if (UNLIKELY(bytes == 0))
+				return true;
+
+			auto& memory = cpu.machine().memory;
+			const auto addr = (typename CPU_t::address_t)cpu.reg(vi.VL.rs1);
+			void* lanes = &rvv.get(vdata);
+			// One whole register is by far the common size, and naming it as
+			// a constant is what lets the copy inline.
+			if (LIKELY(bytes == VectorLane::size())) {
+				if constexpr (IsStore)
+					memory.memcpy(addr, lanes, VectorLane::size());
+				else
+					memory.memcpy_out(lanes, addr, VectorLane::size());
+			} else {
+				if constexpr (IsStore)
+					memory.memcpy(addr, lanes, bytes);
+				else
+					memory.memcpy_out(lanes, addr, bytes);
+			}
+			return true;
+		}
+
 		// The i'th offset out of an index vector, zero-extended from the
 		// index width the encoding names.
 		template <typename RVV_t>
@@ -1425,7 +1529,7 @@ namespace
 		 * and a field count and then driven by one loop.
 		 */
 		template <bool IsStore, typename CPU_t>
-		static void vector_memory(CPU_t& cpu, const rv32v_instruction vi)
+		RISCV_NOINLINE static void vector_memory(CPU_t& cpu, const rv32v_instruction vi)
 		{
 			using address_t = typename CPU_t::address_t;
 			auto& rvv = cpu.registers().rvv();
@@ -1521,21 +1625,10 @@ namespace
 			const address_t stride = strided
 				? (address_t)cpu.reg(vi.VLS.rs2) : (address_t)(data_eew * nf);
 
-			// The common case -- a full, unmasked, single-field unit-stride
-			// transfer -- is a straight block copy of the register group.
-			if (!indexed && !strided && !fault_first && vm && nf == 1
-				&& vl == (uint64_t(VectorLane::size()) / data_eew) * dregs)
-			{
-				for (unsigned r = 0; r < dregs; r++) {
-					const address_t at = base + r * VectorLane::size();
-					if constexpr (IsStore)
-						memory.memcpy(at, &rvv.get(vdata + r), VectorLane::size());
-					else
-						memory.memcpy_out(&rvv.get(vdata + r), at, VectorLane::size());
-				}
-				return;
-			}
-
+			// The plain unmasked unit-stride transfer never arrives here:
+			// unit_stride_transfer() above settles it as one block copy, and
+			// hands back only the encodings that trap or that no longer fit
+			// their register group.
 			for (uint64_t i = 0; i < vl; i++) {
 				if (!element_active(rvv, vm, i))
 					continue;
@@ -1577,6 +1670,30 @@ namespace
 		vector_memory<true>(cpu, rv32v_instruction { instr });
 	},
 	VECTOR_MEM_PRINTER(true));
+
+	/* The unit-stride loads and stores the decoder has already recognised:
+	   one handler per direction and EEW, so that nothing static is left to
+	   test and the block copy is all that remains. */
+#define UNIT_STRIDE_INSTR(name, is_store, eew_log2) \
+	VECTOR_INSTR(name, \
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR \
+	{ \
+		const rv32v_instruction vi { instr }; \
+		if (LIKELY((unit_stride_transfer<is_store, eew_log2>(cpu, vi)))) \
+			return; \
+		vector_memory<is_store>(cpu, vi); \
+	}, \
+	VECTOR_MEM_PRINTER(is_store))
+
+	UNIT_STRIDE_INSTR(VLE8_UNIT,  false, 0);
+	UNIT_STRIDE_INSTR(VLE16_UNIT, false, 1);
+	UNIT_STRIDE_INSTR(VLE32_UNIT, false, 2);
+	UNIT_STRIDE_INSTR(VLE64_UNIT, false, 3);
+	UNIT_STRIDE_INSTR(VSE8_UNIT,  true,  0);
+	UNIT_STRIDE_INSTR(VSE16_UNIT, true,  1);
+	UNIT_STRIDE_INSTR(VSE32_UNIT, true,  2);
+	UNIT_STRIDE_INSTR(VSE64_UNIT, true,  3);
+#undef UNIT_STRIDE_INSTR
 
 	/* OPIVV: vd = vs2 OP vs1 */
 	VECTOR_INSTR(VOPI_VV,
@@ -2452,21 +2569,148 @@ namespace
 	},
 	VECTOR_PRINTER("OPMVV/OPMVX", (1u << 0b010) | (1u << 0b110)));
 
+	namespace
+	{
+		/**
+		 * The element-wise floating-point arithmetic of OPFVV: one result per
+		 * element out of three LMUL-sized register groups, with no widening,
+		 * no reduction and no mask destination. It is the body of every
+		 * vectorised floating-point loop, and the decoder can pick it out on
+		 * funct6 alone -- so it lives here, apart from the frame and the
+		 * operand classification that the rest of the family needs.
+		 *
+		 * Returns false for a funct6 belonging to the rest, which the general
+		 * handler then decodes from the top.
+		 */
+		template <typename CPU_t>
+		RISCV_NOINLINE static bool opfvv_arith(CPU_t& cpu, const rv32v_instruction vi)
+		{
+			const unsigned funct6 = vi.OPVV.funct6;
+			if (!RVV_IS_OPFVV_ARITH(funct6))
+				return false;
+
+			require_valid_vtype(cpu);
+			auto& rvv = cpu.registers().rvv();
+			const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
+			const bool vm = vi.OPVV.vm;
+			check_register_group(cpu, vd);
+			check_register_group(cpu, vs1);
+			check_register_group(cpu, vs2);
+
+			switch (funct6) {
+			case 0b000000: // VFADD.VV
+				fp_sew_dispatch_inline(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						return element_at<F>(rvv, vs2, i) + element_at<F>(rvv, vs1, i);
+					});
+				});
+				return true;
+			case 0b000010: // VFSUB.VV
+				fp_sew_dispatch_inline(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						return element_at<F>(rvv, vs2, i) - element_at<F>(rvv, vs1, i);
+					});
+				});
+				return true;
+			case 0b000100: // VFMIN.VV (number-aware: NaN returns the other operand)
+			case 0b000110: // VFMAX.VV
+				fp_sew_dispatch_inline(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					const bool is_min = funct6 == 0b000100;
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						const F a = element_at<F>(rvv, vs2, i), b = element_at<F>(rvv, vs1, i);
+						if (std::isnan(a)) return b;
+						if (std::isnan(b)) return a;
+						return is_min ? (a < b ? a : b) : (a > b ? a : b);
+					});
+				});
+				return true;
+			case 0b001000: // VFSGNJ.VV
+			case 0b001001: // VFSGNJN.VV
+			case 0b001010: // VFSGNJX.VV
+				fp_sew_dispatch_inline(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					using B = std::conditional_t<sizeof(F) == 4, uint32_t, uint64_t>;
+					constexpr B sign_bit = B(1) << (8 * sizeof(B) - 1);
+					// Sign injection moves bits, not values, so the elements
+					// are read and written as raw patterns of the same width.
+					vector_element_loop<B>(cpu, vd, vm, [&] (uint64_t i) {
+						const B a = element_at<B>(rvv, vs2, i);
+						const B b = element_at<B>(rvv, vs1, i);
+						if (funct6 == 0b001000) return B((a & ~sign_bit) | (b & sign_bit));
+						if (funct6 == 0b001001) return B((a & ~sign_bit) | (~b & sign_bit));
+						return B(a ^ (b & sign_bit));
+					});
+				});
+				return true;
+			case 0b100000: // VFDIV.VV
+				fp_sew_dispatch_inline(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						return element_at<F>(rvv, vs2, i) / element_at<F>(rvv, vs1, i);
+					});
+				});
+				return true;
+			case 0b100100: // VFMUL.VV
+				fp_sew_dispatch_inline(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						return element_at<F>(rvv, vs2, i) * element_at<F>(rvv, vs1, i);
+					});
+				});
+				return true;
+			default: // The eight fused multiply-adds, see below.
+				fp_sew_dispatch_inline(cpu, [&] (auto tag) {
+					using F = decltype(tag);
+					vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
+						const F a = element_at<F>(rvv, vs1, i);
+						const F b = element_at<F>(rvv, vs2, i);
+						const F c = element_at<F>(rvv, vd, i);
+						// These are fused: the product is not rounded before
+						// the addition, so they go through std::fma just like
+						// the scalar FMADD family does. The four `n` forms
+						// negate the whole expression, which is the same as
+						// negating one factor and the addend.
+						switch (funct6) {
+							case 0b101000: return  std::fma(a, c, b);  // VFMADD:  +(vs1*vd) + vs2
+							case 0b101001: return -std::fma(a, c, b);  // VFNMADD: -(vs1*vd) - vs2
+							case 0b101010: return  std::fma(a, c, -b); // VFMSUB:  +(vs1*vd) - vs2
+							case 0b101011: return  std::fma(-a, c, b); // VFNMSUB: -(vs1*vd) + vs2
+							case 0b101100: return  std::fma(a, b, c);  // VFMACC:  +(vs1*vs2) + vd
+							case 0b101101: return -std::fma(a, b, c);  // VFNMACC: -(vs1*vs2) - vd
+							case 0b101110: return  std::fma(a, b, -c); // VFMSAC:  +(vs1*vs2) - vd
+							default:       return  std::fma(-a, b, c); // VFNMSAC: -(vs1*vs2) + vd
+						}
+					});
+				});
+				return true;
+			}
+		}
+	}
+
 	/* OPFVV: vd = vs2 OP vs1 */
 	VECTOR_INSTR(VOPF_VV,
 	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
 	{
 		const rv32v_instruction vi { instr };
+		// The element-wise arithmetic has a handler of its own that the
+		// decoder reaches directly; this is the path for an encoding it did
+		// not recognise, and for the rest of the family.
+		if (opfvv_arith(cpu, vi))
+			return;
+
 		require_valid_vtype(cpu);
 		auto& rvv = cpu.registers().rvv();
 		const unsigned vd = vi.OPVV.vd, vs1 = vi.OPVV.vs1, vs2 = vi.OPVV.vs2;
 		const bool vm = vi.OPVV.vm;
 		{
-			// Only the plain element-wise arithmetic has three LMUL-sized
-			// groups. The reductions have a single-register vd and vs1, the
-			// compares write a mask register, the unary group covers the
-			// scalar moves and the widening conversions, and everything from
-			// funct6 110000 up is widening.
+			// Of what is left, only the non-widening arithmetic has three
+			// LMUL-sized groups. The reductions have a single-register vd and
+			// vs1, the compares write a mask register, the unary group covers
+			// the scalar moves and the widening conversions, and everything
+			// from funct6 110000 up is widening.
 			const unsigned f6 = vi.OPVV.funct6;
 			const bool reduce = f6 < 0b001000 && (f6 & 1);
 			const bool mask_dest = f6 >= 0b011000 && f6 <= 0b011111;
@@ -2479,41 +2723,12 @@ namespace
 		}
 
 		switch (vi.OPVV.funct6) {
-		case 0b000000: // VFADD.VV
-			fp_sew_dispatch(cpu, [&] (auto tag) {
-				using F = decltype(tag);
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					return element_at<F>(rvv, vs2, i) + element_at<F>(rvv, vs1, i);
-				});
-			});
-			return;
-		case 0b000010: // VFSUB.VV
-			fp_sew_dispatch(cpu, [&] (auto tag) {
-				using F = decltype(tag);
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					return element_at<F>(rvv, vs2, i) - element_at<F>(rvv, vs1, i);
-				});
-			});
-			return;
 		case 0b000001: // VFREDUSUM.VS
 		case 0b000011: // VFREDOSUM.VS (ordered sum)
 			fp_sew_dispatch(cpu, [&] (auto tag) {
 				using F = decltype(tag);
 				reduction_loop<F>(cpu, vd, vs1, vs2, vm, [] (F acc, F x) -> F {
 					return acc + x;
-				});
-			});
-			return;
-		case 0b000100: // VFMIN.VV (number-aware: NaN returns the other operand)
-		case 0b000110: // VFMAX.VV
-			fp_sew_dispatch(cpu, [&] (auto tag) {
-				using F = decltype(tag);
-				const bool is_min = vi.OPVV.funct6 == 0b000100;
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					const F a = element_at<F>(rvv, vs2, i), b = element_at<F>(rvv, vs1, i);
-					if (std::isnan(a)) return b;
-					if (std::isnan(b)) return a;
-					return is_min ? (a < b ? a : b) : (a > b ? a : b);
 				});
 			});
 			return;
@@ -2526,25 +2741,6 @@ namespace
 					if (std::isnan(acc)) return x;
 					if (std::isnan(x)) return acc;
 					return is_min ? (acc < x ? acc : x) : (acc > x ? acc : x);
-				});
-			});
-			return;
-		case 0b001000: // VFSGNJ.VV
-		case 0b001001: // VFSGNJN.VV
-		case 0b001010: // VFSGNJX.VV
-			fp_sew_dispatch(cpu, [&] (auto tag) {
-				using F = decltype(tag);
-				using B = std::conditional_t<sizeof(F) == 4, uint32_t, uint64_t>;
-				constexpr B sign_bit = B(1) << (8 * sizeof(B) - 1);
-				const unsigned funct6 = vi.OPVV.funct6;
-				// Sign injection moves bits, not values, so the elements
-				// are read and written as raw patterns of the same width.
-				vector_element_loop<B>(cpu, vd, vm, [&] (uint64_t i) {
-					const B a = element_at<B>(rvv, vs2, i);
-					const B b = element_at<B>(rvv, vs1, i);
-					if (funct6 == 0b001000) return B((a & ~sign_bit) | (b & sign_bit));
-					if (funct6 == 0b001001) return B((a & ~sign_bit) | (~b & sign_bit));
-					return B(a ^ (b & sign_bit));
 				});
 			});
 			return;
@@ -2667,60 +2863,21 @@ namespace
 				});
 			});
 			return; }
-		case 0b100000: // VFDIV.VV
-			fp_sew_dispatch(cpu, [&] (auto tag) {
-				using F = decltype(tag);
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					return element_at<F>(rvv, vs2, i) / element_at<F>(rvv, vs1, i);
-				});
-			});
-			return;
-		case 0b100100: // VFMUL.VV
-			fp_sew_dispatch(cpu, [&] (auto tag) {
-				using F = decltype(tag);
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					return element_at<F>(rvv, vs2, i) * element_at<F>(rvv, vs1, i);
-				});
-			});
-			return;
-		case 0b101000: // VFMADD.VV:  vd = +(vs1 * vd) + vs2
-		case 0b101001: // VFNMADD.VV: vd = -(vs1 * vd) - vs2
-		case 0b101010: // VFMSUB.VV:  vd = +(vs1 * vd) - vs2
-		case 0b101011: // VFNMSUB.VV: vd = -(vs1 * vd) + vs2
-		case 0b101100: // VFMACC.VV:  vd = +(vs1 * vs2) + vd
-		case 0b101101: // VFNMACC.VV: vd = -(vs1 * vs2) - vd
-		case 0b101110: // VFMSAC.VV:  vd = +(vs1 * vs2) - vd
-		case 0b101111: // VFNMSAC.VV: vd = -(vs1 * vs2) + vd
-			fp_sew_dispatch(cpu, [&] (auto tag) {
-				using F = decltype(tag);
-				const unsigned funct6 = vi.OPVV.funct6;
-				vector_element_loop<F>(cpu, vd, vm, [&] (uint64_t i) {
-					const F a = element_at<F>(rvv, vs1, i);
-					const F b = element_at<F>(rvv, vs2, i);
-					const F c = element_at<F>(rvv, vd, i);
-					// These are fused: the product is not rounded before
-					// the addition, so they go through std::fma just like
-					// the scalar FMADD family does. The four `n` forms
-					// negate the whole expression, which is the same as
-					// negating one factor and the addend.
-					switch (funct6) {
-						case 0b101000: return  std::fma(a, c, b);
-						case 0b101001: return -std::fma(a, c, b);
-						case 0b101010: return  std::fma(a, c, -b);
-						case 0b101011: return  std::fma(-a, c, b);
-						case 0b101100: return  std::fma(a, b, c);
-						case 0b101101: return -std::fma(a, b, c);
-						case 0b101110: return  std::fma(a, b, -c);
-						default:       return  std::fma(-a, b, c);
-					}
-				});
-			});
-			return;
 		} // switch
 		// The widening arithmetic and the two widening reductions.
 		if (float_widening(cpu, vi, true, 0.0f))
 			return;
 		cpu.trigger_exception(UNIMPLEMENTED_INSTRUCTION);
+	},
+	VECTOR_PRINTER("OPFVV", 1u << 0b001));
+
+	/* OPFVV, element-wise arithmetic: the same instruction family, entered
+	   where the decoder has already read funct6 and knows this is all there
+	   is to do. */
+	VECTOR_INSTR(VOPF_VV_ARITH,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
+		opfvv_arith(cpu, rv32v_instruction { instr });
 	},
 	VECTOR_PRINTER("OPFVV", 1u << 0b001));
 

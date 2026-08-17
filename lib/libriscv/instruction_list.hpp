@@ -49,4 +49,8 @@
 
 #define RV32V_OP        0b1010111
 
+#define RVV_IS_UNIT_STRIDE(instr) (((instr).whole & 0xFFF00000) == 0x02000000)
+#define RVV_OPFVV_ARITH_MASK 0x0000FF1100000755ull
+#define RVV_IS_OPFVV_ARITH(funct6) ((RVV_OPFVV_ARITH_MASK >> (funct6)) & 1)
+
 #define RV32_INSTR_STOP       0x7ff00073
