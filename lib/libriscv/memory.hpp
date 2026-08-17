@@ -174,6 +174,9 @@ namespace riscv
 		Callsite lookup(address_t) const;
 		void print_backtrace(std::function<void(std::string_view)>, bool ra = true) const;
 
+		// Validates .symtab/.strtab once and invokes fn(sym, name) for each
+		// symbol, @name is nullptr when it points outside the string table.
+		void for_each_symbol(std::function<void(const typename riscv::Elf<W>::Sym&, const char*)> fn) const;
 		// Get list of all symbols in the binary
 		std::vector<const char*> all_symbols() const;
 		// Get list of all unmangled symbols in the binary that starts with a given prefix
@@ -336,9 +339,6 @@ namespace riscv
 		// never throws) for a SHT_NOBITS section or one whose file range falls
 		// outside the binary.
 		const typename Elf::SectionHeader* section_by_name_validated(const std::string& name) const;
-		// Validates .symtab/.strtab once and invokes fn(sym, name) for each
-		// symbol; name is nullptr when it points outside the string table.
-		void for_each_symbol(std::function<void(const typename Elf::Sym&, const char*)> fn) const;
 		void dynamic_linking(const typename Elf::Header&);
 		void relocate_section(const char* section_name, const char* symtab);
 		const typename Elf::Sym* resolve_symbol(std::string_view name) const;
