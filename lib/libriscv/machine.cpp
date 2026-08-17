@@ -64,7 +64,7 @@ namespace riscv
 	}
 
 	template <int W>
-	Registers<W>::Options Machine<W>::register_copy_options() const noexcept
+	typename Registers<W>::Options Machine<W>::register_copy_options() const noexcept
 	{
 		if (!has_options() || options().preserve_vector_registers)
 			return Registers<W>::Options::Everything;
@@ -394,6 +394,10 @@ namespace riscv
 			case 0x105: // WFI
 				this->stop();
 				return;
+			case 0x00D: // Zawrs: WRS.NTO
+			case 0x01D: // Zawrs: WRS.STO
+				// Wait-on-reservation-set -> spurious wakeup
+				return;
 			case 0x7FF: // Stop machine
 				this->stop();
 				return;
@@ -509,6 +513,19 @@ namespace riscv
 			}
 			break;
 		}
+		case 0x4: { // Zimop: the may-be-operations
+			//   MOP.R.n    1 n4 00 n3 n2 0111 n1 n0 | rs1 | 100 | rd
+			//   MOP.RR.n   1 n2 00 n1 n0 1 | rs2  | rs1 | 100 | rd
+			const uint32_t hi = instr.whole >> 25;
+			const bool wellformed = (hi & 0b1011000) == 0b1000000
+				&& ((hi & 1) != 0 || (instr.whole & (0b111 << 22)) == (0b111 << 22));
+			if (wellformed) {
+				if (instr.Itype.rd != 0)
+					cpu.reg(instr.Itype.rd) = 0;
+				return;
+			}
+			break;
+		} // Zimop
 		case 0x5: { // CSRWI: CSRW from uimm[4:0] in RS1
 			const bool rd = instr.Itype.rd != 0;
 			const uint32_t imm = instr.Itype.rs1;

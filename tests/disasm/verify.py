@@ -78,8 +78,25 @@ def is_rv32_reserved_shamt(xlen, want, got):
     return shamt.startswith("0x") and int(shamt, 16) >= 0x20
 
 
+# libriscv models a user-mode guest, so the supervisor-only instructions are
+# not decoded at all -- objdump names them, libriscv rejects them, and that is
+# the intended behaviour rather than a decoding bug. (SRET and MRET are the
+# exceptions: they are printed, because a guest that executes one is worth
+# naming in a trap message.)
+PRIVILEGED_MNEMONICS = ("sfence.vma", "sfence.vm", "sinval.vma", "sfence.w.inval",
+                        "sfence.inval.ir", "uret", "hret", "dret",
+                        "hfence.vvma", "hfence.gvma")
+
+
+def is_privileged_only(want, got):
+    if not got.startswith(".insn"):
+        return False
+    return want.partition("\t")[0] in PRIVILEGED_MNEMONICS
+
+
 def compare(name, words, arch, xlen, stop_first, limit):
     """Disassemble one corpus both ways and report every disagreement."""
+    arch, dropped = refdis.supported_arch(arch)
     obj = refdis.assemble(words, arch=arch)
     expected = refdis.disassemble(obj)
     actual = run_libriscv(words, 0, xlen)
@@ -107,6 +124,16 @@ def compare(name, words, arch, xlen, stop_first, limit):
         if is_rv32_reserved_shamt(xlen, want, got):
             waived += 1
             continue
+        if is_privileged_only(want, got):
+            waived += 1
+            continue
+        # This binutils predates part of the ISA the corpus asks for, so it
+        # renders those encodings as raw words while libriscv names them.
+        # Waive that one shape and only that one -- anywhere the reference
+        # did decode the instruction, the comparison stays strict.
+        if dropped and want.startswith(".insn") and not got.startswith(".insn"):
+            waived += 1
+            continue
         mismatches.append((addr, want, got))
         if stop_first:
             break
@@ -117,9 +144,10 @@ def compare(name, words, arch, xlen, stop_first, limit):
                 if stop_first:
                     break
 
-    print("%-14s %8d instructions, %6d mismatches%s"
+    print("%-14s %8d instructions, %6d mismatches%s%s"
           % (name, len(expected), len(mismatches),
-             ", %d known divergences waived" % waived if waived else ""))
+             ", %d known divergences waived" % waived if waived else "",
+             "  [binutils lacks %s]" % ",".join(dropped) if dropped else ""))
     for addr, want, got in mismatches[:limit]:
         length, value = encodings.get(addr, (4, 0))
         print("    %0*x  (at 0x%x)" % (length * 2, value, addr))

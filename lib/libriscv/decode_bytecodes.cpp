@@ -95,6 +95,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					if (ci.CI.upper_imm() != 0) {
 						return RV32C_BC_FUNCTION; // C.LUI
 					}
+					if ((ci.CI.rd & 1) != 0 && ci.CI.rd < 16) {
+						return RV32C_BC_FUNCTION; // C.MOP.n
+					}
 				}
 				else if (ci.CI.rd == 0 && ci.CI.upper_imm() != 0) {
 					return RV32C_BC_FUNCTION; // C.LUI hint

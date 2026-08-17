@@ -900,8 +900,36 @@ namespace riscv
 				case 0x102: return snprintf(b, n, "sret");
 				case 0x105: return snprintf(b, n, "wfi");
 				case 0x302: return snprintf(b, n, "mret");
+				// Zawrs: wait on a reservation set, until either a store
+				// clears it (nto) or an implementation-defined timeout does.
+				case 0x00D: return snprintf(b, n, "wrs.nto");
+				case 0x01D: return snprintf(b, n, "wrs.sto");
 				}
 				return bad(b, n, i);
+			}
+			//   MOP.R.n   1 n4 00 n3 n2 0111 n1 n0 | rs1 | 100 | rd
+			//   MOP.RR.n  1 n2 00 n1 n0 1 | rs2 | rs1 | 100 | rd
+			if (i.Itype.funct3 == 4) {
+				const uint32_t hi = i.whole >> 25;
+				if ((hi & 0b1011000) != 0b1000000)
+					return bad(b, n, i);
+				if (hi & 1) { // MOP.RR.n: n2 at bit 30, n1 at 27, n0 at 26
+					const uint32_t nr = (((i.whole >> 30) & 1) << 2)
+						| (((i.whole >> 27) & 1) << 1)
+						| ((i.whole >> 26) & 1);
+					return snprintf(b, n, "mop.rr.%u	%s,%s,%s", nr,
+						RVPRINT::reg(i.Rtype.rd), RVPRINT::reg(i.Rtype.rs1),
+						RVPRINT::reg(i.Rtype.rs2));
+				}
+				if ((i.whole & (0b111u << 22)) != (0b111u << 22))
+					return bad(b, n, i);
+				// n4 at bit 30, n3 at 27, n2 at 26, n1:n0 at 21:20
+				const uint32_t nr = (((i.whole >> 30) & 1) << 4)
+					| (((i.whole >> 27) & 1) << 3)
+					| (((i.whole >> 26) & 1) << 2)
+					| ((i.whole >> 20) & 0x3);
+				return snprintf(b, n, "mop.r.%u	%s,%s", nr,
+					RVPRINT::reg(i.Itype.rd), RVPRINT::reg(i.Itype.rs1));
 			}
 			const char* m;
 			bool immediate_form;
@@ -1082,8 +1110,13 @@ namespace riscv
 							return bad(b, n, c);
 						return snprintf(b, n, "c.addi16sp\tsp,%d", c.CI16.signed_imm());
 					}
-					if (c.CI.upper_imm() == 0)
+					if (c.CI.upper_imm() == 0) {
+						// Zcmop takes the reserved imm = 0 points that have
+						// an odd rd below 16; the field spells n as 0nnn1.
+						if ((c.CI.rd & 1) != 0 && c.CI.rd < 16)
+							return snprintf(b, n, "c.mop.%u", c.CI.rd);
 						return bad(b, n, c);
+					}
 					// objdump prints the LUI-style 20-bit field, in hex.
 					return snprintf(b, n, "c.lui\t%s,0x%x", RVPRINT::reg(c.CI.rd),
 						(uint32_t(c.CI.upper_imm()) >> 12) & 0xFFFFF);
@@ -1235,10 +1268,16 @@ namespace riscv
 			static const int ranks[4] = { 1, 2, 0, 3 }; // s, d, h, q
 			return ranks[fmt & 3];
 		}
-		/// libriscv implements single and double; the rest are other extensions.
+		/// libriscv implements single and double arithmetic. Half appears
+		/// only in Zfhmin's loads, stores, moves and conversions.
 		static bool fmt_supported(uint32_t fmt) noexcept
 		{
 			return (fmt & 3) <= 1;
+		}
+		/// Formats a Zfhmin instruction may name, which adds half.
+		static bool fmt_or_half(uint32_t fmt) noexcept
+		{
+			return (fmt & 3) <= 2;
 		}
 		/// The integer width a conversion names: w, wu, l, lu.
 		static const char* intname(uint32_t rs2) noexcept
@@ -1275,7 +1314,8 @@ namespace riscv
 		/// FP LOAD (0x07) and STORE (0x27): funct3 picks the width.
 		static int op_load(char* b, size_t n, instr_t i) noexcept
 		{
-			const char* m = i.Itype.funct3 == 0x2 ? "flw"
+			const char* m = i.Itype.funct3 == 0x1 ? "flh" // Zfhmin
+						  : i.Itype.funct3 == 0x2 ? "flw"
 						  : i.Itype.funct3 == 0x3 ? "fld" : nullptr;
 			if (m == nullptr)
 				return bad(b, n, i);
@@ -1284,7 +1324,8 @@ namespace riscv
 		}
 		static int op_store(char* b, size_t n, instr_t i) noexcept
 		{
-			const char* m = i.Stype.funct3 == 0x2 ? "fsw"
+			const char* m = i.Stype.funct3 == 0x1 ? "fsh" // Zfhmin
+						  : i.Stype.funct3 == 0x2 ? "fsw"
 						  : i.Stype.funct3 == 0x3 ? "fsd" : nullptr;
 			if (m == nullptr)
 				return bad(b, n, i);
@@ -1317,7 +1358,10 @@ namespace riscv
 			const uint32_t rs2    = i.Rtype.rs2;
 			const char* const fs  = fmtname(fmt);
 
-			if (!fmt_supported(fmt))
+			// Half passes the gate here and is turned away inside the
+			// groups that have no half form; the three Zfhmin ones let it
+			// through.
+			if (!fmt_or_half(fmt))
 				return bad(b, n, i);
 
 			const char* const frd  = RVPRINT::freg(i.Rtype.rd);
@@ -1325,6 +1369,12 @@ namespace riscv
 			const char* const frs2 = RVPRINT::freg(rs2);
 			const char* const xrd  = RVPRINT::reg(i.Rtype.rd);
 			const char* const xrs1 = RVPRINT::reg(i.Rtype.rs1);
+
+			// Everything but the conversions and the two register moves is
+			// Zfh, not Zfhmin.
+			const bool half = (fmt == 2);
+			if (half && op != 0x08 && op != 0x1C && op != 0x1E)
+				return bad(b, n, i);
 
 			switch (op) {
 			case 0x00: case 0x01: case 0x02: case 0x03: {
@@ -1351,11 +1401,15 @@ namespace riscv
 			case 0x08: {
 				// Zfa's round-to-integer shares the format-conversion opcode.
 				if (rs2 == 4 || rs2 == 5) {
+					if (half)
+						return bad(b, n, i);
 					const int w = snprintf(b, n, "%s.%s\t%s,%s",
 						rs2 == 4 ? "fround" : "froundnx", fs, frd, frs1);
 					return with_rm(b, n, w, rm);
 				}
-				if (rs2 > 3 || rs2 == fmt || !fmt_supported(rs2))
+				// Zfhmin converts between half and each of the other two, so
+				// half is allowed on exactly one side of the pair.
+				if (rs2 > 3 || rs2 == fmt || !fmt_or_half(rs2))
 					return bad(b, n, i);
 				const int w = snprintf(b, n, "fcvt.%s.%s\t%s,%s",
 					fs, fmtname(rs2), frd, frs1);
@@ -1409,15 +1463,19 @@ namespace riscv
 					return snprintf(b, n, "fmvh.x.d\t%s,%s", xrd, frs1);
 				if (rs2 != 0)
 					return bad(b, n, i);
-				if (rm == 1)
+				if (rm == 1) {
+					if (half) // FCLASS.H needs Zfh
+						return bad(b, n, i);
 					return snprintf(b, n, "fclass.%s\t%s,%s", fs, xrd, frs1);
+				}
 				if (rm != 0)
 					return bad(b, n, i);
 				// FMV.X.W moves a single, FMV.X.D a double: RV64 only.
+				// FMV.X.H is Zfhmin's, and sign-extends its sixteen bits.
 				if (fmt == 1 && !is64)
 					return bad(b, n, i);
 				return snprintf(b, n, "fmv.x.%s\t%s,%s",
-					fmt == 0 ? "w" : "d", xrd, frs1);
+					fmt == 0 ? "w" : fmt == 1 ? "d" : "h", xrd, frs1);
 			}
 			case 0x16: {
 				// FMVP.D.X builds a double out of two 32-bit registers: RV32 only.
@@ -1428,15 +1486,18 @@ namespace riscv
 			case 0x1E: {
 				if (rm != 0)
 					return bad(b, n, i);
-				if (rs2 == 1)
+				if (rs2 == 1) {
+					if (half) // FLI.H needs Zfh
+						return bad(b, n, i);
 					return snprintf(b, n, "fli.%s\t%s,%s", fs, frd,
 						fli_constant(i.Rtype.rs1));
+				}
 				if (rs2 != 0)
 					return bad(b, n, i);
 				if (fmt == 1 && !is64)
 					return bad(b, n, i);
 				return snprintf(b, n, "fmv.%s.x\t%s,%s",
-					fmt == 0 ? "w" : "d", frd, xrs1);
+					fmt == 0 ? "w" : fmt == 1 ? "d" : "h", frd, xrs1);
 			}
 			}
 			return bad(b, n, i);

@@ -384,7 +384,7 @@ namespace riscv
 
 		/// @brief Whether a register copy involves GPRs only or a full register copy (including vector state).
 		/// @return Everything, unless machine options are stored and opts out of vectors
-		Registers<W>::Options register_copy_options() const noexcept;
+		typename Registers<W>::Options register_copy_options() const noexcept;
 
 		// Optional custom native-performance arena
 		bool has_arena() const noexcept { return m_arena != nullptr; }

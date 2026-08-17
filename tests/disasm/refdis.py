@@ -26,6 +26,40 @@ STRIP = _tool("strip")
 
 LINE = re.compile(r"^\s*([0-9a-f]+):\t([0-9a-f ]+)\t(.*)$")
 
+_SUPPORTED = {}
+
+
+def supported_arch(arch):
+    """Drop the ISA extensions this binutils has never heard of.
+
+    The corpora name the whole RVA23 profile, which is newer than some of the
+    binutils a CI image is likely to carry. Rather than fail outright, the
+    unknown extensions are removed and returned, so the caller can say which
+    part of the comparison it is no longer able to make.
+
+    Returns (usable_arch, dropped_extension_names).
+    """
+    parts = arch.split("_")
+    base, exts = parts[0], parts[1:]
+    dropped = []
+    keep = []
+    for e in exts:
+        if e not in _SUPPORTED:
+            tmp = tempfile.mkdtemp(prefix="refarch")
+            s = os.path.join(tmp, "a.s")
+            with open(s, "w") as f:
+                f.write('.attribute arch, "%s_%s"\n' % (base, e))
+            r = subprocess.run([AS, "-o", os.path.join(tmp, "a.o"), s],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+            _SUPPORTED[e] = (r.returncode == 0)
+        if _SUPPORTED[e]:
+            keep.append(e)
+        else:
+            dropped.append(e)
+    return "_".join([base] + keep), dropped
+
+
 def assemble(words, arch=DEFAULT_ARCH):
     """Assemble (length, value) instruction words into a stripped ELF object.
 

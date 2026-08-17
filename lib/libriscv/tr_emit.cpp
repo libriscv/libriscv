@@ -2324,6 +2324,12 @@ void Emitter<W>::emit()
 		case RV32F_LOAD: {
 			const rv32f_instruction fi{instr};
 			switch (fi.Itype.funct3) {
+			case 0x1: // FLH (Zfhmin), boxed at sixteen bits
+				this->memory_load<uint16_t>(from_fpreg(fi.Itype.rd) + ".i32[0]", "uint16_t", fi.Itype.rs1, fi.Itype.signed_imm());
+				if constexpr (nanboxing) {
+					code += from_fpreg(fi.Itype.rd) + ".i64 |= (int64_t)0xFFFFFFFFFFFF0000ULL;\n";
+				}
+				break;
 			case 0x2: // FLW
 				this->memory_load<uint32_t>(from_fpreg(fi.Itype.rd) + ".i32[0]", "uint32_t", fi.Itype.rs1, fi.Itype.signed_imm());
 				if constexpr (nanboxing) {
@@ -2353,6 +2359,9 @@ void Emitter<W>::emit()
 		case RV32F_STORE: {
 			const rv32f_instruction fi{instr};
 			switch (fi.Itype.funct3) {
+			case 0x1: // FSH (Zfhmin)
+				this->memory_store("int16_t", sizeof(int16_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i32[0]");
+				break;
 			case 0x2: // FSW
 				this->memory_store("int32_t", sizeof(int32_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i32[0]");
 				break;
@@ -2738,7 +2747,11 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FCVT_SD_DS:
-				if (fi.R4type.rs2 >= 0x4) {
+				// Only the single<->double pair is inlined. rs2 names the
+				// source format, so anything else here is a half (Zfhmin) or
+				// a quad, and goes to the handler rather than being read as
+				// the format this arm happens to expect.
+				if (fi.R4type.rs2 != (fi.R4type.funct2 ^ 1)) {
 					UNKNOWN_INSTRUCTION();
 				} else if (fi.R4type.funct2 == 0x0) {
 					code += "if (" + rs1 + ".f64 != " + rs1 + ".f64) load_fl(&" + dst + ", 0x7fc00000u); else set_fl(&" + dst + ", " + rs1 + ".f64);\n";
@@ -2922,7 +2935,15 @@ void Emitter<W>::emit()
 				UNKNOWN_INSTRUCTION();
 				break;
 			} // fpfunc
-			} else UNKNOWN_INSTRUCTION();
+			} else {
+				// A format this emitter has no arm for: half (Zfhmin) or
+				// quad. The handler runs instead, and some of these -- the
+				// FMV.X.H that ends every half-precision read -- write an
+				// integer register, so the value the tracker believes rd
+				// holds has to die with them.
+				UNKNOWN_INSTRUCTION();
+				this->reset_tracked_register(fi.R4type.rd);
+			}
 			} break; // RV32F_FPFUNC
 		case RV32A_ATOMIC: // General handler for atomics
 			this->penalty(20); // Atomic operations are slow

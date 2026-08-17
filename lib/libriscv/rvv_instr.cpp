@@ -1,4 +1,5 @@
 #include "rvv.hpp"
+#include "fp16.hpp"
 #include "instr_helpers.hpp"
 #include "rvv_printer.hpp"
 #include <cmath>
@@ -329,73 +330,8 @@ namespace
 
 	// ---- binary16, for Zvfhmin ------------------------------------------
 	//
-	// The profile mandates the *conversions* to and from half precision,
-	// not arithmetic on it, so a pair of bit-twiddling converters is the
-	// whole of what f16 needs here -- no host _Float16 required.
-
-	static float f16_to_f32(const uint16_t h) noexcept
-	{
-		const uint32_t sign = uint32_t(h & 0x8000) << 16;
-		uint32_t exp  = (h >> 10) & 0x1F;
-		uint32_t sig  = h & 0x3FF;
-		uint32_t bits;
-		if (exp == 0x1F) {
-			// Infinity and NaN keep their payload, shifted into place.
-			bits = sign | 0x7F800000u | (sig << 13);
-		} else if (exp == 0) {
-			if (sig == 0) {
-				bits = sign;
-			} else {
-				// Subnormal: renormalise into f32's much wider range.
-				exp = 1;
-				while ((sig & 0x400) == 0) { sig <<= 1; exp--; }
-				sig &= 0x3FF;
-				bits = sign | ((exp + (127 - 15)) << 23) | (sig << 13);
-			}
-		} else {
-			bits = sign | ((exp + (127 - 15)) << 23) | (sig << 13);
-		}
-		float out;
-		__builtin_memcpy(&out, &bits, sizeof(out));
-		return out;
-	}
-
-	static uint16_t f32_to_f16(const float value) noexcept
-	{
-		uint32_t bits;
-		__builtin_memcpy(&bits, &value, sizeof(bits));
-		const uint16_t sign = uint16_t((bits >> 16) & 0x8000);
-		const int32_t  exp  = int32_t((bits >> 23) & 0xFF) - 127 + 15;
-		const uint32_t sig  = bits & 0x7FFFFF;
-
-		if (((bits >> 23) & 0xFF) == 0xFF) {
-			// A NaN must stay a NaN even when its payload does not fit.
-			if (sig != 0)
-				return uint16_t(sign | 0x7E00);
-			return uint16_t(sign | 0x7C00);
-		}
-		if (exp >= 0x1F)               // overflows to infinity
-			return uint16_t(sign | 0x7C00);
-		if (exp <= 0) {
-			// Subnormal or zero: shift the hidden bit back in and round to
-			// nearest-even at the new position.
-			if (exp < -10)
-				return sign;
-			const uint32_t full = sig | 0x800000;
-			const unsigned shift = unsigned(14 - exp);
-			uint32_t out = full >> shift;
-			const uint32_t rem = full & ((1u << shift) - 1);
-			const uint32_t half = 1u << (shift - 1);
-			if (rem > half || (rem == half && (out & 1)))
-				out++;
-			return uint16_t(sign | out);
-		}
-		uint32_t out = (uint32_t(exp) << 10) | (sig >> 13);
-		const uint32_t rem = sig & 0x1FFF;
-		if (rem > 0x1000 || (rem == 0x1000 && (out & 1)))
-			out++;  // carrying into the exponent is exactly what we want
-		return uint16_t(sign | out);
-	}
+	static float f16_to_f32(const uint16_t h) noexcept { return fp16::to_f32(h); }
+	static uint16_t f32_to_f16(const float value) noexcept { return fp16::from_f32(value); }
 
 	// IEEE-754 classification mask for vfclass (bit 9 = qNaN down to
 	// bit 0 = -infinity).

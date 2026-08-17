@@ -1,4 +1,5 @@
 #include "rvfd.hpp"
+#include "fp16.hpp"
 #include "instr_helpers.hpp"
 #include <cmath>
 #include <limits>
@@ -190,6 +191,37 @@ namespace riscv
 	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
 		return rv_expect_mnemonic(buffer, len, "fld",
 			RVFDISASM::op_load(buffer, len, instr));
+	});
+
+	/* Zfhmin: the half-precision load and store. The extension has no
+	 * arithmetic of its own -- these two, the register moves and the
+	 * conversions are all of it -- so a half only ever travels between
+	 * memory and a NaN-boxed register, or through a conversion. */
+	FLOAT_INSTR(FLH,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
+		const rv32f_instruction fi { instr };
+		auto addr = cpu.reg(fi.Itype.rs1) + fi.Itype.signed_imm();
+		auto& dst = cpu.registers().getfl(fi.Itype.rd);
+		dst.load_u16(cpu.machine().memory.template read<uint16_t> (addr));
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "flh",
+			RVFDISASM::op_load(buffer, len, instr));
+	});
+
+	FLOAT_INSTR(FSH,
+	[] (auto& cpu, rv32i_instruction instr) RVINSTR_ATTR
+	{
+		const rv32f_instruction fi { instr };
+		const auto& src = cpu.registers().getfl(fi.Stype.rs2);
+		auto addr = cpu.reg(fi.Stype.rs1) + fi.Stype.signed_imm();
+		// A store takes the low sixteen bits as they are, boxed or not.
+		cpu.machine().memory.template write<uint16_t> (addr, uint16_t(src.i32[0]));
+	},
+	[] (char* buffer, size_t len, auto&, rv32i_instruction instr) RVPRINTR_ATTR {
+		return rv_expect_mnemonic(buffer, len, "fsh",
+			RVFDISASM::op_store(buffer, len, instr));
 	});
 
 	FLOAT_INSTR(FSW,
@@ -797,6 +829,42 @@ namespace riscv
 		const rv32f_instruction fi { instr };
 		auto& rs1 = cpu.registers().getfl(fi.R4type.rs1);
 		auto& dst = cpu.registers().getfl(fi.R4type.rd);
+		// Zfhmin adds three of the four half-precision conversions to this
+		// group; rs2 names the source format the same way funct2 names the
+		// destination, so a half on either side is rs2 == 2 or funct2 == 2.
+		if (fi.R4type.rs2 == 0x2 || fi.R4type.funct2 == 0x2) {
+			switch ((fi.R4type.funct2 << 3) | fi.R4type.rs2) {
+			case (0x0 << 3) | 0x2: // FCVT.S.H
+				dst.set_float(fp16::to_f32(rs1.get_half()));
+				return;
+			case (0x1 << 3) | 0x2: // FCVT.D.H
+				dst.set_double(fp16::to_f64(rs1.get_half()));
+				return;
+			case (0x2 << 3) | 0x0: // FCVT.H.S
+				// The single-precision source is itself NaN-boxed on RV64,
+				// and an unboxed one is the canonical NaN.
+				if constexpr (RVISGE64BIT(cpu) && nanboxing) {
+					if (UNLIKELY(static_cast<uint32_t>(rs1.i32[1]) != 0xFFFFFFFFu)) {
+						dst.load_u16(0x7E00);
+						return;
+					}
+				}
+				dst.load_u16(fp16::from_f32(rs1.f32[0]));
+				return;
+			case (0x2 << 3) | 0x1: // FCVT.H.D
+				// Narrowing in one step: going via f32 would round twice.
+				dst.load_u16(fp16::from_f64(rs1.f64));
+				return;
+			}
+			cpu.trigger_exception(ILLEGAL_OPERATION);
+			return;
+		}
+		// rs2 names the source format: the only pair left is single and
+		// double, so it must be whichever of the two the destination is not.
+		if (fi.R4type.rs2 != (fi.R4type.funct2 ^ 1)) {
+			cpu.trigger_exception(ILLEGAL_OPERATION);
+			return;
+		}
 		switch (fi.R4type.funct2) {
 		case 0x0: // FCVT.S.D (64 -> 32)
 			if (std::isnan(rs1.f64))
@@ -1092,6 +1160,12 @@ namespace riscv
 				return;
 			}
 			break;
+		case 0x2: // FMV.X.H (Zfhmin)
+			// Like FMV.X.W, the bits move untouched and the sign extends
+			// across the rest of the destination. The box is not checked:
+			// this is a bit move, not a read of a half-precision value.
+			dst = RVSIGNTYPE(cpu)(int16_t(rs1.i32[0]));
+			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},
@@ -1116,6 +1190,9 @@ namespace riscv
 				return;
 			}
 			break;
+		case 0x2: // FMV.H.X (Zfhmin)
+			dst.load_u16(uint16_t(rs1));
+			return;
 		}
 		cpu.trigger_exception(ILLEGAL_OPERATION);
 	},

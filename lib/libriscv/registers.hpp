@@ -43,6 +43,25 @@ namespace riscv
 			if constexpr (nanboxing)
 				this->nanbox();
 		}
+		void load_u16(uint16_t val) {
+			// Zfhmin boxes at sixteen bits: everything above the half stays
+			// ones, so reading it as a float or a double gives a NaN.
+			if constexpr (nanboxing) {
+				this->i64 = int64_t(uint64_t(val) | 0xFFFFFFFFFFFF0000ull);
+			} else {
+				this->i32[0] = val;
+			}
+		}
+		// A half is only a half if the box above it is intact; an unboxed
+		// register reads as the canonical quiet NaN instead (spec §21.3).
+		uint16_t get_half() const {
+			if constexpr (nanboxing) {
+				if (UNLIKELY((uint64_t(this->i64) & 0xFFFFFFFFFFFF0000ull)
+					!= 0xFFFFFFFFFFFF0000ull))
+					return 0x7E00; // canonical quiet NaN, binary16
+			}
+			return uint16_t(this->i32[0]);
+		}
 		void load_u64(uint64_t val) {
 			this->i64 = val;
 		}

@@ -186,6 +186,11 @@ rv32i_instruction Emitter<W>::emit_rvc()
 			else if (ci.CI.rd == 0 && ci.CI.upper_imm() != 0) { // C.LUI hint
 				instr.whole = 0x00000013; // ADDI x0, x0, 0
 			}
+			else if (ci.CI.upper_imm() == 0 && (ci.CI.rd & 1) != 0 && ci.CI.rd < 16) {
+				// Zcmop's C.MOP.n, which lives in the reserved imm = 0
+				// points and writes nothing at all -- not even rd.
+				instr.whole = 0x00000013; // ADDI x0, x0, 0
+			}
 			break; // C.ILLEGAL?
 		case CI_CODE(0b001, 0b01):
 			if constexpr (W == 4) {
@@ -509,6 +514,15 @@ rv32i_instruction Emitter<W>::emit_rvc()
 				instr.Itype.rd = 0;
 				instr.Itype.rs1 = 0;
 				instr.Itype.imm = 0x001; // EBREAK
+			}
+			else if (ci.CR.rs2 != 0)
+			{	// C.MV and C.ADD with rd = x0 are HINT encodings
+				// (insn:c-mv_hint, insn:c-add_hint), which the spec requires
+				// to execute as a no-op rather than trap. Zihintntl spells
+				// its non-temporal locality hints exactly this way --
+				// c.ntl.p1 is c.add x0, x2 -- so a compiler targeting the
+				// profile emits them into ordinary code.
+				instr.whole = 0x00000013; // ADDI x0, x0, 0
 			}
 		} break;
 		case CI_CODE(0b101, 0b10):

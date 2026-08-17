@@ -27,8 +27,13 @@ REG_PATTERNS = [
 # zero, small, all-ones, both sides of the sign boundary, an alternating pattern.
 IMM_SAMPLES = [0, 1, 0x7FF, 0x800, 0xFFF, 0x555, 0xAAA, 0x20, 0x3F, 0x40]
 
-RV64GC = "rv64gcv_zcb_zba_zbb_zbc_zbs_zicond_zicbom_zicboz_zifencei_zfa_zbkb_zvbb_zvkb"
-RV32GC = "rv32gcv_zcb_zba_zbb_zbc_zbs_zicond_zicbom_zicboz_zifencei_zfa_zbkb_zvbb_zvkb"
+# Everything libriscv's printers know how to name. The RVA23 mandatory
+# extensions are all here: a printer that cannot name an instruction the
+# emulator executes is a bug of its own, and this is where it shows up.
+_EXTS = ("zcb_zba_zbb_zbc_zbs_zicond_zicbom_zicboz_zifencei_zfa_zbkb"
+         "_zvbb_zvkb_zfhmin_zimop_zcmop_zawrs")
+RV64GC = "rv64gcv_" + _EXTS
+RV32GC = "rv32gcv_" + _EXTS
 
 
 def r_type(opcode, rd, funct3, rs1, rs2, funct7):
@@ -150,8 +155,17 @@ def upper_imm():
 
 
 def system():
-    """SYSTEM: every CSR against every CSR opcode, plus ecall/ebreak/mret/wfi."""
+    """SYSTEM: every CSR against every CSR opcode, plus ecall/ebreak/mret/wfi.
+
+    funct3 = 0 needs its own exhaustive pass with both register fields zero:
+    that is the only shape ecall, ebreak, mret, wfi and Zawrs' wrs.nto and
+    wrs.sto are ever encoded in, and the a5/a1 sweep below never reaches it.
+    funct3 = 4 is where Zimop's may-be-operations live, and the register
+    fields there are real operands, so the sweep covers them as they are.
+    """
     out = []
+    for csr in range(4096):
+        out.append((4, i_type(0x73, 0, 0, 0, csr)))
     for funct3 in range(8):
         for csr in range(4096):
             out.append((4, i_type(0x73, 15, funct3, 11, csr)))

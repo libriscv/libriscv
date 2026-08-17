@@ -243,6 +243,8 @@
 				case RV32F_LOAD: {
 					const rv32f_instruction fi { instruction };
 					switch (fi.Itype.funct3) {
+					case 0x1: // FLH (Zfhmin)
+						DECODER(DECODED_FLOAT(FLH));
 					case 0x2: // FLW
 						DECODER(DECODED_FLOAT(FLW));
 					case 0x3: // FLD
@@ -277,6 +279,8 @@
 				case RV32F_STORE: {
 					const rv32f_instruction fi { instruction };
 					switch (fi.Itype.funct3) {
+					case 0x1: // FSH (Zfhmin)
+						DECODER(DECODED_FLOAT(FSH));
 					case 0x2: // FSW
 						DECODER(DECODED_FLOAT(FSW));
 					case 0x3: // FSD
@@ -596,19 +600,16 @@
 					DECODER(DECODED_INSTR(NOP));
 				case CI_CODE(0b011, 0b01):
 					if (ci.CI.rd == 2) {
-						// insn:c-addi16sp_rsv: C.ADDI16SP is valid only when
-						// nzimm != 0; the code point with nzimm = 0 is
-						// reserved.
 						if (ci.CI16.signed_imm() != 0) {
 							DECODER(DECODED_COMPR(C1_ADDI16SP));
 						}
 					}
 					else if (ci.CI.rd != 0) {
-						// insn:c-lui_rsv: C.LUI is valid only when rd != x2
-						// and the immediate is not equal to zero; code points
-						// with imm = 0 are reserved.
 						if (ci.CI.upper_imm() != 0) {
 							DECODER(DECODED_COMPR(C1_LUI));
+						}
+						if ((ci.CI.rd & 1) != 0 && ci.CI.rd < 16) {
+							DECODER(DECODED_INSTR(NOP));
 						}
 					}
 					else if (ci.CI.rd == 0 && ci.CI.upper_imm() != 0) {
