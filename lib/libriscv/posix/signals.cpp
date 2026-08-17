@@ -81,10 +81,10 @@ void Signals<W>::enter(Machine<W>& machine, int sig)
 	const address_t uctx_addr = sp + Layout::siginfo_size;
 
 	// siginfo_t: the signal was sent by a thread of this same process
-	static constexpr int32_t SI_TKILL = -6;
+	static constexpr int32_t si_tkill = -6;
 	frame.put_u32(0, uint32_t(sig));           // si_signo
 	frame.put_u32(4, 0);                       // si_errno
-	frame.put_u32(8, uint32_t(SI_TKILL));      // si_code
+	frame.put_u32(8, uint32_t(si_tkill));      // si_code
 	frame.put_u32(Layout::si_union + 0, MAIN_THREAD_TID); // si_pid
 	frame.put_u32(Layout::si_union + 4, 0);    // si_uid
 
