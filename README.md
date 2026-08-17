@@ -21,7 +21,7 @@ Goals:
 - Modern, type-safe VM call and system call interfaces
 	- The safe interfaces prevents all kinds of footguns that the author has personally suffered, and consequently blocked off forever :-)
 - [Secure speculation-safe sandbox](SECURITY.md)
-- Low attack surface, only 20k LOC
+- Low attack surface, only 20k LOC (35k with RVA23 and binary translation)
 - Platform-independent and super-easy to embed
 	- Supports all architectures and all platforms, C++17 or later
 - Pause and resume is a first-class citizen
@@ -132,8 +132,7 @@ Most modern languages embed their own pretty printers for debuginfo which enable
 
 ## Instruction set support
 
-The emulator currently supports the RVA22U64 profile. More specifically, RV32GCB, RV64GCB (imafdc_zicsr_zifence_zicond_zba_zbb_zbc_zbs) and RV128G.
-The A-, F-, D-, C- and B-extensions should be 100% supported on 32- and 64-bit. V-extension is undergoing work.
+The emulator currently supports the RVA23U64 profile, `-march=rva23u64` in GCC 16+. More specifically, RV32GCVB, RV64GCVB (imafdcbv_zicsr_zifence_zicond_zfa_zcb) and RV128G.
 
 The 128-bit ISA support is experimental, and the specification is not yet complete.
 
@@ -390,7 +389,7 @@ The feature is not restricted to just 32-bit address spaces. It can be configure
 
 When binary translation is enabled, all emulator settings have roughly the same performance. However, when in interpreter mode (eg. on devices where loading shared objects is not allowed), there are a few ways to reliably improve performance.
 
-Disabling the C-extension increases interpreter speed by ~20-25%, but requires a custom RISC-V toolchain. [Here's how to create one](/docs/NEWLIB.md). There are technical reasons for this, and it will not get better over time.
+Disabling the C-extension can increase interpreter speed by ~20-25%, but requires a custom RISC-V toolchain. [Here's how to create one](/docs/NEWLIB.md). There are technical reasons for this, and it will not get better over time.
 
 The C-extension can be disabled by setting the RISCV_EXT_C CMake option to OFF:
 
@@ -401,14 +400,14 @@ cmake .. -DRISCV_EXT_C=OFF -DCMAKE_BUILD_TYPE=Release
 
 Other build options that aid performance: Enabling link-time optimizations. Using the latest and greatest compiler version. Enabling all the native accelerated system calls. Enabling the read-write arena (default ON). Enabling experimental features, like 32-bit unbounded address space. Unrolling loops in the sandboxed program.
 
-Ultimately, all those settings will only increase performance by ~30-35% at most. For final builds, even on console and mobile systems, an [embedded binary translated code file](#full-binary-translation-as-embeddable-code) should be used to enable full binary translation performance. It doesn't require dynamic linking or changing page permissions on the system, as it is just a code file you add to your project. Full binary translation can easily increase performance up to 20x.
+Ultimately, all those settings will only increase performance by ~30-35% at most. For final builds, even on console and mobile systems, an [embedded binary translated code file](#full-binary-translation-as-embeddable-code) should be used to enable full binary translation performance. It doesn't require dynamic linking or changing page permissions on the system, as it is just a code file you add to your project. Full binary translation can easily increase performance up to 20x, and also works in WASM. For WASM you will want to cross-compile the binary translation itself with emscripten.
 
 
 ## Game development examples
 
 There is a simple [step-by-step gamedev example](/examples/gamedev) under the examples folder. There are also examples for the C++, Rust, Nelua and Nim languages.
 
-For a more complete and thorough implementation, have a look at [RVScript](https://github.com/fwsGonzo/rvscript). It embeds libriscv in a tiny example game framework and automatically builds fully functional C++ programs for ultra low-latency scripting.
+For a more complete and thorough implementation, have a look at the expert examples for [Rust](/examples/rust_expert) and [C++](/examples/expert). They are both using hash-based signatures to essentially do a handshake at load time to create fast host function dispatch, as well as being able to automatically match the ABI.
 
 ### Guides
 
