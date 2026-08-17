@@ -9,8 +9,8 @@ namespace riscv {
 /// @brief Mirrors std::pair<const K, V>, the value_type of std::unordered_map
 template <typename K, typename V>
 struct GuestStdPair {
-	K first;
-	V second;
+	alignas(guest_alignof_v<K>) K first;
+	alignas(guest_alignof_v<V>) V second;
 };
 
 /// @brief Mirrors libstdc++'s __detail::_Hash_node, a node in the singly-
@@ -21,15 +21,15 @@ struct GuestHashNode;
 
 template <int W, typename K, typename V>
 struct GuestHashNode<W, K, V, false> {
-	riscv::address_type<W> next; // _Hash_node_base::_M_nxt
+	alignas(guest_word_align<W>) riscv::address_type<W> next; // _Hash_node_base::_M_nxt
 	GuestStdPair<K, V> value;    // _Hash_node_value_base::_M_storage
 };
 
 template <int W, typename K, typename V>
 struct GuestHashNode<W, K, V, true> {
-	riscv::address_type<W> next;
+	alignas(guest_word_align<W>) riscv::address_type<W> next;
 	GuestStdPair<K, V> value;
-	riscv::address_type<W> hash_code; // _Hash_node_code_cache::_M_hash_code
+	alignas(guest_word_align<W>) riscv::address_type<W> hash_code; // _Hash_node_code_cache::_M_hash_code
 };
 
 // View into libstdc++'s std::unordered_map<K, V>
@@ -52,7 +52,7 @@ struct GuestHashNode<W, K, V, true> {
 // *not* store hash codes, and must be given CacheHashCode = false in order to
 // match the guest. Getting it wrong shifts every key and value in the node.
 template <int W, typename K, typename V, bool CacheHashCode>
-struct GuestStdUnorderedMap
+struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
@@ -70,7 +70,9 @@ struct GuestStdUnorderedMap
 	gaddr_t before_begin;  // __node_base    _M_before_begin (a lone _M_nxt)
 	gaddr_t element_cnt;   // size_type      _M_element_count
 	float   max_load;      // _Prime_rehash_policy::_M_max_load_factor
-	gaddr_t next_resize;   // _Prime_rehash_policy::_M_next_resize
+	// The word after the float is padded back to a whole word by the guest,
+	// even on a host that would have packed it right behind the float
+	alignas(guest_word_align<W>) gaddr_t next_resize; // _Prime_rehash_policy::_M_next_resize
 	gaddr_t single_bucket; // __node_base_ptr _M_single_bucket
 
 	// Offsets of the members that the map itself points at
@@ -620,6 +622,12 @@ struct GuestStdUnorderedMapLayout {
 	static_assert(offsetof(map_type, max_load) == 4 * WORD, "_M_max_load_factor");
 	static_assert(offsetof(map_type, next_resize) == 5 * WORD, "_M_next_resize");
 	static_assert(offsetof(map_type, single_bucket) == 6 * WORD, "_M_single_bucket");
+	static_assert(alignof(map_type) == WORD, "Aligned like a guest word");
+	// A 64-bit value is 8-aligned on a 32-bit guest too, which is a layout the
+	// host does not always share (see guest_alignof in guest_common.hpp)
+	using wide_pair = GuestStdPair<int32_t, int64_t>;
+	static_assert(sizeof(wide_pair) == 16, "pair<int, int64_t>");
+	static_assert(offsetof(wide_pair, second) == 8, "pair<int, int64_t>");
 };
 template struct GuestStdUnorderedMapLayout<4>;
 template struct GuestStdUnorderedMapLayout<8>;
@@ -634,6 +642,10 @@ static_assert(sizeof(GuestHashNode<4, GuestStdString<4>, int, false>) == 32, "_H
 static_assert(sizeof(GuestHashNode<8, GuestStdString<8>, int, false>) == 48, "_Hash_node<pair<string, int>>");
 static_assert(sizeof(GuestHashNode<4, GuestStdString<4>, GuestStdString<4>, true>) == 56, "_Hash_node<pair<string, string>>");
 static_assert(sizeof(GuestHashNode<8, GuestStdString<8>, GuestStdString<8>, true>) == 80, "_Hash_node<pair<string, string>>");
+// A 64-bit value is 8-aligned on a 32-bit guest too, which is a layout the host
+// does not always share (see guest_alignof in guest_common.hpp)
+static_assert(sizeof(GuestHashNode<4, GuestStdString<4>, double, true>) == 48, "_Hash_node<pair<string, double>>");
+static_assert(sizeof(GuestHashNode<8, GuestStdString<8>, double, true>) == 56, "_Hash_node<pair<string, double>>");
 
 /// @brief A guest std::unordered_map that lives in the arena, and which
 /// frees itself (and every node) at the end of the scope.

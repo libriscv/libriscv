@@ -11,7 +11,7 @@ namespace riscv {
 /// NOTE: Like GuestRustStr this is the layout of a slice *stored in memory*.
 /// As a function argument the two halves go in separate registers.
 template <int W, typename T>
-struct GuestRustSlice {
+struct alignas(guest_word_align<W>) GuestRustSlice {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 
@@ -44,7 +44,7 @@ struct GuestRustSlice {
 /// NOTE: An empty vector still has a non-null (dangling) pointer, because
 /// Rust holds a NonNull<T>. Only a non-zero capacity means an allocation.
 template <int W, typename T>
-struct GuestRustVec {
+struct alignas(guest_word_align<W>) GuestRustVec {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 	using value_type = T;
@@ -303,6 +303,8 @@ static_assert(sizeof(GuestRustVec<8, int>) == 24, "Rust Vec is 3 words");
 static_assert(sizeof(GuestRustSlice<4, int>) == 8, "Rust &[T] is 2 words");
 static_assert(sizeof(GuestRustSlice<8, int>) == 16, "Rust &[T] is 2 words");
 static_assert(std::is_standard_layout_v<GuestRustVec<8, int>>, "Standard layout");
+static_assert(alignof(GuestRustVec<8, int>) == 8, "Aligned like a guest word");
+static_assert(alignof(GuestRustSlice<8, int>) == 8, "Aligned like a guest word");
 
 /// @brief A guest Rust Vec that lives in the arena, and which frees itself
 /// (and its elements) at the end of the scope.

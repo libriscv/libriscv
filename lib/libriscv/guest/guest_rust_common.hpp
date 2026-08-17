@@ -115,7 +115,7 @@ struct guest_host_type<W, GuestRustBoxedStr<W>> { using type = std::string; };
 /// undefined behavior, as the collections hold a NonNull<T>.
 template <typename T>
 struct GuestRustDangling {
-	static constexpr std::size_t value = alignof(T);
+	static constexpr std::size_t value = guest_alignof_v<T>;
 };
 
 /// @brief The smallest allocation that Rust's RawVec makes, in elements. It

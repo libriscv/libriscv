@@ -30,7 +30,7 @@ namespace riscv {
 /// declare the value type, alias the box, then define the value type. Only the
 /// operations that touch the pointee need T to be complete.
 template <int W, typename T>
-struct GuestRustBox {
+struct alignas(guest_word_align<W>) GuestRustBox {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 	using element_type = T;
@@ -147,7 +147,7 @@ struct GuestRustBox {
 /// @brief View into Rust's Box<[T]>: an owned { ptr, len }, ie. a Vec<T> that
 /// gave up its capacity. One allocation of exactly len elements.
 template <int W, typename T>
-struct GuestRustBoxedSlice {
+struct alignas(guest_word_align<W>) GuestRustBoxedSlice {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 	using value_type = T;
@@ -272,7 +272,7 @@ private:
 /// @brief View into Rust's Box<str>: an owned { ptr, len } of UTF-8 bytes. A
 /// String without the capacity word, for a string that never grows again.
 template <int W>
-struct GuestRustBoxedStr {
+struct alignas(guest_word_align<W>) GuestRustBoxedStr {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 
@@ -367,6 +367,9 @@ static_assert(sizeof(GuestRustBoxedStr<8>) == 16, "Rust Box<str> is 2 words");
 static_assert(std::is_standard_layout_v<GuestRustBox<8, int>>, "Standard layout");
 static_assert(std::is_standard_layout_v<GuestRustBoxedSlice<8, int>>, "Standard layout");
 static_assert(std::is_standard_layout_v<GuestRustBoxedStr<8>>, "Standard layout");
+static_assert(alignof(GuestRustBox<8, int>) == 8, "Aligned like a guest word");
+static_assert(alignof(GuestRustBoxedSlice<8, int>) == 8, "Aligned like a guest word");
+static_assert(alignof(GuestRustBoxedStr<8>) == 8, "Aligned like a guest word");
 
 /// @brief A guest Rust Box that lives in the arena, and which frees itself
 /// (and the value it points at) at the end of the scope.

@@ -59,7 +59,7 @@ struct GuestRustEnum
 
 	/// @brief The alignment of the widest variant, which the payload as a whole
 	/// is aligned to
-	static constexpr std::size_t payload_align = std::max({alignof(Types)...});
+	static constexpr std::size_t payload_align = std::max({guest_alignof_v<Types>...});
 	/// @brief The size of the payload, rounded up to its alignment
 	static constexpr std::size_t payload_size =
 		((std::max({sizeof(Types)...}) + payload_align - 1) / payload_align) * payload_align;
@@ -76,7 +76,7 @@ struct GuestRustEnum
 		"containers (GuestStdString, GuestStdUnorderedMap) do, and cannot be used "
 		"as a variant of a Rust enum.");
 
-	Tag tag;                                      // the discriminant
+	alignas(guest_alignof_v<Tag>) Tag tag;        // the discriminant
 	alignas(payload_align) uint8_t payload[payload_size];
 
 	/// @brief An enum holding a default-constructed first variant. It allocates

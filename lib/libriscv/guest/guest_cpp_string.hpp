@@ -8,7 +8,7 @@ namespace riscv {
 
 // View into libstdc++'s std::string
 template <int W>
-struct GuestStdString {
+struct alignas(guest_word_align<W>) GuestStdString {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 	static constexpr std::size_t SSO = 15;
@@ -116,6 +116,13 @@ struct GuestStdString {
 		this->size = 0;
 	}
 };
+
+// A guest std::string is two machine words plus the 16-byte inline buffer,
+// and it is aligned like a machine word
+static_assert(sizeof(GuestStdString<4>) == 24, "std::string is 24 bytes on a 32-bit guest");
+static_assert(sizeof(GuestStdString<8>) == 32, "std::string is 32 bytes on a 64-bit guest");
+static_assert(alignof(GuestStdString<8>) == 8, "Aligned like a guest word");
+static_assert(std::is_standard_layout_v<GuestStdString<8>>, "Standard layout");
 
 /// @brief A guest std::string that lives in the arena, and which frees
 /// itself (and its characters) at the end of the scope.

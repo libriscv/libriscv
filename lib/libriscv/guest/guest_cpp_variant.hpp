@@ -33,7 +33,7 @@ struct GuestStdVariant
 	template <std::size_t I>
 	using alternative_t = std::tuple_element_t<I, std::tuple<Types...>>;
 
-	static constexpr std::size_t union_align = std::max({alignof(Types)...});
+	static constexpr std::size_t union_align = std::max({guest_alignof_v<Types>...});
 	/// @brief The size of the union, rounded up to its alignment
 	static constexpr std::size_t union_size =
 		((std::max({sizeof(Types)...}) + union_align - 1) / union_align) * union_align;
@@ -279,8 +279,14 @@ struct GuestStdVariantLayout {
 	static_assert(alignof(variant_type<bool, int32_t, double>) == 8, "variant<bool, int, double>");
 	static_assert(sizeof(variant_type<bool, string_type>) == sizeof(string_type) + alignof(string_type),
 		"variant<bool, std::string>");
+	/// @brief True when the host lays out the alternatives the way the guest
+	/// does. A 32-bit x86 host aligns a double to 4 bytes, which makes its own
+	/// std::variant smaller than the guest's, and no comparison against it can
+	/// say anything about the guest.
+	static constexpr bool host_agrees = alignof(double) == sizeof(double);
 	// The layout must match the host std::variant, which has the same ABI
-	static_assert(sizeof(variant_type<bool, int32_t, double>) == sizeof(std::variant<bool, int32_t, double>),
+	static_assert(!host_agrees ||
+		sizeof(variant_type<bool, int32_t, double>) == sizeof(std::variant<bool, int32_t, double>),
 		"variant<bool, int, double> matches the host");
 	static_assert(sizeof(variant_type<uint8_t, uint16_t, float>) == sizeof(std::variant<uint8_t, uint16_t, float>),
 		"variant<char, short, float> matches the host");

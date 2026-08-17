@@ -14,7 +14,7 @@ namespace riscv {
 /// two halves in separate registers instead, so a &str argument is passed as
 /// two integer arguments: the address and the length.
 template <int W>
-struct GuestRustStr {
+struct alignas(guest_word_align<W>) GuestRustStr {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 
@@ -57,7 +57,7 @@ struct GuestRustStr {
 /// writes into a string here passes the bytes through unchanged: use
 /// is_valid_utf8() when the source is not already known to be text.
 template <int W>
-struct GuestRustString {
+struct alignas(guest_word_align<W>) GuestRustString {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 
@@ -245,6 +245,9 @@ static_assert(sizeof(GuestRustStr<4>) == 8, "Rust &str is 2 words");
 static_assert(sizeof(GuestRustStr<8>) == 16, "Rust &str is 2 words");
 static_assert(std::is_standard_layout_v<GuestRustString<8>>, "Standard layout");
 static_assert(std::is_standard_layout_v<GuestRustStr<8>>, "Standard layout");
+// A 64-bit guest word is 8-aligned even on a host that would align it to 4
+static_assert(alignof(GuestRustString<8>) == 8, "Aligned like a guest word");
+static_assert(alignof(GuestRustStr<8>) == 8, "Aligned like a guest word");
 
 /// @brief A guest Rust String that lives in the arena, and which frees
 /// itself (and its bytes) at the end of the scope.

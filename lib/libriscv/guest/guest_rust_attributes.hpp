@@ -37,7 +37,7 @@ struct GuestRustAttr {
 	using value_type = Value;
 
 	GuestRustString<W> key;
-	Value value;
+	alignas(guest_alignof_v<Value>) Value value;
 
 	constexpr GuestRustAttr() noexcept : key(), value() {}
 

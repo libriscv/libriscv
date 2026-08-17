@@ -9,7 +9,7 @@ namespace riscv {
 
 // View into libstdc++ and LLVM libc++ std::vector (same layout)
 template <int W, typename T>
-struct GuestStdVector {
+struct alignas(guest_word_align<W>) GuestStdVector {
 	using gaddr_t = riscv::address_type<W>;
 	using machine_t = riscv::Machine<W>;
 

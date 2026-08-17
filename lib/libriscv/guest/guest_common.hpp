@@ -21,6 +21,32 @@
 
 namespace riscv {
 
+/// @brief The alignment that the *guest* gives a type, which is not always the
+/// one the host gives it: a RISC-V guest aligns every scalar to its own size,
+/// while a 32-bit x86 host aligns uint64_t and double to 4 bytes. A mirror that
+/// asked the host would then put a 64-bit member at the wrong offset, and be
+/// wrong about its own size, so the mirrors ask here instead - and declare
+/// themselves alignas() the answer, so that alignof() agrees with the guest for
+/// every mirror built out of other mirrors.
+template <typename T, typename = void>
+struct guest_alignof {
+	static constexpr std::size_t value = alignof(T);
+};
+template <typename T>
+struct guest_alignof<T, std::enable_if_t<
+	(std::is_arithmetic_v<T> || std::is_enum_v<T>) && sizeof(T) <= 8>>
+{
+	static constexpr std::size_t value = sizeof(T);
+};
+
+template <typename T>
+inline constexpr std::size_t guest_alignof_v = guest_alignof<T>::value;
+
+/// @brief The alignment of a guest machine word: 4 on a 32-bit guest and 8 on
+/// a 64-bit one, whatever the host makes of address_type<W>.
+template <int W>
+inline constexpr std::size_t guest_word_align = guest_alignof_v<address_type<W>>;
+
 // View a guest memory location as a reference to a C++ object
 template <int W, typename T>
 struct GuestRef {
