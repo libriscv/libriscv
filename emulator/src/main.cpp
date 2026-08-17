@@ -39,6 +39,7 @@ struct Arguments {
 	bool ignore_text = false;
 	bool background = riscv::libtcc_enabled; // Run binary translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
+	bool libc_fastpath = false; // Hot-patch known libc functions
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
 	uint64_t max_memory = 0;
 	std::vector<std::string> allowed_files;
@@ -84,6 +85,7 @@ static const struct option long_options[] = {
 	{"non-interactive", no_argument, 0, 1003},
 	{"verbose-syscalls", no_argument, 0, 1004},
 	{"ebreak", required_argument, 0, 1005},
+	{"libc-fastpath", no_argument, 0, 1006},
 	{0, 0, 0, 0}
 };
 
@@ -123,6 +125,7 @@ static void print_help(const char* name)
 		"  -X, --execute-only Enforce execute-only segments (no read/write)\n"
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
 		"  -c, --call func    Call a function after loading the program\n"
+		"      --libc-fastpath  Hot-patch memcpy, memset, strlen etc. with native implementations\n"
 		"\n"
 	);
 	printf("libriscv v%d.%d is compiled with:\n"
@@ -206,6 +209,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 1003: args.non_interactive = true; break;
 			case 1004: args.verbose_syscalls = true; break;
 			case 1005: args.ebreak_locations.push_back(optarg); break;
+			case 1006: args.libc_fastpath = true; break;
 			case 'm': // --memory
 				if (optarg) {
 					char* endptr;
@@ -312,6 +316,7 @@ static void run_program(
 		.verbose_loader = cli_args.verbose,
 		.use_shared_execute_segments = false, // We are only creating one machine, disabling this can enable some optimizations
 		.ebreak_locations = std::move(ebreaks),
+		.libc_fastpath = cli_args.libc_fastpath,
 #ifdef RISCV_BINARY_TRANSLATION
 		.translate_enabled = !cli_args.no_translate,
 		.translate_future_segments = cli_args.translate_future,

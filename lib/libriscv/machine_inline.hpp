@@ -64,6 +64,16 @@ inline long Machine<W>::stdin_read(char* buffer, size_t len) const
 template <int W> inline
 void Machine<W>::install_syscall_handler(size_t sysn, syscall_t handler)
 {
+	// Once the libc fast-path owns EBREAK it keeps it, and anything installed
+	// afterwards (eg. setup_linux_syscalls()) becomes the handler it chains to
+	// for breakpoints that are not hot-patched libc functions. Without this the
+	// fast-path would silently stop working depending on set-up order.
+	if (UNLIKELY(sysn == SYSCALL_EBREAK && m_libc_fastpath_ebreak != nullptr
+		&& handler != m_libc_fastpath_ebreak))
+	{
+		m_previous_ebreak_handler = handler;
+		return;
+	}
 	// A work-around for thread-sanitizer false positives (setting the same handler)
 	if (syscall_handlers.at(sysn) != handler)
 		syscall_handlers.at(sysn) = handler;

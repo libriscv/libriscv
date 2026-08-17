@@ -377,6 +377,27 @@ Copy [`examples/gamedev/cpp_program/env.cpp`](examples/gamedev/cpp_program/env.c
 
 **Verification**: `objdump -d program.elf | grep -A4 '__wrap_malloc'` must show a 3-instruction stub (`li a7, N; ecall; ret`). A large function body means the takeover failed.
 
+### Native libc Without Guest Changes
+
+When the guest cannot be rebuilt — a prebuilt binary, a distro toolchain, a program someone else ships — `libc_fastpath` gets the same acceleration for the memory and string functions without touching the guest at all:
+
+```cpp
+riscv::Machine<8> machine(binary, {
+    .libc_fastpath = true,
+});
+```
+
+The loader looks up `memcpy`, `memset`, `memmove`, `memcmp`, `memchr`, `rawmemchr`, `strlen`, `strnlen`, `strcmp`, `strncmp`, `strcpy`, `stpcpy`, `strncpy`, `strchr` and `strchrnul` (plus their `__`-prefixed and `bcmp`/`__memcmpeq` aliases) in the ELF symbol table, and rewrites the *decoder cache entry* at each function's entry point so that calling it runs a native implementation and returns straight to `ra`.
+
+Guest memory is not modified: the original machine code is still there, so backtraces, a debugger and `cpu.simulate_precise()` all keep seeing — and executing — the real function. The CLI exposes this as `--libc-fastpath`.
+
+Requirements and caveats:
+
+- The program's libc must be statically linked and its symbols must not be stripped. No-op when stripped.
+- Only the initial execute segment is patched.
+- The instruction counter is penalized in the same way as the accelerated system calls charge.
+- It is worth what the program's libc traffic is worth. A `memcpy`-bound loop gets ~75x.
+
 ### Host Allocation on Behalf of Guest
 
 Once the heap is taken over, the host can allocate and free guest memory:

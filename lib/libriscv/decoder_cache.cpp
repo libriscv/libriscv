@@ -489,6 +489,12 @@ namespace riscv
 			}
 		}
 
+		if constexpr (W <= 8) {
+			if (options.libc_fastpath && is_initial) {
+				machine().install_libc_fastpath(exec, options.verbose_loader);
+			}
+		}
+
 		TIME_POINT(t4);
 #ifdef ENABLE_TIMINGS
 		const long t1t0 = nanodiff(t0, t1);

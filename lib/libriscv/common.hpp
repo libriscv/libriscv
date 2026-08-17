@@ -151,6 +151,12 @@ namespace riscv
 		/// @details This is useful for debugging and live-patching programs.
 		std::vector<std::variant<address_type<W>, std::string>> ebreak_locations {};
 
+		/// @brief Hot-patch well-known libc functions (memcpy, memset, strlen, ...)
+		/// so that calls to them are performed natively instead of emulated.
+		/// @details The functions are found by name in the ELF symbol table, and
+		/// only the decoder cache is modified, preserving the original machine code.
+		bool libc_fastpath = false;
+
 #ifdef RISCV_BINARY_TRANSLATION
 		/// @brief Enable the binary translator.
 		bool translate_enabled = true;

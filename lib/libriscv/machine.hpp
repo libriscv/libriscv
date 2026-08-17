@@ -395,6 +395,22 @@ namespace riscv
 		// Optional custom memory-related system calls
 		static void setup_native_memory(size_t sysnum);
 
+		/// @brief Hot-patch well-known libc functions (memcpy, memset, strlen, ...)
+		/// in an execute segment, so that calls to them are performed natively.
+		/// @param exec The execute segment to patch.
+		/// @param verbose Print each patched function.
+		/// @return The number of functions that were patched.
+		/// @details Only the decoder cache is modified: guest memory keeps the
+		/// original machine code, so debuggers, backtraces and the single-stepping
+		/// simulator still see (and execute) the real function.
+		size_t install_libc_fastpath(DecodedExecuteSegment<W>& exec, bool verbose = false);
+		/// @brief Install the EBREAK handler that hot-patched libc functions use,
+		/// chaining onto any EBREAK handler that is already installed.
+		static void install_libc_fastpath_handler();
+		/// @brief Invoke the EBREAK handler that was installed before the libc
+		/// fast-path handler took over (a debugger breakpoint, usually).
+		static void previous_ebreak_handler(Machine<W>&);
+
 		// System calls, files and threads implementations
 		bool has_file_descriptors() const noexcept { return m_fds != nullptr; }
 		// The "minimum": lseek, read, write, exit (provided for example usage)
@@ -450,6 +466,8 @@ namespace riscv
 		auto resolve_args(std::index_sequence<indices...>) const;
 		static void setup_native_heap_internal(const size_t);
 		[[noreturn]] void timeout_exception(uint64_t);
+		static inline syscall_t m_libc_fastpath_ebreak = nullptr;
+		static inline syscall_t m_previous_ebreak_handler = nullptr;
 
 		uint64_t     m_counter = 0;
 		uint64_t     m_max_counter = 0;
