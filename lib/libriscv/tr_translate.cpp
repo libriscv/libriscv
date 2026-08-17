@@ -10,7 +10,6 @@
 #include <chrono>
 #include <fstream>
 #include <mutex>
-#include <sstream>
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
 # define YEP_IS_WINDOWS 1
 # include "win32/dlfcn.h"
@@ -906,15 +905,20 @@ void CPU<W>::produce_embeddable_code(const MachineOptions<W>& options, DecodedEx
 	const std::string& embed_filename = options.translation_filename(
 		embed.prefix, hash, embed.suffix);
 
-	std::stringstream embed_code;
-	embed_code << "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
+	std::string embed_code;
+	embed_code.reserve(output.code->size() + output.mappings.size() * 24 + 4096);
+	embed_code += "#define EMBEDDABLE_CODE 1\n"; // Mark as embeddable variant
 	for (auto& def : output.defines) {
-		embed_code << "#define " << def.first << " " << def.second << "\n";
+		embed_code += "#define ";
+		embed_code += def.first;
+		embed_code += " ";
+		embed_code += def.second;
+		embed_code += "\n";
 	}
-	embed_code << *output.code;
+	embed_code += *output.code;
 	// Construct a footer that self-registers the translation
 	const std::string reg_func = "libriscv_register_translation" + std::to_string(W);
-	embed_code << R"V0G0N(
+	embed_code += R"V0G0N(
 struct Mappings {
 	addr_t   addr;
 	unsigned mapping_index;
@@ -959,17 +963,22 @@ static REGISTRATION_ATTR void register_translation() {
 		snprintf(buffer, sizeof(buffer), 
 			"{0x%lX, %u},\n",
 			(long)mapping.addr, mapping_index);
-		embed_code << buffer;
+		embed_code += buffer;
 	}
-	embed_code << "    };\n"
+	embed_code += "    };\n"
 		"static bintr_func unique_mappings[] = {\n";
 	for (auto* handler : handlers) {
-		embed_code << "    " << *handler << ",\n";
+		embed_code += "    ";
+		embed_code += *handler;
+		embed_code += ",\n";
 	}
-	embed_code << "};\n"
-		"    " << reg_func << "(" << hash << ", mappings, " << output.mappings.size()
-		<< ", unique_mappings, " << mapping_indices.size() << ", (void*)&init);\n";
-	embed_code << R"V0G0N(}
+	embed_code += "};\n    ";
+	embed_code += reg_func;
+	embed_code += "(" + std::to_string(hash)
+		+ ", mappings, " + std::to_string(output.mappings.size())
+		+ ", unique_mappings, " + std::to_string(mapping_indices.size())
+		+ ", (void*)&init);\n";
+	embed_code += R"V0G0N(}
 #ifdef CALLBACK_INIT
 EXTERN_C __attribute__((used, visibility("default"))) void libriscv_init_with_callback4(RegistrationFunction regfunc) {
 	libriscv_register_translation4 = regfunc;
@@ -989,10 +998,10 @@ EXTERN_C __attribute__((used, visibility("default"))) void libriscv_init_with_ca
 		if (!embed_file.is_open()) {
 			throw MachineException(INVALID_PROGRAM, "Failed to open embeddable code file");
 		}
-		embed_file << embed_code.str();
+		embed_file << embed_code;
 	} else {
 		// Return the embeddable code as a string
-		*embed.result_c99 = embed_code.str();
+		*embed.result_c99 = std::move(embed_code);
 	}
 }
 
