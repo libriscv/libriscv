@@ -126,6 +126,11 @@ namespace riscv
 		/// locality and also enables read-write arena if the CMake option is ON.
 		bool use_memory_arena = true;
 
+		/// @brief Preserve the vector registers, vl and vtype whenever register
+		/// state is copied: forking a machine, switching threads and delivering
+		/// a signal. Disabling skips 1kB of register state.
+		bool preserve_vector_registers = true;
+
 		/// @brief Enable sharing of execute segments between machines.
 		/// @details This will allow multiple machines to share the same execute
 		/// segment, reducing memory usage and increasing performance.

@@ -40,12 +40,15 @@ namespace riscv
 	};
 
 	template <int W>
-	CPU<W>::CPU(Machine<W>& machine, const Machine<W>& other)
+	CPU<W>::CPU(Machine<W>& machine, const Machine<W>& other, const MachineOptions<W>& options)
 		: m_machine { machine }, m_exec(other.cpu.m_exec)
 	{
-		// Copy all registers except vectors
-		// Users can still copy vector registers by assigning to registers().rvv().
-		this->registers().copy_from(Registers<W>::Options::NoVectors, other.cpu.registers());
+		// Copy all registers, with vector state conditional on options.preserve_vector_registers
+		this->registers().copy_from(
+			options.preserve_vector_registers
+				? Registers<W>::Options::Everything
+				: Registers<W>::Options::NoVectors,
+			other.cpu.registers());
 	}
 	template <int W>
 	void CPU<W>::reset()

@@ -130,7 +130,7 @@ namespace riscv
 		void reset_stack_pointer() noexcept;
 
 		CPU(Machine<W>&);
-		CPU(Machine<W>&, const Machine<W>& other); // Fork
+		CPU(Machine<W>&, const Machine<W>& other, const MachineOptions<W>& options); // Fork
 
 		DecodedExecuteSegment<W>& init_execute_area(const void* data, address_t begin, address_t length, bool is_likely_jit = false);
 		void set_execute_segment(DecodedExecuteSegment<W>& seg) noexcept { m_exec = &seg; }

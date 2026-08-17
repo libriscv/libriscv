@@ -130,9 +130,9 @@ inline void Thread<W>::resume()
 {
 	threading.m_current = this;
 	auto& m = threading.machine;
-	// restore registers
+	// restore registers (vector state too, unless opted out)
 	m.cpu.registers().copy_from(
-		Registers<W>::Options::NoVectors,
+		m.register_copy_options(),
 		this->stored_regs);
 	THPRINT(threading.machine,
 		"Returning to tid=%d tls=0x%lX stack=0x%lX\n",
@@ -146,9 +146,9 @@ inline void Thread<W>::resume()
 template <int W>
 inline void Thread<W>::suspend()
 {
-	// copy all regs except vector lanes
+	// copy all regs (vector state too, unless opted out)
 	this->stored_regs.copy_from(
-		Registers<W>::Options::NoVectors,
+		threading.machine.register_copy_options(),
 		threading.machine.cpu.registers());
 	// add to suspended (NB: can throw)
 	threading.m_suspended.push_back(this);
@@ -165,9 +165,9 @@ inline void Thread<W>::suspend(address_t return_value)
 template <int W>
 inline void Thread<W>::block(uint32_t reason, uint32_t extra)
 {
-	// copy all regs except vector lanes
+	// copy all regs (vector state too, unless opted out)
 	this->stored_regs.copy_from(
-		Registers<W>::Options::NoVectors,
+		threading.machine.register_copy_options(),
 		threading.machine.cpu.registers());
 	this->block_word = reason;
 	this->block_extra = extra;
@@ -230,7 +230,7 @@ inline Thread<W>::Thread(
 	  stack_base(other.stack_base), stack_size(other.stack_size),
 	  clear_tid(other.clear_tid), block_word(other.block_word), block_extra(other.block_extra)
 {
-	stored_regs.copy_from(Registers<W>::Options::NoVectors, other.stored_regs);
+	stored_regs.copy_from(mt.machine.register_copy_options(), other.stored_regs);
 }
 
 template <int W>

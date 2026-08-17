@@ -61,9 +61,11 @@ void Signals<W>::enter(Machine<W>& machine, int sig)
 	auto* thread = machine.threads().get_thread();
 	auto& pt = per_thread(thread->tid);
 
-	// Remember the interrupted state for a future sigreturn
+	// Remember the interrupted state for a future sigreturn. A signal lands on
+	// any instruction, vector loops included, and the handler will run vector
+	// code of its own, so the vector state has to be part of what is saved.
 	pt.sigret.regs.copy_from(
-		Registers<W>::Options::NoVectors, machine.cpu.registers());
+		machine.register_copy_options(), machine.cpu.registers());
 
 	address_t sp = machine.cpu.reg(REG_SP);
 	if (sigact.altstack) {
@@ -147,10 +149,18 @@ void Signals<W>::leave(Machine<W>& machine)
 		// A handler that lost its stack cannot be resumed from the ucontext,
 		// so fall back to the state we saved when entering the handler.
 		machine.cpu.registers().copy_from(
-			Registers<W>::Options::NoVectors, pt.sigret.regs);
+			machine.register_copy_options(), pt.sigret.regs);
 		THPRINT(machine, "<<< sigreturn: unreadable ucontext, restored saved state\n");
 		return;
 	}
+
+	// Our signal frame only carries the integer registers, where Linux would
+	// also carry the FP and vector extension state. The state we saved on the
+	// way in stands in for that part of the frame, so that a handler running
+	// vector or FP code does not clobber the interrupted thread. The integer
+	// registers then come from the ucontext, which the handler may have edited.
+	machine.cpu.registers().copy_from(
+		machine.register_copy_options(), pt.sigret.regs);
 
 	auto& regs = machine.cpu.registers();
 	for (unsigned i = 1; i < 32; i++) {

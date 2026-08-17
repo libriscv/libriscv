@@ -32,7 +32,7 @@ namespace riscv
 	}
 	template <int W>
 	inline Machine<W>::Machine(const Machine& other, const MachineOptions<W>& options)
-		: cpu(*this, other),
+		: cpu(*this, other, options),
 		  memory(*this, other, options),
 		  m_arena(nullptr)
 	{
@@ -61,6 +61,15 @@ namespace riscv
 	template <int W>
 	Machine<W>::~Machine()
 	{
+	}
+
+	template <int W>
+	Registers<W>::Options Machine<W>::register_copy_options() const noexcept
+	{
+		if (!has_options() || options().preserve_vector_registers)
+			return Registers<W>::Options::Everything;
+		else
+			return Registers<W>::Options::NoVectors;
 	}
 
 	template <int W>
