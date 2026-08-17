@@ -139,7 +139,7 @@ namespace riscv
 	// compiled for the CPU we actually run on.
 	static float  libm_fmaf32(float a, float b, float c) { return std::fma(a, b, c); }
 	static double libm_fmaf64(double a, double b, double c) { return std::fma(a, b, c); }
-#if defined(__x86_64__) && !defined(__FMA__) && (defined(__GNUC__) || defined(__clang__))
+#if defined(__x86_64__) && !defined(__FMA__) && (defined(__GNUC__) || defined(__clang__)) && !defined(_MSC_VER)
 	__attribute__((target("fma")))
 	static float  hw_fmaf32(float a, float b, float c) { return __builtin_fmaf(a, b, c); }
 	__attribute__((target("fma")))
