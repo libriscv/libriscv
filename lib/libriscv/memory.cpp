@@ -442,13 +442,11 @@ namespace riscv
 		if (writable_begin < rodata_end)
 			return;
 
-		// Only whole pages can be shared. The page holding the end of the
-		// read-only data is writable above initial_rodata_end, as is the page
-		// holding the start of writable data, so both stay private.
-		static constexpr address_t PAGE_MASK = ~address_t(Page::size()-1);
-		address_t shared_end = rodata_end & PAGE_MASK;
+		// Only whole pages can be shared
+		static constexpr address_t page_mask = ~address_t(Page::size()-1);
+		address_t shared_end = rodata_end & page_mask;
 		if (writable_begin != ~address_t(0))
-			shared_end = std::min(shared_end, address_t(writable_begin & PAGE_MASK));
+			shared_end = std::min(shared_end, address_t(writable_begin & page_mask));
 
 		if (shared_end == 0 || shared_end > this->memory_arena_size())
 			return;
