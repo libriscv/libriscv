@@ -261,8 +261,12 @@ static inline uint32_t do_unzip32(uint32_t x) {
 
 #ifdef RISCV_EXT_VECTOR
 typedef union {
-	float  f32[RISCV_EXT_VECTOR / 4];
-	double f64[RISCV_EXT_VECTOR / 8];
+	uint8_t  u8 [RISCV_EXT_VECTOR];
+	uint16_t u16[RISCV_EXT_VECTOR / 2];
+	uint32_t u32[RISCV_EXT_VECTOR / 4];
+	uint64_t u64[RISCV_EXT_VECTOR / 8];
+	float    f32[RISCV_EXT_VECTOR / 4];
+	double   f64[RISCV_EXT_VECTOR / 8];
 } VectorLane __attribute__ ((aligned (RISCV_EXT_VECTOR)));
 
 typedef struct {

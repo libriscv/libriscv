@@ -450,87 +450,386 @@ struct Emitter
 		default:    return -1;
 		}
 	}
-	// True when this instruction is inlined under the vl/vtype guard.
-	bool vector_is_guarded_inlinable(const rv32i_instruction& vinstr)
-	{
-		return !this->vector_inlinable_sews(vinstr).empty();
+	// Helpers to inline vector memory forms that are simple enough to be expressed in C
+	enum class VectorMemForm {
+		None,             // left to the interpreter handler
+		UnitStride,       // vle<eew>.v / vse<eew>.v: vl*EEW bytes
+		MaskedUnitStride, // ... the same, with v0 choosing the elements
+		WholeRegister,    // vl<n>re<eew>.v / vs<n>r.v: n registers, no vtype
+		Mask,             // vlm.v / vsm.v: ceil(vl/8) bytes
+	};
+	struct VectorMemInfo {
+		VectorMemForm form = VectorMemForm::None;
+		bool     is_store = false;
+		unsigned eew_log2 = 0; // log2(EEW / 8), the unit-stride forms
+		unsigned nregs    = 1; // registers moved by a whole-register transfer
+		unsigned vreg     = 0; // vd, or vs3 in a store
+		unsigned rs1      = 0; // the base address
+	};
+	// The longest run any inlined form moves: eight registers, which is both
+	// LMUL=8 and the widest whole-register transfer.
+	static constexpr uint64_t vector_max_transfer() noexcept {
+		return 8ull * VectorLane::size();
 	}
-	// The SEWs this instruction can be inlined at. A unit-stride access
-	// carries its own EEW, so it has at most one. Float arithmetic follows
-	// vtype's SEW, known statically only after an inlined vsetvli. Empty
-	// means "hand it to the interpreter".
-	std::vector<unsigned> vector_inlinable_sews(const rv32i_instruction& vinstr)
+	// Classify a vector load or store. Everything decided here is static: nf,
+	// mew, mop, lumop, vm and the width field are all fixed by the encoding,
+	// so what is left for runtime is only what vtype decides.
+	VectorMemInfo vector_memory_form(const rv32i_instruction& vinstr)
 	{
 		const rv32v_instruction vi { vinstr };
-		int sew = -1;
-		switch (vinstr.opcode()) {
-		case RV32F_LOAD:  // Plain unmasked unit-stride VLE
-			if (uses_flat_memory_arena() && !vi.VL.mew && vi.VL.nf == 0
-				&& vi.VL.mop == 0 && vi.VL.lumop == 0 && vi.VL.vm)
-				sew = vector_unit_stride_sew(vi.VL.width);
-			break;
-		case RV32F_STORE: // ... and VSE
-			if (uses_flat_memory_arena() && !vi.VS.mew && vi.VS.nf == 0
-				&& vi.VS.mop == 0 && vi.VS.sumop == 0 && vi.VS.vm)
-				sew = vector_unit_stride_sew(vi.VS.width);
-			break;
-		case RV32V_OP:
-			if (vector_float_operator(vinstr) == nullptr && !vector_is_float_fma(vinstr))
-				break;
-			// Both float widths are inlinable: a known vtype selects one,
-			// otherwise both bodies are emitted behind their own guard.
-			if (m_vtype.known)
-				sew = int(m_vtype.vsew);
-			else
-				return { 2, 3 };
-			break;
-		default:
-			break;
+		VectorMemInfo info;
+		if (vinstr.opcode() == RV32F_STORE)
+			info.is_store = true;
+		else if (vinstr.opcode() != RV32F_LOAD)
+			return {};
+		// Every body below reaches guest memory as a host pointer.
+		if (!uses_flat_memory_arena())
+			return {};
+		// MEW asks for an element wider than 64 bits, and a mop other than 00
+		// is a strided or indexed access: both belong to the handler.
+		if (vi.VL.mew || vi.VL.mop != 0b00)
+			return {};
+		info.vreg = info.is_store ? vi.VS.vs3 : vi.VL.vd;
+		info.rs1  = info.is_store ? vi.VS.rs1 : vi.VL.rs1;
+		const unsigned nf = vi.VL.nf + 1; // fields per segment
+		switch (info.is_store ? vi.VS.sumop : vi.VL.lumop) {
+		case 0b00000: { // The plain unit-stride access
+			if (nf != 1)
+				return {}; // Segmented: several fields share one address
+			const int eew = vector_unit_stride_sew(vi.VL.width);
+			if (eew < 0)
+				return {};
+			info.eew_log2 = unsigned(eew);
+			info.form = vi.VL.vm ? VectorMemForm::UnitStride
+			                     : VectorMemForm::MaskedUnitStride;
+			return info; }
+		case 0b01000: // vl<n>re<eew>.v / vs<n>r.v
+			// An illegal register count, or a group that is not aligned to
+			// its own size, has to trap: only the handler knows how.
+			if (!vi.VL.vm || (nf != 1 && nf != 2 && nf != 4 && nf != 8))
+				return {};
+			if ((info.vreg % nf) != 0 || info.vreg + nf > 32)
+				return {};
+			info.nregs = nf;
+			info.form = VectorMemForm::WholeRegister;
+			return info;
+		case 0b01011: // vlm.v / vsm.v
+			if (!vi.VL.vm || nf != 1 || vi.VL.width != 0)
+				return {};
+			info.form = VectorMemForm::Mask;
+			return info;
+		default: // Fault-only-first, and the encodings that trap
+			return {};
 		}
-		if (sew < 0)
-			return {};
-		// An inline body is only reachable at the SEW and LMUL it was
-		// written for, so a known vtype decides it here, not at runtime.
-		if (m_vtype.known && (m_vtype.vill || m_vtype.vsew != unsigned(sew) || m_vtype.lmul != 0))
-			return {};
-		if (sew < 2 && vinstr.opcode() == RV32V_OP)
-			return {}; // No 8/16-bit floats
-		return { unsigned(sew) };
 	}
-	// Inline a unit-stride load/store as a whole-lane arena move. The
-	// caller has established the vl/vtype guard; the address is tested
-	// here, and outside the arena drops to the interpreter handler.
-	void emit_vector_unit_stride_body(bool is_store)
+	// True when this instruction is inlined rather than handed over, and so
+	// leaves vl and vtype exactly as it found them.
+	bool vector_is_guarded_inlinable(const rv32i_instruction& vinstr)
 	{
-		const rv32v_instruction vi { instr };
-		const int rs1 = is_store ? vi.VS.rs1 : vi.VL.rs1;
-		const int vreg = is_store ? vi.VS.vs3 : vi.VL.vd;
-		this->load_register(rs1);
-
-		const std::string addr = "vaddr" + PCRELS(0);
-		add_code("{ const addr_t " + addr + " = " + from_untracked_reg(rs1) + ";");
-
-		const bool checked = vector_memory_needs_bounds_check();
-		if (checked) {
-			// A lane fits within the arena over-allocation, so a
-			// readable/writable start address covers the whole move.
-			static_assert(VectorLane::size() <= Memory<W>::OVERALLOCATE,
-				"A vector lane must fit within the arena over-allocation");
-			add_code(std::string("if (LIKELY(")
-				+ (is_store ? "ARENA_WRITABLE(" : "ARENA_READABLE(") + addr + "))) {");
+		if (vinstr.opcode() == RV32F_LOAD || vinstr.opcode() == RV32F_STORE)
+			return vector_memory_form(vinstr).form != VectorMemForm::None;
+		return !this->vector_inlinable_sews(vinstr).empty();
+	}
+	// The SEWs this float arithmetic can be inlined at. It follows vtype's
+	// SEW, which is known statically only after an inlined vsetvli; without
+	// one, both widths are emitted behind their own guard. Empty means "hand
+	// it to the interpreter".
+	std::vector<unsigned> vector_inlinable_sews(const rv32i_instruction& vinstr)
+	{
+		if (vinstr.opcode() != RV32V_OP)
+			return {};
+		if (vector_float_operator(vinstr) == nullptr && !vector_is_float_fma(vinstr))
+			return {};
+		// Both float widths are inlinable: a known vtype selects one,
+		// otherwise both bodies are emitted behind their own guard.
+		if (!m_vtype.known)
+			return { 2, 3 };
+		// An inline body is only reachable at the SEW and LMUL it was written
+		// for, so a known vtype decides it here, not at runtime.
+		if (m_vtype.vill || m_vtype.lmul != 0 || m_vtype.vsew < 2)
+			return {}; // Fractional/multi-register groups, and no 8/16-bit floats
+		return { m_vtype.vsew };
+	}
+	// The live vl, as a C expression: the local an inlined vsetvli left
+	// behind, or the field itself.
+	std::string vector_vl_expr() const {
+		return m_vl_local.empty() ? "cpu->rvv.vl" : m_vl_local;
+	}
+	// What a unit-stride transfer still has to establish at runtime, which is
+	// what unit_stride_transfer() (rvv_instr.cpp) tests minus whatever a
+	// vsetvli earlier in this block has already settled.
+	struct VectorStridePlan {
+		std::vector<std::string> locals; // declared before the guard is tested
+		std::string guard;       // empty when nothing is left to test
+		std::string bytes;       // C expression for the length of the run
+		bool     bytes_known = false;
+		uint64_t known_bytes = 0;
+		unsigned dregs = 0;      // registers in the group, 0 when runtime-only
+	};
+	// Returns false when this encoding cannot be inlined here at all, in
+	// which case the caller hands the instruction over whole.
+	bool vector_plan_unit_stride(const VectorMemInfo& info, VectorStridePlan& plan)
+	{
+		constexpr uint64_t lane_size = VectorLane::size();
+		const unsigned eew = info.eew_log2;
+		if (m_vtype.known) {
+			// EMUL = LMUL * EEW / SEW, as a count of registers.
+			const int emul = m_vtype.lmul + int(eew) - int(m_vtype.vsew);
+			if (m_vtype.vill || emul > 3 || emul < -3)
+				return false;
+			// A group of one needs no alignment, which covers every EEW at
+			// LMUL <= 1; anything wider has to be aligned to its own size.
+			plan.dregs = (emul > 0) ? (1u << emul) : 1u;
+			if (plan.dregs > 1 && ((info.vreg % plan.dregs) != 0
+				|| info.vreg + plan.dregs > 32))
+				return false;
+			const uint64_t max_bytes = uint64_t(plan.dregs) * lane_size;
+			if (m_vl_known) {
+				plan.known_bytes = m_vl << eew;
+				plan.bytes_known = true;
+				// vl outliving the vtype that sized it is rare enough to
+				// leave to the handler.
+				if (plan.known_bytes > max_bytes)
+					return false;
+				plan.bytes = std::to_string(plan.known_bytes);
+			} else {
+				plan.bytes = "vnb" + PCRELS(0);
+				plan.locals.push_back("const addr_t " + plan.bytes + " = (addr_t)"
+					+ vector_vl_expr() + " << " + std::to_string(eew) + ";");
+				plan.guard = plan.bytes + " <= " + std::to_string(max_bytes);
+			}
+			return true;
 		}
-		const std::string lane = "*(VectorLaneBytes *)&" + from_rvvreg(vreg);
-		const std::string mem  = "*(VectorLaneBytes *)" + arena_at(addr);
-		add_code(is_store ? "  " + mem + " = " + lane + ";"
-		                  : "  " + lane + " = " + mem + ";");
-		if (checked) {
+		// vtype is live, so the same arithmetic goes into the guard. The
+		// destination register is a constant, so the alignment test folds
+		// down to a compare once the C compiler knows EMUL.
+		const std::string emul = "vem" + PCRELS(0);
+		const std::string vd = std::to_string(info.vreg);
+		plan.bytes = "vnb" + PCRELS(0);
+		plan.locals.push_back("const int " + emul + " = (int)cpu->rvv.lmul + "
+			+ std::to_string(eew) + " - (int)cpu->rvv.vsew;");
+		plan.locals.push_back("const addr_t " + plan.bytes + " = (addr_t)"
+			+ vector_vl_expr() + " << " + std::to_string(eew) + ";");
+		plan.guard = "!cpu->rvv.vill && " + emul + " <= 3 && " + emul + " >= -3"
+			" && (" + emul + " <= 0 || ((" + vd + " & ((1 << " + emul + ") - 1)) == 0"
+			" && " + vd + " + (1 << " + emul + ") <= 32))"
+			" && " + plan.bytes + " <= ((addr_t)" + std::to_string(lane_size)
+			+ " << (" + emul + " > 0 ? " + emul + " : 0))";
+		return true;
+	}
+	// Open the scaffolding an inlined transfer shares: the base address in a
+	// local, then one test covering both the vtype guard and the arena
+	// bounds, so that everything left over reaches the handler in one place.
+	// Returns whether that test was emitted, and so whether there is an else.
+	bool emit_vector_memory_prologue(const VectorMemInfo& info,
+		const std::string& addr, const std::vector<std::string>& locals,
+		const std::string& guard)
+	{
+		this->load_register(int(info.rs1));
+		add_code("{ const addr_t " + addr + " = " + from_untracked_reg(int(info.rs1)) + ";");
+		for (const auto& local : locals)
+			add_code("  " + local);
+
+		std::string cond = guard;
+		if (this->vector_memory_needs_bounds_check()) {
+			// The longest run still fits within the arena over-allocation, so
+			// a readable/writable start address covers all of it.
+			static_assert(vector_max_transfer() <= Memory<W>::OVERALLOCATE,
+				"A vector register group must fit within the arena over-allocation");
+			const std::string bounds =
+				std::string(info.is_store ? "ARENA_WRITABLE(" : "ARENA_READABLE(") + addr + ")";
+			cond = cond.empty() ? bounds : "(" + cond + ") && " + bounds;
+		}
+		if (!cond.empty())
+			add_code("if (LIKELY(" + cond + ")) {");
+		else
+			add_code("{");
+		return !cond.empty();
+	}
+	void emit_vector_memory_epilogue(const VectorMemInfo& info, bool has_fallback)
+	{
+		if (has_fallback) {
 			add_code("} else {");
 			// rs1 is the handler's only integer input, and it writes none.
-			this->potentially_realize_register(rs1);
+			this->potentially_realize_register(int(info.rs1));
 			this->emit_vector_handler_invoke();
-			add_code("}");
 		}
-		add_code("}");
+		add_code("}", "}");
+	}
+	// One VLEN-sized register, moved as a single struct assignment.
+	void emit_vector_lane_move(const VectorMemInfo& info,
+		const std::string& addr, unsigned index)
+	{
+		const uint64_t offset = uint64_t(index) * VectorLane::size();
+		const std::string at = offset
+			? "(" + addr + " + " + std::to_string(offset) + ")" : addr;
+		const std::string lane = "*(VectorLaneBytes *)&" + from_rvvreg(int(info.vreg + index));
+		const std::string mem  = "*(VectorLaneBytes *)" + arena_at(at);
+		add_code(info.is_store ? "  " + mem + " = " + lane + ";"
+		                       : "  " + lane + " = " + mem + ";");
+	}
+	// A run that is not a whole number of registers: a strip-mined loop's
+	// last iteration, or a mask register's ceil(vl/8). Spelled as a byte
+	// loop, which the C compilers we emit for turn back into the move it
+	// should be, and which libtcc can compile at all.
+	void emit_vector_byte_move(const VectorMemInfo& info,
+		const std::string& addr, const std::string& count)
+	{
+		const std::string i   = "vbi" + PCRELS(0);
+		const std::string dst = "vbd" + PCRELS(0);
+		const std::string src = "vbs" + PCRELS(0);
+		const std::string reg = "(uint8_t *)&" + from_rvvreg(int(info.vreg));
+		const std::string mem = "(uint8_t *)" + arena_at(addr);
+		add_code("  { uint8_t *" + dst + " = " + (info.is_store ? mem : reg) + ";",
+			"    const uint8_t *" + src + " = " + (info.is_store ? reg : mem) + ";",
+			"    addr_t " + i + ";",
+			"    for (" + i + " = 0; " + i + " < " + count + "; " + i + "++)",
+			"      " + dst + "[" + i + "] = " + src + "[" + i + "]; }");
+	}
+	// The contiguous run itself. A whole register is by far the common size,
+	// and naming it as a constant is what lets it compile to one wide move;
+	// a full multi-register group is the same move repeated.
+	void emit_vector_contiguous_move(const VectorMemInfo& info,
+		const std::string& addr, const VectorStridePlan& plan)
+	{
+		constexpr uint64_t lane_size = VectorLane::size();
+		if (plan.bytes_known) {
+			if (plan.known_bytes % lane_size == 0) {
+				for (unsigned r = 0; r < plan.known_bytes / lane_size; r++)
+					this->emit_vector_lane_move(info, addr, r);
+			} else {
+				this->emit_vector_byte_move(info, addr, plan.bytes);
+			}
+			return;
+		}
+		add_code("  if (LIKELY(" + plan.bytes + " == " + std::to_string(lane_size) + ")) {");
+		this->emit_vector_lane_move(info, addr, 0);
+		if (plan.dregs > 1) {
+			// The whole group, for the iterations of a strip-mined loop that
+			// are not the last one at LMUL > 1.
+			add_code("  } else if (LIKELY(" + plan.bytes + " == "
+				+ std::to_string(uint64_t(plan.dregs) * lane_size) + ")) {");
+			for (unsigned r = 0; r < plan.dregs; r++)
+				this->emit_vector_lane_move(info, addr, r);
+		}
+		add_code("  } else {");
+		this->emit_vector_byte_move(info, addr, plan.bytes);
+		add_code("  }");
+	}
+	// vle<eew>.v / vse<eew>.v: vl*EEW contiguous bytes, tail included, which
+	// is one block copy at any vl and any EMUL -- the registers of a group
+	// are adjacent, so a wider group only makes the run longer.
+	void emit_vector_unit_stride(const VectorMemInfo& info)
+	{
+		VectorStridePlan plan;
+		if (!this->vector_plan_unit_stride(info, plan)) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		// An empty transfer touches no memory, and so cannot fault.
+		if (plan.bytes_known && plan.known_bytes == 0)
+			return;
+
+		const std::string addr = "vaddr" + PCRELS(0);
+		const bool fallback = this->emit_vector_memory_prologue(info, addr, plan.locals, plan.guard);
+		this->emit_vector_contiguous_move(info, addr, plan);
+		this->emit_vector_memory_epilogue(info, fallback);
+	}
+	// vle<eew>.v / vse<eew>.v under v0. The elements are still contiguous,
+	// but the mask decides one at a time which of them move, so this is the
+	// one inlined form that walks elements. Inactive elements are left
+	// undisturbed, exactly as the handler leaves them.
+	void emit_vector_masked_unit_stride(const VectorMemInfo& info)
+	{
+		static const char* const element_types[4] =
+			{ "uint8_t", "uint16_t", "uint32_t", "uint64_t" };
+		VectorStridePlan plan;
+		if (!this->vector_plan_unit_stride(info, plan)) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		if (plan.bytes_known && plan.known_bytes == 0)
+			return;
+		const std::string elems = m_vl_known
+			? std::to_string(m_vl) : this->vector_vl_expr();
+
+		const std::string addr = "vaddr" + PCRELS(0);
+		const bool fallback = this->emit_vector_memory_prologue(info, addr, plan.locals, plan.guard);
+
+		const char* const type = element_types[info.eew_log2];
+		const std::string i    = "vmi" + PCRELS(0);
+		const std::string dst  = "vmd" + PCRELS(0);
+		const std::string src  = "vms" + PCRELS(0);
+		const std::string mask = "vmm" + PCRELS(0);
+		const std::string reg = "(" + std::string(type) + " *)&" + from_rvvreg(int(info.vreg));
+		const std::string mem = "(" + std::string(type) + " *)" + arena_at(addr);
+		add_code("  { " + std::string(type) + " *" + dst + " = " + (info.is_store ? mem : reg) + ";",
+			"    const " + std::string(type) + " *" + src + " = " + (info.is_store ? reg : mem) + ";",
+			// v0 always holds the mask, one bit per element, and is read as
+			// the loop runs so that a destination overlapping it behaves as
+			// the handler's element loop does.
+			"    const uint8_t *" + mask + " = (const uint8_t *)&" + from_rvvreg(0) + ";",
+			"    addr_t " + i + ";",
+			"    for (" + i + " = 0; " + i + " < " + elems + "; " + i + "++)",
+			"      if ((" + mask + "[" + i + " >> 3] >> (" + i + " & 7)) & 1)",
+			"        " + dst + "[" + i + "] = " + src + "[" + i + "]; }");
+
+		this->emit_vector_memory_epilogue(info, fallback);
+	}
+	// vl<n>re<eew>.v / vs<n>r.v: a raw copy of n whole registers that reads
+	// neither vl nor vtype, leaving nothing to guard but the address.
+	void emit_vector_whole_register(const VectorMemInfo& info)
+	{
+		const std::string addr = "vaddr" + PCRELS(0);
+		const bool fallback = this->emit_vector_memory_prologue(info, addr, {}, "");
+		for (unsigned r = 0; r < info.nregs; r++)
+			this->emit_vector_lane_move(info, addr, r);
+		this->emit_vector_memory_epilogue(info, fallback);
+	}
+	// vlm.v / vsm.v: ceil(vl/8) bytes of mask, always EEW=8 with EMUL=1 and
+	// never masked. Only vill can stop it, and vl can never ask for more than
+	// the one register a mask lives in.
+	void emit_vector_mask_move(const VectorMemInfo& info)
+	{
+		constexpr uint64_t lane_size = VectorLane::size();
+		if (m_vtype.known && m_vtype.vill) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		VectorStridePlan plan;
+		plan.guard = m_vtype.known ? "" : "!cpu->rvv.vill";
+		if (m_vl_known) {
+			plan.known_bytes = (m_vl + 7) / 8;
+			plan.bytes_known = true;
+			if (plan.known_bytes > lane_size) {
+				this->emit_vector_slowpath();
+				return;
+			}
+			if (plan.known_bytes == 0)
+				return;
+			plan.bytes = std::to_string(plan.known_bytes);
+		} else {
+			plan.bytes = "vnb" + PCRELS(0);
+			plan.locals.push_back("const addr_t " + plan.bytes + " = ((addr_t)"
+				+ vector_vl_expr() + " + 7) / 8;");
+			plan.guard += (plan.guard.empty() ? "" : " && ")
+				+ plan.bytes + " <= " + std::to_string(lane_size);
+		}
+		const std::string addr = "vaddr" + PCRELS(0);
+		const bool fallback = this->emit_vector_memory_prologue(info, addr, plan.locals, plan.guard);
+		this->emit_vector_contiguous_move(info, addr, plan);
+		this->emit_vector_memory_epilogue(info, fallback);
+	}
+	// Emit one vector load or store that does not need the interpreter.
+	void emit_vector_memory(const VectorMemInfo& info)
+	{
+		switch (info.form) {
+		case VectorMemForm::UnitStride:       this->emit_vector_unit_stride(info); break;
+		case VectorMemForm::MaskedUnitStride: this->emit_vector_masked_unit_stride(info); break;
+		case VectorMemForm::WholeRegister:    this->emit_vector_whole_register(info); break;
+		case VectorMemForm::Mask:             this->emit_vector_mask_move(info); break;
+		default:                              this->emit_vector_slowpath(); break;
+		}
 	}
 	// One fused multiply-add element, exactly as the OPFVV/OPFVF handlers
 	// compute it: a is vs1 (or the scalar), b is vs2, c is the old value of
@@ -576,14 +875,6 @@ struct Emitter
 			add_code("  " + d + " = " + (op != nullptr
 				? b + op + a
 				: vector_fma_expression(vi.OPVV.funct6, fma, a, b, d)) + ";");
-		}
-	}
-	void emit_vector_inline_body(unsigned vsew)
-	{
-		switch (instr.opcode()) {
-		case RV32F_LOAD:  this->emit_vector_unit_stride_body(false); break;
-		case RV32F_STORE: this->emit_vector_unit_stride_body(true); break;
-		default:          this->emit_vector_float_arith_body(vsew); break;
 		}
 	}
 	// True for the two configuration forms with an immediate vtype, which is
@@ -677,12 +968,19 @@ struct Emitter
 			add_code(to_reg(rd) + " = " + (m_vl_local.empty() ? vl : m_vl_local) + ";");
 		}
 	}
-	// Emit one vector instruction: inlined under the vl/vtype guard when
-	// the encoding allows it, otherwise straight to the handler.
+	// Emit one vector instruction: inlined when the encoding allows it,
+	// otherwise straight to the handler.
 	void emit_vector_instruction()
 	{
 		if (this->vector_is_inlinable_setvl(instr)) {
 			this->emit_vector_setvl();
+			return;
+		}
+		// A load or store carries its own EEW and brings its own guard, so
+		// it does not go through the SEW machinery the arithmetic needs.
+		const auto meminfo = this->vector_memory_form(instr);
+		if (meminfo.form != VectorMemForm::None) {
+			this->emit_vector_memory(meminfo);
 			return;
 		}
 		const auto sews = this->vector_inlinable_sews(instr);
@@ -697,7 +995,7 @@ struct Emitter
 
 		for (const unsigned vsew : sews) {
 			add_code("if (LIKELY(" + rvv_guard(vsew) + ")) {");
-			this->emit_vector_inline_body(vsew);
+			this->emit_vector_float_arith_body(vsew);
 			add_code("} else {");
 		}
 		this->emit_vector_slowpath();
@@ -2344,10 +2642,11 @@ void Emitter<W>::emit()
 		// 5/6/7 for 16/32/64-bit, none of which collide with the scalar
 		// FLH/FLW/FLD/FLQ encodings above.
 		case 0x0: case 0x5: case 0x6: case 0x7:
-			// Only a plain unmasked unit-stride load of a full register
-			// (EEW == SEW, m1, vl == VLMAX) at an arena address is inlined.
-			// Everything else goes to the handler, which only reads x[rs1]
-			// and writes no integer register: cached registers stay live.
+			// The contiguous forms -- unit-stride, whole-register and mask,
+			// masked or not -- are inlined as an arena move at an address
+			// the emitted code tests. Everything else goes to the handler,
+			// which only reads x[rs1] and writes no integer register, so
+			// cached registers stay live across it.
 			this->emit_vector_instruction();
 			break;
 #endif
@@ -2369,7 +2668,7 @@ void Emitter<W>::emit()
 				this->memory_store("int64_t", sizeof(int64_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
 #ifdef RISCV_EXT_VECTOR
-		// Vector stores (VSE*): like the load case above
+		// Vector stores: like the load case above
 		case 0x0: case 0x5: case 0x6: case 0x7:
 			this->emit_vector_instruction();
 			break;
@@ -2536,8 +2835,10 @@ void Emitter<W>::emit()
 				if constexpr (nanboxing && W == 8) {
 					if (f32) {
 						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
-						code += "{ const bool nb1 = (uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu;"
-							" const bool nb2 = (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu;"
+						// Spelled as int: the JIT compiles this text as C99,
+						// where <stdbool.h> is not in scope.
+						code += "{ const int nb1 = (uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu;"
+							" const int nb2 = (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu;"
 							" if (nb1 && nb2) load_fl(&" + dst + ", 0x7fc00000u);"
 							" else if (nb1) set_fl(&" + dst + ", " + rs2 + ".f32[0]);"
 							" else set_fl(&" + dst + ", " + rs1 + ".f32[0]); }\nelse ";
