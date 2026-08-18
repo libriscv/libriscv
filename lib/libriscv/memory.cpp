@@ -2,6 +2,7 @@
 
 #include "decoder_cache.hpp"
 #include "internal_common.hpp"
+#include <algorithm>
 #include <inttypes.h>
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__wasm__)
 #define DEMANGLE_ENABLED
@@ -20,6 +21,15 @@ namespace riscv
 	// order to absorb the tail of multi-byte accesses at the last guest
 	// address without bounds-checking the access size on every access.
 	[[maybe_unused]] static constexpr uint64_t UNBOUNDED_ARENA_SIZE = (1ULL << encompassing_Nbit_arena) + 2 * Page::size();
+
+	// True when every byte in the range is zero.
+	[[maybe_unused]] static bool is_zeroed(const uint8_t* data, size_t len) noexcept
+	{
+		for (size_t i = 0; i < len; i++)
+			if (data[i] != 0)
+				return false;
+		return true;
+	}
 
 	template <int W>
 	Memory<W>::Memory(Machine<W>& mach, std::string_view bin,
@@ -298,7 +308,12 @@ namespace riscv
 			// Write directly to the arena (rodata boundary set after copy)
 			if (UNLIKELY(vaddr + len > memory_arena_size()))
 				throw MachineException(INVALID_PROGRAM, "ELF segment exceeds arena size");
-			std::memcpy(&((char*)m_arena.data)[vaddr], src, len);
+			// A shared image already holds the bytes below its end, read-only
+			const address_t shared_end = this->shared_rodata_end();
+			const size_t skip = (vaddr < shared_end)
+				? std::min(len, size_t(shared_end - vaddr)) : 0u;
+			if (skip < len)
+				std::memcpy(&((char*)m_arena.data)[vaddr + skip], src + skip, len - skip);
 		} else {
 			// Load into virtual memory
 			this->memcpy(vaddr, src, len);
@@ -360,6 +375,160 @@ namespace riscv
 
 	// ELF32 and ELF64 loader
 	template <int W> RISCV_INTERNAL
+	void Memory<W>::prepare_shared_rodata(const MachineOptions<W>& options,
+		const typename Elf::Header* elf)
+	{
+		// With virtual paging the arena is loaned out through the page table,
+		// instead of being the only home of guest memory
+		if constexpr (virtual_paging_enabled)
+			return;
+		// An encompassing arena stores without consulting the write boundary,
+		// so a read-only mapping turns an ordinary guest store into a crash
+		if constexpr (encompassing_Nbit_arena != 0)
+			return;
+
+		if (!options.use_shared_rodata || !options.load_program)
+			return;
+		if (!this->uses_flat_memory_arena() || !shared_rodata_supported())
+			return;
+
+		// One read-only segment, and where in the binary its bytes come from.
+		struct RoSeg {
+			address_t vaddr;
+			uint64_t  offset;
+			uint64_t  size;
+		};
+		std::vector<RoSeg> segments;
+
+		const auto* phdr = (typename Elf::ProgramHeader*) (m_binary.data() + elf->e_phoff);
+		address_t rodata_end = 0;
+		address_t writable_begin = ~address_t(0);
+
+		for (const auto* hdr = phdr; hdr < phdr + elf->e_phnum; hdr++)
+		{
+			if (hdr->p_type != Elf::PT_LOAD)
+				continue;
+			const address_t vaddr = this->elf_base_address(hdr->p_vaddr);
+
+			// A writable segment can sit anywhere: remember the lowest one, as
+			// its first page can never be shared
+			if (hdr->p_flags & Elf::PF_W) {
+				writable_begin = std::min(writable_begin, vaddr);
+				continue;
+			}
+			// The conditions in binary_load_ph() that extend the read-only
+			// boundary: loaded, readable and not writable
+			if (hdr->p_filesz == 0 || (hdr->p_flags & Elf::PF_R) == 0)
+				continue;
+			// binary_load_ph() rejects segments outside the binary too, but only
+			// runs after us. 64-bit arithmetic, as the sum of two 32-bit ELF
+			// fields wraps in a 32-bit binary.
+			const uint64_t file_offset = uint64_t(hdr->p_offset);
+			const uint64_t file_end = file_offset + uint64_t(hdr->p_filesz);
+			if (file_end < file_offset || file_end > m_binary.size())
+				continue;
+			if (vaddr + hdr->p_filesz < vaddr)
+				continue;
+
+			rodata_end = std::max(rodata_end, address_t(vaddr + hdr->p_filesz));
+			segments.push_back(RoSeg {
+				.vaddr = vaddr, .offset = file_offset, .size = uint64_t(hdr->p_filesz)
+			});
+		}
+
+		if (rodata_end == 0)
+			return;
+		// Interleaved segments, which a single write boundary cannot express
+		if (writable_begin < rodata_end)
+			return;
+
+		// Only whole pages can be shared. The page holding the end of the
+		// read-only data is writable above initial_rodata_end, as is the page
+		// holding the start of writable data, so both stay private.
+		static constexpr address_t PAGE_MASK = ~address_t(Page::size()-1);
+		address_t shared_end = rodata_end & PAGE_MASK;
+		if (writable_begin != ~address_t(0))
+			shared_end = std::min(shared_end, address_t(writable_begin & PAGE_MASK));
+
+		if (shared_end == 0 || shared_end > this->memory_arena_size())
+			return;
+
+		// Sorted by address, so that the layout does not depend on the order of
+		// the program headers, and verify() below can walk it in one pass
+		std::sort(segments.begin(), segments.end(),
+			[] (const RoSeg& a, const RoSeg& b) { return a.vaddr < b.vaddr; });
+
+		std::vector<RoSeg> shared_segments;
+		std::vector<RodataSegment> layout;
+		for (const auto& seg : segments) {
+			if (seg.vaddr >= shared_end)
+				continue;
+			const uint64_t size = std::min(seg.size, uint64_t(shared_end - seg.vaddr));
+			shared_segments.push_back(RoSeg { seg.vaddr, seg.offset, size });
+			layout.push_back(RodataSegment { uint64_t(seg.vaddr), size });
+		}
+
+		// Nothing of the program itself lands inside the shared region
+		if (layout.empty())
+			return;
+
+		this->m_rodata_key = RodataKey {
+			.rodata_end = uint64_t(shared_end),
+			.arena_size = uint64_t(this->memory_arena_size()),
+			.segments   = std::move(layout),
+		};
+
+		// The layout only narrows the search: an image belongs to this program
+		// only when every shared byte matches, gaps included. Anything weaker
+		// would hand one programs memory to another.
+		auto verify = [&] (const uint8_t* image, size_t len) -> bool {
+			if (len != size_t(shared_end))
+				return false;
+			uint64_t pos = 0;
+			for (const auto& seg : shared_segments) {
+				if (seg.vaddr < pos || seg.vaddr + seg.size > len)
+					return false;
+				if (!is_zeroed(image + pos, size_t(seg.vaddr - pos)))
+					return false;
+				if (std::memcmp(image + seg.vaddr, m_binary.data() + seg.offset, seg.size) != 0)
+					return false;
+				pos = seg.vaddr + seg.size;
+			}
+			return is_zeroed(image + pos, size_t(len - pos));
+		};
+
+		// Mapping it now also lets the loader skip the segments it covers
+		auto image = find_shared_rodata_image(this->m_rodata_key, verify);
+		if (image == nullptr)
+			return;
+		if (!image->map_over(this->m_arena.data))
+			return;
+		this->m_rodata_image = std::move(image);
+
+		if (UNLIKELY(options.verbose_loader)) {
+			printf("* Attached shared read-only memory of %zu bytes\n", size_t(shared_end));
+		}
+	}
+
+	template <int W> RISCV_INTERNAL
+	void Memory<W>::publish_shared_rodata()
+	{
+		// Already sharing, or not a candidate at all
+		if (this->m_rodata_image != nullptr || this->m_rodata_key.rodata_end == 0)
+			return;
+
+		// The arena now holds the finished read-only region, relocations and all
+		const size_t len = size_t(this->m_rodata_key.rodata_end);
+		auto image = create_shared_rodata_image(this->m_rodata_key, this->m_arena.data, len);
+		if (image == nullptr)
+			return;
+
+		// Invisible to us: the bytes are the ones we just copied out of here
+		if (image->map_over(this->m_arena.data))
+			this->m_rodata_image = std::move(image);
+	}
+
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::binary_loader(const MachineOptions<W>& options)
 	{
 		static constexpr uint32_t ELFHDR_FLAGS_RVC = 0x1;
@@ -420,6 +589,9 @@ namespace riscv
 		// is_dynamic() is used to determine the ELF base address
 		this->m_start_address = this->elf_base_address(elf->e_entry);
 		this->m_heap_address = 0;
+
+		// Before loading, so that the loader can skip the shared segments
+		this->prepare_shared_rodata(options, elf);
 
 		for (const auto* hdr = phdr; hdr < phdr + program_headers; hdr++)
 		{
@@ -539,6 +711,15 @@ namespace riscv
 			}
 		}
 
+		// Offer the region to later machines, unless already sharing one
+		const bool was_sharing = this->shared_rodata_end() != 0;
+		this->publish_shared_rodata();
+
+		if (UNLIKELY(options.verbose_loader) && !was_sharing && this->shared_rodata_end() != 0) {
+			printf("* Created shared read-only memory of %zu bytes\n",
+				size_t(this->shared_rodata_end()));
+		}
+
 		if (UNLIKELY(options.verbose_loader)) {
 			printf("* Entry is at %p\n",
 				(void*)uintptr_t(this->start_address()));
@@ -595,6 +776,9 @@ namespace riscv
 		this->m_exec = master.memory.m_exec;
 
 		if (options.use_memory_arena) {
+			// A fork references the arena of its master, image and all
+			this->m_rodata_key = master.memory.m_rodata_key;
+			this->m_rodata_image = master.memory.m_rodata_image;
 			this->m_arena.data = master.memory.m_arena.data;
 			this->m_arena.pages = master.memory.m_arena.pages;
 			this->m_arena.read_boundary = master.memory.m_arena.read_boundary;

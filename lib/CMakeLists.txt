@@ -97,6 +97,7 @@ set (SOURCES
 		libriscv/posix/threads.cpp
 		libriscv/posix/socket_calls.cpp
 		libriscv/serialize.cpp
+		libriscv/shared_rodata.cpp
 		libriscv/util/crc32c.cpp
 	)
 if (RISCV_32I)
@@ -347,6 +348,7 @@ if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
 		libriscv/rvc.hpp
 		libriscv/rvfd.hpp
 		libriscv/rsp_server.hpp
+		libriscv/shared_rodata.hpp
 		libriscv/threads.hpp
 		libriscv/types.hpp
 

@@ -68,3 +68,6 @@ add_unit_test(va_exec  va_execute.cpp) # execute permissions need page attribute
 endif()
 add_unit_test(elftest  verify_elf.cpp)
 add_unit_test(security security.cpp)
+if (NOT RISCV_VIRTUAL_PAGING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+add_unit_test(shared_rodata shared_rodata.cpp) # linear arena, memfd sealing
+endif()

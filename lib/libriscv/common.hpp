@@ -138,6 +138,13 @@ namespace riscv
 		/// translated code between machines. (Prevents some optimizations)
 		bool use_shared_execute_segments = true;
 
+		/// @brief Share read-only memory between machines.
+		/// @details Machines loaded from the same binary map one sealed image of
+		/// the programs text and rodata over the low part of their arena, instead
+		/// of each holding a private copy. The host can then no longer write there
+		/// through a raw arena pointer. Requires a linear arena, and Linux.
+		bool use_shared_rodata = true;
+
 		/// @brief Override a default-injected exit function with another function
 		/// that is found by looking up the provided symbol name in the current program.
 		/// Eg. if default_exit_function is "fast_exit", then the ELF binary must have

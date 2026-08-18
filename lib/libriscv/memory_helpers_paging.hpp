@@ -79,7 +79,10 @@ bool Memory<W>::try_memmove(address_t dst, address_t src, size_t len)
 		return true;
 
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(dst + len < memory_arena_size() && dst + len > dst &&
+		// Below the read-only boundary the arena can be a shared read-only
+		// mapping, where a write is fatal
+		if (LIKELY(dst >= initial_rodata_end() &&
+			dst + len < memory_arena_size() && dst + len > dst &&
 			src + len < memory_arena_size() && src + len > src)) {
 			char* p_src = &((char *)m_arena.data)[src];
 			char* p_dest = &((char *)m_arena.data)[dst];

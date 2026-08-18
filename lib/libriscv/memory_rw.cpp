@@ -160,6 +160,18 @@ namespace riscv
 			(void)ignore_protections;
 			if (UNLIKELY(dst + len > memory_arena_size() || dst + len < dst))
 				protection_fault(dst);
+			// Never discard read-only memory: it can be a shared mapping, and
+			// discarding a file mapping restores the original bytes anyway.
+			// Rounded up, as the page at the boundary still holds rodata.
+			const address_t roend =
+				(initial_rodata_end() + Page::size()-1) & ~address_t(Page::size()-1);
+			if (dst < roend) {
+				const size_t skip = std::min(len, size_t(roend - dst));
+				dst += skip;
+				len -= skip;
+				if (len == 0)
+					return;
+			}
 			if constexpr (MADVISE_ENABLED) {
 				auto* baseptr = &((uint8_t *)m_arena.data)[dst];
 				madvise(baseptr, len, MADV_DONTNEED);

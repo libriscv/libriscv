@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include "decoded_exec_segment.hpp"
 #include "mmap_cache.hpp"
+#include "shared_rodata.hpp"
 #include "util/buffer.hpp" // <string>
 #include "util/function.hpp"
 #if RISCV_SPAN_AVAILABLE
@@ -291,6 +292,10 @@ namespace riscv
 		address_t memory_arena_read_boundary() const noexcept { return this->m_arena.read_boundary; }
 		address_t memory_arena_write_boundary() const noexcept { return this->m_arena.write_boundary; }
 		address_t initial_rodata_end() const noexcept { return this->m_arena.initial_rodata_end; }
+		// End of the region shared with other machines, or zero when private
+		address_t shared_rodata_end() const noexcept {
+			return this->m_rodata_image != nullptr ? address_t(this->m_rodata_image->end()) : 0;
+		}
 
 		// Serializes the current memory state to an existing vector
 		// Returns the final size of the serialized state
@@ -345,6 +350,11 @@ namespace riscv
 		const typename Elf::Sym* elf_sym_index(const typename Elf::SectionHeader* shdr, uint32_t symidx) const;
 		// ELF loader
 		void binary_loader(const MachineOptions<W>&);
+		// Find the extents of the programs read-only data, and attach a shared
+		// image if another machine already created one
+		void prepare_shared_rodata(const MachineOptions<W>&, const typename Elf::Header*);
+		// Offer the finished read-only region to later machines
+		void publish_shared_rodata();
 		void binary_load_ph(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
 		void serialize_execute_segment(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
 		void generate_decoder_cache(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&, bool is_initial);
@@ -389,6 +399,11 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		AtomicMemory<W> m_atomics;
 #endif
+
+		// Read-only image mapped over the low part of the arena, shared with
+		// every other machine loaded from the same binary
+		RodataKey m_rodata_key {};
+		std::shared_ptr<SharedRodataImage> m_rodata_image = nullptr;
 
 		// Execute segments
 		std::shared_ptr<DecodedExecuteSegment<W>> m_main_exec_segment;
