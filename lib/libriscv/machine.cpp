@@ -153,6 +153,9 @@ namespace riscv
 		sp &= ~(address_t)0xF; // mandated 16-byte stack alignment
 
 		this->copy_to_guest(sp, argv.data(), argsize);
+
+		// preserve argc/argv/envp and the auxiliary vector for the program lifetime
+		this->memory.set_stack_initial(sp);
 	}
 
 	template <int W, typename T>
@@ -284,6 +287,8 @@ namespace riscv
 		this->copy_to_guest(dst, argv.data(), argsize);
 		// re-initialize machine stack-pointer
 		this->cpu.reg(REG_SP) = dst;
+		// preserve argc/argv/envp and the auxiliary vector for the program lifetime
+		this->memory.set_stack_initial(dst);
 	}
 
 	template <int W>
