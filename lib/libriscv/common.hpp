@@ -307,6 +307,11 @@ namespace riscv
 		/// @details Regions start at every basic-block leader and overlap, so their
 		/// tails are duplicated. This is what bounds that duplication.
 		unsigned asmjit_region_instr_max = 128;
+		/// @brief Enable background translation, using a user-provided callback to
+		/// run the translation step on another thread.
+		/// @details Short-lived programs should leave this disabled, as the
+		/// translation often takes longer than simply interpreting the program.
+		std::function<void(std::function<void()>& translation_step)> asmjit_background_callback = nullptr;
 #endif
 	};
 

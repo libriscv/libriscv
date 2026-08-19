@@ -128,7 +128,7 @@ namespace riscv
 
 #ifdef RISCV_ASMJIT
 		// asmjit native code generation (independent of binary translation)
-		void asmjit_translate(const MachineOptions<W>&, DecodedExecuteSegment<W>&) const;
+		void asmjit_translate(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&) const;
 #endif
 
 		void reset();

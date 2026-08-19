@@ -2,6 +2,7 @@
 #include "../decoded_exec_segment.hpp"
 #include "../decoder_cache.hpp"
 #include "../machine.hpp"
+#include "../livepatch.hpp"
 #include "../threaded_bytecodes.hpp"
 #include "aj_emit.hpp"
 #include "aj_runtime.hpp"
@@ -166,7 +167,8 @@ namespace riscv
 	// interpreter.
 	template <int W>
 	static void aj_translate_segment(const CPU<W>& cpu,
-		const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec)
+		const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec,
+		bool live_patch)
 	{
 		using address_t = address_type<W>;
 
@@ -239,18 +241,34 @@ namespace riscv
 		exec.set_asmjit_code(std::move(ajcode));
 
 		// --- 4. Claim decoder entries ---------------------------------------------
+		// Running synchronously, the decoder cache has not been generated yet: the
+		// claimed entries are skipped by the generator and realize_fastsim() ends
+		// the surrounding block at them. A background translation arrives long
+		// after that, so it patches a copy of the finished cache instead and
+		// live-patches running threads over to it.
+		std::unique_ptr<LivePatchedDecoderCache<W>> patched;
+		if (live_patch) {
+			// The decoder cache is finished by the thread that started us, and
+			// activation both reads and patches it. Wait for it to be complete.
+			exec.wait_for_decoder_cache_ready();
+			patched = std::make_unique<LivePatchedDecoderCache<W>>(exec, regions.size());
+		}
+
 		unsigned claimed = 0;
 		for (size_t i = 0; i < regions.size(); i++) {
 			if (mappings[i] == nullptr)
 				continue;
-			auto& entry = aj_decoder_entry_at(exec.decoder_cache(), regions[i].entry);
 		#ifdef RISCV_BINARY_TRANSLATION
 			// Binary translation ran first and already owns this entry.
 			// (When asmjit_override_bintr is set, asmjit runs first instead and
 			// the symmetric check in tr_translate.cpp keeps bintr off these.)
-			if (entry.get_bytecode() == RV32I_BC_TRANSLATOR)
+			if (aj_decoder_entry_at(exec.decoder_cache(), regions[i].entry)
+				.get_bytecode() == RV32I_BC_TRANSLATOR)
 				continue;
 		#endif
+			auto& entry = live_patch
+				? patched->claim(regions[i].entry, options.verbose_loader)
+				: aj_decoder_entry_at(exec.decoder_cache(), regions[i].entry);
 			entry.set_bytecode(RV32I_BC_ASMJIT);
 			entry.set_invalid_handler();
 			entry.instr  = unsigned(i);
@@ -259,6 +277,12 @@ namespace riscv
 			entry.icount = 0;
 		#endif
 			claimed++;
+		}
+
+		if (live_patch) {
+			// Hand the patched decoder cache to the execute segment, and switch
+			// any thread that is running inside a claimed block over to it.
+			patched->activate(true);
 		}
 
 		if (options.asmjit_verbose || options.asmjit_timing) {
@@ -272,25 +296,60 @@ namespace riscv
 
 	template <int W>
 	void CPU<W>::asmjit_translate(const MachineOptions<W>& options,
-		DecodedExecuteSegment<W>& exec) const
+		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment) const
 	{
 #if RISCV_ASMJIT_HAS_BACKEND
 		if constexpr (W == 4 || W == 8) {
-			aj_translate_segment<W>(*this, options, exec);
+			// Emitting takes long enough on a large program to be worth moving off
+			// the calling thread. The user decides how (and whether) that happens,
+			// exactly like binary translation does.
+			const bool live_patch = options.asmjit_background_callback != nullptr;
+			if (!live_patch) {
+				aj_translate_segment<W>(*this, options, *shared_segment, false);
+				return;
+			}
+
+			// The options are copied, as the caller is free to let its own copy go
+			// out of scope while we are still translating.
+			std::function<void()> translation_step =
+			[this, options, shared_segment = shared_segment] () mutable
+			{
+				try {
+					aj_translate_segment<W>(*this, options, *shared_segment, true);
+				} catch (const std::exception& e) {
+					if (options.verbose_loader) {
+						fprintf(stderr, "libriscv: asmjit translation failed: %s\n", e.what());
+					}
+					shared_segment->set_background_compiling(false);
+					throw;
+				}
+				shared_segment->set_background_compiling(false);
+			};
+
+			shared_segment->set_background_compiling(true);
+			try {
+				options.asmjit_background_callback(translation_step);
+			} catch (...) {
+				// If the callback failed to take ownership of the translation step,
+				// nobody will ever clear the flag, and the execute segment would
+				// block forever on destruction. Clear it here instead.
+				shared_segment->set_background_compiling(false);
+				throw;
+			}
 			return;
 		}
 #endif
 		// RV128, and hosts asmjit has no code generator for, stay interpreted.
-		(void)options; (void)exec;
+		(void)options; (void)shared_segment;
 	}
 
 #ifdef RISCV_32I
-	template void CPU<4>::asmjit_translate(const MachineOptions<4>&, DecodedExecuteSegment<4>&) const;
+	template void CPU<4>::asmjit_translate(const MachineOptions<4>&, std::shared_ptr<DecodedExecuteSegment<4>>&) const;
 #endif
 #ifdef RISCV_64I
-	template void CPU<8>::asmjit_translate(const MachineOptions<8>&, DecodedExecuteSegment<8>&) const;
+	template void CPU<8>::asmjit_translate(const MachineOptions<8>&, std::shared_ptr<DecodedExecuteSegment<8>>&) const;
 #endif
 #ifdef RISCV_128I
-	template void CPU<16>::asmjit_translate(const MachineOptions<16>&, DecodedExecuteSegment<16>&) const;
+	template void CPU<16>::asmjit_translate(const MachineOptions<16>&, std::shared_ptr<DecodedExecuteSegment<16>>&) const;
 #endif
 }

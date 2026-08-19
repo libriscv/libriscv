@@ -37,7 +37,7 @@ struct Arguments {
 	bool sandbox = false;
 	bool execute_only = false;
 	bool ignore_text = false;
-	bool background = riscv::libtcc_enabled; // Run binary translation in background thread
+	bool background = riscv::libtcc_enabled || riscv::asmjit_enabled; // Run translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
 	bool libc_fastpath = false; // Hot-patch known libc functions
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
@@ -349,6 +349,12 @@ static void run_program(
 		.asmjit_override_bintr = false,
 		.asmjit_verbose = cli_args.trace,
 		.asmjit_timing = cli_args.timing,
+		.asmjit_background_callback = cli_args.background ?
+			[] (auto& translation_step) {
+				std::thread([translation_step = std::move(translation_step)] {
+					translation_step();
+				}).detach();
+			} : std::function<void(std::function<void()>&)>(nullptr),
 #endif
 	});
 

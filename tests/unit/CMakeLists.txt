@@ -30,7 +30,7 @@ function(add_unit_test NAME)
 endfunction()
 
 add_unit_test(basic    basic.cpp)
-if (RISCV_BINARY_TRANSLATION)
+if (RISCV_BINARY_TRANSLATION OR RISCV_ASMJIT)
 add_unit_test(bgcompile bgcompile.cpp) # background JIT vs. execute segment lifetime
 endif()
 add_unit_test(basic32  basic32.cpp)
