@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdio>
 #include <set>
+#include <variant>
 #include <vector>
 
 namespace riscv
@@ -30,17 +31,26 @@ namespace riscv
 		address_t begin, end;
 		std::vector<bool> valid_start;
 		std::set<address_t> entries;
+		/// @brief Addresses that must stay with the interpreter no matter what
+		/// instruction they hold, because something patched their decoder entry.
+		const std::set<address_t>& blocked;
 
 		bool is_instruction(address_t pc) const noexcept {
 			return pc >= begin && pc < end && (pc & 1) == 0
 				&& valid_start[(pc - begin) / 2];
 		}
+		/// @brief Emittability as region discovery sees it: an instruction the
+		/// emitter handles, at an address nobody else has claimed.
+		bool is_emittable_at(address_t pc, const AjDecoded& d) const noexcept {
+			return aj_is_emittable<W>(d) && blocked.count(pc) == 0;
+		}
 		void consider_entry(address_t pc) {
-			if (is_instruction(pc)) entries.insert(pc);
+			if (is_instruction(pc) && blocked.count(pc) == 0) entries.insert(pc);
 		}
 
-		AjSegmentMap(const uint8_t* seg, address_t b, address_t e)
-			: begin(b), end(e), valid_start((e - b + 1) / 2, false)
+		AjSegmentMap(const uint8_t* seg, address_t b, address_t e,
+			const std::set<address_t>& blk)
+			: begin(b), end(e), valid_start((e - b + 1) / 2, false), blocked(blk)
 		{
 			std::vector<address_t> candidates;
 			for (address_t pc = begin; pc + 2 <= end; )
@@ -54,7 +64,7 @@ namespace riscv
 				// targets: without the address *after* a call, a returning function
 				// would land in the middle of a region and fall back to the
 				// interpreter for the rest of its caller.
-				if (aj_is_emittable<W>(d)) {
+				if (is_emittable_at(pc, d)) {
 					switch (d.instr.opcode()) {
 					case RV32I_JAL:
 						candidates.push_back(pc + d.instr.Jtype.jump_offset());
@@ -105,7 +115,7 @@ namespace riscv
 			if (seen.size() >= max_instructions)
 				continue;   // capped: anything left over becomes a region exit
 			const auto d = aj_decode<W>(seg, pc, map.end);
-			if (!aj_is_emittable<W>(d))
+			if (!map.is_emittable_at(pc, d))
 				continue;
 			seen.insert(pc);
 
@@ -171,8 +181,22 @@ namespace riscv
 
 		const auto t0 = std::chrono::steady_clock::now();
 
+		// --- 0. Addresses the emitter must not swallow ----------------------------
+		// A breakpoint is installed by rewriting one decoder entry, which a region
+		// that inlined that address never consults. Regions are emitted before the
+		// breakpoints are installed, so the addresses are resolved here the same
+		// way decoder_cache.cpp resolves them, and made to terminate a region.
+		std::set<address_t> blocked;
+		for (const auto& loc : options.ebreak_locations) {
+			const address_t addr = std::holds_alternative<address_t>(loc)
+				? std::get<address_t>(loc)
+				: cpu.machine().address_of(std::get<std::string>(loc));
+			if (addr >= begin && addr < end)
+				blocked.insert(addr);
+		}
+
 		// --- 1. Instruction boundaries and entry points ---------------------------
-		const AjSegmentMap<W> map { seg, begin, end };
+		const AjSegmentMap<W> map { seg, begin, end, blocked };
 
 		// --- 2. One region per entry point ---------------------------------------
 		struct Region {

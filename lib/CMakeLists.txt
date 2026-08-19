@@ -349,6 +349,16 @@ if (RISCV_ASMJIT)
 		)
 	endif()
 	FetchContent_MakeAvailable(asmjit)
+	# asmjit adds -fmerge-all-constants to its own sources in every non-Debug
+	# config, which does not work with AddressSanitizer on GCC: the constexpr
+	# lookup tables inside its always_inline helpers (RegUtils::signature_of()
+	# and friends) get merged into shared .rodata objects, but GCC still emits
+	# use-after-scope poisoning for the inlined scope. The first caller poisons
+	# the merged table on the way out and every later read of it aborts with a
+	# bogus "stack-use-after-scope" on a global.
+	#if (NOT MSVC)
+	#	target_compile_options(asmjit PRIVATE -fno-merge-all-constants)
+	#endif()
 	# NOTE: Do not set ASMJIT_NO_COMPILER: the Compiler API provides the
 	# register allocator and the ABI handling that the emitter relies on.
 	target_link_libraries(riscv PRIVATE asmjit::asmjit)

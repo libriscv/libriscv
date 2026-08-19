@@ -66,8 +66,13 @@ namespace riscv
 		case RV32I_LUI:
 		case RV32I_AUIPC:
 		case RV32I_JAL:
-		case RV32I_FENCE:
 			return true;
+		case RV32I_FENCE:
+			// MISC-MEM carries more than FENCE: funct3 1 is FENCE.I, which the
+			// interpreter uses to invalidate stale execute segments, and funct3 2
+			// is the Zicbo group, whose CBO.ZERO writes 64 bytes of zeroes. A
+			// barrier is the right answer for plain FENCE only.
+			return i.Itype.funct3 == 0x0;
 		case RV32I_JALR:
 			return i.Itype.funct3 == 0x0;
 		case RV32I_BRANCH:
@@ -162,9 +167,16 @@ namespace riscv
 			switch (i.fpfunc()) {
 			case RV32F__FADD: case RV32F__FSUB:
 			case RV32F__FMUL: case RV32F__FDIV:
-			case RV32F__FSQRT:
-			case RV32F__FCVT_SD_DS:
 				return true;
+			case RV32F__FSQRT:
+				// rs2 is not a register here; every value but 0 is reserved.
+				return fi.R4type.rs2 == 0x0;
+			case RV32F__FCVT_SD_DS:
+				// rs2 names the *source* format, where funct2 names the
+				// destination: 0 is single, 1 is double, 2 is half (Zfhmin) and
+				// 4/5 are Zfa's FROUND/FROUNDNX, which are not conversions at
+				// all. Only a real S<->D conversion may be emitted.
+				return fi.R4type.rs2 <= 0x1 && fi.R4type.rs2 != fi.R4type.funct2;
 			case RV32F__FSGNJ_NX:
 				return fi.R4type.funct3 <= 0x2;
 			case RV32F__FMIN_MAX:
@@ -179,11 +191,18 @@ namespace riscv
 				// funct3 0 is FMV.X.W / FMV.X.D, funct3 1 is FCLASS. Only the
 				// move of a whole double into an integer register needs RV64;
 				// FCLASS reads the bit fields and fits a 32-bit result.
+				// rs2 must be 0: Zfa reuses rs2 1 for FMVH.X.D.
+				if (fi.R4type.rs2 != 0x0)
+					return false;
 				if (fi.R4type.funct3 == 0x1)
 					return true;
 				return fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
 			case RV32F__FMV_W_X:
-				return fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
+				// rs2 must be 0: Zfa's FLI.{S,D} shares this funct7 with rs2 1,
+				// and reads a constant table index out of rs1 rather than a
+				// register. Emitting it as FMV.W.X silently loads garbage.
+				return fi.R4type.rs2 == 0x0
+					&& fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
 			default:
 				return false;
 			}
