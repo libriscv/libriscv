@@ -1,0 +1,4 @@
+# Build products of run.sh and isa/run.sh: the two builds of each program,
+# their output, and the compiler and emulator logs.
+build/
+isa/build/
