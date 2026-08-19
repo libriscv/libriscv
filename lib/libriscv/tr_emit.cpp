@@ -292,12 +292,17 @@ struct Emitter
 		}
 		return guard;
 	}
-	// vl and vtype are about to change, or may have changed behind our back.
-	void reset_vector_config() {
-		this->m_vtype = {};
+	// vl is about to change, or may have changed behind our back. SEW, LMUL
+	// and vill are untouched, and so is anything proven from them.
+	void reset_vector_vl() {
 		this->m_vl_known = false;
 		this->m_vl_local.clear();
 		for (auto& guard : this->m_rvv_guard) guard.clear();
+	}
+	// The same for the whole configuration.
+	void reset_vector_config() {
+		this->m_vtype = {};
+		this->reset_vector_vl();
 	}
 	// Call the interpreter's instruction handler (non-libtcc slow path)
 	void emit_vector_handler_call(const rv32i_instruction& instr) {
@@ -383,22 +388,229 @@ struct Emitter
 			this->potentially_reload_register(use.writes);
 		}
 	}
+	// check_group() in rvv_instr.cpp: a register group has to be aligned to
+	// its own size and fit inside v0-v31. A fractional LMUL occupies a
+	// single register, and so is never checked.
+	bool vector_group_is_aligned(unsigned vreg) const noexcept
+	{
+		const unsigned regs = (m_vtype.lmul >= 0) ? (1u << m_vtype.lmul) : 0u;
+		return regs <= 1 || (vreg % regs == 0 && vreg + regs <= 32);
+	}
+	// Whether the interpreter handler for this exact encoding can raise.
+	// Answering no removes the check after the call altogether, so this is a
+	// whitelist: every code point below has been read in rvv_instr.cpp and
+	// reaches nothing but element loops from the handler's entry.
+	//
+	// Three preconditions guard the whole arithmetic family, and an inlined
+	// vsetvli earlier in the block decides all three: require_valid_vtype()
+	// wants vill clear, the SEW dispatch wants a width the operation is
+	// defined for, and check_register_group() wants LMUL, which turns the
+	// register numbers into a static question. Without a known vtype there is
+	// nothing to prove from, and the answer is always yes.
+	bool vector_handler_can_trap(const rv32i_instruction& vinstr) const
+	{
+		// Loads and stores fault on an address that is not known here.
+		if (vinstr.opcode() != RV32V_OP)
+			return true;
+		if (!m_vtype.known || m_vtype.vill)
+			return true;
+		const rv32v_instruction vi { vinstr };
+		const unsigned f6 = vi.OPVV.funct6;
+		// The floating-point families are defined for SEW 32 and 64 only.
+		const bool fp_sew = (m_vtype.vsew == 2 || m_vtype.vsew == 3);
+		// vs1 shares its field with the immediate, and is only a register
+		// group in the .vv forms.
+		const bool vd_ok  = vector_group_is_aligned(vi.OPVV.vd);
+		const bool vs1_ok = vector_group_is_aligned(vi.OPVV.vs1);
+		const bool vs2_ok = vector_group_is_aligned(vi.OPVV.vs2);
+
+		switch (vinstr.vwidth()) {
+		case 0x0: // OPI.VV: elements out of three SEW-sized groups
+			if (!vd_ok || !vs1_ok || !vs2_ok)
+				return true;
+			switch (f6) {
+			case 0b000000: // VADD.VV
+			case 0b000001: // VANDN.VV
+			case 0b000010: // VSUB.VV
+			case 0b000100: // VMINU.VV
+			case 0b000101: // VMIN.VV
+			case 0b000110: // VMAXU.VV
+			case 0b000111: // VMAX.VV
+			case 0b001001: // VAND.VV
+			case 0b001010: // VOR.VV
+			case 0b001011: // VXOR.VV
+			case 0b001100: // VRGATHER.VV
+			case 0b010001: // VMADC.VV(M)
+			case 0b010011: // VMSBC.VV(M)
+			case 0b010111: // VMERGE.VVM / VMV.V.V
+			case 0b011000: // VMSEQ.VV
+			case 0b011001: // VMSNE.VV
+			case 0b011010: // VMSLTU.VV
+			case 0b011011: // VMSLT.VV
+			case 0b011100: // VMSLEU.VV
+			case 0b011101: // VMSLE.VV
+			case 0b100000: // VSADDU.VV
+			case 0b100001: // VSADD.VV
+			case 0b100010: // VSSUBU.VV
+			case 0b100011: // VSSUB.VV
+			case 0b100101: // VSLL.VV
+			case 0b101000: // VSRL.VV
+			case 0b101001: // VSRA.VV
+				return false;
+			case 0b010000: // VADC.VVM
+			case 0b010010: // VSBC.VVM
+				// vm=1 is reserved for these two: v0 is the carry, not a mask.
+				return vi.OPVV.vm != 0;
+			default:
+				return true;
+			}
+		case 0x3: // OPI.VI
+		case 0x4: // OPI.VX: the second source is an immediate or x[rs1]
+			if (!vd_ok || !vs2_ok)
+				return true;
+			switch (f6) {
+			case 0b000000: // VADD
+			case 0b000011: // VRSUB
+			case 0b001001: // VAND
+			case 0b001010: // VOR
+			case 0b001011: // VXOR
+			case 0b001100: // VRGATHER
+			case 0b001110: // VSLIDEUP
+			case 0b001111: // VSLIDEDOWN
+			case 0b010111: // VMERGE / VMV.V.I|X
+			case 0b011000: // VMSEQ
+			case 0b011001: // VMSNE
+			case 0b011010: // VMSLTU
+			case 0b011011: // VMSLT
+			case 0b011100: // VMSLEU
+			case 0b011101: // VMSLE
+			case 0b011110: // VMSGTU
+			case 0b011111: // VMSGT
+			case 0b100000: // VSADDU
+			case 0b100001: // VSADD
+			case 0b100010: // VSSUBU
+			case 0b100011: // VSSUB
+			case 0b100101: // VSLL
+			case 0b101000: // VSRL
+			case 0b101001: // VSRA
+				return false;
+			case 0b000001: // VANDN: there is no .vi form
+				return vinstr.vwidth() != 0x4;
+			default:
+				return true;
+			}
+		case 0x2: // OPM.VV
+		case 0x6: // OPM.VX
+			switch (f6) {
+			case 0b011000: // VMANDN.MM
+			case 0b011001: // VMAND.MM
+			case 0b011010: // VMOR.MM
+			case 0b011011: // VMXOR.MM
+			case 0b011100: // VMORN.MM
+			case 0b011101: // VMNAND.MM
+			case 0b011110: // VMNOR.MM
+			case 0b011111: // VMXNOR.MM
+				// Whole single mask registers: no group to align. The .vx
+				// forms are reserved and fall through to the handler's trap.
+				return vinstr.vwidth() != 0x2;
+			case 0b100000: // VDIVU
+			case 0b100001: // VDIV
+			case 0b100010: // VREMU
+			case 0b100011: // VREM
+			case 0b100100: // VMULHU
+			case 0b100101: // VMUL
+			case 0b100110: // VMULHSU
+			case 0b100111: // VMULH
+			case 0b101001: // VMADD
+			case 0b101011: // VNMSUB
+			case 0b101101: // VMACC
+			case 0b101111: // VNMSAC
+				return !vd_ok || !vs2_ok
+					|| (vinstr.vwidth() == 0x2 && !vs1_ok);
+			default:
+				return true;
+			}
+		case 0x1: // OPF.VV
+			// The element-wise arithmetic the decoder splits out into its own
+			// handler. The rest of the family widens, reduces, converts or
+			// moves to a scalar, and each of those brings its own checks.
+			if (!RVV_IS_OPFVV_ARITH(f6))
+				return true;
+			return !fp_sew || !vd_ok || !vs1_ok || !vs2_ok;
+		case 0x5: // OPF.VF
+			if (!fp_sew || !vd_ok || !vs2_ok)
+				return true;
+			switch (f6) {
+			case 0b000000: // VFADD.VF
+			case 0b000010: // VFSUB.VF
+			case 0b000100: // VFMIN.VF
+			case 0b000110: // VFMAX.VF
+			case 0b001000: // VFSGNJ.VF
+			case 0b001001: // VFSGNJN.VF
+			case 0b001010: // VFSGNJX.VF
+			case 0b001110: // VFSLIDE1UP.VF
+			case 0b001111: // VFSLIDE1DOWN.VF
+			case 0b010000: // VFMV.S.F
+			case 0b010111: // VFMERGE.VFM / VFMV.V.F
+			case 0b011000: // VMFEQ.VF
+			case 0b011001: // VMFLE.VF
+			case 0b011011: // VMFLT.VF
+			case 0b011100: // VMFNE.VF
+			case 0b011101: // VMFGT.VF
+			case 0b011111: // VMFGE.VF
+			case 0b100000: // VFDIV.VF
+			case 0b100001: // VFRDIV.VF
+			case 0b100100: // VFMUL.VF
+			case 0b100111: // VFRSUB.VF
+			case 0b101000: case 0b101001: case 0b101010: case 0b101011:
+			case 0b101100: case 0b101101: case 0b101110: case 0b101111:
+				return false; // ... and the eight fused multiply-adds
+			default:
+				return true;
+			}
+		default: // 0x7: vector configuration
+			return true;
+		}
+	}
+	// Whether the handler can leave vl or vtype different from how it found
+	// them, which is what the block's proven vtype has to survive. Only the
+	// configuration instructions reconfigure, plus the fault-only-first
+	// loads, which shorten vl at the element that faults (rvv_instr.cpp).
+	static bool vector_handler_can_reconfigure(const rv32i_instruction& vinstr)
+	{
+		if (vinstr.opcode() == RV32V_OP)
+			return vinstr.vwidth() == 0x7;
+		if (vinstr.opcode() != RV32F_LOAD)
+			return false; // vector stores never write vl
+		const rv32v_instruction vi { vinstr };
+		return vi.VL.mop == 0b00 && vi.VL.lumop == 0b10000;
+	}
+	// Leave the block when a vector handler has raised.
+	void emit_vector_trap_branch(const std::string& condition)
+	{
+		code += "if (UNLIKELY(" + condition + "))";
+		if (this->uses_register_caching()) {
+			this->m_used_vector_trap = true;
+			code += " goto " + this->vector_trap_label() + ";\n";
+		} else {
+			// Nothing to store, so the exit is already as small as the jump.
+			code += " {\nRETURN_VALUES(0, 0);\n}\n";
+		}
+	}
 	void emit_vector_handler_invoke()
 	{
-		if (tinfo.is_libtcc) {
-			const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler;
-			code += "if (UNLIKELY(api.execute_handler(cpu, " + std::to_string(instr.whole)
-				+ ", " + std::to_string(handler) + ")))";
-			if (this->uses_register_caching()) {
-				this->m_used_vector_trap = true;
-				code += " goto " + this->vector_trap_label() + ";\n";
-			} else {
-				// Nothing to store, so the exit is already as small as the jump.
-				code += " {\nRETURN_VALUES(0, 0);\n}\n";
-			}
-		} else {
+		if (!tinfo.is_libtcc) {
 			this->emit_vector_handler_call(instr);
+			return;
 		}
+		const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler;
+		const std::string call = "api.execute_handler(cpu, "
+			+ std::to_string(instr.whole) + ", " + std::to_string(handler) + ")";
+		// Nothing follows a call that has been proven unable to raise.
+		if (!this->m_vtrap_needed)
+			add_code(call + ";");
+		else
+			this->emit_vector_trap_branch(call);
 	}
 	std::string vector_trap_label() const {
 		return this->func + "_vtrap";
@@ -415,8 +627,15 @@ struct Emitter
 	// reloading only the integer registers the handler names.
 	void emit_vector_slowpath()
 	{
-		if (!this->vector_is_guarded_inlinable(instr))
-			this->reset_vector_config();
+		// A fault-only-first load shortens vl at the element that faults,
+		// but leaves SEW, LMUL and vill as it found them; only the vsetvl*
+		// handlers rewrite the whole configuration.
+		if (vector_handler_can_reconfigure(instr)) {
+			if (instr.opcode() == RV32V_OP)
+				this->reset_vector_config();
+			else
+				this->reset_vector_vl();
+		}
 		const auto use = vector_scalar_use(this->instr);
 		this->realize_vector_scalar_reads(use);
 		this->emit_vector_handler_invoke();
@@ -535,14 +754,6 @@ struct Emitter
 		default: // Fault-only-first, and the encodings that trap
 			return {};
 		}
-	}
-	// True when this instruction is inlined rather than handed over, and so
-	// leaves vl and vtype exactly as it found them.
-	bool vector_is_guarded_inlinable(const rv32i_instruction& vinstr)
-	{
-		if (vinstr.opcode() == RV32F_LOAD || vinstr.opcode() == RV32F_STORE)
-			return vector_memory_form(vinstr).form != VectorMemForm::None;
-		return !this->vector_inlinable_sews(vinstr).empty();
 	}
 	// The SEWs this float arithmetic can be inlined at. It follows vtype's
 	// SEW, which is known statically only after an inlined vsetvli; without
@@ -985,6 +1196,10 @@ struct Emitter
 	// otherwise straight to the handler.
 	void emit_vector_instruction()
 	{
+		// Settle this before emitting anything: it reads the vtype the block
+		// has proven, which the emission below can change.
+		this->m_vtrap_needed = this->vector_handler_can_trap(instr);
+
 		if (this->vector_is_inlinable_setvl(instr)) {
 			this->emit_vector_setvl();
 			return;
@@ -1441,6 +1656,8 @@ private:
 	std::string m_vl_local;
 	// Live C local holding the vl/vtype fast-path test per SEW, see rvv_guard()
 	std::array<std::string, 4> m_rvv_guard;
+	// Whether the current vector instruction's handler can raise at all
+	bool m_vtrap_needed = true;
 #endif
 	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
