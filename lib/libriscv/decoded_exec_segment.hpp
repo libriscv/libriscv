@@ -1,8 +1,10 @@
 #pragma once
 #include <memory>
 #include "types.hpp"
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <thread>
 #include <unordered_set>
 
 namespace riscv
@@ -80,16 +82,43 @@ namespace riscv
 		void set_record_slowpaths(bool do_record) { m_do_record_slowpaths = do_record; }
 		bool is_recording_slowpaths() const noexcept { return m_do_record_slowpaths; }
 		void wait_for_compilation_complete() {
+			// Fast path: avoid taking the lock when nothing is compiling. The
+			// flag is atomic, so this is safe even while a background thread
+			// is finishing up.
+			if (!m_is_background_compiling)
+				return;
 			std::unique_lock<std::mutex> lock(m_background_compilation_mutex);
-			m_background_compilation_cv.wait(lock, [this]{ return !m_is_background_compiling; });
+			m_background_compilation_cv.wait(lock, [this]{ return !m_is_background_compiling.load(); });
 		}
 		bool is_background_compiling() const noexcept { return m_is_background_compiling; }
 		void set_background_compiling(bool is_bg) {
 			std::lock_guard<std::mutex> lock(m_background_compilation_mutex);
-			if (m_is_background_compiling && !is_bg) {
+			const bool was_compiling = m_is_background_compiling;
+			m_is_background_compiling = is_bg;
+			if (was_compiling && !is_bg) {
 				m_background_compilation_cv.notify_all();
 			}
-			m_is_background_compiling = is_bg;
+		}
+		// The decoder cache is only fully generated *after* binary translation
+		// has been kicked off, which means a background compilation must not
+		// touch the decoder cache until the owning thread says it is complete.
+		bool is_decoder_cache_ready() const noexcept { return m_decoder_cache_ready; }
+		void set_decoder_cache_generator(std::thread::id id) { m_decoder_cache_generator = id; }
+		void set_decoder_cache_ready() {
+			std::lock_guard<std::mutex> lock(m_background_compilation_mutex);
+			m_decoder_cache_ready = true;
+			m_background_compilation_cv.notify_all();
+		}
+		void wait_for_decoder_cache_ready() {
+			if (m_decoder_cache_ready)
+				return;
+			// A user-provided background callback is free to invoke the compilation
+			// step synchronously, in which case we *are* the thread generating the
+			// decoder cache, and waiting for ourselves would deadlock.
+			if (std::this_thread::get_id() == m_decoder_cache_generator.load())
+				return;
+			std::unique_lock<std::mutex> lock(m_background_compilation_mutex);
+			m_background_compilation_cv.wait(lock, [this]{ return m_decoder_cache_ready.load(); });
 		}
 #ifdef RISCV_DEBUG
 		void insert_slowpath_address(address_t addr) { m_slowpath_addresses.insert(addr); }
@@ -139,7 +168,9 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		bool m_do_record_slowpaths = false;
 		mutable bool m_is_libtcc = false;
-		bool m_is_background_compiling = false;
+		std::atomic<bool> m_is_background_compiling { false };
+		std::atomic<bool> m_decoder_cache_ready { false };
+		std::atomic<std::thread::id> m_decoder_cache_generator {};
 		mutable std::mutex m_background_compilation_mutex;
 		std::condition_variable m_background_compilation_cv;
 #endif
@@ -189,12 +220,14 @@ namespace riscv
 	inline DecodedExecuteSegment<W>::~DecodedExecuteSegment()
 	{
 #ifdef RISCV_BINARY_TRANSLATION
+		// Wait for any background compilation to finish *before* unloading the
+		// dylib, as the compilation may still be activating (and assigning) it.
+		wait_for_compilation_complete();
+
 		extern void  dylib_close(void* dylib, bool is_libtcc);
 		if (m_bintr_dl)
 			dylib_close(m_bintr_dl, m_is_libtcc);
 		m_bintr_dl = nullptr;
-		// Wait for any background compilation to finish
-		wait_for_compilation_complete();
 #endif
 	}
 

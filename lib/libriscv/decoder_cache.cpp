@@ -82,15 +82,22 @@ namespace riscv
 
 		// Remove a segment if it is the last reference
 		void remove_if_unique(key_t key) {
-			std::lock_guard<std::mutex> lock(mutex);
-			// We are not able to remove the Segment itself, as the mutex
-			// may be locked by another thread. We can, however, lock the
-			// Segments mutex and set the segment to nullptr.
-			auto it = m_segments.find(key);
-			if (it != m_segments.end()) {
-				std::scoped_lock lock(it->second.mutex);
-				if (it->second.segment.use_count() == 1)
-					it->second.segment = nullptr;
+			// The last reference is moved out here and released *after* both
+			// mutexes have been unlocked. Destroying an execute segment can
+			// block for a long time (waiting for a background compilation to
+			// finish) and must never happen while holding these locks.
+			std::shared_ptr<DecodedExecuteSegment<W>> doomed;
+			{
+				std::lock_guard<std::mutex> lock(mutex);
+				// We are not able to remove the Segment itself, as the mutex
+				// may be locked by another thread. We can, however, lock the
+				// Segments mutex and set the segment to nullptr.
+				auto it = m_segments.find(key);
+				if (it != m_segments.end()) {
+					std::scoped_lock lock(it->second.mutex);
+					if (it->second.segment.use_count() == 1)
+						doomed = std::move(it->second.segment);
+				}
 			}
 		}
 
@@ -333,6 +340,20 @@ namespace riscv
 		auto& exec = *shared_segment;
 		if (exec.exec_end() < exec.exec_begin())
 			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
+
+#ifdef RISCV_BINARY_TRANSLATION
+		// Binary translation is started in the middle of this function, and when it
+		// runs in the background it must not touch the decoder cache before we are
+		// done generating it. Signal completion on every exit path, including the
+		// ones that throw, or a background compilation would wait forever.
+		struct DecoderCacheReadyGuard {
+			DecodedExecuteSegment<W>& exec;
+			DecoderCacheReadyGuard(DecodedExecuteSegment<W>& e) : exec(e) {
+				exec.set_decoder_cache_generator(std::this_thread::get_id());
+			}
+			~DecoderCacheReadyGuard() { exec.set_decoder_cache_ready(); }
+		} decoder_cache_ready_guard { exec };
+#endif
 
 		const auto addr  = exec.exec_begin();
 		const auto len   = exec.exec_end() - exec.exec_begin();
@@ -596,8 +617,10 @@ namespace riscv
 
 			this->generate_decoder_cache(options, free_slot, is_initial);
 
-			// Share the execute segment
-			shared_execute_segments<W>.get_segment(key).unlocked_set(free_slot);
+			// Share the execute segment. NOTE: We already hold segment.mutex,
+			// and we must not take the global mutex here (which get_segment()
+			// does), as that is the reverse lock order of remove_if_unique().
+			segment.unlocked_set(free_slot);
 		}
 		else
 		{
@@ -640,6 +663,21 @@ namespace riscv
 		// destructor could throw, so let's invalidate early
 		machine().cpu.set_execute_segment(*CPU<W>::empty_execute_segment());
 
+#ifdef RISCV_BINARY_TRANSLATION
+		// A background compilation holds a reference to the execute segment, but
+		// only a raw pointer to this Machine, which it uses while translating and
+		// activating. It must therefore be finished before we go away, otherwise
+		// it will end up using a destroyed Machine. Waiting here (before any of
+		// the shared execute segment mutexes are taken) also guarantees that the
+		// segment destructor never blocks while holding those locks.
+		if (m_main_exec_segment)
+			m_main_exec_segment->wait_for_compilation_complete();
+		for (auto& segment : m_exec) {
+			if (segment)
+				segment->wait_for_compilation_complete();
+		}
+#endif
+
 		auto& main_segment = m_main_exec_segment;
 		if (main_segment) {
 			const SegmentKey key = SegmentKey::from(*main_segment, memory_arena_size());
@@ -676,6 +714,11 @@ namespace riscv
 	template <int W>
 	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
 	{
+#ifdef RISCV_BINARY_TRANSLATION
+		// See evict_execute_segments(): a background compilation must not outlive
+		// the Machine it was started from.
+		segment.wait_for_compilation_complete();
+#endif
 		const SegmentKey key = SegmentKey::from(segment, memory_arena_size());
 		if (m_main_exec_segment.get() == &segment) {
 			m_main_exec_segment = nullptr;

@@ -1105,6 +1105,11 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 			// Check compilation result
 			if (dylib != nullptr) {
 				if (!exec->is_binary_translated()) {
+					// Activation reads and patches the decoder cache, which the owning
+					// thread may still be generating when we are compiling in the
+					// background. Wait for it to be complete before touching it.
+					if (live_patch)
+						exec->wait_for_decoder_cache_ready();
 					activate_dylib(options, *exec, dylib, machine(), libtcc_enabled, live_patch);
 				}
 
@@ -1140,7 +1145,15 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	if (live_patch) {
 		shared_segment->set_background_compiling(true);
 		// User-provided callback for background compilation
-		options.translate_background_callback(compilation_step);
+		try {
+			options.translate_background_callback(compilation_step);
+		} catch (...) {
+			// If the callback failed to take ownership of the compilation step,
+			// nobody will ever clear the flag, and the execute segment would
+			// block forever on destruction. Clear it here instead.
+			shared_segment->set_background_compiling(false);
+			throw;
+		}
 	} else {
 		// Synchronous compilation
 		compilation_step();

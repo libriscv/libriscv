@@ -30,6 +30,9 @@ function(add_unit_test NAME)
 endfunction()
 
 add_unit_test(basic    basic.cpp)
+if (RISCV_BINARY_TRANSLATION)
+add_unit_test(bgcompile bgcompile.cpp) # background JIT vs. execute segment lifetime
+endif()
 add_unit_test(basic32  basic32.cpp)
 if (RISCV_VIRTUAL_PAGING)
 add_unit_test(brutal   brutal.cpp)  # uses non-arena machines (paging)
