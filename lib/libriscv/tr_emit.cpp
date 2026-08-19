@@ -297,6 +297,7 @@ struct Emitter
 		this->m_vl_known = false;
 		this->m_vl_local.clear();
 		for (auto& guard : this->m_rvv_guard) guard.clear();
+		for (auto& guard : this->m_rvv_int_guard) guard.clear();
 	}
 	// Call the interpreter's instruction handler (non-libtcc slow path)
 	void emit_vector_handler_call(const rv32i_instruction& instr) {
@@ -455,6 +456,9 @@ struct Emitter
 		None,             // left to the interpreter handler
 		UnitStride,       // vle<eew>.v / vse<eew>.v: vl*EEW bytes
 		MaskedUnitStride, // ... the same, with v0 choosing the elements
+		Strided,          // vlse<eew>.v / vsse<eew>.v: vl elements, x[rs2] apart
+		Indexed,          // vlxei<eew>.v / vsxei<eew>.v: vl elements at vs2[i]
+		Segment,          // vlseg<nf>e<eew>.v / vsseg: nf fields, interleaved
 		WholeRegister,    // vl<n>re<eew>.v / vs<n>r.v: n registers, no vtype
 		Mask,             // vlm.v / vsm.v: ceil(vl/8) bytes
 	};
@@ -465,6 +469,8 @@ struct Emitter
 		unsigned nregs    = 1; // registers moved by a whole-register transfer
 		unsigned vreg     = 0; // vd, or vs3 in a store
 		unsigned rs1      = 0; // the base address
+		unsigned rs2      = 0; // the byte stride, in a strided access
+		unsigned vs2      = 0; // the index vector, in an indexed access
 	};
 	// The longest run any inlined form moves: eight registers, which is both
 	// LMUL=8 and the widest whole-register transfer.
@@ -485,21 +491,48 @@ struct Emitter
 		// Every body below reaches guest memory as a host pointer.
 		if (!uses_flat_memory_arena())
 			return {};
-		// MEW asks for an element wider than 64 bits, and a mop other than 00
-		// is a strided or indexed access: both belong to the handler.
-		if (vi.VL.mew || vi.VL.mop != 0b00)
+		// MEW asks for an element wider than 64 bits: that belongs to the
+		// handler.
+		if (vi.VL.mew)
 			return {};
 		info.vreg = info.is_store ? vi.VS.vs3 : vi.VL.vd;
 		info.rs1  = info.is_store ? vi.VS.rs1 : vi.VL.rs1;
 		const unsigned nf = vi.VL.nf + 1; // fields per segment
-		switch (info.is_store ? vi.VS.sumop : vi.VL.lumop) {
-		case 0b00000: { // The plain unit-stride access
-			if (nf != 1)
-				return {}; // Segmented: several fields share one address
+		if (vi.VL.mop == 0b01 || vi.VL.mop == 0b11) { // Indexed, un/ordered
+			if (!vi.VL.vm || nf != 1)
+				return {};
+			const int ieew = vector_unit_stride_sew(vi.VL.width);
+			if (ieew < 0)
+				return {};
+			info.eew_log2 = unsigned(ieew); // ... the index width, here
+			info.vs2 = info.is_store ? vi.VSX.vs2 : vi.VLX.vs2;
+			info.form = VectorMemForm::Indexed;
+			return info;
+		}
+		if (vi.VL.mop == 0b10) { // The strided access
+			if (!vi.VL.vm || nf != 1)
+				return {}; // Masked, or several fields sharing an address
 			const int eew = vector_unit_stride_sew(vi.VL.width);
 			if (eew < 0)
 				return {};
 			info.eew_log2 = unsigned(eew);
+			info.rs2 = info.is_store ? vi.VSS.rs2 : vi.VLS.rs2;
+			info.form = VectorMemForm::Strided;
+			return info;
+		}
+		switch (info.is_store ? vi.VS.sumop : vi.VL.lumop) {
+		case 0b00000: { // The plain unit-stride access
+			const int eew = vector_unit_stride_sew(vi.VL.width);
+			if (eew < 0)
+				return {};
+			info.eew_log2 = unsigned(eew);
+			if (nf != 1) { // Segmented: nf fields share one element index
+				if (!vi.VL.vm || nf > 8 || info.vreg + nf > 32)
+					return {};
+				info.nregs = nf;
+				info.form = VectorMemForm::Segment;
+				return info;
+			}
 			info.form = vi.VL.vm ? VectorMemForm::UnitStride
 			                     : VectorMemForm::MaskedUnitStride;
 			return info; }
@@ -528,6 +561,11 @@ struct Emitter
 	{
 		if (vinstr.opcode() == RV32F_LOAD || vinstr.opcode() == RV32F_STORE)
 			return vector_memory_form(vinstr).form != VectorMemForm::None;
+		if (vector_is_move_xs(vinstr) && !this->vector_int_sews().empty())
+			return true;
+		if (vector_int_form(vinstr).op != VectorIntOp::None
+			&& !this->vector_int_sews().empty())
+			return true;
 		return !this->vector_inlinable_sews(vinstr).empty();
 	}
 	// The SEWs this float arithmetic can be inlined at. It follows vtype's
@@ -820,11 +858,294 @@ struct Emitter
 		this->emit_vector_contiguous_move(info, addr, plan);
 		this->emit_vector_memory_epilogue(info, fallback);
 	}
+	// vlse<eew>.v / vsse<eew>.v: element *i* at base + i * x[rs2]. The run
+	// is not contiguous, so this is a loop rather than a block copy, and it
+	// is inlined only while it stays inside a single register (EMUL <= 1,
+	// vl elements at EEW). Addresses are checked in a pass of their own:
+	// a store that faulted halfway would have written elements the handler
+	// then writes again.
+	void emit_vector_strided(const VectorMemInfo& info)
+	{
+		constexpr uint64_t lane_size = VectorLane::size();
+		const unsigned eew = info.eew_log2;
+		const uint64_t max_elements = lane_size >> eew;
+		std::string guard;
+		if (m_vtype.known) {
+			// EMUL = LMUL * EEW / SEW, as a register count.
+			const int emul = m_vtype.lmul + int(eew) - int(m_vtype.vsew);
+			if (m_vtype.vill || emul > 0 || emul < -3) {
+				this->emit_vector_slowpath();
+				return;
+			}
+			if (m_vl_known && m_vl > max_elements) {
+				this->emit_vector_slowpath();
+				return;
+			}
+			if (!m_vl_known)
+				guard = vector_vl_expr() + " <= " + std::to_string(max_elements);
+		} else {
+			const std::string emul = "vem" + PCRELS(0);
+			add_code("{ const int " + emul + " = (int)cpu->rvv.lmul + "
+				+ std::to_string(eew) + " - (int)cpu->rvv.vsew;");
+			guard = "!cpu->rvv.vill && " + emul + " <= 0 && " + emul + " >= -3 && "
+				+ vector_vl_expr() + " <= " + std::to_string(max_elements);
+		}
+		if (m_vtype.known)
+			add_code("{");
+
+		const std::string base = "vsa" + PCRELS(0);
+		const std::string step = "vss" + PCRELS(0);
+		const std::string n    = "vsn" + PCRELS(0);
+		const std::string at   = "vsp" + PCRELS(0);
+		const std::string i    = "vsi" + PCRELS(0);
+		this->load_register(int(info.rs1));
+		this->load_register(int(info.rs2));
+		add_code("  const addr_t " + base + " = " + from_untracked_reg(int(info.rs1)) + ";",
+			"  const addr_t " + step + " = " + from_untracked_reg(int(info.rs2)) + ";",
+			"  const addr_t " + n + " = (addr_t)" + vector_vl_expr() + ";");
+		if (!guard.empty())
+			add_code("if (LIKELY(" + guard + ")) {");
+		else
+			add_code("{");
+
+		add_code("  addr_t " + i + "; addr_t " + at + ";");
+		bool checked = this->vector_memory_needs_bounds_check();
+		if (checked) {
+			const std::string ok = "vsok" + PCRELS(0);
+			const char* const test = info.is_store ? "ARENA_WRITABLE(" : "ARENA_READABLE(";
+			add_code("  int " + ok + "; " + ok + " = 1;",
+				"  for (" + i + " = 0, " + at + " = " + base + "; " + i + " < " + n
+					+ "; " + i + "++, " + at + " += " + step + ")",
+				"    " + ok + " &= " + test + at + ");",
+				"if (LIKELY(" + ok + ")) {");
+		}
+		const std::string type = vector_int_utype(eew);
+		const std::string reg = from_rvvreg(int(info.vreg)) + "."
+			+ vector_int_field(eew) + "[" + i + "]";
+		const std::string mem = "*(" + type + " *)" + arena_at(at);
+		add_code("  for (" + i + " = 0, " + at + " = " + base + "; " + i + " < " + n
+				+ "; " + i + "++, " + at + " += " + step + ")",
+			"    " + (info.is_store ? mem + " = " + reg : reg + " = " + mem) + ";");
+		if (checked) {
+			add_code("} else {");
+			this->potentially_realize_register(int(info.rs1));
+			this->potentially_realize_register(int(info.rs2));
+			this->emit_vector_handler_invoke();
+			add_code("}");
+		}
+		if (!guard.empty()) {
+			add_code("} else {");
+			this->potentially_realize_register(int(info.rs1));
+			this->potentially_realize_register(int(info.rs2));
+			this->emit_vector_handler_invoke();
+		}
+		add_code("}", "}");
+	}
+	// vlxei<eew>.v / vsxei<eew>.v: element *i* at base + vs2[i], with the
+	// encoding giving the width of the *index* and vtype the width of the
+	// data. That makes the body SEW-dependent, so it is emitted per SEW
+	// behind the same guard the integer arithmetic uses -- which already
+	// pins LMUL=1 and vl to one register, the only shape inlined here.
+	// Ordered and unordered forms are both emitted: the loop runs in index
+	// order, which is what the ordered form asks for and the unordered one
+	// permits.
+	void emit_vector_indexed_body(const VectorMemInfo& info, unsigned vsew)
+	{
+		const unsigned ieew = info.eew_log2;
+		const std::string sfx = PCRELS(0) + "_" + std::to_string(vsew);
+		const std::string base = "vxa" + sfx;
+		const std::string n    = "vxn" + sfx;
+		const std::string i    = "vxi" + sfx;
+		const std::string at   = "vxp" + sfx;
+		add_code("  {");
+		this->load_register(int(info.rs1));
+		add_code("  const addr_t " + base + " = " + from_untracked_reg(int(info.rs1)) + ";",
+			"  const addr_t " + n + " = (addr_t)" + vector_vl_expr() + ";",
+			"  addr_t " + i + "; addr_t " + at + ";");
+		const std::string index = base + " + (addr_t)" + from_rvvreg(int(info.vs2))
+			+ "." + vector_int_field(ieew) + "[" + i + "]";
+		const bool checked = this->vector_memory_needs_bounds_check();
+		if (checked) {
+			const std::string ok = "vxok" + sfx;
+			const char* const test = info.is_store ? "ARENA_WRITABLE(" : "ARENA_READABLE(";
+			add_code("  int " + ok + "; " + ok + " = 1;",
+				"  for (" + i + " = 0; " + i + " < " + n + "; " + i + "++) {",
+				"    " + at + " = " + index + ";",
+				"    " + ok + " &= " + test + at + "); }",
+				"  if (LIKELY(" + ok + ")) {");
+		}
+		const std::string type = vector_int_utype(vsew);
+		const std::string reg = from_rvvreg(int(info.vreg)) + "."
+			+ vector_int_field(vsew) + "[" + i + "]";
+		const std::string mem = "*(" + type + " *)" + arena_at(at);
+		add_code("  for (" + i + " = 0; " + i + " < " + n + "; " + i + "++) {",
+			"    " + at + " = " + index + ";",
+			"    " + (info.is_store ? mem + " = " + reg : reg + " = " + mem) + "; }");
+		if (checked) {
+			add_code("  } else {");
+			this->potentially_realize_register(int(info.rs1));
+			this->emit_vector_handler_invoke();
+			add_code("  }");
+		}
+		add_code("  }");
+	}
+	void emit_vector_indexed(const VectorMemInfo& info)
+	{
+		// The index group is sized by the index width against SEW, so a SEW
+		// narrower than the index would need several index registers.
+		std::vector<unsigned> sews;
+		for (const unsigned vsew : this->vector_int_sews()) {
+			// EMUL of the index group is LMUL * index-EEW / SEW, and the
+			// guard already holds LMUL <= 0, so it can only be smaller than
+			// this -- but it still has to stay above the fractional limit.
+			if (int(info.eew_log2) - int(vsew) <= 0)
+				sews.push_back(vsew);
+		}
+		if (sews.empty()) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		for (const unsigned vsew : sews)
+			(void)this->rvv_int_guard(vsew);
+
+		for (const unsigned vsew : sews) {
+			// LMUL + log2(EEW/SEW) >= -3, spelled as a bound on LMUL.
+			const int lmul_min = int(vsew) - int(info.eew_log2) - 3;
+			std::string legal;
+			if (lmul_min > -3) {
+				legal = m_vtype.known
+					? (m_vtype.lmul >= lmul_min ? "" : "0")
+					: " && cpu->rvv.lmul >= " + std::to_string(lmul_min);
+				if (legal == "0") {
+					add_code("if (0) {");
+					add_code("} else {");
+					continue;
+				}
+			}
+			add_code("if (LIKELY(" + rvv_int_guard(vsew) + legal + ")) {");
+			this->emit_vector_indexed_body(info, vsew);
+			add_code("} else {");
+		}
+		this->emit_vector_slowpath();
+		for (size_t i = 0; i < sews.size(); i++)
+			add_code("}");
+	}
+	// vlseg<nf>e<eew>.v / vsseg<nf>e<eew>.v: nf fields interleaved in
+	// memory, one register each, de-interleaved on the way in. The whole
+	// run is contiguous, so one bounds check covers it -- but the elements
+	// are not, so it is a loop with the field count unrolled into it.
+	void emit_vector_segment(const VectorMemInfo& info)
+	{
+		constexpr uint64_t lane_size = VectorLane::size();
+		const unsigned eew = info.eew_log2;
+		const unsigned nf = info.nregs;
+		const uint64_t max_elements = lane_size >> eew;
+		std::string guard;
+		if (m_vtype.known) {
+			// EMUL > 1 would give each field a register group, which this
+			// body does not walk.
+			const int emul = m_vtype.lmul + int(eew) - int(m_vtype.vsew);
+			if (m_vtype.vill || emul > 0 || emul < -3) {
+				this->emit_vector_slowpath();
+				return;
+			}
+			if (m_vl_known && m_vl > max_elements) {
+				this->emit_vector_slowpath();
+				return;
+			}
+			if (!m_vl_known)
+				guard = vector_vl_expr() + " <= " + std::to_string(max_elements);
+			add_code("{");
+		} else {
+			const std::string emul = "vem" + PCRELS(0);
+			add_code("{ const int " + emul + " = (int)cpu->rvv.lmul + "
+				+ std::to_string(eew) + " - (int)cpu->rvv.vsew;");
+			guard = "!cpu->rvv.vill && " + emul + " <= 0 && " + emul + " >= -3 && "
+				+ vector_vl_expr() + " <= " + std::to_string(max_elements);
+		}
+		const std::string base = "vga" + PCRELS(0);
+		const std::string n    = "vgn" + PCRELS(0);
+		const std::string i    = "vgi" + PCRELS(0);
+		this->load_register(int(info.rs1));
+		add_code("  const addr_t " + base + " = " + from_untracked_reg(int(info.rs1)) + ";",
+			"  const addr_t " + n + " = (addr_t)" + vector_vl_expr() + ";");
+		if (this->vector_memory_needs_bounds_check()) {
+			// nf * EMUL is at most 8 registers, so the run still fits the
+			// arena over-allocation and the base address covers all of it.
+			static_assert(vector_max_transfer() <= Memory<W>::OVERALLOCATE,
+				"A segmented transfer must fit within the arena over-allocation");
+			const std::string bounds =
+				std::string(info.is_store ? "ARENA_WRITABLE(" : "ARENA_READABLE(") + base + ")";
+			guard = guard.empty() ? bounds : "(" + guard + ") && " + bounds;
+		}
+		if (!guard.empty())
+			add_code("if (LIKELY(" + guard + ")) {");
+		else
+			add_code("{");
+
+		const std::string type = vector_int_utype(eew);
+		const std::string stride = std::to_string(uint64_t(nf) << eew);
+		add_code("  addr_t " + i + ";",
+			"  for (" + i + " = 0; " + i + " < " + n + "; " + i + "++) {");
+		for (unsigned f = 0; f < nf; f++) {
+			const std::string at = base + " + " + i + " * " + stride
+				+ (f ? " + " + std::to_string(uint64_t(f) << eew) : "");
+			const std::string mem = "*(" + type + " *)" + arena_at("(" + at + ")");
+			const std::string reg = from_rvvelem(info.vreg + f, eew, i);
+			add_code("    " + (info.is_store ? mem + " = " + reg : reg + " = " + mem) + ";");
+		}
+		add_code("  }");
+		if (!guard.empty()) {
+			add_code("} else {");
+			this->potentially_realize_register(int(info.rs1));
+			this->emit_vector_handler_invoke();
+		}
+		add_code("}", "}");
+	}
+	// VMV.X.S: x[rd] = sext(vs2[0]). The one OPMVV code point worth
+	// inlining on its own -- a compiler reaches for it whenever it takes a
+	// single element back out of a vector, so it shows up in the scalar
+	// tail of any vectorized loop.
+	static bool vector_is_move_xs(const rv32i_instruction& vinstr) noexcept
+	{
+		if (vinstr.opcode() != RV32V_OP || vinstr.vwidth() != 0x2)
+			return false; // Not OPM.VV
+		const rv32v_instruction vi { vinstr };
+		// vs1 == 0 picks VMV.X.S out of VWXUNARY0; x0 as the destination
+		// would be a write to a register that does not keep it.
+		return vi.OPVV.funct6 == 0b010000 && vi.OPVV.vs1 == 0 && vi.OPVV.vd != 0;
+	}
+	void emit_vector_move_xs()
+	{
+		const rv32v_instruction vi { instr };
+		const auto sews = this->vector_int_sews();
+		if (sews.empty()) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		for (const unsigned vsew : sews)
+			(void)this->rvv_int_guard(vsew);
+
+		this->reset_tracked_register(int(vi.OPVV.vd));
+		for (const unsigned vsew : sews) {
+			add_code("if (LIKELY(" + rvv_int_guard(vsew) + ")) {");
+			add_code("  " + to_reg(int(vi.OPVV.vd)) + " = (addr_t)("
+				+ vector_int_stype(vsew) + ")"
+				+ from_rvvelem(vi.OPVV.vs2, vsew, "0") + ";");
+			add_code("} else {");
+		}
+		this->emit_vector_slowpath();
+		for (size_t i = 0; i < sews.size(); i++)
+			add_code("}");
+	}
 	// Emit one vector load or store that does not need the interpreter.
 	void emit_vector_memory(const VectorMemInfo& info)
 	{
 		switch (info.form) {
 		case VectorMemForm::UnitStride:       this->emit_vector_unit_stride(info); break;
+		case VectorMemForm::Strided:          this->emit_vector_strided(info); break;
+		case VectorMemForm::Indexed:          this->emit_vector_indexed(info); break;
+		case VectorMemForm::Segment:          this->emit_vector_segment(info); break;
 		case VectorMemForm::MaskedUnitStride: this->emit_vector_masked_unit_stride(info); break;
 		case VectorMemForm::WholeRegister:    this->emit_vector_whole_register(info); break;
 		case VectorMemForm::Mask:             this->emit_vector_mask_move(info); break;
@@ -876,6 +1197,436 @@ struct Emitter
 				? b + op + a
 				: vector_fma_expression(vi.OPVV.funct6, fma, a, b, d)) + ";");
 		}
+	}
+	// ── Element-wise integer arithmetic ─────────────────────────────────
+	// The OPIVV/OPIVX/OPIVI code points that are one C expression per
+	// element. Everything else -- the mask-producing compares, the
+	// widening/narrowing forms, gathers, slides and reductions -- stays
+	// with the interpreter handler.
+	enum class VectorIntOp {
+		None, Add, Sub, Rsub, And, Or, Xor, Andn,
+		Minu, Min, Maxu, Max, Sll, Srl, Sra, Ror, Rol, Move,
+		Slideup, Slidedown, // the element index moves, the value does not
+		Zext, Sext          // ... and the element grows on the way
+	};
+	struct VectorIntInfo {
+		VectorIntOp op = VectorIntOp::None;
+		unsigned vd  = 0;
+		unsigned vs1 = 0; // vs1, or x[rs1] in the .vx form
+		unsigned vs2 = 0;
+		unsigned form = 0;    // funct3: 0 = .vv, 3 = .vi, 4 = .vx
+		uint64_t imm  = 0;    // .vi: the immediate, already extended
+		bool grouped  = false; // the body walks a multi-register group
+		bool is_vv() const noexcept { return form == 0x0; }
+		bool is_vi() const noexcept { return form == 0x3; }
+		bool is_vx() const noexcept { return form == 0x4; }
+	};
+	// Classify one OPI encoding. Only unmasked forms qualify: a mask makes
+	// element activity a runtime property of v0, which the straight-line
+	// body below has no cheap way to honour.
+	static VectorIntInfo vector_int_form(const rv32i_instruction& vinstr)
+	{
+		if (vinstr.opcode() != RV32V_OP)
+			return {};
+		const unsigned width = vinstr.vwidth();
+		const rv32v_instruction vi0 { vinstr };
+		if (width == 0x2 && vi0.OPVV.vm && vi0.OPVV.funct6 == 0b010010) {
+			// VXUNARY0: the integer extensions. The vs1 field selects the
+			// factor (8, 4 or 2) and its low bit the signedness, as
+			// int_extension() (rvv_instr.cpp) decodes it.
+			const unsigned sel = vi0.OPVV.vs1;
+			if (sel < 0b00010 || sel > 0b00111)
+				return {};
+			VectorIntInfo ext;
+			ext.form = width;
+			ext.vd  = vi0.OPVV.vd;
+			ext.vs2 = vi0.OPVV.vs2;
+			ext.imm = (sel <= 3) ? 3 : (sel <= 5) ? 2 : 1; // log2 of the factor
+			ext.op = (sel & 1) ? VectorIntOp::Sext : VectorIntOp::Zext;
+			return ext;
+		}
+		if (width != 0x0 && width != 0x3 && width != 0x4)
+			return {}; // Not OPI.VV / OPI.VI / OPI.VX
+		const rv32v_instruction vi { vinstr };
+		if (!vi.OPVV.vm)
+			return {};
+		VectorIntInfo info;
+		info.form = width;
+		info.vd  = vi.OPVV.vd;
+		info.vs1 = vi.OPVV.vs1;
+		info.vs2 = vi.OPVV.vs2;
+		// Sign-extended for the arithmetic and bitwise forms, zero-extended
+		// for the shifts: the same split the OPIVI handler makes.
+		const uint32_t imm5 = vi.OPVI.imm;
+		info.imm = uint64_t(int64_t(imm5 ^ 0x10) - 0x10);
+		switch (vi.OPVV.funct6) {
+		case 0b000000: info.op = VectorIntOp::Add; break;
+		case 0b000001: // VANDN (Zvbb), no .vi form
+			if (info.is_vi()) return {};
+			info.op = VectorIntOp::Andn; break;
+		case 0b000010: // VSUB, no .vi form (VRSUB covers it)
+			if (info.is_vi()) return {};
+			info.op = VectorIntOp::Sub; break;
+		case 0b000011: // VRSUB: .vx / .vi only
+			if (info.is_vv()) return {};
+			info.op = VectorIntOp::Rsub; break;
+		case 0b000100: case 0b000101: // VMINU / VMIN
+		case 0b000110: case 0b000111: // VMAXU / VMAX
+			if (info.is_vi()) return {};
+			switch (vi.OPVV.funct6) {
+			case 0b000100: info.op = VectorIntOp::Minu; break;
+			case 0b000101: info.op = VectorIntOp::Min;  break;
+			case 0b000110: info.op = VectorIntOp::Maxu; break;
+			default:       info.op = VectorIntOp::Max;  break;
+			}
+			break;
+		case 0b001001: info.op = VectorIntOp::And; break;
+		case 0b001010: info.op = VectorIntOp::Or;  break;
+		case 0b001011: info.op = VectorIntOp::Xor; break;
+		case 0b010100: // VROR.VV/VX, or VROR.VI with the high bit clear
+		case 0b010101: // VROL.VV/VX, or VROR.VI with it set
+			// The .vi rotate needs six bits of shift amount and borrows the
+			// low bit of funct6 for the sixth, so it is always a rotate
+			// right; the .vx and .vv forms use that bit to pick a direction.
+			if (info.is_vi()) {
+				info.op = VectorIntOp::Ror;
+				info.imm = ((vi.OPVV.funct6 & 1) << 5) | imm5;
+			} else {
+				info.op = (vi.OPVV.funct6 == 0b010100)
+					? VectorIntOp::Ror : VectorIntOp::Rol;
+			}
+			break;
+		case 0b001110: // VSLIDEUP.VI / .VX (there is no .vv form)
+		case 0b001111: // VSLIDEDOWN.VI / .VX
+			if (info.is_vv()) return {};
+			info.op = (vi.OPVV.funct6 == 0b001110)
+				? VectorIntOp::Slideup : VectorIntOp::Slidedown;
+			info.imm = imm5; // The slide offset is zero-extended
+			break;
+		case 0b010111: // VMV.V.V / VMV.V.X / VMV.V.I (the vm=0 form is VMERGE)
+			info.op = VectorIntOp::Move; break;
+		case 0b100101: info.op = VectorIntOp::Sll; info.imm = imm5; break;
+		case 0b101000: info.op = VectorIntOp::Srl; info.imm = imm5; break;
+		case 0b101001: info.op = VectorIntOp::Sra; info.imm = imm5; break;
+		default: return {};
+		}
+		return info;
+	}
+	// The SEWs an integer body is emitted for. Unlike the float path this
+	// is every width, so a block that has not proven its vtype pays a
+	// guarded body per SEW -- only one of which can be reached at runtime.
+	std::vector<unsigned> vector_int_sews() const
+	{
+		if (!m_vtype.known)
+			return { 0, 1, 2, 3 };
+		if (m_vtype.vill)
+			return {};
+		return { m_vtype.vsew };
+	}
+	// Not every operation exists at every SEW: an extension needs a source
+	// element that is still at least a byte wide.
+	static bool vector_int_sew_ok(const VectorIntInfo& info, unsigned vsew) noexcept
+	{
+		if (info.op == VectorIntOp::Zext || info.op == VectorIntOp::Sext)
+			return vsew >= unsigned(info.imm);
+		return true;
+	}
+	// The guard for an integer body: this SEW, at most one register, a
+	// valid vtype. vl is deliberately *not* pinned -- the body loops to vl,
+	// which is what the handler does, tail elements included (they stay
+	// put). A fractional LMUL passes too: it holds fewer elements, but they
+	// sit at the same offsets in the same single register.
+	const std::string& rvv_int_guard(unsigned vsew)
+	{
+		auto& guard = m_rvv_int_guard.at(vsew);
+		if (guard.empty()) {
+			if (m_vtype.known) {
+				guard = (!m_vtype.vill && m_vtype.lmul <= 0
+					&& m_vtype.vsew == vsew) ? "1" : "0";
+			} else {
+				guard = "viok" + PCRELS(0) + "_" + std::to_string(vsew);
+				// Declared and assigned separately, as in rvv_guard().
+				add_code("int " + guard + "; " + guard + " = cpu->rvv.vsew == "
+					+ std::to_string(vsew) + " && cpu->rvv.lmul <= 0"
+					" && !cpu->rvv.vill && " + vector_vl_expr() + " <= "
+					+ std::to_string(rvv_full_vl(vsew)) + ";");
+			}
+		}
+		return guard;
+	}
+	// The guard for a body that walks a multi-register group: a valid
+	// vtype at this SEW, an LMUL above one, vl inside the group, and every
+	// register the instruction names aligned to the group and inside the
+	// file -- the alignment the handler would otherwise trap on. Returns an
+	// empty string when no such body can be reached from here.
+	//
+	// Unlike rvv_int_guard() this is spelled out in place rather than kept
+	// in a block-level local: a group is the rarer shape, and a local would
+	// put its whole computation on the path of every block that has one.
+	std::string rvv_int_group_guard(const VectorIntInfo& info, unsigned vsew)
+	{
+		unsigned regmask = info.vd | info.vs2;
+		unsigned regmax  = std::max(info.vd, info.vs2);
+		if (info.is_vv()) {
+			regmask |= info.vs1;
+			regmax   = std::max(regmax, info.vs1);
+		}
+		if (m_vtype.known) {
+			const unsigned dregs = 1u << m_vtype.lmul;
+			if ((regmask & (dregs - 1)) != 0 || regmax + dregs > 32)
+				return {}; // The handler traps on it, so it has to go there
+			const uint64_t max_vl = uint64_t(rvv_full_vl(vsew)) << m_vtype.lmul;
+			if (m_vl_known)
+				return (m_vl <= max_vl) ? "1" : "";
+			return vector_vl_expr() + " <= " + std::to_string(max_vl);
+		}
+		const std::string dregs = "(1u << cpu->rvv.lmul)";
+		return "cpu->rvv.vsew == " + std::to_string(vsew)
+			+ " && cpu->rvv.lmul > 0 && cpu->rvv.lmul <= 3 && !cpu->rvv.vill && "
+			+ vector_vl_expr() + " <= ((addr_t)" + std::to_string(rvv_full_vl(vsew))
+			+ " << cpu->rvv.lmul) && (" + std::to_string(regmask) + "u & ("
+			+ dregs + " - 1)) == 0 && " + std::to_string(regmax) + "u + " + dregs + " <= 32";
+	}
+	// Whether this operation means the same thing across a group. The
+	// slides and the extensions do not: their element index and source
+	// width are relative to VLMAX and to EMUL, both of which the group
+	// changes.
+	static bool vector_int_op_groupable(const VectorIntInfo& info) noexcept
+	{
+		switch (info.op) {
+		case VectorIntOp::Slideup:
+		case VectorIntOp::Slidedown:
+		case VectorIntOp::Zext:
+		case VectorIntOp::Sext:
+			return false;
+		default:
+			return true;
+		}
+	}
+	static const char* vector_int_field(unsigned vsew) noexcept {
+		switch (vsew) {
+		case 0:  return "u8";
+		case 1:  return "u16";
+		case 2:  return "u32";
+		default: return "u64";
+		}
+	}
+	static const char* vector_int_stype(unsigned vsew) noexcept {
+		switch (vsew) {
+		case 0:  return "int8_t";
+		case 1:  return "int16_t";
+		case 2:  return "int32_t";
+		default: return "int64_t";
+		}
+	}
+	static const char* vector_int_utype(unsigned vsew) noexcept {
+		switch (vsew) {
+		case 0:  return "uint8_t";
+		case 1:  return "uint16_t";
+		case 2:  return "uint32_t";
+		default: return "uint64_t";
+		}
+	}
+	// Element *idx* of a vector register, at this SEW.
+	std::string from_rvvelem(unsigned reg, unsigned vsew, const std::string& idx) {
+		return from_rvvreg(int(reg)) + "." + vector_int_field(vsew) + "[" + idx + "]";
+	}
+	// Element *idx* of a register *group* starting at reg: the registers of
+	// a group are adjacent, so this is element_at() (rvv_instr.cpp) spelled
+	// in C -- one flat array over the whole register file. Only the guarded
+	// bodies use it, and their guard has already put every index they can
+	// reach inside the group.
+	std::string from_rvvgroup(unsigned reg, unsigned vsew, const std::string& idx) {
+		return "((" + std::string(vector_int_utype(vsew)) + " *)&"
+			+ from_rvvreg(0) + ")[" + std::to_string(reg * rvv_full_vl(vsew))
+			+ " + " + idx + "]";
+	}
+	std::string vector_int_elem(const VectorIntInfo& info, unsigned reg,
+		unsigned vsew, const std::string& idx) {
+		return info.grouped ? from_rvvgroup(reg, vsew, idx)
+		                    : from_rvvelem(reg, vsew, idx);
+	}
+	// One destination element, as the interpreter computes it.
+	std::string vector_int_element_expr(const VectorIntInfo& info,
+		unsigned vsew, const std::string& idx)
+	{
+		const std::string U = std::string("(") + vector_int_utype(vsew) + ")";
+		const std::string S = std::string("(") + vector_int_stype(vsew) + ")";
+		const unsigned bits = 8u << vsew;
+		const std::string a = vector_int_elem(info, info.vs2, vsew, idx);
+		std::string b;
+		if (info.is_vv())
+			b = vector_int_elem(info, info.vs1, vsew, idx);
+		else if (info.is_vx())
+			b = U + "(" + from_untracked_reg(int(info.vs1)) + ")";
+		else
+			b = U + std::to_string(info.imm) + "ULL";
+		// Shift and rotate amounts are taken modulo SEW, as in the handlers.
+		const std::string sh = "((" + b + ") & " + std::to_string(bits - 1) + ")";
+		const unsigned elements = rvv_full_vl(vsew);
+		if (info.op == VectorIntOp::Slideup || info.op == VectorIntOp::Slidedown) {
+			// The slide offset is a whole register value, not an element of
+			// this SEW, so it does not go through *b* above.
+			const std::string off = info.is_vx()
+				? "(addr_t)(" + from_untracked_reg(int(info.vs1)) + ")"
+				: "(addr_t)" + std::to_string(info.imm);
+			// The source index is masked to the register: it is only read
+			// where the test that guards it has already put it in range.
+			const std::string mask = " & " + std::to_string(elements - 1);
+			if (info.op == VectorIntOp::Slideup) {
+				// Elements below the offset keep their old value, which is
+				// the same ascending in-place walk the handler makes.
+				return "(" + idx + " >= " + off + ") ? "
+					+ from_rvvelem(info.vs2, vsew, "((" + idx + " - " + off + ")" + mask + ")")
+					+ " : " + from_rvvelem(info.vd, vsew, idx);
+			}
+			// Sliding down past VLMAX reads zero, not the tail -- and a
+			// fractional LMUL puts VLMAX below a whole register, so the
+			// bound is not the element count. The guard has already put
+			// LMUL at one or below, which is what makes it a shift right.
+			const std::string vlmax = m_vtype.known
+				? std::to_string(elements >> unsigned(m_vtype.lmul < 0 ? -m_vtype.lmul : 0))
+				: "((addr_t)" + std::to_string(elements) + " >> (unsigned)-cpu->rvv.lmul)";
+			return "(" + idx + " + " + off + " < " + vlmax + ") ? "
+				+ from_rvvelem(info.vs2, vsew, "((" + idx + " + " + off + ")" + mask + ")")
+				+ " : 0";
+		}
+		if (info.op == VectorIntOp::Zext || info.op == VectorIntOp::Sext) {
+			const unsigned nsew = vsew - unsigned(info.imm);
+			const std::string src = from_rvvelem(info.vs2, nsew, idx);
+			return info.op == VectorIntOp::Sext
+				? U + "(" + vector_int_stype(nsew) + ")" + src
+				: U + src;
+		}
+		switch (info.op) {
+		case VectorIntOp::Add:  return U + "((" + a + ") + (" + b + "))";
+		case VectorIntOp::Sub:  return U + "((" + a + ") - (" + b + "))";
+		case VectorIntOp::Rsub: return U + "((" + b + ") - (" + a + "))";
+		case VectorIntOp::And:  return U + "((" + a + ") & (" + b + "))";
+		case VectorIntOp::Or:   return U + "((" + a + ") | (" + b + "))";
+		case VectorIntOp::Xor:  return U + "((" + a + ") ^ (" + b + "))";
+		case VectorIntOp::Andn: return U + "((" + a + ") & ~(" + b + "))";
+		case VectorIntOp::Minu: return U + "((" + a + ") < (" + b + ") ? (" + a + ") : (" + b + "))";
+		case VectorIntOp::Maxu: return U + "((" + a + ") > (" + b + ") ? (" + a + ") : (" + b + "))";
+		case VectorIntOp::Min:  return U + "(" + S + "(" + a + ") < " + S + "(" + b + ") ? " + S + "(" + a + ") : " + S + "(" + b + "))";
+		case VectorIntOp::Max:  return U + "(" + S + "(" + a + ") > " + S + "(" + b + ") ? " + S + "(" + a + ") : " + S + "(" + b + "))";
+		case VectorIntOp::Sll:  return U + "((" + a + ") << " + sh + ")";
+		case VectorIntOp::Srl:  return U + "((" + a + ") >> " + sh + ")";
+		case VectorIntOp::Sra:  return U + "(" + S + "(" + a + ") >> " + sh + ")";
+		// A rotate by zero would shift by the full width, which is undefined
+		// in C, so the counter-shift is taken modulo SEW as well.
+		case VectorIntOp::Ror:  return U + "(((" + a + ") >> " + sh + ") | " + U + "((" + a
+			+ ") << ((" + std::to_string(bits) + " - " + sh + ") & " + std::to_string(bits - 1) + ")))";
+		case VectorIntOp::Rol:  return U + "(" + U + "((" + a + ") << " + sh + ") | ((" + a
+			+ ") >> ((" + std::to_string(bits) + " - " + sh + ") & " + std::to_string(bits - 1) + ")))";
+		default:                return b; // VMV.V.*
+		}
+	}
+	void emit_vector_int_loop(const VectorIntInfo& info, unsigned vsew,
+		const std::string& idx, const std::string& bound)
+	{
+		add_code("    for (" + idx + " = 0; " + idx + " < " + bound + "; " + idx + "++)",
+			"      " + vector_int_elem(info, info.vd, vsew, idx) + " = "
+			+ vector_int_element_expr(info, vsew, idx) + ";");
+	}
+	// The trip count is what decides whether the host compiler can turn a
+	// register's worth of elements into one SIMD instruction, so it is
+	// spelled as a constant wherever it is known. The two worth testing for
+	// at runtime are a full register and half of one -- a vector loop
+	// written against the 128-bit minimum VLEN runs at half of our 256-bit
+	// register -- and anything else is strip-mined a register at a time,
+	// which is also what carries a multi-register group.
+	void emit_vector_int_arith_body(const VectorIntInfo& info, unsigned vsew)
+	{
+		const unsigned elements = rvv_full_vl(vsew);
+		const std::string sfx = PCRELS(0) + "_" + std::to_string(vsew)
+			+ (info.grouped ? "g" : "");
+		const std::string idx = "vie" + sfx;
+		add_code("  {", "  addr_t " + idx + ";");
+		if (m_vl_known && !info.grouped) {
+			this->emit_vector_int_loop(info, vsew, idx,
+				std::to_string(std::min<uint64_t>(m_vl, elements)));
+			add_code("  }");
+			return;
+		}
+		const std::string vn = "vin" + sfx;
+		add_code("  const addr_t " + vn + " = (addr_t)" + vector_vl_expr() + ";");
+		if (!info.grouped) {
+			for (unsigned n = elements; n * 2 >= elements; n /= 2) {
+				add_code(std::string("  ") + (n == elements ? "if" : "else if")
+					+ " (LIKELY(" + vn + " == " + std::to_string(n) + ")) {");
+				this->emit_vector_int_loop(info, vsew, idx, std::to_string(n));
+				add_code("  }");
+			}
+			add_code("  else {");
+			this->emit_vector_int_loop(info, vsew, idx, vn);
+			add_code("  }");
+			add_code("  }");
+			return;
+		}
+		// A group: whole registers first, in a loop whose inner trip count
+		// is a constant and so still vectorizes, then whatever is left.
+		const std::string k = "vik" + sfx;
+		const std::string body_idx = "(" + idx + " + " + k + ")";
+		add_code("  addr_t " + k + ";",
+			"  for (" + idx + " = 0; " + idx + " + " + std::to_string(elements)
+				+ " <= " + vn + "; " + idx + " += " + std::to_string(elements) + ")",
+			"    for (" + k + " = 0; " + k + " < " + std::to_string(elements) + "; " + k + "++)",
+			"      " + vector_int_elem(info, info.vd, vsew, body_idx) + " = "
+				+ vector_int_element_expr(info, vsew, body_idx) + ";");
+		add_code("  for (; " + idx + " < " + vn + "; " + idx + "++)",
+			"    " + vector_int_elem(info, info.vd, vsew, idx) + " = "
+				+ vector_int_element_expr(info, vsew, idx) + ";");
+		add_code("  }");
+	}
+	// Emit one integer operation: a guarded body per candidate SEW, with
+	// the handler as the last resort.
+	void emit_vector_int_arith(const VectorIntInfo& info)
+	{
+		std::vector<unsigned> sews;
+		for (const unsigned vsew : this->vector_int_sews())
+			if (vector_int_sew_ok(info, vsew))
+				sews.push_back(vsew);
+		if (sews.empty()) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		// Every guard is materialized first, for the reason rvv_guard()
+		// gives: they are C locals, and the bodies below open scopes a
+		// later declaration could not escape.
+		struct IntBody { std::string guard; unsigned vsew; bool grouped; };
+		std::vector<IntBody> bodies;
+		// Single-register bodies first: their guard is a live local, so the
+		// shape a program almost always has is reached after a compare or
+		// two, and the group guards -- which are spelled out in full -- are
+		// only ever evaluated once those have failed.
+		const bool any_single = !m_vtype.known || m_vtype.lmul <= 0;
+		const bool any_group  = !m_vtype.known || m_vtype.lmul > 0;
+		if (any_single) {
+			for (const unsigned vsew : sews)
+				bodies.push_back({ this->rvv_int_guard(vsew), vsew, false });
+		}
+		if (vector_int_op_groupable(info) && any_group) {
+			for (const unsigned vsew : sews) {
+				std::string guard = this->rvv_int_group_guard(info, vsew);
+				if (!guard.empty())
+					bodies.push_back({ std::move(guard), vsew, true });
+			}
+		}
+		if (bodies.empty()) {
+			this->emit_vector_slowpath();
+			return;
+		}
+		for (const auto& body : bodies) {
+			VectorIntInfo shaped = info;
+			shaped.grouped = body.grouped;
+			add_code("if (LIKELY(" + body.guard + ")) {");
+			this->emit_vector_int_arith_body(shaped, body.vsew);
+			add_code("} else {");
+		}
+		this->emit_vector_slowpath();
+		for (size_t i = 0; i < bodies.size(); i++)
+			add_code("}");
 	}
 	// True for the two configuration forms with an immediate vtype, which is
 	// what compilers emit. VSETVL takes it from a register instead, so its
@@ -981,6 +1732,16 @@ struct Emitter
 		const auto meminfo = this->vector_memory_form(instr);
 		if (meminfo.form != VectorMemForm::None) {
 			this->emit_vector_memory(meminfo);
+			return;
+		}
+		if (vector_is_move_xs(instr)) {
+			this->emit_vector_move_xs();
+			return;
+		}
+		// Element-wise integer arithmetic, which is most of what a
+		// vectorised loop is made of once its loads and stores inline.
+		if (const auto intinfo = vector_int_form(instr); intinfo.op != VectorIntOp::None) {
+			this->emit_vector_int_arith(intinfo);
 			return;
 		}
 		const auto sews = this->vector_inlinable_sews(instr);
@@ -1424,6 +2185,8 @@ private:
 	std::string m_vl_local;
 	// Live C local holding the vl/vtype fast-path test per SEW, see rvv_guard()
 	std::array<std::string, 4> m_rvv_guard;
+	// ... and the same for the integer bodies, see rvv_int_guard()
+	std::array<std::string, 4> m_rvv_int_guard;
 #endif
 	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
