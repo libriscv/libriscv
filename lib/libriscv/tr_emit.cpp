@@ -99,14 +99,21 @@ struct Emitter
 {
 	static constexpr bool OPTIMIZE_SYSCALL_REGISTERS = true;
 	static constexpr unsigned XLEN = W * 8u;
-	static constexpr int CACHED_REGISTERS = 18; // Number of registers to cache
+	// Number of guest GPRs mirrored into C locals. Registers at or above this
+	// index are addressed as cpu->r[N] instead. libtcc has no register allocator:
+	// every local is a stack slot anyway. This unfortunately costs latency, so
+	// short function calls suffer, but it's a worthwhile tradeoff.
+	static constexpr int LIBTCC_CACHED_REGISTERS = 32;
+	static constexpr int SYSCC_CACHED_REGISTERS  = 18;
+	const int CACHED_REGISTERS;
 	using address_t = address_type<W>;
 	using saddr_t = signed_address_type<W>;
 
 	bool uses_register_caching() const noexcept { return tinfo.use_register_caching; }
 
 	Emitter(const TransInfo<W>& ptinfo)
-		: m_pc(ptinfo.basepc), tinfo(ptinfo)
+		: CACHED_REGISTERS(ptinfo.is_libtcc ? LIBTCC_CACHED_REGISTERS : SYSCC_CACHED_REGISTERS),
+		  m_pc(ptinfo.basepc), tinfo(ptinfo)
 	{
 		this->func = funclabel<W>("f", this->pc());
 		this->m_arena_hex_address = hex_address(tinfo.arena_ptr) + "L";
@@ -3491,14 +3498,14 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	// Create register push and pop macros
 	if (tinfo.use_register_caching) {
 		code += "#define STORE_REGS_" + e.get_func() + "() \\\n";
-		for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
+		for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 			if (e.gpr_needs_store(reg)) {
 				code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 			}
 		}
 		code += "  ;\n";
 		code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
-		for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
+		for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
 			}
@@ -3536,7 +3543,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	// Function GPRs
 	if (tinfo.use_register_caching) {
-		for (size_t reg = 1; reg < 24; reg++) {
+		for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "addr_t " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "];\n";
 			}
@@ -3583,7 +3590,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	code += "default:\n";
 #endif
 	code += "exception_is_handled:\n"; // Re-using exit point for exceptions
-	for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
+	for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 		if (e.gpr_needs_store(reg)) {
 			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + ";\n";
 		}
