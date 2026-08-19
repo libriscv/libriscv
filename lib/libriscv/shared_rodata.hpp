@@ -34,7 +34,8 @@ namespace riscv
 		bool inspect(const Inspector& fn) const noexcept;
 
 	private:
-		int m_fd;
+		// Unused on platforms without sealable anonymous files
+		[[maybe_unused]] int m_fd;
 		uint64_t m_end;
 	};
 

@@ -10,7 +10,15 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#if defined(MFD_CLOEXEC) && defined(MFD_ALLOW_SEALING) && defined(F_ADD_SEALS) && defined(F_SEAL_WRITE)
+// Bionic declares memfd_create from API level 30 only, and the older libc stubs
+// do not export it either, so Android below that cannot seal a memfd. The
+// MFD_* and F_SEAL_* macros come from the kernel headers and are present
+// regardless, so they cannot be used to detect this on their own.
+#if defined(__ANDROID__) && (!defined(__ANDROID_API__) || __ANDROID_API__ < 30)
+#define RISCV_NO_MEMFD_CREATE 1
+#endif
+#if defined(MFD_CLOEXEC) && defined(MFD_ALLOW_SEALING) && defined(F_ADD_SEALS) \
+	&& defined(F_SEAL_WRITE) && !defined(RISCV_NO_MEMFD_CREATE)
 #define RISCV_HAS_SHARED_RODATA 1
 #endif
 #endif
