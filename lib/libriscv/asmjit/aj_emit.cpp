@@ -49,6 +49,64 @@ static inline void host_sign_extend_word(BackendCompiler& cc, const Gp& dst, con
 #endif
 }
 
+/// @brief True when the host's CLZ/CTZ already give RISC-V's answer for zero.
+/// @details Zbb defines CLZ(0) and CTZ(0) as XLEN, which is exactly what lzcnt
+/// and tzcnt return. Their pre-BMI fallbacks, bsr and bsf, leave the destination
+/// undefined instead, so on such a host the zero case has to be selected in.
+/// AArch64's clz -- and the rbit+clz pair standing in for ctz -- both return the
+/// register width, so nothing is needed there.
+static inline bool host_count_zeros_is_exact(const UniCompiler& uc, bool leading)
+{
+#if defined(ASMJIT_UJIT_X86)
+	return leading ? uc.has_lzcnt() : uc.has_bmi();
+#else
+	(void)uc; (void)leading;
+	return true;
+#endif
+}
+
+/// @brief dst = the number of set bits in `src`, at the width of `dst`.
+/// @details x86 has a single instruction for this whenever POPCNT is present,
+/// which is every host made since 2008. AArch64 only grew a scalar count in
+/// ARMv8.9 (CSSC), and asmjit exposes no universal op for it, so everything else
+/// gets the usual SWAR reduction: pairs, then nibbles, then a folding sum whose
+/// low byte holds the total.
+static inline void host_popcount(UniCompiler& uc, const Gp& dst, const Gp& src)
+{
+#if defined(ASMJIT_UJIT_X86)
+	if (uc.has_popcnt()) {
+		uc.cc->popcnt(dst, src);
+		return;
+	}
+#endif
+	const uint32_t width = uint32_t(dst.size()) * 8;
+	const bool wide = (width == 64);
+	const uint64_t m1 = wide ? 0x5555555555555555ull : 0x55555555ull;
+	const uint64_t m2 = wide ? 0x3333333333333333ull : 0x33333333ull;
+	const uint64_t m4 = wide ? 0x0F0F0F0F0F0F0F0Full : 0x0F0F0F0Full;
+
+	Gp t = uc.new_similar_reg(dst, "pcnt");
+	Gp u = uc.new_similar_reg(dst, "pcnt2");
+	uc.shr (t, src, Imm(1));
+	uc.and_(t, t, Imm(m1));
+	uc.sub (t, src, t);            // t: two-bit counts
+	uc.shr (u, t, Imm(2));
+	uc.and_(u, u, Imm(m2));
+	uc.and_(t, t, Imm(m2));
+	uc.add (t, t, u);              // t: four-bit counts
+	uc.shr (u, t, Imm(4));
+	uc.add (t, t, u);
+	uc.and_(t, t, Imm(m4));        // t: one count per byte, each at most 8
+	// Folding the bytes together can never carry out of the low byte: the total
+	// is at most 64. A multiply by 0x01..01 would do the same in one step, but
+	// x86 has no 64-bit immediate multiply.
+	for (uint32_t s = 8; s < width; s *= 2) {
+		uc.shr(u, t, Imm(s));
+		uc.add(t, t, u);
+	}
+	uc.and_(dst, t, Imm(0xFF));
+}
+
 /// @brief dst = the high half of the 2*XLEN-bit product of `a` and `b`.
 /// @details MULH and MULHU want the part of the product that a three-operand
 /// multiply throws away, which no universal op exposes.
@@ -471,6 +529,284 @@ struct AjEmitter
 	Gp word_of(unsigned reg) { return get(reg).r32(); }
 	void finish_word(unsigned rd, const Gp& tmp32) {
 		host_sign_extend_word(cc, def(rd), tmp32);
+	}
+
+	// --- bit manipulation: Zba, Zbb, Zbs -----------------------------------
+	// Every encoding reaching emit_zb() was classified by aj_zb_classify(),
+	// which region discovery also consults through aj_is_emittable(). Sharing
+	// the one classifier is what keeps discovery from claiming an encoding that
+	// emission then falls through, which would leave rd holding a stale value
+	// rather than faulting.
+
+	static constexpr uint32_t XLEN = uint32_t(RVLEN) * 8;
+
+	/// @brief zext32(rs1) in a full-width register, for the Zba *.UW forms.
+	/// @details Writing a register through its 32-bit half zeroes the upper
+	/// half on both hosts, which is the same identity address_of() relies on to
+	/// use an RV32 address register as an arena index.
+	Gp zext32_of(unsigned rs1) {
+		Gp z = uc.new_gp64("uw");
+		uc.mov(z.r32(), get(rs1).r32());
+		return z;
+	}
+
+	/// @brief 1 << (amount & (XLEN-1)), the mask BSET, BCLR and BINV apply.
+	/// @details Both hosts mask a register shift count by the operand width
+	/// minus one, which is exactly the RISC-V rule at the matching XLEN, so the
+	/// masking never has to be spelled out.
+	Gp bit_mask(const Gp& amount) {
+		Gp m = new_ireg("bitm");
+		uc.mov(m, Imm(1));
+		uc.shl(m, m, amount);
+		return m;
+	}
+	/// @brief The same mask for an immediate bit index. It is materialized
+	/// rather than folded into the OR because x86 ALU immediates are 32 bits,
+	/// and the RV64 masks run up to bit 63.
+	Gp bit_mask(uint32_t shamt) {
+		Gp m = new_ireg("bitm");
+		const uint64_t v = uint64_t(1) << (shamt & (XLEN - 1));
+		uc.mov(m, RV64 ? Imm(v) : Imm(uint32_t(v)));
+		return m;
+	}
+
+	/// @brief dst = the low `bits` of `src`, sign-extended.
+	/// @details Neither host exposes a universal sign-extend-from-width op, and
+	/// the shift pair is one instruction more than the x86 movsx it replaces.
+	void emit_sign_extend(const Gp& d, const Gp& a, uint32_t bits) {
+		const uint32_t up = uint32_t(a.size()) * 8 - bits;
+		Gp t = uc.new_similar_reg(d, "sext");
+		uc.shl(t, a, Imm(up));
+		uc.sar(d, t, Imm(up));
+	}
+
+	/// @brief CLZ/CTZ, including RISC-V's XLEN answer for a zero input.
+	void emit_count_zeros(const Gp& d, const Gp& a, bool leading)
+	{
+		if (host_count_zeros_is_exact(uc, leading)) {
+			if (leading) uc.clz(d, a); else uc.ctz(d, a);
+			return;
+		}
+		// The host left zero undefined. Everything is computed into scratch
+		// registers so that a destination which is also the source stays intact
+		// until the comparison has been made.
+		const uint32_t width = uint32_t(a.size()) * 8;
+		Gp t = uc.new_similar_reg(d, "cnt");
+		Gp r = uc.new_similar_reg(d, "cntz");
+		if (leading) uc.clz(t, a); else uc.ctz(t, a);
+		uc.select(r, Imm(width), t, cmp_eq(a, Imm(0)));
+		uc.mov(d, r);
+	}
+
+	/// @brief ORC.B: every byte holding any set bit becomes 0xFF.
+	void emit_orc_b(const Gp& d, const Gp& a)
+	{
+		const bool wide = (XLEN == 64);
+		const uint64_t low7  = wide ? 0x7F7F7F7F7F7F7F7Full : 0x7F7F7F7Full;
+		const uint64_t high1 = wide ? 0x8080808080808080ull : 0x80808080ull;
+		Gp t = uc.new_similar_reg(d, "orcb");
+		Gp u = uc.new_similar_reg(d, "orcb2");
+		Gp k = uc.new_similar_reg(d, "orcbk");
+		uc.mov (k, RV64 ? Imm(low7) : Imm(uint32_t(low7)));
+		uc.and_(t, a, k);
+		uc.add (t, t, k);      // carries into bit 7 iff the low seven bits were set
+		uc.or_ (t, t, a);      // bit 7 of each byte is now set iff the byte was
+		uc.mov (k, RV64 ? Imm(high1) : Imm(uint32_t(high1)));
+		uc.and_(t, t, k);
+		// Only bit 7 of each byte survives, so shifting right by seven lands on
+		// bit 0 of the same byte and the subtraction cannot borrow across one:
+		// 0x80 - 0x01 is 0x7F, and a zero byte stays zero.
+		uc.shr (u, t, Imm(7));
+		uc.sub (u, t, u);
+		uc.or_ (d, t, u);
+	}
+
+	/// @brief The Zba, Zbb and Zbs forms of OP, OP-IMM, OP-32 and OP-IMM-32.
+	void emit_zb(AjZb zb, rv32i_instruction i)
+	{
+		// Every shamt-carrying encoding reads it from the same field, at the
+		// width the guest allows.
+		const uint32_t shamt = RV64 ? i.Itype.shift64_imm() : i.Itype.shift_imm();
+		// SH1ADD/SH2ADD/SH3ADD put the shift in funct3 as 2, 4 or 6.
+		const uint32_t sh_scale = 1u << (i.Rtype.funct3 >> 1);
+
+		switch (zb)
+		{
+		// --- Zba: address generation ---
+		case AjZb::kShAdd:      // rd = rs2 + (rs1 << n)
+			uc.add_ext(def(i.Rtype.rd), get(i.Rtype.rs2), get(i.Rtype.rs1), sh_scale);
+			break;
+		case AjZb::kShAddUw:    // rd = rs2 + (zext32(rs1) << n)
+			// The .UW forms take the low word of rs1 and produce a full 64-bit
+			// result, so they are not *W operations and must not sign-extend.
+			uc.add_ext(def(i.Rtype.rd), get(i.Rtype.rs2), zext32_of(i.Rtype.rs1), sh_scale);
+			break;
+		case AjZb::kAddUw:
+			uc.add(def(i.Rtype.rd), get(i.Rtype.rs2), zext32_of(i.Rtype.rs1));
+			break;
+		case AjZb::kSlliUw:
+			// A full six-bit shift amount, unlike every other OP-IMM-32 form.
+			uc.shl(def(i.Itype.rd), zext32_of(i.Itype.rs1), Imm(i.Itype.shift64_imm()));
+			break;
+
+		// --- Zbb: logic with negate ---
+		case AjZb::kAndn:
+			uc.bic(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
+			break;
+		case AjZb::kOrn: {
+			Gp t = new_ireg("orn");
+			uc.not_(t, get(i.Rtype.rs2));
+			uc.or_(def(i.Rtype.rd), get(i.Rtype.rs1), t);
+			} break;
+		case AjZb::kXnor: {
+			Gp t = new_ireg("xnor");
+			uc.xor_(t, get(i.Rtype.rs1), get(i.Rtype.rs2));
+			uc.not_(def(i.Rtype.rd), t);
+			} break;
+
+		// --- Zbb: min and max ---
+		case AjZb::kMin:
+			uc.smin(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
+			break;
+		case AjZb::kMinu:
+			uc.umin(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
+			break;
+		case AjZb::kMax:
+			uc.smax(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
+			break;
+		case AjZb::kMaxu:
+			uc.umax(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
+			break;
+
+		// --- Zbb: bit counting ---
+		case AjZb::kClz:
+			emit_count_zeros(def(i.Itype.rd), get(i.Itype.rs1), true);
+			break;
+		case AjZb::kCtz:
+			emit_count_zeros(def(i.Itype.rd), get(i.Itype.rs1), false);
+			break;
+		case AjZb::kCpop:
+			host_popcount(uc, def(i.Itype.rd), get(i.Itype.rs1));
+			break;
+		case AjZb::kClzw:
+		case AjZb::kCtzw:
+		case AjZb::kCpopw: {
+			// A count is at most 32, so the *W sign-extension is a no-op; going
+			// through it anyway keeps every OP-IMM-32 form on one tail.
+			Gp t = uc.new_gp32("w");
+			if (zb == AjZb::kCpopw)
+				host_popcount(uc, t, word_of(i.Itype.rs1));
+			else
+				emit_count_zeros(t, word_of(i.Itype.rs1), zb == AjZb::kClzw);
+			finish_word(i.Itype.rd, t);
+			} break;
+
+		// --- Zbb: extend, reverse, combine ---
+		case AjZb::kSextB:
+			emit_sign_extend(def(i.Itype.rd), get(i.Itype.rs1), 8);
+			break;
+		case AjZb::kSextH:
+			emit_sign_extend(def(i.Itype.rd), get(i.Itype.rs1), 16);
+			break;
+		case AjZb::kRev8:
+			uc.bswap(def(i.Itype.rd), get(i.Itype.rs1));
+			break;
+		case AjZb::kOrcB:
+			emit_orc_b(def(i.Itype.rd), get(i.Itype.rs1));
+			break;
+		case AjZb::kPack: {
+			// rd = the low half of rs1, with the low half of rs2 above it. The
+			// shift pair clears each upper half without needing a wide mask.
+			// On RV32 with rs2 == x0 this is ZEXT.H.
+			constexpr uint32_t half = XLEN / 2;
+			Gp lo = new_ireg("packlo"), hi = new_ireg("packhi");
+			uc.shl(lo, get(i.Rtype.rs1), Imm(half));
+			uc.shr(lo, lo, Imm(half));
+			uc.shl(hi, get(i.Rtype.rs2), Imm(half));
+			uc.or_(def(i.Rtype.rd), lo, hi);
+			} break;
+		case AjZb::kPackH: {
+			// rd = the low byte of rs1, with the low byte of rs2 above it.
+			Gp lo = new_ireg("phlo"), hi = new_ireg("phhi");
+			uc.and_(lo, get(i.Rtype.rs1), Imm(0xFF));
+			uc.and_(hi, get(i.Rtype.rs2), Imm(0xFF));
+			uc.shl(hi, hi, Imm(8));
+			uc.or_(def(i.Rtype.rd), lo, hi);
+			} break;
+		case AjZb::kPackW: if constexpr (RV64) {
+			// The RV64 form pairs 16-bit halves into a sign-extended word. Its
+			// rs2 == x0 case is ZEXT.H, whose result is positive, so the sign
+			// extension leaves it exactly as the zero-extension would.
+			Gp t = uc.new_gp32("w"), h = uc.new_gp32("wh");
+			uc.and_(t, word_of(i.Rtype.rs1), Imm(0xFFFF));
+			uc.shl(h, word_of(i.Rtype.rs2), Imm(16));
+			uc.or_(t, t, h);
+			finish_word(i.Rtype.rd, t);
+			} break;
+
+		// --- Zbb: rotate ---
+		case AjZb::kRol:
+			uc.rol(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
+			break;
+		case AjZb::kRor:
+			uc.ror(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
+			break;
+		case AjZb::kRori:
+			// The rotate amount is masked to the register width, so a zero
+			// amount is a rotate by zero rather than by the full width.
+			uc.ror(def(i.Itype.rd), get(i.Itype.rs1), Imm(shamt));
+			break;
+		case AjZb::kRolw:
+		case AjZb::kRorw: if constexpr (RV64) {
+			Gp t = uc.new_gp32("w");
+			if (zb == AjZb::kRolw)
+				uc.rol(t, word_of(i.Rtype.rs1), word_of(i.Rtype.rs2));
+			else
+				uc.ror(t, word_of(i.Rtype.rs1), word_of(i.Rtype.rs2));
+			finish_word(i.Rtype.rd, t);
+			} break;
+		case AjZb::kRoriw: if constexpr (RV64) {
+			Gp t = uc.new_gp32("w");
+			uc.ror(t, word_of(i.Itype.rs1), Imm(i.Itype.shift_imm()));
+			finish_word(i.Itype.rd, t);
+			} break;
+
+		// --- Zbs: single-bit ---
+		case AjZb::kBset:
+			uc.or_(def(i.Rtype.rd), get(i.Rtype.rs1), bit_mask(get(i.Rtype.rs2)));
+			break;
+		case AjZb::kBclr:
+			uc.bic(def(i.Rtype.rd), get(i.Rtype.rs1), bit_mask(get(i.Rtype.rs2)));
+			break;
+		case AjZb::kBinv:
+			uc.xor_(def(i.Rtype.rd), get(i.Rtype.rs1), bit_mask(get(i.Rtype.rs2)));
+			break;
+		case AjZb::kBext: {
+			Gp t = new_ireg("bext");
+			uc.shr(t, get(i.Rtype.rs1), get(i.Rtype.rs2));
+			uc.and_(def(i.Rtype.rd), t, Imm(1));
+			} break;
+		case AjZb::kBseti:
+			uc.or_(def(i.Itype.rd), get(i.Itype.rs1), bit_mask(shamt));
+			break;
+		case AjZb::kBclri:
+			uc.bic(def(i.Itype.rd), get(i.Itype.rs1), bit_mask(shamt));
+			break;
+		case AjZb::kBinvi:
+			uc.xor_(def(i.Itype.rd), get(i.Itype.rs1), bit_mask(shamt));
+			break;
+		case AjZb::kBexti: {
+			Gp t = new_ireg("bexti");
+			uc.shr(t, get(i.Itype.rs1), Imm(shamt));
+			uc.and_(def(i.Itype.rd), t, Imm(1));
+			} break;
+
+		case AjZb::kNone:
+			// Unreachable: the caller only arrives here for a classified
+			// encoding, and aj_is_emittable() rejected everything else.
+			failed = true;
+			break;
+		}
 	}
 
 	// --- memory ---
@@ -1242,6 +1578,12 @@ struct AjEmitter
 				break;
 
 			case RV32I_OP_IMM: {
+				// Zb* first: BSETI and friends share funct3 with SLLI, and RORI
+				// and friends share it with SRLI/SRAI.
+				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
+					emit_zb(zb, i);
+					break;
+				}
 				const unsigned rd = i.Itype.rd, rs1 = i.Itype.rs1;
 				const int32_t simm = i.Itype.signed_imm();
 				const uint32_t shamt = RV64 ? i.Itype.shift64_imm() : i.Itype.shift_imm();
@@ -1263,6 +1605,11 @@ struct AjEmitter
 				} break;
 
 			case RV32I_OP: {
+				// Zb* first: ANDN, ORN and XNOR share funct7 0x20 with SUB and SRA.
+				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
+					emit_zb(zb, i);
+					break;
+				}
 				const unsigned rd = i.Rtype.rd, rs1 = i.Rtype.rs1, rs2 = i.Rtype.rs2;
 				const bool alt = (i.Rtype.funct7 == 0b0100000);
 				if (i.Rtype.funct7 == 0b0000001) {   // RV32M / RV64M
@@ -1284,6 +1631,11 @@ struct AjEmitter
 				} break;
 
 			case RV64I_OP_IMM32: if constexpr (RV64) {
+				// Zb* first: SLLI.UW shares funct3 with SLLIW, and RORIW with SRLIW.
+				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
+					emit_zb(zb, i);
+					break;
+				}
 				const unsigned rd = i.Itype.rd, rs1 = i.Itype.rs1;
 				Gp t = uc.new_gp32("w");
 				switch (i.Itype.funct3) {
@@ -1301,6 +1653,12 @@ struct AjEmitter
 				} break;
 
 			case RV64I_OP32: if constexpr (RV64) {
+				// Zb* first, and before word_of(): the .UW forms and ZEXT.H
+				// produce full 64-bit results rather than sign-extended words.
+				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
+					emit_zb(zb, i);
+					break;
+				}
 				const unsigned rd = i.Rtype.rd, rs1 = i.Rtype.rs1, rs2 = i.Rtype.rs2;
 				const bool alt = (i.Rtype.funct7 == 0b0100000);
 				Gp t = uc.new_gp32("w");

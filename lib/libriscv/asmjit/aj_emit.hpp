@@ -46,6 +46,152 @@ namespace riscv
 	/// Defined in aj_emit.cpp, where the asmjit headers are available.
 	bool aj_host_has_fma() noexcept;
 
+	/// @brief One bit-manipulation operation, as the emitter thinks of it.
+	/// @details Covers Zba, Zbb and Zbs, plus the PACK family that ZEXT.H is the
+	/// rs2 == 0 form of. Zbc's carry-less multiplies are deliberately absent:
+	/// they have no compact host sequence, and compilers essentially never emit
+	/// them, so they keep ending a region the way every unhandled encoding does.
+	enum class AjZb : uint8_t
+	{
+		kNone = 0,
+		// --- Zba: address generation ---
+		kShAdd,     ///< SH1ADD, SH2ADD, SH3ADD           (the scale is in funct3)
+		kShAddUw,   ///< SH1ADD.UW, SH2ADD.UW, SH3ADD.UW  (RV64)
+		kAddUw,     ///< ADD.UW                           (RV64)
+		kSlliUw,    ///< SLLI.UW                          (RV64)
+		// --- Zbb: logic with negate ---
+		kAndn, kOrn, kXnor,
+		// --- Zbb: min and max ---
+		kMin, kMinu, kMax, kMaxu,
+		// --- Zbb: bit counting ---
+		kClz, kCtz, kCpop,
+		kClzw, kCtzw, kCpopw,          ///< RV64
+		// --- Zbb: extend, reverse, combine ---
+		kSextB, kSextH, kRev8, kOrcB,
+		kPack, kPackH,                 ///< ZEXT.H on RV32 is PACK with rs2 == 0
+		kPackW,                        ///< RV64; ZEXT.H is its rs2 == 0 form
+		// --- Zbb: rotate ---
+		kRol, kRor, kRori,
+		kRolw, kRorw, kRoriw,          ///< RV64
+		// --- Zbs: single-bit ---
+		kBset, kBclr, kBinv, kBext,
+		kBseti, kBclri, kBinvi, kBexti,
+	};
+
+	/// @brief Classifies one instruction as a bit-manipulation operation.
+	/// @details This is the single source of truth for the Zb encodings: both
+	/// aj_is_emittable() and the emitter dispatch on it, so region discovery can
+	/// never claim an encoding that emission then quietly skips -- which would
+	/// leave rd holding a stale value rather than faulting.
+	/// @tparam W The guest register width. RV64 adds the *W and *.UW forms, and
+	/// widens the shift amount that a shamt-carrying encoding may hold.
+	template <int W>
+	inline AjZb aj_zb_classify(rv32i_instruction i) noexcept
+	{
+		constexpr bool RV64 = (W == 8);
+		// On RV32 the shift amount is five bits wide and bit 5 belongs to funct7,
+		// so every shamt-carrying encoding that sets it is reserved instead.
+		const bool shamt_ok = RV64 || (i.Itype.imm & 0x20) == 0;
+
+		switch (i.opcode())
+		{
+		case RV32I_OP:
+			// The key is funct3 | funct7 << 4, the same one the interpreter's
+			// jumptable_friendly_op() builds, so rvi_instr.cpp can be read
+			// alongside this table.
+			switch (i.Rtype.jumptable_friendly_op()) {
+			case 0x44:  return AjZb::kPack;    // ZEXT.H on RV32 when rs2 == 0
+			case 0x47:  return AjZb::kPackH;
+			case 0x54:  return AjZb::kMin;
+			case 0x55:  return AjZb::kMinu;
+			case 0x56:  return AjZb::kMax;
+			case 0x57:  return AjZb::kMaxu;
+			case 0x102: case 0x104: case 0x106:
+				return AjZb::kShAdd;
+			case 0x141: return AjZb::kBset;
+			case 0x204: return AjZb::kXnor;
+			case 0x206: return AjZb::kOrn;
+			case 0x207: return AjZb::kAndn;
+			case 0x241: return AjZb::kBclr;
+			case 0x245: return AjZb::kBext;
+			case 0x301: return AjZb::kRol;
+			case 0x305: return AjZb::kRor;
+			case 0x341: return AjZb::kBinv;
+			default:    return AjZb::kNone;
+			}
+
+		case RV32I_OP_IMM:
+			if (i.Itype.funct3 == 0x1) {
+				// The unary forms name no shift amount at all, so the whole
+				// 12-bit immediate identifies them.
+				switch (i.Itype.imm) {
+				case 0x600: return AjZb::kClz;
+				case 0x601: return AjZb::kCtz;
+				case 0x602: return AjZb::kCpop;
+				case 0x604: return AjZb::kSextB;
+				case 0x605: return AjZb::kSextH;
+				default: break;
+				}
+				if (!shamt_ok) return AjZb::kNone;
+				switch (i.Itype.high_bits()) {
+				case 0x280: return AjZb::kBseti;
+				case 0x480: return AjZb::kBclri;
+				case 0x680: return AjZb::kBinvi;
+				default:    return AjZb::kNone;
+				}
+			}
+			if (i.Itype.funct3 == 0x5) {
+				// ORC.B and REV8 carry no shift amount either, so they are
+				// matched before the RV32 shamt rule can reject them.
+				if (i.Itype.imm == 0x287)         return AjZb::kOrcB;
+				if (i.Itype.template is_rev8<W>()) return AjZb::kRev8;
+				if (!shamt_ok) return AjZb::kNone;
+				if (i.Itype.high_bits() == 0x600) return AjZb::kRori;
+				if (i.Itype.high_bits() == 0x480) return AjZb::kBexti;
+			}
+			return AjZb::kNone;
+
+		case RV64I_OP_IMM32:
+			if constexpr (RV64) {
+				if (i.Itype.funct3 == 0x1) {
+					switch (i.Itype.imm) {
+					case 0x600: return AjZb::kClzw;
+					case 0x601: return AjZb::kCtzw;
+					case 0x602: return AjZb::kCpopw;
+					default: break;
+					}
+					// SLLI.UW is the one OP-IMM-32 form with a full six-bit
+					// shift amount, because it shifts a 64-bit value.
+					if (i.Itype.high_bits() == 0x080) return AjZb::kSlliUw;
+				}
+				else if (i.Itype.funct3 == 0x5) {
+					// RORIW rotates 32 bits, so its shift amount is five bits
+					// wide even here.
+					if (i.Itype.high_bits() == 0x600 && (i.Itype.imm & 0x20) == 0)
+						return AjZb::kRoriw;
+				}
+			}
+			return AjZb::kNone;
+
+		case RV64I_OP32:
+			if constexpr (RV64) {
+				switch (i.Rtype.jumptable_friendly_op()) {
+				case 0x40:  return AjZb::kAddUw;
+				case 0x44:  return AjZb::kPackW;   // ZEXT.H when rs2 == 0
+				case 0x102: case 0x104: case 0x106:
+					return AjZb::kShAddUw;
+				case 0x301: return AjZb::kRolw;
+				case 0x305: return AjZb::kRorw;
+				default:    break;
+				}
+			}
+			return AjZb::kNone;
+
+		default:
+			return AjZb::kNone;
+		}
+	}
+
 	/// @brief True if the instruction can be emitted by the asmjit backend.
 	/// Anything that is false terminates the region.
 	/// @details This predicate is shared between region discovery and emission,
@@ -95,51 +241,66 @@ namespace riscv
 			return i.Stype.funct3 <= (W == 8 ? 0x3u : 0x2u);   // SB SH SW (SD)
 		case RV32I_OP_IMM:
 			switch (i.Itype.funct3) {
-			case 0x1: // SLLI, but not the Zb* encodings sharing funct3
-				return (i.Itype.imm & SHMASK) == 0x000;
-			case 0x5: // SRLI / SRAI, but not RORI and friends
-				return (i.Itype.imm & SHMASK) == 0x000
-					|| (i.Itype.imm & SHMASK) == 0x400;
+			case 0x1: // SLLI, or one of the Zb* encodings sharing funct3
+				if ((i.Itype.imm & SHMASK) == 0x000)
+					return true;
+				break;
+			case 0x5: // SRLI / SRAI, or RORI and friends
+				if ((i.Itype.imm & SHMASK) == 0x000
+					|| (i.Itype.imm & SHMASK) == 0x400)
+					return true;
+				break;
 			default: // ADDI, SLTI, SLTIU, XORI, ORI, ANDI
 				return true;
 			}
+			return aj_zb_classify<W>(i) != AjZb::kNone;
 		case RV32I_OP:
 			if (i.Rtype.funct7 == 0b0000000)
 				return true;  // ADD SLL SLT SLTU XOR SRL OR AND
-			if (i.Rtype.funct7 == 0b0100000)
-				return i.Rtype.funct3 == 0x0 || i.Rtype.funct3 == 0x5; // SUB, SRA
+			if (i.Rtype.funct7 == 0b0100000
+				&& (i.Rtype.funct3 == 0x0 || i.Rtype.funct3 == 0x5))
+				return true;  // SUB, SRA -- the rest of funct7 0x20 is Zbb
 			if (i.Rtype.funct7 == 0b0000001)
 				return true;  // M: MUL MULH MULHSU MULHU DIV DIVU REM REMU
-			return false;     // the bit-manipulation encodings
+			return aj_zb_classify<W>(i) != AjZb::kNone;
 		case RV64I_OP_IMM32:
 			if constexpr (W == 8) {
 				switch (i.Itype.funct3) {
 				case 0x0: // ADDIW
 					return true;
 				case 0x1: // SLLIW, always a 5-bit shift amount
-					return (i.Itype.imm & 0xFE0) == 0x000;
+					if ((i.Itype.imm & 0xFE0) == 0x000)
+						return true;
+					break;
 				case 0x5: // SRLIW / SRAIW
-					return (i.Itype.imm & 0xFE0) == 0x000
-						|| (i.Itype.imm & 0xFE0) == 0x400;
+					if ((i.Itype.imm & 0xFE0) == 0x000
+						|| (i.Itype.imm & 0xFE0) == 0x400)
+						return true;
+					break;
 				default:
-					return false;
+					break;
 				}
+				return aj_zb_classify<W>(i) != AjZb::kNone;
 			}
 			return false;
 		case RV64I_OP32:
 			if constexpr (W == 8) {
-				if (i.Rtype.funct7 == 0b0000000)
-					return i.Rtype.funct3 == 0x0    // ADDW
-						|| i.Rtype.funct3 == 0x1    // SLLW
-						|| i.Rtype.funct3 == 0x5;   // SRLW
-				if (i.Rtype.funct7 == 0b0100000)
-					return i.Rtype.funct3 == 0x0    // SUBW
-						|| i.Rtype.funct3 == 0x5;   // SRAW
-				if (i.Rtype.funct7 == 0b0000001)
-					return i.Rtype.funct3 == 0x0    // MULW
-						|| i.Rtype.funct3 >= 0x4;   // DIVW DIVUW REMW REMUW
+				if (i.Rtype.funct7 == 0b0000000
+					&& (i.Rtype.funct3 == 0x0     // ADDW
+						|| i.Rtype.funct3 == 0x1  // SLLW
+						|| i.Rtype.funct3 == 0x5))// SRLW
+					return true;
+				if (i.Rtype.funct7 == 0b0100000
+					&& (i.Rtype.funct3 == 0x0     // SUBW
+						|| i.Rtype.funct3 == 0x5))// SRAW
+					return true;
+				if (i.Rtype.funct7 == 0b0000001
+					&& (i.Rtype.funct3 == 0x0     // MULW
+						|| i.Rtype.funct3 >= 0x4))// DIVW DIVUW REMW REMUW
+					return true;
+				return aj_zb_classify<W>(i) != AjZb::kNone;
 			}
-			return false;     // the bit-manipulation encodings
+			return false;
 
 		// --- F/D extension ---
 		case RV32F_LOAD:   // FLW, FLD
