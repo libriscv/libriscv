@@ -237,6 +237,7 @@ struct Emitter
 			this->invalidate_bounds_checks(reg);
 			if (uses_register_caching() && reg < CACHED_REGISTERS) {
 				load_register(reg);
+				this->gpr_written[reg] = true;
 				return loaded_regname(reg);
 			} else {
 				return "cpu->r[" + std::to_string(reg) + "]";
@@ -382,20 +383,33 @@ struct Emitter
 			this->potentially_reload_register(use.writes);
 		}
 	}
-	// Hand one vector instruction to the interpreter handler. Callers
-	// realize/reload the integer registers around it. The libtcc exception
-	// path returns from the block, so cached registers are stored first.
 	void emit_vector_handler_invoke()
 	{
 		if (tinfo.is_libtcc) {
 			const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler;
 			code += "if (UNLIKELY(api.execute_handler(cpu, " + std::to_string(instr.whole)
-				+ ", " + std::to_string(handler) + "))) {\n";
-			this->store_loaded_registers();
-			code += "RETURN_VALUES(0, 0);\n}\n";
+				+ ", " + std::to_string(handler) + ")))";
+			if (this->uses_register_caching()) {
+				this->m_used_vector_trap = true;
+				code += " goto " + this->vector_trap_label() + ";\n";
+			} else {
+				// Nothing to store, so the exit is already as small as the jump.
+				code += " {\nRETURN_VALUES(0, 0);\n}\n";
+			}
 		} else {
 			this->emit_vector_handler_call(instr);
 		}
+	}
+	std::string vector_trap_label() const {
+		return this->func + "_vtrap";
+	}
+	void emit_vector_trap_epilogue()
+	{
+		if (!this->m_used_vector_trap)
+			return;
+		add_code(this->vector_trap_label() + ":;");
+		this->store_loaded_registers();
+		add_code("RETURN_VALUES(0, 0);");
 	}
 	// Run one vector instruction in the interpreter, realizing and
 	// reloading only the integer registers the handler names.
@@ -961,7 +975,6 @@ struct Emitter
 		}
 		this->m_vtype = { true, false, newtype.encoded_sew(), newtype.lmul_shift() };
 		if (rd != 0) {
-			// Writes the cached register directly: no realize, no reload.
 			this->reset_tracked_register(rd);
 			if (this->m_vl_known)
 				this->track_register_value(rd, this->m_vl);
@@ -1026,8 +1039,12 @@ struct Emitter
 	// Returns true if the function call has exited/returned from the block
 	bool emit_function_call(address_t target, address_t dest_pc);
 
-	bool gpr_exists_at(int reg) const noexcept { return this->gpr_exists.at(reg); }
+	bool gpr_exists_at(int reg) const { return this->gpr_exists.at(reg); }
+	bool gpr_written_at(int reg) const { return this->gpr_written.at(reg); }
 	auto& get_gpr_exists() const noexcept { return this->gpr_exists; }
+	bool gpr_needs_store(size_t reg) const {
+		return this->gpr_exists_at(reg) && this->gpr_written_at(reg);
+	}
 
 	bool uses_flat_memory_arena() noexcept {
 		return riscv::flat_readwrite_arena && tinfo.arena_ptr != 0;
@@ -1428,6 +1445,7 @@ private:
 	address_t m_encompassing_arena_mask = 0;
 	bool m_used_store_syscalls = false;
 	bool m_used_fixed_store = false;
+	bool m_used_vector_trap = false;
 
 	// Per-register live bounds-check window (see offset_is_within_overallocation)
 	struct BoundsCheck {
@@ -1438,6 +1456,7 @@ private:
 	std::array<BoundsCheck, 32> m_write_checked {};
 
 	std::array<bool, 32> gpr_exists {};
+	std::array<bool, 32> gpr_written {};
 	std::array<bool, 32> m_is_tracked_register {};
 	std::array<address_t, 32> m_tracked_registers {};
 
@@ -2642,11 +2661,6 @@ void Emitter<W>::emit()
 		// 5/6/7 for 16/32/64-bit, none of which collide with the scalar
 		// FLH/FLW/FLD/FLQ encodings above.
 		case 0x0: case 0x5: case 0x6: case 0x7:
-			// The contiguous forms -- unit-stride, whole-register and mask,
-			// masked or not -- are inlined as an arena move at an address
-			// the emitted code tests. Everything else goes to the handler,
-			// which only reads x[rs1] and writes no integer register, so
-			// cached registers stay live across it.
 			this->emit_vector_instruction();
 			break;
 #endif
@@ -3292,6 +3306,10 @@ void Emitter<W>::emit()
 	// we must gracefully finish, setting new PC and incrementing IC
 	this->increment_counter_so_far();
 	exit_function(STRADDR(this->end_pc()));
+#ifdef RISCV_EXT_VECTOR
+	// Unreachable by fall-through: exit_function() above always returns.
+	this->emit_vector_trap_epilogue();
+#endif
 }
 
 template <int W>
@@ -3305,7 +3323,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	if (tinfo.use_register_caching) {
 		code += "#define STORE_REGS_" + e.get_func() + "() \\\n";
 		for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
-			if (e.gpr_exists_at(reg)) {
+			if (e.gpr_needs_store(reg)) {
 				code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 			}
 		}
@@ -3320,19 +3338,19 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 		if (e.used_store_syscalls()) {
 			code += "#define STORE_SYS_REGS_" + e.get_func() + "() \\\n";
 			for (size_t reg = 10; reg < 18; reg++) {
-				if (e.gpr_exists_at(reg)) {
+				if (e.gpr_needs_store(reg)) {
 					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 				}
 			}
 			code += "  ;\n";
 			code += "#define STORE_NON_SYS_REGS_" + e.get_func() + "() \\\n";
 			for (size_t reg = 0; reg < 10; reg++) {
-				if (e.gpr_exists_at(reg)) {
+				if (e.gpr_needs_store(reg)) {
 					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 				}
 			}
 			for (size_t reg = 18; reg < e.CACHED_REGISTERS; reg++) {
-				if (e.gpr_exists_at(reg)) {
+				if (e.gpr_needs_store(reg)) {
 					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 				}
 			}
@@ -3409,7 +3427,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 #endif
 	code += "exception_is_handled:\n"; // Re-using exit point for exceptions
 	for (size_t reg = 1; reg < e.CACHED_REGISTERS; reg++) {
-		if (e.gpr_exists_at(reg)) {
+		if (e.gpr_needs_store(reg)) {
 			code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + ";\n";
 		}
 	}
