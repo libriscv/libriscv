@@ -18,9 +18,6 @@ namespace riscv
 #else
 	static std::random_device rd{};
 #endif
-#ifdef RISCV_BINARY_TRANSLATION
-	static std::unordered_set<size_t> clobbering_syscalls;
-#endif
 
 	template <int W>
 	inline Machine<W>::Machine(std::string_view binary, const MachineOptions<W>& options)
@@ -84,25 +81,6 @@ namespace riscv
 	{
 		auto txt = "Unhandled system call: " + std::to_string(num) + "\n";
 		machine.print(txt.c_str(), txt.size());
-	}
-
-	template <int W>
-	void Machine<W>::register_clobbering_syscall(size_t sysnum)
-	{
-#ifdef RISCV_BINARY_TRANSLATION
-		clobbering_syscalls.insert(sysnum);
-#endif
-		(void)sysnum;
-	}
-
-	template <int W>
-	bool Machine<W>::is_clobbering_syscall(size_t sysnum) noexcept {
-#ifdef RISCV_BINARY_TRANSLATION
-		return clobbering_syscalls.count(sysnum) > 0;
-#else
-		(void)sysnum;
-		return false; // No clobbering syscalls in non-binary translation mode
-#endif
 	}
 
 	template <int W>

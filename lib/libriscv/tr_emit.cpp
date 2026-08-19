@@ -176,7 +176,7 @@ struct Emitter
 			add_code("STORE_REGS_" + this->func + "();");
 	}
 	void reload_syscall_registers() {
-		// A non-clobbering system call only writes back A0/A1
+		// A system call only writes back A0/A1
 		this->invalidate_bounds_checks(10);
 		this->invalidate_bounds_checks(11);
 		// Use the LOAD_SYS_REGS macro to restore registers modified by a syscall
@@ -1249,7 +1249,7 @@ struct Emitter
 
 	void emit_branch(const BranchInfo& binfo, const std::string& op);
 
-	void emit_system_call(std::string syscall_reg, bool clobber_all);
+	void emit_system_call(std::string syscall_reg);
 
 	// Returns true if the function call has exited/returned from the block
 	bool emit_function_call(address_t target, address_t dest_pc);
@@ -1769,30 +1769,16 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 }
 
 template <int W>
-inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_all)
+inline void Emitter<W>::emit_system_call(std::string syscall_reg)
 {
 	if (auto tracked_value = get_tracked_register(17); tracked_value) {
-		// Don't clobber when the value is known and it's not in the list
-		// of known system calls that clobber all registers
-		if (tinfo.use_syscall_clobbering_optimization && this->uses_register_caching() && !clobber_all) {
-			clobber_all = Machine<W>::is_clobbering_syscall(*tracked_value);
-		} else {
-			clobber_all = true;
-		}
-
 		if (syscall_reg != std::to_string(SYSCALL_EBREAK)) {
 			if constexpr (W != 16) { // No 128-bit to_string in C++
 				syscall_reg = std::to_string(*tracked_value);
 			}
 		}
-	} else {
-		clobber_all = true;
 	}
-	if (clobber_all) {
-		this->store_loaded_registers();
-	} else {
-		this->store_syscall_registers();
-	}
+	this->store_loaded_registers();
 	if (tinfo.is_libtcc)
 	{
 		if (!tinfo.ignore_instruction_limit) {
@@ -1802,27 +1788,7 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_a
 			code += "max_ic = api.system_call(cpu, " + PCRELS(0) + ", 0, max_ic, " + syscall_reg + ");\n";
 		}
 		code += "if (!max_ic) {\n";
-		if (this->uses_register_caching() && !clobber_all)
-		{
-			// Non-clobbering syscall, but we are about to leave, so
-			// restore all the remaining registers
-			if (!tinfo.ignore_instruction_limit) {
-				code += "max_ic = MAX_COUNTER(cpu);\n"
-						"if (ic >= max_ic) {\n"
-						"  STORE_NON_SYS_REGS_" + this->func + "();\n"
-						"}\n"
-						"  RETURN_VALUES(ic, max_ic);\n"
-						"}\n";
-			} else {
-				code += "max_ic = MAX_COUNTER(cpu);\n"
-						"if (max_ic == 0) {\n"
-						"  STORE_NON_SYS_REGS_" + this->func + "();\n"
-						"}\n"
-						"  RETURN_VALUES(0, max_ic);\n"
-						"}\n";
-			}
-		}
-		else if (!tinfo.ignore_instruction_limit) {
+		if (!tinfo.ignore_instruction_limit) {
 			code += "  RETURN_VALUES(ic, MAX_COUNTER(cpu));\n"
 					"}\n";
 		} else {
@@ -1835,15 +1801,6 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_a
 		code += "cpu->pc = " + PCRELS(0) + ";\n";
 		if (!tinfo.ignore_instruction_limit) {
 			code += "if (UNLIKELY(do_syscall(cpu, ic, max_ic, " + syscall_reg + "))) {\n";
-			if (this->uses_register_caching() && !clobber_all)
-			{
-				// If we didn't clobber all registers, and the machine timed out,
-				// we need to store back the registers so that the timed out machine
-				// can resume from where it left off, if it is re-entered.
-				code += "if (ic >= MAX_COUNTER(cpu)) {\n";
-				code += "  STORE_NON_SYS_REGS_" + this->func + "();\n";
-				code += "}\n";
-			}
 			code += "  cpu->pc += 4; RETURN_VALUES(ic, MAX_COUNTER(cpu));}\n"; // Correct for +4 expectation outside of bintr
 			code += "max_ic = MAX_COUNTER(cpu);\n"; // Restore max counter
 		} else {
@@ -1851,12 +1808,7 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg, bool clobber_a
 			code += "  cpu->pc += 4; RETURN_VALUES(0, MAX_COUNTER(cpu));}\n";
 		}
 	}
-	if (clobber_all) {
-		this->reset_all_tracked_registers();
-	} else {
-		this->reset_tracked_register(10);
-		this->reset_tracked_register(11);
-	}
+	this->reset_all_tracked_registers();
 #ifdef RISCV_EXT_VECTOR
 	this->reset_vector_config();
 #endif
@@ -1955,7 +1907,7 @@ void Emitter<W>::emit()
 		}
 
 		if (tinfo.ebreak_locations->count(this->pc())) {
-			this->emit_system_call(std::to_string(SYSCALL_EBREAK), true);
+			this->emit_system_call(std::to_string(SYSCALL_EBREAK));
 		}
 
 		// instruction generation
@@ -2637,10 +2589,10 @@ void Emitter<W>::emit()
 					if (instr.Itype.imm == 0) {
 						// ECALL: System call
 						syscall_reg = this->from_reg(REG_ECALL);
-						this->emit_system_call(syscall_reg, false);
+						this->emit_system_call(syscall_reg);
 					} else { // EBREAK
 						syscall_reg = std::to_string(SYSCALL_EBREAK);
-						this->emit_system_call(syscall_reg, true);
+						this->emit_system_call(syscall_reg);
 					}
 					break;
 				} else if (instr.Itype.imm == 261 || instr.Itype.imm == 0x7FF) { // WFI / STOP
@@ -3555,18 +3507,6 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 		if (e.used_store_syscalls()) {
 			code += "#define STORE_SYS_REGS_" + e.get_func() + "() \\\n";
 			for (size_t reg = 10; reg < 18; reg++) {
-				if (e.gpr_needs_store(reg)) {
-					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
-				}
-			}
-			code += "  ;\n";
-			code += "#define STORE_NON_SYS_REGS_" + e.get_func() + "() \\\n";
-			for (size_t reg = 0; reg < 10; reg++) {
-				if (e.gpr_needs_store(reg)) {
-					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
-				}
-			}
-			for (size_t reg = 18; reg < e.CACHED_REGISTERS; reg++) {
 				if (e.gpr_needs_store(reg)) {
 					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
 				}

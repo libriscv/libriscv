@@ -32,7 +32,6 @@ namespace riscv
 		bool ignore_instruction_limit;
 		bool use_shared_execute_segments;
 		bool use_register_caching;
-		bool use_syscall_clobbering_optimization;
 		bool use_automatic_nbit_address_space;
 		bool use_virtual_paging_fallback;
 		bool unsafe_remove_checks;

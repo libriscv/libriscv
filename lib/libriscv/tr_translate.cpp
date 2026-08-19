@@ -783,7 +783,6 @@ if constexpr (SCAN_FOR_GP) {
 				options.translate_ignore_instruction_limit,
 				options.use_shared_execute_segments,
 				options.translate_use_register_caching,
-				options.translate_use_syscall_clobbering_optimization,
 				options.translate_automatic_nbit_address_space,
 				options.translate_use_virtual_paging_fallback,
 				options.translate_unsafe_remove_checks,
