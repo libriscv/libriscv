@@ -3,7 +3,7 @@
 template <int W> inline
 void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 {
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(dst + len > memory_arena_size() || dst + len < dst || dst < initial_rodata_end()))
 		protection_fault(dst);
 	std::memset(&((char*)m_arena.data)[dst], value, len);
@@ -25,7 +25,7 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 template <int W> inline
 void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 {
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(dst + len > memory_arena_size() || dst + len < dst || dst < initial_rodata_end()))
 		protection_fault(dst);
 	std::memcpy(&((char*)m_arena.data)[dst], vsrc, len);
@@ -49,7 +49,7 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 template <int W> inline
 void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 {
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(src + len > memory_arena_size() || src + len < src || src < RWREAD_BEGIN))
 		protection_fault(src);
 	std::memcpy(vdst, &((const char*)m_arena.data)[src], len);
@@ -97,7 +97,7 @@ bool Memory<W>::try_memmove(address_t dst, address_t src, size_t len)
 template <int W> inline
 std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 {
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(addr < RWREAD_BEGIN || addr >= memory_arena_size()))
 		protection_fault(addr);
 	auto* begin = &((const char*)m_arena.data)[addr];
@@ -364,7 +364,7 @@ std::span<T> Memory<W>::memspan(address_t addr, size_t count, size_t maxlen) con
 template <int W> inline
 size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 {
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(addr < RWREAD_BEGIN || addr >= memory_arena_size()))
 		protection_fault(addr);
 	auto* begin = &((const char*)m_arena.data)[addr];
@@ -398,7 +398,7 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 	if (UNLIKELY(p2 + len < p2))
 		protection_fault(p2);
 
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(p1 < RWREAD_BEGIN || p1 + len > memory_arena_size()))
 		protection_fault(p1);
 	if (UNLIKELY(p2 < RWREAD_BEGIN || p2 + len > memory_arena_size()))
@@ -457,7 +457,7 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	if (UNLIKELY(p2 + len < p2))
 		protection_fault(p2);
 
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(p2 < RWREAD_BEGIN || p2 + len > memory_arena_size()))
 		protection_fault(p2);
 	return std::memcmp(ptr1, &((const char*)m_arena.data)[p2], len);
@@ -553,7 +553,7 @@ template <int W> inline
 size_t Memory<W>::gather_buffers_from_range(
 	size_t cnt, vBuffer buffers[], address_t addr, size_t len) const
 {
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(addr < RWREAD_BEGIN || addr + len > memory_arena_size() || addr + len < addr))
 		machine().cpu.trigger_exception(PROTECTION_FAULT, addr);
 	if (cnt == 0)
@@ -597,7 +597,7 @@ template <int W> inline
 size_t Memory<W>::gather_writable_buffers_from_range(
 	size_t cnt, vBuffer buffers[], address_t addr, size_t len)
 {
-#ifndef RISCV_VIRTUAL_PAGING
+#if !defined(RISCV_VIRTUAL_PAGING) || defined(RISCV_FLAT_RW_ARENA)
 	if (UNLIKELY(addr < initial_rodata_end() || addr + len > memory_arena_size() || addr + len < addr))
 		machine().cpu.trigger_exception(PROTECTION_FAULT, addr);
 	if (cnt == 0)
