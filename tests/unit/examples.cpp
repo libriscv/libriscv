@@ -47,6 +47,41 @@ TEST_CASE("Main example", "[Examples]")
 }
 
 #include <libriscv/rv32i_instr.hpp>
+#include <fcntl.h>
+#include <unistd.h>
+
+/// @brief Sends stdout to a file for as long as it is alive.
+///
+/// The two examples below print every instruction the guest executes, and a
+/// statically linked program executes on the order of a hundred thousand of
+/// them before main() returns. The printing is the point of the examples, so
+/// the code is left exactly as one would write it, and the output is put in a
+/// file instead of drowning the rest of the test run.
+struct OutputToFile {
+	explicit OutputToFile(const char* filename)
+	{
+		fflush(stdout);
+		m_saved_stdout = dup(STDOUT_FILENO);
+		m_file = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		if (m_file >= 0 && m_saved_stdout >= 0)
+			dup2(m_file, STDOUT_FILENO);
+	}
+	~OutputToFile()
+	{
+		fflush(stdout);
+		if (m_saved_stdout >= 0) {
+			dup2(m_saved_stdout, STDOUT_FILENO);
+			close(m_saved_stdout);
+		}
+		if (m_file >= 0)
+			close(m_file);
+	}
+	OutputToFile(const OutputToFile&) = delete;
+	OutputToFile& operator=(const OutputToFile&) = delete;
+private:
+	int m_saved_stdout = -1;
+	int m_file = -1;
+};
 
 TEST_CASE("One instruction at a time", "[Examples]")
 {
@@ -64,18 +99,22 @@ TEST_CASE("One instruction at a time", "[Examples]")
 
 	machine.set_max_instructions(1'000'000UL);
 
-	while (!machine.stopped()) {
-		auto& cpu = machine.cpu;
-		// Read next instruction
-		auto instruction = cpu.read_next_instruction();
-		// Print the instruction to terminal
-		printf("%s\n",
-			   cpu.to_string(instruction, cpu.decode(instruction)).c_str());
-		// Execute instruction directly
-		cpu.execute(instruction);
-		// Increment PC to next instruction, and increment instruction counter
-		cpu.increment_pc(instruction.length());
-		machine.increment_counter(1);
+	{
+		const OutputToFile output{"/tmp/libriscv-example-instructions.txt"};
+
+		while (!machine.stopped()) {
+			auto& cpu = machine.cpu;
+			// Read next instruction
+			auto instruction = cpu.read_next_instruction();
+			// Print the instruction to terminal
+			printf("%s\n",
+				   cpu.to_string(instruction, cpu.decode(instruction)).c_str());
+			// Execute instruction directly
+			cpu.execute(instruction);
+			// Increment PC to next instruction, and increment instruction counter
+			cpu.increment_pc(instruction.length());
+			machine.increment_counter(1);
+		}
 	}
 
 	REQUIRE(machine.return_value() == 0x1234);
@@ -94,26 +133,30 @@ TEST_CASE("One instruction at a time with ilimit", "[Examples]")
 		{"LC_TYPE=C", "LC_ALL=C", "USER=root"});
 	machine.setup_linux_syscalls();
 
-	do {
-		// Only execute 1000 instructions at a time
-		machine.reset_instruction_counter();
-		machine.set_max_instructions(1'000);
+	{
+		const OutputToFile output{"/tmp/libriscv-example-instructions-ilimit.txt"};
 
-		while (!machine.stopped())
-		{
-			auto& cpu = machine.cpu;
-			// Read next instruction
-			const auto instruction = cpu.read_next_instruction();
-			// Print the instruction to terminal
-			printf("%s\n", cpu.to_string(instruction).c_str());
-			// Execute instruction directly
-			cpu.execute(instruction);
-			// Increment PC to next instruction, and increment instruction counter
-			cpu.increment_pc(instruction.length());
-			machine.increment_counter(1);
-		}
+		do {
+			// Only execute 1000 instructions at a time
+			machine.reset_instruction_counter();
+			machine.set_max_instructions(1'000);
 
-	} while (machine.instruction_limit_reached());
+			while (!machine.stopped())
+			{
+				auto& cpu = machine.cpu;
+				// Read next instruction
+				const auto instruction = cpu.read_next_instruction();
+				// Print the instruction to terminal
+				printf("%s\n", cpu.to_string(instruction).c_str());
+				// Execute instruction directly
+				cpu.execute(instruction);
+				// Increment PC to next instruction, and increment instruction counter
+				cpu.increment_pc(instruction.length());
+				machine.increment_counter(1);
+			}
+
+		} while (machine.instruction_limit_reached());
+	}
 
 	REQUIRE(machine.return_value() == 0x1234);
 }

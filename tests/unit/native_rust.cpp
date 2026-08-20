@@ -1049,6 +1049,29 @@ static const std::vector<uint8_t>& rust_guest_binary()
 	return binary;
 }
 
+/// @brief The same guest binary, with one machine pinned for the lifetime of
+/// the test binary.
+///
+/// libriscv shares the decoded execute segment between machines built from the
+/// same binary, but the shared entry is dropped again as soon as the last
+/// machine using it goes away. Every test below builds its own machine and lets
+/// it go, so without one machine held open the guest is decoded once per test
+/// case - and under a JIT backend that means compiling a statically linked Rust
+/// program from scratch about forty times, which is most of the test run.
+///
+/// The pinned machine is never simulated and never destroyed; it only has to
+/// exist. It is reached through a static pointer, so it stays a root as far as
+/// the leak sanitizer is concerned, and its destructor never runs at exit.
+static const std::vector<uint8_t>& pinned_rust_guest_binary()
+{
+	const auto& binary = rust_guest_binary();
+	// Default options here, matching the machines the tests build: the shared
+	// segment is keyed on the arena size as well as the code itself.
+	static Machine<RISCV64>* pinned = new Machine<RISCV64>(binary);
+	(void) pinned;
+	return binary;
+}
+
 // ---------------------------------------------------------------------------
 // Counting the block memory operations.
 //
@@ -1128,7 +1151,7 @@ struct GuestBytes {
 struct RustGuest {
 	Machine<RISCV64> machine;
 
-	RustGuest() : machine(rust_guest_binary())
+	RustGuest() : machine(pinned_rust_guest_binary())
 	{
 		const auto heap = machine.memory.mmap_allocate(HEAP_SIZE);
 		machine.setup_native_heap(HEAP_SYSCALLS_BASE, heap, HEAP_SIZE);

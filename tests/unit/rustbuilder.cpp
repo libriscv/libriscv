@@ -88,12 +88,43 @@ bool rust_toolchain_available()
 	return command_succeeds("ls " + libdir + "/libstd-*.rlib");
 }
 
+static bool file_exists(const std::string& filename)
+{
+	return access(filename.c_str(), R_OK) == 0;
+}
+
 std::vector<uint8_t> build_rust_and_load(
 	const std::string& code, const std::string& args)
 {
+	const auto rustc  = env_with_default("RUSTC", DEFAULT_RUSTC);
+	const auto linker = rust_linker();
+
+	// The name of the compiled guest is a checksum of everything that goes into
+	// it, so a binary that is already there is the binary this call would have
+	// produced. Building the Rust guest takes several seconds and every test
+	// binary that uses it needs the same one, so it is only built once.
+	// --no-gc-sections keeps the exported functions in the binary even though
+	// nothing in the guest itself calls them
+	const std::string command_prefix =
+		rustc + " --edition 2021 --crate-name rust_guest --target " + RUST_TARGET
+		+ " -C target-feature=+crt-static"
+		+ " -C linker=" + linker
+		+ " -C link-args=-Wl,--no-gc-sections "
+		+ args;
+
+	uint32_t checksum = crc32((const uint8_t *)code.c_str(), code.size());
+	checksum = crc32(checksum, (const uint8_t *)command_prefix.c_str(), command_prefix.size());
+
+	char bin_filename[256];
+	(void)snprintf(bin_filename, sizeof(bin_filename),
+		"/tmp/rustbinary-%08X", checksum);
+
+	if (file_exists(bin_filename))
+		return load_file(bin_filename);
+
 	// Create a temporary source file. rustc wants the .rs extension, and it
 	// takes the crate name from the file name, which mkstemps does not make
-	// a valid Rust identifier - hence --crate-name below.
+	// a valid Rust identifier - hence --crate-name above.
 	char code_filename[64];
 	strncpy(code_filename, "/tmp/rustbuilder-XXXXXX.rs", sizeof(code_filename));
 	const int code_fd = mkstemps(code_filename, 3);
@@ -108,23 +139,13 @@ std::vector<uint8_t> build_rust_and_load(
 		throw std::runtime_error("Unable to write to temporary file");
 	}
 
-	char bin_filename[256];
-	const uint32_t code_checksum = crc32((const uint8_t *)code.c_str(), code.size());
-	const uint32_t final_checksum = crc32(code_checksum, (const uint8_t *)args.c_str(), args.size());
-	(void)snprintf(bin_filename, sizeof(bin_filename),
-		"/tmp/rustbinary-%08X", final_checksum);
+	// Link into a private file and rename it into place afterwards, so that
+	// test binaries running side by side never load a half-written guest.
+	const std::string temp_binary =
+		std::string(bin_filename) + "." + std::to_string(getpid());
 
-	const auto rustc  = env_with_default("RUSTC", DEFAULT_RUSTC);
-	const auto linker = rust_linker();
-
-	// --no-gc-sections keeps the exported functions in the binary even though
-	// nothing in the guest itself calls them
-	const std::string command =
-		rustc + " --edition 2021 --crate-name rust_guest --target " + RUST_TARGET
-		+ " -C target-feature=+crt-static"
-		+ " -C linker=" + linker
-		+ " -C link-args=-Wl,--no-gc-sections "
-		+ args + " -o " + bin_filename + " " + std::string(code_filename);
+	const std::string command = command_prefix
+		+ " -o " + temp_binary + " " + std::string(code_filename);
 
 	if constexpr (VERBOSE_COMPILER) {
 		printf("Command: %s\n", command.c_str());
@@ -136,6 +157,11 @@ std::vector<uint8_t> build_rust_and_load(
 	}
 	pclose(f);
 	unlink(code_filename);
+
+	if (rename(temp_binary.c_str(), bin_filename) != 0) {
+		unlink(temp_binary.c_str());
+		throw std::runtime_error("Unable to build the Rust guest: " + command);
+	}
 
 	return load_file(bin_filename);
 }
