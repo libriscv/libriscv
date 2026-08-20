@@ -36,8 +36,16 @@ namespace riscv
 		int32_t rvv_vsew        = 0;   ///< log2(SEW / 8)
 		int32_t rvv_lmul        = 0;   ///< log2(LMUL), signed
 		int32_t rvv_vill        = 0;
-		/// @brief True when loads and stores may be inlined against the flat arena.
+		/// @brief True when loads and stores may be inlined against the arena.
 		bool inline_memory = false;
+		/// @brief Nonzero when the arena is an N-bit encompassing one, holding
+		/// the address mask that maps a guest address into it.
+		/// @details Such an arena spans the whole reachable address space, so an
+		/// access cannot land outside it and there is no bounds check and no
+		/// out-of-line path at all -- masking the address *is* the translation,
+		/// exactly as Memory<W>::read()/write() do it. Zero means the flat arena,
+		/// which is indexed by the address itself behind a bounds check.
+		uint64_t arena_mask = 0;
 		const AjCallbacks<W>* cb = nullptr;
 	};
 

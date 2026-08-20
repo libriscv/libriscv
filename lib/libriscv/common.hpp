@@ -304,9 +304,13 @@ namespace riscv
 		/// @brief Maximum number of RISC-V instructions emitted per execute segment.
 		unsigned asmjit_instr_max = 500'000;
 		/// @brief Maximum number of RISC-V instructions in a single region.
-		/// @details Regions start at every basic-block leader and overlap, so their
-		/// tails are duplicated. This is what bounds that duplication.
-		unsigned asmjit_region_instr_max = 128;
+		/// @details Regions partition the segment, so this does not bound total
+		/// emission -- the segment size does. It bounds how large a single emitted
+		/// host function may get, which is what register allocation cost scales
+		/// with. It needs to be comfortably above the size of a hot function:
+		/// a region cut short in the middle of a loop exits to the interpreter on
+		/// every iteration, which costs far more than the emission it saves.
+		unsigned asmjit_region_instr_max = 1024;
 		/// @brief Enable background translation, using a user-provided callback to
 		/// run the translation step on another thread.
 		/// @details Short-lived programs should leave this disabled, as the

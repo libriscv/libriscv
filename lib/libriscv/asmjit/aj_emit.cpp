@@ -1012,10 +1012,32 @@ struct AjEmitter
 		node->set_arg(4, rvimm(pc));
 		emit_fault_check(pc, pend);
 	}
+	/// @brief True when an inlined access needs a bounds check and a slow path.
+	/// @details Only the flat arena does. An N-bit encompassing arena contains
+	/// every address the mask can produce, so there is nothing to check.
+	bool arena_is_checked() const noexcept { return info.arena_mask == 0; }
+	/// @brief The arena index for an effective address.
+	/// @details The flat arena is indexed by the guest address directly. An N-bit
+	/// encompassing arena is indexed by the masked address -- the arena is
+	/// allocated with two pages of slack past 2^N so that an access straddling
+	/// the top still lands in mapped memory, which is what lets the mask stand
+	/// alone as the whole bounds treatment.
+	Gp arena_index(const Gp& addr) {
+		// A mask that already covers the full guest address width cannot change
+		// the address: RV32 under a 32-bit arena is the common case.
+		if (info.arena_mask == 0 || info.arena_mask >= uint64_t(address_t(~address_t(0))))
+			return addr;
+		Gp t = uc.new_gp_ptr("aidx");
+		uc.and_(t, addr, Imm(info.arena_mask));
+		return t;
+	}
 	// (addr - RWREAD_BEGIN) < read_boundary, the same single-sided check the
 	// interpreter uses. Both bounds are read from the machine rather than baked
 	// in, so the code stays valid for every machine sharing this execute segment.
+	// An unchecked arena emits nothing here, and has no slow path to branch to.
 	void emit_arena_check(const Gp& addr, bool is_write, const Label& slow) {
+		if (!arena_is_checked())
+			return;
 		const Gp a = addr_value(addr);
 		Gp t = new_ireg("bchk");
 		if (is_write)
@@ -1034,7 +1056,7 @@ struct AjEmitter
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
 		emit_arena_check(addr, false, slow);
-		const Mem m = mem_ptr(arena, addr);
+		const Mem m = mem_ptr(arena, arena_index(addr));
 		switch (funct3) {
 		case 0x0: uc.load_i8 (dst, m); break;                        // LB
 		case 0x1: uc.load_i16(dst, m); break;                        // LH
@@ -1045,11 +1067,13 @@ struct AjEmitter
 		case 0x6: if constexpr (RV64) uc.load_u32(dst, m); break;    // LWU
 		}
 		uc.bind(done);
-		deferred.push_back([=, this, pend = pending - 1] {
-			uc.bind(slow);
-			call_load_helper(pc, funct3, dst, addr, pend);
-			uc.j(done);
-		});
+		if (arena_is_checked()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(slow);
+				call_load_helper(pc, funct3, dst, addr, pend);
+				uc.j(done);
+			});
+		}
 	}
 	void emit_store(address_t pc, unsigned funct3, unsigned rs1, unsigned rs2, int32_t simm)
 	{
@@ -1061,7 +1085,7 @@ struct AjEmitter
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
 		emit_arena_check(addr, true, slow);
-		const Mem m = mem_ptr(arena, addr);
+		const Mem m = mem_ptr(arena, arena_index(addr));
 		switch (funct3) {
 		case 0x0: uc.store_u8 (m, src); break;                        // SB
 		case 0x1: uc.store_u16(m, src); break;                        // SH
@@ -1069,11 +1093,13 @@ struct AjEmitter
 		case 0x3: if constexpr (RV64) uc.store_u64(m, src); break;    // SD
 		}
 		uc.bind(done);
-		deferred.push_back([=, this, pend = pending - 1] {
-			uc.bind(slow);
-			call_store_helper(pc, funct3, src, addr, pend);
-			uc.j(done);
-		});
+		if (arena_is_checked()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(slow);
+				call_store_helper(pc, funct3, src, addr, pend);
+				uc.j(done);
+			});
+		}
 	}
 
 	// --- interpreter handler calls -----------------------------------------
@@ -1172,7 +1198,7 @@ struct AjEmitter
 		Label slow = uc.new_label(), done = uc.new_label();
 		emit_arena_check(addr, vmi.is_store, slow);
 		Gp mem = uc.new_gp_ptr("vmem");
-		uc.add(mem, arena, addr);
+		uc.add(mem, arena, arena_index(addr));
 		Gp file = uc.new_gp_ptr("vfile");
 		uc.lea(file, mem_ptr(cpu, info.rvv_regs + int32_t(vmi.vreg * VLEN)));
 		for (unsigned r = 0; r < vmi.nregs; r++) {
@@ -1240,7 +1266,7 @@ struct AjEmitter
 		uc.j(done, cmp_eq(regs, Imm(0)));
 
 		Gp mem = uc.new_gp_ptr("vmem");
-		uc.add(mem, arena, addr);
+		uc.add(mem, arena, arena_index(addr));
 		Gp file = uc.new_gp_ptr("vfile");
 		uc.lea(file, mem_ptr(cpu, info.rvv_regs + int32_t(vmi.vreg * VLEN)));
 		Label loop = uc.new_label();
@@ -1377,15 +1403,17 @@ struct AjEmitter
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
 		emit_arena_check(addr, false, slow);
-		const Mem m = mem_ptr(arena, addr);
+		const Mem m = mem_ptr(arena, arena_index(addr));
 		if (is_double) uc.v_loadu64_u64(dst, m);   // FLD
 		else           uc.v_loadu32_u32(dst, m);   // FLW
 		uc.bind(done);
-		deferred.push_back([=, this, pend = pending - 1] {
-			uc.bind(slow);
-			call_fp_load_helper(pc, is_double, dst, addr, pend);
-			uc.j(done);
-		});
+		if (arena_is_checked()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(slow);
+				call_fp_load_helper(pc, is_double, dst, addr, pend);
+				uc.j(done);
+			});
+		}
 		// Emitted after the merge point, so it covers both paths.
 		fp_result(dst, is_double);
 	}
@@ -1400,15 +1428,17 @@ struct AjEmitter
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
 		emit_arena_check(addr, true, slow);
-		const Mem m = mem_ptr(arena, addr);
+		const Mem m = mem_ptr(arena, arena_index(addr));
 		if (is_double) uc.v_storeu64_u64(m, src);  // FSD
 		else           uc.v_storeu32_u32(m, src);  // FSW
 		uc.bind(done);
-		deferred.push_back([=, this, pend = pending - 1] {
-			uc.bind(slow);
-			call_fp_store_helper(pc, is_double, src, addr, pend);
-			uc.j(done);
-		});
+		if (arena_is_checked()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(slow);
+				call_fp_store_helper(pc, is_double, src, addr, pend);
+				uc.j(done);
+			});
+		}
 	}
 
 	/// @brief Move a 32-bit result into a guest register, widening it on RV64.

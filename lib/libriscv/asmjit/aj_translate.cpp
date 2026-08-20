@@ -134,6 +134,17 @@ namespace riscv
 
 			switch (d.instr.opcode()) {
 			case RV32I_JAL:
+				// A JAL that links is a call, and following it inlines the callee
+				// into its caller. With `claimed` in play that is actively harmful:
+				// the callee's body is claimed piecemeal by whichever caller was
+				// discovered first, so every other region that reaches it -- the
+				// callee's own entry included -- is cut short at the holes. Ending
+				// the region at a call instead keeps a region to a single
+				// function's CFG, and the callee is entered through its own entry
+				// point. A tail call (rd == 0) is still followed: it is the end of
+				// this function either way, and the target is usually adjacent.
+				if (d.instr.Jtype.rd != 0)
+					break;
 				work.push_back(pc + d.instr.Jtype.jump_offset());
 				break;
 			case RV32I_JALR:
@@ -175,12 +186,24 @@ namespace riscv
 		info.rvv_lmul = int32_t(uintptr_t(&rvv.lmul_shift_ref())    - cpu_addr);
 		info.rvv_vill = int32_t(uintptr_t(&rvv.vill_ref())          - cpu_addr);
 #endif
-		// Inlined arena access needs the plain flat arena: the N-bit encompassing
-		// arena and the unaligned slow paths both change what a valid access is.
-		info.inline_memory = riscv::flat_readwrite_arena
-			&& !riscv::unaligned_memory_slowpaths
-			&& riscv::encompassing_Nbit_arena == 0
-			&& mem.uses_flat_memory_arena();
+		// Two arenas can be inlined against, and they are inlined differently.
+		if constexpr (riscv::encompassing_Nbit_arena != 0) {
+			// The encompassing arena spans every address the guest can form, so
+			// the access is a mask and nothing else -- no bounds check, no
+			// out-of-line path. This is the cheaper of the two.
+			info.inline_memory = mem.uses_Nbit_encompassing_arena();
+			info.arena_mask = info.inline_memory
+				? riscv::encompassing_arena_mask : 0;
+		} else {
+			// The flat arena covers only what is mapped, so each access carries
+			// the same single-sided bounds check the interpreter uses. The
+			// unaligned slow paths change what a valid access is, so they bar
+			// inlining entirely.
+			info.inline_memory = riscv::flat_readwrite_arena
+				&& !riscv::unaligned_memory_slowpaths
+				&& mem.uses_flat_memory_arena();
+			info.arena_mask = 0;
+		}
 		info.cb = &aj_callbacks<W>();
 		return info;
 	}
