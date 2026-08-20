@@ -42,8 +42,10 @@ function usage()
      --no-tailcall-dispatch disable tailcall dispatch
      -b, --bintr          enable binary translation using system compiler
      --no-bintr           disable binary translation
-     -t, --jit            jit-compile using tcc
-     --no-jit             disable jit-compile using tcc
+     -t, --tcc-jit        jit-compile using libtcc (aliases: --tcc, --libtcc-jit)
+     --no-tcc             disable jit-compilation with libtcc
+     --asmjit, --jit      jit-compile using asmjit
+     --no-jit             disable all jit-compilation (asmjit and tcc)
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
      -N bits              enable N-bits of masked address space (experimental feature)
      --no-expr            disable experimental features
@@ -51,8 +53,8 @@ function usage()
      --paging             enable virtual paging
      --syscall-verbose    compile in system call logging (--verbose-syscalls at run-time)
      --no-syscall-verbose disable system call logging
-	 --correct            enable correctness (FCSR, NaN-boxing, etc.)
-	 --fast               enable the default fast mode (disable correctness features)
+     --correct            enable correctness (FCSR, NaN-boxing, etc.)
+     --fast               enable the default fast mode (disable correctness features)
      --embed FILE         embed binary translated sources into the emulator, produced by CLI -o option
      -v, --verbose        increase the verbosity of the bash script
 
@@ -96,15 +98,16 @@ while [[ "$#" -gt 0 ]]; do
 		--no-assembly-dispatch) OPTS="$OPTS -DRISCV_ASM_DISPATCH=OFF" ;;
 		--tailcall-dispatch) OPTS="$OPTS -DRISCV_TAILCALL_DISPATCH=ON" ;;
 		--no-tailcall-dispatch) OPTS="$OPTS -DRISCV_TAILCALL_DISPATCH=OFF" ;;
-        -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF" ;;
+        -b|--bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=OFF -DRISCV_ASMJIT=OFF" ;;
 		--no-bintr) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=OFF" ;;
-		--jit|--tcc  ) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON" ;;
-		--no-jit|--no-tcc) OPTS="$OPTS -DRISCV_LIBTCC=OFF" ;;
+		--asmjit|--jit) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_LIBTCC=OFF -DRISCV_ASMJIT=ON" ;;
+		-t|--tcc|--tcc-jit|--libtcc-jit) OPTS="$OPTS -DRISCV_BINARY_TRANSLATION=ON -DRISCV_LIBTCC=ON -DRISCV_ASMJIT=OFF" ;;
+		--no-jit|--no-tcc|--no-tcc-jit|--no-libtcc-jit|--no-asmjit) OPTS="$OPTS -DRISCV_LIBTCC=OFF -DRISCV_ASMJIT=OFF" ;;
         -x|--expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON" ;;
 		-N) OPTS="$OPTS -DRISCV_EXPERIMENTAL=ON -DRISCV_ENCOMPASSING_ARENA=ON -DRISCV_ENCOMPASSING_ARENA_BITS=$2"; shift ;;
         --no-expr ) OPTS="$OPTS -DRISCV_EXPERIMENTAL=OFF" ;;
-		--no-paging) OPTS="$OPTS -DRISCV_VIRTUAL_PAGING=OFF" ;;
-		--paging) OPTS="$OPTS -DRISCV_VIRTUAL_PAGING=ON" ;;
+		--no-paging|--no-virtual) OPTS="$OPTS -DRISCV_VIRTUAL_PAGING=OFF" ;;
+		--paging|--virtual) OPTS="$OPTS -DRISCV_VIRTUAL_PAGING=ON" ;;
 		--syscall-verbose) OPTS="$OPTS -DRISCV_VERBOSE_SYSCALLS=ON" ;;
 		--no-syscall-verbose) OPTS="$OPTS -DRISCV_VERBOSE_SYSCALLS=OFF" ;;
 		--correct) OPTS="$OPTS -DRISCV_FCSR=ON" ;;

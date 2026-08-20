@@ -29,7 +29,9 @@ extern "C" int unlink(const char* path);
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
+#include "livepatch.hpp"
 #include "internal_common.hpp"
+#include "rvfd_util.hpp"
 #include "safe_instr_loader.hpp"
 #include "threaded_bytecodes.hpp"
 #include "tr_api.hpp"
@@ -1195,29 +1197,15 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	// After this, we should automatically close the dylib on destruction
 	exec.set_binary_translated(dylib, is_libtcc);
 
-	// Helper to rebuild decoder blocks
-	std::unique_ptr<DecoderData<W>[]> patched_decoder_cache = nullptr;
-	DecoderData<W>* patched_decoder = nullptr;
-	DecoderData<W>* decoder_begin   = nullptr;
-	std::vector<DecoderData<W>*> livepatch_bintr;
-	if (live_patch) {
-#ifdef __cpp_lib_smart_ptr_for_overwrite // C++20 feature
-		patched_decoder_cache = std::make_unique_for_overwrite<DecoderData<W>[]>(exec.decoder_cache_size());
-#else
-		patched_decoder_cache = std::make_unique<DecoderData<W>[]>(exec.decoder_cache_size());
-#endif
-		// Copy the decoder cache to the patched decoder cache
-		std::memcpy(patched_decoder_cache.get(), exec.decoder_cache_base(), exec.decoder_cache_size() * sizeof(DecoderData<W>));
-		// Base-address-relative pointer into the patched decoder cache
-		patched_decoder = patched_decoder_cache.get() - exec.exec_begin() / DecoderData<W>::DIVISOR;
-		decoder_begin = &decoder_entry_at(patched_decoder, exec.exec_begin());
-		// Pre-allocate the livepatch_bintr vector
-		livepatch_bintr.reserve(*no_mappings);
-	}
+	// A patched copy of the decoder cache, which running threads are switched
+	// over to once every mapping has been applied to it.
+	std::unique_ptr<LivePatchedDecoderCache<W>> patched;
+	if (live_patch)
+		patched = std::make_unique<LivePatchedDecoderCache<W>>(exec, *no_mappings);
+
 	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
 	const unsigned nmappings = *no_mappings;
 	const unsigned unique_mappings = *no_handlers;
-	static constexpr bool enable_live_patching = true;
 
 	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
 	auto& exec_mappings = exec.create_mappings(unique_mappings + 1);
@@ -1236,108 +1224,25 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 		const auto addr = mappings[i].addr;
 
 		if (exec.is_within(addr)) {
+		#ifdef RISCV_ASMJIT
+			// The asmjit backend ran first (asmjit_override_bintr) and already
+			// owns this decoder entry, so binary translation must not claim it.
+			{
+				const auto& claimed = decoder_entry_at(exec.decoder_cache(), addr);
+				if (claimed.get_bytecode() == RV32I_BC_ASMJIT
+					&& claimed.is_invalid_handler()
+					&& claimed.instr < exec.asmjit_mappings())
+					continue;
+			}
+		#endif
 			auto* handler = handlers[mapping_index];
 			if (handler != nullptr)
 			{
 				if (live_patch) {
 					// NOTE: If we don't use the patched decoder here, entries
 					// will trample each other in the patched decoder cache.
-					auto& entry = decoder_entry_at(patched_decoder, addr);
-					// If the entry is already the last one in the block,
-					// we can skip the processing entirely.
-					if (entry.block_bytes() == 0) {
-						entry.set_bytecode(RV32I_BC_TRANSLATOR);
-						entry.set_invalid_handler();
-						entry.instr = mapping_index;
-					#ifdef RISCV_EXT_C
-						entry.icount = 0;
-					#endif
-						entry.idxend = 0;
-						if constexpr (enable_live_patching) {
-							auto& original_entry = decoder_entry_at(exec.decoder_cache(), addr);
-							livepatch_bintr.push_back(&original_entry);
-						}
-						continue;
-					}
-
-					// 1. The last instruction will be the current entry
-					// 2. Later instructions will work as normal
-					// 3. Look back to find the beginning of the block
-					auto* last    = &entry;
-					auto* current = &entry;
-					auto last_block_bytes = entry.block_bytes();
-					while (current > decoder_begin) {
-						if ((current-1)->block_bytes() == 0) {
-							// We may have reached the middle of an instruction,
-							// which has an invalid entry. In order to validate this,
-							// we will step one more time back, if possible, and check
-							// if the previous entry matches exactly current block_bytes
-							// + 4 bytes.
-							if (current-1 == decoder_begin) {
-								// We are at the beginning of the decoder cache, so we can't
-								// step back any further.
-								break;
-							}
-							auto* prev = current-2;
-							if (prev->block_bytes() == last_block_bytes + 4) {
-								// We can step over the invalid entry
-								// and continue with the previous entry.
-								current = prev;
-								last_block_bytes = prev->block_bytes();
-								continue;
-							} else {
-								// We have reached the end of the block, so we can stop here.
-								break;
-							}
-						}
-						if ((current-1)->block_bytes() < last_block_bytes)
-							break; // We have reached another previous block
-						current--;
-						last_block_bytes = current->block_bytes();
-					}
-					int block_bytes = last_block_bytes - entry.block_bytes();
-
-					const auto block_begin_addr = addr - block_bytes;
-					if (block_begin_addr < exec.exec_begin() || block_begin_addr >= exec.exec_end()) {
-						if (options.verbose_loader)
-						fprintf(stderr, "libriscv: Patched address 0x%lX outside execute area 0x%lX-0x%lX\n",
-							(long)block_begin_addr, (long)exec.exec_begin(), (long)exec.exec_end());
-						throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
-					}
-
-					// 4. Correct block_bytes() for all entries in the block
-					auto patched_addr = block_begin_addr;
-					if (current + block_bytes / (compressed_enabled ? 2 : 4) != last) {
-						throw MachineException(INVALID_PROGRAM, "Translation mapping block bytes mismatch");
-					}
-					for (auto* dd = current; dd < last; dd++) {
-						// Get the patched decoder entry
-						auto& p = decoder_entry_at(patched_decoder, patched_addr);
-					#ifdef RISCV_EXT_C
-						if (p.get_bytecode() != 0) { // Avoid invalid entries
-							p.icount = last - dd + 1; // This is inexact, but works for now
-							p.idxend = block_bytes / 2;
-						} else {
-							// Setting icount and idxend to 0 on an invalid instruction will
-							// improve exception handling/information, if jumped to.
-							p.icount = 0; // Invalid entry, no instruction count
-							p.idxend = 0; // No index end
-						}
-					#else
-						p.idxend = last - dd;
-					#endif
-						patched_addr += (compressed_enabled ? 2 : 4);
-						block_bytes -= (compressed_enabled ? 2 : 4);
-					}
-					if (compressed_enabled && block_bytes != 0) {
-						if (options.verbose_loader)
-							fprintf(stderr, "libriscv: Patched block bytes mismatch at 0x%lX: %u != 0\n",
-								(long)block_begin_addr, block_bytes);
-						throw MachineException(INVALID_PROGRAM, "Translation mapping block bytes mismatch");
-					}
-
-					// 5. The last instruction will be replaced with a binary translation
-					// function, which will be the last instruction in the block.
+					// The claimed instruction becomes the last one of its block.
+					auto& entry = patched->claim(addr, options.verbose_loader);
 					entry.set_bytecode(RV32I_BC_TRANSLATOR);
 					entry.set_invalid_handler();
 					entry.instr  = mapping_index;
@@ -1345,10 +1250,6 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 				#ifdef RISCV_EXT_C
 					entry.icount = 0;
 				#endif
-					if constexpr (enable_live_patching) {
-						auto& original_entry = decoder_entry_at(exec.decoder_cache(), addr);
-						livepatch_bintr.push_back(&original_entry);
-					}
 				} else {
 					// Normal block-end hint that will be transformed into a translation
 					// bytecode if it passes a few more checks, later.
@@ -1368,26 +1269,12 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 	}
 
 	if (live_patch) {
-		// Move the patched decoder cache to the execute segment
-		exec.set_patched_decoder_cache(std::move(patched_decoder_cache), patched_decoder);
-		// Set regular decoder cache to the patched decoder cache
-		exec.set_decoder(patched_decoder);
-
-		if (options.translate_live_patching)
-		{
-			// Memory fence to ensure that the patched decoder is visible to all threads
-#ifndef __COSMOCC__
-			std::atomic_thread_fence(std::memory_order_seq_cst);
-#endif
-
-			// Atomically set a livepatch bytecode for each instruction that is patched
-			// It will swap out the current decoder with the patched one, and then continue.
-			for (auto* dd : livepatch_bintr) {
-				dd->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 0);
-			}
-			if (options.verbose_loader) {
-				printf("libriscv: Patched %zu instructions for live-patching\n", livepatch_bintr.size());
-			}
+		// Hand the patched decoder cache to the execute segment, and (unless the
+		// user turned it off) switch running threads over to it.
+		const size_t patch_count = patched->patch_count();
+		patched->activate(options.translate_live_patching);
+		if (options.translate_live_patching && options.verbose_loader) {
+			printf("libriscv: Patched %zu instructions for live-patching\n", patch_count);
 		}
 	}
 
@@ -1650,89 +1537,14 @@ CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&)
 		.vfmaf32 = host_has_fma() ? hw_fmaf32 : libm_fmaf32,
 		.vfmaf64 = host_has_fma() ? hw_fmaf64 : libm_fmaf64,
 		// FMIN/FMAX with RISC-V -0.0 < +0.0 convention. std::fmin/fmax
-		// leave the ±0 case implementation-defined.
-		.fmin32_rv = [] (float a, float b) -> float {
-			// Two NaN operands produce the canonical qNaN. A single NaN operand
-			// must yield the other one, which std::fmin/fmax do not reliably
-			// do: glibc returns a quieted copy of a signaling NaN instead.
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint32_t bits = 0x7fc00000u;
-					float result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				// A single NaN operand must yield the other operand. glibc's
-				// std::fmin/fmax return a quieted copy of a signaling NaN
-				// instead, so handle this case explicitly.
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0f && b == 0.0f) {
-				uint32_t ab, bb;
-				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);
-				uint32_t out = ((ab | bb) & 0x80000000u) ? 0x80000000u : 0x00000000u;
-				float r; __builtin_memcpy(&r, &out, 4); return r;
-			}
-			return std::fmin(a, b);
-		},
-		.fmax32_rv = [] (float a, float b) -> float {
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint32_t bits = 0x7fc00000u;
-					float result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0f && b == 0.0f) {
-				uint32_t ab, bb;
-				__builtin_memcpy(&ab, &a, 4); __builtin_memcpy(&bb, &b, 4);
-				uint32_t out = (~(ab & bb) & 0x80000000u) ? 0x00000000u : 0x80000000u;
-				float r; __builtin_memcpy(&r, &out, 4); return r;
-			}
-			return std::fmax(a, b);
-		},
-		.fmin64_rv = [] (double a, double b) -> double {
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint64_t bits = 0x7ff8000000000000ull;
-					double result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0 && b == 0.0) {
-				uint64_t ab, bb;
-				__builtin_memcpy(&ab, &a, 8); __builtin_memcpy(&bb, &b, 8);
-				uint64_t out = ((ab | bb) & 0x8000000000000000ull) ? 0x8000000000000000ull : 0x0ull;
-				double r; __builtin_memcpy(&r, &out, 8); return r;
-			}
-			return std::fmin(a, b);
-		},
-		.fmax64_rv = [] (double a, double b) -> double {
-			if constexpr (fcsr_emulation) {
-				if (std::isnan(a) && std::isnan(b)) {
-					uint64_t bits = 0x7ff8000000000000ull;
-					double result;
-					__builtin_memcpy(&result, &bits, sizeof(result));
-					return result;
-				}
-				if (std::isnan(a)) return b;
-				if (std::isnan(b)) return a;
-			}
-			if (a == 0.0 && b == 0.0) {
-				uint64_t ab, bb;
-				__builtin_memcpy(&ab, &a, 8); __builtin_memcpy(&bb, &b, 8);
-				uint64_t out = (~(ab & bb) & 0x8000000000000000ull) ? 0x0ull : 0x8000000000000000ull;
-				double r; __builtin_memcpy(&r, &out, 8); return r;
-			}
-			return std::fmax(a, b);
-		},
+		// leave the ±0 case implementation-defined, and two NaN operands must
+		// produce the canonical qNaN. The rules live in rvfd_util.hpp, shared
+		// with the interpreter and the asmjit backend so that all three answer
+		// the same thing.
+		.fmin32_rv = rv_fmin32,
+		.fmax32_rv = rv_fmax32,
+		.fmin64_rv = rv_fmin64,
+		.fmax64_rv = rv_fmax64,
 		.clz = [] (uint32_t x) -> int {
 #ifdef RISCV_HAS_BITOPS
 			return std::countl_zero(x);

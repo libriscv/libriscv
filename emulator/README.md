@@ -94,8 +94,10 @@ $ ./build.sh --help
      --no-128             disable RV128
      -b, --bintr          enable binary translation using system compiler
      --no-bintr           disable binary translation
-     -t, --jit            jit-compile using tcc
-     --no-jit             disable jit-compile using tcc
+     -t, --tcc-jit        jit-compile using libtcc (aliases: --tcc, --libtcc-jit)
+     --no-tcc             disable jit-compilation with libtcc
+     --asmjit, --jit      jit-compile using asmjit
+     --no-jit             disable all jit-compilation (asmjit and tcc)
      -x, --expr           enable experimental features (eg. unbounded 32-bit addressing)
      -N bits              enable N-bits of masked address space (experimental feature)
      --no-expr            disable experimental features

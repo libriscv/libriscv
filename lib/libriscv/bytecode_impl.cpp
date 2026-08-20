@@ -931,8 +931,8 @@ INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func) {
 
 INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
 	switch (DECODER().m_handler) {
-	case 0: { // Live-patch binary translation
-#ifdef RISCV_BINARY_TRANSLATION
+	case 0: { // Live-patch native code (binary translation or asmjit)
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
 		// Special bytecode that does not read any decoder data
 		// 1. Wind back PC to the current decoder position
 		pc = pc - DECODER().block_bytes();
@@ -997,6 +997,7 @@ INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
 
 INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 	VIEW_INSTR();
+	REGISTERS().pc = RECONSTRUCT_PC(); // See pcrel.cpp
 	CPU().execute(DECODER().m_handler, DECODER().instr);
 	if (UNLIKELY(exec->is_stale())) {
 		pc = RECONSTRUCT_PC() + instr.length();

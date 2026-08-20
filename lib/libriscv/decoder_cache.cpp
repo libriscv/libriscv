@@ -182,6 +182,9 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		const auto translator_op = RV32I_BC_TRANSLATOR;
 #endif
+#ifdef RISCV_ASMJIT
+		const auto asmjit_op = RV32I_BC_ASMJIT;
+#endif
 
 		if constexpr (compressed_enabled)
 		{
@@ -242,6 +245,10 @@ namespace riscv
 					if (entry->get_bytecode() == translator_op)
 						break;
 				#endif
+				#ifdef RISCV_ASMJIT
+					if (entry->get_bytecode() == asmjit_op)
+						break;
+				#endif
 
 					// A last test for the last instruction, which should have been a block-ending
 					// instruction. Since it wasn't we must force-end the block here.
@@ -300,6 +307,10 @@ namespace riscv
 				if (entry.get_bytecode() == translator_op)
 					idxend = 0;
 			#endif
+			#ifdef RISCV_ASMJIT
+				if (entry.get_bytecode() == asmjit_op)
+					idxend = 0;
+			#endif
 				if (UNLIKELY(idxend == 65535)) {
 					// It's a long sequence of instructions, so end block here.
 					entry.set_bytecode(RV32I_BC_FUNCBLOCK);
@@ -341,7 +352,7 @@ namespace riscv
 		if (exec.exec_end() < exec.exec_begin())
 			throw MachineException(INVALID_PROGRAM, "Execute segment was invalid");
 
-#ifdef RISCV_BINARY_TRANSLATION
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
 		// Binary translation is started in the middle of this function, and when it
 		// runs in the background it must not touch the decoder cache before we are
 		// done generating it. Signal completion on every exit path, including the
@@ -389,6 +400,24 @@ namespace riscv
 		auto* exec_segment = exec.exec_data();
 		TIME_POINT(t1);
 
+#ifdef RISCV_ASMJIT
+		// asmjit is entirely independent of binary translation. The only place the
+		// two subsystems know about each other is this ordering decision: whichever
+		// runs first claims decoder entries, and the other one skips those.
+		bool allow_asmjit = options.asmjit_enabled && !exec.is_likely_jit();
+	#ifdef RISCV_BINARY_TRANSLATION
+		// Background binary translation live-patches by installing a *copy* of the
+		// decoder cache and pointing the segment at it, on another thread, while we
+		// are still filling this one in. All translation types will use entries
+		// in the segment's current cache.
+		if (options.translate_background_callback != nullptr)
+			allow_asmjit = false;
+	#endif
+		if (allow_asmjit && options.asmjit_override_bintr) {
+			machine().cpu.asmjit_translate(options, shared_segment);
+		}
+	#endif
+
 #ifdef RISCV_BINARY_TRANSLATION
 		// We do not support binary translation for RV128I
 		// Also, avoid binary translation for execute segments that are likely JIT-compiled
@@ -404,6 +433,12 @@ namespace riscv
 				machine().cpu.try_translate(
 					options, bintr_filename, shared_segment);
 			}
+		}
+	#endif
+
+#ifdef RISCV_ASMJIT
+		if (allow_asmjit && !options.asmjit_override_bintr) {
+			machine().cpu.asmjit_translate(options, shared_segment);
 		}
 	#endif
 
@@ -428,10 +463,21 @@ namespace riscv
 				exec_segment, dst, end_addr);
 			rv32i_instruction rewritten = instruction;
 
-#ifdef RISCV_BINARY_TRANSLATION
-			// Translator activation uses a special bytecode
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+			// Native code activation uses a special bytecode
 			// but we must still validate the mapping index.
-			if (entry.get_bytecode() == RV32I_BC_TRANSLATOR && entry.is_invalid_handler() && entry.instr < exec.translator_mappings()) {
+			const auto claimed_bc = entry.get_bytecode();
+			const bool claimed =
+	#ifdef RISCV_BINARY_TRANSLATION
+				(claimed_bc == RV32I_BC_TRANSLATOR && entry.is_invalid_handler()
+				 && entry.instr < exec.translator_mappings()) ||
+	#endif
+	#ifdef RISCV_ASMJIT
+				(claimed_bc == RV32I_BC_ASMJIT && entry.is_invalid_handler()
+				 && entry.instr < exec.asmjit_mappings()) ||
+	#endif
+				false;
+			if (claimed) {
 				if constexpr (compressed_enabled) {
 					dst += 2;
 					if (was_full_instruction) {
@@ -663,8 +709,8 @@ namespace riscv
 		// destructor could throw, so let's invalidate early
 		machine().cpu.set_execute_segment(*CPU<W>::empty_execute_segment());
 
-#ifdef RISCV_BINARY_TRANSLATION
-		// A background compilation holds a reference to the execute segment, but
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+		// A background translation holds a reference to the execute segment, but
 		// only a raw pointer to this Machine, which it uses while translating and
 		// activating. It must therefore be finished before we go away, otherwise
 		// it will end up using a destroyed Machine. Waiting here (before any of
@@ -714,8 +760,8 @@ namespace riscv
 	template <int W>
 	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
 	{
-#ifdef RISCV_BINARY_TRANSLATION
-		// See evict_execute_segments(): a background compilation must not outlive
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+		// See evict_execute_segments(): a background translation must not outlive
 		// the Machine it was started from.
 		segment.wait_for_compilation_complete();
 #endif

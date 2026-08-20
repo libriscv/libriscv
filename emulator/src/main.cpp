@@ -37,7 +37,7 @@ struct Arguments {
 	bool sandbox = false;
 	bool execute_only = false;
 	bool ignore_text = false;
-	bool background = riscv::libtcc_enabled; // Run binary translation in background thread
+	bool background = riscv::libtcc_enabled || riscv::asmjit_enabled; // Run translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
 	bool libc_fastpath = false; // Hot-patch known libc functions
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
@@ -147,7 +147,9 @@ static void print_help(const char* name)
 #ifdef RISCV_EXT_V
 		"-  V: Vector extension is enabled\n"
 #endif
-#if defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)
+#if defined(RISCV_ASMJIT)
+		"-  asmjit JIT is enabled\n"
+#elif defined(RISCV_BINARY_TRANSLATION) && defined(RISCV_LIBTCC)
 		"-  Binary translation is enabled (libtcc)\n"
 #elif defined(RISCV_BINARY_TRANSLATION)
 		"-  Binary translation is enabled\n"
@@ -341,6 +343,18 @@ static void run_program(
 			} : std::function<void(std::function<void()>&)>(nullptr),
 		.cross_compile = std::move(cc),
 #endif
+#endif
+#ifdef RISCV_ASMJIT
+		.asmjit_enabled = !cli_args.no_translate,
+		.asmjit_override_bintr = false,
+		.asmjit_verbose = cli_args.trace,
+		.asmjit_timing = cli_args.timing,
+		.asmjit_background_callback = cli_args.background ?
+			[] (auto& translation_step) {
+				std::thread([translation_step = std::move(translation_step)] {
+					translation_step();
+				}).detach();
+			} : std::function<void(std::function<void()>&)>(nullptr),
 #endif
 	});
 

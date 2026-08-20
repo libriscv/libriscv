@@ -1,0 +1,52 @@
+name: asmjit JIT Unit Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{github.workspace}}/tests/unit
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y gcc-14-riscv64-linux-gnu g++-14-riscv64-linux-gnu
+        git submodule update --init ${{github.workspace}}/tests/Catch2
+        git submodule update --init ${{github.workspace}}/tests/unit/ext/lodepng
+
+    - name: Install the RISC-V Rust standard library
+      run: rustup target add riscv64gc-unknown-linux-gnu
+
+    # Check asmjit out here rather than letting CMake's FetchContent clone it
+    # at configure time: actions/checkout retries and the result is cached,
+    # where a FetchContent clone is one unretried git operation per run.
+    - name: Check out asmjit
+      uses: actions/checkout@v4
+      with:
+        repository: fwsGonzo/asmjit
+        ref: master
+        path: ${{github.workspace}}/ext/asmjit
+
+    # asmjit is independent of the binary translator, which is turned off here
+    # so that the run exercises the asmjit code generator and not the
+    # C-emitting backend.
+    - name: Configure
+      env:
+        BUILD_TYPE: Debug
+      run: cmake -B ${{github.workspace}}/build -DRISCV_THREADED=ON -DRISCV_ASMJIT=ON -DRISCV_ASMJIT_SOURCE_DIR=${{github.workspace}}/ext/asmjit -DRISCV_BINARY_TRANSLATION=OFF -DRISCV_EXT_C=ON -DRISCV_MEMORY_TRAPS=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build the unittests
+      run: cmake --build ${{github.workspace}}/build --parallel 4
+
+    - name: Run tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest --verbose . -j4

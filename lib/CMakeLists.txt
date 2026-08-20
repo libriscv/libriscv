@@ -26,6 +26,10 @@ option(RISCV_MEMORY_TRAPS  "Enable memory page traps" ON)
 # BINARY_TRANSLATION will make libriscv generate portable C-code,
 # and invoke a system compiler to execute a program much faster.
 option(RISCV_BINARY_TRANSLATION  "Enable exp. binary translation" ON)
+# ASMJIT enables an experimental native code generator using asmjit.
+# It is completely independent of RISCV_BINARY_TRANSLATION and can be
+# enabled alongside it for runtime A/B comparison.
+option(RISCV_ASMJIT "Enable exp. native code generation with asmjit" OFF)
 # FLAT_RW_ARENA simplifies the program arena, making the heap area always read-write.
 # Memory before the heap and outside of the arena behaves like before.
 option(RISCV_FLAT_RW_ARENA       "Enable performant flat read-write arena" ON)
@@ -178,6 +182,13 @@ if (RISCV_BINARY_TRANSLATION)
 		endif()
 	endif()
 endif()
+if (RISCV_ASMJIT)
+	list(APPEND SOURCES
+		libriscv/asmjit/aj_api.cpp
+		libriscv/asmjit/aj_translate.cpp
+		libriscv/asmjit/aj_emit.cpp
+	)
+endif()
 
 # Generate the settings header
 # RISCV_VERSION_MAJOR and RISCV_VERSION_MINOR are required by libriscv_settings.h.in
@@ -308,6 +319,49 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 	target_include_directories(riscv PUBLIC
 		"${CMAKE_CURRENT_BINARY_DIR}"
 	)
+endif()
+
+if (RISCV_ASMJIT)
+	# The emitter needs ujit's emit_3i() to be aliasing-correct on x86, which
+	# upstream is not: AND/OR/XOR, the non-BMI2 shift fallback and SBound all
+	# destroy src2 when the destination is the same register. The fork carries
+	# the fix. Point RISCV_ASMJIT_SOURCE_DIR at a local checkout to build
+	# against working-tree asmjit instead of fetching.
+	set(RISCV_ASMJIT_REPOSITORY "https://github.com/fwsGonzo/asmjit.git"
+		CACHE STRING "Git repository to fetch asmjit from")
+	set(RISCV_ASMJIT_TAG "master"
+		CACHE STRING "Git tag/branch of asmjit to fetch")
+	set(RISCV_ASMJIT_SOURCE_DIR ""
+		CACHE PATH "Local asmjit checkout to build against (overrides the fetch)")
+
+	include(FetchContent)
+	set(ASMJIT_STATIC ON CACHE BOOL "" FORCE)
+	set(ASMJIT_NO_DEPRECATED ON CACHE BOOL "" FORCE)
+	set(ASMJIT_TEST OFF CACHE BOOL "" FORCE)
+	if (RISCV_ASMJIT_SOURCE_DIR)
+		FetchContent_Declare(asmjit
+			SOURCE_DIR "${RISCV_ASMJIT_SOURCE_DIR}"
+		)
+	else()
+		FetchContent_Declare(asmjit
+			GIT_REPOSITORY "${RISCV_ASMJIT_REPOSITORY}"
+			GIT_TAG        "${RISCV_ASMJIT_TAG}"
+		)
+	endif()
+	FetchContent_MakeAvailable(asmjit)
+	# asmjit adds -fmerge-all-constants to its own sources in every non-Debug
+	# config, which does not work with AddressSanitizer on GCC: the constexpr
+	# lookup tables inside its always_inline helpers (RegUtils::signature_of()
+	# and friends) get merged into shared .rodata objects, but GCC still emits
+	# use-after-scope poisoning for the inlined scope. The first caller poisons
+	# the merged table on the way out and every later read of it aborts with a
+	# bogus "stack-use-after-scope" on a global.
+	#if (NOT MSVC)
+	#	target_compile_options(asmjit PRIVATE -fno-merge-all-constants)
+	#endif()
+	# NOTE: Do not set ASMJIT_NO_COMPILER: the Compiler API provides the
+	# register allocator and the ABI handling that the emitter relies on.
+	target_link_libraries(riscv PRIVATE asmjit::asmjit)
 endif()
 
 if (${CMAKE_PROJECT_NAME} STREQUAL "libriscv")
