@@ -204,7 +204,8 @@ struct AjEmitter
 	UniCompiler& uc;
 	BackendCompiler& cc;  // == *uc.cc, used only by the host escapes above
 	const uint8_t* seg;   // PC-relative pointer to the execute segment
-	address_t entry;      // the guest address this function is entered at
+	const std::vector<address_t>& entries;  // entry addresses, ascending, non-empty
+	address_t entry;      // entries.front(), the lowest address it is entered at
 	const std::vector<address_t>& instrs;   // reachable addresses, ascending
 	address_t seg_end;    // execute segment end, for instruction reads
 	const AjInfo<W>& info;
@@ -240,14 +241,18 @@ struct AjEmitter
 	// live where it branched off, because `pending` has moved on by then.
 	std::vector<std::function<void()>> deferred;
 
-	AjEmitter(UniCompiler& u, const uint8_t* s, address_t en,
+	AjEmitter(UniCompiler& u, const uint8_t* s, const std::vector<address_t>& ens,
 		const std::vector<address_t>& list, address_t se, const AjInfo<W>& in)
-		: uc(u), cc(*u.cc), seg(s), entry(en), instrs(list), seg_end(se), info(in) {}
+		: uc(u), cc(*u.cc), seg(s), entries(ens), entry(ens.front()),
+		  instrs(list), seg_end(se), info(in) {}
 
 	// A region is entered at `entry`, but emitted in address order. The two differ
 	// whenever a back-edge reaches below the entry, which is the normal shape of a
 	// loop entered from its middle.
 	bool entry_is_first() const noexcept { return entry == instrs.front(); }
+	// With a single entry the prologue falls or jumps straight into the body.
+	// With several it has to look at the PC dispatch arrived with.
+	bool needs_entry_dispatch() const noexcept { return entries.size() > 1; }
 	// A branch may only become an internal jump when its target is an address the
 	// region actually emits. Discovery caps region size, so a target inside
 	// [begin, end) is not by itself proof of that.
@@ -1516,9 +1521,12 @@ struct AjEmitter
 		// f0 is an ordinary register, so the f-register sets keep every bit.
 		fp_readset |= fp_writeset;
 
-		// When the entry is not the lowest address, the prologue has to jump to it,
-		// which makes it a label like any other branch target.
-		if (!entry_is_first())
+		// The prologue jumps to whichever entry it was called at, so each of them
+		// needs a label just like any other branch target. A lone entry that is
+		// also the lowest address is the one case the prologue falls straight into.
+		if (needs_entry_dispatch())
+			branch_targets.insert(entries.begin(), entries.end());
+		else if (!entry_is_first())
 			branch_targets.insert(entry);
 
 		for (const address_t t : branch_targets)
@@ -1527,6 +1535,31 @@ struct AjEmitter
 
 	// --- emission ---
 	bool failed = false;
+
+	// A region with several entry points is one function reached at several guest
+	// addresses, so the prologue has to select the matching label. Dispatch left
+	// the address in AjState::pc, and the entries are sorted, so a binary search
+	// costs ceil(log2(n)) compares -- about four for a typical region, paid once
+	// per region entry rather than per instruction.
+	void emit_entry_dispatch()
+	{
+		Gp pcv = new_ireg("entry_pc");
+		uc.load(pcv, mem_ptr(st, off_pc()));
+		emit_entry_search(pcv, 0, entries.size());
+	}
+	void emit_entry_search(const Gp& pcv, size_t lo, size_t hi)
+	{
+		if (hi - lo == 1) {
+			uc.j(label_at(entries[lo]));
+			return;
+		}
+		const size_t mid = lo + (hi - lo) / 2;
+		Label upper = uc.new_label();
+		uc.j(upper, ucmp_ge(pcv, rvimm(entries[mid])));
+		emit_entry_search(pcv, lo, mid);
+		uc.bind(upper);
+		emit_entry_search(pcv, mid, hi);
+	}
 
 	void emit_body()
 	{
@@ -1537,9 +1570,12 @@ struct AjEmitter
 		// `fallthrough_pc` is the address linear control flow has arrived at, or 0
 		// when the previous instruction did not fall through at all. The prologue
 		// falls into the first emitted address only when that is also the entry.
-		if (!entry_is_first())
+		if (needs_entry_dispatch())
+			emit_entry_dispatch();
+		else if (!entry_is_first())
 			uc.j(label_at(entry));
-		address_t fallthrough_pc = entry_is_first() ? instrs.front() : 0;
+		address_t fallthrough_pc =
+			(!needs_entry_dispatch() && entry_is_first()) ? instrs.front() : 0;
 		for (const address_t pc : instrs)
 		{
 			const bool is_target = branch_targets.count(pc) != 0;
@@ -1800,9 +1836,10 @@ struct AjEmitter
 template <int W>
 aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options,
 	const DecodedExecuteSegment<W>& exec, const AjInfo<W>& info,
-	address_type<W> entry, const std::vector<address_type<W>>& instrs)
+	const std::vector<address_type<W>>& entries,
+	const std::vector<address_type<W>>& instrs)
 {
-	if (instrs.empty())
+	if (instrs.empty() || entries.empty())
 		return nullptr;
 
 	CodeHolder code;
@@ -1820,7 +1857,7 @@ aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options
 	if (fn == nullptr)
 		return nullptr;
 
-	AjEmitter<W> e { cc, exec.exec_data(), entry, instrs, exec.exec_end(), info };
+	AjEmitter<W> e { cc, exec.exec_data(), entries, instrs, exec.exec_end(), info };
 	e.cpu     = cc.new_gp_ptr("cpu");
 	e.st      = cc.new_gp_ptr("state");
 	e.counter = cc.new_gp64("counter");
@@ -1843,8 +1880,9 @@ aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options
 		return nullptr;
 
 	if (options.asmjit_verbose) {
-		printf("libriscv: asmjit region 0x%lX-0x%lX entered at 0x%lX (%zu instructions) ->\n%s",
-			long(instrs.front()), long(instrs.back()), long(entry), instrs.size(), logger.data());
+		printf("libriscv: asmjit region 0x%lX-0x%lX, %zu entry point(s) from 0x%lX (%zu instructions) ->\n%s",
+			long(instrs.front()), long(instrs.back()), entries.size(),
+			long(entries.front()), instrs.size(), logger.data());
 	}
 	return out;
 }
@@ -1859,7 +1897,7 @@ bool aj_host_has_fma() noexcept
 template <int W>
 aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 	const DecodedExecuteSegment<W>&, const AjInfo<W>&,
-	address_type<W>, const std::vector<address_type<W>>&)
+	const std::vector<address_type<W>>&, const std::vector<address_type<W>>&)
 {
 	return nullptr;   // no code generator for this host
 }
@@ -1869,11 +1907,11 @@ aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 #ifdef RISCV_32I
 	template aj_block_func<4> aj_emit_region<4>(AjCode&, const MachineOptions<4>&,
 		const DecodedExecuteSegment<4>&, const AjInfo<4>&,
-		address_type<4>, const std::vector<address_type<4>>&);
+		const std::vector<address_type<4>>&, const std::vector<address_type<4>>&);
 #endif
 #ifdef RISCV_64I
 	template aj_block_func<8> aj_emit_region<8>(AjCode&, const MachineOptions<8>&,
 		const DecodedExecuteSegment<8>&, const AjInfo<8>&,
-		address_type<8>, const std::vector<address_type<8>>&);
+		const std::vector<address_type<8>>&, const std::vector<address_type<8>>&);
 #endif
 } // riscv

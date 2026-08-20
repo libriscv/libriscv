@@ -98,10 +98,20 @@ namespace riscv
 	// branches, stopping at indirect jumps and at anything the emitter cannot
 	// handle. Bounding the region this way (rather than "everything up to the
 	// first terminator") is what keeps a region from swallowing the unreachable
-	// tail of the segment and duplicating it into every other region.
+	// tail of the segment.
+	//
+	// `claimed` holds every address an earlier region already emitted, and acts
+	// as a third region boundary. Without it a region would be discovered afresh
+	// from every basic-block leader, and since regions follow fall-through, each
+	// one would re-emit the whole tail of its predecessor: measured at 12-15x
+	// duplication on ordinary programs. Reaching a claimed address instead ends
+	// the region there, and the leader that owns it becomes one of the entry
+	// points of the region that did emit it -- so every address is emitted once
+	// and is still reachable at every leader the interpreter can jump to.
 	template <int W>
 	static std::vector<address_type<W>> aj_discover_region(const uint8_t* seg,
-		const AjSegmentMap<W>& map, address_type<W> entry, size_t max_instructions)
+		const AjSegmentMap<W>& map, address_type<W> entry, size_t max_instructions,
+		const std::set<address_type<W>>& claimed)
 	{
 		using address_t = address_type<W>;
 		std::set<address_t> seen;
@@ -113,6 +123,8 @@ namespace riscv
 			work.pop_back();
 			if (!map.is_instruction(pc) || seen.count(pc))
 				continue;
+			if (claimed.count(pc))
+				continue;   // emitted by an earlier region: a region exit
 			if (seen.size() >= max_instructions)
 				continue;   // capped: anything left over becomes a region exit
 			const auto d = aj_decode<W>(seg, pc, map.end);
@@ -200,12 +212,18 @@ namespace riscv
 		// --- 1. Instruction boundaries and entry points ---------------------------
 		const AjSegmentMap<W> map { seg, begin, end, blocked };
 
-		// --- 2. One region per entry point ---------------------------------------
+		// --- 2. Partition the segment into regions --------------------------------
+		// Entries are visited in address order, and each one that is not already
+		// inside a region starts a new one. The regions therefore never overlap,
+		// and every leader that lands inside one becomes an additional entry point
+		// of it rather than the head of a near-duplicate region.
 		struct Region {
-			address_t entry;
+			address_t entry;                 // the leader the region was grown from
 			std::vector<address_t> instrs;   // ascending; may start below `entry`
+			std::vector<address_t> entries;  // ascending; every leader inside it
 		};
 		std::vector<Region> regions;
+		std::set<address_t> claimed_addrs;
 		size_t emitted_instrs = 0;
 		for (const address_t entry : map.entries)
 		{
@@ -213,14 +231,29 @@ namespace riscv
 				break;
 			if (emitted_instrs >= options.asmjit_instr_max)
 				break;
-			auto instrs = aj_discover_region<W>(seg, map, entry, options.asmjit_region_instr_max);
+			if (claimed_addrs.count(entry))
+				continue;   // an earlier region emitted it; it becomes an entry of that one
+			auto instrs = aj_discover_region<W>(seg, map, entry,
+				options.asmjit_region_instr_max, claimed_addrs);
 			if (instrs.empty())
 				continue;   // nothing emittable at this address
 			emitted_instrs += instrs.size();
-			regions.push_back({entry, std::move(instrs)});
+			claimed_addrs.insert(instrs.begin(), instrs.end());
+			regions.push_back({entry, std::move(instrs), {}});
 		}
 		if (regions.empty())
 			return;
+
+		// Every leader inside a region is a way into it. `instrs` is ascending, so
+		// each entry list comes out ascending too, which is what the emitter's
+		// dispatch search expects.
+		size_t total_entries = 0;
+		for (auto& r : regions) {
+			for (const address_t pc : r.instrs)
+				if (map.entries.count(pc))
+					r.entries.push_back(pc);
+			total_entries += r.entries.size();
+		}
 
 		// --- 3. Emit --------------------------------------------------------------
 		const AjInfo<W> info = aj_machine_info<W>(cpu);
@@ -231,7 +264,7 @@ namespace riscv
 		unsigned live = 0;
 		for (size_t i = 0; i < regions.size(); i++) {
 			mappings[i] = aj_emit_region<W>(*ajcode, options, exec, info,
-				regions[i].entry, regions[i].instrs);
+				regions[i].entries, regions[i].instrs);
 			if (mappings[i]) live++;
 		}
 		if (live == 0) {
@@ -251,32 +284,36 @@ namespace riscv
 			// The decoder cache is finished by the thread that started us, and
 			// activation both reads and patches it. Wait for it to be complete.
 			exec.wait_for_decoder_cache_ready();
-			patched = std::make_unique<LivePatchedDecoderCache<W>>(exec, regions.size());
+			patched = std::make_unique<LivePatchedDecoderCache<W>>(exec, total_entries);
 		}
 
 		unsigned claimed = 0;
 		for (size_t i = 0; i < regions.size(); i++) {
 			if (mappings[i] == nullptr)
 				continue;
-		#ifdef RISCV_BINARY_TRANSLATION
-			// Binary translation ran first and already owns this entry.
-			// (When asmjit_override_bintr is set, asmjit runs first instead and
-			// the symmetric check in tr_translate.cpp keeps bintr off these.)
-			if (aj_decoder_entry_at(exec.decoder_cache(), regions[i].entry)
-				.get_bytecode() == RV32I_BC_TRANSLATOR)
-				continue;
-		#endif
-			auto& entry = live_patch
-				? patched->claim(regions[i].entry, options.verbose_loader)
-				: aj_decoder_entry_at(exec.decoder_cache(), regions[i].entry);
-			entry.set_bytecode(RV32I_BC_ASMJIT);
-			entry.set_invalid_handler();
-			entry.instr  = unsigned(i);
-			entry.idxend = 0;
-		#ifdef RISCV_EXT_C
-			entry.icount = 0;
-		#endif
-			claimed++;
+			// All of a region's entry points share its function: the emitted
+			// prologue dispatches on the entry PC that dispatch left in AjState.
+			for (const address_t addr : regions[i].entries) {
+			#ifdef RISCV_BINARY_TRANSLATION
+				// Binary translation ran first and already owns this entry.
+				// (When asmjit_override_bintr is set, asmjit runs first instead and
+				// the symmetric check in tr_translate.cpp keeps bintr off these.)
+				if (aj_decoder_entry_at(exec.decoder_cache(), addr)
+					.get_bytecode() == RV32I_BC_TRANSLATOR)
+					continue;
+			#endif
+				auto& entry = live_patch
+					? patched->claim(addr, options.verbose_loader)
+					: aj_decoder_entry_at(exec.decoder_cache(), addr);
+				entry.set_bytecode(RV32I_BC_ASMJIT);
+				entry.set_invalid_handler();
+				entry.instr  = unsigned(i);
+				entry.idxend = 0;
+			#ifdef RISCV_EXT_C
+				entry.icount = 0;
+			#endif
+				claimed++;
+			}
 		}
 
 		if (live_patch) {

@@ -388,12 +388,15 @@ namespace riscv
 	}
 
 	/// @brief Emits one region as a single host function.
-	/// @param entry The guest address the emitted function is entered at.
+	/// @param entries The guest addresses the emitted function may be entered at,
+	/// ascending and non-empty. More than one means the prologue dispatches on the
+	/// entry PC that the interpreter left in AjState::pc.
 	/// @param instrs The region's reachable instruction addresses, ascending.
 	/// @return nullptr if the region could not be emitted for any reason.
 	/// @details Defined in aj_emit.cpp.
 	template <int W>
 	aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 		const DecodedExecuteSegment<W>&, const AjInfo<W>&,
-		address_type<W> entry, const std::vector<address_type<W>>& instrs);
+		const std::vector<address_type<W>>& entries,
+		const std::vector<address_type<W>>& instrs);
 }
