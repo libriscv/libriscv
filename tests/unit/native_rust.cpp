@@ -29,6 +29,24 @@ extern bool rust_toolchain_available();
 
 using namespace riscv;
 
+#if defined(__has_feature)
+#  if __has_feature(address_sanitizer)
+#    define UNITTEST_HAS_ASAN 1
+#  endif
+#elif defined(__SANITIZE_ADDRESS__)
+#  define UNITTEST_HAS_ASAN 1
+#endif
+
+#ifdef UNITTEST_HAS_ASAN
+#include <sanitizer/lsan_interface.h>
+/// @brief Tell the leak sanitizer that an allocation is never freed on purpose.
+/// The allocation is treated as a root, so whatever hangs off it is not
+/// reported either.
+static void intentionally_leaked(const void* ptr) { __lsan_ignore_object(ptr); }
+#else
+static void intentionally_leaked(const void*) {}
+#endif
+
 static constexpr uint64_t MAX_INSTRUCTIONS = 100'000'000ul;
 static constexpr size_t   HEAP_SIZE = 4UL << 20;
 
@@ -1060,15 +1078,20 @@ static const std::vector<uint8_t>& rust_guest_binary()
 /// program from scratch about forty times, which is most of the test run.
 ///
 /// The pinned machine is never simulated and never destroyed; it only has to
-/// exist. It is reached through a static pointer, so it stays a root as far as
-/// the leak sanitizer is concerned, and its destructor never runs at exit.
+/// exist. Tearing an execute segment down after main() has returned is not
+/// worth the exit-order risk, so the machine is deliberately leaked, and the
+/// leak is handed to the sanitizer directly - it has no way of telling this
+/// one apart from a real one on its own.
 static const std::vector<uint8_t>& pinned_rust_guest_binary()
 {
 	const auto& binary = rust_guest_binary();
 	// Default options here, matching the machines the tests build: the shared
 	// segment is keyed on the arena size as well as the code itself.
-	static Machine<RISCV64>* pinned = new Machine<RISCV64>(binary);
-	(void) pinned;
+	static Machine<RISCV64>* pinned = nullptr;
+	if (pinned == nullptr) {
+		pinned = new Machine<RISCV64>(binary);
+		intentionally_leaked(pinned);
+	}
 	return binary;
 }
 
