@@ -997,6 +997,7 @@ INSTRUCTION(RV32I_BC_FUNCTION, execute_decoded_function)
 
 INSTRUCTION(RV32I_BC_FUNCBLOCK, execute_function_block) {
 	VIEW_INSTR();
+	REGISTERS().pc = RECONSTRUCT_PC(); // See pcrel.cpp
 	CPU().execute(DECODER().m_handler, DECODER().instr);
 	if (UNLIKELY(exec->is_stale())) {
 		pc = RECONSTRUCT_PC() + instr.length();
