@@ -3,6 +3,7 @@
 #include "../instruction_list.hpp"
 #include "../rv32i_instr.hpp"
 #include "../rvfd.hpp"
+#include "../rvv.hpp"
 #include "../types.hpp"
 #include "aj_api.hpp"
 #include "aj_decode.hpp"
@@ -27,6 +28,14 @@ namespace riscv
 		int32_t arena_rdbound   = 0;   ///< &memory.m_arena.read_boundary  - &cpu
 		int32_t arena_wrbound   = 0;   ///< &memory.m_arena.write_boundary - &cpu
 		int32_t arena_roend     = 0;   ///< &memory.m_arena.initial_rodata_end - &cpu
+		// The vector state, for the inlined vector loads and stores. vl, SEW
+		// and LMUL are read at run-time: vsetvli is not inlined, so vtype is
+		// unknown at translation time.
+		int32_t rvv_regs        = 0;   ///< &cpu.registers().rvv().get(0) - &cpu
+		int32_t rvv_vl          = 0;
+		int32_t rvv_vsew        = 0;   ///< log2(SEW / 8)
+		int32_t rvv_lmul        = 0;   ///< log2(LMUL), signed
+		int32_t rvv_vill        = 0;
 		/// @brief True when loads and stores may be inlined against the flat arena.
 		bool inline_memory = false;
 		const AjCallbacks<W>* cb = nullptr;
@@ -47,10 +56,9 @@ namespace riscv
 	bool aj_host_has_fma() noexcept;
 
 	/// @brief One bit-manipulation operation, as the emitter thinks of it.
-	/// @details Covers Zba, Zbb and Zbs, plus the PACK family that ZEXT.H is the
-	/// rs2 == 0 form of. Zbc's carry-less multiplies are deliberately absent:
-	/// they have no compact host sequence, and compilers essentially never emit
-	/// them, so they keep ending a region the way every unhandled encoding does.
+	/// @details Covers Zba, Zbb, Zbc and Zbs, plus the PACK family that ZEXT.H is
+	/// the rs2 == 0 form of, and Zicond, which shares the OP opcode and so is
+	/// classified here as well.
 	enum class AjZb : uint8_t
 	{
 		kNone = 0,
@@ -76,6 +84,10 @@ namespace riscv
 		// --- Zbs: single-bit ---
 		kBset, kBclr, kBinv, kBext,
 		kBseti, kBclri, kBinvi, kBexti,
+		// --- Zbc: carry-less multiply ---
+		kClmul, kClmulh, kClmulr,
+		// --- Zicond: conditional zero ---
+		kCzeroEqz, kCzeroNez,
 	};
 
 	/// @brief Classifies one instruction as a bit-manipulation operation.
@@ -102,10 +114,15 @@ namespace riscv
 			switch (i.Rtype.jumptable_friendly_op()) {
 			case 0x44:  return AjZb::kPack;    // ZEXT.H on RV32 when rs2 == 0
 			case 0x47:  return AjZb::kPackH;
+			case 0x51:  return AjZb::kClmul;
+			case 0x52:  return AjZb::kClmulr;
+			case 0x53:  return AjZb::kClmulh;
 			case 0x54:  return AjZb::kMin;
 			case 0x55:  return AjZb::kMinu;
 			case 0x56:  return AjZb::kMax;
 			case 0x57:  return AjZb::kMaxu;
+			case 0x75:  return AjZb::kCzeroEqz;
+			case 0x77:  return AjZb::kCzeroNez;
 			case 0x102: case 0x104: case 0x106:
 				return AjZb::kShAdd;
 			case 0x141: return AjZb::kBset;
@@ -192,6 +209,276 @@ namespace riscv
 		}
 	}
 
+	/// @brief An instruction emitted as a call to the interpreter's handler
+	/// instead of a native sequence.
+	/// @details A handler call is semantically exact, but slow. It is used where
+	/// a native form is too long to be worth it (the atomics, CBO.ZERO), where
+	/// the operation is a table lookup or a software float (Zfa, Zfhmin), and
+	/// for the vector instructions outside the inlined memory forms. Handlers
+	/// reached this way must not modify PC nor stop the machine: translated code
+	/// continues at the next instruction.
+	enum class AjHandler : uint8_t
+	{
+		kNone = 0,
+		kAtomic,    ///< A: LR/SC and the AMOs
+		kCsr,       ///< Zicsr and Zicntr, plus the vector CSRs
+		kCboZero,   ///< Zicboz: CBO.ZERO writes a block of zeroes
+		kFloat,     ///< Zfa, Zfhmin, and any FP form with no native sequence
+		kVector,    ///< V: everything but the inlined memory forms
+	};
+
+	/// @brief What an inlined vector transfer moves.
+	/// @details Only transfers of a whole number of vector registers are inlined.
+	/// The strided, indexed, masked and segmented accesses, the mask transfers,
+	/// the fault-only-first loads and any transfer ending in a partial register
+	/// are handler calls, as are the forms below when their run-time guard fails.
+	enum class AjVecForm : uint8_t
+	{
+		kNone = 0,
+		kUnitStride,      ///< vle<eew>.v / vse<eew>.v: vl*EEW contiguous bytes
+		kWholeRegister,   ///< vl<n>re<eew>.v / vs<n>r.v: n registers, no vtype
+	};
+	struct AjVectorMem
+	{
+		AjVecForm form = AjVecForm::kNone;
+		bool     is_store = false;
+		unsigned eew_log2 = 0;   ///< log2(EEW / 8), the unit-stride forms
+		unsigned nregs    = 1;   ///< registers moved by a whole-register transfer
+		unsigned vreg     = 0;   ///< vd, or vs3 in a store
+		unsigned rs1      = 0;   ///< the base address
+	};
+
+	/// @brief True for the LOAD-FP/STORE-FP widths that name a vector access.
+	/// @details Widths 1-4 are the scalar formats (half, single, double, quad);
+	/// the rest are vector EEWs: 0 is EEW 8, and 5, 6 and 7 are 16, 32 and 64.
+	inline bool aj_is_vector_width(unsigned width) noexcept
+	{
+		return width == 0 || width >= 5;
+	}
+
+	/// @brief log2(EEW/8) for a unit-stride width, or -1 for the other widths.
+	inline int aj_vector_unit_stride_eew(uint32_t width) noexcept
+	{
+		switch (width) {
+		case 0b000: return 0;   // VLE8  / VSE8
+		case 0b101: return 1;   // VLE16 / VSE16
+		case 0b110: return 2;   // VLE32 / VSE32
+		case 0b111: return 3;   // VLE64 / VSE64
+		default:    return -1;
+		}
+	}
+
+	/// @brief Classifies one vector load or store as inlinable, or not.
+	/// @details nf, mew, mop, lumop, vm and width are all fixed by the encoding,
+	/// leaving only vtype and vl to check at run-time -- and a whole-register
+	/// transfer reads neither.
+	inline AjVectorMem aj_vector_memory_form(rv32i_instruction i) noexcept
+	{
+		const rv32v_instruction vi { i };
+		AjVectorMem info;
+		if (i.opcode() == RV32F_STORE)
+			info.is_store = true;
+		else if (i.opcode() != RV32F_LOAD)
+			return {};
+		// The handler traps on every width it does not accept, the scalar
+		// widths included: there the mop and lumop bits are part of an
+		// immediate instead.
+		if (!riscv::vector_extension || !aj_is_vector_width(vi.VL.width))
+			return {};
+		// mew means EEW > 64, and a mop other than 00 is a strided or indexed
+		// access: both belong to the handler.
+		if (vi.VL.mew || vi.VL.mop != 0b00)
+			return {};
+		info.vreg = info.is_store ? vi.VS.vs3 : vi.VL.vd;
+		info.rs1  = info.is_store ? vi.VS.rs1 : vi.VL.rs1;
+		const unsigned nf = vi.VL.nf + 1;   // fields per segment
+		switch (info.is_store ? vi.VS.sumop : vi.VL.lumop) {
+		case 0b00000: {   // the plain unit-stride access
+			if (nf != 1 || !vi.VL.vm)
+				return {};   // segmented, or masked per element
+			const int eew = aj_vector_unit_stride_eew(vi.VL.width);
+			if (eew < 0)
+				return {};
+			info.eew_log2 = unsigned(eew);
+			info.form = AjVecForm::kUnitStride;
+			return info; }
+		case 0b01000:     // vl<n>re<eew>.v / vs<n>r.v
+			// An illegal nf, or a group not aligned to its own size, must trap:
+			// only the handler knows how.
+			if (!vi.VL.vm || (nf != 1 && nf != 2 && nf != 4 && nf != 8))
+				return {};
+			if ((info.vreg % nf) != 0 || info.vreg + nf > 32)
+				return {};
+			info.nregs = nf;
+			info.form = AjVecForm::kWholeRegister;
+			return info;
+		default:          // the mask transfers, fault-only-first, and the rest
+			return {};
+		}
+	}
+
+	/// @brief True for the CSRs this emulator answers itself.
+	/// @details The machine-level CSRs, and any CSR a host program serves from
+	/// the unhandled-CSR callback, end the region instead: only a CSR handled
+	/// inside libriscv is known not to stop or redirect execution.
+	inline bool aj_csr_is_known(uint32_t csr) noexcept
+	{
+		switch (csr) {
+		case 0x001: case 0x002: case 0x003:   // fflags, frm, fcsr
+		case 0xC00: case 0xC01: case 0xC02:   // cycle, time, instret
+		case 0xC80: case 0xC81: case 0xC82:   // ... and their upper halves
+			return true;
+		case 0x008: case 0x009: case 0x00A: case 0x00F:   // vstart, vxsat, vxrm, vcsr
+		case 0xC20: case 0xC21: case 0xC22:               // vl, vtype, vlenb
+			return riscv::vector_extension != 0;
+		default:
+			return false;
+		}
+	}
+
+	/// @brief True for Zimop's well-formed may-be-operations, which write zero.
+	/// @details Mirrors machine.cpp: MOP.R.n fixes bits 24:22, and MOP.RR.n
+	/// sets bit 25 instead.
+	inline bool aj_zimop_wellformed(rv32i_instruction i) noexcept
+	{
+		const uint32_t hi = i.whole >> 25;
+		return (hi & 0b1011000) == 0b1000000
+			&& ((hi & 1) != 0 || (i.whole & (0b111 << 22)) == (0b111 << 22));
+	}
+
+	/// @brief Classifies one instruction as covered by an interpreter handler.
+	/// @details Shared by aj_is_emittable() and the emitter, so region discovery
+	/// cannot accept an encoding that emission then skips.
+	template <int W>
+	inline AjHandler aj_handler_classify(rv32i_instruction i) noexcept
+	{
+		switch (i.opcode())
+		{
+		case RV32I_FENCE:
+			// Zicbom's three hints emit nothing at all; only Zicboz's CBO.ZERO
+			// touches memory.
+			if (i.Itype.funct3 == RV32I_CBO_FUNCT3 && i.Itype.imm == RV32I_CBO_ZERO)
+				return AjHandler::kCboZero;
+			return AjHandler::kNone;
+		case RV32I_SYSTEM:
+			// funct3 0 is ECALL/EBREAK/WFI, which redirect execution, and
+			// funct3 4 is Zimop, which is emitted natively.
+			if (i.Itype.funct3 != 0x0 && i.Itype.funct3 != 0x4
+				&& aj_csr_is_known(i.Itype.imm))
+				return AjHandler::kCsr;
+			return AjHandler::kNone;
+		case RV32A_ATOMIC:
+			return riscv::atomics_enabled ? AjHandler::kAtomic : AjHandler::kNone;
+		case RV32F_LOAD:
+		case RV32F_STORE:
+			// funct3 1 is Zfhmin's half-precision access, and quad is not
+			// implemented. Every other width names a vector access.
+			if (i.Itype.funct3 == 0x1)
+				return AjHandler::kFloat;
+			if (aj_is_vector_width(i.Itype.funct3))
+				return riscv::vector_extension ? AjHandler::kVector : AjHandler::kNone;
+			return AjHandler::kNone;
+		case RV32V_OP:
+			// The arithmetic, the reductions, the permutes and vsetvl: the
+			// handler owns the vl/vtype/mask machinery, and the backend's part
+			// is to keep the region from ending here.
+			return riscv::vector_extension ? AjHandler::kVector : AjHandler::kNone;
+		case RV32F_FMADD:
+		case RV32F_FMSUB:
+		case RV32F_FNMADD:
+		case RV32F_FNMSUB:
+		case RV32F_FPFUNC:
+			// Everything aj_fp_native() rejects: Zfa, Zfhmin's conversions and
+			// moves, the fused multiply-adds on a host without FMA, and the
+			// reserved encodings, which trap as they do in the interpreter.
+			return AjHandler::kFloat;
+		default:
+			return AjHandler::kNone;
+		}
+	}
+
+	/// @brief True when this F/D encoding has a native form in the emitter.
+	/// @details Split out of aj_is_emittable() because the emitter needs the same
+	/// answer: what this rejects is still emittable as a handler call, and the
+	/// two paths must agree on which is which.
+	/// @tparam W The guest register width. Only RV64 has the 64-bit integer
+	/// conversions and the moves of a whole double into an integer register.
+	template <int W>
+	inline bool aj_fp_native(rv32i_instruction i) noexcept
+	{
+		if (!aj_fpu_emittable)
+			return false;
+		switch (i.opcode())
+		{
+		case RV32F_LOAD:   // FLW, FLD
+		case RV32F_STORE:  // FSW, FSD
+			// funct3 is the access width, in the same bits either way. Both
+			// guest widths carry FLD/FSD: RV32D moves doubles through a machine
+			// whose integer registers are half as wide.
+			return i.Itype.funct3 == 0x2 || i.Itype.funct3 == 0x3;
+		case RV32F_FMADD:
+		case RV32F_FMSUB:
+		case RV32F_FNMADD:
+		case RV32F_FNMSUB:
+			// funct2 is the precision: 0 is single, 1 is double, and the
+			// half- and quad-precision encodings are not implemented at all.
+			return aj_host_has_fma() && rv32f_instruction(i).R4type.funct2 <= 0x1;
+		case RV32F_FPFUNC: {
+			const rv32f_instruction fi { i };
+			if (fi.R4type.funct2 > 0x1)
+				return false;
+			const bool is_double = (fi.R4type.funct2 == 0x1);
+			switch (i.fpfunc()) {
+			case RV32F__FADD: case RV32F__FSUB:
+			case RV32F__FMUL: case RV32F__FDIV:
+				return true;
+			case RV32F__FSQRT:
+				// rs2 is not a register here; every value but 0 is reserved.
+				return fi.R4type.rs2 == 0x0;
+			case RV32F__FCVT_SD_DS:
+				// rs2 names the *source* format, where funct2 names the
+				// destination: 0 is single, 1 is double, 2 is half (Zfhmin) and
+				// 4/5 are Zfa's FROUND/FROUNDNX, which are not conversions at
+				// all. Only a real S<->D conversion has a native form.
+				return fi.R4type.rs2 <= 0x1 && fi.R4type.rs2 != fi.R4type.funct2;
+			case RV32F__FSGNJ_NX:
+				return fi.R4type.funct3 <= 0x2;
+			case RV32F__FMIN_MAX:
+				// funct3 2 and 3 are Zfa's FMINM/FMAXM, which differ over NaN.
+				return fi.R4type.funct3 <= 0x1;
+			case RV32F__FEQ_LT_LE:
+				// funct3 4 and 5 are Zfa's quiet FLEQ/FLTQ.
+				return fi.R4type.funct3 <= 0x2;
+			case RV32F__FCVT_W_SD:   // FCVT.{W,WU,L,LU}.{S,D}
+			case RV32F__FCVT_SD_W:   // FCVT.{S,D}.{W,WU,L,LU}
+				// The 64-bit integer forms only exist on RV64, and rs2 8 is
+				// Zfa's FCVTMOD.W.D.
+				return fi.R4type.rs2 <= (W == 8 ? 0x3u : 0x1u);
+			case RV32F__FMV_X_W:
+				// funct3 0 is FMV.X.W / FMV.X.D, funct3 1 is FCLASS. Only the
+				// move of a whole double into an integer register needs RV64;
+				// FCLASS reads the bit fields and fits a 32-bit result.
+				// rs2 must be 0: Zfa reuses rs2 1 for FMVH.X.D.
+				if (fi.R4type.rs2 != 0x0)
+					return false;
+				if (fi.R4type.funct3 == 0x1)
+					return true;
+				return fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
+			case RV32F__FMV_W_X:
+				// rs2 must be 0: Zfa's FLI.{S,D} shares this funct7 with rs2 1,
+				// and reads a constant table index out of rs1 rather than a
+				// register. Emitting it as FMV.W.X silently loads garbage.
+				return fi.R4type.rs2 == 0x0
+					&& fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
+			default:
+				return false;
+			}
+		}
+		default:
+			return false;
+		}
+	}
+
 	/// @brief True if the instruction can be emitted by the asmjit backend.
 	/// Anything that is false terminates the region.
 	/// @details This predicate is shared between region discovery and emission,
@@ -215,10 +502,32 @@ namespace riscv
 			return true;
 		case RV32I_FENCE:
 			// MISC-MEM carries more than FENCE: funct3 1 is FENCE.I, which the
-			// interpreter uses to invalidate stale execute segments, and funct3 2
-			// is the Zicbo group, whose CBO.ZERO writes 64 bytes of zeroes. A
-			// barrier is the right answer for plain FENCE only.
-			return i.Itype.funct3 == 0x0;
+			// interpreter uses to invalidate stale execute segments and must
+			// keep, and funct3 2 is the Zicbo group. Only plain FENCE becomes
+			// a barrier.
+			if (i.Itype.funct3 == 0x0)
+				return true;
+			if (i.Itype.funct3 == RV32I_CBO_FUNCT3) {
+				// CBO.INVAL, CBO.CLEAN and CBO.FLUSH have no cache to act on
+				// in an emulator, and so are emitted as nothing.
+				switch (i.Itype.imm) {
+				case RV32I_CBO_INVAL: case RV32I_CBO_CLEAN: case RV32I_CBO_FLUSH:
+					return true;
+				default:
+					break;
+				}
+			}
+			return aj_handler_classify<W>(i) != AjHandler::kNone;
+		case RV32I_SYSTEM:
+			// Zawrs may return immediately, and libriscv does, so WRS.NTO and
+			// WRS.STO are no-ops. The rest of funct3 0 -- ECALL, EBREAK, WFI,
+			// STOP -- ends the region.
+			if (i.Itype.funct3 == 0x0)
+				return i.Itype.imm == 0x00D || i.Itype.imm == 0x01D;
+			// Zimop writes zero to rd, which is one instruction.
+			if (i.Itype.funct3 == 0x4)
+				return aj_zimop_wellformed(i);
+			return aj_handler_classify<W>(i) != AjHandler::kNone;
 		case RV32I_JALR:
 			return i.Itype.funct3 == 0x0;
 		case RV32I_BRANCH:
@@ -303,76 +612,25 @@ namespace riscv
 			return false;
 
 		// --- F/D extension ---
-		case RV32F_LOAD:   // FLW, FLD
-		case RV32F_STORE:  // FSW, FSD
-			// funct3 is the access width, in the same bits either way. Both
-			// widths carry FLD/FSD: RV32D moves doubles through a machine
-			// whose integer registers are half that size.
-			return aj_fpu_emittable
-				&& (i.Itype.funct3 == 0x2 || i.Itype.funct3 == 0x3);
+		// Everything without a native form -- Zfa, Zfhmin's half-precision
+		// accesses, conversions and moves, the fused multiply-adds on a host
+		// without FMA, and the reserved encodings -- is emitted as a call to
+		// the interpreter's handler instead.
+		case RV32F_LOAD:
+		case RV32F_STORE:
 		case RV32F_FMADD:
 		case RV32F_FMSUB:
 		case RV32F_FNMADD:
 		case RV32F_FNMSUB:
-			// funct2 is the precision: 0 is single, 1 is double, and the
-			// half- and quad-precision encodings are not implemented at all.
-			return aj_fpu_emittable && aj_host_has_fma()
-				&& rv32f_instruction(i).R4type.funct2 <= 0x1;
-		case RV32F_FPFUNC: {
-			if (!aj_fpu_emittable)
-				return false;
-			const rv32f_instruction fi { i };
-			if (fi.R4type.funct2 > 0x1)
-				return false;
-			const bool is_double = (fi.R4type.funct2 == 0x1);
-			switch (i.fpfunc()) {
-			case RV32F__FADD: case RV32F__FSUB:
-			case RV32F__FMUL: case RV32F__FDIV:
-				return true;
-			case RV32F__FSQRT:
-				// rs2 is not a register here; every value but 0 is reserved.
-				return fi.R4type.rs2 == 0x0;
-			case RV32F__FCVT_SD_DS:
-				// rs2 names the *source* format, where funct2 names the
-				// destination: 0 is single, 1 is double, 2 is half (Zfhmin) and
-				// 4/5 are Zfa's FROUND/FROUNDNX, which are not conversions at
-				// all. Only a real S<->D conversion may be emitted.
-				return fi.R4type.rs2 <= 0x1 && fi.R4type.rs2 != fi.R4type.funct2;
-			case RV32F__FSGNJ_NX:
-				return fi.R4type.funct3 <= 0x2;
-			case RV32F__FMIN_MAX:
-				return fi.R4type.funct3 <= 0x1;
-			case RV32F__FEQ_LT_LE:
-				return fi.R4type.funct3 <= 0x2;
-			case RV32F__FCVT_W_SD:   // FCVT.{W,WU,L,LU}.{S,D}
-			case RV32F__FCVT_SD_W:   // FCVT.{S,D}.{W,WU,L,LU}
-				// The 64-bit integer forms only exist on RV64.
-				return fi.R4type.rs2 <= (W == 8 ? 0x3u : 0x1u);
-			case RV32F__FMV_X_W:
-				// funct3 0 is FMV.X.W / FMV.X.D, funct3 1 is FCLASS. Only the
-				// move of a whole double into an integer register needs RV64;
-				// FCLASS reads the bit fields and fits a 32-bit result.
-				// rs2 must be 0: Zfa reuses rs2 1 for FMVH.X.D.
-				if (fi.R4type.rs2 != 0x0)
-					return false;
-				if (fi.R4type.funct3 == 0x1)
-					return true;
-				return fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
-			case RV32F__FMV_W_X:
-				// rs2 must be 0: Zfa's FLI.{S,D} shares this funct7 with rs2 1,
-				// and reads a constant table index out of rs1 rather than a
-				// register. Emitting it as FMV.W.X silently loads garbage.
-				return fi.R4type.rs2 == 0x0
-					&& fi.R4type.funct3 == 0x0 && (!is_double || W == 8);
-			default:
-				return false;
-			}
-		}
+		case RV32F_FPFUNC:
+			return aj_fp_native<W>(i)
+				|| aj_handler_classify<W>(i) != AjHandler::kNone;
 
 		default:
-			// SYSTEM (ECALL/EBREAK/CSR) and the A/V opcodes all terminate the
-			// region: the interpreter picks them up at the address we exit with.
-			return false;
+			// The A and V opcodes reach the handler classifier, which rejects
+			// them when their extension is disabled. Everything left over ends
+			// the region, and the interpreter resumes at the exit address.
+			return aj_handler_classify<W>(i) != AjHandler::kNone;
 		}
 	}
 	template <int W>

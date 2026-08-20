@@ -129,6 +129,14 @@ namespace riscv
 			return !m_vill;
 		}
 
+		// Fields a code generator reads directly. The asmjit backend computes
+		// displacements from a live instance rather than with offsetof(), as it
+		// does for the integer register file, so they survive layout changes.
+		const register_t& vl_ref() const noexcept { return m_vl; }
+		const uint32_t& encoded_sew_ref() const noexcept { return m_vsew; }
+		const int& lmul_shift_ref() const noexcept { return m_lmul; }
+		const bool& vill_ref() const noexcept { return m_vill; }
+
 		// Verifies the C mirror in tr_api.cpp against the offsets below.
 		friend struct VectorLayoutProbe;
 

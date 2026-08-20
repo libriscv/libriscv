@@ -2,6 +2,7 @@
 #include "../machine.hpp"
 #include "../internal_common.hpp"
 #include "../rvfd_util.hpp"
+#include "../rv32i_instr.hpp"
 
 namespace riscv
 {
@@ -128,6 +129,50 @@ namespace riscv
 	AJ_FCVT_TO_INT(aj_fcvt_l_d,  int64_t,  int64_t, double)
 	AJ_FCVT_TO_INT(aj_fcvt_lu_d, uint64_t, uint64_t, double)
 
+	// Executes one instruction on the interpreter's handler. Handlers reached
+	// this way never modify PC nor stop the machine, so translated code
+	// continues at the next instruction unless the handler traps.
+	template <int W>
+	static void aj_execute(CPU<W>& cpu, AjState<W>* st, uint32_t instr,
+		address_type<W> pc, const void* handler) noexcept
+	{
+		cpu.registers().pc = pc;
+		try {
+			auto fn = reinterpret_cast<instruction_handler<W>>(
+				reinterpret_cast<uintptr_t>(handler));
+			fn(cpu, rv32i_instruction{instr});
+		} catch (...) {
+			aj_fault(cpu, st);
+		}
+	}
+
+	// Zbc's carry-less multiplies, mirroring rvi_instr.cpp, for hosts without
+	// a carry-less multiply instruction.
+	template <int W>
+	static address_type<W> aj_clmul(address_type<W> a, address_type<W> b) noexcept
+	{
+		address_type<W> result = 0;
+		for (unsigned i = 0; i < 8 * sizeof(a); i++)
+			if ((b >> i) & 1) result ^= (a << i);
+		return result;
+	}
+	template <int W>
+	static address_type<W> aj_clmulh(address_type<W> a, address_type<W> b) noexcept
+	{
+		address_type<W> result = 0;
+		for (unsigned i = 1; i < 8 * sizeof(a); i++)
+			if ((b >> i) & 1) result ^= (a >> (8 * sizeof(a) - i));
+		return result;
+	}
+	template <int W>
+	static address_type<W> aj_clmulr(address_type<W> a, address_type<W> b) noexcept
+	{
+		address_type<W> result = 0;
+		for (unsigned i = 0; i < 8 * sizeof(a); i++)
+			if ((b >> i) & 1) result ^= (a >> (8 * sizeof(a) - i - 1));
+		return result;
+	}
+
 	static float  aj_fcvt_s_lu(uint64_t value) noexcept { return float(value); }
 	static double aj_fcvt_d_lu(uint64_t value) noexcept { return double(value); }
 
@@ -151,6 +196,9 @@ namespace riscv
 			.fcvt_l_s  = aj_fcvt_l_s<W>,  .fcvt_lu_s = aj_fcvt_lu_s<W>,
 			.fcvt_w_d  = aj_fcvt_w_d<W>,  .fcvt_wu_d = aj_fcvt_wu_d<W>,
 			.fcvt_l_d  = aj_fcvt_l_d<W>,  .fcvt_lu_d = aj_fcvt_lu_d<W>,
+			.execute = aj_execute<W>,
+			.clmul  = aj_clmul<W>,  .clmulh = aj_clmulh<W>,
+			.clmulr = aj_clmulr<W>,
 			.fcvt_s_lu = aj_fcvt_s_lu,    .fcvt_d_lu = aj_fcvt_d_lu,
 		};
 		return table;

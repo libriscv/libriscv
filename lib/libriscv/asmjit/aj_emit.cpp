@@ -135,6 +135,48 @@ static inline void host_mul_hi(UniCompiler& uc, const Gp& dst, const Gp& a, cons
 #endif
 }
 
+/// @brief True when the host has a carry-less multiply instruction.
+/// @details With PCLMULQDQ the three Zbc multiplies are one host instruction;
+/// without it they are a helper call, as the software form is a loop over XLEN
+/// bits, which is longer than the call it would replace.
+static inline bool host_has_clmul(const UniCompiler& uc)
+{
+#if defined(ASMJIT_UJIT_X86)
+	return uc.has_pclmulqdq();
+#else
+	(void)uc;
+	return false;
+#endif
+}
+
+/// @brief The 128-bit carry-less product of two 64-bit values.
+/// @details Only valid when host_has_clmul() holds. The halves are returned
+/// separately, as the three Zbc opcodes select between them.
+static inline void host_clmul64(UniCompiler& uc, const Gp& lo, const Gp& hi,
+	const Gp& a, const Gp& b)
+{
+#if defined(ASMJIT_UJIT_X86)
+	BackendCompiler& cc = *uc.cc;
+	Vec va = uc.new_vec128("clmula");
+	Vec vb = uc.new_vec128("clmulb");
+	uc.s_mov_u64(va, a);
+	uc.s_mov_u64(vb, b);
+	// The immediate selects which 64-bit half of each operand to multiply;
+	// both values sit in the low half.
+	if (uc.has_avx()) cc.vpclmulqdq(va, va, vb, Imm(0));
+	else              cc.pclmulqdq(va, vb, Imm(0));
+	uc.s_mov_u64(lo, va);
+	// The upper half is shifted down rather than extracted in place:
+	// s_extract_u64() ignores the lane index on the AVX path (always vmovq),
+	// and would return the low half again.
+	Vec vh = uc.new_vec128("clmulh");
+	uc.v_srlb_u128(vh, va, 8);
+	uc.s_mov_u64(hi, vh);
+#else
+	(void)uc; (void)lo; (void)hi; (void)a; (void)b;
+#endif
+}
+
 /// @brief True when the host can compute a fused multiply-add.
 /// @details RISC-V requires FMADD and friends to round once, which a separate
 /// multiply and add does not. asmjit will happily emit the two-instruction
@@ -626,7 +668,58 @@ struct AjEmitter
 		uc.or_ (d, t, u);
 	}
 
-	/// @brief The Zba, Zbb and Zbs forms of OP, OP-IMM, OP-32 and OP-IMM-32.
+	/// @brief Zbc's CLMUL, CLMULH and CLMULR.
+	/// @details Each selects a window of the same 2*XLEN-bit carry-less product:
+	/// the low half, the high half, and the XLEN bits straddling them. With a
+	/// host carry-less multiply that is one instruction plus the shifts that
+	/// select the window, and a helper call everywhere else.
+	void emit_clmul(AjZb zb, rv32i_instruction i)
+	{
+		const unsigned rd = i.Rtype.rd, rs1 = i.Rtype.rs1, rs2 = i.Rtype.rs2;
+		if (!host_has_clmul(uc)) {
+			const void* fn = (zb == AjZb::kClmul)  ? (const void*)info.cb->clmul
+						   : (zb == AjZb::kClmulh) ? (const void*)info.cb->clmulh
+												   : (const void*)info.cb->clmulr;
+			InvokeNode* node;
+			cc.invoke(Out(node), uint64_t(uintptr_t(fn)),
+				FuncSignature::build<address_t, address_t, address_t>());
+			node->set_arg(0, get(rs1));
+			node->set_arg(1, get(rs2));
+			node->set_ret(0, def(rd));
+			return;
+		}
+		Gp lo = uc.new_gp64("clmlo"), hi = uc.new_gp64("clmhi");
+		if constexpr (RV64) {
+			host_clmul64(uc, lo, hi, get(rs1), get(rs2));
+			switch (zb) {
+			case AjZb::kClmul:  uc.mov(def(rd), lo); break;
+			case AjZb::kClmulh: uc.mov(def(rd), hi); break;
+			default: {          // CLMULR: the window one bit below the high half
+				Gp t = uc.new_gp64("clmr"), u = uc.new_gp64("clmr2");
+				uc.shl(t, hi, Imm(1));
+				uc.shr(u, lo, Imm(63));
+				uc.or_(def(rd), t, u);
+				} break;
+			}
+		} else {
+			// A 32x32 carry-less product is 63 bits wide, so all of it lands
+			// in the low half and the three windows are three shifts.
+			Gp x = uc.new_gp64("clmx"), y = uc.new_gp64("clmy");
+			uc.mov(x.r32(), get(rs1));   // a 32-bit write zero-extends
+			uc.mov(y.r32(), get(rs2));
+			host_clmul64(uc, lo, hi, x, y);
+			if (zb == AjZb::kClmul) {
+				uc.mov(def(rd), lo.r32());
+			} else {
+				Gp t = uc.new_gp64("clmw");
+				uc.shr(t, lo, Imm(zb == AjZb::kClmulh ? 32 : 31));
+				uc.mov(def(rd), t.r32());
+			}
+		}
+	}
+
+	/// @brief The Zba, Zbb, Zbc and Zbs forms of OP, OP-IMM, OP-32 and
+	/// OP-IMM-32, plus Zicond's two conditional zeroes.
 	void emit_zb(AjZb zb, rv32i_instruction i)
 	{
 		// Every shamt-carrying encoding reads it from the same field, at the
@@ -806,6 +899,25 @@ struct AjEmitter
 			uc.and_(def(i.Itype.rd), t, Imm(1));
 			} break;
 
+		// --- Zbc: carry-less multiply ---
+		case AjZb::kClmul:
+		case AjZb::kClmulh:
+		case AjZb::kClmulr:
+			emit_clmul(zb, i);
+			break;
+
+		// --- Zicond: conditional zero ---
+		// rs2 is the condition and rs1 the value, so the other select operand
+		// is a zero immediate rather than a second register.
+		case AjZb::kCzeroEqz:   // rd = (rs2 == 0) ? 0 : rs1
+			uc.select(def(i.Rtype.rd), Imm(0), get(i.Rtype.rs1),
+				cmp_eq(get(i.Rtype.rs2), Imm(0)));
+			break;
+		case AjZb::kCzeroNez:   // rd = (rs2 != 0) ? 0 : rs1
+			uc.select(def(i.Rtype.rd), Imm(0), get(i.Rtype.rs1),
+				cmp_ne(get(i.Rtype.rs2), Imm(0)));
+			break;
+
 		case AjZb::kNone:
 			// Unreachable: the caller only arrives here for a classified
 			// encoding, and aj_is_emittable() rejected everything else.
@@ -963,6 +1075,208 @@ struct AjEmitter
 			uc.j(done);
 		});
 	}
+
+	// --- interpreter handler calls -----------------------------------------
+
+	/// @brief Runs one instruction on the interpreter's own handler.
+	/// @details The handler works on the register file in memory, so every cached
+	/// register it could name is written back before the call, and rd re-read
+	/// after it. Writing back more than the handler reads is harmless, as the
+	/// stored value is the architectural one either way, but reloading a register
+	/// that was never stored would revive a stale value: hence the reload set is
+	/// a subset of the store set by construction.
+	void emit_handler_call(address_t pc, rv32i_instruction i)
+	{
+		emit_handler_call(pc, i, pending - 1);
+	}
+	void emit_handler_call(address_t pc, rv32i_instruction i, uint32_t pend)
+	{
+		// Every encoding reached this way names its registers in the standard
+		// fields: none is an R4-type with an rs3.
+		const unsigned rd  = i.Itype.rd;
+		const unsigned rs1 = i.Itype.rs1;
+		const unsigned rs2 = (i.whole >> 20) & 0x1F;
+
+		const auto store_int = [&] (unsigned r) {
+			if (r != 0 && readset[r]) uc.store(reg_mem(r), vreg[r]);
+		};
+		const auto store_fp = [&] (unsigned r) {
+			if (fp_readset[r]) uc.v_storeu64_u64(freg_mem(r), fvreg[r]);
+		};
+		store_int(rs1); store_int(rs2); store_int(rd);
+		store_fp(rs1);  store_fp(rs2);  store_fp(rd);
+
+		// Resolved here rather than at run-time: decoding is a pure function of
+		// the encoding, which is a constant.
+		const auto handler = uint64_t(uintptr_t(CPU<W>::decode(i).handler));
+		InvokeNode* node;
+		cc.invoke(Out(node), uint64_t(uintptr_t(info.cb->execute)),
+			FuncSignature::build<void, void*, void*, uint32_t, address_t, const void*>());
+		node->set_arg(0, cpu);
+		node->set_arg(1, st);
+		node->set_arg(2, Imm(i.whole));
+		node->set_arg(3, rvimm(pc));
+		node->set_arg(4, Imm(handler));
+
+		if (rd != 0 && readset[rd]) uc.load(vreg[rd], reg_mem(rd));
+		if (fp_readset[rd]) uc.v_loadu64_u64(fvreg[rd], freg_mem(rd));
+		emit_fault_check(pc, pend);
+	}
+
+	// --- vector memory ------------------------------------------------------
+	// Two transfer forms move a whole number of vector registers between the
+	// arena and the register file. The registers of a group are adjacent in the
+	// file, so the transfer is one block copy, and a wider group only lengthens
+	// it. Everything else is a handler call, as are these two whenever their
+	// run-time guard does not hold.
+#ifdef RISCV_EXT_VECTOR
+	static constexpr uint32_t VLEN = VectorLane::size();
+	static_assert(VLEN % 16 == 0, "A vector register is copied 128 bits at a time");
+	// The longest inlined transfer is eight registers: both LMUL=8 and the widest
+	// whole-register form. It must fit inside the arena over-allocation, as a
+	// single check on the start address covers the whole transfer.
+	static_assert(8 * uint64_t(VLEN) <= Memory<W>::OVERALLOCATE,
+		"A vector register group must fit within the arena over-allocation");
+
+	static constexpr uint32_t vlen_log2() {
+		uint32_t n = 0, v = VLEN;
+		while (v > 1) { v >>= 1; n++; }
+		return n;
+	}
+	/// @brief The largest EMUL the destination register can legally name.
+	/// @details A group must be aligned to its own size and fit within v0-v31.
+	/// Legality is monotone in EMUL, so for a constant register number the
+	/// run-time check is a single comparison against this bound.
+	static int max_legal_emul(unsigned vreg) {
+		int best = 0;
+		for (int e = 1; e <= 3; e++) {
+			const unsigned regs = 1u << e;
+			if ((vreg % regs) == 0 && vreg + regs <= 32) best = e; else break;
+		}
+		return best;
+	}
+	/// @brief Copies one vector register between two host pointers.
+	void emit_vector_lane(const Gp& dst, const Gp& src, int32_t offset) {
+		for (uint32_t o = 0; o < VLEN; o += 16) {
+			Vec t = uc.new_vec128("vlane");
+			uc.v_loadu128(t, mem_ptr(src, offset + int32_t(o)));
+			uc.v_storeu128(mem_ptr(dst, offset + int32_t(o)), t);
+		}
+	}
+	/// @brief vl<n>re<eew>.v / vs<n>r.v: n whole registers, at a length fixed by
+	/// the encoding. It reads neither vl nor vtype, so only the address is
+	/// checked.
+	void emit_vector_whole_register(address_t pc, const AjVectorMem& vmi, rv32i_instruction i)
+	{
+		auto addr = address_of(vmi.rs1, 0);
+		Label slow = uc.new_label(), done = uc.new_label();
+		emit_arena_check(addr, vmi.is_store, slow);
+		Gp mem = uc.new_gp_ptr("vmem");
+		uc.add(mem, arena, addr);
+		Gp file = uc.new_gp_ptr("vfile");
+		uc.lea(file, mem_ptr(cpu, info.rvv_regs + int32_t(vmi.vreg * VLEN)));
+		for (unsigned r = 0; r < vmi.nregs; r++) {
+			const int32_t off = int32_t(r * VLEN);
+			if (vmi.is_store) emit_vector_lane(mem, file, off);
+			else              emit_vector_lane(file, mem, off);
+		}
+		uc.bind(done);
+		deferred.push_back([=, this, pend = pending - 1] {
+			uc.bind(slow);
+			emit_handler_call(pc, i, pend);
+			uc.j(done);
+		});
+	}
+	/// @brief vle<eew>.v / vse<eew>.v: vl*EEW contiguous bytes.
+	/// @details The guard mirrors unit_stride_transfer() in rvv_instr.cpp, at
+	/// run-time because no vsetvli is inlined ahead of it: a valid vtype, an EMUL
+	/// the destination register may legally name, and a length that fits the
+	/// group it names. A transfer ending in a partial register -- the last
+	/// iteration of a strip-mined loop -- goes to the handler instead.
+	void emit_vector_unit_stride(address_t pc, const AjVectorMem& vmi, rv32i_instruction i)
+	{
+		const uint32_t eew = vmi.eew_log2;
+		Label slow = uc.new_label(), done = uc.new_label();
+
+		Gp vill = uc.new_gp32("vill");
+		uc.load_u8(vill, mem_ptr(cpu, info.rvv_vill));
+		uc.j(slow, test_nz(vill));
+
+		// EMUL = LMUL * EEW / SEW, as a count of registers, in log2 form.
+		Gp emul = uc.new_gp32("vemul");
+		uc.load(emul, mem_ptr(cpu, info.rvv_lmul));
+		Gp sew = uc.new_gp32("vsew");
+		uc.load(sew, mem_ptr(cpu, info.rvv_vsew));
+		uc.sub(emul, emul, sew);
+		if (eew != 0) uc.add(emul, emul, Imm(int32_t(eew)));
+		uc.j(slow, scmp_lt(emul, Imm(-3)));
+		uc.j(slow, scmp_gt(emul, Imm(max_legal_emul(vmi.vreg))));
+
+		// The length, in bytes and then in whole registers. vl is unchanged by a
+		// later vtype write, so a length that no longer fits its group, or that
+		// is not a whole number of registers, goes the long way.
+		Gp bytes = new_ireg("vbytes");
+		uc.load(bytes, mem_ptr(cpu, info.rvv_vl));
+		if (eew != 0) uc.shl(bytes, bytes, Imm(eew));
+		Gp rem = new_ireg("vrem");
+		uc.and_(rem, bytes, Imm(VLEN - 1));
+		uc.j(slow, test_nz(rem));
+		Gp regs = new_ireg("vregs");
+		uc.shr(regs, bytes, Imm(vlen_log2()));
+		// dregs = 1 << max(EMUL, 0), the number of registers the group holds.
+		Gp shift = uc.new_gp32("vshift");
+		uc.smax(shift, emul, Imm(0));
+		Gp shiftw = new_ireg("vshiftw");
+		if constexpr (RV64) uc.mov(shiftw.r32(), shift);
+		else                uc.mov(shiftw, shift);
+		Gp dregs = new_ireg("vdregs");
+		uc.mov(dregs, Imm(1));
+		uc.shl(dregs, dregs, shiftw);
+		uc.j(slow, ucmp_gt(regs, dregs));
+
+		auto addr = address_of(vmi.rs1, 0);
+		emit_arena_check(addr, vmi.is_store, slow);
+		// An empty transfer touches no memory, and so cannot fault.
+		uc.j(done, cmp_eq(regs, Imm(0)));
+
+		Gp mem = uc.new_gp_ptr("vmem");
+		uc.add(mem, arena, addr);
+		Gp file = uc.new_gp_ptr("vfile");
+		uc.lea(file, mem_ptr(cpu, info.rvv_regs + int32_t(vmi.vreg * VLEN)));
+		Label loop = uc.new_label();
+		uc.bind(loop);
+		if (vmi.is_store) emit_vector_lane(mem, file, 0);
+		else              emit_vector_lane(file, mem, 0);
+		uc.add(mem, mem, Imm(VLEN));
+		uc.add(file, file, Imm(VLEN));
+		uc.sub(regs, regs, Imm(1));
+		uc.j(loop, test_nz(regs));
+		uc.bind(done);
+
+		deferred.push_back([=, this, pend = pending - 1] {
+			uc.bind(slow);
+			emit_handler_call(pc, i, pend);
+			uc.j(done);
+		});
+	}
+	/// @brief True when this vector transfer is inlined rather than called.
+	bool vector_memory_inlinable(const AjVectorMem& vmi) const {
+		return vmi.form != AjVecForm::kNone && info.inline_memory;
+	}
+	void emit_vector_memory(address_t pc, const AjVectorMem& vmi, rv32i_instruction i)
+	{
+		switch (vmi.form) {
+		case AjVecForm::kUnitStride:    emit_vector_unit_stride(pc, vmi, i); break;
+		case AjVecForm::kWholeRegister: emit_vector_whole_register(pc, vmi, i); break;
+		default:                        emit_handler_call(pc, i); break;
+		}
+	}
+#else
+	bool vector_memory_inlinable(const AjVectorMem&) const { return false; }
+	void emit_vector_memory(address_t pc, const AjVectorMem&, rv32i_instruction i) {
+		emit_handler_call(pc, i);
+	}
+#endif
 
 	// --- F/D extension -----------------------------------------------------
 	// f-registers live in vector registers of the host, one guest register per
@@ -1395,6 +1709,17 @@ struct AjEmitter
 	}
 
 	// --- pre-pass ---
+	// An inlined vector transfer reads its base address from an integer register
+	// and reaches the arena. The vector registers, vl and vtype live in memory
+	// and are never cached.
+	void prepass_vector_memory(rv32i_instruction i) {
+		const auto vmi = aj_vector_memory_form(i);
+		if (!vector_memory_inlinable(vmi))
+			return;
+		readset.set(vmi.rs1);
+		needs_arena = true;
+	}
+
 	// Collects the read set, the write set and the in-region branch targets in a
 	// single walk, so the emission loop is free of path-dependent state.
 	// The read set must mirror exactly which registers the emitter calls get() on.
@@ -1450,12 +1775,25 @@ struct AjEmitter
 				if (in_region(t)) branch_targets.insert(t);
 				} break;
 
+			case RV32I_SYSTEM:
+				// Zimop writes zero to rd. The CSR instructions go to the
+				// handler, which works on the register file in memory.
+				if (i.Itype.funct3 == 0x4)
+					writeset.set(i.Itype.rd);
+				break;
+
+			// An F/D encoding without a native form is a handler call, which
+			// reaches the register file through memory and so belongs in
+			// neither set: emit_handler_call() writes back and re-reads
+			// whatever is cached anyway.
 			case RV32F_LOAD:               // FLW, FLD
+				if (!aj_fp_native<W>(i)) { prepass_vector_memory(i); break; }
 				readset.set(i.Itype.rs1);
 				fp_writeset.set(i.Itype.rd);
 				needs_arena |= info.inline_memory;
 				break;
 			case RV32F_STORE:              // FSW, FSD
+				if (!aj_fp_native<W>(i)) { prepass_vector_memory(i); break; }
 				readset.set(i.Stype.rs1);
 				fp_readset.set(i.Stype.rs2);
 				needs_arena |= info.inline_memory;
@@ -1464,6 +1802,7 @@ struct AjEmitter
 			case RV32F_FMSUB:
 			case RV32F_FNMADD:
 			case RV32F_FNMSUB: {
+				if (!aj_fp_native<W>(i)) break;
 				const rv32f_instruction fi { i };
 				fp_readset.set(fi.R4type.rs1);
 				fp_readset.set(fi.R4type.rs2);
@@ -1471,6 +1810,7 @@ struct AjEmitter
 				fp_writeset.set(fi.R4type.rd);
 				} break;
 			case RV32F_FPFUNC: {
+				if (!aj_fp_native<W>(i)) break;
 				const rv32f_instruction fi { i };
 				const unsigned rd = fi.R4type.rd, rs1 = fi.R4type.rs1, rs2 = fi.R4type.rs2;
 				const bool dbl = (fi.R4type.funct2 == 0x1);
@@ -1608,9 +1948,35 @@ struct AjEmitter
 				break;
 
 			case RV32I_FENCE:
-				// The interpreter makes every FENCE form a full barrier; match it
-				// rather than reason about which guest orderings the host covers.
-				host_fence(cc);
+				if (i.Itype.funct3 == 0x0) {
+					// The interpreter makes every FENCE form a full barrier; match
+					// it rather than reason about which guest orderings the host
+					// covers.
+					host_fence(cc);
+				} else if (aj_handler_classify<W>(i) == AjHandler::kCboZero) {
+					emit_handler_call(pc, i);
+				}
+				// Zicbom's CBO.INVAL, CBO.CLEAN and CBO.FLUSH have no cache to
+				// act on: there is nothing to emit for them.
+				break;
+
+			case RV32I_SYSTEM:
+				if (i.Itype.funct3 == 0x4) {
+					// Zimop: a well-formed MOP writes zero to rd, and is
+					// otherwise inert.
+					if (i.Itype.rd != 0)
+						uc.mov(def(i.Itype.rd), Imm(0));
+				} else if (i.Itype.funct3 != 0x0) {
+					emit_handler_call(pc, i);   // the CSR instructions
+				}
+				// Zawrs' WRS.NTO and WRS.STO may return immediately, and in
+				// libriscv they do: nothing to emit.
+				break;
+
+			case RV32A_ATOMIC:
+				// LR/SC keep a reservation, and the AMOs read-modify-write guest
+				// memory: both belong to the interpreter.
+				emit_handler_call(pc, i);
 				break;
 
 			case RV32I_OP_IMM: {
@@ -1725,23 +2091,49 @@ struct AjEmitter
 				emit_store(pc, i.Stype.funct3, i.Stype.rs1, i.Stype.rs2, i.Stype.signed_imm());
 				break;
 
+			// Every F/D opcode splits the same way: the encodings with a native
+			// form take it, and the rest -- Zfa, Zfhmin, and anything the host
+			// cannot round correctly -- go to the interpreter's handler.
 			case RV32F_LOAD:
-				emit_fp_load(pc, i.Itype.funct3, i.Itype.rd, i.Itype.rs1, i.Itype.signed_imm());
+				if (aj_fp_native<W>(i))
+					emit_fp_load(pc, i.Itype.funct3, i.Itype.rd, i.Itype.rs1, i.Itype.signed_imm());
+				else if (const auto vmi = aj_vector_memory_form(i); vector_memory_inlinable(vmi))
+					emit_vector_memory(pc, vmi, i);
+				else
+					emit_handler_call(pc, i);
 				break;
 
 			case RV32F_STORE:
-				emit_fp_store(pc, i.Stype.funct3, i.Stype.rs1, i.Stype.rs2, i.Stype.signed_imm());
+				if (aj_fp_native<W>(i))
+					emit_fp_store(pc, i.Stype.funct3, i.Stype.rs1, i.Stype.rs2, i.Stype.signed_imm());
+				else if (const auto vmi = aj_vector_memory_form(i); vector_memory_inlinable(vmi))
+					emit_vector_memory(pc, vmi, i);
+				else
+					emit_handler_call(pc, i);
+				break;
+
+			case RV32V_OP:
+				// Only the memory forms above are emitted natively: vsetvl, the
+				// arithmetic and the permutes all run on the interpreter's
+				// handler.
+				emit_handler_call(pc, i);
 				break;
 
 			case RV32F_FMADD:
 			case RV32F_FMSUB:
 			case RV32F_FNMADD:
 			case RV32F_FNMSUB:
-				emit_fmadd(i);
+				if (aj_fp_native<W>(i))
+					emit_fmadd(i);
+				else
+					emit_handler_call(pc, i);
 				break;
 
 			case RV32F_FPFUNC:
-				emit_fpfunc(i);
+				if (aj_fp_native<W>(i))
+					emit_fpfunc(i);
+				else
+					emit_handler_call(pc, i);
 				break;
 
 			case RV32I_BRANCH: {

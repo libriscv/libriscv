@@ -165,6 +165,16 @@ namespace riscv
 		info.arena_rdbound = int32_t(uintptr_t(&mem.memory_arena_read_boundary_ref()) - cpu_addr);
 		info.arena_wrbound = int32_t(uintptr_t(&mem.memory_arena_write_boundary_ref()) - cpu_addr);
 		info.arena_roend   = int32_t(uintptr_t(&mem.initial_rodata_end_ref()) - cpu_addr);
+#ifdef RISCV_EXT_VECTOR
+		// The vector register file, and the vl/vtype fields an inlined
+		// transfer tests, measured the same way.
+		const auto& rvv = cpu.registers().rvv();
+		info.rvv_regs = int32_t(uintptr_t(&rvv.get(0))              - cpu_addr);
+		info.rvv_vl   = int32_t(uintptr_t(&rvv.vl_ref())            - cpu_addr);
+		info.rvv_vsew = int32_t(uintptr_t(&rvv.encoded_sew_ref())   - cpu_addr);
+		info.rvv_lmul = int32_t(uintptr_t(&rvv.lmul_shift_ref())    - cpu_addr);
+		info.rvv_vill = int32_t(uintptr_t(&rvv.vill_ref())          - cpu_addr);
+#endif
 		// Inlined arena access needs the plain flat arena: the N-bit encompassing
 		// arena and the unaligned slow paths both change what a valid access is.
 		info.inline_memory = riscv::flat_readwrite_arena

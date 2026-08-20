@@ -73,6 +73,20 @@ namespace riscv
 		addr_t (*fcvt_l_d) (CPU<W>&, double, uint32_t rm) noexcept;   // RV64 only
 		addr_t (*fcvt_lu_d)(CPU<W>&, double, uint32_t rm) noexcept;   // RV64 only
 
+		// Executes one instruction on the interpreter's handler: used for the
+		// atomics, the CSRs, CBO.ZERO, the vector unit and the Zfa/Zfhmin
+		// encodings with no compact host sequence. `handler` is the
+		// instruction_handler<W> for this encoding, resolved at translation
+		// time. PC is stored to the CPU first, as traps report against it.
+		void (*execute)(CPU<W>&, AjState<W>*, uint32_t instr, addr_t pc,
+			const void* handler) noexcept;
+
+		// Zbc's carry-less multiplies, for a host without PCLMULQDQ or an
+		// equivalent. Each selects a window of the same 2*XLEN-bit product.
+		addr_t (*clmul) (addr_t, addr_t) noexcept;
+		addr_t (*clmulh)(addr_t, addr_t) noexcept;
+		addr_t (*clmulr)(addr_t, addr_t) noexcept;
+
 		// Integer to float. Only the 64-bit unsigned sources need a helper:
 		// no host has an instruction for them, and the signed forms are one
 		// instruction each and are emitted inline.
