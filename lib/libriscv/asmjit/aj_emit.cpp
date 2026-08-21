@@ -23,9 +23,7 @@ using namespace asmjit;
 using namespace asmjit::ujit;
 
 // --- host escapes ---------------------------------------------------------
-// Everything else in this file is emitted through asmjit's universal compiler,
-// which serves x86-64 and AArch64 from one source. These two operations have no
-// universal spelling, and together they are the entire host-specific surface.
+// The only host-specific code; everything else goes through asmjit's universal compiler.
 
 /// @brief A full memory barrier, matching what the interpreter gives FENCE.
 static inline void host_fence(BackendCompiler& cc)
@@ -37,9 +35,7 @@ static inline void host_fence(BackendCompiler& cc)
 #endif
 }
 
-/// @brief dst = sign_extend_32_to_64(src).
-/// @details RV64 defines every *W instruction as a 32-bit operation whose
-/// result is sign-extended into the full destination register.
+/// @brief Sign-extend 32-bit src to 64-bit dst (*W instruction result).
 static inline void host_sign_extend_word(BackendCompiler& cc, const Gp& dst, const Gp& src)
 {
 #if defined(ASMJIT_UJIT_X86)
@@ -49,12 +45,7 @@ static inline void host_sign_extend_word(BackendCompiler& cc, const Gp& dst, con
 #endif
 }
 
-/// @brief True when the host's CLZ/CTZ already give RISC-V's answer for zero.
-/// @details Zbb defines CLZ(0) and CTZ(0) as XLEN, which is exactly what lzcnt
-/// and tzcnt return. Their pre-BMI fallbacks, bsr and bsf, leave the destination
-/// undefined instead, so on such a host the zero case has to be selected in.
-/// AArch64's clz -- and the rbit+clz pair standing in for ctz -- both return the
-/// register width, so nothing is needed there.
+/// @brief True when CLZ/CTZ return XLEN for zero input (lzcnt/tzcnt do; bsr/bsf don't).
 static inline bool host_count_zeros_is_exact(const UniCompiler& uc, bool leading)
 {
 #if defined(ASMJIT_UJIT_X86)
@@ -65,12 +56,7 @@ static inline bool host_count_zeros_is_exact(const UniCompiler& uc, bool leading
 #endif
 }
 
-/// @brief dst = the number of set bits in `src`, at the width of `dst`.
-/// @details x86 has a single instruction for this whenever POPCNT is present,
-/// which is every host made since 2008. AArch64 only grew a scalar count in
-/// ARMv8.9 (CSSC), and asmjit exposes no universal op for it, so everything else
-/// gets the usual SWAR reduction: pairs, then nibbles, then a folding sum whose
-/// low byte holds the total.
+/// @brief dst = popcount(src). Uses POPCNT when available, else SWAR reduction.
 static inline void host_popcount(UniCompiler& uc, const Gp& dst, const Gp& src)
 {
 #if defined(ASMJIT_UJIT_X86)
@@ -97,9 +83,7 @@ static inline void host_popcount(UniCompiler& uc, const Gp& dst, const Gp& src)
 	uc.shr (u, t, Imm(4));
 	uc.add (t, t, u);
 	uc.and_(t, t, Imm(m4));        // t: one count per byte, each at most 8
-	// Folding the bytes together can never carry out of the low byte: the total
-	// is at most 64. A multiply by 0x01..01 would do the same in one step, but
-	// x86 has no 64-bit immediate multiply.
+	// Fold bytes: total <= 64 so no carry past the low byte.
 	for (uint32_t s = 8; s < width; s *= 2) {
 		uc.shr(u, t, Imm(s));
 		uc.add(t, t, u);
@@ -107,15 +91,12 @@ static inline void host_popcount(UniCompiler& uc, const Gp& dst, const Gp& src)
 	uc.and_(dst, t, Imm(0xFF));
 }
 
-/// @brief dst = the high half of the 2*XLEN-bit product of `a` and `b`.
-/// @details MULH and MULHU want the part of the product that a three-operand
-/// multiply throws away, which no universal op exposes.
+/// @brief dst = high XLEN bits of 2*XLEN product a*b.
 static inline void host_mul_hi(UniCompiler& uc, const Gp& dst, const Gp& a, const Gp& b, bool is_signed)
 {
 	BackendCompiler& cc = *uc.cc;
 #if defined(ASMJIT_UJIT_X86)
-	// xDX:xAX <- xAX * src. Both halves are virtual registers; the allocator
-	// pins them to the physical pair the instruction requires.
+	// xDX:xAX <- xAX * src; allocator pins the virtual pair.
 	Gp lo = uc.new_similar_reg(dst, "mullo");
 	Gp hi = uc.new_similar_reg(dst, "mulhi");
 	cc.mov(lo, a);
@@ -125,8 +106,7 @@ static inline void host_mul_hi(UniCompiler& uc, const Gp& dst, const Gp& a, cons
 	if (dst.size() == 8) {
 		if (is_signed) cc.smulh(dst, a, b); else cc.umulh(dst, a, b);
 	} else {
-		// AArch64 has no 32-bit multiply-high, but it does have a widening
-		// 32x32 -> 64 multiply, whose upper half is the same thing.
+		// AArch64: widening 32x32→64 multiply, take upper half.
 		Gp t = uc.new_gp64("mulw");
 		if (is_signed) cc.smull(t, a, b); else cc.umull(t, a, b);
 		uc.shr(t, t, Imm(32));
@@ -135,10 +115,7 @@ static inline void host_mul_hi(UniCompiler& uc, const Gp& dst, const Gp& a, cons
 #endif
 }
 
-/// @brief True when the host has a carry-less multiply instruction.
-/// @details With PCLMULQDQ the three Zbc multiplies are one host instruction;
-/// without it they are a helper call, as the software form is a loop over XLEN
-/// bits, which is longer than the call it would replace.
+/// @brief True when the host has PCLMULQDQ (x86) for Zbc carry-less multiply.
 static inline bool host_has_clmul(const UniCompiler& uc)
 {
 #if defined(ASMJIT_UJIT_X86)
@@ -149,9 +126,7 @@ static inline bool host_has_clmul(const UniCompiler& uc)
 #endif
 }
 
-/// @brief The 128-bit carry-less product of two 64-bit values.
-/// @details Only valid when host_has_clmul() holds. The halves are returned
-/// separately, as the three Zbc opcodes select between them.
+/// @brief 128-bit carry-less product of two 64-bit values. Only valid when host_has_clmul().
 static inline void host_clmul64(UniCompiler& uc, const Gp& lo, const Gp& hi,
 	const Gp& a, const Gp& b)
 {
@@ -161,14 +136,11 @@ static inline void host_clmul64(UniCompiler& uc, const Gp& lo, const Gp& hi,
 	Vec vb = uc.new_vec128("clmulb");
 	uc.s_mov_u64(va, a);
 	uc.s_mov_u64(vb, b);
-	// The immediate selects which 64-bit half of each operand to multiply;
-	// both values sit in the low half.
+	// imm=0: multiply low halves of both operands.
 	if (uc.has_avx()) cc.vpclmulqdq(va, va, vb, Imm(0));
 	else              cc.pclmulqdq(va, vb, Imm(0));
 	uc.s_mov_u64(lo, va);
-	// The upper half is shifted down rather than extracted in place:
-	// s_extract_u64() ignores the lane index on the AVX path (always vmovq),
-	// and would return the low half again.
+	// Shift down: s_extract_u64() always returns the low lane on AVX.
 	Vec vh = uc.new_vec128("clmulh");
 	uc.v_srlb_u128(vh, va, 8);
 	uc.s_mov_u64(hi, vh);
@@ -177,11 +149,7 @@ static inline void host_clmul64(UniCompiler& uc, const Gp& lo, const Gp& hi,
 #endif
 }
 
-/// @brief True when the host can compute a fused multiply-add.
-/// @details RISC-V requires FMADD and friends to round once, which a separate
-/// multiply and add does not. asmjit will happily emit the two-instruction
-/// fallback, so the FMA opcodes are only claimed when the host has the real
-/// thing; elsewhere they end the region and the interpreter's std::fma runs.
+/// @brief True when the host has hardware FMA (required for correctly-rounded FMADD).
 static inline bool host_has_fma(const UniCompiler& uc)
 {
 #if defined(ASMJIT_UJIT_X86)
@@ -192,16 +160,12 @@ static inline bool host_has_fma(const UniCompiler& uc)
 #endif
 }
 
-/// @brief dst = a / b, signed, or a % b when `want_rem`.
-/// @details The caller has already taken b == 0 and b == -1 off this path:
-/// they are exactly the two inputs x86's idiv faults on, and exactly the two
-/// RISC-V defines a result for instead.
+/// @brief Signed div/rem; caller has excluded b==0 and b==-1 (the two idiv faults).
 static inline void host_sdiv(UniCompiler& uc, const Gp& dst, const Gp& a, const Gp& b, bool want_rem)
 {
 	BackendCompiler& cc = *uc.cc;
 #if defined(ASMJIT_UJIT_X86)
-	// idiv divides xDX:xAX, so the dividend has to be sign-extended into the
-	// upper half first.
+	// idiv requires sign-extending the dividend into xDX:xAX.
 	Gp quot = uc.new_similar_reg(dst, "quot");
 	Gp rem  = uc.new_similar_reg(dst, "rem");
 	cc.mov(quot, a);
@@ -221,8 +185,7 @@ static inline void host_sdiv(UniCompiler& uc, const Gp& dst, const Gp& a, const 
 
 bool aj_host_has_fma() noexcept
 {
-	// The JitRuntime derives its features from the host the same way, so this
-	// answers the same question the emitter's UniCompiler would.
+	// Queries host features the same way the emitter's UniCompiler does.
 	static const bool has_fma = [] {
 		const CpuFeatures& f = CpuInfo::host().features();
 #if defined(ASMJIT_UJIT_X86)
@@ -264,9 +227,7 @@ struct AjEmitter
 	bool needs_zero = false;
 	bool needs_arena = false;
 
-	// The f-registers get exactly the same treatment as the integer ones: a
-	// virtual register each, preloaded in the prologue and stored back at every
-	// exit. There is no x0 equivalent here -- f0 is an ordinary register.
+	// f-registers: same eager preload/writeback as integer, but f0 is ordinary.
 	std::array<Vec, 32> fvreg {};
 	std::bitset<32> fp_writeset;
 	std::bitset<32> fp_readset;
@@ -278,9 +239,7 @@ struct AjEmitter
 	std::unordered_map<address_t, Label> labels;
 	uint32_t pending = 0;       // instructions retired since the last counter flush
 
-	// Cold paths (helper calls) are emitted after the region body, so that the
-	// hot path stays contiguous. Each one captures the counter state that was
-	// live where it branched off, because `pending` has moved on by then.
+	// Cold paths emitted after the body; each captures its `pending` at branch-off.
 	std::vector<std::function<void()>> deferred;
 
 	AjEmitter(UniCompiler& u, const uint8_t* s, const std::vector<address_t>& ens,
@@ -288,25 +247,18 @@ struct AjEmitter
 		: uc(u), cc(*u.cc), seg(s), entries(ens), entry(ens.front()),
 		  instrs(list), seg_end(se), info(in) {}
 
-	// A region is entered at `entry`, but emitted in address order. The two differ
-	// whenever a back-edge reaches below the entry, which is the normal shape of a
-	// loop entered from its middle.
+	// Entry and emit order differ when a back-edge reaches below the entry.
 	bool entry_is_first() const noexcept { return entry == instrs.front(); }
-	// With a single entry the prologue falls or jumps straight into the body.
-	// With several it has to look at the PC dispatch arrived with.
+	// Multiple entries require a PC-based dispatch in the prologue.
 	bool needs_entry_dispatch() const noexcept { return entries.size() > 1; }
-	// A branch may only become an internal jump when its target is an address the
-	// region actually emits. Discovery caps region size, so a target inside
-	// [begin, end) is not by itself proof of that.
+	// Target must be in the emitted instruction set, not just in [begin, end).
 	bool in_region(address_t pc) const noexcept {
 		return std::binary_search(instrs.begin(), instrs.end(), pc);
 	}
 	Label label_at(address_t pc) { return labels.at(pc); }
 
 	// --- width-parametric primitives ---
-	// A guest register is a host register of exactly the guest width, so that
-	// every operation on it carries RISC-V wrapping and shift-masking semantics
-	// for free, on both 32- and 64-bit guests.
+	// Guest-width host registers give RISC-V wrapping/shift semantics for free.
 	Gp new_ireg(const char* name) {
 		if constexpr (RV64) return uc.new_gp64(name); else return uc.new_gp32(name);
 	}
@@ -323,8 +275,7 @@ struct AjEmitter
 	Mem reg_mem(unsigned i) const {
 		return mem_ptr(cpu, info.reg_offset + int32_t(i * RVLEN));
 	}
-	/// @brief An f-register is 64 bits wide on both guest widths: RV32D moves
-	/// doubles through a machine whose integer registers are half that size.
+	/// @brief f-registers are 64-bit on both RV32 and RV64 (RV32D needs full-width doubles).
 	Mem freg_mem(unsigned i) const {
 		return mem_ptr(cpu, info.fpreg_offset + int32_t(i * 8));
 	}
@@ -333,10 +284,7 @@ struct AjEmitter
 	static constexpr int32_t off_pc()      { return int32_t(offsetof(AjState<W>, pc)); }
 
 	// --- register cache ---
-	// Registers are preloaded eagerly in the prologue, NOT lazily on first use.
-	// A lazy load emitted mid-region would sit after a bound label, so a back-edge
-	// jumping to that label would re-execute the load and clobber the loop-carried
-	// value with stale memory. Preloading puts every load ahead of every label.
+	// Eager preload, not lazy: a lazy load after a label would clobber loop-carried values on back-edges.
 	void emit_prologue_loads() {
 		if (needs_zero) {
 			zero = new_ireg("zero");
@@ -346,8 +294,7 @@ struct AjEmitter
 			arena = uc.new_gp_ptr("arena");
 			uc.load(arena, mem_ptr(cpu, info.arena_ptr));
 		}
-		// The canonical NaNs are loop-invariant, so they are materialized here
-		// rather than at each conversion that needs one.
+		// Canonical NaNs are loop-invariant; materialized once here.
 		if (needs_canon32) {
 			Gp t = uc.new_gp32("canon32i");
 			uc.mov(t, Imm(CANONICAL_NAN_F32));
@@ -379,28 +326,20 @@ struct AjEmitter
 		if (i == 0) return new_ireg("sink"); // writes to x0 are discarded
 		return vreg[i];                // in writeset, so the prologue loaded it
 	}
-	// f-registers need no x0 special case, so source and destination are the
-	// same lookup; both names exist to keep the emission code readable.
+	// f-registers have no x0 special case; both names exist for readability.
 	Vec fget(unsigned i) { return fvreg[i]; }
 	Vec fdef(unsigned i) { return fvreg[i]; }
 
 	// --- counter accounting ---
-	// `pending` is a compile-time count of instructions retired since the last
-	// flush into the `counter` register. It must be zero at every point where
-	// control flow can merge, otherwise two predecessors of a label disagree
-	// about how much the register still owes. Two flush points guarantee that:
-	//   1. immediately before binding a label that is a branch target
-	//   2. immediately before emitting a BRANCH, JAL or JALR
-	// Both sit on linear control flow, so flushing never diverges between paths.
+	// `pending` counts retired instructions since the last flush. Must be zero
+	// at every merge point (before binding a target label or emitting a branch).
 	void flush_counter() {
 		if (pending) { uc.add(counter, counter, Imm(pending)); pending = 0; }
 	}
 
 	// --- exits ---
-	// Stores the region's whole static write-set, not an incrementally tracked
-	// dirty set. An exit emitted early in a loop body would otherwise miss
-	// registers written later in the body, which the *previous* iteration did
-	// execute. Exits are cold, so the extra stores cost nothing.
+	// Stores the full static write-set, not a dirty set: an early exit in a loop
+	// must include registers written by the previous iteration.
 	void flush_regs() {
 		for (unsigned i = 1; i < 32; i++)
 			if (writeset[i]) uc.store(reg_mem(i), vreg[i]);
@@ -421,9 +360,7 @@ struct AjEmitter
 		uc.mov(t, rvimm(next_pc));
 		uc.store(mem_ptr(st, off_pc()), t);
 	}
-	// Writes back registers, counter and PC, then returns to dispatch.
-	// Must not mutate `counter` or `pending`: an exit is emitted on one side of a
-	// branch while the fall-through path continues with the same state.
+	// Write back everything and return. Must not mutate counter/pending (branch fall-through shares them).
 	void emit_exit(address_t next_pc, uint32_t pend) {
 		flush_regs();
 		store_counter(pend);
@@ -437,9 +374,7 @@ struct AjEmitter
 		uc.store(mem_ptr(st, off_pc()), next_pc);
 		uc.ret();
 	}
-	// Emitted on the taken path of a backward branch, after flush_counter().
-	// Reloads max from memory on every check so that a faulting helper (which
-	// zeroes it) breaks the loop rather than spinning to the instruction limit.
+	// Back-edge counter check; reloads max so a faulting helper's zero breaks the loop.
 	void emit_backedge_check(address_t target) {
 		Label ok = uc.new_label();
 		uc.j(ok, ucmp_lt(counter, mem_ptr(st, off_max())));
@@ -448,10 +383,7 @@ struct AjEmitter
 	}
 
 	// --- ALU helpers ---
-	// The universal compiler takes three operands and resolves dst/src aliasing
-	// itself, so RISC-V's two-address forms map straight onto it. In particular
-	// `and rd, rs1, rd` -- a destination that is also the second source -- needs
-	// nothing from the emitter.
+	// UniCompiler resolves dst/src aliasing, so RISC-V three-operand forms map directly.
 	enum Op { OP_ADD, OP_SUB, OP_AND, OP_OR, OP_XOR };
 
 	void alu_rr(Op op, const Gp& d, const Gp& a, const Gp& b) {
@@ -464,8 +396,7 @@ struct AjEmitter
 		}
 	}
 	void alu_ri(Op op, const Gp& d, const Gp& a, int32_t v) {
-		// Identity immediates: ADDI/ORI/XORI with 0 (which is how MV is encoded)
-		// and ANDI with -1 are pure moves.
+		// Identity immediates (ADDI/ORI/XORI 0, ANDI -1) fold to a move.
 		if ((v == 0 && (op == OP_ADD || op == OP_SUB || op == OP_OR || op == OP_XOR))
 			|| (v == -1 && op == OP_AND)) {
 			if (d.id() != a.id()) uc.mov(d, a);
@@ -479,9 +410,7 @@ struct AjEmitter
 		case OP_XOR: uc.xor_(d, a, sximm(v)); break;
 		}
 	}
-	// 0 = shift left, 1 = shift right logical, 2 = shift right arithmetic.
-	// Both hosts mask a register shift count by the operand width minus one,
-	// which is exactly the RISC-V rule for the matching XLEN.
+	// 0=SLL, 1=SRL, 2=SRA. Both hosts mask the shift count to XLEN-1.
 	void shift_rr(int kind, const Gp& d, const Gp& a, const Gp& b) {
 		switch (kind) {
 		case 0: uc.shl(d, a, b); break;
@@ -509,10 +438,8 @@ struct AjEmitter
 	}
 
 	// --- M extension ---
-	// Neither division-by-zero nor signed overflow traps in RISC-V; both have a
-	// defined result. `b + 1 <= 1` unsigned holds for exactly b == 0 and
-	// b == -1, so a single test moves both off the hot path -- and that pair is
-	// also exactly what x86's idiv faults on.
+	// Division by zero and signed overflow are defined, not trapping.
+	// `b + 1 <=u 1` catches both b==0 and b==-1 in one branch.
 	void emit_div(const Gp& d, const Gp& a, const Gp& b, bool want_rem, bool is_signed)
 	{
 		Label slow = uc.new_label(), done = uc.new_label();
@@ -531,30 +458,25 @@ struct AjEmitter
 		if (is_signed) {
 			Label divzero = uc.new_label();
 			uc.j(divzero, cmp_eq(b, Imm(0)));
-			// b == -1. a / -1 is -a, which is also the defined result of the
-			// only overflowing division, MIN / -1 == MIN. a % -1 is zero.
+			// b == -1: a / -1 = -a (also handles MIN / -1 = MIN). a % -1 = 0.
 			if (want_rem) uc.mov(d, Imm(0));
 			else          uc.neg(d, a);
 			uc.j(done);
 			uc.bind(divzero);
 		}
-		// Division by zero: the quotient is all ones, the remainder is the dividend.
+		// div/0: quotient = -1, remainder = dividend.
 		if (want_rem) { if (d.id() != a.id()) uc.mov(d, a); }
 		else          uc.mov(d, sximm(-1));
 		uc.bind(done);
 	}
-	/// @brief The eight M-extension forms of OP, and the five of OP-32.
-	/// @details `d`, `a` and `b` are already the right width for the caller:
-	/// full guest width for OP, 32 bits for the *W forms.
+	/// @brief M-extension OP/OP-32 dispatch; operands are pre-narrowed for *W forms.
 	void emit_muldiv(unsigned funct3, const Gp& d, const Gp& a, const Gp& b)
 	{
 		switch (funct3) {
 		case 0x0: uc.mul(d, a, b); break;                      // MUL / MULW
 		case 0x1: host_mul_hi(uc, d, a, b, true);  break;      // MULH
 		case 0x2: {                                            // MULHSU
-			// Reading `a` as signed subtracts one whole `b` from the high half
-			// when `a` is negative: high(a*b) - (a < 0 ? b : 0). The adjustment
-			// is computed first because the product may land in `a` or `b`.
+			// MULHSU: high(a*b) - (a<0 ? b : 0); adjust before the multiply clobbers operands.
 			Gp adj = uc.new_similar_reg(d, "hsu");
 			uc.sar(adj, a, Imm(d.size() * 8 - 1));   // 0 or ~0
 			uc.and_(adj, adj, b);
@@ -570,46 +492,32 @@ struct AjEmitter
 	}
 
 	// --- RV64 word operations ---
-	// Every *W instruction computes on the low 32 bits and sign-extends the
-	// result, so it is emitted as a 32-bit operation into a scratch register
-	// followed by one widening move.
+	// *W forms compute in 32-bit scratch and sign-extend the result.
 	Gp word_of(unsigned reg) { return get(reg).r32(); }
 	void finish_word(unsigned rd, const Gp& tmp32) {
 		host_sign_extend_word(cc, def(rd), tmp32);
 	}
 
-	// --- bit manipulation: Zba, Zbb, Zbs -----------------------------------
-	// Every encoding reaching emit_zb() was classified by aj_zb_classify(),
-	// which region discovery also consults through aj_is_emittable(). Sharing
-	// the one classifier is what keeps discovery from claiming an encoding that
-	// emission then falls through, which would leave rd holding a stale value
-	// rather than faulting.
+	// --- bit manipulation: Zba, Zbb, Zbs, Zbc, Zicond ----------------------
+	// aj_zb_classify() is shared with region discovery to prevent emitting an unhandled encoding.
 
 	static constexpr uint32_t XLEN = uint32_t(RVLEN) * 8;
 
-	/// @brief zext32(rs1) in a full-width register, for the Zba *.UW forms.
-	/// @details Writing a register through its 32-bit half zeroes the upper
-	/// half on both hosts, which is the same identity address_of() relies on to
-	/// use an RV32 address register as an arena index.
+	/// @brief zext32(rs1) for Zba *.UW forms; writing r32 zeroes the upper half on both hosts.
 	Gp zext32_of(unsigned rs1) {
 		Gp z = uc.new_gp64("uw");
 		uc.mov(z.r32(), get(rs1).r32());
 		return z;
 	}
 
-	/// @brief 1 << (amount & (XLEN-1)), the mask BSET, BCLR and BINV apply.
-	/// @details Both hosts mask a register shift count by the operand width
-	/// minus one, which is exactly the RISC-V rule at the matching XLEN, so the
-	/// masking never has to be spelled out.
+	/// @brief 1 << (amount & (XLEN-1)), the Zbs single-bit mask. Host shift masking matches RISC-V.
 	Gp bit_mask(const Gp& amount) {
 		Gp m = new_ireg("bitm");
 		uc.mov(m, Imm(1));
 		uc.shl(m, m, amount);
 		return m;
 	}
-	/// @brief The same mask for an immediate bit index. It is materialized
-	/// rather than folded into the OR because x86 ALU immediates are 32 bits,
-	/// and the RV64 masks run up to bit 63.
+	/// @brief Immediate bit mask, materialized because x86 ALU immediates are 32-bit.
 	Gp bit_mask(uint32_t shamt) {
 		Gp m = new_ireg("bitm");
 		const uint64_t v = uint64_t(1) << (shamt & (XLEN - 1));
@@ -617,9 +525,7 @@ struct AjEmitter
 		return m;
 	}
 
-	/// @brief dst = the low `bits` of `src`, sign-extended.
-	/// @details Neither host exposes a universal sign-extend-from-width op, and
-	/// the shift pair is one instruction more than the x86 movsx it replaces.
+	/// @brief Sign-extend the low `bits` of `src` via a shift pair.
 	void emit_sign_extend(const Gp& d, const Gp& a, uint32_t bits) {
 		const uint32_t up = uint32_t(a.size()) * 8 - bits;
 		Gp t = uc.new_similar_reg(d, "sext");
@@ -634,9 +540,7 @@ struct AjEmitter
 			if (leading) uc.clz(d, a); else uc.ctz(d, a);
 			return;
 		}
-		// The host left zero undefined. Everything is computed into scratch
-		// registers so that a destination which is also the source stays intact
-		// until the comparison has been made.
+		// Host leaves zero undefined; use scratch to avoid clobbering d==a.
 		const uint32_t width = uint32_t(a.size()) * 8;
 		Gp t = uc.new_similar_reg(d, "cnt");
 		Gp r = uc.new_similar_reg(d, "cntz");
@@ -668,11 +572,7 @@ struct AjEmitter
 		uc.or_ (d, t, u);
 	}
 
-	/// @brief Zbc's CLMUL, CLMULH and CLMULR.
-	/// @details Each selects a window of the same 2*XLEN-bit carry-less product:
-	/// the low half, the high half, and the XLEN bits straddling them. With a
-	/// host carry-less multiply that is one instruction plus the shifts that
-	/// select the window, and a helper call everywhere else.
+	/// @brief Zbc CLMUL/CLMULH/CLMULR: windows of the 2*XLEN-bit carry-less product.
 	void emit_clmul(AjZb zb, rv32i_instruction i)
 	{
 		const unsigned rd = i.Rtype.rd, rs1 = i.Rtype.rs1, rs2 = i.Rtype.rs2;
@@ -702,8 +602,7 @@ struct AjEmitter
 				} break;
 			}
 		} else {
-			// A 32x32 carry-less product is 63 bits wide, so all of it lands
-			// in the low half and the three windows are three shifts.
+			// RV32: the 63-bit product fits in the low lane; windows are shifts.
 			Gp x = uc.new_gp64("clmx"), y = uc.new_gp64("clmy");
 			uc.mov(x.r32(), get(rs1));   // a 32-bit write zero-extends
 			uc.mov(y.r32(), get(rs2));
@@ -735,8 +634,7 @@ struct AjEmitter
 			uc.add_ext(def(i.Rtype.rd), get(i.Rtype.rs2), get(i.Rtype.rs1), sh_scale);
 			break;
 		case AjZb::kShAddUw:    // rd = rs2 + (zext32(rs1) << n)
-			// The .UW forms take the low word of rs1 and produce a full 64-bit
-			// result, so they are not *W operations and must not sign-extend.
+			// .UW forms produce a full 64-bit result, not a sign-extended word.
 			uc.add_ext(def(i.Rtype.rd), get(i.Rtype.rs2), zext32_of(i.Rtype.rs1), sh_scale);
 			break;
 		case AjZb::kAddUw:
@@ -789,8 +687,7 @@ struct AjEmitter
 		case AjZb::kClzw:
 		case AjZb::kCtzw:
 		case AjZb::kCpopw: {
-			// A count is at most 32, so the *W sign-extension is a no-op; going
-			// through it anyway keeps every OP-IMM-32 form on one tail.
+			// Count <= 32, so sign-extension is a no-op; keeps *W forms uniform.
 			Gp t = uc.new_gp32("w");
 			if (zb == AjZb::kCpopw)
 				host_popcount(uc, t, word_of(i.Itype.rs1));
@@ -813,9 +710,7 @@ struct AjEmitter
 			emit_orc_b(def(i.Itype.rd), get(i.Itype.rs1));
 			break;
 		case AjZb::kPack: {
-			// rd = the low half of rs1, with the low half of rs2 above it. The
-			// shift pair clears each upper half without needing a wide mask.
-			// On RV32 with rs2 == x0 this is ZEXT.H.
+			// Shift pair clears each upper half without a wide mask. rs2==x0 on RV32 is ZEXT.H.
 			constexpr uint32_t half = XLEN / 2;
 			Gp lo = new_ireg("packlo"), hi = new_ireg("packhi");
 			uc.shl(lo, get(i.Rtype.rs1), Imm(half));
@@ -824,7 +719,7 @@ struct AjEmitter
 			uc.or_(def(i.Rtype.rd), lo, hi);
 			} break;
 		case AjZb::kPackH: {
-			// rd = the low byte of rs1, with the low byte of rs2 above it.
+			// Low bytes of rs1 and rs2, packed into rd[15:0].
 			Gp lo = new_ireg("phlo"), hi = new_ireg("phhi");
 			uc.and_(lo, get(i.Rtype.rs1), Imm(0xFF));
 			uc.and_(hi, get(i.Rtype.rs2), Imm(0xFF));
@@ -832,9 +727,7 @@ struct AjEmitter
 			uc.or_(def(i.Rtype.rd), lo, hi);
 			} break;
 		case AjZb::kPackW: if constexpr (RV64) {
-			// The RV64 form pairs 16-bit halves into a sign-extended word. Its
-			// rs2 == x0 case is ZEXT.H, whose result is positive, so the sign
-			// extension leaves it exactly as the zero-extension would.
+			// RV64: pairs 16-bit halves into a sign-extended word. rs2==x0 is ZEXT.H.
 			Gp t = uc.new_gp32("w"), h = uc.new_gp32("wh");
 			uc.and_(t, word_of(i.Rtype.rs1), Imm(0xFFFF));
 			uc.shl(h, word_of(i.Rtype.rs2), Imm(16));
@@ -850,8 +743,7 @@ struct AjEmitter
 			uc.ror(def(i.Rtype.rd), get(i.Rtype.rs1), get(i.Rtype.rs2));
 			break;
 		case AjZb::kRori:
-			// The rotate amount is masked to the register width, so a zero
-			// amount is a rotate by zero rather than by the full width.
+			// Rotate amount is masked to XLEN; zero rotates by zero.
 			uc.ror(def(i.Itype.rd), get(i.Itype.rs1), Imm(shamt));
 			break;
 		case AjZb::kRolw:
@@ -907,8 +799,7 @@ struct AjEmitter
 			break;
 
 		// --- Zicond: conditional zero ---
-		// rs2 is the condition and rs1 the value, so the other select operand
-		// is a zero immediate rather than a second register.
+		// rs2 is the condition, rs1 the value.
 		case AjZb::kCzeroEqz:   // rd = (rs2 == 0) ? 0 : rs1
 			uc.select(def(i.Rtype.rd), Imm(0), get(i.Rtype.rs1),
 				cmp_eq(get(i.Rtype.rs2), Imm(0)));
@@ -919,17 +810,14 @@ struct AjEmitter
 			break;
 
 		case AjZb::kNone:
-			// Unreachable: the caller only arrives here for a classified
-			// encoding, and aj_is_emittable() rejected everything else.
+			// Unreachable: aj_is_emittable() rejects unclassified encodings.
 			failed = true;
 			break;
 		}
 	}
 
 	// --- memory ---
-	// The effective address lives in a host pointer-sized register. On RV32 it is
-	// only ever written through its 32-bit half, so the upper half is implicitly
-	// zeroed and the register can be used directly as an index into the arena.
+	// EA in a pointer-sized register; RV32 writes via r32 so the upper half is zero.
 	Gp address_of(unsigned rs1, int32_t simm) {
 		Gp a = uc.new_gp_ptr("addr");
 		if constexpr (RV64) {
@@ -946,8 +834,7 @@ struct AjEmitter
 		}
 		return a;
 	}
-	/// @brief The guest-width view of an address register, for bounds arithmetic
-	/// and for passing the address to a helper.
+	/// @brief Guest-width view of an address register.
 	static Gp addr_value(const Gp& a) {
 		if constexpr (RV64) return a; else return a.r32();
 	}
@@ -958,9 +845,7 @@ struct AjEmitter
 	static FuncSignature store_signature() {
 		return FuncSignature::build<void, void*, void*, address_t, address_t, address_t>();
 	}
-	// A helper that faults records the exception and zeroes max_counter; leave the
-	// region right there rather than running on with a half-executed instruction.
-	// `pend` excludes the faulting instruction, which never retired.
+	// A faulting helper zeroes max_counter; exit rather than running a half-executed instruction.
 	void emit_fault_check(address_t pc, uint32_t pend) {
 		Label ok = uc.new_label();
 		Gp maxc = uc.new_gp64("maxc");
@@ -1012,29 +897,18 @@ struct AjEmitter
 		node->set_arg(4, rvimm(pc));
 		emit_fault_check(pc, pend);
 	}
-	/// @brief True when an inlined access needs a bounds check and a slow path.
-	/// @details Only the flat arena does. An N-bit encompassing arena contains
-	/// every address the mask can produce, so there is nothing to check.
+	/// @brief True for flat arena (needs bounds check); N-bit encompassing arena needs no check.
 	bool arena_is_checked() const noexcept { return info.arena_mask == 0; }
-	/// @brief The arena index for an effective address.
-	/// @details The flat arena is indexed by the guest address directly. An N-bit
-	/// encompassing arena is indexed by the masked address -- the arena is
-	/// allocated with two pages of slack past 2^N so that an access straddling
-	/// the top still lands in mapped memory, which is what lets the mask stand
-	/// alone as the whole bounds treatment.
+	/// @brief Arena index: direct for flat, masked for N-bit encompassing (over-allocation covers straddles).
 	Gp arena_index(const Gp& addr) {
-		// A mask that already covers the full guest address width cannot change
-		// the address: RV32 under a 32-bit arena is the common case.
+		// Full-width mask is a no-op (common for RV32 under a 32-bit arena).
 		if (info.arena_mask == 0 || info.arena_mask >= uint64_t(address_t(~address_t(0))))
 			return addr;
 		Gp t = uc.new_gp_ptr("aidx");
 		uc.and_(t, addr, Imm(info.arena_mask));
 		return t;
 	}
-	// (addr - RWREAD_BEGIN) < read_boundary, the same single-sided check the
-	// interpreter uses. Both bounds are read from the machine rather than baked
-	// in, so the code stays valid for every machine sharing this execute segment.
-	// An unchecked arena emits nothing here, and has no slow path to branch to.
+	// Single-sided bounds check matching the interpreter; bounds read from the machine, not baked in.
 	void emit_arena_check(const Gp& addr, bool is_write, const Label& slow) {
 		if (!arena_is_checked())
 			return;
@@ -1104,21 +978,14 @@ struct AjEmitter
 
 	// --- interpreter handler calls -----------------------------------------
 
-	/// @brief Runs one instruction on the interpreter's own handler.
-	/// @details The handler works on the register file in memory, so every cached
-	/// register it could name is written back before the call, and rd re-read
-	/// after it. Writing back more than the handler reads is harmless, as the
-	/// stored value is the architectural one either way, but reloading a register
-	/// that was never stored would revive a stale value: hence the reload set is
-	/// a subset of the store set by construction.
+	/// @brief Run one instruction via the interpreter handler; write back cached operands, reload rd.
 	void emit_handler_call(address_t pc, rv32i_instruction i)
 	{
 		emit_handler_call(pc, i, pending - 1);
 	}
 	void emit_handler_call(address_t pc, rv32i_instruction i, uint32_t pend)
 	{
-		// Every encoding reached this way names its registers in the standard
-		// fields: none is an R4-type with an rs3.
+		// All encodings reaching here use standard register fields (no R4-type rs3).
 		const unsigned rd  = i.Itype.rd;
 		const unsigned rs1 = i.Itype.rs1;
 		const unsigned rs2 = (i.whole >> 20) & 0x1F;
@@ -1132,8 +999,7 @@ struct AjEmitter
 		store_int(rs1); store_int(rs2); store_int(rd);
 		store_fp(rs1);  store_fp(rs2);  store_fp(rd);
 
-		// Resolved here rather than at run-time: decoding is a pure function of
-		// the encoding, which is a constant.
+		// Handler resolved at JIT time; decoding is pure on the constant encoding.
 		const auto handler = uint64_t(uintptr_t(CPU<W>::decode(i).handler));
 		InvokeNode* node;
 		cc.invoke(Out(node), uint64_t(uintptr_t(info.cb->execute)),
@@ -1150,17 +1016,12 @@ struct AjEmitter
 	}
 
 	// --- vector memory ------------------------------------------------------
-	// Two transfer forms move a whole number of vector registers between the
-	// arena and the register file. The registers of a group are adjacent in the
-	// file, so the transfer is one block copy, and a wider group only lengthens
-	// it. Everything else is a handler call, as are these two whenever their
-	// run-time guard does not hold.
+	// Unit-stride and whole-register transfers are block copies between arena and register file.
+	// All other vector memory ops fall back to the interpreter handler.
 #ifdef RISCV_EXT_VECTOR
 	static constexpr uint32_t VLEN = VectorLane::size();
 	static_assert(VLEN % 16 == 0, "A vector register is copied 128 bits at a time");
-	// The longest inlined transfer is eight registers: both LMUL=8 and the widest
-	// whole-register form. It must fit inside the arena over-allocation, as a
-	// single check on the start address covers the whole transfer.
+	// Max inlined transfer is 8 regs (LMUL=8); must fit within the arena over-allocation.
 	static_assert(8 * uint64_t(VLEN) <= Memory<W>::OVERALLOCATE,
 		"A vector register group must fit within the arena over-allocation");
 
@@ -1169,10 +1030,7 @@ struct AjEmitter
 		while (v > 1) { v >>= 1; n++; }
 		return n;
 	}
-	/// @brief The largest EMUL the destination register can legally name.
-	/// @details A group must be aligned to its own size and fit within v0-v31.
-	/// Legality is monotone in EMUL, so for a constant register number the
-	/// run-time check is a single comparison against this bound.
+	/// @brief Max legal EMUL for a given vreg (alignment + fit within v0-v31).
 	static int max_legal_emul(unsigned vreg) {
 		int best = 0;
 		for (int e = 1; e <= 3; e++) {
@@ -1189,9 +1047,7 @@ struct AjEmitter
 			uc.v_storeu128(mem_ptr(dst, offset + int32_t(o)), t);
 		}
 	}
-	/// @brief vl<n>re<eew>.v / vs<n>r.v: n whole registers, at a length fixed by
-	/// the encoding. It reads neither vl nor vtype, so only the address is
-	/// checked.
+	/// @brief Whole-register load/store: fixed length from encoding, checks only address.
 	void emit_vector_whole_register(address_t pc, const AjVectorMem& vmi, rv32i_instruction i)
 	{
 		auto addr = address_of(vmi.rs1, 0);
@@ -1213,12 +1069,7 @@ struct AjEmitter
 			uc.j(done);
 		});
 	}
-	/// @brief vle<eew>.v / vse<eew>.v: vl*EEW contiguous bytes.
-	/// @details The guard mirrors unit_stride_transfer() in rvv_instr.cpp, at
-	/// run-time because no vsetvli is inlined ahead of it: a valid vtype, an EMUL
-	/// the destination register may legally name, and a length that fits the
-	/// group it names. A transfer ending in a partial register -- the last
-	/// iteration of a strip-mined loop -- goes to the handler instead.
+	/// @brief Unit-stride vle/vse: run-time guard checks vtype, EMUL legality, and whole-register length.
 	void emit_vector_unit_stride(address_t pc, const AjVectorMem& vmi, rv32i_instruction i)
 	{
 		const uint32_t eew = vmi.eew_log2;
@@ -1228,7 +1079,7 @@ struct AjEmitter
 		uc.load_u8(vill, mem_ptr(cpu, info.rvv_vill));
 		uc.j(slow, test_nz(vill));
 
-		// EMUL = LMUL * EEW / SEW, as a count of registers, in log2 form.
+		// EMUL = LMUL * EEW / SEW (log2).
 		Gp emul = uc.new_gp32("vemul");
 		uc.load(emul, mem_ptr(cpu, info.rvv_lmul));
 		Gp sew = uc.new_gp32("vsew");
@@ -1238,9 +1089,7 @@ struct AjEmitter
 		uc.j(slow, scmp_lt(emul, Imm(-3)));
 		uc.j(slow, scmp_gt(emul, Imm(max_legal_emul(vmi.vreg))));
 
-		// The length, in bytes and then in whole registers. vl is unchanged by a
-		// later vtype write, so a length that no longer fits its group, or that
-		// is not a whole number of registers, goes the long way.
+		// Length in bytes → whole registers. Partial-register transfers go to handler.
 		Gp bytes = new_ireg("vbytes");
 		uc.load(bytes, mem_ptr(cpu, info.rvv_vl));
 		if (eew != 0) uc.shl(bytes, bytes, Imm(eew));
@@ -1305,28 +1154,20 @@ struct AjEmitter
 #endif
 
 	// --- F/D extension -----------------------------------------------------
-	// f-registers live in vector registers of the host, one guest register per
-	// virtual register, and every operation works on the low 32 or 64 bits of
-	// one. The upper half of an f-register written by a single-precision
-	// operation is architecturally NaN-boxed; libriscv only pays for that under
-	// `nanboxing`, and otherwise leaves it as whatever the host op produced,
-	// which is the same contract the interpreter documents for `set_float()`.
+	// f-registers live in host XMM/NEON lanes. Single-precision results are NaN-boxed
+	// only when the `nanboxing` policy is active.
 
-	/// @brief Fill the upper half of an f-register with ones, so that reading a
-	/// single-precision value back as a double yields a NaN, as on hardware.
+	/// @brief NaN-box: fill upper 32 bits with ones so a double read yields NaN.
 	void nanbox(const Vec& d) {
 		if constexpr (riscv::nanboxing)
 			uc.v_or_f64(d, d, uc.simd_const(&uc.ct().p_FFFFFFFF00000000, Bcst::k64, d));
 	}
-	/// @brief Finish a result of the given precision: single-precision results
-	/// are the only ones that leave the upper half of the register undefined.
+	/// @brief NaN-box single-precision results; doubles need no fixup.
 	void fp_result(const Vec& d, bool is_double) {
 		if (!is_double) nanbox(d);
 	}
 
-	// Bitwise operations have no precision of their own, but keeping them in
-	// the same domain as the surrounding arithmetic avoids the bypass penalty
-	// x86 charges for moving a value between the float and double pipelines.
+	// Bitwise ops stay in the caller's precision domain to avoid x86 bypass penalties.
 	void v_and_fp(bool dbl, const Vec& d, const Vec& a, const Operand& b) {
 		if (dbl) uc.v_and_f64(d, a, b); else uc.v_and_f32(d, a, b);
 	}
@@ -1339,8 +1180,7 @@ struct AjEmitter
 	void v_xor_fp(bool dbl, const Vec& d, const Vec& a, const Operand& b) {
 		if (dbl) uc.v_xor_f64(d, a, b); else uc.v_xor_f32(d, a, b);
 	}
-	/// @brief dst = mask ? if_set : if_clear, where `mask` came out of a scalar
-	/// compare and is therefore all-ones or all-zeros in the low lane.
+	/// @brief dst = mask ? if_set : if_clear (mask is all-ones or all-zeros from a scalar compare).
 	void select_masked(bool dbl, const Vec& dst, const Vec& mask,
 		const Vec& if_set, const Vec& if_clear)
 	{
@@ -1351,8 +1191,7 @@ struct AjEmitter
 		v_or_fp(dbl, dst, a, b);
 	}
 
-	// FLD and FSD are 64-bit accesses on both guest widths, so the FP helpers
-	// carry a uint64_t payload rather than an address_t one.
+	// FP helpers carry uint64_t: FLD/FSD are 64-bit on both RV32 and RV64.
 	static FuncSignature fp_load_signature() {
 		return FuncSignature::build<uint64_t, void*, void*, address_t, address_t>();
 	}
@@ -1441,23 +1280,14 @@ struct AjEmitter
 		}
 	}
 
-	/// @brief Move a 32-bit result into a guest register, widening it on RV64.
-	/// @details Every FP instruction that writes an integer register produces
-	/// either a sign-extended word (FMV.X.W) or a small positive number
-	/// (FEQ/FLT/FLE, FCLASS), so one sign-extending path serves all of them.
+	/// @brief Move a 32-bit FP result into a guest int register, sign-extending on RV64.
 	void set_word_result(unsigned rd, const Gp& t32) {
 		if constexpr (RV64) host_sign_extend_word(cc, def(rd), t32);
 		else                uc.mov(def(rd), t32);
 	}
 
-	/// @brief The four fused multiply-add opcodes.
-	/// @details asmjit has all four shapes built in, but its negated forms
-	/// negate a different operand than the interpreter's std::fma() calls do.
-	/// The arithmetic is identical either way; the NaN that comes out is not,
-	/// because a hardware FMA propagates a NaN operand unchanged and so records
-	/// which operand was negated on the way in. Spelling every form as an
-	/// explicit sign flip plus a plain multiply-add costs one xor and keeps the
-	/// two backends bit-identical.
+	/// @brief FMADD/FMSUB/FNMSUB/FNMADD: explicit sign flip + FMADD to keep NaN
+	/// propagation bit-identical with the interpreter's std::fma path.
 	void emit_fmadd(rv32i_instruction i)
 	{
 		const rv32f_instruction fi { i };
@@ -1492,8 +1322,7 @@ struct AjEmitter
 		fp_result(d, dbl);
 	}
 
-	/// @brief FMIN/FMAX, which no host instruction implements: RISC-V orders
-	/// -0.0 below +0.0 and canonicalizes a pair of NaN operands.
+	/// @brief FMIN/FMAX: helper call (RISC-V orders -0.0 < +0.0 and canonicalizes NaN pairs).
 	void emit_fminmax(const rv32f_instruction& fi, bool dbl)
 	{
 		const bool is_max = (fi.R4type.funct3 == 0x1);
@@ -1510,8 +1339,7 @@ struct AjEmitter
 		fp_result(fdef(fi.R4type.rd), dbl);
 	}
 
-	/// @brief FSGNJ, FSGNJN and FSGNJX: rs1's magnitude with a sign derived
-	/// from rs2. This is also how a compiler spells FMV, FNEG and FABS.
+	/// @brief FSGNJ/N/X: magnitude from rs1, sign from rs2. Also encodes FMV/FNEG/FABS.
 	void emit_fsgnj(const rv32f_instruction& fi, bool dbl)
 	{
 		const Vec a = fget(fi.R4type.rs1), b = fget(fi.R4type.rs2);
@@ -1542,9 +1370,7 @@ struct AjEmitter
 		fp_result(d, dbl);
 	}
 
-	/// @brief FEQ, FLT and FLE, whose result is an integer 0 or 1.
-	/// @details All three are ordered comparisons: a NaN operand makes them
-	/// false, which is exactly what the host's scalar compare already answers.
+	/// @brief FEQ/FLT/FLE → integer 0 or 1. Ordered comparisons; NaN yields false.
 	void emit_fcmp(const rv32f_instruction& fi, bool dbl)
 	{
 		const Vec a = fget(fi.R4type.rs1), b = fget(fi.R4type.rs2);
@@ -1554,19 +1380,14 @@ struct AjEmitter
 		case 0x1: if (dbl) uc.s_cmp_lt_f64(m, a, b); else uc.s_cmp_lt_f32(m, a, b); break;
 		case 0x2: if (dbl) uc.s_cmp_eq_f64(m, a, b); else uc.s_cmp_eq_f32(m, a, b); break;
 		}
-		// The low lane is all ones or all zeros; one bit of it is the result.
+		// Extract one bit from the all-ones/all-zeros mask.
 		Gp t = uc.new_gp32("fcmpr");
 		uc.s_extract_u32(t, m, 0);
 		uc.and_(t, t, Imm(1));
 		set_word_result(fi.R4type.rd, t);
 	}
 
-	/// @brief FCVT.S.D and FCVT.D.S.
-	/// @details A NaN operand must come out as the destination format's
-	/// canonical NaN, which the host conversion does not do -- it carries the
-	/// payload across. Selecting the canonical NaN of the *source* format
-	/// before converting gets there in one fewer domain: the two canonical NaNs
-	/// convert into each other exactly.
+	/// @brief FCVT.S.D / FCVT.D.S: canonicalize NaN in the source format before converting.
 	void emit_fcvt_sd_ds(const rv32f_instruction& fi, bool to_double)
 	{
 		const Vec a = fget(fi.R4type.rs1);
@@ -1585,12 +1406,7 @@ struct AjEmitter
 		}
 	}
 
-	/// @brief FCVT.{W,WU,L,LU}.{S,D}, all of them helper calls.
-	/// @details Every host conversion instruction disagrees with RISC-V about
-	/// NaN and about overflow -- x86 answers the integer indefinite for both,
-	/// where RISC-V clips to the nearest representable extreme -- and the
-	/// rounding mode is part of the instruction rather than of the register
-	/// file, so there is little of the sequence left to inline.
+	/// @brief FCVT.{W,WU,L,LU}.{S,D}: helper call (host disagrees on NaN/overflow saturation and RM).
 	void emit_fcvt_to_int(const rv32f_instruction& fi, bool dbl)
 	{
 		const auto* cb = info.cb;
@@ -1613,10 +1429,7 @@ struct AjEmitter
 		node->set_ret(0, def(fi.R4type.rd));
 	}
 
-	/// @brief FCVT.{S,D}.{W,WU,L,LU}.
-	/// @details Without FCSR emulation these carry no inexactness reporting, so
-	/// the signed forms are a single host instruction. Only a 64-bit unsigned
-	/// source needs a helper: no host has an instruction for it.
+	/// @brief FCVT.{S,D}.{W,WU,L,LU}: inline except LU (no host instruction for uint64→float).
 	void emit_fcvt_from_int(const rv32f_instruction& fi, bool dbl)
 	{
 		const Vec d = fdef(fi.R4type.rd);
@@ -1650,8 +1463,7 @@ struct AjEmitter
 		fp_result(d, dbl);
 	}
 
-	/// @brief The OP-FP opcode, which carries every FP instruction that is not
-	/// a load, a store or a fused multiply-add.
+	/// @brief OP-FP dispatch: all FP ops except loads, stores, and FMA.
 	void emit_fpfunc(rv32i_instruction i)
 	{
 		const rv32f_instruction fi { i };
@@ -1739,9 +1551,7 @@ struct AjEmitter
 	}
 
 	// --- pre-pass ---
-	// An inlined vector transfer reads its base address from an integer register
-	// and reaches the arena. The vector registers, vl and vtype live in memory
-	// and are never cached.
+	// Vector transfers need the base address register and the arena; vregs/vl/vtype stay in memory.
 	void prepass_vector_memory(rv32i_instruction i) {
 		const auto vmi = aj_vector_memory_form(i);
 		if (!vector_memory_inlinable(vmi))
@@ -1750,9 +1560,7 @@ struct AjEmitter
 		needs_arena = true;
 	}
 
-	// Collects the read set, the write set and the in-region branch targets in a
-	// single walk, so the emission loop is free of path-dependent state.
-	// The read set must mirror exactly which registers the emitter calls get() on.
+	// Single walk: collects read-set, write-set, and branch targets. Read-set must mirror get() usage.
 	void prepass() {
 		for (const address_t pc : instrs) {
 			const auto i = aj_decode<W>(seg, pc, seg_end).instr;
@@ -1812,10 +1620,7 @@ struct AjEmitter
 					writeset.set(i.Itype.rd);
 				break;
 
-			// An F/D encoding without a native form is a handler call, which
-			// reaches the register file through memory and so belongs in
-			// neither set: emit_handler_call() writes back and re-reads
-			// whatever is cached anyway.
+			// Non-native F/D: handler call writes/reads via memory, so no set membership needed.
 			case RV32F_LOAD:               // FLW, FLD
 				if (!aj_fp_native<W>(i)) { prepass_vector_memory(i); break; }
 				readset.set(i.Itype.rs1);
@@ -1855,7 +1660,7 @@ struct AjEmitter
 					break;
 				case RV32F__FCVT_SD_DS:
 					fp_readset.set(rs1); fp_writeset.set(rd);
-					// The canonical NaN is selected in the *source* format.
+					// Canonicalize in the source format.
 					if (dbl) needs_canon32 = true; else needs_canon64 = true;
 					break;
 				case RV32F__FEQ_LT_LE:
@@ -1882,8 +1687,7 @@ struct AjEmitter
 				break;
 			}
 		}
-		// A LOAD with rs1 == x0 reads no register, but the read set is allowed to
-		// be conservative: an unused preload costs one instruction in the prologue.
+		// Conservative: an unused preload costs one prologue instruction.
 		readset |= writeset;      // written registers must be loaded too, see flush_regs
 		needs_zero = readset[0];
 		readset.reset(0);
@@ -1891,9 +1695,7 @@ struct AjEmitter
 		// f0 is an ordinary register, so the f-register sets keep every bit.
 		fp_readset |= fp_writeset;
 
-		// The prologue jumps to whichever entry it was called at, so each of them
-		// needs a label just like any other branch target. A lone entry that is
-		// also the lowest address is the one case the prologue falls straight into.
+		// Each entry needs a label; a lone entry at the lowest address falls through.
 		if (needs_entry_dispatch())
 			branch_targets.insert(entries.begin(), entries.end());
 		else if (!entry_is_first())
@@ -1906,11 +1708,7 @@ struct AjEmitter
 	// --- emission ---
 	bool failed = false;
 
-	// A region with several entry points is one function reached at several guest
-	// addresses, so the prologue has to select the matching label. Dispatch left
-	// the address in AjState::pc, and the entries are sorted, so a binary search
-	// costs ceil(log2(n)) compares -- about four for a typical region, paid once
-	// per region entry rather than per instruction.
+	// Multi-entry dispatch: binary search on AjState::pc, O(log n) compares.
 	void emit_entry_dispatch()
 	{
 		Gp pcv = new_ireg("entry_pc");
@@ -1933,13 +1731,8 @@ struct AjEmitter
 
 	void emit_body()
 	{
-		// Labels are bound only at addresses actually jumped to from within the
-		// region. `begin` needs no label of its own: the prologue falls straight
-		// into it, and if it is also a branch target it gets bound here, after the
-		// prologue loads, which is exactly right.
-		// `fallthrough_pc` is the address linear control flow has arrived at, or 0
-		// when the previous instruction did not fall through at all. The prologue
-		// falls into the first emitted address only when that is also the entry.
+		// Labels bound only at branch targets. `fallthrough_pc` tracks linear control flow;
+		// 0 means the previous instruction did not fall through.
 		if (needs_entry_dispatch())
 			emit_entry_dispatch();
 		else if (!entry_is_first())
@@ -1954,8 +1747,7 @@ struct AjEmitter
 				else pending = 0;   // only reachable through the label
 				uc.bind(label_at(pc));
 			} else if (pc != fallthrough_pc) {
-				// Discovery only produces addresses reachable from the entry, so an
-				// address that neither falls through nor carries a label cannot exist.
+				// Unreachable address: discovery guarantees reachability from the entry.
 				failed = true;
 				return;
 			}
@@ -1979,39 +1771,32 @@ struct AjEmitter
 
 			case RV32I_FENCE:
 				if (i.Itype.funct3 == 0x0) {
-					// The interpreter makes every FENCE form a full barrier; match
-					// it rather than reason about which guest orderings the host
-					// covers.
+					// Match the interpreter's full-barrier FENCE semantics.
 					host_fence(cc);
 				} else if (aj_handler_classify<W>(i) == AjHandler::kCboZero) {
 					emit_handler_call(pc, i);
 				}
-				// Zicbom's CBO.INVAL, CBO.CLEAN and CBO.FLUSH have no cache to
-				// act on: there is nothing to emit for them.
+				// Zicbom CBO ops are no-ops (no guest cache to act on).
 				break;
 
 			case RV32I_SYSTEM:
 				if (i.Itype.funct3 == 0x4) {
-					// Zimop: a well-formed MOP writes zero to rd, and is
-					// otherwise inert.
+					// Zimop: MOP writes zero to rd.
 					if (i.Itype.rd != 0)
 						uc.mov(def(i.Itype.rd), Imm(0));
 				} else if (i.Itype.funct3 != 0x0) {
 					emit_handler_call(pc, i);   // the CSR instructions
 				}
-				// Zawrs' WRS.NTO and WRS.STO may return immediately, and in
-				// libriscv they do: nothing to emit.
+				// Zawrs WRS.NTO/WRS.STO: always returns immediately, nothing to emit.
 				break;
 
 			case RV32A_ATOMIC:
-				// LR/SC keep a reservation, and the AMOs read-modify-write guest
-				// memory: both belong to the interpreter.
+				// LR/SC and AMOs go through the interpreter.
 				emit_handler_call(pc, i);
 				break;
 
 			case RV32I_OP_IMM: {
-				// Zb* first: BSETI and friends share funct3 with SLLI, and RORI
-				// and friends share it with SRLI/SRAI.
+				// Zb* first: BSETI/RORI share funct3 with SLLI/SRLI/SRAI.
 				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
 					emit_zb(zb, i);
 					break;
@@ -2037,7 +1822,7 @@ struct AjEmitter
 				} break;
 
 			case RV32I_OP: {
-				// Zb* first: ANDN, ORN and XNOR share funct7 0x20 with SUB and SRA.
+				// Zb* first: ANDN/ORN/XNOR share funct7 0x20 with SUB/SRA.
 				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
 					emit_zb(zb, i);
 					break;
@@ -2063,7 +1848,7 @@ struct AjEmitter
 				} break;
 
 			case RV64I_OP_IMM32: if constexpr (RV64) {
-				// Zb* first: SLLI.UW shares funct3 with SLLIW, and RORIW with SRLIW.
+				// Zb* first: SLLI.UW/RORIW share funct3 with SLLIW/SRLIW.
 				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
 					emit_zb(zb, i);
 					break;
@@ -2085,8 +1870,7 @@ struct AjEmitter
 				} break;
 
 			case RV64I_OP32: if constexpr (RV64) {
-				// Zb* first, and before word_of(): the .UW forms and ZEXT.H
-				// produce full 64-bit results rather than sign-extended words.
+				// Zb* first (before word_of): .UW/ZEXT.H produce full 64-bit results.
 				if (const AjZb zb = aj_zb_classify<W>(i); zb != AjZb::kNone) {
 					emit_zb(zb, i);
 					break;
@@ -2121,9 +1905,7 @@ struct AjEmitter
 				emit_store(pc, i.Stype.funct3, i.Stype.rs1, i.Stype.rs2, i.Stype.signed_imm());
 				break;
 
-			// Every F/D opcode splits the same way: the encodings with a native
-			// form take it, and the rest -- Zfa, Zfhmin, and anything the host
-			// cannot round correctly -- go to the interpreter's handler.
+			// F/D split: native forms are inlined, the rest (Zfa, Zfhmin, etc.) go to handler.
 			case RV32F_LOAD:
 				if (aj_fp_native<W>(i))
 					emit_fp_load(pc, i.Itype.funct3, i.Itype.rd, i.Itype.rs1, i.Itype.signed_imm());
@@ -2143,9 +1925,7 @@ struct AjEmitter
 				break;
 
 			case RV32V_OP:
-				// Only the memory forms above are emitted natively: vsetvl, the
-				// arithmetic and the permutes all run on the interpreter's
-				// handler.
+				// vsetvl, arithmetic, and permutes go to handler; only memory ops are inlined.
 				emit_handler_call(pc, i);
 				break;
 
@@ -2173,8 +1953,7 @@ struct AjEmitter
 				const Gp a = get(i.Btype.rs1);
 				const bool vs_zero = (i.Btype.rs2 == 0);
 				const Gp b = vs_zero ? a : get(i.Btype.rs2);   // unused when vs_zero
-				// Jump *around* the taken path with the inverted condition, so the
-				// taken path stays inline.
+				// Inverted condition jumps around the taken path (keeps taken inline).
 				switch (i.Btype.funct3) {
 				case 0x0: // BEQ
 					uc.j(notaken, vs_zero ? cmp_ne(a, Imm(0)) : cmp_ne(a, b)); break;
@@ -2213,8 +1992,7 @@ struct AjEmitter
 				} break;
 
 			case RV32I_JALR: {
-				// Read rs1 into a temporary before writing rd: they may be the same
-				// register, and RISC-V takes the old value of rs1 as the target.
+				// Read rs1 before writing rd: they may alias, and JALR uses the old rs1.
 				Gp target = new_ireg("jalr");
 				const int32_t simm = i.Itype.signed_imm();
 				if (i.Itype.rs1 == 0) {
@@ -2237,9 +2015,7 @@ struct AjEmitter
 				break;
 			}
 
-			// The region ends wherever linear control flow leaves the set of
-			// addresses discovery reached: past the last instruction, or at a
-			// fall-through that the per-region instruction cap cut off.
+			// Exit when fall-through leaves the discovered instruction set.
 			if (fallthrough_pc != 0 && !in_region(fallthrough_pc)) {
 				emit_exit(fallthrough_pc, pending);
 				pending = 0;
@@ -2247,9 +2023,7 @@ struct AjEmitter
 			}
 		}
 
-		// Slow paths last, so that they do not split the hot path. New entries can
-		// appear while draining (a helper call emits no further slow paths, but the
-		// index-based loop keeps that from mattering either way).
+		// Emit deferred slow paths after the hot path.
 		for (size_t n = 0; n < deferred.size(); n++)
 			deferred[n]();
 	}

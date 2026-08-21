@@ -21,9 +21,8 @@ namespace riscv
 		return cache[addr / DecoderData<W>::DIVISOR];
 	}
 
-	// Walks the segment linearly using real instruction lengths, exactly the way
-	// the decoder cache does, so that an address is only ever treated as an
-	// instruction boundary when the interpreter agrees that it is one.
+	// Linear walk using real instruction lengths, matching the decoder cache's
+	// boundary decisions.
 	template <int W>
 	struct AjSegmentMap
 	{
@@ -32,16 +31,14 @@ namespace riscv
 		address_t begin, end;
 		std::vector<bool> valid_start;
 		std::set<address_t> entries;
-		/// @brief Addresses that must stay with the interpreter no matter what
-		/// instruction they hold, because something patched their decoder entry.
+		/// @brief Addresses excluded from JIT: their decoder entries are patched (e.g. breakpoints).
 		const std::set<address_t>& blocked;
 
 		bool is_instruction(address_t pc) const noexcept {
 			return pc >= begin && pc < end && (pc & 1) == 0
 				&& valid_start[(pc - begin) / 2];
 		}
-		/// @brief Emittability as region discovery sees it: an instruction the
-		/// emitter handles, at an address nobody else has claimed.
+		/// @brief Emittable and unclaimed by breakpoints or live-patches.
 		bool is_emittable_at(address_t pc, const AjDecoded& d) const noexcept {
 			return aj_is_emittable<W>(d) && blocked.count(pc) == 0;
 		}
@@ -61,10 +58,9 @@ namespace riscv
 					break;
 				valid_start[(pc - begin) / 2] = true;
 
-				// Every basic-block leader becomes an entry point, not just branch
-				// targets: without the address *after* a call, a returning function
-				// would land in the middle of a region and fall back to the
-				// interpreter for the rest of its caller.
+				// Every basic-block leader is an entry point. Without the
+				// address after a call, a returning callee would land mid-region
+				// and fall back to the interpreter.
 				if (is_emittable_at(pc, d)) {
 					switch (d.instr.opcode()) {
 					case RV32I_JAL:
@@ -82,7 +78,7 @@ namespace riscv
 						break;
 					}
 				} else {
-					// The interpreter handles this one; pick the trace back up after it.
+					// Non-emittable: resume after it.
 					candidates.push_back(pc + d.length);
 				}
 				pc += d.length;
@@ -94,20 +90,10 @@ namespace riscv
 		}
 	};
 
-	// Collects every address reachable from `entry` by fall-through and by direct
-	// branches, stopping at indirect jumps and at anything the emitter cannot
-	// handle. Bounding the region this way (rather than "everything up to the
-	// first terminator") is what keeps a region from swallowing the unreachable
-	// tail of the segment.
-	//
-	// `claimed` holds every address an earlier region already emitted, and acts
-	// as a third region boundary. Without it a region would be discovered afresh
-	// from every basic-block leader, and since regions follow fall-through, each
-	// one would re-emit the whole tail of its predecessor: measured at 12-15x
-	// duplication on ordinary programs. Reaching a claimed address instead ends
-	// the region there, and the leader that owns it becomes one of the entry
-	// points of the region that did emit it -- so every address is emitted once
-	// and is still reachable at every leader the interpreter can jump to.
+	// Discover addresses reachable from `entry` by fall-through and direct
+	// branches. Stops at indirect jumps, unemittable instructions, and addresses
+	// already `claimed` by earlier regions (prevents O(N²) re-emission of
+	// shared tails).
 	template <int W>
 	static std::vector<address_type<W>> aj_discover_region(const uint8_t* seg,
 		const AjSegmentMap<W>& map, address_type<W> entry, size_t max_instructions,
@@ -134,15 +120,10 @@ namespace riscv
 
 			switch (d.instr.opcode()) {
 			case RV32I_JAL:
-				// A JAL that links is a call, and following it inlines the callee
-				// into its caller. With `claimed` in play that is actively harmful:
-				// the callee's body is claimed piecemeal by whichever caller was
-				// discovered first, so every other region that reaches it -- the
-				// callee's own entry included -- is cut short at the holes. Ending
-				// the region at a call instead keeps a region to a single
-				// function's CFG, and the callee is entered through its own entry
-				// point. A tail call (rd == 0) is still followed: it is the end of
-				// this function either way, and the target is usually adjacent.
+				// A linking JAL is a call; following it would inline the callee
+				// and fragment it across callers via `claimed`. End the region at
+				// calls, keeping each to one function's CFG. Tail calls (rd==0)
+				// are still followed.
 				if (d.instr.Jtype.rd != 0)
 					break;
 				work.push_back(pc + d.instr.Jtype.jump_offset());
@@ -163,9 +144,8 @@ namespace riscv
 	template <int W>
 	static AjInfo<W> aj_machine_info(const CPU<W>& cpu)
 	{
-		// Displacements are measured from a live CPU instance, which is robust
-		// against any CPU<W>/Machine<W> layout change and avoids offsetof() on a
-		// non-standard-layout type.
+		// Field offsets measured from a live instance, avoiding offsetof() on
+		// non-standard-layout types.
 		const auto& mem = cpu.machine().memory;
 		const auto cpu_addr = uintptr_t(&cpu);
 
@@ -177,8 +157,7 @@ namespace riscv
 		info.arena_wrbound = int32_t(uintptr_t(&mem.memory_arena_write_boundary_ref()) - cpu_addr);
 		info.arena_roend   = int32_t(uintptr_t(&mem.initial_rodata_end_ref()) - cpu_addr);
 #ifdef RISCV_EXT_VECTOR
-		// The vector register file, and the vl/vtype fields an inlined
-		// transfer tests, measured the same way.
+		// RVV register file and vl/vtype fields, same measurement method.
 		const auto& rvv = cpu.registers().rvv();
 		info.rvv_regs = int32_t(uintptr_t(&rvv.get(0))              - cpu_addr);
 		info.rvv_vl   = int32_t(uintptr_t(&rvv.vl_ref())            - cpu_addr);
@@ -186,19 +165,14 @@ namespace riscv
 		info.rvv_lmul = int32_t(uintptr_t(&rvv.lmul_shift_ref())    - cpu_addr);
 		info.rvv_vill = int32_t(uintptr_t(&rvv.vill_ref())          - cpu_addr);
 #endif
-		// Two arenas can be inlined against, and they are inlined differently.
 		if constexpr (riscv::encompassing_Nbit_arena != 0) {
-			// The encompassing arena spans every address the guest can form, so
-			// the access is a mask and nothing else -- no bounds check, no
-			// out-of-line path. This is the cheaper of the two.
+			// N-bit encompassing arena: mask only, no bounds check.
 			info.inline_memory = mem.uses_Nbit_encompassing_arena();
 			info.arena_mask = info.inline_memory
 				? riscv::encompassing_arena_mask : 0;
 		} else {
-			// The flat arena covers only what is mapped, so each access carries
-			// the same single-sided bounds check the interpreter uses. The
-			// unaligned slow paths change what a valid access is, so they bar
-			// inlining entirely.
+			// Flat arena: single-sided bounds check per access; disabled with
+			// unaligned slow paths.
 			info.inline_memory = riscv::flat_readwrite_arena
 				&& !riscv::unaligned_memory_slowpaths
 				&& mem.uses_flat_memory_arena();
@@ -208,8 +182,7 @@ namespace riscv
 		return info;
 	}
 
-	// RV32 and RV64. RV128 and hosts without a code generator fall back to the
-	// interpreter.
+	// RV32/RV64 only. RV128 and unsupported hosts stay interpreted.
 	template <int W>
 	static void aj_translate_segment(const CPU<W>& cpu,
 		const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec,
@@ -228,11 +201,9 @@ namespace riscv
 
 		const auto t0 = std::chrono::steady_clock::now();
 
-		// --- 0. Addresses the emitter must not swallow ----------------------------
-		// A breakpoint is installed by rewriting one decoder entry, which a region
-		// that inlined that address never consults. Regions are emitted before the
-		// breakpoints are installed, so the addresses are resolved here the same
-		// way decoder_cache.cpp resolves them, and made to terminate a region.
+		// --- 0. Blocked addresses (breakpoints) -----------------------------------
+		// Breakpoints rewrite decoder entries. Regions bypass the cache, so
+		// blocked addresses must terminate regions explicitly.
 		std::set<address_t> blocked;
 		for (const auto& loc : options.ebreak_locations) {
 			const address_t addr = std::holds_alternative<address_t>(loc)
@@ -245,11 +216,9 @@ namespace riscv
 		// --- 1. Instruction boundaries and entry points ---------------------------
 		const AjSegmentMap<W> map { seg, begin, end, blocked };
 
-		// --- 2. Partition the segment into regions --------------------------------
-		// Entries are visited in address order, and each one that is not already
-		// inside a region starts a new one. The regions therefore never overlap,
-		// and every leader that lands inside one becomes an additional entry point
-		// of it rather than the head of a near-duplicate region.
+		// --- 2. Partition into non-overlapping regions ----------------------------
+		// Each unclaimed entry grows a region; leaders inside an existing region
+		// become additional entry points rather than starting duplicates.
 		struct Region {
 			address_t entry;                 // the leader the region was grown from
 			std::vector<address_t> instrs;   // ascending; may start below `entry`
@@ -277,9 +246,8 @@ namespace riscv
 		if (regions.empty())
 			return;
 
-		// Every leader inside a region is a way into it. `instrs` is ascending, so
-		// each entry list comes out ascending too, which is what the emitter's
-		// dispatch search expects.
+		// Collect entry points per region. instrs is sorted, so entries come out
+		// sorted too.
 		size_t total_entries = 0;
 		for (auto& r : regions) {
 			for (const address_t pc : r.instrs)
@@ -307,15 +275,11 @@ namespace riscv
 		exec.set_asmjit_code(std::move(ajcode));
 
 		// --- 4. Claim decoder entries ---------------------------------------------
-		// Running synchronously, the decoder cache has not been generated yet: the
-		// claimed entries are skipped by the generator and realize_fastsim() ends
-		// the surrounding block at them. A background translation arrives long
-		// after that, so it patches a copy of the finished cache instead and
-		// live-patches running threads over to it.
+		// Synchronous: entries are skipped by the cache generator. Background:
+		// live-patches a finished cache copy.
 		std::unique_ptr<LivePatchedDecoderCache<W>> patched;
 		if (live_patch) {
-			// The decoder cache is finished by the thread that started us, and
-			// activation both reads and patches it. Wait for it to be complete.
+			// Wait for the decoder cache to be fully built before patching.
 			exec.wait_for_decoder_cache_ready();
 			patched = std::make_unique<LivePatchedDecoderCache<W>>(exec, total_entries);
 		}
@@ -324,13 +288,11 @@ namespace riscv
 		for (size_t i = 0; i < regions.size(); i++) {
 			if (mappings[i] == nullptr)
 				continue;
-			// All of a region's entry points share its function: the emitted
-			// prologue dispatches on the entry PC that dispatch left in AjState.
+			// All entry points share the region's function; the prologue
+			// dispatches on the entry PC stored in AjState.
 			for (const address_t addr : regions[i].entries) {
 			#ifdef RISCV_BINARY_TRANSLATION
-				// Binary translation ran first and already owns this entry.
-				// (When asmjit_override_bintr is set, asmjit runs first instead and
-				// the symmetric check in tr_translate.cpp keeps bintr off these.)
+				// Binary translation already owns this entry.
 				if (aj_decoder_entry_at(exec.decoder_cache(), addr)
 					.get_bytecode() == RV32I_BC_TRANSLATOR)
 					continue;
@@ -350,8 +312,7 @@ namespace riscv
 		}
 
 		if (live_patch) {
-			// Hand the patched decoder cache to the execute segment, and switch
-			// any thread that is running inside a claimed block over to it.
+			// Activate the patched cache and migrate running threads.
 			patched->activate(true);
 		}
 
@@ -370,17 +331,13 @@ namespace riscv
 	{
 #if RISCV_ASMJIT_HAS_BACKEND
 		if constexpr (W == 4 || W == 8) {
-			// Emitting takes long enough on a large program to be worth moving off
-			// the calling thread. The user decides how (and whether) that happens,
-			// exactly like binary translation does.
+			// Background JIT: options captured by value, segment shared.
 			const bool live_patch = options.asmjit_background_callback != nullptr;
 			if (!live_patch) {
 				aj_translate_segment<W>(*this, options, *shared_segment, false);
 				return;
 			}
 
-			// The options are copied, as the caller is free to let its own copy go
-			// out of scope while we are still translating.
 			std::function<void()> translation_step =
 			[this, options, shared_segment = shared_segment] () mutable
 			{
@@ -400,9 +357,8 @@ namespace riscv
 			try {
 				options.asmjit_background_callback(translation_step);
 			} catch (...) {
-				// If the callback failed to take ownership of the translation step,
-				// nobody will ever clear the flag, and the execute segment would
-				// block forever on destruction. Clear it here instead.
+				// Callback failed: clear the flag so the segment doesn't block
+				// on destruction.
 				shared_segment->set_background_compiling(false);
 				throw;
 			}

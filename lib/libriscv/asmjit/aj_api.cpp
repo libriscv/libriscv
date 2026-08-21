@@ -6,10 +6,7 @@
 
 namespace riscv
 {
-	// Records the exception, stops the machine, and forces every subsequent
-	// counter check in generated code to exit (max_counter = 0), so that a
-	// faulting region terminates at its next backward branch or exit instead
-	// of spinning all the way to the instruction limit.
+	// Stash exception, zero max_counter → region exit.
 	template <int W>
 	static void aj_fault(CPU<W>& cpu, AjState<W>* st) noexcept
 	{
@@ -18,9 +15,7 @@ namespace riscv
 		cpu.machine().stop();
 	}
 
-	// `result` is the C++ type the value is extended through before it lands in
-	// the destination register, which is what makes LB/LH sign-extend and
-	// LBU/LHU zero-extend without any further work in generated code.
+	// `result` type controls sign/zero extension (LB→int8_t, LBU→uint8_t, etc.).
 #define AJ_LOAD_HELPER(name, type, result)                                        \
 	template <int W>                                                              \
 	static address_type<W> name(CPU<W>& cpu, AjState<W>* st,                      \
@@ -40,8 +35,7 @@ namespace riscv
 	AJ_LOAD_HELPER(aj_load_i16, uint16_t, int16_t)
 	AJ_LOAD_HELPER(aj_load_u16, uint16_t, uint16_t)
 	AJ_LOAD_HELPER(aj_load_i32, uint32_t, int32_t)
-	// Only ever emitted for W == 8; on RV32 the result would not fit a register,
-	// but the entries exist so that the callback table has one shape.
+	// RV64 only; present in RV32 for uniform callback table shape.
 	AJ_LOAD_HELPER(aj_load_u32, uint32_t, uint32_t)
 	AJ_LOAD_HELPER(aj_load_i64, uint64_t, int64_t)
 
@@ -63,9 +57,7 @@ namespace riscv
 	AJ_STORE_HELPER(aj_store_32, uint32_t)
 	AJ_STORE_HELPER(aj_store_64, uint64_t)   // RV64 only
 
-	// --- F/D extension -----------------------------------------------------
-	// Same shape as the integer accessors, but with a uint64_t payload on both
-	// guest widths: RV32D moves 64-bit doubles through 32-bit registers.
+	// --- F/D extension: uint64_t payload (RV32D needs 64-bit transfers) ---
 #define AJ_FLOAD_HELPER(name, type)                                           \
 	template <int W>                                                          \
 	static uint64_t name(CPU<W>& cpu, AjState<W>* st,                         \
@@ -108,14 +100,12 @@ namespace riscv
 		return rv_fclass64(bits);
 	}
 
-	// The result type is what decides the extension the destination register
-	// ends up with: FCVT.WU.* delivers a *sign*-extended 32-bit result on RV64,
-	// which is why the unsigned word forms go through int32_t on the way out.
+	// `exttype` sign-extends to XLEN (FCVT.WU.* → int32_t for sign-extension).
 #define AJ_FCVT_TO_INT(name, dsttype, exttype, srctype)                       \
 	template <int W>                                                          \
 	static address_type<W> name(CPU<W>& cpu, srctype value, uint32_t rm) noexcept \
 	{                                                                         \
-		if (rm == 0x7) /* DYN: the mode comes from the fcsr */                \
+		if (rm == 0x7) /* DYN: read from FCSR */                \
 			rm = cpu.registers().fcsr().frm;                                  \
 		return address_type<W>(exttype(fcvt_to_integer<dsttype>(value, rm))); \
 	}
@@ -129,9 +119,7 @@ namespace riscv
 	AJ_FCVT_TO_INT(aj_fcvt_l_d,  int64_t,  int64_t, double)
 	AJ_FCVT_TO_INT(aj_fcvt_lu_d, uint64_t, uint64_t, double)
 
-	// Executes one instruction on the interpreter's handler. Handlers reached
-	// this way never modify PC nor stop the machine, so translated code
-	// continues at the next instruction unless the handler traps.
+	// Execute one instruction via the interpreter fallback.
 	template <int W>
 	static void aj_execute(CPU<W>& cpu, AjState<W>* st, uint32_t instr,
 		address_type<W> pc, const void* handler) noexcept
@@ -146,8 +134,7 @@ namespace riscv
 		}
 	}
 
-	// Zbc's carry-less multiplies, mirroring rvi_instr.cpp, for hosts without
-	// a carry-less multiply instruction.
+	// Zbc CLMUL software fallback (no host PCLMULQDQ).
 	template <int W>
 	static address_type<W> aj_clmul(address_type<W> a, address_type<W> b) noexcept
 	{

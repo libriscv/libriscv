@@ -17,8 +17,7 @@
 #define PCRELA(x) ((address_t) (this->pc() + (x)))
 #define PCRELS(x) hex_address(PCRELA(x)) + "LL"
 #define STRADDR(x) (hex_address(x) + "LL")
-// Reveal PC on unknown instructions
-// libtcc always runs on the current machine, so we can use the handler index directly
+// libtcc: resolve handler at translate time; shared builds dispatch at runtime
 #define UNKNOWN_INSTRUCTION() { \
   this->invalidate_all_bounds_checks(); \
   if (tinfo.is_libtcc) { \
@@ -47,8 +46,7 @@
 		code += "api.exception(cpu, " + hex_address(this->pc()) + ", ILLEGAL_OPCODE);\n"; \
   } \
 }
-// NOTE: The handler is arbitrary emulator code that can write any register,
-// so every bounds-check window dies here.
+// Handler may clobber any GPR; invalidate all bounds-check windows.
 #define WELL_KNOWN_INSTRUCTION() { \
   this->invalidate_all_bounds_checks(); \
   if (tinfo.is_libtcc) { \
@@ -99,10 +97,7 @@ struct Emitter
 {
 	static constexpr bool OPTIMIZE_SYSCALL_REGISTERS = true;
 	static constexpr unsigned XLEN = W * 8u;
-	// Number of guest GPRs mirrored into C locals. Registers at or above this
-	// index are addressed as cpu->r[N] instead. libtcc has no register allocator:
-	// every local is a stack slot anyway. This unfortunately costs latency, so
-	// short function calls suffer, but it's a worthwhile tradeoff.
+	// libtcc: all locals are stack slots, so more cached registers cost latency.
 	static constexpr int LIBTCC_CACHED_REGISTERS = 32;
 	static constexpr int SYSCC_CACHED_REGISTERS  = 18;
 	const int CACHED_REGISTERS;
@@ -145,8 +140,7 @@ struct Emitter
 		}
 	}
 	void potentially_reload_register(int reg) {
-		// The value came back from memory and may differ from what we checked,
-		// regardless of whether register caching made this emit anything.
+		// Reload from memory; may invalidate bounds-check.
 		this->invalidate_bounds_checks(reg);
 		if (uses_register_caching()) {
 			if (reg != 0 && reg < CACHED_REGISTERS) {
@@ -173,12 +167,10 @@ struct Emitter
 
 	void reload_all_registers() {
 		this->invalidate_all_bounds_checks();
-		// Use the LOAD_REGS macro to restore the registers
 		if (uses_register_caching())
 			add_code("LOAD_REGS_" + this->func + "();");
 	}
 	void store_loaded_registers() {
-		// Use the STORE_REGS macro to store the registers
 		if (uses_register_caching())
 			add_code("STORE_REGS_" + this->func + "();");
 	}
@@ -186,12 +178,10 @@ struct Emitter
 		// A system call only writes back A0/A1
 		this->invalidate_bounds_checks(10);
 		this->invalidate_bounds_checks(11);
-		// Use the LOAD_SYS_REGS macro to restore registers modified by a syscall
 		if (uses_register_caching())
 			add_code("LOAD_SYS_REGS_" + this->func + "();");
 	}
 	void store_syscall_registers() {
-		// Use the STORE_SYS_REGS macro to store registers used by a syscall
 		if (uses_register_caching()) {
 			add_code("STORE_SYS_REGS_" + this->func + "();");
 			this->m_used_store_syscalls = true;
@@ -236,9 +226,7 @@ struct Emitter
 		}
 		return "(addr_t)0";
 	}
-	// NOTE: to_reg() is only ever used to name a *destination*, so it is the one
-	// choke point every GPR write passes through. Invalidating here means a new
-	// instruction cannot silently keep a stale bounds-check window alive.
+	// Every GPR write passes through to_reg(); invalidating here kills stale bounds-check windows.
 	std::string to_reg(int reg) {
 		if (reg != 0) {
 			this->invalidate_bounds_checks(reg);
@@ -263,11 +251,8 @@ struct Emitter
 	static constexpr unsigned rvv_full_vl(unsigned vsew) noexcept {
 		return VectorLane::size() >> vsew;
 	}
-	// Condition for addressing exactly one full register: the given SEW,
-	// m1, vl == VLMAX and a valid vtype. Matches the whole-group fast path
-	// in unit_stride_load/store (rvv_instr.cpp), and is the only case where
-	// every element is active and there is no tail. A vsetvli earlier in
-	// this block may already have proven SEW/LMUL/vill, leaving only vl.
+	// Full m1 lane at this SEW: all elements active, no tail.
+	// Matches the fast path in unit_stride_load/store.
 	std::string rvv_full_lane_condition(unsigned vsew) const {
 		// An inlined vsetvli leaves vl in a C local, sparing us a reload.
 		std::string cond = (m_vl_local.empty() ? "cpu->rvv.vl" : m_vl_local)
@@ -277,9 +262,7 @@ struct Emitter
 		return cond + " && cpu->rvv.vsew == " + std::to_string(vsew)
 			+ " && cpu->rvv.lmul == 0 && !cpu->rvv.vill";
 	}
-	// The condition as a live C local, computed once per block and shared by
-	// every vector instruction in it. Always emitted at statement level, so
-	// that the bodies opened below can all see it.
+	// Per-SEW guard as a C local, shared by all vector instructions in the block.
 	const std::string& rvv_guard(unsigned vsew)
 	{
 		auto& guard = m_rvv_guard.at(vsew);
@@ -306,7 +289,6 @@ struct Emitter
 		this->m_vl_local.clear();
 		for (auto& guard : this->m_rvv_guard) guard.clear();
 	}
-	// The same for the whole configuration.
 	void reset_vector_config() {
 		this->m_vtype = {};
 		this->reset_vector_vl();
@@ -395,25 +377,15 @@ struct Emitter
 			this->potentially_reload_register(use.writes);
 		}
 	}
-	// check_group() in rvv_instr.cpp: a register group has to be aligned to
-	// its own size and fit inside v0-v31. A fractional LMUL occupies a
-	// single register, and so is never checked.
+	// Group alignment: must be aligned to its size and fit in v0-v31. Fractional LMUL = single register.
 	bool vector_group_is_aligned(unsigned vreg) const noexcept
 	{
 		const unsigned regs = (m_vtype.lmul >= 0) ? (1u << m_vtype.lmul) : 0u;
 		return regs <= 1 || (vreg % regs == 0 && vreg + regs <= 32);
 	}
-	// Whether the interpreter handler for this exact encoding can raise.
-	// Answering no removes the check after the call altogether, so this is a
-	// whitelist: every code point below has been read in rvv_instr.cpp and
-	// reaches nothing but element loops from the handler's entry.
-	//
-	// Three preconditions guard the whole arithmetic family, and an inlined
-	// vsetvli earlier in the block decides all three: require_valid_vtype()
-	// wants vill clear, the SEW dispatch wants a width the operation is
-	// defined for, and check_register_group() wants LMUL, which turns the
-	// register numbers into a static question. Without a known vtype there is
-	// nothing to prove from, and the answer is always yes.
+	// True if this encoding's handler cannot trap. Three preconditions (valid vtype,
+	// supported SEW, aligned register group) are proven by an earlier inlined vsetvli;
+	// without a known vtype the answer is always yes.
 	bool vector_handler_can_trap(const rv32i_instruction& vinstr) const
 	{
 		// Loads and stores fault on an address that is not known here.
@@ -538,9 +510,7 @@ struct Emitter
 				return true;
 			}
 		case 0x1: // OPF.VV
-			// The element-wise arithmetic the decoder splits out into its own
-			// handler. The rest of the family widens, reduces, converts or
-			// moves to a scalar, and each of those brings its own checks.
+			// Only element-wise OPF.VV arithmetic; widening/reduction/conversion handlers have their own checks.
 			if (!RVV_IS_OPFVV_ARITH(f6))
 				return true;
 			return !fp_sew || !vd_ok || !vs1_ok || !vs2_ok;
@@ -579,10 +549,7 @@ struct Emitter
 			return true;
 		}
 	}
-	// Whether the handler can leave vl or vtype different from how it found
-	// them, which is what the block's proven vtype has to survive. Only the
-	// configuration instructions reconfigure, plus the fault-only-first
-	// loads, which shorten vl at the element that faults (rvv_instr.cpp).
+	// True if the handler may modify vl or vtype. Only vsetvl* and fault-only-first loads do.
 	static bool vector_handler_can_reconfigure(const rv32i_instruction& vinstr)
 	{
 		if (vinstr.opcode() == RV32V_OP)
@@ -630,13 +597,10 @@ struct Emitter
 		this->store_loaded_registers();
 		add_code("RETURN_VALUES(0, 0);");
 	}
-	// Run one vector instruction in the interpreter, realizing and
-	// reloading only the integer registers the handler names.
+	// Interpreter fallback: realize/reload only the named scalar registers.
 	void emit_vector_slowpath()
 	{
-		// A fault-only-first load shortens vl at the element that faults,
-		// but leaves SEW, LMUL and vill as it found them; only the vsetvl*
-		// handlers rewrite the whole configuration.
+		// Fault-only-first loads shorten vl; vsetvl* rewrites the whole vtype.
 		if (vector_handler_can_reconfigure(instr)) {
 			if (instr.opcode() == RV32V_OP)
 				this->reset_vector_config();
@@ -652,8 +616,7 @@ struct Emitter
 	bool vector_memory_needs_bounds_check() noexcept {
 		return !tinfo.unsafe_remove_checks && !uses_Nbit_encompassing_arena();
 	}
-	// The element-wise float operator this encoding computes, or nullptr
-	// when it is not translated directly.
+	// Element-wise float operator, or nullptr when not inlined.
 	static const char* vector_float_operator(const rv32i_instruction& vinstr)
 	{
 		if (vinstr.vwidth() != 0x1 && vinstr.vwidth() != 0x5) // OPF.VV / OPF.VF
@@ -678,8 +641,7 @@ struct Emitter
 			return false; // Masked: element activity depends on v0 at runtime
 		return (rv32v_instruction{vinstr}.OPVV.funct6 & 0b111000) == 0b101000;
 	}
-	// log2(EEW/8) for a unit-stride access width, or -1 for the widths that
-	// are not one of the plain 8/16/32/64-bit element forms.
+	// EEW log2 for unit-stride widths, or -1 for non-standard widths.
 	static int vector_unit_stride_sew(uint32_t width) noexcept
 	{
 		switch (width) {
@@ -706,14 +668,11 @@ struct Emitter
 		unsigned vreg     = 0; // vd, or vs3 in a store
 		unsigned rs1      = 0; // the base address
 	};
-	// The longest run any inlined form moves: eight registers, which is both
-	// LMUL=8 and the widest whole-register transfer.
+	// Max inlined transfer: 8 registers (LMUL=8 / widest whole-register form).
 	static constexpr uint64_t vector_max_transfer() noexcept {
 		return 8ull * VectorLane::size();
 	}
-	// Classify a vector load or store. Everything decided here is static: nf,
-	// mew, mop, lumop, vm and the width field are all fixed by the encoding,
-	// so what is left for runtime is only what vtype decides.
+	// Static classification of vector memory ops. Only vtype-dependent checks remain at runtime.
 	VectorMemInfo vector_memory_form(const rv32i_instruction& vinstr)
 	{
 		const rv32v_instruction vi { vinstr };
@@ -762,10 +721,7 @@ struct Emitter
 			return {};
 		}
 	}
-	// The SEWs this float arithmetic can be inlined at. It follows vtype's
-	// SEW, which is known statically only after an inlined vsetvli; without
-	// one, both widths are emitted behind their own guard. Empty means "hand
-	// it to the interpreter".
+	// Inlinable SEWs for float arithmetic. Empty = use interpreter.
 	std::vector<unsigned> vector_inlinable_sews(const rv32i_instruction& vinstr)
 	{
 		if (vinstr.opcode() != RV32V_OP)
@@ -787,9 +743,7 @@ struct Emitter
 	std::string vector_vl_expr() const {
 		return m_vl_local.empty() ? "cpu->rvv.vl" : m_vl_local;
 	}
-	// What a unit-stride transfer still has to establish at runtime, which is
-	// what unit_stride_transfer() (rvv_instr.cpp) tests minus whatever a
-	// vsetvli earlier in this block has already settled.
+	// Runtime checks for a unit-stride transfer, minus what the proven vtype already settled.
 	struct VectorStridePlan {
 		std::vector<std::string> locals; // declared before the guard is tested
 		std::string guard;       // empty when nothing is left to test
@@ -849,10 +803,7 @@ struct Emitter
 			+ " << (" + emul + " > 0 ? " + emul + " : 0))";
 		return true;
 	}
-	// Open the scaffolding an inlined transfer shares: the base address in a
-	// local, then one test covering both the vtype guard and the arena
-	// bounds, so that everything left over reaches the handler in one place.
-	// Returns whether that test was emitted, and so whether there is an else.
+	// Emit prologue: base address, combined vtype+arena guard. Returns true if a fallback else-branch exists.
 	bool emit_vector_memory_prologue(const VectorMemInfo& info,
 		const std::string& addr, const std::vector<std::string>& locals,
 		const std::string& guard)
@@ -900,10 +851,7 @@ struct Emitter
 		add_code(info.is_store ? "  " + mem + " = " + lane + ";"
 		                       : "  " + lane + " = " + mem + ";");
 	}
-	// A run that is not a whole number of registers: a strip-mined loop's
-	// last iteration, or a mask register's ceil(vl/8). Spelled as a byte
-	// loop, which the C compilers we emit for turn back into the move it
-	// should be, and which libtcc can compile at all.
+	// Byte-loop fallback for partial-register runs (strip-mine tail, mask loads).
 	void emit_vector_byte_move(const VectorMemInfo& info,
 		const std::string& addr, const std::string& count)
 	{
@@ -918,9 +866,7 @@ struct Emitter
 			"    for (" + i + " = 0; " + i + " < " + count + "; " + i + "++)",
 			"      " + dst + "[" + i + "] = " + src + "[" + i + "]; }");
 	}
-	// The contiguous run itself. A whole register is by far the common size,
-	// and naming it as a constant is what lets it compile to one wide move;
-	// a full multi-register group is the same move repeated.
+	// Contiguous block copy. Constant-sized lanes compile to wide moves.
 	void emit_vector_contiguous_move(const VectorMemInfo& info,
 		const std::string& addr, const VectorStridePlan& plan)
 	{
@@ -948,9 +894,7 @@ struct Emitter
 		this->emit_vector_byte_move(info, addr, plan.bytes);
 		add_code("  }");
 	}
-	// vle<eew>.v / vse<eew>.v: vl*EEW contiguous bytes, tail included, which
-	// is one block copy at any vl and any EMUL -- the registers of a group
-	// are adjacent, so a wider group only makes the run longer.
+	// Unit-stride: vl*EEW contiguous bytes. Adjacent group registers make wider EMUL a longer run.
 	void emit_vector_unit_stride(const VectorMemInfo& info)
 	{
 		VectorStridePlan plan;
@@ -967,10 +911,7 @@ struct Emitter
 		this->emit_vector_contiguous_move(info, addr, plan);
 		this->emit_vector_memory_epilogue(info, fallback);
 	}
-	// vle<eew>.v / vse<eew>.v under v0. The elements are still contiguous,
-	// but the mask decides one at a time which of them move, so this is the
-	// one inlined form that walks elements. Inactive elements are left
-	// undisturbed, exactly as the handler leaves them.
+	// Masked unit-stride: per-element v0 test over contiguous data.
 	void emit_vector_masked_unit_stride(const VectorMemInfo& info)
 	{
 		static const char* const element_types[4] =
@@ -1063,9 +1004,7 @@ struct Emitter
 		default:                              this->emit_vector_slowpath(); break;
 		}
 	}
-	// One fused multiply-add element, exactly as the OPFVV/OPFVF handlers
-	// compute it: a is vs1 (or the scalar), b is vs2, c is the old value of
-	// the destination. The product is unrounded, hence the api.fma call.
+	// Per-element FMA expression matching the interpreter's OPFVV/OPFVF handlers.
 	static std::string vector_fma_expression(unsigned funct6, const std::string& fma,
 		const std::string& a, const std::string& b, const std::string& c)
 	{
@@ -1081,8 +1020,7 @@ struct Emitter
 		default:       return       call + "-" + a + ", " + b + ", " + c + ")"; // VFNMSAC
 		}
 	}
-	// Inline float arithmetic as straight-line code. The vl/vtype guard
-	// pins a full m1 register at this SEW: every element active, no tail.
+	// Inline float arithmetic: guard ensures full m1 register, all elements active.
 	void emit_vector_float_arith_body(unsigned vsew)
 	{
 		const rv32v_instruction vi { instr };
@@ -1119,10 +1057,7 @@ struct Emitter
 		const auto func = vinstr.vsetfunc();
 		return func == 0x0 || func == 0x1 || func == 0x3;
 	}
-	// Inline vsetvli/vsetivli. Strip-mined loops execute one per iteration,
-	// and as a handler call it would realize and reload the cached integer
-	// registers every time, which is most of what it costs. Inlined it is
-	// a compare and a few stores, and the block gets a known vtype.
+	// Inline vsetvli: avoids per-iteration register spill/reload in strip-mined loops.
 	void emit_vector_setvl()
 	{
 		const rv32v_instruction vi { instr };
@@ -1288,10 +1223,7 @@ struct Emitter
 	}
 
 	std::string arena_at(const std::string& address) {
-		// libtcc direct arena pointer access
-		// This is a performance optimization for libtcc, which allows direct access to the memory arena
-		// however, with it execute segments can no longer be shared between different machines.
-		// So, for a simple CLI tool, this is a good optimization. But not for a system of multiple machines.
+		// Direct arena pointer for libtcc (non-shared segments only).
 		if (tinfo.is_libtcc && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
 				if (riscv::encompassing_Nbit_arena == 32)
@@ -1335,10 +1267,7 @@ struct Emitter
 		return std::abs(offset - anchor) <= int64_t(Memory<W>::OVERALLOCATE - size);
 	}
 
-	// The window stays live until the base register is written, or until control
-	// flow can join from somewhere we haven't proven anything about (a label, a
-	// call that clobbers registers). Falling through a not-taken branch changes no
-	// register, so the window deliberately survives that.
+	// Window survives not-taken branches but dies at labels, calls, or base-register writes.
 	void invalidate_bounds_checks(int reg) {
 		if (reg > 0 && reg < 32) {
 			this->m_read_checked[reg].valid = false;
@@ -1361,8 +1290,7 @@ struct Emitter
 		if (m_read_checked[reg].valid
 			&& offset_is_within_overallocation(m_read_checked[reg].anchor, offset, size))
 			return true;
-		// The arena is divided into unreadable, readable and writable regions,
-		// and any region that is writable is also readable, so we inherit the check:
+		// Writable implies readable; inherit the write-check.
 		if (m_write_checked[reg].valid
 			&& offset_is_within_overallocation(m_write_checked[reg].anchor, offset, size))
 			return true;
@@ -1469,17 +1397,13 @@ struct Emitter
 			throw MachineException(INVALID_PROGRAM, "Unsupported memory store type");
 		}
 	}
-	// NOTE: TCC truncates a 64-bit absolute store address to a 32-bit displacement,
-	// so the pointer must be materialized first. It goes in one function-scope
-	// scratch, as TCC never reuses the stack slot of a block-scope local.
+	// TCC truncates 64-bit addresses; materialize pointer in a function-scope scratch.
 	void fixed_store(const std::string& type, address_t address, const std::string& value)
 	{
 		this->m_used_fixed_store = true;
 		add_code("mstore = (char*)&" + arena_at_fixed(type, address) + ";",
 			"*(" + type + "*)mstore = " + value + ";");
 	}
-	// NOTE: `size` is the width of the access, and must be passed explicitly --
-	// it used to be derived as sizeof(type), which is sizeof(std::string).
 	void memory_store(std::string type, size_t size, int reg, int32_t imm, std::string value)
 	{
 		if (uses_flat_memory_arena()) {
@@ -1539,8 +1463,6 @@ struct Emitter
 	auto& get_mappings() { return this->mappings; }
 
 	bool add_reentry_next() {
-		// Avoid re-entering at the end of the function
-		// WARNING: End-of-function can be empty
 		if (this->pc() + this->m_instr_length >= end_pc())
 			return false;
 		this->mapping_labels.insert(index() + 1);
@@ -1627,9 +1549,7 @@ private:
 		this->m_is_tracked_register[idx] = false;
 		this->invalidate_bounds_checks(idx);
 	}
-	// Forgets tracked constants only. The caller must decide separately whether the
-	// bounds-check windows also die: they survive a not-taken branch, but not a
-	// label, a call, or anything else that can change registers behind our back.
+	// Reset tracked constants only; bounds-check windows are handled separately.
 	void reset_all_tracked_constants() {
 		this->m_is_tracked_register.fill(false);
 	}
@@ -1876,14 +1796,8 @@ void Emitter<W>::emit()
 			this->reset_all_tracked_registers();
 		}
 
-		// With garbage instructions, it's possible that someone is trying to jump to
-		// the middle of an instruction. This technically allowed, so we need to check
-		// there's a jump label in the middle of this instruction.
+		// Rare: jump target at PC+2 inside a 4-byte instruction. Emit a skip-over trap.
 		if (UNLIKELY(compressed_enabled && this->m_instr_length == 4 && tinfo.jump_locations.count(this->pc() + 2))) {
-			// This occurence should be very rare, so we permit outselves to jump over it, so that
-			// we can trigger an exception for anyone trying to jump to the middle of an instruction.
-			// It is technically possible to create an endless loop without this, as we are not
-			// counting instructions correctly for this case.
 			code.append("goto " + FUNCLABEL(this->pc() + 2) + "_skip;\n");
 			code.append(FUNCLABEL(this->pc() + 2) + ":;\n");
 			code.append("api.exception(cpu, " + STRADDR(this->pc() + 2) + ", MISALIGNED_INSTRUCTION); RETURN_VALUES(0, 0);\n");
@@ -1893,10 +1807,7 @@ void Emitter<W>::emit()
 
 		auto it = tinfo.single_return_locations.find(this->pc());
 		if (it != tinfo.single_return_locations.end()) {
-			// We don't know what function we are in, but we do know what functions get called
-			// Track the current callable PC, so that we can use that for JALR return addresses
-			// If the address is zero, it means many places call this function, so we can't predict
-			// a single return address.
+			// Track the current function's PC for single-return-location optimizations.
 			if (it->second != 0)
 				current_callable_pc = this->pc();
 			else
@@ -2050,10 +1961,7 @@ void Emitter<W>::emit()
 				emit_branch({ false, tinfo.ignore_instruction_limit, jump_pc, call_pc }, " >= ");
 				break;
 			}
-			// Only the code after this branch falls through here, and a not-taken
-			// branch writes no register -- so the bounds-check windows survive it.
-			// (The taken side always leaves via goto/return, and every place it can
-			// land emits a label, where the windows are invalidated anyway.)
+			// Not-taken path: bounds-check windows survive (no register writes).
 			this->reset_all_tracked_constants(); // For now
 			} break;
 		case RV32I_JALR: {
@@ -2833,9 +2741,7 @@ void Emitter<W>::emit()
 				this->memory_load<uint64_t>(from_fpreg(fi.Itype.rd) + ".i64", "uint64_t", fi.Itype.rs1, fi.Itype.signed_imm());
 				break;
 #ifdef RISCV_EXT_VECTOR
-		// Vector loads. funct3 is the element width here: 0 for 8-bit and
-		// 5/6/7 for 16/32/64-bit, none of which collide with the scalar
-		// FLH/FLW/FLD/FLQ encodings above.
+		// RVV loads: funct3 encodes EEW, non-overlapping with scalar FP widths.
 		case 0x0: case 0x5: case 0x6: case 0x7:
 			this->emit_vector_instruction();
 			break;
@@ -2858,7 +2764,7 @@ void Emitter<W>::emit()
 				this->memory_store("int64_t", sizeof(int64_t), fi.Stype.rs1, fi.Stype.signed_imm(), from_fpreg(fi.Stype.rs2) + ".i64");
 				break;
 #ifdef RISCV_EXT_VECTOR
-		// Vector stores: like the load case above
+		// RVV stores
 		case 0x0: case 0x5: case 0x6: case 0x7:
 			this->emit_vector_instruction();
 			break;
@@ -2872,9 +2778,7 @@ void Emitter<W>::emit()
 		case RV32F_FMSUB:
 		case RV32F_FNMADD:
 		case RV32F_FNMSUB: {
-			// RISC-V spec §11.6: FMA must round only once. Route through
-			// api.fmaf{32,64} (std::fma) so the generated C is correctly
-			// fused — TCC would otherwise compile `a*b+c` as two roundings.
+			// FMA: single rounding via std::fma; TCC would otherwise split into two roundings.
 			//   FMADD  =  rs1*rs2 + rs3 →  fma(rs1, rs2,  rs3)
 			//   FMSUB  =  rs1*rs2 - rs3 →  fma(rs1, rs2, -rs3)
 			//   FNMADD = -rs1*rs2 - rs3 → -fma(rs1, rs2,  rs3)
@@ -2909,11 +2813,7 @@ void Emitter<W>::emit()
 			const auto rs1 = from_fpreg(fi.R4type.rs1);
 			const auto rs2 = from_fpreg(fi.R4type.rs2);
 			const bool f32 = (fi.R4type.funct2 == 0x0);
-			// Operand predicates for the fcsr flag code below. A NaN has an
-			// all-ones exponent and a non-zero payload; a signaling NaN also has
-			// the quiet bit clear. Everything that uses these is emitted only
-			// under fcsr_emulation: a scripting guest that never reads fflags
-			// should not pay for the tests on every FP instruction.
+			// NaN/sNaN predicates for FCSR flag computation. Only emitted under fcsr_emulation.
 			auto is_nan = [] (const std::string& r, bool is_f32) -> std::string {
 				if (is_f32)
 					return "((" + r + ".i32[0] & 0x7f800000u) == 0x7f800000u && (" + r + ".i32[0] & 0x007fffffu) != 0)";
@@ -2927,10 +2827,7 @@ void Emitter<W>::emit()
 			auto raise_nv = [] (const std::string& cond) -> std::string {
 				return "if (" + cond + ") cpu->fcsr |= 0x10;\n";
 			};
-			// Emit `dst = <expr>`. Spec §11.3 wants a NaN result to be the
-			// canonical quiet NaN rather than the payload-propagating one the
-			// host FPU produces, which again is only worth a branch when the
-			// guest is looking at the FCSR.
+			// Canonical qNaN substitution on NaN results (spec §11.3). Only under fcsr_emulation.
 			auto emit_arith = [&] (const std::string& expr, bool is_f32) -> std::string {
 				if constexpr (fcsr_emulation) {
 					if (is_f32)
@@ -3010,18 +2907,8 @@ void Emitter<W>::emit()
 				this->reset_tracked_register(fi.R4type.rd);
 				break;
 			case RV32F__FMIN_MAX:
-				// Route through api.{fmin,fmax}{32,64}_rv so the emitted
-				// C honors RISC-V's -0.0 < +0.0 convention for FMIN/FMAX
-				// (std::fmin/fmax leave the ±0 case implementation-
-				// defined; the host's fminf/fmaxf would otherwise return
-				// a sign that disagrees with the spec).
-				// A signaling NaN operand raises NV; a quiet one does not. The
-				// api callbacks below already return the finite operand, or the
-				// canonical qNaN when both are NaN.
-				// A non-NaN-boxed single-precision operand is read as the
-				// canonical quiet NaN: FMIN/FMAX then return the other
-				// operand, or the canonical qNaN when both are non-boxed,
-				// and no NV is raised.
+				// RISC-V FMIN/FMAX: -0.0 < +0.0, unlike std::fmin/fmax.
+				// Non-NaN-boxed operand → canonical qNaN.
 				if constexpr (nanboxing && W == 8) {
 					if (f32) {
 						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
@@ -3201,10 +3088,7 @@ void Emitter<W>::emit()
 				this->penalty(f32 ? 10 : 15); // sqrt is a slow operation
 				break;
 			case RV32F__FSGNJ_NX:
-				// A non-NaN-boxed single-precision operand is read as the
-				// canonical quiet NaN; either non-boxed source makes the
-				// whole result NaN. FSGNJN additionally inverts the sign bit
-				// of the NaN result (RISC-V §11.6).
+				// Non-boxed → canonical qNaN. FSGNJN inverts the qNaN sign (§11.6).
 				if constexpr (nanboxing && W == 8) {
 					if (fi.R4type.funct2 == 0x0) {
 						code += "if ((uint32_t)" + rs1 + ".i32[1] != 0xFFFFFFFFu || (uint32_t)" + rs2 + ".i32[1] != 0xFFFFFFFFu) ";
@@ -3238,10 +3122,7 @@ void Emitter<W>::emit()
 					UNKNOWN_INSTRUCTION();
 				} break;
 			case RV32F__FCVT_SD_DS:
-				// Only the single<->double pair is inlined. rs2 names the
-				// source format, so anything else here is a half (Zfhmin) or
-				// a quad, and goes to the handler rather than being read as
-				// the format this arm happens to expect.
+				// Only S↔D inlined; Zfhmin/quad go to handler.
 				if (fi.R4type.rs2 != (fi.R4type.funct2 ^ 1)) {
 					UNKNOWN_INSTRUCTION();
 				} else if (fi.R4type.funct2 == 0x0) {
@@ -3348,9 +3229,7 @@ void Emitter<W>::emit()
 						}
 						rounded = std::string(rfn) + "(" + src + ")";
 					}
-					// Converting an out-of-range float to an integer is undefined
-					// behavior in C, and this code is handed to a C compiler, so
-					// the range check is not optional. RISC-V pins the result to
+					// Range check required: out-of-range float→int is UB in C. RISC-V pins the result to
 					// the destination's extreme (NaN and positive overflow give
 					// the maximum, negative overflow the minimum) and raises NV.
 					// The bounds are powers of two, hence exactly representable.
@@ -3427,11 +3306,7 @@ void Emitter<W>::emit()
 				break;
 			} // fpfunc
 			} else {
-				// A format this emitter has no arm for: half (Zfhmin) or
-				// quad. The handler runs instead, and some of these -- the
-				// FMV.X.H that ends every half-precision read -- write an
-				// integer register, so the value the tracker believes rd
-				// holds has to die with them.
+				// Unhandled format (Zfhmin/quad): use handler, reset tracked rd.
 				UNKNOWN_INSTRUCTION();
 				this->reset_tracked_register(fi.R4type.rd);
 			}
@@ -3451,19 +3326,14 @@ void Emitter<W>::emit()
 			this->potentially_reload_register(instr.Atype.rs2);
 			break;
 		case RV32V_OP:
-			// Handlers in rvv_instr.cpp implement the full vl/vtype/mask
-			// semantics. Only element-wise float arithmetic is translated
-			// directly, with the handler as its runtime fallback.
+			// RVV: element-wise float inlined; all else to interpreter.
 #ifdef RISCV_EXT_VECTOR
 			this->emit_vector_instruction();
 #else
 			UNKNOWN_INSTRUCTION();
 #endif
 			break;
-		case 0b1011011: // Dynamic call custom-2 instruction
-			// Assumption: Dynamic calls are like regular function calls
-			// Note: This behavior can be turned off by disabling register_caching
-			// Load and realize registers A0-A7
+		case 0b1011011: // Custom-2 dynamic call: store/reload A0-A7 like a regular call.
 			for (unsigned i = 10; i < 18; i++) {
 				this->load_register(i);
 			}
@@ -3478,8 +3348,7 @@ void Emitter<W>::emit()
 			UNKNOWN_INSTRUCTION();
 		}
 	}
-	// If the function ends with an unimplemented instruction,
-	// we must gracefully finish, setting new PC and incrementing IC
+	// Fall-through exit at block end.
 	this->increment_counter_so_far();
 	exit_function(STRADDR(this->end_pc()));
 #ifdef RISCV_EXT_VECTOR
@@ -3552,9 +3421,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	code += e.get_func() + "_jumptbl:;\n";
 
-#if 0 // A failed attempt at a faster dispatch
-	// This code exists here purely as a "no, I've tried it and it's not faster"
-	// Feel free to try to optimize it further
+#if 0 // Computed-goto dispatch: not faster than the switch below.
 	const auto str_begin_pc = std::to_string(e.begin_pc()) + "UL";
 	code += "if (pc < " + str_begin_pc + " || pc >= " + std::to_string(e.end_pc()) + ") goto dispatch;\n";
 	code += "static void* jumptbl[] = {\n";
