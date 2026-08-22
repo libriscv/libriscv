@@ -273,13 +273,15 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 	execute_invalid:
 		// Calculate the current PC from the decoder pointer
 		pc = (decoder - exec_decoder) << DecoderData<W>::SHIFT;
-		// Check if the instruction is still invalid
-		try {
-			if (decoder->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
-				exec->set_stale(true);
+		// See the same fallback in cpu_dispatch.cpp
+		if (decoder->instr == 0 && LIKELY(exec->is_within(pc))) {
+			pc = this->simulate_undecoded(pc);
+			if (MACHINE().stopped())
+				return;
+			if (UNLIKELY(exec->is_stale()))
 				goto new_execute_segment;
-			}
-		} catch (...) {}
+			goto check_jump;
+		}
 		registers().pc = pc;
 		trigger_exception(ILLEGAL_OPCODE, decoder->instr);
 

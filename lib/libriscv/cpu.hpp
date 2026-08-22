@@ -48,6 +48,14 @@ namespace riscv
 		// any instruction. Can be used for debugging.
 		void simulate_precise();
 
+		/// @brief Execute directly (and slowly) on instructions in memory
+		/// @param pc The starting address, inside the current execute segment
+		/// @return The address decoded execution can resume at
+		address_t simulate_undecoded(address_t pc);
+
+		/// @brief True when the execute segment was written to (by the guest)
+		bool guest_rewrote_code(const DecodedExecuteSegment<W>& exec, address_t pc);
+
 		/// @brief  Get the current PC
 		/// @return The current PC address
 		address_t pc() const noexcept { return registers().pc; }

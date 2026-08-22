@@ -240,18 +240,15 @@ namespace riscv
 	{
 		// Calculate the current PC (mid block)
 		pc = (d - exec->decoder_cache()) << DecoderData<W>::SHIFT;
-		// Check if the instruction is still invalid
-		bool stale = false;
-		try {
-			if (d->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
-				exec->set_stale(true);
-				stale = true;
-			}
-		} catch (...) {}
-		if (stale) {
-			exec = resolve_execute_segment<W>(cpu, pc);
-			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
-			NEXT_BLOCK(0, true);
+		// See the same fallback in cpu_dispatch.cpp
+		if (d->instr == 0 && LIKELY(exec->is_within(pc))) {
+			counter.apply(MACHINE());
+			pc = cpu.simulate_undecoded(pc);
+			counter.retrieve_counters(MACHINE());
+			OVERFLOW_CHECK();
+			if (UNLIKELY(exec->is_stale()))
+				exec = resolve_execute_segment<W>(cpu, pc);
+			UNCHECKED_JUMP();
 		}
 		cpu.registers().pc = pc;
 		cpu.trigger_exception(ILLEGAL_OPCODE, d->instr);

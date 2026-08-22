@@ -342,6 +342,44 @@ restart_precise_sim:
 
 	} // CPU::simulate_precise
 
+	template<int W> RISCV_NOINLINE
+	address_type<W> CPU<W>::simulate_undecoded(address_t pc)
+	{
+		auto& exec = *this->m_exec;
+		const auto* exec_seg_data = exec.exec_data();
+		const auto* exec_decoder  = exec.decoder_cache();
+
+		while (true)
+		{
+			if (this->guest_rewrote_code(exec, pc)) {
+				exec.set_stale(true);
+				break;
+			}
+
+			this->registers().pc = pc;
+			const auto instruction = decode_safely<W>(exec_seg_data, pc);
+			this->execute(instruction);
+			machine().increment_counter(1);
+
+			if constexpr (compressed_enabled)
+				this->registers().pc += instruction.length();
+			else
+				this->registers().pc += 4;
+			pc = this->registers().pc;
+
+			if (this->m_exec != &exec)
+				break;
+			if (!exec.is_within(pc) || exec.is_stale())
+				break;
+			if (exec_decoder[pc >> DecoderData<W>::SHIFT].get_bytecode() != RV32I_BC_INVALID)
+				break;
+			if (machine().stopped())
+				break;
+		}
+
+		return pc;
+	} // CPU::simulate_undecoded
+
 	template<int W>
 	void CPU<W>::step_one(bool use_instruction_counter)
 	{

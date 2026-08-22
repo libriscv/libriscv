@@ -293,13 +293,17 @@ new_execute_segment: {
 execute_invalid:
 	// Calculate the current PC from the decoder pointer
 	pc = (decoder - exec_decoder) << DecoderData<W>::SHIFT;
-	// Check if the instruction is still invalid
-	try {
-		if (decoder->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
-			exec->set_stale(true);
+	// We cannot directly say whether the instruction is truly invalid.
+	// It is, for example, possible that the decoder cache encountered
+	// mid-stream JIT constants and lost alignment.
+	if (decoder->instr == 0 && LIKELY(exec->is_within(pc))) {
+		counter.apply(MACHINE());
+		pc = this->simulate_undecoded(pc);
+		counter.retrieve_counters(MACHINE());
+		if (UNLIKELY(exec->is_stale() && !counter.overflowed()))
 			goto new_execute_segment;
-		}
-	} catch (...) {}
+		goto check_jump;
+	}
 	MACHINE().set_instruction_counter(counter.value());
 	registers().pc = pc;
 	trigger_exception(ILLEGAL_OPCODE, decoder->instr);

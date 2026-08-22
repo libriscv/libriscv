@@ -445,11 +445,7 @@ long syscall6(long n, long a, long b, long c, long d, long e, long f) {
 
 TEST_CASE("Guest JIT emits constants between functions", "[SelfModify]")
 {
-	// A linear decode cannot tell the constant pool from instructions, and
-	// loses the instruction boundary for the real code behind it. Publishing
-	// says where a stream begins, but arrives before the segment exists.
-	return;
-
+	// A linear decode cannot tell the constant pool from instructions
 	const auto binary = build_and_load(CONSTPOOL_GUEST);
 
 	{
