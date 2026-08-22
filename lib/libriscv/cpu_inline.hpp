@@ -34,12 +34,17 @@ inline bool CPU<W>::guest_rewrote_code(const DecodedExecuteSegment<W>& exec, add
 {
 	if (UNLIKELY(!exec.is_within(pc)))
 		return false;
+#if __cpp_exceptions
 	try {
 		return *(const uint16_t *)exec.exec_data(pc)
 			!= machine().memory.template read<uint16_t>(pc);
 	} catch (...) {
 		return false;
 	}
+#else
+	return *(const uint16_t *)exec.exec_data(pc)
+		!= machine().memory.template read<uint16_t>(pc);
+#endif
 }
 
 template<int W>
