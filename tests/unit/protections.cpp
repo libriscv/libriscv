@@ -291,3 +291,58 @@ TEST_CASE("Discarding memory zeroes it everywhere", "[Memory]")
 		REQUIRE(machine.memory.read<uint8_t>(addr + Page::size() - 1) == 0x00);
 	}
 }
+
+TEST_CASE("MAP_FIXED_NOREPLACE reserves an exact address", "[Memory]")
+{
+	const auto binary = build_and_load(R"M(
+	#include <errno.h>
+	#include <stdio.h>
+	#include <sys/mman.h>
+
+	#ifndef MAP_FIXED_NOREPLACE
+	#define MAP_FIXED_NOREPLACE 0x100000
+	#endif
+
+	int main() {
+		const unsigned long SIZE = 0x100000UL;
+		/* A hint the kernel is free to ignore, to find the arena */
+		char *probe = mmap(0, SIZE, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (probe == MAP_FAILED)
+			return -1;
+		char *ADDR = probe + 16 * SIZE;
+
+		void *first = mmap(ADDR, SIZE, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+		if (first != (void *)ADDR)
+			return -2;
+		*(volatile int *)first = 1234;
+		if (*(volatile int *)first != 1234)
+			return -3;
+
+		/* The region is taken now, so the same request must fail */
+		void *again = mmap(ADDR, SIZE, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+		if (again != MAP_FAILED || errno != EEXIST)
+			return -4;
+
+		/* A kernel-chosen mapping must not come out of the reservation */
+		char *anon = mmap(0, SIZE, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (anon == MAP_FAILED)
+			return -5;
+		if (anon + SIZE > ADDR && anon < ADDR + SIZE)
+			return -6;
+		if (*(volatile int *)first != 1234)
+			return -7;
+
+		return 666;
+	})M");
+
+	Machine<RISCV64> machine { binary, { .memory_max = 32ul << 20 } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_linux({"noreplace"}, {});
+	machine.simulate(10'000'000ul);
+
+	REQUIRE(machine.return_value<int>() == 666);
+}

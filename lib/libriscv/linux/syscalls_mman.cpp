@@ -3,6 +3,7 @@
 #define LINUX_MAP_ANONYMOUS        0x20
 #define LINUX_MAP_NORESERVE     0x04000
 #define LINUX_MAP_FIXED         0x10
+#define LINUX_MAP_FIXED_NOREPLACE 0x100000
 
 template <int W>
 static void add_mman_syscalls()
@@ -41,6 +42,11 @@ static void add_mman_syscalls()
 		#define MMAP_HAS_FAILED() { \
 			machine.set_result(address_type<W>(-1)); \
 			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = MAP_FAILED\n", (long)addr_g, (size_t)length); \
+			return; \
+		}
+		#define MMAP_IS_TAKEN() { \
+			machine.set_result(-EEXIST); \
+			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = EEXIST\n", (long)addr_g, (size_t)length); \
 			return; \
 		}
 
@@ -107,6 +113,26 @@ static void add_mman_syscalls()
 			// kernel would, instead of throwing a machine exception
 			MMAP_HAS_FAILED();
 		}
+		}
+		else if (addr_g != 0 && (flags & LINUX_MAP_FIXED_NOREPLACE) != 0)
+		{
+			// MAP_FIXED_NOREPLACE maps at exactly the given address or fails
+			// with EEXIST, and must never be relocated: guests use the error
+			// to probe for a free region.
+			if (addr_g + length < addr_g || addr_g < machine.memory.mmap_start()
+				|| addr_g < nextfree)
+				MMAP_IS_TAKEN();
+			if constexpr (riscv::encompassing_Nbit_arena > 0) {
+				if (addr_g + length > riscv::encompassing_arena_mask)
+					MMAP_IS_TAKEN();
+			}
+			if (!riscv::virtual_paging_enabled
+				&& addr_g + length > machine.memory.memory_arena_size())
+				MMAP_IS_TAKEN();
+			result = addr_g;
+			// Keep the arena cursor above the reservation, so that later
+			// kernel-chosen mappings never come out of it
+			nextfree = addr_g + length;
 		}
 		else if (addr_g == 0 || (flags & LINUX_MAP_FIXED) == 0)
 		{
