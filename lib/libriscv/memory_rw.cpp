@@ -9,6 +9,9 @@ static constexpr bool MADVISE_ENABLED = true;
 extern "C" int madvise(void*, size_t, int);
 static constexpr bool MADVISE_ENABLED = false;
 #endif
+#ifndef MADV_DONTNEED
+static constexpr int MADV_DONTNEED = 0x4;
+#endif
 
 namespace riscv
 {
@@ -150,6 +153,7 @@ namespace riscv
 #endif
 	}
 
+#ifdef RISCV_VIRTUAL_PAGING
 	template <int W>
 	void Memory<W>::discard_page(Memory<W>& memory, Page& page,
 		address_t pageno, address_t addr, size_t size, bool ignore_protections)
@@ -182,13 +186,11 @@ namespace riscv
 			protection_fault(addr);
 		}
 	}
+#endif // RISCV_VIRTUAL_PAGING
 
 	template <int W>
 	void Memory<W>::memdiscard(address_t dst, size_t len, bool ignore_protections)
 	{
-#ifndef MADV_DONTNEED
-		static constexpr int MADV_DONTNEED = 0x4;
-#endif
 		if constexpr (!virtual_paging_enabled) {
 			(void)ignore_protections;
 			if (UNLIKELY(dst + len > memory_arena_size() || dst + len < dst))
