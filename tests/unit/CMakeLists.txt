@@ -70,6 +70,9 @@ add_unit_test(vmcall   vmcall.cpp)
 if (RISCV_VIRTUAL_PAGING)
 add_unit_test(va_exec  va_execute.cpp) # execute permissions need page attributes
 endif()
+if (RISCV_VIRTUAL_PAGING)
+add_unit_test(selfmodify selfmodify.cpp) # guest JITs need mmap'ed execute pages
+endif()
 add_unit_test(elftest  verify_elf.cpp)
 add_unit_test(security security.cpp)
 if (NOT RISCV_VIRTUAL_PAGING AND CMAKE_SYSTEM_NAME STREQUAL "Linux")

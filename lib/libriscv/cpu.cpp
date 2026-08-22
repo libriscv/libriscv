@@ -164,6 +164,8 @@ restart_next_execute_segment:
 		auto& next = this->m_override_exec(*this);
 		if (!next.empty()) {
 			this->m_exec = &next;
+			if (!next.is_stale())
+				this->m_stale_restart_pc = ~address_t(0);
 			return {this->m_exec, this->registers().pc};
 		}
 
@@ -215,10 +217,17 @@ restart_next_execute_segment:
 			}
 
 			// Decode and store it for later
-			return {&this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size(), is_likely_jit), pc};
+			auto& seg = this->init_execute_area(area.get(), base_pageno * Page::size(), n_pages * Page::size(), is_likely_jit);
+			// The rebuild succeeded, so re-arm the no-progress guard
+			if (!seg.is_stale())
+				this->m_stale_restart_pc = ~address_t(0);
+			return {&seg, pc};
 		} else {
 			// We can use the sequential execute segment directly
-			return {&this->init_execute_area(base_page_data, base_pageno * Page::size(), n_pages * Page::size(), is_likely_jit), pc};
+			auto& seg = this->init_execute_area(base_page_data, base_pageno * Page::size(), n_pages * Page::size(), is_likely_jit);
+			if (!seg.is_stale())
+				this->m_stale_restart_pc = ~address_t(0);
+			return {&seg, pc};
 		}
 #endif // RISCV_VIRTUAL_PAGING
 	} // CPU::next_execute_segment

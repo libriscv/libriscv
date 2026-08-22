@@ -242,14 +242,29 @@ namespace riscv
 		pc = (d - exec->decoder_cache()) << DecoderData<W>::SHIFT;
 		// Check if the instruction is still invalid
 		bool stale = false;
+		bool redecoded = false;
+		// A zero decoder entry means either the guest rewrote this code, or the
+		// linear decode lost instruction alignment on the constants a JIT emits
+		// between functions. Compare against the bytes the segment was decoded
+		// from to tell the two apart: rebuild for real changes, and otherwise
+		// decode again from here, which is a known instruction boundary.
 		try {
 			if (d->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
-				exec->set_stale(true);
-				stale = true;
+				if (*(const uint16_t *)exec->exec_data(pc) != MACHINE().memory.template read<uint16_t>(pc)) {
+					exec->set_stale(true);
+					stale = true;
+				} else {
+					MACHINE().memory.redecode_execute_segment(*exec, pc);
+					redecoded = d->instr != 0;
+				}
 			}
 		} catch (...) {}
 		if (stale) {
 			exec = resolve_execute_segment<W>(cpu, pc);
+			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
+			NEXT_BLOCK(0, true);
+		}
+		if (redecoded) {
 			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
 			NEXT_BLOCK(0, true);
 		}

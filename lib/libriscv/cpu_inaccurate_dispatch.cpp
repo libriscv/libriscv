@@ -274,10 +274,20 @@ INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 		// Calculate the current PC from the decoder pointer
 		pc = (decoder - exec_decoder) << DecoderData<W>::SHIFT;
 		// Check if the instruction is still invalid
+			// A zero decoder entry means either the guest rewrote this code, or the
+			// linear decode lost instruction alignment on the constants a JIT emits
+			// between functions. Compare against the bytes the segment was decoded
+			// from to tell the two apart: rebuild for real changes, and otherwise
+			// decode again from here, which is a known instruction boundary.
 		try {
 			if (decoder->instr == 0 && MACHINE().memory.template read<uint16_t>(pc) != 0) {
-				exec->set_stale(true);
-				goto new_execute_segment;
+				if (*(const uint16_t *)exec->exec_data(pc) != MACHINE().memory.template read<uint16_t>(pc)) {
+					exec->set_stale(true);
+					goto new_execute_segment;
+				}
+				MACHINE().memory.redecode_execute_segment(*exec, pc);
+				if (decoder->instr != 0)
+					goto continue_segment;
 			}
 		} catch (...) {}
 		registers().pc = pc;

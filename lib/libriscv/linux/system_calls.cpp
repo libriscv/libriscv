@@ -81,6 +81,24 @@ static void syscall_stub_zero(Machine<W>& machine) {
 	machine.set_result(0);
 }
 
+/// @brief Flush the instruction cache after the guest has written code.
+/// @details Guest JITs reach this through __builtin___clear_cache(), which is
+/// the only portable way to publish freshly written code on RISC-V. Without
+/// invalidating the decoder here, previously decoded instructions are executed
+/// for code that no longer exists, sending the guest off into the weeds.
+template <int W>
+static void syscall_riscv_flush_icache(Machine<W>& machine) {
+	const auto begin = machine.sysarg(0);
+	const auto end   = machine.sysarg(1);
+	SYSPRINT("SYSCALL riscv_flush_icache(0x%lX, 0x%lX, 0x%lX)\n",
+		(long)begin, (long)end, (long)machine.sysarg(2));
+	if (begin < end)
+		machine.memory.mark_execute_segments_stale(begin, end);
+	else // A reversed or empty range means the whole address space
+		machine.memory.mark_execute_segments_stale();
+	machine.set_result(0);
+}
+
 template <int W>
 static void syscall_rt_sigreturn(Machine<W>& machine) {
 	SYSPRINT("SYSCALL rt_sigreturn, sp: 0x%lX\n", (long)machine.cpu.reg(REG_SP));
@@ -145,6 +163,32 @@ static void syscall_getpid(Machine<W>& machine) {
 	// The process ID is the TID of the main thread, and is never zero
 	machine.set_result(MAIN_THREAD_TID);
 	SYSPRINT("SYSCALL getpid() = %d\n", (int)machine.return_value());
+}
+
+template <int W>
+static void syscall_getppid(Machine<W>& machine) {
+	// The main thread has no parent inside the sandbox, so report init
+	machine.set_result(1);
+	SYSPRINT("SYSCALL getppid() = %d\n", (int)machine.return_value());
+}
+
+/// @brief Report the CPUs the guest may run on
+/// @details Programs size their thread pools from this, and treat a failure
+/// as "unknown", which is not the same answer as "one CPU". A Machine runs
+/// on a single host thread, with green threads on top of it.
+template <int W>
+static void syscall_sched_getaffinity(Machine<W>& machine) {
+	const auto cpusetsize = machine.sysarg(1);
+	const auto g_mask     = machine.sysarg(2);
+	if (cpusetsize < sizeof(uint64_t) || g_mask == 0x0) {
+		machine.set_result(-EINVAL);
+	} else {
+		const uint64_t mask = 0x1;
+		machine.copy_to_guest(g_mask, &mask, sizeof(mask));
+		machine.set_result(sizeof(mask));
+	}
+	SYSPRINT("SYSCALL sched_getaffinity(size=%zu, mask=0x%lX) = %ld\n",
+		(size_t)cpusetsize, (long)g_mask, (long)machine.return_value());
 }
 
 template <int W>
@@ -1476,7 +1520,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// clock_nanosleep
 	install_syscall_handler(115, syscall_clock_nanosleep<W>);
 	// sched_getaffinity
-	install_syscall_handler(123, syscall_stub_nosys<W>);
+	install_syscall_handler(123, syscall_sched_getaffinity<W>);
 	// tkill
 	install_syscall_handler(130,
 	[] (Machine<W>& machine) {
@@ -1514,6 +1558,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(165, syscall_getrusage<W>);
 	// getpid
 	install_syscall_handler(172, syscall_getpid<W>);
+	// getppid
+	install_syscall_handler(173, syscall_getppid<W>);
 	// getuid
 	install_syscall_handler(174, syscall_stub_zero<W>);
 	// geteuid
@@ -1531,7 +1577,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// riscv_hwprobe
 	install_syscall_handler(258, syscall_stub_zero<W>);
 	// riscv_flush_icache
-	install_syscall_handler(259, syscall_stub_zero<W>);
+	install_syscall_handler(259, syscall_riscv_flush_icache<W>);
 
 	install_syscall_handler(278, syscall_getrandom<W>);
 

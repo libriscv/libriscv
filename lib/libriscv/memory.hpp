@@ -145,6 +145,20 @@ namespace riscv
 		address_t mmap_start() const noexcept { return this->m_heap_address + BRK_MAX; }
 		const address_t& mmap_address() const noexcept { return m_mmap_address; }
 		address_t& mmap_address() noexcept { return m_mmap_address; }
+		// Ranges the guest placed itself with MAP_FIXED_NOREPLACE, which are
+		// kept out of the mmap arena so that kernel-chosen mappings are never
+		// handed out from inside a region the guest reserved for itself.
+		auto& mmap_fixed_ranges() noexcept { return m_mmap_fixed_ranges; }
+		bool mmap_fixed_overlaps(address_t addr, address_t size, address_t* end = nullptr) const noexcept
+		{
+			for (const auto& r : m_mmap_fixed_ranges) {
+				if (addr < r.addr + r.size && r.addr < addr + size) {
+					if (end) *end = r.addr + r.size;
+					return true;
+				}
+			}
+			return false;
+		}
 		// Allocate at least writable bytes through mmap(), and return the page-aligned address
 		address_t mmap_allocate(address_t bytes);
 		// Attempts to relax a previous call to mmap_allocate(), freeing space at the end
@@ -275,6 +289,14 @@ namespace riscv
 		void evict_execute_segments();
 		void evict_execute_segment(DecodedExecuteSegment<W>&);
 		void mark_execute_segments_stale() noexcept;
+		/// @brief Mark only the execute segments overlapping [begin, end) stale
+		void mark_execute_segments_stale(address_t begin, address_t end) noexcept;
+		/// @brief Decode a segment again from a known instruction boundary
+		/// @details A linear decode cannot tell code from the constants a JIT
+		/// emits between functions, so it can lose instruction alignment and
+		/// leave real instruction starts marked invalid. Jumping to one of them
+		/// says where a stream truly begins, which is enough to repair it.
+		void redecode_execute_segment(DecodedExecuteSegment<W>&, address_t from);
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<address_t> gather_jump_hints() const;
 #endif
@@ -364,6 +386,7 @@ namespace riscv
 		void binary_load_ph(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
 		void serialize_execute_segment(const MachineOptions<W>&, const typename Elf::ProgramHeader*, address_t vaddr);
 		void generate_decoder_cache(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&, bool is_initial);
+		address_t decode_execute_range(DecodedExecuteSegment<W>&, address_t from, address_t to);
 		// Machine copy-on-write fork
 		void machine_loader(const Machine<W>&, const MachineOptions<W>&);
 
@@ -372,6 +395,7 @@ namespace riscv
 		address_t m_exit_address  = 0;
 		address_t m_sigreturn_address = 0;
 		address_t m_mmap_address  = 0;
+		std::vector<typename MMapCache<W>::Range> m_mmap_fixed_ranges;
 		address_t m_heap_address  = 0;
 		address_t m_brk_address   = 0;
 

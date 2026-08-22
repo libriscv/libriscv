@@ -3,6 +3,7 @@
 #define LINUX_MAP_ANONYMOUS        0x20
 #define LINUX_MAP_NORESERVE     0x04000
 #define LINUX_MAP_FIXED         0x10
+#define LINUX_MAP_FIXED_NOREPLACE 0x100000
 
 template <int W>
 static void add_mman_syscalls()
@@ -17,6 +18,16 @@ static void add_mman_syscalls()
 		machine.memory.free_pages(addr, len);
 		if (addr >= machine.memory.mmap_start() && addr + len <= machine.memory.mmap_address()) {
 			machine.memory.mmap_unmap(addr, len);
+		}
+		// Release guest-placed ranges again, so that the address can be reserved
+		// a second time instead of failing with EEXIST forever
+		auto& fixed = machine.memory.mmap_fixed_ranges();
+		const auto size = (len + PageMask) & ~address_type<W>(PageMask);
+		for (auto it = fixed.begin(); it != fixed.end(); ) {
+			if (it->addr >= addr && it->addr + it->size <= addr + size)
+				it = fixed.erase(it);
+			else
+				++it;
 		}
 		machine.set_result(0);
 		SYSPRINT(">>> munmap(0x%lX, len=%zu) => %d\n",
@@ -43,11 +54,18 @@ static void add_mman_syscalls()
 			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = MAP_FAILED\n", (long)addr_g, (size_t)length); \
 			return; \
 		}
+		#define MMAP_IS_TAKEN() { \
+			machine.set_result(-EEXIST); \
+			SYSPRINT("<<< mmap(addr 0x%lX, len %zu, ...) = EEXIST\n", (long)addr_g, (size_t)length); \
+			return; \
+		}
 
 		if (addr_g % Page::size() != 0)
 			MMAP_HAS_FAILED();
 
 		auto& nextfree = machine.memory.mmap_address();
+		// Address space never handed out before is untouched and zeroed
+		const auto prev_nextfree = nextfree;
 		length = (length + PageMask) & ~address_type<W>(PageMask);
 		if (length == 0)
 			MMAP_HAS_FAILED();
@@ -107,6 +125,46 @@ static void add_mman_syscalls()
 			MMAP_HAS_FAILED();
 		}
 		}
+		else if (addr_g != 0 && (flags & LINUX_MAP_FIXED_NOREPLACE) != 0)
+		{
+			// MAP_FIXED_NOREPLACE maps at exactly the given address, or fails
+			// with EEXIST. It must never be relocated: guests use the error to
+			// probe for a free region, and then assume the returned address is
+			// the requested one. Handing out a different address silently
+			// corrupts every region-based allocator that relies on this.
+			const bool overflows = (addr_g + length < addr_g);
+			const bool taken     = machine.memory.mmap_fixed_overlaps(addr_g, length);
+			const bool virgin    = (addr_g >= nextfree && !taken);
+			const bool cached    = machine.memory.mmap_cache().contains(addr_g, length) && !taken;
+			if (overflows || addr_g < machine.memory.mmap_start() || !(virgin || cached))
+				MMAP_IS_TAKEN();
+			if constexpr (riscv::encompassing_Nbit_arena > 0) {
+				// The address must be representable in the encompassing arena
+				if (addr_g + length > riscv::encompassing_arena_mask)
+					MMAP_IS_TAKEN();
+			}
+			if constexpr (!riscv::virtual_paging_enabled) {
+				// Without paging only the flat arena is addressable, so a
+				// mapping outside of it could never be accessed
+				if (addr_g + length > machine.memory.memory_arena_size())
+					MMAP_IS_TAKEN();
+			}
+			if (cached)
+				machine.memory.mmap_cache().invalidate(addr_g, length);
+			result = addr_g;
+			// Remember the range instead of moving the arena cursor up to it:
+			// the cursor would then hand out every later anonymous mapping from
+			// inside a region the guest reserved for itself, which a
+			// region-based allocator reads as one of its own blocks.
+			auto& fixed = machine.memory.mmap_fixed_ranges();
+			static constexpr size_t MAX_FIXED_RANGES = 256;
+			if (!fixed.empty() && fixed.back().addr + fixed.back().size == addr_g)
+				fixed.back().size += length;
+			else if (fixed.size() < MAX_FIXED_RANGES)
+				fixed.push_back({addr_g, length});
+			else // Out of room to track it precisely: keep the arena below it
+				nextfree = std::max(nextfree, address_type<W>(addr_g + length));
+		}
 		else if (addr_g == 0 || (flags & LINUX_MAP_FIXED) == 0)
 		{
 			// Without MAP_FIXED the address is only a hint that the kernel is
@@ -116,7 +174,17 @@ static void add_mman_syscalls()
 			auto range = machine.memory.mmap_cache().find(length);
 			// Not found in cache, increment MM base address
 			if (range.empty()) {
+				// Step over any range the guest has reserved for itself
+				address_type<W> fixed_end = 0;
+				while (machine.memory.mmap_fixed_overlaps(nextfree, length, &fixed_end))
+					nextfree = fixed_end;
 				if (nextfree + length < nextfree)
+					MMAP_HAS_FAILED();
+				// Without paging only the flat arena is addressable, so report
+				// the allocation failure instead of handing out an address that
+				// faults on first use
+				if (!riscv::virtual_paging_enabled
+					&& nextfree + length > machine.memory.memory_arena_size())
 					MMAP_HAS_FAILED();
 				result = nextfree;
 				nextfree += length;
@@ -125,6 +193,12 @@ static void add_mman_syscalls()
 			{
 				result = range.addr;
 			}
+		} else if (!riscv::virtual_paging_enabled
+			&& addr_g + length > machine.memory.memory_arena_size()) {
+			// Without paging only the flat arena is addressable. Relocating the
+			// mapping would hand back an address the guest did not ask for,
+			// which is worse than the failure the guest knows how to handle.
+			MMAP_HAS_FAILED();
 		} else if (addr_g < machine.memory.mmap_start()) {
 			// A fixed range below the mmap arena start, we do nothing except return the address
 			result    = addr_g;
@@ -153,12 +227,18 @@ static void add_mman_syscalls()
 			MMAP_HAS_FAILED();
 		}
 
+		// A brand-new range is already zeroed, and nothing is mapped in it
+		const bool untouched = (result >= prev_nextfree);
 		// anon pages need to be zeroed
-		if (flags & LINUX_MAP_ANONYMOUS) {
+		if ((flags & LINUX_MAP_ANONYMOUS) && !untouched) {
 			machine.memory.memdiscard(result, length, true);
 		}
-		// avoid potentially creating pages when MAP_NORESERVE is set
-		if ((flags & LINUX_MAP_NORESERVE) == 0)
+		// PROT_NONE is a pure address space reservation: guests reserve huge
+		// ranges (tens of gigabytes) and commit them piecemeal with mprotect
+		// later. Creating a page for every one of them just to mark it
+		// inaccessible would exhaust memory, and unmapped memory is not
+		// enforced to begin with. Also avoid creating pages for MAP_NORESERVE.
+		if ((flags & LINUX_MAP_NORESERVE) == 0 && !(prot == 0 && untouched))
 		{
 			machine.memory.set_page_attr(result, length, attr);
 		}

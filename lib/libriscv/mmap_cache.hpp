@@ -49,6 +49,17 @@ namespace riscv
 			return Range{};
 		}
 
+		// True when a single cached free range fully covers [addr, addr+size)
+		bool contains(address_t addr, address_t size) const noexcept
+		{
+			for (const auto& r : m_lines) {
+				if (!r.empty() && addr >= r.addr && addr + size <= r.addr + r.size
+					&& addr + size >= addr)
+					return true;
+			}
+			return false;
+		}
+
 		void invalidate(address_t addr, address_t size)
 		{
 			auto it = m_lines.begin();
