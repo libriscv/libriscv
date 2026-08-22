@@ -319,6 +319,8 @@ namespace riscv
 		void initial_paging();
 #endif
 		[[noreturn]] static void protection_fault(address_t);
+		static void discard_page(Memory<W>&, Page&, address_t pageno,
+			address_t addr, size_t size, bool ignore_protections);
 		// Helpers
 		template <typename T>
 		static void foreach_helper(T& mem, address_t addr, size_t len,

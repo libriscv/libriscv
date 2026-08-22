@@ -3,6 +3,7 @@
 
 #include <libriscv/machine.hpp>
 #include <cerrno>
+#include <chrono>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
 using namespace riscv;
@@ -345,4 +346,35 @@ TEST_CASE("MAP_FIXED_NOREPLACE reserves an exact address", "[Memory]")
 	machine.simulate(10'000'000ul);
 
 	REQUIRE(machine.return_value<int>() == 666);
+}
+
+TEST_CASE("Discarding an enormous range only visits existing pages", "[Memory]")
+{
+	static constexpr uint64_t MEMORY_MAX = 8ul << 20; /* 8MB */
+	static constexpr uint64_t A = 0x40000000;
+	static constexpr uint64_t B = 0x80000000;
+	static constexpr uint64_t HUGE = 4ull << 40; /* 4TB */
+
+	Machine<RISCV64> machine { empty, { .memory_max = MEMORY_MAX } };
+	const std::vector<uint8_t> pattern(Page::size(), 0x41);
+	machine.copy_to_guest(A, pattern.data(), pattern.size());
+	machine.copy_to_guest(B, pattern.data(), pattern.size());
+	const size_t before = machine.memory.pages_active();
+
+	// A range this large must not be walked page by page
+	const auto t0 = std::chrono::steady_clock::now();
+	machine.memory.memdiscard(A, HUGE, true);
+	const auto ms = std::chrono::duration<double, std::milli>(
+		std::chrono::steady_clock::now() - t0).count();
+
+	REQUIRE(ms < 1000.0);
+	REQUIRE(machine.memory.pages_active() == before);
+	REQUIRE(machine.memory.read<uint8_t>(A) == 0x00);
+	REQUIRE(machine.memory.read<uint8_t>(B) == 0x00);
+
+	// Pages outside the range are left alone
+	machine.copy_to_guest(A, pattern.data(), pattern.size());
+	machine.memory.memdiscard(B, HUGE, true);
+	REQUIRE(machine.memory.read<uint8_t>(A) == 0x41);
+	REQUIRE(machine.memory.read<uint8_t>(B) == 0x00);
 }
