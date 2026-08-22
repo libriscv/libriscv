@@ -148,6 +148,27 @@ static void syscall_getpid(Machine<W>& machine) {
 }
 
 template <int W>
+static void syscall_getppid(Machine<W>& machine) {
+	machine.set_result(1);
+	SYSPRINT("SYSCALL getppid() = %d\n", (int)machine.return_value());
+}
+
+template <int W>
+static void syscall_sched_getaffinity(Machine<W>& machine) {
+	const auto cpusetsize = machine.sysarg(1);
+	const auto g_mask     = machine.sysarg(2);
+	if (cpusetsize < sizeof(uint64_t) || g_mask == 0x0) {
+		machine.set_result(-EINVAL);
+	} else {
+		const uint64_t mask = 0x1;
+		machine.copy_to_guest(g_mask, &mask, sizeof(mask));
+		machine.set_result(sizeof(mask));
+	}
+	SYSPRINT("SYSCALL sched_getaffinity(size=%zu, mask=0x%lX) = %ld\n",
+		(size_t)cpusetsize, (long)g_mask, (long)machine.return_value());
+}
+
+template <int W>
 static void syscall_stub_nosys(Machine<W>& machine) {
 	SYSPRINT("SYSCALL stubbed (nosys): %d\n", (int)machine.cpu.reg(17));
 	machine.set_result(-ENOSYS);
@@ -1476,7 +1497,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// clock_nanosleep
 	install_syscall_handler(115, syscall_clock_nanosleep<W>);
 	// sched_getaffinity
-	install_syscall_handler(123, syscall_stub_nosys<W>);
+	install_syscall_handler(123, syscall_sched_getaffinity<W>);
 	// tkill
 	install_syscall_handler(130,
 	[] (Machine<W>& machine) {
@@ -1514,6 +1535,8 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	install_syscall_handler(165, syscall_getrusage<W>);
 	// getpid
 	install_syscall_handler(172, syscall_getpid<W>);
+	// getppid
+	install_syscall_handler(173, syscall_getppid<W>);
 	// getuid
 	install_syscall_handler(174, syscall_stub_zero<W>);
 	// geteuid
