@@ -767,6 +767,37 @@ namespace riscv
 	}
 
 	template <int W>
+	static void flush_execute_segment(Memory<W>& memory,
+		DecodedExecuteSegment<W>& segment, address_type<W> begin, address_type<W> end) noexcept
+	{
+		using address_t = address_type<W>;
+		if (segment.exec_begin() >= end || begin >= segment.exec_end())
+			return;
+		const address_t lo = begin > segment.exec_begin()
+			? begin : segment.exec_begin();
+		const address_t hi = end < segment.exec_end()
+			? end : segment.exec_end();
+		memory.machine().penalize((hi - lo) / 4);
+		try {
+			if (memory.memcmp(segment.exec_data(lo), lo, hi - lo) != 0)
+				segment.set_stale(true);
+		} catch (...) {
+			segment.set_stale(true);
+		}
+	}
+
+	template <int W>
+	void Memory<W>::flush_execute_segments(address_t begin, address_t end) noexcept
+	{
+		if (m_main_exec_segment)
+			flush_execute_segment<W>(*this, *m_main_exec_segment, begin, end);
+		for (auto& segment : m_exec) {
+			if (segment)
+				flush_execute_segment<W>(*this, *segment, begin, end);
+		}
+	}
+
+	template <int W>
 	void Memory<W>::evict_execute_segment(DecodedExecuteSegment<W>& segment)
 	{
 #if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)

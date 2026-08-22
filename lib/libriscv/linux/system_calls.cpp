@@ -82,6 +82,19 @@ static void syscall_stub_zero(Machine<W>& machine) {
 }
 
 template <int W>
+static void syscall_riscv_flush_icache(Machine<W>& machine) {
+	const auto begin = machine.sysarg(0);
+	const auto end   = machine.sysarg(1);
+	SYSPRINT("SYSCALL riscv_flush_icache(0x%lX, 0x%lX, 0x%lX)\n",
+		(long)begin, (long)end, (long)machine.sysarg(2));
+	if (begin < end)
+		machine.memory.flush_execute_segments(begin, end);
+	else
+		machine.memory.mark_execute_segments_stale();
+	machine.set_result(0);
+}
+
+template <int W>
 static void syscall_rt_sigreturn(Machine<W>& machine) {
 	SYSPRINT("SYSCALL rt_sigreturn, sp: 0x%lX\n", (long)machine.cpu.reg(REG_SP));
 	machine.signals().leave(machine);
@@ -1554,7 +1567,7 @@ void Machine<W>::setup_linux_syscalls(bool filesystem, bool sockets)
 	// riscv_hwprobe
 	install_syscall_handler(258, syscall_stub_zero<W>);
 	// riscv_flush_icache
-	install_syscall_handler(259, syscall_stub_zero<W>);
+	install_syscall_handler(259, syscall_riscv_flush_icache<W>);
 
 	install_syscall_handler(278, syscall_getrandom<W>);
 

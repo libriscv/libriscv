@@ -275,6 +275,7 @@ namespace riscv
 		void evict_execute_segments();
 		void evict_execute_segment(DecodedExecuteSegment<W>&);
 		void mark_execute_segments_stale() noexcept;
+		void flush_execute_segments(address_t begin, address_t end) noexcept;
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<address_t> gather_jump_hints() const;
 #endif

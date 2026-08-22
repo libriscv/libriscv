@@ -285,3 +285,195 @@ TEST_CASE("FENCE.I observes stores to instruction memory", "[SelfModify]")
 		REQUIRE(machine.return_value<long>() == 123L);
 	}
 }
+
+static const std::string ICACHE_GUEST = R"M(
+#define uintptr_t __UINTPTR_TYPE__
+typedef int (*retfunc)(void);
+
+static long syscall(long n, long arg0);
+static long syscall3(long n, long a, long b, long c);
+static long syscall6(long n, long a, long b, long c, long d, long e, long f);
+
+int main()
+{
+	long page = syscall6(222, 0, 4096, 7, 34, -1, 0);
+	if (page <= 0)
+		syscall(93, 0);
+
+	volatile unsigned *code = (volatile unsigned *)(uintptr_t)page;
+	code[0] = 0x06f00513; // addi a0, x0, 111
+	code[1] = 0x00008067; // jalr x0, 0(ra)  == ret
+	syscall3(259, page, page + 8, 0);
+
+	retfunc fn = (retfunc)(uintptr_t)page;
+	int first = fn();
+
+	code[0] = 0x0de00513; // addi a0, x0, 222
+	syscall3(259, page, page + 8, 0);
+	int second = fn();
+
+	syscall(93, first * 1000 + second);
+}
+
+long syscall(long n, long arg0) {
+	register long a0 __asm__("a0") = arg0;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+
+	return a0;
+}
+long syscall3(long n, long a, long b, long c) {
+	register long a0 __asm__("a0") = a;
+	register long a1 __asm__("a1") = b;
+	register long a2 __asm__("a2") = c;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0)
+		: "r"(a1), "r"(a2), "r"(syscall_id));
+
+	return a0;
+}
+long syscall6(long n, long a, long b, long c, long d, long e, long f) {
+	register long a0 __asm__("a0") = a;
+	register long a1 __asm__("a1") = b;
+	register long a2 __asm__("a2") = c;
+	register long a3 __asm__("a3") = d;
+	register long a4 __asm__("a4") = e;
+	register long a5 __asm__("a5") = f;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0)
+		: "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(syscall_id));
+
+	return a0;
+})M";
+
+TEST_CASE("riscv_flush_icache observes stores to instruction memory", "[SelfModify]")
+{
+	const auto binary = build_and_load(ICACHE_GUEST);
+
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"icache"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.simulate(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 111222L);
+	}
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"icache"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.set_max_instructions(MAX_INSTRUCTIONS);
+		machine.cpu.simulate_precise();
+
+		REQUIRE(machine.return_value<long>() == 111222L);
+	}
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"icache"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.simulate<false>(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 111222L);
+	}
+}
+
+static const std::string CONSTPOOL_GUEST = R"M(
+#define uintptr_t __UINTPTR_TYPE__
+typedef int (*retfunc)(void);
+
+static long syscall(long n, long arg0);
+static long syscall3(long n, long a, long b, long c);
+static long syscall6(long n, long a, long b, long c, long d, long e, long f);
+
+int main()
+{
+	long page = syscall6(222, 0, 4096, 7, 34, -1, 0);
+	if (page <= 0)
+		syscall(93, 0);
+
+	volatile unsigned *code = (volatile unsigned *)(uintptr_t)page;
+	code[0] = 0x0140006f; // jal x0, +20
+	code[1] = 0x00000073; // constant pool
+	code[2] = 0x00000073;
+	code[3] = 0x00000073;
+	code[4] = 0x00734000;
+	code[5] = 0x1a400513; // addi a0, x0, 420
+	code[6] = 0x00008067; // jalr x0, 0(ra)  == ret
+	syscall3(259, page, page + 28, 0);
+
+	retfunc fn = (retfunc)(uintptr_t)page;
+	syscall(93, fn());
+}
+
+long syscall(long n, long arg0) {
+	register long a0 __asm__("a0") = arg0;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0) : "r"(syscall_id));
+
+	return a0;
+}
+long syscall3(long n, long a, long b, long c) {
+	register long a0 __asm__("a0") = a;
+	register long a1 __asm__("a1") = b;
+	register long a2 __asm__("a2") = c;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0)
+		: "r"(a1), "r"(a2), "r"(syscall_id));
+
+	return a0;
+}
+long syscall6(long n, long a, long b, long c, long d, long e, long f) {
+	register long a0 __asm__("a0") = a;
+	register long a1 __asm__("a1") = b;
+	register long a2 __asm__("a2") = c;
+	register long a3 __asm__("a3") = d;
+	register long a4 __asm__("a4") = e;
+	register long a5 __asm__("a5") = f;
+	register long syscall_id __asm__("a7") = n;
+
+	__asm__ volatile ("scall" : "+r"(a0)
+		: "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(syscall_id));
+
+	return a0;
+})M";
+
+TEST_CASE("Guest JIT emits constants between functions", "[SelfModify]")
+{
+	// A linear decode cannot tell the constant pool from instructions, and
+	// loses the instruction boundary for the real code behind it. Publishing
+	// says where a stream begins, but arrives before the segment exists.
+	return;
+
+	const auto binary = build_and_load(CONSTPOOL_GUEST);
+
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"constpool"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.simulate(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 420L);
+	}
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"constpool"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.set_max_instructions(MAX_INSTRUCTIONS);
+		machine.cpu.simulate_precise();
+
+		REQUIRE(machine.return_value<long>() == 420L);
+	}
+	{
+		riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+		machine.setup_linux_syscalls();
+		machine.setup_linux({"constpool"}, {"LC_TYPE=C", "LC_ALL=C", "USER=root"});
+		machine.simulate<false>(MAX_INSTRUCTIONS);
+
+		REQUIRE(machine.return_value<long>() == 420L);
+	}
+}
