@@ -553,6 +553,8 @@ template <int W> inline
 size_t Memory<W>::gather_buffers_from_range(
 	size_t cnt, vBuffer buffers[], address_t addr, size_t len) const
 {
+	if (len == 0)
+		return 0;
 #ifndef RISCV_VIRTUAL_PAGING
 	if (UNLIKELY(addr < RWREAD_BEGIN || addr + len > memory_arena_size() || addr + len < addr))
 		machine().cpu.trigger_exception(PROTECTION_FAULT, addr);
@@ -597,6 +599,8 @@ template <int W> inline
 size_t Memory<W>::gather_writable_buffers_from_range(
 	size_t cnt, vBuffer buffers[], address_t addr, size_t len)
 {
+	if (len == 0)
+		return 0;
 #ifndef RISCV_VIRTUAL_PAGING
 	if (UNLIKELY(addr < initial_rodata_end() || addr + len > memory_arena_size() || addr + len < addr))
 		machine().cpu.trigger_exception(PROTECTION_FAULT, addr);
