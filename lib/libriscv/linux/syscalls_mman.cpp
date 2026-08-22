@@ -48,6 +48,7 @@ static void add_mman_syscalls()
 			MMAP_HAS_FAILED();
 
 		auto& nextfree = machine.memory.mmap_address();
+		const auto prev_nextfree = nextfree;
 		length = (length + PageMask) & ~address_type<W>(PageMask);
 		if (length == 0)
 			MMAP_HAS_FAILED();
@@ -118,6 +119,9 @@ static void add_mman_syscalls()
 			if (range.empty()) {
 				if (nextfree + length < nextfree)
 					MMAP_HAS_FAILED();
+				if (!riscv::virtual_paging_enabled
+					&& nextfree + length > machine.memory.memory_arena_size())
+					MMAP_HAS_FAILED();
 				result = nextfree;
 				nextfree += length;
 			}
@@ -125,6 +129,9 @@ static void add_mman_syscalls()
 			{
 				result = range.addr;
 			}
+		} else if (!riscv::virtual_paging_enabled
+			&& addr_g + length > machine.memory.memory_arena_size()) {
+			MMAP_HAS_FAILED();
 		} else if (addr_g < machine.memory.mmap_start()) {
 			// A fixed range below the mmap arena start, we do nothing except return the address
 			result    = addr_g;
@@ -153,12 +160,13 @@ static void add_mman_syscalls()
 			MMAP_HAS_FAILED();
 		}
 
+		const bool untouched = (result >= prev_nextfree);
 		// anon pages need to be zeroed
 		if (flags & LINUX_MAP_ANONYMOUS) {
 			machine.memory.memdiscard(result, length, true);
 		}
 		// avoid potentially creating pages when MAP_NORESERVE is set
-		if ((flags & LINUX_MAP_NORESERVE) == 0)
+		if ((flags & LINUX_MAP_NORESERVE) == 0 && !(prot == 0 && untouched))
 		{
 			machine.memory.set_page_attr(result, length, attr);
 		}
