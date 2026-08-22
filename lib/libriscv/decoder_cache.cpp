@@ -343,6 +343,98 @@ namespace riscv
 	// with minimal bounds-checking, while also enabling accurate
 	// instruction counting.
 	template <int W> RISCV_INTERNAL
+	address_type<W> Memory<W>::decode_execute_range(
+		DecodedExecuteSegment<W>& exec, address_t from, address_t to)
+	{
+		auto* exec_decoder = exec.decoder_cache();
+		auto* exec_segment = exec.exec_data();
+		const address_t end_addr = exec.exec_end();
+		// When compressed instructions are enabled, many decoder
+		// entries are illegal because they are between instructions.
+		bool was_full_instruction = true;
+		address_t dst = from;
+		for (; dst < to;)
+		{
+			auto& entry = exec_decoder[dst / DecoderData<W>::DIVISOR];
+			entry.m_handler = 0;
+			entry.idxend = 0;
+
+			// Load unaligned instruction from execute segment
+			const auto instruction = read_instruction(
+				exec_segment, dst, end_addr);
+			rv32i_instruction rewritten = instruction;
+
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+			// Native code activation uses a special bytecode
+			// but we must still validate the mapping index.
+			const auto claimed_bc = entry.get_bytecode();
+			const bool claimed =
+	#ifdef RISCV_BINARY_TRANSLATION
+				(claimed_bc == RV32I_BC_TRANSLATOR && entry.is_invalid_handler()
+				 && entry.instr < exec.translator_mappings()) ||
+	#endif
+	#ifdef RISCV_ASMJIT
+				(claimed_bc == RV32I_BC_ASMJIT && entry.is_invalid_handler()
+				 && entry.instr < exec.asmjit_mappings()) ||
+	#endif
+				false;
+			if (claimed) {
+				if constexpr (compressed_enabled) {
+					dst += 2;
+					if (was_full_instruction) {
+						was_full_instruction = (instruction.length() == 2);
+					} else {
+						was_full_instruction = true;
+					}
+				} else
+					dst += 4;
+				continue;
+			}
+#endif // RISCV_BINARY_TRANSLATION
+
+			if (!compressed_enabled || was_full_instruction) {
+				// Cache the (modified) instruction bits
+				auto bytecode = CPU<W>::computed_index_for(instruction);
+				// Threaded rewrites are **always** enabled
+				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
+				entry.set_bytecode(bytecode);
+				entry.instr = rewritten.whole;
+			} else {
+				// WARNING: If we don't ignore this instruction,
+				// it will get *wrong* idxend values, and cause *invalid jumps*
+				entry.m_handler = 0;
+				entry.set_bytecode(0);
+				// ^ Must be made invalid, even if technically possible to jump to!
+			}
+			if constexpr (VERBOSE_DECODER) {
+				if (entry.get_bytecode() >= RV32I_BC_BEQ && entry.get_bytecode() <= RV32I_BC_BGEU) {
+					fprintf(stderr, "Detected branch bytecode at 0x%lX\n", dst);
+				}
+				if (entry.get_bytecode() == RV32I_BC_BEQ_FW || entry.get_bytecode() == RV32I_BC_BNE_FW) {
+					fprintf(stderr, "Detected forward branch bytecode at 0x%lX\n", dst);
+				}
+			}
+
+			// Increment PC after everything
+			if constexpr (compressed_enabled) {
+				// With compressed we always step forward 2 bytes at a time
+				dst += 2;
+				if (was_full_instruction) {
+					// For it to be a full instruction again,
+					// the length needs to match.
+					was_full_instruction = (instruction.length() == 2);
+				} else {
+					// If it wasn't a full instruction last time, it
+					// will for sure be one now.
+					was_full_instruction = true;
+				}
+			} else
+				dst += 4;
+		}
+		return dst;
+	}
+
+	template <int W> RISCV_INTERNAL
 	void Memory<W>::generate_decoder_cache(
 		[[maybe_unused]] const MachineOptions<W>& options,
 		std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, [[maybe_unused]] bool is_initial)
@@ -442,94 +534,11 @@ namespace riscv
 		}
 	#endif
 
-		// When compressed instructions are enabled, many decoder
-		// entries are illegal because they are between instructions.
-		bool was_full_instruction = true;
-
 		/* Generate all instruction pointers for executable code.
 		   Cannot step outside of this area when pregen is enabled,
 		   so it's fine to leave the boundries alone. */
 		TIME_POINT(t2);
-		address_t dst = addr;
-		const address_t end_addr = addr + len;
-		for (; dst < addr + len;)
-		{
-			auto& entry = exec_decoder[dst / DecoderData<W>::DIVISOR];
-			entry.m_handler = 0;
-			entry.idxend = 0;
-
-			// Load unaligned instruction from execute segment
-			const auto instruction = read_instruction(
-				exec_segment, dst, end_addr);
-			rv32i_instruction rewritten = instruction;
-
-#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
-			// Native code activation uses a special bytecode
-			// but we must still validate the mapping index.
-			const auto claimed_bc = entry.get_bytecode();
-			const bool claimed =
-	#ifdef RISCV_BINARY_TRANSLATION
-				(claimed_bc == RV32I_BC_TRANSLATOR && entry.is_invalid_handler()
-				 && entry.instr < exec.translator_mappings()) ||
-	#endif
-	#ifdef RISCV_ASMJIT
-				(claimed_bc == RV32I_BC_ASMJIT && entry.is_invalid_handler()
-				 && entry.instr < exec.asmjit_mappings()) ||
-	#endif
-				false;
-			if (claimed) {
-				if constexpr (compressed_enabled) {
-					dst += 2;
-					if (was_full_instruction) {
-						was_full_instruction = (instruction.length() == 2);
-					} else {
-						was_full_instruction = true;
-					}
-				} else
-					dst += 4;
-				continue;
-			}
-#endif // RISCV_BINARY_TRANSLATION
-
-			if (!compressed_enabled || was_full_instruction) {
-				// Cache the (modified) instruction bits
-				auto bytecode = CPU<W>::computed_index_for(instruction);
-				// Threaded rewrites are **always** enabled
-				bytecode = exec.threaded_rewrite(bytecode, dst, rewritten);
-				entry.set_bytecode(bytecode);
-				entry.instr = rewritten.whole;
-			} else {
-				// WARNING: If we don't ignore this instruction,
-				// it will get *wrong* idxend values, and cause *invalid jumps*
-				entry.m_handler = 0;
-				entry.set_bytecode(0);
-				// ^ Must be made invalid, even if technically possible to jump to!
-			}
-			if constexpr (VERBOSE_DECODER) {
-				if (entry.get_bytecode() >= RV32I_BC_BEQ && entry.get_bytecode() <= RV32I_BC_BGEU) {
-					fprintf(stderr, "Detected branch bytecode at 0x%lX\n", dst);
-				}
-				if (entry.get_bytecode() == RV32I_BC_BEQ_FW || entry.get_bytecode() == RV32I_BC_BNE_FW) {
-					fprintf(stderr, "Detected forward branch bytecode at 0x%lX\n", dst);
-				}
-			}
-
-			// Increment PC after everything
-			if constexpr (compressed_enabled) {
-				// With compressed we always step forward 2 bytes at a time
-				dst += 2;
-				if (was_full_instruction) {
-					// For it to be a full instruction again,
-					// the length needs to match.
-					was_full_instruction = (instruction.length() == 2);
-				} else {
-					// If it wasn't a full instruction last time, it
-					// will for sure be one now.
-					was_full_instruction = true;
-				}
-			} else
-				dst += 4;
-		}
+		const address_t dst = this->decode_execute_range(exec, addr, addr + len);
 		// Make sure the last entry is an invalid instruction
 		// This simplifies many other sub-systems
 		auto& entry = exec_decoder[(addr + len) / DecoderData<W>::DIVISOR];
