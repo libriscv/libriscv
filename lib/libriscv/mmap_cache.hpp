@@ -49,6 +49,35 @@ namespace riscv
 			return Range{};
 		}
 
+		// Reserve an exact range out of the free list, keeping whatever is
+		// left over on either side. Returns false when the range is not
+		// entirely free, in which case nothing is modified.
+		bool carve(address_t addr, address_t size)
+		{
+			if (addr + size < addr)
+				return false;
+			for (auto it = m_lines.begin(); it != m_lines.end(); ++it)
+			{
+				auto& r = *it;
+				if (r.empty() || addr < r.addr || addr + size > r.addr + r.size)
+					continue;
+				const address_t tail_addr = addr + size;
+				const address_t tail_size = (r.addr + r.size) - tail_addr;
+				if (addr == r.addr) {
+					// Carved from the front
+					if (tail_size == 0) m_lines.erase(it);
+					else { r.addr = tail_addr; r.size = tail_size; }
+				} else {
+					// Carved from the back or the middle
+					r.size = addr - r.addr;
+					if (tail_size != 0)
+						m_lines.insert(it + 1, Range{tail_addr, tail_size});
+				}
+				return true;
+			}
+			return false;
+		}
+
 		void invalidate(address_t addr, address_t size)
 		{
 			auto it = m_lines.begin();

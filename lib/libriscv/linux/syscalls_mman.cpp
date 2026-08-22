@@ -119,8 +119,7 @@ static void add_mman_syscalls()
 			// MAP_FIXED_NOREPLACE maps at exactly the given address or fails
 			// with EEXIST, and must never be relocated: guests use the error
 			// to probe for a free region.
-			if (addr_g + length < addr_g || addr_g < machine.memory.mmap_start()
-				|| addr_g < nextfree)
+			if (addr_g + length < addr_g || addr_g < machine.memory.mmap_start())
 				MMAP_IS_TAKEN();
 			if constexpr (riscv::encompassing_Nbit_arena > 0) {
 				if (addr_g + length > riscv::encompassing_arena_mask)
@@ -129,10 +128,18 @@ static void add_mman_syscalls()
 			if (!riscv::virtual_paging_enabled
 				&& addr_g + length > machine.memory.memory_arena_size())
 				MMAP_IS_TAKEN();
+			if (addr_g >= nextfree) {
+				// Untouched territory: reserve it by moving the arena cursor
+				// above it, and donate the skipped-over gap to the free list
+				// so that later kernel-chosen mappings can still use it.
+				if (addr_g > nextfree)
+					machine.memory.mmap_cache().insert(nextfree, addr_g - nextfree);
+				nextfree = addr_g + length;
+			} else if (!machine.memory.mmap_cache().carve(addr_g, length)) {
+				// Below the cursor and not entirely free: occupied
+				MMAP_IS_TAKEN();
+			}
 			result = addr_g;
-			// Keep the arena cursor above the reservation, so that later
-			// kernel-chosen mappings never come out of it
-			nextfree = addr_g + length;
 		}
 		else if (addr_g == 0 || (flags & LINUX_MAP_FIXED) == 0)
 		{
@@ -162,7 +169,11 @@ static void add_mman_syscalls()
 			// A fixed range below the mmap arena start, we do nothing except return the address
 			result    = addr_g;
 		} else if (addr_g + length > addr_g && addr_g + length <= nextfree) {
-			// Fixed mapping inside mmap arena
+			// Fixed mapping inside mmap arena: it may land on top of a range
+			// that is sitting in the free list, which must not be handed out
+			// a second time.
+			if (!machine.memory.mmap_cache().carve(addr_g, length))
+				machine.memory.mmap_cache().invalidate(addr_g, length);
 			result = addr_g;
 		} else if (addr_g + length > addr_g) {
 			// Fixed mapping ending after the current end of the mmap arena
@@ -175,10 +186,18 @@ static void add_mman_syscalls()
 					result = nextfree;
 					nextfree += length;
 				} else {
+					if (addr_g > nextfree)
+						machine.memory.mmap_cache().insert(nextfree, addr_g - nextfree);
+					else
+						machine.memory.mmap_cache().invalidate(addr_g, length);
 					result = addr_g;
-					nextfree = addr_g + length;
+					nextfree = std::max(nextfree, address_type<W>(addr_g + length));
 				}
 			} else {
+				if (addr_g > nextfree)
+					machine.memory.mmap_cache().insert(nextfree, addr_g - nextfree);
+				else
+					machine.memory.mmap_cache().invalidate(addr_g, length);
 				result = addr_g;
 				nextfree = std::max(nextfree, address_type<W>(addr_g + length));
 			}
