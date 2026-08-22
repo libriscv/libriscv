@@ -1,6 +1,7 @@
 #include "rvv.hpp"
 #include "fp16.hpp"
 #include "instr_helpers.hpp"
+#include "internal_common.hpp"
 #include "rvv_printer.hpp"
 #include <cmath>
 #include <cstdint>
@@ -244,20 +245,12 @@ namespace
 		}
 	}
 
-	// The rounding right shift that the scaling shifts, the clips and
-	// vsmul share: `value >> shift` plus an increment picked by vxrm. The
-	// shift is arithmetic when T is signed, the difference between vssra and vssrl.
-	template <typename T, typename U = std::make_unsigned_t<T>>
-	static T roundoff(const T value, const unsigned shift, const unsigned vxrm)
+	// Apply vxrm rounding to a pre-shifted value given the guard bit (lsb)
+	// and sticky bit (rest). Used directly when 2*SEW is unavailable.
+	template <typename T>
+	static T round_adjust(const T shifted, const bool lsb, const bool rest,
+		const unsigned vxrm)
 	{
-		if (shift == 0)
-			return value;
-		const T shifted = T(value >> shift);
-		const U bits = (U)value;
-		// The last bit shifted out, and whether anything below it was set.
-		const U lsb = U(bits >> (shift - 1)) & 1;
-		const bool rest = shift > 1
-			&& (bits & U((U(1) << (shift - 1)) - 1)) != 0;
 		switch (vxrm) {
 		case 0: return T(shifted + lsb);                         // rnu
 		case 1: // rne: a tie rounds to the even result
@@ -265,6 +258,42 @@ namespace
 		case 2: return shifted;                                  // rdn
 		default: // rod: force an odd result unless the shift was exact
 			return (lsb || rest) ? T(shifted | 1) : shifted;
+		}
+	}
+
+	// Rounding right shift shared by vssrl/vssra, vnclip and vsmul.
+	template <typename T, typename U = std::make_unsigned_t<T>>
+	static T roundoff(const T value, const unsigned shift, const unsigned vxrm)
+	{
+		if (shift == 0)
+			return value;
+		const T shifted = T(value >> shift);
+		const U bits = (U)value;
+		// Guard and sticky bits for vxrm rounding.
+		const bool lsb = (U(bits >> (shift - 1)) & 1) != 0;
+		const bool rest = shift > 1
+			&& (bits & U((U(1) << (shift - 1)) - 1)) != 0;
+		return round_adjust<T>(shifted, lsb, rest, vxrm);
+	}
+
+	// Upper SEW bits of a 2*SEW product (vmulh/vmulhu/vmulhsu).
+	// SEW<64 uses a 64-bit intermediate; SEW=64 delegates to the scalar MULH helpers.
+	template <typename E>
+	static E mul_high(const E a, const E b, const bool a_signed, const bool b_signed)
+	{
+		using U = std::make_unsigned_t<E>;
+		if constexpr (sizeof(E) < sizeof(int64_t)) {
+			// Sign/zero-extend to 64 bits; unsigned multiply is fine since
+			// only the upper SEW bits are kept.
+			const uint64_t wa = a_signed ? (uint64_t)(int64_t)a : (uint64_t)(U)a;
+			const uint64_t wb = b_signed ? (uint64_t)(int64_t)b : (uint64_t)(U)b;
+			return (E)((wa * wb) >> (8 * sizeof(E)));
+		} else {
+			if (a_signed && b_signed)
+				return (E)mulhi64((uint64_t)a, (uint64_t)b);
+			else if (a_signed)
+				return (E)mulhsu64((uint64_t)a, (uint64_t)b);
+			return (E)mulhu64((uint64_t)a, (uint64_t)b);
 		}
 	}
 
@@ -589,21 +618,28 @@ namespace
 			int_sew_dispatch(cpu, [&] (auto tag) {
 				using E = decltype(tag);
 				constexpr unsigned bits = 8 * sizeof(E);
-				// Both operands are fractions with SEW-1 bits after the
-				// point, so the 2*SEW product is shifted back down by that
-				// much. Only the most negative square overflows.
+				// Q(SEW-1) fixed-point multiply; only emin*emin saturates.
 				constexpr E emin = E(std::make_unsigned_t<E>(1) << (bits - 1));
 				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
 					const E a = element_at<E>(rvv, vs2, i);
 					const E b = is_vv ? element_at<E>(rvv, vs1, i) : (E)scalar;
-					const __int128_t prod = (__int128_t)a * (__int128_t)b;
-					const __int128_t r =
-						roundoff<__int128_t, __uint128_t>(prod, bits - 1, vxrm);
-					if (r > (__int128_t)(E)~emin) {
+					if (a == emin && b == emin) {
 						rvv.set_vxsat(true);
 						return (E)~emin;
 					}
-					return (E)r;
+					if constexpr (sizeof(E) < sizeof(int64_t)) {
+						const int64_t prod = (int64_t)a * (int64_t)b;
+						return (E)roundoff<int64_t>(prod, bits - 1, vxrm);
+					} else {
+						// SEW=64: no 2*SEW type. Reconstruct the Q(SEW-1)
+						// fixed-point result from hi:lo and round with vxrm.
+						const uint64_t lo = (uint64_t)a * (uint64_t)b;
+						const uint64_t hi = (uint64_t)mul_high<E>(a, b, true, true);
+						const E shifted = (E)((hi << 1) | (lo >> 63));
+						const bool lsb = ((lo >> 62) & 1) != 0;
+						const bool rest = (lo & ((uint64_t(1) << 62) - 1)) != 0;
+						return round_adjust<E>(shifted, lsb, rest, vxrm);
+					}
 				});
 			});
 			return true;
@@ -755,12 +791,8 @@ namespace
 		return true;
 	}
 
-	/**
-	 * The averaging add and subtract. The sum is exact in SEW+1 bits and
-	 * then shifted back down with vxrm rounding, so the intermediate is
-	 * always one bit wider than the element -- 128-bit arithmetic covers
-	 * SEW=64, where there is no wider element type to borrow.
-	 */
+	// vaadd/vaaddu/vasub/vasubu: exact (SEW+1)-bit sum/difference, rounded
+	// back to SEW via vxrm. Operands are halved first to stay within SEW.
 	template <typename CPU_t>
 	static void integer_averaging(CPU_t& cpu, const rv32v_instruction& vi,
 		const bool is_vv, const uint64_t scalar)
@@ -779,16 +811,14 @@ namespace
 			vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
 				const E a = element_at<E>(rvv, vs2, i);
 				const E b = is_vv ? element_at<E>(rvv, vs1, i) : (E)scalar;
-				if (sign) {
-					const __int128_t s = sub
-						? (__int128_t)a - (__int128_t)b
-						: (__int128_t)a + (__int128_t)b;
-					return (E)roundoff<__int128_t, __uint128_t>(s, 1, vxrm);
-				}
-				const __uint128_t s = sub
-					? (__uint128_t)(U)a - (__uint128_t)(U)b
-					: (__uint128_t)(U)a + (__uint128_t)(U)b;
-				return (E)(U)roundoff<__uint128_t, __uint128_t>(s, 1, vxrm);
+				// Halve, combine, then round: a0/b0 carry the guard/sticky.
+				const U ah = sign ? (U)(a >> 1) : (U)((U)a >> 1);
+				const U bh = sign ? (U)(b >> 1) : (U)((U)b >> 1);
+				const unsigned a0 = (unsigned)a & 1u, b0 = (unsigned)b & 1u;
+				const U shifted = sub
+					? U(ah - bh - (a0 < b0 ? 1u : 0u))
+					: U(ah + bh + (a0 & b0));
+				return (E)round_adjust<U>(shifted, a0 != b0, false, vxrm);
 			});
 		});
 	}
@@ -2471,7 +2501,6 @@ namespace
 			int_sew_dispatch(cpu, [&] (auto tag) {
 				using E = decltype(tag);
 				using U = std::make_unsigned_t<E>;
-				constexpr unsigned bits = 8 * sizeof(E);
 				const unsigned funct6 = vi.OPVV.funct6;
 				vector_element_loop<E>(cpu, vd, vm, [&] (uint64_t i) {
 					const E a = element_at<E>(rvv, vs2, i);
@@ -2479,15 +2508,13 @@ namespace
 					                  : element_at<E>(rvv, vs1, i);
 					const U c = element_at<E>(rvv, vd, i);
 					switch (funct6) {
-						case 0b100100:
-							return (E)(((__uint128_t)(U)a * (__uint128_t)(U)b) >> bits);
+						case 0b100100: return mul_high<E>(a, b, false, false);
 						case 0b100101: return (E)((U)a * (U)b);
 						case 0b100110:
 							// Only vs2 is signed, so the unsigned operand is
 							// widened first and the product stays signed.
-							return (E)(((__int128_t)a * (__int128_t)(U)b) >> bits);
-						case 0b100111:
-							return (E)(((__int128_t)a * (__int128_t)b) >> bits);
+							return mul_high<E>(a, b, true, false);
+						case 0b100111: return mul_high<E>(a, b, true, true);
 						case 0b101001: return (E)((U)b * c + (U)a);
 						case 0b101011: return (E)((U)a - (U)b * c);
 						case 0b101101: return (E)((U)a * (U)b + c);
