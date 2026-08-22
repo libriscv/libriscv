@@ -266,3 +266,28 @@ TEST_CASE("Freeing an enormous range only frees the range", "[Memory]")
 	machine.memory.free_pages(B, 2 * Page::size());
 	REQUIRE(machine.memory.pages_active() == before);
 }
+
+TEST_CASE("Discarding memory zeroes it everywhere", "[Memory]")
+{
+	static constexpr uint64_t MEMORY_MAX = 8ul << 20; /* 8MB */
+	static constexpr uint64_t INSIDE  = 0x500000;
+	static constexpr uint64_t OUTSIDE = 0x40000000;
+
+	Machine<RISCV64> machine { empty, { .memory_max = MEMORY_MAX } };
+	REQUIRE(INSIDE < machine.memory.memory_arena_size());
+	REQUIRE(OUTSIDE > machine.memory.memory_arena_size());
+
+	const std::vector<uint8_t> pattern(Page::size(), 0x41);
+	for (const auto addr : {INSIDE, OUTSIDE})
+	{
+		machine.copy_to_guest(addr, pattern.data(), pattern.size());
+		REQUIRE(machine.memory.read<uint8_t>(addr) == 0x41);
+		REQUIRE(machine.memory.read<uint8_t>(addr + Page::size() - 1) == 0x41);
+
+		// Pages outside the memory arena come from the heap, which has no
+		// host page alignment, so they cannot be discarded with madvise
+		machine.memory.memdiscard(addr, Page::size(), true);
+		REQUIRE(machine.memory.read<uint8_t>(addr) == 0x00);
+		REQUIRE(machine.memory.read<uint8_t>(addr + Page::size() - 1) == 0x00);
+	}
+}

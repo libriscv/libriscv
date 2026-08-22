@@ -201,15 +201,17 @@ namespace riscv
 						m_page_write_handler(*this, pageno, page);
 					}
 					if (page.attr.write || ignore_protections) {
-
+						bool discarded = false;
 						if constexpr (MADVISE_ENABLED) {
 							// madvise "fast-path" (XXX: doesn't scale on busy server)
-							if (offset == 0 && size == Page::size()) {
-								madvise(page.data(), Page::size(), MADV_DONTNEED);
-							} else {
-								std::memset(page.data() + offset, 0, size);
+							// Only whole, host-page-aligned pages qualify: madvise
+							// rejects anything else, and page data comes from 16b heap
+							if (offset == 0 && size == Page::size()
+								&& (uintptr_t(page.data()) & (Page::size()-1)) == 0) {
+								discarded = madvise(page.data(), Page::size(), MADV_DONTNEED) == 0;
 							}
-						} else {
+						}
+						if (!discarded) {
 							// Zero the existing writable page
 							std::memset(page.data() + offset, 0, size);
 						}
@@ -231,7 +233,8 @@ namespace riscv
 							const size_t new_size = new_dst - dst;
 
 							auto* baseptr = &((uint8_t *)m_arena.data)[dst];
-							madvise(baseptr, new_size, MADV_DONTNEED);
+							if (madvise(baseptr, new_size, MADV_DONTNEED) != 0)
+								std::memset(baseptr, 0, new_size);
 
 							dst += new_size;
 							len -= new_size;
