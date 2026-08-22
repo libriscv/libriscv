@@ -171,6 +171,7 @@ retry_translated_function:
 	// Invoke translated code
 	auto bintr_results = 
 		exec->unchecked_mapping_at(decoder->instr)(*this, cnt, max, pc);
+
 	pc = REGISTERS().pc;
 	cnt = bintr_results.counter;
 	max = bintr_results.max_counter;
@@ -188,6 +189,11 @@ retry_translated_function:
 		counter.set_counters(cnt, max);
 		goto continue_segment;
 	}
+#ifdef RISCV_LIBTCC
+	// We need to check if we have a current exception
+	if (UNLIKELY(CPU().has_current_exception()))
+		goto handle_rethrow_exception;
+#endif
 	counter.set_counters(cnt, max);
 	goto check_jump;
 }

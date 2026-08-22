@@ -170,7 +170,7 @@ TEST_CASE("Writes to read-only segment", "[Memory]")
 	const auto read_addr = machine.address_of("read_from");
 	REQUIRE(read_addr != 0x0);
 
-	// Reads amd writes to invalid locations
+	// Reads and writes to invalid locations
 	REQUIRE_THROWS_WITH([&] {
 		machine.vmcall<MAX_INSTRUCTIONS>(read_addr, 0);
 	}(), Catch::Matchers::ContainsSubstring("Protection fault"));
