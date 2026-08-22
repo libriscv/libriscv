@@ -321,7 +321,7 @@ static void run_program(
 		.libc_fastpath = cli_args.libc_fastpath,
 #ifdef RISCV_BINARY_TRANSLATION
 		.translate_enabled = !cli_args.no_translate,
-		.translate_future_segments = cli_args.translate_future,
+		.translate_future_segments = cli_args.proxy_mode && cli_args.translate_future,
 		.translate_trace = cli_args.trace,
 		.translate_timing = cli_args.timing,
 		.translate_ignore_instruction_limit = !cli_args.accurate, // Press Ctrl+C to stop

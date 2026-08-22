@@ -173,7 +173,7 @@ namespace riscv
 		bool translate_enable_embedded = true;
 		/// @brief Translate not just the initial execute segments of the ELF program,
 		/// but also any future shared objects or JIT-produced segments.
-		bool translate_future_segments = true;
+		bool translate_future_segments = false;
 		/// @brief Enable compiling execute segment on-demand during emulation.
 		/// @details Not available on most Windows systems.
 #if defined(_WIN32) && !defined(RISCV_LIBTCC)

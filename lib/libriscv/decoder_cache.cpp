@@ -758,8 +758,8 @@ namespace riscv
 	template <int W>
 	void Memory<W>::mark_execute_segments_stale() noexcept
 	{
-		if (m_main_exec_segment)
-			m_main_exec_segment->set_stale(true);
+		// We intentionally ignore the main execute segment,
+		// as this is a sandbox, not a toy emulator.
 		for (auto& segment : m_exec) {
 			if (segment)
 				segment->set_stale(true);
