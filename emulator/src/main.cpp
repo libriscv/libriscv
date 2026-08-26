@@ -40,6 +40,7 @@ struct Arguments {
 	bool background = riscv::libtcc_enabled || riscv::asmjit_enabled; // Run translation in background thread
 	bool proxy_mode = false;  // Proxy mode for system calls
 	bool libc_fastpath = false; // Hot-patch known libc functions
+	bool automatic_nbit = false;
 	uint64_t fuel = 30'000'000'000ULL; // Default: Timeout after ~30bn instructions
 	uint64_t max_memory = 0;
 	std::vector<std::string> allowed_files;
@@ -86,6 +87,7 @@ static const struct option long_options[] = {
 	{"verbose-syscalls", no_argument, 0, 1004},
 	{"ebreak", required_argument, 0, 1005},
 	{"libc-fastpath", no_argument, 0, 1006},
+	{"nbit-address-space", no_argument, 0, 1007},
 	{0, 0, 0, 0}
 };
 
@@ -126,6 +128,7 @@ static void print_help(const char* name)
 		"  -I, --ignore-text  Ignore .text section, and use segments only\n"
 		"  -c, --call func    Call a function after loading the program\n"
 		"      --libc-fastpath  Hot-patch memcpy, memset, strlen etc. with native implementations\n"
+		"      --nbit-address-space  Mask arena addresses in translated code instead of bounds-checking them\n"
 		"\n"
 	);
 	printf("libriscv v%d.%d is compiled with:\n"
@@ -212,6 +215,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 1004: args.verbose_syscalls = true; break;
 			case 1005: args.ebreak_locations.push_back(optarg); break;
 			case 1006: args.libc_fastpath = true; break;
+			case 1007: args.automatic_nbit = true; break;
 			case 'm': // --memory
 				if (optarg) {
 					char* endptr;
@@ -324,11 +328,17 @@ static void run_program(
 		.translate_future_segments = cli_args.proxy_mode && cli_args.translate_future,
 		.translate_trace = cli_args.trace,
 		.translate_timing = cli_args.timing,
-		.translate_ignore_instruction_limit = !cli_args.accurate, // Press Ctrl+C to stop
+#endif
+		.translate_ignore_instruction_limit = !cli_args.accurate,
+#ifdef RISCV_BINARY_TRANSLATION
 		.translate_use_register_caching = cli_args.translate_regcache,
-		.translate_automatic_nbit_address_space = false,
+#endif
+		.translate_automatic_nbit_address_space = cli_args.automatic_nbit,
+#ifdef RISCV_BINARY_TRANSLATION
 		.translate_use_virtual_paging_fallback = cli_args.full_virtual,
+#endif
 		.translate_unsafe_remove_checks = cli_args.proxy_mode, // Proxy mode disables sandboxing
+#ifdef RISCV_BINARY_TRANSLATION
 		.record_slowpaths_to_jump_hints = !cli_args.jump_hints_file.empty(),
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",

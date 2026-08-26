@@ -8,6 +8,7 @@
 #include "aj_runtime.hpp"
 
 #include <chrono>
+#include <cinttypes>
 #include <cstdio>
 #include <set>
 #include <variant>
@@ -177,9 +178,19 @@ namespace riscv
 				&& !riscv::unaligned_memory_slowpaths
 				&& mem.uses_flat_memory_arena();
 			info.arena_mask = 0;
+			// Only power-of-two arenas qualify; a wider mask lets accesses escape.
+			if (info.inline_memory && options.translate_automatic_nbit_address_space) {
+				const uint64_t arena_size = mem.memory_arena_size();
+				if (arena_size != 0 && (arena_size & (arena_size - 1)) == 0)
+					info.arena_mask = arena_size - 1;
+				else if (options.verbose_loader)
+					fprintf(stderr, "libriscv: asmjit cannot use an automatic N-bit address space "
+						"for a %" PRIu64 "-byte arena; it is not a power of two\n", arena_size);
+			}
 		}
 		info.unsafe_remove_checks =
 			options.translate_unsafe_remove_checks && info.inline_memory;
+		info.ignore_instruction_limit = options.translate_ignore_instruction_limit;
 		info.cb = &aj_callbacks<W>();
 		return info;
 	}

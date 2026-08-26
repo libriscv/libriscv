@@ -47,6 +47,7 @@ namespace riscv
 		/// which is indexed by the address itself behind a bounds check.
 		uint64_t arena_mask = 0;
 		bool unsafe_remove_checks = false;
+		bool ignore_instruction_limit = false;
 		const AjCallbacks<W>* cb = nullptr;
 	};
 

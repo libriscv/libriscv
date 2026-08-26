@@ -334,6 +334,7 @@ struct AjEmitter
 	// `pending` counts retired instructions since the last flush. Must be zero
 	// at every merge point (before binding a target label or emitting a branch).
 	void flush_counter() {
+		if (info.ignore_instruction_limit) { pending = 0; return; }
 		if (pending) { uc.add(counter, counter, Imm(pending)); pending = 0; }
 	}
 
@@ -347,6 +348,7 @@ struct AjEmitter
 			if (fp_writeset[i]) uc.v_storeu64_u64(freg_mem(i), fvreg[i]);
 	}
 	void store_counter(uint32_t pend) {
+		if (info.ignore_instruction_limit) pend = 0;
 		if (pend == 0) {
 			uc.store(mem_ptr(st, off_counter()), counter);
 		} else {
@@ -374,8 +376,9 @@ struct AjEmitter
 		uc.store(mem_ptr(st, off_pc()), next_pc);
 		uc.ret();
 	}
-	// Back-edge counter check; reloads max so a faulting helper's zero breaks the loop.
+	// Reloads max so a faulting helper's zero breaks the loop.
 	void emit_backedge_check(address_t target) {
+		if (info.ignore_instruction_limit) return;
 		Label ok = uc.new_label();
 		uc.j(ok, ucmp_lt(counter, mem_ptr(st, off_max())));
 		emit_exit(target, 0);
@@ -2063,7 +2066,10 @@ aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options
 	fn->set_arg(1, e.st);
 
 	e.prepass();
-	cc.load(e.counter, mem_ptr(e.st, AjEmitter<W>::off_counter()));
+	if (info.ignore_instruction_limit)
+		cc.mov(e.counter, Imm(0));
+	else
+		cc.load(e.counter, mem_ptr(e.st, AjEmitter<W>::off_counter()));
 	e.emit_prologue_loads();   // every load lands here, ahead of every label
 	e.emit_body();
 	if (e.failed)

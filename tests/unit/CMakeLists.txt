@@ -60,6 +60,7 @@ endif()
 add_unit_test(rvbuffer rvbuffer.cpp)
 if (RISCV_BINARY_TRANSLATION OR RISCV_ASMJIT)
 add_unit_test(unchecked unchecked.cpp)  # translate_unsafe_remove_checks, both back-ends
+add_unit_test(nbitarena nbit_arena.cpp)
 endif()
 if (RISCV_EXT_V)
 add_unit_test(rvv     rvv.cpp)

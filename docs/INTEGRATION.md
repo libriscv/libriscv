@@ -189,10 +189,13 @@ The Machine constructor has many options, and we will go through each one.
 - When enabled, the binary translator will make use of the memory arena. Default: true
 
 > translate_ignore_instruction_limit
-- When enabled, instruction counting is not performed during binary translation, and execution can only stop using another external method. This slightly improves performance. Default: false
+- When enabled, instruction counting is not performed by the native back-ends (binary translation and asmjit), and execution can only stop using another external method. This slightly improves performance. Default: false
 
 > translate_use_register_caching
 - When enabled, Machine registers will be put into local stack variables in the binary translation, and loaded and stored more efficiently than unoptimized code. This improves code compiled with -O0, or code produced using simpler compilers like TCC. Default: Enabled with libtcc, otherwise disabled.
+
+> translate_automatic_nbit_address_space
+- When enabled, the native back-ends (binary translation and asmjit) mask guest addresses into the memory arena instead of bounds-checking them, the same translation a build-time N-bit encompassing arena gets. asmjit requires the arena to be a power of two, and declines otherwise (visible with verbose_loader). Masked accesses carry no bounds check, so translated code can write anywhere in the arena, the guest's own rodata included. Default: false
 
 > cross_compile
 - A vector of cross-compilation methods. Each method is invoked during binary translation, as needed. If an output already exists, skip. A method can be to produce embeddable source files, while another method can be a cross-compiler invocation. Windows-compatible MinGW .dll's can be cross-compiled from Linux.

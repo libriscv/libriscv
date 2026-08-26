@@ -193,13 +193,15 @@ namespace riscv
 		/// @details If disabled, remote machines will be able to make remote
 		/// calls to this machine. In most cases, this is not needed.
 		bool translation_use_arena = true;
+#endif // RISCV_BINARY_TRANSLATION
 		/// @brief Allow the program to run forever, ignoring the instruction counter limit.
 		/// @details This is useful when there are other ways of interrupting and cancelling the program.
-		/// @note This option is only available when the binary translator is enabled. The main dispatch
+		/// @note Honored by both native back-ends. The main dispatch
 		/// will always check the instruction counter limit.
 		/// It is completely fine to enable this option when running from the command line,
 		/// as a simple Ctrl+C will stop the program.
 		bool translate_ignore_instruction_limit = false;
+#ifdef RISCV_BINARY_TRANSLATION
 		/// @brief Enable the use of register caching for the binary translator. Always enabled
 		/// when binary translation with libtcc is enabled.
 		/// @details Enable this when compiling with -O0 or when using simple compilers like TCC.
@@ -208,10 +210,13 @@ namespace riscv
 #else
 		bool translate_use_register_caching = false;
 #endif
-		/// @brief Enable automatic n-bit address space for the binary translator by rounding down to the nearest power of 2.
-		/// @details This will allow the binary translator to use and-masked addresses
+#endif // RISCV_BINARY_TRANSLATION
+		/// @brief Enable automatic n-bit address space for the native back-ends by rounding the arena down to the nearest power of 2.
+		/// @details This will allow the back-end to use and-masked addresses
 		/// for all memory accesses, which can drastically improve performance.
+		/// @note Masked accesses skip bounds checks; the guest can write anywhere in the arena.
 		bool translate_automatic_nbit_address_space = false;
+#ifdef RISCV_BINARY_TRANSLATION
 		/// @brief Enable access to virtual pages outside of the arena in the binary translator.
 		/// @details Disabling this will simplifiy memory accesses, allowing up to 8 nearby
 		/// accesses to use only a single bounds-check. However, accessing virtual pages

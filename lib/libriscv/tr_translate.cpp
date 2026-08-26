@@ -342,6 +342,13 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	if (options.translate_unsafe_remove_checks) {
 		defines.emplace("RISCV_UNCHECKED_MEMORY", "1");
 	}
+	// Enter the hash so cached translations with the opposite setting are not reused.
+	if (options.translate_automatic_nbit_address_space) {
+		defines.emplace("RISCV_NBIT_AUTOMATIC", "1");
+	}
+	if (options.translate_ignore_instruction_limit) {
+		defines.emplace("RISCV_NO_INSTRUCTION_LIMIT", "1");
+	}
 	return defines;
 }
 
