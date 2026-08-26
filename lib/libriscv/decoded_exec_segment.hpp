@@ -154,6 +154,10 @@ namespace riscv
 		bool is_stale() const noexcept { return m_is_stale; }
 		void set_stale(bool is_stale) { m_is_stale = is_stale; }
 
+		// Part of the shared-segment key: unchecked code must not be handed to a sandboxed Machine.
+		bool is_unchecked_memory() const noexcept { return m_unchecked_memory; }
+		void set_unchecked_memory(bool unchecked) { m_unchecked_memory = unchecked; }
+
 	private:
 		address_t m_vaddr_begin = 0;
 		address_t m_vaddr_end   = 0;
@@ -185,6 +189,7 @@ namespace riscv
 #endif
 		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment
 		bool m_is_execute_only = false;
+		bool m_unchecked_memory = false;
 #ifdef RISCV_BINARY_TRANSLATION
 		bool m_do_record_slowpaths = false;
 		mutable bool m_is_libtcc = false;

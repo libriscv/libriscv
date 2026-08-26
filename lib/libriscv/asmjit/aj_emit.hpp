@@ -46,6 +46,7 @@ namespace riscv
 		/// exactly as Memory<W>::read()/write() do it. Zero means the flat arena,
 		/// which is indexed by the address itself behind a bounds check.
 		uint64_t arena_mask = 0;
+		bool unsafe_remove_checks = false;
 		const AjCallbacks<W>* cb = nullptr;
 	};
 

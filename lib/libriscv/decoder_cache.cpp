@@ -9,12 +9,14 @@
 #include "util/crc32.hpp"
 #include <inttypes.h>
 #include <mutex>
+#include <tuple>
 #include <unordered_set>
 //#define ENABLE_TIMINGS
 struct SegmentKey {
 	uint64_t pc;
 	uint32_t crc;
 	uint64_t arena_size = 0;
+	bool unchecked_memory = false;
 
 	template <int W>
 	static SegmentKey from(const riscv::DecodedExecuteSegment<W>& segment, uint64_t arena_size) {
@@ -22,21 +24,26 @@ struct SegmentKey {
 		key.pc = uint64_t(segment.exec_begin());
 		key.crc = segment.crc32c_hash();
 		key.arena_size = arena_size;
+		key.unchecked_memory = segment.is_unchecked_memory();
 		return key;
 	}
 
+	auto as_tuple() const noexcept {
+		return std::tie(pc, crc, arena_size, unchecked_memory);
+	}
 	bool operator==(const SegmentKey& other) const {
-		return pc == other.pc && crc == other.crc;
+		return as_tuple() == other.as_tuple();
 	}
 	bool operator<(const SegmentKey& other) const {
-		return pc < other.pc || (pc == other.pc && crc < other.crc);
+		return as_tuple() < other.as_tuple();
 	}
 };
 namespace std {
 	template <>
 	struct hash<SegmentKey> {
 		size_t operator()(const SegmentKey& key) const {
-			return key.pc ^ key.crc ^ key.arena_size;
+			return key.pc ^ key.crc ^ key.arena_size
+				^ (key.unchecked_memory ? 0x9E3779B97F4A7C15ull : 0ull);
 		}
 	};
 }
@@ -641,6 +648,8 @@ namespace riscv
 		// Create CRC32-C hash of the execute segment
 		const uint32_t hash = crc32c(exec_data, current_exec->exec_end() - current_exec->exec_begin());
 
+		current_exec->set_unchecked_memory(options.translate_unsafe_remove_checks);
+
 		// Get a free slot to reference the execute segment
 		auto& free_slot = this->next_execute_segment();
 
@@ -648,7 +657,8 @@ namespace riscv
 		if (options.use_shared_execute_segments)
 		{
 			// We have to key on the base address of the execute segment as well as the hash
-			const SegmentKey key{uint64_t(current_exec->exec_begin()), hash, memory_arena_size()};
+			const SegmentKey key{uint64_t(current_exec->exec_begin()), hash,
+				memory_arena_size(), current_exec->is_unchecked_memory()};
 
 			// In order to prevent others from creating the same execute segment
 			// we need to lock the shared execute segments mutex.

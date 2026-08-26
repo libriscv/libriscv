@@ -338,6 +338,10 @@ static std::unordered_map<std::string, std::string> create_defines_for(const Mac
 	if constexpr (encompassing_Nbit_arena != 0) {
 		defines.emplace("RISCV_NBIT_UNBOUNDED", std::to_string(encompassing_Nbit_arena));
 	}
+	// Enters the define hash like RISCV_FCSR: prevents sharing with a sandboxed Machine.
+	if (options.translate_unsafe_remove_checks) {
+		defines.emplace("RISCV_UNCHECKED_MEMORY", "1");
+	}
 	return defines;
 }
 

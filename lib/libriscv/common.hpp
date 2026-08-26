@@ -222,10 +222,11 @@ namespace riscv
 #else
 			false;
 #endif
-		/// @brief Enable unsafe removal of checks in the binary translator.
-		/// @details This will remove checks that prevent the program from crashing, such
-		/// as memory access checks, and other checks that sandboxes normally provide.
+#endif // RISCV_BINARY_TRANSLATION
+		/// @brief Remove arena bounds checks in both back-ends.
+		/// @details Outside the RISCV_BINARY_TRANSLATION block so asmjit-only builds have it.
 		bool translate_unsafe_remove_checks = false;
+#ifdef RISCV_BINARY_TRANSLATION
 		/// @brief Enable recording of slowpaths to jump hints for the binary translator.
 		/// @note This option is only available when RISCV_DEBUG and the binary translator is enabled.
 		/// @details This will record slowpaths to the MachineOptions jump hints vector.

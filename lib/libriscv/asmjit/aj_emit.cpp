@@ -897,8 +897,10 @@ struct AjEmitter
 		node->set_arg(4, rvimm(pc));
 		emit_fault_check(pc, pend);
 	}
-	/// @brief True for flat arena (needs bounds check); N-bit encompassing arena needs no check.
-	bool arena_is_checked() const noexcept { return info.arena_mask == 0; }
+	/// @brief True when the arena requires a bounds check.
+	bool arena_is_checked() const noexcept {
+		return info.arena_mask == 0 && !info.unsafe_remove_checks;
+	}
 	/// @brief Arena index: direct for flat, masked for N-bit encompassing (over-allocation covers straddles).
 	Gp arena_index(const Gp& addr) {
 		// Full-width mask is a no-op (common for RV32 under a 32-bit arena).

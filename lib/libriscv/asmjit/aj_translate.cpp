@@ -142,7 +142,7 @@ namespace riscv
 	}
 
 	template <int W>
-	static AjInfo<W> aj_machine_info(const CPU<W>& cpu)
+	static AjInfo<W> aj_machine_info(const CPU<W>& cpu, const MachineOptions<W>& options)
 	{
 		// Field offsets measured from a live instance, avoiding offsetof() on
 		// non-standard-layout types.
@@ -178,6 +178,8 @@ namespace riscv
 				&& mem.uses_flat_memory_arena();
 			info.arena_mask = 0;
 		}
+		info.unsafe_remove_checks =
+			options.translate_unsafe_remove_checks && info.inline_memory;
 		info.cb = &aj_callbacks<W>();
 		return info;
 	}
@@ -257,7 +259,7 @@ namespace riscv
 		}
 
 		// --- 3. Emit --------------------------------------------------------------
-		const AjInfo<W> info = aj_machine_info<W>(cpu);
+		const AjInfo<W> info = aj_machine_info<W>(cpu, options);
 
 		auto ajcode = std::make_shared<AjCode>();
 		auto& mappings = exec.create_asmjit_mappings(regions.size());
