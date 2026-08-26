@@ -167,12 +167,11 @@ retry_translated_function:
 	// Invoke translated code
 	auto bintr_results =
 		exec->unchecked_mapping_at(decoder->instr)(*this, 0, ~0ULL, pc);
-	if (bintr_results.max_counter == 0) {
 #ifdef RISCV_LIBTCC
-		// We need to check if we have a current exception
-		if (UNLIKELY(CPU().has_current_exception()))
-			goto handle_rethrow_exception;
+	if (UNLIKELY(CPU().has_current_exception()))
+		goto handle_rethrow_exception;
 #endif
+	if (bintr_results.max_counter == 0) {
 		return;
 	}
 

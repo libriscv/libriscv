@@ -170,16 +170,15 @@ namespace riscv
 		VIEW_INSTR();
 		auto new_values = 
 			exec->mapping_at(instr.whole)(CPU(), counter.value()-1, counter.max(), pc);
+#ifdef RISCV_LIBTCC
+		if (UNLIKELY(CPU().has_current_exception())) {
+			const auto except = CPU().current_exception();
+			CPU().clear_current_exception();
+			std::rethrow_exception(except);
+		}
+#endif
 		counter.set_counters(new_values.counter, new_values.max_counter);
 		if (new_values.max_counter == 0) {
-#ifdef RISCV_LIBTCC
-			// We need to check if we have a current exception
-			if (UNLIKELY(CPU().has_current_exception())) {
-				const auto except = CPU().current_exception();
-				CPU().clear_current_exception();
-				std::rethrow_exception(except);
-			}
-#endif
 			return RETURN_VALUES();
 		}
 		pc = REGISTERS().pc;
