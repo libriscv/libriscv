@@ -60,6 +60,15 @@ typedef struct {
 	riscv_error_func_t error; /* Error callback */
 	riscv_stdout_func_t stdout; /* Stdout callback */
 	void *opaque;             /* User-provided pointer */
+	/* Extended options are initialized by libriscv_set_defaults(). */
+	int      use_memory_arena;
+	int      use_shared_execute_segments;
+	const char *default_exit_function;
+	int      load_program;
+	int      protect_segments;
+	unsigned native_syscall_base;
+	uint64_t arena_size;
+	unsigned native_heap_max_chunks; /* 0 derives a bounded cap from arena_size */
 } RISCVOptions;
 
 /* Fill out default values. */

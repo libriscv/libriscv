@@ -191,7 +191,15 @@ Arena& Machine<W>::arena() {
 template <int W>
 void Machine<W>::setup_native_heap(size_t sysnum, uint64_t base, size_t max_memory)
 {
-	m_arena.reset(new Arena(base, base + max_memory));
+	setup_native_heap(sysnum, base, max_memory, 0);
+}
+template <int W>
+void Machine<W>::setup_native_heap(size_t sysnum, uint64_t base, size_t max_memory, unsigned max_chunks)
+{
+	if (UNLIKELY(base > UINT32_MAX || max_memory > UINT32_MAX ||
+		base + max_memory < base || base + max_memory > UINT32_MAX))
+		throw MachineException(INVALID_PROGRAM, "Native heap exceeds 32-bit address range", base);
+	m_arena.reset(new Arena(base, base + max_memory, max_chunks));
 
 	this->setup_native_heap_internal(sysnum);
 }

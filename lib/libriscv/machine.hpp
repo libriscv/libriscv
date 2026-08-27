@@ -391,6 +391,7 @@ namespace riscv
 		const Arena& arena() const;
 		Arena& arena();
 		void setup_native_heap(size_t sysnum, uint64_t addr, size_t size);
+		void setup_native_heap(size_t sysnum, uint64_t addr, size_t size, unsigned max_chunks);
 		void transfer_arena_from(const Machine& other);
 		// Optional custom memory-related system calls
 		static void setup_native_memory(size_t sysnum);

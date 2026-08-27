@@ -40,6 +40,7 @@ typedef struct {
 	int      protect_segments;            /* Apply ELF segment protections (default: 1) */
 	unsigned native_syscall_base;         /* If non-zero, install native heap+memory syscalls at this base (needs 10 slots) */
 	uint64_t arena_size;                  /* Arena size in bytes (default: 8 MiB, ignored if native_syscall_base == 0) */
+	unsigned native_heap_max_chunks;      /* Host metadata cap (0: derive from arena_size) */
 } RISCVOptions;
 
 /* Fill out default values. */

@@ -113,6 +113,7 @@ void libriscv_set_defaults(RISCVOptions *options)
 	options->protect_segments = mo.protect_segments ? 1 : 0;
 	options->native_syscall_base = 0;
 	options->arena_size = 8ULL << 20;
+	options->native_heap_max_chunks = 0;
 }
 
 extern "C"
@@ -156,7 +157,8 @@ RISCVMachine *libriscv_new(const void *elf_prog, unsigned elf_length, const RISC
 		if (options->native_syscall_base > 0) {
 			const unsigned base = options->native_syscall_base;
 			Machine<RISCV_ARCH>::setup_native_memory(base + 5);
-			m->setup_native_heap(base, m->memory.mmap_allocate(options->arena_size), options->arena_size);
+			m->setup_native_heap(base, m->memory.mmap_allocate(options->arena_size),
+				options->arena_size, options->native_heap_max_chunks);
 			u->arena_syscall_base = base;
 			u->arena_total_size = options->arena_size;
 		}
@@ -613,7 +615,8 @@ RISCVMachine *libriscv_fast_fork(const RISCVMachine *parent, RISCVOptions *opts)
 			const auto syscall_base = parent_ud.arena_syscall_base;
 			if (total_size > 0 && syscall_base > 0) {
 				const auto remaining = total_size - (watermark - arena_base);
-				m->setup_native_heap(syscall_base, watermark, remaining);
+				m->setup_native_heap(syscall_base, watermark, remaining,
+					opts ? opts->native_heap_max_chunks : 0);
 
 				m->arena().on_unknown_free(
 					[](auto, auto*) -> int { return 0; });

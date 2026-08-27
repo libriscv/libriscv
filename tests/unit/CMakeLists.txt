@@ -9,6 +9,7 @@ add_subdirectory(../../lib lib)
 target_compile_definitions(riscv PUBLIC
 	FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION=1
 	RISCV_SYSCALLS_MAX=600
+	RISCV_ARENA_DEBUG=1
 )
 
 add_subdirectory(../Catch2 Catch2)
@@ -44,6 +45,7 @@ add_unit_test(dynamic  dynamic.cpp)
 add_unit_test(examples examples.cpp)
 add_unit_test(exceptions exceptions.cpp)
 add_unit_test(heap     heaptest.cpp)
+add_unit_test(heap_invariants heap_invariants.cpp)
 add_unit_test(libcfast libc_fastpath.cpp)
 add_unit_test(fptest   fp_testsuite.cpp)
 add_unit_test(micro    micro.cpp)
