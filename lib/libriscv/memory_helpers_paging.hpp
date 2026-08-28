@@ -210,7 +210,9 @@ std::string_view Memory<W>::memview(address_t addr, size_t len, size_t maxlen) c
 		return {};
 
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(addr + len - RWREAD_BEGIN < memory_arena_read_boundary() && addr < addr + len)) {
+		const address_t offset = addr - RWREAD_BEGIN;
+		const address_t window = memory_arena_read_boundary();
+		if (LIKELY(offset < window && len <= window - offset)) {
 			auto* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
 			return {begin, len};
 		}
@@ -236,7 +238,9 @@ std::string_view Memory<W>::writable_memview(address_t addr, size_t len, size_t 
 		return {};
 
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(addr + len - initial_rodata_end() < memory_arena_write_boundary() && addr < addr + len)) {
+		const address_t offset = addr - initial_rodata_end();
+		const address_t window = memory_arena_write_boundary();
+		if (LIKELY(offset < window && len <= window - offset)) {
 			char* begin = &((char *)m_arena.data)[RISCV_SPECSAFE(addr)];
 			return {begin, len};
 		}
@@ -314,12 +318,16 @@ T* Memory<W>::try_memarray(address_t addr, size_t count, size_t maxbytes) const
 		protection_fault(addr);
 
 	if constexpr (flat_readwrite_arena && std::is_const_v<T>) {
-		if (LIKELY(addr + len - RWREAD_BEGIN < memory_arena_read_boundary() && addr < addr + len)) {
+		const address_t offset = addr - RWREAD_BEGIN;
+		const address_t window = memory_arena_read_boundary();
+		if (LIKELY(offset < window && len <= window - offset)) {
 			const char* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
 			return (T*) begin;
 		}
 	} else if constexpr (flat_readwrite_arena) {
-		if (LIKELY(addr + len - initial_rodata_end() < memory_arena_write_boundary() && addr < addr + len)) {
+		const address_t offset = addr - initial_rodata_end();
+		const address_t window = memory_arena_write_boundary();
+		if (LIKELY(offset < window && len <= window - offset)) {
 			char* begin = &((char *)m_arena.data)[RISCV_SPECSAFE(addr)];
 			return (T*) begin;
 		}
@@ -405,10 +413,6 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 		protection_fault(p2);
 	return std::memcmp(&((const char*)m_arena.data)[p1], &((const char*)m_arena.data)[p2], len);
 #else
-	// A flat readwrite arena can compare both ranges where they lie, no matter
-	// how many pages they span. Without this, anything crossing a page boundary
-	// ends up in the byte-at-a-time path below, which looks up two pages per
-	// byte compared - slower than letting the guest emulate the comparison.
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(p1 + len - RWREAD_BEGIN < memory_arena_read_boundary()
 			&& p2 + len - RWREAD_BEGIN < memory_arena_read_boundary()
