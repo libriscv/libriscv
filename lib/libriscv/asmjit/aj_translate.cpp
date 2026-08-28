@@ -66,8 +66,11 @@ namespace riscv
 					switch (d.instr.opcode()) {
 					case RV32I_JAL:
 						candidates.push_back(pc + d.instr.Jtype.jump_offset());
-						if (d.instr.Jtype.rd != 0)
-							candidates.push_back(pc + d.length);   // return address
+						// A function reached only through a pointer commonly follows
+						// the preceding function's tail jump. Treat the address after
+						// every unconditional jump as a possible entry as well as the
+						// architectural return address after linking JALs.
+						candidates.push_back(pc + d.length);
 						break;
 					case RV32I_BRANCH:
 						candidates.push_back(pc + d.instr.Btype.signed_imm());
@@ -77,6 +80,26 @@ namespace riscv
 						break;
 					default:
 						break;
+					}
+
+					// Function pointers are commonly materialized as LUI/AUIPC,
+					// optionally followed by ADDI. Invalid candidates are discarded
+					// after the instruction-boundary walk has completed.
+					if ((d.instr.opcode() == RV32I_LUI || d.instr.opcode() == RV32I_AUIPC)
+						&& d.instr.Utype.rd != 0) {
+						const address_t base = d.instr.opcode() == RV32I_LUI
+							? address_t(int64_t(d.instr.Utype.upper_imm()))
+							: address_t(pc + address_t(int64_t(d.instr.Utype.upper_imm())));
+						candidates.push_back(base);
+						const address_t npc = pc + d.length;
+						if (npc + 2 <= end) {
+							const auto nd = aj_decode<W>(seg, npc, end);
+							if (nd.length != 0 && nd.instr.opcode() == RV32I_OP_IMM
+								&& nd.instr.Itype.funct3 == 0
+								&& nd.instr.Itype.rd == d.instr.Utype.rd
+								&& nd.instr.Itype.rs1 == d.instr.Utype.rd)
+								candidates.push_back(base + address_t(int64_t(nd.instr.Itype.signed_imm())));
+						}
 					}
 				} else {
 					// Non-emittable: resume after it.
@@ -122,11 +145,12 @@ namespace riscv
 			switch (d.instr.opcode()) {
 			case RV32I_JAL:
 				// A linking JAL is a call; following it would inline the callee
-				// and fragment it across callers via `claimed`. End the region at
-				// calls, keeping each to one function's CFG. Tail calls (rd==0)
-				// are still followed.
-				if (d.instr.Jtype.rd != 0)
+				// and fragment it across callers via `claimed`. Follow only the
+				// caller continuation so a chained native call can resume inline.
+				if (d.instr.Jtype.rd != 0) {
+					work.push_back(pc + d.length);
 					break;
+				}
 				work.push_back(pc + d.instr.Jtype.jump_offset());
 				break;
 			case RV32I_JALR:
@@ -154,9 +178,9 @@ namespace riscv
 		info.reg_offset    = int32_t(uintptr_t(&cpu.registers().get(0)) - cpu_addr);
 		info.fpreg_offset  = int32_t(uintptr_t(&cpu.registers().getfl(0)) - cpu_addr);
 		info.arena_ptr     = int32_t(uintptr_t(&mem.memory_arena_ptr_ref()) - cpu_addr);
-		info.arena_rdbound = int32_t(uintptr_t(&mem.memory_arena_read_boundary_ref()) - cpu_addr);
-		info.arena_wrbound = int32_t(uintptr_t(&mem.memory_arena_write_boundary_ref()) - cpu_addr);
-		info.arena_roend   = int32_t(uintptr_t(&mem.initial_rodata_end_ref()) - cpu_addr);
+		info.arena_rdbound_value = mem.memory_arena_read_boundary();
+		info.arena_wrbound_value = mem.memory_arena_write_boundary();
+		info.arena_roend_value   = mem.initial_rodata_end();
 #ifdef RISCV_EXT_VECTOR
 		// RVV register file and vl/vtype fields, same measurement method.
 		const auto& rvv = cpu.registers().rvv();
@@ -191,6 +215,8 @@ namespace riscv
 		info.unsafe_remove_checks =
 			options.translate_unsafe_remove_checks && info.inline_memory;
 		info.ignore_instruction_limit = options.translate_ignore_instruction_limit;
+		info.direct_calls = options.asmjit_direct_calls;
+		info.direct_call_depth = options.asmjit_direct_call_depth;
 		info.cb = &aj_callbacks<W>();
 		return info;
 	}
@@ -227,7 +253,13 @@ namespace riscv
 		}
 
 		// --- 1. Instruction boundaries and entry points ---------------------------
-		const AjSegmentMap<W> map { seg, begin, end, blocked };
+		AjSegmentMap<W> map { seg, begin, end, blocked };
+		// Symbol starts cover externally visible and address-taken functions even
+		// when no local control-flow instruction exposes them.
+		cpu.machine().memory.for_each_symbol([&] (const auto& sym, const char*) {
+			if (Elf<W>::SymbolType(sym.st_info) == Elf<W>::STT_FUNC)
+				map.consider_entry(address_t(sym.st_value));
+		});
 
 		// --- 2. Partition into non-overlapping regions ----------------------------
 		// Each unclaimed entry grows a region; leaders inside an existing region
@@ -274,10 +306,16 @@ namespace riscv
 
 		auto ajcode = std::make_shared<AjCode>();
 		auto& mappings = exec.create_asmjit_mappings(regions.size());
+		std::vector<std::pair<address_t, size_t>> call_targets;
+		for (size_t i = 0; i < regions.size(); i++)
+			for (const address_t target : regions[i].entries)
+				call_targets.emplace_back(target, i);
+		std::sort(call_targets.begin(), call_targets.end());
 
 		unsigned live = 0;
 		for (size_t i = 0; i < regions.size(); i++) {
 			mappings[i] = aj_emit_region<W>(*ajcode, options, exec, info,
+				mappings.data(), call_targets,
 				regions[i].entries, regions[i].instrs);
 			if (mappings[i]) live++;
 		}

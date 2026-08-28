@@ -317,6 +317,12 @@ namespace riscv
 		/// a region cut short in the middle of a loop exits to the interpreter on
 		/// every iteration, which costs far more than the emission it saves.
 		unsigned asmjit_region_instr_max = 1024;
+		/// @brief Chain direct guest calls between asmjit regions on the host stack.
+		/// @details Disable this for tooling that must observe every guest call at
+		/// the central dispatcher. Breakpoint addresses remain region boundaries.
+		bool asmjit_direct_calls = true;
+		/// @brief Maximum chained guest-call depth before returning to the dispatcher.
+		unsigned asmjit_direct_call_depth = 256;
 		/// @brief Enable background translation, using a user-provided callback to
 		/// run the translation step on another thread.
 		/// @details Short-lived programs should leave this disabled, as the

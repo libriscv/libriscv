@@ -208,8 +208,6 @@ retry_asmjit_function:
 	// Invoke asmjit-generated code. Re-entering here without rebuilding state is
 	// correct: the callee already wrote counter, max_counter and pc into it.
 	exec->unchecked_asmjit_mapping_at(decoder->instr)(*this, &state);
-	if (UNLIKELY(CPU().has_current_exception()))
-		goto handle_rethrow_exception;
 	pc = state.pc;
 	if (LIKELY(state.counter < state.max_counter
 		&& (pc - current_begin < current_end - current_begin)))
@@ -221,6 +219,8 @@ retry_asmjit_function:
 		goto continue_segment;
 	}
 	counter.set_counters(state.counter, state.max_counter);
+	if (UNLIKELY(state.max_counter == 0 && CPU().has_current_exception()))
+		goto handle_rethrow_exception;
 	goto check_jump;
 }
 #endif // RISCV_ASMJIT

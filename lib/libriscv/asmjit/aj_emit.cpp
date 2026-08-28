@@ -210,6 +210,8 @@ struct AjEmitter
 	BackendCompiler& cc;  // == *uc.cc, used only by the host escapes above
 	const uint8_t* seg;   // PC-relative pointer to the execute segment
 	const std::vector<address_t>& entries;  // entry addresses, ascending, non-empty
+	const aj_block_func<W>* mappings;       // stable, fully sized mapping table
+	const std::vector<std::pair<address_t, size_t>>& call_targets;
 	address_t entry;      // entries.front(), the lowest address it is entered at
 	const std::vector<address_t>& instrs;   // reachable addresses, ascending
 	address_t seg_end;    // execute segment end, for instruction reads
@@ -220,6 +222,8 @@ struct AjEmitter
 	Gp counter;           // live instruction counter, always 64-bit
 	Gp zero;              // a constant zero, standing in for x0
 	Gp arena;             // base of the flat memory arena, when inlining
+	Gp read_bound;        // RV64 bounds that do not fit a compare immediate
+	Gp write_bound;
 
 	std::array<Gp, 32> vreg {};
 	std::bitset<32> writeset;   // static: every rd the region writes
@@ -238,13 +242,20 @@ struct AjEmitter
 	std::set<address_t> branch_targets;         // in-region targets
 	std::unordered_map<address_t, Label> labels;
 	uint32_t pending = 0;       // instructions retired since the last counter flush
+	Label exit_tail;            // one writeback/return sequence per region
+	Gp exit_pc;
+	Gp exit_counter;
+	bool has_exit = false;
 
 	// Cold paths emitted after the body; each captures its `pending` at branch-off.
 	std::vector<std::function<void()>> deferred;
 
 	AjEmitter(UniCompiler& u, const uint8_t* s, const std::vector<address_t>& ens,
+		const aj_block_func<W>* maps,
+		const std::vector<std::pair<address_t, size_t>>& targets,
 		const std::vector<address_t>& list, address_t se, const AjInfo<W>& in)
-		: uc(u), cc(*u.cc), seg(s), entries(ens), entry(ens.front()),
+		: uc(u), cc(*u.cc), seg(s), entries(ens), mappings(maps), call_targets(targets),
+		  entry(ens.front()),
 		  instrs(list), seg_end(se), info(in) {}
 
 	// Entry and emit order differ when a back-edge reaches below the entry.
@@ -282,6 +293,7 @@ struct AjEmitter
 	static constexpr int32_t off_counter() { return int32_t(offsetof(AjState<W>, counter)); }
 	static constexpr int32_t off_max()     { return int32_t(offsetof(AjState<W>, max_counter)); }
 	static constexpr int32_t off_pc()      { return int32_t(offsetof(AjState<W>, pc)); }
+	static constexpr int32_t off_depth()   { return int32_t(offsetof(AjState<W>, call_depth)); }
 
 	// --- register cache ---
 	// Eager preload, not lazy: a lazy load after a label would clobber loop-carried values on back-edges.
@@ -293,6 +305,16 @@ struct AjEmitter
 		if (needs_arena) {
 			arena = uc.new_gp_ptr("arena");
 			uc.load(arena, mem_ptr(cpu, info.arena_ptr));
+		}
+		if constexpr (RV64) {
+			if (arena_is_checked() && info.arena_rdbound_value > uint64_t(INT32_MAX)) {
+				read_bound = new_ireg("rdbound");
+				uc.mov(read_bound, Imm(info.arena_rdbound_value));
+			}
+			if (arena_is_checked() && info.arena_wrbound_value > uint64_t(INT32_MAX)) {
+				write_bound = new_ireg("wrbound");
+				uc.mov(write_bound, Imm(info.arena_wrbound_value));
+			}
 		}
 		// Canonical NaNs are loop-invariant; materialized once here.
 		if (needs_canon32) {
@@ -317,6 +339,12 @@ struct AjEmitter
 			fvreg[i] = uc.new_vec128("f%u", i);
 			uc.v_loadu64_u64(fvreg[i], freg_mem(i));
 		}
+	}
+	void reload_regs() {
+		for (unsigned i = 1; i < 32; i++)
+			if (readset[i]) uc.load(vreg[i], reg_mem(i));
+		for (unsigned i = 0; i < 32; i++)
+			if (fp_readset[i]) uc.v_loadu64_u64(fvreg[i], freg_mem(i));
 	}
 	Gp get(unsigned i) {               // source register
 		if (i == 0) return zero;       // never written, so it can be shared
@@ -347,33 +375,55 @@ struct AjEmitter
 		for (unsigned i = 0; i < 32; i++)
 			if (fp_writeset[i]) uc.v_storeu64_u64(freg_mem(i), fvreg[i]);
 	}
-	void store_counter(uint32_t pend) {
-		if (info.ignore_instruction_limit) pend = 0;
-		if (pend == 0) {
-			uc.store(mem_ptr(st, off_counter()), counter);
-		} else {
-			Gp total = uc.new_gp64("total");
-			uc.add(total, counter, Imm(pend));
-			uc.store(mem_ptr(st, off_counter()), total);
-		}
-	}
 	void store_pc(address_t next_pc) {
 		Gp t = new_ireg("nextpc");
 		uc.mov(t, rvimm(next_pc));
 		uc.store(mem_ptr(st, off_pc()), t);
 	}
-	// Write back everything and return. Must not mutate counter/pending (branch fall-through shares them).
+	void ensure_exit_tail() {
+		if (has_exit) return;
+		has_exit = true;
+		exit_tail = uc.new_label();
+		exit_pc = new_ireg("exitpc");
+		if (!info.ignore_instruction_limit)
+			exit_counter = uc.new_gp64("exitcnt");
+	}
+	void set_exit_counter(uint32_t pend) {
+		if (info.ignore_instruction_limit) return;
+		if (pend == 0) uc.mov(exit_counter, counter);
+		else           uc.add(exit_counter, counter, Imm(pend));
+	}
+	// Select the exit PC/count locally and branch to the region's single cold
+	// writeback tail. This must not mutate counter/pending because branch
+	// fall-through may share them.
 	void emit_exit(address_t next_pc, uint32_t pend) {
-		flush_regs();
-		store_counter(pend);
-		store_pc(next_pc);
-		uc.ret();
+		ensure_exit_tail();
+		set_exit_counter(pend);
+		uc.mov(exit_pc, rvimm(next_pc));
+		uc.j(exit_tail);
 	}
 	// The JALR form: the next PC is only known at run time.
 	void emit_exit_reg(const Gp& next_pc, uint32_t pend) {
+		ensure_exit_tail();
+		set_exit_counter(pend);
+		uc.mov(exit_pc, next_pc);
+		uc.j(exit_tail);
+	}
+	// Propagate a callee-selected PC/counter through this native caller.
+	void emit_exit_state() {
+		ensure_exit_tail();
+		if (!info.ignore_instruction_limit)
+			uc.load(exit_counter, mem_ptr(st, off_counter()));
+		uc.load(exit_pc, mem_ptr(st, off_pc()));
+		uc.j(exit_tail);
+	}
+	void emit_exit_tail() {
+		if (!has_exit) return;
+		uc.bind(exit_tail);
 		flush_regs();
-		store_counter(pend);
-		uc.store(mem_ptr(st, off_pc()), next_pc);
+		if (!info.ignore_instruction_limit)
+			uc.store(mem_ptr(st, off_counter()), exit_counter);
+		uc.store(mem_ptr(st, off_pc()), exit_pc);
 		uc.ret();
 	}
 	// Reloads max so a faulting helper's zero breaks the loop.
@@ -383,6 +433,68 @@ struct AjEmitter
 		uc.j(ok, ucmp_lt(counter, mem_ptr(st, off_max())));
 		emit_exit(target, 0);
 		uc.bind(ok);
+	}
+
+	bool emit_direct_call(address_t target, address_t return_pc)
+	{
+		if (!info.direct_calls || info.direct_call_depth == 0)
+			return false;
+		const auto it = std::lower_bound(call_targets.begin(), call_targets.end(), target,
+			[] (const auto& item, address_t pc) { return item.first < pc; });
+		if (it == call_targets.end() || it->first != target)
+			return false;
+
+		Label fallback = uc.new_label();
+		Label resume = uc.new_label();
+		Label propagate = uc.new_label();
+		Gp fnptr = uc.new_gp_ptr("callee");
+		uc.mov(fnptr, Imm(uint64_t(uintptr_t(mappings + it->second))));
+		uc.load(fnptr, mem_ptr(fnptr));
+		uc.j(fallback, test_z(fnptr));
+
+		Gp depth = uc.new_gp32("depth");
+		uc.load(depth, mem_ptr(st, off_depth()));
+		uc.j(fallback, ucmp_ge(depth, Imm(info.direct_call_depth)));
+		uc.add(depth, depth, Imm(1));
+		uc.store(mem_ptr(st, off_depth()), depth);
+
+		flush_regs();
+		if (!info.ignore_instruction_limit)
+			uc.store(mem_ptr(st, off_counter()), counter);
+		store_pc(target);
+
+		InvokeNode* node;
+		cc.invoke(Out(node), fnptr, FuncSignature::build<void, void*, void*>());
+		node->set_arg(0, cpu);
+		node->set_arg(1, st);
+
+		Gp returned_depth = uc.new_gp32("depthret");
+		uc.load(returned_depth, mem_ptr(st, off_depth()));
+		uc.sub(returned_depth, returned_depth, Imm(1));
+		uc.store(mem_ptr(st, off_depth()), returned_depth);
+		reload_regs();
+		if (!info.ignore_instruction_limit)
+			uc.load(counter, mem_ptr(st, off_counter()));
+
+		Gp maxc = uc.new_gp64("callmax");
+		uc.load(maxc, mem_ptr(st, off_max()));
+		uc.j(propagate, test_z(maxc));
+		// A straight-line callee can return without encountering its own
+		// back-edge check. Do the dispatcher's limit check here before the
+		// caller is allowed to resume.
+		if (!info.ignore_instruction_limit)
+			uc.j(propagate, ucmp_ge(counter, maxc));
+		Gp returned_pc = new_ireg("callpc");
+		uc.load(returned_pc, mem_ptr(st, off_pc()));
+		uc.j(propagate, cmp_ne(returned_pc, rvimm(return_pc)));
+		uc.j(resume);
+
+		uc.bind(propagate);
+		emit_exit_state();
+		uc.bind(fallback);
+		emit_exit(target, 0);
+		uc.bind(resume);
+		return true;
 	}
 
 	// --- ALU helpers ---
@@ -830,9 +942,15 @@ struct AjEmitter
 		} else {
 			if (rs1 == 0) {
 				uc.mov(a.r32(), Imm(uint32_t(simm)));
-			} else {
+			} else if (simm == 0) {
 				uc.mov(a.r32(), get(rs1));
-				if (simm != 0) uc.add(a.r32(), a.r32(), sximm(simm));
+			} else {
+#if defined(ASMJIT_UJIT_X86)
+				// A 32-bit LEA gives RV32 wrapping and zero extension in one instruction.
+				cc.lea(a.r32(), mem_ptr(get(rs1).r64(), simm));
+#else
+				uc.add(a.r32(), get(rs1), sximm(simm));
+#endif
 			}
 		}
 		return a;
@@ -913,17 +1031,30 @@ struct AjEmitter
 		uc.and_(t, addr, Imm(info.arena_mask));
 		return t;
 	}
-	// Single-sided bounds check matching the interpreter; bounds read from the machine, not baked in.
+	// Single-sided bounds check matching the interpreter, with immutable arena
+	// bounds baked into the generated function.
 	void emit_arena_check(const Gp& addr, bool is_write, const Label& slow) {
 		if (!arena_is_checked())
 			return;
-		const Gp a = addr_value(addr);
 		Gp t = new_ireg("bchk");
-		if (is_write)
-			uc.sub(t, a, mem_ptr(cpu, info.arena_roend));
-		else
-			uc.sub(t, a, rvimm(address_t(Memory<W>::RWREAD_BEGIN)));
-		uc.j(slow, ucmp_ge(t, mem_ptr(cpu, is_write ? info.arena_wrbound : info.arena_rdbound)));
+		const uint64_t lo = is_write ? info.arena_roend_value : uint64_t(Memory<W>::RWREAD_BEGIN);
+		const uint64_t hi = is_write ? info.arena_wrbound_value : info.arena_rdbound_value;
+#if defined(ASMJIT_UJIT_X86)
+		cc.lea(t, mem_ptr(addr, -int32_t(lo)));
+#else
+		const Gp a = addr_value(addr);
+		uc.sub(t, a, rvimm(address_t(lo)));
+#endif
+		if constexpr (RV64) {
+			if (hi > uint64_t(INT32_MAX))
+				uc.j(slow, ucmp_ge(t, is_write ? write_bound : read_bound));
+			else
+				uc.j(slow, ucmp_ge(t, Imm(hi)));
+		} else {
+			// x86 compares accept every 32-bit bit pattern; do not reject the
+			// near-4GB rvlinux arena merely because it exceeds INT32_MAX.
+			uc.j(slow, ucmp_ge(t, Imm(uint32_t(hi))));
+		}
 	}
 	void emit_load(address_t pc, unsigned funct3, unsigned rd, unsigned rs1, int32_t simm)
 	{
@@ -949,8 +1080,13 @@ struct AjEmitter
 		if (arena_is_checked()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				call_load_helper(pc, funct3, dst, addr, pend);
-				uc.j(done);
+				// A claimed entry would immediately re-enter this region at the
+				// same faulting instruction. Use the precise helper only for that
+				// rare case; all ordinary sites exit for interpreter re-execution.
+				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+					call_load_helper(pc, funct3, dst, addr, pend);
+					uc.j(done);
+				} else emit_exit(pc, pend);
 			});
 		}
 	}
@@ -975,8 +1111,10 @@ struct AjEmitter
 		if (arena_is_checked()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				call_store_helper(pc, funct3, src, addr, pend);
-				uc.j(done);
+				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+					call_store_helper(pc, funct3, src, addr, pend);
+					uc.j(done);
+				} else emit_exit(pc, pend);
 			});
 		}
 	}
@@ -1254,8 +1392,10 @@ struct AjEmitter
 		if (arena_is_checked()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				call_fp_load_helper(pc, is_double, dst, addr, pend);
-				uc.j(done);
+				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+					call_fp_load_helper(pc, is_double, dst, addr, pend);
+					uc.j(done);
+				} else emit_exit(pc, pend);
 			});
 		}
 		// Emitted after the merge point, so it covers both paths.
@@ -1279,8 +1419,10 @@ struct AjEmitter
 		if (arena_is_checked()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				call_fp_store_helper(pc, is_double, src, addr, pend);
-				uc.j(done);
+				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+					call_fp_store_helper(pc, is_double, src, addr, pend);
+					uc.j(done);
+				} else emit_exit(pc, pend);
 			});
 		}
 	}
@@ -1327,21 +1469,55 @@ struct AjEmitter
 		fp_result(d, dbl);
 	}
 
-	/// @brief FMIN/FMAX: helper call (RISC-V orders -0.0 < +0.0 and canonicalizes NaN pairs).
+	/// @brief FMIN/FMAX with RISC-V NaN and signed-zero semantics.
 	void emit_fminmax(const rv32f_instruction& fi, bool dbl)
 	{
 		const bool is_max = (fi.R4type.funct3 == 0x1);
-		const void* fn = dbl
-			? (is_max ? (const void*)info.cb->fmax64 : (const void*)info.cb->fmin64)
-			: (is_max ? (const void*)info.cb->fmax32 : (const void*)info.cb->fmin32);
-		InvokeNode* node;
-		cc.invoke(Out(node), uint64_t(uintptr_t(fn)),
-			dbl ? FuncSignature::build<double, double, double>()
-				: FuncSignature::build<float, float, float>());
-		node->set_arg(0, fget(fi.R4type.rs1));
-		node->set_arg(1, fget(fi.R4type.rs2));
-		node->set_ret(0, fdef(fi.R4type.rd));
-		fp_result(fdef(fi.R4type.rd), dbl);
+		const Vec a = fget(fi.R4type.rs1), b = fget(fi.R4type.rs2);
+		const Vec d = fdef(fi.R4type.rd);
+		Vec ma = uc.new_vec128("fmina");
+		Vec mb = uc.new_vec128("fminb");
+		if (dbl) {
+			uc.s_cmp_unord_f64(ma, a, a);
+			uc.s_cmp_unord_f64(mb, b, b);
+		} else {
+			uc.s_cmp_unord_f32(ma, a, a);
+			uc.s_cmp_unord_f32(mb, b, b);
+		}
+
+		Vec r = uc.new_vec128("fminr");
+		if (dbl) {
+			if (is_max) uc.s_max_f64(r, a, b); else uc.s_min_f64(r, a, b);
+		} else {
+			if (is_max) uc.s_max_f32(r, a, b); else uc.s_min_f32(r, a, b);
+		}
+		// One NaN returns the numeric operand; two return the canonical NaN.
+		Vec t = uc.new_vec128("fmint");
+		select_masked(dbl, t, ma, b, r);
+		select_masked(dbl, r, mb, a, t);
+		Vec both_nan = uc.new_vec128("fminnn");
+		v_and_fp(dbl, both_nan, ma, mb);
+		select_masked(dbl, t, both_nan, dbl ? canon64 : canon32, r);
+
+		// For a ±0 tie, min is bitwise OR (-0 wins) and max is bitwise
+		// AND (+0 wins). Hardware min/max operand-order rules differ here.
+		const Operand z = uc.simd_const(&uc.ct().p_0000000000000000, Bcst::k32, a);
+		Vec za = uc.new_vec128("fminza");
+		Vec zb = uc.new_vec128("fminzb");
+		if (dbl) {
+			uc.s_cmp_eq_f64(za, a, z);
+			uc.s_cmp_eq_f64(zb, b, z);
+		} else {
+			uc.s_cmp_eq_f32(za, a, z);
+			uc.s_cmp_eq_f32(zb, b, z);
+		}
+		Vec both_zero = uc.new_vec128("fminzz");
+		v_and_fp(dbl, both_zero, za, zb);
+		Vec zero_result = uc.new_vec128("fminzr");
+		if (is_max) v_and_fp(dbl, zero_result, a, b);
+		else        v_or_fp (dbl, zero_result, a, b);
+		select_masked(dbl, d, both_zero, zero_result, t);
+		fp_result(d, dbl);
 	}
 
 	/// @brief FSGNJ/N/X: magnitude from rs1, sign from rs2. Also encodes FMV/FNEG/FABS.
@@ -1657,8 +1833,12 @@ struct AjEmitter
 				switch (i.fpfunc()) {
 				case RV32F__FADD: case RV32F__FSUB:
 				case RV32F__FMUL: case RV32F__FDIV:
-				case RV32F__FSGNJ_NX: case RV32F__FMIN_MAX:
+				case RV32F__FSGNJ_NX:
 					fp_readset.set(rs1); fp_readset.set(rs2); fp_writeset.set(rd);
+					break;
+				case RV32F__FMIN_MAX:
+					fp_readset.set(rs1); fp_readset.set(rs2); fp_writeset.set(rd);
+					if (dbl) needs_canon64 = true; else needs_canon32 = true;
 					break;
 				case RV32F__FSQRT:
 					fp_readset.set(rs1); fp_writeset.set(rd);
@@ -1718,7 +1898,10 @@ struct AjEmitter
 	{
 		Gp pcv = new_ireg("entry_pc");
 		uc.load(pcv, mem_ptr(st, off_pc()));
-		emit_entry_search(pcv, 0, entries.size());
+		// Function entry dominates in practice. Avoid the binary search entirely
+		// for that overwhelmingly common case.
+		uc.j(label_at(entries.front()), cmp_eq(pcv, rvimm(entries.front())));
+		emit_entry_search(pcv, 1, entries.size());
 	}
 	void emit_entry_search(const Gp& pcv, size_t lo, size_t hi)
 	{
@@ -1727,11 +1910,11 @@ struct AjEmitter
 			return;
 		}
 		const size_t mid = lo + (hi - lo) / 2;
-		Label upper = uc.new_label();
-		uc.j(upper, ucmp_ge(pcv, rvimm(entries[mid])));
-		emit_entry_search(pcv, lo, mid);
-		uc.bind(upper);
+		Label lower = uc.new_label();
+		uc.j(lower, ucmp_lt(pcv, rvimm(entries[mid])));
 		emit_entry_search(pcv, mid, hi);
+		uc.bind(lower);
+		emit_entry_search(pcv, lo, mid);
 	}
 
 	void emit_body()
@@ -1954,10 +2137,24 @@ struct AjEmitter
 			case RV32I_BRANCH: {
 				const address_t target = pc + i.Btype.signed_imm();
 				flush_counter();                 // settle before control flow splits
-				Label notaken = uc.new_label();
 				const Gp a = get(i.Btype.rs1);
 				const bool vs_zero = (i.Btype.rs2 == 0);
 				const Gp b = vs_zero ? a : get(i.Btype.rs2);   // unused when vs_zero
+				// When no instruction-limit check must sit on the taken path, branch
+				// directly to the region label instead of jcc-skip + jmp-target.
+				if (in_region(target) && (info.ignore_instruction_limit || target > pc)) {
+					const Label L = label_at(target);
+					switch (i.Btype.funct3) {
+					case 0x0: uc.j(L, vs_zero ? cmp_eq(a, Imm(0))  : cmp_eq(a, b)); break;
+					case 0x1: uc.j(L, vs_zero ? cmp_ne(a, Imm(0))  : cmp_ne(a, b)); break;
+					case 0x4: uc.j(L, vs_zero ? scmp_lt(a, Imm(0)) : scmp_lt(a, b)); break;
+					case 0x5: uc.j(L, vs_zero ? scmp_ge(a, Imm(0)) : scmp_ge(a, b)); break;
+					case 0x6: uc.j(L, vs_zero ? ucmp_lt(a, Imm(0)) : ucmp_lt(a, b)); break;
+					case 0x7: uc.j(L, vs_zero ? ucmp_ge(a, Imm(0)) : ucmp_ge(a, b)); break;
+					}
+					break;
+				}
+				Label notaken = uc.new_label();
 				// Inverted condition jumps around the taken path (keeps taken inline).
 				switch (i.Btype.funct3) {
 				case 0x0: // BEQ
@@ -1984,16 +2181,19 @@ struct AjEmitter
 
 			case RV32I_JAL: {
 				const address_t target = pc + i.Jtype.jump_offset();
+				bool continues = false;
 				if (i.Jtype.rd != 0)
 					uc.mov(def(i.Jtype.rd), rvimm(next));
 				flush_counter();
-				if (in_region(target)) {
+				if (i.Jtype.rd != 0 && emit_direct_call(target, next)) {
+					continues = true;
+				} else if (in_region(target)) {
 					if (target <= pc) emit_backedge_check(target);
 					uc.j(label_at(target));
 				} else {
 					emit_exit(target, 0);
 				}
-				fallthrough_pc = 0;   // nothing falls through an unconditional jump
+				fallthrough_pc = continues ? next : 0;
 				} break;
 
 			case RV32I_JALR: {
@@ -2031,12 +2231,15 @@ struct AjEmitter
 		// Emit deferred slow paths after the hot path.
 		for (size_t n = 0; n < deferred.size(); n++)
 			deferred[n]();
+		emit_exit_tail();
 	}
 };
 
 template <int W>
 aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options,
 	const DecodedExecuteSegment<W>& exec, const AjInfo<W>& info,
+	const aj_block_func<W>* mappings,
+	const std::vector<std::pair<address_type<W>, size_t>>& call_targets,
 	const std::vector<address_type<W>>& entries,
 	const std::vector<address_type<W>>& instrs)
 {
@@ -2058,17 +2261,17 @@ aj_block_func<W> aj_emit_region(AjCode& ajcode, const MachineOptions<W>& options
 	if (fn == nullptr)
 		return nullptr;
 
-	AjEmitter<W> e { cc, exec.exec_data(), entries, instrs, exec.exec_end(), info };
+	AjEmitter<W> e { cc, exec.exec_data(), entries, mappings, call_targets,
+		instrs, exec.exec_end(), info };
 	e.cpu     = cc.new_gp_ptr("cpu");
 	e.st      = cc.new_gp_ptr("state");
-	e.counter = cc.new_gp64("counter");
+	if (!info.ignore_instruction_limit)
+		e.counter = cc.new_gp64("counter");
 	fn->set_arg(0, e.cpu);
 	fn->set_arg(1, e.st);
 
 	e.prepass();
-	if (info.ignore_instruction_limit)
-		cc.mov(e.counter, Imm(0));
-	else
+	if (!info.ignore_instruction_limit)
 		cc.load(e.counter, mem_ptr(e.st, AjEmitter<W>::off_counter()));
 	e.emit_prologue_loads();   // every load lands here, ahead of every label
 	e.emit_body();
@@ -2101,6 +2304,8 @@ bool aj_host_has_fma() noexcept
 template <int W>
 aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 	const DecodedExecuteSegment<W>&, const AjInfo<W>&,
+	const aj_block_func<W>*,
+	const std::vector<std::pair<address_type<W>, size_t>>&,
 	const std::vector<address_type<W>>&, const std::vector<address_type<W>>&)
 {
 	return nullptr;   // no code generator for this host
@@ -2111,11 +2316,13 @@ aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 #ifdef RISCV_32I
 	template aj_block_func<4> aj_emit_region<4>(AjCode&, const MachineOptions<4>&,
 		const DecodedExecuteSegment<4>&, const AjInfo<4>&,
+		const aj_block_func<4>*, const std::vector<std::pair<address_type<4>, size_t>>&,
 		const std::vector<address_type<4>>&, const std::vector<address_type<4>>&);
 #endif
 #ifdef RISCV_64I
 	template aj_block_func<8> aj_emit_region<8>(AjCode&, const MachineOptions<8>&,
 		const DecodedExecuteSegment<8>&, const AjInfo<8>&,
+		const aj_block_func<8>*, const std::vector<std::pair<address_type<8>, size_t>>&,
 		const std::vector<address_type<8>>&, const std::vector<address_type<8>>&);
 #endif
 } // riscv

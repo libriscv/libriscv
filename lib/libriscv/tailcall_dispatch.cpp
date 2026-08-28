@@ -192,7 +192,7 @@ namespace riscv
 		AjState<W> state { counter.value() - d->instruction_count(), counter.max(), pc };
 		do {
 			exec->unchecked_asmjit_mapping_at(d->instr)(cpu, &state);
-			if (UNLIKELY(cpu.has_current_exception())) {
+			if (UNLIKELY(state.max_counter == 0 && cpu.has_current_exception())) {
 				const auto except = cpu.current_exception();
 				cpu.clear_current_exception();
 				std::rethrow_exception(except);

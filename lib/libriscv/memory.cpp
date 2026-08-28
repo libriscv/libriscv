@@ -646,6 +646,16 @@ namespace riscv
 		// Default stack
 		this->m_stack_address = mmap_allocate(options.stack_size) + options.stack_size;
 
+		// The arena boundaries are final once every PT_LOAD is in place, and they
+		// must be settled before any execute segment is created: the JIT bakes them
+		// into the generated code and keys shared segments on them.
+		if (this->uses_flat_memory_arena() && this->memory_arena_size() >= m_arena.initial_rodata_end) {
+			this->m_arena.read_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - RWREAD_BEGIN));
+			this->m_arena.write_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - m_arena.initial_rodata_end));
+		} else {
+			this->m_arena.initial_rodata_end = 0;
+		}
+
 		if (!options.default_exit_function.empty())
 		{
 			// It is slightly faster to set a custom exit function, in order
@@ -685,13 +695,6 @@ namespace riscv
 			this->create_execute_segment(options,
 				exit_code, host_page, sizeof(exit_code), false);
 #endif
-		}
-
-		if (this->uses_flat_memory_arena() && this->memory_arena_size() >= m_arena.initial_rodata_end) {
-			this->m_arena.read_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - RWREAD_BEGIN));
-			this->m_arena.write_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - m_arena.initial_rodata_end));
-		} else {
-			this->m_arena.initial_rodata_end = 0;
 		}
 
 		// Now that we know the boundries of the program, generate

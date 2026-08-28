@@ -25,9 +25,13 @@ namespace riscv
 		int32_t reg_offset      = 0;   ///< &cpu.registers().get(0) - &cpu
 		int32_t fpreg_offset    = 0;   ///< &cpu.registers().getfl(0) - &cpu
 		int32_t arena_ptr       = 0;   ///< &memory.m_arena.data    - &cpu
-		int32_t arena_rdbound   = 0;   ///< &memory.m_arena.read_boundary  - &cpu
-		int32_t arena_wrbound   = 0;   ///< &memory.m_arena.write_boundary - &cpu
-		int32_t arena_roend     = 0;   ///< &memory.m_arena.initial_rodata_end - &cpu
+		/// @brief Arena bounds baked when the execute segment is translated.
+		/// @details Flat-arena bounds are immutable after construction and are
+		/// shared unchanged by forks, so emitted code need not reload them from
+		/// CPU memory at every guest access.
+		uint64_t arena_rdbound_value = 0;
+		uint64_t arena_wrbound_value = 0;
+		uint64_t arena_roend_value   = 0;
 		// The vector state, for the inlined vector loads and stores. vl, SEW
 		// and LMUL are read at run-time: vsetvli is not inlined, so vtype is
 		// unknown at translation time.
@@ -48,6 +52,8 @@ namespace riscv
 		uint64_t arena_mask = 0;
 		bool unsafe_remove_checks = false;
 		bool ignore_instruction_limit = false;
+		bool direct_calls = true;
+		unsigned direct_call_depth = 256;
 		const AjCallbacks<W>* cb = nullptr;
 	};
 
@@ -665,6 +671,8 @@ namespace riscv
 	template <int W>
 	aj_block_func<W> aj_emit_region(AjCode&, const MachineOptions<W>&,
 		const DecodedExecuteSegment<W>&, const AjInfo<W>&,
+		const aj_block_func<W>* mappings,
+		const std::vector<std::pair<address_type<W>, size_t>>& call_targets,
 		const std::vector<address_type<W>>& entries,
 		const std::vector<address_type<W>>& instrs);
 }

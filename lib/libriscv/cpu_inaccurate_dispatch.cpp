@@ -203,10 +203,11 @@ begin_asmjit_function:
 	AjState<W> state { 0, ~0ULL, pc };
 retry_asmjit_function:
 	exec->unchecked_asmjit_mapping_at(decoder->instr)(*this, &state);
-	if (UNLIKELY(CPU().has_current_exception()))
-		goto handle_rethrow_exception;
-	if (UNLIKELY(state.max_counter == 0))
+	if (UNLIKELY(state.max_counter == 0)) {
+		if (UNLIKELY(CPU().has_current_exception()))
+			goto handle_rethrow_exception;
 		return;
+	}
 	pc = state.pc;
 	if (LIKELY(pc - exec->exec_begin() < exec->exec_end() - exec->exec_begin())) {
 		decoder = &exec_decoder[pc >> DecoderData<W>::SHIFT];

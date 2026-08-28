@@ -16,20 +16,36 @@ struct SegmentKey {
 	uint64_t pc;
 	uint32_t crc;
 	uint64_t arena_size = 0;
+	// The JIT bakes the arena boundaries into the generated code, so a segment
+	// may only be shared between machines that agree on all of them.
+	uint64_t arena_rdbound = 0;
+	uint64_t arena_wrbound = 0;
+	uint64_t arena_roend = 0;
 	bool unchecked_memory = false;
 
 	template <int W>
-	static SegmentKey from(const riscv::DecodedExecuteSegment<W>& segment, uint64_t arena_size) {
+	static SegmentKey from(const riscv::Memory<W>& memory,
+		const riscv::DecodedExecuteSegment<W>& segment, uint32_t crc) {
 		SegmentKey key;
 		key.pc = uint64_t(segment.exec_begin());
-		key.crc = segment.crc32c_hash();
-		key.arena_size = arena_size;
+		key.crc = crc;
+		key.arena_size = memory.memory_arena_size();
+		key.arena_rdbound = memory.memory_arena_read_boundary();
+		key.arena_wrbound = memory.memory_arena_write_boundary();
+		key.arena_roend = memory.initial_rodata_end();
 		key.unchecked_memory = segment.is_unchecked_memory();
 		return key;
 	}
 
+	template <int W>
+	static SegmentKey from(const riscv::Memory<W>& memory,
+		const riscv::DecodedExecuteSegment<W>& segment) {
+		return from(memory, segment, segment.crc32c_hash());
+	}
+
 	auto as_tuple() const noexcept {
-		return std::tie(pc, crc, arena_size, unchecked_memory);
+		return std::tie(pc, crc, arena_size,
+			arena_rdbound, arena_wrbound, arena_roend, unchecked_memory);
 	}
 	bool operator==(const SegmentKey& other) const {
 		return as_tuple() == other.as_tuple();
@@ -42,8 +58,11 @@ namespace std {
 	template <>
 	struct hash<SegmentKey> {
 		size_t operator()(const SegmentKey& key) const {
-			return key.pc ^ key.crc ^ key.arena_size
+			size_t h = key.pc ^ key.crc ^ key.arena_size
 				^ (key.unchecked_memory ? 0x9E3779B97F4A7C15ull : 0ull);
+			for (const uint64_t v : {key.arena_rdbound, key.arena_wrbound, key.arena_roend})
+				h = (h * 0x100000001B3ull) ^ v;
+			return h;
 		}
 	};
 }
@@ -657,8 +676,7 @@ namespace riscv
 		if (options.use_shared_execute_segments)
 		{
 			// We have to key on the base address of the execute segment as well as the hash
-			const SegmentKey key{uint64_t(current_exec->exec_begin()), hash,
-				memory_arena_size(), current_exec->is_unchecked_memory()};
+			const SegmentKey key = SegmentKey::from(*this, *current_exec, hash);
 
 			// In order to prevent others from creating the same execute segment
 			// we need to lock the shared execute segments mutex.
@@ -745,7 +763,7 @@ namespace riscv
 
 		auto& main_segment = m_main_exec_segment;
 		if (main_segment) {
-			const SegmentKey key = SegmentKey::from(*main_segment, memory_arena_size());
+			const SegmentKey key = SegmentKey::from(*this, *main_segment);
 			main_segment = nullptr;
 			shared_execute_segments<W>.remove_if_unique(key);
 		}
@@ -754,7 +772,7 @@ namespace riscv
 			try {
 				auto& segment = m_exec.back();
 				if (segment) {
-					const SegmentKey key = SegmentKey::from(*segment, memory_arena_size());
+					const SegmentKey key = SegmentKey::from(*this, *segment);
 					segment = nullptr;
 					shared_execute_segments<W>.remove_if_unique(key);
 				}
@@ -815,7 +833,7 @@ namespace riscv
 		// the Machine it was started from.
 		segment.wait_for_compilation_complete();
 #endif
-		const SegmentKey key = SegmentKey::from(segment, memory_arena_size());
+		const SegmentKey key = SegmentKey::from(*this, segment);
 		if (m_main_exec_segment.get() == &segment) {
 			m_main_exec_segment = nullptr;
 			shared_execute_segments<W>.remove_if_unique(key);
