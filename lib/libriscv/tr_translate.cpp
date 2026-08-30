@@ -169,9 +169,6 @@ namespace riscv
 		unsigned mapping_index;
 	};
 
-	// This implementation is designed to make sure it's not a global constructor
-	// instead it will get zeroed from BSS
-	static constexpr size_t MAX_EMBEDDED = 12;
 	template <int W>
 	struct EmbeddedTranslation {
 		uint32_t    hash = 0;
@@ -183,18 +180,16 @@ namespace riscv
 		binary_translation_init_func<W> init_func = nullptr;
 	};
 	template <int W>
-	struct EmbeddedTranslations {
-		std::array<EmbeddedTranslation<W>, MAX_EMBEDDED> translations;
-		size_t count = 0;
-	};
-	template <int W>
-	static EmbeddedTranslations<W> registered_embedded_translations;
+	static std::vector<EmbeddedTranslation<W>>& registered_embedded_translations()
+	{
+		static std::vector<EmbeddedTranslation<W>> translations;
+		return translations;
+	}
 
 	template <int W>
 	static EmbeddedTranslation<W>* find_embedded_translation_by_hash(uint32_t hash)
 	{
-		for (size_t i = 0; i < registered_embedded_translations<W>.count; ++i) {
-			auto& translation = registered_embedded_translations<W>.translations[i];
+		for (auto& translation : registered_embedded_translations<W>()) {
 			if (translation.hash == hash) {
 				return &translation;
 			}
@@ -209,14 +204,12 @@ namespace riscv
 		static std::mutex translation_mutex;
 		std::scoped_lock lock(translation_mutex);
 
-		EmbeddedTranslations<W>& translations = registered_embedded_translations<W>;
+		auto& translations = registered_embedded_translations<W>();
 		EmbeddedTranslation<W>* existing = find_embedded_translation_by_hash<W>(hash);
 		if (existing == nullptr) {
-			if (translations.count >= MAX_EMBEDDED) {
-				throw MachineException(INVALID_PROGRAM, "Too many embedded translations", MAX_EMBEDDED);
-			}
 			// We allow overwriting existing translations with the same hash
-			existing = &translations.translations[translations.count++];
+			translations.emplace_back();
+			existing = &translations.back();
 		}
 		existing->hash = hash;
 		existing->nmappings = nmappings;
@@ -247,10 +240,18 @@ namespace riscv
 		return defstr;
 	}
 
-	// Set BINTR_DUMP=<path> to write the emitted C to a file, regardless of which
-	// backend compiles it. With libtcc there is no temporary file to inspect (and
-	// KEEPCODE only applies to the system-compiler path), so this is the only way
-	// to see the code emitter's output in the fastest-iterating configuration.
+	static std::string defines_to_c99(const std::unordered_map<std::string, std::string>& defines)
+	{
+		std::vector<std::pair<std::string, std::string>> sorted(defines.begin(), defines.end());
+		std::sort(sorted.begin(), sorted.end());
+		std::string source;
+		for (const auto& [name, value] : sorted) {
+			source += "#define " + name + " " + value + "\n";
+		}
+		return source;
+	}
+
+	// Set BINTR_DUMP=<path> to write the emitted C to a file.
 	// The defines are written as a leading comment so the dump can be recompiled
 	// standalone with the same flags the translator used.
 	static void dump_generated_code(const std::string& code,
@@ -411,9 +412,9 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	{
 		TIME_POINT(t6);
 
-		for (size_t i = 0; i < registered_embedded_translations<W>.count; i++)
+		for (size_t i = 0; i < registered_embedded_translations<W>().size(); i++)
 		{
-			auto& translation = registered_embedded_translations<W>.translations[i];
+			auto& translation = registered_embedded_translations<W>()[i];
 			if (translation.hash == checksum)
 			{
 				// Initialize the translation
@@ -481,7 +482,20 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 		// with the emulated dlopen() functionality. Let's serialize it.
 		static std::mutex dlopen_mutex;
 		std::lock_guard<std::mutex> lock(dlopen_mutex);
+		auto& embedded = registered_embedded_translations<W>();
+		const size_t embedded_before = embedded.size();
 		dylib = dlopen(filebuffer, RTLD_LAZY);
+		// A self-registering object is the wrong format for the hash cache. Its
+		// constructor has just stored pointers into itself in the global registry;
+		// remove those registrations before unmapping it to avoid dangling code.
+		if (dylib != nullptr && embedded.size() != embedded_before) {
+			embedded.resize(embedded_before);
+			dylib_close(dylib, false);
+			dylib = nullptr;
+			if (options.verbose_loader) {
+				fprintf(stderr, "libriscv: Refusing self-registering object in translation cache\n");
+			}
+		}
 		if (options.translate_timing) {
 			TIME_POINT(t8);
 			printf(">> dlopen took %ld ns\n", nanodiff(t7, t8));
@@ -1065,7 +1079,17 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 				if (std::holds_alternative<MachineTranslationEmbeddableCodeOptions>(cc))
 				{
 					auto& embed = std::get<MachineTranslationEmbeddableCodeOptions>(cc);
-					produce_embeddable_code(options, *shared_segment, output, embed);
+					if (embed.result_shared_c99 != nullptr) {
+						*embed.result_shared_c99 = defines_to_c99(output.defines);
+						embed.result_shared_c99->append(*output.code);
+						embed.result_shared_c99->append(output.footer);
+					}
+					// Preserve the legacy filename behavior when no string result was
+					// requested, while allowing shared-source-only callers to avoid an
+					// unwanted embeddable file.
+					if (embed.result_c99 != nullptr || embed.result_shared_c99 == nullptr) {
+						produce_embeddable_code(options, *shared_segment, output, embed);
+					}
 				}
 			}
 

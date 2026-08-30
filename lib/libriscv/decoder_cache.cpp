@@ -555,7 +555,11 @@ namespace riscv
 	#endif
 
 #ifdef RISCV_ASMJIT
-		if (allow_asmjit && !options.asmjit_override_bintr) {
+		// A cache-loaded C99 translation owns this segment. Running asmjit after
+		// it would turn a Full/AOT load into a hybrid segment reported as JIT.
+		// A cache miss leaves is_binary_translated() false and still falls back
+		// to asmjit as before.
+		if (allow_asmjit && !options.asmjit_override_bintr && !exec.is_binary_translated()) {
 			machine().cpu.asmjit_translate(options, shared_segment);
 		}
 	#endif

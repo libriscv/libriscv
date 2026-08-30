@@ -78,6 +78,11 @@ namespace riscv
 		/// instead of writing to a file.
 		/// @details Puts freestanding C99 code into the std::string pointer.
 		std::string* result_c99 = nullptr;
+
+		/// @brief An optional std::string pointer for the shared library variant.
+		/// @details The returned source includes every required preprocessor define
+		/// and exports init/mappings symbols for CPU::load_translation().
+		std::string* result_shared_c99 = nullptr;
 	};
 	using MachineTranslationOptions = std::variant<MachineTranslationCrossOptions, MachineTranslationEmbeddableCodeOptions>;
 
