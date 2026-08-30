@@ -164,11 +164,8 @@ namespace riscv
 	/**
 	 * A prepared vmcall makes preparations for a given type of call
 	 * by recording the PC, max instructions, and enforcing a function type
-	 * 
-	 * A fast-path is attempted to be created, which allows the function
-	 * to return by directly stopping the simulation and returning.
 	**/
-	template <int W, typename F, uint64_t IMAX = UINT64_MAX, bool UseFastPath = true>
+	template <int W, typename F, uint64_t IMAX = UINT64_MAX>
 	struct PreparedCall
 	{
 	public:
@@ -209,10 +206,8 @@ namespace riscv
 		/// @brief Prepare a call to a function at the given address.
 		/// @param m The machine to prepare the call for.
 		/// @param call_addr The address of the function to call.
-		/// @return True if the call turned into a fast-path call.
-		/// @note The function will throw an exception if unsuccessful. A 'false' return value
-		/// indicates that the function did not get a fast-path, but was still prepared.
-		bool prepare(Machine<W>& m, address_t call_addr)
+		/// @note The function will throw an exception if unsuccessful.
+		void prepare(Machine<W>& m, address_t call_addr)
 		{
 			if (call_addr == 0x0)
 				throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
@@ -228,17 +223,11 @@ namespace riscv
 
 			this->m_machine = &m;
 			this->m_pc = pc;
-
-			if constexpr (UseFastPath) {
-				// Try to create a fast path function
-				return m.cpu.create_fast_path_function(pc);
-			}
-			return true; // No fast path, but prepared
 		}
 
-		bool prepare(Machine<W>& m, const std::string& func)
+		void prepare(Machine<W>& m, const std::string& func)
 		{
-			return this->prepare(m, m.address_of(func));
+			this->prepare(m, m.address_of(func));
 		}
 
 		void prepare(Machine<W>& m)
@@ -246,20 +235,14 @@ namespace riscv
 			this->m_machine = &m;
 		}
 
-		PreparedCall(Machine<W>& m, const std::string& func, unsigned* stat = nullptr)
+		PreparedCall(Machine<W>& m, const std::string& func)
 		{
-			bool is_fast = this->prepare(m, func);
-			if (stat && is_fast) {
-				*stat += 1; // Increment the fast-path stat
-			}
+			this->prepare(m, func);
 		}
-		PreparedCall(Machine<W>& m, address_t call_addr, unsigned* stat = nullptr)
+		PreparedCall(Machine<W>& m, address_t call_addr)
 			: m_machine(&m), m_pc(0)
 		{
-			bool is_fast = this->prepare(m, call_addr);
-			if (stat && is_fast) {
-				*stat += 1; // Increment the fast-path stat
-			}
+			this->prepare(m, call_addr);
 		}
 		PreparedCall(const PreparedCall& other)
 			: m_machine(other.m_machine), m_pc(other.m_pc)
