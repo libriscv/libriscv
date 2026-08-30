@@ -14,6 +14,29 @@ static bool is_zig() {
 	return std::string(rcc).find("zig") != std::string::npos;
 }
 
+TEST_CASE("Forked machines require an empty flat memory arena", "[Fork]")
+{
+	if constexpr (!riscv::flat_readwrite_arena)
+		return;
+
+	Machine<RISCV64> master {{
+		.memory_max = 8ul << 20,
+		.use_memory_arena = true,
+	}};
+	REQUIRE(master.memory.uses_flat_memory_arena());
+
+	// The master may use an arena as long as the fork does not inherit it.
+	Machine<RISCV64> fork {master, {
+		.use_memory_arena = false,
+	}};
+	REQUIRE(fork.memory.memory_arena_ptr() == nullptr);
+	REQUIRE(fork.memory.memory_arena_size() == 0);
+
+	REQUIRE_THROWS_AS(Machine<RISCV64>(master, {
+		.use_memory_arena = true,
+	}), MachineException);
+}
+
 /**
  * These tests are designed to be really brutal to support,
  * and most emulators will surely fail here.

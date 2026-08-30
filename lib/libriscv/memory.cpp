@@ -188,6 +188,13 @@ namespace riscv
 		m_original_machine {false},
 		m_binary{other.memory.binary()}
 	{
+		if (UNLIKELY(options.use_memory_arena &&
+			other.memory.uses_flat_memory_arena()))
+		{
+			throw MachineException(ILLEGAL_OPERATION,
+				"Forked machines cannot use a non-empty flat memory arena",
+				other.memory.memory_arena_size());
+		}
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = other.memory.m_atomics;
 #endif
