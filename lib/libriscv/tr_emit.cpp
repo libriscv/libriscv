@@ -1,9 +1,11 @@
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
+#include <algorithm>
 #include <array>
 #include <inttypes.h>
 #include <optional>
+#include <set>
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #include "tr_types.hpp"
@@ -95,11 +97,15 @@ struct BranchInfo {
 template <int W>
 struct Emitter
 {
-	static constexpr bool OPTIMIZE_SYSCALL_REGISTERS = true;
 	static constexpr unsigned XLEN = W * 8u;
-	// libtcc: all locals are stack slots, so more cached registers cost latency.
+	// An optimizing compiler allocates locals for free, so every register is a
+	// local: a register left in cpu->r[] costs a memory access on every use.
 	static constexpr int LIBTCC_CACHED_REGISTERS = 32;
-	static constexpr int SYSCC_CACHED_REGISTERS  = 18;
+	static constexpr int SYSCC_CACHED_REGISTERS  = 32;
+	// A return is resolved by comparing against the known call sites before
+	// falling back to indirect dispatch; beyond this many sites the compares
+	// are more likely to miss than the branch predictor.
+	static constexpr size_t MAX_PREDICTED_RETURN_SITES = 4;
 	const int CACHED_REGISTERS;
 	using address_t = address_type<W>;
 	using saddr_t = signed_address_type<W>;
@@ -170,22 +176,29 @@ struct Emitter
 		if (uses_register_caching())
 			add_code("LOAD_REGS_" + this->func + "();");
 	}
-	void store_loaded_registers() {
-		if (uses_register_caching())
-			add_code("STORE_REGS_" + this->func + "();");
+	uint32_t dirty_registers() const noexcept {
+		return (index() < m_dirty_at.size()) ? m_dirty_at[index()] : ~0u;
 	}
+	void store_registers(uint32_t mask) {
+		if (uses_register_caching()) {
+			this->m_store_masks.insert(mask);
+			add_code("STORE_REGS_" + this->func + "_" + hex_address(mask) + "();");
+		}
+	}
+	void store_loaded_registers() {
+		this->store_registers(this->dirty_registers());
+	}
+	void store_arg_registers() {
+		static constexpr uint32_t arg_mask =
+			(1u << 10) | (1u << 11) | (1u << 12) | (1u << 13) | (1u << 14) | (1u << 15) | (1u << 16) | (1u << 17);
+		this->store_registers(this->dirty_registers() & arg_mask);
+	}
+	const auto& get_store_masks() const noexcept { return this->m_store_masks; }
 	void reload_syscall_registers() {
-		// A system call only writes back A0/A1
 		this->invalidate_bounds_checks(10);
 		this->invalidate_bounds_checks(11);
 		if (uses_register_caching())
 			add_code("LOAD_SYS_REGS_" + this->func + "();");
-	}
-	void store_syscall_registers() {
-		if (uses_register_caching()) {
-			add_code("STORE_SYS_REGS_" + this->func + "();");
-			this->m_used_store_syscalls = true;
-		}
 	}
 
 	void exit_function(const std::string& new_pc, bool add_bracket = false)
@@ -594,7 +607,7 @@ struct Emitter
 		if (!this->m_used_vector_trap)
 			return;
 		add_code(this->vector_trap_label() + ":;");
-		this->store_loaded_registers();
+		this->store_registers(~0u); // Reached from anywhere in the block
 		add_code("RETURN_VALUES(0, 0);");
 	}
 	// Interpreter fallback: realize/reload only the named scalar registers.
@@ -914,8 +927,9 @@ struct Emitter
 	// Masked unit-stride: per-element v0 test over contiguous data.
 	void emit_vector_masked_unit_stride(const VectorMemInfo& info)
 	{
+		// May-alias types: the elements are guest memory on one side.
 		static const char* const element_types[4] =
-			{ "uint8_t", "uint16_t", "uint32_t", "uint64_t" };
+			{ "ga_uint8_t", "ga_uint16_t", "ga_uint32_t", "ga_uint64_t" };
 		VectorStridePlan plan;
 		if (!this->vector_plan_unit_stride(info, plan)) {
 			this->emit_vector_slowpath();
@@ -1222,6 +1236,15 @@ struct Emitter
 			return 0;
 	}
 
+	// The C type used to access guest memory: the may_alias twin of `type`,
+	// see the ga_* typedefs in tr_api.cpp.
+	static std::string guest_access_type(const std::string& type) {
+		const std::string volatile_prefix = "volatile ";
+		if (type.rfind(volatile_prefix, 0) == 0)
+			return volatile_prefix + "ga_" + type.substr(volatile_prefix.size());
+		return "ga_" + type;
+	}
+
 	std::string arena_at(const std::string& address) {
 		// Direct arena pointer for libtcc (non-shared segments only).
 		if (tinfo.is_libtcc && !tinfo.use_shared_execute_segments) {
@@ -1243,7 +1266,8 @@ struct Emitter
 		}
 	}
 
-	std::string arena_at_fixed(const std::string& type, address_t address) {
+	std::string arena_at_fixed(const std::string& access_type, address_t address) {
+		const std::string type = guest_access_type(access_type);
 		if (tinfo.is_libtcc && !tinfo.use_shared_execute_segments) {
 			if (uses_Nbit_encompassing_arena()) {
 				return "*(" + type + "*)" + hex_address(tinfo.arena_ptr + (address & address_t(get_Nbit_encompassing_arena_mask()))) + "";
@@ -1353,14 +1377,15 @@ struct Emitter
 		}
 
 		const std::string address = from_untracked_reg(reg) + " + " + from_imm(imm);
+		const std::string access = "*(" + guest_access_type(type) + "*)";
 		if (skip_load_bounds_check(reg, imm, sizeof(T)))
 		{
-			add_code(dst + " = *(" + type + "*)" + arena_at(address) + ";");
+			add_code(dst + " = " + access + arena_at(address) + ";");
 		}
 		else if (uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_READABLE(" + address + ")))",
-					dst + " = *(" + type + "*)" + arena_at(address) + ";",
+					dst + " = " + access + arena_at(address) + ";",
 				"else {");
 			if (!tinfo.use_virtual_paging_fallback) {
 				add_code("  cpu->pc = " + hex_address(this->pc()) + "LL; goto exception;",
@@ -1402,7 +1427,7 @@ struct Emitter
 	{
 		this->m_used_fixed_store = true;
 		add_code("mstore = (char*)&" + arena_at_fixed(type, address) + ";",
-			"*(" + type + "*)mstore = " + value + ";");
+			"*(" + guest_access_type(type) + "*)mstore = " + value + ";");
 	}
 	void memory_store(std::string type, size_t size, int reg, int32_t imm, std::string value)
 	{
@@ -1426,14 +1451,15 @@ struct Emitter
 		}
 
 		const std::string address = from_untracked_reg(reg) + " + " + from_imm(imm);
+		const std::string access = "*(" + guest_access_type(type) + "*)";
 		if (skip_store_bounds_check(reg, imm, size))
 		{
-			add_code("*(" + type + "*)" + arena_at(address) + " = " + value + ";");
+			add_code(access + arena_at(address) + " = " + value + ";");
 		}
 		else if (uses_flat_memory_arena()) {
 			add_code(
 				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
-				"  *(" + type + "*)" + arena_at(address) + " = " + value + ";",
+				"  " + access + arena_at(address) + " = " + value + ";",
 				"else {");
 			if (!tinfo.use_virtual_paging_fallback) {
 				add_code("  cpu->pc = " + hex_address(this->pc()) + "LL; goto exception;",
@@ -1510,10 +1536,10 @@ struct Emitter
 	bool within_segment(address_t addr) const noexcept {
 		return addr >= this->tinfo.segment_basepc && addr < this->tinfo.segment_endpc;
 	}
-	bool used_store_syscalls() const noexcept { return this->m_used_store_syscalls; }
 	bool used_fixed_store() const noexcept { return this->m_used_fixed_store; }
 
 	const std::string get_func() const noexcept { return this->func; }
+	void analyze_dirty_registers();
 	void emit();
 	rv32i_instruction emit_rvc();
 
@@ -1587,7 +1613,6 @@ private:
 	bool m_vtrap_needed = true;
 #endif
 	address_t m_encompassing_arena_mask = 0;
-	bool m_used_store_syscalls = false;
 	bool m_used_fixed_store = false;
 	bool m_used_vector_trap = false;
 
@@ -1601,6 +1626,9 @@ private:
 
 	std::array<bool, 32> gpr_exists {};
 	std::array<bool, 32> gpr_written {};
+	std::vector<uint32_t> m_dirty_at;  // dirty when the instruction executes (what a sync here stores)
+	std::vector<uint32_t> m_dirty_out; // dirty after it, for the flow
+	std::set<uint32_t> m_store_masks;
 	std::array<bool, 32> m_is_tracked_register {};
 	std::array<address_t, 32> m_tracked_registers {};
 
@@ -1695,16 +1723,47 @@ inline bool Emitter<W>::emit_function_call(address_t target_funcaddr, address_t 
 	return true;
 }
 
+// Linux system calls that hand control to another thread, which comes back
+// with that thread's register file restored in place. clone(2) is the one that
+// also leaves the PC where it was, so nothing downstream can notice the swap:
+// the child resumes at the very instruction that made the call. The rest are
+// here because two threads can be parked at the same system call - a spin loop
+// that yields, or a futex wait - and then the PC does not move either.
+static bool syscall_switches_thread(uint64_t sysno) noexcept
+{
+	switch (sysno) {
+	case 93:  // exit
+	case 94:  // exit_group, installed as the exit handler, see setup_posix_threads()
+	case 98:  // futex
+	case 124: // sched_yield
+	case 131: // tgkill
+	case 139: // rt_sigreturn
+	case 220: // clone
+	case 422: // futex_time64
+	case 435: // clone3
+		return true;
+	default:
+		return false;
+	}
+}
+
 template <int W>
 inline void Emitter<W>::emit_system_call(std::string syscall_reg)
 {
-	if (auto tracked_value = get_tracked_register(17); tracked_value) {
-		if (syscall_reg != std::to_string(SYSCALL_EBREAK)) {
+	// A7 is loaded with an immediate right before the ECALL in almost all code,
+	// so the system call number is usually known here.
+	std::optional<uint64_t> sysno;
+	if (syscall_reg == std::to_string(SYSCALL_EBREAK)) {
+		sysno = SYSCALL_EBREAK;
+	} else if (auto tracked_value = get_tracked_register(REG_ECALL); tracked_value) {
+		if (*tracked_value < address_t(1) << 20) {
+			sysno = uint64_t(*tracked_value);
 			if constexpr (W != 16) { // No 128-bit to_string in C++
 				syscall_reg = std::to_string(*tracked_value);
 			}
 		}
 	}
+	const bool switches_thread = sysno && syscall_switches_thread(*sysno);
 	this->store_loaded_registers();
 	if (tinfo.is_libtcc)
 	{
@@ -1739,6 +1798,17 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg)
 #ifdef RISCV_EXT_VECTOR
 	this->reset_vector_config();
 #endif
+	if (switches_thread) {
+		// The handler swapped in another thread's register file. Exit without
+		// storing the cached registers, which belong to the thread that made
+		// the call; re-entering the block loads the new thread's registers.
+		const char* counter = (tinfo.ignore_instruction_limit) ? "0" : "ic";
+		add_code("cpu->pc = " + PCRELS(4) + ";",
+			std::string("RETURN_VALUES(") + counter + ", MAX_COUNTER(cpu));");
+		// Whatever follows is only reachable through the dispatch table now
+		this->add_reentry_next();
+		return;
+	}
 	this->reload_syscall_registers();
 }
 
@@ -1747,8 +1817,150 @@ inline void Emitter<W>::emit_system_call(std::string syscall_reg)
 #endif
 
 template <int W>
+void Emitter<W>::analyze_dirty_registers()
+{
+	const auto& instrs = tinfo.instr;
+	const size_t n = instrs.size();
+	m_dirty_at.assign(n, 0);
+	m_dirty_out.assign(n, 0);
+	if (!uses_register_caching() || n == 0)
+		return;
+
+	enum Kind { SIMPLE, BRANCH, JUMP, INDIRECT, SYSCALL, OTHER };
+	struct Node {
+		uint32_t writes = 0;
+		Kind kind = SIMPLE;
+		int  target = -1; // instruction index, for BRANCH and JUMP inside the block
+	};
+	std::vector<Node> nodes(n);
+	std::vector<address_t> addr_of(n);
+	std::unordered_map<address_t, int> index_of;
+	address_t pc = tinfo.basepc;
+	for (size_t i = 0; i < n; i++) {
+		addr_of[i] = pc;
+		index_of.emplace(pc, int(i));
+		pc += compressed_enabled ? instrs[i].length() : 4;
+	}
+	const auto lookup = [&] (address_t target) -> int {
+		auto it = index_of.find(target);
+		return (it != index_of.end()) ? it->second : -1;
+	};
+	const auto reg_bit = [] (unsigned reg) -> uint32_t {
+		return (reg != 0) ? (1u << reg) : 0u;
+	};
+
+	for (size_t i = 0; i < n; i++) {
+		const auto& instr = instrs[i];
+		Node& node = nodes[i];
+		if (compressed_enabled && instr.is_compressed()) {
+#ifdef RISCV_EXT_C
+			const rv32c_instruction ci { instr };
+			// Every rd field of every compressed format, plus x1 for the links
+			node.writes = reg_bit(instr.whole >> 7 & 0x1F)
+				| reg_bit(8 + (instr.whole >> 2 & 0x7))
+				| reg_bit(8 + (instr.whole >> 7 & 0x7)) | reg_bit(1);
+			const unsigned quadrant = instr.whole & 0x3;
+			const unsigned funct3 = instr.whole >> 13 & 0x7;
+			if (quadrant == 0b01 && (funct3 == 0b101 || (W == 4 && funct3 == 0b001))) {
+				node.kind = JUMP; // C.J, C.JAL
+				node.target = lookup(addr_of[i] + ci.CJ.signed_imm());
+			} else if (quadrant == 0b01 && (funct3 == 0b110 || funct3 == 0b111)) {
+				node.kind = BRANCH; // C.BEQZ, C.BNEZ
+				node.target = lookup(addr_of[i] + ci.CB.signed_imm());
+			} else if (quadrant == 0b10 && funct3 == 0b100 && ci.CR.rs2 == 0) {
+				// C.JR, C.JALR, C.EBREAK
+				node.kind = (ci.CR.rd != 0) ? INDIRECT : SYSCALL;
+			}
+#endif
+			continue;
+		}
+		node.writes = reg_bit(instr.Itype.rd);
+		switch (instr.opcode()) {
+		case RV32I_LOAD: case RV32I_STORE: case RV32I_OP_IMM: case RV32I_OP:
+		case RV32I_LUI: case RV32I_AUIPC: case RV64I_OP_IMM32: case RV64I_OP32:
+		case RV32F_LOAD: case RV32F_STORE: case RV32F_FMADD: case RV32F_FMSUB:
+		case RV32F_FNMSUB: case RV32F_FNMADD: case RV32F_FPFUNC: case RV32A_ATOMIC:
+			break;
+		case RV32I_BRANCH:
+			node.kind = BRANCH;
+			node.target = lookup(addr_of[i] + instr.Btype.signed_imm());
+			break;
+		case RV32I_JAL:
+			node.kind = JUMP;
+			node.target = lookup((addr_of[i] + instr.Jtype.jump_offset()) & ~address_t(ALIGN_MASK));
+			break;
+		case RV32I_JALR:
+			node.kind = INDIRECT;
+			break;
+		case RV32I_SYSTEM:
+			// ECALL and EBREAK store everything dirty, and reload a0/a1
+			node.kind = (instr.Itype.funct3 == 0 && instr.Itype.imm < 2) ? SYSCALL : OTHER;
+			break;
+		default:
+			node.kind = OTHER;
+			break;
+		}
+	}
+
+	// Which instructions can be entered from the dispatch switch, or through a
+	// label at all: the block entry, every jump target, whatever follows an
+	// instruction that is not straight-line, and code after a run of zeroes.
+	std::vector<bool> is_label(n, false);
+	is_label[0] = true;
+	for (const auto addr : tinfo.jump_locations)
+		if (const int idx = lookup(addr); idx >= 0) is_label[idx] = true;
+	for (const auto addr : tinfo.global_jump_locations)
+		if (const int idx = lookup(addr); idx >= 0) is_label[idx] = true;
+	unsigned zeroes = 0;
+	for (size_t i = 0; i < n; i++) {
+		if (nodes[i].kind != SIMPLE && i + 1 < n)
+			is_label[i + 1] = true;
+		if (instrs[i].is_illegal())
+			zeroes++;
+		else {
+			if (zeroes >= 4) is_label[i] = true;
+			zeroes = 0;
+		}
+	}
+
+	// Fixpoint over the may-dirty sets. The dispatch switch is one node:
+	// its input is the union over every indirect jump, and it flows into
+	// every label.
+	std::vector<uint32_t> in(n, 0);
+	uint32_t dispatch = 0;
+	bool changed = true;
+	while (changed) {
+		changed = false;
+		uint32_t new_dispatch = 0;
+		for (size_t i = 0; i < n; i++) {
+			const Node& node = nodes[i];
+			uint32_t d = in[i];
+			if (is_label[i]) d |= dispatch;
+			if (i > 0 && nodes[i - 1].kind != JUMP && nodes[i - 1].kind != INDIRECT)
+				d |= m_dirty_out[i - 1]; // fall-through
+			if (d != in[i]) { in[i] = d; changed = true; }
+			// A sync at this instruction stores what is dirty on entry plus
+			// whatever the instruction itself wrote before it. A system call
+			// syncs everything, so nothing is dirty after it.
+			m_dirty_at[i] = d | node.writes;
+			const uint32_t out = (node.kind == SYSCALL) ? 0u : m_dirty_at[i];
+			if (out != m_dirty_out[i]) { m_dirty_out[i] = out; changed = true; }
+			if ((node.kind == BRANCH || node.kind == JUMP) && node.target >= 0) {
+				if ((in[node.target] | out) != in[node.target]) {
+					in[node.target] |= out; changed = true;
+				}
+			}
+			if (node.kind == INDIRECT)
+				new_dispatch |= out;
+		}
+		if (new_dispatch != dispatch) { dispatch = new_dispatch; changed = true; }
+	}
+}
+
+template <int W>
 void Emitter<W>::emit()
 {
+	this->analyze_dirty_registers();
 	this->add_mapping(this->pc(), this->func);
 	code.append(FUNCLABEL(this->pc()) + ":;\n");
 	auto next_pc = tinfo.basepc;
@@ -1805,13 +2017,10 @@ void Emitter<W>::emit()
 			this->reset_all_tracked_registers();
 		}
 
-		auto it = tinfo.single_return_locations.find(this->pc());
-		if (it != tinfo.single_return_locations.end()) {
-			// Track the current function's PC for single-return-location optimizations.
-			if (it->second != 0)
-				current_callable_pc = this->pc();
-			else
-				current_callable_pc = 0;
+		if (tinfo.return_locations.count(this->pc())) {
+			// A called function starts here: its returns can be predicted
+			// from the call sites, see RV32I_JALR below.
+			current_callable_pc = this->pc();
 		}
 
 		this->m_instr_counter += 1;
@@ -1982,35 +2191,46 @@ void Emitter<W>::emit()
 					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			} else {
-				// If this is JALR ra, check if the return address is a single return location
+				// A plain return from a function with known call sites: compare
+				// the return address against the sites in this block and jump
+				// directly, which is always correct whichever function we are
+				// really in, and skips the indirect dispatch when it hits.
+				std::vector<address_t> predicted;
 				if (instr.Itype.rs1 != 0 && instr.Itype.signed_imm() == 0 && current_callable_pc != 0) {
-					// Return locations are stored from the callee's perspective
-					auto it = tinfo.single_return_locations.find(current_callable_pc);
-					if (it == tinfo.single_return_locations.end()) {
-						throw std::runtime_error("JALR ra with current callable PC, without a return location");
+					auto it = tinfo.return_locations.find(current_callable_pc);
+					if (it != tinfo.return_locations.end()) {
+						for (const address_t site : it->second) {
+							if (site > this->begin_pc() && site < this->end_pc()
+								&& std::find(predicted.begin(), predicted.end(), site) == predicted.end())
+								predicted.push_back(site);
+						}
+						if (predicted.size() > MAX_PREDICTED_RETURN_SITES)
+							predicted.clear();
 					}
-					// TODO: Check if the return location is in the current block
-					// If it is, we can jump directly to it
-					// Otherwise, we should immediately exit the function
-					//printf("Single return location: 0x%lX (pc=0x%lX) -> 0x%lX\n",
-					//	long(current_callable_pc), long(this->pc()), long(it->second));
-					if (it->second >= this->begin_pc() && it->second < this->end_pc()) {
-						// Jump directly to the return location
-						add_code("if (" + from_reg(instr.Itype.rs1) + " == " + STRADDR(current_callable_pc) + ") goto " + FUNCLABEL(it->second) + ";");
-					}
-					// Otherwise, we need to use unknown register values to jump
 				}
+				// In counting mode the whole dispatch is guarded by the limit
+				// below, so a predicted (possibly backward) jump is also counted.
+				if (!predicted.empty() && !tinfo.ignore_instruction_limit)
+					add_code("if (" + LOOP_EXPRESSION + ") {");
+				for (const address_t site : predicted) {
+					add_code("if (" + from_reg(instr.Itype.rs1) + " == " + STRADDR(site) + ") goto " + FUNCLABEL(site) + ";");
+				}
+				if (!predicted.empty() && !tinfo.ignore_instruction_limit)
+					add_code("}");
 				add_code(
 					"JUMP_TO(" + from_reg(instr.Itype.rs1) + " + " + from_imm(instr.Itype.signed_imm()) + ");"
 				);
 			}
 			// Untrack current callable PC
 			current_callable_pc = 0;
-			if (!tinfo.ignore_instruction_limit)
-				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + " && " + LOOP_EXPRESSION + ") goto " + this->func + "_jumptbl;\n";
-			else
-				code += "if (pc >= " + STRADDR(this->begin_pc()) + " && pc < " + STRADDR(this->end_pc()) + ") goto " + this->func + "_jumptbl;\n";
-			exit_function("pc", false);
+			// The dispatch table covers the whole block, and exits the
+			// function for any address outside of it.
+			if (!tinfo.ignore_instruction_limit) {
+				add_code("if (" + LOOP_EXPRESSION + ") goto " + this->func + "_jumptbl;");
+				exit_function("pc", false);
+			} else {
+				add_code("goto " + this->func + "_jumptbl;");
+			}
 			this->add_reentry_next();
 			} break;
 		case RV32I_JAL: {
@@ -3333,14 +3553,13 @@ void Emitter<W>::emit()
 			UNKNOWN_INSTRUCTION();
 #endif
 			break;
-		case 0b1011011: // Custom-2 dynamic call: store/reload A0-A7 like a regular call.
+		case 0b1011011: // Custom-2 dynamic call: arguments in A0-A7, results in A0/A1.
 			for (unsigned i = 10; i < 18; i++) {
 				this->load_register(i);
 			}
-			store_syscall_registers();
+			this->store_arg_registers();
 			WELL_KNOWN_INSTRUCTION();
-			// Reload registers A0-A1
-			reload_syscall_registers();
+			this->reload_syscall_registers();
 			this->reset_tracked_register(10);
 			this->reset_tracked_register(11);
 			break;
@@ -3366,13 +3585,15 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 
 	// Create register push and pop macros
 	if (tinfo.use_register_caching) {
-		code += "#define STORE_REGS_" + e.get_func() + "() \\\n";
-		for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
-			if (e.gpr_needs_store(reg)) {
-				code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+		for (const uint32_t mask : e.get_store_masks()) {
+			code += "#define STORE_REGS_" + e.get_func() + "_" + hex_address(mask) + "() \\\n";
+			for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
+				if (e.gpr_needs_store(reg) && (mask & (1u << reg))) {
+					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
+				}
 			}
+			code += "  ;\n";
 		}
-		code += "  ;\n";
 		code += "#define LOAD_REGS_" + e.get_func() + "() \\\n";
 		for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 			if (e.gpr_exists_at(reg)) {
@@ -3380,17 +3601,9 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 			}
 		}
 		code += "  ;\n";
-		if (e.used_store_syscalls()) {
-			code += "#define STORE_SYS_REGS_" + e.get_func() + "() \\\n";
-			for (size_t reg = 10; reg < 18; reg++) {
-				if (e.gpr_needs_store(reg)) {
-					code += "  cpu->r[" + std::to_string(reg) + "] = " + e.loaded_regname(reg) + "; \\\n";
-				}
-			}
-			code += "  ;\n";
-		}
+		// A system call returns its values in A0 and A1
 		code += "#define LOAD_SYS_REGS_" + e.get_func() + "() \\\n";
-		for (size_t reg = 10; reg < 12; reg++) {
+		for (int reg = 10; reg < 12; reg++) {
 			if (e.gpr_exists_at(reg)) {
 				code += "  " + e.loaded_regname(reg) + " = cpu->r[" + std::to_string(reg) + "]; \\\n";
 			}
@@ -3404,7 +3617,7 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	}
 
 	// Function header
-	code += "static ReturnValues " + e.get_func() + "(CPU* cpu, uint64_t ic, uint64_t max_ic, addr_t pc) {\n";
+	code += "static ReturnValues " + e.get_func() + "(CPU* RESTRICT cpu, uint64_t ic, uint64_t max_ic, addr_t pc) {\n";
 	// NOTE: Scratch shared by every exit point, see RETURN_VALUES
 	code += "ReturnValues retvals;\n";
 	if (e.used_fixed_store())
@@ -3420,42 +3633,31 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 	}
 
 	code += e.get_func() + "_jumptbl:;\n";
+	{
+		// Indirect dispatch over the entry points of this block. Switching on
+		// the halfword index rather than the address doubles the case density,
+		// which is what decides whether the compiler emits a single jump
+		// table or a binary search of sub-tables: several data-dependent
+		// branches on every return and indirect call. Only entry points are
+		// cases: every case constrains register allocation at its label, and
+		// making all branch targets reachable from here measured 25% slower.
+		// Indirect jump targets found in data (switch and function pointer
+		// tables) are entry points, so those stay inside the function too.
+		// Computed gotos would be denser still, but their targets become
+		// abnormal edges that block optimization around every label.
+		std::vector<address_type<W>> cases;
+		for (const auto& entry : e.get_mappings())
+			cases.push_back(entry.addr);
+		std::sort(cases.begin(), cases.end());
+		cases.erase(std::unique(cases.begin(), cases.end()), cases.end());
 
-#if 0 // Computed-goto dispatch: not faster than the switch below.
-	const auto str_begin_pc = std::to_string(e.begin_pc()) + "UL";
-	code += "if (pc < " + str_begin_pc + " || pc >= " + std::to_string(e.end_pc()) + ") goto dispatch;\n";
-	code += "static void* jumptbl[] = {\n";
-	size_t idx = 0;
-	const size_t max_idx = e.get_mappings().size();
-	for (address_type<W> pc = e.begin_pc(); pc < e.end_pc(); pc += 2) {
-
-		if (idx < max_idx) {
-			const auto& entry = e.get_mappings().at(idx);
-			// Default to dispatch if no mapping
-			if (entry.addr != pc) {
-				code += "&&dispatch,\n";
-				continue;
-			}
-			// Label for this jumpable address
-			const auto label = funclabel<W>(e.get_func(), pc);
-			code += "&&" + label + ",\n";
-			idx++;
-		} else {
-			code += "&&dispatch,\n";
+		code += "switch ((pc - " + hex_address(e.begin_pc()) + "LL) >> 1) {\n";
+		for (const auto addr : cases) {
+			code += "case " + std::to_string(uint64_t(addr - e.begin_pc()) >> 1) + ": goto "
+				+ funclabel<W>(e.get_func(), addr) + ";\n";
 		}
+		code += "default:;\n}\n";
 	}
-	code += "};\n";
-	code += "goto *jumptbl[(pc - " + str_begin_pc + ") >> 1];\n";
-	code += "dispatch: {\n";
-#else
-	code += "switch (pc) {\n";
-	for (size_t idx = 0; idx < e.get_mappings().size(); idx++) {
-		auto& entry = e.get_mappings().at(idx);
-		const auto label = funclabel<W>(e.get_func(), entry.addr);
-		code += "case " + hex_address(entry.addr) + ": goto " + label + ";\n";
-	}
-	code += "default:\n";
-#endif
 	code += "exception_is_handled:\n"; // Re-using exit point for exceptions
 	for (int reg = 1; reg < e.CACHED_REGISTERS; reg++) {
 		if (e.gpr_needs_store(reg)) {
@@ -3463,7 +3665,6 @@ CPU<W>::emit(std::string& code, const TransInfo<W>& tinfo)
 		}
 	}
 	code += "  cpu->pc = pc; RETURN_VALUES(ic, max_ic);\n";
-	code += "}\n";
 
 	// Function code
 	code += e.get_code();

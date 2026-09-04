@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <chrono>
 #include <fstream>
 #include <mutex>
@@ -45,6 +46,7 @@ namespace riscv
 {
 	static constexpr bool VERBOSE_BLOCKS = false;
 	static constexpr bool SCAN_FOR_GP = true;
+	static constexpr int ALIGN_MASK = (compressed_enabled) ? 0x1 : 0x3;
 
 	static inline timespec time_now();
 	static inline long nanodiff(timespec, timespec);
@@ -575,18 +577,12 @@ static bool is_stopping_instruction(rv32i_instruction instr) {
 }
 
 template <int W>
-static void record_return_location(std::unordered_map<address_type<W>, address_type<W>>& single_return_locations, address_type<W> caller, address_type<W> callee)
+static void record_return_location(std::unordered_map<address_type<W>, std::vector<address_type<W>>>& return_locations, address_type<W> caller, address_type<W> callee)
 {
-	auto it = single_return_locations.find(callee);
-	if (it != single_return_locations.end()) {
-		// We already have a return location, disable it by setting it to zero
-		// This means JALR cannot predict the return location
-		it->second = 0;
-	} else {
-		// Record the return location
-		// This means JALR can predict the return location
-		single_return_locations.emplace(callee, caller);
-	}
+	// Every direct call site of a function is a candidate for its returns:
+	// the emitter compares the return address against the known sites and
+	// jumps straight to the winner, before falling back to indirect dispatch.
+	return_locations[callee].push_back(caller);
 }
 
 template <int W>
@@ -667,10 +663,10 @@ if constexpr (SCAN_FOR_GP) {
 
 	// Code block and loop detection
 	TIME_POINT(t2);
-	const size_t ITS_TIME_TO_SPLIT = (is_libtcc) ? 5'000 : 1'250;
+	const size_t ITS_TIME_TO_SPLIT = (is_libtcc) ? 5'000 : std::max(1u, options.translate_block_split);
 	size_t icounter = 0;
 	std::unordered_set<address_type<W>> global_jump_locations;
-	std::unordered_map<address_type<W>, address_type<W>> single_return_locations;
+	std::unordered_map<address_type<W>, std::vector<address_type<W>>> return_locations;
 	std::vector<TransInfo<W>> blocks;
 
 	// Insert the ELF entry point as the first global jump location
@@ -683,6 +679,57 @@ if constexpr (SCAN_FOR_GP) {
 	for (auto address : options.translator_jump_hints) {
 		if (address >= basepc && address < endbasepc) {
 			global_jump_locations.insert(address);
+		}
+	}
+	// Indirect jump targets referenced from data: switch tables (32-bit
+	// absolute entries, even on RV64) and function pointer tables. These
+	// become entry points with their own dispatch case, so a jr/jalr through
+	// them stays inside the translated function instead of leaving for the
+	// interpreter, which then has to find its way back in.
+	if (options.translate_scan_data_jump_targets) {
+		const auto& binary = machine().memory.binary();
+		using Elf = riscv::Elf<W>;
+		if (Elf::validate(binary)) {
+			const auto* hdr = machine().memory.elf_header();
+			const auto* phdrs = (const typename Elf::ProgramHeader*)(binary.data() + hdr->e_phoff);
+			size_t found = 0;
+			for (unsigned i = 0; i < hdr->e_phnum; i++) {
+				const auto& ph = phdrs[i];
+				if (ph.p_type != Elf::PT_LOAD)
+					continue;
+				if (ph.p_offset > binary.size() || ph.p_filesz > binary.size() - ph.p_offset)
+					continue;
+				const char* data = binary.data() + ph.p_offset;
+				const auto consider = [&] (uint64_t value) {
+					if (value >= basepc && value < endbasepc && (value & ALIGN_MASK) == 0) {
+						found += global_jump_locations.insert(address_t(value)).second;
+					}
+				};
+				// Small programs keep .rodata in the executable segment, so
+				// scan around the code rather than skipping the segment. The
+				// code itself is skipped: instruction words are not pointers.
+				const auto in_code = [&] (size_t off, size_t size) {
+					const uint64_t vaddr = uint64_t(ph.p_vaddr) + off;
+					return vaddr + size > basepc && vaddr < endbasepc;
+				};
+				for (size_t off = 0; off + 4 <= ph.p_filesz; off += 4) {
+					if (in_code(off, 4)) continue;
+					uint32_t value;
+					std::memcpy(&value, data + off, sizeof(value));
+					consider(value);
+				}
+				if constexpr (W >= 8) {
+					for (size_t off = 0; off + 8 <= ph.p_filesz; off += 8) {
+						if (in_code(off, 8)) continue;
+						uint64_t value;
+						std::memcpy(&value, data + off, sizeof(value));
+						if (value > UINT32_MAX) consider(value);
+					}
+				}
+			}
+			if (verbose) {
+				printf("libriscv: Binary translator found %zu indirect jump targets in data\n", found);
+			}
 		}
 	}
 
@@ -766,7 +813,7 @@ if constexpr (SCAN_FOR_GP) {
 
 				// Record return location for JALR prediction when rd != 0
 				if (instruction.opcode() == RV32I_JAL && instruction.Jtype.rd != 0) {
-					record_return_location<W>(single_return_locations, pc + instruction.length(), location);
+					record_return_location<W>(return_locations, pc + instruction.length(), location);
 					global_jump_locations.insert(pc + instruction.length());
 				}
 
@@ -814,7 +861,7 @@ if constexpr (SCAN_FOR_GP) {
 				options.translate_use_virtual_paging_fallback,
 				options.translate_unsafe_remove_checks,
 				std::move(jump_locations),
-				std::move(single_return_locations),
+				return_locations,
 				nullptr, // blocks
 				&ebreak_locations,
 				global_jump_locations,

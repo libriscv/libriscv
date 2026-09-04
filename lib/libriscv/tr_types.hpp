@@ -36,7 +36,9 @@ namespace riscv
 		bool use_virtual_paging_fallback;
 		bool unsafe_remove_checks;
 		std::unordered_set<address_type<W>> jump_locations;
-		std::unordered_map<address_type<W>, address_type<W>> single_return_locations;
+		// Return addresses of every direct call site, keyed by callee. Shared by
+		// all blocks, and complete by the time any block is emitted.
+		const std::unordered_map<address_type<W>, std::vector<address_type<W>>>& return_locations;
 		// Pointer to all the other blocks (including current)
 		std::vector<TransInfo<W>>* blocks = nullptr;
 		// Pointer to list of ebreak-locations

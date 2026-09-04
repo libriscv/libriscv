@@ -40,6 +40,33 @@ namespace riscv {
 #endif
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
+/* The CPU pointer is the only route to the register file, and guest memory is a
+   separate mapping, so the two can never overlap. Telling the compiler so lets
+   it keep registers, the arena pointer and the FP register file in host
+   registers across guest stores, which would otherwise have to be assumed to
+   alias them (a char store aliases everything, an int64 store aliases the
+   uint64 register file). Every access derived from cpu has to stay pointer
+   arithmetic, never a uintptr_t round trip, or the compiler loses the base. */
+#ifdef __TINYC__
+#define RESTRICT
+#define MAY_ALIAS
+#else
+#define RESTRICT __restrict
+#define MAY_ALIAS __attribute__((__may_alias__))
+#endif
+/* Guest memory is accessed through these, never through the plain types. The
+   guest type-puns freely (a double is stored with fsd and read back as two
+   words on RV32, for one), so a strict-aliasing compiler must not be allowed
+   to reorder or drop arena accesses based on their C type. The register file
+   stays distinguishable from the arena through the RESTRICT pointer alone. */
+typedef int8_t   MAY_ALIAS ga_int8_t;
+typedef int16_t  MAY_ALIAS ga_int16_t;
+typedef int32_t  MAY_ALIAS ga_int32_t;
+typedef int64_t  MAY_ALIAS ga_int64_t;
+typedef uint8_t  MAY_ALIAS ga_uint8_t;
+typedef uint16_t MAY_ALIAS ga_uint16_t;
+typedef uint32_t MAY_ALIAS ga_uint32_t;
+typedef uint64_t MAY_ALIAS ga_uint64_t;
 #define ILLEGAL_OPCODE  0
 #define MISALIGNED_INSTRUCTION 4
 #define VISIBLE  __attribute__((visibility("default")))
@@ -392,22 +419,22 @@ INTERNAL static int32_t arena_offset;
 // built against a different machine layout is already rejected by hash; this
 // symbol lets the loader verify it directly rather than rely on that.
 VISIBLE const int32_t arena_offset_constant = RISCV_ARENA_OFFSET;
-#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + RISCV_ARENA_OFFSET) + (x))
+#define ARENA_AT(cpu, x)  (*(char **)((char *)(cpu) + RISCV_ARENA_OFFSET) + (x))
 #else
-#define ARENA_AT(cpu, x)  (*(char **)((uintptr_t)cpu + arena_offset) + (x))
+#define ARENA_AT(cpu, x)  (*(char **)((char *)(cpu) + arena_offset) + (x))
 #endif
 
 INTERNAL static int32_t ic_offset;
-#define INS_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + ic_offset))
-#define MAX_COUNTER(cpu) (*(uint64_t *)((uintptr_t)cpu + ic_offset + 8))
+#define INS_COUNTER(cpu) (*(uint64_t *)((char *)(cpu) + ic_offset))
+#define MAX_COUNTER(cpu) (*(uint64_t *)((char *)(cpu) + ic_offset + 8))
 
 typedef struct {
 	addr_t pageno;
 	uint8_t *data;
 } CachedPage;
 INTERNAL static int32_t rdcache_offset;
-#define RD_CACHE(cpu) ((CachedPage *)((uintptr_t)cpu + rdcache_offset))
-#define WR_CACHE(cpu) ((CachedPage *)((uintptr_t)cpu + rdcache_offset + sizeof(CachedPage)))
+#define RD_CACHE(cpu) ((CachedPage *)((char *)(cpu) + rdcache_offset))
+#define WR_CACHE(cpu) ((CachedPage *)((char *)(cpu) + rdcache_offset + sizeof(CachedPage)))
 
 #ifdef __TINYC__
 // Use the API directly as TCC doesn't optimize well
@@ -420,58 +447,58 @@ INTERNAL static int32_t rdcache_offset;
 #define wr32 api.mem_st32
 #define wr64 api.mem_st64
 #else
-static uint8_t rd8(CPU* cpu, addr_t addr) {
+static uint8_t rd8(CPU* RESTRICT cpu, addr_t addr) {
 	const addr_t pageno = addr >> 12;
 	if (RD_CACHE(cpu)->pageno != pageno) {
 		return api.mem_ld8(cpu, addr);
 	}
 	return RD_CACHE(cpu)->data[PAGEOFF(addr)];
 }
-static uint16_t rd16(CPU* cpu, addr_t addr) {
+static uint16_t rd16(CPU* RESTRICT cpu, addr_t addr) {
 	const addr_t pageno = addr >> 12;
 	if (RD_CACHE(cpu)->pageno != pageno) {
 		return api.mem_ld16(cpu, addr);
 	}
-	return *(uint16_t *)&RD_CACHE(cpu)->data[PAGEOFF(addr)];
+	return *(ga_uint16_t *)&RD_CACHE(cpu)->data[PAGEOFF(addr)];
 }
-static uint32_t rd32(CPU* cpu, addr_t addr) {
+static uint32_t rd32(CPU* RESTRICT cpu, addr_t addr) {
 	const addr_t pageno = addr >> 12;
 	if (RD_CACHE(cpu)->pageno != pageno) {
 		return api.mem_ld32(cpu, addr);
 	}
-	return *(uint32_t *)&RD_CACHE(cpu)->data[PAGEOFF(addr)];
+	return *(ga_uint32_t *)&RD_CACHE(cpu)->data[PAGEOFF(addr)];
 }
-static uint64_t rd64(CPU* cpu, addr_t addr) {
+static uint64_t rd64(CPU* RESTRICT cpu, addr_t addr) {
 	const addr_t pageno = addr >> 12;
 	if (RD_CACHE(cpu)->pageno != pageno) {
 		return api.mem_ld64(cpu, addr);
 	}
-	return *(uint64_t *)&RD_CACHE(cpu)->data[PAGEOFF(addr)];
+	return *(ga_uint64_t *)&RD_CACHE(cpu)->data[PAGEOFF(addr)];
 }
-static void wr8(CPU* cpu, addr_t addr, uint8_t value) {
+static void wr8(CPU* RESTRICT cpu, addr_t addr, uint8_t value) {
 	if (WR_CACHE(cpu)->pageno == addr >> 12) {
 		WR_CACHE(cpu)->data[PAGEOFF(addr)] = value;
 		return;
 	}
 	api.mem_st8(cpu, addr, value);
 }
-static void wr16(CPU* cpu, addr_t addr, uint16_t value) {
+static void wr16(CPU* RESTRICT cpu, addr_t addr, uint16_t value) {
 	if (WR_CACHE(cpu)->pageno == addr >> 12) {
-		*(uint16_t *)&WR_CACHE(cpu)->data[PAGEOFF(addr)] = value;
+		*(ga_uint16_t *)&WR_CACHE(cpu)->data[PAGEOFF(addr)] = value;
 		return;
 	}
 	api.mem_st16(cpu, addr, value);
 }
-static void wr32(CPU* cpu, addr_t addr, uint32_t value) {
+static void wr32(CPU* RESTRICT cpu, addr_t addr, uint32_t value) {
 	if (WR_CACHE(cpu)->pageno == addr >> 12) {
-		*(uint32_t *)&WR_CACHE(cpu)->data[PAGEOFF(addr)] = value;
+		*(ga_uint32_t *)&WR_CACHE(cpu)->data[PAGEOFF(addr)] = value;
 		return;
 	}
 	api.mem_st32(cpu, addr, value);
 }
-static void wr64(CPU* cpu, addr_t addr, uint64_t value) {
+static void wr64(CPU* RESTRICT cpu, addr_t addr, uint64_t value) {
 	if (WR_CACHE(cpu)->pageno == addr >> 12) {
-		*(uint64_t *)&WR_CACHE(cpu)->data[PAGEOFF(addr)] = value;
+		*(ga_uint64_t *)&WR_CACHE(cpu)->data[PAGEOFF(addr)] = value;
 		return;
 	}
 	api.mem_st64(cpu, addr, value);

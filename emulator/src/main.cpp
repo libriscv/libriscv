@@ -30,6 +30,7 @@ struct Arguments {
 	bool trace = false;
 	bool no_translate = false;
 	bool translate_regcache = riscv::libtcc_enabled; // Default: Register caching w/libtcc
+	unsigned block_split = 1250; // Minimum instructions per translated function
 	bool translate_future = true;
 	bool full_virtual = true; // Use virtual paging in binary translator
 	bool mingw = false;
@@ -88,6 +89,7 @@ static const struct option long_options[] = {
 	{"ebreak", required_argument, 0, 1005},
 	{"libc-fastpath", no_argument, 0, 1006},
 	{"nbit-address-space", no_argument, 0, 1007},
+	{"block-split", required_argument, 0, 1008},
 	{0, 0, 0, 0}
 };
 
@@ -216,6 +218,7 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 			case 1005: args.ebreak_locations.push_back(optarg); break;
 			case 1006: args.libc_fastpath = true; break;
 			case 1007: args.automatic_nbit = true; break;
+			case 1008: args.block_split = atoi(optarg); break;
 			case 'm': // --memory
 				if (optarg) {
 					char* endptr;
@@ -343,7 +346,9 @@ static void run_program(
 #ifdef _WIN32
 		.translation_prefix = "translations/rvbintr-",
 		.translation_suffix = ".dll",
+		.translate_block_split = cli_args.block_split,
 #else
+		.translate_block_split = cli_args.block_split,
 		.translator_jump_hints = load_jump_hints<W>(cli_args.jump_hints_file, cli_args.verbose),
 		.translate_background_callback = cli_args.background ?
 			[] (auto& compilation_step) {

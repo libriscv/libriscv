@@ -192,7 +192,13 @@ The Machine constructor has many options, and we will go through each one.
 - When enabled, instruction counting is not performed by the native back-ends (binary translation and asmjit), and execution can only stop using another external method. This slightly improves performance. Default: false
 
 > translate_use_register_caching
-- When enabled, Machine registers will be put into local stack variables in the binary translation, and loaded and stored more efficiently than unoptimized code. This improves code compiled with -O0, or code produced using simpler compilers like TCC. Default: Enabled with libtcc, otherwise disabled.
+- When enabled, guest registers become C locals in the binary translation, and are only synced to the register file where the host may read them: exits, system calls and instruction handlers. An optimizing compiler then allocates them freely, where a register in `cpu->r[]` costs a store on every write. Measured at up to 2x on call-heavy code with GCC. Default: true
+
+> translate_block_split
+- The minimum number of instructions in a translated code block, which becomes one C function. A block only ends at a return or an indirect jump after this many instructions. Calls and returns inside a block are direct jumps, while crossing blocks costs a full register sync each way, so a program that fits in a few blocks runs faster. Compile time grows faster than linearly with the block size, so raise it when the translation is baked ahead of time. Default: 1250
+
+> translate_scan_data_jump_targets
+- When enabled, the data segments of the ELF are scanned for addresses into the code, which are treated as jump targets: switch tables and function pointer tables. An indirect jump into a known target stays inside the translated function, anything else exits to the interpreter. Default: true
 
 > translate_automatic_nbit_address_space
 - When enabled, the native back-ends (binary translation and asmjit) mask guest addresses into the memory arena instead of bounds-checking them, the same translation a build-time N-bit encompassing arena gets. asmjit requires the arena to be a power of two, and declines otherwise (visible with verbose_loader). Masked accesses carry no bounds check, so translated code can write anywhere in the arena, the guest's own rodata included. Default: false

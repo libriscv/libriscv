@@ -207,9 +207,9 @@ namespace riscv
 		/// as a simple Ctrl+C will stop the program.
 		bool translate_ignore_instruction_limit = false;
 #ifdef RISCV_BINARY_TRANSLATION
-		/// @brief Enable the use of register caching for the binary translator. Always enabled
-		/// when binary translation with libtcc is enabled.
-		/// @details Enable this when compiling with -O0 or when using simple compilers like TCC.
+		/// @brief Enable the use of register caching for the binary translator.
+		/// @details Guest registers become C vars, synced to the register file only
+		/// when exiting to the host
 #ifdef RISCV_LIBTCC
 		bool translate_use_register_caching = true;
 #else
@@ -237,6 +237,11 @@ namespace riscv
 		/// @details Outside the RISCV_BINARY_TRANSLATION block so asmjit-only builds have it.
 		bool translate_unsafe_remove_checks = false;
 #ifdef RISCV_BINARY_TRANSLATION
+		/// @brief Scan the data segments of the ELF for addresses into the code, and
+		/// treat them as jump targets: switch tables and function pointer tables.
+		/// @details An indirect jump into a known target stays inside the translated
+		/// function; anything else exits to the interpreter.
+		bool translate_scan_data_jump_targets = true;
 		/// @brief Enable recording of slowpaths to jump hints for the binary translator.
 		/// @note This option is only available when RISCV_DEBUG and the binary translator is enabled.
 		/// @details This will record slowpaths to the MachineOptions jump hints vector.
@@ -259,6 +264,15 @@ namespace riscv
 		/// either of these limits. The limits are per shared object.
 		unsigned translate_blocks_max = 1024;
 		unsigned translate_instr_max = 500'000;
+		/// @brief Minimum number of instructions in a code block, which is one C function.
+		/// @details A block only ends at a return or an indirect jump after this many
+		/// instructions. Calls and returns inside a block are direct jumps; between
+		/// blocks they cost a full register sync each way, so a program that fits in a
+		/// few blocks runs faster. The cost is compile time, which grows faster than
+		/// linearly with the block size: a 33k-instruction program took 7 s as 27
+		/// blocks of 1250 and 72 s as a single block with GCC -O2. Raise it when the
+		/// translation is baked ahead of time. Ignored by libtcc, which uses 5000.
+		unsigned translate_block_split = 1250;
 		/// @brief Jump location hints for the binary translator.
 		/// @details These hints can improve performance of the binary translation.
 		std::vector<address_type<W>> translator_jump_hints {};
