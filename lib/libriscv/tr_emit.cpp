@@ -2497,7 +2497,7 @@ void Emitter<W>::emit()
 			// extension RV32M / RV64M
 			case 0x10: // MUL
 				add_code(
-					to_reg(instr.Rtype.rd) + " = (saddr_t)" + from_reg(instr.Rtype.rs1) + " * (saddr_t)" + from_reg(instr.Rtype.rs2) + ";");
+					to_reg(instr.Rtype.rd) + " = (addr_t)" + from_reg(instr.Rtype.rs1) + " * (addr_t)" + from_reg(instr.Rtype.rs2) + ";");
 				break;
 			case 0x11: // MULH (signed x signed)
 				if constexpr (W == 4) {
