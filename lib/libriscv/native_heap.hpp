@@ -10,7 +10,9 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
+#include <new>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -37,6 +39,106 @@ struct ArenaChunk
 	bool free = false;
 };
 
+/// Inline storage up to N elements, then overflows to the host heap.
+/// Small VMs never allocate host memory for heap metadata.
+template <typename T, size_t N>
+class ArenaInlineVector
+{
+	static_assert(std::is_trivially_copyable_v<T> && std::is_trivially_destructible_v<T>);
+public:
+	ArenaInlineVector() noexcept = default;
+	ArenaInlineVector(const ArenaInlineVector& other) { assign_range(other.data(), other.size()); }
+	ArenaInlineVector(ArenaInlineVector&& other) noexcept { steal(other); }
+	ArenaInlineVector& operator=(const ArenaInlineVector& other) {
+		if (this != &other) assign_range(other.data(), other.size());
+		return *this;
+	}
+	ArenaInlineVector& operator=(ArenaInlineVector&& other) noexcept {
+		if (this != &other) steal(other);
+		return *this;
+	}
+
+	T& operator[](size_t i) noexcept { return m_data[i]; }
+	const T& operator[](size_t i) const noexcept { return m_data[i]; }
+	T* data() noexcept { return m_data; }
+	const T* data() const noexcept { return m_data; }
+	T* begin() noexcept { return m_data; }
+	T* end() noexcept { return m_data + m_size; }
+	const T* begin() const noexcept { return m_data; }
+	const T* end() const noexcept { return m_data + m_size; }
+	size_t size() const noexcept { return m_size; }
+	bool empty() const noexcept { return m_size == 0; }
+	bool on_heap() const noexcept { return m_data != local(); }
+	static constexpr size_t inline_capacity() noexcept { return N; }
+	/// Host memory owned beyond the inline storage
+	size_t heap_bytes() const noexcept { return m_heap.capacity() * sizeof(T); }
+
+	/// Assign count copies of value. Shrinks back to inline storage when possible.
+	void assign(size_t count, const T& value) {
+		if (count <= N) {
+			release_heap();
+			std::fill_n(local(), count, value);
+			m_data = local();
+		} else {
+			m_heap.assign(count, value);
+			m_data = m_heap.data();
+		}
+		m_size = count;
+	}
+	/// Resize, preserving existing elements. Once on the heap, stays there.
+	void resize(size_t count) {
+		if (!on_heap() && count <= N) {
+			for (size_t i = m_size; i < count; ++i)
+				new (&local()[i]) T{};
+		} else {
+			if (!on_heap()) {
+				std::vector<T> heap;
+				heap.reserve(count);
+				heap.assign(local(), local() + m_size);
+				m_heap.swap(heap);
+			}
+			m_heap.resize(count);
+			m_data = m_heap.data();
+		}
+		m_size = count;
+	}
+	void assign_range(const T* src, size_t count) {
+		if (count <= N) {
+			release_heap();
+			if (count) std::memcpy((void*)local(), src, count * sizeof(T));
+			m_data = local();
+		} else {
+			m_heap.assign(src, src + count);
+			m_data = m_heap.data();
+		}
+		m_size = count;
+	}
+
+private:
+	T* local() noexcept { return std::launder(reinterpret_cast<T*>(m_storage)); }
+	const T* local() const noexcept { return std::launder(reinterpret_cast<const T*>(m_storage)); }
+	void release_heap() noexcept { std::vector<T>().swap(m_heap); }
+	void steal(ArenaInlineVector& other) noexcept {
+		if (other.on_heap()) {
+			m_heap = std::move(other.m_heap);
+			m_data = m_heap.data();
+		} else {
+			release_heap();
+			if (other.m_size) std::memcpy((void*)local(), other.local(), other.m_size * sizeof(T));
+			m_data = local();
+		}
+		m_size = other.m_size;
+		other.release_heap();
+		other.m_data = other.local();
+		other.m_size = 0;
+	}
+
+	T* m_data = local();
+	size_t m_size = 0;
+	std::vector<T> m_heap;
+	alignas(T) unsigned char m_storage[N * sizeof(T)];
+};
+
 struct Arena
 {
 	static constexpr size_t ALIGNMENT = 16u;
@@ -47,13 +149,15 @@ struct Arena
 	static constexpr unsigned DEFAULT_MIN_CHUNKS = 16'384u;
 	static constexpr unsigned DEFAULT_MAX_CHUNKS = 1u << 20;
 	static constexpr unsigned SEQ_PROBE_LIMIT = 8u;
+	// Inline capacity before metadata overflows to the host heap.
+	// Table stays at most 25% full, so 256 slots covers 64 live allocations.
+	static constexpr size_t INLINE_CHUNKS = 128u;
+	static constexpr size_t INLINE_TABLE_CAPACITY = 256u;
 	using PointerType = ArenaChunk::PointerType;
 	using ReallocResult = std::tuple<PointerType, size_t>;
 	using unknown_realloc_func_t = Function<ReallocResult(PointerType, size_t)>;
 	using unknown_free_func_t = Function<int(PointerType, ArenaChunk*)>;
 
-	/// Construct an arena for [base, end). An exhausted fork may use an empty range.
-	/// Metadata remains host-side.
 	/// Both addresses must be 16-byte aligned and the range must fit in uint32_t.
 	Arena(PointerType base, PointerType end) : Arena(uint64_t(base), uint64_t(end), 0) {}
 	Arena(uint64_t base, uint64_t end, unsigned max_chunks);
@@ -66,25 +170,27 @@ struct Arena
 	PointerType seq_alloc_aligned(size_t size, size_t alignment,
 		bool arena_is_flat = riscv::flat_readwrite_arena);
 
-	/// O(1) accounting used directly by the meminfo syscall.
+	/// O(1) accounting.
 	size_t bytes_free() const noexcept { return m_bytes_free; }
 	size_t bytes_used() const noexcept { return m_total - m_bytes_free; }
 	size_t chunks_used() const noexcept { return m_slab_top; }
 	size_t live_chunks() const noexcept { return m_live_chunks; }
 	unsigned max_chunks() const noexcept { return m_max_chunks; }
 	size_t metadata_bytes() const noexcept {
-		return m_chunk_slab.capacity() * sizeof(ArenaChunk)
-			+ m_used_chunk_table.capacity() * sizeof(UsedSlot) + sizeof(m_bins);
+		return sizeof(Arena) + m_chunk_slab.heap_bytes() + m_used_chunk_table.heap_bytes();
+	}
+	/// True when metadata has overflowed to the host heap.
+	bool metadata_on_heap() const noexcept {
+		return m_chunk_slab.on_heap() || m_used_chunk_table.on_heap();
 	}
 
-	/// O(1): immediate coalescing means a free tail begins at the watermark.
+	/// O(1): coalescing keeps the tail free, so the watermark is always current.
 	PointerType high_watermark() const noexcept {
 		const auto& tail = slab(m_tail);
 		return tail.free ? tail.data : tail.data + tail.size;
 	}
 
-	/// Set the host-controlled metadata cap. This never eagerly grows the slab.
-	/// Lowering below chunks_used() is permitted and prevents further slab growth.
+	/// Set the metadata cap. Lowering below chunks_used() prevents further growth.
 	void set_max_chunks(unsigned new_max);
 
 	unsigned allocation_counter() const noexcept { return m_allocation_counter; }
@@ -110,7 +216,7 @@ struct Arena
 		return std::max(ALIGNMENT, word_align(size));
 	}
 
-	/// Full O(n) integrity check for tests/debugging. No allocator syscall calls it.
+	/// O(n) integrity check. Not called by any allocator syscall.
 	bool validate(std::string* error = nullptr) const;
 
 	uint64_t search_steps() const noexcept { return m_search_steps; }
@@ -138,6 +244,10 @@ private:
 
 	static size_t table_capacity_for(unsigned max_chunks);
 	static uint32_t hash_key(uint32_t key) noexcept { return key * 2654435769u; }
+	// Fibonacci hash; top bits distribute better than low bits in small tables
+	size_t home_slot(uint32_t key) const noexcept {
+		return hash_key(key) >> (32u - __builtin_ctz(uint32_t(m_used_chunk_table.size())));
+	}
 	uint32_t pointer_key(PointerType ptr) const noexcept { return (ptr - m_base) >> 4u; }
 	uint32_t begin_find_used(PointerType ptr) const noexcept;
 	void table_insert(PointerType ptr, uint32_t idx);
@@ -168,7 +278,7 @@ private:
 #endif
 	}
 
-	std::vector<ArenaChunk> m_chunk_slab;
+	ArenaInlineVector<ArenaChunk, INLINE_CHUNKS> m_chunk_slab;
 	uint32_t m_slab_top = 0;
 	uint32_t m_slab_free = ArenaChunk::NO_CHUNK;
 	uint32_t m_slab_free_count = 0;
@@ -178,7 +288,7 @@ private:
 	uint32_t m_fl_bitmap = 0;
 	std::array<uint16_t, 32> m_sl_bitmap {};
 
-	std::vector<UsedSlot> m_used_chunk_table;
+	ArenaInlineVector<UsedSlot, INLINE_TABLE_CAPACITY> m_used_chunk_table;
 	size_t m_live_chunks = 0;
 	PointerType m_base = 0;
 	uint32_t m_total = 0;
@@ -195,10 +305,6 @@ private:
 	unknown_free_func_t m_free_unknown_chunk = [] (auto, auto*) { return -1; };
 	unknown_realloc_func_t m_realloc_unknown_chunk = [] (auto, auto) { return ReallocResult{0, 0}; };
 };
-
-// ---------------------------------------------------------------------------
-// Size-class index
-// ---------------------------------------------------------------------------
 
 inline void Arena::mapping_insert(uint32_t size, unsigned& fl, unsigned& sl) noexcept
 {
@@ -318,10 +424,6 @@ inline uint32_t Arena::bin_search(size_t size) const noexcept
 	return m_bins[fl][sl];
 }
 
-// ---------------------------------------------------------------------------
-// Bounded flat used-pointer table
-// ---------------------------------------------------------------------------
-
 inline size_t Arena::table_capacity_for(unsigned max_chunks)
 {
 	const size_t wanted = std::max<size_t>(2, size_t(max_chunks) * 2u);
@@ -341,7 +443,7 @@ inline uint32_t Arena::begin_find_used(PointerType ptr) const noexcept
 		return ArenaChunk::NO_CHUNK;
 	const uint32_t key = pointer_key(ptr);
 	const size_t mask = m_used_chunk_table.size() - 1u;
-	size_t slot = hash_key(key) & mask;
+	size_t slot = home_slot(key);
 	uint32_t probes = 0;
 	while (probes++ < m_used_chunk_table.size()) {
 		const auto& entry = m_used_chunk_table[slot];
@@ -361,11 +463,15 @@ inline uint32_t Arena::begin_find_used(PointerType ptr) const noexcept
 
 inline void Arena::table_insert(PointerType ptr, uint32_t idx)
 {
-	if ((m_live_chunks + 1u) * 2u > m_used_chunk_table.size())
-		throw MachineException(INVALID_PROGRAM, "Native heap pointer table exhausted", m_live_chunks);
+	// Grow at 25% load; allow up to 50% past the cap to avoid mid-malloc failure
+	if (UNLIKELY((m_live_chunks + 1u) * 4u > m_used_chunk_table.size())) {
+		if (m_used_chunk_table.size() < table_capacity_for(m_max_chunks)
+			|| (m_live_chunks + 1u) * 2u > m_used_chunk_table.size())
+			rebuild_table(std::max<size_t>(2u, m_used_chunk_table.size() * 2u));
+	}
 	const uint32_t key = pointer_key(ptr);
 	const size_t mask = m_used_chunk_table.size() - 1u;
-	size_t slot = hash_key(key) & mask;
+	size_t slot = home_slot(key);
 	uint32_t probes = 1;
 	while (m_used_chunk_table[slot].chunk != ArenaChunk::NO_CHUNK) {
 		if (m_used_chunk_table[slot].key == key) {
@@ -386,7 +492,7 @@ inline bool Arena::table_erase(PointerType ptr) noexcept
 	if (ptr < m_base || m_used_chunk_table.empty()) return false;
 	const uint32_t key = pointer_key(ptr);
 	const size_t mask = m_used_chunk_table.size() - 1u;
-	size_t hole = hash_key(key) & mask;
+	size_t hole = home_slot(key);
 	uint32_t probes = 1;
 	while (m_used_chunk_table[hole].chunk != ArenaChunk::NO_CHUNK &&
 		m_used_chunk_table[hole].key != key) {
@@ -402,7 +508,7 @@ inline bool Arena::table_erase(PointerType ptr) noexcept
 		 m_used_chunk_table[scan].chunk != ArenaChunk::NO_CHUNK;
 		 scan = (scan + 1u) & mask) {
 		++probes;
-		const size_t home = hash_key(m_used_chunk_table[scan].key) & mask;
+		const size_t home = home_slot(m_used_chunk_table[scan].key);
 		const size_t scan_distance = (scan - home) & mask;
 		const size_t hole_distance = (hole - home) & mask;
 		if (hole_distance < scan_distance) {
@@ -419,7 +525,7 @@ inline bool Arena::table_erase(PointerType ptr) noexcept
 inline void Arena::rebuild_table(size_t capacity)
 {
 	if (capacity < m_live_chunks * 2u) return;
-	std::vector<UsedSlot> old = std::move(m_used_chunk_table);
+	const auto old = std::move(m_used_chunk_table);
 	m_used_chunk_table.assign(capacity, UsedSlot{});
 	m_live_chunks = 0;
 	for (const auto& entry : old) {
@@ -427,10 +533,6 @@ inline void Arena::rebuild_table(size_t capacity)
 			table_insert(slab(entry.chunk).data, entry.chunk);
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Slab and chunk operations
-// ---------------------------------------------------------------------------
 
 inline void Arena::ensure_chunk_capacity(unsigned count) const
 {
@@ -489,7 +591,7 @@ inline void Arena::split_next(uint32_t idx, size_t size)
 		const uint32_t old_next = slab(idx).next;
 		const PointerType new_data = slab(idx).data + PointerType(size);
 		const uint32_t new_idx = new_chunk(old_next, idx, old_size - size, true, new_data);
-		// new_chunk may grow the vector, so every slab reference is re-fetched.
+		// new_chunk may reallocate the slab vector
 		if (old_next != ArenaChunk::NO_CHUNK) slab(old_next).prev = new_idx;
 		slab(idx).next = new_idx;
 		slab(idx).size = uint32_t(size);
@@ -545,10 +647,6 @@ inline void Arena::internal_free(uint32_t idx)
 	}
 	bin_insert(idx);
 }
-
-// ---------------------------------------------------------------------------
-// Public allocator operations
-// ---------------------------------------------------------------------------
 
 inline Arena::PointerType Arena::malloc(size_t size)
 {
@@ -674,10 +772,6 @@ inline int Arena::free(PointerType ptr)
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Construction, configuration and transfer
-// ---------------------------------------------------------------------------
-
 inline Arena::Arena(uint64_t arena_base, uint64_t arena_end, unsigned max_chunks)
 {
 	if (arena_end < arena_base || arena_end > UINT32_MAX ||
@@ -689,13 +783,12 @@ inline Arena::Arena(uint64_t arena_base, uint64_t arena_end, unsigned max_chunks
 	m_max_chunks = max_chunks != 0 ? max_chunks : unsigned(std::clamp<uint64_t>(
 		m_total / 64u, DEFAULT_MIN_CHUNKS, DEFAULT_MAX_CHUNKS));
 	initialize_bins();
-	m_chunk_slab.resize(std::min<unsigned>(8u, m_max_chunks));
-	if (m_chunk_slab.empty()) m_chunk_slab.resize(1);
+	m_chunk_slab.resize(std::max<unsigned>(1u, std::min<unsigned>(8u, m_max_chunks)));
 	m_chunk_slab[0] = ArenaChunk{ArenaChunk::NO_CHUNK, ArenaChunk::NO_CHUNK,
 		m_total, true, m_base};
 	m_slab_top = 1;
 	m_tail = 0;
-	m_used_chunk_table.assign(table_capacity_for(m_max_chunks), UsedSlot{});
+	m_used_chunk_table.assign(std::min(table_capacity_for(m_max_chunks), INLINE_TABLE_CAPACITY), UsedSlot{});
 	bin_insert(0);
 }
 
@@ -707,16 +800,15 @@ inline Arena::Arena(const Arena& other)
 inline void Arena::set_max_chunks(unsigned new_max)
 {
 	const size_t new_capacity = table_capacity_for(new_max);
-	if (new_capacity != m_used_chunk_table.size() && new_capacity >= m_live_chunks * 2u)
+	if (new_capacity < m_used_chunk_table.size() && new_capacity >= m_live_chunks * 2u)
 		rebuild_table(new_capacity);
 	m_max_chunks = new_max;
 }
 
 inline void Arena::transfer(Arena& dest) const
 {
-	std::vector<ArenaChunk> slab_copy(m_chunk_slab.begin(), m_chunk_slab.begin() + m_slab_top);
-	std::vector<UsedSlot> table_copy(m_used_chunk_table);
-	dest.m_chunk_slab.swap(slab_copy);
+	if (&dest == this) return;
+	dest.m_chunk_slab.assign_range(m_chunk_slab.data(), m_slab_top);
 	dest.m_slab_top = m_slab_top;
 	dest.m_slab_free = m_slab_free;
 	dest.m_slab_free_count = m_slab_free_count;
@@ -724,7 +816,7 @@ inline void Arena::transfer(Arena& dest) const
 	dest.m_bins = m_bins;
 	dest.m_fl_bitmap = m_fl_bitmap;
 	dest.m_sl_bitmap = m_sl_bitmap;
-	dest.m_used_chunk_table.swap(table_copy);
+	dest.m_used_chunk_table = m_used_chunk_table;
 	dest.m_live_chunks = m_live_chunks;
 	dest.m_base = m_base;
 	dest.m_total = m_total;
@@ -736,10 +828,6 @@ inline void Arena::transfer(Arena& dest) const
 	dest.m_max_probe = m_max_probe;
 	dest.m_seq_fallbacks = m_seq_fallbacks;
 }
-
-// ---------------------------------------------------------------------------
-// Debug integrity checker
-// ---------------------------------------------------------------------------
 
 inline bool Arena::validate(std::string* error) const
 {
@@ -820,7 +908,7 @@ inline bool Arena::validate(std::string* error) const
 		if (entry.chunk >= m_slab_top || !address_seen[entry.chunk] || slab(entry.chunk).free)
 			return fail("table points to invalid chunk");
 		if (entry.key != pointer_key(slab(entry.chunk).data)) return fail("table key mismatch");
-		const size_t home = hash_key(entry.key) & mask;
+		const size_t home = home_slot(entry.key);
 		for (size_t probe = home; probe != slot; probe = (probe + 1u) & mask)
 			if (m_used_chunk_table[probe].chunk == ArenaChunk::NO_CHUNK)
 				return fail("broken linear-probing chain");

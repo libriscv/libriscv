@@ -237,6 +237,55 @@ TEST_CASE("Native heap slab growth and transfer remain valid", "[Heap][ArenaInva
 	require_valid(source);
 }
 
+TEST_CASE("Native heap metadata stays inline for small programs", "[Heap][ArenaInvariant]")
+{
+	// The default chunk cap for this range is large, but nothing up to the
+	// inline capacity may touch the host heap
+	riscv::Arena arena(BASE, END);
+	REQUIRE_FALSE(arena.metadata_on_heap());
+	std::vector<uint32_t> pointers;
+	for (unsigned round = 0; round < 4; ++round) {
+		for (unsigned i = 0; i < riscv::Arena::INLINE_TABLE_CAPACITY / 4; ++i)
+			pointers.push_back(arena.malloc(16 + (i % 7) * 48));
+		for (unsigned i = 0; i < pointers.size(); i += 2)
+			REQUIRE(arena.free(pointers[i]) == 0);
+		require_valid(arena);
+		REQUIRE_FALSE(arena.metadata_on_heap());
+		for (unsigned i = 1; i < pointers.size(); i += 2)
+			REQUIRE(arena.free(pointers[i]) == 0);
+		pointers.clear();
+		REQUIRE_FALSE(arena.metadata_on_heap());
+	}
+	REQUIRE(arena.bytes_free() == END - BASE);
+
+	// Copies of an inline arena are inline too
+	for (unsigned i = 0; i < 32; ++i) pointers.push_back(arena.malloc(64));
+	riscv::Arena copy(arena);
+	REQUIRE_FALSE(copy.metadata_on_heap());
+	require_valid(copy);
+
+	// Overflow onto the heap, and keep working
+	for (unsigned i = 0; i < 1000; ++i) pointers.push_back(arena.malloc(16 + (i % 13) * 16));
+	REQUIRE(arena.metadata_on_heap());
+	require_valid(arena);
+	riscv::Arena overflowed(arena);
+	REQUIRE(overflowed.metadata_on_heap());
+	require_valid(overflowed);
+	for (auto ptr : pointers) REQUIRE(overflowed.free(ptr) == 0);
+	REQUIRE(overflowed.bytes_free() == END - BASE);
+	require_valid(overflowed);
+	// The original is unaffected by the copy being emptied
+	for (auto ptr : pointers) REQUIRE(arena.size(ptr) != 0);
+	require_valid(arena);
+
+	// Lowering the cap shrinks the table back into the inline storage
+	riscv::Arena shrink(BASE, END);
+	shrink.set_max_chunks(8);
+	REQUIRE_FALSE(shrink.metadata_on_heap());
+	REQUIRE(shrink.malloc(16) != 0);
+	require_valid(shrink);
+}
+
 TEST_CASE("Native heap exact-class LIFO reuse", "[Heap][ArenaInvariant]")
 {
 	riscv::Arena arena(BASE, END);
