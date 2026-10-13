@@ -175,8 +175,10 @@ namespace riscv
 #ifndef __COSMOCC__
 			std::atomic_thread_fence(std::memory_order_seq_cst);
 #endif
+			// Only the bytecode changes, with a single byte store. Anyone that already
+			// dispatched on the old bytecode will continue to work correctly.
 			for (auto* dd : m_patched)
-				dd->set_atomic_bytecode_and_handler(RV32I_BC_LIVEPATCH, 0);
+				dd->set_bytecode(RV32I_BC_LIVEPATCH);
 		}
 
 		size_t patch_count() const noexcept { return m_patched.size(); }

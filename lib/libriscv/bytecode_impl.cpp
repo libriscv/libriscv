@@ -930,56 +930,26 @@ INSTRUCTION(RV32C_BC_FUNCTION, rv32c_func) {
 #endif // RISCV_EXT_VECTOR
 
 INSTRUCTION(RV32I_BC_LIVEPATCH, execute_livepatch) {
-	switch (DECODER().m_handler) {
-	case 0: { // Live-patch native code (binary translation or asmjit)
 #if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
-		// Special bytecode that does not read any decoder data
-		// 1. Wind back PC to the current decoder position
-		pc = pc - DECODER().block_bytes();
+	// Native code was activated in the background. Only the bytecode of this
+	// entry was replaced, so the rest of it still describes the original block.
+	// 1. Wind back PC to the current decoder position
+	pc = pc - DECODER().block_bytes();
 #  ifdef DISPATCH_MODE_TAILCALL
-		// 2. Find the correct decoder pointer in the patched decoder cache
-		auto* patched = &exec->patched_decoder_cache()[pc / DecoderData<W>::DIVISOR];
-		d = patched;
+	// 2. Find the correct decoder pointer in the patched decoder cache
+	auto* patched = &exec->patched_decoder_cache()[pc / DecoderData<W>::DIVISOR];
+	d = patched;
 #  else
-		// 2. Find the correct decoder pointer in the patched decoder cache
-		exec_decoder = exec->patched_decoder_cache();
-		decoder = &exec_decoder[pc / DecoderData<W>::DIVISOR];
+	// 2. Find the correct decoder pointer in the patched decoder cache
+	exec_decoder = exec->patched_decoder_cache();
+	decoder = &exec_decoder[pc / DecoderData<W>::DIVISOR];
 #  endif
-		// 3. Execute the instruction
-		EXECUTE_CURRENT();
 #else
-		// Invalid handler
-		DECODER().set_bytecode(RV32I_BC_INVALID);
-		DECODER().set_invalid_handler();
+	// Invalid handler
+	DECODER().set_bytecode(RV32I_BC_INVALID);
+	DECODER().set_invalid_handler();
 #endif
-	}	break;
-	case 1: { // Live-patch JALR -> STOP
-		// Check if RA == memory exit address
-		if (RISCV_SPECSAFE(REG(REG_RA) == MACHINE().memory.exit_address())) {
-			// Hot-swap the bytecode to a STOP
-			DECODER().set_bytecode(RV32I_BC_STOP);
-			EXECUTE_CURRENT();
-		}
-		// Otherwise, leave the JALR instruction as is (NOTE: sets invalid handler)
-		DECODER().set_atomic_bytecode_and_handler(RV32I_BC_JALR, 0);
-	}	break;
-#ifdef RISCV_EXT_COMPRESSED
-	case 2: { // Live-patch C.JR -> STOP
-		// Check if RA == memory exit address
-		if (RISCV_SPECSAFE(REG(REG_RA) == MACHINE().memory.exit_address())) {
-			// Hot-swap the bytecode to a STOP
-			DECODER().set_bytecode(RV32I_BC_STOP);
-			EXECUTE_CURRENT();
-		}
-		// Otherwise, leave the JR instruction as is (NOTE: sets invalid handler)
-		DECODER().set_atomic_bytecode_and_handler(RV32C_BC_JR, 0);
-	}	break;
-#endif
-	default:
-		// Invalid handler
-		DECODER().set_bytecode(RV32I_BC_INVALID);
-		DECODER().set_invalid_handler();
-	}
+	// 3. Execute the instruction
 	EXECUTE_CURRENT();
 }
 

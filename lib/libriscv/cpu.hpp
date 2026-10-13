@@ -176,13 +176,6 @@ namespace riscv
 		/// @note At the end of the call, a block-ending instruction must have been installed.
 		static DecoderData<W>& create_block_ending_entry_at(DecodedExecuteSegment<W>& exec, address_t addr);
 
-		/// @brief Modify existing function by making calls to it faster
-		/// @param exec The execute segment where the address is located
-		/// @param addr The address where a function already exists
-		/// @return True if the fast path was created, otherwise false
-		static bool create_fast_path_function(DecodedExecuteSegment<W>& exec, address_t addr);
-		bool create_fast_path_function(address_t addr);
-
 		// Override the function that gets called when the CPU
 		// throws an execute space protection fault.
 		void set_fault_handler(execute_fault_t func) noexcept { m_fault = func; }
