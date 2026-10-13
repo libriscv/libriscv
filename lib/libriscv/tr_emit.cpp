@@ -3574,7 +3574,18 @@ void Emitter<W>::emit()
 				this->increment_counter_so_far();
 				code += "INS_COUNTER(cpu) = ic; MAX_COUNTER(cpu) = max_ic;\n";
 			}
-			WELL_KNOWN_INSTRUCTION();
+			if (tinfo.is_libtcc && this->uses_register_caching()) {
+				// A raising handler leaves the block: publish the cached registers
+				// it was not handed. Its outputs are what the handler wrote.
+				this->invalidate_all_bounds_checks();
+				const uintptr_t handler = (uintptr_t)CPU<W>::decode(instr).handler;
+				code += "if (api.execute_handler(cpu, " + std::to_string(instr.whole) + ", " + std::to_string(handler) + ")) {\n";
+				this->store_registers(this->dirty_registers()
+					& ~(Dyncall::arg_mask(inputs) | Dyncall::arg_mask(outputs)));
+				code += "  RETURN_VALUES(0, 0);\n}\n";
+			} else {
+				WELL_KNOWN_INSTRUCTION();
+			}
 			for (unsigned i = 10; i < 10 + outputs; i++) {
 				this->load_register(i);
 				this->potentially_reload_register(i);

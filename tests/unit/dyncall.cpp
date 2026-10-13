@@ -79,7 +79,10 @@ TEST_CASE("Counted integer calls preserve live FP values", "[Dyncall]") {
 		std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\"";
 		for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 		source += "\"); }";
-		const auto binary = build_and_load(source, "-nostdlib -static -march=rv64imafd_zicsr_zifencei -mabi=lp64d -Wl,-e,_start", false);
+		// The guest is hand-written assembly, so pin it to GCC: Zig rejects -march=rv64g.
+		const char* cc = getenv("RVVCC");
+		setenv("RCC", cc ? cc : "riscv64-linux-gnu-gcc-14", 1);
+		const auto binary = build_and_load(source, "-nostdlib -static -march=rv64g -mabi=lp64d -Wl,-e,_start", false);
 		for (unsigned scenario = 0; scenario < 4; scenario++) {
 			std::array<uint64_t, 32> expected_gpr{};
 			std::array<int64_t, 32> expected_fp{};

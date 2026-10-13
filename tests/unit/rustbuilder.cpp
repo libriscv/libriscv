@@ -104,10 +104,13 @@ std::vector<uint8_t> build_rust_and_load(
 	// produced. Building the Rust guest takes several seconds and every test
 	// binary that uses it needs the same one, so it is only built once.
 	// --no-gc-sections keeps the exported functions in the binary even though
-	// nothing in the guest itself calls them
+	// nothing in the guest itself calls them. A static relocation model links
+	// with -static instead of -static-pie, which needs an rcrt1.o that not
+	// every cross-glibc ships.
 	const std::string command_prefix =
 		rustc + " --edition 2021 --crate-name rust_guest --target " + RUST_TARGET
 		+ " -C target-feature=+crt-static"
+		+ " -C relocation-model=static"
 		+ " -C linker=" + linker
 		+ " -C link-args=-Wl,--no-gc-sections "
 		+ args;

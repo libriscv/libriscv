@@ -8,6 +8,9 @@ linker = "riscv64-linux-gnu-gcc-12"
 rustflags = [
     # libriscv loads a static ELF: no interpreter, no shared libraries
     "-C", "target-feature=+crt-static",
+    # -static rather than -static-pie, which needs an rcrt1.o that not every
+    # cross-glibc ships
+    "-C", "relocation-model=static",
     # The exported guest functions and the dyncall_table have no callers
     # inside the guest, and would otherwise be collected
     "-C", "link-arg=-Wl,--no-gc-sections",
