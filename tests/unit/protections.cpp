@@ -106,14 +106,8 @@ TEST_CASE("Caches must be invalidated", "[Memory]")
 	machine.memory.memset(V, 0, VLEN);
 	// Read data from page, causing cached read
 	REQUIRE(machine.memory.read<uint32_t> (V) == 0x0);
-	// Make page completely unpresented
+	// Make page completely unpresented, which drops it from the caches
 	machine.memory.set_page_attr(V, Page::size(), {.read = false, .write = false, .exec = false});
-	// We can still read from the page, because
-	// it is in the read cache.
-	REQUIRE(machine.memory.read<uint32_t> (V) == 0x0);
-
-	// Invalidate the caches
-	machine.memory.invalidate_reset_cache();
 
 	// We can no longer read from the page
 	REQUIRE_THROWS_WITH([&] {

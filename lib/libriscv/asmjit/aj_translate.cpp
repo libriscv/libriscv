@@ -212,6 +212,25 @@ namespace riscv
 						"for a %" PRIu64 "-byte arena; it is not a power of two\n", arena_size);
 			}
 		}
+#ifdef RISCV_VIRTUAL_PAGING
+		// Without an inlined arena every access goes through the page tables.
+		// The inline probe reproduces Memory<W>::read()/write() on a cache hit,
+		// which excludes the builds where those do more than an aligned access:
+		// the encompassing arena never reaches the pages, and the debug build
+		// checks alignment and splits page-straddling accesses.
+		if constexpr (riscv::encompassing_Nbit_arena == 0
+			&& !riscv::unaligned_memory_slowpaths && !riscv::memory_alignment_check)
+		{
+			if (!info.inline_memory) {
+				const auto& rdc = mem.rdcache_set();
+				const auto& wrc = mem.wrcache_set();
+				info.paged_memory   = true;
+				info.rdcache_set    = int32_t(uintptr_t(&rdc[0]) - cpu_addr);
+				info.wrcache_set    = int32_t(uintptr_t(&wrc[0]) - cpu_addr);
+				info.cache_data_off = int32_t(uintptr_t(&rdc[0].page) - uintptr_t(&rdc[0]));
+			}
+		}
+#endif
 		info.unsafe_remove_checks =
 			options.translate_unsafe_remove_checks && info.inline_memory;
 		info.ignore_instruction_limit = options.translate_ignore_instruction_limit;

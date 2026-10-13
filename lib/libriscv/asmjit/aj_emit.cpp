@@ -1022,7 +1022,19 @@ struct AjEmitter
 	}
 	/// @brief True when the arena requires a bounds check.
 	bool arena_is_checked() const noexcept {
-		return info.arena_mask == 0 && !info.unsafe_remove_checks;
+		return info.inline_memory && info.arena_mask == 0 && !info.unsafe_remove_checks;
+	}
+	/// @brief True when an inlined access has a cold path to emit.
+	bool memory_has_slow_path() const noexcept {
+		return info.paged_memory || arena_is_checked();
+	}
+	/// @brief Whether a cold path completes the access with the helper and
+	/// rejoins, rather than leaving the region for the interpreter.
+	/// @details A page-cache miss is routine, and the helper refills the cache.
+	/// An arena miss is rare, but a claimed entry would immediately re-enter
+	/// this region at the same faulting instruction, so it must not exit.
+	bool slow_path_calls_helper(address_t pc) const noexcept {
+		return info.paged_memory || std::binary_search(entries.begin(), entries.end(), pc);
 	}
 	/// @brief Arena index: direct for flat, masked for N-bit encompassing (over-allocation covers straddles).
 	Gp arena_index(const Gp& addr) {
@@ -1058,17 +1070,90 @@ struct AjEmitter
 			uc.j(slow, ucmp_ge(t, Imm(uint32_t(hi))));
 		}
 	}
+	// --- virtual paging ---
+	static_assert((PageSize & (PageSize - 1)) == 0, "The page size must be a power of two");
+	static_assert(offsetof(PageData, buffer8) == 0, "A cached page pointer must be its data");
+	static constexpr unsigned PAGE_SHIFT = unsigned(__builtin_ctzll(PageSize));
+	/// @brief The in-page offset mask of a `size`-byte access, as memory_align_mask<T>().
+	static constexpr uint64_t page_offset_mask(unsigned size) {
+		if constexpr (force_align_memory)
+			return (PageSize - 1) & ~uint64_t(size - 1);
+		else
+			return PageSize - 1;
+	}
+	/// @brief Probes the memory's direct-mapped read or write page cache for `addr`.
+	/// @return The host location of the access on a hit; a miss branches to
+	/// `miss`, where the helper both performs the access and refills the cache.
+	Mem emit_page_cache_probe(const Gp& addr, bool is_write, unsigned size, const Label& miss)
+	{
+#ifdef RISCV_VIRTUAL_PAGING
+		using RdEntry = typename Memory<W>::rdcache_set_t::value_type;
+		using WrEntry = typename Memory<W>::wrcache_set_t::value_type;
+		static_assert(sizeof(RdEntry) == sizeof(WrEntry)
+			&& offsetof(RdEntry, page) == offsetof(WrEntry, page),
+			"Both page caches must share one entry layout");
+		static constexpr unsigned SETS = Memory<W>::PAGE_CACHE_SETS;
+		static constexpr unsigned ENTRY_SHIFT = unsigned(__builtin_ctz(sizeof(RdEntry)));
+		static_assert((SETS & (SETS - 1)) == 0 && (sizeof(RdEntry) & (sizeof(RdEntry) - 1)) == 0
+			&& ENTRY_SHIFT <= PAGE_SHIFT, "The page cache must be indexable by shifting");
+		// The page number, and the byte offset of its entry, straight from the
+		// address: (addr >> 12) % SETS * sizeof(entry).
+		Gp pageno = new_ireg("pageno");
+		uc.shr(pageno, addr_value(addr), Imm(PAGE_SHIFT));
+		Gp entry = uc.new_gp_ptr("pcentry");
+		uc.shr(entry, addr, Imm(PAGE_SHIFT - ENTRY_SHIFT));
+		uc.and_(entry, entry, Imm(uint64_t(SETS - 1) << ENTRY_SHIFT));
+		const int32_t base = is_write ? info.wrcache_set : info.rdcache_set;
+#if defined(ASMJIT_UJIT_X86)
+		const Mem tag  = mem_ptr(cpu, entry, 0, base);
+		const Mem page = mem_ptr(cpu, entry, 0, base + info.cache_data_off);
+#else
+		// AArch64 has no base + index + displacement form, and a load encodes
+		// only a scaled 12-bit displacement. The sets lie behind all of CPU<W>,
+		// which can be further away than that, so the base is then folded in.
+		static constexpr auto ldr_fits = [] (int32_t off, int32_t size) {
+			return off >= 0 && off % size == 0 && off / size < 4096;
+		};
+		uc.add(entry, entry, cpu);
+		int32_t disp = base;
+		if (!ldr_fits(disp, int32_t(sizeof(address_t)))
+			|| !ldr_fits(disp + info.cache_data_off, int32_t(sizeof(void*))))
+		{
+			uc.add(entry, entry, Imm(disp));
+			disp = 0;
+		}
+		const Mem tag  = mem_ptr(entry, disp);
+		const Mem page = mem_ptr(entry, disp + info.cache_data_off);
+#endif
+		uc.j(miss, cmp_ne(pageno, tag));
+		Gp data = uc.new_gp_ptr("pagedata");
+		uc.load(data, page);
+		// addr is pointer-wide and zero-extended on RV32 as well.
+		Gp offset = uc.new_gp_ptr("pageoff");
+		uc.and_(offset, addr, Imm(page_offset_mask(size)));
+		return mem_ptr(data, offset);
+#else
+		(void)addr; (void)is_write; (void)size; (void)miss;
+		return Mem();   // unreachable: paged_memory needs virtual paging
+#endif
+	}
+
 	void emit_load(address_t pc, unsigned funct3, unsigned rd, unsigned rs1, int32_t simm)
 	{
 		auto addr = address_of(rs1, simm);
 		const Gp dst = def(rd);
-		if (!info.inline_memory) {
+		if (!info.inline_memory && !info.paged_memory) {
 			call_load_helper(pc, funct3, dst, addr, pending - 1);
 			return;
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
-		emit_arena_check(addr, false, slow);
-		const Mem m = mem_ptr(arena, arena_index(addr));
+		Mem m;
+		if (info.paged_memory) {
+			m = emit_page_cache_probe(addr, false, 1u << (funct3 & 0x3), slow);
+		} else {
+			emit_arena_check(addr, false, slow);
+			m = mem_ptr(arena, arena_index(addr));
+		}
 		switch (funct3) {
 		case 0x0: uc.load_i8 (dst, m); break;                        // LB
 		case 0x1: uc.load_i16(dst, m); break;                        // LH
@@ -1079,13 +1164,11 @@ struct AjEmitter
 		case 0x6: if constexpr (RV64) uc.load_u32(dst, m); break;    // LWU
 		}
 		uc.bind(done);
-		if (arena_is_checked()) {
+		if (memory_has_slow_path()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				// A claimed entry would immediately re-enter this region at the
-				// same faulting instruction. Use the precise helper only for that
-				// rare case; all ordinary sites exit for interpreter re-execution.
-				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+				// Ordinary arena misses exit for interpreter re-execution.
+				if (slow_path_calls_helper(pc)) {
 					call_load_helper(pc, funct3, dst, addr, pend);
 					uc.j(done);
 				} else emit_exit(pc, pend);
@@ -1096,13 +1179,18 @@ struct AjEmitter
 	{
 		auto addr = address_of(rs1, simm);
 		const Gp src = get(rs2);
-		if (!info.inline_memory) {
+		if (!info.inline_memory && !info.paged_memory) {
 			call_store_helper(pc, funct3, src, addr, pending - 1);
 			return;
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
-		emit_arena_check(addr, true, slow);
-		const Mem m = mem_ptr(arena, arena_index(addr));
+		Mem m;
+		if (info.paged_memory) {
+			m = emit_page_cache_probe(addr, true, 1u << funct3, slow);
+		} else {
+			emit_arena_check(addr, true, slow);
+			m = mem_ptr(arena, arena_index(addr));
+		}
 		switch (funct3) {
 		case 0x0: uc.store_u8 (m, src); break;                        // SB
 		case 0x1: uc.store_u16(m, src); break;                        // SH
@@ -1110,10 +1198,10 @@ struct AjEmitter
 		case 0x3: if constexpr (RV64) uc.store_u64(m, src); break;    // SD
 		}
 		uc.bind(done);
-		if (arena_is_checked()) {
+		if (memory_has_slow_path()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+				if (slow_path_calls_helper(pc)) {
 					call_store_helper(pc, funct3, src, addr, pend);
 					uc.j(done);
 				} else emit_exit(pc, pend);
@@ -1458,21 +1546,26 @@ struct AjEmitter
 		const bool is_double = (funct3 == 0x3);
 		auto addr = address_of(rs1, simm);
 		const Vec dst = fdef(rd);
-		if (!info.inline_memory) {
+		if (!info.inline_memory && !info.paged_memory) {
 			call_fp_load_helper(pc, is_double, dst, addr, pending - 1);
 			fp_result(dst, is_double);
 			return;
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
-		emit_arena_check(addr, false, slow);
-		const Mem m = mem_ptr(arena, arena_index(addr));
+		Mem m;
+		if (info.paged_memory) {
+			m = emit_page_cache_probe(addr, false, is_double ? 8 : 4, slow);
+		} else {
+			emit_arena_check(addr, false, slow);
+			m = mem_ptr(arena, arena_index(addr));
+		}
 		if (is_double) uc.v_loadu64_u64(dst, m);   // FLD
 		else           uc.v_loadu32_u32(dst, m);   // FLW
 		uc.bind(done);
-		if (arena_is_checked()) {
+		if (memory_has_slow_path()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+				if (slow_path_calls_helper(pc)) {
 					call_fp_load_helper(pc, is_double, dst, addr, pend);
 					uc.j(done);
 				} else emit_exit(pc, pend);
@@ -1486,20 +1579,25 @@ struct AjEmitter
 		const bool is_double = (funct3 == 0x3);
 		auto addr = address_of(rs1, simm);
 		const Vec src = fget(rs2);
-		if (!info.inline_memory) {
+		if (!info.inline_memory && !info.paged_memory) {
 			call_fp_store_helper(pc, is_double, src, addr, pending - 1);
 			return;
 		}
 		Label slow = uc.new_label(), done = uc.new_label();
-		emit_arena_check(addr, true, slow);
-		const Mem m = mem_ptr(arena, arena_index(addr));
+		Mem m;
+		if (info.paged_memory) {
+			m = emit_page_cache_probe(addr, true, is_double ? 8 : 4, slow);
+		} else {
+			emit_arena_check(addr, true, slow);
+			m = mem_ptr(arena, arena_index(addr));
+		}
 		if (is_double) uc.v_storeu64_u64(m, src);  // FSD
 		else           uc.v_storeu32_u32(m, src);  // FSW
 		uc.bind(done);
-		if (arena_is_checked()) {
+		if (memory_has_slow_path()) {
 			deferred.push_back([=, this, pend = pending - 1] {
 				uc.bind(slow);
-				if (std::binary_search(entries.begin(), entries.end(), pc)) {
+				if (slow_path_calls_helper(pc)) {
 					call_fp_store_helper(pc, is_double, src, addr, pend);
 					uc.j(done);
 				} else emit_exit(pc, pend);

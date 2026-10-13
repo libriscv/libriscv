@@ -51,6 +51,18 @@ namespace riscv
 		/// exactly as Memory<W>::read()/write() do it. Zero means the flat arena,
 		/// which is indexed by the address itself behind a bounds check.
 		uint64_t arena_mask = 0;
+		/// @brief True when loads and stores go through the page tables, and
+		/// the memory's direct-mapped page caches may be probed inline before
+		/// falling back to the helpers.
+		/// @details The memory fills the caches (Memory::rdcache_set() and
+		/// wrcache_set()) whenever it fills its own last-read and last-written
+		/// pages, which the helpers do on a miss, and invalidates them along
+		/// with those. Pages that must not be cached (traps) never enter them,
+		/// and so always reach a helper.
+		bool paged_memory = false;
+		int32_t rdcache_set    = 0;  ///< &memory.rdcache_set()[0] - &cpu
+		int32_t wrcache_set    = 0;  ///< &memory.wrcache_set()[0] - &cpu
+		int32_t cache_data_off = 0;  ///< offset of the page pointer in an entry
 		bool unsafe_remove_checks = false;
 		bool ignore_instruction_limit = false;
 		bool direct_calls = true;

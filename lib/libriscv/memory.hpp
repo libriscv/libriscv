@@ -221,6 +221,25 @@ namespace riscv
 		CachedPage<W, PageData>& wrcache() noexcept {
 			return m_wr_cache;
 		}
+		// Direct-mapped page caches for translated code, indexed by the low
+		// bits of the page number. Every page that enters m_rd_cache/m_wr_cache
+		// also enters its set, so only cacheable pages are in them, and they
+		// are invalidated together with those.
+		static constexpr unsigned PAGE_CACHE_SETS = 8;
+		using rdcache_set_t = std::array<CachedPage<W, const PageData>, PAGE_CACHE_SETS>;
+		using wrcache_set_t = std::array<CachedPage<W, PageData>, PAGE_CACHE_SETS>;
+		const rdcache_set_t& rdcache_set() const noexcept { return m_rd_cache_set; }
+		const wrcache_set_t& wrcache_set() const noexcept { return m_wr_cache_set; }
+		/// @brief Make a cacheable page the last-read page, and enter it into its set.
+		void fill_rdcache(address_t pageno, const PageData& data) const noexcept {
+			m_rd_cache = {pageno, &data};
+			m_rd_cache_set[pageno % PAGE_CACHE_SETS] = m_rd_cache;
+		}
+		/// @brief Make a cacheable page the last-written page, and enter it into its set.
+		void fill_wrcache(address_t pageno, PageData& data) noexcept {
+			m_wr_cache = {pageno, &data};
+			m_wr_cache_set[pageno % PAGE_CACHE_SETS] = m_wr_cache;
+		}
 		const PageData& cached_readable_page(address_t, size_t) const;
 		PageData& cached_writable_page(address_t);
 		// Page creation & destruction
@@ -386,6 +405,8 @@ namespace riscv
 #ifdef RISCV_VIRTUAL_PAGING
 		mutable CachedPage<W, const PageData> m_rd_cache;
 		mutable CachedPage<W, PageData> m_wr_cache;
+		mutable rdcache_set_t m_rd_cache_set;
+		mutable wrcache_set_t m_wr_cache_set;
 
 		std::unordered_map<address_t, Page> m_pages;
 		size_t m_pages_max = size_t(-1);

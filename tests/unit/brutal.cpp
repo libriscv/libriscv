@@ -146,3 +146,214 @@ TEST_CASE("Threads test-suite slowly", "[Compute]")
 	} while (machine.instruction_limit_reached());
 	REQUIRE(machine.return_value<long>() == 123666123L);
 }
+
+/// Without a flat arena every access goes through the page tables. With asmjit
+/// that means the inline page-cache probe, which these tests are for, so make
+/// sure it is actually the code that runs.
+static void require_paged_translation(const riscv::Machine<RISCV64>& machine)
+{
+	REQUIRE(!machine.memory.uses_flat_memory_arena());
+	if constexpr (riscv::asmjit_enabled)
+		REQUIRE(machine.cpu.current_execute_segment().is_asmjit_translated());
+}
+
+TEST_CASE("Forks see their own copy-on-write pages through the page caches", "[Fork]")
+{
+	// Four arrays, two pages each, visited interleaved so that every access
+	// moves to another page. The fork first reads the master's pages, then
+	// writes them (copying each one), then reads them again: a page cache
+	// left pointing at the master's data would miss every write.
+	const auto binary = build_and_load(R"M(
+	#define N 1024
+	static volatile long g[4][N];
+
+	__attribute__((used, retain, noinline))
+	long sum_all() {
+		long s = 0;
+		for (int i = 0; i < N; i += 7)
+			for (int a = 0; a < 4; a++)
+				s += g[a][i];
+		return s;
+	}
+	__attribute__((used, retain))
+	long bump(long v) {
+		const long before = sum_all();
+		for (int i = 0; i < N; i += 7)
+			for (int a = 0; a < 4; a++)
+				g[a][i] += v;
+		return sum_all() - before;
+	}
+
+	int main() {
+		for (int a = 0; a < 4; a++)
+			for (int i = 0; i < N; i++)
+				g[a][i] = i * (a + 1);
+		return 0;
+	})M");
+
+	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
+	require_paged_translation(machine);
+	machine.setup_linux_syscalls();
+	machine.setup_linux({"brutal"}, {"LC_TYPE=C", "LC_ALL=C"});
+	machine.simulate();
+	REQUIRE(machine.return_value<long>() == 0);
+
+	constexpr long ACCESSES = 4 * ((1024 + 6) / 7);
+	const long master_sum = machine.vmcall("sum_all");
+
+	for (long v = 1; v <= 4; v++) {
+		riscv::Machine<RISCV64> fork { machine, { .use_memory_arena = false } };
+		REQUIRE(fork.vmcall("sum_all") == master_sum);
+		REQUIRE(fork.vmcall("bump", v) == v * ACCESSES);
+		REQUIRE(fork.vmcall("bump", v) == v * ACCESSES);
+		REQUIRE(fork.vmcall("sum_all") == master_sum + 2 * v * ACCESSES);
+		// The master's pages are untouched.
+		REQUIRE(machine.vmcall("sum_all") == master_sum);
+	}
+	// Writes by the master itself go through the same caches.
+	REQUIRE(machine.vmcall("bump", 10) == 10 * ACCESSES);
+	REQUIRE(machine.vmcall("sum_all") == master_sum + 10 * ACCESSES);
+}
+
+/// One page per slot. Each function touches the first word of a slot's page,
+/// so that the page caches hold it, then changes the page underneath them.
+static const char* page_cache_program = R"M(
+	#define N 512
+	static volatile long g[4][N] __attribute__((aligned(4096)));
+
+	static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+		register long a0 __asm__("a0") = a;
+		register long a1 __asm__("a1") = b;
+		register long a2 __asm__("a2") = c;
+		register long a3 __asm__("a3") = d;
+		register long a4 __asm__("a4") = e;
+		register long a5 __asm__("a5") = f;
+		register long a7 __asm__("a7") = n;
+		__asm__ volatile("ecall" : "+r"(a0)
+			: "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(a7) : "memory");
+		return a0;
+	}
+
+	__attribute__((used, retain))
+	long page_addr(long a) { return (long)&g[a][0]; }
+	__attribute__((used, retain))
+	long read_at(long a) { return g[a][0]; }
+	__attribute__((used, retain))
+	void write_at(long a, long v) { g[a][0] = v; }
+
+	__attribute__((used, retain))
+	long protect_then_write(long a, long prot) {
+		g[a][0] = 5;
+		if (sys6(226, (long)&g[a][0], 4096, prot, 0, 0, 0) != 0)
+			return -1;
+		g[a][0] = 6;
+		return g[a][0];
+	}
+	__attribute__((used, retain))
+	long read_then_madvise(long a) {
+		if (g[a][0] == 0)
+			return -1;
+		if (sys6(233, (long)&g[a][0], 4096, 4 /* MADV_DONTNEED */, 0, 0, 0) != 0)
+			return -1;
+		return g[a][0];
+	}
+	__attribute__((used, retain))
+	long read_then_mmap_noreserve(long a) {
+		if (g[a][0] == 0)
+			return -1;
+		/* MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS | MAP_NORESERVE */
+		if (sys6(222, (long)&g[a][0], 4096, 3, 0x02 | 0x10 | 0x20 | 0x4000, -1, 0)
+				!= (long)&g[a][0])
+			return -1;
+		return g[a][0];
+	}
+
+	int main() {
+		for (int a = 0; a < 4; a++)
+			g[a][0] = 100 + a;
+		return 0;
+	})M";
+
+static void boot_page_cache_program(riscv::Machine<RISCV64>& machine)
+{
+	require_paged_translation(machine);
+	machine.setup_linux_syscalls();
+	machine.setup_linux({"brutal"}, {"LC_TYPE=C", "LC_ALL=C"});
+	machine.simulate();
+	REQUIRE(machine.return_value<long>() == 0);
+}
+
+TEST_CASE("Page caches drop pages whose protections change", "[Memory]")
+{
+	const auto binary = build_and_load(page_cache_program);
+	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
+	boot_page_cache_program(machine);
+	const auto page0 = machine.vmcall("page_addr", 0);
+
+	// The host changes the protections of a page the guest has just written
+	machine.vmcall("write_at", 0, 1);
+	REQUIRE(machine.vmcall("read_at", 0) == 1);
+	machine.memory.set_page_attr(page0, 4096, { .read = true, .write = false });
+	REQUIRE_THROWS_AS(machine.vmcall("write_at", 0, 2), MachineException);
+	REQUIRE(machine.vmcall("read_at", 0) == 1);
+	machine.memory.set_page_attr(page0, 4096, { .read = false, .write = false });
+	REQUIRE_THROWS_AS(machine.vmcall("read_at", 0), MachineException);
+	machine.memory.set_page_attr(page0, 4096, {});
+	machine.vmcall("write_at", 0, 3);
+	REQUIRE(machine.vmcall("read_at", 0) == 3);
+
+	// The guest does it with mprotect, between two writes to the page
+	REQUIRE_THROWS_AS(machine.vmcall("protect_then_write", 1, 1 /* PROT_READ */), MachineException);
+	REQUIRE(machine.vmcall("read_at", 1) == 5);
+	REQUIRE_THROWS_AS(machine.vmcall("write_at", 1, 7), MachineException);
+	REQUIRE(machine.vmcall("protect_then_write", 2, 3 /* PROT_READ | PROT_WRITE */) == 6);
+	REQUIRE(machine.vmcall("read_at", 2) == 6);
+}
+
+TEST_CASE("Discarding a fork's copy-on-write page drops it from the page caches", "[Fork]")
+{
+	const auto binary = build_and_load(page_cache_program);
+	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
+	boot_page_cache_program(machine);
+
+	for (int i = 0; i < 2; i++) {
+		riscv::Machine<RISCV64> fork { machine, { .use_memory_arena = false } };
+		// The fork reads the master's page, and then copies it to discard it
+		REQUIRE(fork.vmcall("read_then_madvise", 1) == 0);
+		REQUIRE(fork.vmcall("read_at", 1) == 0);
+		REQUIRE(fork.vmcall("read_then_mmap_noreserve", 2) == 0);
+		REQUIRE(fork.vmcall("read_at", 2) == 0);
+		// The master's pages are untouched
+		REQUIRE(machine.vmcall("read_at", 1) == 101);
+		REQUIRE(machine.vmcall("read_at", 2) == 102);
+	}
+}
+
+TEST_CASE("Trapping a cached page, and mprotect of a trapped page", "[Memory Traps]")
+{
+	if constexpr (!riscv::memory_traps_enabled)
+		return;
+	const auto binary = build_and_load(page_cache_program);
+	riscv::Machine<RISCV64> machine { binary, { .use_memory_arena = false } };
+	boot_page_cache_program(machine);
+
+	// Both page caches hold the page before the trap is installed
+	machine.vmcall("write_at", 3, 7);
+	REQUIRE(machine.vmcall("read_at", 3) == 7);
+
+	int reads = 0, writes = 0;
+	machine.memory.trap(machine.vmcall("page_addr", 3),
+		[&] (Page&, uint32_t, int mode, int64_t) {
+			if (Page::trap_mode(mode) == TRAP_READ) reads++;
+			else if (Page::trap_mode(mode) == TRAP_WRITE) writes++;
+		});
+	REQUIRE(machine.vmcall("read_at", 3) == 7);
+	machine.vmcall("write_at", 3, 8);
+	REQUIRE((reads == 1 && writes == 1));
+
+	// mprotect must not make the page cacheable again
+	REQUIRE(machine.vmcall("protect_then_write", 3, 3 /* PROT_READ | PROT_WRITE */) == 7);
+	REQUIRE((reads == 2 && writes == 3));
+	machine.vmcall("read_at", 3);
+	REQUIRE(reads == 3);
+}

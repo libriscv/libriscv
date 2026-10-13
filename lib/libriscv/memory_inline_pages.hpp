@@ -11,7 +11,7 @@ const PageData& Memory<W>::cached_readable_page(address_t address, size_t len) c
 
 	auto& page = get_readable_pageno(pageno);
 	if (LIKELY(page.attr.is_cacheable())) {
-		entry = {pageno, &page.page()};
+		fill_rdcache(pageno, page.page());
 	} else if constexpr (memory_traps_enabled) {
 		if (UNLIKELY(page.has_trap())) {
 			page.trap(address & (Page::size()-1), len | TRAP_READ, 0);
@@ -29,7 +29,7 @@ PageData& Memory<W>::cached_writable_page(address_t address)
 		return *entry.page;
 	auto& page = create_writable_pageno(pageno);
 	if (LIKELY(page.attr.is_cacheable()))
-		entry = {pageno, &page.page()};
+		fill_wrcache(pageno, page.page());
 	return page.page();
 }
 
@@ -64,12 +64,19 @@ inline const Page& Memory<W>::get_pageno(const address_t pageno) const
 template <int W> inline void
 Memory<W>::invalidate_cache(address_t pageno, Page* page) const noexcept
 {
-	// NOTE: It is only possible to keep the write page as long as
-	// the page tables are node-based. In that case, we only have
-	// to invalidate the read page when it matches.
-	if (m_rd_cache.pageno == pageno) {
+	// The page may have new data (copy-on-write) or new protections, so
+	// every cache that holds it lets go. The page tables are node-based,
+	// so the other pages stay valid.
+	if (m_rd_cache.pageno == pageno)
 		m_rd_cache.pageno = (address_t)-1;
-	}
+	if (m_wr_cache.pageno == pageno)
+		m_wr_cache.pageno = (address_t)-1;
+	auto& rd = m_rd_cache_set[pageno % PAGE_CACHE_SETS];
+	if (rd.pageno == pageno)
+		rd.pageno = (address_t)-1;
+	auto& wr = m_wr_cache_set[pageno % PAGE_CACHE_SETS];
+	if (wr.pageno == pageno)
+		wr.pageno = (address_t)-1;
 	(void)page;
 }
 template <int W> inline void
@@ -77,6 +84,10 @@ Memory<W>::invalidate_reset_cache() const noexcept
 {
 	m_rd_cache.pageno = (address_t)-1;
 	m_wr_cache.pageno = (address_t)-1;
+	for (auto& entry : m_rd_cache_set)
+		entry.pageno = (address_t)-1;
+	for (auto& entry : m_wr_cache_set)
+		entry.pageno = (address_t)-1;
 }
 
 template <int W>
@@ -128,6 +139,8 @@ inline void Memory<W>::trap(address_t page_addr, mmio_cb_t callback)
 	// and enables page traps when RISCV_DEBUG is enabled.
 	page.attr.cacheable = false;
 	page.set_trap(callback);
+	// The page may already be cached, which would bypass the trap.
+	this->invalidate_cache(page_number(page_addr), &page);
 }
 
 #endif // RISCV_VIRTUAL_PAGING
