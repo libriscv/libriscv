@@ -168,6 +168,9 @@ riscv::Buffer Memory<W>::membuffer(address_t addr,
 	if (UNLIKELY(datalen > maxlen))
 		protection_fault(addr);
 
+	if (datalen == 0)
+		return result;
+
 	if constexpr (flat_readwrite_arena) {
 		if (LIKELY(addr + datalen < memory_arena_size() && addr + datalen > addr)) {
 			auto* begin = &((char *)memory_arena_ptr())[RISCV_SPECSAFE(addr)];
