@@ -260,7 +260,6 @@ namespace riscv
 	void Memory<W>::binary_load_ph(const MachineOptions<W>& options,
 		const typename Elf::ProgramHeader* hdr, const address_t vaddr)
 	{
-		const auto* src = m_binary.data() + hdr->p_offset;
 		const size_t len = hdr->p_filesz;
 		if (m_binary.size() <= hdr->p_offset ||
 			hdr->p_offset + len < hdr->p_offset)
@@ -273,6 +272,7 @@ namespace riscv
 		if (vaddr + len < vaddr) {
 			throw MachineException(INVALID_PROGRAM, "Bogus ELF segment virtual base");
 		}
+		const auto* src = m_binary.data() + hdr->p_offset;
 
 		if (options.verbose_loader) {
 		printf("* Loading program of size %zu from %p to virtual %p -> %p\n",
@@ -354,17 +354,43 @@ namespace riscv
 		// Zig's ELF writer is insane, so we add an option to disable .text section segment reduction.
 		if (W <= 8 && !options.ignore_text_section)
 		{
+			// Section and segment addresses are compared as written in the
+			// ELF, before any dynamic base is applied. binary_load_ph() has
+			// verified that the segment file range is inside the binary.
+			const address_t seg_begin = hdr->p_vaddr;
+			const address_t seg_end   = seg_begin + hdr->p_filesz;
 			// Look for a .text section inside this segment:
 			const auto* texthdr = section_by_name_validated(".text");
-			if (texthdr != nullptr
-				// Validate that the .text section is inside this
-				// execute segment.
-				&& texthdr->sh_addr >= vaddr && texthdr->sh_size <= exlen
-				&& texthdr->sh_addr + texthdr->sh_size <= vaddr + exlen)
+			const address_t text_end = (texthdr != nullptr)
+				? address_t(texthdr->sh_addr + texthdr->sh_size) : 0;
+			if (texthdr != nullptr && seg_end >= seg_begin
+				// Validate that the .text section is inside this execute segment
+				&& texthdr->sh_addr >= seg_begin && texthdr->sh_size <= exlen
+				&& text_end >= texthdr->sh_addr && text_end <= seg_end)
 			{
-				data = m_binary.data() + texthdr->sh_offset;
-				vaddr = this->elf_base_address(texthdr->sh_addr);
-				exlen = texthdr->sh_size;
+				// Widen the range to cover every other executable section in
+				// this segment, eg. __lcxx_override (again, *sigh*)
+				address_t lo = texthdr->sh_addr;
+				address_t hi = text_end;
+				const auto& elf = *elf_header();
+				// section_by_name() has validated the section header table
+				const auto* shdr = elf_offset<typename Elf::SectionHeader> (elf.e_shoff);
+				for (unsigned i = 0; i < elf.e_shnum; i++) {
+					const auto& sh = shdr[i];
+					static constexpr auto SHF_ALLOC_EXEC = Elf::SHF_ALLOC | Elf::SHF_EXECINSTR;
+					if ((sh.sh_flags & SHF_ALLOC_EXEC) != SHF_ALLOC_EXEC || sh.sh_type == Elf::SHT_NOBITS)
+						continue;
+					const address_t sh_end = sh.sh_addr + sh.sh_size;
+					if (sh.sh_addr < seg_begin || sh_end < sh.sh_addr || sh_end > seg_end)
+						continue;
+					lo = std::min(lo, address_t(sh.sh_addr));
+					hi = std::max(hi, sh_end);
+				}
+				// The bytes come from the segment, not from sh_offset, as
+				// the range may no longer be just .text
+				data = m_binary.data() + hdr->p_offset + (lo - seg_begin);
+				vaddr = this->elf_base_address(lo);
+				exlen = hi - lo;
 			}
 			//printf("* Found .text section inside segment: %p -> %p\n",
 			//	(void*)uintptr_t(vaddr), (void*)uintptr_t(vaddr + exlen));
@@ -417,14 +443,11 @@ namespace riscv
 				continue;
 			const address_t vaddr = this->elf_base_address(hdr->p_vaddr);
 
-			// A writable segment can sit anywhere: remember the lowest one, as
-			// its first page can never be shared
+			// Always pick the lowest writable segment
 			if (hdr->p_flags & Elf::PF_W) {
 				writable_begin = std::min(writable_begin, vaddr);
 				continue;
 			}
-			// The conditions in binary_load_ph() that extend the read-only
-			// boundary: loaded, readable and not writable
 			if (hdr->p_filesz == 0 || (hdr->p_flags & Elf::PF_R) == 0)
 				continue;
 			// binary_load_ph() rejects segments outside the binary too, but only
@@ -445,7 +468,6 @@ namespace riscv
 
 		if (rodata_end == 0)
 			return;
-		// Interleaved segments, which a single write boundary cannot express
 		if (writable_begin < rodata_end)
 			return;
 
@@ -483,9 +505,7 @@ namespace riscv
 			.segments   = std::move(layout),
 		};
 
-		// The layout only narrows the search: an image belongs to this program
-		// only when every shared byte matches, gaps included. Anything weaker
-		// would hand one programs memory to another.
+		// An image belongs to this program only when every shared byte matches
 		auto verify = [&] (const uint8_t* image, size_t len) -> bool {
 			if (len != size_t(shared_end))
 				return false;
@@ -653,9 +673,7 @@ namespace riscv
 		// Default stack
 		this->m_stack_address = mmap_allocate(options.stack_size) + options.stack_size;
 
-		// The arena boundaries are final once every PT_LOAD is in place, and they
-		// must be settled before any execute segment is created: the JIT bakes them
-		// into the generated code and keys shared segments on them.
+		// The arena boundaries are final once every PT_LOAD is in place
 		if (this->uses_flat_memory_arena() && this->memory_arena_size() >= m_arena.initial_rodata_end) {
 			this->m_arena.read_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - RWREAD_BEGIN));
 			this->m_arena.write_boundary = std::min(this->memory_arena_size(), size_t(this->memory_arena_size() - m_arena.initial_rodata_end));
@@ -666,7 +684,7 @@ namespace riscv
 		if (!options.default_exit_function.empty())
 		{
 			// It is slightly faster to set a custom exit function, in order
-			// to avoid changing execute segment (slow-path) to exit.
+			// to avoid changing execute segment (slow-path) to exit/stop.
 			auto potential_exit_addr = this->resolve_address(options.default_exit_function);
 			if (potential_exit_addr != 0x0) {
 				this->m_exit_address = potential_exit_addr;

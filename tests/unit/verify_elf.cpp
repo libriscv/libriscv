@@ -389,3 +389,116 @@ TEST_CASE("Symbol section ending exactly at EOF is accepted", "[Verify]")
 		REQUIRE_NOTHROW(machine.memory.all_symbols());
 	}
 }
+
+// Writes an address-sized section header field (sh_flags, sh_addr, ...)
+static void set_section_field(std::vector<uint8_t>& elf,
+	const char* section, size_t field32, size_t field64, uint64_t value)
+{
+	const bool is64 = elf[4] == 2;
+	const size_t hdr_offset = section_header_offset(elf, section);
+	if (is64) {
+		std::memcpy(elf.data() + hdr_offset + field64, &value, 8);
+	} else {
+		uint32_t v = (uint32_t)value;
+		std::memcpy(elf.data() + hdr_offset + field32, &v, 4);
+	}
+}
+static uint64_t get_section_field(const std::vector<uint8_t>& elf,
+	const char* section, size_t field32, size_t field64)
+{
+	const bool is64 = elf[4] == 2;
+	const size_t hdr_offset = section_header_offset(elf, section);
+	if (is64) {
+		uint64_t v; std::memcpy(&v, elf.data() + hdr_offset + field64, 8);
+		return v;
+	}
+	uint32_t v; std::memcpy(&v, elf.data() + hdr_offset + field32, 4);
+	return v;
+}
+static constexpr uint32_t SHF_ALLOC_EXECINSTR = 0x2 | 0x4;
+#define SH_FLAGS 0x08, 0x08
+#define SH_ADDR  0x0C, 0x10
+#define SH_SIZE  0x14, 0x20
+
+TEST_CASE("Execute segment covers executable sections outside .text", "[Verify]")
+{
+	// __libc_freeres_fn is an AX section placed right after .text, the same
+	// way Zig places __lcxx_override, and it must be decoded as well.
+	const auto binary = load_file(cwd + "/elf/rust-riscv64-hello-world");
+	const uint64_t text_begin = get_section_field(binary, ".text", SH_ADDR);
+	const uint64_t extra_begin = get_section_field(binary, "__libc_freeres_fn", SH_ADDR);
+	const uint64_t extra_end = extra_begin + get_section_field(binary, "__libc_freeres_fn", SH_SIZE);
+	REQUIRE(extra_begin >= text_begin + get_section_field(binary, ".text", SH_SIZE));
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	auto& exec = machine.cpu.current_execute_segment();
+	REQUIRE(exec.exec_begin() == text_begin);
+	REQUIRE(exec.exec_end() >= extra_end);
+	REQUIRE(exec.is_within(extra_begin, 4));
+}
+
+TEST_CASE("Widened execute segment is read from the program segment", "[Verify]")
+{
+	// fib counts down from 0xf424000: make it 0x1000, to finish quickly
+	auto reference = load_file(cwd + "/elf/fib");
+	static constexpr size_t LUI_OFFSET = 0x78;
+	static constexpr uint32_t LUI_A5_1 = 0x000017b7; // lui a5, 0x1
+	std::memcpy(reference.data() + LUI_OFFSET, &LUI_A5_1, 4);
+
+	// Split .text [0x10074, 0x100cc) in two, turning .comment into the
+	// executable tail [0x100b8, 0x100cc). Then point .text sh_offset at the
+	// end of the file, where its own size still fits, but the widened range
+	// does not. The widened range must come from the program segment.
+	auto binary = reference;
+	set_section_size(binary, ".text", 0x44);
+	set_section_file_offset(binary, ".text", binary.size() - 0x44);
+	set_section_field(binary, ".comment", SH_FLAGS, SHF_ALLOC_EXECINSTR);
+	set_section_field(binary, ".comment", SH_ADDR, 0x100b8);
+	set_section_file_offset(binary, ".comment", 0xb8);
+	set_section_size(binary, ".comment", 0x14);
+
+	auto run = [] (const std::vector<uint8_t>& elf) {
+		riscv::Machine<RISCV32> machine { elf, { .memory_max = MAX_MEMORY } };
+		auto& exec = machine.cpu.current_execute_segment();
+		REQUIRE(exec.exec_begin() == 0x10074);
+		REQUIRE(exec.exec_end() >= 0x100cc);
+		machine.setup_minimal_syscalls();
+		machine.simulate(MAX_INSTRUCTIONS);
+		REQUIRE(!machine.instruction_limit_reached());
+		return machine.return_value<uint32_t>();
+	};
+	REQUIRE(run(binary) == run(reference));
+}
+
+TEST_CASE("Executable sections outside the segment are ignored", "[Verify]")
+{
+	auto binary = load_file(cwd + "/elf/fib");
+	// An executable section beyond the end of the execute segment
+	set_section_field(binary, ".comment", SH_FLAGS, SHF_ALLOC_EXECINSTR);
+	set_section_field(binary, ".comment", SH_ADDR, 0x100cc);
+	// An executable section starting in the segment, but whose end wraps
+	// around the address space to below the end of the segment
+	set_section_field(binary, ".riscv.attributes", SH_FLAGS, SHF_ALLOC_EXECINSTR);
+	set_section_field(binary, ".riscv.attributes", SH_ADDR, 0x10000);
+	set_section_size(binary, ".riscv.attributes", 0xFFFF0010);
+	// An executable section that is not allocated
+	set_section_field(binary, ".strtab", SH_FLAGS, 0x4);
+	set_section_field(binary, ".strtab", SH_ADDR, 0x10000);
+
+	riscv::Machine<RISCV32> machine { binary, { .memory_max = MAX_MEMORY } };
+	auto& exec = machine.cpu.current_execute_segment();
+	REQUIRE(exec.exec_begin() == 0x10074);
+	REQUIRE(exec.exec_end() == 0x100cc);
+}
+
+TEST_CASE("Wrapping .text section falls back to the whole segment", "[Verify]")
+{
+	auto binary = load_file(cwd + "/elf/fib");
+	// .text end wraps around to below the end of the segment
+	set_section_field(binary, ".text", SH_ADDR, 0xFFFFFFF0);
+
+	riscv::Machine<RISCV32> machine { binary, { .memory_max = MAX_MEMORY } };
+	auto& exec = machine.cpu.current_execute_segment();
+	REQUIRE(exec.exec_begin() == 0x10000);
+	REQUIRE(exec.exec_end() == 0x100cc);
+}

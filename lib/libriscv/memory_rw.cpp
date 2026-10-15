@@ -114,6 +114,42 @@ namespace riscv
 			return;
 		}
 #ifdef RISCV_VIRTUAL_PAGING
+		if (len == 0)
+			return;
+		// No range covers more than the whole address space
+		if constexpr (sizeof(address_t) < sizeof(size_t))
+			len = std::min(len, size_t(std::numeric_limits<address_t>::max()) + 1);
+		// A range that wraps around is two ranges
+		const address_t last = dst + address_t(len - 1);
+		if (last < dst) {
+			const size_t head = size_t(address_t(0) - dst);
+			this->set_page_attr(dst, head, attr);
+			this->set_page_attr(0, len - head, attr);
+			return;
+		}
+
+		// A guest can mmap() or mprotect() an enormous range, so we
+		// visit the arena pages in range (and only the pages that exist)
+		const address_t firstpage = page_number(dst);
+		const address_t endpage   = page_number(last) + 1;
+		if (attr.is_default() && size_t(endpage - firstpage) > m_pages.size())
+		{
+			address_t arena_end = 0;
+			if constexpr (flat_readwrite_arena)
+				arena_end = std::min(endpage, address_t(this->m_arena.pages));
+			const address_t outside = std::max(firstpage, arena_end);
+			for (auto& it : m_pages) {
+				if (it.first >= outside && it.first < endpage)
+					this->set_pageno_attr(it.first, attr);
+			}
+			// Arena pages are created, so the page table changes from here
+			for (address_t pageno = firstpage; pageno < arena_end; pageno++)
+				this->set_pageno_attr(pageno, attr);
+			// A page that does not exist may be cached as the zero-page
+			this->invalidate_reset_cache();
+			return;
+		}
+
 		while (len > 0)
 		{
 			const size_t offset = dst & (Page::size()-1); // offset within page
