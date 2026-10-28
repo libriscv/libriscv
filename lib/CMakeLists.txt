@@ -283,7 +283,15 @@ if (RISCV_BINARY_TRANSLATION AND RISCV_LIBTCC)
 		CONFIG_TCC_BCHECK=0
 	)
 	# We support: Windows, Linux, macOS and Android
-	if (ANDROID_TOOLCHAIN)
+	if (ANDROID_TOOLCHAIN AND ANDROID_ABI STREQUAL "armeabi-v7a")
+		# EABI with VFP instructions and the softfp calling convention Android uses
+		target_compile_definitions(riscv PRIVATE
+			TARGETOS_ANDROID=1
+			TCC_TARGET_ARM=1
+			TCC_ARM_EABI=1
+			TCC_ARM_VFP=1
+		)
+	elseif (ANDROID_TOOLCHAIN)
 		target_compile_definitions(riscv PRIVATE
 			TARGETOS_ANDROID=1
 			TCC_TARGET_ARM64=1

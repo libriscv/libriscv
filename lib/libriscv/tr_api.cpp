@@ -23,6 +23,16 @@ namespace riscv {
 #define int64_t  long long
 #define uint64_t unsigned long long
 #define uintptr_t unsigned long long
+#elif defined(__TINYC__) && defined(__ANDROID__) && defined(__arm__)
+#define int8_t   signed char
+#define uint8_t  unsigned char
+#define int16_t  short
+#define uint16_t unsigned short
+#define int32_t  int
+#define uint32_t unsigned int
+#define int64_t  long long
+#define uint64_t unsigned long long
+#define uintptr_t unsigned long
 #elif defined(__TINYC__) && defined(__ANDROID__)
 #define uintptr_t unsigned long
 #elif defined(__TINYC__)
@@ -38,8 +48,13 @@ namespace riscv {
 #else
 #include <stdint.h>
 #endif
+#if defined(__TINYC__) && defined(__arm__)
+#define LIKELY(x) (x)
+#define UNLIKELY(x) (x)
+#else
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
+#endif
 /* The CPU pointer is the only route to the register file, and guest memory is a
    separate mapping, so the two can never overlap. Telling the compiler so lets
    it keep registers, the arena pointer and the FP register file in host
