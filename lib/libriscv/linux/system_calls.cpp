@@ -18,20 +18,97 @@ static constexpr bool verbose_syscalls = false;
 #include <signal.h>
 #undef sa_handler
 #include <unistd.h>
+#if __has_include(<sys/mman.h>)
 #include <sys/mman.h>
+#endif
 #include <sys/ioctl.h>
-#if !defined(__OpenBSD__) && !defined(TARGET_OS_IPHONE)
+#if !defined(__OpenBSD__) && !defined(TARGET_OS_IPHONE) && __has_include(<sys/random.h>)
+#define HAVE_SYS_RANDOM
 #include <sys/random.h>
 #endif
 extern "C" int dup3(int oldfd, int newfd, int flags);
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#if __has_include(<sys/uio.h>)
 #include <sys/uio.h>
-#if __has_include(<termios.h>)
+#else
+// No vectored I/O on this host (Nintendo Switch): one call per buffer.
+#include <sys/_iovec.h>
+static ssize_t readv(int fd, const struct iovec* iov, int count)
+{
+	ssize_t total = 0;
+	for (int i = 0; i < count; i++) {
+		const ssize_t res = read(fd, iov[i].iov_base, iov[i].iov_len);
+		if (res < 0) return total > 0 ? total : res;
+		total += res;
+		if ((size_t)res < iov[i].iov_len) break;
+	}
+	return total;
+}
+static ssize_t writev(int fd, const struct iovec* iov, int count)
+{
+	ssize_t total = 0;
+	for (int i = 0; i < count; i++) {
+		const ssize_t res = write(fd, iov[i].iov_base, iov[i].iov_len);
+		if (res < 0) return total > 0 ? total : res;
+		total += res;
+		if ((size_t)res < iov[i].iov_len) break;
+	}
+	return total;
+}
+#endif
+#ifdef __SWITCH__
+// newlib declares these, libnx implements none of them. Paths resolve against the
+// working directory only; everything else fails with ENOSYS.
+extern "C" {
+#include <switch/kernel/random.h>
+}
+#include <cstring>
+static bool host_cwd_path(int dirfd, const char* path)
+{
+	if (dirfd == AT_FDCWD || path[0] == '/' || std::strchr(path, ':') != nullptr)
+		return true;
+	errno = ENOSYS;
+	return false;
+}
+static int host_openat(int dirfd, const char* path, int flags, mode_t mode)
+{
+	return host_cwd_path(dirfd, path) ? open(path, flags, mode) : -1;
+}
+static int host_fstatat(int dirfd, const char* path, struct stat* st, int flags)
+{
+#ifdef AT_EMPTY_PATH
+	if (path[0] == '\0' && (flags & AT_EMPTY_PATH)) return fstat(dirfd, st);
+#endif
+	(void)flags;
+	return host_cwd_path(dirfd, path) ? stat(path, st) : -1;
+}
+static int host_faccessat(int dirfd, const char* path, int mode, int)
+{
+	return host_cwd_path(dirfd, path) ? access(path, mode) : -1;
+}
+static ssize_t host_readlinkat(int, const char*, char*, size_t) { errno = ENOSYS; return -1; }
+static int host_pipe2(int*, int) { errno = ENOSYS; return -1; }
+static ssize_t host_pread(int fd, void* buf, size_t len, off_t offset)
+{
+	if (lseek(fd, offset, SEEK_SET) == (off_t)-1) return -1;
+	return read(fd, buf, len);
+}
+#define openat host_openat
+#define fstatat host_fstatat
+#define faccessat host_faccessat
+#define readlinkat host_readlinkat
+#define pipe2 host_pipe2
+#define pread host_pread
+#endif
+// newlib (Nintendo Switch) ships a termios.h whose sys/termios.h is missing.
+#if __has_include(<termios.h>) && !defined(__SWITCH__)
 #include <termios.h>
 #endif
+#if __has_include(<sys/syscall.h>)
 #include <sys/syscall.h>
+#endif
 #ifndef EBADFD
 #define EBADFD EBADF  // OpenBSD, FreeBSD
 #endif
@@ -124,6 +201,7 @@ static void syscall_getrusage(Machine<W>& machine)
 		return;
 	}
 
+#ifndef __SWITCH__ // no getrusage()
 	if (machine.has_file_descriptors() && machine.fds().proxy_mode) {
 		struct rusage host_usage {};
 		const int res = getrusage(
@@ -137,7 +215,9 @@ static void syscall_getrusage(Machine<W>& machine)
 		usage.ru_stime_sec  = host_usage.ru_stime.tv_sec;
 		usage.ru_stime_usec = host_usage.ru_stime.tv_usec;
 		usage.ru_maxrss     = host_usage.ru_maxrss;
-	} else {
+	} else
+#endif
+	{
 		// Report some deterministic progress, sandbox-safe/sanitized
 		const uint64_t micros = machine.instruction_counter() / 1000;
 		usage.ru_utime_sec  = micros / 1000000;
@@ -1321,6 +1401,9 @@ static void syscall_getrandom(Machine<W>& machine)
 	const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
 	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
 	#endif
+#elif defined(__SWITCH__)
+	const ssize_t result = need;
+	randomGet(buffer, need);
 #elif defined(__ANDROID__) || defined(__wasm__)
 	for (size_t i = 0; i < need; ++i) {
 		buffer[i] ^= rand() & 0xFF; // XXX: Not secure

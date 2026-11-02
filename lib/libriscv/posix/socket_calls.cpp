@@ -11,7 +11,10 @@
 #ifndef _WIN32
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#if __has_include(<sys/un.h>)
+#define HAVE_UNIX_SOCKETS
 #include <sys/un.h>
+#endif
 #if __has_include(<linux/netlink.h>)
 #define HAVE_LINUX_NETLINK
 #include <linux/netlink.h>
@@ -67,11 +70,13 @@ static void print_address(std::array<char, 128> buffer, address_type<W> addrlen)
 		printf("SYSCALL -- IPv4 address: %s\n", printbuf);
 		break;
 	}
+#ifdef HAVE_UNIX_SOCKETS
 	case AF_UNIX: {
 		auto* sun = (struct sockaddr_un *)buffer.data();
 		printf("SYSCALL -- UNIX address: %s\n", sun->sun_path);
 		break;
 	}
+#endif
 #ifdef HAVE_LINUX_NETLINK
 	case AF_NETLINK: {
 		auto* snl = (struct sockaddr_nl *)buffer.data();
@@ -108,7 +113,9 @@ static void syscall_socket(Machine<W>& machine)
 #ifdef SOCKETCALL_VERBOSE
 	const char* domname;
 	switch (domain & 0xFF) {
+#ifdef AF_UNIX
 		case AF_UNIX: domname = "Unix"; break;
+#endif
 		case AF_INET: domname = "IPv4"; break;
 		case AF_INET6: domname = "IPv6"; break;
 #ifdef HAVE_LINUX_NETLINK

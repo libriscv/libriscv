@@ -11,8 +11,8 @@
 #include <poll.h>
 
 int poll_with_timeout(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts) {
-    #if defined(__APPLE__)
-        // On macOS, we don't have ppoll, so we need to use poll and then handle the timeout manually.
+    #if defined(__APPLE__) || defined(__SWITCH__)
+        // On macOS (and Switch), we don't have ppoll, so we need to use poll and then handle the timeout manually.
         int timeout_ms;
         if (timeout_ts != NULL) {
             timeout_ms = timeout_ts->tv_sec * 1000 + timeout_ts->tv_nsec / 1000000;

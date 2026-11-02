@@ -124,7 +124,7 @@ if (MINGW_TOOLCHAIN OR MINGW OR WIN32)
 	list(APPEND SOURCES
 		libriscv/win32/system_calls.cpp
 	)
-elseif(UNIX)
+elseif(UNIX OR NINTENDO_SWITCH)
 	list(APPEND SOURCES
 		libriscv/linux/system_calls.cpp
 	)
@@ -248,7 +248,8 @@ if (WIN32 OR MINGW_TOOLCHAIN)
 	if (RISCV_BINARY_TRANSLATION)
 		target_sources(riscv PRIVATE libriscv/win32/dlfcn.cpp)
 	endif()
-elseif (RISCV_BINARY_TRANSLATION)
+elseif (RISCV_BINARY_TRANSLATION AND NOT NINTENDO_SWITCH)
+	# Switch homebrew has no dynamic loader (tr_dylib.hpp).
 	target_link_libraries(riscv PUBLIC dl)
 endif()
 

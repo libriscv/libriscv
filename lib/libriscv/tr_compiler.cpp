@@ -1,12 +1,8 @@
 #include "common.hpp"
 
 #include <cstring>
-#if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
-#include "win32/dlfcn.h"
-#else
-#include <dlfcn.h>
-#endif
 #include <unistd.h>
+#include "tr_dylib.hpp"
 
 static std::string compiler()
 {
@@ -55,6 +51,11 @@ namespace riscv
 	compile(const std::string& code, int arch, const std::string& cflags,
 		const std::string& outfile)
 	{
+#if !RISCV_HAVE_DLOPEN
+		// Nothing could load the result.
+		(void)code; (void)arch; (void)cflags; (void)outfile;
+		return nullptr;
+#else
 		// create temporary filename
 		char namebuffer[64];
 		strncpy(namebuffer, "/tmp/rvtrcode-XXXXXX", sizeof(namebuffer));
@@ -98,6 +99,7 @@ namespace riscv
 		}
 
 		return dlopen(outfile.c_str(), RTLD_LAZY);
+#endif
 	}
 
 	static std::string mingw_compile_command(int /*arch*/,
@@ -115,6 +117,11 @@ namespace riscv
 	mingw_compile(const std::string& code, int arch, const std::string& cflags,
 		const std::string& outfile, const MachineTranslationCrossOptions& cross_options)
 	{
+#if !RISCV_HAVE_DLOPEN
+		// No host compiler to run.
+		(void)code; (void)arch; (void)cflags; (void)outfile; (void)cross_options;
+		return false;
+#else
 		// create temporary filename
 		char namebuffer[64];
 		strncpy(namebuffer, "/tmp/rvtrcode-XXXXXX", sizeof(namebuffer));
@@ -158,6 +165,7 @@ namespace riscv
 		}
 
 		return true;
+#endif
 	}
 
 	extern void  tcc_close(void* state);

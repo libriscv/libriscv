@@ -13,7 +13,6 @@
 #include <mutex>
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_MSC_VER)
 # define YEP_IS_WINDOWS 1
-# include "win32/dlfcn.h"
 # ifdef _MSC_VER
 #  define access _access
 #  define unlink _unlink
@@ -24,9 +23,9 @@ extern "C" int unlink(const char* path);
 #  include <unistd.h>
 # endif
 #else
-#include <dlfcn.h>
 #include <unistd.h>
 #endif
+#include "tr_dylib.hpp"
 #include "machine.hpp"
 #include "decoder_cache.hpp"
 #include "instruction_list.hpp"
