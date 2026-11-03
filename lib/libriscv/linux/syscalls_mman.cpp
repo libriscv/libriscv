@@ -299,6 +299,11 @@ static void add_mman_syscalls()
 				machine.memory.free_pages(addr, len);
 				machine.set_result(0);
 				break;
+			case 102: // MADV_GUARD_INSTALL
+			case 103: // MADV_GUARD_REMOVE
+				// Unsupported, as on Linux < 6.13: glibc >= 2.42 falls back to mprotect guards
+				machine.set_result(-EINVAL);
+				break;
 			case -1: // Work-around for Zig behavior
 				machine.set_result(-EINVAL);
 				break;
