@@ -121,7 +121,7 @@ namespace riscv
 	template <int W>
 	static std::vector<address_type<W>> aj_discover_region(const uint8_t* seg,
 		const AjSegmentMap<W>& map, address_type<W> entry, size_t max_instructions,
-		const std::set<address_type<W>>& claimed)
+		const std::set<address_type<W>>& claimed, std::vector<address_type<W>>& exits)
 	{
 		using address_t = address_type<W>;
 		std::set<address_t> seen;
@@ -133,10 +133,14 @@ namespace riscv
 			work.pop_back();
 			if (!map.is_instruction(pc) || seen.count(pc))
 				continue;
-			if (claimed.count(pc))
-				continue;   // emitted by an earlier region: a region exit
-			if (seen.size() >= max_instructions)
-				continue;   // capped: anything left over becomes a region exit
+			if (claimed.count(pc)) {
+				exits.push_back(pc);   // emitted by an earlier region: a region exit
+				continue;
+			}
+			if (seen.size() >= max_instructions) {
+				exits.push_back(pc);   // capped: anything left over becomes a region exit
+				continue;
+			}
 			const auto d = aj_decode<W>(seg, pc, map.end);
 			if (!map.is_emittable_at(pc, d))
 				continue;
@@ -290,22 +294,39 @@ namespace riscv
 		};
 		std::vector<Region> regions;
 		std::set<address_t> claimed_addrs;
+		std::vector<address_t> exits;
 		size_t emitted_instrs = 0;
-		for (const address_t entry : map.entries)
-		{
+		auto grow_region = [&] (const address_t entry) -> bool {
 			if (regions.size() >= options.asmjit_blocks_max)
-				break;
+				return false;
 			if (emitted_instrs >= options.asmjit_instr_max)
-				break;
+				return false;
 			if (claimed_addrs.count(entry))
-				continue;   // an earlier region emitted it; it becomes an entry of that one
+				return true;   // an earlier region emitted it; it becomes an entry of that one
 			auto instrs = aj_discover_region<W>(seg, map, entry,
-				options.asmjit_region_instr_max, claimed_addrs);
+				options.asmjit_region_instr_max, claimed_addrs, exits);
 			if (instrs.empty())
-				continue;   // nothing emittable at this address
+				return true;   // nothing emittable at this address
 			emitted_instrs += instrs.size();
 			claimed_addrs.insert(instrs.begin(), instrs.end());
 			regions.push_back({entry, std::move(instrs), {}});
+			return true;
+		};
+		for (const address_t entry : map.entries)
+			if (!grow_region(entry))
+				break;
+
+		std::set<address_t> exit_entries;
+		size_t exit_regions = 0;
+		while (!exits.empty()) {
+			const address_t pc = exits.back();
+			exits.pop_back();
+			if (map.entries.count(pc) || !exit_entries.insert(pc).second)
+				continue;
+			const size_t before = regions.size();
+			if (!grow_region(pc))
+				break;
+			exit_regions += regions.size() - before;
 		}
 		if (regions.empty())
 			return;
@@ -315,7 +336,7 @@ namespace riscv
 		size_t total_entries = 0;
 		for (auto& r : regions) {
 			for (const address_t pc : r.instrs)
-				if (map.entries.count(pc))
+				if (map.entries.count(pc) || exit_entries.count(pc))
 					r.entries.push_back(pc);
 			total_entries += r.entries.size();
 		}
@@ -389,9 +410,10 @@ namespace riscv
 		if (options.asmjit_verbose || options.asmjit_timing) {
 			const auto ms = std::chrono::duration<double, std::milli>(
 				std::chrono::steady_clock::now() - t0).count();
-			printf("libriscv: asmjit emitted %u/%zu regions (%u claimed), "
-				"%zu instructions in %.2f ms\n",
-				live, regions.size(), claimed, emitted_instrs, ms);
+			printf("libriscv: asmjit emitted %u/%zu regions (%u claimed, %zu exit entries, "
+				"%zu exit regions), %zu instructions in %.2f ms\n",
+				live, regions.size(), claimed, exit_entries.size(), exit_regions,
+				emitted_instrs, ms);
 		}
 	}
 

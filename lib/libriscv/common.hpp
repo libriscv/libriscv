@@ -333,8 +333,8 @@ namespace riscv
 		/// emission -- the segment size does. It bounds how large a single emitted
 		/// host function may get, which is what register allocation cost scales
 		/// with. It needs to be comfortably above the size of a hot function:
-		/// a region cut short in the middle of a loop exits to the interpreter on
-		/// every iteration, which costs far more than the emission it saves.
+		/// a region cut short in the middle of a loop leaves native code on every
+		/// iteration, which costs far more than the emission it saves.
 		unsigned asmjit_region_instr_max = 1024;
 		/// @brief Chain direct guest calls between asmjit regions on the host stack.
 		/// @details Disable this for tooling that must observe every guest call at
