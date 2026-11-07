@@ -61,7 +61,7 @@ namespace riscv
 
 			if (options.use_memory_arena)
 			{
-#if defined(__linux__) || defined(__FreeBSD__)
+#if defined(__linux__) || (defined(__FreeBSD__) && !defined(__PROSPERO__))
 				if constexpr (encompassing_Nbit_arena != 0)
 				{
 					static_assert(flat_readwrite_arena || encompassing_Nbit_arena == 0,
@@ -213,7 +213,7 @@ namespace riscv
 		this->evict_execute_segments();
 		// only the original machine owns arena
 		if (this->m_arena.data != nullptr && !is_forked()) {
-#if defined(__linux__) || defined(__FreeBSD__)
+#if defined(__linux__) || (defined(__FreeBSD__) && !defined(__PROSPERO__))
 			// Adjust back to the original base pointer (subtract OVERALLOCATE)
 			auto* base_ptr = (uint8_t *)this->m_arena.data - Memory::OVERALLOCATE;
 			if constexpr (riscv::encompassing_Nbit_arena != 0)

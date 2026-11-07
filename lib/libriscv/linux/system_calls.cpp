@@ -739,7 +739,7 @@ static void syscall_dup3(Machine<W>& machine)
 	if (machine.has_file_descriptors()) {
 		int real_old_fd = machine.fds().translate(old_vfd);
 		int real_new_fd = machine.fds().translate(new_vfd);
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__linux__) || (defined(__FreeBSD__) && !defined(__PROSPERO__)) || defined(__OpenBSD__)
 		int res = dup3(real_old_fd, real_new_fd, flags);
 		if (res > 0) {
 			res = machine.fds().assign_file(res);
@@ -1378,6 +1378,9 @@ static void syscall_brk(Machine<W>& machine)
 #if defined(__APPLE__)
 	#include <Security/Security.h>
 #endif
+#if defined(__PROSPERO__)
+extern "C" int sceRandomGetRandomNumber(void* buffer, size_t size);
+#endif
 
 template <int W>
 static void syscall_getrandom(Machine<W>& machine)
@@ -1404,6 +1407,10 @@ static void syscall_getrandom(Machine<W>& machine)
 #elif defined(__SWITCH__)
 	const ssize_t result = need;
 	randomGet(buffer, need);
+#elif defined(__PROSPERO__)
+	ssize_t result = need;
+	for (size_t i = 0; i < need && result > 0; i += 64)
+		if (sceRandomGetRandomNumber(buffer + i, std::min<size_t>(64, need - i)) != 0) result = -1;
 #elif defined(__ANDROID__) || defined(__wasm__)
 	for (size_t i = 0; i < need; ++i) {
 		buffer[i] ^= rand() & 0xFF; // XXX: Not secure
