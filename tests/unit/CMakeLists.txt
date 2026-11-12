@@ -64,6 +64,9 @@ if (RISCV_VIRTUAL_PAGING)
 add_unit_test(protect  protections.cpp)
 endif()
 add_unit_test(rvbuffer rvbuffer.cpp)
+if (UNIX)
+add_unit_test(rsp      rsp.cpp)     # GDB remote serial protocol server
+endif()
 if (RISCV_BINARY_TRANSLATION OR RISCV_ASMJIT)
 add_unit_test(unchecked unchecked.cpp)  # translate_unsafe_remove_checks, both back-ends
 add_unit_test(nbitarena nbit_arena.cpp)

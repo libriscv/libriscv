@@ -126,7 +126,7 @@ Check out the [CLI documentation](/emulator/README.md).
 
 ## Remote debugging using GDB
 
-If you have built the emulator, you can use `./rvlinux --gdb /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch /path/to/program`. Make sure your program is built with -O0 and with debuginfo present. Then, once in GDB connect with `target remote :2159`. Now you can step through the code.
+If you have built the emulator, you can use `./rvlinux --gdb /path/to/program` to enable GDB to connect. Most distros have `gdb-multiarch`, which is a separate program from the default gdb. It will have RISC-V support already built in. Start your GDB like so: `gdb-multiarch -ex "target remote :2159"`, and it will find the program on its own. Make sure your program is built with `-O0 -ggdb3`. Breakpoints, watchpoints, threads, Ctrl-C, faults reported as signals and all registers (including vector registers) are supported. See [DEBUGGING.md](/docs/DEBUGGING.md) for details and for how to embed the GDB server in your own application.
 
 Most modern languages embed their own pretty printers for debuginfo which enables you to go line by line in your favorite language.
 

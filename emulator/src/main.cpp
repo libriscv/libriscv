@@ -1,6 +1,7 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/debug.hpp>
 #include <libriscv/rsp_server.hpp>
+#include <filesystem>
 #include <inttypes.h>
 #include <chrono>
 #include <thread>
@@ -599,6 +600,11 @@ static void run_program(
 			auto client = server.accept();
 			if (client != nullptr) {
 				printf("GDB is connected\n");
+				// Provide the executable path so GDB can load its symbols
+				std::error_code ec;
+				auto path = std::filesystem::canonical(args.at(0), ec);
+				if (!ec)
+					client->set_exec_file(path.string());
 				while (client->process_one());
 			}
 			if (!machine.stopped()) {

@@ -2,12 +2,16 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
+#include <cerrno>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 namespace riscv {
 
@@ -16,18 +20,19 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 	: m_machine{m}
 {
 	this->server_fd = socket(AF_INET,
-	                         SOCK_STREAM 
+	                         SOCK_STREAM
 #ifdef SOCK_NONBLOCK
 	                         	| SOCK_NONBLOCK
 #endif
 	                        ,0);
+	if (server_fd < 0)
+		throw MachineException(SYSTEM_CALL_FAILED, "GDB listener failed to create socket");
 	int opt = 1;
-	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
-		&opt, sizeof(opt))) {
+	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
 		close(server_fd);
-		throw MachineException(SYSTEM_CALL_FAILED, "Failed to enable REUSEADDR/PORT");
+		throw MachineException(SYSTEM_CALL_FAILED, "Failed to enable SO_REUSEADDR");
 	}
-	struct sockaddr_in address;
+	struct sockaddr_in address {};
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(port);
@@ -44,38 +49,41 @@ RSP<W>::RSP(riscv::Machine<W>& m, uint16_t port)
 template <int W>
 std::unique_ptr<RSPClient<W>> RSP<W>::accept(int timeout_secs)
 {
-	struct timeval tv {
-		.tv_sec = timeout_secs,
-		.tv_usec = 0
-	};
-	fd_set fds;
-	FD_ZERO(&fds);
-	FD_SET(server_fd, &fds);
-
-	const int ret = select(server_fd + 1, &fds, NULL, NULL, &tv);
+	struct pollfd pfd {};
+	pfd.fd = server_fd;
+	pfd.events = POLLIN;
+	int ret;
+	do {
+		ret = poll(&pfd, 1, (timeout_secs < 0) ? -1 : timeout_secs * 1000);
+	} while (ret < 0 && errno == EINTR);
 	if (ret <= 0) {
 		return nullptr;
 	}
 
 	struct sockaddr_in address;
-	int addrlen = sizeof(address);
-	int sockfd = ::accept(server_fd, (struct sockaddr*) &address,
-			(socklen_t*) &addrlen);
+	socklen_t addrlen = sizeof(address);
+	int sockfd = ::accept(server_fd, (struct sockaddr*) &address, &addrlen);
 	if (sockfd < 0) {
 		return nullptr;
 	}
+	// Ensure the client socket is blocking; some systems inherit O_NONBLOCK
+	int flags = fcntl(sockfd, F_GETFL, 0);
+	if (flags >= 0 && (flags & O_NONBLOCK))
+		fcntl(sockfd, F_SETFL, flags & ~O_NONBLOCK);
 	// Disable Nagle
 	int opt = 1;
 	if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt))) {
 		close(sockfd);
 		return nullptr;
 	}
-	// Enable receive and send timeouts
-	tv = {
-		.tv_sec = 60,
-		.tv_usec = 0
-	};
-	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO | SO_SNDTIMEO, &tv, sizeof(tv))) {
+#ifdef SO_NOSIGPIPE
+	setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
+#endif
+	// Set a send timeout to prevent an unresponsive GDB from blocking the host.
+	// Leave reads without a timeout: GDB may remain idle for hours.
+	struct timeval tv {};
+	tv.tv_sec = 60;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv))) {
 		close(sockfd);
 		return nullptr;
 	}
@@ -88,106 +96,60 @@ RSP<W>::~RSP() {
 
 template <int W> inline
 RSPClient<W>::~RSPClient() {
-    if (!is_closed())
-        close(this->sockfd);
+	if (!is_closed())
+		close(this->sockfd);
 }
 
 template <int W> inline
 void RSPClient<W>::close_now() {
-    this->m_closed = true;
-    close(this->sockfd);
+	if (!this->m_closed) {
+		this->m_closed = true;
+		close(this->sockfd);
+	}
 }
 
 template <int W>
-bool RSPClient<W>::sendf(const char* fmt, ...)
+bool RSPClient<W>::write_raw(const char* data, size_t len)
 {
-    char buffer[PACKET_SIZE];
-    va_list args;
-    va_start(args, fmt);
-    int plen = forge_packet(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-    if (UNLIKELY(m_verbose)) {
-        printf("TX >>> %.*s\n", plen, buffer);
-    }
-    int len = ::write(sockfd, buffer, plen);
-    if (len <= 0) {
-        this->close_now();
-        return false;
-    }
-    // Acknowledgement
-    int rlen = ::read(sockfd, buffer, 1);
-    if (rlen <= 0) {
-        this->close_now();
-        return false;
-    }
-    return (buffer[0] == '+');
+	if (m_closed) return false;
+#ifdef MSG_NOSIGNAL
+	static constexpr int flags = MSG_NOSIGNAL;
+#else
+	static constexpr int flags = 0;
+#endif
+	while (len > 0) {
+		const ssize_t w = ::send(sockfd, data, len, flags);
+		if (w < 0 && errno == EINTR)
+			continue;
+		if (w <= 0) {
+			this->close_now();
+			return false;
+		}
+		data += w;
+		len  -= w;
+	}
+	return true;
 }
 
 template <int W>
-bool RSPClient<W>::send(const char* str)
+int RSPClient<W>::read_raw(char* buffer, size_t len, int timeout_ms)
 {
-    char buffer[PACKET_SIZE];
-    int plen = forge_packet(buffer, sizeof(buffer), str, strlen(str));
-    if (UNLIKELY(m_verbose)) {
-        printf("TX >>> %.*s\n", plen, buffer);
-    }
-    int len = ::write(sockfd, buffer, plen);
-    if (len <= 0) {
-        this->close_now();
-        return false;
-    }
-    // Acknowledgement
-    int rlen = ::read(sockfd, buffer, 1);
-    if (rlen <= 0) {
-        this->close_now();
-        return false;
-    }
-    return (buffer[0] == '+');
-}
-template <int W>
-bool RSPClient<W>::process_one()
-{
-    char tmp[1024];
-    int len = ::read(this->sockfd, tmp, sizeof(tmp));
-    if (len <= 0) {
-        this->close_now();
-        return false;
-    }
-    if (UNLIKELY(m_verbose)) {
-        printf("RX <<< %.*s\n", len, tmp);
-    }
-    for (int i = 0; i < len; i++)
-    {
-        char c = tmp[i];
-        if (buffer.empty() && c == '+') {
-            /* Ignore acks? */
-        }
-        else if (c == '$') {
-            this->buffer.clear();
-        }
-        else if (c == '#') {
-            reply_ack();
-            process_data();
-            this->buffer.clear();
-            i += 2;
-        }
-        else {
-            this->buffer.append(&c, 1);
-            if (buffer.size() >= PACKET_SIZE)
-                break;
-        }
-    }
-    return true;
+	if (m_closed) return -1;
+	if (timeout_ms >= 0) {
+		struct pollfd pfd {};
+		pfd.fd = sockfd;
+		pfd.events = POLLIN;
+		const int ret = ::poll(&pfd, 1, timeout_ms);
+		if (ret == 0 || (ret < 0 && errno == EINTR))
+			return 0;
+		if (ret < 0)
+			return -1;
+	}
+	ssize_t r;
+	do {
+		r = ::read(sockfd, buffer, len);
+	} while (r < 0 && errno == EINTR);
+	return (r > 0) ? int(r) : -1;
 }
 
-template <int W> inline
-void RSPClient<W>::reply_ack() {
-    ssize_t len = write(sockfd, "+", 1);
-    if (len < 0) throw MachineException(SYSTEM_CALL_FAILED, "RSPClient: Unable to ACK");
-}
-
-template <int W>
-void RSPClient<W>::kill() {
-    close(sockfd);
-}
 } // riscv

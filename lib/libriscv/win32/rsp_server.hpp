@@ -63,9 +63,9 @@ std::unique_ptr<RSPClient<W>> RSP<W>::accept(int timeout_secs)
         closesocket(sockfd);
 		return nullptr;
 	}
-	// Enable receive and send timeouts
+	// Set a send timeout; leave reads without a timeout so GDB can remain idle
 	DWORD timeout = 60*1000;
-	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO | SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout))) {
+	if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout))) {
         closesocket(sockfd);
 		return nullptr;
 	}
@@ -84,101 +84,47 @@ RSPClient<W>::~RSPClient() {
 
 template <int W> inline
 void RSPClient<W>::close_now() {
-    this->m_closed = true;
-    closesocket(this->sockfd);
+    if (!this->m_closed) {
+        this->m_closed = true;
+        closesocket(this->sockfd);
+    }
 }
 
 template <int W>
-bool RSPClient<W>::sendf(const char* fmt, ...)
+bool RSPClient<W>::write_raw(const char* data, size_t len)
 {
-    char buffer[PACKET_SIZE];
-    va_list args;
-    va_start(args, fmt);
-    int plen = forge_packet(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-    if (UNLIKELY(m_verbose)) {
-        printf("TX >>> %.*s\n", plen, buffer);
-    }
-    int len =  ::send(sockfd, buffer, plen, 0);
-    if (len <= 0) {
-        this->close_now();
-        return false;
-    }
-    // Acknowledgement
-    int rlen = ::recv(sockfd, buffer, 1, 0);
-    if (rlen <= 0) {
-        this->close_now();
-        return false;
-    }
-    return (buffer[0] == '+');
-}
-
-template <int W>
-bool RSPClient<W>::send(const char* str)
-{
-    char buffer[PACKET_SIZE];
-    int plen = forge_packet(buffer, sizeof(buffer), str, strlen(str));
-    if (UNLIKELY(m_verbose)) {
-        printf("TX >>> %.*s\n", plen, buffer);
-    }
-    int len = ::write(sockfd, buffer, plen);
-    if (len <= 0) {
-        this->close_now();
-        return false;
-    }
-    // Acknowledgement
-    int rlen = ::recv(sockfd, buffer, 1, 0);
-    if (rlen <= 0) {
-        this->close_now();
-        return false;
-    }
-    return (buffer[0] == '+');
-}
-template <int W>
-bool RSPClient<W>::process_one()
-{
-    char tmp[1024];
-    int len = ::recv(this->sockfd, tmp, sizeof(tmp), 0);
-    if (len <= 0) {
-        this->close_now();
-        return false;
-    }
-    if (UNLIKELY(m_verbose)) {
-        printf("RX <<< %.*s\n", len, tmp);
-    }
-    for (int i = 0; i < len; i++)
-    {
-        char c = tmp[i];
-        if (buffer.empty() && c == '+') {
-            /* Ignore acks? */
+    if (m_closed) return false;
+    while (len > 0) {
+        const int w = ::send(sockfd, data, (int)len, 0);
+        if (w <= 0) {
+            this->close_now();
+            return false;
         }
-        else if (c == '$') {
-            this->buffer.clear();
-        }
-        else if (c == '#') {
-            reply_ack();
-            process_data();
-            this->buffer.clear();
-            i += 2;
-        }
-        else {
-            this->buffer.append(&c, 1);
-            if (buffer.size() >= PACKET_SIZE)
-                break;
-        }
+        data += w;
+        len  -= w;
     }
     return true;
 }
 
-template <int W> inline
-void RSPClient<W>::reply_ack() {
-    ssize_t len = ::send(sockfd, "+", 1, 0);
-    if (len < 0) throw MachineException(SYSTEM_CALL_FAILED, "RSPClient: Unable to ACK");
-}
-
 template <int W>
-void RSPClient<W>::kill() {
-    closesocket(sockfd);
+int RSPClient<W>::read_raw(char* buffer, size_t len, int timeout_ms)
+{
+    if (m_closed) return -1;
+    if (timeout_ms >= 0) {
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(sockfd, &fds);
+        struct timeval tv;
+        tv.tv_sec = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        const int ret = select(0, &fds, NULL, NULL, &tv);
+        if (ret == 0)
+            return 0;
+        if (ret < 0)
+            return -1;
+    }
+    const int r = ::recv(sockfd, buffer, (int)len, 0);
+    return (r > 0) ? r : -1;
 }
 
 } // riscv

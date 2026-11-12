@@ -54,7 +54,37 @@ To get a GDB capable of debugging RISC-V you will need to install your distros e
 sudo apt install gdb-multiarch
 ```
 
-Once you have a RISC-V aware GDB you can start it with `gdb-multiarch my.elf`. Once inside GDB execute `target remote :2159` to connect when the emulator is waiting for a debugger.
+With the CLI, start the program with `--gdb` and connect from another terminal:
+
+```
+$ ./rvlinux --gdb my.elf
+GDB server is listening on localhost:2159
+
+$ gdb-multiarch -ex "target remote :2159"
+```
+
+The CLI provides the executable path so GDB can load its symbols automatically. You can also specify the executable directly: `gdb-multiarch my.elf`. The program starts paused at its entry point. Use `break main` and `continue` to begin debugging; `run` and `start` are not available on a remote target.
+
+Remember to build your RISC-V program with `-ggdb3 -O0`, otherwise you will not get complete information during the debugging session.
+
+Supported features:
+
+- Unlimited breakpoints, conditional breakpoints, `tbreak`, `until`, `advance`, `finish`, `next`, `step`, `stepi` and `catch throw`.
+- Watchpoints: `watch` (write), `rwatch` (read) and `awatch` (access). Write watchpoints check for changes to the watched memory after each instruction, including changes made by system calls. Read and access watchpoints decode scalar loads, stores and atomics, but do not support vector memory operations.
+- Backtraces and function calls within the program (`print func(1, 2)`).
+- All registers: integer, floating-point (`$ft0`, `$fcsr`), vector (`$v0`, `$vl`, `$vlenb`, etc.) and the `$cycle` and `$instret` counters, both of which report the instruction counter.
+- Threads (when POSIX threads are enabled): `info threads`, `thread N`, `thread apply all bt`.
+- Ctrl-C interrupts a running program.
+- CPU exceptions stop the program with the corresponding signal: SIGSEGV for protection faults, SIGILL for illegal instructions, SIGBUS for misaligned access, and so on. The PC points to the faulting instruction, and the exception message appears in the GDB console.
+- An `ebreak` instruction compiled into the program stops execution with SIGTRAP. The PC points to the instruction after the `ebreak`, allowing execution to resume.
+- Program termination reports the exit status. `kill` stops the machine; `detach` or quitting GDB allows the program to continue independently.
+- Static PIE programs: GDB receives the auxiliary vector needed to relocate symbols.
+
+While GDB is connected, the program executes one instruction at a time at roughly 200 million instructions per second. This provides precise debugging but is slower than normal execution. The decoder cache is bypassed, so functions patched through the cache (e.g., by `--libc-fastpath`) execute their original code under the debugger.
+
+For dynamically linked programs, the CLI loads the dynamic linker as the main executable, and GDB treats it as such. GDB finds the shared libraries but does not automatically locate the program's own symbols. Add them manually with `add-symbol-file`. Prefer static linking when debugging.
+
+### Embedding the GDB server
 
 ```C++
 #include <libriscv/rsp_server.hpp>
@@ -67,6 +97,8 @@ void gdb_listen(uint16_t port, Machine<W>& machine)
 	auto client = server.accept();
 	if (client != nullptr) {
 		printf("GDB connected\n");
+		// Optional: Provide the executable path so GDB can load its symbols
+		client->set_exec_file("/path/to/program.elf");
 		while (client->process_one());
 	}
 	// Finish the *remainder* of the program
@@ -75,9 +107,21 @@ void gdb_listen(uint16_t port, Machine<W>& machine)
 }
 ```
 
-Remember to build your RISC-V program with `-ggdb3 -O0`, otherwise you will not get complete information during the debugging session.
+To debug a single function call, prepare the call before connecting GDB. When the function returns, GDB reports program termination with the function's return value as the exit status:
 
-The RSP client will automatically feed new instruction limits to the machine when you type continue in GDB. The limit is still in place in order for you to not lose interactivity with GDB, in case there are infinite loops.
+```C++
+	machine.setup_call(6);
+	machine.cpu.jump(machine.address_of("fib"));
+	gdb_listen(2159, machine);
+	// The return value is in A0
+```
+
+Other `RSPClient` options:
+
+- `set_instruction_limit(n)`: Stop with SIGXCPU after executing `n` instructions during a single `continue` command. No limit is set by default; use Ctrl-C to interrupt execution.
+- `on_stopped(callback)`: Invoke the callback when the machine stops (e.g., when the program exits or `machine.stop()` is called), replacing the default exit report to GDB.
+- `set_debug_printer(printer)`: Send exception messages to the printer as well as the GDB console.
+- `set_verbose(true)`: Print every packet sent and received.
 
 ## Debugging remotely using program breakpoints
 
