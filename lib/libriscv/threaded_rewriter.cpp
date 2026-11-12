@@ -173,6 +173,16 @@ namespace riscv
 			case RV32I_BC_OP_SH1ADD:
 			case RV32I_BC_OP_SH2ADD:
 			case RV32I_BC_OP_SH3ADD: {
+				if (original.Rtype.rd == 0) {
+					// Writing to register zero is a no-op, so we can rewrite
+					// it to LI x0, 0, which is effectively a no-op.
+					FasterItype rewritten;
+					rewritten.imm = 0;
+					rewritten.rs1 = 0;
+					rewritten.rs2 = 0;
+					instr.whole = rewritten.whole;
+					return RV32I_BC_LI;
+				}
 				FasterOpType rewritten;
 				rewritten.rd = original.Rtype.rd;
 				rewritten.rs1 = original.Rtype.rs1;
