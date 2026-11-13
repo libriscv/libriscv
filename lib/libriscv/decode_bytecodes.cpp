@@ -44,7 +44,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				}
 				else if (ci.CL.funct3 == 0x3) {
 					if constexpr (sizeof(address_t) == 8) {
-						return RV32C_BC_FUNCTION; // C.LD
+						return RV32C_BC_LDD; // C.LD
 					} else {
 						return RV32C_BC_FUNCTION; // C.FLW
 					}
@@ -447,6 +447,9 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			case 0x5: // SRLIW / SRAIW
 				if (instr.Itype.high_bits() == 0x000 && (instr.Itype.imm & 0x20) == 0) {
 					return RV64I_BC_SRLIW;
+				}
+				if (instr.Itype.high_bits() == 0x400 && (instr.Itype.imm & 0x20) == 0) {
+					return RV64I_BC_SRAIW;
 				}
 				return RV32I_BC_FUNCTION;
 			}

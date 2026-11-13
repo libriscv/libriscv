@@ -498,8 +498,8 @@ namespace riscv
 				FasterItype rewritten;
 				if ((ci.opcode() & 0x3) == 0x0)
 				{	// C.LD
-					rewritten.rs1 = ci.CSD.srs1 + 8;
-					rewritten.rs2 = ci.CSD.srs2 + 8;
+					rewritten.rs1 = ci.CSD.srs2 + 8;
+					rewritten.rs2 = ci.CSD.srs1 + 8;
 					rewritten.imm = ci.CSD.offset8();
 				}
 				else
