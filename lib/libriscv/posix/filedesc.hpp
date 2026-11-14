@@ -54,6 +54,21 @@ struct FileDescriptors
 	std::function<bool(void*, std::string&)> filter_readlink = nullptr; /* NOTE: Can modify path */
 	std::function<bool(void*, const std::string&)> filter_stat = nullptr;
 	std::function<bool(void*, uint64_t)> filter_ioctl = nullptr;
+
+	/// @brief Files whose mmap without an address (ld.so mapping a shared
+	/// library) goes to a fixed guest address: filtered path -> address.
+	/// The address is used when it is page aligned, the whole mapping fits
+	/// in the arena and that range of the mmap area is free; otherwise the
+	/// mapping goes where it would have gone. Not a Linux feature: it keeps
+	/// libraries at the same address in every program, so code saved for
+	/// them (keyed by address) is found again.
+	std::map<std::string, uint64_t> pinned_mappings;
+	/// @brief The (filtered) paths that files were opened with, by virtual FD.
+	std::map<int, std::string> paths;
+	const std::string* path_of(int vfd) const {
+		auto it = paths.find(vfd);
+		return (it != paths.end()) ? &it->second : nullptr;
+	}
 };
 
 inline int FileDescriptors::assign(FileDescriptors::real_fd_type real_fd, bool socket)
@@ -87,6 +102,7 @@ inline FileDescriptors::real_fd_type FileDescriptors::erase(int virtfd)
         FileDescriptors::real_fd_type real_fd = it->second;
 		// Remove the virt FD
 		translation.erase(it);
+		paths.erase(virtfd);
 		return real_fd;
 	}
 	return -EBADF;

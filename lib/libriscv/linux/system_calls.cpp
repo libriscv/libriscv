@@ -679,6 +679,8 @@ static void syscall_openat(Machine<W>& machine)
 		int real_fd = openat(machine.fds().translate(dir_fd), path.c_str(), flags, mode);
 		if (real_fd >= 0) {
 			const int vfd = machine.fds().assign_file(real_fd);
+			if (!machine.fds().pinned_mappings.empty())
+				machine.fds().paths.emplace(vfd, path);
 			machine.set_result(vfd);
 		} else {
 			// Translate errno() into kernel API return value

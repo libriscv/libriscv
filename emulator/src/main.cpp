@@ -16,6 +16,19 @@
 static inline std::vector<uint8_t> load_file(const std::string &);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
+// The real path to the libraries (on the host system)
+static const std::string GUEST_REAL_LIBDIR = "/usr/riscv64-linux-gnu/lib/";
+// The libraries a dynamic executable may open (from /lib/riscv64-linux-gnu/)
+static const std::vector<std::string> GUEST_LIBS = {
+	"libdl.so.2", "libm.so.6", "libgcc_s.so.1", "libc.so.6", "libatomic.so.1",
+	"libstdc++.so.6", "libresolv.so.2", "libnss_dns.so.2", "libnss_files.so.2"
+};
+// ld.so maps each library in GUEST_LIBS in its own slot, in list order from
+// LIBRARY_PIN_BASE up, so a library has the same address in every program
+// and code saved for it (keyed by address) is found again. With an arena too
+// small for a slot, or a library larger than one, it goes where mmap puts it.
+static constexpr uint64_t LIBRARY_PIN_BASE = 1ull << 30;
+static constexpr uint64_t LIBRARY_PIN_SLOT = 16ull << 20;
 
 struct Arguments {
 	bool verbose = false;
@@ -421,6 +434,11 @@ static void run_program(
 		machine.setup_linux_syscalls();
 		machine.fds().permit_filesystem = !cli_args.sandbox;
 		machine.fds().permit_sockets    = !cli_args.sandbox;
+		if (is_dynamic) {
+			for (size_t i = 0; i < GUEST_LIBS.size(); i++)
+				machine.fds().pinned_mappings.emplace(GUEST_REAL_LIBDIR + GUEST_LIBS[i],
+					LIBRARY_PIN_BASE + i * LIBRARY_PIN_SLOT);
+		}
 		if (cli_args.proxy_mode) {
 			if (cli_args.sandbox)
 				fprintf(stderr, "Warning: Proxy mode is enabled, but sandbox is also enabled\n");
@@ -465,13 +483,8 @@ static void run_program(
 
 			// Paths that are allowed to be opened
 			static const std::string sandbox_libdir  = "/lib/riscv64-linux-gnu/";
-			// The real path to the libraries (on the host system)
-			static const std::string real_libdir = "/usr/riscv64-linux-gnu/lib/";
-			// The dynamic linker and libraries we allow
-			static const std::vector<std::string> libs = {
-				"libdl.so.2", "libm.so.6", "libgcc_s.so.1", "libc.so.6", "libatomic.so.1",
-				"libstdc++.so.6", "libresolv.so.2", "libnss_dns.so.2", "libnss_files.so.2"
-			};
+			const std::string& real_libdir = GUEST_REAL_LIBDIR;
+			const std::vector<std::string>& libs = GUEST_LIBS;
 
 			if (path.find(sandbox_libdir) == 0) {
 				// Find the library name

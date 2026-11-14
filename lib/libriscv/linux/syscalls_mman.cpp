@@ -67,7 +67,33 @@ static void add_mman_syscalls()
 				const int real_fd = machine.fds().translate(vfd);
 
 				address_type<W> dst = 0x0;
-				if (addr_g == 0x0) {
+				// A pinned file (see FileDescriptors::pinned_mappings) goes to
+				// its fixed address, if the range fits in the arena and is free
+				const std::string* path = (addr_g == 0x0 && voff == 0)
+					? machine.fds().path_of(vfd) : nullptr;
+				auto pin = path ? machine.fds().pinned_mappings.find(*path)
+					: machine.fds().pinned_mappings.end();
+				address_type<W> pinned = 0x0;
+				if (pin != machine.fds().pinned_mappings.end()) {
+					const address_type<W> addr = pin->second;
+					if (addr % Page::size() == 0 && addr + length >= addr
+						&& addr + length <= machine.memory.memory_arena_size()
+						&& addr >= machine.memory.mmap_start())
+					{
+						if (addr >= nextfree) {
+							// Untouched territory: the skipped gap goes to the free list
+							if (addr > nextfree)
+								machine.memory.mmap_cache().insert(nextfree, addr - nextfree);
+							nextfree = addr + length;
+							pinned = addr;
+						} else if (machine.memory.mmap_cache().carve(addr, length)) {
+							pinned = addr;
+						}
+					}
+				}
+				if (pinned != 0x0) {
+					dst = pinned;
+				} else if (addr_g == 0x0) {
 					if (nextfree + length < nextfree)
 						MMAP_HAS_FAILED();
 					dst = nextfree;
