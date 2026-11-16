@@ -435,6 +435,7 @@ namespace riscv
 		// Signal structure, lazily created
 		Signals<W>& signals();
 		SignalAction<W>& sigaction(int sig) { return signals().get(sig); }
+		bool has_signals() const noexcept { return m_signals != nullptr; }
 
 		// Resets the machine to the initial state. It is, however, not a
 		// reliable way to reset complex machines with all kinds of features

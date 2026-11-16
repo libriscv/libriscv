@@ -71,12 +71,22 @@ static void syscall_sigaltstack(Machine<W> &machine) {
 	SYSPRINT("SYSCALL sigaltstack, tid=%d ss: 0x%lX old_ss: 0x%lX\n",
 			 machine.gettid(), (long) ss, (long) old_ss);
 
-	auto &stack = machine.signals().per_thread(machine.gettid()).stack;
-
+	// Only setting a new stack creates per-thread signal state
 	if (old_ss != 0x0) {
-		machine.copy_to_guest(old_ss, &stack, sizeof(stack));
+		const auto* pt = machine.has_signals()
+			? machine.signals().find_per_thread(machine.gettid()) : nullptr;
+		// Zeroed, so that the padding does not leak host stack bytes
+		SignalStack<W> old_stack;
+		std::memset(&old_stack, 0, sizeof(old_stack));
+		if (pt != nullptr) {
+			old_stack.ss_sp    = pt->stack.ss_sp;
+			old_stack.ss_flags = pt->stack.ss_flags;
+			old_stack.ss_size  = pt->stack.ss_size;
+		}
+		machine.copy_to_guest(old_ss, &old_stack, sizeof(old_stack));
 	}
 	if (ss != 0x0) {
+		auto& stack = machine.signals().per_thread(machine.gettid()).stack;
 		machine.copy_from_guest(&stack, ss, sizeof(stack));
 
 		SYSPRINT("<<< sigaltstack sp: 0x%lX flags: 0x%X size: 0x%lX\n",

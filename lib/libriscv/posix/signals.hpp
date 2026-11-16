@@ -44,8 +44,16 @@ struct Signals {
 	/// @brief Return from a signal handler, restoring the interrupted state
 	void leave(Machine<W>&);
 
-	// TODO: Lock this in the future, for multiproessing
+	/// @brief The signal state of a thread, created on first use
 	auto& per_thread(int tid) { return m_per_thread[tid]; }
+	/// @brief The signal state of a thread, or nullptr if it has none.
+	const SignalPerThread<W>* find_per_thread(int tid) const {
+		auto it = m_per_thread.find(tid);
+		return (it != m_per_thread.end()) ? &it->second : nullptr;
+	}
+	/// @brief Forget the signal state of a thread that exited.
+	void erase_per_thread(int tid) { m_per_thread.erase(tid); }
+	size_t per_thread_count() const noexcept { return m_per_thread.size(); }
 
 	Signals();
 	~Signals();

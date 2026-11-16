@@ -355,7 +355,7 @@ TEST_CASE("C7: pselect returns 0 without file descriptors", "[Security]")
 // sched_yield (resume) or FUTEX_WAKE (wakeup_blocked) then used it after free.
 // =============================================================================
 
-static void setup_two_threads(riscv::Machine<RISCV64>& machine, uint64_t stack)
+static int setup_two_threads(riscv::Machine<RISCV64>& machine, uint64_t stack)
 {
 	auto& cpu = machine.cpu;
 	// clone(flags=0, stack, ...): main is suspended, the child is running
@@ -365,8 +365,9 @@ static void setup_two_threads(riscv::Machine<RISCV64>& machine, uint64_t stack)
 	cpu.reg(riscv::REG_ARG5) = 0;
 	cpu.reg(riscv::REG_ARG6) = 0;
 	machine.system_call(220);
-	REQUIRE(machine.threads().get_tid() == 2);
+	REQUIRE(machine.threads().get_tid() != riscv::MAIN_THREAD_TID);
 	REQUIRE(machine.threads().suspended_threads().size() == 1);
+	return machine.threads().get_tid();
 }
 
 static void tgkill(riscv::Machine<RISCV64>& machine, int tid, int sig)
@@ -388,7 +389,7 @@ TEST_CASE("C8: tgkill on a suspended thread removes it from the scheduler", "[Se
 	const auto stack = machine.memory.mmap_allocate(65536) + 65536;
 	auto& threads = machine.threads();
 
-	setup_two_threads(machine, stack);
+	REQUIRE(setup_two_threads(machine, stack) == 2);
 	// The child yields back to main, and is now suspended
 	machine.system_call(124); // sched_yield
 	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
@@ -424,7 +425,7 @@ TEST_CASE("C8: tgkill on a blocked thread removes it from the scheduler", "[Secu
 	auto& threads = machine.threads();
 	auto& cpu = machine.cpu;
 
-	setup_two_threads(machine, stack);
+	REQUIRE(setup_two_threads(machine, stack) == 2);
 	// The child waits on the futex, blocks, and main resumes
 	cpu.reg(riscv::REG_ARG0) = futex_word;
 	cpu.reg(riscv::REG_ARG1) = 0; // FUTEX_WAIT
@@ -449,4 +450,163 @@ TEST_CASE("C8: tgkill on a blocked thread removes it from the scheduler", "[Secu
 	REQUIRE(machine.return_value<int>() == 0);
 	REQUIRE(threads.suspended_threads().empty());
 	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+}
+
+// =============================================================================
+// C9: the main thread stays in m_blocked when the fallback resumes it
+//
+// When the running thread exited with nothing suspended, wakeup_next() fell
+// back to resuming the main thread, even though it was blocked, and left it in
+// m_blocked. Each round of (clone; the child yields; main waits on a futex;
+// the child exits) added another entry, and every exit and FUTEX_WAKE scans
+// the list: host time grew with the square of guest instructions. A FUTEX_WAKE
+// could also queue main while it was running.
+// =============================================================================
+
+TEST_CASE("C9: a resumed thread leaves the blocked list", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	const auto stack = machine.memory.mmap_allocate(65536) + 65536;
+	const auto futex_word = machine.memory.mmap_allocate(4096);
+	machine.memory.write<uint32_t>(futex_word, 0);
+	auto& threads = machine.threads();
+	auto& cpu = machine.cpu;
+
+	for (int round = 0; round < 10; round++)
+	{
+		setup_two_threads(machine, stack);
+		// The child yields back to main
+		machine.system_call(124); // sched_yield
+		REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+		// Main waits on the futex, and the child runs
+		cpu.reg(riscv::REG_ARG0) = futex_word;
+		cpu.reg(riscv::REG_ARG1) = 0; // FUTEX_WAIT
+		cpu.reg(riscv::REG_ARG2) = 0;
+		cpu.reg(riscv::REG_ARG5) = 0;
+		machine.system_call(98);
+		REQUIRE(threads.get_tid() != riscv::MAIN_THREAD_TID);
+		REQUIRE(threads.blocked_threads().size() == 1);
+		// The child exits with nothing suspended: fallback to main
+		cpu.reg(riscv::REG_ARG0) = 0;
+		machine.system_call(93); // exit
+		REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+		REQUIRE(threads.blocked_threads().empty());
+		REQUIRE(threads.suspended_threads().empty());
+	}
+
+	// Waking the futex must not queue the running main thread
+	cpu.reg(riscv::REG_ARG0) = futex_word;
+	cpu.reg(riscv::REG_ARG1) = 1; // FUTEX_WAKE
+	cpu.reg(riscv::REG_ARG2) = 1;
+	cpu.reg(riscv::REG_ARG5) = 0;
+	machine.system_call(98);
+	REQUIRE(machine.return_value<int>() == 0);
+	REQUIRE(threads.suspended_threads().empty());
+}
+
+TEST_CASE("C9: queueing an already queued thread is an error", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	auto* main_thread = machine.threads().get_thread();
+
+	main_thread->suspend();
+	REQUIRE(machine.threads().suspended_threads().size() == 1);
+	REQUIRE_THROWS_AS(main_thread->suspend(), riscv::MachineException);
+	REQUIRE_THROWS_AS(main_thread->block(0), riscv::MachineException);
+	REQUIRE(machine.threads().suspended_threads().size() == 1);
+	REQUIRE(machine.threads().blocked_threads().empty());
+}
+
+// =============================================================================
+// C10: per-thread signal state leaks
+//
+// Signals::per_thread() created an entry (altstack and a full register file)
+// on first use, including for a read-only sigaltstack(NULL, &old) and for
+// rt_sigreturn, and nothing erased it when the thread exited. TIDs are not
+// reused, so creating threads in a loop grew host memory outside memory_max.
+// =============================================================================
+
+static void sigaltstack(riscv::Machine<RISCV64>& machine, uint64_t ss, uint64_t old_ss)
+{
+	machine.cpu.reg(riscv::REG_ARG0) = ss;
+	machine.cpu.reg(riscv::REG_ARG1) = old_ss;
+	machine.system_call(132);
+	REQUIRE(machine.return_value<int>() == 0);
+}
+
+TEST_CASE("C10: reading signal state does not create it", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	const auto area = machine.memory.mmap_allocate(65536);
+
+	// sigaltstack(NULL, &old) reads a zeroed stack (padding included)
+	std::array<uint8_t, sizeof(riscv::SignalStack<RISCV64>)> old_ss;
+	machine.memory.memset(area, 0xAA, old_ss.size());
+	sigaltstack(machine, 0, area);
+	machine.memory.memcpy_out(old_ss.data(), area, old_ss.size());
+	for (auto byte : old_ss)
+		REQUIRE(byte == 0);
+	REQUIRE(machine.signals().per_thread_count() == 0);
+
+	// rt_sigreturn without a delivered signal
+	machine.cpu.reg(riscv::REG_SP) = area + 4096;
+	machine.system_call(139);
+	REQUIRE(machine.signals().per_thread_count() == 0);
+
+	// Setting an altstack creates it, and reading it back sees it
+	const riscv::SignalStack<RISCV64> new_ss { .ss_sp = area, .ss_flags = 0, .ss_size = 8192 };
+	machine.copy_to_guest(area + 128, &new_ss, sizeof(new_ss));
+	sigaltstack(machine, area + 128, 0);
+	REQUIRE(machine.signals().per_thread_count() == 1);
+	sigaltstack(machine, 0, area + 256);
+	REQUIRE(machine.memory.read<uint64_t>(area + 256) == area);
+	REQUIRE(machine.memory.read<uint64_t>(area + 256 + 16) == 8192);
+}
+
+TEST_CASE("C10: an exited thread's signal state is erased", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	const auto stack = machine.memory.mmap_allocate(65536) + 65536;
+	const auto area = machine.memory.mmap_allocate(4096);
+	const riscv::SignalStack<RISCV64> new_ss { .ss_sp = area, .ss_flags = 0, .ss_size = 2048 };
+	machine.copy_to_guest(area, &new_ss, sizeof(new_ss));
+	auto& threads = machine.threads();
+
+	for (int round = 0; round < 100; round++)
+	{
+		const int tid = setup_two_threads(machine, stack);
+		// The child sets an altstack (which creates its signal state)
+		sigaltstack(machine, area, 0);
+		REQUIRE(machine.signals().find_per_thread(tid) != nullptr);
+		if (round % 2 == 0) {
+			// ... and exits
+			machine.cpu.reg(riscv::REG_ARG0) = 0;
+			machine.system_call(93); // exit
+		} else {
+			// ... or yields, and main kills it
+			machine.system_call(124); // sched_yield
+			REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+			tgkill(machine, tid, 15);
+		}
+		REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+		REQUIRE(threads.get_thread(tid) == nullptr);
+		REQUIRE(machine.signals().find_per_thread(tid) == nullptr);
+	}
+	REQUIRE(machine.signals().per_thread_count() == 0);
 }

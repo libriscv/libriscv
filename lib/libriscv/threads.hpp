@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cstdio>
 #include <unordered_map>
 #include "machine.hpp"
@@ -66,6 +67,8 @@ struct MultiThreading
 	bool      suspend_and_yield(long result = 0);
 	bool      yield_to(int tid, bool store_retval = true);
 	void      erase_thread(int tid);
+	void      dequeue(const thread_t*);
+	void      check_dequeued(const thread_t*) const;
 	void      wakeup_next();
 	bool      block(address_t retval, uint32_t reason, uint32_t extra = 0);
 	void      unblock(int tid);
@@ -128,6 +131,8 @@ inline MultiThreading<W>::MultiThreading(Machine<W>& mach, const MultiThreading<
 template <int W>
 inline void Thread<W>::resume()
 {
+	// a running thread is in neither list
+	threading.dequeue(this);
 	threading.m_current = this;
 	auto& m = threading.machine;
 	// restore registers (vector state too, unless opted out)
@@ -146,6 +151,7 @@ inline void Thread<W>::resume()
 template <int W>
 inline void Thread<W>::suspend()
 {
+	threading.check_dequeued(this);
 	// copy all regs (vector state too, unless opted out)
 	this->stored_regs.copy_from(
 		threading.machine.register_copy_options(),
@@ -165,6 +171,7 @@ inline void Thread<W>::suspend(address_t return_value)
 template <int W>
 inline void Thread<W>::block(uint32_t reason, uint32_t extra)
 {
+	threading.check_dequeued(this);
 	// copy all regs (vector state too, unless opted out)
 	this->stored_regs.copy_from(
 		threading.machine.register_copy_options(),
@@ -208,6 +215,8 @@ inline void MultiThreading<W>::wakeup_next()
 		next->resume();
 	} else {
 		THPRINT(machine, "No more threads to resume. Fallback to main thread (*ERROR*)\n");
+		// The main thread may be blocked here. Resuming it takes it
+		// off the blocked list, as if it was woken up.
 		auto* next = get_thread(MAIN_THREAD_TID);
 		next->resume();
 	}
@@ -361,14 +370,7 @@ inline bool MultiThreading<W>::yield_to(int tid, bool store_retval)
 		thread->suspend(0);
 	else
 		thread->suspend();
-	// remove the next thread from suspension
-	for (auto it = m_suspended.begin(); it != m_suspended.end(); ++it) {
-		if (*it == next) {
-			m_suspended.erase(it);
-			break;
-		}
-	}
-	// resume next thread
+	// resume next thread (removing it from suspension)
 	next->resume();
 	return true;
 }
@@ -380,11 +382,11 @@ inline void MultiThreading<W>::unblock(int tid)
 	{
 		if ((*it)->tid == tid)
 		{
+			auto* thread = *it;
 			// suspend current thread
 			get_thread()->suspend(0);
-			// resume this thread
-			(*it)->resume();
-			m_blocked.erase(it);
+			// resume this thread (removing it from the blocked list)
+			thread->resume();
 			return;
 		}
 		else ++it;
@@ -404,7 +406,7 @@ inline size_t MultiThreading<W>::wakeup_blocked(size_t max, uint32_t reason, uin
 		{
 			// move to suspended
 			m_suspended.push_back(*it);
-			m_blocked.erase(it);
+			it = m_blocked.erase(it);
 			awakened ++;
 		}
 		else ++it;
@@ -417,10 +419,27 @@ inline void MultiThreading<W>::erase_thread(int tid)
 {
 	auto it = m_threads.find(tid);
 	assert(it != m_threads.end());
-	const thread_t* thread = &it->second;
+	dequeue(&it->second);
+	m_threads.erase(it);
+	// TIDs are not reused, so the signal state of an exited thread
+	// would otherwise stay around (outside of memory_max) forever.
+	if (machine.has_signals())
+		machine.signals().erase_per_thread(tid);
+}
+
+template <int W>
+inline void MultiThreading<W>::dequeue(const thread_t* thread)
+{
 	std::erase(m_suspended, thread);
 	std::erase(m_blocked, thread);
-	m_threads.erase(it);
+}
+
+template <int W>
+inline void MultiThreading<W>::check_dequeued(const thread_t* thread) const
+{
+	if (UNLIKELY(std::find(m_suspended.begin(), m_suspended.end(), thread) != m_suspended.end()
+		|| std::find(m_blocked.begin(), m_blocked.end(), thread) != m_blocked.end()))
+		throw MachineException(INVALID_PROGRAM, "Thread is already queued", thread->tid);
 }
 
 } // riscv
