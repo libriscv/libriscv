@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <libriscv/machine.hpp>
+#include <libriscv/threads.hpp>
 #include <chrono>
 #include <fcntl.h>
 #include <unistd.h>
@@ -344,3 +345,108 @@ TEST_CASE("C7: pselect returns 0 without file descriptors", "[Security]")
 }
 
 
+
+// =============================================================================
+// C8: tgkill on a suspended or blocked thread leaves a dangling pointer
+//
+// Thread::exit() -> erase_thread() removed the thread from m_threads only.
+// Killing a thread that is not running (tgkill with an unhandled signal)
+// destroyed it while m_suspended or m_blocked still pointed at it. The next
+// sched_yield (resume) or FUTEX_WAKE (wakeup_blocked) then used it after free.
+// =============================================================================
+
+static void setup_two_threads(riscv::Machine<RISCV64>& machine, uint64_t stack)
+{
+	auto& cpu = machine.cpu;
+	// clone(flags=0, stack, ...): main is suspended, the child is running
+	cpu.reg(riscv::REG_ARG0) = 0;
+	cpu.reg(riscv::REG_ARG1) = stack;
+	cpu.reg(riscv::REG_ARG4) = 0;
+	cpu.reg(riscv::REG_ARG5) = 0;
+	cpu.reg(riscv::REG_ARG6) = 0;
+	machine.system_call(220);
+	REQUIRE(machine.threads().get_tid() == 2);
+	REQUIRE(machine.threads().suspended_threads().size() == 1);
+}
+
+static void tgkill(riscv::Machine<RISCV64>& machine, int tid, int sig)
+{
+	auto& cpu = machine.cpu;
+	cpu.reg(riscv::REG_ARG0) = riscv::MAIN_THREAD_TID;
+	cpu.reg(riscv::REG_ARG1) = tid;
+	cpu.reg(riscv::REG_ARG2) = sig;
+	machine.system_call(131);
+}
+
+TEST_CASE("C8: tgkill on a suspended thread removes it from the scheduler", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	const auto stack = machine.memory.mmap_allocate(65536) + 65536;
+	auto& threads = machine.threads();
+
+	setup_two_threads(machine, stack);
+	// The child yields back to main, and is now suspended
+	machine.system_call(124); // sched_yield
+	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+	REQUIRE(threads.suspended_threads().size() == 1);
+
+	// Main kills the suspended child (SIGTERM has no handler)
+	tgkill(machine, 2, 15);
+	REQUIRE(threads.get_thread(2) == nullptr);
+	REQUIRE(threads.suspended_threads().empty());
+	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+
+	// Yielding must not resume the destroyed thread
+	machine.system_call(124); // sched_yield
+	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+	REQUIRE(machine.return_value<int>() == 0);
+
+	// A fork must not copy the destroyed thread either
+	riscv::MultiThreading<RISCV64> copy { machine, threads };
+	REQUIRE(copy.suspended_threads().empty());
+	REQUIRE(copy.blocked_threads().empty());
+}
+
+TEST_CASE("C8: tgkill on a blocked thread removes it from the scheduler", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	const auto stack = machine.memory.mmap_allocate(65536) + 65536;
+	const auto futex_word = machine.memory.mmap_allocate(4096);
+	machine.memory.write<uint32_t>(futex_word, 0);
+	auto& threads = machine.threads();
+	auto& cpu = machine.cpu;
+
+	setup_two_threads(machine, stack);
+	// The child waits on the futex, blocks, and main resumes
+	cpu.reg(riscv::REG_ARG0) = futex_word;
+	cpu.reg(riscv::REG_ARG1) = 0; // FUTEX_WAIT
+	cpu.reg(riscv::REG_ARG2) = 0; // expected value
+	cpu.reg(riscv::REG_ARG5) = 0;
+	machine.system_call(98);
+	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+	REQUIRE(threads.blocked_threads().size() == 1);
+	REQUIRE(threads.suspended_threads().empty());
+
+	// Main kills the blocked child
+	tgkill(machine, 2, 15);
+	REQUIRE(threads.get_thread(2) == nullptr);
+	REQUIRE(threads.blocked_threads().empty());
+
+	// Waking the futex must not touch the destroyed thread
+	cpu.reg(riscv::REG_ARG0) = futex_word;
+	cpu.reg(riscv::REG_ARG1) = 1; // FUTEX_WAKE
+	cpu.reg(riscv::REG_ARG2) = 1;
+	cpu.reg(riscv::REG_ARG5) = 0;
+	machine.system_call(98);
+	REQUIRE(machine.return_value<int>() == 0);
+	REQUIRE(threads.suspended_threads().empty());
+	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
+}

@@ -417,6 +417,9 @@ inline void MultiThreading<W>::erase_thread(int tid)
 {
 	auto it = m_threads.find(tid);
 	assert(it != m_threads.end());
+	const thread_t* thread = &it->second;
+	std::erase(m_suspended, thread);
+	std::erase(m_blocked, thread);
 	m_threads.erase(it);
 }
 
