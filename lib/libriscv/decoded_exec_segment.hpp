@@ -1,4 +1,5 @@
 #pragma once
+#include <cstring>
 #include <memory>
 #include "types.hpp"
 #include <atomic>
@@ -159,6 +160,15 @@ namespace riscv
 		bool is_unchecked_memory() const noexcept { return m_unchecked_memory; }
 		void set_unchecked_memory(bool unchecked) { m_unchecked_memory = unchecked; }
 
+		bool has_libc_fastpath() const noexcept { return m_libc_fastpath; }
+		void set_libc_fastpath(bool enabled) { m_libc_fastpath = enabled; }
+
+		bool has_same_code(const DecodedExecuteSegment& other) const noexcept {
+			return m_vaddr_begin == other.m_vaddr_begin && m_vaddr_end == other.m_vaddr_end
+				&& std::memcmp(exec_data(m_vaddr_begin), other.exec_data(m_vaddr_begin),
+					m_vaddr_end - m_vaddr_begin) == 0;
+		}
+
 	private:
 		address_t m_vaddr_begin = 0;
 		address_t m_vaddr_end   = 0;
@@ -191,6 +201,7 @@ namespace riscv
 		uint32_t m_crc32c_hash = 0x0; // CRC32-C of the execute segment
 		bool m_is_execute_only = false;
 		bool m_unchecked_memory = false;
+		bool m_libc_fastpath = false;
 #ifdef RISCV_BINARY_TRANSLATION
 		bool m_do_record_slowpaths = false;
 		mutable bool m_is_libtcc = false;

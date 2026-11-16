@@ -243,3 +243,29 @@ TEST_CASE("Hot-patching does not break real breakpoints", "[LibcFastpath]")
 	REQUIRE(state.ebreaks == 1);
 	REQUIRE(state.output == "libc: 0 failures\n");
 }
+
+TEST_CASE("Patched execute segments are not shared with unpatched machines", "[LibcFastpath]")
+{
+	const auto binary = build_and_load(libc_exerciser);
+
+	riscv::Machine<RISCV64> plain { binary, { .memory_max = MAX_MEMORY } };
+	riscv::Machine<RISCV64> plain2 { binary, { .memory_max = MAX_MEMORY } };
+	riscv::Machine<RISCV64> patched { binary, {
+		.memory_max = MAX_MEMORY,
+		.libc_fastpath = true,
+	} };
+	riscv::Machine<RISCV64> breakpoint { binary, {
+		.memory_max = MAX_MEMORY,
+		.ebreak_locations = {std::string("main")},
+	} };
+
+	const auto main_addr = plain.address_of("main");
+	REQUIRE(main_addr != 0x0);
+	const auto& segment = plain.memory.exec_segment_for(main_addr);
+	REQUIRE(segment == plain2.memory.exec_segment_for(main_addr));
+	REQUIRE(segment != patched.memory.exec_segment_for(main_addr));
+	REQUIRE(segment != breakpoint.memory.exec_segment_for(main_addr));
+
+	riscv::Machine<RISCV64> plain3 { binary, { .memory_max = MAX_MEMORY } };
+	REQUIRE(plain3.memory.exec_segment_for(main_addr) == segment);
+}

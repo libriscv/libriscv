@@ -3,6 +3,7 @@
 
 #include <libriscv/machine.hpp>
 #include <libriscv/debug.hpp>
+#include <libriscv/util/crc32.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
 static constexpr uint32_t MAX_CYCLES = 5'000;
@@ -960,4 +961,58 @@ TEST_CASE("RV32 Zbkb packing, zip and unzip", "[Micro]")
 	DebugMachine debugger { machine };
 	debugger.simulate(program.size() - 1);
 	verify();
+}
+
+TEST_CASE("Shared execute segments survive a forged CRC32-C", "[Micro]")
+{
+	static constexpr uint32_t POLY = 0x82F63B78;
+	static constexpr auto crc_register = [] (const std::array<uint32_t, 4>& words, size_t n) {
+		uint32_t reg = 0xFFFFFFFF;
+		const auto* bytes = (const uint8_t*)words.data();
+		for (size_t i = 0; i < n * 4; i++) {
+			reg ^= bytes[i];
+			for (int b = 0; b < 8; b++)
+				reg = (reg >> 1) ^ (POLY & -(reg & 1));
+		}
+		return reg;
+	};
+
+	const std::array<uint32_t, 4> program_a {
+		0x00100513, // li a0, 1
+		0x10500073, // wfi
+		0x00000013, // nop
+		0x00000013, // nop
+	};
+	std::array<uint32_t, 4> program_b {
+		0x00200513, // li a0, 2
+		0x10500073, // wfi
+		0x00000013, // nop
+		0x00000000, // forged below
+	};
+	// Choose the last word of B so that both programs have the same CRC32-C
+	uint32_t reg = crc_register(program_a, 4);
+	for (int b = 0; b < 32; b++)
+		reg = (reg & 0x80000000) ? ((reg ^ POLY) << 1) | 1 : reg << 1;
+	program_b[3] = reg ^ crc_register(program_b, 3);
+	REQUIRE(crc32c(program_a.data(), sizeof(program_a)) == crc32c(program_b.data(), sizeof(program_b)));
+	REQUIRE(program_a != program_b);
+
+	constexpr uint32_t V = 0x2000;
+	auto run = [] (riscv::Machine<RISCV64>& machine, const std::array<uint32_t, 4>& program) {
+		machine.memory.set_page_attr(V, 0x1000, {.read = true, .exec = true});
+		machine.cpu.init_execute_area(program.data(), V, sizeof(program));
+		machine.cpu.jump(V);
+		machine.simulate(MAX_CYCLES);
+		return machine.cpu.reg(REG_ARG0);
+	};
+
+	riscv::Machine<RISCV64> machine_a { empty };
+	riscv::Machine<RISCV64> machine_b { empty };
+	REQUIRE(run(machine_a, program_a) == 1);
+	REQUIRE(run(machine_b, program_b) == 2);
+	REQUIRE(machine_a.memory.exec_segment_for(V) != machine_b.memory.exec_segment_for(V));
+
+	riscv::Machine<RISCV64> machine_c { empty };
+	REQUIRE(run(machine_c, program_a) == 1);
+	REQUIRE(machine_a.memory.exec_segment_for(V) == machine_c.memory.exec_segment_for(V));
 }

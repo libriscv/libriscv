@@ -288,7 +288,7 @@ namespace riscv
 		// Custom execute segment, returns page base, final size and execute segment pointer
 		std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr);
 		const std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr) const;
-		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len, bool is_initial, bool is_likely_jit = false);
+		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len, bool is_initial, bool is_likely_jit = false, bool is_execute_only = false);
 		size_t execute_segments_count() const noexcept { return m_exec.size(); }
 		// Evict all execute segments, also disabling the main execute segment
 		void evict_execute_segments();
