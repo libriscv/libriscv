@@ -267,20 +267,24 @@ namespace riscv
 #ifdef RISCV_VIRTUAL_PAGING
 		if (len == 0)
 			return;
+		const address_t room = address_t(~address_t(0)) - dst;
+		if (len - 1 > room)
+			len = size_t(room) + 1;
+		const address_t last = dst + address_t(len - 1);
 
 		// A guest can discard an enormous range, so when the range spans more
 		// pages than the page table holds, it is cheaper to bulk-discard the
 		// part inside the arena and then visit only the pages that exist
 		const address_t firstpage = page_number(dst);
-		const address_t endpage   = page_number(dst + len - 1) + 1;
+		const address_t endpage   = page_number(last) + 1;
 		if (size_t(endpage - firstpage) > m_pages.size())
 		{
 			if constexpr (flat_readwrite_arena) {
-				const address_t aend =
-					std::min(address_t(dst + len), address_t(memory_arena_size()));
-				if (dst < aend) {
+				if (dst < memory_arena_size()) {
+					const address_t alast =
+						std::min(last, address_t(memory_arena_size() - 1));
 					auto* baseptr = &((uint8_t *)m_arena.data)[dst];
-					const size_t bytes = aend - dst;
+					const size_t bytes = size_t(alast - dst) + 1;
 					if constexpr (MADVISE_ENABLED) {
 						if (madvise(baseptr, bytes, MADV_DONTNEED) != 0)
 							std::memset(baseptr, 0, bytes);
@@ -294,11 +298,11 @@ namespace riscv
 				const address_t pageno = entry.first;
 				if (pageno < firstpage || pageno >= endpage)
 					continue;
-				const address_t pbegin = std::max(dst, address_t(pageno * Page::size()));
-				const address_t pend = std::min(address_t(dst + len),
-					address_t((pageno + 1) * Page::size()));
+				const address_t pstart = address_t(pageno * Page::size());
+				const address_t pbegin = std::max(dst, pstart);
+				const address_t plast = std::min(last, address_t(pstart + (Page::size() - 1)));
 				discard_page(*this, entry.second, pageno, pbegin,
-					size_t(pend - pbegin), ignore_protections);
+					size_t(plast - pbegin) + 1, ignore_protections);
 			}
 			return;
 		}
@@ -323,9 +327,8 @@ namespace riscv
 					if constexpr (MADVISE_ENABLED) {
 						// XXX: doesn't scale on busy server
 						if (offset == 0 && size == Page::size()) {
-							address_t new_dst = dst + (len & ~address_t(Page::size()-1));
-							new_dst = std::min(new_dst, (address_t)memory_arena_size());
-							const size_t new_size = new_dst - dst;
+							const size_t new_size = std::min(len & ~size_t(Page::size()-1),
+								size_t(memory_arena_size() - dst));
 
 							auto* baseptr = &((uint8_t *)m_arena.data)[dst];
 							if (madvise(baseptr, new_size, MADV_DONTNEED) != 0)

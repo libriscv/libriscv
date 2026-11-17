@@ -769,3 +769,54 @@ TEST_CASE("C11: a preempted segment is not evicted", "[Security]")
 	REQUIRE(machine.memory.exec_segment_for(AREA + 0x1000).get()
 		== machine.memory.exec_segment_for(AREA).get());
 }
+
+template <int W>
+static void discard_past_the_top(riscv::address_type<W> dst, size_t len, riscv::address_type<W> far)
+{
+	static const std::vector<uint8_t> empty;
+	riscv::Machine<W> machine { empty, { .memory_max = MAX_MEMORY } };
+	if constexpr (!riscv::virtual_paging_enabled) {
+		REQUIRE_THROWS(machine.memory.memdiscard(dst, len, true));
+		return;
+	}
+	machine.memory.template write<uint64_t>(0x2000, 1);
+	machine.memory.template write<uint64_t>(0x8000, 2);
+	machine.memory.template write<uint64_t>(far, 3);
+	machine.memory.memdiscard(dst, len, true);
+	REQUIRE(machine.memory.template read<uint64_t>(0x2000) == uint64_t(dst <= 0x2000 ? 0 : 1));
+	REQUIRE(machine.memory.template read<uint64_t>(0x8000) == 0);
+	REQUIRE(machine.memory.template read<uint64_t>(far) == 0);
+}
+
+TEST_CASE("C12: discarding past the top of the address space ends there", "[Security]")
+{
+	static constexpr uint64_t FAR64 = 0x1000000000;
+	for (const size_t len : { ~size_t(0), size_t(0xFFFFFFFFFFFFF930), size_t(-0x3000) })
+		discard_past_the_top<RISCV64>(0x3000, len, FAR64);
+	discard_past_the_top<RISCV64>(0x3800, ~size_t(0), FAR64);
+	discard_past_the_top<RISCV64>(0x0, ~size_t(0), FAR64);
+
+	static constexpr uint32_t FAR32 = 0x80000000;
+	for (const size_t len : { ~size_t(0), size_t(0xFFFFF930), size_t(0x100000000 - 0x3000), size_t(1) << 40 })
+		discard_past_the_top<RISCV32>(0x3000, len, FAR32);
+	discard_past_the_top<RISCV32>(0x3800, ~size_t(0), FAR32);
+	discard_past_the_top<RISCV32>(0x0, ~size_t(0), FAR32);
+}
+
+TEST_CASE("C12: madvise(MADV_DONTNEED) with a wrapping length", "[Security]")
+{
+	static const std::vector<uint8_t> empty;
+	Machine<RISCV64> machine { empty, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.cpu.reg(riscv::REG_ARG0) = 0x203000;
+	machine.cpu.reg(riscv::REG_ARG1) = ~uint64_t(0);
+	machine.cpu.reg(riscv::REG_ARG2) = 4;
+	if constexpr (!riscv::virtual_paging_enabled) {
+		REQUIRE_THROWS(machine.system_call(233));
+		return;
+	}
+	machine.memory.write<uint64_t>(0x203000, 1);
+	machine.system_call(233);
+	REQUIRE(machine.return_value<int>() == 0);
+	REQUIRE(machine.memory.read<uint64_t>(0x203000) == 0);
+}
