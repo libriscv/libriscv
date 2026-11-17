@@ -292,6 +292,11 @@ new_execute_segment: {
 		current_begin = exec->exec_begin();
 		current_end   = exec->exec_end();
 		exec_decoder  = exec->decoder_cache();
+		if (UNLIKELY(new_values.penalty != 0)) {
+			counter.increment_counter(new_values.penalty);
+			if (counter.overflowed())
+				goto counter_overflow;
+		}
 	}
 	goto continue_segment;
 

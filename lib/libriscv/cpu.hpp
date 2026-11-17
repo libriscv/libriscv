@@ -152,6 +152,7 @@ namespace riscv
 		struct NextExecuteReturn {
 			DecodedExecuteSegment<W>* exec;
 			address_t pc;
+			uint64_t penalty = 0;
 		};
 		NextExecuteReturn next_execute_segment(address_t pc);
 		static std::shared_ptr<DecodedExecuteSegment<W>>& empty_execute_segment() noexcept;

@@ -290,6 +290,8 @@ namespace riscv
 		const std::shared_ptr<DecodedExecuteSegment<W>>& exec_segment_for(address_t vaddr) const;
 		DecodedExecuteSegment<W>& create_execute_segment(const MachineOptions<W>&, const void* data, address_t addr, size_t len, bool is_initial, bool is_likely_jit = false, bool is_execute_only = false);
 		size_t execute_segments_count() const noexcept { return m_exec.size(); }
+		uint64_t execute_segments_memory() const noexcept;
+		uint64_t execute_segments_memory_max() const noexcept { return m_exec_memory_max; }
 		// Evict all execute segments, also disabling the main execute segment
 		void evict_execute_segments();
 		void evict_execute_segment(DecodedExecuteSegment<W>&);
@@ -442,6 +444,12 @@ namespace riscv
 		std::shared_ptr<DecodedExecuteSegment<W>> m_main_exec_segment;
 		std::vector<std::shared_ptr<DecodedExecuteSegment<W>>> m_exec; // not including main_exec_segment
 		std::shared_ptr<DecodedExecuteSegment<W>>& next_execute_segment();
+		bool is_superseded_execute_segment(const DecodedExecuteSegment<W>&, address_t begin, address_t end) const noexcept;
+		void check_execute_segment_memory(address_t addr, size_t len) const;
+		void evict_superseded_execute_segments(const DecodedExecuteSegment<W>&);
+		uint64_t penalize_execute_segment_decode(size_t len) noexcept;
+		static uint64_t default_execute_segment_memory_max(const MachineOptions<W>&) noexcept;
+		uint64_t m_exec_memory_max = 0;
 
 		// Linear arena at start of memory (mmap-backed)
 		struct {

@@ -610,3 +610,162 @@ TEST_CASE("C10: an exited thread's signal state is erased", "[Security]")
 	}
 	REQUIRE(machine.signals().per_thread_count() == 0);
 }
+
+static constexpr uint32_t WFI = 0x10500073;
+static constexpr riscv::PageAttributes RWX {.read = true, .write = true, .exec = true};
+
+// Every decoded byte is charged (len / 4), so leave room for decoding megabytes
+static void execute_at(riscv::Machine<RISCV64>& machine, uint64_t pc, uint64_t max = 10'000'000)
+{
+	machine.memory.write<uint32_t>(pc, WFI);
+	machine.cpu.jump(pc);
+	machine.simulate<false>(max);
+}
+
+static riscv::Machine<RISCV64> machine_with_main_segment(riscv::MachineOptions<RISCV64> options)
+{
+	static const std::vector<uint8_t> empty;
+	riscv::Machine<RISCV64> machine { empty, options };
+	machine.memory.set_page_attr(0x1000, 0x1000, RWX);
+	execute_at(machine, 0x1000);
+	REQUIRE(machine.memory.execute_segments_count() == 0);
+	return machine;
+}
+
+TEST_CASE("C11: overlapping execute segments do not accumulate", "[Security]")
+{
+	static constexpr uint64_t AREA = 0x100000;
+	static constexpr uint64_t AREA_LEN = 2ul << 20;
+	auto machine = machine_with_main_segment({ .memory_max = 64ul << 20 });
+	const uint64_t main = machine.memory.execute_segments_memory();
+
+	machine.memory.set_page_attr(AREA, AREA_LEN, RWX);
+	execute_at(machine, AREA);
+	const uint64_t one_copy = machine.memory.execute_segments_memory() - main;
+	REQUIRE(one_copy > 2 * AREA_LEN);
+	REQUIRE(one_copy < 10 * AREA_LEN);
+
+	uint64_t end = AREA + AREA_LEN;
+	for (size_t i = 1; i < RISCV_MAX_EXECUTE_SEGS; i++)
+	{
+		machine.memory.set_page_attr(end, 0x1000, RWX);
+		execute_at(machine, end);
+		end += 0x1000;
+		REQUIRE(!machine.instruction_limit_reached());
+		REQUIRE(machine.memory.execute_segments_count() == i + 1);
+		REQUIRE(machine.memory.execute_segments_memory() < main + one_copy + one_copy / 16);
+		auto& segment = machine.memory.exec_segment_for(AREA);
+		REQUIRE(segment->exec_begin() == AREA);
+		REQUIRE(segment->exec_end() == end);
+	}
+	// Evicted slots stay taken
+	machine.memory.set_page_attr(end, 0x1000, RWX);
+	REQUIRE_THROWS_WITH(execute_at(machine, end),
+		Catch::Matchers::ContainsSubstring("Max execute segments"));
+}
+
+TEST_CASE("C11: execute segments are bounded by their memory limit", "[Security]")
+{
+	static constexpr uint64_t LEN = 2ul << 20;
+	auto machine = machine_with_main_segment({
+		.memory_max = 128ul << 20,
+		.execute_segment_memory_max = 32ul << 20,
+	});
+	REQUIRE(machine.memory.execute_segments_memory_max() == (32ul << 20));
+
+	size_t created = 0;
+	for (; created < RISCV_MAX_EXECUTE_SEGS; created++)
+	{
+		const uint64_t addr = 0x100000 + 2 * LEN * created;
+		machine.memory.set_page_attr(addr, LEN, RWX);
+		const uint64_t before = machine.memory.execute_segments_memory();
+		try {
+			execute_at(machine, addr);
+		} catch (const riscv::MachineException& e) {
+			REQUIRE(e.type() == riscv::OUT_OF_MEMORY);
+			REQUIRE(machine.memory.execute_segments_memory() == before);
+			REQUIRE(machine.memory.execute_segments_count() == created);
+			break;
+		}
+		REQUIRE(machine.memory.execute_segments_memory() <= (32ul << 20));
+	}
+	REQUIRE(created >= 1);
+	REQUIRE(created < RISCV_MAX_EXECUTE_SEGS);
+
+	// The default is max(memory_max, 256MB)
+	auto other = machine_with_main_segment({ .memory_max = 64ul << 20 });
+	REQUIRE(other.memory.execute_segments_memory_max() == (256ul << 20));
+}
+
+TEST_CASE("C11: decoding code is charged", "[Security]")
+{
+	static constexpr uint64_t AREA = 0x100000;
+	static constexpr uint64_t AREA_LEN = 1ul << 20;
+
+	// Each decode costs len / 4
+	auto charged = machine_with_main_segment({ .memory_max = 64ul << 20 });
+	charged.memory.set_page_attr(AREA, AREA_LEN, RWX);
+	execute_at(charged, AREA, 10'000'000);
+	REQUIRE(charged.instruction_counter() >= AREA_LEN / 4);
+	REQUIRE(charged.instruction_counter() < AREA_LEN / 4 + 10);
+	REQUIRE(!charged.instruction_limit_reached());
+
+	// ... and the limit is checked before the new segment runs
+	auto limited = machine_with_main_segment({ .memory_max = 64ul << 20 });
+	limited.memory.set_page_attr(AREA, AREA_LEN, RWX);
+	execute_at(limited, AREA, 1000);
+	REQUIRE(limited.instruction_limit_reached());
+	REQUIRE(limited.cpu.pc() == AREA);
+}
+
+TEST_CASE("C11: rebuilding code after FENCE.I is charged", "[Security]")
+{
+	static constexpr uint64_t AREA = 0x100000;
+	static constexpr uint64_t AREA_LEN = 64ul << 10;
+	auto machine = machine_with_main_segment({ .memory_max = 64ul << 20 });
+	machine.memory.set_page_attr(AREA, AREA_LEN, RWX);
+	machine.memory.write<uint32_t>(AREA + 0, 0x0000100F); // fence.i
+	machine.memory.write<uint32_t>(AREA + 4, 0x00130313); // addi t1, t1, 1
+	machine.memory.write<uint32_t>(AREA + 8, 0xFF9FF06F); // j AREA
+	machine.cpu.jump(AREA);
+	machine.simulate<false>(1'000'000);
+
+	REQUIRE(machine.instruction_limit_reached());
+	REQUIRE(machine.cpu.reg(6) > 0);
+	REQUIRE(machine.cpu.reg(6) <= 1'000'000 / (AREA_LEN / 4) + 1);
+}
+
+TEST_CASE("C11: a preempted segment is not evicted", "[Security]")
+{
+	static constexpr uint64_t AREA = 0x100000;
+	auto machine = machine_with_main_segment({ .memory_max = 64ul << 20 });
+	machine.memory.set_page_attr(AREA, 0x2000, RWX);
+	machine.memory.write<uint32_t>(AREA + 0, 0x1F400893); // li a7, 500
+	machine.memory.write<uint32_t>(AREA + 4, 0x00000073); // ecall
+	machine.memory.write<uint32_t>(AREA + 8, WFI);
+	machine.memory.set_page_attr(AREA + 0x1000, 0x1000, {.read = true, .write = true});
+
+	static bool preempted;
+	preempted = false;
+	machine.install_syscall_handler(500, [] (auto& m) {
+		// Extend the area the outer call is executing, and call into it
+		m.memory.set_page_attr(AREA + 0x1000, 0x1000, RWX);
+		m.memory.template write<uint32_t>(AREA + 0x1000, WFI);
+		m.preempt(100'000, AREA + 0x1000);
+		REQUIRE(m.memory.execute_segments_count() == 2);
+		REQUIRE(m.memory.exec_segment_for(AREA)->exec_end() == AREA + 0x1000);
+		preempted = true;
+	});
+	machine.cpu.jump(AREA);
+	machine.simulate(100'000);
+	REQUIRE(preempted);
+	REQUIRE(machine.cpu.pc() == AREA + 12);
+
+	// Back at the top level, the next segment evicts both
+	machine.memory.set_page_attr(AREA + 0x2000, 0x1000, RWX);
+	execute_at(machine, AREA + 0x2000);
+	REQUIRE(machine.memory.execute_segments_count() == 3);
+	REQUIRE(machine.memory.exec_segment_for(AREA)->exec_end() == AREA + 0x3000);
+	REQUIRE(machine.memory.exec_segment_for(AREA + 0x1000).get()
+		== machine.memory.exec_segment_for(AREA).get());
+}

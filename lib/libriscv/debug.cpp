@@ -460,6 +460,7 @@ void DebugMachine<W>::simulate(std::function<void(DebugMachine<W>&)> callback, u
 			exec = new_values.exec;
 			pc   = new_values.pc;
 			exec_seg_data = exec->exec_data();
+			machine.penalize(new_values.penalty);
 		}
 
 		// Instructions may be unaligned with C-extension

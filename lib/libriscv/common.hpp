@@ -143,6 +143,10 @@ namespace riscv
 		/// translated code between machines. (Prevents some optimizations)
 		bool use_shared_execute_segments = true;
 
+		/// @brief Creating any segment at runtime past segment memory max throws
+		/// OUT_OF_MEMORY, including shared segments
+		uint64_t execute_segment_memory_max = 256ull << 20;
+
 		/// @brief Share read-only memory between machines.
 		/// @details Machines loaded from the same binary map one sealed image of
 		/// the programs text and rodata over the low part of their arena, instead

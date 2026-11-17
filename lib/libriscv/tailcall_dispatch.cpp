@@ -102,12 +102,13 @@ namespace riscv
 #endif
 
 	template <int W> static inline
-	DecodedExecuteSegment<W>* resolve_execute_segment(CPU<W>& cpu, address_type<W>& pc)
+	DecodedExecuteSegment<W>* resolve_execute_segment(CPU<W>& cpu, address_type<W>& pc, InstrCounter& counter)
 	{
 		// Change execute segment
 		auto results = cpu.next_execute_segment(pc);
 		// Restore PC
 		pc = results.pc;
+		counter.increment_counter(results.penalty);
 		return results.exec;
 	}
 
@@ -129,7 +130,8 @@ namespace riscv
 #define MACHINE()   cpu.machine()
 #define RECONSTRUCT_PC() ((d - exec->decoder_cache()) << DecoderData<W>::SHIFT)
 #define ENTER_NEW_EXECUTE_SEGMENT()                            \
-	exec = resolve_execute_segment<W>(cpu, pc);                \
+	exec = resolve_execute_segment<W>(cpu, pc, counter);       \
+	OVERFLOW_CHECK();                                          \
 	d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];   \
 	BEGIN_BLOCK();                                             \
 	EXECUTE_CURRENT();
@@ -229,7 +231,8 @@ namespace riscv
 
 	INSTRUCTION(0, next_execute_segment) {
 		// A helper function to change execute segment
-		exec = resolve_execute_segment<W>(cpu, pc);
+		exec = resolve_execute_segment<W>(cpu, pc, counter);
+		OVERFLOW_CHECK();
 		d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
 		BEGIN_BLOCK();
 		EXECUTE_CURRENT();
@@ -245,8 +248,10 @@ namespace riscv
 			pc = cpu.simulate_undecoded(pc);
 			counter.retrieve_counters(MACHINE());
 			OVERFLOW_CHECK();
-			if (UNLIKELY(exec->is_stale()))
-				exec = resolve_execute_segment<W>(cpu, pc);
+			if (UNLIKELY(exec->is_stale())) {
+				exec = resolve_execute_segment<W>(cpu, pc, counter);
+				OVERFLOW_CHECK();
+			}
 			UNCHECKED_JUMP();
 		}
 		cpu.registers().pc = pc;
@@ -402,6 +407,12 @@ namespace riscv
 			auto results = this->next_execute_segment(pc);
 			exec = results.exec;
 			pc   = results.pc;
+			counter.increment_counter(results.penalty);
+			if (UNLIKELY(counter.overflowed())) {
+				this->registers().pc = pc;
+				machine().set_instruction_counter(counter.value());
+				return counter.max() == 0;
+			}
 		}
 
 		DecoderData<W>* exec_decoder = exec->decoder_cache();

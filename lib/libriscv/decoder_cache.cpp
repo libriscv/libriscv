@@ -664,6 +664,9 @@ namespace riscv
 		if (UNLIKELY(__builtin_add_overflow(vaddr, exlen, &pbase2)))
 			throw MachineException(INVALID_PROGRAM, "Segment virtual overflowed");
 #endif
+		if (!is_initial)
+			this->check_execute_segment_memory(vaddr, exlen);
+
 		// Create the whole executable memory range
 		auto current_exec = std::make_shared<DecodedExecuteSegment<W>>(vaddr, exlen);
 		if (current_exec->empty())
@@ -705,19 +708,18 @@ namespace riscv
 			if (existing != nullptr && !existing->is_stale()
 				&& existing->has_same_code(*current_exec)) {
 				free_slot = existing;
-				return *free_slot;
-			}
+			} else {
+				free_slot = std::move(current_exec);
+				this->generate_decoder_cache(options, free_slot, is_initial);
 
-			free_slot = std::move(current_exec);
-			this->generate_decoder_cache(options, free_slot, is_initial);
-
-			// A CRC32-C collision keeps the existing segment and leaves ours private
-			if (existing == nullptr || existing->is_stale()) {
-				// NOTE: We already hold segment.mutex, and we must not take the
-				// global mutex here (which get_segment() does), as that is the
-				// reverse lock order of remove_if_unique().
-				doomed = std::move(existing);
-				segment.unlocked_set(free_slot);
+				// A CRC32-C collision keeps the existing segment and leaves ours private
+				if (existing == nullptr || existing->is_stale()) {
+					// NOTE: We already hold segment.mutex, and we must not take the
+					// global mutex here (which get_segment() does), as that is the
+					// reverse lock order of remove_if_unique().
+					doomed = std::move(existing);
+					segment.unlocked_set(free_slot);
+				}
 			}
 		}
 		else
@@ -726,7 +728,85 @@ namespace riscv
 			this->generate_decoder_cache(options, free_slot, is_initial);
 		}
 
+		if (!is_initial)
+			this->evict_superseded_execute_segments(*free_slot);
 		return *free_slot;
+	}
+
+	template <int W>
+	uint64_t Memory<W>::default_execute_segment_memory_max(const MachineOptions<W>& options) noexcept
+	{
+		if (options.execute_segment_memory_max != 0)
+			return options.execute_segment_memory_max;
+		return std::max(options.memory_max, uint64_t(256) << 20);
+	}
+
+	template <int W>
+	uint64_t Memory<W>::execute_segments_memory() const noexcept
+	{
+		uint64_t total = 0;
+		if (m_main_exec_segment)
+			total += m_main_exec_segment->size_bytes();
+		for (const auto& segment : m_exec) {
+			if (segment)
+				total += segment->size_bytes();
+		}
+		return total;
+	}
+
+	template <int W>
+	bool Memory<W>::is_superseded_execute_segment(const DecodedExecuteSegment<W>& segment,
+		address_t begin, address_t end) const noexcept
+	{
+		// A dispatch loop further up the stack may still be executing
+		// the current segment, or any segment when preempted
+		auto& exec = machine().cpu.current_execute_segment();
+		if (&segment == &exec || segment.preemptive_executors() != 0)
+			return false;
+		return segment.exec_begin() >= begin && segment.exec_end() <= end;
+	}
+
+	template <int W>
+	void Memory<W>::check_execute_segment_memory(address_t addr, size_t len) const
+	{
+		const address_t end = addr + len;
+		const uint64_t entries = (len + sizeof(DecoderData<W>)) / DecoderData<W>::DIVISOR;
+		uint64_t total = sizeof(DecodedExecuteSegment<W>) + len + 8
+			+ entries * sizeof(DecoderData<W>);
+		if (m_main_exec_segment)
+			total += m_main_exec_segment->size_bytes();
+		for (const auto& segment : m_exec) {
+			if (segment && !is_superseded_execute_segment(*segment, addr, end))
+				total += segment->size_bytes();
+		}
+		if (UNLIKELY(total > m_exec_memory_max))
+			throw MachineException(OUT_OF_MEMORY, "Execute segments would exceed their memory limit", total);
+	}
+
+	template <int W>
+	void Memory<W>::evict_superseded_execute_segments(const DecodedExecuteSegment<W>& new_segment)
+	{
+		if (!m_main_exec_segment || m_main_exec_segment.get() == &new_segment)
+			return;
+		const address_t begin = new_segment.exec_begin();
+		const address_t end = new_segment.exec_end();
+		for (auto& segment : m_exec) {
+			if (!segment || segment.get() == &new_segment
+				|| !is_superseded_execute_segment(*segment, begin, end))
+				continue;
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+			segment->wait_for_compilation_complete();
+#endif
+			const SegmentKey key = SegmentKey::from(*this, *segment);
+			segment = nullptr;
+			shared_execute_segments<W>.remove_if_unique(key);
+		}
+	}
+
+	template <int W>
+	uint64_t Memory<W>::penalize_execute_segment_decode(size_t len) noexcept
+	{
+		return std::max(uint64_t(len / 4), uint64_t(1));
 	}
 
 	template <int W>

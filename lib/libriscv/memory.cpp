@@ -38,6 +38,7 @@ namespace riscv
 		  m_original_machine {true},
 		  m_binary {bin}
 	{
+		this->m_exec_memory_max = default_execute_segment_memory_max(options);
 #ifdef RISCV_VIRTUAL_PAGING
 		// Bound the page table, including attribute-only pages that are
 		// created outside of the page fault handler (eg. mmap, mprotect)
@@ -198,6 +199,7 @@ namespace riscv
 #ifdef RISCV_EXT_ATOMICS
 		this->m_atomics = other.memory.m_atomics;
 #endif
+		this->m_exec_memory_max = default_execute_segment_memory_max(options);
 		this->machine_loader(other, options);
 	}
 

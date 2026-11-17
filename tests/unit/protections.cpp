@@ -24,7 +24,7 @@ TEST_CASE("Basic page protections", "[Memory]")
 	// The data at V is all zeroes, which forms an
 	// illegal instruction in RISC-V.
 	REQUIRE_THROWS_WITH([&] {
-		machine.simulate(1);
+		machine.simulate(25'000);
 	}(), Catch::Matchers::ContainsSubstring("Illegal opcode executed"));
 
 	// V is not readable anymore

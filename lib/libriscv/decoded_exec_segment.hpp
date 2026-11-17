@@ -50,7 +50,13 @@ namespace riscv
 		void set_decoder(DecoderData<W>* dec) { m_exec_decoder = dec; }
 
 		size_t size_bytes() const noexcept {
-			return sizeof(*this) + (m_vaddr_end - m_vaddr_begin) + m_decoder_cache_size * 4;
+			size_t bytes = sizeof(*this) + (m_vaddr_end - m_vaddr_begin) + 8
+				+ m_decoder_cache_size * sizeof(DecoderData<W>);
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+			if (m_patched_decoder_cache)
+				bytes += m_decoder_cache_size * sizeof(DecoderData<W>);
+#endif
+			return bytes;
 		}
 		bool empty() const noexcept { return m_exec_pagedata == nullptr; }
 
@@ -152,6 +158,15 @@ namespace riscv
 		bool is_likely_jit() const noexcept { return m_is_likely_jit; }
 		void set_likely_jit(bool is_jit) { m_is_likely_jit = is_jit; }
 
+		// The number of preemptive executors currently using this execute segment
+		uint16_t preemptive_executors() const noexcept { return m_preemptive_executors; }
+		void preemptive_executors_inc() {
+			m_preemptive_executors.fetch_add(1);
+		}
+		void preemptive_executors_dec() {
+			m_preemptive_executors.fetch_sub(1);
+		}
+
 		bool is_stale() const noexcept { return m_is_stale; }
 		// XO-segments *must not be rebuilt*, so they should never be stale.
 		void set_stale(bool is_stale) { m_is_stale = is_stale && !m_is_execute_only; }
@@ -206,6 +221,7 @@ namespace riscv
 		bool m_do_record_slowpaths = false;
 		mutable bool m_is_libtcc = false;
 #endif
+		std::atomic<uint16_t> m_preemptive_executors = 0;
 #if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
 		std::unique_ptr<DecoderData<W>[]> m_patched_decoder_cache = nullptr;
 		DecoderData<W>* m_patched_exec_decoder = nullptr;
