@@ -14,6 +14,7 @@ static constexpr bool verbose_syscalls = true;
 static constexpr bool verbose_syscalls = false;
 #endif
 
+#include <chrono>
 #include <fcntl.h>
 #include <signal.h>
 #undef sa_handler

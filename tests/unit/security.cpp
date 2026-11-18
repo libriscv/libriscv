@@ -5,6 +5,7 @@
 #include <libriscv/threads.hpp>
 #include <chrono>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
@@ -987,4 +988,108 @@ TEST_CASE("C13: special files are refused unless permitted", "[Security]")
 
 	m.machine.fds().permit_special_files = true;
 	REQUIRE(m.openat(GUEST_AT_FDCWD, "/dev/null") >= riscv::FileDescriptors::FILE_D_BASE);
+}
+
+namespace {
+struct PollMachine {
+	riscv::Machine<RISCV64> machine { std::vector<uint8_t>{}, { .memory_max = MAX_MEMORY } };
+	uint64_t g_fds = 0;
+	uint64_t g_ts = 0;
+	int pipe_fds[2] = { -1, -1 };
+	int vfd = -1;
+
+	PollMachine() {
+		machine.setup_linux_syscalls(true, false);
+		machine.set_max_instructions(~0ULL);
+		g_fds = machine.memory.mmap_allocate(4096);
+		g_ts  = g_fds + 2048;
+		REQUIRE(::pipe(pipe_fds) == 0);
+		// The machine owns (and closes) the read end
+		vfd = machine.fds().assign_file(pipe_fds[0]);
+	}
+	~PollMachine() { ::close(pipe_fds[1]); }
+
+	long ppoll(std::vector<struct pollfd> fds, const int64_t* ts) {
+		machine.copy_to_guest(g_fds, fds.data(), fds.size() * sizeof(fds[0]));
+		if (ts != nullptr)
+			machine.copy_to_guest(g_ts, ts, 2 * sizeof(int64_t));
+		machine.cpu.reg(riscv::REG_ARG0) = g_fds;
+		machine.cpu.reg(riscv::REG_ARG1) = fds.size();
+		machine.cpu.reg(riscv::REG_ARG2) = (ts != nullptr) ? g_ts : 0;
+		machine.cpu.reg(riscv::REG_ARG3) = 0;
+		machine.system_call(73);
+		return machine.return_value<long>();
+	}
+	short revents(unsigned i) {
+		struct pollfd pfd;
+		machine.copy_from_guest(&pfd, g_fds + i * sizeof(pfd), sizeof(pfd));
+		return pfd.revents;
+	}
+	int64_t remaining_ns() {
+		int64_t ts[2];
+		machine.copy_from_guest(ts, g_ts, sizeof(ts));
+		return ts[0] * 1'000'000'000LL + ts[1];
+	}
+};
+}
+
+TEST_CASE("C14: ppoll with a NULL timeout", "[Security]")
+{
+	PollMachine m;
+	// A ready descriptor and an infinite wait
+	REQUIRE(::write(m.pipe_fds[1], "x", 1) == 1);
+	REQUIRE(m.ppoll({{ m.vfd, POLLIN, 0 }}, nullptr) == 1);
+	REQUIRE((m.revents(0) & POLLIN) != 0);
+	char c;
+	REQUIRE(::read(m.pipe_fds[0], &c, 1) == 1);
+
+	// Nothing ready and an infinite wait: the host is blocked for a bounded
+	// time, which is charged, and the guest sees an interrupted wait.
+	const uint64_t counter = m.machine.instruction_counter();
+	const auto t0 = std::chrono::steady_clock::now();
+	REQUIRE(m.ppoll({{ m.vfd, POLLIN, POLLIN }}, nullptr) == -EINTR);
+	const auto elapsed = std::chrono::steady_clock::now() - t0;
+	REQUIRE(elapsed < std::chrono::seconds(3));
+	REQUIRE(m.machine.instruction_counter() - counter >= 500'000);
+	// revents is always written back
+	REQUIRE(m.revents(0) == 0);
+}
+
+TEST_CASE("C14: ppoll timeouts are validated and bounded", "[Security]")
+{
+	PollMachine m;
+	const int64_t bad_nsec[2] = { 0, 1'000'000'000LL };
+	REQUIRE(m.ppoll({{ m.vfd, POLLIN, 0 }}, bad_nsec) == -EINVAL);
+	const int64_t negative[2] = { -1, 0 };
+	REQUIRE(m.ppoll({{ m.vfd, POLLIN, 0 }}, negative) == -EINVAL);
+
+	// A short timeout that expires is a timeout, with nothing remaining
+	const int64_t short_wait[2] = { 0, 10'000'000LL };
+	REQUIRE(m.ppoll({{ m.vfd, POLLIN, 0 }}, short_wait) == 0);
+	REQUIRE(m.remaining_ns() == 0);
+
+	// A huge timeout does not overflow: it is cut short, and the time that
+	// remains is written back
+	const int64_t huge[2] = { INT64_MAX, 999'999'999LL };
+	const auto t0 = std::chrono::steady_clock::now();
+	REQUIRE(m.ppoll({{ m.vfd, POLLIN, 0 }}, huge) == -EINTR);
+	REQUIRE(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(3));
+	REQUIRE(m.remaining_ns() > INT64_MAX / 2);
+}
+
+TEST_CASE("C14: ppoll on descriptors the guest does not have", "[Security]")
+{
+	PollMachine m;
+	// Unknown descriptors are invalid (and ready), so an infinite wait
+	// returns at once. Negative descriptors are ignored.
+	const auto t0 = std::chrono::steady_clock::now();
+	REQUIRE(m.ppoll({{ 1234, POLLIN, 0 }, { -1, POLLIN, 0 }, { m.vfd, POLLIN, 0 }}, nullptr) == 1);
+	REQUIRE(std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(500));
+	REQUIRE(m.revents(0) == POLLNVAL);
+	REQUIRE(m.revents(1) == 0);
+	REQUIRE(m.revents(2) == 0);
+
+	// Too many descriptors
+	std::vector<struct pollfd> many(129, { -1, 0, 0 });
+	REQUIRE(m.ppoll(many, nullptr) == -EINVAL);
 }
