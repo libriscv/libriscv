@@ -5,6 +5,7 @@
 #include <libriscv/threads.hpp>
 #include <chrono>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
@@ -819,4 +820,171 @@ TEST_CASE("C12: madvise(MADV_DONTNEED) with a wrapping length", "[Security]")
 	machine.system_call(233);
 	REQUIRE(machine.return_value<int>() == 0);
 	REQUIRE(machine.memory.read<uint64_t>(0x203000) == 0);
+}
+
+TEST_CASE("C13: guest paths are normalised", "[Security]")
+{
+	auto n = riscv::FileDescriptors::normalize_path;
+	REQUIRE(n("/etc/hosts") == "/etc/hosts");
+	REQUIRE(n("//etc///./hosts") == "/etc/hosts");
+	REQUIRE(n("/srv/data/../../etc/shadow") == "/etc/shadow");
+	REQUIRE(n("/../../..") == "/");
+	REQUIRE(n("/a/b/..") == "/a/");
+	REQUIRE(n("/a/b/.") == "/a/b/");
+	REQUIRE(n("/a/b/") == "/a/b/");
+	REQUIRE(n("/") == "/");
+	REQUIRE(n("") == "/");
+	REQUIRE(n("a/./b") == "/a/b");
+	REQUIRE(n("/a/..b/.c") == "/a/..b/.c");
+}
+
+namespace {
+struct SandboxDir {
+	std::string dir;
+	SandboxDir() {
+		char tmpl[] = "/tmp/libriscv_sandbox_XXXXXX";
+		REQUIRE(mkdtemp(tmpl) != nullptr);
+		dir = tmpl;
+		const int fd = ::open((dir + "/data").c_str(), O_WRONLY | O_CREAT, 0644);
+		REQUIRE(fd >= 0);
+		REQUIRE(::write(fd, "hello", 5) == 5);
+		::close(fd);
+		REQUIRE(mkfifo((dir + "/fifo").c_str(), 0644) == 0);
+		REQUIRE(symlink((dir + "/fifo").c_str(), (dir + "/link_fifo").c_str()) == 0);
+		REQUIRE(symlink((dir + "/data").c_str(), (dir + "/link_data").c_str()) == 0);
+	}
+	~SandboxDir() {
+		for (const char* name : {"/data", "/fifo", "/link_fifo", "/link_data", "/created"})
+			::unlink((dir + name).c_str());
+		::rmdir(dir.c_str());
+	}
+	std::string operator/ (const char* name) const { return dir + "/" + name; }
+};
+
+struct SandboxMachine {
+	riscv::Machine<RISCV64> machine { std::vector<uint8_t>{}, { .memory_max = MAX_MEMORY } };
+	uint64_t scratch = 0;
+	std::vector<std::string> seen;
+
+	SandboxMachine() {
+		machine.setup_linux_syscalls(true, false);
+		machine.fds().permit_filesystem = true;
+		scratch = machine.memory.mmap_allocate(8192);
+	}
+	void prefix_filter(const std::string& prefix) {
+		machine.fds().filter_open = [this, prefix] (void*, std::string& path) {
+			seen.push_back(path);
+			return path.rfind(prefix, 0) == 0;
+		};
+	}
+	long syscall(int n, int fd, const std::string& path, uint64_t a2 = 0, uint64_t a3 = 0) {
+		machine.copy_to_guest(scratch, path.c_str(), path.size() + 1);
+		machine.cpu.reg(riscv::REG_ARG0) = fd;
+		machine.cpu.reg(riscv::REG_ARG1) = scratch;
+		machine.cpu.reg(riscv::REG_ARG2) = a2;
+		machine.cpu.reg(riscv::REG_ARG3) = a3;
+		machine.system_call(n);
+		return machine.return_value<long>();
+	}
+	long openat(int fd, const std::string& path, int flags = 0) { return syscall(56, fd, path, flags, 0644); }
+	long faccessat(int fd, const std::string& path) { return syscall(48, fd, path, 0, 0); }
+	long fstatat(int fd, const std::string& path) { return syscall(79, fd, path, scratch + 4096, 0); }
+	long readlinkat(int fd, const std::string& path) { return syscall(78, fd, path, scratch + 4096, 256); }
+};
+static constexpr int GUEST_AT_FDCWD = -100;
+}
+
+TEST_CASE("C13: without a filter, paths reach the host only in proxy mode", "[Security]")
+{
+	SandboxDir dir;
+	SandboxMachine m;
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "data") == -EPERM);
+	REQUIRE(m.faccessat(GUEST_AT_FDCWD, dir / "data") == -EACCES);
+	REQUIRE(m.fstatat(GUEST_AT_FDCWD, dir / "data") == -EPERM);
+	REQUIRE(m.readlinkat(GUEST_AT_FDCWD, dir / "link_data") == -EPERM);
+
+	m.machine.fds().proxy_mode = true;
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "data") >= riscv::FileDescriptors::FILE_D_BASE);
+	REQUIRE(m.faccessat(GUEST_AT_FDCWD, dir / "data") == 0);
+	REQUIRE(m.fstatat(GUEST_AT_FDCWD, dir / "data") == 0);
+	REQUIRE(m.readlinkat(GUEST_AT_FDCWD, dir / "link_data") == long((dir / "data").size()));
+}
+
+TEST_CASE("C13: filters see normalised absolute paths", "[Security]")
+{
+	SandboxDir dir;
+	SandboxMachine m;
+	m.prefix_filter(dir.dir + "/");
+	const std::string escape = dir / "../../etc/passwd";
+
+	REQUIRE(m.openat(GUEST_AT_FDCWD, escape) == -EPERM);
+	REQUIRE(m.seen.back() == "/etc/passwd");
+	REQUIRE(m.faccessat(GUEST_AT_FDCWD, escape) == -EACCES);
+	REQUIRE(m.seen.back() == "/etc/passwd");
+	REQUIRE(m.fstatat(GUEST_AT_FDCWD, escape) == -EPERM);
+	REQUIRE(m.seen.back() == "/etc/passwd");
+
+	REQUIRE(m.openat(GUEST_AT_FDCWD, "data") == -EBADF);
+	REQUIRE(m.openat(GUEST_AT_FDCWD, "") == -ENOENT);
+
+	const long dirfd = m.openat(GUEST_AT_FDCWD, dir.dir + "//./");
+	REQUIRE(dirfd >= riscv::FileDescriptors::FILE_D_BASE);
+	REQUIRE(m.seen.back() == dir.dir + "/");
+	REQUIRE(m.openat(dirfd, "../../etc/passwd") == -EPERM);
+	REQUIRE(m.seen.back() == "/etc/passwd");
+	REQUIRE(m.fstatat(dirfd, "../../etc/passwd") == -EPERM);
+	REQUIRE(m.faccessat(dirfd, "data") == 0);
+	REQUIRE(m.seen.back() == dir / "data");
+
+	const long fd = m.openat(dirfd, "./data");
+	REQUIRE(fd >= riscv::FileDescriptors::FILE_D_BASE);
+	REQUIRE(m.seen.back() == dir / "data");
+	REQUIRE(m.machine.fds().guest_paths.at(fd) == dir / "data");
+	m.machine.cpu.reg(riscv::REG_ARG0) = fd;
+	m.machine.system_call(57);
+	REQUIRE(m.machine.fds().guest_paths.count(fd) == 0);
+}
+
+TEST_CASE("C13: write access needs proxy mode", "[Security]")
+{
+	static constexpr int GUEST_O_WRONLY = 01, GUEST_O_RDWR = 02, GUEST_O_CREAT = 0100,
+		GUEST_O_TRUNC = 01000, GUEST_O_APPEND = 02000;
+	SandboxDir dir;
+	SandboxMachine m;
+	m.prefix_filter(dir.dir + "/");
+
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "data", GUEST_O_TRUNC) == -EACCES);
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "data", GUEST_O_WRONLY) == -EACCES);
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "data", GUEST_O_RDWR) == -EACCES);
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "data", GUEST_O_APPEND) == -EACCES);
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "created", GUEST_O_CREAT) == -EACCES);
+	struct stat st;
+	REQUIRE(::stat((dir / "data").c_str(), &st) == 0);
+	REQUIRE(st.st_size == 5);
+	REQUIRE(::stat((dir / "created").c_str(), &st) != 0);
+
+	m.machine.fds().proxy_mode = true;
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "created", GUEST_O_WRONLY | GUEST_O_CREAT) >= 0);
+	REQUIRE(::stat((dir / "created").c_str(), &st) == 0);
+}
+
+TEST_CASE("C13: special files are refused unless permitted", "[Security]")
+{
+	SandboxDir dir;
+	SandboxMachine m;
+	m.machine.fds().filter_open = [] (void*, std::string&) { return true; };
+
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "fifo") == -EACCES);
+	REQUIRE(m.openat(GUEST_AT_FDCWD, dir / "link_fifo") == -EACCES);
+	REQUIRE(m.openat(GUEST_AT_FDCWD, "/dev/null") == -EACCES);
+
+	const long fd = m.openat(GUEST_AT_FDCWD, dir / "link_data");
+	REQUIRE(fd >= riscv::FileDescriptors::FILE_D_BASE);
+	const int real_fd = m.machine.fds().translate(fd);
+	REQUIRE((::fcntl(real_fd, F_GETFL) & O_NONBLOCK) == 0);
+	char buf[8] = {};
+	REQUIRE(::read(real_fd, buf, sizeof(buf)) == 5);
+
+	m.machine.fds().permit_special_files = true;
+	REQUIRE(m.openat(GUEST_AT_FDCWD, "/dev/null") >= riscv::FileDescriptors::FILE_D_BASE);
 }

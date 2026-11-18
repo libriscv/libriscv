@@ -284,6 +284,11 @@ static int parse_arguments(int argc, const char** argv, Arguments& args)
 
 #endif
 
+static std::string normalized_path(const std::string& path) {
+	if (path.empty()) return path;
+	return (path[0] == '/') ? riscv::FileDescriptors::normalize_path(path) : path;
+}
+
 template <int W>
 static void run_sighandler(riscv::Machine<W>&, int signal);
 static int signal_for_exception(int type);
@@ -421,6 +426,7 @@ static void run_program(
 		machine.setup_linux_syscalls();
 		machine.fds().permit_filesystem = !cli_args.sandbox;
 		machine.fds().permit_sockets    = !cli_args.sandbox;
+		machine.fds().permit_special_files = true;
 		if (cli_args.proxy_mode) {
 			if (cli_args.sandbox)
 				fprintf(stderr, "Warning: Proxy mode is enabled, but sandbox is also enabled\n");
@@ -444,6 +450,12 @@ static void run_program(
 			fprintf(stderr, "Guest wanted to readlink: %s (denied)\n", path.c_str());
 			return false;
 		};
+		std::string dynamic_program;
+		if (is_dynamic && args.size() > 1)
+			dynamic_program = normalized_path(args.at(1));
+		std::vector<std::string> allowed_files;
+		for (const auto& allowed : cli_args.allowed_files)
+			allowed_files.push_back(normalized_path(allowed));
 		// Only allow opening certain file paths. The void* argument is
 		// the user-provided pointer set in the RISC-V machine.
 		machine.fds().filter_open = [=] (void* user, std::string& path) {
@@ -489,13 +501,13 @@ static void run_program(
 				return true;
 			}
 
-			if (is_dynamic && args.size() > 1 && path == args.at(1)) {
+			if (!dynamic_program.empty() && path == dynamic_program) {
 				return true;
 			}
 			if (cli_args.proxy_mode) {
 				return true;
 			}
-			for (const auto& allowed : cli_args.allowed_files) {
+			for (const auto& allowed : allowed_files) {
 				if (path == allowed) {
 					return true;
 				}
