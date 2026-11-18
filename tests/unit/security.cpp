@@ -4,6 +4,7 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/threads.hpp>
 #include <chrono>
+#include <functional>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/stat.h>
@@ -1092,4 +1093,62 @@ TEST_CASE("C14: ppoll on descriptors the guest does not have", "[Security]")
 	// Too many descriptors
 	std::vector<struct pollfd> many(129, { -1, 0, 0 });
 	REQUIRE(m.ppoll(many, nullptr) == -EINVAL);
+}
+
+// =============================================================================
+// C15: signal numbers above 64 threw std::out_of_range
+//
+// Signals::get() used signals.at(sig-1), so a guest sigaction, tkill or
+// tgkill with a signal number above 64 escaped as a non-MachineException.
+// Every invalid signal number must be an ILLEGAL_OPERATION instead.
+// =============================================================================
+
+static void rt_sigaction(riscv::Machine<RISCV64>& machine, int sig, uint64_t act, uint64_t oldact)
+{
+	machine.cpu.reg(riscv::REG_ARG0) = sig;
+	machine.cpu.reg(riscv::REG_ARG1) = act;
+	machine.cpu.reg(riscv::REG_ARG2) = oldact;
+	machine.system_call(134);
+}
+
+static void require_illegal_operation(const std::function<void()>& func)
+{
+	try {
+		func();
+		FAIL("Expected a MachineException");
+	} catch (const riscv::MachineException& me) {
+		REQUIRE(me.type() == riscv::ILLEGAL_OPERATION);
+	}
+}
+
+TEST_CASE("C15: invalid signal numbers are illegal operations", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	const auto area = machine.memory.mmap_allocate(4096);
+
+	// The valid range is 1 to 64
+	rt_sigaction(machine, 1, 0, area);
+	REQUIRE(machine.return_value<int>() == 0);
+	rt_sigaction(machine, 64, 0, area);
+	REQUIRE(machine.return_value<int>() == 0);
+
+	for (const int sig : { 65, 1000, INT32_MAX, -1, INT32_MIN })
+	{
+		require_illegal_operation([&] { rt_sigaction(machine, sig, 0, area); });
+		require_illegal_operation([&] { machine.sigaction(sig); });
+		require_illegal_operation([&] { tgkill(machine, riscv::MAIN_THREAD_TID, sig); });
+		require_illegal_operation([&] {
+			machine.cpu.reg(riscv::REG_ARG0) = riscv::MAIN_THREAD_TID;
+			machine.cpu.reg(riscv::REG_ARG1) = sig;
+			machine.system_call(130); // tkill
+		});
+	}
+	// Signal 0 remains a no-op for the system calls
+	rt_sigaction(machine, 0, 0, area);
+	tgkill(machine, riscv::MAIN_THREAD_TID, 0);
+	require_illegal_operation([&] { machine.sigaction(0); });
 }

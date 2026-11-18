@@ -12,7 +12,8 @@ namespace riscv {
 /// an SA_SIGINFO handler. Runtimes that inspect the siginfo (eg. the Go
 /// runtime reads si_code before anything else) fault immediately without it.
 template <int W>
-struct SignalFrameLayout {
+struct SignalFrameLayout
+{
 	using address_t = address_type<W>;
 	static constexpr size_t siginfo_size = 128;
 	/// siginfo_t: si_signo, si_errno, si_code, then a union that begins on
@@ -45,10 +46,13 @@ template <int W>
 Signals<W>::~Signals() {}
 
 template <int W>
-SignalAction<W>& Signals<W>::get(int sig) {
-	if (sig > 0)
-		return signals.at(sig-1);
-	throw MachineException(ILLEGAL_OPERATION, "Signal 0 invoked");
+SignalAction<W>& Signals<W>::get(int sig)
+{
+	if (sig > 0 && unsigned(sig) <= signals.size())
+		return signals[sig-1];
+	if (sig == 0)
+		throw MachineException(ILLEGAL_OPERATION, "Signal 0 invoked");
+	throw MachineException(ILLEGAL_OPERATION, "Invalid signal number", uint32_t(sig));
 }
 
 template <int W>

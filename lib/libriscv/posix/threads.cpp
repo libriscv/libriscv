@@ -134,7 +134,7 @@ void Machine<W>::setup_posix_threads()
 				machine.signals().enter(machine, sig);
 				THPRINT(machine,
 					"<<< tgkill signal=%d jumping to 0x%lX (sp=0x%lX)\n",
-					sig, (long)machine.sigaction(sig).handler, (long)machine.cpu.reg(REG_SP));
+					sig, (long)machine.cpu.pc(), (long)machine.cpu.reg(REG_SP));
 				return;
 			}
 		}
