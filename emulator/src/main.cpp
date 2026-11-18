@@ -16,6 +16,9 @@
 static inline std::vector<uint8_t> load_file(const std::string &);
 static constexpr uint64_t MAX_MEMORY = (riscv::encompassing_Nbit_arena == 0) ? uint64_t(4000) << 20 : uint64_t(1) << riscv::encompassing_Nbit_arena;
 static const std::string DYNAMIC_LINKER = "/usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1";
+static const std::string DYNAMIC_LINKER_NAME = "ld-linux-riscv64-lp64d.so.1";
+static constexpr size_t MAX_DYNAMIC_LINKER_SIZE = size_t(64) << 20;
+static std::vector<uint8_t> load_host_file(const std::string& filename, size_t max_size);
 
 struct Arguments {
 	bool verbose = false;
@@ -469,7 +472,7 @@ static void run_program(
 			if (path == "/dev/urandom")
 				return true;
 			if (path == "/program") { // Fake program path
-				path = args.at(0); // Sneakily open the real program instead
+				path = (is_dynamic && args.size() > 1) ? args.at(1) : args.at(0);
 				return true;
 			}
 			if (path == "/etc/ssl/certs/ca-certificates.crt")
@@ -803,25 +806,29 @@ int main(int argc, const char** argv)
 
 		bool is_dynamic = false;
 		if (binary[4] == riscv::ELFCLASS64) {
-			std::string_view interpreter;
-			std::tie(is_dynamic, interpreter) =
+			std::string_view pt_interp;
+			std::tie(is_dynamic, pt_interp) =
 				riscv::Elf<8>::is_dynamic(std::string_view(binary.data(), binary.size()));
 
 			if (is_dynamic) {
-				// Load the dynamic linker shared object
-				if (interpreter.empty()) {
+				// PT_INTERP comes from the untrusted guest ELF
+				std::string interpreter(pt_interp.substr(0, pt_interp.find('\0')));
+				const auto slash = interpreter.rfind('/');
+				const std::string_view interp_name = (slash != std::string::npos)
+					? std::string_view(interpreter).substr(slash + 1) : std::string_view(interpreter);
+				// But we still keep it for -P proxy mode
+				if (!cli_args.proxy_mode && interp_name != DYNAMIC_LINKER_NAME) {
+					fprintf(stderr, "Warning: Ignoring the program's interpreter \"%s\", using %s\n",
+						interpreter.c_str(), DYNAMIC_LINKER.c_str());
 					interpreter = DYNAMIC_LINKER;
 				}
-				try {
-					vbin = load_file(std::string(interpreter));
-				} catch (const std::exception& e) {
-					vbin = load_file(DYNAMIC_LINKER);
-				}
+				vbin = load_host_file(DYNAMIC_LINKER, MAX_DYNAMIC_LINKER_SIZE);
 				binary = { (const char*)vbin.data(), vbin.size() };
-				// Insert program name as argv[1]
-				args.insert(args.begin() + 1, args.at(0));
+				std::error_code ec;
+				const auto program = std::filesystem::absolute(args.at(0), ec);
+				args.insert(args.begin() + 1, ec ? args.at(0) : program.lexically_normal().string());
 				// Set dynamic linker to argv[0]
-				args.at(0) = interpreter;
+				args.at(0) = std::move(interpreter);
 			}
 		}
 
@@ -895,6 +902,7 @@ static int signal_for_exception(int type)
 	}
 }
 
+#include <cerrno>
 #include <stdexcept>
 #include <unistd.h>
 #include <fstream>
@@ -906,6 +914,68 @@ std::vector<uint8_t> load_file(const std::string& filename)
 	}
 
 	return std::vector<uint8_t> (std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+}
+
+std::vector<uint8_t> load_host_file(const std::string& filename, size_t max_size)
+{
+	std::vector<uint8_t> result;
+#if defined(__linux__)
+	// O_NONBLOCK: opening a FIFO may block
+	const int fd = open(filename.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+	if (fd < 0)
+		throw std::runtime_error("Could not open file: " + filename);
+	struct stat st;
+	if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode)) {
+		close(fd);
+		throw std::runtime_error("Not a regular file: " + filename);
+	}
+	if (uint64_t(st.st_size) > max_size) {
+		close(fd);
+		throw std::runtime_error("File too large: " + filename);
+	}
+	// The file may grow after fstat(), read at most max_size + 1 bytes
+	result.resize(st.st_size);
+	size_t total = 0;
+	while (true) {
+		if (total == result.size()) {
+			if (result.size() > max_size)
+				break;
+			result.resize(std::min(result.size() + 65536, max_size + 1));
+		}
+		const ssize_t len = read(fd, result.data() + total, result.size() - total);
+		if (len < 0 && errno == EINTR)
+			continue;
+		if (len < 0) {
+			close(fd);
+			throw std::runtime_error("Could not read file: " + filename);
+		}
+		if (len == 0)
+			break;
+		total += len;
+	}
+	close(fd);
+	result.resize(total);
+#else
+	std::error_code ec;
+	if (!std::filesystem::is_regular_file(filename, ec))
+		throw std::runtime_error("Not a regular file: " + filename);
+	const auto size = std::filesystem::file_size(filename, ec);
+	if (ec)
+		throw std::runtime_error("Could not stat file: " + filename);
+	if (size > max_size)
+		throw std::runtime_error("File too large: " + filename);
+	std::ifstream file(filename, std::ios::in | std::ios::binary);
+	if (!file.is_open())
+		throw std::runtime_error("Could not open file: " + filename);
+	result.resize(size + 1);
+	file.read((char*)result.data(), result.size());
+	result.resize(file.gcount());
+	if (result.size() > size)
+		throw std::runtime_error("File changed while reading: " + filename);
+#endif
+	if (result.size() > max_size)
+		throw std::runtime_error("File too large: " + filename);
+	return result;
 }
 
 template <int W>
