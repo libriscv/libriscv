@@ -258,8 +258,10 @@ TEST_CASE("RSP: Faults are reported as signals at the faulting instruction", "[R
 	const auto binary = build_and_load(R"M(
 	__attribute__((noinline))
 	void crash(volatile int* ptr) { *ptr = 1234; }
+	// Load at run-time, to prevent Clang from specializing crash()
+	volatile int* volatile bad_ptr = (volatile int*)0x16;
 	int main() {
-		crash((volatile int*)0x16);
+		crash(bad_ptr);
 		return 0;
 	})M", "-O1 -static");
 	RspSession s { binary };
