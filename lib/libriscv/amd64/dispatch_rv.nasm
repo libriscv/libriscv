@@ -731,6 +731,28 @@ do_c_fallback:
 	mov eax, REG32(rax)
 	mov ecx, REG32(rcx)
 %endmacro
+;; Dispatch the instruction after a branch that was not taken (%1 = NEXT macro)
+;; with the color NT_COLOR rather than the color of control flow, which the
+;; taken path (a branch target) keeps. Otherwise the fall-through instruction
+;; and the branch target run the same copy whenever they have the same
+;; bytecode, and that copy's dispatch jump alternates between their
+;; successors. In CoreMark's core_list_find loop:
+;;   lw a0,0(a0); beqz a0,out; lw a5,4(a0); lh a5,2(a5); bne a5,a4,loop
+;; both LWs ran ldw copy 0 (one after the taken BNE, one after the not-taken
+;; BEQZ), whose jump alternated between BEQZ and LH and mispredicted almost
+;; every time. Separating them cut CoreMark's indirect mispredictions from 430M
+;; to ~105M and its cycles by 6-9% (rv32gb), with Dhrystone, fib, STREAM and
+;; rvctest unchanged. Color 2 measured better than 1. A 4th copy just for this
+;; (or a 5th for jumps) was no faster on CoreMark and cost Dhrystone 2-4%.
+%ifndef NT_COLOR
+%define NT_COLOR 2
+%endif
+%macro NOT_TAKEN 1
+	%assign %%saved COLOR
+	%assign COLOR NT_COLOR
+	%1
+	%assign COLOR %%saved
+%endmacro
 ;; %1 = jcc taken when the branch is taken, %2 = 1 when it may go backwards
 %macro BRANCH 2
 	movzx eax, byte [rbx + 7]
@@ -738,7 +760,7 @@ do_c_fallback:
 	mov xax, REG(rax)
 	cmp xax, REG(rcx)
 	%1 %%taken
-	NEXT_BLOCK_INSTR
+	NOT_TAKEN NEXT_BLOCK_INSTR
 %%taken:
 	TAKE_BRANCH %2
 %endmacro
@@ -755,7 +777,7 @@ do_c_fallback:
 	jmp [RBTAB + rax * (8 / STUB_GRAN)]
 %endif
 %%not_taken:
-	NEXT_BLOCK_INSTR
+	NOT_TAKEN NEXT_BLOCK_INSTR
 %endmacro
 
 ;; Memory handlers load the operands from the entry in memory, like the
@@ -1491,7 +1513,7 @@ HANDLER c_bnez
 	movzx eax, byte [rbx + 7]
 	cmp REG(rax), 0
 	jne .taken
-	NEXT_BLOCK_C_INSTR
+	NOT_TAKEN NEXT_BLOCK_C_INSTR
 .taken:
 	TAKE_BRANCH 1
 
@@ -1499,7 +1521,7 @@ HANDLER c_beqz
 	movzx eax, byte [rbx + 7]
 	cmp REG(rax), 0
 	je .taken
-	NEXT_BLOCK_C_INSTR
+	NOT_TAKEN NEXT_BLOCK_C_INSTR
 .taken:
 	TAKE_BRANCH 1
 
