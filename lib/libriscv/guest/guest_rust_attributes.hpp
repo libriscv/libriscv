@@ -56,9 +56,9 @@ struct GuestRustAttr {
 	GuestRustAttr& operator=(const GuestRustAttr& other) = default;
 
 	/// @brief Drop the key and the value, recursively
-	void free(machine_t& machine) {
-		free_guest_object<W>(machine, this->key);
-		free_guest_object<W>(machine, this->value);
+	void free(machine_t& machine, unsigned depth = 0) {
+		free_guest_object<W>(machine, this->key, depth);
+		free_guest_object<W>(machine, this->value, depth);
 	}
 };
 
@@ -217,8 +217,8 @@ struct GuestRustAttributes {
 
 	/// @brief Drop every entry and release the allocation, recursively, the way
 	/// the guest's drop glue would.
-	void free(machine_t& machine) {
-		this->entries.free(machine);
+	void free(machine_t& machine, unsigned depth = 0) {
+		this->entries.free(machine, depth);
 	}
 
 	// --- Validation of guest-provided trees ----------------------------------

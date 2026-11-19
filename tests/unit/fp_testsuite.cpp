@@ -354,8 +354,8 @@ TEST_CASE("FCSR exception flags and canonical NaNs", "[Verification]")
 		return;
 	}
 
-	static constexpr uint32_t QNAN = 0x7fc00000u; // canonical quiet NaN
-	static constexpr uint32_t SNAN = 0x7f800001u; // signaling NaN
+	static constexpr uint32_t QNAN_BITS = 0x7fc00000u; // canonical quiet NaN
+	static constexpr uint32_t SNAN_BITS = 0x7f800001u; // signaling NaN
 	static constexpr uint32_t ONE  = 0x3f800000u; // 1.0f
 	static constexpr uint32_t MONE = 0xbf800000u; // -1.0f
 	static constexpr uint32_t NV = 16, DZ = 8, NX = 1;
@@ -429,25 +429,25 @@ TEST_CASE("FCSR exception flags and canonical NaNs", "[Verification]")
 
 	// Spec 11.3: a NaN result is the canonical quiet NaN, never a propagated
 	// payload. A quiet NaN operand is not an invalid operation.
-	REQUIRE(call("fadd_bits", QNAN, ONE) == QNAN);
-	REQUIRE(call("fmul_bits", QNAN, ONE) == QNAN);
-	REQUIRE(call("fdiv_bits", QNAN, ONE) == QNAN);
-	REQUIRE(call("fadd_bits", SNAN, ONE) == QNAN);
+	REQUIRE(call("fadd_bits", QNAN_BITS, ONE) == QNAN_BITS);
+	REQUIRE(call("fmul_bits", QNAN_BITS, ONE) == QNAN_BITS);
+	REQUIRE(call("fdiv_bits", QNAN_BITS, ONE) == QNAN_BITS);
+	REQUIRE(call("fadd_bits", SNAN_BITS, ONE) == QNAN_BITS);
 
 	// FMIN/FMAX return the non-NaN operand, and the canonical NaN when both
 	// operands are NaN. A signaling operand raises NV, a quiet one does not.
-	REQUIRE(call("fmin_bits", QNAN, ONE) == ONE);
-	REQUIRE(call("fmax_bits", QNAN, MONE) == MONE);
-	REQUIRE(call("fmin_bits", QNAN, QNAN) == QNAN);
-	REQUIRE((call("fmin_flags", SNAN, ONE) & NV) == NV);
-	REQUIRE((call("fmin_flags", QNAN, ONE) & NV) == 0);
+	REQUIRE(call("fmin_bits", QNAN_BITS, ONE) == ONE);
+	REQUIRE(call("fmax_bits", QNAN_BITS, MONE) == MONE);
+	REQUIRE(call("fmin_bits", QNAN_BITS, QNAN_BITS) == QNAN_BITS);
+	REQUIRE((call("fmin_flags", SNAN_BITS, ONE) & NV) == NV);
+	REQUIRE((call("fmin_flags", QNAN_BITS, ONE) & NV) == 0);
 
 	// sqrt of a negative number is invalid; sqrt of a quiet NaN is not.
-	REQUIRE(call1("fsqrt_bits", MONE) == QNAN);
+	REQUIRE(call1("fsqrt_bits", MONE) == QNAN_BITS);
 	REQUIRE((call1("fsqrt_flags", MONE) & NV) == NV);
-	REQUIRE(call1("fsqrt_bits", QNAN) == QNAN);
-	REQUIRE((call1("fsqrt_flags", QNAN) & NV) == 0);
-	REQUIRE((call1("fsqrt_flags", SNAN) & NV) == NV);
+	REQUIRE(call1("fsqrt_bits", QNAN_BITS) == QNAN_BITS);
+	REQUIRE((call1("fsqrt_flags", QNAN_BITS) & NV) == 0);
+	REQUIRE((call1("fsqrt_flags", SNAN_BITS) & NV) == NV);
 
 	// Division of a finite non-zero value by zero raises DZ.
 	REQUIRE((call("fdiv_flags", ONE, 0u) & DZ) == DZ);
@@ -455,7 +455,7 @@ TEST_CASE("FCSR exception flags and canonical NaNs", "[Verification]")
 	REQUIRE((call("fdiv_flags", ONE, ONE) & DZ) == 0);
 
 	// FLT is a signaling compare: any NaN operand raises NV.
-	REQUIRE((call("flt_flags", QNAN, ONE) & NV) == NV);
+	REQUIRE((call("flt_flags", QNAN_BITS, ONE) & NV) == NV);
 	REQUIRE((call("flt_flags", ONE, ONE) & NV) == 0);
 
 	// Out-of-range float->int is invalid, and an integer too wide for the

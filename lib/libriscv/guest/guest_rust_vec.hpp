@@ -181,22 +181,20 @@ struct alignas(guest_word_align<W>) GuestRustVec {
 	void pop_back(machine_t& machine) {
 		if (this->len == 0)
 			throw std::out_of_range("Guest Rust Vec is empty");
-		this->free_element(machine, this->len - 1);
+		this->free_elements(machine, this->len - 1, this->len);
 		this->len -= 1;
 	}
 
 	/// @brief Drop every element, keeping the allocation (Rust's clear).
 	void clear(machine_t& machine) {
-		for (std::size_t i = 0; i < this->len; i++)
-			this->free_element(machine, i);
+		this->free_elements(machine, 0, this->len);
 		this->len = 0;
 	}
 
 	void resize(machine_t& machine, std::size_t new_size)
 	{
 		if (new_size < this->len) {
-			for (std::size_t i = new_size; i < this->len; i++)
-				this->free_element(machine, i);
+			this->free_elements(machine, new_size, this->len);
 		} else if (new_size > this->len) {
 			this->reserve(machine, new_size);
 			T* array = machine.memory.template memarray<T>(this->ptr, new_size);
@@ -281,10 +279,14 @@ struct alignas(guest_word_align<W>) GuestRustVec {
 	}
 
 	/// @brief Drop every element and release the allocation. A freed vector
-	/// is left in the state of a newly created Rust Vec::new().
-	void free(machine_t& machine)
+	/// is left in the state of a newly created Rust Vec::new(). A tree nested
+	/// deeper than GUEST_MAX_NESTING (or a cyclic one) throws before anything
+	/// in it is released. depth is the number of guest pointers already
+	/// followed to get here.
+	void free(machine_t& machine, unsigned depth = 0)
 	{
-		this->clear(machine);
+		this->free_elements(machine, 0, this->len, depth);
+		this->len = 0;
 		if (this->cap != 0)
 			machine.arena().free(this->ptr);
 		this->ptr = DANGLING;
@@ -292,8 +294,17 @@ struct alignas(guest_word_align<W>) GuestRustVec {
 	}
 
 private:
-	void free_element(machine_t& machine, std::size_t index) {
-		free_guest_object<W>(machine, this->at(machine, index));
+	/// @brief Drop the elements [begin, end), which follows the vector's
+	/// pointer, and so is one level deeper into a tree of guest objects.
+	void free_elements(machine_t& machine, std::size_t begin, std::size_t end,
+		unsigned depth = 0)
+	{
+		if (begin >= end)
+			return;
+		const unsigned inner = guest_nesting_enter(depth);
+		T* array = this->as_array(machine);
+		for (std::size_t i = begin; i < end; i++)
+			free_guest_object<W>(machine, array[i], inner);
 	}
 };
 

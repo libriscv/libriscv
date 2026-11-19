@@ -264,6 +264,27 @@ inline guest_host_type_t<W, T> guest_object_to_host(const Machine<W>& machine, c
 	}
 }
 
+/// @brief Maximum depth of guest pointer nesting that the host will follow
+static constexpr unsigned GUEST_MAX_NESTING = 128;
+
+/// @brief Returns the next depth. Throws at depth == GUEST_MAX_NESTING
+inline unsigned guest_nesting_enter(unsigned depth)
+{
+	if (depth >= GUEST_MAX_NESTING)
+		throw std::runtime_error("Guest objects nest too deeply");
+	return depth + 1;
+}
+
+namespace detail {
+	/// @brief True when object.free(machine, depth) is valid
+	template <int W, typename T, typename = void>
+	struct has_nested_free : std::false_type {};
+	template <int W, typename T>
+	struct has_nested_free<W, T, std::void_t<decltype(
+		std::declval<T&>().free(std::declval<Machine<W>&>(), std::declval<unsigned>()))>>
+		: std::true_type {};
+} // detail
+
 /// @brief Destroy an object in guest memory, freeing any guest allocations
 /// that it owns. Trivial types are simply destructed.
 template <int W, typename T>
@@ -273,6 +294,17 @@ inline void free_guest_object(Machine<W>& machine, T& object)
 		object.free(machine);
 	else
 		object.~T();
+}
+
+/// @brief Destroy an object that is depth guest pointers deep into a tree.
+/// Containers that cannot be part of a recursive tree don't take the depth.
+template <int W, typename T>
+inline void free_guest_object(Machine<W>& machine, T& object, unsigned depth)
+{
+	if constexpr (detail::has_nested_free<W, T>::value)
+		object.free(machine, depth);
+	else
+		free_guest_object<W>(machine, object);
 }
 
 /// @brief Tell an object that it now lives at the given guest address,

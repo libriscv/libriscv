@@ -1430,3 +1430,179 @@ TEST_CASE("C17: invalid guest std::unordered_map load factors", "[Security]")
 		REQUIRE(f.map().at(f.machine, int64_t(1)) == 2);
 	}
 }
+
+// =============================================================================
+// C18: freeing guest Rust containers recursed without a depth limit
+//
+// Freeing a GuestRustEnum/Box/Vec/Attributes tree follows every guest pointer
+// recursively, the way the guest's drop glue does. The guest controls those
+// pointers, so a list whose Box points at a Vec holding that same list (a
+// cycle), or merely a chain of 200k nested lists, recursed until the host
+// stack overflowed, which aborts the process. The walks that follow a pointer
+// (Box, Box<[T]> and Vec elements) now pass free(machine, depth + 1) down, and
+// throw past GUEST_MAX_NESTING (128) before anything in the tree is released.
+// =============================================================================
+
+namespace {
+struct NestValue;
+using NestAttrs = riscv::GuestRustAttributes<RISCV64, NestValue>;
+using NestVec   = riscv::GuestRustVec<RISCV64, NestValue>;
+using NestList  = riscv::GuestRustBox<RISCV64, NestVec>;
+using NestGroup = riscv::GuestRustBox<RISCV64, NestAttrs>;
+struct NestValue : riscv::GuestRustEnum<RISCV64, uint64_t,
+	std::monostate, int64_t, riscv::GuestRustString<RISCV64>, NestGroup, NestList>
+{
+	using GuestRustEnum::GuestRustEnum;
+};
+} // namespace
+RISCV_REGISTER_GUEST_RUST_ENUM(RISCV64, NestValue);
+
+namespace {
+struct NestFixture {
+	riscv::Machine<RISCV64> machine;
+
+	NestFixture(const std::vector<uint8_t>& binary)
+		: machine { binary, { .memory_max = 32ul << 20 } }
+	{
+		const auto heap = machine.memory.mmap_allocate(256 << 10);
+		machine.setup_native_heap(470, heap, 256 << 10);
+	}
+	template <typename T>
+	T& at(uint64_t addr) { return *machine.memory.memarray<T>(addr, 1); }
+
+	/// @brief Write a List value at addr, whose Box points at a one-element
+	/// Vec header at vec, whose element is the value at next.
+	void link(uint64_t addr, uint64_t vec, uint64_t next)
+	{
+		auto& v = at<NestVec>(vec);
+		new (&v) NestVec();
+		v.cap = 1;
+		v.ptr = next;
+		v.len = 1;
+		auto& value = at<NestValue>(addr);
+		new (&value) NestValue();
+		value.tag = NestValue::index_of<NestList>();
+		new (&value.get<NestList>()) NestList(vec);
+	}
+	size_t live() {
+		return machine.arena().allocation_counter() - machine.arena().deallocation_counter();
+	}
+};
+
+void require_too_deep(const std::function<void()>& func)
+{
+	REQUIRE_THROWS_WITH(func(), "Guest objects nest too deeply");
+}
+
+/// @brief A List value nested count lists deep, the innermost one empty.
+/// It follows 2 * count - 1 pointers when freed: a Box and a Vec per list,
+/// except that the empty Vec at the bottom has no elements to follow.
+NestValue nested_lists(riscv::Machine<RISCV64>& machine, unsigned count)
+{
+	NestValue value;
+	value.emplace<NestList>(machine);
+	for (unsigned i = 1; i < count; i++) {
+		NestValue outer;
+		outer.emplace<NestList>(machine).get(machine).push_back(machine, value);
+		value = outer;
+	}
+	return value;
+}
+} // namespace
+
+TEST_CASE("C18: cyclic guest Rust containers are rejected", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	// A list whose Vec holds the list itself
+	{
+		NestFixture f { binary };
+		const auto value = f.machine.arena().malloc(sizeof(NestValue));
+		const auto vec   = f.machine.arena().malloc(sizeof(NestVec));
+		f.link(value, vec, value);
+		const size_t live = f.live();
+
+		require_too_deep([&] { f.at<NestValue>(value).free(f.machine); });
+		require_too_deep([&] { f.at<NestList>(value + 8).free(f.machine); });
+		require_too_deep([&] { f.at<NestVec>(vec).free(f.machine); });
+		require_too_deep([&] { f.at<NestVec>(vec).clear(f.machine); });
+		require_too_deep([&] { f.at<NestVec>(vec).pop_back(f.machine); });
+		require_too_deep([&] { f.at<NestVec>(vec).resize(f.machine, 0); });
+		// Nothing was released, and the tree is unchanged
+		REQUIRE(f.live() == live);
+		REQUIRE(f.at<NestValue>(value).holds_alternative<NestList>());
+		REQUIRE(f.at<NestVec>(vec).size() == 1);
+	}
+	// A group whose attribute map holds the group itself
+	{
+		NestFixture f { binary };
+		using Entry = NestAttrs::entry_type;
+		const auto entry = f.machine.arena().malloc(sizeof(Entry));
+		const auto attrs = f.machine.arena().malloc(sizeof(NestAttrs));
+		auto& e = f.at<Entry>(entry);
+		new (&e) Entry();
+		e.value.tag = NestValue::index_of<NestGroup>();
+		new (&e.value.get<NestGroup>()) NestGroup(attrs);
+		auto& a = f.at<NestAttrs>(attrs);
+		new (&a) NestAttrs();
+		a.entries.cap = 1;
+		a.entries.ptr = entry;
+		a.entries.len = 1;
+		const size_t live = f.live();
+
+		require_too_deep([&] { f.at<Entry>(entry).value.free(f.machine); });
+		require_too_deep([&] { f.at<NestAttrs>(attrs).free(f.machine); });
+		REQUIRE(f.live() == live);
+		REQUIRE(f.at<Entry>(entry).value.holds_alternative<NestGroup>());
+	}
+}
+
+TEST_CASE("C18: deeply nested guest Rust containers are rejected", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	// No cycle, just depth: a chain of lists far deeper than the host stack
+	// allows, built by the guest outside of the arena
+	{
+		NestFixture f { binary };
+		constexpr uint64_t depth = 200'000;
+		const auto base = f.machine.memory.mmap_allocate((depth + 1) * 64);
+		auto at = [&] (uint64_t i) { return base + 64 * i; };
+		for (uint64_t i = 0; i < depth; i++)
+			f.link(at(i), at(i) + 32, at(i + 1));
+		new (&f.at<NestValue>(at(depth))) NestValue();
+		const size_t live = f.live();
+
+		require_too_deep([&] { f.at<NestValue>(at(0)).free(f.machine); });
+		REQUIRE(f.live() == live);
+		REQUIRE(f.at<NestValue>(at(0)).holds_alternative<NestList>());
+	}
+	// Exactly at the limit: 65 lists follow 129 pointers, and 64 lists 127
+	{
+		NestFixture f { binary };
+		const size_t live = f.live();
+		NestValue too_deep = nested_lists(f.machine, 65);
+		require_too_deep([&] { too_deep.free(f.machine); });
+		REQUIRE(too_deep.holds_alternative<NestList>());
+
+		NestValue deep = nested_lists(f.machine, 64);
+		deep.free(f.machine);
+		REQUIRE(deep.holds_alternative<std::monostate>());
+		// Peel off the outermost list, which leaves 64 that free completely
+		NestVec& outer = too_deep.get<NestList>().get(f.machine);
+		outer.free(f.machine);
+		too_deep.free(f.machine);
+		REQUIRE(f.live() == live);
+	}
+	// The limit counts pointers, not the size of a level
+	{
+		NestFixture f { binary };
+		const size_t live = f.live();
+		NestValue wide;
+		auto& list = wide.emplace<NestList>(f.machine).get(f.machine);
+		for (int i = 0; i < 20; i++)
+			list.push_back(f.machine, nested_lists(f.machine, 32));
+		wide.free(f.machine);
+		REQUIRE(f.live() == live);
+	}
+}

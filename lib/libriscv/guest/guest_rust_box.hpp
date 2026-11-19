@@ -134,10 +134,13 @@ struct alignas(guest_word_align<W>) GuestRustBox {
 
 	/// @brief Drop the boxed value and release its allocation, the way the
 	/// guest's drop glue would: recursively, so a whole tree goes with it.
-	void free(machine_t& machine)
+	/// A tree nested deeper than GUEST_MAX_NESTING (or a cyclic one) throws
+	/// before anything in it is released. depth is the number of guest
+	/// pointers already followed to get here.
+	void free(machine_t& machine, unsigned depth = 0)
 	{
 		if (this->ptr != 0) {
-			free_guest_object<W>(machine, this->get(machine));
+			free_guest_object<W>(machine, this->get(machine), guest_nesting_enter(depth));
 			machine.arena().free(this->ptr);
 			this->ptr = 0;
 		}
@@ -244,13 +247,15 @@ struct alignas(guest_word_align<W>) GuestRustBoxedSlice {
 	/// The pointer, not the length, says whether there is anything to release:
 	/// a boxed slice has no capacity word, and a zero-length allocation is
 	/// reachable through assume_ownership() and the element-count constructor.
-	void free(machine_t& machine)
+	/// Nesting deeper than GUEST_MAX_NESTING throws, see GuestRustBox::free().
+	void free(machine_t& machine, unsigned depth = 0)
 	{
 		if (this->ptr != DANGLING) {
 			if (this->len != 0) {
 				T* array = machine.memory.template memarray<T>(this->ptr, this->len);
+				const unsigned inner = guest_nesting_enter(depth);
 				for (std::size_t i = 0; i < this->len; i++)
-					free_guest_object<W>(machine, array[i]);
+					free_guest_object<W>(machine, array[i], inner);
 			}
 			machine.arena().free(this->ptr);
 		}

@@ -255,14 +255,15 @@ struct GuestRustEnum
 	/// A Rust enum has no valueless state, so what is left behind is the first
 	/// variant in its default state - which allocates nothing, and which the
 	/// guest can safely drop. Freeing twice is a no-op, not a double free.
-	void free(machine_t& machine)
+	/// depth is the number of guest pointers already followed to get here.
+	void free(machine_t& machine, unsigned depth = 0)
 	{
 		using First = alternative_t<0>;
 		static_assert(std::is_default_constructible_v<First>,
 			"The first variant of a guest Rust enum must be default constructible, "
 			"as it is what free() leaves behind. Declare a unit variant first "
 			"(std::monostate here, `Nil` in the guest).");
-		this->destroy_active(machine);
+		this->destroy_active(machine, depth);
 		new (&this->template alternative_ref<First>()) First();
 		this->tag = 0;
 	}
@@ -280,9 +281,9 @@ private:
 	/// @brief Release the guest allocations of the active variant, leaving the
 	/// tag pointing at storage that is no longer valid: every caller assigns a
 	/// new variant right afterwards.
-	void destroy_active(machine_t& machine) {
+	void destroy_active(machine_t& machine, unsigned depth) {
 		this->visit([&] (auto& alt) {
-			free_guest_object<W>(machine, alt);
+			free_guest_object<W>(machine, alt, depth);
 		});
 	}
 
