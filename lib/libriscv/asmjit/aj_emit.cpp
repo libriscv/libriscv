@@ -1244,7 +1244,8 @@ struct AjEmitter
 
 	void emit_dyncall(address_t pc, rv32i_instruction i)
 	{
-		for (unsigned r = 10; r < 10 + Dyncall::inputs(i.whole); r++)
+		const unsigned args = std::max(Dyncall::inputs(i.whole), Dyncall::outputs(i.whole));
+		for (unsigned r = 10; r < 10 + args; r++)
 			if (writeset[r]) uc.store(reg_mem(r), vreg[r]);
 		if (Dyncall::floats(i.whole))
 			for (unsigned r = REG_FA0; r < REG_FA0 + FP_INPUTS; r++)
