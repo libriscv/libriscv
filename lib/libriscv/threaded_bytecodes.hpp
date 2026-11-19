@@ -115,6 +115,7 @@ namespace riscv
 #endif
 
 		RV32I_BC_SYSCALL,
+		RV32I_BC_DYNCALL,
 		RV32I_BC_STOP,
 
 		RV32F_BC_FLW,

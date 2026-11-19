@@ -172,6 +172,7 @@ dispatch_table:
 	dd 0x00000000 ;; RV64I_BC_OP_SH2ADD_UW
 
 	dd .bytecode_syscall ;; RV32I_BC_SYSCALL
+	dd 0x00000000 ;; RV32I_BC_DYNCALL
 	dd .bytecode_stop ;; RV32I_BC_STOP
 
 	dd 0x00000000 ;; RV32F_BC_FLW

@@ -106,6 +106,7 @@ static constexpr void *computed_opcode[] = {
 #endif
 
 	[RV32I_BC_SYSCALL] = &&rv32i_syscall,
+	[RV32I_BC_DYNCALL] = &&rv32i_dyncall,
 	[RV32I_BC_STOP] = &&rv32i_stop,
 
 	[RV32F_BC_FLW] = &&rv32i_flw,

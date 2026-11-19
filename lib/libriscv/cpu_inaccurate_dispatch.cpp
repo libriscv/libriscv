@@ -242,6 +242,12 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall)
 	NEXT_BLOCK(4, false);
 }
 
+INSTRUCTION(RV32I_BC_DYNCALL, rv32i_dyncall)
+{
+	CPU().execute(DECODER().m_handler, DECODER().instr);
+	NEXT_INSTR();
+}
+
 INSTRUCTION(RV32I_BC_STOP, rv32i_stop)
 {
 	REGISTERS().pc = pc + 4;

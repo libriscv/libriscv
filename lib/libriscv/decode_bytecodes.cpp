@@ -3,6 +3,7 @@
 #include "instruction_list.hpp"
 #include "internal_common.hpp"
 #include "threaded_bytecodes.hpp"
+#include "dyncall.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
 #ifdef RISCV_EXT_COMPRESSED
@@ -523,6 +524,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 		case RV32A_ATOMIC:
 			return RV32I_BC_FUNCTION;
 #endif
+		case Dyncall::opcode:
+			if (Dyncall::valid(instr.whole))
+				return RV32I_BC_DYNCALL;
+			return RV32I_BC_FUNCTION;
 	}
 	// Unknown instructions can be custom-handled
 	return RV32I_BC_FUNCTION;

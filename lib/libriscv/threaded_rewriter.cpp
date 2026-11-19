@@ -22,6 +22,7 @@ namespace riscv
 		{
 			case RV32I_BC_INVALID:
 			case RV32I_BC_FUNCTION:
+			case RV32I_BC_DYNCALL:
 			case RV32I_BC_FUNCBLOCK:
 			case RV32I_BC_STOP:
 			case RV32I_BC_SYSTEM: {

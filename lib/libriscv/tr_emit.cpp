@@ -3571,7 +3571,6 @@ void Emitter<W>::emit()
 			// to this instruction. Counters are synchronized only when enabled.
 			code += "cpu->pc = " + PCRELS(0) + ";\n";
 			if (!tinfo.ignore_instruction_limit) {
-				this->increment_counter_so_far();
 				code += "INS_COUNTER(cpu) = ic; MAX_COUNTER(cpu) = max_ic;\n";
 			}
 			if (tinfo.is_libtcc && this->uses_register_caching()) {
@@ -3594,6 +3593,8 @@ void Emitter<W>::emit()
 			if (!tinfo.ignore_instruction_limit) {
 				code += "ic = INS_COUNTER(cpu); max_ic = MAX_COUNTER(cpu);\n";
 				code += "if (UNLIKELY(ic >= max_ic)) {\n";
+				if (this->m_instr_counter > 0)
+					code += "ic += " + std::to_string(this->m_instr_counter) + ";\n";
 				this->exit_function(PCRELS(4), true);
 			}
 			break;

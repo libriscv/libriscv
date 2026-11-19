@@ -248,6 +248,17 @@ INSTRUCTION(RV32I_BC_SYSCALL, rv32i_syscall) {
 	NEXT_BLOCK(4, false);
 }
 
+INSTRUCTION(RV32I_BC_DYNCALL, rv32i_dyncall) {
+	counter.apply(MACHINE());
+	CPU().execute(DECODER().m_handler, DECODER().instr);
+	counter.retrieve_counters(MACHINE());
+	if (UNLIKELY(counter.overflowed())) {
+		pc = RECONSTRUCT_PC() + 4;
+		goto check_jump;
+	}
+	NEXT_INSTR();
+}
+
 INSTRUCTION(RV32I_BC_STOP, rv32i_stop) {
 	REGISTERS().pc = pc + 4;
 	MACHINE().set_instruction_counter(counter.value());

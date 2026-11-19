@@ -1249,11 +1249,8 @@ struct AjEmitter
 		if (Dyncall::floats(i.whole))
 			for (unsigned r = REG_FA0; r < REG_FA0 + FP_INPUTS; r++)
 				if (fp_writeset[r]) uc.v_storeu64_u64(freg_mem(r), fvreg[r]);
-		if (!info.ignore_instruction_limit) {
-			Gp retired = uc.new_gp64("dyncnt");
-			uc.add(retired, counter, Imm(pending));
-			uc.store(mem_ptr(st, off_counter()), retired);
-		}
+		if (!info.ignore_instruction_limit)
+			uc.store(mem_ptr(st, off_counter()), counter);
 		const auto handler = uint64_t(uintptr_t(CPU<W>::decode(i).handler));
 		InvokeNode* node;
 		Gp fault;
@@ -1284,8 +1281,10 @@ struct AjEmitter
 			emit_exit(pc, pending - 1);
 			uc.bind(ok);
 			uc.load(counter, mem_ptr(st, off_counter()));
-			pending = 0;
-			emit_backedge_check(pc + 4);
+			Label cont = uc.new_label();
+			uc.j(cont, ucmp_lt(counter, mem_ptr(st, off_max())));
+			emit_exit(pc + 4, pending);
+			uc.bind(cont);
 		}
 	}
 

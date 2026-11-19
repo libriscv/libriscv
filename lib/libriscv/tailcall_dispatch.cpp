@@ -167,6 +167,16 @@ namespace riscv
 		NEXT_BLOCK(4, true);
 	}
 
+	INSTRUCTION(RV32I_BC_DYNCALL, rv32i_dyncall)
+	{
+		counter.apply(MACHINE());
+		cpu.execute(d->m_handler, d->instr);
+		counter.retrieve_counters(MACHINE());
+		if (UNLIKELY(counter.overflowed()))
+			return RECONSTRUCT_PC() + 4;
+		NEXT_INSTR();
+	}
+
 #ifdef RISCV_BINARY_TRANSLATION
 	INSTRUCTION(RV32I_BC_TRANSLATOR, translated_function) {
 		VIEW_INSTR();
@@ -180,9 +190,6 @@ namespace riscv
 		}
 #endif
 		counter.set_counters(new_values.counter, new_values.max_counter);
-		if (new_values.max_counter == 0) {
-			return RETURN_VALUES();
-		}
 		pc = REGISTERS().pc;
 		OVERFLOW_CHECK();
 		UNCHECKED_JUMP();
@@ -370,6 +377,7 @@ namespace riscv
 #endif
 
 		[RV32I_BC_SYSCALL] = rv32i_syscall,
+		[RV32I_BC_DYNCALL] = rv32i_dyncall,
 		[RV32I_BC_STOP]    = rv32i_stop,
 
 		[RV32F_BC_FLW]     = rv32i_flw,
