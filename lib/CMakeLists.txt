@@ -132,6 +132,13 @@ endif()
 if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	# ASM_DISPATCH uses assembly to dispatch instructions.
 	# It is currently only available on the AMD64 (x86_64) Linux platform.
+	# The decoder cache layout differs with the C-extension (one entry per
+	# 2 bytes, and icount), and there are handlers for compressed bytecodes
+	if (RISCV_EXT_C)
+		set(RVASM_COMPRESSED 1)
+	else()
+		set(RVASM_COMPRESSED 0)
+	endif()
 	if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"
 	 OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")
 		message(STATUS "libriscv: Assembly dispatch enabled")
@@ -139,9 +146,30 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 			libriscv/amd64/asm_dispatch.cpp
 			libriscv/threaded_dispatch.cpp
 			libriscv/threaded_inaccurate_dispatch.cpp
-			#libriscv/amd64/accurate_dispatch_rv64gb.o
-			libriscv/amd64/inaccurate_dispatch_rv64gb.o
 		)
+		# One assembly source, assembled once per register width and mode:
+		# COUNTING=1 is CPU::simulate, COUNTING=0 CPU::simulate_inaccurate
+		find_program(NASM_EXECUTABLE nasm REQUIRED)
+		set(RVASM_SRC ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/amd64/dispatch_rv.nasm)
+		set(RVASM_XLENS)
+		if (RISCV_32I)
+			list(APPEND RVASM_XLENS 32)
+		endif()
+		if (RISCV_64I)
+			list(APPEND RVASM_XLENS 64)
+		endif()
+		foreach(XLEN ${RVASM_XLENS})
+			foreach(COUNTING 0 1)
+				set(RVASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv${XLEN}_${COUNTING}.o)
+				add_custom_command(
+					OUTPUT ${RVASM_OBJ}
+					COMMAND ${NASM_EXECUTABLE} -f elf64 -g -F dwarf -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} ${RVASM_SRC} -o ${RVASM_OBJ}
+					DEPENDS ${RVASM_SRC}
+				)
+				set_source_files_properties(${RVASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+				list(APPEND SOURCES ${RVASM_OBJ})
+			endforeach()
+		endforeach()
 	else()
 		message(FATAL_ERROR "libriscv: Assembly dispatch not supported on this platform")
 	endif()

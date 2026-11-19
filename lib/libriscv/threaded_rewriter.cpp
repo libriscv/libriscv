@@ -425,6 +425,24 @@ namespace riscv
 				instr.whole = rewritten.whole;
 				return bytecode;
 			}
+			case RV32C_BC_SRAI: {
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				rewritten.rs1 = ci.CA.srd + 8;
+				rewritten.rs2 = 0;
+				rewritten.imm = ci.CAB.shift64_imm() & (XLEN-1);
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_SUBW:
+			case RV32C_BC_ADDW:
+				if (W != 8)
+					return RV32I_BC_INVALID;
+				[[fallthrough]];
+			case RV32C_BC_SUB:
+			case RV32C_BC_AND:
 			case RV32C_BC_XOR:
 			case RV32C_BC_OR: {
 				const rv32c_instruction ci{instr};
@@ -565,6 +583,104 @@ namespace riscv
 				}
 				else
 				{	// C.SWSP
+					rewritten.rs1 = REG_SP;
+					rewritten.rs2 = ci.CSS.rs2;
+					rewritten.imm = ci.CSS.offset(4);
+				}
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_LUI: {
+				const rv32c_instruction ci{instr};
+
+				FasterJtype rewritten;
+				rewritten.rd     = ci.CI.rd;
+				rewritten.offset = uint32_t(ci.CI.upper_imm()) >> 8;
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_FLD: {
+				if (W > 8)
+					return RV32I_BC_INVALID;
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.FLD
+					rewritten.rs1 = ci.CL.srd  + 8;
+					rewritten.rs2 = ci.CL.srs1 + 8;
+					rewritten.imm = ci.CSD.offset8();
+				}
+				else
+				{	// C.FLDSP
+					rewritten.rs1 = ci.CIFLD.rd;
+					rewritten.rs2 = REG_SP;
+					rewritten.imm = ci.CIFLD.offset();
+				}
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_FSD: {
+				if (W > 8)
+					return RV32I_BC_INVALID;
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.FSD
+					rewritten.rs1 = ci.CSD.srs1 + 8;
+					rewritten.rs2 = ci.CSD.srs2 + 8;
+					rewritten.imm = ci.CSD.offset8();
+				}
+				else
+				{	// C.FSDSP
+					rewritten.rs1 = REG_SP;
+					rewritten.rs2 = ci.CSFSD.rs2;
+					rewritten.imm = ci.CSFSD.offset();
+				}
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_FLW: {
+				if (W != 4)
+					return RV32I_BC_INVALID;
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.FLW
+					rewritten.rs1 = ci.CL.srd  + 8;
+					rewritten.rs2 = ci.CL.srs1 + 8;
+					rewritten.imm = ci.CL.offset();
+				}
+				else
+				{	// C.FLWSP
+					rewritten.rs1 = ci.CI2.rd;
+					rewritten.rs2 = REG_SP;
+					rewritten.imm = ci.CI2.offset();
+				}
+
+				instr.whole = rewritten.whole;
+				return bytecode;
+			}
+			case RV32C_BC_FSW: {
+				if (W != 4)
+					return RV32I_BC_INVALID;
+				const rv32c_instruction ci{instr};
+
+				FasterItype rewritten;
+				if ((ci.opcode() & 0x3) == 0x0)
+				{	// C.FSW
+					rewritten.rs1 = ci.CS.srs1 + 8;
+					rewritten.rs2 = ci.CS.srs2 + 8;
+					rewritten.imm = ci.CS.offset4();
+				}
+				else
+				{	// C.FSWSP
 					rewritten.rs1 = REG_SP;
 					rewritten.rs2 = ci.CSS.rs2;
 					rewritten.imm = ci.CSS.offset(4);

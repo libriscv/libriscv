@@ -102,6 +102,16 @@ static constexpr void *computed_opcode[] = {
 	[RV32C_BC_ADD]  = &&rv32c_add,
 	[RV32C_BC_XOR]  = &&rv32c_xor,
 	[RV32C_BC_OR]   = &&rv32c_or,
+	[RV32C_BC_LUI]  = &&rv32c_lui,
+	[RV32C_BC_FLD]  = &&rv32c_fld,
+	[RV32C_BC_FSD]  = &&rv32c_fsd,
+	[RV32C_BC_FLW]  = &&rv32c_flw,
+	[RV32C_BC_FSW]  = &&rv32c_fsw,
+	[RV32C_BC_SRAI] = &&rv32c_srai,
+	[RV32C_BC_SUB]  = &&rv32c_sub,
+	[RV32C_BC_AND]  = &&rv32c_and,
+	[RV32C_BC_SUBW] = &&rv32c_subw,
+	[RV32C_BC_ADDW] = &&rv32c_addw,
 	[RV32C_BC_FUNCTION] = &&rv32c_func,
 #endif
 

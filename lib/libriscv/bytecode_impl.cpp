@@ -317,6 +317,30 @@ INSTRUCTION(RV32C_BC_STW, rv32c_stw) {
 	CPU().memory().template write<uint32_t>(addr, REG(fi.get_rs2()));
 	NEXT_C_INSTR();
 }
+INSTRUCTION(RV32C_BC_FLD, rv32c_fld) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = REG(fi.rs2) + fi.signed_imm();
+	REGISTERS().getfl(fi.rs1).load_u64(CPU().memory().template read<uint64_t>(addr));
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_FSD, rv32c_fsd) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = REG(fi.rs1) + fi.signed_imm();
+	CPU().memory().template write<uint64_t>(addr, REGISTERS().getfl(fi.rs2).i64);
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_FLW, rv32c_flw) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = REG(fi.rs2) + fi.signed_imm();
+	REGISTERS().getfl(fi.rs1).load_u32(CPU().memory().template read<uint32_t>(addr));
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_FSW, rv32c_fsw) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	const auto addr = REG(fi.rs1) + fi.signed_imm();
+	CPU().memory().template write<uint32_t>(addr, REGISTERS().getfl(fi.rs2).i32[0]);
+	NEXT_C_INSTR();
+}
 #endif // RISCV_EXT_COMPRESSED
 
 
@@ -334,6 +358,14 @@ INSTRUCTION(RV32I_BC_LUI, rv32i_lui)
 	REG(fi.rd) = fi.upper_imm();
 	NEXT_INSTR();
 }
+#ifdef RISCV_EXT_COMPRESSED
+INSTRUCTION(RV32C_BC_LUI, rv32c_lui)
+{
+	VIEW_INSTR_AS(fi, FasterJtype);
+	REG(fi.rd) = fi.upper_imm();
+	NEXT_C_INSTR();
+}
+#endif
 
 #define OP_INSTR()                       \
 	VIEW_INSTR_AS(fi, FasterOpType);     \
@@ -913,6 +945,39 @@ INSTRUCTION(RV32C_BC_OR, rv32c_or) {
 	VIEW_INSTR_AS(fi, FasterItype);
 	REG(fi.get_rs1()) |= REG(fi.get_rs2());
 	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_SRAI, rv32c_srai) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) = saddr_t(REG(fi.get_rs1())) >> fi.imm;
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_SUB, rv32c_sub) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) -= REG(fi.get_rs2());
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_AND, rv32c_and) {
+	VIEW_INSTR_AS(fi, FasterItype);
+	REG(fi.get_rs1()) &= REG(fi.get_rs2());
+	NEXT_C_INSTR();
+}
+INSTRUCTION(RV32C_BC_SUBW, rv32c_subw) {
+	if constexpr (W == 8) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		REG(fi.get_rs1()) = (int32_t)
+			((uint32_t)REG(fi.get_rs1()) - (uint32_t)REG(fi.get_rs2()));
+		NEXT_C_INSTR();
+	}
+	else UNUSED_FUNCTION();
+}
+INSTRUCTION(RV32C_BC_ADDW, rv32c_addw) {
+	if constexpr (W == 8) {
+		VIEW_INSTR_AS(fi, FasterItype);
+		REG(fi.get_rs1()) = (int32_t)
+			((uint32_t)REG(fi.get_rs1()) + (uint32_t)REG(fi.get_rs2()));
+		NEXT_C_INSTR();
+	}
+	else UNUSED_FUNCTION();
 }
 INSTRUCTION(RV32C_BC_ANDI, rv32c_andi) {
 	VIEW_INSTR_AS(fi, FasterItype);

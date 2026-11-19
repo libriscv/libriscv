@@ -22,6 +22,9 @@ std::vector<uint8_t> build_asm(const std::string& body)
 	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\".option norvc\\n";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 	source += "\"); }";
+	// The guest is hand-written assembly, so pin it to GCC: Zig rejects -march=rv64g.
+	const char* cc = getenv("RVVCC");
+	setenv("RCC", cc ? cc : "riscv64-linux-gnu-gcc-14", 1);
 	return build_and_load(source,
 		"-nostdlib -static -march=rv64g -mabi=lp64d -Wl,-e,_start", false);
 }
