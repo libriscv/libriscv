@@ -64,8 +64,13 @@ std::vector<uint8_t> build_and_load(
 	}
 	// Compile code to binary file
 	char bin_filename[256];
+	// The compiler is part of the key: a binary built by another toolchain
+	// (eg. with RVC, for a build without the C-extension) must not be reused.
+	const std::string compiler = cpp ? env_with_default("RCXX", DEFAULT_CXX_COMPILER)
+		: env_with_default("RCC", DEFAULT_C_COMPILER);
 	const uint32_t code_checksum = crc32((const uint8_t *)code.c_str(), code.size());
-	const uint32_t final_checksum = crc32(code_checksum, (const uint8_t *)args.c_str(), args.size());
+	const uint32_t args_checksum = crc32(code_checksum, (const uint8_t *)args.c_str(), args.size());
+	const uint32_t final_checksum = crc32(args_checksum, (const uint8_t *)compiler.c_str(), compiler.size());
 	(void)snprintf(bin_filename, sizeof(bin_filename),
 		"/tmp/binary-%08X", final_checksum);
 

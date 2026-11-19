@@ -75,8 +75,14 @@ namespace riscv
 	goto check_jump
 
 
+#ifdef RISCV_ASM_DISPATCH
+#define DISPATCH_FUNCNAME simulate_cpp
+#else
+#define DISPATCH_FUNCNAME simulate
+#endif
+
 template <int W> DISPATCH_ATTR
-bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
+bool CPU<W>::DISPATCH_FUNCNAME(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 {
 	static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;

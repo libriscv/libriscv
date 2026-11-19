@@ -1,9 +1,11 @@
-;; RV32 and RV64 inaccurate (no instruction counting) dispatch for libriscv,
-;; AMD64 SysV.
+;; RV32 and RV64 dispatch for libriscv, AMD64 SysV.
 ;;
-;; Assemble once per register width:
-;;   nasm -f elf64 -DXLEN=32|64 -DCOMPRESSED=0|1 dispatch_rv.nasm
-;; The exported symbols are prefixed rv32asm_ or rv64asm_.
+;; Assemble once per register width and mode:
+;;   nasm -f elf64 -DXLEN=32|64 -DCOUNTING=0|1 dispatch_rv.nasm
+;; COUNTING=0 is the inaccurate dispatch (CPU::simulate_inaccurate), with the
+;; exported symbols prefixed rv32asm_ or rv64asm_. COUNTING=1 counts
+;; instructions like cpu_dispatch.cpp (CPU::simulate), prefixed rv32asmc_ or
+;; rv64asmc_. See "Instruction counting" below.
 ;;
 ;; The bytecodes and the 8-byte decoder entries are produced by the regular
 ;; decoder (decode_bytecodes.cpp) and are shared with the C++ dispatch:
@@ -14,9 +16,11 @@
 ;; Every bytecode without a handler here maps to the fallback handler, which
 ;; returns to C++ so that it can execute exactly one instruction and re-enter.
 ;;
-;; The only call out is to <prefix>call (system calls, FUNCTION entries etc.),
-;; which is noexcept and hands any exception back to C++, so nothing unwinds
-;; through these frames.
+;; The only call out is to <prefix>call (system calls, FUNCTION entries, native
+;; code, and the fallback for anything the fast paths here do not handle), which
+;; is noexcept and hands any exception back to C++, so nothing unwinds through
+;; these frames. Every bytecode has a handler, so the dispatch only returns to
+;; C++ to stop, to change execute segment or to throw.
 ;;
 ;; Requires BMI2 (rorx), AVX and FMA3. C++ checks for them at run-time.
 ;;
@@ -48,8 +52,18 @@ DEFAULT REL
 %ifndef COMPRESSED
 %define COMPRESSED 0
 %endif
+%ifndef COUNTING
+%define COUNTING 0
+%endif
+%if COMPRESSED && COUNTING
+%error "The counting dispatch does not support the C-extension"
+%endif
 
+%if COUNTING
+%xdefine PFX rv %+ XLEN %+ asmc_
+%else
 %xdefine PFX rv %+ XLEN %+ asm_
+%endif
 
 ;; Register width. x-prefixed names are the host registers that hold a guest
 ;; register value (or a guest address) of XLEN bits.
@@ -114,9 +128,17 @@ DEFAULT REL
 ;;   xr8  arena read boundary   (addr - 0x1000 < xr8 is readable)
 ;;   xr9  initial rodata end
 ;;   xr10 arena write boundary  (addr - xr9 < xr10 is writable)
-;;   xr11 current execute segment begin
-;;   xr12 current execute segment length (end - begin)
+;;   xr11 current execute segment begin          (COUNTING: r11 = max counter)
+;;   xr12 current execute segment length (end - begin)  (COUNTING: r12 = counter)
 ;; Scratch: rax, rcx, rdx, rdi, xmm0, xmm1
+;;
+;; Instruction counting (COUNTING=1) follows cpu_dispatch.cpp exactly, so that
+;; both report the same counts and stop at the same places: the instruction
+;; count of a whole block (idxend + 1, from its first decoder entry) is added
+;; when a block is entered, and the counter is compared with the max only where
+;; the C++ dispatch does it, which is before taking a branch that can go
+;; backwards, before jumps, after calls into C++ and when re-entering. The
+;; segment bounds, which only JALR needs, are then read from the context.
 
 ;; Context layout (struct AsmDispatchContext in asm_dispatch.cpp)
 %define CTX_REGS     0
@@ -130,16 +152,20 @@ DEFAULT REL
 %define CTX_TABLE    64
 %define CTX_PC       72
 %define CTX_CPU      80
+%define CTX_COUNTER  88
+%define CTX_MAX      96
+%define CTX_ENTER_COUNT 104   ; byte: count the block that the dispatch enters
 
 ;; Exit codes (returned to C++), also returned by <prefix>call
-%define EXIT_STOP      0
-%define EXIT_FALLBACK  1
-%define EXIT_JUMP      2
+%define EXIT_STOP      0   ; STOP, or the machine was stopped (inaccurate)
+%define EXIT_REENTER   1   ; continue at ctx->pc, without counting a new block
+%define EXIT_JUMP      2   ; continue at ctx->pc, possibly in another segment
 %define EXIT_EXCEPTION 3
 ;; Only returned by <prefix>call: continue with the next instruction, or
 ;; continue at ctx->pc (which may be outside the execute segment)
 %define CALL_NEXT      4
 %define CALL_GOTO      5
+%define EXIT_OVERFLOW  6   ; COUNTING: the counter reached the max, at ctx->pc
 
 ;; What <prefix>call should do
 %define KIND_FUNCTION   0
@@ -149,6 +175,10 @@ DEFAULT REL
 %define KIND_SYSTEM     4
 %define KIND_FUNCBLOCK  5
 %define KIND_STEP       6   ; read, decode and execute the instruction in C++
+%define KIND_INVALID    7   ; RV32I_BC_INVALID (and any unknown bytecode)
+%define KIND_TRANSLATOR 8   ; binary translation
+%define KIND_ASMJIT     9
+%define KIND_LIVEPATCH  10
 
 ;; uint32_t <prefix>call(AsmDispatchContext*, DecoderData* entry, uint32_t kind) noexcept
 ;; Executes the current decoder entry in C++. Returns CALL_NEXT or CALL_GOTO to
@@ -203,6 +233,9 @@ extern %[PFX]call
 %define CLASS_DEFAULT 1
 %define CLASS_fallback 0
 %define CLASS_stop 0
+%define CLASS_translator 0
+%define CLASS_asmjit 0
+%define CLASS_livepatch 0
 %define CLASS_function 2
 %define CLASS_c_function 2
 %define CLASS_funcblock 2
@@ -310,6 +343,59 @@ extern %[PFX]call
 	NEXT I2
 %endmacro
 
+;; Dispatch the decoder entry at rbx, which begins a block (the target of a
+;; branch or jump, or the instruction after one). COUNTING: count the block.
+%macro DISPATCH_BLOCK 0
+%if COUNTING
+	mov rdx, [rbx]
+	mov eax, edx
+	shr eax, 16             ; idxend: the instructions after this one in its block
+	lea r12, [r12 + rax + 1]
+	movzx eax, dl
+	jmp [r14 + rax * 8 + TABLE_OFFSET]
+%else
+	DISPATCH
+%endif
+%endmacro
+;; Advance by %1 bytes to the next block (no overflow check)
+%macro NEXT_BLOCK 1
+%if COUNTING
+	add rbx, %1
+	DISPATCH_BLOCK
+%else
+	NEXT %1
+%endif
+%endmacro
+%macro NEXT_BLOCK_INSTR 0
+	NEXT_BLOCK I4
+%endmacro
+;; COUNTING: leave the dispatch when the counter has reached the max, at the
+;; pc of the decoder entry in rbx (_RBX) or at the guest address in xax (_EAX).
+;; Inside a handler the jump goes to a stub after its end, like FALLBACK_IF,
+;; so that it can be a short one.
+%macro CHECK_OVERFLOW_RBX 0
+%if COUNTING
+	cmp r12, r11
+%ifdef CUR_HANDLER
+	jae CUR_HANDLER %+ _overflow_rbx
+	%define NEED_OVERFLOW_RBX
+%else
+	jae exit_overflow_rbx
+%endif
+%endif
+%endmacro
+%macro CHECK_OVERFLOW_EAX 0
+%if COUNTING
+	cmp r12, r11
+%ifdef CUR_HANDLER
+	jae CUR_HANDLER %+ _overflow
+	%define NEED_OVERFLOW_EAX
+%else
+	jae exit_overflow
+%endif
+%endif
+%endmacro
+
 ;; %1 = 64-bit register receiving the pc of the current instruction
 %macro RECONSTRUCT_PC 1
 	mov %1, rbx
@@ -317,11 +403,15 @@ extern %[PFX]call
 	shr %1, PC2DEC
 %endmacro
 
-;; Branch by the signed 16-bit byte offset in the instruction
-%macro TAKE_BRANCH 0
+;; Branch by the signed 16-bit byte offset in the instruction.
+;; %1 = 1: the branch may go backwards, so check the counter first
+%macro TAKE_BRANCH 0-1 0
 	movsx rax, word [rbx + 4]
 	lea rbx, [rbx + rax * BRSCALE]
-	DISPATCH
+%if %1
+	CHECK_OVERFLOW_RBX
+%endif
+	DISPATCH_BLOCK
 %endmacro
 
 ;; Defines copy COPY of a handler. The exported symbol <prefix><name> is an
@@ -372,6 +462,16 @@ CUR_FALLBACK:
 	jmp do_fallback
 	%undef NEED_FALLBACK
 %endif
+%ifdef NEED_OVERFLOW_RBX
+CUR_HANDLER %+ _overflow_rbx:
+	jmp exit_overflow_rbx
+	%undef NEED_OVERFLOW_RBX
+%endif
+%ifdef NEED_OVERFLOW_EAX
+CUR_HANDLER %+ _overflow:
+	jmp exit_overflow
+	%undef NEED_OVERFLOW_EAX
+%endif
 %endmacro
 
 section .rodata
@@ -400,15 +500,31 @@ global %[PFX]dispatch
 	mov xr8,  XW [rdi + CTX_RBOUND]
 	mov xr9,  XW [rdi + CTX_RODATA]
 	mov xr10, XW [rdi + CTX_WBOUND]
+%if COUNTING
+	mov r11, [rdi + CTX_MAX]
+	mov r12, [rdi + CTX_COUNTER]
+%else
 	mov xr11, XW [rdi + CTX_BEGIN]
 	mov xr12, XW [rdi + CTX_LENGTH]
+%endif
 	mov xax,  XW [rdi + CTX_PC]
 	lea RBTAB, [backward_table_end]
 	lea rbx, [RDEC + rax * BRSCALE]
+%if COUNTING
+	cmp byte [rdi + CTX_ENTER_COUNT], 0
+	je .uncounted
+	DISPATCH_BLOCK
+.uncounted:
+%endif
 	DISPATCH
 
 ;; Leave the dispatch: eax = exit code, ctx->pc already written
 exit_dispatch:
+%if COUNTING
+	mov rdi, [rsp]
+	mov [rdi + CTX_COUNTER], r12
+	mov [rdi + CTX_MAX], r11
+%endif
 	pop rdi
 	pop r15
 	pop r14
@@ -418,13 +534,16 @@ exit_dispatch:
 	pop rbx
 	ret
 
-;; Execute the current instruction in C++
-do_fallback:
+%if COUNTING
+;; The counter reached the max: stop at the pc of rbx, or at xax
+exit_overflow_rbx:
 	RECONSTRUCT_PC rax
+exit_overflow:
 	mov rdi, [rsp]
 	mov XW [rdi + CTX_PC], xax
-	mov eax, EXIT_FALLBACK
+	mov eax, EXIT_OVERFLOW
 	jmp exit_dispatch
+%endif
 
 ;; Jump to xax, which is outside the current execute segment
 exit_jump:
@@ -444,12 +563,20 @@ do_stop:
 ;; Jump to the address in xax: within the segment it is just a new
 ;; decoder pointer, otherwise C++ has to find the segment.
 %macro JUMP_TO_EAX 0
+%if COUNTING
+	CHECK_OVERFLOW_EAX
+	mov rdi, [rsp]
+	mov xcx, xax
+	sub xcx, XW [rdi + CTX_BEGIN]
+	cmp xcx, XW [rdi + CTX_LENGTH]
+%else
 	mov xcx, xax
 	sub xcx, xr11
 	cmp xcx, xr12
+%endif
 	jae exit_jump
 	lea rbx, [RDEC + rax * BRSCALE]
-	DISPATCH
+	DISPATCH_BLOCK
 %endmacro
 
 ;; <prefix>call asked to continue at ctx->pc
@@ -465,6 +592,10 @@ call_goto:
 	push r11
 	push RREGS
 	mov rdi, [rsp + 16]     ; context
+%if COUNTING
+	mov [rdi + CTX_COUNTER], r12
+	mov [rdi + CTX_MAX], r11
+%endif
 	mov rsi, rbx            ; decoder entry
 	mov edx, %1
 	call %[PFX]call wrt ..plt
@@ -475,6 +606,11 @@ call_goto:
 	mov xr8,  XW [rdi + CTX_RBOUND]
 	mov xr9,  XW [rdi + CTX_RODATA]
 	mov xr10, XW [rdi + CTX_WBOUND]
+%if COUNTING
+	;; So can the counters (penalties, stopping)
+	mov r12, [rdi + CTX_COUNTER]
+	mov r11, [rdi + CTX_MAX]
+%endif
 	cmp eax, CALL_NEXT
 	jne %%special
 	%2
@@ -482,6 +618,13 @@ call_goto:
 	ja call_goto
 	jmp exit_dispatch       ; eax = exit code, ctx->pc written by C++
 %endmacro
+
+;; A fast path could not handle the current instruction (a load or store
+;; outside the flat arena, a misaligned jump, ...): C++ executes it from
+;; memory (CPU::step_one), raising whatever exception is due, without leaving
+;; the dispatch.
+do_fallback:
+	CALL_CPP KIND_STEP, NEXT_INSTR
 
 ;; Division, RISC-V semantics (no traps)
 %macro DIVISION 1   ; %1 = divu, remu, div, rem
@@ -562,15 +705,16 @@ call_goto:
 	mov eax, REG32(rax)
 	mov ecx, REG32(rcx)
 %endmacro
-%macro BRANCH 1   ; %1 = jcc taken when the branch is taken
+;; %1 = jcc taken when the branch is taken, %2 = 1 when it may go backwards
+%macro BRANCH 2
 	movzx eax, byte [rbx + 7]
 	movzx ecx, byte [rbx + 6]
 	mov xax, REG(rax)
 	cmp xax, REG(rcx)
 	%1 %%taken
-	NEXT_INSTR
+	NEXT_BLOCK_INSTR
 %%taken:
-	TAKE_BRANCH
+	TAKE_BRANCH %2
 %endmacro
 %macro BRANCH_BACKWARD 1   ; %1 = jcc taken when the branch is NOT taken
 	movzx eax, byte [rbx + 7]
@@ -579,13 +723,13 @@ call_goto:
 	cmp xax, REG(rcx)
 	%1 %%not_taken
 %ifdef NO_BSTUBS
-	TAKE_BRANCH
+	TAKE_BRANCH 1
 %else
 	movsx rax, word [rbx + 4]   ; <= 0 for BEQ/BNE (the rewriter makes the rest _FW)
 	jmp [RBTAB + rax * (8 / STUB_GRAN)]
 %endif
 %%not_taken:
-	NEXT_INSTR
+	NEXT_BLOCK_INSTR
 %endmacro
 
 ;; Memory handlers load the operands from the entry in memory, like the
@@ -659,8 +803,9 @@ call_goto:
 
 %macro ALL_HANDLERS 0
 	%assign HID 0
+;; RV32I_BC_INVALID and every unknown bytecode
 HANDLER fallback
-	jmp do_fallback
+	CALL_CPP KIND_INVALID, NEXT_INSTR
 HANDLER stop
 	jmp do_stop
 
@@ -1011,13 +1156,23 @@ HANDLER op_sh2add_uw
 HANDLER function
 	CALL_CPP KIND_FUNCTION, NEXT_INSTR
 HANDLER funcblock
-	CALL_CPP KIND_FUNCBLOCK, NEXT_INSTR
+	CALL_CPP KIND_FUNCBLOCK, NEXT_INSTR   ; C++ always continues at ctx->pc
 HANDLER syscall
-	CALL_CPP KIND_SYSCALL, NEXT_INSTR
+	CALL_CPP KIND_SYSCALL, NEXT_BLOCK_INSTR
 HANDLER dyncall
 	CALL_CPP KIND_DYNCALL, NEXT_INSTR
 HANDLER system
-	CALL_CPP KIND_SYSTEM, NEXT_INSTR
+	CALL_CPP KIND_SYSTEM, NEXT_BLOCK_INSTR
+;; Native code (binary translation, asmjit): C++ runs it for as long as it
+;; can, then continues at ctx->pc
+HANDLER translator
+	CALL_CPP KIND_TRANSLATOR, NEXT_INSTR
+HANDLER asmjit
+	CALL_CPP KIND_ASMJIT, NEXT_INSTR
+;; Native code was activated in the background (livepatch.hpp): C++ switches
+;; to the patched decoder cache and re-enters at this instruction
+HANDLER livepatch
+	CALL_CPP KIND_LIVEPATCH, NEXT_INSTR
 ;; A 4-byte instruction that C++ executes from memory (CPU::step_one), for
 ;; bytecodes whose fast path here would be incorrect, such as FP arithmetic
 ;; with FCSR emulation. Cheaper than the fallback, which leaves the dispatch.
@@ -1033,17 +1188,17 @@ HANDLER beq
 HANDLER bne
 	BRANCH_BACKWARD je
 HANDLER beq_fw
-	BRANCH je
+	BRANCH je, 0
 HANDLER bne_fw
-	BRANCH jne
+	BRANCH jne, 0
 HANDLER blt
-	BRANCH jl
+	BRANCH jl, 1
 HANDLER bge
-	BRANCH jge
+	BRANCH jge, 1
 HANDLER bltu
-	BRANCH jb
+	BRANCH jb, 1
 HANDLER bgeu
-	BRANCH jae
+	BRANCH jae, 1
 
 ;; -== Jumps ==-
 
@@ -1058,12 +1213,14 @@ HANDLER jal
 	sar eax, 8
 	movsxd rax, eax
 	lea rbx, [rbx + rax * BRSCALE]
-	DISPATCH
+	CHECK_OVERFLOW_RBX
+	DISPATCH_BLOCK
 
 HANDLER fast_jal
 	movsxd rax, dword [rbx + 4]
 	lea rbx, [rbx + rax * BRSCALE]
-	DISPATCH
+	CHECK_OVERFLOW_RBX
+	DISPATCH_BLOCK
 
 HANDLER fast_call
 	RECONSTRUCT_PC rax
@@ -1071,7 +1228,8 @@ HANDLER fast_call
 	mov REG(1), xax
 	movsxd rax, dword [rbx + 4]
 	lea rbx, [rbx + rax * BRSCALE]
-	DISPATCH
+	CHECK_OVERFLOW_RBX
+	DISPATCH_BLOCK
 
 ;; FasterItype: target = REG(rs2) + imm, rs1 = link register (0 = none)
 HANDLER jalr
@@ -1333,6 +1491,7 @@ HANDLER c_std
 %endif
 %endif ; COMPRESSED
 	FLUSH_FALLBACK
+	%undef CUR_HANDLER
 %endmacro
 
 ;; Backward branches: a predicted indirect jump through a table indexed by the
@@ -1348,19 +1507,26 @@ HANDLER c_std
 %endif
 %define NSTUBS 256
 %assign COLOR 0
+%if COUNTING
+%define BSTUB_ALIGN 64
+%else
+%define BSTUB_ALIGN 16
+%endif
 %assign SK 0
 %rep NSTUBS
-align 16
+align BSTUB_ALIGN
 bstub_%[SK]:
 	sub rbx, SK * STUB_GRAN * BRSCALE
-	DISPATCH
+	CHECK_OVERFLOW_RBX
+	DISPATCH_BLOCK
 %assign SK SK+1
 %endrep
-align 16
+align BSTUB_ALIGN
 bstub_generic:
 	movsx rax, word [rbx + 4]
 	lea rbx, [rbx + rax * BRSCALE]
-	DISPATCH
+	CHECK_OVERFLOW_RBX
+	DISPATCH_BLOCK
 
 [section .data.rel.ro]
 align 8

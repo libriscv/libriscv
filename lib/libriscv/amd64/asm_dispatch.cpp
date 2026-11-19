@@ -9,9 +9,12 @@
 #include <exception>
 #include <cstddef>
 
-// The inaccurate dispatch (no instruction counting) for RV32 and RV64 is
-// written in assembly: amd64/dispatch_rv.nasm, assembled once per width. The
-// accurate dispatch is still the C++ threaded dispatch.
+// Both RV32 and RV64 dispatches are written in assembly: amd64/dispatch_rv.nasm,
+// assembled once per width and mode. The counting dispatch (prefix rvXXasmc_)
+// is CPU::simulate and follows cpu_dispatch.cpp, and the inaccurate dispatch
+// (prefix rvXXasm_) is CPU::simulate_inaccurate. The C++ threaded dispatch is
+// still built, as CPU::simulate_cpp, for 128-bit and for host CPUs without
+// the extensions that the assembly uses.
 
 // Handlers in dispatch_rv.nasm. Each handler symbol is an array with the
 // address of every copy (see handler replication in the assembly).
@@ -25,6 +28,7 @@
 	X(op_div) X(op_divu) X(op_rem) X(op_remu) \
 	X(op_sh1add) X(op_sh2add) X(op_sh3add) \
 	X(function) X(funcblock) X(syscall) X(dyncall) X(system) X(step) \
+	X(translator) X(asmjit) X(livepatch) \
 	X(beq) X(bne) X(beq_fw) X(bne_fw) X(blt) X(bge) X(bltu) X(bgeu) \
 	X(jal) X(fast_jal) X(fast_call) X(jalr) \
 	X(ldw) X(ldh) X(ldhu) X(ldb) X(ldbu) X(stw) X(sth) X(stb) \
@@ -33,33 +37,41 @@
 	X(addiw) X(slliw) X(srliw) X(sraiw) \
 	X(op_addw) X(op_subw) X(op_mulw) X(op_add_uw) X(op_sh1add_uw) X(op_sh2add_uw) \
 	X(ldwu) X(ldd) X(std)
-#define ASMDISPATCH_C_HANDLERS(X) \
-	X(c_addi) X(c_mv) X(c_slli) X(c_srli) X(c_andi) X(c_add) X(c_xor) X(c_or) \
-	X(c_bnez) X(c_beqz) X(c_jmp) X(c_jal_addiw) X(c_jr) X(c_jalr) X(c_ldw) X(c_stw) \
-	X(c_function)
-#define ASMDISPATCH_RV64_C_HANDLERS(X) \
-	X(c_ldd) X(c_std)
+
+#ifdef RISCV_EXT_COMPRESSED
+#error "The assembly dispatch does not support the C-extension (RISCV_EXT_C=OFF)"
+#endif
+
+namespace riscv {
+	struct AsmDispatchContext;
+	template <int W> struct DecoderData;
+}
+using riscv::AsmDispatchContext;
+using riscv::DecoderData;
 
 extern "C" {
+#define ASMDISPATCH_DECLARE_ONE(P, name) extern void* const P##name[];
 #ifdef RISCV_32I
-	uint32_t rv32asm_dispatch(void* ctx);
+	uint32_t rv32asm_dispatch(AsmDispatchContext* ctx);
+	uint32_t rv32asmc_dispatch(AsmDispatchContext* ctx);
 	extern const uint32_t rv32asm_ncopies;
-#define RV32ASM_DECLARE(name) extern void* const rv32asm_##name[];
+	extern const uint32_t rv32asmc_ncopies;
+#define RV32ASM_DECLARE(name)  ASMDISPATCH_DECLARE_ONE(rv32asm_, name)
+#define RV32ASMC_DECLARE(name) ASMDISPATCH_DECLARE_ONE(rv32asmc_, name)
 	ASMDISPATCH_HANDLERS(RV32ASM_DECLARE)
-#ifdef RISCV_EXT_COMPRESSED
-	ASMDISPATCH_C_HANDLERS(RV32ASM_DECLARE)
-#endif
+	ASMDISPATCH_HANDLERS(RV32ASMC_DECLARE)
 #endif
 #ifdef RISCV_64I
-	uint32_t rv64asm_dispatch(void* ctx);
+	uint32_t rv64asm_dispatch(AsmDispatchContext* ctx);
+	uint32_t rv64asmc_dispatch(AsmDispatchContext* ctx);
 	extern const uint32_t rv64asm_ncopies;
-#define RV64ASM_DECLARE(name) extern void* const rv64asm_##name[];
+	extern const uint32_t rv64asmc_ncopies;
+#define RV64ASM_DECLARE(name)  ASMDISPATCH_DECLARE_ONE(rv64asm_, name)
+#define RV64ASMC_DECLARE(name) ASMDISPATCH_DECLARE_ONE(rv64asmc_, name)
 	ASMDISPATCH_HANDLERS(RV64ASM_DECLARE)
 	ASMDISPATCH_RV64_HANDLERS(RV64ASM_DECLARE)
-#ifdef RISCV_EXT_COMPRESSED
-	ASMDISPATCH_C_HANDLERS(RV64ASM_DECLARE)
-	ASMDISPATCH_RV64_C_HANDLERS(RV64ASM_DECLARE)
-#endif
+	ASMDISPATCH_HANDLERS(RV64ASMC_DECLARE)
+	ASMDISPATCH_RV64_HANDLERS(RV64ASMC_DECLARE)
 #endif
 }
 
@@ -78,23 +90,34 @@ struct AsmDispatchContext {
 	void**   table;
 	uint64_t pc;
 	void*    cpu;
+	uint64_t counter;     // Counting dispatch only
+	uint64_t max_counter; // Counting dispatch only
+	uint8_t  enter_count; // Counting dispatch: count the block it enters
 };
 static_assert(offsetof(AsmDispatchContext, read_boundary) == 40);
 static_assert(offsetof(AsmDispatchContext, table) == 64);
 static_assert(offsetof(AsmDispatchContext, pc) == 72);
 static_assert(offsetof(AsmDispatchContext, cpu) == 80);
+static_assert(offsetof(AsmDispatchContext, counter) == 88);
+static_assert(offsetof(AsmDispatchContext, max_counter) == 96);
+static_assert(offsetof(AsmDispatchContext, enter_count) == 104);
 static_assert(sizeof(DecoderData<4>) == 8 && sizeof(DecoderData<8>) == 8);
 
 // Exit codes of the dispatch, also returned by asm_call
 enum : uint32_t {
-	ASM_EXIT_STOP = 0, ASM_EXIT_FALLBACK = 1, ASM_EXIT_JUMP = 2, ASM_EXIT_EXCEPTION = 3,
-	ASM_CALL_NEXT = 4, // Only asm_call: continue with the next instruction
-	ASM_CALL_GOTO = 5, // Only asm_call: continue at ctx->pc
+	ASM_EXIT_STOP = 0,     // STOP, or (inaccurate) the machine was stopped
+	ASM_EXIT_REENTER = 1,  // Continue at ctx->pc without counting a new block
+	ASM_EXIT_JUMP = 2,     // Continue at ctx->pc, which begins a block
+	ASM_EXIT_EXCEPTION = 3,
+	ASM_CALL_NEXT = 4,     // Only asm_call: continue with the next instruction
+	ASM_CALL_GOTO = 5,     // Only asm_call: continue at ctx->pc
+	ASM_EXIT_OVERFLOW = 6, // Counting: the counter reached the max, at ctx->pc
 };
 // KIND_* in dispatch_rv.nasm
 enum : uint32_t {
 	ASM_KIND_FUNCTION = 0, ASM_KIND_C_FUNCTION, ASM_KIND_SYSCALL,
 	ASM_KIND_DYNCALL, ASM_KIND_SYSTEM, ASM_KIND_FUNCBLOCK, ASM_KIND_STEP,
+	ASM_KIND_INVALID, ASM_KIND_TRANSLATOR, ASM_KIND_ASMJIT, ASM_KIND_LIVEPATCH,
 };
 // offsetof(Registers<W>, m_regfl), FPOFF in dispatch_rv.nasm
 template <int W> static constexpr ptrdiff_t ASM_FPOFF = (W == 4) ? 136 : 272;
@@ -119,25 +142,37 @@ static void asm_refresh_arena(Memory<W>& mem, AsmDispatchContext* ctx)
 	}
 }
 
+[[noreturn]] static void asm_rethrow_current(auto& cpu)
+{
+	const auto except = cpu.current_exception();
+	cpu.clear_current_exception();
+	std::rethrow_exception(except);
+}
+
 // Executes the current decoder entry in C++ on behalf of the assembly.
-// The semantics follow the tail-call dispatch (tailcall_dispatch.cpp).
-template <int W>
+// The semantics follow cpu_dispatch.cpp (Counting) and
+// cpu_inaccurate_dispatch.cpp (!Counting).
+template <int W, bool Counting>
 static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_t kind) noexcept
 {
 	using address_t = address_type<W>;
 	auto& cpu = *static_cast<CPU<W>*>(ctx->cpu);
 	auto& machine = cpu.machine();
 	auto& regs = cpu.registers();
-	const address_t pc = address_t(entry - static_cast<DecoderData<W>*>(ctx->decoder)) << DecoderData<W>::SHIFT;
-	// Make the current PC visible
+	auto& exec = cpu.current_execute_segment();
+	auto* decoder = static_cast<DecoderData<W>*>(ctx->decoder);
+	const address_t pc = address_t(entry - decoder) << DecoderData<W>::SHIFT;
+	// Make the current PC and the instruction counters visible
 	regs.pc = pc;
+	if constexpr (Counting) {
+		machine.set_instruction_counter(ctx->counter);
+		machine.set_max_instructions(ctx->max_counter);
+	}
 	address_t next_pc = pc + 4;
-	bool jumped = false;
+	bool jumped = false;     // Continue at next_pc, which begins a block
+	bool next_block = false; // The next instruction begins a block
 	try {
 		switch (kind) {
-		case ASM_KIND_C_FUNCTION:
-			next_pc = pc + 2;
-			[[fallthrough]];
 		case ASM_KIND_FUNCTION:
 		case ASM_KIND_DYNCALL:
 			cpu.execute(entry->m_handler, entry->instr);
@@ -154,6 +189,7 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 				next_pc = regs.pc + 4;
 				jumped = true;
 			}
+			next_block = true;
 			break;
 		case ASM_KIND_STEP: // Always a 4-byte instruction, see the handler
 			cpu.step_one(false);
@@ -167,29 +203,129 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 				next_pc = regs.pc;
 				jumped = true;
 			}
+			next_block = true;
+			break;
+		case ASM_KIND_INVALID:
+			// The decoder also uses INVALID for instructions it refuses, such as
+			// branches out of the execute segment, so only undecoded entries may
+			// be executed from memory. See execute_invalid in cpu_dispatch.cpp.
+			if (entry->get_bytecode() == RV32I_BC_INVALID && entry->instr == 0 && exec.is_within(pc)) {
+				next_pc = cpu.simulate_undecoded(pc);
+				jumped = true;
+				break;
+			}
+			cpu.trigger_exception(ILLEGAL_OPCODE, entry->instr);
+			break;
+#ifdef RISCV_BINARY_TRANSLATION
+		case ASM_KIND_TRANSLATOR: {
+			// This entry was counted as one instruction of its block, which the
+			// translated code counts itself
+			uint64_t counter = Counting ? ctx->counter - 1 : 0;
+			uint64_t max     = Counting ? ctx->max_counter : ~0ULL;
+			address_t tpc = pc;
+			const auto* e = entry;
+			while (true) {
+				const auto results = exec.unchecked_mapping_at(e->instr)(cpu, counter, max, tpc);
+#  ifdef RISCV_LIBTCC
+				if (UNLIKELY(cpu.has_current_exception()))
+					asm_rethrow_current(cpu);
+#  endif
+				tpc = regs.pc;
+				counter = results.counter;
+				max     = results.max_counter;
+				if (!(counter < max) || !(tpc >= exec.exec_begin() && tpc < exec.exec_end())
+					|| exec.is_stale())
+					break;
+				e = &decoder[tpc >> DecoderData<W>::SHIFT];
+				if (e->get_bytecode() != RV32I_BC_TRANSLATOR)
+					break;
+			}
+			machine.set_instruction_counter(counter);
+			machine.set_max_instructions(max);
+			next_pc = tpc;
+			jumped = true;
+			break;
+		}
+#endif
+#ifdef RISCV_ASMJIT
+		case ASM_KIND_ASMJIT: {
+			AjState<W> state {
+				Counting ? ctx->counter - entry->instruction_count() : 0,
+				Counting ? ctx->max_counter : ~0ULL, pc };
+			const auto* e = entry;
+			do {
+				exec.unchecked_asmjit_mapping_at(e->instr)(cpu, &state);
+				if (UNLIKELY(state.max_counter == 0 && cpu.has_current_exception()))
+					asm_rethrow_current(cpu);
+				if (!(state.pc >= exec.exec_begin() && state.pc < exec.exec_end()))
+					break;
+				e = &decoder[state.pc >> DecoderData<W>::SHIFT];
+			} while (state.counter < state.max_counter && e->get_bytecode() == RV32I_BC_ASMJIT);
+			machine.set_instruction_counter(state.counter);
+			machine.set_max_instructions(state.max_counter);
+			next_pc = state.pc;
+			jumped = true;
+			break;
+		}
+#endif
+		case ASM_KIND_LIVEPATCH:
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+			// Native code was activated in the background, and the segment
+			// now uses the patched decoder cache. Re-enter at this instruction,
+			// which belongs to a block that has already been counted.
+#else
+			// Without native code there is nothing to switch to
+			entry->set_bytecode(RV32I_BC_INVALID);
+			entry->set_invalid_handler();
+#endif
+			ctx->pc = pc;
+			return ASM_EXIT_REENTER;
+		default: // Bytecodes without a translator or asmjit build
+			cpu.trigger_exception(ILLEGAL_OPCODE, entry->instr);
 			break;
 		}
 	} catch (...) {
 		asm_exception = std::current_exception();
 		ctx->pc = regs.pc;
+		if constexpr (Counting) {
+			ctx->counter = machine.instruction_counter();
+			ctx->max_counter = machine.max_instructions();
+		}
 		return ASM_EXIT_EXCEPTION;
 	}
 	asm_refresh_arena(machine.memory, ctx);
 	ctx->pc = next_pc;
-	if (UNLIKELY(machine.stopped()))
-		return ASM_EXIT_STOP;
+	if constexpr (Counting) {
+		ctx->counter = machine.instruction_counter();
+		ctx->max_counter = machine.max_instructions();
+		// The assembly checks the counter at ctx->pc and stops there, but only
+		// where cpu_dispatch.cpp checks it. After a FUNCTION (or a STEP that did
+		// not jump) it continues to the next check, even though the counter
+		// may already have overflowed when the block was entered.
+		if (UNLIKELY(ctx->counter >= ctx->max_counter)
+			&& (jumped || next_block || kind == ASM_KIND_DYNCALL))
+			return ASM_CALL_GOTO;
+	} else {
+		if (UNLIKELY(machine.stopped()))
+			return ASM_EXIT_STOP;
+	}
 	// A (nested) call may have left another execute segment, or the code
 	// may have been changed: let C++ find the right segment.
-	auto& exec = cpu.current_execute_segment();
-	if (UNLIKELY(exec.decoder_cache() != ctx->decoder || exec.is_stale()))
+	auto& current = cpu.current_execute_segment();
+	if (UNLIKELY(current.is_stale()))
 		return ASM_EXIT_JUMP;
+	if (UNLIKELY(current.decoder_cache() != ctx->decoder))
+		return (jumped || next_block) ? ASM_EXIT_JUMP : ASM_EXIT_REENTER;
 	return jumped ? ASM_CALL_GOTO : ASM_CALL_NEXT;
 }
 
-template <int W>
-struct AsmDispatch;
+// table[copy * 256 + bytecode] = copy `copy` of the handler
+#define H(bc, sym) for (unsigned c = 0; c < copies; c++) t[c * 256 + (bc)] = sym[c];
 
-#define ASMDISPATCH_FILL(T, P) \
+#define ASMDISPATCH_FILL(P) \
+	for (unsigned c = 0; c < copies; c++) \
+		for (unsigned bc = 0; bc < 256; bc++) \
+			t[c * 256 + bc] = P##fallback[c]; \
 	H(RV32I_BC_STOP, P##stop) \
 	H(RV32I_BC_ADDI, P##addi)   H(RV32I_BC_LI, P##li)       H(RV32I_BC_MV, P##mv) \
 	H(RV32I_BC_SLLI, P##slli)   H(RV32I_BC_SRLI, P##srli)   H(RV32I_BC_SRAI, P##srai) \
@@ -209,7 +345,8 @@ struct AsmDispatch;
 	H(RV32I_BC_OP_SH3ADD, P##op_sh3add) \
 	H(RV32I_BC_FUNCTION, P##function) H(RV32I_BC_FUNCBLOCK, P##funcblock) \
 	H(RV32I_BC_SYSCALL, P##syscall) H(RV32I_BC_DYNCALL, P##dyncall) \
-	H(RV32I_BC_SYSTEM, P##system) \
+	H(RV32I_BC_SYSTEM, P##system) H(RV32I_BC_LIVEPATCH, P##livepatch) \
+	ASMDISPATCH_FILL_NATIVE(P) \
 	H(RV32I_BC_BEQ, P##beq)     H(RV32I_BC_BNE, P##bne) \
 	H(RV32I_BC_BEQ_FW, P##beq_fw) H(RV32I_BC_BNE_FW, P##bne_fw) \
 	H(RV32I_BC_BLT, P##blt)     H(RV32I_BC_BGE, P##bge) \
@@ -232,71 +369,55 @@ struct AsmDispatch;
 		H(RV32F_BC_FMUL, P##step) H(RV32F_BC_FDIV, P##step) \
 		H(RV32F_BC_FMADD, P##step) \
 	}
-#define ASMDISPATCH_FILL_C(P) \
-	H(RV32C_BC_ADDI, P##c_addi) H(RV32C_BC_MV, P##c_mv) \
-	H(RV32C_BC_SLLI, P##c_slli) H(RV32C_BC_SRLI, P##c_srli) H(RV32C_BC_ANDI, P##c_andi) \
-	H(RV32C_BC_ADD, P##c_add)   H(RV32C_BC_XOR, P##c_xor)   H(RV32C_BC_OR, P##c_or) \
-	H(RV32C_BC_BNEZ, P##c_bnez) H(RV32C_BC_BEQZ, P##c_beqz) H(RV32C_BC_JMP, P##c_jmp) \
-	H(RV32C_BC_JAL_ADDIW, P##c_jal_addiw) H(RV32C_BC_JR, P##c_jr) H(RV32C_BC_JALR, P##c_jalr) \
-	H(RV32C_BC_LDW, P##c_ldw)   H(RV32C_BC_STW, P##c_stw) \
-	H(RV32C_BC_FUNCTION, P##c_function)
+#ifdef RISCV_BINARY_TRANSLATION
+#define ASMDISPATCH_FILL_TRANSLATOR(P) H(RV32I_BC_TRANSLATOR, P##translator)
+#else
+#define ASMDISPATCH_FILL_TRANSLATOR(P) /* */
+#endif
+#ifdef RISCV_ASMJIT
+#define ASMDISPATCH_FILL_ASMJIT(P) H(RV32I_BC_ASMJIT, P##asmjit)
+#else
+#define ASMDISPATCH_FILL_ASMJIT(P) /* */
+#endif
+#define ASMDISPATCH_FILL_NATIVE(P) ASMDISPATCH_FILL_TRANSLATOR(P) ASMDISPATCH_FILL_ASMJIT(P)
+#define ASMDISPATCH_FILL_RV64(P) \
+	H(RV64I_BC_ADDIW, P##addiw) \
+	H(RV64I_BC_SLLIW, P##slliw) H(RV64I_BC_SRLIW, P##srliw) H(RV64I_BC_SRAIW, P##sraiw) \
+	H(RV64I_BC_OP_ADDW, P##op_addw) H(RV64I_BC_OP_SUBW, P##op_subw) \
+	H(RV64I_BC_OP_MULW, P##op_mulw) H(RV64I_BC_OP_ADD_UW, P##op_add_uw) \
+	H(RV64I_BC_OP_SH1ADD_UW, P##op_sh1add_uw) H(RV64I_BC_OP_SH2ADD_UW, P##op_sh2add_uw) \
+	H(RV32I_BC_LDWU, P##ldwu) H(RV32I_BC_LDD, P##ldd) H(RV32I_BC_STD, P##std)
 
-// table[copy * 256 + bytecode] = copy `copy` of the handler
-#define H(bc, sym) for (unsigned c = 0; c < copies; c++) t[c * 256 + (bc)] = sym[c];
+template <int W, bool Counting>
+struct AsmDispatch;
+
+#define ASMDISPATCH_DEFINE(W, COUNTING, P, RV64FILL) \
+template <> \
+struct AsmDispatch<W, COUNTING> { \
+	static uint32_t dispatch(AsmDispatchContext* ctx) { return P##dispatch(ctx); } \
+	static void** table() { \
+		static std::vector<void*> t = [] { \
+			const unsigned copies = P##ncopies; \
+			std::vector<void*> t(copies * 256); \
+			ASMDISPATCH_FILL(P) \
+			RV64FILL \
+			return t; \
+		}(); \
+		return t.data(); \
+	} \
+}; \
+extern "C" uint32_t P##call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_t kind) noexcept \
+{ \
+	return asm_call<W, COUNTING>(ctx, entry, kind); \
+}
 
 #ifdef RISCV_32I
-template <>
-struct AsmDispatch<4> {
-	static uint32_t dispatch(AsmDispatchContext* ctx) { return rv32asm_dispatch(ctx); }
-	static std::vector<void*> make_table() {
-		const unsigned copies = rv32asm_ncopies;
-		std::vector<void*> t(copies * 256);
-		for (unsigned c = 0; c < copies; c++)
-			for (unsigned bc = 0; bc < 256; bc++)
-				t[c * 256 + bc] = rv32asm_fallback[c];
-		ASMDISPATCH_FILL(4, rv32asm_)
-#ifdef RISCV_EXT_COMPRESSED
-		ASMDISPATCH_FILL_C(rv32asm_)
-#endif
-		return t;
-	}
-};
-extern "C" uint32_t rv32asm_call(AsmDispatchContext* ctx, DecoderData<4>* entry, uint32_t kind) noexcept
-{
-	return asm_call<4>(ctx, entry, kind);
-}
+ASMDISPATCH_DEFINE(4, false, rv32asm_, )
+ASMDISPATCH_DEFINE(4, true, rv32asmc_, )
 #endif
 #ifdef RISCV_64I
-template <>
-struct AsmDispatch<8> {
-	static uint32_t dispatch(AsmDispatchContext* ctx) { return rv64asm_dispatch(ctx); }
-	static std::vector<void*> make_table() {
-		const unsigned copies = rv64asm_ncopies;
-		std::vector<void*> t(copies * 256);
-		for (unsigned c = 0; c < copies; c++)
-			for (unsigned bc = 0; bc < 256; bc++)
-				t[c * 256 + bc] = rv64asm_fallback[c];
-		ASMDISPATCH_FILL(8, rv64asm_)
-		H(RV64I_BC_ADDIW, rv64asm_addiw)
-		H(RV64I_BC_SLLIW, rv64asm_slliw) H(RV64I_BC_SRLIW, rv64asm_srliw)
-		H(RV64I_BC_SRAIW, rv64asm_sraiw)
-		H(RV64I_BC_OP_ADDW, rv64asm_op_addw) H(RV64I_BC_OP_SUBW, rv64asm_op_subw)
-		H(RV64I_BC_OP_MULW, rv64asm_op_mulw) H(RV64I_BC_OP_ADD_UW, rv64asm_op_add_uw)
-		H(RV64I_BC_OP_SH1ADD_UW, rv64asm_op_sh1add_uw)
-		H(RV64I_BC_OP_SH2ADD_UW, rv64asm_op_sh2add_uw)
-		H(RV32I_BC_LDWU, rv64asm_ldwu) H(RV32I_BC_LDD, rv64asm_ldd)
-		H(RV32I_BC_STD, rv64asm_std)
-#ifdef RISCV_EXT_COMPRESSED
-		ASMDISPATCH_FILL_C(rv64asm_)
-		H(RV32C_BC_LDD, rv64asm_c_ldd) H(RV32C_BC_STD, rv64asm_c_std)
-#endif
-		return t;
-	}
-};
-extern "C" uint32_t rv64asm_call(AsmDispatchContext* ctx, DecoderData<8>* entry, uint32_t kind) noexcept
-{
-	return asm_call<8>(ctx, entry, kind);
-}
+ASMDISPATCH_DEFINE(8, false, rv64asm_, ASMDISPATCH_FILL_RV64(rv64asm_))
+ASMDISPATCH_DEFINE(8, true, rv64asmc_, ASMDISPATCH_FILL_RV64(rv64asmc_))
 #endif
 #undef H
 
@@ -308,83 +429,113 @@ static bool asm_dispatch_supported()
 	return supported;
 }
 
+// The outer loop of both dispatches: find the execute segment, enter the
+// assembly, and handle whatever made it return. Counting follows
+// cpu_dispatch.cpp: returns true when the machine stopped normally.
+template <int W, bool Counting>
+static bool asm_simulate(CPU<W>& cpu, address_type<W> pc, uint64_t counter, uint64_t max_counter)
+{
+	using address_t = address_type<W>;
+	static void** const table = AsmDispatch<W, Counting>::table();
+	auto& machine = cpu.machine();
+	auto& regs = cpu.registers();
+
+	AsmDispatchContext ctx;
+	ctx.regs  = &regs.get(0);
+	ctx.cpu   = &cpu;
+	ctx.table = table;
+	if (UNLIKELY((char*)&regs.getfl(0) - (char*)ctx.regs != ASM_FPOFF<W>))
+		throw MachineException(FEATURE_DISABLED, "Assembly dispatch: unexpected register file layout");
+
+	bool count_entry = true;
+	while (true) {
+		DecodedExecuteSegment<W>* exec = &cpu.current_execute_segment();
+		if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end()) || exec->is_stale())) {
+			auto new_values = cpu.next_execute_segment(pc);
+			exec = new_values.exec;
+			pc   = new_values.pc;
+			count_entry = true;
+			if constexpr (Counting) {
+				counter += new_values.penalty;
+				if (UNLIKELY(counter >= max_counter)) {
+					regs.pc = pc;
+					machine.set_instruction_counter(counter);
+					return max_counter == 0;
+				}
+			}
+		}
+		ctx.decoder = exec->decoder_cache();
+		ctx.begin   = exec->exec_begin();
+		ctx.length  = exec->exec_end() - exec->exec_begin();
+		asm_refresh_arena(machine.memory, &ctx);
+		ctx.pc = pc;
+		ctx.counter = counter;
+		ctx.max_counter = max_counter;
+		ctx.enter_count = count_entry;
+
+		const uint32_t code = AsmDispatch<W, Counting>::dispatch(&ctx);
+		pc = address_t(ctx.pc);
+		if constexpr (Counting) {
+			counter = ctx.counter;
+			max_counter = ctx.max_counter;
+		}
+		switch (code) {
+		case ASM_EXIT_REENTER:
+			count_entry = false;
+			continue;
+		case ASM_EXIT_JUMP:
+			// A jump checks the counter, like check_jump in cpu_dispatch.cpp
+			if constexpr (Counting) {
+				if (UNLIKELY(counter >= max_counter))
+					break;
+			}
+			count_entry = true;
+			continue;
+		case ASM_EXIT_EXCEPTION: {
+			regs.pc = pc;
+			if constexpr (Counting)
+				machine.set_instruction_counter(counter);
+			auto except = std::move(asm_exception);
+			asm_exception = nullptr;
+			std::rethrow_exception(except);
+		}
+		case ASM_EXIT_STOP:
+			regs.pc = pc;
+			if constexpr (Counting)
+				machine.set_instruction_counter(counter);
+			return true;
+		default: // ASM_EXIT_OVERFLOW
+			break;
+		}
+		// The counter reached the max
+		regs.pc = pc;
+		machine.set_instruction_counter(counter);
+		return max_counter == 0;
+	}
+}
+
+template <int W>
+bool CPU<W>::simulate(address_t pc, uint64_t inscounter, uint64_t maxcounter)
+{
+	if constexpr (W == 4 || W == 8) {
+		if (LIKELY(asm_dispatch_supported()))
+			return asm_simulate<W, true>(*this, pc, inscounter, maxcounter);
+	}
+	return this->simulate_cpp(pc, inscounter, maxcounter);
+}
+
 template <int W>
 void CPU<W>::simulate_inaccurate(address_t pc)
 {
 	if constexpr (W == 4 || W == 8) {
-		if (UNLIKELY(!asm_dispatch_supported())) {
-			// The accurate dispatch, with a counter that never runs out
-			machine().set_max_instructions(UINT64_MAX);
-			this->simulate(pc, 0, UINT64_MAX);
-			return;
-		}
-		static void** const table = [] {
-			static std::vector<void*> t = AsmDispatch<W>::make_table();
-			return t.data();
-		}();
-
 		machine().set_instruction_counter(0);
 		machine().set_max_instructions(UINT64_MAX);
-
-		AsmDispatchContext ctx;
-		ctx.regs  = &registers().get(0);
-		ctx.cpu   = this;
-		ctx.table = table;
-		if (UNLIKELY((char*)&registers().getfl(0) - (char*)ctx.regs != ASM_FPOFF<W>))
-			throw MachineException(FEATURE_DISABLED, "Assembly dispatch: unexpected register file layout");
-
-		while (true) {
-			DecodedExecuteSegment<W>* exec = this->m_exec;
-			if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end()) || exec->is_stale())) {
-				auto new_values = this->next_execute_segment(pc);
-				exec = new_values.exec;
-				pc   = new_values.pc;
-			}
-			ctx.decoder = exec->decoder_cache();
-			ctx.begin   = exec->exec_begin();
-			ctx.length  = exec->exec_end() - exec->exec_begin();
-			asm_refresh_arena(machine().memory, &ctx);
-			ctx.pc = pc;
-
-			switch (AsmDispatch<W>::dispatch(&ctx)) {
-			case ASM_EXIT_STOP:
-				registers().pc = address_t(ctx.pc);
-				return;
-			case ASM_EXIT_JUMP:
-				pc = address_t(ctx.pc);
-				continue;
-			case ASM_EXIT_EXCEPTION: {
-				registers().pc = address_t(ctx.pc);
-				auto except = std::move(asm_exception);
-				asm_exception = nullptr;
-				std::rethrow_exception(except);
-			}
-			default: { // ASM_EXIT_FALLBACK: execute one instruction in C++
-				pc = address_t(ctx.pc);
-				const auto& entry = exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
-				if (entry.get_bytecode() == RV32I_BC_INVALID) {
-					// Same as execute_invalid in cpu_inaccurate_dispatch.cpp: the
-					// decoder also uses INVALID for instructions it refuses, such as
-					// branches out of the execute segment, so only undecoded entries
-					// may be executed from memory.
-					if (entry.instr == 0 && exec->is_within(pc)) {
-						pc = this->simulate_undecoded(pc);
-						if (machine().stopped())
-							return;
-						continue;
-					}
-					registers().pc = pc;
-					trigger_exception(ILLEGAL_OPCODE, entry.instr);
-				}
-				registers().pc = pc;
-				this->step_one(false);
-			}
-				if (machine().stopped())
-					return;
-				pc = registers().pc;
-				continue;
-			}
+		if (UNLIKELY(!asm_dispatch_supported())) {
+			// The accurate dispatch, with a counter that never runs out
+			this->simulate_cpp(pc, 0, UINT64_MAX);
+			return;
 		}
+		asm_simulate<W, false>(*this, pc, 0, UINT64_MAX);
 	} else {
 		// For 128-bit, we don't have an inaccurate dispatch
 		throw MachineException(FEATURE_DISABLED, "Inaccurate dispatch is not implemented for this CPU width");
@@ -393,4 +544,8 @@ void CPU<W>::simulate_inaccurate(address_t pc)
 
 	INSTANTIATE_32_IF_ENABLED(CPU);
 	INSTANTIATE_64_IF_ENABLED(CPU);
+#ifdef RISCV_128I
+	// The rest of CPU<16> is instantiated with the C++ dispatch
+	template bool CPU<16>::simulate(address_type<16>, uint64_t, uint64_t);
+#endif
 } // riscv

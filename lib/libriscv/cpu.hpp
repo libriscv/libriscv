@@ -40,6 +40,10 @@ namespace riscv
 		/// layer of timeout checking, like signal handling.
 		/// @param pc The starting address
 		void simulate_inaccurate(address_t pc);
+#ifdef RISCV_ASM_DISPATCH
+		/// @brief The "fallback" C++ (threaded) dispatch
+		bool simulate_cpp(address_t pc, uint64_t icounter, uint64_t maxcounter);
+#endif
 
 		// Step precisely one instruction forward from current PC.
 		void step_one(bool use_instruction_counter = true);
