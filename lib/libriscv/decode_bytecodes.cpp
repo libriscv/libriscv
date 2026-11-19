@@ -38,7 +38,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			case CI_CODE(0b010, 0b00):
 			case CI_CODE(0b011, 0b00): {
 				if (ci.CL.funct3 == 0x1) {
-					return RV32C_BC_FUNCTION; // C.FLD
+					if constexpr (W <= 8) {
+						return RV32C_BC_FLD; // C.FLD
+					}
+					return RV32C_BC_FUNCTION; // C.LQ
 				}
 				else if (ci.CL.funct3 == 0x2) {
 					return RV32C_BC_LDW; // C.LW
@@ -46,8 +49,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				else if (ci.CL.funct3 == 0x3) {
 					if constexpr (sizeof(address_t) == 8) {
 						return RV32C_BC_LDD; // C.LD
+					} else if constexpr (W == 4) {
+						return RV32C_BC_FLW; // C.FLW
 					} else {
-						return RV32C_BC_FUNCTION; // C.FLW
+						return RV32C_BC_FUNCTION;
 					}
 				}
 				return RV32C_BC_FUNCTION; // C.UNIMP
@@ -60,14 +65,19 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				case 4:
 					return RV32C_BC_FUNCTION; // C.UNIMP
 				case 5:
-					return RV32C_BC_FUNCTION; // C.FSD
+					if constexpr (W <= 8) {
+						return RV32C_BC_FSD; // C.FSD
+					}
+					return RV32C_BC_FUNCTION; // C.SQ
 				case 6:
 					return RV32C_BC_STW; // C.SW
 				case 7: // C.SD / C.FSW
 					if constexpr (sizeof(address_t) == 8) {
 						return RV32C_BC_STD; // C.SD
+					} else if constexpr (W == 4) {
+						return RV32C_BC_FSW; // C.FSW
 					} else {
-						return RV32C_BC_FUNCTION; // C.FSW
+						return RV32C_BC_FUNCTION;
 					}
 				}
 				return RV32C_BC_FUNCTION; // C.UNIMP?
@@ -94,7 +104,7 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					// C.LUI is valid only when rd != x2 and imm != 0
 					// (insn:c-lui_rsv).
 					if (ci.CI.upper_imm() != 0) {
-						return RV32C_BC_FUNCTION; // C.LUI
+						return RV32C_BC_LUI; // C.LUI
 					}
 					if ((ci.CI.rd & 1) != 0 && ci.CI.rd < 16) {
 						return RV32C_BC_FUNCTION; // C.MOP.n
@@ -130,7 +140,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 					return RV32C_BC_SLLI; // C.SLLI
 				}
 				else if (ci.CI2.funct3 == 0x1) {
-					return RV32C_BC_FUNCTION; // C.FLDSP
+					if constexpr (W <= 8) {
+						return RV32C_BC_FLD; // C.FLDSP
+					}
+					return RV32C_BC_FUNCTION; // C.LQSP
 				}
 				else if (ci.CI2.funct3 == 0x2 && ci.CI2.rd != 0) {
 					return RV32C_BC_LDW; // C.LWSP
@@ -140,8 +153,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 						if (ci.CI2.rd != 0) {
 							return RV32C_BC_LDD; // C.LDSP
 						}
+					} else if constexpr (W == 4) {
+						return RV32C_BC_FLW; // C.FLWSP
 					} else {
-						return RV32C_BC_FUNCTION; // C.FLWSP
+						return RV32C_BC_FUNCTION;
 					}
 				}
 				else if (ci.CI.rd == 0) {
@@ -155,20 +170,30 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				case 0x0:
 					return RV32C_BC_SRLI; // C.SRLI
 				case 0x1:
-					return RV32C_BC_FUNCTION; // C.SRAI
+					return RV32C_BC_SRAI; // C.SRAI
 				case 0x2:
 					return RV32C_BC_ANDI; // C.ANDI
 				case 0x3: // More ALU ops
 					switch (ci.CA.funct2 | (ci.CA.funct6 & 0x4))
 					{
 					case 0x0:
-						return RV32C_BC_FUNCTION; // C.SUB
+						return RV32C_BC_SUB; // C.SUB
 					case 0x1:
 						return RV32C_BC_XOR; // C.XOR
 					case 0x2:
 						return RV32C_BC_OR; // C.OR
 					case 0x3:
-						return RV32C_BC_FUNCTION; // C.AND
+						return RV32C_BC_AND; // C.AND
+					case 0x4:
+						if constexpr (W == 8) {
+							return RV32C_BC_SUBW; // C.SUBW
+						}
+						return RV32C_BC_FUNCTION;
+					case 0x5:
+						if constexpr (W == 8) {
+							return RV32C_BC_ADDW; // C.ADDW
+						}
+						return RV32C_BC_FUNCTION;
 					default:
 						return RV32C_BC_FUNCTION;
 					}
@@ -204,7 +229,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 			case CI_CODE(0b110, 0b10):
 			case CI_CODE(0b111, 0b10): {
 				if (ci.CSS.funct3 == 5) {
-					return RV32C_BC_FUNCTION; // FSDSP
+					if constexpr (W <= 8) {
+						return RV32C_BC_FSD; // FSDSP
+					}
+					return RV32C_BC_FUNCTION; // SQSP
 				}
 				else if (ci.CSS.funct3 == 6) {
 					return RV32C_BC_STW; // SWSP
@@ -212,8 +240,10 @@ size_t CPU<W>::computed_index_for(rv32i_instruction instr) noexcept
 				else if (ci.CSS.funct3 == 7) {
 					if constexpr (W == 8) {
 						return RV32C_BC_STD; // SDSP
+					} else if constexpr (W == 4) {
+						return RV32C_BC_FSW; // FSWSP
 					} else {
-						return RV32C_BC_FUNCTION; // FSWSP
+						return RV32C_BC_FUNCTION;
 					}
 				}
 				return RV32C_BC_FUNCTION; // C.UNIMP?

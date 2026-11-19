@@ -283,6 +283,11 @@ extern %[PFX]call
 %define CLASS_c_stw 2
 %define CLASS_c_ldd 2
 %define CLASS_c_std 2
+%define CLASS_c_fld 2
+%define CLASS_c_fsd 2
+%define CLASS_c_flw 2
+%define CLASS_c_fsw 2
+%define CLASS_c_step 2
 %assign COPY  0
 %assign HID   0
 %assign COLOR 0
@@ -822,44 +827,6 @@ do_c_fallback:
 	NEXT_INSTR
 %endmacro
 
-
-;; Helpers for the RV32C_BC_FUNCTION handler (c_function)
-;; Exports <prefix>cf_<path>, the address of c_function.<path> in every copy
-%macro CF_EXPORT 1
-%if COPY == 0
-	[section .data.rel.ro]
-	align 8
-	global %[PFX]cf_%1
-	%[PFX]cf_%1:
-	%assign %%i 0
-	%rep NCOPIES
-		dq %[PFX]c_function_%[%%i].%1
-		%assign %%i %%i+1
-	%endrep
-	__?SECT?__
-%endif
-%endmacro
-%macro C_ALU_OP 1   ; rd' (rcx) op= rs2' (rdi)
-	mov xax, XW [RREGS + rdi * XB + 8 * XB]
-	%1 XW [RREGS + rcx * XB + 8 * XB], xax
-	NEXT_C_INSTR
-%endmacro
-;; Double-precision loads and stores. The fallback (C++, from memory) raises
-;; the exceptions and handles memory outside the flat arena.
-;; xdx = guest address REG(xax) + edx, or go to the fallback
-%macro C_FP_READ_ADDRESS 0
-	add xdx, XW [RREGS + rax * XB]
-	lea xax, [rdx - RWREAD_BEGIN]
-	cmp xax, xr8
-	FALLBACK_IF jae
-%endmacro
-%macro C_FP_WRITE_ADDRESS 0
-	add xdx, XW [RREGS + rax * XB]
-	mov xax, xdx
-	sub xax, xr9
-	cmp xax, xr10
-	FALLBACK_IF jae
-%endmacro
 
 %macro ALL_HANDLERS 0
 	%assign HID 0
@@ -1457,6 +1424,46 @@ HANDLER c_andi
 	and REG(rdx), xax
 	NEXT_C_INSTR
 
+HANDLER c_srai
+	movzx edx, byte [rbx + 7]
+	movzx ecx, word [rbx + 4]
+	sar REG(rdx), cl
+	NEXT_C_INSTR
+
+HANDLER c_sub
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov xax, REG(rcx)
+	sub REG(rdx), xax
+	NEXT_C_INSTR
+
+HANDLER c_and
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov xax, REG(rcx)
+	and REG(rdx), xax
+	NEXT_C_INSTR
+
+%if XLEN == 64
+HANDLER c_subw
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov eax, REG32(rdx)
+	sub eax, REG32(rcx)
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_C_INSTR
+
+HANDLER c_addw
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov eax, REG32(rdx)
+	add eax, REG32(rcx)
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_C_INSTR
+%endif
+
 HANDLER c_add
 	movzx ecx, byte [rbx + 6]
 	movzx edx, byte [rbx + 7]
@@ -1532,220 +1539,51 @@ HANDLER c_jalr
 	mov REG(1), xcx
 	JUMP_TO_EAX
 
-;; RV32C_BC_FUNCTION keeps the original 16-bit instruction. The decoder sends
-;; every compressed instruction without a bytecode of its own here, and some of
-;; them are common: C.LUI everywhere, C.SUB/C.AND/C.ADDW/C.SUBW/C.SRAI in
-;; integer code, and C.FLD/C.FSD/C.FLDSP/C.FSDSP in all FP code (two thirds of
-;; RV64GC STREAM's time went to the call into C++). They are executed here, and
-;; the rest (C.NOP, C.MOP, C.EBREAK, C.FLW, reserved encodings, ...) by C++.
-;;
-;; The entry's handler index (dh) identifies the C++ instruction handler, one
-;; per group (C1_ALU_OPS, C1_LUI, C0_REG_FLD, ...). C++ fills a table for each
-;; copy, after the dispatch tables, with the paths below for the handler
-;; indices of those groups, and .generic for every other index, including 0
-;; (not resolved yet: C++ resolves it on the first execution).
-%define CF_TABLE_OFFSET ((NCOPIES + COPY) * 256 * 8)
-CF_EXPORT generic
-CF_EXPORT lui
-CF_EXPORT alu
-CF_EXPORT fld
-CF_EXPORT fsd
-CF_EXPORT fldsp
-CF_EXPORT fsdsp
-C_HANDLER c_function
-	movzx ecx, dh
-	mov eax, dword [rbx + 4]
-	jmp [r14 + rcx * 8 + CF_TABLE_OFFSET]
-.generic:
-	CALL_CPP KIND_C_FUNCTION, NEXT_C_INSTR
-
-	align 64
-;; C.LUI rd, nzimm (Q1, funct3 = 3). C.ADDI16SP has a bytecode, so x2 here is
-;; reserved, and nzimm = 0 is reserved (or C.MOP.n): those go to C++.
-.lui:
-	mov ecx, eax
-	shr ecx, 7
-	and ecx, 31                 ; rd
-	test ecx, ~2 & 31
-	jz .lui_generic             ; rd = x0 or x2
-	bt eax, 12
-	sbb edx, edx
-	shl edx, 5                  ; -32 when imm[17] is set
-	mov edi, eax
-	shr edi, 2
-	and edi, 31                 ; imm[16:12]
-	or edx, edi
-	jz .lui_generic
-	shl edx, 12
+;; FasterJtype: offset24 @4..6, rd @7
+HANDLER c_lui
+	movzx ecx, byte [rbx + 7]
+	shr rdx, 32
+	shl edx, 8
 %if XLEN == 64
 	movsxd rdx, edx
 %endif
 	mov REG(rcx), xdx
 	NEXT_C_INSTR
-.lui_generic:
-	jmp .generic
 
-	align 64
-;; Q1, funct3 = 4: C.SRAI (01), and C.SUB/XOR/OR/AND/SUBW/ADDW (11). C.SRLI
-;; and C.ANDI have bytecodes.
-.alu:
-	mov ecx, eax
-	shr ecx, 7
-	and ecx, 7                  ; rd' - 8
-	mov edx, eax
-	shr edx, 10
-	and edx, 3
-	cmp edx, 1
-	je .srai
-	cmp edx, 3
-	jne .generic
-	mov edi, eax
-	shr edi, 2
-	and edi, 7                  ; rs2' - 8
-	mov edx, eax
-	shr edx, 10
-	and edx, 4                  ; instr[12]
-	shr eax, 5
-	and eax, 3                  ; instr[6:5]
-	or edx, eax
-	lea rax, [CUR_HANDLER %+ _alu_table]
-	jmp [rax + rdx * 8]
-.srai:
-	mov edi, ecx                ; rd' - 8
-	mov ecx, eax
-	shr ecx, 7
-	and ecx, 0x20               ; shamt[5]
+C_HANDLER c_fld
+	READ_ADDRESS 6
+	movzx edx, byte [rbx + 7]
+	mov rax, qword [RARENA + rax]
+	mov qword FREG(rdx), rax
+	NEXT_MEM_C_INSTR
+C_HANDLER c_fsd
+	WRITE_ADDRESS 7
+	movzx ecx, byte [rbx + 6]
+	mov rcx, qword FREG(rcx)
+	mov qword [RARENA + rax], rcx
+	NEXT_MEM_C_INSTR
 %if XLEN == 32
-	jnz .generic                ; reserved on RV32
+C_HANDLER c_flw
+	READ_ADDRESS 6
+	movzx edx, byte [rbx + 7]
+	mov eax, dword [RARENA + rax]
+	mov dword FREG(rdx), eax
+	NEXT_MEM_C_INSTR
+C_HANDLER c_fsw
+	WRITE_ADDRESS 7
+	movzx ecx, byte [rbx + 6]
+	mov ecx, dword FREG(rcx)
+	mov dword [RARENA + rax], ecx
+	NEXT_MEM_C_INSTR
 %endif
-	shr eax, 2
-	and eax, 31
-	or ecx, eax                 ; shamt
-	sar XW [RREGS + rdi * XB + 8 * XB], cl
-	NEXT_C_INSTR
+HANDLER c_step
+	CALL_CPP KIND_C_STEP, NEXT_C_INSTR
 
-	align 64
-.sub:
-	C_ALU_OP sub
-	align 64
-.xor:
-	C_ALU_OP xor
-	align 64
-.or:
-	C_ALU_OP or
-	align 64
-.and:
-	C_ALU_OP and
-%if XLEN == 64
-	align 64
-.subw:
-	mov eax, dword [RREGS + rcx * 8 + 64]
-	sub eax, dword [RREGS + rdi * 8 + 64]
-	movsxd rax, eax
-	mov qword [RREGS + rcx * 8 + 64], rax
-	NEXT_C_INSTR
-	align 64
-.addw:
-	mov eax, dword [RREGS + rcx * 8 + 64]
-	add eax, dword [RREGS + rdi * 8 + 64]
-	movsxd rax, eax
-	mov qword [RREGS + rcx * 8 + 64], rax
-	NEXT_C_INSTR
-%endif
-
-	align 64
-;; C.FLD rd', offset(rs1'): offset = instr[12:10] << 3 | instr[6:5] << 6
-.fld:
-	mov ecx, eax
-	shr ecx, 7
-	and ecx, 0x38
-	mov edx, eax
-	shl edx, 1
-	and edx, 0xC0
-	or edx, ecx                 ; offset
-	mov ecx, eax
-	shr eax, 7
-	and eax, 7
-	add eax, 8                  ; rs1'
-	C_FP_READ_ADDRESS
-	shr ecx, 2
-	and ecx, 7                  ; rd' - 8
-	mov rax, qword [RARENA + rdx]
-	mov qword [RREGS + FPOFF + rcx * 8 + 64], rax
-	NEXT_C_INSTR
-	align 64
-;; C.FSD rs2', offset(rs1')
-.fsd:
-	mov ecx, eax
-	shr ecx, 7
-	and ecx, 0x38
-	mov edx, eax
-	shl edx, 1
-	and edx, 0xC0
-	or edx, ecx
-	mov ecx, eax
-	shr eax, 7
-	and eax, 7
-	add eax, 8
-	C_FP_WRITE_ADDRESS
-	shr ecx, 2
-	and ecx, 7                  ; rs2' - 8
-	mov rax, qword [RREGS + FPOFF + rcx * 8 + 64]
-	mov qword [RARENA + rdx], rax
-	NEXT_C_INSTR
-	align 64
-;; C.FLDSP rd, offset(sp): offset = instr[12] << 5 | instr[6:5] << 3 | instr[4:2] << 6
-.fldsp:
-	mov ecx, eax
-	shr ecx, 7
-	and ecx, 0x20
-	mov edx, eax
-	shr edx, 2
-	and edx, 0x18
-	or ecx, edx
-	mov edx, eax
-	shl edx, 4
-	and edx, 0x1C0
-	or edx, ecx                 ; offset
-	mov ecx, eax
-	mov eax, 2                  ; sp
-	C_FP_READ_ADDRESS
-	shr ecx, 7
-	and ecx, 31                 ; rd
-	mov rax, qword [RARENA + rdx]
-	mov qword FREG(rcx), rax
-	NEXT_C_INSTR
-	align 64
-;; C.FSDSP rs2, offset(sp): offset = instr[12:10] << 3 | instr[9:7] << 6
-.fsdsp:
-	mov ecx, eax
-	shr ecx, 7
-	and ecx, 0x38
-	mov edx, eax
-	shr edx, 1
-	and edx, 0x1C0
-	or edx, ecx
-	mov ecx, eax
-	mov eax, 2
-	C_FP_WRITE_ADDRESS
-	shr ecx, 2
-	and ecx, 31                 ; rs2
-	mov rax, qword FREG(rcx)
-	mov qword [RARENA + rdx], rax
-	NEXT_C_INSTR
-
-	[section .data.rel.ro]
-	align 8
-	;; Index: instr[12] << 2 | instr[6:5]
-CUR_HANDLER %+ _alu_table:
-	dq CUR_HANDLER %+ .sub, CUR_HANDLER %+ .xor, CUR_HANDLER %+ .or, CUR_HANDLER %+ .and
-%if XLEN == 64
-	dq CUR_HANDLER %+ .subw, CUR_HANDLER %+ .addw
-%else
-	dq CUR_HANDLER %+ .generic, CUR_HANDLER %+ .generic
-%endif
-	dq CUR_HANDLER %+ .generic, CUR_HANDLER %+ .generic
-	__?SECT?__
+;; RV32C_BC_FUNCTION keeps the original 16-bit instruction: compressed
+;; instructions without a bytecode of their own (C.NOP, C.EBREAK, Zcb, reserved
+;; encodings, ...), executed by C++.
+C_HANDLER c_function
+	CALL_CPP KIND_C_FUNCTION, NEXT_C_INSTR
 
 C_HANDLER c_ldw
 %if XLEN == 64

@@ -45,11 +45,13 @@
 #define ASMDISPATCH_C_HANDLERS(X) \
 	X(c_addi) X(c_mv) X(c_slli) X(c_srli) X(c_andi) X(c_add) X(c_xor) X(c_or) \
 	X(c_bnez) X(c_beqz) X(c_jmp) X(c_jal_addiw) X(c_jr) X(c_jalr) \
-	X(c_function) X(c_ldw) X(c_stw) \
-	X(cf_generic) X(cf_lui) X(cf_alu) X(cf_fld) X(cf_fsd) X(cf_fldsp) X(cf_fsdsp)
-#define ASMDISPATCH_RV64_C_HANDLERS(X) X(c_ldd) X(c_std)
+	X(c_function) X(c_ldw) X(c_stw) X(c_lui) X(c_fld) X(c_fsd) X(c_step) \
+	X(c_srai) X(c_sub) X(c_and)
+#define ASMDISPATCH_RV32_C_HANDLERS(X) X(c_flw) X(c_fsw)
+#define ASMDISPATCH_RV64_C_HANDLERS(X) X(c_ldd) X(c_std) X(c_subw) X(c_addw)
 #else
 #define ASMDISPATCH_C_HANDLERS(X) /* */
+#define ASMDISPATCH_RV32_C_HANDLERS(X) /* */
 #define ASMDISPATCH_RV64_C_HANDLERS(X) /* */
 #endif
 
@@ -73,6 +75,8 @@ extern "C" {
 	ASMDISPATCH_HANDLERS(RV32ASMC_DECLARE)
 	ASMDISPATCH_C_HANDLERS(RV32ASM_DECLARE)
 	ASMDISPATCH_C_HANDLERS(RV32ASMC_DECLARE)
+	ASMDISPATCH_RV32_C_HANDLERS(RV32ASM_DECLARE)
+	ASMDISPATCH_RV32_C_HANDLERS(RV32ASMC_DECLARE)
 #endif
 #ifdef RISCV_64I
 	uint32_t rv64asm_dispatch(AsmDispatchContext* ctx);
@@ -404,50 +408,22 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 	H(RV32C_BC_JAL_ADDIW, P##c_jal_addiw) \
 	H(RV32C_BC_JR, P##c_jr)     H(RV32C_BC_JALR, P##c_jalr) \
 	H(RV32C_BC_FUNCTION, P##c_function) \
-	H(RV32C_BC_LDW, P##c_ldw)   H(RV32C_BC_STW, P##c_stw)
+	H(RV32C_BC_LDW, P##c_ldw)   H(RV32C_BC_STW, P##c_stw) \
+	H(RV32C_BC_LUI, P##c_lui)   H(RV32C_BC_FLD, P##c_fld)   H(RV32C_BC_FSD, P##c_fsd) \
+	H(RV32C_BC_SRAI, P##c_srai) H(RV32C_BC_SUB, P##c_sub)   H(RV32C_BC_AND, P##c_and)
+#define ASMDISPATCH_FILL_RV32_C(P) \
+	if constexpr (!nanboxing) { H(RV32C_BC_FLW, P##c_flw) } \
+	else { H(RV32C_BC_FLW, P##c_step) } \
+	H(RV32C_BC_FSW, P##c_fsw)
 #define ASMDISPATCH_FILL_RV64_C(P) \
-	H(RV32C_BC_LDD, P##c_ldd)   H(RV32C_BC_STD, P##c_std)
-#define ASMDISPATCH_FILL_CF(W, P) \
-	asm_fill_c_function<W>(t.data(), copies, P##cf_generic, { \
-		{ 0x6505, P##cf_lui },   /* c.lui a0, 1:  C1_LUI */ \
-		{ 0x8D0D, P##cf_alu },   /* c.sub a0, a1: C1_ALU_OPS */ \
-		{ 0x2508, P##cf_fld },   /* c.fld fa0, 8(a0) */ \
-		{ 0xA508, P##cf_fsd },   /* c.fsd fa0, 8(a0) */ \
-		{ 0x2522, P##cf_fldsp }, /* c.fldsp fa0, 8(sp) */ \
-		{ 0xA42A, P##cf_fsdsp }, /* c.fsdsp fa0, 8(sp) */ \
-	});
+	H(RV32C_BC_LDD, P##c_ldd)   H(RV32C_BC_STD, P##c_std) \
+	H(RV32C_BC_SUBW, P##c_subw) H(RV32C_BC_ADDW, P##c_addw)
 #else
 #define ASMDISPATCH_FILL_C(P) /* */
+#define ASMDISPATCH_FILL_RV32_C(P) /* */
 #define ASMDISPATCH_FILL_RV64_C(P) /* */
-#define ASMDISPATCH_FILL_CF(W, P) /* */
 #endif
 
-#ifdef RISCV_EXT_COMPRESSED
-// The table that the RV32C_BC_FUNCTION handler (c_function) dispatches through,
-// one for each copy, after the bytecode tables: entry handler index -> path.
-// The paths are named by an instruction of the group that the C++ decoder
-// gives the handler to. Index 0 is "not resolved yet", which C++ has to do.
-template <int W>
-static void asm_fill_c_function(void** t, unsigned copies, void* const* generic,
-	std::initializer_list<std::pair<uint16_t, void* const*>> paths)
-{
-	void** cf = t + copies * 256;
-	for (unsigned c = 0; c < copies; c++)
-		for (unsigned idx = 0; idx < 256; idx++)
-			cf[c * 256 + idx] = generic[c];
-	// Index 0 belongs to the invalid instruction, which the decoder checks
-	// (see decoder_cache.cpp). This may run before any decoder cache has
-	// been created, so register it first, like the decoder does.
-	DecoderData<W>::handler_index_for(CPU<W>::decode(rv32i_instruction{0}).handler);
-	for (auto& [instr, path] : paths) {
-		const size_t idx = DecoderData<W>::handler_index_for(CPU<W>::decode(rv32i_instruction{instr}).handler);
-		if (idx == 0)
-			continue;
-		for (unsigned c = 0; c < copies; c++)
-			cf[c * 256 + idx] = path[c];
-	}
-}
-#endif
 #ifdef RISCV_BINARY_TRANSLATION
 #define ASMDISPATCH_FILL_TRANSLATOR(P) H(RV32I_BC_TRANSLATOR, P##translator)
 #else
@@ -478,11 +454,9 @@ struct AsmDispatch<W, COUNTING> { \
 	static void** table() { \
 		static std::vector<void*> t = [] { \
 			const unsigned copies = P##ncopies; \
-			/* With RVC, the c_function tables follow */ \
-			std::vector<void*> t(copies * 256 * (compressed_enabled ? 2 : 1)); \
+			std::vector<void*> t(copies * 256); \
 			ASMDISPATCH_FILL(P) \
 			RV64FILL \
-			ASMDISPATCH_FILL_CF(W, P) \
 			return t; \
 		}(); \
 		return t.data(); \
@@ -494,8 +468,8 @@ extern "C" uint32_t P##call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint
 }
 
 #ifdef RISCV_32I
-ASMDISPATCH_DEFINE(4, false, rv32asm_, )
-ASMDISPATCH_DEFINE(4, true, rv32asmc_, )
+ASMDISPATCH_DEFINE(4, false, rv32asm_, ASMDISPATCH_FILL_RV32_C(rv32asm_))
+ASMDISPATCH_DEFINE(4, true, rv32asmc_, ASMDISPATCH_FILL_RV32_C(rv32asmc_))
 #endif
 #ifdef RISCV_64I
 ASMDISPATCH_DEFINE(8, false, rv64asm_, ASMDISPATCH_FILL_RV64(rv64asm_))
