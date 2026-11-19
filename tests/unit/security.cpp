@@ -2,9 +2,12 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <libriscv/machine.hpp>
+#include <libriscv/guest_datatypes.hpp>
 #include <libriscv/threads.hpp>
 #include <chrono>
+#include <cmath>
 #include <functional>
+#include <limits>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/stat.h>
@@ -1248,4 +1251,182 @@ TEST_CASE("C16: host memory helpers respect the arena windows", "[Security]")
 	// One byte past the end is outside both windows
 	REQUIRE(!mem.try_memmove(scratch, arena_end - 15, 16));
 	REQUIRE(!mem.try_memmove(arena_end - 15, scratch, 16));
+}
+
+// =============================================================================
+// C17: guest std::unordered_map walks followed cyclic node lists forever
+//
+// GuestStdUnorderedMap followed the guest's _M_nxt pointers with no bound in
+// for_each, to_map, clear/free, rehash and find_before_node. A cyclic list
+// looped forever, or collected entries until the host ran out of memory, and
+// bounding the walks by the element count is not enough, as the guest
+// controls that too. Every walk now detects cycles, and the walks that free
+// or relink nodes check the whole list before changing anything. A max load
+// factor of 0 (or NaN, negative, infinite) made the bucket count infinite,
+// and converting that to size_t is undefined behavior.
+// =============================================================================
+
+namespace {
+using CycMap = riscv::GuestStdUnorderedMap<RISCV64, int64_t, int64_t>;
+static_assert(!CycMap::cache_hash_code);
+static_assert(sizeof(CycMap::node_type) == 24);
+
+struct MapFixture {
+	riscv::Machine<RISCV64> machine;
+	CycMap::gaddr_t self = 0;
+	std::vector<CycMap::gaddr_t> nodes;
+
+	MapFixture(const std::vector<uint8_t>& binary)
+		: machine { binary, { .memory_max = MAX_MEMORY } }
+	{
+		const auto heap = machine.memory.mmap_allocate(256 << 10);
+		machine.setup_native_heap(470, heap, 256 << 10);
+		// The map and its nodes are in the arena, so that a free would succeed
+		self = machine.arena().malloc(sizeof(CycMap));
+		auto& map = this->map();
+		map = CycMap{};
+		map.move(machine, self);
+	}
+	CycMap& map() { return *machine.memory.memarray<CycMap>(self, 1); }
+
+	/// @brief One bucket, and a list of nodes with keys 0, 1, 2.. whose last
+	/// node points at node[cycle_to], or ends the list when cycle_to < 0
+	void build(size_t count, int cycle_to, uint64_t element_cnt)
+	{
+		for (size_t i = 0; i < count; i++)
+			nodes.push_back(machine.arena().malloc(sizeof(CycMap::node_type)));
+		for (size_t i = 0; i < count; i++) {
+			auto& node = *machine.memory.memarray<CycMap::node_type>(nodes[i], 1);
+			node.next = (i + 1 < count) ? nodes[i + 1]
+				: (cycle_to >= 0 ? nodes[cycle_to] : 0);
+			node.value.first = i;
+			node.value.second = 100 + i;
+		}
+		auto& map = this->map();
+		map.before_begin = nodes.at(0);
+		map.element_cnt = element_cnt;
+		map.next_resize = ~CycMap::gaddr_t(0); // Never rehash on insert
+		map.bucket_array(machine)[0] = self + CycMap::BEFORE_BEGIN_OFF;
+	}
+	size_t live() {
+		return machine.arena().allocation_counter() - machine.arena().deallocation_counter();
+	}
+};
+
+void require_corrupt_list(const std::function<void()>& func)
+{
+	REQUIRE_THROWS_WITH(func(), "Guest std::unordered_map: corrupt node list");
+}
+} // namespace
+
+TEST_CASE("C17: cyclic guest std::unordered_map lists are rejected", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	struct Shape { size_t count; int cycle_to; };
+	// A node pointing at itself, a cycle back to the first node, and a cycle
+	// that leaves out the first nodes of the list
+	const Shape shapes[] = { {1, 0}, {2, 0}, {5, 2}, {64, 31} };
+	for (const auto& shape : shapes)
+	for (const uint64_t element_cnt : { uint64_t(1), uint64_t(2), uint64_t(1000), UINT64_MAX })
+	{
+		auto test = [&] (auto&& func) {
+			MapFixture f { binary };
+			f.build(shape.count, shape.cycle_to, element_cnt);
+			const size_t live = f.live();
+			func(f);
+			// Nothing was freed (or allocated) before the list was rejected
+			REQUIRE(f.live() == live);
+		};
+		test([] (MapFixture& f) { require_corrupt_list([&] { f.map().validate(f.machine); }); });
+		test([] (MapFixture& f) { require_corrupt_list([&] {
+			f.map().for_each(f.machine, [] (auto&, auto&) {}); }); });
+		test([] (MapFixture& f) { require_corrupt_list([&] { f.map().to_map(f.machine); }); });
+		test([] (MapFixture& f) { require_corrupt_list([&] { f.map().clear(f.machine); }); });
+		test([] (MapFixture& f) { require_corrupt_list([&] { f.map().free(f.machine); }); });
+		test([] (MapFixture& f) { require_corrupt_list([&] { f.map().rehash(f.machine, f.self, 100); }); });
+		// Looking for a key that is not there walks the whole bucket
+		test([] (MapFixture& f) { require_corrupt_list([&] { f.map().find(f.machine, int64_t(-1)); }); });
+		test([] (MapFixture& f) { require_corrupt_list([&] { f.map().erase(f.machine, f.self, int64_t(-1)); }); });
+		test([] (MapFixture& f) { require_corrupt_list([&] {
+			f.map().insert_or_assign(f.machine, f.self, int64_t(-1), int64_t(0)); }); });
+	}
+}
+
+TEST_CASE("C17: guest std::unordered_map lists longer than the count", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	// An acyclic list with more nodes than the element count says
+	{
+		MapFixture f { binary };
+		f.build(3, -1, 2);
+		const size_t live = f.live();
+		require_corrupt_list([&] { f.map().validate(f.machine); });
+		require_corrupt_list([&] { f.map().for_each(f.machine, [] (auto&, auto&) {}); });
+		require_corrupt_list([&] { f.map().clear(f.machine); });
+		require_corrupt_list([&] { f.map().rehash(f.machine, f.self, 100); });
+		REQUIRE(f.live() == live);
+	}
+	// The same list with a matching count is fine, and frees every node
+	{
+		MapFixture f { binary };
+		f.build(3, -1, 3);
+		const size_t live = f.live();
+		REQUIRE(f.map().validate(f.machine) == 3);
+		REQUIRE(f.map().at(f.machine, int64_t(2)) == 102);
+		REQUIRE(f.map().to_map(f.machine).size() == 3);
+		f.map().rehash(f.machine, f.self, 100);
+		REQUIRE(f.map().bucket_count() >= 100);
+		REQUIRE(f.map().at(f.machine, int64_t(1)) == 101);
+		f.map().free(f.machine);
+		// Three nodes, and the bucket array that rehash() allocated
+		REQUIRE(f.live() == live - 3);
+	}
+	// A shorter list than the count is harmless
+	{
+		MapFixture f { binary };
+		f.build(3, -1, 1000);
+		REQUIRE(f.map().validate(f.machine) == 3);
+		REQUIRE(f.map().to_map(f.machine).size() == 3);
+	}
+}
+
+TEST_CASE("C17: invalid guest std::unordered_map load factors", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+	auto require_invalid = [] (auto&& func) {
+		REQUIRE_THROWS_WITH(func(), "Guest std::unordered_map: invalid max load factor");
+	};
+
+	for (const float mlf : { 0.0f, -0.0f, -1.0f, NAN, INFINITY, -INFINITY })
+	{
+		MapFixture f { binary };
+		const size_t live = f.live();
+		// From the host
+		require_invalid([&] { f.map().set_max_load_factor(mlf); });
+		REQUIRE(f.map().max_load_factor() == 1.0f);
+		// From the guest
+		f.map().max_load = mlf;
+		require_invalid([&] { f.map().insert_or_assign(f.machine, f.self, int64_t(1), int64_t(2)); });
+		require_invalid([&] { f.map().reserve(f.machine, f.self, 10); });
+		require_invalid([&] { f.map().rehash(f.machine, f.self, 10); });
+		REQUIRE(f.map().empty());
+		REQUIRE(f.live() == live);
+	}
+
+	// A tiny (but valid) load factor asks for more buckets than any arena
+	// can hold, which must neither overflow nor convert out of range
+	for (const float mlf : { 1e-30f, std::numeric_limits<float>::denorm_min() })
+	{
+		MapFixture f { binary };
+		f.map().set_max_load_factor(mlf);
+		REQUIRE_THROWS_AS(f.map().reserve(f.machine, f.self, 10), std::bad_alloc);
+		REQUIRE_THROWS_AS(f.map().insert_or_assign(f.machine, f.self, int64_t(1), int64_t(2)), std::bad_alloc);
+		REQUIRE(f.map().empty());
+		// The resize threshold is unchanged, so a sane load factor recovers
+		f.map().set_max_load_factor(1.0f);
+		f.map().insert_or_assign(f.machine, f.self, int64_t(1), int64_t(2));
+		REQUIRE(f.map().at(f.machine, int64_t(1)) == 2);
+	}
 }

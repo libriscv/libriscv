@@ -2,6 +2,8 @@
 #include "guest_arena_object.hpp"
 #include "guest_cpp_hash.hpp"
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <unordered_map>
 
 namespace riscv {
@@ -51,6 +53,12 @@ struct GuestHashNode<W, K, V, true> {
 // hash function - even one that just forwards to std::hash - therefore does
 // *not* store hash codes, and must be given CacheHashCode = false in order to
 // match the guest. Getting it wrong shifts every key and value in the node.
+//
+// NOTE: The node list and the load factor are guest memory, and may be
+// corrupt. Every walk over the node list detects cycles, the walks that free
+// or relink nodes check the whole list before changing anything, and a load
+// factor that is not a positive number is rejected. These throw a
+// std::runtime_error, where libstdc++ would loop forever.
 template <int W, typename K, typename V, bool CacheHashCode>
 struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 {
@@ -122,6 +130,7 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 	}
 
 	void set_max_load_factor(float mlf) {
+		check_max_load(mlf);
 		this->max_load = mlf;
 		if (this->bucket_cnt > 1)
 			this->next_resize = floor_size(this->bucket_cnt * double(mlf));
@@ -239,8 +248,15 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 	/// @brief Remove every element, keeping the bucket array.
 	void clear(machine_t& machine)
 	{
+		// Check the list before freeing anything in it
+		const std::size_t limit = this->validate(machine);
+		std::size_t freed = 0;
 		gaddr_t addr = this->before_begin;
 		while (addr != 0) {
+			// Freeing a key or a value writes to guest memory, which could
+			// have changed the rest of the list
+			if (++freed > limit)
+				throw_corrupt_list();
 			node_type& node = this->node_at(machine, addr);
 			const gaddr_t next = node.next;
 			free_member(machine, node.value.first);
@@ -298,15 +314,42 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 
 	/// @brief Visit every element in the map, in an unspecified order. The
 	/// callback is invoked as callback(const K& key, V& value).
+	/// NOTE: A corrupt (cyclic) list throws partway through the walk, which
+	/// means the callback may already have seen some elements, and possibly
+	/// some of them twice. Use validate() first when that matters.
 	template <typename F>
 	void for_each(const machine_t& machine, F&& callback) const
 	{
+		const std::size_t limit = this->element_cnt;
+		std::size_t visited = 0;
 		gaddr_t addr = this->before_begin;
+		CycleCheck check(addr);
 		while (addr != 0) {
+			if (++visited > limit)
+				throw_corrupt_list();
 			node_type& node = this->node_at(machine, addr);
 			addr = node.next;
+			check.step(addr);
 			callback(const_cast<const K&>(node.value.first), node.value.second);
 		}
+	}
+
+	/// @brief Check that the node list ends, without visiting any node twice,
+	/// and that it holds no more nodes than the element count says.
+	/// @return The number of nodes in the list.
+	std::size_t validate(const machine_t& machine) const
+	{
+		const std::size_t limit = this->element_cnt;
+		std::size_t count = 0;
+		gaddr_t addr = this->before_begin;
+		CycleCheck check(addr);
+		while (addr != 0) {
+			if (++count > limit)
+				throw_corrupt_list();
+			addr = this->next_ref(machine, addr);
+			check.step(addr);
+		}
+		return count;
 	}
 
 	using host_key_type    = guest_host_type_t<W, K>;
@@ -320,7 +363,8 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 			&& is_host_convertible_guest_object<W, V>::value,
 			"Guest std::unordered_map: Nested guest containers must be read using for_each()");
 		std::unordered_map<host_key_type, host_mapped_type> result;
-		result.reserve(this->size());
+		// The element count is not trusted: for_each() stops at a corrupt list
+		result.reserve(std::min(this->size(), std::size_t(1) << 16));
 		this->for_each(machine, [&] (const K& key, const V& value) {
 			result.emplace(guest_object_to_host<W>(machine, key),
 				guest_object_to_host<W>(machine, value));
@@ -332,6 +376,7 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 	/// Mirrors std::unordered_map::rehash().
 	void rehash(machine_t& machine, gaddr_t self, std::size_t count)
 	{
+		check_max_load(this->max_load);
 		const gaddr_t saved_resize = this->next_resize;
 		std::size_t buckets =
 			std::max(this->bkt_for_elements(std::size_t(this->element_cnt) + 1), count);
@@ -406,7 +451,9 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 		gaddr_t prev = bkts[bkt];
 		if (prev == 0)
 			return 0;
-		for (gaddr_t addr = this->next_ref(machine, prev); addr != 0; ) {
+		gaddr_t addr = this->next_ref(machine, prev);
+		CycleCheck check(addr);
+		while (addr != 0) {
 			node_type& node = this->node_at(machine, addr);
 			if (this->node_equals(machine, node, key, code))
 				return prev;
@@ -417,6 +464,7 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 				break;
 			prev = addr;
 			addr = node.next;
+			check.step(addr);
 		}
 		return 0;
 	}
@@ -441,14 +489,19 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 	{
 		if (std::size_t(this->element_cnt) + n_ins <= this->next_resize)
 			return false;
+		check_max_load(this->max_load);
 		// A zero resize threshold means that no buckets have been allocated
 		// yet, in which case libstdc++ starts out with at least 11 buckets
 		const std::size_t elements = std::max(std::size_t(this->element_cnt) + n_ins,
 			this->next_resize == 0 ? std::size_t(11) : std::size_t(0));
 		const double min_buckets = elements / double(this->max_load);
 		if (min_buckets >= double(this->bucket_cnt)) {
+			// Saturating, as the bucket count is guest memory: an impossibly
+			// large count fails in next_bucket_count()
+			const std::size_t doubled = std::size_t(this->bucket_cnt) > SIZE_MAX / 2
+				? SIZE_MAX : std::size_t(this->bucket_cnt) * 2;
 			const std::size_t count = this->next_bucket_count(
-				std::max(floor_size(min_buckets) + 1, std::size_t(this->bucket_cnt) * 2));
+				std::max(saturating_inc(floor_size(min_buckets)), doubled));
 			this->rehash_buckets(machine, self, count);
 			return true;
 		}
@@ -461,6 +514,9 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 	std::size_t next_bucket_count(std::size_t count)
 	{
 		using policy = GuestStdHashPolicy;
+		// Fail before changing the resize threshold
+		if (count > MAX_BUCKETS)
+			throw std::bad_alloc();
 		if (count < sizeof(policy::fast_bkt)) {
 			if (count == 0) {
 				// Keep the threshold at zero, so that the next insertion allocates
@@ -483,6 +539,7 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 
 	/// @brief The bucket count needed to hold count elements
 	std::size_t bkt_for_elements(std::size_t count) const {
+		check_max_load(this->max_load);
 		return ceil_size(count / double(this->max_load));
 	}
 
@@ -494,6 +551,12 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 	/// Mirrors _M_rehash_aux() for containers with unique keys.
 	void rehash_buckets(machine_t& machine, gaddr_t self, std::size_t count)
 	{
+		// No bucket array can be larger than the arena
+		if (count > MAX_BUCKETS)
+			throw std::bad_alloc();
+		// Check the list before relinking anything: relinking a cyclic list
+		// could turn it into a walk that never visits the same node twice
+		const std::size_t limit = this->validate(machine);
 		const gaddr_t bbegin = self + BEFORE_BEGIN_OFF;
 		gaddr_t new_buckets;
 		if (count == 1) {
@@ -512,7 +575,10 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 		gaddr_t addr = this->before_begin;
 		this->before_begin = 0;
 		std::size_t bbegin_bkt = 0;
+		std::size_t moved = 0;
 		while (addr != 0) {
+			if (++moved > limit)
+				throw_corrupt_list();
 			node_type& node = this->node_at(machine, addr);
 			const gaddr_t next = node.next;
 			const std::size_t bkt = this->node_hash(machine, node) % count;
@@ -598,14 +664,59 @@ struct alignas(guest_word_align<W>) GuestStdUnorderedMap
 		relocate_guest_object<W>(machine, member, addr);
 	}
 
+	/// @brief The largest bucket array: one that fills a 4 GiB arena
+	static constexpr std::size_t MAX_BUCKETS = (uint64_t(1) << 32) / sizeof(gaddr_t);
+
 private:
-	// std::floor and std::ceil for non-negative values
+	[[noreturn]] static void throw_corrupt_list() {
+		throw std::runtime_error("Guest std::unordered_map: corrupt node list");
+	}
+
+	/// @brief A load factor of 0 (or NaN, negative or infinite) makes the
+	/// bucket count that is needed infinite or meaningless. libstdc++ requires
+	/// a positive load factor, so a guest map without one is corrupt.
+	static void check_max_load(float mlf) {
+		if (!(mlf > 0.0f) || !std::isfinite(mlf))
+			throw std::runtime_error("Guest std::unordered_map: invalid max load factor");
+	}
+
+	/// @brief Cycle detection for a walk over guest nodes (Brent's algorithm).
+	/// Constant memory, and a list without a cycle never fails the check.
+	struct CycleCheck {
+		explicit CycleCheck(gaddr_t start) noexcept : tortoise(start) {}
+		/// @brief Called with each node that the walk moves to. Throws once
+		/// the walk has come back to a node that it already visited.
+		void step(gaddr_t addr) {
+			if (addr != 0 && addr == this->tortoise)
+				throw_corrupt_list();
+			if (++this->steps == this->power) {
+				this->tortoise = addr;
+				this->power *= 2;
+				this->steps = 0;
+			}
+		}
+	private:
+		gaddr_t  tortoise;
+		uint64_t power = 1;
+		uint64_t steps = 0;
+	};
+
+	static std::size_t saturating_inc(std::size_t value) noexcept {
+		return value != SIZE_MAX ? value + 1 : value;
+	}
+	// std::floor and std::ceil for non-negative values. NaN and negative
+	// values give 0, and values too large for size_t saturate (converting
+	// those would be undefined behavior).
 	static std::size_t floor_size(double value) noexcept {
-		return value > 0.0 ? std::size_t(value) : 0u;
+		if (!(value > 0.0))
+			return 0u;
+		if (value >= double(SIZE_MAX))
+			return SIZE_MAX;
+		return std::size_t(value);
 	}
 	static std::size_t ceil_size(double value) noexcept {
 		const std::size_t result = floor_size(value);
-		return double(result) < value ? result + 1 : result;
+		return double(result) < value ? saturating_inc(result) : result;
 	}
 };
 
