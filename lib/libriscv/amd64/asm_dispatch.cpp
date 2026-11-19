@@ -5,6 +5,8 @@
 #include "../rv32i_instr.hpp"
 #include "../threaded_bytecodes.hpp"
 #include <array>
+#include <initializer_list>
+#include <utility>
 #include <vector>
 #include <exception>
 #include <cstddef>
@@ -38,8 +40,17 @@
 	X(op_addw) X(op_subw) X(op_mulw) X(op_add_uw) X(op_sh1add_uw) X(op_sh2add_uw) \
 	X(ldwu) X(ldd) X(std)
 
+// The compressed bytecodes (dispatch_rv.nasm assembled with -DCOMPRESSED=1)
 #ifdef RISCV_EXT_COMPRESSED
-#error "The assembly dispatch does not support the C-extension (RISCV_EXT_C=OFF)"
+#define ASMDISPATCH_C_HANDLERS(X) \
+	X(c_addi) X(c_mv) X(c_slli) X(c_srli) X(c_andi) X(c_add) X(c_xor) X(c_or) \
+	X(c_bnez) X(c_beqz) X(c_jmp) X(c_jal_addiw) X(c_jr) X(c_jalr) \
+	X(c_function) X(c_ldw) X(c_stw) \
+	X(cf_generic) X(cf_lui) X(cf_alu) X(cf_fld) X(cf_fsd) X(cf_fldsp) X(cf_fsdsp)
+#define ASMDISPATCH_RV64_C_HANDLERS(X) X(c_ldd) X(c_std)
+#else
+#define ASMDISPATCH_C_HANDLERS(X) /* */
+#define ASMDISPATCH_RV64_C_HANDLERS(X) /* */
 #endif
 
 namespace riscv {
@@ -60,6 +71,8 @@ extern "C" {
 #define RV32ASMC_DECLARE(name) ASMDISPATCH_DECLARE_ONE(rv32asmc_, name)
 	ASMDISPATCH_HANDLERS(RV32ASM_DECLARE)
 	ASMDISPATCH_HANDLERS(RV32ASMC_DECLARE)
+	ASMDISPATCH_C_HANDLERS(RV32ASM_DECLARE)
+	ASMDISPATCH_C_HANDLERS(RV32ASMC_DECLARE)
 #endif
 #ifdef RISCV_64I
 	uint32_t rv64asm_dispatch(AsmDispatchContext* ctx);
@@ -72,6 +85,10 @@ extern "C" {
 	ASMDISPATCH_RV64_HANDLERS(RV64ASM_DECLARE)
 	ASMDISPATCH_HANDLERS(RV64ASMC_DECLARE)
 	ASMDISPATCH_RV64_HANDLERS(RV64ASMC_DECLARE)
+	ASMDISPATCH_C_HANDLERS(RV64ASM_DECLARE)
+	ASMDISPATCH_C_HANDLERS(RV64ASMC_DECLARE)
+	ASMDISPATCH_RV64_C_HANDLERS(RV64ASM_DECLARE)
+	ASMDISPATCH_RV64_C_HANDLERS(RV64ASMC_DECLARE)
 #endif
 }
 
@@ -118,6 +135,7 @@ enum : uint32_t {
 	ASM_KIND_FUNCTION = 0, ASM_KIND_C_FUNCTION, ASM_KIND_SYSCALL,
 	ASM_KIND_DYNCALL, ASM_KIND_SYSTEM, ASM_KIND_FUNCBLOCK, ASM_KIND_STEP,
 	ASM_KIND_INVALID, ASM_KIND_TRANSLATOR, ASM_KIND_ASMJIT, ASM_KIND_LIVEPATCH,
+	ASM_KIND_C_STEP, // ASM_KIND_STEP for a 2-byte instruction
 };
 // offsetof(Registers<W>, m_regfl), FPOFF in dispatch_rv.nasm
 template <int W> static constexpr ptrdiff_t ASM_FPOFF = (W == 4) ? 136 : 272;
@@ -177,6 +195,10 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 		case ASM_KIND_DYNCALL:
 			cpu.execute(entry->m_handler, entry->instr);
 			break;
+		case ASM_KIND_C_FUNCTION:
+			cpu.execute(entry->m_handler, entry->instr);
+			next_pc = pc + 2;
+			break;
 		case ASM_KIND_FUNCBLOCK: // See pcrel.cpp
 			cpu.execute(entry->m_handler, entry->instr);
 			next_pc = pc + rv32i_instruction{entry->instr}.length();
@@ -191,7 +213,10 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 			}
 			next_block = true;
 			break;
-		case ASM_KIND_STEP: // Always a 4-byte instruction, see the handler
+		case ASM_KIND_C_STEP: // The fallback of a 2-byte instruction
+			next_pc = pc + 2;
+			[[fallthrough]];
+		case ASM_KIND_STEP: // A 4-byte instruction, see the handler
 			cpu.step_one(false);
 			jumped = (regs.pc != next_pc);
 			next_pc = regs.pc;
@@ -368,7 +393,61 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 		H(RV32F_BC_FADD, P##step) H(RV32F_BC_FSUB, P##step) \
 		H(RV32F_BC_FMUL, P##step) H(RV32F_BC_FDIV, P##step) \
 		H(RV32F_BC_FMADD, P##step) \
+	} \
+	ASMDISPATCH_FILL_C(P)
+#ifdef RISCV_EXT_COMPRESSED
+#define ASMDISPATCH_FILL_C(P) \
+	H(RV32C_BC_ADDI, P##c_addi) H(RV32C_BC_LI, P##c_addi) H(RV32C_BC_MV, P##c_mv) \
+	H(RV32C_BC_SLLI, P##c_slli) H(RV32C_BC_SRLI, P##c_srli) H(RV32C_BC_ANDI, P##c_andi) \
+	H(RV32C_BC_ADD, P##c_add)   H(RV32C_BC_XOR, P##c_xor)   H(RV32C_BC_OR, P##c_or) \
+	H(RV32C_BC_BNEZ, P##c_bnez) H(RV32C_BC_BEQZ, P##c_beqz) H(RV32C_BC_JMP, P##c_jmp) \
+	H(RV32C_BC_JAL_ADDIW, P##c_jal_addiw) \
+	H(RV32C_BC_JR, P##c_jr)     H(RV32C_BC_JALR, P##c_jalr) \
+	H(RV32C_BC_FUNCTION, P##c_function) \
+	H(RV32C_BC_LDW, P##c_ldw)   H(RV32C_BC_STW, P##c_stw)
+#define ASMDISPATCH_FILL_RV64_C(P) \
+	H(RV32C_BC_LDD, P##c_ldd)   H(RV32C_BC_STD, P##c_std)
+#define ASMDISPATCH_FILL_CF(W, P) \
+	asm_fill_c_function<W>(t.data(), copies, P##cf_generic, { \
+		{ 0x6505, P##cf_lui },   /* c.lui a0, 1:  C1_LUI */ \
+		{ 0x8D0D, P##cf_alu },   /* c.sub a0, a1: C1_ALU_OPS */ \
+		{ 0x2508, P##cf_fld },   /* c.fld fa0, 8(a0) */ \
+		{ 0xA508, P##cf_fsd },   /* c.fsd fa0, 8(a0) */ \
+		{ 0x2522, P##cf_fldsp }, /* c.fldsp fa0, 8(sp) */ \
+		{ 0xA42A, P##cf_fsdsp }, /* c.fsdsp fa0, 8(sp) */ \
+	});
+#else
+#define ASMDISPATCH_FILL_C(P) /* */
+#define ASMDISPATCH_FILL_RV64_C(P) /* */
+#define ASMDISPATCH_FILL_CF(W, P) /* */
+#endif
+
+#ifdef RISCV_EXT_COMPRESSED
+// The table that the RV32C_BC_FUNCTION handler (c_function) dispatches through,
+// one for each copy, after the bytecode tables: entry handler index -> path.
+// The paths are named by an instruction of the group that the C++ decoder
+// gives the handler to. Index 0 is "not resolved yet", which C++ has to do.
+template <int W>
+static void asm_fill_c_function(void** t, unsigned copies, void* const* generic,
+	std::initializer_list<std::pair<uint16_t, void* const*>> paths)
+{
+	void** cf = t + copies * 256;
+	for (unsigned c = 0; c < copies; c++)
+		for (unsigned idx = 0; idx < 256; idx++)
+			cf[c * 256 + idx] = generic[c];
+	// Index 0 belongs to the invalid instruction, which the decoder checks
+	// (see decoder_cache.cpp). This may run before any decoder cache has
+	// been created, so register it first, like the decoder does.
+	DecoderData<W>::handler_index_for(CPU<W>::decode(rv32i_instruction{0}).handler);
+	for (auto& [instr, path] : paths) {
+		const size_t idx = DecoderData<W>::handler_index_for(CPU<W>::decode(rv32i_instruction{instr}).handler);
+		if (idx == 0)
+			continue;
+		for (unsigned c = 0; c < copies; c++)
+			cf[c * 256 + idx] = path[c];
 	}
+}
+#endif
 #ifdef RISCV_BINARY_TRANSLATION
 #define ASMDISPATCH_FILL_TRANSLATOR(P) H(RV32I_BC_TRANSLATOR, P##translator)
 #else
@@ -386,7 +465,8 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 	H(RV64I_BC_OP_ADDW, P##op_addw) H(RV64I_BC_OP_SUBW, P##op_subw) \
 	H(RV64I_BC_OP_MULW, P##op_mulw) H(RV64I_BC_OP_ADD_UW, P##op_add_uw) \
 	H(RV64I_BC_OP_SH1ADD_UW, P##op_sh1add_uw) H(RV64I_BC_OP_SH2ADD_UW, P##op_sh2add_uw) \
-	H(RV32I_BC_LDWU, P##ldwu) H(RV32I_BC_LDD, P##ldd) H(RV32I_BC_STD, P##std)
+	H(RV32I_BC_LDWU, P##ldwu) H(RV32I_BC_LDD, P##ldd) H(RV32I_BC_STD, P##std) \
+	ASMDISPATCH_FILL_RV64_C(P)
 
 template <int W, bool Counting>
 struct AsmDispatch;
@@ -398,9 +478,11 @@ struct AsmDispatch<W, COUNTING> { \
 	static void** table() { \
 		static std::vector<void*> t = [] { \
 			const unsigned copies = P##ncopies; \
-			std::vector<void*> t(copies * 256); \
+			/* With RVC, the c_function tables follow */ \
+			std::vector<void*> t(copies * 256 * (compressed_enabled ? 2 : 1)); \
 			ASMDISPATCH_FILL(P) \
 			RV64FILL \
+			ASMDISPATCH_FILL_CF(W, P) \
 			return t; \
 		}(); \
 		return t.data(); \

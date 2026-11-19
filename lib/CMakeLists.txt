@@ -132,10 +132,12 @@ endif()
 if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	# ASM_DISPATCH uses assembly to dispatch instructions.
 	# It is currently only available on the AMD64 (x86_64) Linux platform.
+	# The decoder cache layout differs with the C-extension (one entry per
+	# 2 bytes, and icount), and there are handlers for compressed bytecodes
 	if (RISCV_EXT_C)
-		# The assembly has no handlers for the compressed bytecodes, and
-		# the decoder cache layout differs (one entry per 2 bytes)
-		message(FATAL_ERROR "libriscv: Assembly dispatch requires RISCV_EXT_C=OFF")
+		set(RVASM_COMPRESSED 1)
+	else()
+		set(RVASM_COMPRESSED 0)
 	endif()
 	if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"
 	 OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")
@@ -161,7 +163,7 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 				set(RVASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv${XLEN}_${COUNTING}.o)
 				add_custom_command(
 					OUTPUT ${RVASM_OBJ}
-					COMMAND ${NASM_EXECUTABLE} -f elf64 -g -F dwarf -DXLEN=${XLEN} -DCOUNTING=${COUNTING} ${RVASM_SRC} -o ${RVASM_OBJ}
+					COMMAND ${NASM_EXECUTABLE} -f elf64 -g -F dwarf -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} ${RVASM_SRC} -o ${RVASM_OBJ}
 					DEPENDS ${RVASM_SRC}
 				)
 				set_source_files_properties(${RVASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
