@@ -1152,3 +1152,100 @@ TEST_CASE("C15: invalid signal numbers are illegal operations", "[Security]")
 	tgkill(machine, riscv::MAIN_THREAD_TID, 0);
 	require_illegal_operation([&] { machine.sigaction(0); });
 }
+
+// =============================================================================
+// C16: host-side memory helpers skipped the arena's read/write windows
+//
+// The flat-arena fast paths of memstring_view, membuffer and try_memmove only
+// checked against the size of the arena, so they read page zero (below
+// RWREAD_BEGIN), which guest loads cannot. try_memmove did not check its
+// source against the read window at all, which let the native memmove system
+// call copy page zero into guest-readable memory. The arena fast paths of
+// both memcmp overloads only checked the end of each range. The helpers must
+// agree with memview(): the read window is [RWREAD_BEGIN, arena end), and the
+// write window is [initial_rodata_end, arena end), both inclusive of the very
+// last byte of the arena.
+// =============================================================================
+
+static void require_protection_fault(const std::function<void()>& func)
+{
+	try {
+		func();
+		FAIL("Expected a MachineException");
+	} catch (const riscv::MachineException& me) {
+		REQUIRE(me.type() == riscv::PROTECTION_FAULT);
+	}
+}
+
+TEST_CASE("C16: host memory helpers respect the arena windows", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+	static constexpr int MEMORY_SYSCALLS_BASE = 495;
+
+	// Large enough for the whole address space layout without paging
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = 64ul << 20 } };
+	machine.setup_native_memory(MEMORY_SYSCALLS_BASE);
+	auto& mem = machine.memory;
+	using M = riscv::Memory<RISCV64>;
+	const auto area = mem.mmap_allocate(4096);
+	mem.memset(area, 0, 4096);
+
+	// A marker in page zero, which only the host can put there. A shared
+	// rodata image maps page zero read-only, and it stays zeroes then.
+	static const char secret[] = "page zero secret";
+	if (mem.uses_flat_memory_arena() && mem.shared_rodata_end() == 0)
+		std::memcpy((char *)mem.memory_arena_ptr() + 0x10, secret, sizeof(secret));
+
+	// memstring_view: page zero, and a string starting just below the window
+	require_protection_fault([&] { mem.memstring_view(0x10); });
+	require_protection_fault([&] { mem.memstring_view(M::RWREAD_BEGIN - 1); });
+	// membuffer: page zero, and a range that only ends inside the window
+	require_protection_fault([&] { mem.membuffer(0x10, 16); });
+	require_protection_fault([&] { mem.membuffer(M::RWREAD_BEGIN - 16, 32); });
+	// memcmp: a range starting in page zero and ending inside the window
+	const std::array<char, 32> host_buffer {};
+	require_protection_fault([&] { mem.memcmp(host_buffer.data(), M::RWREAD_BEGIN - 16, 32); });
+	require_protection_fault([&] { mem.memcmp(M::RWREAD_BEGIN - 16, area, 32); });
+	require_protection_fault([&] { mem.memcmp(area, M::RWREAD_BEGIN - 16, 32); });
+
+	// try_memmove: the source must be readable by the guest
+	REQUIRE(!mem.try_memmove(area, 0x10, sizeof(secret)));
+	REQUIRE(!mem.try_memmove(area, M::RWREAD_BEGIN - 16, 32));
+
+	// The native memmove system call (guest-reachable) must not leak page zero
+	machine.cpu.reg(riscv::REG_ARG0) = area;
+	machine.cpu.reg(riscv::REG_ARG1) = 0x10;
+	machine.cpu.reg(riscv::REG_ARG2) = sizeof(secret);
+	require_protection_fault([&] { machine.system_call(MEMORY_SYSCALLS_BASE + 2); });
+	REQUIRE(mem.memview(area, sizeof(secret)) != std::string_view(secret, sizeof(secret)));
+
+	if (!mem.uses_flat_memory_arena())
+		return;
+
+	// The windows themselves still work, including the last byte of the arena
+	const auto arena_end = M::address_t(mem.memory_arena_size());
+	const auto rodata = M::address_t(mem.initial_rodata_end());
+	REQUIRE(rodata > M::RWREAD_BEGIN + 64);
+	// Writable scratch memory inside the arena (the mmap area may be outside)
+	const auto scratch = arena_end - 2 * 4096;
+	mem.memcpy(arena_end - 16, "0123456789abcde", 16);
+
+	REQUIRE(mem.memstring_view(arena_end - 16) == "0123456789abcde");
+	REQUIRE(mem.memstring_view(arena_end - 1).empty());
+	REQUIRE(mem.membuffer(arena_end - 16, 16).to_string() == std::string("0123456789abcde", 16));
+	REQUIRE(mem.memcmp("0123456789abcde", arena_end - 16, 16) == 0);
+	REQUIRE(mem.memcmp(arena_end - 16, arena_end - 16, 16) == 0);
+	REQUIRE(mem.memcmp(rodata - 32, rodata - 32, 32) == 0);
+	// Rodata is readable: a valid source, but not a destination
+	REQUIRE(mem.try_memmove(scratch, rodata - 32, 32));
+	REQUIRE(mem.memview(scratch, 32) == mem.memview(rodata - 32, 32));
+	REQUIRE(!mem.try_memmove(rodata - 32, scratch, 32));
+	// Moving to and from the very end of the arena
+	REQUIRE(mem.try_memmove(scratch, arena_end - 16, 16));
+	REQUIRE(mem.memview(scratch, 16) == std::string_view("0123456789abcde", 16));
+	REQUIRE(mem.try_memmove(arena_end - 8, scratch, 8));
+	REQUIRE(mem.memview(arena_end - 8, 8) == "01234567");
+	// One byte past the end is outside both windows
+	REQUIRE(!mem.try_memmove(scratch, arena_end - 15, 16));
+	REQUIRE(!mem.try_memmove(arena_end - 15, scratch, 16));
+}

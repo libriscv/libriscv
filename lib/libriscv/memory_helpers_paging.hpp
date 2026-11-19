@@ -79,11 +79,12 @@ bool Memory<W>::try_memmove(address_t dst, address_t src, size_t len)
 		return true;
 
 	if constexpr (flat_readwrite_arena) {
-		// Below the read-only boundary the arena can be a shared read-only
-		// mapping, where a write is fatal
-		if (LIKELY(dst >= initial_rodata_end() &&
-			dst + len < memory_arena_size() && dst + len > dst &&
-			src + len < memory_arena_size() && src + len > src)) {
+		const address_t dst_offset = dst - initial_rodata_end();
+		const address_t wr_window = memory_arena_write_boundary();
+		const address_t src_offset = src - RWREAD_BEGIN;
+		const address_t rd_window = memory_arena_read_boundary();
+		if (LIKELY(dst_offset < wr_window && len <= wr_window - dst_offset &&
+			src_offset < rd_window && len <= rd_window - src_offset)) {
 			char* p_src = &((char *)m_arena.data)[src];
 			char* p_dest = &((char *)m_arena.data)[dst];
 			std::memmove(p_dest, p_src, len);
@@ -146,10 +147,12 @@ template <int W> inline
 std::string_view Memory<W>::memstring_view(address_t addr, size_t max_len) const
 {
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(addr < memory_arena_size())) {
+		const address_t offset = addr - RWREAD_BEGIN;
+		const address_t window = memory_arena_read_boundary();
+		if (LIKELY(offset < window)) {
 			auto* begin = &((const char *)m_arena.data)[RISCV_SPECSAFE(addr)];
-			// limit to the end of the arena
-			max_len = std::min(max_len, size_t(memory_arena_size() - addr));
+			// limit to the end of the read window (the end of the arena)
+			max_len = std::min(max_len, size_t(window - offset));
 			// limit to the end of the string
 			const size_t len = strnlen(begin, max_len);
 			return {begin, len};
@@ -172,7 +175,9 @@ riscv::Buffer Memory<W>::membuffer(address_t addr,
 		return result;
 
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(addr + datalen < memory_arena_size() && addr + datalen > addr)) {
+		const address_t offset = addr - RWREAD_BEGIN;
+		const address_t window = memory_arena_read_boundary();
+		if (LIKELY(offset < window && datalen <= window - offset)) {
 			auto* begin = &((char *)memory_arena_ptr())[RISCV_SPECSAFE(addr)];
 			result.append_page(begin, datalen);
 			return result;
@@ -417,9 +422,12 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 	return std::memcmp(&((const char*)m_arena.data)[p1], &((const char*)m_arena.data)[p2], len);
 #else
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(p1 + len - RWREAD_BEGIN < memory_arena_read_boundary()
-			&& p2 + len - RWREAD_BEGIN < memory_arena_read_boundary()
-			&& p1 < p1 + len && p2 < p2 + len)) {
+		// Both ranges must be entirely inside the read window
+		const address_t offset1 = p1 - RWREAD_BEGIN;
+		const address_t offset2 = p2 - RWREAD_BEGIN;
+		const address_t window = memory_arena_read_boundary();
+		if (LIKELY(offset1 < window && len <= window - offset1
+			&& offset2 < window && len <= window - offset2)) {
 			const char* s1 = &((const char *)m_arena.data)[RISCV_SPECSAFE(p1)];
 			const char* s2 = &((const char *)m_arena.data)[RISCV_SPECSAFE(p2)];
 			return std::memcmp(s1, s2, len);
@@ -472,8 +480,9 @@ int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 	const char* s1 = (const char*) ptr1;
 	// The same flat-arena fast path as the two-address overload above
 	if constexpr (flat_readwrite_arena) {
-		if (LIKELY(p2 + len - RWREAD_BEGIN < memory_arena_read_boundary()
-			&& p2 < p2 + len)) {
+		const address_t offset2 = p2 - RWREAD_BEGIN;
+		const address_t window = memory_arena_read_boundary();
+		if (LIKELY(offset2 < window && len <= window - offset2)) {
 			const char* s2 = &((const char *)m_arena.data)[RISCV_SPECSAFE(p2)];
 			return std::memcmp(s1, s2, len);
 		}
