@@ -151,20 +151,19 @@ namespace riscv
 	{
 		// Make the current PC visible
 		cpu.registers().pc = pc;
-		// Make the instruction counter(s) visible
+		// Make the instruction counters visible
 		counter.apply(MACHINE());
 		// Invoke system call
 		cpu.machine().system_call(cpu.reg(REG_ECALL));
-		// Restore max counter
+		// Restore both counters
 		counter.retrieve_counters(MACHINE());
-		// Clone-like system calls can change PC
-		if (UNLIKELY(pc != cpu.registers().pc))
+		// Check for signs of stopping/overflow or PC diverging
+		if (UNLIKELY(counter.overflowed() || pc != cpu.registers().pc))
 		{
-			pc = cpu.registers().pc;
-			QUICK_EXEC_CHECK();
-			d = &exec->decoder_cache()[pc >> DecoderData<W>::SHIFT];
+			pc = cpu.registers().pc + 4;
+			OVERFLOW_CHECKED_JUMP();
 		}
-		NEXT_BLOCK(4, true);
+		NEXT_BLOCK(4, false);
 	}
 
 	INSTRUCTION(RV32I_BC_DYNCALL, rv32i_dyncall)
@@ -225,15 +224,16 @@ namespace riscv
 		counter.apply(MACHINE());
 		// Invoke SYSTEM
 		cpu.machine().system(instr);
-		// Restore counters
-		counter.retrieve_max_counter(MACHINE());
-		if (UNLIKELY(pc != cpu.registers().pc))
+		// Restore counters (EBREAK handlers and the libc fast-path penalize)
+		counter.retrieve_counters(MACHINE());
+		// Stopping, or a changed PC, continues at the current PC,
+		// like cpu_dispatch.cpp
+		if (UNLIKELY(counter.overflowed() || pc != cpu.registers().pc))
 		{
 			pc = cpu.registers().pc;
 			OVERFLOW_CHECKED_JUMP();
 		}
-		// Overflow-check, next block
-		NEXT_BLOCK(4, true);
+		NEXT_BLOCK(4, false);
 	}
 
 	INSTRUCTION(0, next_execute_segment) {
@@ -261,6 +261,7 @@ namespace riscv
 			}
 			UNCHECKED_JUMP();
 		}
+		MACHINE().set_instruction_counter(counter.value());
 		cpu.registers().pc = pc;
 		cpu.trigger_exception(ILLEGAL_OPCODE, d->instr);
 	}
@@ -410,7 +411,7 @@ namespace riscv
 		auto* exec = this->m_exec;
 
 		// We need an execute segment matching current PC
-		if (UNLIKELY(!exec->is_within(pc)))
+		if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end())))
 		{
 			auto results = this->next_execute_segment(pc);
 			exec = results.exec;
@@ -449,7 +450,7 @@ namespace riscv
 		auto* exec = this->m_exec;
 
 		// We need an execute segment matching current PC
-		if (UNLIKELY(!exec->is_within(pc)))
+		if (UNLIKELY(!(pc >= exec->exec_begin() && pc < exec->exec_end())))
 		{
 			auto results = this->next_execute_segment(pc);
 			exec = results.exec;
