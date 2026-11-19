@@ -140,8 +140,27 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 			libriscv/threaded_dispatch.cpp
 			libriscv/threaded_inaccurate_dispatch.cpp
 			#libriscv/amd64/accurate_dispatch_rv64gb.o
-			libriscv/amd64/inaccurate_dispatch_rv64gb.o
 		)
+		if (RISCV_64I)
+			list(APPEND SOURCES libriscv/amd64/inaccurate_dispatch_rv64gb.o)
+		endif()
+		if (RISCV_32I)
+			find_program(NASM_EXECUTABLE nasm REQUIRED)
+			if (RISCV_EXT_C)
+				set(RV32ASM_COMPRESSED 1)
+			else()
+				set(RV32ASM_COMPRESSED 0)
+			endif()
+			set(RV32ASM_SRC ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/amd64/dispatch_rv32.nasm)
+			set(RV32ASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv32.o)
+			add_custom_command(
+				OUTPUT ${RV32ASM_OBJ}
+				COMMAND ${NASM_EXECUTABLE} -f elf64 -g -F dwarf -DCOMPRESSED=${RV32ASM_COMPRESSED} ${RV32ASM_SRC} -o ${RV32ASM_OBJ}
+				DEPENDS ${RV32ASM_SRC}
+			)
+			set_source_files_properties(${RV32ASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+			list(APPEND SOURCES ${RV32ASM_OBJ})
+		endif()
 	else()
 		message(FATAL_ERROR "libriscv: Assembly dispatch not supported on this platform")
 	endif()
