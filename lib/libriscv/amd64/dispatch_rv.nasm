@@ -83,7 +83,7 @@ DEFAULT REL
 %define RODATA_SECTION .rdata rdata align=8
 %else
 %define CTX_SLOT   [rsp]
-%define RELRO_SECTION .data.rel.ro
+%define RELRO_SECTION .data.rel.ro progbits alloc noexec write align=8
 %define RODATA_SECTION .rodata
 %endif
 
