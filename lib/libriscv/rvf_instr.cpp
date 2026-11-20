@@ -220,11 +220,15 @@ namespace riscv
 					return;
 				}
 			}
-			dst.set_float(std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]));
-			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
+			// rd may also be a source: read the sources before writing it
+			const float a = rs1.f32[0], b = rs2.f32[0], c = rs3.f32[0];
+			dst.set_float(std::fma(a, b, c));
+			fsflags(cpu, (double)a * (double)b + (double)c, dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
-			dst.f64 = std::fma(rs1.f64, rs2.f64, rs3.f64);
-			fsflags(cpu, (long double)rs1.f64 * (long double)rs2.f64 + (long double)rs3.f64, dst.f64);
+			// rd may also be a source: read the sources before writing it
+			const double a = rs1.f64, b = rs2.f64, c = rs3.f64;
+			dst.f64 = std::fma(a, b, c);
+			fsflags(cpu, (long double)a * (long double)b + (long double)c, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -255,11 +259,15 @@ namespace riscv
 					return;
 				}
 			}
-			dst.set_float(std::fma(rs1.f32[0], rs2.f32[0], -rs3.f32[0]));
-			fsflags(cpu, (double)rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
+			// rd may also be a source: read the sources before writing it
+			const float a = rs1.f32[0], b = rs2.f32[0], c = rs3.f32[0];
+			dst.set_float(std::fma(a, b, -c));
+			fsflags(cpu, (double)a * (double)b - (double)c, dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
-			dst.f64 = std::fma(rs1.f64, rs2.f64, -rs3.f64);
-			fsflags(cpu, (long double)rs1.f64 * (long double)rs2.f64 - (long double)rs3.f64, dst.f64);
+			// rd may also be a source: read the sources before writing it
+			const double a = rs1.f64, b = rs2.f64, c = rs3.f64;
+			dst.f64 = std::fma(a, b, -c);
+			fsflags(cpu, (long double)a * (long double)b - (long double)c, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -290,11 +298,15 @@ namespace riscv
 					return;
 				}
 			}
-			dst.set_float(-std::fma(rs1.f32[0], rs2.f32[0], rs3.f32[0]));
-			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] - (double)rs3.f32[0], dst.f32[0]);
+			// rd may also be a source: read the sources before writing it
+			const float a = rs1.f32[0], b = rs2.f32[0], c = rs3.f32[0];
+			dst.set_float(-std::fma(a, b, c));
+			fsflags(cpu, (double)-a * (double)b - (double)c, dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
-			dst.f64 = -std::fma(rs1.f64, rs2.f64, rs3.f64);
-			fsflags(cpu, (long double)-rs1.f64 * (long double)rs2.f64 - (long double)rs3.f64, dst.f64);
+			// rd may also be a source: read the sources before writing it
+			const double a = rs1.f64, b = rs2.f64, c = rs3.f64;
+			dst.f64 = -std::fma(a, b, c);
+			fsflags(cpu, (long double)-a * (long double)b - (long double)c, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -325,11 +337,15 @@ namespace riscv
 					return;
 				}
 			}
-			dst.set_float(std::fma(-rs1.f32[0], rs2.f32[0], rs3.f32[0]));
-			fsflags(cpu, (double)-rs1.f32[0] * (double)rs2.f32[0] + (double)rs3.f32[0], dst.f32[0]);
+			// rd may also be a source: read the sources before writing it
+			const float a = rs1.f32[0], b = rs2.f32[0], c = rs3.f32[0];
+			dst.set_float(std::fma(-a, b, c));
+			fsflags(cpu, (double)-a * (double)b + (double)c, dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
-			dst.f64 = std::fma(-rs1.f64, rs2.f64, rs3.f64);
-			fsflags(cpu, (long double)-rs1.f64 * (long double)rs2.f64 + (long double)rs3.f64, dst.f64);
+			// rd may also be a source: read the sources before writing it
+			const double a = rs1.f64, b = rs2.f64, c = rs3.f64;
+			dst.f64 = std::fma(-a, b, c);
+			fsflags(cpu, (long double)-a * (long double)b + (long double)c, dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -368,11 +384,15 @@ namespace riscv
 					return;
 				}
 			}
-			dst.set_float(rs1.f32[0] + rs2.f32[0]);
-			fsflags(cpu, (double)(rs1.f32[0]) + (double)(rs2.f32[0]), dst.f32[0]);
+			// rd may also be a source: read the sources before writing it
+			const float a = rs1.f32[0], b = rs2.f32[0];
+			dst.set_float(a + b);
+			fsflags(cpu, (double)(a) + (double)(b), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
-			dst.f64 = rs1.f64 + rs2.f64;
-			fsflags(cpu, (long double)(rs1.f64) + (long double)(rs2.f64), dst.f64);
+			// rd may also be a source: read the sources before writing it
+			const double a = rs1.f64, b = rs2.f64;
+			dst.f64 = a + b;
+			fsflags(cpu, (long double)(a) + (long double)(b), dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -399,11 +419,15 @@ namespace riscv
 					return;
 				}
 			}
-			dst.set_float(rs1.f32[0] - rs2.f32[0]);
-			fsflags(cpu, (double)(rs1.f32[0]) - (double)(rs2.f32[0]), dst.f32[0]);
+			// rd may also be a source: read the sources before writing it
+			const float a = rs1.f32[0], b = rs2.f32[0];
+			dst.set_float(a - b);
+			fsflags(cpu, (double)(a) - (double)(b), dst.f32[0]);
 		} else if (fi.R4type.funct2 == 0x1) { // float64
-			dst.f64 = rs1.f64 - rs2.f64;
-			fsflags(cpu, (long double)(rs1.f64) - (long double)(rs2.f64), dst.f64);
+			// rd may also be a source: read the sources before writing it
+			const double a = rs1.f64, b = rs2.f64;
+			dst.f64 = a - b;
+			fsflags(cpu, (long double)(a) - (long double)(b), dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -462,8 +486,10 @@ namespace riscv
 				}
 			}
 		} else if (fi.R4type.funct2 == 0x1) { // float64
-			dst.f64 = rs1.f64 * rs2.f64;
-			fsflags(cpu, (long double)(rs1.f64) * (long double)(rs2.f64), dst.f64);
+			// rd may also be a source: read the sources before writing it
+			const double a = rs1.f64, b = rs2.f64;
+			dst.f64 = a * b;
+			fsflags(cpu, (long double)(a) * (long double)(b), dst.f64);
 		} else {
 			cpu.trigger_exception(ILLEGAL_OPERATION);
 		}
@@ -550,8 +576,11 @@ namespace riscv
 					return;
 				}
 			}
-			dst.set_float(sqrtf(rs1.f32[0]));
-			fsflags(cpu, std::sqrt((double)(rs1.f32[0])), dst.f32[0]);
+			{ // rd may also be the source: read it before writing rd
+				const float a = rs1.f32[0];
+				dst.set_float(sqrtf(a));
+				fsflags(cpu, std::sqrt((double)(a)), dst.f32[0]);
+			}
 			break;
 		case 0x1: // FSQRT.D
 			if constexpr (fcsr_emulation) {
@@ -562,8 +591,11 @@ namespace riscv
 					return;
 				}
 			}
-			dst.f64 = sqrt(rs1.f64);
-			fsflags(cpu, std::sqrt((long double)(rs1.f64)), dst.f64);
+			{ // rd may also be the source: read it before writing rd
+				const double a = rs1.f64;
+				dst.f64 = sqrt(a);
+				fsflags(cpu, std::sqrt((long double)(a)), dst.f64);
+			}
 			break;
 		default:
 			cpu.trigger_exception(ILLEGAL_OPERATION);
