@@ -167,9 +167,16 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 			break;
 #ifdef RISCV_BINARY_TRANSLATION
 		case ASM_KIND_TRANSLATOR: {
-			// This entry was counted as one instruction of its block, which the
-			// translated code counts itself
-			uint64_t counter = Counting ? ctx->counter - 1 : 0;
+			// Undo what the dispatch counted for this entry, as the translated code
+			// counts itself. The counter can be 0 here (an entered vmcall, or any
+			// return from code translated with ignore_instruction_limit) while the
+			// entry counted 0 (icount with RVC) or nothing (a re-entry), so it must
+			// not wrap: translated code can return the counter it was given.
+			uint64_t counter = 0;
+			if constexpr (Counting) {
+				const uint64_t counted = entry->instruction_count();
+				counter = (ctx->counter > counted) ? ctx->counter - counted : 0;
+			}
 			uint64_t max     = Counting ? ctx->max_counter : ~0ULL;
 			address_t tpc = pc;
 			const auto* e = entry;
@@ -199,7 +206,8 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 #ifdef RISCV_ASMJIT
 		case ASM_KIND_ASMJIT: {
 			AjState<W> state {
-				Counting ? ctx->counter - entry->instruction_count() : 0,
+				(Counting && ctx->counter > entry->instruction_count())
+					? ctx->counter - entry->instruction_count() : 0,
 				Counting ? ctx->max_counter : ~0ULL, pc };
 			const auto* e = entry;
 			do {
