@@ -76,8 +76,13 @@ namespace riscv
 	else                                                          \
 		goto new_execute_segment;
 
+#ifdef RISCV_WASM_DISPATCH
+#define INACCURATE_FUNCNAME simulate_inaccurate_cpp
+#else
+#define INACCURATE_FUNCNAME simulate_inaccurate
+#endif
 	template <int W>
-	DISPATCH_ATTR void CPU<W>::simulate_inaccurate(address_t pc)
+	DISPATCH_ATTR void CPU<W>::INACCURATE_FUNCNAME(address_t pc)
 	{
 		static constexpr uint32_t XLEN = W * 8;
 		using addr_t = address_type<W>;

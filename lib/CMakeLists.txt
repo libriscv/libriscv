@@ -54,6 +54,17 @@ endif()
 
 # TAILCALL_DISPATCH enables clang-based compilers to use musttail dispatch.
 option(RISCV_TAILCALL_DISPATCH   "Enable exp. tailcall dispatch" OFF)
+# WASM_DISPATCH replaces the RV64 C++ dispatch with one written in
+# WebAssembly (libriscv/wasm/dispatch_rv64.py), when building with
+# Emscripten for wasm32. RV32 and RV128 keep the C++ dispatch.
+if (EMSCRIPTEN AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+	option(RISCV_WASM_DISPATCH   "Enable WebAssembly dispatch (Emscripten, RV64)" ON)
+else()
+	option(RISCV_WASM_DISPATCH   "Enable WebAssembly dispatch (Emscripten, RV64)" OFF)
+endif()
+if (RISCV_WASM_DISPATCH AND NOT RISCV_64I)
+	set(RISCV_WASM_DISPATCH OFF)
+endif()
 
 if (RISCV_EXPERIMENTAL)
 	# RISCV_ENCOMPASSING_ARENA allows the memory arena to encompass
@@ -173,6 +184,59 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	else()
 		message(FATAL_ERROR "libriscv: Assembly dispatch not supported on this platform")
 	endif()
+elseif (RISCV_WASM_DISPATCH)
+	# WASM_DISPATCH generates the RV64 dispatch in WebAssembly (see
+	# wasm/dispatch_rv64.py). RV32 and RV128 use the threaded C++ dispatch.
+	if (NOT EMSCRIPTEN OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+		message(FATAL_ERROR "libriscv: WebAssembly dispatch requires Emscripten and wasm32 (not MEMORY64)")
+	endif()
+	message(STATUS "libriscv: WebAssembly dispatch enabled")
+	find_package(Python3 REQUIRED COMPONENTS Interpreter)
+	set(RVWASM_GEN ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/wasm/dispatch_rv64.py)
+	# The generated code depends on these settings: 1 or 0
+	macro(rvwasm_setting VAR)
+		if (${ARGN})
+			set(${VAR} 1)
+		else()
+			set(${VAR} 0)
+		endif()
+	endmacro()
+	rvwasm_setting(RVWASM_COMPRESSED RISCV_EXT_C)
+	rvwasm_setting(RVWASM_TRANSLATOR RISCV_BINARY_TRANSLATION)
+	rvwasm_setting(RVWASM_ASMJIT RISCV_ASMJIT)
+	rvwasm_setting(RVWASM_FCSR RISCV_FCSR)
+	# NaN-boxing rides along with FCSR emulation (see common.hpp)
+	rvwasm_setting(RVWASM_NANBOXING RISCV_FCSR OR RISCV_DEBUG)
+	# The settings are part of the file names, so that changing one of them
+	# always generates the dispatch again
+	set(RVWASM_TAG c${RVWASM_COMPRESSED}t${RVWASM_TRANSLATOR}a${RVWASM_ASMJIT}f${RVWASM_FCSR}n${RVWASM_NANBOXING})
+	set(RVWASM_ASM ${CMAKE_CURRENT_BINARY_DIR}/rv64wasm_dispatch_${RVWASM_TAG}.s)
+	set(RVWASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/rv64wasm_dispatch_${RVWASM_TAG}.o)
+	set(RVWASM_HDR_DIR ${CMAKE_CURRENT_BINARY_DIR}/rv64wasm_${RVWASM_TAG})
+	set(RVWASM_HDR ${RVWASM_HDR_DIR}/rv64wasm_layout.h)
+	file(MAKE_DIRECTORY ${RVWASM_HDR_DIR})
+	add_custom_command(
+		OUTPUT ${RVWASM_ASM} ${RVWASM_HDR}
+		COMMAND ${Python3_EXECUTABLE} ${RVWASM_GEN}
+			--compressed ${RVWASM_COMPRESSED} --translator ${RVWASM_TRANSLATOR}
+			--asmjit ${RVWASM_ASMJIT} --fcsr ${RVWASM_FCSR} --nanboxing ${RVWASM_NANBOXING}
+			-o ${RVWASM_ASM} --header ${RVWASM_HDR}
+		DEPENDS ${RVWASM_GEN}
+	)
+	add_custom_command(
+		OUTPUT ${RVWASM_OBJ}
+		COMMAND ${CMAKE_CXX_COMPILER} -c ${RVWASM_ASM} -o ${RVWASM_OBJ}
+		DEPENDS ${RVWASM_ASM}
+	)
+	set_source_files_properties(${RVWASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+	set_source_files_properties(${RVWASM_HDR} PROPERTIES GENERATED TRUE)
+	list(APPEND SOURCES
+		libriscv/wasm/wasm_dispatch.cpp
+		libriscv/threaded_dispatch.cpp
+		libriscv/threaded_inaccurate_dispatch.cpp
+		${RVWASM_OBJ}
+		${RVWASM_HDR}
+	)
 elseif (RISCV_THREADED OR RISCV_TAILCALL_DISPATCH)
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
 	 AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0
@@ -256,6 +320,13 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	target_compile_definitions(riscv PUBLIC
 		RISCV_ASM_DISPATCH=1
 	)
+endif()
+if (RISCV_WASM_DISPATCH AND NOT (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH))
+	target_compile_definitions(riscv PUBLIC
+		RISCV_WASM_DISPATCH=1
+	)
+	# rv64wasm_layout.h for wasm_dispatch.cpp
+	target_include_directories(riscv PRIVATE ${RVWASM_HDR_DIR})
 endif()
 if (RISCV_VERBOSE_SYSCALLS)
 	message(STATUS "libriscv: Verbose system calls enabled")

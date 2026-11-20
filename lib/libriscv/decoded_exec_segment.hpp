@@ -168,6 +168,8 @@ namespace riscv
 		}
 
 		bool is_stale() const noexcept { return m_is_stale; }
+		// For dispatches that check staleness without calling into C++
+		const bool* stale_flag() const noexcept { return &m_is_stale; }
 		// XO-segments *must not be rebuilt*, so they should never be stale.
 		void set_stale(bool is_stale) { m_is_stale = is_stale && !m_is_execute_only; }
 

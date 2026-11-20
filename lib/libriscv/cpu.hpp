@@ -40,9 +40,13 @@ namespace riscv
 		/// layer of timeout checking, like signal handling.
 		/// @param pc The starting address
 		void simulate_inaccurate(address_t pc);
-#ifdef RISCV_ASM_DISPATCH
+#if defined(RISCV_ASM_DISPATCH) || defined(RISCV_WASM_DISPATCH)
 		/// @brief The "fallback" C++ (threaded) dispatch
 		bool simulate_cpp(address_t pc, uint64_t icounter, uint64_t maxcounter);
+#endif
+#ifdef RISCV_WASM_DISPATCH
+		/// @brief The C++ (threaded) inaccurate dispatch, used for RV32 and RV128
+		void simulate_inaccurate_cpp(address_t pc);
 #endif
 
 		// Step precisely one instruction forward from current PC.

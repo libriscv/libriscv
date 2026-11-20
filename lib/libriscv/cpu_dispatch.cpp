@@ -75,7 +75,7 @@ namespace riscv
 	goto check_jump
 
 
-#ifdef RISCV_ASM_DISPATCH
+#if defined(RISCV_ASM_DISPATCH) || defined(RISCV_WASM_DISPATCH)
 #define DISPATCH_FUNCNAME simulate_cpp
 #else
 #define DISPATCH_FUNCNAME simulate
