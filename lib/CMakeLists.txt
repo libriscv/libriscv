@@ -230,9 +230,16 @@ elseif (RISCV_WASM_DISPATCH)
 	rvwasm_setting(RVWASM_FCSR RISCV_FCSR)
 	# NaN-boxing rides along with FCSR emulation (see common.hpp)
 	rvwasm_setting(RVWASM_NANBOXING RISCV_FCSR OR RISCV_DEBUG)
+	# With an encompassing arena, loads and stores mask the address instead
+	# of bounds-checking it (see RVASM_ARENA_BITS). 0 = the regular arena.
+	if (RISCV_EXPERIMENTAL AND RISCV_ENCOMPASSING_ARENA AND NOT RISCV_ENCOMPASSING_ARENA_BITS EQUAL 0)
+		set(RVWASM_ARENA_BITS ${RISCV_ENCOMPASSING_ARENA_BITS})
+	else()
+		set(RVWASM_ARENA_BITS 0)
+	endif()
 	# The settings are part of the file names, so that changing one of them
 	# always generates the dispatch again
-	set(RVWASM_TAG c${RVWASM_COMPRESSED}t${RVWASM_TRANSLATOR}a${RVWASM_ASMJIT}f${RVWASM_FCSR}n${RVWASM_NANBOXING})
+	set(RVWASM_TAG c${RVWASM_COMPRESSED}t${RVWASM_TRANSLATOR}a${RVWASM_ASMJIT}f${RVWASM_FCSR}n${RVWASM_NANBOXING}b${RVWASM_ARENA_BITS})
 	set(RVWASM_ASM ${CMAKE_CURRENT_BINARY_DIR}/rv64wasm_dispatch_${RVWASM_TAG}.s)
 	set(RVWASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/rv64wasm_dispatch_${RVWASM_TAG}.o)
 	set(RVWASM_HDR_DIR ${CMAKE_CURRENT_BINARY_DIR}/rv64wasm_${RVWASM_TAG})
@@ -243,6 +250,7 @@ elseif (RISCV_WASM_DISPATCH)
 		COMMAND ${Python3_EXECUTABLE} ${RVWASM_GEN}
 			--compressed ${RVWASM_COMPRESSED} --translator ${RVWASM_TRANSLATOR}
 			--asmjit ${RVWASM_ASMJIT} --fcsr ${RVWASM_FCSR} --nanboxing ${RVWASM_NANBOXING}
+			--arena-bits ${RVWASM_ARENA_BITS}
 			-o ${RVWASM_ASM} --header ${RVWASM_HDR}
 		DEPENDS ${RVWASM_GEN}
 	)

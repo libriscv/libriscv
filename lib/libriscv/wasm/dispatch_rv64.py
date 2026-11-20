@@ -51,6 +51,11 @@ How it differs from the native dispatch, and why:
    through JavaScript with Emscripten's default exception handling.
  - FMADD calls fma()/fmaf() from libc: WebAssembly has no fused multiply-add
    that is guaranteed to round once.
+
+With --arena-bits N (RISCV_ENCOMPASSING_ARENA_BITS), the arena covers the
+whole N-bit address space, and loads and stores access arena[address mod 2^N]
+without bounds checks, like Memory::read and Memory::write (and ARENA_BITS in
+the native dispatch). wasm32 cannot allocate 2^32 bytes, so N is 12..31.
 """
 import argparse
 import sys
@@ -299,8 +304,9 @@ class Func:
 # The dispatch
 
 class Dispatch:
-    def __init__(self, counting, compressed, bytecodes, hmap):
+    def __init__(self, counting, compressed, bytecodes, hmap, arena_bits):
         self.counting = counting
+        self.arena_bits = arena_bits
         self.compressed = compressed
         self.shift = 1 if compressed else 2
         # One 8-byte decoder entry per 2^SHIFT bytes of code
@@ -315,9 +321,15 @@ class Dispatch:
             ('regs', 'i32'),    # register file
             ('dec', 'i32'),     # decoder cache base (entry of pc 0)
             ('arena', 'i32'),   # flat arena base
-            ('rbound', 'i64'),  # addr - 0x1000 < rbound is readable
-            ('rodata', 'i64'),  # initial rodata end
-            ('wbound', 'i64'),  # addr - rodata < wbound is writable
+        ]
+        if not arena_bits:
+            # An encompassing arena has no boundaries
+            local_types += [
+                ('rbound', 'i64'),  # addr - 0x1000 < rbound is readable
+                ('rodata', 'i64'),  # initial rodata end
+                ('wbound', 'i64'),  # addr - rodata < wbound is writable
+            ]
+        local_types += [
             ('begin', 'i64'),   # execute segment begin
             ('length', 'i64'),  # execute segment length
             ('counter', 'i64'),
@@ -644,7 +656,10 @@ class Dispatch:
         self.next_block()
 
     def read_address(self, base_off):
-        """$a = REG(@base_off) + imm16, or the fallback when it is not readable."""
+        """$a = REG(@base_off) + imm16, or the fallback when it is not readable.
+        Nothing with an encompassing arena: see host_addr()."""
+        if self.arena_bits:
+            return
         f = self.f
         self.reg(base_off)
         self.imm16s()
@@ -657,6 +672,8 @@ class Dispatch:
         self.fallback_if()
 
     def write_address(self, base_off):
+        if self.arena_bits:
+            return
         f = self.f
         self.reg(base_off)
         self.imm16s()
@@ -668,12 +685,27 @@ class Dispatch:
         f.op('i64.ge_u')
         self.fallback_if()
 
-    def host_addr(self):
-        """Push the host address of the guest address in $a."""
+    def host_addr(self, base_off):
+        """Push the host address of the guest address in $a, which
+        read_address(base_off) or write_address(base_off) checked.
+
+        Encompassing arena: the host address of (REG(@base_off) + imm16) mod
+        2^N, which is always inside the arena, so there are no checks, and
+        reads and writes are the same (the C++ dispatch has no write protection
+        here either). The low 32 bits of the address are all that is needed for
+        N < 32, so the add is 32-bit, like ARENA_ADDRESS in the native dispatch.
+        """
         f = self.f
         f.get('arena')
-        f.get('a')
-        f.op('i32.wrap_i64')
+        if self.arena_bits:
+            self.reg32(base_off)
+            self.imm16s(4, 'i32')
+            f.op('i32.add')
+            f.op('i32.const', (1 << self.arena_bits) - 1)
+            f.op('i32.and')
+        else:
+            f.get('a')
+            f.op('i32.wrap_i64')
         f.op('i32.add')
 
     def load(self, op):
@@ -681,7 +713,7 @@ class Dispatch:
         f = self.f
         self.read_address(6)
         self.reg_addr(7)
-        self.host_addr()
+        self.host_addr(6)
         f.op(op, 0)
         f.op('i64.store', 0)
         self.next()
@@ -690,7 +722,7 @@ class Dispatch:
         """FasterItype: imm16 @4, rs2 (value) @6, rs1 (base) @7"""
         f = self.f
         self.write_address(7)
-        self.host_addr()
+        self.host_addr(7)
         self.reg(6)
         f.op(op, 0)
         self.next()
@@ -699,7 +731,7 @@ class Dispatch:
         f = self.f
         self.read_address(6)
         self.reg_addr(7)
-        self.host_addr()
+        self.host_addr(6)
         # Integer loads and stores: the bits are copied as they are.
         # Without NaN-boxing a single-precision load writes only the low half.
         f.op('i32.load' if width == 32 else 'i64.load', 0)
@@ -709,7 +741,7 @@ class Dispatch:
     def fp_store(self, width):
         f = self.f
         self.write_address(7)
-        self.host_addr()
+        self.host_addr(7)
         self.reg_addr(6)
         f.op('i32.load' if width == 32 else 'i64.load', FPOFF)
         f.op('i32.store' if width == 32 else 'i64.store', 0)
@@ -1201,9 +1233,7 @@ class Dispatch:
         self.ctx_load('regs', 'i32'); f.set('regs')
         self.ctx_load('decoder', 'i32'); f.set('dec')
         self.ctx_load('arena', 'i32'); f.set('arena')
-        self.ctx_load('read_boundary'); f.set('rbound')
-        self.ctx_load('rodata_end'); f.set('rodata')
-        self.ctx_load('write_boundary'); f.set('wbound')
+        self.load_arena_bounds()
         self.ctx_load('begin'); f.set('begin')
         self.ctx_load('length'); f.set('length')
         self.ctx_load('budget', 'i32'); f.set('budget')
@@ -1264,6 +1294,14 @@ class Dispatch:
         f.get('code')
         return f
 
+    def load_arena_bounds(self):
+        if self.arena_bits:
+            return
+        f = self.f
+        self.ctx_load('read_boundary'); f.set('rbound')
+        self.ctx_load('rodata_end'); f.set('rodata')
+        self.ctx_load('write_boundary'); f.set('wbound')
+
     def do_call(self):
         f = self.f
         if self.counting:
@@ -1279,9 +1317,7 @@ class Dispatch:
         f.op('call_indirect', '__indirect_function_table,', '(i32, i32, i32) -> (i32)')
         f.set('code')
         # The arena boundaries can change in any system call
-        self.ctx_load('read_boundary'); f.set('rbound')
-        self.ctx_load('rodata_end'); f.set('rodata')
-        self.ctx_load('write_boundary'); f.set('wbound')
+        self.load_arena_bounds()
         self.ctx_load('arena', 'i32'); f.set('arena')
         if self.counting:
             # So can the counters (penalties, stopping)
@@ -1370,9 +1406,13 @@ def main():
     ap.add_argument('--asmjit', type=int, default=0)
     ap.add_argument('--nanboxing', type=int, default=0)
     ap.add_argument('--fcsr', type=int, default=0)
+    ap.add_argument('--arena-bits', type=int, default=0,
+                    help='RISCV_ENCOMPASSING_ARENA_BITS, 0 = the regular flat arena')
     ap.add_argument('-o', '--output', required=True, help='the .s file')
     ap.add_argument('--header', required=True, help='the C++ header with the layout checks')
     args = ap.parse_args()
+    if args.arena_bits != 0 and not 12 <= args.arena_bits <= 31:
+        ap.error('--arena-bits must be 0 or 12..31 (wasm32 cannot allocate a 32-bit arena)')
 
     bytecodes = bytecode_list(args.compressed, args.translator, args.asmjit)
     hmap = handler_map(args.compressed, args.nanboxing, args.fcsr)
@@ -1382,7 +1422,7 @@ def main():
            '\t.functype\tfmaf (f32, f32, f32) -> (f32)',
            '\t.tabletype\t__indirect_function_table, funcref']
     for counting in (False, True):
-        d = Dispatch(counting, args.compressed, bytecodes, hmap)
+        d = Dispatch(counting, args.compressed, bytecodes, hmap, args.arena_bits)
         d.build().emit(out)
     with open(args.output, 'w') as fp:
         fp.write('\n'.join(out) + '\n')
@@ -1394,6 +1434,7 @@ def main():
            f'#define RV64WASM_ASMJIT {args.asmjit}',
            f'#define RV64WASM_NANBOXING {args.nanboxing}',
            f'#define RV64WASM_FCSR {args.fcsr}',
+           f'#define RV64WASM_ARENA_BITS {args.arena_bits}',
            f'#define RV64WASM_FPOFF {FPOFF}',
            f'#define RV64WASM_PCOFF {PCOFF}',
            f'#define RV64WASM_BYTECODES_MAX {len(bytecodes)}',

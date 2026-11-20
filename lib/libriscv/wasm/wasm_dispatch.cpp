@@ -14,6 +14,7 @@ namespace riscv {
 	static_assert(compressed_enabled == bool(RV64WASM_COMPRESSED), "wasm dispatch: generated for another RISCV_EXT_C");
 	static_assert(nanboxing == bool(RV64WASM_NANBOXING), "wasm dispatch: generated for another NaN-boxing setting");
 	static_assert(fcsr_emulation == bool(RV64WASM_FCSR), "wasm dispatch: generated for another RISCV_FCSR");
+	static_assert(encompassing_Nbit_arena == RV64WASM_ARENA_BITS, "wasm dispatch: generated for another RISCV_ENCOMPASSING_ARENA_BITS");
 	[[maybe_unused]] static void wasm_check_bytecodes() { RV64WASM_CHECK_BYTECODES() }
 }
 using riscv::AsmDispatchContext;
