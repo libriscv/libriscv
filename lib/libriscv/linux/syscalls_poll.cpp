@@ -105,7 +105,7 @@ static void syscall_ppoll(Machine<W>& machine)
 		std::chrono::steady_clock::now() - t0).count();
 	if (res < 0)
 		res = -errno;
-	if (sandboxed && elapsed_ns > 0)
+	if (sandboxed && wait_ns != 0 && elapsed_ns > 0)
 		machine.penalize(elapsed_ns / 1000);
 
 	if (res >= 0) {
