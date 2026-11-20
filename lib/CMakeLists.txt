@@ -174,6 +174,17 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 		# COUNTING=1 is CPU::simulate, COUNTING=0 CPU::simulate_inaccurate
 		find_program(NASM_EXECUTABLE nasm REQUIRED)
 		set(RVASM_SRC ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/amd64/dispatch_rv.nasm)
+		# With an encompassing arena, loads and stores mask the address
+		# instead of bounds-checking it. The bits are in the object name,
+		# so that changing them can never link a stale dispatch.
+		# RISCV_ENCOMPASSING_ARENA_BITS=0 is the regular arena in C++ too.
+		if (RISCV_ENCOMPASSING_ARENA AND NOT RISCV_ENCOMPASSING_ARENA_BITS EQUAL 0)
+			set(RVASM_ARENA_BITS ${RISCV_ENCOMPASSING_ARENA_BITS})
+			set(RVASM_SUFFIX "_a${RVASM_ARENA_BITS}")
+		else()
+			set(RVASM_ARENA_BITS 0)
+			set(RVASM_SUFFIX "")
+		endif()
 		set(RVASM_XLENS)
 		if (RISCV_32I)
 			list(APPEND RVASM_XLENS 32)
@@ -183,10 +194,10 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 		endif()
 		foreach(XLEN ${RVASM_XLENS})
 			foreach(COUNTING 0 1)
-				set(RVASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv${XLEN}_${COUNTING}.o)
+				set(RVASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv${XLEN}_${COUNTING}${RVASM_SUFFIX}.o)
 				add_custom_command(
 					OUTPUT ${RVASM_OBJ}
-					COMMAND ${NASM_EXECUTABLE} ${RVASM_FORMAT} -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} ${RVASM_SRC} -o ${RVASM_OBJ}
+					COMMAND ${NASM_EXECUTABLE} ${RVASM_FORMAT} -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} -DARENA_BITS=${RVASM_ARENA_BITS} ${RVASM_SRC} -o ${RVASM_OBJ}
 					DEPENDS ${RVASM_SRC}
 				)
 				set_source_files_properties(${RVASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)

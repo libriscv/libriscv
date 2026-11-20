@@ -61,6 +61,16 @@ DEFAULT REL
 %ifndef COUNTING
 %define COUNTING 0
 %endif
+;; -DARENA_BITS=N must match RISCV_ENCOMPASSING_ARENA_BITS: the arena then
+;; covers the whole N-bit address space (plus a page on each side), and every
+;; access is arena[address mod 2^N], without bounds checks, like Memory::read
+;; and Memory::write. 0 = the regular flat arena, with bounds checks.
+%ifndef ARENA_BITS
+%define ARENA_BITS 0
+%endif
+%if ARENA_BITS != 0 && (ARENA_BITS < 12 || ARENA_BITS > 48)
+%error "ARENA_BITS must be 0 or 12..48"
+%endif
 
 %ifidn __?OUTPUT_FORMAT?__, win64
 %define WIN64 1
@@ -156,6 +166,8 @@ DEFAULT REL
 ;;   xr8  arena read boundary   (addr - 0x1000 < xr8 is readable)
 ;;   xr9  initial rodata end
 ;;   xr10 arena write boundary  (addr - xr9 < xr10 is writable)
+;;        With ARENA_BITS there are no boundaries, and r8..r10 are free,
+;;        except that RV64 with ARENA_BITS > 32 keeps the mask in r8.
 ;;   xr11 current execute segment begin          (COUNTING: r11 = max counter)
 ;;   xr12 current execute segment length (end - begin)  (COUNTING: r12 = counter)
 ;; Scratch: rax, rcx, rdx, rdi, xmm0, xmm1
@@ -216,6 +228,17 @@ DEFAULT REL
 extern %[PFX]call
 
 %define RWREAD_BEGIN 0x1000
+
+;; Load the arena boundaries from the context in rdi (see Pinned state)
+%macro LOAD_ARENA_BOUNDS 0
+%if ARENA_BITS == 0
+	mov xr8,  XW [rdi + CTX_RBOUND]
+	mov xr9,  XW [rdi + CTX_RODATA]
+	mov xr10, XW [rdi + CTX_WBOUND]
+%elif XLEN == 64 && ARENA_BITS > 32
+	mov r8, (1 << ARENA_BITS) - 1
+%endif
+%endmacro
 
 ;; Handler replication. Every handler is emitted NCOPIES times, and each copy
 ;; dispatches through one of NCOPIES tables (its "color", fixed at assembly
@@ -576,9 +599,7 @@ global %[PFX]dispatch
 	mov RDEC,   [rdi + CTX_DECODER]
 	mov RARENA, [rdi + CTX_ARENA]
 	mov r14,    [rdi + CTX_TABLE]
-	mov xr8,  XW [rdi + CTX_RBOUND]
-	mov xr9,  XW [rdi + CTX_RODATA]
-	mov xr10, XW [rdi + CTX_WBOUND]
+	LOAD_ARENA_BOUNDS
 %if COUNTING
 	mov r11, [rdi + CTX_MAX]
 	mov r12, [rdi + CTX_COUNTER]
@@ -709,9 +730,7 @@ call_goto:
 %endif
 	;; The arena boundaries can change in any system call
 	mov rdi, CTX_SLOT
-	mov xr8,  XW [rdi + CTX_RBOUND]
-	mov xr9,  XW [rdi + CTX_RODATA]
-	mov xr10, XW [rdi + CTX_WBOUND]
+	LOAD_ARENA_BOUNDS
 %if COUNTING
 	;; So can the counters (penalties, stopping)
 	mov r12, [rdi + CTX_COUNTER]
@@ -872,6 +891,34 @@ do_c_fallback:
 ;; without another load (see NEXT_SELF).
 ;; FasterItype: imm16 @4, rs2 @6, rs1 @7
 
+%if ARENA_BITS != 0
+;; Encompassing arena: rax = (REG(rs @%1) + imm16) mod 2^ARENA_BITS, which is
+;; always inside the arena, so there are no checks, no fallback, and reads and
+;; writes are the same (the C++ dispatch has no write protection here either).
+;; A 32-bit add truncates the address for free, which is uint32_t(address) in
+;; Memory::read; RV32 addresses do not have more bits than that anyway.
+%macro ARENA_ADDRESS 1
+	mov rdi, rdx
+	movzx ecx, byte [rbx + %1]
+%if XLEN == 32 || ARENA_BITS <= 32
+	movsx eax, word [rbx + 4]
+	add eax, dword [RREGS + rcx * XB]
+%if ARENA_BITS < 32
+	and eax, (1 << ARENA_BITS) - 1
+%endif
+%else
+	movsx rax, word [rbx + 4]
+	add rax, REG(rcx)
+	and rax, r8             ; the mask, see LOAD_ARENA_BOUNDS
+%endif
+%endmacro
+%macro READ_ADDRESS 1
+	ARENA_ADDRESS %1
+%endmacro
+%macro WRITE_ADDRESS 1
+	ARENA_ADDRESS %1
+%endmacro
+%else
 ;; xax = guest address REG(rs @%1) + imm16, or go to the fallback when it is
 ;; not readable in the flat arena
 %macro READ_ADDRESS 1
@@ -894,6 +941,7 @@ do_c_fallback:
 	cmp xdx, xr10
 	FALLBACK_IF jae
 %endmacro
+%endif ; ARENA_BITS
 
 ;; FasterItype: imm16 @4, rs2 (base) @6, rs1 (dst) @7
 %macro LOAD 2   ; %1 = load instruction with xax as destination, %2 = NEXT

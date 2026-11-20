@@ -173,6 +173,9 @@ static void print_help(const char* name)
 		"-  Flat sequential memory arena is enabled\n"
 #endif
 #endif
+#ifdef RISCV_ASM_DISPATCH
+		"-  ASM dispatch is enabled (fast, experimental)\n"
+#endif
 #ifdef RISCV_ENCOMPASSING_ARENA_BITS
 #define _STR(x) #x
 #define STR(x) _STR(x)
