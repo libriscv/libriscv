@@ -519,8 +519,8 @@ void Memory<W>::memcpy(
 {
 	if constexpr (riscv::flat_readwrite_arena) {
 		// Fast-path: Find the entire source and destination buffers in the memory arena
-		if (uint8_t* srcptr = srcm.memory.template try_memarray<uint8_t> (src, len)) {
-			if (uint8_t* dstptr = this->template try_memarray<uint8_t> (dst, len)) {
+		if (const uint8_t* srcptr = srcm.memory.template try_memarray<const uint8_t> (src, len, len)) {
+			if (uint8_t* dstptr = this->template try_memarray<uint8_t> (dst, len, len)) {
 				std::memcpy(dstptr, srcptr, len);
 				return;
 			}
@@ -537,7 +537,7 @@ void Memory<W>::memcpy(
 		while (len >= 4*W) {
 			if constexpr (riscv::flat_readwrite_arena) {
 				// Fast-path: Find the entire source buffer in the memory arena using memarray()
-				if (uint8_t* srcptr = srcm.memory.template try_memarray<uint8_t> (src, len)) {
+				if (const uint8_t* srcptr = srcm.memory.template try_memarray<const uint8_t> (src, len, len)) {
 					this->memcpy(dst, srcptr, len);
 					return;
 				}

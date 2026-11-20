@@ -330,7 +330,12 @@ namespace {
 	static constexpr LibcSymbol libc_symbols[] {
 		{"memcpy",       FN_MEMCPY},    {"__memcpy",     FN_MEMCPY},
 		{"__GI_memcpy",  FN_MEMCPY},
-		{"memset",       FN_MEMSET},    {"__memset",     FN_MEMSET},
+		// glibc (2.40+) makes memcpy an IFUNC on RISC-V. The IFUNC symbol is
+		// the resolver (and is skipped below, as it is not STT_FUNC), so the
+		// implementations it can select have to be patched instead.
+		{"__memcpy_generic",     FN_MEMCPY},
+		{"__memcpy_noalignment", FN_MEMCPY},
+		{"memset",      FN_MEMSET},    {"__memset",     FN_MEMSET},
 		{"__GI_memset",  FN_MEMSET},
 		{"memmove",      FN_MEMMOVE},   {"__memmove",    FN_MEMMOVE},
 		{"__GI_memmove", FN_MEMMOVE},
