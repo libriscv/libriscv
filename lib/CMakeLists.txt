@@ -142,7 +142,7 @@ elseif(UNIX OR NINTENDO_SWITCH)
 endif()
 if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	# ASM_DISPATCH uses assembly to dispatch instructions.
-	# It is currently only available on the AMD64 (x86_64) Linux platform.
+	# It is available on AMD64 (x86_64) Linux and 64-bit MinGW (Win64 ABI).
 	# The decoder cache layout differs with the C-extension (one entry per
 	# 2 bytes, and icount), and there are handlers for compressed bytecodes
 	if (RISCV_EXT_C)
@@ -150,8 +150,20 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	else()
 		set(RVASM_COMPRESSED 0)
 	endif()
-	if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"
-	 OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")
+	# The MinGW toolchain file does not set CMAKE_SYSTEM_NAME, so WIN32 is
+	# not always set when cross-compiling: MINGW_TOOLCHAIN is
+	if (MINGW_TOOLCHAIN OR MINGW OR WIN32)
+		if (MSVC)
+			message(FATAL_ERROR "libriscv: Assembly dispatch requires MinGW on Windows")
+		endif()
+		set(RVASM_FORMAT -f win64)
+	else()
+		set(RVASM_FORMAT -f elf64 -g -F dwarf)
+	endif()
+	if ((CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"
+	  OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64"
+	  OR CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
+	 AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
 		message(STATUS "libriscv: Assembly dispatch enabled")
 		list(APPEND SOURCES
 			libriscv/amd64/asm_dispatch.cpp
@@ -174,7 +186,7 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 				set(RVASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv${XLEN}_${COUNTING}.o)
 				add_custom_command(
 					OUTPUT ${RVASM_OBJ}
-					COMMAND ${NASM_EXECUTABLE} -f elf64 -g -F dwarf -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} ${RVASM_SRC} -o ${RVASM_OBJ}
+					COMMAND ${NASM_EXECUTABLE} ${RVASM_FORMAT} -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} ${RVASM_SRC} -o ${RVASM_OBJ}
 					DEPENDS ${RVASM_SRC}
 				)
 				set_source_files_properties(${RVASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)

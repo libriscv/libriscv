@@ -1,7 +1,10 @@
-;; RV32 and RV64 dispatch for libriscv, AMD64 SysV.
+;; RV32 and RV64 dispatch for libriscv, AMD64 SysV and Win64 (MinGW).
 ;;
 ;; Assemble once per register width and mode:
 ;;   nasm -f elf64 -DXLEN=32|64 -DCOUNTING=0|1 dispatch_rv.nasm
+;; or with -f win64 for Windows. The Win64 differences (calling convention,
+;; stack frame, sections and unwind info) are all under %if WIN64, and the
+;; SysV output does not depend on them.
 ;; COUNTING=0 is the inaccurate dispatch (CPU::simulate_inaccurate), with the
 ;; exported symbols prefixed rv32asm_ or rv64asm_. COUNTING=1 counts
 ;; instructions like cpu_dispatch.cpp (CPU::simulate), prefixed rv32asmc_ or
@@ -57,6 +60,31 @@ DEFAULT REL
 %endif
 %ifndef COUNTING
 %define COUNTING 0
+%endif
+
+%ifidn __?OUTPUT_FORMAT?__, win64
+%define WIN64 1
+%else
+%define WIN64 0
+%endif
+
+;; Stack frame. SysV: the context is at [rsp], and CALL_CPP pushes the pinned
+;; caller-saved registers around the call. Win64: rsi and rdi are callee-saved,
+;; and every call needs 32 bytes of shadow space below the return address,
+;; which the callee may overwrite. So the frame is allocated once, in the
+;; prologue, and rsp does not move in the handlers (which also makes one set
+;; of unwind codes valid for all of them):
+;;   [rsp + 0..31] shadow space, [rsp + 32] saved r11, [rsp + 40] context
+%if WIN64
+%define CTX_SLOT   [rsp + 40]
+%define R11_SLOT   [rsp + 32]
+%define FRAME_SIZE 56       ; 8 pushes + 56 = 16-byte aligned at calls
+%define RELRO_SECTION .rdata rdata align=8
+%define RODATA_SECTION .rdata rdata align=8
+%else
+%define CTX_SLOT   [rsp]
+%define RELRO_SECTION .data.rel.ro
+%define RODATA_SECTION .rodata
 %endif
 
 %if COUNTING
@@ -124,7 +152,7 @@ DEFAULT REL
 %define RDEC   rbp
 %define RARENA r15
 %define RBTAB  r13
-;;   [rsp] context
+;;   CTX_SLOT context (see "Stack frame")
 ;;   xr8  arena read boundary   (addr - 0x1000 < xr8 is readable)
 ;;   xr9  initial rodata end
 ;;   xr10 arena write boundary  (addr - xr9 < xr10 is writable)
@@ -448,7 +476,7 @@ extern %[PFX]call
 %endif
 	FLUSH_FALLBACK
 	%if COPY == 0
-	[section .data.rel.ro]
+	[section RELRO_SECTION]
 	align 8
 	global %[PFX]%1
 	%[PFX]%1:
@@ -496,11 +524,16 @@ CUR_HANDLER %+ _overflow:
 %endif
 %endmacro
 
-section .rodata
+section RODATA_SECTION
 global %[PFX]ncopies
 %[PFX]ncopies: dd NCOPIES
 
+%if WIN64
+;; HALIGN needs the section to be at least as aligned as the handlers
+section .text code align=64
+%else
 section .text
+%endif
 
 ;; uint32_t <prefix>dispatch(AsmDispatchContext* ctx)
 ;; Starts executing at ctx->pc, which must be inside the execute segment.
@@ -508,6 +541,29 @@ section .text
 align 16
 global %[PFX]dispatch
 %[PFX]dispatch:
+%if WIN64
+	;; The unwind codes at the end of this file describe this prologue
+	push rbx
+.uw_rbx:
+	push rbp
+.uw_rbp:
+	push rdi
+.uw_rdi:
+	push rsi
+.uw_rsi:
+	push r12
+.uw_r12:
+	push r13
+.uw_r13:
+	push r14
+.uw_r14:
+	push r15
+.uw_r15:
+	sub rsp, FRAME_SIZE
+.uw_alloc:
+	mov CTX_SLOT, rcx
+	mov rdi, rcx
+%else
 	push rbx
 	push rbp
 	push r12
@@ -515,6 +571,7 @@ global %[PFX]dispatch
 	push r14
 	push r15
 	push rdi                ; [rsp] = context
+%endif
 	mov RREGS,  [rdi + CTX_REGS]
 	mov RDEC,   [rdi + CTX_DECODER]
 	mov RARENA, [rdi + CTX_ARENA]
@@ -543,10 +600,22 @@ global %[PFX]dispatch
 ;; Leave the dispatch: eax = exit code, ctx->pc already written
 exit_dispatch:
 %if COUNTING
-	mov rdi, [rsp]
+	mov rdi, CTX_SLOT
 	mov [rdi + CTX_COUNTER], r12
 	mov [rdi + CTX_MAX], r11
 %endif
+%if WIN64
+	;; The canonical epilogue form, which the Windows unwinder recognizes
+	add rsp, FRAME_SIZE
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop rsi
+	pop rdi
+	pop rbp
+	pop rbx
+%else
 	pop rdi
 	pop r15
 	pop r14
@@ -554,6 +623,7 @@ exit_dispatch:
 	pop r12
 	pop rbp
 	pop rbx
+%endif
 	ret
 
 %if COUNTING
@@ -561,7 +631,7 @@ exit_dispatch:
 exit_overflow_rbx:
 	RECONSTRUCT_PC rax
 exit_overflow:
-	mov rdi, [rsp]
+	mov rdi, CTX_SLOT
 	mov XW [rdi + CTX_PC], xax
 	mov eax, EXIT_OVERFLOW
 	jmp exit_dispatch
@@ -569,7 +639,7 @@ exit_overflow:
 
 ;; Jump to xax, which is outside the current execute segment
 exit_jump:
-	mov rdi, [rsp]
+	mov rdi, CTX_SLOT
 	mov XW [rdi + CTX_PC], xax
 	mov eax, EXIT_JUMP
 	jmp exit_dispatch
@@ -577,7 +647,7 @@ exit_jump:
 do_stop:
 	RECONSTRUCT_PC rax
 	add xax, 4
-	mov rdi, [rsp]
+	mov rdi, CTX_SLOT
 	mov XW [rdi + CTX_PC], xax
 	mov eax, EXIT_STOP
 	jmp exit_dispatch
@@ -587,7 +657,7 @@ do_stop:
 %macro JUMP_TO_EAX 0
 %if COUNTING
 	CHECK_OVERFLOW_EAX
-	mov rdi, [rsp]
+	mov rdi, CTX_SLOT
 	mov xcx, xax
 	sub xcx, XW [rdi + CTX_BEGIN]
 	cmp xcx, XW [rdi + CTX_LENGTH]
@@ -603,7 +673,7 @@ do_stop:
 
 ;; <prefix>call asked to continue at ctx->pc
 call_goto:
-	mov rdi, [rsp]
+	mov rdi, CTX_SLOT
 	mov xax, XW [rdi + CTX_PC]
 	JUMP_TO_EAX
 
@@ -611,6 +681,19 @@ call_goto:
 ;; The pinned caller-saved registers are kept on the stack, which is 16-byte
 ;; aligned in every handler. %1 = KIND_*, %2 = NEXT macro
 %macro CALL_CPP 2
+%if WIN64
+	;; rsi (RREGS) is callee-saved, and the frame already has the shadow space
+	mov R11_SLOT, r11
+	mov rcx, CTX_SLOT       ; context
+%if COUNTING
+	mov [rcx + CTX_COUNTER], r12
+	mov [rcx + CTX_MAX], r11
+%endif
+	mov rdx, rbx            ; decoder entry
+	mov r8d, %1
+	call %[PFX]call
+	mov r11, R11_SLOT
+%else
 	push r11
 	push RREGS
 	mov rdi, [rsp + 16]     ; context
@@ -623,8 +706,9 @@ call_goto:
 	call %[PFX]call wrt ..plt
 	pop RREGS
 	pop r11
+%endif
 	;; The arena boundaries can change in any system call
-	mov rdi, [rsp]
+	mov rdi, CTX_SLOT
 	mov xr8,  XW [rdi + CTX_RBOUND]
 	mov xr9,  XW [rdi + CTX_RODATA]
 	mov xr10, XW [rdi + CTX_WBOUND]
@@ -1662,7 +1746,7 @@ bstub_generic:
 	CHECK_OVERFLOW_RBX
 	DISPATCH_BLOCK
 
-[section .data.rel.ro]
+[section RELRO_SECTION]
 align 8
 backward_table:
 %assign SK (32768 / STUB_GRAN)
@@ -1683,4 +1767,37 @@ __?SECT?__
 %endrep
 %assign COLOR 0
 
+%if WIN64
+dispatch_text_end:
+;; Unwind info. rsp does not move after the prologue (see "Stack frame"), so
+;; one RUNTIME_FUNCTION covers the dispatch and every handler and stub after
+;; it: from the end of the prologue on, all of the codes apply. Without it,
+;; anything that walks the stack through a call into C++ (debuggers,
+;; profilers, SEH dispatch) would take [rsp] for the return address.
+;; UNWIND_CODE: offset after the instruction, then op | info << 4,
+;; in reverse order. UWOP_PUSH_NONVOL = 0 (info = register number),
+;; UWOP_ALLOC_SMALL = 2 (info = size / 8 - 1).
+%define UW_PUSH(label, reg) db label - %[PFX]dispatch, 0 | (reg << 4)
+section .xdata rdata align=4
+dispatch_unwind:
+	db 1                                         ; version 1, no flags
+	db %[PFX]dispatch.uw_alloc - %[PFX]dispatch  ; size of the prologue
+	db 9                                         ; number of codes
+	db 0                                         ; no frame register
+	db %[PFX]dispatch.uw_alloc - %[PFX]dispatch, 2 | ((FRAME_SIZE / 8 - 1) << 4)
+	UW_PUSH(%[PFX]dispatch.uw_r15, 15)
+	UW_PUSH(%[PFX]dispatch.uw_r14, 14)
+	UW_PUSH(%[PFX]dispatch.uw_r13, 13)
+	UW_PUSH(%[PFX]dispatch.uw_r12, 12)
+	UW_PUSH(%[PFX]dispatch.uw_rsi, 6)
+	UW_PUSH(%[PFX]dispatch.uw_rdi, 7)
+	UW_PUSH(%[PFX]dispatch.uw_rbp, 5)
+	UW_PUSH(%[PFX]dispatch.uw_rbx, 3)
+	dw 0                                         ; pad to an even count
+section .pdata rdata align=4
+	dd %[PFX]dispatch wrt ..imagebase
+	dd dispatch_text_end wrt ..imagebase
+	dd dispatch_unwind wrt ..imagebase
+%else
 section .note.GNU-stack noalloc noexec nowrite progbits
+%endif
