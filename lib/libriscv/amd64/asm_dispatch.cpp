@@ -45,6 +45,18 @@
 #define ASMDISPATCH_RV64_C_HANDLERS(X) /* */
 #endif
 
+// The fused pairs (fused_pairs.inc) that each width of the assembly has
+#define RV32ASM_IF_COMMON(...) __VA_ARGS__
+#define RV32ASM_IF_RV64(...) /* */
+#define RV32ASM_IF_C(...) RISCV_FUSED_IF_C(__VA_ARGS__)
+#define RV32ASM_IF_C_RV32(...) RISCV_FUSED_IF_C_RV32(__VA_ARGS__)
+#define RV32ASM_IF_C_RV64(...) /* */
+#define RV64ASM_IF_COMMON(...) __VA_ARGS__
+#define RV64ASM_IF_RV64(...) __VA_ARGS__
+#define RV64ASM_IF_C(...) RISCV_FUSED_IF_C(__VA_ARGS__)
+#define RV64ASM_IF_C_RV32(...) /* */
+#define RV64ASM_IF_C_RV64(...) RISCV_FUSED_IF_C_RV64(__VA_ARGS__)
+
 namespace riscv {
 	struct AsmDispatchContext;
 	template <int W> struct DecoderData;
@@ -67,6 +79,10 @@ extern "C" {
 	ASMDISPATCH_C_HANDLERS(RV32ASMC_DECLARE)
 	ASMDISPATCH_RV32_C_HANDLERS(RV32ASM_DECLARE)
 	ASMDISPATCH_RV32_C_HANDLERS(RV32ASMC_DECLARE)
+#define FUSED_PAIR(name, a, b, A, B, G) RV32ASM_IF_ ## G( \
+	ASMDISPATCH_DECLARE_ONE(rv32asm_, f_ ## name) ASMDISPATCH_DECLARE_ONE(rv32asmc_, f_ ## name))
+#include "../fused_pairs.inc"
+#undef FUSED_PAIR
 #endif
 #ifdef RISCV_64I
 	uint32_t rv64asm_dispatch(AsmDispatchContext* ctx);
@@ -83,6 +99,10 @@ extern "C" {
 	ASMDISPATCH_C_HANDLERS(RV64ASMC_DECLARE)
 	ASMDISPATCH_RV64_C_HANDLERS(RV64ASM_DECLARE)
 	ASMDISPATCH_RV64_C_HANDLERS(RV64ASMC_DECLARE)
+#define FUSED_PAIR(name, a, b, A, B, G) RV64ASM_IF_ ## G( \
+	ASMDISPATCH_DECLARE_ONE(rv64asm_, f_ ## name) ASMDISPATCH_DECLARE_ONE(rv64asmc_, f_ ## name))
+#include "../fused_pairs.inc"
+#undef FUSED_PAIR
 #endif
 }
 
@@ -194,6 +214,67 @@ static_assert(sizeof(DecoderData<4>) == 8 && sizeof(DecoderData<8>) == 8);
 	H(RV32I_BC_LDWU, P##ldwu) H(RV32I_BC_LDD, P##ldd) H(RV32I_BC_STD, P##std) \
 	ASMDISPATCH_FILL_RV64_C(P)
 
+// A fused pair runs the handler of its first bytecode (which is correct, as the
+// second one has its own decoder entry), unless both halves have fast paths in
+// this configuration: then it runs the handler for the pair, which continues
+// directly with the second half.
+struct AsmFusedHandler {
+	unsigned bytecode;
+	void* const* copies;
+};
+static void asmdispatch_fill_fused(std::vector<void*>& t, unsigned copies,
+	const AsmFusedHandler* fused, size_t count, std::initializer_list<void*> slow)
+{
+	const auto is_fast = [&] (void* handler) {
+		for (void* s : slow) if (handler == s) return false;
+		return true;
+	};
+	for (size_t i = 0; i < count; i++) {
+		const unsigned bc = fused[i].bytecode;
+		const auto& pair = fused_pairs[bc - RV32I_BC_FUSED_FIRST];
+		const bool fast = is_fast(t[pair.first]) && is_fast(t[pair.second]);
+		for (unsigned c = 0; c < copies; c++)
+			t[c * 256 + bc] = fast ? fused[i].copies[c] : t[c * 256 + pair.first];
+	}
+}
+#ifdef RISCV_EXT_COMPRESSED
+#define ASMDISPATCH_SLOW(P) { P##fallback[0], P##step[0], P##c_step[0] }
+#else
+#define ASMDISPATCH_SLOW(P) { P##fallback[0], P##step[0] }
+#endif
+#define ASMDISPATCH_FILL_FUSED(P) \
+	asmdispatch_fill_fused(t, copies, P##fused_handlers, \
+		std::size(P##fused_handlers) - 1, ASMDISPATCH_SLOW(P));
+
+#ifdef RISCV_32I
+#define FUSED_PAIR(name, a, b, A, B, G) RV32ASM_IF_ ## G( \
+	{ RV32I_BC_F_ ## name, rv32asm_f_ ## name },)
+static const AsmFusedHandler rv32asm_fused_handlers[] = {
+#include "../fused_pairs.inc"
+	{ 0, nullptr } };
+#undef FUSED_PAIR
+#define FUSED_PAIR(name, a, b, A, B, G) RV32ASM_IF_ ## G( \
+	{ RV32I_BC_F_ ## name, rv32asmc_f_ ## name },)
+static const AsmFusedHandler rv32asmc_fused_handlers[] = {
+#include "../fused_pairs.inc"
+	{ 0, nullptr } };
+#undef FUSED_PAIR
+#endif
+#ifdef RISCV_64I
+#define FUSED_PAIR(name, a, b, A, B, G) RV64ASM_IF_ ## G( \
+	{ RV32I_BC_F_ ## name, rv64asm_f_ ## name },)
+static const AsmFusedHandler rv64asm_fused_handlers[] = {
+#include "../fused_pairs.inc"
+	{ 0, nullptr } };
+#undef FUSED_PAIR
+#define FUSED_PAIR(name, a, b, A, B, G) RV64ASM_IF_ ## G( \
+	{ RV32I_BC_F_ ## name, rv64asmc_f_ ## name },)
+static const AsmFusedHandler rv64asmc_fused_handlers[] = {
+#include "../fused_pairs.inc"
+	{ 0, nullptr } };
+#undef FUSED_PAIR
+#endif
+
 template <int W, bool Counting>
 struct AsmDispatch;
 
@@ -209,6 +290,7 @@ struct AsmDispatch<W, COUNTING> { \
 			std::vector<void*> t(copies * 256); \
 			ASMDISPATCH_FILL(P) \
 			RV64FILL \
+			ASMDISPATCH_FILL_FUSED(P) \
 			return t; \
 		}(); \
 		return t.data(); \

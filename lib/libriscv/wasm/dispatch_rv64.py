@@ -58,6 +58,8 @@ without bounds checks, like Memory::read and Memory::write (and ARENA_BITS in
 the native dispatch). wasm32 cannot allocate 2^32 bytes, so N is 12..31.
 """
 import argparse
+import os
+import re
 import sys
 
 # ---------------------------------------------------------------------------
@@ -101,7 +103,23 @@ FPOFF = 272
 RWREAD_BEGIN = 0x1000
 
 
-def bytecode_list(compressed, translator, asmjit):
+def fused_pairs(path, compressed):
+    """The fused pairs in fused_pairs.inc that exist in an RV64 build, in the
+    order of the bytecode enum: (name, first bytecode, second bytecode)."""
+    groups = {'COMMON', 'RV64'} | ({'C', 'C_RV32', 'C_RV64'} if compressed else set())
+    pairs = []
+    with open(path) as fp:
+        for line in fp:
+            m = re.match(r'\s*FUSED_PAIR\(([^)]*)\)', line)
+            if not m:
+                continue
+            name, _, _, a, b, group = [x.strip() for x in m.group(1).split(',')]
+            if group in groups:
+                pairs.append((name, a, b))
+    return pairs
+
+
+def bytecode_list(compressed, translator, asmjit, fused):
     """The bytecode enum in threaded_bytecodes.hpp, for an RV64 build."""
     bc = ['RV32I_BC_INVALID',
           'RV32I_BC_ADDI', 'RV32I_BC_LI', 'RV32I_BC_MV',
@@ -141,6 +159,7 @@ def bytecode_list(compressed, translator, asmjit):
     if asmjit:
         bc += ['RV32I_BC_ASMJIT']
     bc += ['RV32I_BC_LIVEPATCH', 'RV32I_BC_SYSTEM']
+    bc += ['RV32I_BC_F_' + name for name, _, _ in fused]
     assert len(bc) <= 256
     return bc
 
@@ -211,6 +230,24 @@ def handler_map(compressed, nanboxing, fcsr):
             # RV32C_BC_FLW/FSW are RV32-only encodings: the fallback
         })
     return m
+
+
+def fused_handlers(hmap, fused):
+    """Add the fused pairs to the handler map. A pair whose halves both have
+    fast paths gets its own handler, f_<name>, which is the handler of the
+    first half, continuing directly with the handler of the second half. The
+    others run the handler of the first half (the second half has its own
+    decoder entry). Returns f_<name> -> (first handler, second handler)."""
+    slow = ('fallback', 'step')
+    info = {}
+    for name, a, b in fused:
+        ha, hb = hmap.get(a, 'fallback'), hmap.get(b, 'fallback')
+        if ha in slow or hb in slow:
+            hmap['RV32I_BC_F_' + name] = ha
+        else:
+            hmap['RV32I_BC_F_' + name] = 'f_' + name
+            info['f_' + name] = (ha, hb)
+    return info
 
 
 # ---------------------------------------------------------------------------
@@ -304,8 +341,10 @@ class Func:
 # The dispatch
 
 class Dispatch:
-    def __init__(self, counting, compressed, bytecodes, hmap, arena_bits):
+    def __init__(self, counting, compressed, bytecodes, hmap, arena_bits, fused):
         self.counting = counting
+        self.fused = fused      # f_<name> -> (first handler, second handler)
+        self.fuse_to = None     # building a fused pair: the second handler
         self.arena_bits = arena_bits
         self.compressed = compressed
         self.shift = 1 if compressed else 2
@@ -459,7 +498,11 @@ class Dispatch:
         if n is None:
             n = self.I2 if self.cur_c else self.I4
         self.advance(n)
-        self.dispatch()
+        if self.fuse_to:
+            # The first half of a fused pair: the next instruction is known
+            self.f.br('h_' + self.fuse_to)
+        else:
+            self.dispatch()
 
     def next_block(self, n=None):
         if n is None:
@@ -840,6 +883,14 @@ class Dispatch:
     # -- The handlers --
     def handler(self, name):
         f = self.f
+        if name in self.fused:
+            # A fused pair (fused_pairs.inc): the handler of the first half,
+            # which then branches directly to the handler of the second half
+            # instead of going through the dispatch
+            first, self.fuse_to = self.fused[name]
+            self.handler(first)
+            self.fuse_to = None
+            return
         self.cur_c = name.startswith('c_')
         H = self
         if name in ('fallback', 'default'):
@@ -1224,6 +1275,9 @@ class Dispatch:
                 names.append(h)
         if 'fallback' not in names:
             names.insert(0, 'fallback')
+        # The fused pairs branch directly to the handler of the second half,
+        # which they can only do when its block encloses them: they go first
+        names = [n for n in names if n in self.fused] + [n for n in names if n not in self.fused]
         # The default of the br_table (bytecodes that do not exist) is a copy of
         # the fallback, so that bytecode 0 (INVALID, the fallback) is not the
         # default too: wasm-opt then subtracts 1 from every bytecode to shorten
@@ -1408,21 +1462,25 @@ def main():
     ap.add_argument('--fcsr', type=int, default=0)
     ap.add_argument('--arena-bits', type=int, default=0,
                     help='RISCV_ENCOMPASSING_ARENA_BITS, 0 = the regular flat arena')
+    ap.add_argument('--fused', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'fused_pairs.inc'),
+                    help='fused_pairs.inc')
     ap.add_argument('-o', '--output', required=True, help='the .s file')
     ap.add_argument('--header', required=True, help='the C++ header with the layout checks')
     args = ap.parse_args()
     if args.arena_bits != 0 and not 12 <= args.arena_bits <= 31:
         ap.error('--arena-bits must be 0 or 12..31 (wasm32 cannot allocate a 32-bit arena)')
 
-    bytecodes = bytecode_list(args.compressed, args.translator, args.asmjit)
+    fused = fused_pairs(args.fused, args.compressed)
+    bytecodes = bytecode_list(args.compressed, args.translator, args.asmjit, fused)
     hmap = handler_map(args.compressed, args.nanboxing, args.fcsr)
+    fused_info = fused_handlers(hmap, fused)
 
     out = ['# Generated by dispatch_rv64.py. Do not edit.',
            '\t.functype\tfma (f64, f64, f64) -> (f64)',
            '\t.functype\tfmaf (f32, f32, f32) -> (f32)',
            '\t.tabletype\t__indirect_function_table, funcref']
     for counting in (False, True):
-        d = Dispatch(counting, args.compressed, bytecodes, hmap, args.arena_bits)
+        d = Dispatch(counting, args.compressed, bytecodes, hmap, args.arena_bits, fused_info)
         d.build().emit(out)
     with open(args.output, 'w') as fp:
         fp.write('\n'.join(out) + '\n')

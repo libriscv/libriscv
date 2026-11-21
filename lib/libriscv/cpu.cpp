@@ -4,6 +4,7 @@
 #include "internal_common.hpp"
 #include "riscvbase.hpp"
 #include "rv32i_instr.hpp"
+#include "fused_bytecodes.hpp"
 #include "threaded_bytecodes.hpp"
 //#define TIME_EXECUTION
 
@@ -447,6 +448,8 @@ restart_precise_sim:
 		auto* decoder_begin = &exec_decoder[exec.exec_begin() / DecoderData<W>::DIVISOR];
 
 		auto& cache_entry = exec_decoder[addr / DecoderData<W>::DIVISOR];
+		// Make sure that if this entry is part of a fused pair, the pair is unfused before modification
+		unfuse_entry_before(exec_decoder, exec.exec_begin(), addr);
 
 		// The last instruction will be the current entry
 		// Later instructions will work as normal
@@ -454,8 +457,15 @@ restart_precise_sim:
 		auto* last    = &cache_entry;
 		auto* current = &cache_entry;
 		auto last_block_bytes = cache_entry.block_bytes();
-		while (current > decoder_begin && (current-1)->block_bytes() > last_block_bytes) {
-			current--;
+		while (current > decoder_begin) {
+			auto* prev = current - 1;
+			// The middle of a compressed 4-byte instruction is an invalid no-length entry
+			if (compressed_enabled && prev->block_bytes() == 0 && prev > decoder_begin
+				&& (prev-1)->block_bytes() == last_block_bytes + 4)
+				prev--;
+			if (prev->block_bytes() <= last_block_bytes)
+				break; // The end of a previous block
+			current = prev;
 			last_block_bytes = current->block_bytes();
 		}
 
@@ -471,11 +481,15 @@ restart_precise_sim:
 		for (auto* dd = current; dd < last; dd++) {
 			// Get the patched decoder entry
 			auto& p = exec_decoder[patched_addr / DecoderData<W>::DIVISOR];
+			patched_addr += (compressed_enabled) ? 2 : 4;
+			// The middle of a 4-byte instruction stays invalid: every real
+			// entry before the last one in the block has a block length
+			if (compressed_enabled && p.idxend == 0)
+				continue;
 			p.idxend = last - dd;
 		#ifdef RISCV_EXT_C
 			p.icount = 0; // TODO: Implement C-ext icount for breakpoints
 		#endif
-			patched_addr += (compressed_enabled) ? 2 : 4;
 		}
 		// Check if the last address matches the breakpoint address
 		if (patched_addr != addr) {

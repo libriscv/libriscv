@@ -138,4 +138,7 @@ static constexpr void *computed_opcode[] = {
 #endif
 	[RV32I_BC_LIVEPATCH]  = &&execute_livepatch,
 	[RV32I_BC_SYSTEM] = &&rv32i_system,
+#define FUSED_PAIR(name, a, b, A, B, G) RISCV_FUSED_IF_ ## G([RV32I_BC_F_ ## name] = &&rv_fused_ ## name,)
+#include "fused_pairs.inc"
+#undef FUSED_PAIR
 };

@@ -1,6 +1,7 @@
 #pragma once
 #include "decoded_exec_segment.hpp"
 #include "decoder_cache.hpp"
+#include "fused_bytecodes.hpp"
 #include "threaded_bytecodes.hpp"
 #include <atomic>
 #include <cstdio>
@@ -9,15 +10,12 @@
 #include <vector>
 
 // Shared machinery for activating native code (binary translation or asmjit)
-// on an execute segment whose decoder cache is already realized, which is what
-// happens when the translation ran in the background.
+// on an execute segment whose decoder cache is already realized
 //
 // The activation cannot patch the live decoder cache in place: another thread
 // may be executing out of it right now. Instead a full copy is patched, the
 // segment is pointed at the copy, and every patched address gets a LIVEPATCH
-// bytecode written atomically into the *original* cache. A thread that reaches
-// one of those addresses rewinds to the start of its block, switches to the
-// patched cache and continues there.
+// bytecode written atomically into the *original* cache
 
 #if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
 
@@ -155,6 +153,11 @@ namespace riscv
 		/// @return The patched entry, for the caller to overwrite.
 		DecoderData<W>& claim(address_t addr, bool verbose)
 		{
+			// The caller replaces this entry, which a fused pair before it would
+			// execute. The original cache is only live-patched with a new
+			// bytecode, which a fused pair ignores, executing the original
+			// instruction, so it keeps working.
+			unfuse_entry_before(m_decoder, m_exec.exec_begin(), addr);
 			auto& entry = livepatch_make_block_ending<W>(m_exec, m_decoder, m_begin, addr, verbose);
 			m_patched.push_back(&livepatch_entry_at(m_exec.decoder_cache(), addr));
 			return entry;

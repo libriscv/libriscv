@@ -379,25 +379,44 @@ extern %[PFX]call
 	jmp [r14 + rax * 8 + TABLE_OFFSET]
 %endmacro
 
+;; In the first half of a fused pair (see FUSED) the next instruction is known:
+;; advance to it and jump directly to the handler of the second half
+%macro NEXT_FUSED 1
+	mov rdx, [rbx + %1]
+	add rbx, %1
+	jmp %[PFX]%[FUSE_TO]_%[COLOR]
+%endmacro
 %macro NEXT_INSTR 0
+%ifdef FUSE_TO
+	NEXT_FUSED I4
+%else
 	NEXT I4
+%endif
 %endmacro
 %macro NEXT_MEM_INSTR 0
-%ifndef NO_SELF_MEM
+%ifdef FUSE_TO
+	NEXT_FUSED I4
+%elifndef NO_SELF_MEM
 	NEXT_SELF I4
 %else
 	NEXT I4
 %endif
 %endmacro
 %macro NEXT_MEM_C_INSTR 0
-%ifndef NO_SELF_MEM
+%ifdef FUSE_TO
+	NEXT_FUSED I2
+%elifndef NO_SELF_MEM
 	NEXT_SELF I2
 %else
 	NEXT I2
 %endif
 %endmacro
 %macro NEXT_C_INSTR 0
+%ifdef FUSE_TO
+	NEXT_FUSED I2
+%else
 	NEXT I2
+%endif
 %endmacro
 
 ;; Dispatch the decoder entry at rbx, which begins a block (the target of a
@@ -982,6 +1001,655 @@ do_c_fallback:
 %endmacro
 
 
+;; The bodies of the handlers that can be the first half of a fused pair
+%macro BODY_addi 0
+	rorx rax, rdx, 32       ; ax = imm, bits 16..23 = rs2, 24..31 = rs1
+	movsx xdi, ax
+	shr eax, 16
+	movzx ecx, al
+	movzx eax, ah
+	add xdi, REG(rcx)
+	mov REG(rax), xdi
+	NEXT_INSTR
+%endmacro
+%macro BODY_li 0
+	movzx ecx, byte [rbx + 4]
+	movsx xax, word [rbx + 6]
+	mov REG(rcx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_mv 0
+	movzx ecx, byte [rbx + 4]
+	movzx eax, byte [rbx + 5]
+	mov xcx, REG(rcx)
+	mov REG(rax), xcx
+	NEXT_INSTR
+%endmacro
+%macro BODY_slli 0
+	ITYPE_LOAD_SRC
+	movzx ecx, word [rbx + 4]
+	shl xax, cl
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_srli 0
+	ITYPE_LOAD_SRC
+	movzx ecx, word [rbx + 4]
+	shr xax, cl
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_srai 0
+	ITYPE_LOAD_SRC
+	movzx ecx, word [rbx + 4]
+	sar xax, cl
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_slti 0
+	ITYPE_LOAD_SRC
+	movsx xcx, word [rbx + 4]
+	xor edi, edi
+	cmp xax, xcx
+	setl dil
+	mov REG(rdx), xdi
+	NEXT_INSTR
+%endmacro
+%macro BODY_sltiu 0
+	ITYPE_LOAD_SRC
+	movsx xcx, word [rbx + 4]
+	xor edi, edi
+	cmp xax, xcx
+	setb dil
+	mov REG(rdx), xdi
+	NEXT_INSTR
+%endmacro
+%macro BODY_xori 0
+	ITYPE_LOAD_SRC
+	movsx xcx, word [rbx + 4]
+	xor xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_ori 0
+	ITYPE_LOAD_SRC
+	movsx xcx, word [rbx + 4]
+	or xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_andi 0
+	ITYPE_LOAD_SRC
+	movsx xcx, word [rbx + 4]
+	and xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_sext_b 0
+	ITYPE_LOAD_SRC
+	movsx xax, al
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_sext_h 0
+	ITYPE_LOAD_SRC
+	movsx xax, ax
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_bseti 0
+	ITYPE_LOAD_SRC
+	movzx ecx, word [rbx + 4]
+	bts xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_bexti 0
+	ITYPE_LOAD_SRC
+	movzx ecx, word [rbx + 4]
+	shr xax, cl
+	and eax, 1
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_lui 0
+	mov eax, dword [rbx + 4]
+	movzx edx, byte [rbx + 7]
+	shl eax, 8
+%if XLEN == 64
+	movsxd rax, eax
+%endif
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_auipc 0
+	mov eax, dword [rbx + 4]
+	movzx edx, byte [rbx + 7]
+	shl eax, 8
+%if XLEN == 64
+	movsxd rax, eax
+%endif
+	RECONSTRUCT_PC rcx
+	add xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_add 0
+	rorx rax, rdx, 48       ; al = rs2, ah = rs1
+	shr rdx, 32             ; dx = rd
+	movzx ecx, al
+	movzx eax, ah
+	movzx edx, dx
+	mov xax, REG(rax)
+	add xax, REG(rcx)
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sub 0
+	OP_LOAD
+	sub xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sll 0
+	OP_LOAD
+	shl xax, cl
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_srl 0
+	OP_LOAD
+	shr xax, cl
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sra 0
+	OP_LOAD
+	sar xax, cl
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_slt 0
+	OP_LOAD
+	xor edi, edi
+	cmp xax, xcx
+	setl dil
+	mov REG(rdx), xdi
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sltu 0
+	OP_LOAD
+	xor edi, edi
+	cmp xax, xcx
+	setb dil
+	mov REG(rdx), xdi
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_xor 0
+	OP_LOAD
+	xor xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_or 0
+	OP_LOAD
+	or xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_and 0
+	OP_LOAD
+	and xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_mul 0
+	OP_LOAD
+	imul xax, xcx
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_div 0
+	DIVISION div
+%endmacro
+%macro BODY_op_divu 0
+	DIVISION divu
+%endmacro
+%macro BODY_op_rem 0
+	DIVISION rem
+%endmacro
+%macro BODY_op_remu 0
+	DIVISION remu
+%endmacro
+%macro BODY_op_zext_h 0
+	OP_LOAD
+	movzx eax, ax
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sh1add 0
+	OP_LOAD
+	lea xax, [rcx + rax * 2]
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sh2add 0
+	OP_LOAD
+	lea xax, [rcx + rax * 4]
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sh3add 0
+	OP_LOAD
+	lea xax, [rcx + rax * 8]
+	mov REG(rdx), xax
+	NEXT_INSTR
+%endmacro
+%macro BODY_addiw 0
+	movzx ecx, byte [rbx + 6]
+	movsx edi, word [rbx + 4]
+	movzx edx, byte [rbx + 7]
+	add edi, REG32(rcx)
+	movsxd rdi, edi
+	mov REG(rdx), rdi
+	NEXT_INSTR
+%endmacro
+%macro BODY_slliw 0
+	movzx eax, byte [rbx + 6]
+	movzx ecx, word [rbx + 4]
+	movzx edx, byte [rbx + 7]
+	mov eax, REG32(rax)
+	shl eax, cl
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_srliw 0
+	movzx eax, byte [rbx + 6]
+	movzx ecx, word [rbx + 4]
+	movzx edx, byte [rbx + 7]
+	mov eax, REG32(rax)
+	shr eax, cl
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_sraiw 0
+	movzx eax, byte [rbx + 6]
+	movzx ecx, word [rbx + 4]
+	movzx edx, byte [rbx + 7]
+	mov eax, REG32(rax)
+	sar eax, cl
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_addw 0
+	OP_LOAD32
+	add eax, ecx
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_subw 0
+	OP_LOAD32
+	sub eax, ecx
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_mulw 0
+	OP_LOAD32
+	imul eax, ecx
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_add_uw 0
+	movzx eax, byte [rbx + 7]
+	movzx ecx, byte [rbx + 6]
+	movzx edx, word [rbx + 4]
+	mov eax, REG32(rax)
+	add rax, REG(rcx)
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sh1add_uw 0
+	movzx eax, byte [rbx + 7]
+	movzx ecx, byte [rbx + 6]
+	movzx edx, word [rbx + 4]
+	mov eax, REG32(rax)
+	mov rcx, REG(rcx)
+	lea rax, [rcx + rax * 2]
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_op_sh2add_uw 0
+	movzx eax, byte [rbx + 7]
+	movzx ecx, byte [rbx + 6]
+	movzx edx, word [rbx + 4]
+	mov eax, REG32(rax)
+	mov rcx, REG(rcx)
+	lea rax, [rcx + rax * 4]
+	mov REG(rdx), rax
+	NEXT_INSTR
+%endmacro
+%macro BODY_ldw 0
+%if XLEN == 64
+	LOAD {movsxd rax, dword [RARENA + rax]}, NEXT_MEM_INSTR
+%else
+	LOAD {mov eax, dword [RARENA + rax]}, NEXT_MEM_INSTR
+%endif
+%endmacro
+%macro BODY_ldh 0
+	LOAD {movsx xax, word [RARENA + rax]}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_ldhu 0
+	LOAD {movzx eax, word [RARENA + rax]}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_ldb 0
+	LOAD {movsx xax, byte [RARENA + rax]}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_ldbu 0
+	LOAD {movzx eax, byte [RARENA + rax]}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_ldwu 0
+	LOAD {mov eax, dword [RARENA + rax]}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_ldd 0
+	LOAD {mov rax, qword [RARENA + rax]}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_stw 0
+	STORE {mov dword [RARENA + rax], ecx}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_sth 0
+	STORE {mov word [RARENA + rax], cx}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_stb 0
+	STORE {mov byte [RARENA + rax], cl}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_std 0
+	STORE {mov qword [RARENA + rax], rcx}, NEXT_MEM_INSTR
+%endmacro
+%macro BODY_flw 0
+	READ_ADDRESS 6
+	movzx edx, byte [rbx + 7]
+	mov eax, dword [RARENA + rax]
+	mov dword FREG(rdx), eax    ; no NaN-boxing (C++ maps FLW only without it)
+	NEXT_MEM_INSTR
+%endmacro
+%macro BODY_fld 0
+	READ_ADDRESS 6
+	movzx edx, byte [rbx + 7]
+	mov rax, qword [RARENA + rax]
+	mov qword FREG(rdx), rax
+	NEXT_MEM_INSTR
+%endmacro
+%macro BODY_fsw 0
+	WRITE_ADDRESS 7
+	movzx ecx, byte [rbx + 6]
+	mov ecx, dword FREG(rcx)
+	mov dword [RARENA + rax], ecx
+	NEXT_MEM_INSTR
+%endmacro
+%macro BODY_fsd 0
+	WRITE_ADDRESS 7
+	movzx ecx, byte [rbx + 6]
+	mov rcx, qword FREG(rcx)
+	mov qword [RARENA + rax], rcx
+	NEXT_MEM_INSTR
+%endmacro
+%macro BODY_fadd 0
+	FP_ARITH add
+%endmacro
+%macro BODY_fsub 0
+	FP_ARITH sub
+%endmacro
+%macro BODY_fmul 0
+	FP_ARITH mul
+%endmacro
+%macro BODY_fdiv 0
+	FP_ARITH div
+%endmacro
+%macro BODY_fmadd 0
+	mov eax, dword [rbx + 4]
+	test eax, 1 << 26           ; funct2 >= 2 (half, quad)
+	FALLBACK_IF jnz
+	mov ecx, eax
+	shr ecx, 15
+	and ecx, 31
+	mov edi, eax
+	shr edi, 20
+	and edi, 31
+	bt eax, 25
+	jc .double
+	vmovss xmm0, FREG(rcx)
+	vmovss xmm1, FREG(rdi)
+	mov ecx, eax
+	shr ecx, 27
+	shr eax, 7
+	and eax, 31
+	vfmadd213ss xmm0, xmm1, FREG(rcx)
+	vmovss FREG(rax), xmm0
+	NEXT_INSTR
+	align 64
+.double:
+	vmovsd xmm0, FREG(rcx)
+	vmovsd xmm1, FREG(rdi)
+	mov ecx, eax
+	shr ecx, 27
+	shr eax, 7
+	and eax, 31
+	vfmadd213sd xmm0, xmm1, FREG(rcx)
+	vmovsd FREG(rax), xmm0
+	NEXT_INSTR
+%endmacro
+%macro BODY_c_addi 0
+	movzx ecx, byte [rbx + 6]
+	movsx xax, word [rbx + 4]
+	movzx edx, byte [rbx + 7]
+	add xax, REG(rcx)
+	mov REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_mv 0
+	movzx ecx, byte [rbx + 4]
+	movzx edx, byte [rbx + 5]
+	mov xax, REG(rcx)
+	mov REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_slli 0
+	movzx edx, byte [rbx + 7]
+	movzx ecx, word [rbx + 4]
+	shl REG(rdx), cl
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_srli 0
+	movzx edx, byte [rbx + 7]
+	movzx ecx, word [rbx + 4]
+	shr REG(rdx), cl
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_andi 0
+	movzx edx, byte [rbx + 7]
+	movsx xax, word [rbx + 4]
+	and REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_srai 0
+	movzx edx, byte [rbx + 7]
+	movzx ecx, word [rbx + 4]
+	sar REG(rdx), cl
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_sub 0
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov xax, REG(rcx)
+	sub REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_and 0
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov xax, REG(rcx)
+	and REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_subw 0
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov eax, REG32(rdx)
+	sub eax, REG32(rcx)
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_addw 0
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov eax, REG32(rdx)
+	add eax, REG32(rcx)
+	movsxd rax, eax
+	mov REG(rdx), rax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_add 0
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov xax, REG(rcx)
+	add REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_xor 0
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov xax, REG(rcx)
+	xor REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_or 0
+	movzx ecx, byte [rbx + 6]
+	movzx edx, byte [rbx + 7]
+	mov xax, REG(rcx)
+	or REG(rdx), xax
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_lui 0
+	movzx ecx, byte [rbx + 7]
+	shr rdx, 32
+	shl edx, 8
+%if XLEN == 64
+	movsxd rdx, edx
+%endif
+	mov REG(rcx), xdx
+	NEXT_C_INSTR
+%endmacro
+%macro BODY_c_fld 0
+	READ_ADDRESS 6
+	movzx edx, byte [rbx + 7]
+	mov rax, qword [RARENA + rax]
+	mov qword FREG(rdx), rax
+	NEXT_MEM_C_INSTR
+%endmacro
+%macro BODY_c_fsd 0
+	WRITE_ADDRESS 7
+	movzx ecx, byte [rbx + 6]
+	mov rcx, qword FREG(rcx)
+	mov qword [RARENA + rax], rcx
+	NEXT_MEM_C_INSTR
+%endmacro
+%macro BODY_c_flw 0
+	READ_ADDRESS 6
+	movzx edx, byte [rbx + 7]
+	mov eax, dword [RARENA + rax]
+	mov dword FREG(rdx), eax
+	NEXT_MEM_C_INSTR
+%endmacro
+%macro BODY_c_fsw 0
+	WRITE_ADDRESS 7
+	movzx ecx, byte [rbx + 6]
+	mov ecx, dword FREG(rcx)
+	mov dword [RARENA + rax], ecx
+	NEXT_MEM_C_INSTR
+%endmacro
+%macro BODY_c_ldw 0
+%if XLEN == 64
+	LOAD {movsxd rax, dword [RARENA + rax]}, NEXT_MEM_C_INSTR
+%else
+	LOAD {mov eax, dword [RARENA + rax]}, NEXT_MEM_C_INSTR
+%endif
+%endmacro
+%macro BODY_c_stw 0
+	STORE {mov dword [RARENA + rax], ecx}, NEXT_MEM_C_INSTR
+%endmacro
+%macro BODY_c_ldd 0
+	LOAD {mov rax, qword [RARENA + rax]}, NEXT_MEM_C_INSTR
+%endmacro
+%macro BODY_c_std 0
+	STORE {mov qword [RARENA + rax], rcx}, NEXT_MEM_C_INSTR
+%endmacro
+
+;; Fused pairs (fused_pairs.inc, shared with C++). The decoder gives an entry
+;; the bytecode of a pair when it is the first half and the next instruction,
+;; in the same block, is the second half. The handler for the pair is the body
+;; of the first half, which then continues directly with the handler of the
+;; second half (from the next entry, which is unchanged), instead of
+;; dispatching. That replaces an indirect jump with a direct one: after a
+;; handler that is followed by many kinds of instructions the dispatch jump is
+;; predicted by the indirect target predictor, which costs ~3 more cycles than
+;; a BTB prediction even when it is right (Zen 4). It also removes the
+;; dispatch ops, and the remaining dispatch jumps have fewer targets.
+;; FUSED name, first, second: first and second are handler names.
+%macro FUSED 3
+%ifdef CLASS_%2
+	%xdefine CLASS_f_%1 CLASS_%2
+%endif
+%ifdef C_FALLBACK_%2
+C_HANDLER f_%1
+%else
+HANDLER f_%1
+%endif
+	%xdefine FUSE_TO %3
+	BODY_%2
+	%undef FUSE_TO
+%endmacro
+;; The groups in fused_pairs.inc
+%macro FUSED_COMMON 3
+	FUSED %1, %2, %3
+%endmacro
+%macro FUSED_RV64 3
+%if XLEN == 64
+	FUSED %1, %2, %3
+%endif
+%endmacro
+%macro FUSED_C 3
+%if COMPRESSED
+	FUSED %1, %2, %3
+%endif
+%endmacro
+%macro FUSED_C_RV64 3
+%if COMPRESSED && XLEN == 64
+	FUSED %1, %2, %3
+%endif
+%endmacro
+%macro FUSED_C_RV32 3
+%if COMPRESSED && XLEN == 32
+	FUSED %1, %2, %3
+%endif
+%endmacro
+%define FUSED_PAIR(name, a, b, A, B, G) FUSED_ %+ G name, a, b
+;; Handlers that continue at pc+2 after a fallback (C_HANDLER)
+%define C_FALLBACK_c_fld
+%define C_FALLBACK_c_fsd
+%define C_FALLBACK_c_flw
+%define C_FALLBACK_c_fsw
+%define C_FALLBACK_c_ldw
+%define C_FALLBACK_c_stw
+%define C_FALLBACK_c_ldd
+%define C_FALLBACK_c_std
+
 %macro ALL_HANDLERS 0
 	%assign HID 0
 ;; RV32I_BC_INVALID and every unknown bytecode
@@ -993,343 +1661,149 @@ HANDLER stop
 ;; -== Immediate ALU, FasterItype: imm16 @4, rs2 (src) @6, rs1 (dst) @7 ==-
 
 HANDLER addi
-	rorx rax, rdx, 32       ; ax = imm, bits 16..23 = rs2, 24..31 = rs1
-	movsx xdi, ax
-	shr eax, 16
-	movzx ecx, al
-	movzx eax, ah
-	add xdi, REG(rcx)
-	mov REG(rax), xdi
-	NEXT_INSTR
+	BODY_addi
 
 ;; FasterImmediate: rd @4, imm16 @6
 HANDLER li
-	movzx ecx, byte [rbx + 4]
-	movsx xax, word [rbx + 6]
-	mov REG(rcx), xax
-	NEXT_INSTR
+	BODY_li
 
 ;; FasterMove: rs1 @4, rd @5
 HANDLER mv
-	movzx ecx, byte [rbx + 4]
-	movzx eax, byte [rbx + 5]
-	mov xcx, REG(rcx)
-	mov REG(rax), xcx
-	NEXT_INSTR
+	BODY_mv
 
 HANDLER slli
-	ITYPE_LOAD_SRC
-	movzx ecx, word [rbx + 4]
-	shl xax, cl
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_slli
 
 HANDLER srli
-	ITYPE_LOAD_SRC
-	movzx ecx, word [rbx + 4]
-	shr xax, cl
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_srli
 
 HANDLER srai
-	ITYPE_LOAD_SRC
-	movzx ecx, word [rbx + 4]
-	sar xax, cl
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_srai
 
 HANDLER slti
-	ITYPE_LOAD_SRC
-	movsx xcx, word [rbx + 4]
-	xor edi, edi
-	cmp xax, xcx
-	setl dil
-	mov REG(rdx), xdi
-	NEXT_INSTR
+	BODY_slti
 
 HANDLER sltiu
-	ITYPE_LOAD_SRC
-	movsx xcx, word [rbx + 4]
-	xor edi, edi
-	cmp xax, xcx
-	setb dil
-	mov REG(rdx), xdi
-	NEXT_INSTR
+	BODY_sltiu
 
 HANDLER xori
-	ITYPE_LOAD_SRC
-	movsx xcx, word [rbx + 4]
-	xor xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_xori
 
 HANDLER ori
-	ITYPE_LOAD_SRC
-	movsx xcx, word [rbx + 4]
-	or xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_ori
 
 HANDLER andi
-	ITYPE_LOAD_SRC
-	movsx xcx, word [rbx + 4]
-	and xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_andi
 
 HANDLER sext_b
-	ITYPE_LOAD_SRC
-	movsx xax, al
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_sext_b
 
 HANDLER sext_h
-	ITYPE_LOAD_SRC
-	movsx xax, ax
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_sext_h
 
 HANDLER bseti
-	ITYPE_LOAD_SRC
-	movzx ecx, word [rbx + 4]
-	bts xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_bseti
 
 HANDLER bexti
-	ITYPE_LOAD_SRC
-	movzx ecx, word [rbx + 4]
-	shr xax, cl
-	and eax, 1
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_bexti
 
 ;; -== Upper immediates, FasterJtype: offset24 @4..6, rd @7 ==-
 
 HANDLER lui
-	mov eax, dword [rbx + 4]
-	movzx edx, byte [rbx + 7]
-	shl eax, 8
-%if XLEN == 64
-	movsxd rax, eax
-%endif
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_lui
 
 HANDLER auipc
-	mov eax, dword [rbx + 4]
-	movzx edx, byte [rbx + 7]
-	shl eax, 8
-%if XLEN == 64
-	movsxd rax, eax
-%endif
-	RECONSTRUCT_PC rcx
-	add xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_auipc
 
 ;; -== Register ALU, FasterOpType: rd16 @4, rs2 @6, rs1 @7 ==-
 
 HANDLER op_add
-	rorx rax, rdx, 48       ; al = rs2, ah = rs1
-	shr rdx, 32             ; dx = rd
-	movzx ecx, al
-	movzx eax, ah
-	movzx edx, dx
-	mov xax, REG(rax)
-	add xax, REG(rcx)
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_add
 
 HANDLER op_sub
-	OP_LOAD
-	sub xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_sub
 
 HANDLER op_sll
-	OP_LOAD
-	shl xax, cl
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_sll
 
 HANDLER op_srl
-	OP_LOAD
-	shr xax, cl
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_srl
 
 HANDLER op_sra
-	OP_LOAD
-	sar xax, cl
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_sra
 
 HANDLER op_slt
-	OP_LOAD
-	xor edi, edi
-	cmp xax, xcx
-	setl dil
-	mov REG(rdx), xdi
-	NEXT_INSTR
+	BODY_op_slt
 
 HANDLER op_sltu
-	OP_LOAD
-	xor edi, edi
-	cmp xax, xcx
-	setb dil
-	mov REG(rdx), xdi
-	NEXT_INSTR
+	BODY_op_sltu
 
 HANDLER op_xor
-	OP_LOAD
-	xor xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_xor
 
 HANDLER op_or
-	OP_LOAD
-	or xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_or
 
 HANDLER op_and
-	OP_LOAD
-	and xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_and
 
 HANDLER op_mul
-	OP_LOAD
-	imul xax, xcx
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_mul
 
 HANDLER op_div
-	DIVISION div
+	BODY_op_div
 HANDLER op_divu
-	DIVISION divu
+	BODY_op_divu
 HANDLER op_rem
-	DIVISION rem
+	BODY_op_rem
 HANDLER op_remu
-	DIVISION remu
+	BODY_op_remu
 
 HANDLER op_zext_h
-	OP_LOAD
-	movzx eax, ax
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_zext_h
 
 HANDLER op_sh1add
-	OP_LOAD
-	lea xax, [rcx + rax * 2]
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_sh1add
 
 HANDLER op_sh2add
-	OP_LOAD
-	lea xax, [rcx + rax * 4]
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_sh2add
 
 HANDLER op_sh3add
-	OP_LOAD
-	lea xax, [rcx + rax * 8]
-	mov REG(rdx), xax
-	NEXT_INSTR
+	BODY_op_sh3add
 
 %if XLEN == 64
 ;; -== RV64 32-bit operations, sign-extended to 64 bits ==-
 
 HANDLER addiw
-	movzx ecx, byte [rbx + 6]
-	movsx edi, word [rbx + 4]
-	movzx edx, byte [rbx + 7]
-	add edi, REG32(rcx)
-	movsxd rdi, edi
-	mov REG(rdx), rdi
-	NEXT_INSTR
+	BODY_addiw
 
 HANDLER slliw
-	movzx eax, byte [rbx + 6]
-	movzx ecx, word [rbx + 4]
-	movzx edx, byte [rbx + 7]
-	mov eax, REG32(rax)
-	shl eax, cl
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_slliw
 
 HANDLER srliw
-	movzx eax, byte [rbx + 6]
-	movzx ecx, word [rbx + 4]
-	movzx edx, byte [rbx + 7]
-	mov eax, REG32(rax)
-	shr eax, cl
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_srliw
 
 HANDLER sraiw
-	movzx eax, byte [rbx + 6]
-	movzx ecx, word [rbx + 4]
-	movzx edx, byte [rbx + 7]
-	mov eax, REG32(rax)
-	sar eax, cl
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_sraiw
 
 HANDLER op_addw
-	OP_LOAD32
-	add eax, ecx
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_op_addw
 
 HANDLER op_subw
-	OP_LOAD32
-	sub eax, ecx
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_op_subw
 
 HANDLER op_mulw
-	OP_LOAD32
-	imul eax, ecx
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_op_mulw
 
 ;; rd = zext32(rs1) + rs2
 HANDLER op_add_uw
-	movzx eax, byte [rbx + 7]
-	movzx ecx, byte [rbx + 6]
-	movzx edx, word [rbx + 4]
-	mov eax, REG32(rax)
-	add rax, REG(rcx)
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_op_add_uw
 
 HANDLER op_sh1add_uw
-	movzx eax, byte [rbx + 7]
-	movzx ecx, byte [rbx + 6]
-	movzx edx, word [rbx + 4]
-	mov eax, REG32(rax)
-	mov rcx, REG(rcx)
-	lea rax, [rcx + rax * 2]
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_op_sh1add_uw
 
 HANDLER op_sh2add_uw
-	movzx eax, byte [rbx + 7]
-	movzx ecx, byte [rbx + 6]
-	movzx edx, word [rbx + 4]
-	mov eax, REG32(rax)
-	mov rcx, REG(rcx)
-	lea rax, [rcx + rax * 4]
-	mov REG(rdx), rax
-	NEXT_INSTR
+	BODY_op_sh2add_uw
 %endif ; XLEN == 64
 
 ;; -== Calls into C++ ==-
@@ -1434,210 +1908,107 @@ HANDLER jalr
 ;; -== Loads ==-
 
 HANDLER ldw
-%if XLEN == 64
-	LOAD {movsxd rax, dword [RARENA + rax]}, NEXT_MEM_INSTR
-%else
-	LOAD {mov eax, dword [RARENA + rax]}, NEXT_MEM_INSTR
-%endif
+	BODY_ldw
 HANDLER ldh
-	LOAD {movsx xax, word [RARENA + rax]}, NEXT_MEM_INSTR
+	BODY_ldh
 HANDLER ldhu
-	LOAD {movzx eax, word [RARENA + rax]}, NEXT_MEM_INSTR
+	BODY_ldhu
 HANDLER ldb
-	LOAD {movsx xax, byte [RARENA + rax]}, NEXT_MEM_INSTR
+	BODY_ldb
 HANDLER ldbu
-	LOAD {movzx eax, byte [RARENA + rax]}, NEXT_MEM_INSTR
+	BODY_ldbu
 %if XLEN == 64
 HANDLER ldwu
-	LOAD {mov eax, dword [RARENA + rax]}, NEXT_MEM_INSTR
+	BODY_ldwu
 HANDLER ldd
-	LOAD {mov rax, qword [RARENA + rax]}, NEXT_MEM_INSTR
+	BODY_ldd
 %endif
 
 ;; -== Stores ==-
 
 HANDLER stw
-	STORE {mov dword [RARENA + rax], ecx}, NEXT_MEM_INSTR
+	BODY_stw
 HANDLER sth
-	STORE {mov word [RARENA + rax], cx}, NEXT_MEM_INSTR
+	BODY_sth
 HANDLER stb
-	STORE {mov byte [RARENA + rax], cl}, NEXT_MEM_INSTR
+	BODY_stb
 %if XLEN == 64
 HANDLER std
-	STORE {mov qword [RARENA + rax], rcx}, NEXT_MEM_INSTR
+	BODY_std
 %endif
 
 ;; -== Floating point loads and stores, FasterItype like the integer ones ==-
 
 HANDLER flw
-	READ_ADDRESS 6
-	movzx edx, byte [rbx + 7]
-	mov eax, dword [RARENA + rax]
-	mov dword FREG(rdx), eax    ; no NaN-boxing (C++ maps FLW only without it)
-	NEXT_MEM_INSTR
+	BODY_flw
 HANDLER fld
-	READ_ADDRESS 6
-	movzx edx, byte [rbx + 7]
-	mov rax, qword [RARENA + rax]
-	mov qword FREG(rdx), rax
-	NEXT_MEM_INSTR
+	BODY_fld
 HANDLER fsw
-	WRITE_ADDRESS 7
-	movzx ecx, byte [rbx + 6]
-	mov ecx, dword FREG(rcx)
-	mov dword [RARENA + rax], ecx
-	NEXT_MEM_INSTR
+	BODY_fsw
 HANDLER fsd
-	WRITE_ADDRESS 7
-	movzx ecx, byte [rbx + 6]
-	mov rcx, qword FREG(rcx)
-	mov qword [RARENA + rax], rcx
-	NEXT_MEM_INSTR
+	BODY_fsd
 
 ;; -== Floating point arithmetic (C++ maps these only without FCSR emulation
 ;;     and NaN-boxing, which need flags and canonical NaNs) ==-
 
 HANDLER fadd
-	FP_ARITH add
+	BODY_fadd
 HANDLER fsub
-	FP_ARITH sub
+	BODY_fsub
 HANDLER fmul
-	FP_ARITH mul
+	BODY_fmul
 HANDLER fdiv
-	FP_ARITH div
+	BODY_fdiv
 
 ;; The original instruction (R4type): rd @7, rs1 @15, rs2 @20, funct2 @25,
 ;; rs3 @27. rd = rs1 * rs2 + rs3, rounded once.
 HANDLER fmadd
-	mov eax, dword [rbx + 4]
-	test eax, 1 << 26           ; funct2 >= 2 (half, quad)
-	FALLBACK_IF jnz
-	mov ecx, eax
-	shr ecx, 15
-	and ecx, 31
-	mov edi, eax
-	shr edi, 20
-	and edi, 31
-	bt eax, 25
-	jc .double
-	vmovss xmm0, FREG(rcx)
-	vmovss xmm1, FREG(rdi)
-	mov ecx, eax
-	shr ecx, 27
-	shr eax, 7
-	and eax, 31
-	vfmadd213ss xmm0, xmm1, FREG(rcx)
-	vmovss FREG(rax), xmm0
-	NEXT_INSTR
-	align 64
-.double:
-	vmovsd xmm0, FREG(rcx)
-	vmovsd xmm1, FREG(rdi)
-	mov ecx, eax
-	shr ecx, 27
-	shr eax, 7
-	and eax, 31
-	vfmadd213sd xmm0, xmm1, FREG(rcx)
-	vmovsd FREG(rax), xmm0
-	NEXT_INSTR
+	BODY_fmadd
 
 %if COMPRESSED
 ;; -== Compressed bytecodes, one decoder entry each ==-
 
 ;; FasterItype: rs1 = dst @7, rs2 = src @6, imm16 @4
 HANDLER c_addi
-	movzx ecx, byte [rbx + 6]
-	movsx xax, word [rbx + 4]
-	movzx edx, byte [rbx + 7]
-	add xax, REG(rcx)
-	mov REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_addi
 
 HANDLER c_mv
-	movzx ecx, byte [rbx + 4]
-	movzx edx, byte [rbx + 5]
-	mov xax, REG(rcx)
-	mov REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_mv
 
 HANDLER c_slli
-	movzx edx, byte [rbx + 7]
-	movzx ecx, word [rbx + 4]
-	shl REG(rdx), cl
-	NEXT_C_INSTR
+	BODY_c_slli
 
 HANDLER c_srli
-	movzx edx, byte [rbx + 7]
-	movzx ecx, word [rbx + 4]
-	shr REG(rdx), cl
-	NEXT_C_INSTR
+	BODY_c_srli
 
 HANDLER c_andi
-	movzx edx, byte [rbx + 7]
-	movsx xax, word [rbx + 4]
-	and REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_andi
 
 HANDLER c_srai
-	movzx edx, byte [rbx + 7]
-	movzx ecx, word [rbx + 4]
-	sar REG(rdx), cl
-	NEXT_C_INSTR
+	BODY_c_srai
 
 HANDLER c_sub
-	movzx ecx, byte [rbx + 6]
-	movzx edx, byte [rbx + 7]
-	mov xax, REG(rcx)
-	sub REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_sub
 
 HANDLER c_and
-	movzx ecx, byte [rbx + 6]
-	movzx edx, byte [rbx + 7]
-	mov xax, REG(rcx)
-	and REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_and
 
 %if XLEN == 64
 HANDLER c_subw
-	movzx ecx, byte [rbx + 6]
-	movzx edx, byte [rbx + 7]
-	mov eax, REG32(rdx)
-	sub eax, REG32(rcx)
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_C_INSTR
+	BODY_c_subw
 
 HANDLER c_addw
-	movzx ecx, byte [rbx + 6]
-	movzx edx, byte [rbx + 7]
-	mov eax, REG32(rdx)
-	add eax, REG32(rcx)
-	movsxd rax, eax
-	mov REG(rdx), rax
-	NEXT_C_INSTR
+	BODY_c_addw
 %endif
 
 HANDLER c_add
-	movzx ecx, byte [rbx + 6]
-	movzx edx, byte [rbx + 7]
-	mov xax, REG(rcx)
-	add REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_add
 
 HANDLER c_xor
-	movzx ecx, byte [rbx + 6]
-	movzx edx, byte [rbx + 7]
-	mov xax, REG(rcx)
-	xor REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_xor
 
 HANDLER c_or
-	movzx ecx, byte [rbx + 6]
-	movzx edx, byte [rbx + 7]
-	mov xax, REG(rcx)
-	or REG(rdx), xax
-	NEXT_C_INSTR
+	BODY_c_or
 
 ;; Taken compressed branches check the counter in either direction, like
 ;; PERFORM_BRANCH in cpu_dispatch.cpp
@@ -1695,40 +2066,17 @@ HANDLER c_jalr
 
 ;; FasterJtype: offset24 @4..6, rd @7
 HANDLER c_lui
-	movzx ecx, byte [rbx + 7]
-	shr rdx, 32
-	shl edx, 8
-%if XLEN == 64
-	movsxd rdx, edx
-%endif
-	mov REG(rcx), xdx
-	NEXT_C_INSTR
+	BODY_c_lui
 
 C_HANDLER c_fld
-	READ_ADDRESS 6
-	movzx edx, byte [rbx + 7]
-	mov rax, qword [RARENA + rax]
-	mov qword FREG(rdx), rax
-	NEXT_MEM_C_INSTR
+	BODY_c_fld
 C_HANDLER c_fsd
-	WRITE_ADDRESS 7
-	movzx ecx, byte [rbx + 6]
-	mov rcx, qword FREG(rcx)
-	mov qword [RARENA + rax], rcx
-	NEXT_MEM_C_INSTR
+	BODY_c_fsd
 %if XLEN == 32
 C_HANDLER c_flw
-	READ_ADDRESS 6
-	movzx edx, byte [rbx + 7]
-	mov eax, dword [RARENA + rax]
-	mov dword FREG(rdx), eax
-	NEXT_MEM_C_INSTR
+	BODY_c_flw
 C_HANDLER c_fsw
-	WRITE_ADDRESS 7
-	movzx ecx, byte [rbx + 6]
-	mov ecx, dword FREG(rcx)
-	mov dword [RARENA + rax], ecx
-	NEXT_MEM_C_INSTR
+	BODY_c_fsw
 %endif
 HANDLER c_step
 	CALL_CPP KIND_C_STEP, NEXT_C_INSTR
@@ -1740,22 +2088,21 @@ C_HANDLER c_function
 	CALL_CPP KIND_C_FUNCTION, NEXT_C_INSTR
 
 C_HANDLER c_ldw
-%if XLEN == 64
-	LOAD {movsxd rax, dword [RARENA + rax]}, NEXT_MEM_C_INSTR
-%else
-	LOAD {mov eax, dword [RARENA + rax]}, NEXT_MEM_C_INSTR
-%endif
+	BODY_c_ldw
 
 C_HANDLER c_stw
-	STORE {mov dword [RARENA + rax], ecx}, NEXT_MEM_C_INSTR
+	BODY_c_stw
 
 %if XLEN == 64
 C_HANDLER c_ldd
-	LOAD {mov rax, qword [RARENA + rax]}, NEXT_MEM_C_INSTR
+	BODY_c_ldd
 C_HANDLER c_std
-	STORE {mov qword [RARENA + rax], rcx}, NEXT_MEM_C_INSTR
+	BODY_c_std
 %endif
 %endif ; COMPRESSED
+
+;; -== Fused pairs ==-
+%include "fused_pairs.inc"
 	FLUSH_FALLBACK
 	%undef CUR_HANDLER
 %endmacro

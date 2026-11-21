@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <libriscv/machine.hpp>
+#include <libriscv/fused_bytecodes.hpp>
 #include <array>
 using namespace riscv;
 extern std::vector<uint8_t> build_and_load(const std::string&, const std::string&, bool);
@@ -12,21 +13,24 @@ namespace {
 struct HostState {
 	unsigned calls = 0;
 	uint64_t seen_counter = 0;
+	uint64_t seen_pc = 0;
 	uint64_t penalty = 0;
 	bool stop = false;
 	int64_t move_pc = 0; // ECALL: new PC (minus 4), 0 = unchanged
 };
 
-std::vector<uint8_t> build_asm(const std::string& body)
+std::vector<uint8_t> build_asm(const std::string& body, bool rvc = false)
 {
-	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\".option norvc\\n";
+	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\".option ";
+	source += rvc ? "rvc\\n" : "norvc\\n";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 	source += "\"); }";
 	// The guest is hand-written assembly, so pin it to GCC: Zig rejects -march=rv64g.
 	const char* cc = getenv("RVVCC");
 	setenv("RCC", cc ? cc : "riscv64-linux-gnu-gcc-14", 1);
 	return build_and_load(source,
-		"-nostdlib -static -march=rv64g -mabi=lp64d -Wl,-e,_start", false);
+		std::string("-nostdlib -static -march=") + (rvc ? "rv64gc" : "rv64g")
+		+ " -mabi=lp64d -Wl,-e,_start", false);
 }
 
 MachineOptions<RISCV64> make_options(bool translated)
@@ -51,6 +55,7 @@ void host_call(Machine<RISCV64>& machine)
 	auto& state = *machine.get_userdata<HostState>();
 	state.calls++;
 	state.seen_counter = machine.instruction_counter();
+	state.seen_pc = machine.cpu.pc();
 	if (state.penalty) machine.penalize(state.penalty);
 	if (state.move_pc) machine.cpu.registers().pc = state.move_pc;
 	if (state.stop) machine.stop();
@@ -209,4 +214,67 @@ TEST_CASE("Illegal instruction faults record the instruction counter", "[Dispatc
 	REQUIRE(machine.instruction_counter() >= 3);
 	REQUIRE(machine.instruction_counter() <= 4);
 	REQUIRE(machine.cpu.pc() == machine.address_of("_start") + 8);
+}
+
+TEST_CASE("A breakpoint on the second half of a fused pair", "[Dispatch]")
+{
+	// The decoder fuses ADDI + ADDI (fused_pairs.inc): the first entry then
+	// executes the second one too, without dispatching it. A breakpoint
+	// installed afterwards on the second instruction must still be hit.
+	Machine<RISCV64>::install_syscall_handler(SYSCALL_EBREAK, host_call);
+	const auto binary = build_asm(
+		"li a0, 0\n"
+		"addi a0, a0, 1\n"
+		"addi a0, a0, 2\n"
+		"addi a0, a0, 4\n"
+		".word 0x7ff00073\n");
+
+	Machine<RISCV64> machine(binary, make_options(false));
+	const auto start = machine.address_of("_start");
+	auto& exec = machine.cpu.current_execute_segment();
+	auto& first = exec.decoder_cache()[(start + 4) / DecoderData<RISCV64>::DIVISOR];
+	REQUIRE(is_fused_bytecode(first));
+
+	CPU<RISCV64>::install_ebreak_for(exec, start + 8);
+	REQUIRE(!is_fused_bytecode(first));
+
+	// Stop in the EBREAK handler: only the instructions before it have run
+	HostState state;
+	state.stop = true;
+	machine.set_userdata(&state);
+	REQUIRE(machine.simulate<false>(10'000));
+	REQUIRE(state.calls == 1);
+	REQUIRE(machine.cpu.reg(REG_ARG0) == 1);
+}
+
+TEST_CASE("A breakpoint after a 4-byte instruction in a compressed block", "[Dispatch]")
+{
+	if constexpr (!compressed_enabled) return;
+	// The 4-byte ADDI occupies two decoder entries, and the second one has
+	// no block length. Installing the breakpoint must look past it, or the
+	// block entered at _start still ends at the old block end, and the
+	// EBREAK handler sees that PC instead of the breakpoint address.
+	Machine<RISCV64>::install_syscall_handler(SYSCALL_EBREAK, host_call);
+	const auto binary = build_asm(
+		"c.li a0, 0\n"
+		"addi a0, a0, 1000\n"
+		"c.addi a0, 1\n"
+		"c.addi a0, 2\n"
+		"c.addi a0, 4\n"
+		".word 0x7ff00073\n", true);
+
+	Machine<RISCV64> machine(binary, make_options(false));
+	const auto start = machine.address_of("_start");
+	auto& exec = machine.cpu.current_execute_segment();
+	// c.li (2) + addi (4) + c.addi (2)
+	const auto breakpoint = start + 8;
+	CPU<RISCV64>::install_ebreak_for(exec, breakpoint);
+
+	HostState state;
+	state.stop = true;
+	machine.set_userdata(&state);
+	REQUIRE(machine.simulate<false>(10'000));
+	REQUIRE(state.calls == 1);
+	REQUIRE(state.seen_pc == breakpoint);
+	REQUIRE(machine.cpu.reg(REG_ARG0) == 1001);
 }
