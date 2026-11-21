@@ -458,6 +458,30 @@ TEST_CASE("C8: tgkill on a blocked thread removes it from the scheduler", "[Secu
 	REQUIRE(threads.get_tid() == riscv::MAIN_THREAD_TID);
 }
 
+TEST_CASE("Futex wake rejects an unaligned address", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	machine.setup_posix_threads();
+	const auto futex_word = machine.memory.mmap_allocate(4096);
+	machine.memory.write<uint32_t>(futex_word, 0);
+	auto& cpu = machine.cpu;
+
+	// The aligned control succeeds even when there are no waiters.
+	cpu.reg(riscv::REG_ARG0) = futex_word;
+	cpu.reg(riscv::REG_ARG1) = 1; // FUTEX_WAKE
+	cpu.reg(riscv::REG_ARG2) = 0;
+	machine.system_call(98);
+	REQUIRE(machine.return_value<int>() == 0);
+
+	// FUTEX_WAKE must still validate the word address without touching it.
+	cpu.reg(riscv::REG_ARG0) = futex_word + 1;
+	machine.system_call(98);
+	REQUIRE(machine.return_value<int>() == -EINVAL);
+}
+
 // =============================================================================
 // C9: the main thread stays in m_blocked when the fallback resumes it
 //
