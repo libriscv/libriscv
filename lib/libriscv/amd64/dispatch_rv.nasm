@@ -694,6 +694,12 @@ do_stop:
 
 ;; Jump to the address in xax: within the segment it is just a new
 ;; decoder pointer, otherwise C++ has to find the segment.
+;; Spectre v1: the guest controls every bit of xax, so on a mispredicted jae
+;; rbx would point at arbitrary host memory, and the predicted handler would
+;; take its operands from there (an immediate of host data becomes an arena
+;; address, which the guest can time). The cmov clamps the address to the
+;; segment begin. It never moves anything architecturally (CF=1 here), and
+;; x86 does not predict cmov, so the mispredicted path sees a valid entry.
 %macro JUMP_TO_EAX 0
 %if COUNTING
 	CHECK_OVERFLOW_EAX
@@ -701,12 +707,15 @@ do_stop:
 	mov xcx, xax
 	sub xcx, XW [rdi + CTX_BEGIN]
 	cmp xcx, XW [rdi + CTX_LENGTH]
+	jae exit_jump
+	cmovae xax, XW [rdi + CTX_BEGIN]
 %else
 	mov xcx, xax
 	sub xcx, xr11
 	cmp xcx, xr12
-%endif
 	jae exit_jump
+	cmovae xax, xr11
+%endif
 	lea rbx, [RDEC + rax * BRSCALE]
 	DISPATCH_BLOCK
 %endmacro
