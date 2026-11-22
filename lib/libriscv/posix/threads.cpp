@@ -15,6 +15,11 @@ static inline void futex_op(Machine<W>& machine,
 	THPRINT(machine, ">>> futex(0x%lX, op=%d (0x%X), val=%d val3=0x%X)\n",
 		(long)addr, futex_op & 0xF, futex_op, val, val3);
 
+	if ((addr & (alignof(uint32_t) - 1)) != 0) {
+		machine.set_result(-EINVAL);
+		return;
+	}
+
 	if ((futex_op & 0xF) == FUTEX_WAIT || (futex_op & 0xF) == FUTEX_WAIT_BITSET)
 	{
 		const bool is_bitset = (futex_op & 0xF) == FUTEX_WAIT_BITSET;
