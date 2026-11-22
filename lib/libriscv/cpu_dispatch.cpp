@@ -5,6 +5,7 @@
 #include "threaded_bytecodes.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
+#include "bytecode_bodies.hpp"
 #ifdef RISCV_EXT_COMPRESSED
 #include "rvc.hpp"
 #endif
@@ -34,6 +35,15 @@ namespace riscv
 #define NEXT_C_INSTR() \
 	decoder += 1;      \
 	EXECUTE_INSTR();
+#define NEXT_INSTR_TO(bc)             \
+	if constexpr (compressed_enabled) \
+		decoder += 2;                 \
+	else                              \
+		decoder += 1;                 \
+	EXECUTE_BYTECODE(bc);
+#define NEXT_C_INSTR_TO(bc) \
+	decoder += 1;           \
+	EXECUTE_BYTECODE(bc);
 
 #define NEXT_BLOCK(len, OF)                 \
 	pc += len;                              \
@@ -84,7 +94,7 @@ namespace riscv
 template <int W> DISPATCH_ATTR
 bool CPU<W>::DISPATCH_FUNCNAME(address_t pc, uint64_t inscounter, uint64_t maxcounter)
 {
-	static constexpr uint32_t XLEN = W * 8;
+	[[maybe_unused]] static constexpr uint32_t XLEN = W * 8;
 	using addr_t  = address_type<W>;
 	using saddr_t = signed_address_type<W>;
 
@@ -147,6 +157,7 @@ while (true) {
 	/** Instruction handlers **/
 
 #include "bytecode_impl.cpp"
+
 
 INSTRUCTION(RV32I_BC_SYSTEM, rv32i_system) {
 	VIEW_INSTR();

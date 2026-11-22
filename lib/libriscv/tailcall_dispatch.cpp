@@ -5,6 +5,7 @@
 #include "threaded_bytecodes.hpp"
 #include "rv32i_instr.hpp"
 #include "rvfd.hpp"
+#include "bytecode_bodies.hpp"
 #ifdef RISCV_EXT_COMPRESSED
 #include "rvc.hpp"
 #endif
@@ -36,6 +37,12 @@
 #define NEXT_C_INSTR() \
 	d += 1;            \
 	EXECUTE_CURRENT()
+#define NEXT_INSTR_TO(bc)              \
+	d += (compressed_enabled ? 2 : 1); \
+	MUSTTAIL return computed_opcode<W>[bc](d, exec, cpu, pc, counter);
+#define NEXT_C_INSTR_TO(bc) \
+	d += 1;                 \
+	MUSTTAIL return computed_opcode<W>[bc](d, exec, cpu, pc, counter);
 
 #define RETURN_VALUES()   \
 	pc
@@ -410,6 +417,9 @@ namespace riscv
 #endif
 		[RV32I_BC_LIVEPATCH] = execute_livepatch,
 		[RV32I_BC_SYSTEM]  = rv32i_system,
+#define FUSED_PAIR(name, a, b, A, B, G) RISCV_FUSED_IF_ ## G([RV32I_BC_F_ ## name] = rv_fused_ ## name,)
+#include "fused_pairs.inc"
+#undef FUSED_PAIR
 		};
 	}
 

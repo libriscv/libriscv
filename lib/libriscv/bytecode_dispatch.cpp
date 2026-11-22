@@ -6,6 +6,9 @@
 
 #define EXECUTE_INSTR() \
 	continue;
+// The switch dispatches the next instruction like any other
+#define EXECUTE_BYTECODE(bc) \
+	continue;
 #define EXECUTE_CURRENT() \
 	EXECUTE_INSTR()
 #define UNUSED_FUNCTION() \

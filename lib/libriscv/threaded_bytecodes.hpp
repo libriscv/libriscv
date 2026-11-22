@@ -3,6 +3,24 @@
 
 namespace riscv
 {
+	// Fused pairs (see fused_pairs.inc). A pair exists when the bytecodes of
+	// both halves do: RISCV_FUSED_IF_<group>(x) expands to x or to nothing.
+#define RISCV_FUSED_IF_COMMON(...) __VA_ARGS__
+#ifdef RISCV_64I
+#define RISCV_FUSED_IF_RV64(...) __VA_ARGS__
+#else
+#define RISCV_FUSED_IF_RV64(...) /* */
+#endif
+#ifdef RISCV_EXT_COMPRESSED
+#define RISCV_FUSED_IF_C(...) __VA_ARGS__
+#define RISCV_FUSED_IF_C_RV32(...) __VA_ARGS__
+#define RISCV_FUSED_IF_C_RV64(...) RISCV_FUSED_IF_RV64(__VA_ARGS__)
+#else
+#define RISCV_FUSED_IF_C(...) /* */
+#define RISCV_FUSED_IF_C_RV32(...) /* */
+#define RISCV_FUSED_IF_C_RV64(...) /* */
+#endif
+
 	// Bytecodes for threaded simulation
 	enum
 	{
@@ -147,9 +165,42 @@ namespace riscv
 #endif
 		RV32I_BC_LIVEPATCH,
 		RV32I_BC_SYSTEM,
+#define FUSED_PAIR(name, a, b, A, B, G) RISCV_FUSED_IF_ ## G(RV32I_BC_F_ ## name,)
+#include "fused_pairs.inc"
+#undef FUSED_PAIR
 		BYTECODES_MAX
 	};
 	static_assert(BYTECODES_MAX <= 256, "A bytecode must fit in a byte");
+
+	// The first (A) and second (B) bytecode of each fused pair, and the
+	// register width it is for (0 = both): some compressed bytecodes are
+	// different instructions in RV32 and RV64
+	struct FusedPair { unsigned char first, second, width; };
+#define RISCV_FUSED_WIDTH_COMMON 0
+#define RISCV_FUSED_WIDTH_C 0
+#define RISCV_FUSED_WIDTH_RV64 8
+#define RISCV_FUSED_WIDTH_C_RV64 8
+#define RISCV_FUSED_WIDTH_C_RV32 4
+#define FUSED_PAIR(name, a, b, A, B, G) RISCV_FUSED_IF_ ## G(FusedPair{A, B, RISCV_FUSED_WIDTH_ ## G},)
+	inline constexpr FusedPair fused_pairs[] = {
+#include "fused_pairs.inc"
+	};
+#undef FUSED_PAIR
+#undef RISCV_FUSED_WIDTH_COMMON
+#undef RISCV_FUSED_WIDTH_C
+#undef RISCV_FUSED_WIDTH_RV64
+#undef RISCV_FUSED_WIDTH_C_RV64
+#undef RISCV_FUSED_WIDTH_C_RV32
+	static constexpr unsigned RV32I_BC_FUSED_COUNT = sizeof(fused_pairs) / sizeof(fused_pairs[0]);
+	static constexpr unsigned RV32I_BC_FUSED_FIRST = BYTECODES_MAX - RV32I_BC_FUSED_COUNT;
+#ifdef RISCV_EXT_COMPRESSED
+	// The compressed bytecodes (2-byte instructions)
+	static constexpr unsigned RV32C_BC_FIRST = RV32C_BC_ADDI;
+	static constexpr unsigned RV32C_BC_LAST  = RV32C_BC_FUNCTION;
+#else
+	static constexpr unsigned RV32C_BC_FIRST = 256;
+	static constexpr unsigned RV32C_BC_LAST  = 256;
+#endif
 
 	union FasterItype
 	{

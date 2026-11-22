@@ -10,6 +10,8 @@
 			abort();         \
 	}                        \
 	goto *computed_opcode[decoder->get_bytecode()];
+#define EXECUTE_BYTECODE(bc) \
+	goto *computed_opcode[bc];
 #define EXECUTE_CURRENT() \
 	EXECUTE_INSTR()
 #define UNUSED_FUNCTION() \

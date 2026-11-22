@@ -362,6 +362,40 @@ namespace riscv
 		}
 	}
 
+	// Fused pairs (fused_pairs.inc): give each entry whose next instruction is
+	// in the same block, and whose bytecode and the next one form a pair, the
+	// bytecode of the pair. The dispatch then continues directly with the
+	// next entry, which is unchanged, as it may also be a jump target. This
+	// runs last, as the entries must not change afterwards (otherwise see
+	// unfuse_entry_before()). The instruction count of a block is added when
+	// the block is entered, so it does not depend on this.
+	template <int W>
+	static void fuse_bytecodes(address_type<W> begin, address_type<W> end,
+		DecoderData<W>* exec_decoder)
+	{
+		static const auto table = [] {
+			std::array<uint8_t, 256 * 256> t {};
+			for (unsigned i = 0; i < RV32I_BC_FUSED_COUNT; i++) {
+				const auto& pair = fused_pairs[i];
+				if (pair.width == 0 || pair.width == W)
+					t[pair.first * 256 + pair.second] = RV32I_BC_FUSED_FIRST + i;
+			}
+			return t;
+		}();
+		for (address_type<W> pc = begin; pc + 4 <= end; pc += DecoderData<W>::DIVISOR)
+		{
+			auto& entry = exec_decoder[pc / DecoderData<W>::DIVISOR];
+			if (entry.instruction_count() <= 1)
+				continue; // The last instruction in its block
+			const unsigned bc = entry.get_bytecode();
+			const unsigned len = (bc >= RV32C_BC_FIRST && bc <= RV32C_BC_LAST) ? 2 : 4;
+			const auto& next = exec_decoder[(pc + len) / DecoderData<W>::DIVISOR];
+			const uint8_t fused = table[bc * 256 + next.get_bytecode()];
+			if (fused != 0)
+				entry.set_bytecode(fused);
+		}
+	}
+
 	// The decoder cache is a sequential array of DecoderData<W> entries
 	// each of which (currently) serves a dual purpose of enabling
 	// threaded dispatch (m_bytecode) and fallback to callback function
@@ -607,6 +641,8 @@ namespace riscv
 				machine().install_libc_fastpath(exec, options.verbose_loader);
 			}
 		}
+
+		fuse_bytecodes<W>(addr, dst, exec_decoder);
 
 		TIME_POINT(t4);
 #ifdef ENABLE_TIMINGS

@@ -1,9 +1,5 @@
 #pragma once
 #include "machine.hpp"
-#if defined(RISCV_BINARY_TRANSLATION)
-#include "decoder_cache.hpp"
-#include "threaded_bytecodes.hpp"
-#endif
 
 namespace riscv
 {
