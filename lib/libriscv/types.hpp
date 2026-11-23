@@ -95,6 +95,8 @@ namespace riscv
 
 	template <int W>
 	struct TransOutput;
+	template <int W>
+	struct TransBlocks;
 
 	template <int W>
 	struct TransMapping {

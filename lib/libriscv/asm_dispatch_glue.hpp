@@ -93,6 +93,35 @@ static void asm_refresh_arena(Memory<W>& mem, AsmDispatchContext* ctx)
 	std::rethrow_exception(except);
 }
 
+#ifdef RISCV_BINARY_TRANSLATION
+// Keep block calls outside asm_call's try block to avoid per-block
+// invoke_* trampolines and BigInt conversions under Emscripten -fexceptions.
+template <int W>
+RISCV_NOINLINE static bintr_block_returns<W> asm_translator_chain(CPU<W>& cpu,
+	DecodedExecuteSegment<W>& exec, const DecoderData<W>* decoder, const DecoderData<W>* e,
+	uint64_t counter, uint64_t max, address_type<W>& tpc)
+{
+	auto& regs = cpu.registers();
+	while (true) {
+		const auto results = exec.unchecked_mapping_at(e->instr)(cpu, counter, max, tpc);
+#  ifdef RISCV_LIBTCC
+		if (UNLIKELY(cpu.has_current_exception()))
+			asm_rethrow_current(cpu);
+#  endif
+		tpc = regs.pc;
+		counter = results.counter;
+		max     = results.max_counter;
+		if (!(counter < max) || !(tpc >= exec.exec_begin() && tpc < exec.exec_end())
+			|| exec.is_stale())
+			break;
+		e = &decoder[tpc >> DecoderData<W>::SHIFT];
+		if (e->get_bytecode() != RV32I_BC_TRANSLATOR)
+			break;
+	}
+	return { counter, max };
+}
+#endif
+
 // Executes the current decoder entry in C++ on behalf of the dispatch.
 template <int W, bool Counting>
 static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_t kind) noexcept
@@ -179,25 +208,9 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 			}
 			uint64_t max     = Counting ? ctx->max_counter : ~0ULL;
 			address_t tpc = pc;
-			const auto* e = entry;
-			while (true) {
-				const auto results = exec.unchecked_mapping_at(e->instr)(cpu, counter, max, tpc);
-#  ifdef RISCV_LIBTCC
-				if (UNLIKELY(cpu.has_current_exception()))
-					asm_rethrow_current(cpu);
-#  endif
-				tpc = regs.pc;
-				counter = results.counter;
-				max     = results.max_counter;
-				if (!(counter < max) || !(tpc >= exec.exec_begin() && tpc < exec.exec_end())
-					|| exec.is_stale())
-					break;
-				e = &decoder[tpc >> DecoderData<W>::SHIFT];
-				if (e->get_bytecode() != RV32I_BC_TRANSLATOR)
-					break;
-			}
-			machine.set_instruction_counter(counter);
-			machine.set_max_instructions(max);
+			const auto results = asm_translator_chain<W>(cpu, exec, decoder, entry, counter, max, tpc);
+			machine.set_instruction_counter(results.counter);
+			machine.set_max_instructions(results.max_counter);
 			next_pc = tpc;
 			jumped = true;
 			break;

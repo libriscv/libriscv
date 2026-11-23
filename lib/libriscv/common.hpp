@@ -48,6 +48,11 @@ namespace riscv
 {
 	template <int W> struct Memory;
 
+	enum class TranslateBackend : uint8_t {
+		C,    // Emitted C, compiled into a shared object
+		Wasm, // A WebAssembly module, linked at run time (Emscripten)
+	};
+
 	struct MachineTranslationCrossOptions
 	{
 		/// @brief Provide a custom binary-translation compiler in order
@@ -176,6 +181,14 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		/// @brief Enable the binary translator.
 		bool translate_enabled = true;
+		/// @brief Select the binary translation backend.
+		/// @details The Wasm backend supports RV64 guests on Emscripten wasm32.
+		TranslateBackend translate_backend =
+#if defined(__EMSCRIPTEN__) && !defined(__wasm64__)
+			TranslateBackend::Wasm;
+#else
+			TranslateBackend::C;
+#endif
 		/// @brief Enable loading of embedded binary translated programs.
 		/// @details This will allow the machine to load and execute *embedded*
 		/// binary translated programs. They auto-register themselves.

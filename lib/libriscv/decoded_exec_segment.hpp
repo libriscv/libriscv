@@ -79,6 +79,8 @@ namespace riscv
 		void set_translation_hash(uint32_t hash) { m_bintr_hash = hash; }
 		auto& create_mappings(size_t mappings) { m_translator_mappings.resize(mappings); return m_translator_mappings; }
 		void set_mapping(unsigned i, bintr_block_func<W> handler) { m_translator_mappings.at(i) = handler; }
+		// Tie the lifetime of a linked WebAssembly module to the execute segment.
+		void set_translation_owner(std::shared_ptr<void> owner) { m_translation_owner = std::move(owner); }
 		bintr_block_func<W> mapping_at(unsigned i) const { return m_translator_mappings.at(i); }
 		bintr_block_func<W> unchecked_mapping_at(unsigned i) const { return m_translator_mappings[i]; }
 		size_t translator_mappings() const noexcept { return m_translator_mappings.size(); }
@@ -204,6 +206,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		std::vector<bintr_block_func<W>> m_translator_mappings;
 		mutable void* m_bintr_dl = nullptr;
+		std::shared_ptr<void> m_translation_owner;
 #ifdef RISCV_DEBUG
 		std::unordered_set<address_t> m_slowpath_addresses;
 #endif
@@ -270,6 +273,7 @@ namespace riscv
 		other.m_bintr_dl = nullptr;
 		m_bintr_hash = other.m_bintr_hash;
 		m_is_libtcc = other.m_is_libtcc;
+		m_translation_owner = std::move(other.m_translation_owner);
 #endif
 #ifdef RISCV_ASMJIT
 		m_asmjit_mappings = std::move(other.m_asmjit_mappings);

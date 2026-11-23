@@ -50,4 +50,20 @@ namespace riscv
 		address_type<W> arena_roend;
 		address_type<W> arena_size;
 	};
+
+	// Blocks hold references to this object's jump and breakpoint metadata.
+	template <int W>
+	struct TransBlocks
+	{
+		std::unordered_set<address_type<W>> global_jump_locations;
+		std::unordered_map<address_type<W>, std::vector<address_type<W>>> return_locations;
+		std::unordered_set<address_type<W>> ebreak_locations;
+		std::vector<TransInfo<W>> blocks;
+		address_type<W> gp = 0;
+		size_t icounter = 0;
+
+		TransBlocks() = default;
+		TransBlocks(const TransBlocks&) = delete;
+		TransBlocks& operator=(const TransBlocks&) = delete;
+	};
 }

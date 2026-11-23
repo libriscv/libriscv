@@ -319,6 +319,7 @@ if (RISCV_BINARY_TRANSLATION)
 	list(APPEND SOURCES
 		libriscv/tr_api.cpp
 		libriscv/tr_emit.cpp
+		libriscv/wasm/wasm_emit.cpp
 		libriscv/tr_translate.cpp
 	)
 	if (MSVC)
@@ -383,6 +384,10 @@ if (RISCV_WASM_DISPATCH AND NOT (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH))
 	)
 	# rv64wasm_layout.h for wasm_dispatch.cpp
 	target_include_directories(riscv PRIVATE ${RVWASM_HDR_DIR})
+endif()
+if (RISCV_BINARY_TRANSLATION AND EMSCRIPTEN)
+	# The Wasm linker allocates function table slots at runtime.
+	target_link_options(riscv PUBLIC -sALLOW_TABLE_GROWTH=1)
 endif()
 if (RISCV_VERBOSE_SYSCALLS)
 	message(STATUS "libriscv: Verbose system calls enabled")
