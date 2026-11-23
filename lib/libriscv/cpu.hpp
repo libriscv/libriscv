@@ -230,7 +230,7 @@ namespace riscv
 		static std::vector<TransMapping<W>> emit(std::string& code, const TransInfo<W>&);
 		void binary_translate(const MachineOptions<W>&, DecodedExecuteSegment<W>&, TransOutput<W>&) const;
 		void discover_translation_blocks(const MachineOptions<W>&, DecodedExecuteSegment<W>&, TransBlocks<W>&, bool is_libtcc, timespec t0) const;
-		void wasm_translate(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&, bool live_patch) const;
+		void wasm_translate(const MachineOptions<W>&, std::shared_ptr<DecodedExecuteSegment<W>>&) const;
 		static void apply_translator_mappings(const MachineOptions<W>&, DecodedExecuteSegment<W>&,
 			const std::vector<std::pair<address_type<W>, unsigned>>& mappings, unsigned nhandlers, bool live_patch) RISCV_INTERNAL;
 		static void activate_dylib(const MachineOptions<W>&, DecodedExecuteSegment<W>&, void*, const Machine<W>&, bool, bool) RISCV_INTERNAL;

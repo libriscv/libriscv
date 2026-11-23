@@ -735,27 +735,41 @@ namespace riscv
 			const SegmentKey key = SegmentKey::from(*this, *current_exec, hash);
 
 			std::shared_ptr<DecodedExecuteSegment<W>> doomed;
-			// In order to prevent others from creating the same execute segment
-			// we need to lock the shared execute segments mutex.
-			auto& segment = shared_execute_segments<W>.get_segment(key);
-			std::scoped_lock lock(segment.mutex);
+			std::shared_ptr<DecodedExecuteSegment<W>> reused;
+			{
+				auto& segment = shared_execute_segments<W>.get_segment(key);
+				std::scoped_lock lock(segment.mutex);
 
-			auto& existing = segment.segment;
-			if (existing != nullptr && !existing->is_stale()
-				&& existing->has_same_code(*current_exec)) {
-				free_slot = existing;
-			} else {
-				free_slot = std::move(current_exec);
-				this->generate_decoder_cache(options, free_slot, is_initial);
+				auto& existing = segment.segment;
+				if (existing != nullptr && !existing->is_stale()
+					&& existing->has_same_code(*current_exec)) {
+					reused = existing;
+				} else {
+					free_slot = std::move(current_exec);
+					this->generate_decoder_cache(options, free_slot, is_initial);
 
-				// A CRC32-C collision keeps the existing segment and leaves ours private
-				if (existing == nullptr || existing->is_stale()) {
-					// NOTE: We already hold segment.mutex, and we must not take the
-					// global mutex here (which get_segment() does), as that is the
-					// reverse lock order of remove_if_unique().
-					doomed = std::move(existing);
-					segment.unlocked_set(free_slot);
+					// Keep the new segment private on a CRC32-C collision with a live segment.
+					if (existing == nullptr || existing->is_stale()) {
+						// remove_if_unique() acquires the global mutex before segment.mutex.
+						doomed = std::move(existing);
+						segment.unlocked_set(free_slot);
+					}
 				}
+			}
+			if (reused != nullptr) {
+#ifdef RISCV_BINARY_TRANSLATION
+				if (!reused->attach_translation()) {
+					if (options.verbose_loader)
+						fprintf(stderr, "libriscv: Shared translation unavailable on this thread, using a private segment\n");
+					MachineOptions<W> private_options = options;
+					private_options.translate_enabled = false;
+					private_options.translate_enable_embedded = false;
+					private_options.cross_compile.clear();
+					free_slot = std::move(current_exec);
+					this->generate_decoder_cache(private_options, free_slot, is_initial);
+				} else
+#endif
+				free_slot = std::move(reused);
 			}
 		}
 		else

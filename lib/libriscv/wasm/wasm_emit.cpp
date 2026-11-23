@@ -7,15 +7,20 @@
 #include "../rv32i_instr.hpp"
 #include "../rvfd.hpp"
 #include "../tr_types.hpp"
+#include "../util/crc32.hpp"
 #include "wasm_writer.hpp"
 #include "../asmjit/aj_decode.hpp" // RVC expansion (standalone, no asmjit needed)
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <set>
+#include <tuple>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -1262,13 +1267,29 @@ bool WasmEmitter<W>::emit_op32(const rv32i_instruction instr)
 	return false;
 }
 
-struct WasmModuleOutput
+// Target a module size below the browser main thread's synchronous compilation limit.
+static constexpr size_t WASM_CHUNK_BYTES = 7u << 20;
+
+struct WasmModuleChunk
 {
 	std::vector<uint8_t> bytes;
+	unsigned first = 0; // index of its first function in the translation
+	unsigned count = 0;
+};
+
+struct WasmModuleOutput
+{
+	std::vector<WasmModuleChunk> chunks;
 	std::vector<std::pair<uint64_t, unsigned>> mappings; // entry address -> function
 	unsigned functions = 0;
 	size_t instructions = 0;
 	size_t fallbacks = 0;
+
+	size_t bytes() const noexcept {
+		size_t total = 0;
+		for (const auto& chunk : chunks) total += chunk.bytes.size();
+		return total;
+	}
 };
 
 static void wasm_functype(wasm::Buffer& b, std::initializer_list<uint8_t> params, std::initializer_list<uint8_t> results)
@@ -1283,27 +1304,9 @@ static void wasm_import_func(wasm::Buffer& b, std::string_view mod, std::string_
 	b.name(mod); b.name(name); b.u8(0x00); b.u32(type);
 }
 
-template <int W>
-static WasmModuleOutput wasm_emit_module(const MachineOptions<W>& options, TransBlocks<W>& discovered,
-	const WasmLayout& layout, uint32_t hash)
+static std::vector<uint8_t> wasm_module_bytes(const std::vector<Code>& bodies,
+	unsigned first, unsigned count, uint32_t hash)
 {
-	WasmModuleOutput result;
-	std::vector<Code> bodies;
-	bodies.reserve(discovered.blocks.size());
-
-	for (auto& block : discovered.blocks) {
-		block.blocks = &discovered.blocks;
-		WasmEmitter<W> e(block, layout, options);
-		auto func = e.emit();
-		const unsigned index = bodies.size();
-		for (const auto addr : func.entries)
-			result.mappings.push_back({ addr, index });
-		result.instructions += block.instr.size();
-		result.fallbacks += func.fallbacks;
-		bodies.push_back(std::move(func.code));
-	}
-	result.functions = bodies.size();
-
 	wasm::Buffer m;
 	static constexpr uint8_t magic[8] = { 0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00 };
 	m.bytes(magic, sizeof(magic));
@@ -1331,29 +1334,34 @@ static WasmModuleOutput wasm_emit_module(const MachineOptions<W>& options, Trans
 		wasm_import_func(s, "api", "execute_simple", TYPE_EXECUTE_SIMPLE);
 		wasm_import_func(s, "api", "fma32", TYPE_FMA32);
 		wasm_import_func(s, "api", "fma64", TYPE_FMA64);
+#ifdef __EMSCRIPTEN_SHARED_MEMORY__
+		// Importing shared memory requires a shared declaration with a maximum.
+		s.name("env"); s.name("memory"); s.u8(0x02); s.u8(0x03); s.u32(0); s.u32(65536);
+#else
 		s.name("env"); s.name("memory"); s.u8(0x02); s.u8(0x00); s.u32(0); // min 0, no max
+#endif
 		m.section(SEC_IMPORT, s);
 	}
 	{ // Functions
 		wasm::Buffer s;
-		s.u32(result.functions);
-		for (unsigned i = 0; i < result.functions; i++) s.u32(TYPE_BLOCK);
+		s.u32(count);
+		for (unsigned i = 0; i < count; i++) s.u32(TYPE_BLOCK);
 		m.section(SEC_FUNCTION, s);
 	}
 	{ // Exports: function i as "i", placed in the function table by the linker
 		wasm::Buffer s;
-		s.u32(result.functions);
-		for (unsigned i = 0; i < result.functions; i++) {
+		s.u32(count);
+		for (unsigned i = 0; i < count; i++) {
 			s.name(std::to_string(i)); s.u8(0x00); s.u32(IMP_COUNT + i);
 		}
 		m.section(SEC_EXPORT, s);
 	}
 	{ // Code
 		wasm::Buffer s;
-		s.u32(result.functions);
-		for (auto& body : bodies) {
-			s.u32(body.size());
-			s.append(body);
+		s.u32(count);
+		for (unsigned i = first; i < first + count; i++) {
+			s.u32(bodies[i].size());
+			s.append(bodies[i]);
 		}
 		m.section(SEC_CODE, s);
 	}
@@ -1363,7 +1371,52 @@ static WasmModuleOutput wasm_emit_module(const MachineOptions<W>& options, Trans
 		s.bytes(&hash, sizeof(hash));
 		m.section(SEC_CUSTOM, s);
 	}
-	result.bytes = std::move(m.data);
+	return std::move(m.data);
+}
+
+template <int W>
+static WasmModuleOutput wasm_emit_module(const MachineOptions<W>& options, TransBlocks<W>& discovered,
+	const WasmLayout& layout, uint32_t hash)
+{
+	WasmModuleOutput result;
+	std::vector<Code> bodies;
+	bodies.reserve(discovered.blocks.size());
+
+	for (auto& block : discovered.blocks) {
+		block.blocks = &discovered.blocks;
+		WasmEmitter<W> e(block, layout, options);
+		auto func = e.emit();
+		const unsigned index = bodies.size();
+		for (const auto addr : func.entries)
+			result.mappings.push_back({ addr, index });
+		result.instructions += block.instr.size();
+		result.fallbacks += func.fallbacks;
+		bodies.push_back(std::move(func.code));
+	}
+	result.functions = bodies.size();
+
+	// Translated functions call only imports, so module splits need no cross-module links.
+	unsigned first = 0;
+	while (first < result.functions) {
+		unsigned count = 0;
+		size_t size = 0;
+		while (first + count < result.functions) {
+			// Allow 16 bytes per body for length and section entries.
+			const size_t cost = bodies[first + count].size() + 16;
+			if (count > 0 && size + cost > WASM_CHUNK_BYTES)
+				break;
+			size += cost;
+			count++;
+		}
+		result.chunks.push_back(WasmModuleChunk {
+			.bytes = wasm_module_bytes(bodies, first, count, hash),
+			.first = first,
+			.count = count,
+		});
+		for (unsigned i = first; i < first + count; i++)
+			Code().data.swap(bodies[i].data);
+		first += count;
+	}
 	return result;
 }
 
@@ -1442,104 +1495,217 @@ static void rvw_execute_simple(CPU<W>* cpu, uint32_t instr, uint32_t handler, ui
 #ifdef __EMSCRIPTEN__
 // Keep wasmTable available to EM_JS with -fwasm-exceptions.
 EM_JS_DEPS(rvw_translation_deps, "$wasmTable");
-// Return the first table slot, -1 on failure, or -2 for async compilation.
-// Async results are delivered to rvw_async_linked. A browser can reject large
-// synchronous compilations with RangeError.
-EM_JS(int, rvw_link_module, (const uint8_t* bytes, uint32_t len, uint32_t nfuncs,
-	const uint32_t* imports, uint32_t nimports, int verbose, uint32_t token, int force_async), {
+
+EM_JS(uint32_t, rvw_table_length, (), {
+	return wasmTable.length;
+});
+
+// Install module exports at [base, base + nfuncs) in the calling thread's table.
+// Returns -1 on a slot conflict or link failure.
+EM_JS(int, rvw_place_module, (const uint8_t* bytes, uint32_t len, uint32_t nfuncs, uint32_t base,
+	const uint32_t* imports, uint32_t nimports, int verbose), {
+	// Treat slots beyond rvwTableTop as owned by the host runtime.
+	const length = wasmTable.length;
+	const top = Module.rvwTableTop || 0;
+	if (length > top && base < length && base + nfuncs > top) {
+		err('libriscv: WebAssembly table slots ' + base + '..' + (base + nfuncs) +
+			' are taken on this thread (table length ' + length + ')');
+		return -1;
+	}
 	const names = ['load', 'store', 'syscall', 'execute', 'execute_simple', 'fma32', 'fma64'];
 	const api = {};
 	for (let i = 0; i < nimports; i++)
 		api[names[i]] = wasmTable.get(HEAPU32[(imports >> 2) + i]);
-	const link = (module) => {
-		const exports = new WebAssembly.Instance(module, {
-			env: { memory: wasmMemory }, api: api
-		}).exports;
-		// Table slots released by earlier translations are reused (first fit)
-		if (!Module.rvwFreeSlots) Module.rvwFreeSlots = [];
-		const free = Module.rvwFreeSlots;
-		let base = -1;
-		for (let i = 0; i < free.length; i++) {
-			if (free[i].count >= nfuncs) {
-				base = free[i].base;
-				free[i].base += nfuncs; free[i].count -= nfuncs;
-				if (free[i].count == 0) free.splice(i, 1);
-				break;
-			}
-		}
-		if (base < 0) base = wasmTable.grow(nfuncs);
-		for (let i = 0; i < nfuncs; i++) {
-			wasmTable.set(base + i, exports[i]);
-			if (typeof wasmTableMirror !== 'undefined') wasmTableMirror[base + i] = undefined;
-		}
-		return base;
-	};
+	let instance;
 	const t0 = performance.now();
-	if (!force_async) {
-		try {
-			const module = new WebAssembly.Module(HEAPU8.subarray(bytes, bytes + len));
-			const t1 = performance.now();
-			const base = link(module);
-			if (verbose)
-				out('libriscv: WebAssembly module compiled in ' + (t1 - t0).toFixed(2) +
-					' ms, instantiated in ' + (performance.now() - t1).toFixed(2) + ' ms');
-			return base;
-		} catch (e) {
-			if (!(e instanceof RangeError)) {
-				err('libriscv: WebAssembly translation failed to link: ' + e);
-				return -1;
-			}
-		}
+	try {
+		// WebAssembly.Module requires a buffer backed by unshared memory.
+		const module = new WebAssembly.Module(HEAPU8.slice(bytes, bytes + len));
+		instance = new WebAssembly.Instance(module, { env: { memory: wasmMemory }, api: api });
+	} catch (e) {
+		err('libriscv: WebAssembly translation failed to link: ' + e);
+		return -1;
 	}
-	// Copy the bytes before async compilation outlives the caller buffer.
-	WebAssembly.compile(HEAPU8.slice(bytes, bytes + len)).then((module) => {
-		let base = -1;
-		try {
-			base = link(module);
-			if (verbose)
-				out('libriscv: WebAssembly module compiled asynchronously in ' +
-					(performance.now() - t0).toFixed(2) + ' ms');
-		} catch (e) {
-			err('libriscv: WebAssembly translation failed to link: ' + e);
-		}
-		_rvw_async_linked(token, base);
-	}, (e) => {
-		err('libriscv: WebAssembly translation failed to compile: ' + e);
-		_rvw_async_linked(token, -1);
-	});
-	return -2;
+	if (length < base + nfuncs) {
+		wasmTable.grow(base + nfuncs - length);
+		Module.rvwTableTop = wasmTable.length;
+	}
+	const exports = instance.exports;
+	for (let i = 0; i < nfuncs; i++) {
+		wasmTable.set(base + i, exports[i]);
+		if (typeof wasmTableMirror !== 'undefined') wasmTableMirror[base + i] = undefined;
+	}
+	if (verbose)
+		out('libriscv: WebAssembly module of ' + len + ' bytes linked in ' +
+			(performance.now() - t0).toFixed(2) + ' ms');
+	return 0;
 });
-// Clears the slots of a released translation, so that a stale index traps
-EM_JS(void, rvw_unlink_module, (uint32_t base, uint32_t count), {
+
+// Clear released slots so calls through stale indices trap.
+EM_JS(void, rvw_clear_slots, (uint32_t base, uint32_t count), {
 	for (let i = 0; i < count; i++) {
 		wasmTable.set(base + i, null);
 		if (typeof wasmTableMirror !== 'undefined') wasmTableMirror[base + i] = undefined;
 	}
-	if (!Module.rvwFreeSlots) Module.rvwFreeSlots = [];
-	Module.rvwFreeSlots.push({ base: base, count: count });
 });
 
-static std::unordered_map<uint32_t, std::function<void(int)>> g_pending_links;
-static uint32_t g_next_link_token = 1;
+// Shared decoder mappings require identical table indices on every thread.
+// Reserve space below the translation slots for host table growth.
+static constexpr uint32_t WASM_TABLE_HEADROOM = 65536;
 
-extern "C" EMSCRIPTEN_KEEPALIVE void rvw_async_linked(uint32_t token, int base)
+struct WasmSlotAllocator
 {
-	auto it = g_pending_links.find(token);
-	if (it == g_pending_links.end())
-		return;
-	auto complete = std::move(it->second);
-	g_pending_links.erase(it);
-	try {
-		complete(base);
-	} catch (const std::exception& e) {
-		fprintf(stderr, "libriscv: WebAssembly translation failed to activate: %s\n", e.what());
+	std::mutex mutex;
+	uint32_t end = 0;
+	std::vector<std::pair<uint32_t, uint32_t>> free; // base, count
+	std::set<uint64_t> live; // generations
+	uint64_t next_generation = 1;
+};
+static WasmSlotAllocator g_wasm_slots;
+
+struct WasmPlacedTranslation
+{
+	uint64_t generation;
+	uint32_t base;
+	uint32_t count;
+};
+static thread_local std::vector<WasmPlacedTranslation> t_wasm_placed;
+
+static std::pair<uint32_t, uint64_t> rvw_allocate_slots(uint32_t count)
+{
+	std::scoped_lock lock(g_wasm_slots.mutex);
+	const uint64_t generation = g_wasm_slots.next_generation++;
+	g_wasm_slots.live.insert(generation);
+	auto& free = g_wasm_slots.free;
+	for (auto it = free.begin(); it != free.end(); ++it) {
+		if (it->second >= count) {
+			const uint32_t base = it->first;
+			it->first += count;
+			it->second -= count;
+			if (it->second == 0)
+				free.erase(it);
+			return { base, generation };
+		}
 	}
+	if (g_wasm_slots.end == 0)
+		g_wasm_slots.end = rvw_table_length() + WASM_TABLE_HEADROOM;
+	const uint32_t base = g_wasm_slots.end;
+	g_wasm_slots.end += count;
+	return { base, generation };
 }
+
+static void rvw_release_slots(uint32_t base, uint32_t count, uint64_t generation)
+{
+	{
+		std::scoped_lock lock(g_wasm_slots.mutex);
+		g_wasm_slots.live.erase(generation);
+		g_wasm_slots.free.push_back({ base, count });
+	}
+	// Other threads clear released slots on their next attach().
+	std::erase_if(t_wasm_placed, [&] (const auto& placed) {
+		if (placed.generation != generation)
+			return false;
+		rvw_clear_slots(placed.base, placed.count);
+		return true;
+	});
+}
+
+struct WasmLinkedTranslation
+{
+	std::shared_ptr<const WasmModuleOutput> module;
+	std::array<uint32_t, IMP_COUNT> imports {};
+	uint32_t base = 0;
+	uint64_t generation = 0;
+	bool verbose = false;
+
+	WasmLinkedTranslation(std::shared_ptr<const WasmModuleOutput> mod, const std::array<uint32_t, IMP_COUNT>& imp, bool verb)
+		: module(std::move(mod)), imports(imp), verbose(verb)
+	{
+		std::tie(base, generation) = rvw_allocate_slots(module->functions);
+	}
+	~WasmLinkedTranslation() {
+		rvw_release_slots(base, module->functions, generation);
+	}
+
+	bool attach()
+	{
+		{
+			// Clear slots from expired generations before reuse.
+			std::scoped_lock lock(g_wasm_slots.mutex);
+			std::erase_if(t_wasm_placed, [] (const auto& placed) {
+				if (g_wasm_slots.live.count(placed.generation))
+					return false;
+				rvw_clear_slots(placed.base, placed.count);
+				return true;
+			});
+		}
+		for (const auto& placed : t_wasm_placed) {
+			if (placed.generation == generation)
+				return true;
+		}
+		for (const auto& chunk : module->chunks) {
+			if (rvw_place_module(chunk.bytes.data(), chunk.bytes.size(), chunk.count, base + chunk.first,
+				imports.data(), imports.size(), verbose) != 0) {
+				rvw_clear_slots(base, chunk.first);
+				return false;
+			}
+		}
+		t_wasm_placed.push_back({ generation, base, module->functions });
+		return true;
+	}
+
+	static bool attach_owner(void* owner) {
+		return static_cast<WasmLinkedTranslation*>(owner)->attach();
+	}
+};
 #endif
+
+// Block functions access machine state through offsets from the CPU pointer.
+// Machines with matching translation inputs can share the emitted module bytes.
+// Each thread links the module into its own function table. The cache key adds
+// execution bounds, layout offsets, and block discovery settings to the translation hash.
+struct WasmModuleKey
+{
+	uint32_t hash;
+	uint64_t exec_begin;
+	uint64_t exec_end;
+	uint32_t regs_off, pc_off, fregs_off, arena_off, counter_off;
+	uint32_t instr_max;
+	uint32_t blocks_max;
+	uint32_t block_split;
+	bool scan_data_jump_targets;
+	uint32_t jump_hints_crc;
+	size_t jump_hints;
+
+	auto operator<=>(const WasmModuleKey&) const = default;
+};
+
+// Linked segments keep the module alive through their translation owners.
+struct WasmModuleCacheEntry
+{
+	std::mutex mutex;
+	std::weak_ptr<const WasmModuleOutput> output;
+};
+
+static std::shared_ptr<WasmModuleCacheEntry> wasm_module_cache_entry(const WasmModuleKey& key)
+{
+	static std::mutex cache_mutex;
+	static std::map<WasmModuleKey, std::shared_ptr<WasmModuleCacheEntry>> cache;
+	std::scoped_lock lock(cache_mutex);
+	auto& entry = cache[key];
+	if (entry == nullptr) {
+		// Remove unused cache entries whose modules have expired.
+		std::erase_if(cache, [] (const auto& it) {
+			return it.second != nullptr && it.second.use_count() == 1 && it.second->output.expired();
+		});
+		entry = std::make_shared<WasmModuleCacheEntry>();
+	}
+	return entry;
+}
 
 template <int W>
 void CPU<W>::wasm_translate(const MachineOptions<W>& options,
-	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment, bool live_patch) const
+	std::shared_ptr<DecodedExecuteSegment<W>>& shared_segment) const
 {
 	if constexpr (W != 8) {
 		if (options.verbose_loader)
@@ -1549,12 +1715,6 @@ void CPU<W>::wasm_translate(const MachineOptions<W>& options,
 	auto& exec = *shared_segment;
 	using clock = std::chrono::steady_clock;
 	const auto t0 = clock::now();
-
-	TransBlocks<W> discovered;
-	timespec ts {};
-	this->discover_translation_blocks(options, exec, discovered, false, ts);
-	if (discovered.blocks.empty())
-		return;
 
 	auto& m = const_cast<Machine<W>&>(machine());
 	const uintptr_t cpu_addr = uintptr_t(this);
@@ -1567,50 +1727,66 @@ void CPU<W>::wasm_translate(const MachineOptions<W>& options,
 	if (uintptr_t(&m.get_counters().second) != uintptr_t(&m.get_counters().first) + 8)
 		throw MachineException(INVALID_PROGRAM, "wasm translator: unexpected counter layout");
 
-	auto module = wasm_emit_module<W>(options, discovered, layout, exec.translation_hash());
+	// Bypass the cache for modules with machine-specific breakpoint patches.
+	std::shared_ptr<WasmModuleCacheEntry> entry;
+	if (options.ebreak_locations.empty()) {
+		const auto& hints = options.translator_jump_hints;
+		entry = wasm_module_cache_entry(WasmModuleKey {
+			.hash = exec.translation_hash(),
+			.exec_begin = exec.exec_begin(),
+			.exec_end = exec.exec_end(),
+			.regs_off = layout.regs_off, .pc_off = layout.pc_off, .fregs_off = layout.fregs_off,
+			.arena_off = layout.arena_off, .counter_off = layout.counter_off,
+			.instr_max = uint32_t(options.translate_instr_max),
+			.blocks_max = uint32_t(options.translate_blocks_max),
+			.block_split = uint32_t(options.translate_block_split),
+			.scan_data_jump_targets = options.translate_scan_data_jump_targets,
+			.jump_hints_crc = hints.empty() ? 0u : crc32c(hints.data(), hints.size() * sizeof(hints[0])),
+			.jump_hints = hints.size(),
+		});
+	}
+	// Serialize block discovery and module emission for this cache key.
+	std::unique_lock<std::mutex> entry_lock;
+	std::shared_ptr<const WasmModuleOutput> shared_module;
+	if (entry) {
+		entry_lock = std::unique_lock(entry->mutex);
+		shared_module = entry->output.lock();
+	}
+	const bool reused = shared_module != nullptr;
+	if (!reused) {
+		TransBlocks<W> discovered;
+		timespec ts {};
+		this->discover_translation_blocks(options, exec, discovered, false, ts);
+		if (discovered.blocks.empty())
+			return;
+		shared_module = std::make_shared<const WasmModuleOutput>(
+			wasm_emit_module<W>(options, discovered, layout, exec.translation_hash()));
+		if (entry)
+			entry->output = shared_module;
+	}
+	if (entry_lock.owns_lock())
+		entry_lock.unlock();
+	const WasmModuleOutput& module = *shared_module;
 	const auto t1 = clock::now();
 
-	if (const char* path = getenv("RVWASM_DUMP"); path != nullptr) {
-		std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
-		ofs.write((const char*)module.bytes.data(), module.bytes.size());
+	if (const char* path = getenv("RVWASM_DUMP"); path != nullptr && !reused) {
+		for (size_t i = 0; i < module.chunks.size(); i++) {
+			const std::string name = (i == 0) ? std::string(path) : std::string(path) + "." + std::to_string(i);
+			std::ofstream ofs(name, std::ios::binary | std::ios::trunc);
+			ofs.write((const char*)module.chunks[i].bytes.data(), module.chunks[i].bytes.size());
+		}
 	}
 	if (options.verbose_loader || options.translate_timing) {
 		printf("libriscv: WebAssembly translation: %u functions, %zu instructions (%zu by handler), "
-			"%zu mappings, %zu bytes, generated in %.2f ms\n",
+			"%zu mappings, %zu bytes in %zu modules, %s in %.2f ms\n",
 			module.functions, module.instructions, module.fallbacks, module.mappings.size(),
-			module.bytes.size(), std::chrono::duration<double, std::milli>(t1 - t0).count());
+			module.bytes(), module.chunks.size(), reused ? "reused" : "generated",
+			std::chrono::duration<double, std::milli>(t1 - t0).count());
 	}
 
 #ifdef __EMSCRIPTEN__
 	const unsigned nfuncs = module.functions;
-	std::vector<std::pair<address_t, unsigned>> addr_mappings;
-	addr_mappings.reserve(module.mappings.size());
-	for (const auto& [addr, index] : module.mappings)
-		addr_mappings.push_back({ address_t(addr), index });
-
-	auto activate = [nfuncs, t0] (const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, int base,
-		const std::vector<std::pair<address_t, unsigned>>& addr_mappings, bool live_patch)
-	{
-		exec.set_translation_owner(std::shared_ptr<void>(nullptr, [base, nfuncs] (void*) {
-			rvw_unlink_module(base, nfuncs);
-		}));
-		// A function pointer is a table index in wasm32
-		auto& mappings = exec.create_mappings(nfuncs + 1);
-		for (unsigned i = 0; i < nfuncs; i++)
-			mappings[i] = reinterpret_cast<bintr_block_func<W>>(uintptr_t(base + i));
-		exec.set_mapping(nfuncs, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
-			throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
-		});
-		CPU<W>::apply_translator_mappings(options, exec, addr_mappings, nfuncs, live_patch);
-		if (options.verbose_loader || options.translate_timing) {
-			printf("libriscv: Activated WebAssembly translation with hash 0x%X after %.2f ms%s\n",
-				exec.translation_hash(),
-				std::chrono::duration<double, std::milli>(clock::now() - t0).count(),
-				live_patch ? ", live-patching enabled" : "");
-		}
-	};
-
-	const uint32_t imports[IMP_COUNT] = {
+	const std::array<uint32_t, IMP_COUNT> imports {
 		uint32_t(uintptr_t(&rvw_load<W>)),
 		uint32_t(uintptr_t(&rvw_store<W>)),
 		uint32_t(uintptr_t(&rvw_syscall<W>)),
@@ -1619,33 +1795,30 @@ void CPU<W>::wasm_translate(const MachineOptions<W>& options,
 		uint32_t(uintptr_t(&rvw_fma32)),
 		uint32_t(uintptr_t(&rvw_fma64)),
 	};
-	const char* force_async = getenv("LIBRISCV_WASM_ASYNC");
-	const uint32_t token = g_next_link_token++;
-	const int base = rvw_link_module(module.bytes.data(), module.bytes.size(), nfuncs,
-		imports, IMP_COUNT, options.verbose_loader, token,
-		force_async != nullptr && force_async[0] == '1');
+	auto linked = std::make_shared<WasmLinkedTranslation>(shared_module, imports, options.verbose_loader);
+	if (!linked->attach())
+		return;
+	const uint32_t base = linked->base;
+	exec.set_translation_owner(std::move(linked), &WasmLinkedTranslation::attach_owner);
 
-	if (base >= 0) {
-		activate(options, exec, base, addr_mappings, live_patch);
-	} else if (base == -2) {
-		// Async activation uses live patching because dispatch may already hold
-		// the segment's decoder cache.
-		std::weak_ptr<DecodedExecuteSegment<W>> weak = shared_segment;
-		g_pending_links.emplace(token,
-			[weak, options, addr_mappings = std::move(addr_mappings), activate, nfuncs] (int base) {
-				if (base < 0) return;
-				auto segment = weak.lock();
-				if (!segment || segment->is_binary_translated()) {
-					rvw_unlink_module(base, nfuncs);
-					return;
-				}
-				activate(options, *segment, base, addr_mappings, true);
-			});
-		if (options.verbose_loader)
-			printf("libriscv: WebAssembly translation is compiling asynchronously\n");
+	// A function pointer is a table index in wasm32
+	auto& mappings = exec.create_mappings(nfuncs + 1);
+	for (unsigned i = 0; i < nfuncs; i++)
+		mappings[i] = reinterpret_cast<bintr_block_func<W>>(uintptr_t(base + i));
+	exec.set_mapping(nfuncs, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
+		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
+	});
+	std::vector<std::pair<address_t, unsigned>> addr_mappings;
+	addr_mappings.reserve(module.mappings.size());
+	for (const auto& [addr, index] : module.mappings)
+		addr_mappings.push_back({ address_t(addr), index });
+	CPU<W>::apply_translator_mappings(options, exec, addr_mappings, nfuncs, false);
+	if (options.verbose_loader || options.translate_timing) {
+		printf("libriscv: Activated WebAssembly translation with hash 0x%X at table slot %u after %.2f ms\n",
+			exec.translation_hash(), base,
+			std::chrono::duration<double, std::milli>(clock::now() - t0).count());
 	}
 #else
-	(void)live_patch;
 	if (options.verbose_loader)
 		printf("libriscv: WebAssembly translations can only be linked in an Emscripten build\n");
 #endif
@@ -1653,12 +1826,12 @@ void CPU<W>::wasm_translate(const MachineOptions<W>& options,
 }
 
 #ifdef RISCV_32I
-template void CPU<4>::wasm_translate(const MachineOptions<4>&, std::shared_ptr<DecodedExecuteSegment<4>>&, bool) const;
+template void CPU<4>::wasm_translate(const MachineOptions<4>&, std::shared_ptr<DecodedExecuteSegment<4>>&) const;
 #endif
 #ifdef RISCV_64I
-template void CPU<8>::wasm_translate(const MachineOptions<8>&, std::shared_ptr<DecodedExecuteSegment<8>>&, bool) const;
+template void CPU<8>::wasm_translate(const MachineOptions<8>&, std::shared_ptr<DecodedExecuteSegment<8>>&) const;
 #endif
 #ifdef RISCV_128I
-template void CPU<16>::wasm_translate(const MachineOptions<16>&, std::shared_ptr<DecodedExecuteSegment<16>>&, bool) const;
+template void CPU<16>::wasm_translate(const MachineOptions<16>&, std::shared_ptr<DecodedExecuteSegment<16>>&) const;
 #endif
 } // riscv

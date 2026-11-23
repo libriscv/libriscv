@@ -1119,8 +1119,9 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	output.t0 = t0;
 
 	output.defines = create_defines_for(machine(), options);
-	// Live-patching is enabled if the user has provided a callback.
-	const bool live_patch = options.translate_background_callback != nullptr;
+	// Wasm links synchronously before the execute segment is shared.
+	const bool live_patch = options.translate_background_callback != nullptr
+		&& options.translate_backend != TranslateBackend::Wasm;
 
 	// Compilation step
 	std::function<void()> compilation_step =
@@ -1130,12 +1131,7 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 			auto* exec = shared_segment.get();
 
 			if (options.translate_backend == TranslateBackend::Wasm) {
-				// Activation patches the decoder cache, see below
-				if (live_patch)
-					exec->wait_for_decoder_cache_ready();
-				this->wasm_translate(options, shared_segment, live_patch);
-				if (live_patch)
-					exec->set_background_compiling(false);
+				this->wasm_translate(options, shared_segment);
 				return;
 			}
 
@@ -1783,6 +1779,17 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 	{
 		return (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
 	}
+
+	// Instantiate discover_translation_blocks for wasm/wasm_emit.cpp.
+#ifdef RISCV_32I
+	template void CPU<4>::discover_translation_blocks(const MachineOptions<4>&, DecodedExecuteSegment<4>&, TransBlocks<4>&, bool, timespec) const;
+#endif
+#ifdef RISCV_64I
+	template void CPU<8>::discover_translation_blocks(const MachineOptions<8>&, DecodedExecuteSegment<8>&, TransBlocks<8>&, bool, timespec) const;
+#endif
+#ifdef RISCV_128I
+	template void CPU<16>::discover_translation_blocks(const MachineOptions<16>&, DecodedExecuteSegment<16>&, TransBlocks<16>&, bool, timespec) const;
+#endif
 } // riscv
 
 extern "C" {
