@@ -142,7 +142,8 @@ elseif(UNIX OR NINTENDO_SWITCH)
 endif()
 if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	# ASM_DISPATCH uses assembly to dispatch instructions.
-	# It is available on AMD64 (x86_64) Linux and 64-bit MinGW (Win64 ABI).
+	# It is available on AMD64 (x86_64) Linux and 64-bit MinGW (Win64 ABI),
+	# and on AArch64 Linux.
 	# The decoder cache layout differs with the C-extension (one entry per
 	# 2 bytes, and icount), and there are handlers for compressed bytecodes
 	if (RISCV_EXT_C)
@@ -153,60 +154,74 @@ if (RISCV_EXPERIMENTAL AND RISCV_ASM_DISPATCH)
 	# The MinGW toolchain file does not set CMAKE_SYSTEM_NAME, so WIN32 is
 	# not always set when cross-compiling: MINGW_TOOLCHAIN is
 	if (MINGW_TOOLCHAIN OR MINGW OR WIN32)
+		set(RVASM_WINDOWS ON)
 		if (MSVC)
 			message(FATAL_ERROR "libriscv: Assembly dispatch requires MinGW on Windows")
 		endif()
 		set(RVASM_FORMAT -f win64)
 	else()
+		set(RVASM_WINDOWS OFF)
 		set(RVASM_FORMAT -f elf64 -g -F dwarf)
 	endif()
 	if ((CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"
 	  OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64"
 	  OR CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
 	 AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
-		message(STATUS "libriscv: Assembly dispatch enabled")
-		list(APPEND SOURCES
-			libriscv/amd64/asm_dispatch.cpp
-			libriscv/threaded_dispatch.cpp
-			libriscv/threaded_inaccurate_dispatch.cpp
-		)
-		# One assembly source, assembled once per register width and mode:
-		# COUNTING=1 is CPU::simulate, COUNTING=0 CPU::simulate_inaccurate
+		set(RVASM_ARCH amd64)
 		find_program(NASM_EXECUTABLE nasm REQUIRED)
 		set(RVASM_SRC ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/amd64/dispatch_rv.nasm)
-		# With an encompassing arena, loads and stores mask the address
-		# instead of bounds-checking it. The bits are in the object name,
-		# so that changing them can never link a stale dispatch.
-		# RISCV_ENCOMPASSING_ARENA_BITS=0 is the regular arena in C++ too.
-		if (RISCV_ENCOMPASSING_ARENA AND NOT RISCV_ENCOMPASSING_ARENA_BITS EQUAL 0)
-			set(RVASM_ARENA_BITS ${RISCV_ENCOMPASSING_ARENA_BITS})
-			set(RVASM_SUFFIX "_a${RVASM_ARENA_BITS}")
-		else()
-			set(RVASM_ARENA_BITS 0)
-			set(RVASM_SUFFIX "")
-		endif()
-		set(RVASM_XLENS)
-		if (RISCV_32I)
-			list(APPEND RVASM_XLENS 32)
-		endif()
-		if (RISCV_64I)
-			list(APPEND RVASM_XLENS 64)
-		endif()
-		foreach(XLEN ${RVASM_XLENS})
-			foreach(COUNTING 0 1)
-				set(RVASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv${XLEN}_${COUNTING}${RVASM_SUFFIX}.o)
-				add_custom_command(
-					OUTPUT ${RVASM_OBJ}
-					COMMAND ${NASM_EXECUTABLE} ${RVASM_FORMAT} -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} -DARENA_BITS=${RVASM_ARENA_BITS} -I${CMAKE_CURRENT_SOURCE_DIR}/libriscv/ ${RVASM_SRC} -o ${RVASM_OBJ}
-					DEPENDS ${RVASM_SRC} ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/fused_pairs.inc
-				)
-				set_source_files_properties(${RVASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
-				list(APPEND SOURCES ${RVASM_OBJ})
-			endforeach()
-		endforeach()
+	elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$"
+	 AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT RVASM_WINDOWS AND NOT APPLE)
+		# Assembled by the C++ compiler, through the C preprocessor
+		set(RVASM_ARCH arm64)
+		set(RVASM_SRC ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/arm64/dispatch_rv.S)
 	else()
 		message(FATAL_ERROR "libriscv: Assembly dispatch not supported on this platform")
 	endif()
+	message(STATUS "libriscv: Assembly dispatch enabled (${RVASM_ARCH})")
+	list(APPEND SOURCES
+		libriscv/amd64/asm_dispatch.cpp
+		libriscv/threaded_dispatch.cpp
+		libriscv/threaded_inaccurate_dispatch.cpp
+	)
+	# With an encompassing arena, loads and stores mask the address
+	# instead of bounds-checking it. The bits are in the object name,
+	# so that changing them can never link a stale dispatch.
+	# RISCV_ENCOMPASSING_ARENA_BITS=0 is the regular arena in C++ too.
+	if (RISCV_ENCOMPASSING_ARENA AND NOT RISCV_ENCOMPASSING_ARENA_BITS EQUAL 0)
+		set(RVASM_ARENA_BITS ${RISCV_ENCOMPASSING_ARENA_BITS})
+		set(RVASM_SUFFIX "_a${RVASM_ARENA_BITS}")
+	else()
+		set(RVASM_ARENA_BITS 0)
+		set(RVASM_SUFFIX "")
+	endif()
+	set(RVASM_XLENS)
+	if (RISCV_32I)
+		list(APPEND RVASM_XLENS 32)
+	endif()
+	if (RISCV_64I)
+		list(APPEND RVASM_XLENS 64)
+	endif()
+	# One assembly source, assembled once per register width and mode:
+	# COUNTING=1 is CPU::simulate, COUNTING=0 CPU::simulate_inaccurate
+	foreach(XLEN ${RVASM_XLENS})
+		foreach(COUNTING 0 1)
+			set(RVASM_OBJ ${CMAKE_CURRENT_BINARY_DIR}/dispatch_rv${XLEN}_${COUNTING}${RVASM_SUFFIX}.o)
+			set(RVASM_DEFS -DXLEN=${XLEN} -DCOUNTING=${COUNTING} -DCOMPRESSED=${RVASM_COMPRESSED} -DARENA_BITS=${RVASM_ARENA_BITS})
+			if (RVASM_ARCH STREQUAL "amd64")
+				set(RVASM_COMMAND ${NASM_EXECUTABLE} ${RVASM_FORMAT} ${RVASM_DEFS} -I${CMAKE_CURRENT_SOURCE_DIR}/libriscv/ ${RVASM_SRC} -o ${RVASM_OBJ})
+			else()
+				set(RVASM_COMMAND ${CMAKE_CXX_COMPILER} -c -x assembler-with-cpp -g ${RVASM_DEFS} -I${CMAKE_CURRENT_SOURCE_DIR}/libriscv/ ${RVASM_SRC} -o ${RVASM_OBJ})
+			endif()
+			add_custom_command(
+				OUTPUT ${RVASM_OBJ}
+				COMMAND ${RVASM_COMMAND}
+				DEPENDS ${RVASM_SRC} ${CMAKE_CURRENT_SOURCE_DIR}/libriscv/fused_pairs.inc
+			)
+			set_source_files_properties(${RVASM_OBJ} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+			list(APPEND SOURCES ${RVASM_OBJ})
+		endforeach()
+	endforeach()
 elseif (RISCV_WASM_DISPATCH)
 	# WASM_DISPATCH generates the RV64 dispatch in WebAssembly (see
 	# wasm/dispatch_rv64.py). RV32 and RV128 use the threaded C++ dispatch.

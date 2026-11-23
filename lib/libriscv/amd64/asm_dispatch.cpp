@@ -2,11 +2,12 @@
 #include <vector>
 
 // Both RV32 and RV64 dispatches are written in assembly: amd64/dispatch_rv.nasm,
-// assembled once per width and mode. The counting dispatch (prefix rvXXasmc_)
-// is CPU::simulate and follows cpu_dispatch.cpp, and the inaccurate dispatch
-// (prefix rvXXasm_) is CPU::simulate_inaccurate. The C++ threaded dispatch is
-// still built, as CPU::simulate_cpp, for 128-bit and for host CPUs without
-// the extensions that the assembly uses.
+// or arm64/dispatch_rv.S on AArch64, assembled once per width and mode. The
+// counting dispatch (prefix rvXXasmc_) is CPU::simulate and follows
+// cpu_dispatch.cpp, and the inaccurate dispatch (prefix rvXXasm_) is
+// CPU::simulate_inaccurate. The C++ threaded dispatch is still built, as
+// CPU::simulate_cpp, for 128-bit and for host CPUs without the extensions
+// that the assembly uses.
 
 // Handlers in dispatch_rv.nasm. Each handler symbol is an array with the
 // address of every copy (see handler replication in the assembly).
@@ -311,12 +312,17 @@ ASMDISPATCH_DEFINE(8, true, rv64asmc_, ASMDISPATCH_FILL_RV64(rv64asmc_))
 #endif
 #undef H
 
-// The assembly uses BMI2, AVX and FMA3
 static bool asm_dispatch_supported()
 {
+#if defined(__x86_64__) || defined(_M_X64)
+	// The AMD64 assembly uses BMI2, AVX and FMA3
 	static const bool supported = __builtin_cpu_supports("bmi2")
 		&& __builtin_cpu_supports("avx") && __builtin_cpu_supports("fma");
 	return supported;
+#else
+	// The AArch64 assembly (arm64/dispatch_rv.S) only uses base ARMv8.0-A
+	return true;
+#endif
 }
 
 template <int W>
