@@ -4,6 +4,7 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/guest_datatypes.hpp>
 #include <libriscv/threads.hpp>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -330,6 +331,31 @@ TEST_CASE("C6: getcwd returns -EBADF without file descriptors", "[Security]")
 
 	REQUIRE_NOTHROW(machine.system_call(17)); // getcwd
 	REQUIRE(machine.return_value<int>() == -9); // -EBADF
+}
+
+TEST_CASE("getrusage returns -EFAULT for a NULL output pointer", "[LinuxSyscall]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+
+	auto& cpu = machine.cpu;
+	cpu.reg(riscv::REG_ARG0) = 0; // RUSAGE_SELF
+	cpu.reg(riscv::REG_ARG1) = 0; // usage = NULL
+	machine.system_call(165); // getrusage
+	REQUIRE(machine.return_value<int>() == -EFAULT);
+
+	const auto usage = machine.memory.mmap_allocate(4096);
+	cpu.reg(riscv::REG_ARG0) = 0;
+	cpu.reg(riscv::REG_ARG1) = usage;
+	machine.system_call(165);
+	REQUIRE(machine.return_value<int>() == 0);
+
+	cpu.reg(riscv::REG_ARG0) = 99; // invalid selector takes precedence
+	cpu.reg(riscv::REG_ARG1) = 0;
+	machine.system_call(165);
+	REQUIRE(machine.return_value<int>() == -EINVAL);
 }
 
 // =============================================================================
