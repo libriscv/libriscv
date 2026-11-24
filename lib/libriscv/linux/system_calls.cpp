@@ -201,6 +201,10 @@ static void syscall_getrusage(Machine<W>& machine)
 			who, (int)machine.return_value());
 		return;
 	}
+	if (g_usage == 0x0) {
+		machine.set_result(-EFAULT);
+		return;
+	}
 
 #ifndef __SWITCH__ // no getrusage()
 	if (machine.has_file_descriptors() && machine.fds().proxy_mode) {
@@ -227,8 +231,7 @@ static void syscall_getrusage(Machine<W>& machine)
 			(machine.memory.pages_active() * riscv::Page::size()) / 1024;
 	}
 
-	if (g_usage != 0x0)
-		machine.copy_to_guest(g_usage, &usage, sizeof(usage));
+	machine.copy_to_guest(g_usage, &usage, sizeof(usage));
 	machine.set_result(0);
 	SYSPRINT("SYSCALL getrusage, who: %d usage: 0x%lX => %d\n",
 		who, (long)g_usage, (int)machine.return_value());
