@@ -39,6 +39,35 @@ TEST_CASE("Instantiate machine", "[Dynamic]")
 	REQUIRE(machine.cpu.current_execute_segment().is_within(machine.memory.start_address()));
 }
 
+TEST_CASE("Resolve symbol address from dynamic ELF", "[Dynamic]")
+{
+	if (is_zig())
+		return;
+
+	const auto binary = build_and_load(R"M(
+	int target() { return 42; }
+	int main() { return target(); }
+)M", pie_compiler_args);
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+
+	REQUIRE(machine.memory.is_dynamic_executable());
+	const auto target_address = machine.address_of("target");
+	REQUIRE(target_address >= Memory<RISCV64>::DYLINK_BASE);
+	REQUIRE(machine.vmcall("target") == 42);
+}
+
+TEST_CASE("Resolve symbol address from static ELF", "[Dynamic]")
+{
+	const auto binary = build_and_load(R"M(
+	int target() { return 42; }
+	int main() { return target(); }
+)M");
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+
+	REQUIRE_FALSE(machine.memory.is_dynamic_executable());
+	REQUIRE(machine.vmcall("target") == 42);
+}
+
 TEST_CASE("Instantiate machine using shared ELF", "[Dynamic]")
 {
 	// This fails because we are not loading the dynamic linker.

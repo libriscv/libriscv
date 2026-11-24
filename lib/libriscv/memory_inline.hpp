@@ -177,7 +177,7 @@ template <int W>
 inline address_type<W> Memory<W>::resolve_address(std::string_view name) const
 {
 	auto* sym = resolve_symbol(name);
-	return (sym) ? sym->st_value : 0x0;
+	return (sym) ? elf_base_address(sym->st_value) : 0x0;
 }
 
 template <int W>
