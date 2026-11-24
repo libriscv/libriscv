@@ -4,14 +4,20 @@
 #include <libriscv/machine.hpp>
 #include <libriscv/guest_datatypes.hpp>
 #include <libriscv/threads.hpp>
+#include <array>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/stat.h>
+#if defined(__linux__) && INTPTR_MAX == INT64_MAX
+#include <sys/socket.h>
+#include <sys/uio.h>
+#endif
 #include <unistd.h>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
@@ -357,6 +363,64 @@ TEST_CASE("getrusage returns -EFAULT for a NULL output pointer", "[LinuxSyscall]
 	machine.system_call(165);
 	REQUIRE(machine.return_value<int>() == -EINVAL);
 }
+
+#if defined(__linux__) && INTPTR_MAX == INT64_MAX
+TEST_CASE("sendmmsg accepts 129 messages", "[LinuxSyscall]")
+{
+	static constexpr size_t count = 129;
+	struct GuestMmsghdr {
+		struct msghdr hdr;
+		unsigned int msg_len;
+	};
+	static_assert(sizeof(GuestMmsghdr) == 64);
+
+	static const std::vector<uint8_t> empty;
+	Machine<RISCV64> machine { empty, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, true);
+	machine.fds().permit_sockets = true;
+	int sockets[2];
+	REQUIRE(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sockets) == 0);
+	const int sender = machine.fds().assign_socket(sockets[0]);
+	const int receiver = machine.fds().assign_socket(sockets[1]);
+	const int receiver_host_fd = machine.fds().translate(receiver);
+	const int socket_flags = ::fcntl(receiver_host_fd, F_GETFL, 0);
+	REQUIRE(socket_flags >= 0);
+	REQUIRE(::fcntl(receiver_host_fd, F_SETFL, socket_flags | O_NONBLOCK) == 0);
+
+	const auto msgvec = machine.memory.mmap_allocate(count * sizeof(GuestMmsghdr));
+	const auto guest_iovecs = machine.memory.mmap_allocate(count * sizeof(struct iovec));
+	const auto payload_addr = machine.memory.mmap_allocate(count);
+	std::vector<GuestMmsghdr> messages(count);
+	std::vector<struct iovec> vectors(count);
+	std::array<char, count> payload;
+	payload.fill('x');
+	for (size_t i = 0; i < count; ++i) {
+		vectors[i].iov_base = reinterpret_cast<void*>(static_cast<uintptr_t>(payload_addr + i));
+		vectors[i].iov_len = 1;
+		messages[i].hdr.msg_iov = reinterpret_cast<struct iovec*>(
+			static_cast<uintptr_t>(guest_iovecs + i * sizeof(struct iovec)));
+		messages[i].hdr.msg_iovlen = 1;
+	}
+	machine.memory.memcpy(payload_addr, payload.data(), payload.size());
+	machine.memory.memcpy(guest_iovecs, vectors.data(), vectors.size() * sizeof(vectors[0]));
+	machine.memory.memcpy(msgvec, messages.data(), messages.size() * sizeof(messages[0]));
+
+	auto& cpu = machine.cpu;
+	cpu.reg(REG_ARG0) = sender;
+	cpu.reg(REG_ARG1) = msgvec;
+	cpu.reg(REG_ARG2) = count;
+	cpu.reg(REG_ARG3) = 0;
+	machine.system_call(269); // sendmmsg
+	REQUIRE(machine.return_value<int>() == static_cast<int>(count));
+	REQUIRE(machine.memory.read<GuestMmsghdr>(msgvec).msg_len == 1);
+	REQUIRE(machine.memory.read<GuestMmsghdr>(msgvec + (count - 1) * sizeof(GuestMmsghdr)).msg_len == 1);
+	for (size_t i = 0; i < count; ++i) {
+		char received = 0;
+		REQUIRE(::recv(receiver_host_fd, &received, 1, 0) == 1);
+		REQUIRE(received == payload[i]);
+	}
+}
+#endif
 
 // =============================================================================
 // C7: pselect throws a machine exception when file descriptors are disabled

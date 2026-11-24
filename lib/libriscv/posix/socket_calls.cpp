@@ -1,5 +1,7 @@
 #include <libriscv/machine.hpp>
 
+#include <algorithm>
+
 //#define SOCKETCALL_VERBOSE 1
 #ifdef SOCKETCALL_VERBOSE
 #define SYSPRINT(fmt, ...) \
@@ -481,17 +483,26 @@ static void syscall_sendmmsg(Machine<W>& machine)
 		real_fd = machine.fds().translate(vfd);
 
 #ifdef __linux__
-		std::array<struct mmsghdr, 128> msgvec;
-
-		if (veclen > msgvec.size()) {
-			machine.set_result(-ENOMEM);
-			return;
-		}
-		machine.copy_from_guest(&msgvec[0], g_msgvec, veclen * sizeof(msgvec[0]));
+		// Linux caps sendmmsg()'s vlen at UIO_MAXIOV (1024).
+		constexpr unsigned max_mmsg_count = 1024;
+		std::array<struct mmsghdr, max_mmsg_count> msgvec;
+		const unsigned count = std::min(veclen, max_mmsg_count);
 
 		ssize_t finalcnt = 0;
-		for (size_t i = 0; i < veclen; i++)
+		for (size_t i = 0; i < count; i++)
 		{
+			try {
+				const auto guest_entry = g_msgvec + i * sizeof(msgvec[0]);
+				machine.copy_from_guest(&msgvec[i], guest_entry, sizeof(msgvec[i]));
+			} catch (const MachineException& error) {
+				if (error.type() != PROTECTION_FAULT) throw;
+				if (finalcnt == 0) {
+					machine.set_result(-EFAULT);
+					return;
+				}
+				break;
+			}
+
 			auto& entry = msgvec[i].msg_hdr;
 			std::array<guest_iovec<W>, 128> g_iov;
 
