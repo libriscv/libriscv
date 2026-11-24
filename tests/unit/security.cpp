@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -412,8 +413,10 @@ TEST_CASE("sendmmsg accepts 129 messages", "[LinuxSyscall]")
 	cpu.reg(REG_ARG3) = 0;
 	machine.system_call(269); // sendmmsg
 	REQUIRE(machine.return_value<int>() == static_cast<int>(count));
-	REQUIRE(machine.memory.read<GuestMmsghdr>(msgvec).msg_len == 1);
-	REQUIRE(machine.memory.read<GuestMmsghdr>(msgvec + (count - 1) * sizeof(GuestMmsghdr)).msg_len == 1);
+	constexpr auto msg_len_offset = offsetof(GuestMmsghdr, msg_len);
+	REQUIRE(machine.memory.read<unsigned int>(msgvec + msg_len_offset) == 1);
+	REQUIRE(machine.memory.read<unsigned int>(
+		msgvec + (count - 1) * sizeof(GuestMmsghdr) + msg_len_offset) == 1);
 	for (size_t i = 0; i < count; ++i) {
 		char received = 0;
 		REQUIRE(::recv(receiver_host_fd, &received, 1, 0) == 1);
