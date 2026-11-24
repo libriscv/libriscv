@@ -12,6 +12,9 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/stat.h>
+#if defined(__linux__)
+#include <sys/socket.h>
+#endif
 #include <unistd.h>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
@@ -357,6 +360,51 @@ TEST_CASE("getrusage returns -EFAULT for a NULL output pointer", "[LinuxSyscall]
 	machine.system_call(165);
 	REQUIRE(machine.return_value<int>() == -EINVAL);
 }
+
+#if defined(__linux__)
+TEST_CASE("recvfrom ignores addrlen when src_addr is NULL", "[LinuxSyscall]")
+{
+	static const std::vector<uint8_t> empty;
+	Machine<RISCV64> machine { empty, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, true);
+	machine.fds().permit_sockets = true;
+	int sockets[2];
+	REQUIRE(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sockets) == 0);
+	const int sender = machine.fds().assign_socket(sockets[0]);
+	const int receiver = machine.fds().assign_socket(sockets[1]);
+	const char payload = 'x';
+	REQUIRE(::send(machine.fds().translate(sender), &payload, 1, 0) == 1);
+
+	const auto buffer = machine.memory.mmap_allocate(4096);
+	const auto addrlen = buffer + 8;
+	const auto blocked_addrlen = machine.memory.mmap_allocate(4096);
+	machine.memory.write<char>(buffer, '\0');
+	machine.memory.write<socklen_t>(addrlen, 0x5a5a);
+	machine.memory.write<socklen_t>(blocked_addrlen, 0x5a5a);
+	machine.memory.set_page_attr(blocked_addrlen, 4096,
+		{.read = true, .write = false, .exec = false});
+	auto& cpu = machine.cpu;
+	cpu.reg(REG_ARG0) = receiver;
+	cpu.reg(REG_ARG1) = buffer;
+	cpu.reg(REG_ARG2) = 1;
+	cpu.reg(REG_ARG3) = 0;
+	cpu.reg(REG_ARG4) = 0;
+	cpu.reg(REG_ARG5) = addrlen;
+	machine.system_call(207); // recvfrom
+
+	REQUIRE(machine.return_value<ssize_t>() == 1);
+	REQUIRE(machine.memory.read<char>(buffer) == payload);
+	CHECK(machine.memory.read<socklen_t>(addrlen) == 0x5a5a);
+
+	const char second_payload = 'y';
+	REQUIRE(::send(machine.fds().translate(sender), &second_payload, 1, 0) == 1);
+	cpu.reg(REG_ARG0) = receiver;
+	cpu.reg(REG_ARG5) = blocked_addrlen; // read-only guest memory
+	CHECK_NOTHROW(machine.system_call(207));
+	CHECK(machine.return_value<ssize_t>() == 1);
+	CHECK(machine.memory.read<char>(buffer) == second_payload);
+}
+#endif
 
 // =============================================================================
 // C7: pselect throws a machine exception when file descriptors are disabled
