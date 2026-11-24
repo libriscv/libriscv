@@ -487,22 +487,11 @@ static void syscall_sendmmsg(Machine<W>& machine)
 		constexpr unsigned max_mmsg_count = 1024;
 		std::array<struct mmsghdr, max_mmsg_count> msgvec;
 		const unsigned count = std::min(veclen, max_mmsg_count);
+		machine.copy_from_guest(&msgvec[0], g_msgvec, count * sizeof(msgvec[0]));
 
 		ssize_t finalcnt = 0;
 		for (size_t i = 0; i < count; i++)
 		{
-			try {
-				const auto guest_entry = g_msgvec + i * sizeof(msgvec[0]);
-				machine.copy_from_guest(&msgvec[i], guest_entry, sizeof(msgvec[i]));
-			} catch (const MachineException& error) {
-				if (error.type() != PROTECTION_FAULT) throw;
-				if (finalcnt == 0) {
-					machine.set_result(-EFAULT);
-					return;
-				}
-				break;
-			}
-
 			auto& entry = msgvec[i].msg_hdr;
 			std::array<guest_iovec<W>, 128> g_iov;
 
