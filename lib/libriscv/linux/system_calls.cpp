@@ -15,6 +15,7 @@ static constexpr bool verbose_syscalls = false;
 #endif
 
 #include <chrono>
+#include <limits>
 #include <fcntl.h>
 #include <signal.h>
 #undef sa_handler
@@ -1482,42 +1483,58 @@ static void syscall_getrandom(Machine<W>& machine)
 	const auto g_len  = machine.sysarg(1);
 
 	char buffer[256];
-	if (g_len > sizeof(buffer)) {
-		machine.set_result(-1);
-		return;
-	}
-	const size_t need = std::min((size_t)g_len, sizeof(buffer));
+	constexpr size_t max_request = 32 * 1024 * 1024 - 1;
+	const size_t requested = g_len > max_request ? max_request :
+		static_cast<size_t>(g_len);
+	size_t copied = 0;
+	const auto guest_address_max = std::numeric_limits<address_type<W>>::max();
+	while (copied < requested) {
+		const address_type<W> guest_dst = g_addr + static_cast<address_type<W>>(copied);
+		if (guest_dst < g_addr) break;
+		size_t need = std::min(requested - copied, sizeof(buffer));
+		const auto address_room = guest_address_max - guest_dst;
+		if (address_room < need - 1)
+			need = static_cast<size_t>(address_room) + 1;
 #if defined(__OpenBSD__)
-	const ssize_t result = need; // always success
-	arc4random_buf(buffer, need);
+		const ssize_t result = need; // always success
+		arc4random_buf(buffer, need);
 #elif defined(__APPLE__)
-	#if TARGET_OS_IPHONE
-	const ssize_t result = need;
-	#else
-	const int sec_result = SecRandomCopyBytes(kSecRandomDefault, need, (uint8_t *)buffer);
-	const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
-	#endif
+		#if TARGET_OS_IPHONE
+		const ssize_t result = need;
+		#else
+		const int sec_result = SecRandomCopyBytes(
+			kSecRandomDefault, need, (uint8_t *)buffer);
+		const ssize_t result = (sec_result == errSecSuccess) ? need : -1;
+		#endif
 #elif defined(__SWITCH__)
-	const ssize_t result = need;
-	randomGet(buffer, need);
+		const ssize_t result = need;
+		randomGet(buffer, need);
 #elif defined(__PROSPERO__)
-	ssize_t result = need;
-	for (size_t i = 0; i < need && result > 0; i += 64)
-		if (sceRandomGetRandomNumber(buffer + i, std::min<size_t>(64, need - i)) != 0) result = -1;
+		ssize_t result = need;
+		for (size_t i = 0; i < need && result > 0; i += 64)
+			if (sceRandomGetRandomNumber(
+					buffer + i, std::min<size_t>(64, need - i)) != 0)
+				result = -1;
 #elif defined(__ANDROID__) || defined(__wasm__)
-	for (size_t i = 0; i < need; ++i) {
-		buffer[i] ^= rand() & 0xFF; // XXX: Not secure
-	}
-	const ssize_t result = need;
+		for (size_t i = 0; i < need; ++i) {
+			buffer[i] ^= rand() & 0xFF; // XXX: Not secure
+		}
+		const ssize_t result = need;
 #else
-	const ssize_t result = getrandom(buffer, need, 0);
+		const ssize_t result = getrandom(buffer, need, 0);
 #endif
-	if (result > 0) {
-		machine.copy_to_guest(g_addr, buffer, result);
+		if (result <= 0) {
+			if (copied == 0) machine.set_result(result);
+			break;
+		}
+		machine.copy_to_guest(guest_dst, buffer, result);
+		copied += (size_t)result;
 		// getrandom() is a slow syscall, penalize it
 		machine.penalize(20'000 * result); // 20K insn per byte
+		if ((size_t)result < need) break;
 	}
-	machine.set_result(result);
+	if (copied != 0 || requested == 0)
+		machine.set_result(copied);
 
 	if constexpr (verbose_syscalls) if (riscv::verbose_syscalls_enabled) {
 		printf("SYSCALL getrandom(addr=0x%lX, len=%ld) = %ld\n",

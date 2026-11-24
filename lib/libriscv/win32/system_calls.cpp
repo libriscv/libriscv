@@ -3,6 +3,7 @@
 #include <libriscv/threads.hpp>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <io.h>
 
 typedef std::make_signed_t<size_t> ssize_t;
@@ -819,21 +820,28 @@ static void syscall_getrandom(Machine<W>& machine)
 	const auto g_len  = machine.sysarg(1);
 
 	std::array<uint8_t, 256> buffer;
-	if (g_len > buffer.size()) {
-		machine.set_result(-1);
-		return;
-	}
-	const size_t need = std::min((size_t)g_len, buffer.size());
-	for (size_t i = 0; i < need; ++i) {
-		buffer[i] ^= rand() & 0xFF; // XXX: Not secure
-	}
-	const ssize_t result = need;
-	if (result > 0) {
-		machine.copy_to_guest(g_addr, buffer.data(), result);
+	constexpr size_t max_request = 32 * 1024 * 1024 - 1;
+	const size_t requested = g_len > max_request ? max_request :
+		static_cast<size_t>(g_len);
+	size_t copied = 0;
+	const auto guest_address_max = std::numeric_limits<address_type<W>>::max();
+	while (copied < requested) {
+		const address_type<W> guest_dst =
+			g_addr + static_cast<address_type<W>>(copied);
+		if (guest_dst < g_addr) break;
+		size_t need = std::min(requested - copied, buffer.size());
+		const auto address_room = guest_address_max - guest_dst;
+		if (address_room < need - 1)
+			need = static_cast<size_t>(address_room) + 1;
+		for (size_t i = 0; i < need; ++i)
+			buffer[i] = static_cast<uint8_t>(rand() & 0xFF); // XXX: Not secure
+		machine.copy_to_guest(guest_dst, buffer.data(), need);
+		copied += need;
 		// getrandom() is a slow syscall, penalize it
-		machine.penalize(20'000 * result); // 20K insn per byte
+		machine.penalize(20'000 * need); // 20K insn per byte
 	}
-	machine.set_result(result);
+	if (copied != 0 || requested == 0)
+		machine.set_result(copied);
 
 	if constexpr (verbose_syscalls) {
 		printf("SYSCALL getrandom(addr=0x%lX, len=%ld) = %ld\n",
