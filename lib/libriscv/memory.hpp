@@ -96,6 +96,7 @@ namespace riscv
 		void madvise_dontneed(address_t addr, size_t len, bool ignore_protections);
 		void refault_file_page_if_needed(address_t addr);
 		void refault_file_range_if_needed(address_t addr, size_t len);
+		const uint8_t& file_refault_pending_ref() const noexcept { return m_file_refault_pending; }
 		/* Fill an array of buffers pointing to complete guest virtual [addr, len].
 		   Throws an exception if there was a protection violation.
 		   Returns the number of buffers filled, or an exception if not enough. */
@@ -459,7 +460,7 @@ namespace riscv
 		// Memory map cache
 		MMapCache<W> m_mmap_cache;
 		std::vector<FileMapping> m_file_mappings;
-		bool m_file_refault_pending = false;
+		uint8_t m_file_refault_pending = 0;
 
 #ifdef RISCV_VIRTUAL_PAGING
 		page_fault_cb_t m_page_fault_handler = nullptr;

@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 using namespace riscv;
+extern std::vector<uint8_t> build_and_load(const std::string&, const std::string&, bool);
 
 static const std::vector<uint8_t> empty_binary;
 static constexpr address_type<RISCV64> guest_addr = 0x100000;
@@ -60,6 +61,43 @@ static void map_test_page(Machine<RISCV64>& machine, int fd,
 	REQUIRE(backing != nullptr);
 	machine.memory.register_file_mapping(guest_addr, size, 0, std::move(backing));
 }
+
+static std::vector<uint8_t> build_file_refault_probe(bool store)
+{
+	std::string body = "li t0, 0x100000\n";
+	if (store)
+		body += "li t1, 69\nsb t1, 0(t0)\n";
+	body += "lb a0, 0(t0)\n.word 0x7ff00073\n";
+	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\".option rvc\\n";
+	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
+	source += "\"); }";
+	return build_and_load(source,
+		"-nostdlib -static -march=rv64gc -mabi=lp64d -Wl,-e,_start", false);
+}
+
+static MachineOptions<RISCV64> file_refault_options(bool translated)
+{
+	MachineOptions<RISCV64> options;
+	options.memory_max = 16u << 20;
+	options.use_shared_execute_segments = false;
+#ifdef RISCV_BINARY_TRANSLATION
+	options.translate_enabled = translated;
+	options.translation_cache = false;
+	options.translate_enable_embedded = false;
+#endif
+#ifdef RISCV_ASMJIT
+	options.asmjit_enabled = translated;
+#endif
+	(void)translated;
+	return options;
+}
+
+constexpr bool translated_file_refault_supported =
+#if defined(RISCV_BINARY_TRANSLATION) || defined(RISCV_ASMJIT)
+	true;
+#else
+	false;
+#endif
 
 TEST_CASE("file backing retention distinguishes unsupported fds from errors",
 	"[Memory][madvise-file-backed]")
@@ -168,6 +206,53 @@ TEST_CASE("MADV_DONTNEED discards a dirty private page and keeps split mappings 
 	machine.memory.madvise_dontneed(guest_addr, original.size(), true);
 	CHECK(guest_read_byte(machine, guest_addr) == 0x7f);
 	CHECK(guest_read_byte(machine, guest_addr + Page::size()) == 0);
+}
+
+TEST_CASE("translated reads refault file data after MADV_DONTNEED",
+	"[Memory][madvise-file-backed][translation]")
+{
+	const auto binary = build_file_refault_probe(false);
+	for (bool translated : {false, true}) {
+		if (translated && !translated_file_refault_supported) continue;
+		TemporaryFile file;
+		REQUIRE(file.fd >= 0);
+		std::array<uint8_t, Page::size()> original;
+		original.fill(0x7f);
+		write_file(file.fd, original.data(), original.size());
+
+		Machine<RISCV64> machine(binary, file_refault_options(translated));
+		map_test_page(machine, file.fd, original.data(), original.size());
+		machine.memory.madvise_dontneed(guest_addr, Page::size(), true);
+		const uint8_t updated = 0x42;
+		REQUIRE(::pwrite(file.fd, &updated, sizeof(updated), 0) == 1);
+		REQUIRE(machine.simulate<false>(10'000));
+		CHECK(machine.cpu.reg(REG_ARG0) == updated);
+	}
+}
+
+TEST_CASE("translated stores refault before modifying file-backed pages",
+	"[Memory][madvise-file-backed][translation]")
+{
+	const auto binary = build_file_refault_probe(true);
+	for (bool translated : {false, true}) {
+		if (translated && !translated_file_refault_supported) continue;
+		TemporaryFile file;
+		REQUIRE(file.fd >= 0);
+		std::array<uint8_t, Page::size()> original;
+		original.fill(0x7f);
+		write_file(file.fd, original.data(), original.size());
+
+		Machine<RISCV64> machine(binary, file_refault_options(translated));
+		map_test_page(machine, file.fd, original.data(), original.size());
+		machine.memory.madvise_dontneed(guest_addr, Page::size(), true);
+		const uint8_t updated = 0x42;
+		REQUIRE(::pwrite(file.fd, &updated, sizeof(updated), 0) == 1);
+		REQUIRE(machine.simulate<false>(10'000));
+		CHECK(machine.cpu.reg(REG_ARG0) == 69);
+		uint8_t actual = 0;
+		machine.memory.memcpy_out(&actual, guest_addr, sizeof(actual));
+		CHECK(actual == 69);
+	}
 }
 
 #ifdef RISCV_VIRTUAL_PAGING

@@ -14,6 +14,10 @@ static void add_mman_syscalls()
 	[] (Machine<W>& machine) {
 		const auto addr = machine.sysarg(0);
 		const auto len  = machine.sysarg(1);
+		if (addr % Page::size() != 0) {
+			machine.set_result(-EINVAL);
+			return;
+		}
 		if (addr + len < addr)
 			throw MachineException(SYSTEM_CALL_FAILED, "munmap() arguments overflow");
 		machine.memory.remove_file_mappings(addr, len);

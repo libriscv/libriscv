@@ -442,6 +442,8 @@ VISIBLE const int32_t arena_offset_constant = RISCV_ARENA_OFFSET;
 INTERNAL static int32_t ic_offset;
 #define INS_COUNTER(cpu) (*(uint64_t *)((char *)(cpu) + ic_offset))
 #define MAX_COUNTER(cpu) (*(uint64_t *)((char *)(cpu) + ic_offset + 8))
+INTERNAL static int32_t refault_pending_offset;
+#define FILE_REFAULT_PENDING(cpu) (*(uint8_t *)((char *)(cpu) + refault_pending_offset))
 
 typedef struct {
 	addr_t pageno;
@@ -573,13 +575,15 @@ static
 #else
 extern VISIBLE
 #endif
-void init(struct CallbackTable* table, int32_t arena_off, int32_t ins_counter_off, int32_t rdcache_off)
+void init(struct CallbackTable* table, int32_t arena_off, int32_t ins_counter_off,
+	int32_t rdcache_off, int32_t refault_pending_off)
 {
 	api = *table;
 	arena_offset = arena_off;
 	ic_offset = ins_counter_off;
 	//max_ic_offset = ins_counter_off + sizeof(uint64_t);
 	rdcache_offset = rdcache_off;
+	refault_pending_offset = refault_pending_off;
 }
 
 typedef struct {

@@ -156,7 +156,7 @@ namespace riscv
 #endif
 
 	template <int W>
-	using binary_translation_init_func = void (*)(const CallbackTable<W>&, int32_t, int32_t, int32_t);
+	using binary_translation_init_func = void (*)(const CallbackTable<W>&, int32_t, int32_t, int32_t, int32_t);
 	template <int W>
 	static CallbackTable<W> create_bintr_callback_table(DecodedExecuteSegment<W>&);
 
@@ -428,6 +428,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 					throw MachineException(INVALID_PROGRAM, "Invalid counter offsets in emulator");
 				}
 				const int32_t arena_offset = uintptr_t(&machine().memory.memory_arena_ptr_ref()) - uintptr_t(&m);
+				const int32_t refault_pending_offset = uintptr_t(&machine().memory.file_refault_pending_ref()) - uintptr_t(&m);
 #ifdef RISCV_VIRTUAL_PAGING
 				const int32_t rdcache_offset = uintptr_t(&machine().memory.rdcache()) - uintptr_t(&m);
 #else
@@ -435,7 +436,7 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 #endif
 
 				translation.init_func(create_bintr_callback_table(exec),
-					arena_offset, ins_counter_offset, rdcache_offset);
+					arena_offset, ins_counter_offset, rdcache_offset, refault_pending_offset);
 
 				if (options.verbose_loader) {
 					printf("libriscv: Found embedded translation for hash %08X, %u/%u mappings\n",
@@ -1688,6 +1689,7 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void*
 		throw MachineException(INVALID_PROGRAM, "Invalid counter offsets in emulator");
 	}
 	const int32_t arena_offset = uintptr_t(&machine.memory.memory_arena_ptr_ref()) - uintptr_t(&machine);
+	const int32_t refault_pending_offset = uintptr_t(&machine.memory.file_refault_pending_ref()) - uintptr_t(&machine);
 
 	// Translations bake the arena offset in as a constant (RISCV_ARENA_OFFSET). It
 	// is covered by the translation hash, so a mismatch should be impossible -- but
@@ -1704,7 +1706,8 @@ bool CPU<W>::initialize_translated_segment(DecodedExecuteSegment<W>& exec, void*
 	const int32_t rdcache_offset = 0;
 #endif
 
-	func(create_bintr_callback_table<W>(exec), arena_offset, ins_counter_offset, rdcache_offset);
+	func(create_bintr_callback_table<W>(exec), arena_offset, ins_counter_offset, rdcache_offset,
+		refault_pending_offset);
 
 	return true;
 }

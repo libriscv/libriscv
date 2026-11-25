@@ -822,7 +822,10 @@ struct Emitter
 		for (const auto& local : locals)
 			add_code("  " + local);
 
-		std::string cond = guard;
+		// Raw arena copies bypass lazy file-page refault handling.
+		std::string cond = "!FILE_REFAULT_PENDING(cpu)";
+		if (!guard.empty())
+			cond += " && (" + guard + ")";
 		if (this->vector_memory_needs_bounds_check()) {
 			// The longest run still fits within the arena over-allocation, so
 			// a readable/writable start address covers all of it.
@@ -830,7 +833,7 @@ struct Emitter
 				"A vector register group must fit within the arena over-allocation");
 			const std::string bounds =
 				std::string(info.is_store ? "ARENA_WRITABLE(" : "ARENA_READABLE(") + addr + ")";
-			cond = cond.empty() ? bounds : "(" + cond + ") && " + bounds;
+			cond += " && " + bounds;
 		}
 		if (!cond.empty())
 			add_code("if (LIKELY(" + cond + ")) {");
@@ -1349,6 +1352,21 @@ struct Emitter
 		}
 	}
 	template <typename T>
+	std::string memory_load_api_type(const std::string& address)
+	{
+		if (std::is_same<T, int8_t>::value || std::is_same<T, uint8_t>::value) {
+			return "api.mem_ld8(cpu, " + address + ")";
+		} else if (std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value) {
+			return "api.mem_ld16(cpu, " + address + ")";
+		} else if (std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value) {
+			return "api.mem_ld32(cpu, " + address + ")";
+		} else if (std::is_same<T, int64_t>::value || std::is_same<T, uint64_t>::value) {
+			return "api.mem_ld64(cpu, " + address + ")";
+		} else {
+			throw MachineException(INVALID_PROGRAM, "Unsupported memory load type");
+		}
+	}
+	template <typename T>
 	void memory_load(std::string dst, std::string type, int reg, int32_t imm)
 	{
 		if (uses_flat_memory_arena()) {
@@ -1358,15 +1376,23 @@ struct Emitter
 			}
 			constexpr bool good = riscv::encompassing_Nbit_arena != 0;
 			if (absolute_vaddr != 0 && absolute_vaddr >= 0x1000 && (good || absolute_vaddr + sizeof(T) <= tinfo.arena_size)) {
-				add_code(
-					dst + " = " + arena_at_fixed(type, absolute_vaddr) + ";"
-				);
+				const auto guest_addr = hex_address(absolute_vaddr) + "LL";
+				add_code("if (UNLIKELY(FILE_REFAULT_PENDING(cpu))) {",
+					"  " + dst + " = (" + type + ")" + memory_load_api_type<T>(guest_addr) + ";",
+					"} else {",
+					"  " + dst + " = " + arena_at_fixed(type, absolute_vaddr) + ";",
+					"}");
 				return;
 			}
 			if (auto tracked_value = get_tracked_register(reg)) {
 				const address_t vaddr = *tracked_value + imm;
 				if (vaddr >= 0x1000 && vaddr + sizeof(T) <= tinfo.arena_size) {
-					add_code(dst + " = " + arena_at_fixed(type, vaddr) + ";");
+					const auto guest_addr = hex_address(vaddr) + "LL";
+					add_code("if (UNLIKELY(FILE_REFAULT_PENDING(cpu))) {",
+						"  " + dst + " = (" + type + ")" + memory_load_api_type<T>(guest_addr) + ";",
+						"} else {",
+						"  " + dst + " = " + arena_at_fixed(type, vaddr) + ";",
+						"}");
 					return;
 				}
 			}
@@ -1376,13 +1402,19 @@ struct Emitter
 		const std::string access = "*(" + guest_access_type(type) + "*)";
 		if (skip_load_bounds_check(reg, imm, sizeof(T)))
 		{
-			add_code(dst + " = " + access + arena_at(address) + ";");
+			add_code("if (UNLIKELY(FILE_REFAULT_PENDING(cpu))) {",
+				"  " + dst + " = (" + type + ")" + memory_load_api_type<T>(address) + ";",
+				"} else {",
+				"  " + dst + " = " + access + arena_at(address) + ";",
+				"}");
 		}
 		else if (uses_flat_memory_arena()) {
 			add_code(
-				"if (LIKELY(ARENA_READABLE(" + address + ")))",
-					dst + " = " + access + arena_at(address) + ";",
-				"else {");
+				"if (UNLIKELY(FILE_REFAULT_PENDING(cpu))) {",
+				"  " + dst + " = (" + type + ")" + memory_load_api_type<T>(address) + ";",
+				"} else if (LIKELY(ARENA_READABLE(" + address + "))) {",
+				"  " + dst + " = " + access + arena_at(address) + ";",
+				"} else {");
 			if (!tinfo.use_virtual_paging_fallback) {
 				add_code("  cpu->pc = " + hex_address(this->pc()) + "LL; goto exception;",
 						"}");
@@ -1418,12 +1450,30 @@ struct Emitter
 			throw MachineException(INVALID_PROGRAM, "Unsupported memory store type");
 		}
 	}
+	std::string memory_store_api_type(const std::string& type, const std::string& address, const std::string& value)
+	{
+		if (type == "int8_t" || type == "uint8_t") {
+			return "api.mem_st8(cpu, " + address + ", " + value + ");";
+		} else if (type == "int16_t" || type == "uint16_t") {
+			return "api.mem_st16(cpu, " + address + ", " + value + ");";
+		} else if (type == "int32_t" || type == "uint32_t") {
+			return "api.mem_st32(cpu, " + address + ", " + value + ");";
+		} else if (type == "int64_t" || type == "uint64_t") {
+			return "api.mem_st64(cpu, " + address + ", " + value + ");";
+		} else {
+			throw MachineException(INVALID_PROGRAM, "Unsupported memory store type");
+		}
+	}
 	// TCC truncates 64-bit addresses; materialize pointer in a function-scope scratch.
 	void fixed_store(const std::string& type, address_t address, const std::string& value)
 	{
 		this->m_used_fixed_store = true;
-		add_code("mstore = (char*)&" + arena_at_fixed(type, address) + ";",
-			"*(" + guest_access_type(type) + "*)mstore = " + value + ";");
+		add_code("if (UNLIKELY(FILE_REFAULT_PENDING(cpu))) {",
+			"  " + memory_store_api_type(type, hex_address(address) + "LL", value),
+			"} else {",
+			"  mstore = (char*)&" + arena_at_fixed(type, address) + ";",
+			"  *(" + guest_access_type(type) + "*)mstore = " + value + ";",
+			"}");
 	}
 	void memory_store(std::string type, size_t size, int reg, int32_t imm, std::string value)
 	{
@@ -1450,13 +1500,19 @@ struct Emitter
 		const std::string access = "*(" + guest_access_type(type) + "*)";
 		if (skip_store_bounds_check(reg, imm, size))
 		{
-			add_code(access + arena_at(address) + " = " + value + ";");
+			add_code("if (UNLIKELY(FILE_REFAULT_PENDING(cpu))) {",
+				"  " + memory_store_api_type(type, address, value),
+				"} else {",
+				"  " + access + arena_at(address) + " = " + value + ";",
+				"}");
 		}
 		else if (uses_flat_memory_arena()) {
 			add_code(
-				"if (LIKELY(ARENA_WRITABLE(" + address + ")))",
+				"if (UNLIKELY(FILE_REFAULT_PENDING(cpu))) {",
+				"  " + memory_store_api_type(type, address, value),
+				"} else if (LIKELY(ARENA_WRITABLE(" + address + "))) {",
 				"  " + access + arena_at(address) + " = " + value + ";",
-				"else {");
+				"} else {");
 			if (!tinfo.use_virtual_paging_fallback) {
 				add_code("  cpu->pc = " + hex_address(this->pc()) + "LL; goto exception;",
 						"}");

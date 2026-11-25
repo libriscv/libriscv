@@ -162,15 +162,7 @@ namespace riscv
 	{
 		if (len == 0 || address_t(addr + len) < addr)
 			return;
-		// VM mapping changes operate on complete pages, even when their byte range is partial.
-		address_t begin = addr;
-		const address_t begin_tail = begin & PageMask;
-		if (begin_tail != 0) {
-			const address_t increment = Page::size() - begin_tail;
-			if (begin > std::numeric_limits<address_t>::max() - increment)
-				return;
-			begin += increment;
-		}
+		// Callers pass page-aligned starts; round the end as Linux does for mapping ranges.
 		address_t end = addr + len;
 		const address_t end_tail = end & PageMask;
 		if (end_tail != 0) {
@@ -178,18 +170,18 @@ namespace riscv
 			end = end > std::numeric_limits<address_t>::max() - increment
 				? std::numeric_limits<address_t>::max() : end + increment;
 		}
-		if (begin >= end)
+		if (addr >= end)
 			return;
 		std::vector<FileMapping> remaining;
 		remaining.reserve(m_file_mappings.size() + 1);
 		for (const auto& mapping : m_file_mappings) {
 			const address_t map_end = mapping.addr + mapping.size;
-			if (map_end <= begin || mapping.addr >= end) {
+			if (map_end <= addr || mapping.addr >= end) {
 				remaining.push_back(mapping);
 				continue;
 			}
-			if (mapping.addr < begin)
-				remaining.push_back({mapping.addr, size_t(begin - mapping.addr),
+			if (mapping.addr < addr)
+				remaining.push_back({mapping.addr, size_t(addr - mapping.addr),
 					mapping.file_offset, mapping.backing, mapping.refault_pending});
 			if (map_end > end)
 				remaining.push_back({end, size_t(map_end - end),
