@@ -68,10 +68,10 @@ static std::vector<uint8_t> build_file_refault_probe(bool store)
 	if (store)
 		body += "li t1, 69\nsb t1, 0(t0)\n";
 	body += "lb a0, 0(t0)\n.word 0x7ff00073\n";
-	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\"";
+	std::string source = "__attribute__((naked)) void refault_entry(void) { __asm__ volatile(\"";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 	source += "\"); }";
-	return build_and_load(source, "-nostdlib -nostartfiles -static -Wl,-e,_start", false);
+	return build_and_load(source, "-nostdlib -static -Wl,-e,refault_entry", false);
 }
 
 static std::vector<uint8_t> build_file_refault_fp_probe(bool store_without_load)
@@ -82,10 +82,10 @@ static std::vector<uint8_t> build_file_refault_fp_probe(bool store_without_load)
 	else
 		body += ".word 0x0002a507\n"; // flw fa0, 0(t0)
 	body += ".word 0x00a2a227\n.word 0x7ff00073\n"; // fsw fa0, 4(t0); ecall
-	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\"";
+	std::string source = "__attribute__((naked)) void refault_entry(void) { __asm__ volatile(\"";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 	source += "\"); }";
-	return build_and_load(source, "-nostdlib -nostartfiles -static -Wl,-e,_start", false);
+	return build_and_load(source, "-nostdlib -static -Wl,-e,refault_entry", false);
 }
 
 static MachineOptions<RISCV64> file_refault_options(bool translated)
