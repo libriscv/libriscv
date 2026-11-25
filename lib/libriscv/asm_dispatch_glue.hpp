@@ -209,6 +209,7 @@ static uint32_t asm_call(AsmDispatchContext* ctx, DecoderData<W>* entry, uint32_
 				(Counting && ctx->counter > entry->instruction_count())
 					? ctx->counter - entry->instruction_count() : 0,
 				Counting ? ctx->max_counter : ~0ULL, pc };
+			state.file_refault_pending = &machine.memory.file_refault_pending_ref();
 			const auto* e = entry;
 			do {
 				exec.unchecked_asmjit_mapping_at(e->instr)(cpu, &state);

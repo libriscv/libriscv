@@ -68,11 +68,24 @@ static std::vector<uint8_t> build_file_refault_probe(bool store)
 	if (store)
 		body += "li t1, 69\nsb t1, 0(t0)\n";
 	body += "lb a0, 0(t0)\n.word 0x7ff00073\n";
-	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\".option rvc\\n";
+	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\"";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 	source += "\"); }";
-	return build_and_load(source,
-		"-nostdlib -static -march=rv64gc -mabi=lp64d -Wl,-e,_start", false);
+	return build_and_load(source, "-nostdlib -static -Wl,-e,_start", false);
+}
+
+static std::vector<uint8_t> build_file_refault_fp_probe(bool store_without_load)
+{
+	std::string body = "li t0, 0x100000\n";
+	if (store_without_load)
+		body += "li t1, 0x42434445\n.word 0xf0030553\n"; // fmv.w.x fa0, t1
+	else
+		body += ".word 0x0002a507\n"; // flw fa0, 0(t0)
+	body += ".word 0x00a2a227\n.word 0x7ff00073\n"; // fsw fa0, 4(t0); ecall
+	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\"";
+	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
+	source += "\"); }";
+	return build_and_load(source, "-nostdlib -static -Wl,-e,_start", false);
 }
 
 static MachineOptions<RISCV64> file_refault_options(bool translated)
@@ -252,6 +265,31 @@ TEST_CASE("translated stores refault before modifying file-backed pages",
 		uint8_t actual = 0;
 		machine.memory.memcpy_out(&actual, guest_addr, sizeof(actual));
 		CHECK(actual == 69);
+	}
+}
+
+TEST_CASE("translated floating-point accesses refault file data",
+	"[Memory][madvise-file-backed][translation]")
+{
+	const std::array<uint8_t, 4> updated {0x45, 0x44, 0x43, 0x42};
+	for (bool store_without_load : {false, true}) {
+		const auto binary = build_file_refault_fp_probe(store_without_load);
+		for (bool translated : {false, true}) {
+			TemporaryFile file;
+			REQUIRE(file.fd >= 0);
+			std::array<uint8_t, Page::size()> original;
+			original.fill(0x7f);
+			write_file(file.fd, original.data(), original.size());
+
+			Machine<RISCV64> machine(binary, file_refault_options(translated));
+			map_test_page(machine, file.fd, original.data(), original.size());
+			machine.memory.madvise_dontneed(guest_addr, Page::size(), true);
+			REQUIRE(::pwrite(file.fd, updated.data(), updated.size(), 0)
+				== ssize_t(updated.size()));
+			REQUIRE(machine.simulate<false>(10'000));
+			for (size_t i = 0; i < updated.size(); i++)
+				CHECK(guest_read_byte(machine, guest_addr + 4 + i) == updated[i]);
+		}
 	}
 }
 

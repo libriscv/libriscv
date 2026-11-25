@@ -221,6 +221,7 @@ INSTRUCTION(RV32I_BC_ASMJIT, asmjit_function) {
 	counter.increment_counter(-int64_t(decoder->instruction_count()));
 begin_asmjit_function:
 	AjState<W> state { counter.value(), counter.max(), pc };
+	state.file_refault_pending = &MACHINE().memory.file_refault_pending_ref();
 retry_asmjit_function:
 	// Invoke asmjit-generated code. Re-entering here without rebuilding state is
 	// correct: the callee already wrote counter, max_counter and pc into it.
