@@ -4,6 +4,8 @@
 #include <libriscv/machine.hpp>
 extern std::vector<uint8_t> build_and_load(const std::string& code,
 	const std::string& args = "-O2 -static", bool cpp = false);
+extern std::vector<uint8_t> load_file(const std::string& filename);
+static const std::string cwd {SRCDIR};
 static const uint64_t MAX_MEMORY = 8ul << 20; /* 8MB */
 static const uint64_t MAX_INSTRUCTIONS = 10'000'000ul;
 using namespace riscv;
@@ -227,3 +229,41 @@ TEST_CASE("Count using EBREAK", "[Compute]")
 	else
 		REQUIRE(machine.return_value<long>() == 46368L);
 }
+
+#if !defined(__ANDROID__)
+template <int W>
+static void check_getrandom_size(const std::string& elf)
+{
+	const auto binary = load_file(elf);
+	riscv::Machine<W> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+	const auto buffer = machine.memory.mmap_allocate(4096);
+	REQUIRE(buffer != 0);
+
+	auto& cpu = machine.cpu;
+	cpu.reg(REG_ARG0) = buffer;
+	cpu.reg(REG_ARG1) = 256;
+	cpu.reg(REG_ARG2) = 0;
+	machine.system_call(278);
+	REQUIRE(machine.template return_value<int>() == 256);
+
+	cpu.reg(REG_ARG0) = buffer;
+	cpu.reg(REG_ARG1) = 257;
+	cpu.reg(REG_ARG2) = 0;
+	machine.system_call(278);
+	const auto result = machine.template return_value<int>();
+	CHECK(result > 0);
+	CHECK(result <= 257);
+}
+
+TEST_CASE("getrandom accepts valid requests larger than "
+	"the host scratch buffer", "[LinuxSyscall]")
+{
+	SECTION("RV32") {
+		check_getrandom_size<RISCV32>(cwd + "/elf/newlib-rv32gb-hello-world");
+	}
+	SECTION("RV64") {
+		check_getrandom_size<RISCV64>(cwd + "/elf/newlib-rv64gb-hello-world");
+	}
+}
+#endif
