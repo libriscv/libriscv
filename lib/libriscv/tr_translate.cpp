@@ -475,6 +475,12 @@ int CPU<W>::load_translation(const MachineOptions<W>& options,
 	if (!options.translate_enabled || exec.is_binary_translated())
 		return (has_cross_compile) ? 1 : -1;
 
+	// Wasm emits a module at runtime and bypasses the shared-object cache.
+	if (options.translate_backend == TranslateBackend::Wasm) {
+		if (filename) *filename = std::string(filebuffer);
+		return 1;
+	}
+
 	void* dylib = nullptr;
 	if (translation_cache_enabled(options.translation_cache))
 	{
@@ -590,7 +596,6 @@ void CPU<W>::binary_translate(const MachineOptions<W>& options, DecodedExecuteSe
 {
 	// Run with VERBOSE=1 to see command and output
 	const bool verbose = options.verbose_loader;
-	const bool trace_instructions = options.translate_trace;
 	bool is_libtcc = libtcc_enabled;
 	if constexpr (libtcc_enabled) {
 		// If there is an embeddable code option, we can't enable libtcc
@@ -601,6 +606,101 @@ void CPU<W>::binary_translate(const MachineOptions<W>& options, DecodedExecuteSe
 			}
 		}
 	}
+
+	TransBlocks<W> discovered;
+	this->discover_translation_blocks(options, exec, discovered, is_libtcc, output.t0);
+	auto& blocks = discovered.blocks;
+	const size_t icounter = discovered.icounter;
+	const address_t gp = discovered.gp;
+	TIME_POINT(t3);
+
+	auto& dlmappings = output.mappings;
+	extern const std::string bintr_code;
+	output.code = std::make_shared<std::string>(bintr_code);
+#ifdef RISCV_EXT_VECTOR
+	*output.code += VectorLayoutProbe::layout_checks<W>();
+#endif
+
+	for (auto& block : blocks)
+	{
+		block.blocks = &blocks;
+		auto result = emit(*output.code, block);
+
+		for (auto& mapping : result) {
+			dlmappings.push_back(std::move(mapping));
+		}
+	}
+	// Export guest entry addresses and their handler indices.
+	auto& footer = output.footer;
+	footer += "VISIBLE const uint32_t no_mappings = "
+		+ std::to_string(dlmappings.size()) + ";\n";
+	footer += R"V0G0N(
+struct Mapping {
+	addr_t   addr;
+	unsigned mapping_index;
+};
+VISIBLE const struct Mapping mappings[] = {
+)V0G0N";
+
+	std::unordered_map<std::string, unsigned> mapping_indices;
+	std::vector<const std::string*> handlers;
+	handlers.reserve(blocks.size());
+
+	for (const auto& mapping : dlmappings)
+	{
+		unsigned mapping_index = 0;
+		auto it = mapping_indices.find(mapping.symbol);
+		if (it == mapping_indices.end()) {
+			mapping_index = handlers.size();
+			mapping_indices.emplace(mapping.symbol, mapping_index);
+			handlers.push_back(&mapping.symbol);
+		} else {
+			mapping_index = it->second;
+		}
+
+		char buffer[128];
+		snprintf(buffer, sizeof(buffer),
+			"{0x%lX, %u},\n",
+			(long)mapping.addr, mapping_index);
+		footer.append(buffer);
+	}
+	footer += "};\nVISIBLE const uint32_t no_handlers = "
+		+ std::to_string(mapping_indices.size()) + ";\n"
+		+ "VISIBLE const void* unique_mappings[] = {\n";
+
+	if (handlers.size() != blocks.size())
+		throw MachineException(INVALID_PROGRAM, "Mismatch in unique mappings");
+	for (auto* handler : handlers) {
+		footer += "    " + *handler + ",\n";
+	}
+	footer += "};\n";
+
+	if (options.translate_timing) {
+		TIME_POINT(t4);
+		printf(">> Code generation took %ld ns\n", nanodiff(t3, t4));
+	}
+
+	if (verbose) {
+		printf("libriscv: Emitted %zu accelerated instructions, %zu blocks and %zu functions. GP=0x%lX\n",
+			icounter, blocks.size(), dlmappings.size(), (long) gp);
+		std::vector<unsigned> entries;
+		entries.resize(blocks.size());
+		for (auto& mapping : dlmappings) {
+			const unsigned index = mapping_indices.at(mapping.symbol);
+			entries.at(index)++;
+		}
+		for (unsigned i = 0; i < entries.size(); ++i) {
+			printf("libriscv: %u mappings for %s\n", entries[i], handlers[i]->c_str());
+		}
+	}
+}
+
+template <int W>
+void CPU<W>::discover_translation_blocks(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec,
+	TransBlocks<W>& out, bool is_libtcc, timespec t0) const
+{
+	const bool verbose = options.verbose_loader;
+	const bool trace_instructions = options.translate_trace;
 
 	const address_t basepc    = exec.exec_begin();
 	const address_t endbasepc = exec.exec_end();
@@ -640,12 +740,12 @@ if constexpr (SCAN_FOR_GP) {
 	} // iterator
 	if (options.translate_timing) {
 		TIME_POINT(t1);
-		printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(output.t0, t1), (long)gp);
+		printf(">> GP scan took %ld ns, GP=0x%lX\n", nanodiff(t0, t1), (long)gp);
 	}
 } // SCAN_FOR_GP
 
 	// EBREAK locations
-	std::unordered_set<address_type<W>> ebreak_locations;
+	auto& ebreak_locations = out.ebreak_locations;
 	for (auto& loc : options.ebreak_locations) {
 		address_t addr = 0;
 		if (std::holds_alternative<address_type<W>>(loc))
@@ -664,9 +764,9 @@ if constexpr (SCAN_FOR_GP) {
 	TIME_POINT(t2);
 	const size_t ITS_TIME_TO_SPLIT = (is_libtcc) ? 5'000 : std::max(1u, options.translate_block_split);
 	size_t icounter = 0;
-	std::unordered_set<address_type<W>> global_jump_locations;
-	std::unordered_map<address_type<W>, std::vector<address_type<W>>> return_locations;
-	std::vector<TransInfo<W>> blocks;
+	auto& global_jump_locations = out.global_jump_locations;
+	auto& return_locations = out.return_locations;
+	auto& blocks = out.blocks;
 
 	// Insert the ELF entry point as the first global jump location
 	const auto elf_entry = machine().memory.start_address();
@@ -883,90 +983,8 @@ if constexpr (SCAN_FOR_GP) {
 	if (options.translate_timing) {
 		printf(">> Code block detection %ld ns\n", nanodiff(t2, t3));
 	}
-
-	// Code generation
-	auto& dlmappings = output.mappings;
-	extern const std::string bintr_code;
-	output.code = std::make_shared<std::string>(bintr_code);
-#ifdef RISCV_EXT_VECTOR
-	*output.code += VectorLayoutProbe::layout_checks<W>();
-#endif
-
-	for (auto& block : blocks)
-	{
-		block.blocks = &blocks;
-		auto result = emit(*output.code, block);
-
-		for (auto& mapping : result) {
-			dlmappings.push_back(std::move(mapping));
-		}
-	}
-	// Append all instruction handler -> dl function mappings
-	// to the footer used by shared libraries
-	auto& footer = output.footer;
-	footer += "VISIBLE const uint32_t no_mappings = "
-		+ std::to_string(dlmappings.size()) + ";\n";
-	footer += R"V0G0N(
-struct Mapping {
-	addr_t   addr;
-	unsigned mapping_index;
-};
-VISIBLE const struct Mapping mappings[] = {
-)V0G0N";
-
-	std::unordered_map<std::string, unsigned> mapping_indices;
-	std::vector<const std::string*> handlers;
-	handlers.reserve(blocks.size());
-
-	for (const auto& mapping : dlmappings)
-	{
-		// Create map of unique mappings
-		unsigned mapping_index = 0;
-		auto it = mapping_indices.find(mapping.symbol);
-		if (it == mapping_indices.end()) {
-			mapping_index = handlers.size();
-			mapping_indices.emplace(mapping.symbol, mapping_index);
-			handlers.push_back(&mapping.symbol);
-		} else {
-			mapping_index = it->second;
-		}
-
-		char buffer[128];
-		snprintf(buffer, sizeof(buffer), 
-			"{0x%lX, %u},\n",
-			(long)mapping.addr, mapping_index);
-		footer.append(buffer);
-	}
-	footer += "};\nVISIBLE const uint32_t no_handlers = "
-		+ std::to_string(mapping_indices.size()) + ";\n"
-		+ "VISIBLE const void* unique_mappings[] = {\n";
-
-	// Create array of unique mappings
-	if (handlers.size() != blocks.size())
-		throw MachineException(INVALID_PROGRAM, "Mismatch in unique mappings");
-	for (auto* handler : handlers) {
-		footer += "    " + *handler + ",\n";
-	}
-	footer += "};\n";
-
-	if (options.translate_timing) {
-		TIME_POINT(t4);
-		printf(">> Code generation took %ld ns\n", nanodiff(t3, t4));
-	}
-
-	if (verbose) {
-		printf("libriscv: Emitted %zu accelerated instructions, %zu blocks and %zu functions. GP=0x%lX\n",
-			icounter, blocks.size(), dlmappings.size(), (long) gp);
-		std::vector<unsigned> entries;
-		entries.resize(blocks.size());
-		for (auto& mapping : dlmappings) {
-			const unsigned index = mapping_indices.at(mapping.symbol);
-			entries.at(index)++;
-		}
-		for (unsigned i = 0; i < entries.size(); ++i) {
-			printf("libriscv: %u mappings for %s\n", entries[i], handlers[i]->c_str());
-		}
-	}
+	out.gp = gp;
+	out.icounter = icounter;
 }
 
 template <int W>
@@ -1101,8 +1119,9 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	output.t0 = t0;
 
 	output.defines = create_defines_for(machine(), options);
-	// Live-patching is enabled if the user has provided a callback.
-	const bool live_patch = options.translate_background_callback != nullptr;
+	// Wasm links synchronously before the execute segment is shared.
+	const bool live_patch = options.translate_background_callback != nullptr
+		&& options.translate_backend != TranslateBackend::Wasm;
 
 	// Compilation step
 	std::function<void()> compilation_step =
@@ -1110,6 +1129,11 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	{
 		try {
 			auto* exec = shared_segment.get();
+
+			if (options.translate_backend == TranslateBackend::Wasm) {
+				this->wasm_translate(options, shared_segment);
+				return;
+			}
 
 			this->binary_translate(options, *exec, output);
 
@@ -1238,68 +1262,22 @@ void CPU<W>::try_translate(const MachineOptions<W>& options, const std::string& 
 	}
 }
 
+// Install decoder entries after populating the segment's handler table.
 template <int W>
-void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, const Machine<W>& machine, bool is_libtcc, bool live_patch)
+void CPU<W>::apply_translator_mappings(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec,
+	const std::vector<std::pair<address_type<W>, unsigned>>& mappings, unsigned nhandlers, bool live_patch)
 {
-	TIME_POINT(t11);
-
-	if (!initialize_translated_segment(exec, dylib, machine, is_libtcc))
-	{
-		if constexpr (!libtcc_enabled) {
-			// only warn when translation is not already disabled
-			if (options.verbose_loader) {
-				fprintf(stderr, "libriscv: Could not find dylib init function\n");
-			}
-		}
-		if (dylib != nullptr) {
-			dylib_close(dylib, is_libtcc);
-		}
-		exec.set_binary_translated(nullptr, false);
-		exec.set_background_compiling(false);
-		return;
-	}
-
-	// Map all the functions to instruction handlers
-	const uint32_t* no_mappings = (const uint32_t *)dylib_lookup(dylib, "no_mappings", is_libtcc);
-	const auto* mappings = (const Mapping<W> *)dylib_lookup(dylib, "mappings", is_libtcc);
-	const uint32_t* no_handlers = (const uint32_t *)dylib_lookup(dylib, "no_handlers", is_libtcc);
-	const auto* handlers = (const bintr_block_func<W> *)dylib_lookup(dylib, "unique_mappings", is_libtcc);
-
-	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
-		dylib_close(dylib, is_libtcc);
-		exec.set_binary_translated(nullptr, false);
-		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
-	}
-
-	// After this, we should automatically close the dylib on destruction
-	exec.set_binary_translated(dylib, is_libtcc);
-
 	// A patched copy of the decoder cache, which running threads are switched
 	// over to once every mapping has been applied to it.
 	std::unique_ptr<LivePatchedDecoderCache<W>> patched;
 	if (live_patch)
-		patched = std::make_unique<LivePatchedDecoderCache<W>>(exec, *no_mappings);
-
-	std::unordered_map<bintr_block_func<W>, unsigned> block_indices;
-	const unsigned nmappings = *no_mappings;
-	const unsigned unique_mappings = *no_handlers;
-
-	// Create N+1 mappings, where the last one is a catch-all for invalid mappings
-	auto& exec_mappings = exec.create_mappings(unique_mappings + 1);
-	std::copy(handlers, handlers + unique_mappings, exec_mappings.begin());
-	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
-		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
-	});
+		patched = std::make_unique<LivePatchedDecoderCache<W>>(exec, mappings.size());
 
 	// Apply mappings to decoder cache
-	// NOTE: It is possible to optimize this by applying from the end towards the beginning
-	// and for each mapping, move on to the next mapping when that mappings address is reached.
-	// This way, we can avoid the O(n) search for each mapping, and instead do it in O(1).
-	for (unsigned i = 0; i < nmappings; i++)
+	for (const auto& [addr, mapping_index] : mappings)
 	{
-		const unsigned mapping_index = mappings[i].mapping_index;
-		const auto addr = mappings[i].addr;
-
+		if (mapping_index >= nhandlers)
+			throw MachineException(INVALID_PROGRAM, "Invalid mapping index in binary translation");
 		if (exec.is_within(addr)) {
 		#ifdef RISCV_ASMJIT
 			// The asmjit backend ran first (asmjit_override_bintr) and already
@@ -1312,8 +1290,7 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 					continue;
 			}
 		#endif
-			auto* handler = handlers[mapping_index];
-			if (handler != nullptr)
+			if (exec.mapping_at(mapping_index) != nullptr)
 			{
 				if (live_patch) {
 					// NOTE: If we don't use the patched decoder here, entries
@@ -1354,6 +1331,57 @@ void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegm
 			printf("libriscv: Patched %zu instructions for live-patching\n", patch_count);
 		}
 	}
+}
+
+template <int W>
+void CPU<W>::activate_dylib(const MachineOptions<W>& options, DecodedExecuteSegment<W>& exec, void* dylib, const Machine<W>& machine, bool is_libtcc, bool live_patch)
+{
+	TIME_POINT(t11);
+
+	if (!initialize_translated_segment(exec, dylib, machine, is_libtcc))
+	{
+		if constexpr (!libtcc_enabled) {
+			if (options.verbose_loader) {
+				fprintf(stderr, "libriscv: Could not find dylib init function\n");
+			}
+		}
+		if (dylib != nullptr) {
+			dylib_close(dylib, is_libtcc);
+		}
+		exec.set_binary_translated(nullptr, false);
+		exec.set_background_compiling(false);
+		return;
+	}
+
+	const uint32_t* no_mappings = (const uint32_t *)dylib_lookup(dylib, "no_mappings", is_libtcc);
+	const auto* mappings = (const Mapping<W> *)dylib_lookup(dylib, "mappings", is_libtcc);
+	const uint32_t* no_handlers = (const uint32_t *)dylib_lookup(dylib, "no_handlers", is_libtcc);
+	const auto* handlers = (const bintr_block_func<W> *)dylib_lookup(dylib, "unique_mappings", is_libtcc);
+
+	if (no_mappings == nullptr || mappings == nullptr || *no_mappings > 500000UL) {
+		dylib_close(dylib, is_libtcc);
+		exec.set_binary_translated(nullptr, false);
+		throw MachineException(INVALID_PROGRAM, "Invalid mappings in binary translation program");
+	}
+
+	// Transfer ownership of the shared object to the execute segment.
+	exec.set_binary_translated(dylib, is_libtcc);
+
+	const unsigned nmappings = *no_mappings;
+	const unsigned unique_mappings = *no_handlers;
+
+	// Reserve the final handler slot for invalid mappings.
+	auto& exec_mappings = exec.create_mappings(unique_mappings + 1);
+	std::copy(handlers, handlers + unique_mappings, exec_mappings.begin());
+	exec.set_mapping(unique_mappings, [] (CPU<W>&, uint64_t, uint64_t, address_t) -> bintr_block_returns<W> {
+		throw MachineException(INVALID_PROGRAM, "Translation mapping outside execute area");
+	});
+
+	std::vector<std::pair<address_t, unsigned>> addr_mappings;
+	addr_mappings.reserve(nmappings);
+	for (unsigned i = 0; i < nmappings; i++)
+		addr_mappings.push_back({ mappings[i].addr, mappings[i].mapping_index });
+	apply_translator_mappings(options, exec, addr_mappings, unique_mappings, live_patch);
 
 	if (options.translate_timing) {
 		TIME_POINT(t12);
@@ -1751,6 +1779,17 @@ std::string MachineOptions<W>::translation_filename(const std::string& prefix, u
 	{
 		return (end_time.tv_sec - start_time.tv_sec) * (long)1e9 + (end_time.tv_nsec - start_time.tv_nsec);
 	}
+
+	// Instantiate discover_translation_blocks for wasm/wasm_emit.cpp.
+#ifdef RISCV_32I
+	template void CPU<4>::discover_translation_blocks(const MachineOptions<4>&, DecodedExecuteSegment<4>&, TransBlocks<4>&, bool, timespec) const;
+#endif
+#ifdef RISCV_64I
+	template void CPU<8>::discover_translation_blocks(const MachineOptions<8>&, DecodedExecuteSegment<8>&, TransBlocks<8>&, bool, timespec) const;
+#endif
+#ifdef RISCV_128I
+	template void CPU<16>::discover_translation_blocks(const MachineOptions<16>&, DecodedExecuteSegment<16>&, TransBlocks<16>&, bool, timespec) const;
+#endif
 } // riscv
 
 extern "C" {

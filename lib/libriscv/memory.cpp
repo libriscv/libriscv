@@ -801,6 +801,14 @@ namespace riscv
 		// Reference the same execute segments
 		this->m_main_exec_segment = master.memory.m_main_exec_segment;
 		this->m_exec = master.memory.m_exec;
+#ifdef RISCV_BINARY_TRANSLATION
+		if (m_main_exec_segment && !m_main_exec_segment->attach_translation())
+			throw MachineException(INVALID_PROGRAM, "Execute segment translation is unavailable on this thread");
+		for (const auto& segment : m_exec) {
+			if (segment && !segment->attach_translation())
+				throw MachineException(INVALID_PROGRAM, "Execute segment translation is unavailable on this thread");
+		}
+#endif
 
 		if (options.use_memory_arena) {
 			// A fork references the arena of its master, image and all
