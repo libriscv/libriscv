@@ -243,6 +243,11 @@ static void add_mman_syscalls()
 		const auto old_size = machine.sysarg(1);
 		const auto new_size = machine.sysarg(2);
 		const auto flags    = machine.template sysarg<int>(3);
+		// Linux rounds both mremap sizes to page boundaries.
+		const address_type<W> old_size_rounded =
+			(old_size + PageMask) & ~address_type<W>(PageMask);
+		const address_type<W> new_size_rounded =
+			(new_size + PageMask) & ~address_type<W>(PageMask);
 		SYSPRINT(">>> mremap(addr 0x%lX, len %zu, newsize %zu, flags %#X)\n",
 				(long)old_addr, (size_t)old_size, (size_t)new_size, flags);
 		auto& nextfree = machine.memory.mmap_address();
@@ -251,11 +256,13 @@ static void add_mman_syscalls()
 		if ((flags & LINUX_MREMAP_FIXED) != 0) {
 			// Not supported
 		}
-		else if (old_addr + old_size >= old_addr && old_addr + old_size == nextfree
-			&& old_addr + new_size >= old_addr) {
-			nextfree = old_addr + new_size;
-			if (new_size < old_size)
-				machine.memory.remove_file_mappings(old_addr + new_size, old_size - new_size);
+		else if (old_size_rounded >= old_size && new_size_rounded >= new_size
+			&& old_addr + old_size_rounded >= old_addr && old_addr + old_size_rounded == nextfree
+			&& old_addr + new_size_rounded >= old_addr) {
+			nextfree = old_addr + new_size_rounded;
+			if (new_size_rounded < old_size_rounded)
+				machine.memory.remove_file_mappings(old_addr + new_size_rounded,
+					old_size_rounded - new_size_rounded);
 			machine.set_result(old_addr);
 			return;
 		}
