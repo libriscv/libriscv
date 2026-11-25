@@ -1327,7 +1327,8 @@ static void syscall_nanosleep(Machine<W>& machine)
 
 	struct timespec ts_req;
 	machine.copy_from_guest(&ts_req, g_req, sizeof(ts_req));
-	if (UNLIKELY(ts_req.tv_sec < 0 || ts_req.tv_nsec < 0)) {
+	if (UNLIKELY(ts_req.tv_sec < 0 || ts_req.tv_nsec < 0
+		|| ts_req.tv_nsec >= 1'000'000'000)) {
 		machine.set_result(-EINVAL);
 		return;
 	}

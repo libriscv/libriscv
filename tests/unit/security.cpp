@@ -309,6 +309,28 @@ TEST_CASE("C5: nanosleep is clamped and penalized", "[Security]")
 	REQUIRE(machine.return_value<int>() == -22); // -EINVAL
 }
 
+TEST_CASE("nanosleep rejects out-of-range tv_nsec", "[Security]")
+{
+	const auto binary = load_file(cwd + "/elf/newlib-rv64gb-hello-world");
+
+	riscv::Machine<RISCV64> machine { binary, { .memory_max = MAX_MEMORY } };
+	machine.setup_linux_syscalls(false, false);
+
+	const auto ts_addr = machine.memory.mmap_allocate(4096);
+	REQUIRE(ts_addr != 0);
+
+	struct kernel_timespec { int64_t tv_sec; int64_t tv_nsec; };
+	const kernel_timespec ts { .tv_sec = 0, .tv_nsec = 1'000'000'000 };
+	machine.memory.memcpy(ts_addr, &ts, sizeof(ts));
+
+	auto& cpu = machine.cpu;
+	cpu.reg(riscv::REG_ARG0) = ts_addr;
+	cpu.reg(riscv::REG_ARG1) = 0x0; // rem = NULL
+
+	machine.system_call(101); // nanosleep
+	REQUIRE(machine.return_value<int>() == -22); // -EINVAL
+}
+
 // =============================================================================
 // C6: getcwd throws a machine exception when file descriptors are disabled
 //
