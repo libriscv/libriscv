@@ -646,13 +646,12 @@ namespace riscv
 	{
 		if (len == 0)
 			return;
-		const address_t end = addr + len;
-		if (end < addr)
-			this->protection_fault(addr);
 		if (addr % Page::size() != 0 || m_file_mappings.empty()) {
 			this->memdiscard(addr, len, ignore_protections);
 			return;
 		}
+		const address_t max_addr = std::numeric_limits<address_t>::max();
+		const address_t end = len > size_t(max_addr - addr) ? max_addr : addr + len;
 
 		address_t advice_end = end;
 		const size_t tail = end & PageMask;
