@@ -53,6 +53,8 @@ inline const Page& Memory<W>::get_exec_pageno(const address_t pageno) const
 template <int W>
 inline const Page& Memory<W>::get_pageno(const address_t pageno) const
 {
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_page_if_needed(pageno * Page::size());
 	auto it = m_pages.find(pageno);
 	if (LIKELY(it != m_pages.end())) {
 		return it->second;

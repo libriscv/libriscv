@@ -3,8 +3,13 @@
 #include "page.hpp"
 #include <cassert>
 #include <cstring>
+#include <memory>
+#ifdef _WIN32
+#include <mutex>
+#endif
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 #include "decoded_exec_segment.hpp"
 #include "mmap_cache.hpp"
 #include "shared_rodata.hpp"
@@ -19,10 +24,31 @@ namespace riscv
 	template<int W> struct Machine;
 	struct vBuffer { char* ptr; size_t len; };
 
+	struct FileMappingBacking
+	{
+		explicit FileMappingBacking(int descriptor, void* handle = nullptr) noexcept
+			: fd(descriptor), native_handle(handle) {}
+		~FileMappingBacking();
+		bool read_at(uint64_t offset, void* destination, size_t length,
+			size_t& bytes_read, int& error) const noexcept;
+		int fd = -1;
+		void* native_handle = nullptr;
+#ifdef _WIN32
+		mutable std::mutex io_mutex;
+#endif
+	};
+
 	template<int W>
 	struct alignas(RISCV_MACHINE_ALIGNMENT) Memory
 	{
 		using address_t = address_type<W>;
+		struct FileMapping {
+			address_t addr;
+			size_t size;
+			uint64_t file_offset;
+			std::shared_ptr<FileMappingBacking> backing;
+			bool refault_pending = false;
+		};
 		using mmio_cb_t = Page::mmio_cb_t;
 		using page_fault_cb_t = riscv::Function<Page&(Memory&, address_t, bool)>;
 		using page_readf_cb_t = riscv::Function<const Page&(const Memory&, address_t)>;
@@ -62,6 +88,14 @@ namespace riscv
 		int memcmp(const void* p1, address_t p2, size_t len) const;
 		// Perform the equivalent of MADV_DONTNEED on memory region
 		void memdiscard(address_t dst, size_t len, bool ignore_protections);
+		std::shared_ptr<FileMappingBacking> retain_file_mapping(int host_fd,
+			bool& retention_failed);
+		void register_file_mapping(address_t addr, size_t len, uint64_t file_offset,
+			std::shared_ptr<FileMappingBacking> backing);
+		void remove_file_mappings(address_t addr, size_t len);
+		void madvise_dontneed(address_t addr, size_t len, bool ignore_protections);
+		void refault_file_page_if_needed(address_t addr);
+		void refault_file_range_if_needed(address_t addr, size_t len);
 		/* Fill an array of buffers pointing to complete guest virtual [addr, len].
 		   Throws an exception if there was a protection violation.
 		   Returns the number of buffers filled, or an exception if not enough. */
@@ -424,6 +458,8 @@ namespace riscv
 
 		// Memory map cache
 		MMapCache<W> m_mmap_cache;
+		std::vector<FileMapping> m_file_mappings;
+		bool m_file_refault_pending = false;
 
 #ifdef RISCV_VIRTUAL_PAGING
 		page_fault_cb_t m_page_fault_handler = nullptr;

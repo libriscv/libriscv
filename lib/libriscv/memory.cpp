@@ -797,6 +797,10 @@ namespace riscv
 		this->m_brk_address  = master.memory.m_brk_address;
 		this->m_mmap_address = master.memory.m_mmap_address;
 		this->m_mmap_cache   = master.memory.m_mmap_cache;
+		if (!options.minimal_fork) {
+			this->m_file_mappings = master.memory.m_file_mappings;
+			this->m_file_refault_pending = master.memory.m_file_refault_pending;
+		}
 
 		// Reference the same execute segments
 		this->m_main_exec_segment = master.memory.m_main_exec_segment;
