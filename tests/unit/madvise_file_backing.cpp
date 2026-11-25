@@ -70,7 +70,7 @@ static std::vector<uint8_t> build_file_refault_probe(bool store)
 	body += "lb a0, 0(t0)\n.word 0x7ff00073\n";
 	std::string source = "__attribute__((naked)) void refault_entry(void) { __asm__ volatile(\"";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
-	source += "\"); }";
+	source += "\"); } int main(void) { return 0; }";
 	return build_and_load(source, "-nostdlib -static -Wl,-e,refault_entry", false);
 }
 
@@ -84,7 +84,7 @@ static std::vector<uint8_t> build_file_refault_fp_probe(bool store_without_load)
 	body += ".word 0x00a2a227\n.word 0x7ff00073\n"; // fsw fa0, 4(t0); ecall
 	std::string source = "__attribute__((naked)) void refault_entry(void) { __asm__ volatile(\"";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
-	source += "\"); }";
+	source += "\"); } int main(void) { return 0; }";
 	return build_and_load(source, "-nostdlib -static -Wl,-e,refault_entry", false);
 }
 
