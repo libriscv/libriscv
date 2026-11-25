@@ -71,7 +71,7 @@ static std::vector<uint8_t> build_file_refault_probe(bool store)
 	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\"";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 	source += "\"); }";
-	return build_and_load(source, "-nostdlib -static -Wl,-e,_start", false);
+	return build_and_load(source, "-nostdlib -nostartfiles -static -Wl,-e,_start", false);
 }
 
 static std::vector<uint8_t> build_file_refault_fp_probe(bool store_without_load)
@@ -85,7 +85,7 @@ static std::vector<uint8_t> build_file_refault_fp_probe(bool store_without_load)
 	std::string source = "__attribute__((naked)) void _start(void) { __asm__ volatile(\"";
 	for (char c : body) source += c == '\n' ? "\\n" : std::string(1, c);
 	source += "\"); }";
-	return build_and_load(source, "-nostdlib -static -Wl,-e,_start", false);
+	return build_and_load(source, "-nostdlib -nostartfiles -static -Wl,-e,_start", false);
 }
 
 static MachineOptions<RISCV64> file_refault_options(bool translated)
