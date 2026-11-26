@@ -42,43 +42,70 @@ namespace riscv
 	bool FileMappingBacking::read_at(uint64_t offset, void* destination, size_t length,
 		size_t& bytes_read, int& error) const noexcept
 	{
+		bytes_read = 0;
+		error = 0;
+		if (length == 0)
+			return true;
 #if defined(_WIN32)
 		std::lock_guard<std::mutex> guard(io_mutex);
-		if (offset > uint64_t(std::numeric_limits<int64_t>::max())
-			|| length > std::numeric_limits<DWORD>::max()) {
+		const uint64_t max_offset = uint64_t(std::numeric_limits<int64_t>::max());
+		if (offset > max_offset || length > std::numeric_limits<DWORD>::max()) {
 			error = ERROR_ARITHMETIC_OVERFLOW;
 			return false;
 		}
-		OVERLAPPED request {};
-		request.Offset = DWORD(offset);
-		request.OffsetHigh = DWORD(offset >> 32);
-		DWORD count = 0;
-		if (!::ReadFile(static_cast<HANDLE>(native_handle), destination, DWORD(length),
-			&count, &request)) {
-			const DWORD code = ::GetLastError();
-			if (code == ERROR_HANDLE_EOF) {
-				bytes_read = 0;
-				return true;
+		auto* output = static_cast<uint8_t*>(destination);
+		while (bytes_read < length) {
+			if (bytes_read > max_offset - offset) {
+				error = ERROR_ARITHMETIC_OVERFLOW;
+				return false;
 			}
-			error = int(code);
-			return false;
+			const uint64_t current_offset = offset + bytes_read;
+			OVERLAPPED request {};
+			request.Offset = DWORD(current_offset);
+			request.OffsetHigh = DWORD(current_offset >> 32);
+			DWORD count = 0;
+			const DWORD remaining = DWORD(length - bytes_read);
+			if (!::ReadFile(static_cast<HANDLE>(native_handle), output + bytes_read,
+				remaining, &count, &request)) {
+				const DWORD code = ::GetLastError();
+				if (code == ERROR_HANDLE_EOF)
+					break;
+				error = int(code);
+				return false;
+			}
+			if (count == 0)
+				break;
+			bytes_read += count;
 		}
-		bytes_read = count;
 		return true;
 #elif defined(__linux__) || defined(__APPLE__) || (defined(__unix__) && !defined(__wasm__))
-		if (offset > uint64_t(std::numeric_limits<off_t>::max())) {
+		const uint64_t max_offset = uint64_t(std::numeric_limits<off_t>::max());
+		if (offset > max_offset) {
 			error = EOVERFLOW;
 			return false;
 		}
-		ssize_t count;
-		do {
-			count = ::pread(fd, destination, length, off_t(offset));
-		} while (count < 0 && errno == EINTR);
-		if (count < 0) {
-			error = errno;
-			return false;
+		auto* output = static_cast<uint8_t*>(destination);
+		while (bytes_read < length) {
+			if (bytes_read > max_offset - offset) {
+				error = EOVERFLOW;
+				return false;
+			}
+			const uint64_t current_offset = offset + bytes_read;
+			const size_t request_size = std::min(length - bytes_read,
+				size_t(std::numeric_limits<ssize_t>::max()));
+			ssize_t count;
+			do {
+				count = ::pread(fd, output + bytes_read, request_size,
+					off_t(current_offset));
+			} while (count < 0 && errno == EINTR);
+			if (count < 0) {
+				error = errno;
+				return false;
+			}
+			if (count == 0)
+				break;
+			bytes_read += size_t(count);
 		}
-		bytes_read = size_t(count);
 		return true;
 #else
 		(void) offset;
