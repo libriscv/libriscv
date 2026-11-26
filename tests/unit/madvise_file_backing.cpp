@@ -243,6 +243,27 @@ TEST_CASE("translated reads refault file data after MADV_DONTNEED",
 	}
 }
 
+#ifdef RISCV_ASMJIT
+TEST_CASE("inaccurate JIT reads refault file data after MADV_DONTNEED",
+	"[Memory][madvise-file-backed][translation]")
+{
+	const auto binary = build_file_refault_probe(false);
+	TemporaryFile file;
+	REQUIRE(file.fd >= 0);
+	std::array<uint8_t, Page::size()> original;
+	original.fill(0x7f);
+	write_file(file.fd, original.data(), original.size());
+
+	Machine<RISCV64> machine(binary, file_refault_options(true));
+	map_test_page(machine, file.fd, original.data(), original.size());
+	machine.memory.madvise_dontneed(guest_addr, Page::size(), true);
+	const uint8_t updated = 0x42;
+	REQUIRE(::pwrite(file.fd, &updated, sizeof(updated), 0) == 1);
+	machine.cpu.simulate_inaccurate(machine.cpu.registers().pc);
+	CHECK(machine.cpu.reg(REG_ARG0) == updated);
+}
+#endif
+
 TEST_CASE("translated stores refault before modifying file-backed pages",
 	"[Memory][madvise-file-backed][translation]")
 {

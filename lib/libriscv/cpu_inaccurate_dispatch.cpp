@@ -219,6 +219,7 @@ begin_asmjit_function:
 	// The inaccurate dispatch does not count instructions, so the region only
 	// ever exits on control flow it cannot handle, or when a helper faults.
 	AjState<W> state { 0, ~0ULL, pc };
+	state.file_refault_pending = &MACHINE().memory.file_refault_pending_ref();
 retry_asmjit_function:
 	exec->unchecked_asmjit_mapping_at(decoder->instr)(*this, &state);
 	if (UNLIKELY(state.max_counter == 0)) {
