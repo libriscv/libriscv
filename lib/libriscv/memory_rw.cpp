@@ -2,7 +2,19 @@
 #include "decoder_cache.hpp"
 
 #include "internal_common.hpp"
+#include <algorithm>
+#include <cerrno>
 #include <cinttypes>
+#include <limits>
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#include <io.h>
+#include <sys/stat.h>
+#elif defined(__linux__) || defined(__APPLE__) || (defined(__unix__) && !defined(__wasm__))
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #ifdef __linux__
 #include <sys/mman.h>
 static constexpr bool MADVISE_ENABLED = true;
@@ -16,6 +28,311 @@ static constexpr int MADV_DONTNEED = 0x4;
 
 namespace riscv
 {
+	FileMappingBacking::~FileMappingBacking()
+	{
+#ifdef _WIN32
+		if (native_handle != nullptr)
+			::CloseHandle(static_cast<HANDLE>(native_handle));
+#elif defined(__linux__) || defined(__APPLE__) || (defined(__unix__) && !defined(__wasm__))
+		if (fd >= 0)
+			::close(fd);
+#endif
+	}
+
+	bool FileMappingBacking::read_at(uint64_t offset, void* destination, size_t length,
+		size_t& bytes_read, int& error) const noexcept
+	{
+		bytes_read = 0;
+		error = 0;
+		if (length == 0)
+			return true;
+#if defined(_WIN32)
+		std::lock_guard<std::mutex> guard(io_mutex);
+		const uint64_t max_offset = uint64_t(std::numeric_limits<int64_t>::max());
+		if (offset > max_offset || length > std::numeric_limits<DWORD>::max()) {
+			error = ERROR_ARITHMETIC_OVERFLOW;
+			return false;
+		}
+		auto* output = static_cast<uint8_t*>(destination);
+		while (bytes_read < length) {
+			if (bytes_read > max_offset - offset) {
+				error = ERROR_ARITHMETIC_OVERFLOW;
+				return false;
+			}
+			const uint64_t current_offset = offset + bytes_read;
+			OVERLAPPED request {};
+			request.Offset = DWORD(current_offset);
+			request.OffsetHigh = DWORD(current_offset >> 32);
+			DWORD count = 0;
+			const DWORD remaining = DWORD(length - bytes_read);
+			if (!::ReadFile(static_cast<HANDLE>(native_handle), output + bytes_read,
+				remaining, &count, &request)) {
+				const DWORD code = ::GetLastError();
+				if (code == ERROR_HANDLE_EOF)
+					break;
+				error = int(code);
+				return false;
+			}
+			if (count == 0)
+				break;
+			bytes_read += count;
+		}
+		return true;
+#elif defined(__linux__) || defined(__APPLE__) || (defined(__unix__) && !defined(__wasm__))
+		const uint64_t max_offset = uint64_t(std::numeric_limits<off_t>::max());
+		if (offset > max_offset) {
+			error = EOVERFLOW;
+			return false;
+		}
+		auto* output = static_cast<uint8_t*>(destination);
+		while (bytes_read < length) {
+			if (bytes_read > max_offset - offset) {
+				error = EOVERFLOW;
+				return false;
+			}
+			const uint64_t current_offset = offset + bytes_read;
+			const size_t request_size = std::min(length - bytes_read,
+				size_t(std::numeric_limits<ssize_t>::max()));
+			ssize_t count;
+			do {
+				count = ::pread(fd, output + bytes_read, request_size,
+					off_t(current_offset));
+			} while (count < 0 && errno == EINTR);
+			if (count < 0) {
+				error = errno;
+				return false;
+			}
+			if (count == 0)
+				break;
+			bytes_read += size_t(count);
+		}
+		return true;
+#else
+		(void) offset;
+		(void) destination;
+		(void) length;
+		(void) bytes_read;
+		error = ENOSYS;
+		return false;
+#endif
+	}
+
+	template <int W>
+	std::shared_ptr<FileMappingBacking> Memory<W>::retain_file_mapping(int host_fd,
+		bool& retention_failed)
+	{
+		retention_failed = false;
+	#if defined(_WIN32)
+		struct _stat info {};
+		if (::_fstat(host_fd, &info) != 0) {
+			retention_failed = true;
+			return {};
+		}
+		if ((info.st_mode & _S_IFMT) != _S_IFREG)
+			return {};
+		const intptr_t os_handle = ::_get_osfhandle(host_fd);
+		if (os_handle == -1) {
+			retention_failed = true;
+			return {};
+		}
+		HANDLE retained = ::ReOpenFile(reinterpret_cast<HANDLE>(os_handle), GENERIC_READ,
+			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0);
+		if (retained == INVALID_HANDLE_VALUE) {
+			retention_failed = true;
+			return {};
+		}
+		try {
+			return std::make_shared<FileMappingBacking>(-1, retained);
+		} catch (...) {
+			::CloseHandle(retained);
+			throw;
+		}
+#elif defined(__linux__) || defined(__APPLE__) || (defined(__unix__) && !defined(__wasm__))
+		struct stat info {};
+		if (::fstat(host_fd, &info) != 0) {
+			retention_failed = true;
+			return {};
+		}
+		if (!S_ISREG(info.st_mode))
+			return {};
+		const int retained_fd = ::dup(host_fd);
+		if (retained_fd < 0) {
+			retention_failed = true;
+			return {};
+		}
+		try {
+			return std::make_shared<FileMappingBacking>(retained_fd);
+		} catch (...) {
+			::close(retained_fd);
+			throw;
+		}
+#else
+		(void) host_fd;
+		return {};
+#endif
+	}
+
+	template <int W>
+	void Memory<W>::register_file_mapping(address_t addr, size_t len,
+		uint64_t file_offset, std::shared_ptr<FileMappingBacking> backing)
+	{
+		if (len == 0 || !backing)
+			return;
+		this->remove_file_mappings(addr, len);
+		m_file_mappings.push_back({addr, len, file_offset, std::move(backing), false});
+		std::sort(m_file_mappings.begin(), m_file_mappings.end(),
+			[](const auto& a, const auto& b) { return a.addr < b.addr; });
+	}
+
+	template <int W>
+	void Memory<W>::remove_file_mappings(address_t addr, size_t len)
+	{
+		if (len == 0 || address_t(addr + len) < addr)
+			return;
+		// Callers pass page-aligned starts; round the end as Linux does for mapping ranges.
+		address_t end = addr + len;
+		const address_t end_tail = end & PageMask;
+		if (end_tail != 0) {
+			const address_t increment = Page::size() - end_tail;
+			end = end > std::numeric_limits<address_t>::max() - increment
+				? std::numeric_limits<address_t>::max() : end + increment;
+		}
+		if (addr >= end)
+			return;
+		std::vector<FileMapping> remaining;
+		remaining.reserve(m_file_mappings.size() + 1);
+		for (const auto& mapping : m_file_mappings) {
+			const address_t map_end = mapping.addr + mapping.size;
+			if (map_end <= addr || mapping.addr >= end) {
+				remaining.push_back(mapping);
+				continue;
+			}
+			if (mapping.addr < addr)
+				remaining.push_back({mapping.addr, size_t(addr - mapping.addr),
+					mapping.file_offset, mapping.backing, mapping.refault_pending});
+			if (map_end > end)
+				remaining.push_back({end, size_t(map_end - end),
+					mapping.file_offset + uint64_t(end - mapping.addr),
+					mapping.backing, mapping.refault_pending});
+		}
+		m_file_mappings = std::move(remaining);
+		m_file_refault_pending = std::any_of(m_file_mappings.begin(), m_file_mappings.end(),
+			[](const auto& mapping) { return mapping.refault_pending; });
+		this->invalidate_reset_cache();
+	}
+
+	template <int W>
+	void Memory<W>::refault_file_page_if_needed(address_t addr)
+	{
+		if (!m_file_refault_pending)
+			return;
+	#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__) || (defined(__unix__) && !defined(__wasm__))
+		const address_t page_addr = addr & ~address_t(PageMask);
+		auto it = std::upper_bound(m_file_mappings.begin(), m_file_mappings.end(), page_addr,
+			[](address_t page, const auto& mapping) { return page < mapping.addr; });
+		if (it == m_file_mappings.begin())
+			return;
+		--it;
+		if (!it->refault_pending || page_addr >= it->addr + it->size)
+			return;
+		const auto mapping = *it;
+		const uint64_t page_offset = uint64_t(page_addr - mapping.addr);
+	#if defined(_WIN32)
+		const uint64_t max_offset = uint64_t(std::numeric_limits<int64_t>::max());
+	#else
+		const uint64_t max_offset = uint64_t(std::numeric_limits<off_t>::max());
+	#endif
+		if (page_offset > max_offset || mapping.file_offset > max_offset - page_offset)
+			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+				"File-backed mapping offset overflow", page_addr);
+		PageData contents {};
+		size_t bytes = 0;
+		int read_error = 0;
+		if (!mapping.backing->read_at(mapping.file_offset + page_offset,
+			contents.buffer8.data(), Page::size(), bytes, read_error))
+			throw MachineException(SYSTEM_CALL_FAILED,
+				"Could not refill a discarded file-backed page", read_error);
+		if (bytes == 0)
+			throw MachineException(EXECUTION_SPACE_PROTECTION_FAULT,
+				"File-backed mapping page is beyond EOF", page_addr);
+
+		bool copied_to_arena = false;
+		if constexpr (flat_readwrite_arena) {
+			if (this->uses_flat_memory_arena() && page_addr >= RWREAD_BEGIN) {
+				const address_t offset = page_addr - RWREAD_BEGIN;
+				const auto boundary = memory_arena_read_boundary();
+				if (offset <= boundary && Page::size() <= boundary - offset) {
+					std::memcpy(&((uint8_t*)m_arena.data)[page_addr],
+						contents.buffer8.data(), Page::size());
+					copied_to_arena = true;
+				}
+			}
+		}
+		if (!copied_to_arena) {
+#ifdef RISCV_VIRTUAL_PAGING
+			const address_t pageno = page_number(page_addr);
+			auto page_it = m_pages.find(pageno);
+			Page& page = page_it != m_pages.end()
+				? page_it->second : this->create_writable_pageno(pageno);
+			const auto old_attr = page.attr;
+			if (old_attr.is_cow) {
+				m_page_write_handler(*this, pageno, page);
+			} else if (old_attr.non_owning || page.is_cow_page()) {
+				page.make_writable();
+			}
+			std::memcpy(page.data(), contents.buffer8.data(), Page::size());
+			page.attr = old_attr;
+			page.attr.non_owning = false;
+			page.attr.is_cow = false;
+			page.attr.write = old_attr.write || old_attr.is_cow;
+#else
+			std::memcpy(&((uint8_t*)m_arena.data)[page_addr],
+				contents.buffer8.data(), Page::size());
+#endif
+		}
+		// Resolve only this page. The remaining part of a large advice range
+		// stays pending until the guest actually reads or writes those pages.
+		const address_t page_end = page_addr + Page::size();
+		std::vector<FileMapping> remaining;
+		remaining.reserve(m_file_mappings.size() + 2);
+		for (const auto& item : m_file_mappings) {
+			const address_t item_end = item.addr + item.size;
+			if (!item.refault_pending || page_addr < item.addr || page_end > item_end) {
+				remaining.push_back(item);
+				continue;
+			}
+			if (item.addr < page_addr)
+				remaining.push_back({item.addr, size_t(page_addr - item.addr),
+					item.file_offset, item.backing, true});
+			remaining.push_back({page_addr, Page::size(),
+				item.file_offset + uint64_t(page_addr - item.addr), item.backing, false});
+			if (page_end < item_end)
+				remaining.push_back({page_end, size_t(item_end - page_end),
+					item.file_offset + uint64_t(page_end - item.addr), item.backing, true});
+		}
+		m_file_mappings = std::move(remaining);
+		m_file_refault_pending = std::any_of(m_file_mappings.begin(), m_file_mappings.end(),
+			[](const auto& item) { return item.refault_pending; });
+		this->invalidate_reset_cache();
+#else
+		(void) addr;
+#endif
+	}
+
+	template <int W>
+	void Memory<W>::refault_file_range_if_needed(address_t addr, size_t len)
+	{
+		if (!m_file_refault_pending || len == 0 || address_t(addr + len) < addr)
+			return;
+		const address_t end = addr + len;
+		for (address_t page = addr & ~address_t(PageMask); page < end; ) {
+			this->refault_file_page_if_needed(page);
+			if (end - page <= Page::size())
+				break;
+			page += Page::size();
+		}
+	}
+
 #ifdef RISCV_VIRTUAL_PAGING
 	template <int W>
 	const Page& Memory<W>::get_readable_pageno(const address_t pageno) const
@@ -358,6 +675,67 @@ namespace riscv
 			len -= size;
 		}
 #endif // RISCV_VIRTUAL_PAGING
+	}
+
+	template <int W>
+	void Memory<W>::madvise_dontneed(address_t addr, size_t len, bool ignore_protections)
+	{
+		if (len == 0)
+			return;
+		if (addr % Page::size() != 0 || m_file_mappings.empty()) {
+			this->memdiscard(addr, len, ignore_protections);
+			return;
+		}
+		const address_t max_addr = std::numeric_limits<address_t>::max();
+		const address_t end = len > size_t(max_addr - addr) ? max_addr : addr + len;
+
+		address_t advice_end = end;
+		const size_t tail = end & PageMask;
+		if (tail != 0) {
+			const address_t increment = Page::size() - tail;
+			advice_end = end + increment;
+			if (advice_end < end)
+				advice_end = std::numeric_limits<address_t>::max();
+		}
+
+		const auto mappings = m_file_mappings;
+		address_t cursor = addr;
+		for (const auto& original : mappings) {
+			const address_t map_end = original.addr + original.size;
+			if (map_end <= addr || original.addr >= advice_end)
+				continue;
+			const address_t begin = std::max(addr, original.addr);
+			const address_t finish = std::min(advice_end, map_end);
+			if (cursor < begin)
+				this->memdiscard(cursor, size_t(begin - cursor), ignore_protections);
+
+			std::vector<FileMapping> updated;
+			updated.reserve(m_file_mappings.size() + 2);
+			for (const auto& mapping : m_file_mappings) {
+				const address_t item_end = mapping.addr + mapping.size;
+				if (item_end <= begin || mapping.addr >= finish) {
+					updated.push_back(mapping);
+					continue;
+				}
+				if (mapping.addr < begin)
+					updated.push_back({mapping.addr, size_t(begin - mapping.addr),
+						mapping.file_offset, mapping.backing, mapping.refault_pending});
+				updated.push_back({begin, size_t(finish - begin),
+					mapping.file_offset + uint64_t(begin - mapping.addr),
+					mapping.backing, true});
+				if (item_end > finish)
+					updated.push_back({finish, size_t(item_end - finish),
+						mapping.file_offset + uint64_t(finish - mapping.addr),
+						mapping.backing, mapping.refault_pending});
+			}
+			m_file_mappings = std::move(updated);
+			m_file_refault_pending = true;
+			this->flush_execute_segments(begin, finish);
+			cursor = finish;
+		}
+		if (cursor < end)
+			this->memdiscard(cursor, size_t(end - cursor), ignore_protections);
+		this->invalidate_reset_cache();
 	}
 
 #ifdef RISCV_VIRTUAL_PAGING

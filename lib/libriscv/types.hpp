@@ -127,6 +127,7 @@ namespace riscv
 		uint64_t max_counter;
 		address_type<W> pc;
 		uint32_t call_depth = 0;
+		const uint8_t* file_refault_pending = nullptr;
 	};
 
 	template <int W>

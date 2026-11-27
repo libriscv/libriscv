@@ -296,6 +296,9 @@ struct AjEmitter
 	static constexpr int32_t off_max()     { return int32_t(offsetof(AjState<W>, max_counter)); }
 	static constexpr int32_t off_pc()      { return int32_t(offsetof(AjState<W>, pc)); }
 	static constexpr int32_t off_depth()   { return int32_t(offsetof(AjState<W>, call_depth)); }
+	static constexpr int32_t off_file_refault_pending() {
+		return int32_t(offsetof(AjState<W>, file_refault_pending));
+	}
 
 	// --- register cache ---
 	// Eager preload, not lazy: a lazy load after a label would clobber loop-carried values on back-edges.
@@ -1028,6 +1031,19 @@ struct AjEmitter
 	bool memory_has_slow_path() const noexcept {
 		return info.paged_memory || arena_is_checked();
 	}
+	bool memory_has_file_refault_slow_path() const noexcept {
+		return info.inline_memory || info.paged_memory;
+	}
+	// Inline accesses bypass Memory::read/write's lazy file-page refault.
+	void emit_file_refault_check(const Label& refault) {
+		if (!memory_has_file_refault_slow_path())
+			return;
+		Gp pending_ptr = uc.new_gp_ptr("refault_ptr");
+		Gp pending = uc.new_gp32("refault_pending");
+		uc.load(pending_ptr, mem_ptr(st, off_file_refault_pending()));
+		uc.load_u8(pending, mem_ptr(pending_ptr));
+		uc.j(refault, test_nz(pending));
+	}
 	/// @brief Whether a cold path completes the access with the helper and
 	/// rejoins, rather than leaving the region for the interpreter.
 	/// @details A page-cache miss is routine, and the helper refills the cache.
@@ -1146,8 +1162,9 @@ struct AjEmitter
 			call_load_helper(pc, funct3, dst, addr, pending - 1);
 			return;
 		}
-		Label slow = uc.new_label(), done = uc.new_label();
+		Label slow = uc.new_label(), refault = uc.new_label(), done = uc.new_label();
 		Mem m;
+		emit_file_refault_check(refault);
 		if (info.paged_memory) {
 			m = emit_page_cache_probe(addr, false, 1u << (funct3 & 0x3), slow);
 		} else {
@@ -1174,6 +1191,13 @@ struct AjEmitter
 				} else emit_exit(pc, pend);
 			});
 		}
+		if (memory_has_file_refault_slow_path()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(refault);
+				call_load_helper(pc, funct3, dst, addr, pend);
+				uc.j(done);
+			});
+		}
 	}
 	void emit_store(address_t pc, unsigned funct3, unsigned rs1, unsigned rs2, int32_t simm)
 	{
@@ -1183,8 +1207,9 @@ struct AjEmitter
 			call_store_helper(pc, funct3, src, addr, pending - 1);
 			return;
 		}
-		Label slow = uc.new_label(), done = uc.new_label();
+		Label slow = uc.new_label(), refault = uc.new_label(), done = uc.new_label();
 		Mem m;
+		emit_file_refault_check(refault);
 		if (info.paged_memory) {
 			m = emit_page_cache_probe(addr, true, 1u << funct3, slow);
 		} else {
@@ -1205,6 +1230,13 @@ struct AjEmitter
 					call_store_helper(pc, funct3, src, addr, pend);
 					uc.j(done);
 				} else emit_exit(pc, pend);
+			});
+		}
+		if (memory_has_file_refault_slow_path()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(refault);
+				call_store_helper(pc, funct3, src, addr, pend);
+				uc.j(done);
 			});
 		}
 	}
@@ -1363,6 +1395,7 @@ struct AjEmitter
 	{
 		auto addr = address_of(vmi.rs1, 0);
 		Label slow = uc.new_label(), done = uc.new_label();
+		emit_file_refault_check(slow);
 		emit_arena_check(addr, vmi.is_store, slow);
 		Gp mem = uc.new_gp_ptr("vmem");
 		uc.add(mem, arena, arena_index(addr));
@@ -1385,6 +1418,7 @@ struct AjEmitter
 	{
 		const uint32_t eew = vmi.eew_log2;
 		Label slow = uc.new_label(), done = uc.new_label();
+		emit_file_refault_check(slow);
 
 		Gp vill = uc.new_gp32("vill");
 		uc.load_u8(vill, mem_ptr(cpu, info.rvv_vill));
@@ -1551,8 +1585,9 @@ struct AjEmitter
 			fp_result(dst, is_double);
 			return;
 		}
-		Label slow = uc.new_label(), done = uc.new_label();
+		Label slow = uc.new_label(), refault = uc.new_label(), done = uc.new_label();
 		Mem m;
+		emit_file_refault_check(refault);
 		if (info.paged_memory) {
 			m = emit_page_cache_probe(addr, false, is_double ? 8 : 4, slow);
 		} else {
@@ -1571,6 +1606,13 @@ struct AjEmitter
 				} else emit_exit(pc, pend);
 			});
 		}
+		if (memory_has_file_refault_slow_path()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(refault);
+				call_fp_load_helper(pc, is_double, dst, addr, pend);
+				uc.j(done);
+			});
+		}
 		// Emitted after the merge point, so it covers both paths.
 		fp_result(dst, is_double);
 	}
@@ -1583,8 +1625,9 @@ struct AjEmitter
 			call_fp_store_helper(pc, is_double, src, addr, pending - 1);
 			return;
 		}
-		Label slow = uc.new_label(), done = uc.new_label();
+		Label slow = uc.new_label(), refault = uc.new_label(), done = uc.new_label();
 		Mem m;
+		emit_file_refault_check(refault);
 		if (info.paged_memory) {
 			m = emit_page_cache_probe(addr, true, is_double ? 8 : 4, slow);
 		} else {
@@ -1601,6 +1644,13 @@ struct AjEmitter
 					call_fp_store_helper(pc, is_double, src, addr, pend);
 					uc.j(done);
 				} else emit_exit(pc, pend);
+			});
+		}
+		if (memory_has_file_refault_slow_path()) {
+			deferred.push_back([=, this, pend = pending - 1] {
+				uc.bind(refault);
+				call_fp_store_helper(pc, is_double, src, addr, pend);
+				uc.j(done);
 			});
 		}
 	}

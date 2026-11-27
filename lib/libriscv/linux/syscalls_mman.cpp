@@ -1,6 +1,7 @@
 /// Linux memory mapping system call emulation
 /// Works on all platforms
 #define LINUX_MAP_ANONYMOUS        0x20
+#define LINUX_MAP_PRIVATE          0x02
 #define LINUX_MAP_NORESERVE     0x04000
 #define LINUX_MAP_FIXED         0x10
 #define LINUX_MAP_FIXED_NOREPLACE 0x100000
@@ -13,8 +14,13 @@ static void add_mman_syscalls()
 	[] (Machine<W>& machine) {
 		const auto addr = machine.sysarg(0);
 		const auto len  = machine.sysarg(1);
+		if (addr % Page::size() != 0) {
+			machine.set_result(-EINVAL);
+			return;
+		}
 		if (addr + len < addr)
 			throw MachineException(SYSTEM_CALL_FAILED, "munmap() arguments overflow");
+		machine.memory.remove_file_mappings(addr, len);
 		machine.memory.free_pages(addr, len);
 		if (addr >= machine.memory.mmap_start() && addr + len <= machine.memory.mmap_address()) {
 			machine.memory.mmap_unmap(addr, len);
@@ -65,6 +71,15 @@ static void add_mman_syscalls()
 			if (machine.has_file_descriptors())
 			{
 				const int real_fd = machine.fds().translate(vfd);
+				std::shared_ptr<FileMappingBacking> backing;
+				#if defined(_WIN32) || defined(__linux__) || defined(__APPLE__) || (defined(__unix__) && !defined(__wasm__))
+				if ((flags & LINUX_MAP_PRIVATE) != 0) {
+					bool retention_failed = false;
+					backing = machine.memory.retain_file_mapping(real_fd, retention_failed);
+					if (retention_failed)
+						MMAP_HAS_FAILED();
+				}
+#endif
 
 				address_type<W> dst = 0x0;
 				if (addr_g == 0x0) {
@@ -102,6 +117,9 @@ static void add_mman_syscalls()
 				if (readv(real_fd, (const iovec*)&buffers[0], cnt) < 0)
 					MMAP_HAS_FAILED();
 #endif
+				machine.memory.remove_file_mappings(dst, length);
+				if (backing)
+					machine.memory.register_file_mapping(dst, length, voff, std::move(backing));
 				// Set new page protections on area
 				machine.memory.set_page_attr(dst, length, attr);
 				machine.set_result(dst);
@@ -206,6 +224,7 @@ static void add_mman_syscalls()
 		}
 
 		const bool untouched = (result >= prev_nextfree);
+		machine.memory.remove_file_mappings(result, length);
 		// anon pages need to be zeroed
 		if (flags & LINUX_MAP_ANONYMOUS) {
 			machine.memory.memdiscard(result, length, true);
@@ -228,6 +247,11 @@ static void add_mman_syscalls()
 		const auto old_size = machine.sysarg(1);
 		const auto new_size = machine.sysarg(2);
 		const auto flags    = machine.template sysarg<int>(3);
+		// Linux rounds both mremap sizes to page boundaries.
+		const address_type<W> old_size_rounded =
+			(old_size + PageMask) & ~address_type<W>(PageMask);
+		const address_type<W> new_size_rounded =
+			(new_size + PageMask) & ~address_type<W>(PageMask);
 		SYSPRINT(">>> mremap(addr 0x%lX, len %zu, newsize %zu, flags %#X)\n",
 				(long)old_addr, (size_t)old_size, (size_t)new_size, flags);
 		auto& nextfree = machine.memory.mmap_address();
@@ -236,9 +260,13 @@ static void add_mman_syscalls()
 		if ((flags & LINUX_MREMAP_FIXED) != 0) {
 			// Not supported
 		}
-		else if (old_addr + old_size >= old_addr && old_addr + old_size == nextfree
-			&& old_addr + new_size >= old_addr) {
-			nextfree = old_addr + new_size;
+		else if (old_size_rounded >= old_size && new_size_rounded >= new_size
+			&& old_addr + old_size_rounded >= old_addr && old_addr + old_size_rounded == nextfree
+			&& old_addr + new_size_rounded >= old_addr) {
+			nextfree = old_addr + new_size_rounded;
+			if (new_size_rounded < old_size_rounded)
+				machine.memory.remove_file_mappings(old_addr + new_size_rounded,
+					old_size_rounded - new_size_rounded);
 			machine.set_result(old_addr);
 			return;
 		}
@@ -291,7 +319,7 @@ static void add_mman_syscalls()
 				machine.set_result(0);
 				break;
 			case 4: // MADV_DONTNEED
-				machine.memory.memdiscard(addr, len, true);
+				machine.memory.madvise_dontneed(addr, len, true);
 				machine.set_result(0);
 				break;
 			case 8: // MADV_FREE

@@ -3,6 +3,8 @@
 template <int W> inline
 void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 {
+	if (m_file_refault_pending)
+		this->refault_file_range_if_needed(dst, len);
 #ifndef RISCV_VIRTUAL_PAGING
 	if (UNLIKELY(dst + len > memory_arena_size() || dst + len < dst || dst < initial_rodata_end()))
 		protection_fault(dst);
@@ -25,6 +27,8 @@ void Memory<W>::memset(address_t dst, uint8_t value, size_t len)
 template <int W> inline
 void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 {
+	if (m_file_refault_pending)
+		this->refault_file_range_if_needed(dst, len);
 #ifndef RISCV_VIRTUAL_PAGING
 	if (UNLIKELY(dst + len > memory_arena_size() || dst + len < dst || dst < initial_rodata_end()))
 		protection_fault(dst);
@@ -49,6 +53,8 @@ void Memory<W>::memcpy(address_t dst, const void* vsrc, size_t len)
 template <int W> inline
 void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 {
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(src, len);
 #ifndef RISCV_VIRTUAL_PAGING
 	if (UNLIKELY(src + len > memory_arena_size() || src + len < src || src < RWREAD_BEGIN))
 		protection_fault(src);
@@ -75,6 +81,10 @@ void Memory<W>::memcpy_out(void* vdst, address_t src, size_t len) const
 template <int W> inline
 bool Memory<W>::try_memmove(address_t dst, address_t src, size_t len)
 {
+	if (m_file_refault_pending) {
+		this->refault_file_range_if_needed(dst, len);
+		this->refault_file_range_if_needed(src, len);
+	}
 	if (dst == src || len == 0)
 		return true;
 
@@ -99,6 +109,8 @@ template <int W> inline
 std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 {
 #ifndef RISCV_VIRTUAL_PAGING
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, max_len);
 	if (UNLIKELY(addr < RWREAD_BEGIN || addr >= memory_arena_size()))
 		protection_fault(addr);
 	auto* begin = &((const char*)m_arena.data)[addr];
@@ -146,6 +158,8 @@ std::string Memory<W>::memstring(address_t addr, const size_t max_len) const
 template <int W> inline
 std::string_view Memory<W>::memstring_view(address_t addr, size_t max_len) const
 {
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, max_len);
 	if constexpr (flat_readwrite_arena) {
 		const address_t offset = addr - RWREAD_BEGIN;
 		const address_t window = memory_arena_read_boundary();
@@ -170,6 +184,8 @@ riscv::Buffer Memory<W>::membuffer(address_t addr,
 
 	if (UNLIKELY(datalen > maxlen))
 		protection_fault(addr);
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, datalen);
 
 	if (datalen == 0)
 		return result;
@@ -216,6 +232,8 @@ std::string_view Memory<W>::memview(address_t addr, size_t len, size_t maxlen) c
 
 	if (len == 0)
 		return {};
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, len);
 
 	if constexpr (flat_readwrite_arena) {
 		const address_t offset = addr - RWREAD_BEGIN;
@@ -244,6 +262,8 @@ std::string_view Memory<W>::writable_memview(address_t addr, size_t len, size_t 
 
 	if (len == 0)
 		return {};
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, len);
 
 	if constexpr (flat_readwrite_arena) {
 		const address_t offset = addr - initial_rodata_end();
@@ -321,6 +341,8 @@ T* Memory<W>::try_memarray(address_t addr, size_t count, size_t maxbytes) const
 		protection_fault(addr);
 
 	const size_t len = count * sizeof(T);
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, len);
 
 	if (addr % alignof(T) != 0)
 		protection_fault(addr);
@@ -381,6 +403,8 @@ template <int W> inline
 size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 {
 #ifndef RISCV_VIRTUAL_PAGING
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, maxlen);
 	if (UNLIKELY(addr < RWREAD_BEGIN || addr >= memory_arena_size()))
 		protection_fault(addr);
 	auto* begin = &((const char*)m_arena.data)[addr];
@@ -409,6 +433,11 @@ size_t Memory<W>::strlen(address_t addr, size_t maxlen) const
 template <int W> inline
 int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 {
+	if (m_file_refault_pending) {
+		auto* self = const_cast<Memory<W>*>(this);
+		self->refault_file_range_if_needed(p1, len);
+		self->refault_file_range_if_needed(p2, len);
+	}
 	if (UNLIKELY(p1 + len < p1))
 		protection_fault(p1);
 	if (UNLIKELY(p2 + len < p2))
@@ -469,6 +498,8 @@ int Memory<W>::memcmp(address_t p1, address_t p2, size_t len) const
 template <int W> inline
 int Memory<W>::memcmp(const void* ptr1, address_t p2, size_t len) const
 {
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(p2, len);
 	if (UNLIKELY(p2 + len < p2))
 		protection_fault(p2);
 
@@ -571,6 +602,8 @@ size_t Memory<W>::gather_buffers_from_range(
 {
 	if (len == 0)
 		return 0;
+	if (m_file_refault_pending)
+		const_cast<Memory<W>*>(this)->refault_file_range_if_needed(addr, len);
 #ifndef RISCV_VIRTUAL_PAGING
 	if (UNLIKELY(addr < RWREAD_BEGIN || addr + len > memory_arena_size() || addr + len < addr))
 		machine().cpu.trigger_exception(PROTECTION_FAULT, addr);
@@ -617,6 +650,8 @@ size_t Memory<W>::gather_writable_buffers_from_range(
 {
 	if (len == 0)
 		return 0;
+	if (m_file_refault_pending)
+		this->refault_file_range_if_needed(addr, len);
 #ifndef RISCV_VIRTUAL_PAGING
 	if (UNLIKELY(addr < initial_rodata_end() || addr + len > memory_arena_size() || addr + len < addr))
 		machine().cpu.trigger_exception(PROTECTION_FAULT, addr);

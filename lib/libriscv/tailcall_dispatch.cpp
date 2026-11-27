@@ -205,6 +205,7 @@ namespace riscv
 #ifdef RISCV_ASMJIT
 	INSTRUCTION(RV32I_BC_ASMJIT, asmjit_function) {
 		AjState<W> state { counter.value() - d->instruction_count(), counter.max(), pc };
+		state.file_refault_pending = &machine.memory.file_refault_pending_ref();
 		do {
 			exec->unchecked_asmjit_mapping_at(d->instr)(cpu, &state);
 			if (UNLIKELY(state.max_counter == 0 && cpu.has_current_exception())) {

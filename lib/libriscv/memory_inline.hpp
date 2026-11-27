@@ -11,6 +11,8 @@ template <int W>
 template <typename T> inline
 T Memory<W>::read(address_t address)
 {
+	if (m_file_refault_pending)
+		this->refault_file_page_if_needed(address);
 	if constexpr (encompassing_Nbit_arena)
 	{
 		if constexpr (encompassing_Nbit_arena == 32)
@@ -58,6 +60,8 @@ template <int W>
 template <typename T> inline
 T& Memory<W>::writable_read(address_t address)
 {
+	if (m_file_refault_pending)
+		this->refault_file_page_if_needed(address);
 	if constexpr (encompassing_Nbit_arena)
 	{
 		if constexpr (encompassing_Nbit_arena == 32)
@@ -90,6 +94,8 @@ template <int W>
 template <typename T> inline
 void Memory<W>::write(address_t address, T value)
 {
+	if (m_file_refault_pending)
+		this->refault_file_page_if_needed(address);
 	if constexpr (encompassing_Nbit_arena)
 	{
 		if constexpr (encompassing_Nbit_arena == 32)
