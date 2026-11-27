@@ -73,6 +73,7 @@ namespace riscv
 #ifdef RISCV_BINARY_TRANSLATION
 		bool is_binary_translated() const noexcept { return !m_translator_mappings.empty(); }
 		bool is_libtcc() const noexcept { return m_is_libtcc; }
+		bool is_runtime_linked() const noexcept { return m_translation_attach != nullptr; }
 		void* binary_translation_so() const { return m_bintr_dl; }
 		void set_binary_translated(void* dl, bool is_libtcc) const { m_bintr_dl = dl; m_is_libtcc = is_libtcc; }
 		uint32_t translation_hash() const { return m_bintr_hash; }
