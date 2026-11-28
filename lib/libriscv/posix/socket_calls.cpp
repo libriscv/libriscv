@@ -385,7 +385,7 @@ static void syscall_recvfrom(Machine<W>& machine)
 		if (res >= 0) {
 			if (g_src_addr != 0x0)
 				machine.copy_to_guest(g_src_addr, hdr.msg_name, hdr.msg_namelen);
-			if (g_addrlen != 0x0)
+			if (g_src_addr != 0x0 && g_addrlen != 0x0)
 				machine.copy_to_guest(g_addrlen, &hdr.msg_namelen, sizeof(hdr.msg_namelen));
 		}
 #else
